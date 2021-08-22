@@ -4,8 +4,12 @@ package gui
 
 import (
 	"fmt"
+	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -23,8 +27,10 @@ import (
 var log = logging.NewMasterLogger()
 
 var (
-	stopVisorFnMx sync.Mutex
-	stopVisorFn   func()
+	stopVisorFnMx     sync.Mutex
+	stopVisorFn       func()
+	vpnClientStatusMu sync.Mutex
+	vpnClientStatus   bool
 )
 
 var (
@@ -33,6 +39,7 @@ var (
 
 var (
 	mOpenHypervisor *systray.MenuItem
+	mVPNClient      *systray.MenuItem
 	mUninstall      *systray.MenuItem
 	mQuit           *systray.MenuItem
 )
@@ -45,6 +52,7 @@ func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 		systray.SetTemplateIcon(icon, icon)
 
 		initOpenHypervisorBtn(conf)
+		initVpnClientBtn()
 		initUninstallBtn()
 		initQuitBtn()
 
@@ -122,6 +130,59 @@ func initOpenHypervisorBtn(conf *visorconfig.V1) {
 	}()
 }
 
+func initVpnClientBtn() {
+	mVPNClient = systray.AddMenuItem("VPN", "VPN Client Connection")
+}
+
+func handleVpnClientButton(conf *visorconfig.V1) {
+
+}
+
+func updateVPNConnectionStatus(conf *visorconfig.V1, doneCh <-chan bool) {
+	rpcDialTimeout := time.Second * 5
+	conn, err := net.DialTimeout("tcp", conf.CLIAddr, rpcDialTimeout)
+	if err != nil {
+		log.Fatal("RPC Connection failed: ", err)
+	}
+	rpcClient := visor.NewRPCClient(log, conn, visor.RPCPrefix, 0)
+
+	vpnSumChan := make(chan appserver.ConnectionSummary)
+
+	// polls vpn client summary
+	go func(done <-chan bool) {
+		for {
+			if <-done {
+				break
+			}
+			vpnSummary, err := rpcClient.GetAppConnectionsSummary(skyenv.VPNClientName)
+			if err != nil {
+				vpnClientStatusMu.Lock()
+				vpnClientStatus = false
+				vpnClientStatusMu.Unlock()
+			}
+
+			for _, sum := range vpnSummary {
+				vpnSumChan <- sum
+			}
+		}
+	}(doneCh)
+
+	for {
+		select {
+		case sum := <-vpnSumChan:
+			if sum.IsAlive {
+				vpnClientStatusMu.Lock()
+				vpnClientStatus = true
+				vpnClientStatusMu.Unlock()
+			}
+		case <-doneCh:
+			close(vpnSumChan)
+			break
+		}
+	}
+
+}
+
 func initUninstallBtn() {
 	mUninstall = systray.AddMenuItem("Uninstall", "")
 }
@@ -135,6 +196,8 @@ func handleUserInteraction(conf *visorconfig.V1) {
 		select {
 		case <-mOpenHypervisor.ClickedCh:
 			handleOpenHypervisor(conf)
+		case <-mVPNClient.ClickedCh:
+			handleVpnClientButton(conf)
 		case <-mUninstall.ClickedCh:
 			handleUninstall()
 		case <-mQuit.ClickedCh:
