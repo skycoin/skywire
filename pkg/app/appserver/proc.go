@@ -7,8 +7,6 @@ import (
 	"net/rpc"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -69,31 +67,8 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	var cmd *exec.Cmd
 	envs := conf.Envs()
 
-	if conf.SudoRequired {
-		absBinPath, _ := filepath.Abs(conf.BinaryLoc) // nolint:errcheck
-		binArgs := []string{absBinPath}
-		binArgs = append(binArgs, conf.ProcArgs...)
-		switch runtime.GOOS {
-		case "linux":
-			pkenvs := make([]string, len(envs)+1)
-			pkenvs[0] = "env"
-			for i, env := range envs {
-				pkenvs[i+1] = env
-			}
-			pkenvs = append(pkenvs, binArgs...)
-			cmd = exec.Command("pkexec", pkenvs...) //nolint:gosec
-
-		case "windows":
-			cmd = exec.Command("runas", binArgs...) //nolint:gosec
-			cmd.Env = append(os.Environ(), envs...)
-		default:
-			cmd = exec.Command("sudo", binArgs...) //nolint:gosec
-			cmd.Env = append(os.Environ(), envs...)
-		}
-	} else {
-		cmd = exec.Command(conf.BinaryLoc, conf.ProcArgs...) // nolint:gosec
-		cmd.Env = append(os.Environ(), envs...)
-	}
+	cmd = exec.Command(conf.BinaryLoc, conf.ProcArgs...) // nolint:gosec
+	cmd.Env = append(os.Environ(), envs...)
 	cmd.Dir = conf.ProcWorkDir
 
 	appLog, appLogDB := appcommon.NewProcLogger(conf)
@@ -278,29 +253,9 @@ func (p *Proc) Stop() error {
 	}
 
 	if p.cmd.Process != nil {
-		if p.conf.SudoRequired {
-			var cmd *exec.Cmd
-			pid := p.cmd.Process.Pid
-			switch runtime.GOOS {
-			case "linux":
-				cmd = exec.Command("pkexec", "kill", strconv.Itoa(pid))
-			case "windows":
-				cmd = exec.Command("runas", fmt.Sprintf(`"taskkill /f /pid %s"`, strconv.Itoa(pid))) //nolint:gosec
-			default:
-				cmd = exec.Command("sudo", "kill", strconv.Itoa(pid)) //nolint:gosec
-			}
-			cmd.Stdout = p.log.WithField("func", "(STDOUT)").Writer()
-			cmd.Stderr = p.log.WithField("func", "(STDERR)").Writer()
-
-			if err := cmd.Start(); err != nil {
-				return err
-			}
-
-		} else {
-			err := p.cmd.Process.Signal(os.Interrupt)
-			if err != nil {
-				return err
-			}
+		err := p.cmd.Process.Signal(os.Interrupt)
+		if err != nil {
+			return err
 		}
 	}
 

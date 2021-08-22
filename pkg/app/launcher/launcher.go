@@ -36,11 +36,10 @@ var (
 
 // AppConfig defines app startup parameters.
 type AppConfig struct {
-	Name         string       `json:"name"`
-	Args         []string     `json:"args,omitempty"`
-	AutoStart    bool         `json:"auto_start"`
-	Port         routing.Port `json:"port"`
-	SudoRequired bool         `json:"sudo_required"`
+	Name      string       `json:"name"`
+	Args      []string     `json:"args,omitempty"`
+	AutoStart bool         `json:"auto_start"`
+	Port      routing.Port `json:"port"`
 }
 
 // Config configures the launcher.
@@ -279,17 +278,16 @@ func (l *Launcher) RestartApp(name string) error {
 
 func makeProcConfig(lc Config, ac AppConfig, envs []string) (appcommon.ProcConfig, error) {
 	procConf := appcommon.ProcConfig{
-		AppName:      ac.Name,
-		AppSrvAddr:   lc.ServerAddr,
-		ProcKey:      appcommon.RandProcKey(),
-		ProcArgs:     ac.Args,
-		ProcEnvs:     envs,
-		ProcWorkDir:  filepath.Join(lc.LocalPath, ac.Name),
-		VisorPK:      lc.VisorPK,
-		RoutingPort:  ac.Port,
-		BinaryLoc:    filepath.Join(lc.BinPath, ac.Name),
-		LogDBLoc:     filepath.Join(lc.LocalPath, ac.Name+"_log.db"),
-		SudoRequired: ac.SudoRequired,
+		AppName:     ac.Name,
+		AppSrvAddr:  lc.ServerAddr,
+		ProcKey:     appcommon.RandProcKey(),
+		ProcArgs:    ac.Args,
+		ProcEnvs:    envs,
+		ProcWorkDir: filepath.Join(lc.LocalPath, ac.Name),
+		VisorPK:     lc.VisorPK,
+		RoutingPort: ac.Port,
+		BinaryLoc:   filepath.Join(lc.BinPath, ac.Name),
+		LogDBLoc:    filepath.Join(lc.LocalPath, ac.Name+"_log.db"),
 	}
 	err := ensureDir(&procConf.ProcWorkDir)
 	return procConf, err
