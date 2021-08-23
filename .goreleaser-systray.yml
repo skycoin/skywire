@@ -233,7 +233,7 @@ builds:
 archives:
   - format: tar.gz
     wrap_in_directory: false
-    name_template: 'skywire-{{ .Version }}-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
+    name_template: 'skywire-systray-v{{ .Version }}-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
 checksum:
   name_template: 'checksums-linux.txt'
 snapshot:

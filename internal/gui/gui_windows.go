@@ -17,3 +17,7 @@ func platformExecUninstall() error {
 	deinstallerPath = filepath.Join(localDataPath, "skywire", "deinstaller.ps1")
 	return osutil.Run("pwsh", "-c", deinstallerPath)
 }
+
+func preReadIcon() error {
+	return nil
+}
