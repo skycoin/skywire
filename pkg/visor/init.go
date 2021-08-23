@@ -236,10 +236,11 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	logS := transport.InMemoryTransportLogStore()
 
 	tpMConf := transport.ManagerConfig{
-		PubKey:          v.conf.PK,
-		SecKey:          v.conf.SK,
-		DiscoveryClient: tpdC,
-		LogStore:        logS,
+		PubKey:               v.conf.PK,
+		SecKey:               v.conf.SK,
+		DiscoveryClient:      tpdC,
+		LogStore:             logS,
+		PersistentTransports: v.conf.PersistentTransports,
 	}
 	managerLogger := v.MasterLogger().PackageLogger("transport_manager")
 
@@ -271,9 +272,9 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	v.pushCloseStack("transport.manager", func() error {
 		cancel()
-		err := tpM.Close()
+		tpM.Close()
 		wg.Wait()
-		return err
+		return nil
 	})
 
 	v.initLock.Lock()
