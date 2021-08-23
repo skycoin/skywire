@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"strconv"
 	"sync"
 	"time"
 
@@ -321,40 +320,15 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	// todo: this piece is somewhat ugly and inherited from the times when init was
-	// calling init functions sequentially
-	// It is probably a hack to run init
-	// "somewhat concurrently", where the heaviest init functions will be partially concurrent
-
-	// to avoid this we can:
-	// either introduce some kind of "task" functionality that abstracts out
-	// something that has to be run concurrent to the init, and check on their status
-	// stop in close functions, etc
-
-	// or, we can completely rely on the module system, and just wait for everything
-	// in init functions, instead of spawning more goroutines.
-	// but, even though modules themselves are concurrent this can introduce some
-	// performance penalties, because dependencies will be waiting on complete init
-
-	// leaving as it is until future requirements about init and modules are known
-
 	serveCtx, cancel := context.WithCancel(context.Background())
-	wg := new(sync.WaitGroup)
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-		runtimeErrors := getErrors(ctx)
-		if err := r.Serve(serveCtx); err != nil {
-			runtimeErrors <- fmt.Errorf("serve router stopped: %w", err)
-		}
-	}()
+	if err := r.Serve(serveCtx); err != nil {
+		cancel()
+		return err
+	}
 
 	v.pushCloseStack("router.serve", func() error {
 		cancel()
-		err := r.Close()
-		wg.Wait()
-		return err
+		return r.Close()
 	})
 
 	v.initLock.Lock()
@@ -566,50 +540,38 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 	return nil
 }
 
-// this service is not considered critical and always returns true
 // advertise this visor as public in service discovery
+// this service is not considered critical and always returns true
 func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	if !v.conf.IsPublic {
 		return nil
 	}
-
-	// retrieve interface IPs and check if at least one is public
-	defaultIPs, err := netutil.DefaultNetworkInterfaceIPs()
+	logger := v.MasterLogger().PackageLogger("public_visor")
+	hasPublic, err := netutil.HasPublicIP()
 	if err != nil {
+		logger.WithError(err).Warn("Failed to check for existing public IP address")
 		return nil
 	}
-	var found bool
-	for _, IP := range defaultIPs {
-		if netutil.IsPublicIP(IP) {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !hasPublic {
+		logger.Warn("No public IP address found, stopping")
 		return nil
 	}
 
-	// todo: consider moving this to transport into some helper function
 	stcpr, ok := v.tpM.Stcpr()
 	if !ok {
+		logger.Warn("No stcpr client found, stopping")
 		return nil
 	}
-	la, err := stcpr.LocalAddr()
+	addr, err := stcpr.LocalAddr()
 	if err != nil {
-		log.WithError(err).Errorln("Failed to get STCPR local addr")
+		logger.Warn("Failed to get STCPR local addr")
 		return nil
 	}
-	_, portStr, err := net.SplitHostPort(la.String())
+	port, err := netutil.ExtractPort(addr)
 	if err != nil {
-		log.WithError(err).Errorf("Failed to extract port from addr %v", la.String())
+		logger.Warn("Failed to get STCPR port")
 		return nil
 	}
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		log.WithError(err).Errorf("Failed to convert port to int")
-		return nil
-	}
-
 	visorUpdater := v.serviceDisc.VisorUpdater(uint16(port))
 	visorUpdater.Start()
 
