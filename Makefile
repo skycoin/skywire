@@ -115,7 +115,7 @@ snapshot-systray: sysroot ## create snapshot release
 		-v $(GOPATH)/src:/go/src \
 		-v $(CURDIR)/sysroot:/sysroot \
 		-w /go/src/github.com/skycoin/skywire \
-		alexadhyatma/golang-cross:$(GO_BUILDER_VERSION) -f /go/src/github.com/skycoin/skywire/.goreleaser-systray.yml --snapshot --skip-publish --rm-dist
+		skycoin/golang-cross:$(GO_BUILDER_VERSION) -f /go/src/github.com/skycoin/skywire/.goreleaser-systray.yml --snapshot --skip-publish --rm-dist
 
 snapshot:
 	goreleaser --snapshot --skip-publish --rm-dist
@@ -188,7 +188,7 @@ github-release-systray: sysroot ## Create a GitHub release
 		-v $(GOPATH)/src:/go/src \
 		-v $(CURDIR)/sysroot:/sysroot \
 		-w /go/src/github.com/skycoin/skywire \
-		alexadhyatma/golang-cross:$(GO_BUILDER_VERSION) -f /go/src/github.com/skycoin/skywire/.goreleaser-systray.yml --rm-dist
+		skycoin/golang-cross:$(GO_BUILDER_VERSION) -f /go/src/github.com/skycoin/skywire/.goreleaser-systray.yml --rm-dist
 
 github-release:
 	goreleaser --rm-dist
