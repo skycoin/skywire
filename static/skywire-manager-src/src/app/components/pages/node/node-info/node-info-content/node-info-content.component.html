@@ -30,6 +30,10 @@
       {{ node.version ? node.version : ('common.unknown' | translate) }}
     </span>
     <span class="info-line">
+      <span class="title">{{ 'node.details.node-info.skybian-version' | translate }}</span>
+      {{ node.skybianBuildVersion ? node.skybianBuildVersion : ('node.details.node-info.no-skybian-version' | translate) }}
+    </span>
+    <span class="info-line">
       <span class="title">{{ 'node.details.node-info.time.title' | translate }}</span>
       {{ ('node.details.node-info.time.' + timeOnline.translationVarName) | translate:{time: timeOnline.elapsedTime} }}
 
