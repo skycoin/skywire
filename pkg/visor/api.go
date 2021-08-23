@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -144,6 +145,7 @@ type Summary struct {
 	Online               bool                             `json:"online"`
 	MinHops              uint16                           `json:"min_hops"`
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
+	SkybianBuildVersion  string                           `json:"skybian_build_version"`
 }
 
 // Summary implements API.
@@ -168,6 +170,8 @@ func (v *Visor) Summary() (*Summary, error) {
 		return nil, fmt.Errorf("routes")
 	}
 
+	skybianBuildVersion := v.SkybianBuildVersion()
+
 	extraRoutes := make([]routingRuleResp, 0, len(routes))
 	for _, route := range routes {
 		extraRoutes = append(extraRoutes, routingRuleResp{
@@ -189,6 +193,7 @@ func (v *Visor) Summary() (*Summary, error) {
 		Routes:               extraRoutes,
 		MinHops:              v.conf.Routing.MinHops,
 		PersistentTransports: pts,
+		SkybianBuildVersion:  skybianBuildVersion,
 	}
 
 	return summary, nil
@@ -281,6 +286,11 @@ func (v *Visor) Uptime() (float64, error) {
 // Apps implements API.
 func (v *Visor) Apps() ([]*launcher.AppState, error) {
 	return v.appL.AppStates(), nil
+}
+
+// SkybianBuildVersion implements API.
+func (v *Visor) SkybianBuildVersion() string {
+	return os.Getenv("SKYBIAN_BUILD_VERSION")
 }
 
 // StartApp implements API.
