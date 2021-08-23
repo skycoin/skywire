@@ -7,3 +7,7 @@ const (
 	iconPath        = "/opt/skywire/icon.png"
 	deinstallerPath = "/opt/skywire/deinstaller"
 )
+
+func preReadIcon() error {
+	return nil
+}

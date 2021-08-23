@@ -3,13 +3,10 @@
 package gui
 
 import (
+	"context"
 	"fmt"
-	"github.com/skycoin/skywire/pkg/app/appserver"
-	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/visor"
 	"io"
 	"io/ioutil"
-	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -21,16 +18,20 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/toqueteos/webbrowser"
 
+	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
+
+// TODO @alexadhy : Show VPN status, list all vpn servers, quick dial
 
 var log = logging.NewMasterLogger()
 
 var (
-	stopVisorFnMx     sync.Mutex
-	stopVisorFn       func()
-	vpnClientStatusMu sync.Mutex
-	vpnClientStatus   bool
+	stopVisorFnMx sync.Mutex
+	stopVisorFn   func()
+	//vpnClientStatusMu sync.Mutex
+	//vpnClientStatus   bool
 )
 
 var (
@@ -39,24 +40,27 @@ var (
 
 var (
 	mOpenHypervisor *systray.MenuItem
-	mVPNClient      *systray.MenuItem
-	mUninstall      *systray.MenuItem
-	mQuit           *systray.MenuItem
+	//mVPNClient      *systray.MenuItem
+	mUninstall *systray.MenuItem
+	mQuit      *systray.MenuItem
 )
 
 // GetOnGUIReady creates func to run on GUI startup.
 func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
+	doneCh := make(chan bool, 1)
 	return func() {
 		systray.SetTooltip("Skywire")
 
 		systray.SetTemplateIcon(icon, icon)
 
 		initOpenHypervisorBtn(conf)
-		initVpnClientBtn()
+		//initVpnClientBtn()
 		initUninstallBtn()
 		initQuitBtn()
 
-		go handleUserInteraction(conf)
+		//go updateVPNConnectionStatus(conf, doneCh)
+
+		go handleUserInteraction(conf, doneCh)
 	}
 }
 
@@ -67,6 +71,9 @@ func OnGUIQuit() {
 
 // ReadSysTrayIcon reads system tray icon.
 func ReadSysTrayIcon() ([]byte, error) {
+	if err := preReadIcon(); err != nil {
+		return nil, err
+	}
 	contents, err := ioutil.ReadFile(iconPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read icon: %w", err)
@@ -130,58 +137,78 @@ func initOpenHypervisorBtn(conf *visorconfig.V1) {
 	}()
 }
 
-func initVpnClientBtn() {
-	mVPNClient = systray.AddMenuItem("VPN", "VPN Client Connection")
-}
+//func initVpnClientBtn() {
+//	mVPNClient = systray.AddMenuItem("VPN", "VPN Client Connection")
+//}
 
-func handleVpnClientButton(conf *visorconfig.V1) {
+//func handleVpnClientButton(conf *visorconfig.V1) {
+//	//mVPNClient.AddSubMenuItem()
+//}
 
-}
-
-func updateVPNConnectionStatus(conf *visorconfig.V1, doneCh <-chan bool) {
-	rpcDialTimeout := time.Second * 5
-	conn, err := net.DialTimeout("tcp", conf.CLIAddr, rpcDialTimeout)
+func GetAvailPublicVPNServers(conf *visorconfig.V1) []string {
+	sdClient := servicedisc.NewClient(log, servicedisc.Config{
+		Type:     servicedisc.ServiceTypeVPN,
+		PK:       conf.PK,
+		SK:       conf.SK,
+		DiscAddr: skyenv.DefaultServiceDiscAddr,
+	})
+	//ctx, _ := context.WithTimeout(context.Background(), 7*time.Second)
+	vpnServers, err := sdClient.Services(context.Background(), 0)
 	if err != nil {
-		log.Fatal("RPC Connection failed: ", err)
+		log.Error("Error getting public vpn servers: ", err)
+		return nil
 	}
-	rpcClient := visor.NewRPCClient(log, conn, visor.RPCPrefix, 0)
-
-	vpnSumChan := make(chan appserver.ConnectionSummary)
-
-	// polls vpn client summary
-	go func(done <-chan bool) {
-		for {
-			if <-done {
-				break
-			}
-			vpnSummary, err := rpcClient.GetAppConnectionsSummary(skyenv.VPNClientName)
-			if err != nil {
-				vpnClientStatusMu.Lock()
-				vpnClientStatus = false
-				vpnClientStatusMu.Unlock()
-			}
-
-			for _, sum := range vpnSummary {
-				vpnSumChan <- sum
-			}
-		}
-	}(doneCh)
-
-	for {
-		select {
-		case sum := <-vpnSumChan:
-			if sum.IsAlive {
-				vpnClientStatusMu.Lock()
-				vpnClientStatus = true
-				vpnClientStatusMu.Unlock()
-			}
-		case <-doneCh:
-			close(vpnSumChan)
-			break
-		}
+	serverAddrs := make([]string, len(vpnServers))
+	for idx, server := range vpnServers {
+		serverAddrs[idx] = server.Addr.PubKey().String()
 	}
-
+	return serverAddrs
 }
+
+//func updateVPNConnectionStatus(conf *visorconfig.V1, doneCh <-chan bool) {
+//	rpcDialTimeout := time.Second * 5
+//	conn, err := net.DialTimeout("tcp", conf.CLIAddr, rpcDialTimeout)
+//	if err != nil {
+//		log.Fatal("RPC Connection failed: ", err)
+//	}
+//	rpcClient := visor.NewRPCClient(log, conn, visor.RPCPrefix, 0)
+//
+//	vpnSumChan := make(chan appserver.ConnectionSummary)
+//
+//	// polls vpn client summary
+//	go func(done <-chan bool) {
+//		for {
+//			if <-done {
+//				break
+//			}
+//			vpnSummary, err := rpcClient.GetAppConnectionsSummary(skyenv.VPNClientName)
+//			if err != nil {
+//				vpnClientStatusMu.Lock()
+//				vpnClientStatus = false
+//				vpnClientStatusMu.Unlock()
+//			}
+//
+//			for _, sum := range vpnSummary {
+//				vpnSumChan <- sum
+//			}
+//		}
+//	}(doneCh)
+//
+//	for {
+//		select {
+//		case sum := <-vpnSumChan:
+//			if sum.IsAlive {
+//				vpnClientStatusMu.Lock()
+//				vpnClientStatus = true
+//				vpnClientStatusMu.Unlock()
+//			}
+//		case <-doneCh:
+//			close(vpnSumChan)
+//			break
+//		}
+//	}
+//
+//}
 
 func initUninstallBtn() {
 	mUninstall = systray.AddMenuItem("Uninstall", "")
@@ -191,16 +218,17 @@ func initQuitBtn() {
 	mQuit = systray.AddMenuItem("Quit", "")
 }
 
-func handleUserInteraction(conf *visorconfig.V1) {
+func handleUserInteraction(conf *visorconfig.V1, doneCh chan<- bool) {
 	for {
 		select {
 		case <-mOpenHypervisor.ClickedCh:
 			handleOpenHypervisor(conf)
-		case <-mVPNClient.ClickedCh:
-			handleVpnClientButton(conf)
+		//case <-mVPNClient.ClickedCh:
+		//	handleVpnClientButton(conf)
 		case <-mUninstall.ClickedCh:
 			handleUninstall()
 		case <-mQuit.ClickedCh:
+			doneCh <- true
 			Stop()
 		}
 	}
