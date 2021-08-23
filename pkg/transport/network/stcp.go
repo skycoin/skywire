@@ -33,7 +33,7 @@ func newStcp(generic *genericClient, table stcp.PKTable) Client {
 var ErrStcpEntryNotFound = errors.New("entry not found in PK table")
 
 // Dial implements Client interface
-func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (Conn, error) {
+func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (Transport, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
 	}
@@ -46,13 +46,14 @@ func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) 
 		return nil, ErrStcpEntryNotFound
 	}
 	c.eb.SendTCPDial(context.Background(), string(STCP), addr)
-	conn, err := net.Dial("tcp", addr)
+	dialer := net.Dialer{}
+	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return nil, err
 	}
 
 	c.log.Infof("Dialed %v:%v@%v", rPK, rPort, conn.RemoteAddr())
-	return c.initConnection(ctx, conn, rPK, rPort)
+	return c.initTransport(ctx, conn, rPK, rPort)
 }
 
 // Start implements Client interface
@@ -70,5 +71,5 @@ func (c *stcpClient) serve() {
 		c.log.Errorf("Failed to listen on %q: %v", c.listenAddr, err)
 		return
 	}
-	c.acceptConnections(lis)
+	c.acceptTransports(lis)
 }

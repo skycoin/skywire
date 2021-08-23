@@ -55,8 +55,8 @@ type API interface {
 	AddTransport(remote cipher.PubKey, tpType string, public bool, timeout time.Duration) (*TransportSummary, error)
 	RemoveTransport(tid uuid.UUID) error
 
-	DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error)
-	DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error)
+	DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error)
+	DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error)
 
 	RoutingRules() ([]routing.Rule, error)
 	RoutingRule(key routing.RouteID) (routing.Rule, error)
@@ -74,6 +74,8 @@ type API interface {
 	RuntimeLogs() (string, error)
 
 	SetMinHops(uint16) error
+
+	SetPersistentTransports([]transport.PersistentTransports) error
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -134,15 +136,16 @@ func (v *Visor) Overview() (*Overview, error) {
 
 // Summary provides detailed info including overview and health of the visor.
 type Summary struct {
-	Overview            *Overview                      `json:"overview"`
-	Health              *HealthInfo                    `json:"health"`
-	Uptime              float64                        `json:"uptime"`
-	Routes              []routingRuleResp              `json:"routes"`
-	IsHypervisor        bool                           `json:"is_hypervisor,omitempty"`
-	DmsgStats           *dmsgtracker.DmsgClientSummary `json:"dmsg_stats"`
-	Online              bool                           `json:"online"`
-	MinHops             uint16                         `json:"min_hops"`
-	SkybianBuildVersion string                         `json:"skybian_build_version"`
+	Overview             *Overview                        `json:"overview"`
+	Health               *HealthInfo                      `json:"health"`
+	Uptime               float64                          `json:"uptime"`
+	Routes               []routingRuleResp                `json:"routes"`
+	IsHypervisor         bool                             `json:"is_hypervisor,omitempty"`
+	DmsgStats            *dmsgtracker.DmsgClientSummary   `json:"dmsg_stats"`
+	Online               bool                             `json:"online"`
+	MinHops              uint16                           `json:"min_hops"`
+	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
+	SkybianBuildVersion  string                           `json:"skybian_build_version"`
 }
 
 // Summary implements API.
@@ -178,13 +181,19 @@ func (v *Visor) Summary() (*Summary, error) {
 		})
 	}
 
+	pts, err := v.conf.GetPersistentTransports()
+	if err != nil {
+		return nil, fmt.Errorf("pts")
+	}
+
 	summary := &Summary{
-		Overview:            overview,
-		Health:              health,
-		Uptime:              uptime,
-		Routes:              extraRoutes,
-		MinHops:             v.conf.Routing.MinHops,
-		SkybianBuildVersion: skybianBuildVersion,
+		Overview:             overview,
+		Health:               health,
+		Uptime:               uptime,
+		Routes:               extraRoutes,
+		MinHops:              v.conf.Routing.MinHops,
+		PersistentTransports: pts,
+		SkybianBuildVersion:  skybianBuildVersion,
 	}
 
 	return summary, nil
@@ -560,7 +569,7 @@ func (v *Visor) RemoveTransport(tid uuid.UUID) error {
 }
 
 // DiscoverTransportsByPK implements API.
-func (v *Visor) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error) {
+func (v *Visor) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error) {
 	tpD := v.tpDiscClient()
 
 	entries, err := tpD.GetTransportsByEdge(context.Background(), pk)
@@ -572,7 +581,7 @@ func (v *Visor) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWith
 }
 
 // DiscoverTransportByID implements API.
-func (v *Visor) DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error) {
+func (v *Visor) DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error) {
 	tpD := v.tpDiscClient()
 
 	entry, err := tpD.GetTransportByID(context.Background(), id)
@@ -753,4 +762,9 @@ func (v *Visor) RuntimeLogs() (string, error) {
 // SetMinHops sets min_hops routing config of visor
 func (v *Visor) SetMinHops(in uint16) error {
 	return v.conf.UpdateMinHops(in)
+}
+
+// SetPersistentTransports sets min_hops routing config of visor
+func (v *Visor) SetPersistentTransports(pts []transport.PersistentTransports) error {
+	return v.conf.UpdatePersistentTransports(pts)
 }
