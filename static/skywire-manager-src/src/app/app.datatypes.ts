@@ -14,6 +14,7 @@ export class Node {
   dmsgServerPk?: string;
   roundTripPing?: string;
   isHypervisor?: boolean;
+  skybianBuildVersion?: string;
 }
 
 export interface Application {
