@@ -136,14 +136,15 @@ func (v *Visor) Overview() (*Overview, error) {
 
 // Summary provides detailed info including overview and health of the visor.
 type Summary struct {
-	Overview     *Overview                      `json:"overview"`
-	Health       *HealthInfo                    `json:"health"`
-	Uptime       float64                        `json:"uptime"`
-	Routes       []routingRuleResp              `json:"routes"`
-	IsHypervisor bool                           `json:"is_hypervisor,omitempty"`
-	DmsgStats    *dmsgtracker.DmsgClientSummary `json:"dmsg_stats"`
-	Online       bool                           `json:"online"`
-	MinHops      uint16                         `json:"min_hops"`
+	Overview             *Overview                        `json:"overview"`
+	Health               *HealthInfo                      `json:"health"`
+	Uptime               float64                          `json:"uptime"`
+	Routes               []routingRuleResp                `json:"routes"`
+	IsHypervisor         bool                             `json:"is_hypervisor,omitempty"`
+	DmsgStats            *dmsgtracker.DmsgClientSummary   `json:"dmsg_stats"`
+	Online               bool                             `json:"online"`
+	MinHops              uint16                           `json:"min_hops"`
+	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 }
 
 // Summary implements API.
@@ -177,12 +178,18 @@ func (v *Visor) Summary() (*Summary, error) {
 		})
 	}
 
+	pts, err := v.conf.GetPersistentTransports()
+	if err != nil {
+		return nil, fmt.Errorf("pts")
+	}
+
 	summary := &Summary{
-		Overview: overview,
-		Health:   health,
-		Uptime:   uptime,
-		Routes:   extraRoutes,
-		MinHops:  v.conf.Routing.MinHops,
+		Overview:             overview,
+		Health:               health,
+		Uptime:               uptime,
+		Routes:               extraRoutes,
+		MinHops:              v.conf.Routing.MinHops,
+		PersistentTransports: pts,
 	}
 
 	return summary, nil
