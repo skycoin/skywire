@@ -1,3 +1,0 @@
-//+build systray
-
-package visor
