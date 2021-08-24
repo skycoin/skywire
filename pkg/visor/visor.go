@@ -38,7 +38,7 @@ const (
 	shortHashLen             = 6
 	// moduleShutdownTimeout is the timeout given to a module to shutdown cleanly.
 	// Otherwise the shutdown logic will continue and report a timeout error.
-	moduleShutdownTimeout = time.Second * 2
+	moduleShutdownTimeout = time.Second * 4
 )
 
 // Visor provides messaging runtime for Apps by setting up all
@@ -64,7 +64,6 @@ type Visor struct {
 	router     router.Router
 	rfClient   rfclient.Client
 
-	isNetConf   chan bool             // net config check
 	procM       appserver.ProcManager // proc manager
 	appL        *launcher.Launcher    // app launcher
 	serviceDisc appdisc.Factory
@@ -102,7 +101,6 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 		conf:       conf,
 		restartCtx: restartCtx,
 		initLock:   new(sync.Mutex),
-		isNetConf:  make(chan bool),
 	}
 
 	if logLvl, err := logging.LevelFromString(conf.LogLevel); err != nil {

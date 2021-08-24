@@ -52,7 +52,7 @@ func (c *sudphClient) serve() {
 		c.log.Errorf("Failed to listen on random port: %v", err)
 		return
 	}
-	c.acceptConnections(lis)
+	c.acceptTransports(lis)
 }
 
 // listen
@@ -106,7 +106,7 @@ func (c *sudphClient) acceptAddresses(conn net.PacketConn, addrCh <-chan addrres
 }
 
 // Dial implements interface
-func (c *sudphClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (Conn, error) {
+func (c *sudphClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (Transport, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
 	}
@@ -116,7 +116,7 @@ func (c *sudphClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16)
 		return nil, err
 	}
 
-	return c.initConnection(ctx, conn, rPK, rPort)
+	return c.initTransport(ctx, conn, rPK, rPort)
 }
 
 func (c *sudphClient) dialWithTimeout(ctx context.Context, addr string) (net.Conn, error) {

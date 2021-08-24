@@ -270,14 +270,14 @@ func (rc *rpcClient) RemoveTransport(tid uuid.UUID) error {
 	return rc.Call("RemoveTransport", &tid, &struct{}{})
 }
 
-func (rc *rpcClient) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error) {
-	entries := make([]*transport.EntryWithStatus, 0)
+func (rc *rpcClient) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error) {
+	entries := make([]*transport.Entry, 0)
 	err := rc.Call("DiscoverTransportsByPK", &pk, &entries)
 	return entries, err
 }
 
-func (rc *rpcClient) DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error) {
-	var entry transport.EntryWithStatus
+func (rc *rpcClient) DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error) {
+	var entry transport.Entry
 	err := rc.Call("DiscoverTransportByID", &id, &entry)
 	return &entry, err
 }
@@ -342,6 +342,12 @@ func (rc *rpcClient) RuntimeLogs() (string, error) {
 // SetMinHops sets the min_hops from visor routing config
 func (rc *rpcClient) SetMinHops(hops uint16) error {
 	err := rc.Call("SetMinHops", &hops, &struct{}{})
+	return err
+}
+
+// SetPersistentTransports sets the persistent_transports from visor routing config
+func (rc *rpcClient) SetPersistentTransports(pts []transport.PersistentTransports) error {
+	err := rc.Call("SetPersistentTransports", &pts, &struct{}{})
 	return err
 }
 
@@ -847,11 +853,11 @@ func (mc *mockRPCClient) RemoveTransport(tid uuid.UUID) error {
 	})
 }
 
-func (mc *mockRPCClient) DiscoverTransportsByPK(cipher.PubKey) ([]*transport.EntryWithStatus, error) {
+func (mc *mockRPCClient) DiscoverTransportsByPK(cipher.PubKey) ([]*transport.Entry, error) {
 	return nil, ErrNotImplemented
 }
 
-func (mc *mockRPCClient) DiscoverTransportByID(uuid.UUID) (*transport.EntryWithStatus, error) {
+func (mc *mockRPCClient) DiscoverTransportByID(uuid.UUID) (*transport.Entry, error) {
 	return nil, ErrNotImplemented
 }
 
@@ -936,6 +942,11 @@ func (mc *mockRPCClient) RuntimeLogs() (string, error) {
 }
 
 // SetMinHops implements API
-func (mc *mockRPCClient) SetMinHops(n uint16) error {
+func (mc *mockRPCClient) SetMinHops(_ uint16) error {
+	return nil
+}
+
+// SetPersistentTransports implements API
+func (mc *mockRPCClient) SetPersistentTransports(_ []transport.PersistentTransports) error {
 	return nil
 }
