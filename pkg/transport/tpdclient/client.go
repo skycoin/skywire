@@ -102,7 +102,7 @@ func (c *apiClient) RegisterTransports(ctx context.Context, entries ...*transpor
 }
 
 // GetTransportByID returns Transport for corresponding ID.
-func (c *apiClient) GetTransportByID(ctx context.Context, id uuid.UUID) (*transport.EntryWithStatus, error) {
+func (c *apiClient) GetTransportByID(ctx context.Context, id uuid.UUID) (*transport.Entry, error) {
 	resp, err := c.Get(ctx, fmt.Sprintf("/transports/id:%s", id.String()))
 	if err != nil {
 		return nil, err
@@ -118,7 +118,7 @@ func (c *apiClient) GetTransportByID(ctx context.Context, id uuid.UUID) (*transp
 		return nil, err
 	}
 
-	entry := &transport.EntryWithStatus{}
+	entry := &transport.Entry{}
 	if err := json.NewDecoder(resp.Body).Decode(entry); err != nil {
 		return nil, fmt.Errorf("json: %w", err)
 	}
@@ -127,7 +127,7 @@ func (c *apiClient) GetTransportByID(ctx context.Context, id uuid.UUID) (*transp
 }
 
 // GetTransportsByEdge returns all Transports registered for the edge.
-func (c *apiClient) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*transport.EntryWithStatus, error) {
+func (c *apiClient) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
 	resp, err := c.Get(ctx, fmt.Sprintf("/transports/edge:%s", pk))
 	if err != nil {
 		return nil, err
@@ -143,7 +143,7 @@ func (c *apiClient) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) (
 		return nil, err
 	}
 
-	var entries []*transport.EntryWithStatus
+	var entries []*transport.Entry
 	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
 		return nil, fmt.Errorf("json: %w", err)
 	}
@@ -167,35 +167,6 @@ func (c *apiClient) DeleteTransport(ctx context.Context, id uuid.UUID) error {
 	return httputil.ErrorFromResp(resp)
 }
 
-// UpdateStatuses updates statuses of transports in discovery.
-func (c *apiClient) UpdateStatuses(ctx context.Context, statuses ...*transport.Status) ([]*transport.EntryWithStatus, error) {
-	if len(statuses) == 0 {
-		return nil, nil
-	}
-
-	resp, err := c.Post(ctx, "/statuses", statuses)
-	if err != nil {
-		return nil, err
-	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close HTTP response body")
-		}
-	}()
-
-	if err := httputil.ErrorFromResp(resp); err != nil {
-		return nil, err
-	}
-
-	var entries []*transport.EntryWithStatus
-	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
-		return nil, fmt.Errorf("json: %w", err)
-	}
-
-	return entries, nil
-}
-
 func (c *apiClient) Health(ctx context.Context) (int, error) {
 	resp, err := c.Get(ctx, "/health")
 	if err != nil {
@@ -209,4 +180,19 @@ func (c *apiClient) Health(ctx context.Context) (int, error) {
 	}()
 
 	return resp.StatusCode, nil
+}
+
+func (c *apiClient) HeartBeat(ctx context.Context, id uuid.UUID) error {
+	resp, err := c.Post(ctx, fmt.Sprintf("/heartbeat/id:%s", id.String()), nil)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.WithError(err).Warn("Failed to close HTTP response body")
+		}
+	}()
+
+	return nil
 }
