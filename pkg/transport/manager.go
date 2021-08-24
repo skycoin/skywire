@@ -162,10 +162,10 @@ func (tm *Manager) runClient(ctx context.Context, netType network.Type) {
 	if err != nil {
 		tm.Logger.WithError(err).Errorf("Failed to listen on %s network", client.Type())
 	}
-	lis, err := client.Listen(skyenv.DmsgTransportPort)
+	lis, err := client.Listen(skyenv.TransportPort)
 	if err != nil {
 		tm.Logger.WithError(err).Fatalf("failed to listen on network '%s' of port '%d'",
-			client.Type(), skyenv.DmsgTransportPort)
+			client.Type(), skyenv.TransportPort)
 		return
 	}
 	tm.Logger.Infof("listening on network: %s", client.Type())
