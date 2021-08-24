@@ -144,7 +144,7 @@ func runVisor(args []string) {
 	// Wait.
 	<-ctx.Done()
 
-	stopSystray(log, cancel, v.Close)
+	stopVisor(log, cancel, v.Close)
 }
 
 // Execute executes root CLI command.
