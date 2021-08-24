@@ -181,7 +181,8 @@ build-deploy: ## Build for deployment Docker images
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
-github-release-systray: sysroot ## Create a GitHub release
+github-release: sysroot
+	goreleaser --rm-dist
 	docker run --rm --privileged \
 		-v $(CURDIR):/go/src/github.com/skycoin/skywire \
 		-v /var/run/docker.sock:/var/run/docker.sock \
@@ -189,9 +190,6 @@ github-release-systray: sysroot ## Create a GitHub release
 		-v $(CURDIR)/sysroot:/sysroot \
 		-w /go/src/github.com/skycoin/skywire \
 		skycoin/golang-cross:$(GO_BUILDER_VERSION) -f /go/src/github.com/skycoin/skywire/.goreleaser-systray.yml --rm-dist
-
-github-release:
-	goreleaser --rm-dist
 
 build-docker: ## Build docker image
 	./ci_scripts/docker-push.sh -t ${BRANCH} -b

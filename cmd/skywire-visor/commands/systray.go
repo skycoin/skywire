@@ -4,6 +4,7 @@ package commands
 
 import (
 	"context"
+	log "github.com/sirupsen/logrus"
 	"sync"
 
 	"github.com/getlantern/systray"
@@ -17,15 +18,8 @@ var (
 	runSysTrayApp bool
 )
 
-func init() {
-	rootCmd.Flags().StringVar(&tag, "tag", "skywire", "logging tag")
-	rootCmd.Flags().StringVar(&syslogAddr, "syslog", "", "syslog server address. E.g. localhost:514")
-	rootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "p", "", "pprof profiling mode. Valid values: cpu, mem, mutex, block, trace, http")
-	rootCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port if mode is 'http'")
-	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file location. If the value is 'STDIN', config file will be read from stdin.")
-	rootCmd.Flags().StringVar(&delay, "delay", "0ns", "start delay (deprecated)") // deprecated
+func extraFlags() {
 	rootCmd.Flags().BoolVar(&runSysTrayApp, "systray", false, "Run system tray app")
-	rootCmd.Flags().BoolVar(&launchBrowser, "launch-browser", false, "open hypervisor web ui (hypervisor only) with system browser")
 }
 
 func runApp(args ...string) {
@@ -46,12 +40,15 @@ func runApp(args ...string) {
 
 }
 
-func stopSystray(cancel context.CancelFunc) {
+func stopSystray(cancel context.CancelFunc, stopVisorFn func() error) {
 	stopVisorWg.Add(1)
 	defer stopVisorWg.Done()
 
 	gui.SetStopVisorFn(func() {
 		cancel()
+		if err := stopVisorFn(); err != nil {
+			log.WithError(err).Error("Visor closed with error.")
+		}
 		stopVisorWg.Wait()
 	})
 }
