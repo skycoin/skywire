@@ -30,7 +30,6 @@ func runApp(args ...string) {
 
 	go func() {
 		runVisor(args)
-		gui.Stop()
 	}()
 
 	conf := initConfig(l, args, confPath)
@@ -44,12 +43,13 @@ func stopSystray(log *logging.MasterLogger, cancel context.CancelFunc, stopVisor
 	defer stopVisorWg.Done()
 
 	gui.SetStopVisorFn(func() {
-		cancel()
 		if err := stopVisorFn(); err != nil {
 			log.WithError(err).Error("Visor closed with error.")
 		}
 		stopVisorWg.Wait()
 	})
+
+	gui.Stop()
 }
 
 func quitSystray() {
