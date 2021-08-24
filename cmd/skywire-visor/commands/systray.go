@@ -4,7 +4,6 @@ package commands
 
 import (
 	"context"
-	log "github.com/sirupsen/logrus"
 	"sync"
 
 	"github.com/getlantern/systray"
@@ -40,7 +39,7 @@ func runApp(args ...string) {
 
 }
 
-func stopSystray(cancel context.CancelFunc, stopVisorFn func() error) {
+func stopSystray(log *logging.MasterLogger, cancel context.CancelFunc, stopVisorFn func() error) {
 	stopVisorWg.Add(1)
 	defer stopVisorWg.Done()
 

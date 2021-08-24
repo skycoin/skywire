@@ -49,7 +49,6 @@ var (
 	launchBrowser bool
 )
 
-
 var rootCmd = &cobra.Command{
 	Use:   "skywire-visor",
 	Short: "Skywire visor",
@@ -58,7 +57,6 @@ var rootCmd = &cobra.Command{
 	},
 	Version: buildinfo.Version(),
 }
-
 
 func init() {
 	rootCmd.Flags().StringVar(&tag, "tag", "skywire", "logging tag")
@@ -146,7 +144,7 @@ func runVisor(args []string) {
 	// Wait.
 	<-ctx.Done()
 
-	stopSystray(cancel, v.Close)
+	stopSystray(log, cancel, v.Close)
 }
 
 // Execute executes root CLI command.

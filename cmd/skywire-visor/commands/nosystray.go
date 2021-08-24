@@ -4,6 +4,7 @@ package commands
 
 import (
 	"context"
+	"github.com/skycoin/skycoin/src/util/logging"
 )
 
 func extraFlags() {
@@ -15,7 +16,7 @@ func runApp(args ...string) {
 }
 
 // stopSystray is a stub
-func stopSystray(ctx context.CancelFunc, stopVisorFn func() error) {
+func stopSystray(log *logging.MasterLogger, _ context.CancelFunc, stopVisorFn func() error) {
 	if err := stopVisorFn(); err != nil {
 		log.WithError(err).Error("Visor closed with error.")
 	}
