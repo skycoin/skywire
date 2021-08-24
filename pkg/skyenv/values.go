@@ -103,13 +103,42 @@ const (
 	AppDiscUpdateInterval = time.Minute
 	DefaultAppBinPath     = DefaultSkywirePath + "/apps"
 	DefaultLogLevel       = "info"
-	PackageAppBinPath     = PackageSkywirePath + "/apps"
+)
+
+// Package defaults
+const (
+	PackageAppBinPath       = PackageSkywirePath + "/apps"
+	PackageLocalPath        = PackageSkywirePath + "/local"
+	PackageDmsgPtyWhiteList = PackageSkywirePath + "/dmsgpty/whitelist.json"
+	PackageDmsgPtyCLIAddr   = PackageSkywirePath + "/dmsgpty/cli.sock"
+	PackageTpLogStore       = PackageSkywirePath + "/transport_logs"
+	PackageDBPath           = PackageSkywirePath + "/users.db"
+	PackageEnableTLS        = false
+	PackageTLSKey           = PackageSkywirePath + "/ssl/key.pem"
+	PackageTLSCert          = PackageSkywirePath + "/ssl/cert.pem"
+)
+
+// Default routing constants
+const (
+	DefaultTpLogStore = DefaultSkywirePath + "/transport_logs"
+)
+
+// Skybian defaults
+const (
+	SkybianAppBinPath       = "/usr/bin/apps"
+	SkybianDmsgPtyWhiteList = "/var/skywire-visor/dsmgpty/whitelist.json"
+	SkybianDmsgPtyCLIAddr   = "/run/skywire-visor/dmsgpty/cli.sock"
+	SkybianLocalPath        = "/var/skywire-visor/apps"
+	SkybianTpLogStore       = "/var/skywire-visor/transports"
+	SkybianEnableTLS        = false
+	SkybianDBPath           = "/var/skywire-visor/users.db"
+	SkybianTLSKey           = "/var/skywire-visor/ssl/key.pem"
+	SkybianTLSCert          = "/var/skywire-visor/ssl/cert.pem"
 )
 
 // Default local constants
 const (
 	DefaultLocalPath = DefaultSkywirePath + "/local"
-	PackageLocalPath = PackageSkywirePath + "/local"
 )
 
 // Default hypervisor constants
@@ -119,9 +148,6 @@ const (
 	DefaultEnableTLS    = false
 	DefaultTLSKey       = DefaultSkywirePath + "/ssl/key.pem"
 	DefaultTLSCert      = DefaultSkywirePath + "/ssl/cert.pem"
-	PackageEnableTLS    = true
-	PackageTLSKey       = PackageSkywirePath + "/ssl/key.pem"
-	PackageTLSCert      = PackageSkywirePath + "/ssl/cert.pem"
 )
 
 // MustPK unmarshals string PK to cipher.PubKey. It panics if unmarshaling fails.
