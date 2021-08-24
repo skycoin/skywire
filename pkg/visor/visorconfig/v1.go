@@ -9,6 +9,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/dmsgc"
+	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
@@ -58,6 +59,8 @@ type V1 struct {
 	ShutdownTimeout   Duration `json:"shutdown_timeout,omitempty"`    // time value, examples: 10s, 1m, etc
 	RestartCheckDelay Duration `json:"restart_check_delay,omitempty"` // time value, examples: 10s, 1m, etc
 	IsPublic          bool     `json:"is_public"`
+
+	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 
 	Hypervisor *hypervisorconfig.Config `json:"hypervisor,omitempty"`
 }
@@ -186,6 +189,22 @@ func (v1 *V1) UpdateMinHops(hops uint16) error {
 	v1.mu.Unlock()
 
 	return v1.flush(v1)
+}
+
+// UpdatePersistentTransports updates min_hops config
+func (v1 *V1) UpdatePersistentTransports(pts []transport.PersistentTransports) error {
+	v1.mu.Lock()
+	v1.PersistentTransports = pts
+	v1.mu.Unlock()
+
+	return v1.flush(v1)
+}
+
+// GetPersistentTransports updates min_hops config
+func (v1 *V1) GetPersistentTransports() ([]transport.PersistentTransports, error) {
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+	return v1.PersistentTransports, nil
 }
 
 // updateStringArg updates the cli non-boolean flag of the specified app config and also within the launcher.

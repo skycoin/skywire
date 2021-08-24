@@ -20,12 +20,22 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 )
 
+const reconnectPhaseDelay = 10 * time.Second
+const reconnectRemoteTimeout = 3 * time.Second
+
+// PersistentTransports is a persistent transports description
+type PersistentTransports struct {
+	PK      cipher.PubKey `json:"pk"`
+	NetType network.Type  `json:"type"`
+}
+
 // ManagerConfig configures a Manager.
 type ManagerConfig struct {
-	PubKey          cipher.PubKey
-	SecKey          cipher.SecKey
-	DiscoveryClient DiscoveryClient
-	LogStore        LogStore
+	PubKey               cipher.PubKey
+	SecKey               cipher.SecKey
+	DiscoveryClient      DiscoveryClient
+	LogStore             LogStore
+	PersistentTransports []PersistentTransports
 }
 
 // Manager manages Transports.
@@ -36,12 +46,10 @@ type Manager struct {
 	arClient addrresolver.APIClient
 	ebc      *appevent.Broadcaster
 
-	readCh    chan routing.Packet
-	mx        sync.RWMutex
-	wgMu      sync.Mutex
-	wg        sync.WaitGroup
-	closeOnce sync.Once // ensure we only close once.
-	done      chan struct{}
+	readCh chan routing.Packet
+	mx     sync.RWMutex
+	wg     sync.WaitGroup
+	done   chan struct{}
 
 	readyOnce sync.Once // ensure we only ready once.
 	ready     chan struct{}
@@ -77,6 +85,49 @@ func (tm *Manager) InitDmsgClient(ctx context.Context, dmsgC *dmsg.Client) {
 	tm.InitClient(ctx, network.DMSG)
 }
 
+// Serve starts all network clients and starts accepting connections
+// from all those clients
+// Additionally, it runs cleanup and persistent reconnection routines
+func (tm *Manager) Serve(ctx context.Context) {
+	// for cleanup and reconnect goroutines
+	tm.wg.Add(2)
+	go tm.cleanupTransports(ctx)
+	go tm.runReconnectPersistent(ctx)
+	tm.Logger.Info("transport manager is serving.")
+}
+
+func (tm *Manager) runReconnectPersistent(ctx context.Context) {
+	defer tm.wg.Done()
+	ticker := time.NewTicker(reconnectPhaseDelay)
+	tm.reconnectPersistent(ctx)
+	for {
+		select {
+		case <-ticker.C:
+			tm.reconnectPersistent(ctx)
+			// wait full timeout no matter how long the last phase took
+			ticker = time.NewTicker(reconnectPhaseDelay)
+		case <-tm.done:
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (tm *Manager) reconnectPersistent(ctx context.Context) {
+	for _, remote := range tm.Conf.PersistentTransports {
+		tm.Logger.Debugf("Reconnecting to persistent transport to %s, type %s", remote.PK, remote.NetType)
+		deadlined, cancel := context.WithTimeout(ctx, reconnectRemoteTimeout)
+		_, err := tm.saveTransport(deadlined, remote.PK, remote.NetType, LabelUser)
+		if err != nil {
+			tm.Logger.WithError(err).
+				WithField("remote_pk", remote.PK).
+				WithField("network_type", remote.NetType).
+				Warnf("Cannot connect to persistent remote")
+		}
+		cancel()
+	}
+}
+
 // InitClient initilizes a network client
 func (tm *Manager) InitClient(ctx context.Context, netType network.Type) {
 
@@ -88,7 +139,6 @@ func (tm *Manager) InitClient(ctx context.Context, netType network.Type) {
 	tm.netClients[netType] = client
 	tm.mx.Unlock()
 	tm.runClient(ctx, netType)
-	tm.initTransports(ctx, netType)
 
 	// Transport Manager is 'ready' once we have successfully initilized
 	// with at least one transport client.
@@ -119,14 +169,17 @@ func (tm *Manager) runClient(ctx context.Context, netType network.Type) {
 		return
 	}
 	tm.Logger.Infof("listening on network: %s", client.Type())
-	tm.wgMu.Lock()
-	tm.wg.Add(1)
-	tm.wgMu.Unlock()
-	go tm.acceptTransports(ctx, lis)
+	if client.Type() != network.DMSG {
+		tm.wg.Add(1)
+	}
+	go tm.acceptTransports(ctx, lis, netType)
 }
 
-func (tm *Manager) acceptTransports(ctx context.Context, lis network.Listener) {
-	defer tm.wg.Done()
+func (tm *Manager) acceptTransports(ctx context.Context, lis network.Listener, t network.Type) {
+	// we do not close dmsg client explicitly, so we don't have to wait for it to finish
+	if t != network.DMSG {
+		defer tm.wg.Done()
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -134,11 +187,40 @@ func (tm *Manager) acceptTransports(ctx context.Context, lis network.Listener) {
 			return
 		default:
 			if err := tm.acceptTransport(ctx, lis); err != nil {
-				tm.Logger.Warnf("Failed to accept connection: %v", err)
+				tm.Logger.Warnf("Failed to accept transport: %v", err)
 				if errors.Is(err, io.ErrClosedPipe) {
 					return
 				}
 			}
+		}
+	}
+}
+
+func (tm *Manager) cleanupTransports(ctx context.Context) {
+	defer tm.wg.Done()
+	ticker := time.NewTicker(1 * time.Second)
+	for {
+		select {
+		case <-ticker.C:
+			tm.mx.Lock()
+			tm.Logger.Debugf("Locked in cleanup")
+			var toDelete []*ManagedTransport
+			for _, tp := range tm.tps {
+				if tp.IsClosed() {
+					toDelete = append(toDelete, tp)
+				}
+			}
+			for _, tp := range toDelete {
+				delete(tm.tps, tp.Entry.ID)
+			}
+			tm.mx.Unlock()
+			tm.Logger.Debugf("Unlocked in cleanup")
+			if len(toDelete) > 0 {
+				tm.Logger.Infof("Deleted %d unused transport entries", len(toDelete))
+			}
+		case <-ctx.Done():
+		case <-tm.done:
+			return
 		}
 	}
 }
@@ -152,31 +234,6 @@ func (tm *Manager) Networks() []string {
 	return nets
 }
 
-func (tm *Manager) initTransports(ctx context.Context, netType network.Type) {
-
-	entries, err := tm.Conf.DiscoveryClient.GetTransportsByEdge(ctx, tm.Conf.PubKey)
-	if err != nil {
-		log.Warnf("No %v transports found for local visor: %v", netType, err)
-	}
-	tm.Logger.Debugf("Initializing %d transports", len(entries))
-	for _, entry := range entries {
-		if entry.Entry.Type == netType {
-			tm.Logger.Debugf("Initializing TP %v", *entry.Entry)
-			var (
-				tpType = entry.Entry.Type
-				remote = entry.Entry.RemoteEdge(tm.Conf.PubKey)
-				tpID   = entry.Entry.ID
-			)
-			isInitiator := tm.Conf.PubKey == entry.Entry.Edges[0]
-			if _, err := tm.saveTransport(ctx, remote, isInitiator, tpType, entry.Entry.Label); err != nil {
-				tm.Logger.Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s)", tpType, remote, tpID)
-			} else {
-				tm.Logger.Debugf("Successfully initialized TP %v", *entry.Entry)
-			}
-		}
-	}
-}
-
 // Stcpr returns stcpr client
 func (tm *Manager) Stcpr() (network.Client, bool) {
 	c, ok := tm.netClients[network.STCP]
@@ -184,15 +241,17 @@ func (tm *Manager) Stcpr() (network.Client, bool) {
 }
 
 func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) error {
-	conn, err := lis.AcceptConn() // TODO: tcp panic.
+	transport, err := lis.AcceptTransport() // TODO: tcp panic.
 	if err != nil {
 		return err
 	}
 
-	tm.Logger.Infof("recv transport connection request: type(%s) remote(%s)", lis.Network(), conn.RemotePK())
+	tm.Logger.Infof("recv transport request: type(%s) remote(%s)", lis.Network(), transport.RemotePK())
 
 	tm.mx.Lock()
+	tm.Logger.Debugf("Locked in accept")
 	defer tm.mx.Unlock()
+	defer tm.Logger.Debugf("Unlocked in accept")
 
 	if tm.isClosing() {
 		return errors.New("transport.Manager is closing. Skipping incoming transport")
@@ -200,11 +259,11 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 
 	// For transports for purpose(data).
 
-	tpID := tm.tpIDFromPK(conn.RemotePK(), conn.Network())
+	tpID := tm.tpIDFromPK(transport.RemotePK(), transport.Network())
 
-	client, ok := tm.netClients[network.Type(conn.Network())]
+	client, ok := tm.netClients[network.Type(transport.Network())]
 	if !ok {
-		return fmt.Errorf("client not found for the type %s", conn.Network())
+		return fmt.Errorf("client not found for the type %s", transport.Network())
 	}
 
 	mTp, ok := tm.tps[tpID]
@@ -215,17 +274,19 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 			client:         client,
 			DC:             tm.Conf.DiscoveryClient,
 			LS:             tm.Conf.LogStore,
-			RemotePK:       conn.RemotePK(),
+			RemotePK:       transport.RemotePK(),
 			TransportLabel: LabelUser,
 			ebc:            tm.ebc,
-		}, false)
+		})
 
 		go func() {
 			mTp.Serve(tm.readCh)
 
 			tm.mx.Lock()
+			tm.Logger.Debugf("Locked in deleting after serve in accept")
 			delete(tm.tps, mTp.Entry.ID)
 			tm.mx.Unlock()
+			tm.Logger.Debugf("Locked in deleting after serve in accept")
 		}()
 
 		tm.tps[tpID] = mTp
@@ -233,12 +294,11 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 		tm.Logger.Debugln("TP found, accepting...")
 	}
 
-	if err := mTp.Accept(ctx, conn); err != nil {
+	if err := mTp.Accept(ctx, transport); err != nil {
 		return err
 	}
 
-	tm.Logger.Infof("accepted tp: type(%s) remote(%s) tpID(%s) new(%v)", lis.Network(), conn.RemotePK(), tpID, !ok)
-
+	tm.Logger.Infof("accepted tp: type(%s) remote(%s) tpID(%s) new(%v)", lis.Network(), transport.RemotePK(), tpID, !ok)
 	return nil
 }
 
@@ -251,6 +311,8 @@ var ErrUnknownNetwork = errors.New("unknown network type")
 // IsKnownNetwork returns true when netName is a known
 // network type that we are able to operate in
 func (tm *Manager) IsKnownNetwork(netName network.Type) bool {
+	tm.mx.RLock()
+	defer tm.mx.RUnlock()
 	_, ok := tm.netClients[netName]
 	return ok
 }
@@ -273,6 +335,8 @@ func (tm *Manager) GetTransport(remote cipher.PubKey, netType network.Type) (*Ma
 
 // GetTransportByID retrieves transport by its ID, if it exists
 func (tm *Manager) GetTransportByID(tpID uuid.UUID) (*ManagedTransport, error) {
+	tm.mx.RLock()
+	defer tm.mx.RUnlock()
 	tp, ok := tm.tps[tpID]
 	if !ok {
 		return nil, ErrNotFound
@@ -299,7 +363,7 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, netT
 		return nil, io.ErrClosedPipe
 	}
 	for {
-		mTp, err := tm.saveTransport(ctx, remote, true, netType, label)
+		mTp, err := tm.saveTransport(ctx, remote, netType, label)
 
 		if err != nil {
 			if err == ErrNotServing {
@@ -311,9 +375,7 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, netT
 	}
 }
 
-func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, initiator bool, netType network.Type, label Label) (*ManagedTransport, error) {
-	tm.mx.Lock()
-	defer tm.mx.Unlock()
+func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, netType network.Type, label Label) (*ManagedTransport, error) {
 	if !tm.IsKnownNetwork(netType) {
 		return nil, ErrUnknownNetwork
 	}
@@ -321,13 +383,15 @@ func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, init
 	tpID := tm.tpIDFromPK(remote, netType)
 	tm.Logger.Debugf("Initializing TP with ID %s", tpID)
 
-	oldMTp, ok := tm.tps[tpID]
-	if ok {
+	oldMTp, err := tm.GetTransportByID(tpID)
+	if err == nil {
 		tm.Logger.Debug("Found an old mTp from internal map.")
 		return oldMTp, nil
 	}
 
+	tm.mx.RLock()
 	client, ok := tm.netClients[network.Type(netType)]
+	tm.mx.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("client not found for the type %s", netType)
 	}
@@ -339,43 +403,25 @@ func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, init
 		LS:             tm.Conf.LogStore,
 		RemotePK:       remote,
 		TransportLabel: label,
-	}, initiator)
-
-	// todo: do we need this here? Client dial will run resolve anyway
-	if mTp.Type() == network.STCPR && tm.arClient != nil {
-		visorData, err := tm.arClient.Resolve(context.Background(), string(mTp.Type()), remote)
-		if err == nil {
-			mTp.remoteAddr = visorData.RemoteAddr
-		} else {
-			if err != addrresolver.ErrNoEntry {
-				return nil, fmt.Errorf("failed to resolve %s: %w", remote, err)
-			}
-		}
-	}
+	})
 
 	tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.client.Type())
-	if err := mTp.Dial(ctx); err != nil {
+	errCh := make(chan error)
+	go mTp.DialAsync(ctx, errCh)
+	err = <-errCh
+	if err != nil {
 		tm.Logger.Debugf("Error dialing transport to %v via %v: %v", mTp.Remote(), mTp.client.Type(), err)
-		// The first occurs when an old tp is returned by 'tm.saveTransport', meaning a tp of the same transport ID was
-		// just deleted (and has not yet fully closed). Hence, we should close and delete the old tp and try again.
-		// The second occurs when the tp type is STCP and the requested remote PK is not associated with an IP address in
-		// the STCP table. There is no point in retrying as a connection would be impossible, so we just return an
-		// error.
-		if err == ErrNotServing || errors.Is(err, network.ErrStcpEntryNotFound) {
-			if closeErr := mTp.Close(); closeErr != nil {
-				tm.Logger.WithError(err).Warn("Closing mTp returns non-nil error.")
-			}
-			tm.deleteTransport(mTp.Entry.ID)
+		if closeErr := mTp.Close(); closeErr != nil {
+			tm.Logger.WithError(err).Warn("Error closing transport")
 		}
-		tm.Logger.WithError(err).Warn("Underlying transport connection is not established.")
 		return nil, err
 	}
-
-	go func() {
-		mTp.Serve(tm.readCh)
-		tm.deleteTransport(mTp.Entry.ID)
-	}()
+	go mTp.Serve(tm.readCh)
+	tm.mx.Lock()
+	tm.Logger.Debug("Locked in saveTransport")
 	tm.tps[tpID] = mTp
+	tm.mx.Unlock()
+	tm.Logger.Debug("Unlocked in saveTransport")
 	tm.Logger.Infof("saved transport: remote(%s) type(%s) tpID(%s)", remote, netType, tpID)
 	return mTp, nil
 }
@@ -388,8 +434,9 @@ func (tm *Manager) STCPRRemoteAddrs() []string {
 	defer tm.mx.RUnlock()
 
 	for _, tp := range tm.tps {
-		if tp.Entry.Type == network.STCPR && tp.remoteAddr != "" {
-			addrs = append(addrs, tp.remoteAddr)
+		remoteRaw := tp.transport.RemoteRawAddr().String()
+		if tp.Entry.Type == network.STCPR && remoteRaw != "" {
+			addrs = append(addrs, remoteRaw)
 		}
 	}
 
@@ -399,34 +446,31 @@ func (tm *Manager) STCPRRemoteAddrs() []string {
 // DeleteTransport deregisters the Transport of Transport ID in transport discovery and deletes it locally.
 func (tm *Manager) DeleteTransport(id uuid.UUID) {
 	tm.mx.Lock()
+	tm.Logger.Debugf("Locked in DeleteTransport")
 	defer tm.mx.Unlock()
+	defer tm.Logger.Debug("Unlocked in DeleteTransport")
 
 	if tm.isClosing() {
 		return
 	}
 
-	// Deregister transport before closing the underlying connection.
+	// Deregister transport before closing the underlying transport.
 	if tp, ok := tm.tps[id]; ok {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
 
-		// Deregister transport.
+		// todo: this should probably be moved to tp.close because we want to deregister
+		// a transport completely and not deal with transport statuses at all
 		if err := tm.Conf.DiscoveryClient.DeleteTransport(ctx, id); err != nil {
 			tm.Logger.WithError(err).Warnf("Failed to deregister transport of ID %s from discovery.", id)
 		} else {
 			tm.Logger.Infof("De-registered transport of ID %s from discovery.", id)
 		}
 
-		// Close underlying connection.
+		// Close underlying transport.
 		tp.close()
 		delete(tm.tps, id)
 	}
-}
-
-func (tm *Manager) deleteTransport(id uuid.UUID) {
-	tm.mx.Lock()
-	defer tm.mx.Unlock()
-	delete(tm.tps, id)
 }
 
 // ReadPacket reads data packets from routes.
@@ -466,33 +510,30 @@ func (tm *Manager) Local() cipher.PubKey {
 	return tm.Conf.PubKey
 }
 
-// Close closes opened transports and registered factories.
-func (tm *Manager) Close() error {
-	tm.closeOnce.Do(tm.close)
-	return nil
-}
-
-func (tm *Manager) close() {
+// Close closes opened transports, network clients
+// and all service tasks of transport manager
+func (tm *Manager) Close() {
+	select {
+	case <-tm.done:
+		return
+	default:
+	}
+	close(tm.done)
 	tm.Logger.Info("transport manager is closing.")
 	defer tm.Logger.Info("transport manager closed.")
-
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
 
-	close(tm.done)
-
-	statuses := make([]*Status, 0, len(tm.tps))
 	for _, tr := range tm.tps {
 		tr.close()
 	}
-	if _, err := tm.Conf.DiscoveryClient.UpdateStatuses(context.Background(), statuses...); err != nil {
-		tm.Logger.Warnf("failed to update transport statuses: %v", err)
+	for _, client := range tm.netClients {
+		err := client.Close()
+		if err != nil {
+			tm.Logger.WithError(err).Warnf("Failed to close %s client", client.Type())
+		}
 	}
-
-	tm.wgMu.Lock()
 	tm.wg.Wait()
-	tm.wgMu.Unlock()
-
 	close(tm.readCh)
 }
 
