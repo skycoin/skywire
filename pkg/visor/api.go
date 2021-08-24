@@ -119,8 +119,11 @@ func (v *Visor) Overview() (*Overview, error) {
 		switch v.stunClient.NATType {
 		case stun.NATNone, stun.NATFull, stun.NATRestricted, stun.NATPortRestricted:
 			publicIP = v.stunClient.PublicIP.IP()
-			isSymmetricNAT = true
+			isSymmetricNAT = false
 		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
+			isSymmetricNAT = true
+		case stun.NATError, stun.NATUnknown, stun.NATBlocked:
+			publicIP = v.stunClient.NATType.String()
 			isSymmetricNAT = false
 		}
 	}
