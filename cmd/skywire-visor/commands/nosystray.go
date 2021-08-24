@@ -4,6 +4,7 @@ package commands
 
 import (
 	"context"
+
 	"github.com/skycoin/skycoin/src/util/logging"
 )
 
