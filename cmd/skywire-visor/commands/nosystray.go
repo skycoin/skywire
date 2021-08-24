@@ -17,7 +17,7 @@ func runApp(args ...string) {
 }
 
 // stopSystray is a stub
-func stopSystray(log *logging.MasterLogger, _ context.CancelFunc, stopVisorFn func() error) {
+func stopVisor(log *logging.MasterLogger, _ context.CancelFunc, stopVisorFn func() error) {
 	if err := stopVisorFn(); err != nil {
 		log.WithError(err).Error("Visor closed with error.")
 	}

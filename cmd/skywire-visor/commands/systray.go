@@ -38,15 +38,11 @@ func runApp(args ...string) {
 
 }
 
-func stopSystray(log *logging.MasterLogger, cancel context.CancelFunc, stopVisorFn func() error) {
-	stopVisorWg.Add(1)
-	defer stopVisorWg.Done()
-
+func stopVisor(log *logging.MasterLogger, cancel context.CancelFunc, stopVisorFn func() error) {
 	gui.SetStopVisorFn(func() {
 		if err := stopVisorFn(); err != nil {
 			log.WithError(err).Error("Visor closed with error.")
 		}
-		stopVisorWg.Wait()
 	})
 
 	gui.Stop()
