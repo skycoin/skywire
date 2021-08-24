@@ -12,7 +12,3 @@ func initDmsgpty(ctx context.Context, log *logging.Logger) error {
 	log.Error("dmsgpty is not supported on windows.")
 	return nil
 }
-
-func appendExecPlatform(envs []string) {
-	envs = append(envs, "runas")
-}
