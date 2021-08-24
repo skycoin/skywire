@@ -60,7 +60,7 @@ $ gnome-extensions enable ubuntu-appindicators@ubuntu.com
 
 #### Mac / Darwin
 
-You need to have an icon defined in `/Applications/Skywire.app/Contents/Resources/tray_icon.tiff`
+You need to have an icon defined in `/Applications/Skywire.app/Contents/Resources/tray_icon.png`
 
 #### Windows
 
@@ -71,8 +71,12 @@ Then you can run it with
 ```bash
 
 # Linux
+$ sudo setcap 'cap_net_admin+p' ./apps/vpn-client
 $ ./skywire-visor -c <YOUR_CONFIG_PATH> --systray
 
 # MacOS
-$ sudo ./skywire-visor -c <YOUR_CONFIG_PATH> --systray
+
+$ sudo chown root ./apps/vpn-client
+$ sudo chmod 4755 ./apps/vpn-client
+$ ./skywire-visor -c <YOUR_CONFIG_PATH> --systray
 ```
