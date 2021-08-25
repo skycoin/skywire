@@ -11,9 +11,9 @@ environment:
   - job_name: MacOS
     appveyor_build_worker_image: macos
     GOARCH: amd64
-  - job_name: Windows
-    appveyor_build_worker_image: Visual Studio 2019
-    GOARCH: amd64 
+  # - job_name: Windows
+  #   appveyor_build_worker_image: Visual Studio 2019
+  #   GOARCH: amd64 
   # For release, by pushing tag
   - job_name: linux-amd64
     appveyor_build_worker_image: ubuntu1804
@@ -30,9 +30,9 @@ environment:
   - job_name: darwin-amd64
     appveyor_build_worker_image: macos
     GOARCH: amd64
-  - job_name: windows-amd64
-    appveyor_build_worker_image: Visual Studio 2019
-    GOARCH: amd64
+  # - job_name: windows-amd64
+  #   appveyor_build_worker_image: Visual Studio 2019
+  #   GOARCH: amd64
   
 for:
   - # Linux
@@ -60,7 +60,7 @@ for:
     matrix:
       only:
         - job_name: MacOS
-        - job_name: Windows
+        # - job_name: Windows
 
     environment:
       matrix:
@@ -123,7 +123,7 @@ for:
     matrix:
       only:
         - job_name: darwin-amd64
-        - job_name: windows-amd64
+        # - job_name: windows-amd64
 
     environment:
       matrix:
