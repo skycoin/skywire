@@ -14,6 +14,7 @@ environment:
   # - job_name: Windows
   #   appveyor_build_worker_image: Visual Studio 2019
   #   GOARCH: amd64 
+  
   # For release, by pushing tag
   - job_name: linux-amd64
     appveyor_build_worker_image: ubuntu1804
