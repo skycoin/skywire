@@ -70,12 +70,14 @@ for:
       - sh: curl -OL "https://golang.org/dl/go1.16.6.darwin-amd64.tar.gz" && sudo tar -C /usr/local -xzf go1.16.6.darwin-amd64.tar.gz && export GOPATH=$HOME/go && export GOROOT=/usr/local/go && export PATH=$GOROOT/bin:$GOPATH/bin:$PATH
       - sh: ci_scripts/create-ip-aliases.sh
       - cmd: choco install make
-      - go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.41.1
+      - go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.42.0
       - make dep
       - make install-deps-ui
     
     before_build:
-      - make check
+      - cmd: set GO111MODULE=on
+      - cmd: make check-windows-appveyor
+      - sh: make check
       - make lint-ui
   
     build_script:
