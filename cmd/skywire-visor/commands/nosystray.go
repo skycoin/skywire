@@ -16,10 +16,17 @@ func runApp(args ...string) {
 	runVisor(args)
 }
 
-// stopSystray is a stub
-func stopVisor(log *logging.MasterLogger, _ context.CancelFunc, stopVisorFn func() error) {
-	if err := stopVisorFn(); err != nil {
-		log.WithError(err).Error("Visor closed with error.")
+// setStopFunction sets the stop function
+func setStopFunction(log *logging.MasterLogger, cancel context.CancelFunc, fn func() error) {
+	stopVisorWg.Add(1)
+	defer stopVisorWg.Done()
+
+	stopVisorFn() = func() {
+		if err := fn(); err != nil {
+			log.WithError(err).Error("Visor closed with error.")
+		}
+		cancel()
+		stopVisorWg.Wait()
 	}
 }
 
