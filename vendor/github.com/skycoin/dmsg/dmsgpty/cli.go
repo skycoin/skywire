@@ -9,6 +9,10 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skycoin/src/util/logging"
+<<<<<<< HEAD
+=======
+	"golang.org/x/crypto/ssh/terminal"
+>>>>>>> upstream/develop
 
 	"github.com/skycoin/dmsg/cipher"
 )

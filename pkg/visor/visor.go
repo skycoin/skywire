@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/dmsg"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/utclient"
@@ -18,9 +19,8 @@ import (
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
-	"github.com/skycoin/skywire/pkg/snet"
-	"github.com/skycoin/skywire/pkg/snet/arclient"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -37,7 +37,7 @@ const (
 	shortHashLen             = 6
 	// moduleShutdownTimeout is the timeout given to a module to shutdown cleanly.
 	// Otherwise the shutdown logic will continue and report a timeout error.
-	moduleShutdownTimeout = time.Second * 2
+	moduleShutdownTimeout = time.Second * 4
 )
 
 // Visor provides messaging runtime for Apps by setting up all
@@ -54,11 +54,11 @@ type Visor struct {
 	updater       *updater.Updater
 	uptimeTracker utclient.APIClient
 
-	ebc *appevent.Broadcaster // event broadcaster
+	ebc   *appevent.Broadcaster // event broadcaster
+	dmsgC *dmsg.Client
 
-	net      *snet.Network
 	tpM      *transport.Manager
-	arClient arclient.APIClient
+	arClient addrresolver.APIClient
 	router   router.Router
 	rfClient rfclient.Client
 
@@ -219,6 +219,6 @@ func (v *Visor) uptimeTrackerClient() utclient.APIClient {
 }
 
 // addressResolverClient is a convenience function to obtain uptime address resovler client.
-func (v *Visor) addressResolverClient() arclient.APIClient {
+func (v *Visor) addressResolverClient() addrresolver.APIClient {
 	return v.arClient
 }
