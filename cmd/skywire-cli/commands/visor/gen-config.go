@@ -13,7 +13,6 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -22,35 +21,25 @@ func init() {
 }
 
 var (
-	sk                cipher.SecKey
-	output            string
-	replace           bool
-	testEnv           bool
-	packageConfig     bool
-	hypervisor        bool
-	hypervisorPKs     string
-	hasVPNClient      bool
-	hasVPNServer      bool
-	hasSkychat        bool
-	hasSkysocks       bool
-	hasSkysocksClient bool
-	noApps            bool
+	sk            cipher.SecKey
+	output        string
+	replace       bool
+	testEnv       bool
+	packageConfig bool
+	skybianConfig bool
+	hypervisor    bool
+	hypervisorPKs string
 )
 
 func init() {
-	genConfigCmd.Flags().Var(&sk, "sk", "if unspecified, a random key pair will be generated.")
+	genConfigCmd.Flags().Var(&sk, "sk", "if unspecified, a random key pair will be generated.\n")
 	genConfigCmd.Flags().StringVarP(&output, "output", "o", "skywire-config.json", "path of output config file.")
-	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "whether to allow rewrite of a file that already exists (this retains the keys).")
-	genConfigCmd.Flags().BoolVarP(&packageConfig, "package", "p", false, "use defaults for package-based installations")
-	genConfigCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "whether to use production or test deployment service.")
-	genConfigCmd.Flags().BoolVar(&hypervisor, "is-hypervisor", false, "whether to generate config to run this visor as a hypervisor.")
+	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "rewrite existing config (retains keys).")
+	genConfigCmd.Flags().BoolVarP(&packageConfig, "package", "p", false, "use defaults for package-based installations in /opt/skywire")
+	genConfigCmd.Flags().BoolVarP(&skybianConfig, "skybian", "s", false, "use defaults paths found in skybian\n writes config to /etc/skywire-config.json")
+	genConfigCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "use test deployment service.")
+	genConfigCmd.Flags().BoolVarP(&hypervisor, "is-hypervisor", "i", false, "generate a hypervisor configuration.")
 	genConfigCmd.Flags().StringVar(&hypervisorPKs, "hypervisor-pks", "", "public keys of hypervisors that should be added to this visor")
-	genConfigCmd.Flags().BoolVar(&hasVPNClient, "has-vpn-client", false, "generate config for VPN client")
-	genConfigCmd.Flags().BoolVar(&hasVPNServer, "has-vpn-server", false, "generate config for VPN server")
-	genConfigCmd.Flags().BoolVar(&hasSkychat, "has-skychat", false, "generate config for Skychat")
-	genConfigCmd.Flags().BoolVar(&hasSkysocks, "has-skysocks", false, "generate config for Skysocks")
-	genConfigCmd.Flags().BoolVar(&hasSkysocksClient, "has-skysocks-client", false, "generate config for Skysocks client")
-	genConfigCmd.Flags().BoolVar(&noApps, "no-apps", false, "generate config with no apps")
 }
 
 var genConfigCmd = &cobra.Command{
@@ -66,6 +55,23 @@ var genConfigCmd = &cobra.Command{
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
 
+		//Fail on -pst combination
+		if (packageConfig && skybianConfig) || (packageConfig && testEnv) || (skybianConfig && testEnv) {
+			logger.Fatal("Failed to create config: use of mutually exclusive flags")
+		}
+
+		//set output for package and skybian configs
+		if packageConfig {
+			if hypervisor {
+				output = "/opt/skywire/skywire.json"
+			} else {
+				output = "/opt/skywire/skywire-visor.json"
+			}
+		}
+		if skybianConfig {
+			output = "/etc/skywire-config.json"
+		}
+
 		// Read in old config (if any) and obtain old secret key.
 		// Otherwise, we generate a new random secret key.
 		var sk cipher.SecKey
@@ -76,22 +82,21 @@ var genConfigCmd = &cobra.Command{
 		}
 
 		// Determine config type to generate.
-		var genConf func(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool,
-			genAppConfig map[string]bool) (*visorconfig.V1, error)
+		var genConf func(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool) (*visorconfig.V1, error)
 
-		// to be improved later
+		//  default paths for different installations
 		if packageConfig {
 			genConf = visorconfig.MakePackageConfig
+		} else if skybianConfig {
+			genConf = visorconfig.MakeDefaultConfig
 		} else if testEnv {
 			genConf = visorconfig.MakeTestConfig
 		} else {
 			genConf = visorconfig.MakeDefaultConfig
 		}
 
-		genAppConfigs := getGenAppConfigs()
-
 		// Generate config.
-		conf, err := genConf(mLog, output, &sk, hypervisor, genAppConfigs)
+		conf, err := genConf(mLog, output, &sk, hypervisor)
 		if err != nil {
 			logger.WithError(err).Fatal("Failed to create config.")
 		}
@@ -105,7 +110,6 @@ var genConfigCmd = &cobra.Command{
 				}
 				conf.Hypervisors = append(conf.Hypervisors, cipher.PubKey(keyParsed))
 			}
-
 		}
 
 		// Save config to file.
@@ -132,7 +136,7 @@ func readOldConfig(log *logging.MasterLogger, confPath string, replace bool) (*v
 	}
 
 	if !replace {
-		logger.Fatal("Config file already exists. Specify the 'replace,r' flag to replace this.")
+		logger.Fatal("Config file already exists. Specify the 'replace, r' flag to replace this.")
 	}
 
 	conf, err := visorconfig.Parse(log, confPath, raw)
@@ -141,33 +145,4 @@ func readOldConfig(log *logging.MasterLogger, confPath string, replace bool) (*v
 	}
 
 	return conf, true
-}
-
-func getGenAppConfigs() map[string]bool {
-	genAppConfigs := map[string]bool{
-		skyenv.VPNClientName:      hasVPNClient,
-		skyenv.VPNServerName:      hasVPNServer,
-		skyenv.SkychatName:        hasSkychat,
-		skyenv.SkysocksName:       hasSkysocks,
-		skyenv.SkysocksClientName: hasSkysocksClient,
-	}
-
-	for _, gen := range genAppConfigs {
-		// at least one flag is specified, return as is
-		if gen {
-			return genAppConfigs
-		}
-	}
-
-	if noApps {
-		return genAppConfigs
-	}
-
-	// if no flags were passed at all, we need to generate config for all apps
-	// as a default behavior
-	for appName := range genAppConfigs {
-		genAppConfigs[appName] = true
-	}
-
-	return genAppConfigs
 }

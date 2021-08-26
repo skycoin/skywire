@@ -21,7 +21,7 @@ func setStopFunction(log *logging.MasterLogger, cancel context.CancelFunc, fn fu
 	stopVisorWg.Add(1)
 	defer stopVisorWg.Done()
 
-	stopVisorFn() = func() {
+	stopVisorFn = func() {
 		if err := fn(); err != nil {
 			log.WithError(err).Error("Visor closed with error.")
 		}

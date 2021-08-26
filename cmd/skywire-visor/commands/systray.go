@@ -4,8 +4,6 @@ package commands
 
 import (
 	"context"
-	"sync"
-
 	"github.com/getlantern/systray"
 	"github.com/skycoin/skycoin/src/util/logging"
 
@@ -13,7 +11,6 @@ import (
 )
 
 var (
-	stopVisorWg   sync.WaitGroup
 	runSysTrayApp bool
 )
 

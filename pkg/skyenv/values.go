@@ -1,6 +1,7 @@
 package skyenv
 
 import (
+	"path/filepath"
 	"time"
 
 	"github.com/skycoin/dmsg/cipher"
@@ -103,6 +104,24 @@ const (
 	DefaultLogLevel       = "info"
 )
 
+// Default routing constants
+const (
+	DefaultTpLogStore = DefaultSkywirePath + "/transport_logs"
+)
+
+// Skybian defaults
+const (
+	SkybianAppBinPath       = "/usr/bin/apps"
+	SkybianDmsgPtyWhiteList = "/var/skywire-visor/dsmgpty/whitelist.json"
+	SkybianDmsgPtyCLIAddr   = "/run/skywire-visor/dmsgpty/cli.sock"
+	SkybianLocalPath        = "/var/skywire-visor/apps"
+	SkybianTpLogStore       = "/var/skywire-visor/transports"
+	SkybianEnableTLS        = false
+	SkybianDBPath           = "/var/skywire-visor/users.db"
+	SkybianTLSKey           = "/var/skywire-visor/ssl/key.pem"
+	SkybianTLSCert          = "/var/skywire-visor/ssl/cert.pem"
+)
+
 // Default local constants
 const (
 	DefaultLocalPath = DefaultSkywirePath + "/local"
@@ -115,37 +134,51 @@ const (
 	DefaultEnableTLS    = false
 	DefaultTLSKey       = DefaultSkywirePath + "/ssl/key.pem"
 	DefaultTLSCert      = DefaultSkywirePath + "/ssl/cert.pem"
-	PackageEnableTLS    = true
 )
+
+// PackageLocalPath is the path to local directory
+func PackageLocalPath() string {
+	return filepath.Join(PackageSkywirePath(), "local")
+}
+
+// PackageDmsgPtyCLIAddr is the path to dmsgpty-cli file socket
+func PackageDmsgPtyCLIAddr() string {
+	return filepath.Join(PackageSkywirePath(), "dmsgpty", "cli.sock")
+}
+
+// PackageDBPath is the filepath location to the local db
+func PackageDBPath() string {
+	return filepath.Join(PackageSkywirePath(), "users.db")
+}
 
 // PackageDmsgPtyWhiteList gets dmsgpty whitelist path for installed Skywire.
 func PackageDmsgPtyWhiteList() string {
-	return PackageSkywirePath() + "/dmsgpty/whitelist.json"
+	return filepath.Join(PackageSkywirePath(), "dmsgpty", "whitelist.json")
 }
 
 // PackageAppLocalPath gets `.local` path for installed Skywire.
 func PackageAppLocalPath() string {
-	return PackageSkywirePath() + "/local"
+	return filepath.Join(PackageSkywirePath(), "local")
 }
 
 // PackageAppBinPath gets apps path for installed Skywire.
 func PackageAppBinPath() string {
-	return PackageSkywirePath() + "/apps"
+	return filepath.Join(PackageSkywirePath(), "apps")
 }
 
 // PackageTpLogStore gets transport logs path for installed Skywire.
 func PackageTpLogStore() string {
-	return PackageSkywirePath() + "/transport_logs"
+	return filepath.Join(PackageSkywirePath(), "transport_logs")
 }
 
 // PackageTLSKey gets TLS key path for installed Skywire.
 func PackageTLSKey() string {
-	return PackageSkywirePath() + "/ssl/key.pem"
+	return filepath.Join(PackageSkywirePath(), "ssl", "key.pem")
 }
 
 // PackageTLSCert gets TLS cert path for installed Skywire.
 func PackageTLSCert() string {
-	return PackageSkywirePath() + "/ssl/cert.pem"
+	return filepath.Join(PackageSkywirePath(), "ssl", "cert.pem")
 }
 
 // MustPK unmarshals string PK to cipher.PubKey. It panics if unmarshaling fails.
