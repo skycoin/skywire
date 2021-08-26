@@ -73,6 +73,7 @@ var rootCmd = &cobra.Command{
 		log.WithField("delay", delayDuration).
 			WithField("systemd", restartCtx.Systemd()).
 			WithField("parent_systemd", restartCtx.ParentSystemd()).
+			WithField("skybian_build_version", os.Getenv("SKYBIAN_BUILD_VERSION")).
 			Debugf("Process info")
 
 		detachProcess(delayDuration, log)

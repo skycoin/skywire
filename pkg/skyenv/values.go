@@ -12,14 +12,24 @@ const (
 	PackageSkywirePath = "/opt/skywire"
 )
 
-// Constants for default services.
+// Constants for old default services.
 const (
-	DefaultTpDiscAddr          = "http://transport.discovery.skywire.skycoin.com"
-	DefaultDmsgDiscAddr        = "http://dmsg.discovery.skywire.skycoin.com"
-	DefaultServiceDiscAddr     = "http://service.discovery.skycoin.com"
-	DefaultRouteFinderAddr     = "http://routefinder.skywire.skycoin.com"
-	DefaultUptimeTrackerAddr   = "http://uptime-tracker.skywire.skycoin.com"
-	DefaultAddressResolverAddr = "http://address.resolver.skywire.skycoin.com"
+	OldDefaultTpDiscAddr          = "http://transport.discovery.skywire.skycoin.com"
+	OldDefaultDmsgDiscAddr        = "http://dmsg.discovery.skywire.skycoin.com"
+	OldDefaultServiceDiscAddr     = "http://service.discovery.skycoin.com"
+	OldDefaultRouteFinderAddr     = "http://routefinder.skywire.skycoin.com"
+	OldDefaultUptimeTrackerAddr   = "http://uptime-tracker.skywire.skycoin.com"
+	OldDefaultAddressResolverAddr = "http://address.resolver.skywire.skycoin.com"
+)
+
+// Constants for new default services.
+const (
+	DefaultTpDiscAddr          = "http://tpd.skywire.skycoin.com"
+	DefaultDmsgDiscAddr        = "http://dmsgd.skywire.skycoin.com"
+	DefaultServiceDiscAddr     = "http://sd.skycoin.com"
+	DefaultRouteFinderAddr     = "http://rf.skywire.skycoin.com"
+	DefaultUptimeTrackerAddr   = "http://ut.skywire.skycoin.com"
+	DefaultAddressResolverAddr = "http://ar.skywire.skycoin.com"
 	DefaultSetupPK             = "0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557"
 )
 
@@ -93,13 +103,42 @@ const (
 	AppDiscUpdateInterval = time.Minute
 	DefaultAppBinPath     = DefaultSkywirePath + "/apps"
 	DefaultLogLevel       = "info"
-	PackageAppBinPath     = PackageSkywirePath + "/apps"
+)
+
+// Package defaults
+const (
+	PackageAppBinPath       = PackageSkywirePath + "/apps"
+	PackageLocalPath        = PackageSkywirePath + "/local"
+	PackageDmsgPtyWhiteList = PackageSkywirePath + "/dmsgpty/whitelist.json"
+	PackageDmsgPtyCLIAddr   = PackageSkywirePath + "/dmsgpty/cli.sock"
+	PackageTpLogStore       = PackageSkywirePath + "/transport_logs"
+	PackageDBPath           = PackageSkywirePath + "/users.db"
+	PackageEnableTLS        = false
+	PackageTLSKey           = PackageSkywirePath + "/ssl/key.pem"
+	PackageTLSCert          = PackageSkywirePath + "/ssl/cert.pem"
+)
+
+// Default routing constants
+const (
+	DefaultTpLogStore = DefaultSkywirePath + "/transport_logs"
+)
+
+// Skybian defaults
+const (
+	SkybianAppBinPath       = "/usr/bin/apps"
+	SkybianDmsgPtyWhiteList = "/var/skywire-visor/dsmgpty/whitelist.json"
+	SkybianDmsgPtyCLIAddr   = "/run/skywire-visor/dmsgpty/cli.sock"
+	SkybianLocalPath        = "/var/skywire-visor/apps"
+	SkybianTpLogStore       = "/var/skywire-visor/transports"
+	SkybianEnableTLS        = false
+	SkybianDBPath           = "/var/skywire-visor/users.db"
+	SkybianTLSKey           = "/var/skywire-visor/ssl/key.pem"
+	SkybianTLSCert          = "/var/skywire-visor/ssl/cert.pem"
 )
 
 // Default local constants
 const (
 	DefaultLocalPath = DefaultSkywirePath + "/local"
-	PackageLocalPath = PackageSkywirePath + "/local"
 )
 
 // Default hypervisor constants
@@ -109,9 +148,6 @@ const (
 	DefaultEnableTLS    = false
 	DefaultTLSKey       = DefaultSkywirePath + "/ssl/key.pem"
 	DefaultTLSCert      = DefaultSkywirePath + "/ssl/cert.pem"
-	PackageEnableTLS    = true
-	PackageTLSKey       = PackageSkywirePath + "/ssl/key.pem"
-	PackageTLSCert      = PackageSkywirePath + "/ssl/cert.pem"
 )
 
 // MustPK unmarshals string PK to cipher.PubKey. It panics if unmarshaling fails.

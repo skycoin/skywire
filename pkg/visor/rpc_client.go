@@ -25,8 +25,9 @@ import (
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/snet/snettest"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/util/cipherutil"
 	"github.com/skycoin/skywire/pkg/util/updater"
 )
 
@@ -269,14 +270,14 @@ func (rc *rpcClient) RemoveTransport(tid uuid.UUID) error {
 	return rc.Call("RemoveTransport", &tid, &struct{}{})
 }
 
-func (rc *rpcClient) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error) {
-	entries := make([]*transport.EntryWithStatus, 0)
+func (rc *rpcClient) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error) {
+	entries := make([]*transport.Entry, 0)
 	err := rc.Call("DiscoverTransportsByPK", &pk, &entries)
 	return entries, err
 }
 
-func (rc *rpcClient) DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error) {
-	var entry transport.EntryWithStatus
+func (rc *rpcClient) DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error) {
+	var entry transport.Entry
 	err := rc.Call("DiscoverTransportByID", &id, &entry)
 	return &entry, err
 }
@@ -341,6 +342,12 @@ func (rc *rpcClient) RuntimeLogs() (string, error) {
 // SetMinHops sets the min_hops from visor routing config
 func (rc *rpcClient) SetMinHops(hops uint16) error {
 	err := rc.Call("SetMinHops", &hops, &struct{}{})
+	return err
+}
+
+// SetPersistentTransports sets the persistent_transports from visor routing config
+func (rc *rpcClient) SetPersistentTransports(pts []transport.PersistentTransports) error {
+	err := rc.Call("SetPersistentTransports", &pts, &struct{}{})
 	return err
 }
 
@@ -445,7 +452,7 @@ func (rc *rpcClient) UpdateStatus() (string, error) {
 type mockRPCClient struct {
 	startedAt time.Time
 	o         *Overview
-	tpTypes   []string
+	tpTypes   []network.Type
 	rt        routing.Table
 	logS      appcommon.LogStore
 	sync.RWMutex
@@ -455,7 +462,7 @@ type mockRPCClient struct {
 func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, API, error) {
 	log := logging.MustGetLogger("mock-rpc-client")
 
-	types := []string{"messaging", "native"}
+	types := []network.Type{"messaging", "native"}
 	localPK, _ := cipher.GenerateKeyPair()
 
 	log.Infof("generating mock client with: localPK(%s) maxTps(%d) maxRules(%d)", localPK, maxTps, maxRules)
@@ -496,7 +503,7 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, AP
 			panic(err)
 		}
 
-		keys := snettest.GenKeyPairs(2)
+		keys := cipherutil.GenKeyPairs(2)
 
 		fwdRule := routing.ForwardRule(ruleKeepAlive, fwdRID[0], routing.RouteID(r.Uint32()), uuid.New(), keys[0].PK, keys[1].PK, 0, 0)
 		if err := rt.SaveRule(fwdRule); err != nil {
@@ -759,7 +766,11 @@ func (mc *mockRPCClient) GetAppConnectionsSummary(_ string) ([]appserver.Connect
 
 // TransportTypes implements API.
 func (mc *mockRPCClient) TransportTypes() ([]string, error) {
-	return mc.tpTypes, nil
+	var res []string
+	for _, tptype := range mc.tpTypes {
+		res = append(res, string(tptype))
+	}
+	return res, nil
 }
 
 // Transports implements API.
@@ -770,7 +781,7 @@ func (mc *mockRPCClient) Transports(types []string, pks []cipher.PubKey, logs bo
 			tp := tp
 			if types != nil {
 				for _, reqT := range types {
-					if tp.Type == reqT {
+					if string(tp.Type) == reqT {
 						goto TypeOK
 					}
 				}
@@ -817,10 +828,10 @@ func (mc *mockRPCClient) Transport(tid uuid.UUID) (*TransportSummary, error) {
 // AddTransport implements API.
 func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ bool, _ time.Duration) (*TransportSummary, error) {
 	summary := &TransportSummary{
-		ID:     transport.MakeTransportID(mc.o.PubKey, remote, tpType),
+		ID:     transport.MakeTransportID(mc.o.PubKey, remote, network.Type(tpType)),
 		Local:  mc.o.PubKey,
 		Remote: remote,
-		Type:   tpType,
+		Type:   network.Type(tpType),
 		Log:    new(transport.LogEntry),
 	}
 	return summary, mc.do(true, func() error {
@@ -842,11 +853,11 @@ func (mc *mockRPCClient) RemoveTransport(tid uuid.UUID) error {
 	})
 }
 
-func (mc *mockRPCClient) DiscoverTransportsByPK(cipher.PubKey) ([]*transport.EntryWithStatus, error) {
+func (mc *mockRPCClient) DiscoverTransportsByPK(cipher.PubKey) ([]*transport.Entry, error) {
 	return nil, ErrNotImplemented
 }
 
-func (mc *mockRPCClient) DiscoverTransportByID(uuid.UUID) (*transport.EntryWithStatus, error) {
+func (mc *mockRPCClient) DiscoverTransportByID(uuid.UUID) (*transport.Entry, error) {
 	return nil, ErrNotImplemented
 }
 
@@ -931,6 +942,11 @@ func (mc *mockRPCClient) RuntimeLogs() (string, error) {
 }
 
 // SetMinHops implements API
-func (mc *mockRPCClient) SetMinHops(n uint16) error {
+func (mc *mockRPCClient) SetMinHops(_ uint16) error {
+	return nil
+}
+
+// SetPersistentTransports implements API
+func (mc *mockRPCClient) SetPersistentTransports(_ []transport.PersistentTransports) error {
 	return nil
 }
