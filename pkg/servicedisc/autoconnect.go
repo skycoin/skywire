@@ -8,8 +8,8 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/netutil"
-	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 const (
@@ -55,33 +55,18 @@ func (a *autoconnector) Run(ctx context.Context) error {
 			a.log.Errorf("Cannot fetch public services: %s", err)
 		}
 
-		tps := a.updateTransports()
+		tps := a.tm.GetTransportsByLabel(transport.LabelAutomatic)
 		absent := a.filterDuplicates(addresses, tps)
 		for _, pk := range absent {
 			a.log.WithField("pk", pk).Infoln("Adding transport to public visor")
-			logger := a.log.WithField("pk", pk).WithField("type", tptypes.STCPR)
-			if _, err := a.tm.SaveTransport(ctx, pk, tptypes.STCPR, transport.LabelAutomatic); err != nil {
+			logger := a.log.WithField("pk", pk).WithField("type", string(network.STCPR))
+			if _, err := a.tm.SaveTransport(ctx, pk, network.STCPR, transport.LabelAutomatic); err != nil {
 				logger.WithError(err).Warnln("Failed to add transport to public visor")
 				continue
 			}
 			logger.Infoln("Added transport to public visor")
 		}
 	}
-}
-
-// Remove all inactive automatic transports and return all active
-// automatic transports
-func (a *autoconnector) updateTransports() []*transport.ManagedTransport {
-	tps := a.tm.GetTransportsByLabel(transport.LabelAutomatic)
-	var tpsActive []*transport.ManagedTransport
-	for _, tr := range tps {
-		if !tr.IsUp() {
-			a.tm.DeleteTransport(tr.Entry.ID)
-		} else {
-			tpsActive = append(tpsActive, tr)
-		}
-	}
-	return tpsActive
 }
 
 func (a *autoconnector) fetchPubAddresses(ctx context.Context) ([]cipher.PubKey, error) {

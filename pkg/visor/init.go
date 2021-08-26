@@ -6,9 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"os"
-	"path/filepath"
-	"strconv"
 	"sync"
 	"time"
 
@@ -16,7 +13,6 @@ import (
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/dmsgctrl"
-	"github.com/skycoin/dmsg/dmsgpty"
 	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 
@@ -26,19 +22,19 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/setup/setupclient"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/snet"
-	"github.com/skycoin/skywire/pkg/snet/arclient"
-	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
+	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 	ts "github.com/skycoin/skywire/pkg/transport/setup"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	"github.com/skycoin/skywire/pkg/util/netutil"
-	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	vinit "github.com/skycoin/skywire/pkg/visor/visorinit"
@@ -66,10 +62,10 @@ var (
 	ar vinit.Module
 	// App discovery
 	disc vinit.Module
-	// Snet (different network types)
-	sn vinit.Module
 	// dmsg pty: a remote terminal to the visor working over dmsg protocol
 	pty vinit.Module
+	// Dmsg module
+	dmsgC vinit.Module
 	// Transport manager
 	tr vinit.Module
 	// Transport setup
@@ -108,20 +104,20 @@ func registerModules(logger *logging.MasterLogger) {
 	ebc = maker("event_broadcaster", initEventBroadcaster)
 	ar = maker("address_resolver", initAddressResolver)
 	disc = maker("discovery", initDiscovery)
-	sn = maker("snet", initSNet, &ar, &disc, &ebc)
-	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &sn)
-	pty = maker("dmsg_pty", initDmsgpty, &sn)
-	tr = maker("transport", initTransport, &sn, &ebc)
-	trs = maker("transport_setup", initTransportSetup, &sn, &tr)
-	rt = maker("router", initRouter, &tr, &sn)
-	launch = maker("launcher", initLauncher, &ebc, &disc, &sn, &tr, &rt)
+	dmsgC = maker("dmsg", initDmsg, &ebc)
+	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &dmsgC)
+	pty = maker("dmsg_pty", initDmsgpty, &dmsgC)
+	tr = maker("transport", initTransport, &ar, &ebc, &dmsgC)
+	rt = maker("router", initRouter, &tr, &dmsgC)
+	launch = maker("launcher", initLauncher, &ebc, &disc, &dmsgC, &tr, &rt)
 	cli = maker("cli", initCLI)
-	hvs = maker("hypervisors", initHypervisors, &sn)
+	hvs = maker("hypervisors", initHypervisors, &dmsgC)
 	ut = maker("uptime_tracker", initUptimeTracker)
 	pv = maker("public_visors", initPublicVisors, &tr)
-	pvs = maker("public_visor", initPublicVisor, &sn, &ar, &disc)
-	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &sn, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &dmsgCtrl)
+	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc)
+	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
+	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &pty,
+		&tr, &rt, &launch, &cli, &trs, &hvs, &ut, &pv, &pvs, &dmsgCtrl)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -153,7 +149,7 @@ func initEventBroadcaster(ctx context.Context, v *Visor, log *logging.Logger) er
 func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Transport
 
-	arClient, err := arclient.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK)
+	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, log)
 	if err != nil {
 		err := fmt.Errorf("failed to create address resolver client: %w", err)
 		return err
@@ -184,37 +180,28 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initSNet(ctx context.Context, v *Visor, log *logging.Logger) error {
-	nc := snet.NetworkConfigs{
-		Dmsg: v.conf.Dmsg,
-		STCP: v.conf.STCP,
+func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) error {
+	if v.conf.Dmsg == nil {
+		return fmt.Errorf("cannot initialize dmsg: empty configuration")
 	}
+	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg)
 
-	conf := snet.Config{
-		PubKey:         v.conf.PK,
-		SecKey:         v.conf.SK,
-		ARClient:       v.arClient,
-		NetworkConfigs: nc,
-	}
-
-	n, err := snet.New(conf, v.ebc)
-	if err != nil {
-		return err
-	}
-
-	if err := n.Init(); err != nil {
-		return err
-	}
-	v.pushCloseStack("snet", n.Close)
+	time.Sleep(200 * time.Millisecond)
+	go dmsgC.Serve(context.Background())
+	time.Sleep(200 * time.Millisecond)
 
 	v.initLock.Lock()
-	v.net = n
+	v.dmsgC = dmsgC
 	v.initLock.Unlock()
+
+	v.pushCloseStack("dmsgC", func() error {
+		return dmsgC.Close()
+	})
 	return nil
 }
 
 func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
-	dmsgC := v.net.Dmsg()
+	dmsgC := v.dmsgC
 	if dmsgC == nil {
 		return nil
 	}
@@ -224,7 +211,7 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	select {
 	case <-time.After(dmsgTimeout):
 		logger.Warn("Failed to connect to the dmsg network, will try again later.")
-	case <-v.net.Dmsg().Ready():
+	case <-v.dmsgC.Ready():
 		logger.Info("Connected to the dmsg network.")
 	}
 	// dmsgctrl setup
@@ -235,100 +222,6 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	v.pushCloseStack("snet.dmsgctrl", cl.Close)
 
 	dmsgctrl.ServeListener(cl, 0)
-	return nil
-}
-
-const ownerRWX = 0700
-
-func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
-	conf := v.conf.Dmsgpty
-
-	if conf == nil {
-		log.Info("'dmsgpty' is not configured, skipping.")
-		return nil
-	}
-
-	// Unlink dmsg socket files (just in case).
-	if conf.CLINet == "unix" {
-		if err := osutil.UnlinkSocketFiles(v.conf.Dmsgpty.CLIAddr); err != nil {
-			return err
-		}
-	}
-
-	wl := dmsgpty.NewMemoryWhitelist()
-
-	// Ensure hypervisors are added to the whitelist.
-	if err := wl.Add(v.conf.Hypervisors...); err != nil {
-		return err
-	}
-	// add itself to the whitelist to allow local pty
-	if err := wl.Add(v.conf.PK); err != nil {
-		v.log.Errorf("Cannot add itself to the pty whitelist: %s", err)
-	}
-
-	dmsgC := v.net.Dmsg()
-	if dmsgC == nil {
-		err := errors.New("cannot create dmsgpty with nil dmsg client")
-		return err
-	}
-
-	pty := dmsgpty.NewHost(dmsgC, wl)
-
-	if ptyPort := conf.Port; ptyPort != 0 {
-		serveCtx, cancel := context.WithCancel(context.Background())
-		wg := new(sync.WaitGroup)
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-			runtimeErrors := getErrors(ctx)
-			if err := pty.ListenAndServe(serveCtx, ptyPort); err != nil {
-				runtimeErrors <- fmt.Errorf("listen and serve stopped: %w", err)
-			}
-		}()
-
-		v.pushCloseStack("router.serve", func() error {
-			cancel()
-			wg.Wait()
-			return nil
-		})
-
-	}
-
-	if conf.CLINet != "" {
-		if conf.CLINet == "unix" {
-			if err := os.MkdirAll(filepath.Dir(conf.CLIAddr), ownerRWX); err != nil {
-				err := fmt.Errorf("failed to prepare unix file for dmsgpty cli listener: %w", err)
-				return err
-			}
-		}
-
-		cliL, err := net.Listen(conf.CLINet, conf.CLIAddr)
-		if err != nil {
-			err := fmt.Errorf("failed to start dmsgpty cli listener: %w", err)
-			return err
-		}
-
-		serveCtx, cancel := context.WithCancel(context.Background())
-		wg := new(sync.WaitGroup)
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-			runtimeErrors := getErrors(ctx)
-			if err := pty.ServeCLI(serveCtx, cliL); err != nil {
-				runtimeErrors <- fmt.Errorf("serve cli stopped: %w", err)
-			}
-		}()
-
-		v.pushCloseStack("router.serve", func() error {
-			cancel()
-			err := cliL.Close()
-			wg.Wait()
-			return err
-		})
-	}
-
 	return nil
 }
 
@@ -343,27 +236,30 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	logS := transport.InMemoryTransportLogStore()
 
 	tpMConf := transport.ManagerConfig{
-		PubKey:          v.conf.PK,
-		SecKey:          v.conf.SK,
-		DiscoveryClient: tpdC,
-		LogStore:        logS,
+		PubKey:               v.conf.PK,
+		SecKey:               v.conf.SK,
+		DiscoveryClient:      tpdC,
+		LogStore:             logS,
+		PersistentTransports: v.conf.PersistentTransports,
 	}
 	managerLogger := v.MasterLogger().PackageLogger("transport_manager")
-	tpM, err := transport.NewManager(managerLogger, v.net, &tpMConf)
+
+	// todo: pass down configuration?
+	table := stcp.NewTable(v.conf.STCP.PKTable)
+	factory := network.ClientFactory{
+		PK:         v.conf.PK,
+		SK:         v.conf.SK,
+		ListenAddr: v.conf.STCP.LocalAddr,
+		PKTable:    table,
+		ARClient:   v.arClient,
+		EB:         v.ebc,
+		DmsgC:      v.dmsgC,
+	}
+	tpM, err := transport.NewManager(managerLogger, v.arClient, v.ebc, &tpMConf, factory)
 	if err != nil {
 		err := fmt.Errorf("failed to start transport manager: %w", err)
 		return err
 	}
-
-	tpM.OnAfterTPClosed(func(network, addr string) {
-		if network == tptypes.STCPR && addr != "" {
-			data := appevent.TCPCloseData{RemoteNet: network, RemoteAddr: addr}
-			event := appevent.NewEvent(appevent.TCPClose, data)
-			if err := v.ebc.Broadcast(context.Background(), event); err != nil {
-				v.log.WithError(err).Errorln("Failed to broadcast TCPClose event")
-			}
-		}
-	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := new(sync.WaitGroup)
@@ -376,9 +272,9 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	v.pushCloseStack("transport.manager", func() error {
 		cancel()
-		err := tpM.Close()
+		tpM.Close()
 		wg.Wait()
-		return err
+		return nil
 	})
 
 	v.initLock.Lock()
@@ -389,7 +285,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) error {
 	ctx, cancel := context.WithCancel(ctx)
-	ts, err := ts.NewTransportListener(ctx, v.conf, v.net.Dmsg(), v.tpM)
+	ts, err := ts.NewTransportListener(ctx, v.conf, v.dmsgC, v.tpM, v.MasterLogger())
 	if err != nil {
 		cancel()
 		return err
@@ -405,9 +301,9 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Routing
 	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout))
-
+	logger := v.MasterLogger().PackageLogger("router")
 	rConf := router.Config{
-		Logger:           v.MasterLogger().PackageLogger("router"),
+		Logger:           logger,
 		PubKey:           v.conf.PK,
 		SecKey:           v.conf.SK,
 		TransportManager: v.tpM,
@@ -418,46 +314,21 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		MinHops:          v.conf.Routing.MinHops,
 	}
 
-	r, err := router.New(v.net, &rConf)
+	r, err := router.New(v.dmsgC, &rConf)
 	if err != nil {
 		err := fmt.Errorf("failed to create router: %w", err)
 		return err
 	}
 
-	// todo: this piece is somewhat ugly and inherited from the times when init was
-	// calling init functions sequentially
-	// It is probably a hack to run init
-	// "somewhat concurrently", where the heaviest init functions will be partially concurrent
-
-	// to avoid this we can:
-	// either introduce some kind of "task" functionality that abstracts out
-	// something that has to be run concurrent to the init, and check on their status
-	// stop in close functions, etc
-
-	// or, we can completely rely on the module system, and just wait for everything
-	// in init functions, instead of spawning more goroutines.
-	// but, even though modules themselves are concurrent this can introduce some
-	// performance penalties, because dependencies will be waiting on complete init
-
-	// leaving as it is until future requirements about init and modules are known
-
 	serveCtx, cancel := context.WithCancel(context.Background())
-	wg := new(sync.WaitGroup)
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-		runtimeErrors := getErrors(ctx)
-		if err := r.Serve(serveCtx); err != nil {
-			runtimeErrors <- fmt.Errorf("serve router stopped: %w", err)
-		}
-	}()
+	if err := r.Serve(serveCtx); err != nil {
+		cancel()
+		return err
+	}
 
 	v.pushCloseStack("router.serve", func() error {
 		cancel()
-		err := r.Close()
-		wg.Wait()
-		return err
+		return r.Close()
 	})
 
 	v.initLock.Lock()
@@ -491,15 +362,15 @@ func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	launchLog := v.MasterLogger().PackageLogger("launcher")
 
-	launch, err := launcher.NewLauncher(launchLog, launchConf, v.net.Dmsg(), v.router, procM)
+	launch, err := launcher.NewLauncher(launchLog, launchConf, v.dmsgC, v.router, procM)
 	if err != nil {
 		err := fmt.Errorf("failed to start launcher: %w", err)
 		return err
 	}
 
 	err = launch.AutoStart(launcher.EnvMap{
-		skyenv.VPNClientName: vpnEnvMaker(v.conf, v.net, v.tpM.STCPRRemoteAddrs()),
-		skyenv.VPNServerName: vpnEnvMaker(v.conf, v.net, nil),
+		skyenv.VPNClientName: vpnEnvMaker(v.conf, v.dmsgC, v.tpM.STCPRRemoteAddrs()),
+		skyenv.VPNServerName: vpnEnvMaker(v.conf, v.dmsgC, nil),
 	})
 
 	if err != nil {
@@ -516,7 +387,7 @@ func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 // Make an env maker function for vpn application
-func vpnEnvMaker(conf *visorconfig.V1, n *snet.Network, tpRemoteAddrs []string) launcher.EnvMaker {
+func vpnEnvMaker(conf *visorconfig.V1, dmsgC *dmsg.Client, tpRemoteAddrs []string) launcher.EnvMaker {
 	return launcher.EnvMaker(func() ([]string, error) {
 		var envCfg vpn.DirectRoutesEnvConfig
 
@@ -525,7 +396,7 @@ func vpnEnvMaker(conf *visorconfig.V1, n *snet.Network, tpRemoteAddrs []string) 
 
 			r := dmsgnetutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
 			err := r.Do(context.Background(), func() error {
-				for _, ses := range n.Dmsg().AllSessions() {
+				for _, ses := range dmsgC.AllSessions() {
 					envCfg.DmsgServers = append(envCfg.DmsgServers, ses.RemoteTCPAddr().String())
 				}
 
@@ -616,7 +487,7 @@ func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 		go func(hvErrs chan error) {
 			defer wg.Done()
-			ServeRPCClient(ctx, log, v.net, rpcS, addr, hvErrs)
+			ServeRPCClient(ctx, log, v.dmsgC, rpcS, addr, hvErrs)
 		}(hvErrs)
 
 		v.pushCloseStack("hypervisor."+hvPK.String()[:shortHashLen], func() error {
@@ -630,7 +501,7 @@ func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error {
-	const tickDuration = 1 * time.Minute
+	const tickDuration = 5 * time.Minute
 
 	conf := v.conf.UptimeTracker
 
@@ -669,50 +540,38 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 	return nil
 }
 
-// this service is not considered critical and always returns true
 // advertise this visor as public in service discovery
+// this service is not considered critical and always returns true
 func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	if !v.conf.IsPublic {
 		return nil
 	}
-
-	// retrieve interface IPs and check if at least one is public
-	defaultIPs, err := netutil.DefaultNetworkInterfaceIPs()
+	logger := v.MasterLogger().PackageLogger("public_visor")
+	hasPublic, err := netutil.HasPublicIP()
 	if err != nil {
+		logger.WithError(err).Warn("Failed to check for existing public IP address")
 		return nil
 	}
-	var found bool
-	for _, IP := range defaultIPs {
-		if netutil.IsPublicIP(IP) {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !hasPublic {
+		logger.Warn("No public IP address found, stopping")
 		return nil
 	}
 
-	// todo: consider moving this to transport into some helper function
-	stcpr, ok := v.net.STcpr()
+	stcpr, ok := v.tpM.Stcpr()
 	if !ok {
+		logger.Warn("No stcpr client found, stopping")
 		return nil
 	}
-	la, err := stcpr.LocalAddr()
+	addr, err := stcpr.LocalAddr()
 	if err != nil {
-		log.WithError(err).Errorln("Failed to get STCPR local addr")
+		logger.Warn("Failed to get STCPR local addr")
 		return nil
 	}
-	_, portStr, err := net.SplitHostPort(la.String())
+	port, err := netutil.ExtractPort(addr)
 	if err != nil {
-		log.WithError(err).Errorf("Failed to extract port from addr %v", la.String())
+		logger.Warn("Failed to get STCPR port")
 		return nil
 	}
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		log.WithError(err).Errorf("Failed to convert port to int")
-		return nil
-	}
-
 	visorUpdater := v.serviceDisc.VisorUpdater(uint16(port))
 	visorUpdater.Start()
 
@@ -761,7 +620,7 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	conf.DmsgDiscovery = v.conf.Dmsg.Discovery
 
 	// Prepare hypervisor.
-	hv, err := New(conf, v, v.net.Dmsg())
+	hv, err := New(conf, v, v.dmsgC)
 	if err != nil {
 		v.log.Fatalln("Failed to start hypervisor:", err)
 	}

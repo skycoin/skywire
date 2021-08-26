@@ -5,10 +5,11 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
 
@@ -18,7 +19,7 @@ import (
 func MakeBaseConfig(common *Common) *V1 {
 	conf := new(V1)
 	conf.Common = common
-	conf.Dmsg = &snet.DmsgConfig{
+	conf.Dmsg = &dmsgc.DmsgConfig{
 		Discovery:     skyenv.DefaultDmsgDiscAddr,
 		SessionsCount: 1,
 	}
@@ -32,10 +33,15 @@ func MakeBaseConfig(common *Common) *V1 {
 		RouteFinderTimeout: DefaultTimeout,
 	}
 	conf.Launcher = &V1Launcher{
-		Discovery:  nil,
+		Discovery: &V1AppDisc{
+			ServiceDisc: skyenv.DefaultServiceDiscAddr,
+		},
 		Apps:       nil,
 		ServerAddr: skyenv.DefaultAppSrvAddr,
 		BinPath:    skyenv.DefaultAppBinPath,
+	}
+	conf.UptimeTracker = &V1UptimeTracker{
+		Addr: skyenv.DefaultUptimeTrackerAddr,
 	}
 	conf.CLIAddr = skyenv.DefaultRPCAddr
 	conf.LogLevel = skyenv.DefaultLogLevel
@@ -73,7 +79,7 @@ func defaultConfigFromCommon(cc *Common, hypervisor bool) (*V1, error) {
 		CLIAddr: skyenv.DefaultDmsgPtyCLIAddr,
 	}
 
-	conf.STCP = &snet.STCPConfig{
+	conf.STCP = &network.STCPConfig{
 		LocalAddr: skyenv.DefaultSTCPAddr,
 		PKTable:   nil,
 	}
@@ -160,6 +166,32 @@ func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 		conf.Hypervisor.EnableTLS = skyenv.PackageEnableTLS
 		conf.Hypervisor.TLSKeyFile = skyenv.PackageTLSKey
 		conf.Hypervisor.TLSCertFile = skyenv.PackageTLSCert
+		conf.Hypervisor.DBPath = skyenv.PackageDBPath
+	}
+	return conf, nil
+}
+
+// MakeSkybianConfig acts like MakeDefaultConfig but uses default paths, etc. as found in skybian / produced by skyimager
+func MakeSkybianConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool) (*V1, error) {
+	conf, err := MakeDefaultConfig(log, confPath, sk, hypervisor)
+	if err != nil {
+		return nil, err
+	}
+
+	conf.Dmsgpty = &V1Dmsgpty{
+		Port:    skyenv.DmsgPtyPort,
+		CLINet:  skyenv.DefaultDmsgPtyCLINet,
+		CLIAddr: skyenv.SkybianDmsgPtyCLIAddr,
+	}
+	conf.LocalPath = skyenv.SkybianLocalPath
+	conf.Launcher.BinPath = skyenv.SkybianAppBinPath
+
+	if conf.Hypervisor != nil {
+		conf.Hypervisor.EnableAuth = skyenv.DefaultEnableAuth
+		conf.Hypervisor.EnableTLS = skyenv.SkybianEnableTLS
+		conf.Hypervisor.TLSKeyFile = skyenv.SkybianTLSKey
+		conf.Hypervisor.TLSCertFile = skyenv.SkybianTLSCert
+		conf.Hypervisor.DBPath = skyenv.SkybianDBPath
 	}
 	return conf, nil
 }

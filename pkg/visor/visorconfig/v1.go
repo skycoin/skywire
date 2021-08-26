@@ -8,7 +8,9 @@ import (
 	"github.com/skycoin/dmsg/cipher"
 
 	"github.com/skycoin/skywire/pkg/app/launcher"
-	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/dmsgc"
+	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
 
@@ -16,6 +18,9 @@ import (
 
 // V100Name is the semantic version string for v1.0.0.
 const V100Name = "v1.0.0"
+
+// V101Name is the semantic version string for v1.0.1.
+const V101Name = "v1.0.1"
 
 // V110Name is the semantic version string for v1.1.0.
 // Added MinHops field to V1Routing section of config
@@ -25,6 +30,7 @@ const V100Name = "v1.0.0"
 // Added public_autoconnect field to transport section
 // Added transport_setup_nodes field to transport section
 // Removed authorization_file field from dmsgpty section
+// Default urls are changed to newer shortned ones
 const V110Name = "v1.1.0"
 
 // V1Name is the semantic version string for the most recent version of V1.
@@ -35,13 +41,13 @@ type V1 struct {
 	*Common
 	mu sync.RWMutex
 
-	Dmsg          *snet.DmsgConfig `json:"dmsg"`
-	Dmsgpty       *V1Dmsgpty       `json:"dmsgpty,omitempty"`
-	STCP          *snet.STCPConfig `json:"stcp,omitempty"`
-	Transport     *V1Transport     `json:"transport"`
-	Routing       *V1Routing       `json:"routing"`
-	UptimeTracker *V1UptimeTracker `json:"uptime_tracker,omitempty"`
-	Launcher      *V1Launcher      `json:"launcher"`
+	Dmsg          *dmsgc.DmsgConfig   `json:"dmsg"`
+	Dmsgpty       *V1Dmsgpty          `json:"dmsgpty,omitempty"`
+	STCP          *network.STCPConfig `json:"stcp,omitempty"`
+	Transport     *V1Transport        `json:"transport"`
+	Routing       *V1Routing          `json:"routing"`
+	UptimeTracker *V1UptimeTracker    `json:"uptime_tracker,omitempty"`
+	Launcher      *V1Launcher         `json:"launcher"`
 
 	Hypervisors []cipher.PubKey `json:"hypervisors"`
 	CLIAddr     string          `json:"cli_addr"`
@@ -51,6 +57,8 @@ type V1 struct {
 	ShutdownTimeout   Duration `json:"shutdown_timeout,omitempty"`    // time value, examples: 10s, 1m, etc
 	RestartCheckDelay Duration `json:"restart_check_delay,omitempty"` // time value, examples: 10s, 1m, etc
 	IsPublic          bool     `json:"is_public"`
+
+	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 
 	Hypervisor *hypervisorconfig.Config `json:"hypervisor,omitempty"`
 }
@@ -179,6 +187,22 @@ func (v1 *V1) UpdateMinHops(hops uint16) error {
 	v1.mu.Unlock()
 
 	return v1.flush(v1)
+}
+
+// UpdatePersistentTransports updates min_hops config
+func (v1 *V1) UpdatePersistentTransports(pts []transport.PersistentTransports) error {
+	v1.mu.Lock()
+	v1.PersistentTransports = pts
+	v1.mu.Unlock()
+
+	return v1.flush(v1)
+}
+
+// GetPersistentTransports updates min_hops config
+func (v1 *V1) GetPersistentTransports() ([]transport.PersistentTransports, error) {
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+	return v1.PersistentTransports, nil
 }
 
 // updateStringArg updates the cli non-boolean flag of the specified app config and also within the launcher.
