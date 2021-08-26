@@ -94,16 +94,14 @@ The configuration file is generated in the following way
 for a visor with local hypervisor:
 
 ```
-$ cd /opt/skywire
-$ skywire-cli visor gen-config --is-hypervisor -pro skywire.json
+$ skywire-cli visor gen-config -ip
 ```
 
 for visor with remote hypervisor; first copy the existing configuration file to keep the same keys.
 
 ```
-$ cd /opt/skywire
-# cp skywire.json skywire-visor.json
-# skywire-cli visor gen-config --hypervisor-pks <remote-hypervisor-public-key> -pro skywire-visor.json
+# cp /opt/skywire/skywire.json /opt/skywire/skywire-visor.json
+# skywire-cli visor gen-config --hypervisor-pks <remote-hypervisor-public-key> -p
 ```
 
 These two configuration files can be referenced in systemd service files or init scripts to start skywire with either a local or remote hypervisor.
