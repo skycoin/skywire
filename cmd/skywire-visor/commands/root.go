@@ -47,6 +47,7 @@ var (
 	confPath      string
 	delay         string
 	launchBrowser bool
+	stopVisorFn   func()
 )
 
 var rootCmd = &cobra.Command{
@@ -138,13 +139,12 @@ func runVisor(args []string) {
 	}
 
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
+	setStopFunction(log, cancel, v.Close)
 
 	defer cancel()
 
 	// Wait.
 	<-ctx.Done()
-
-	stopVisor(log, cancel, v.Close)
 }
 
 // Execute executes root CLI command.
