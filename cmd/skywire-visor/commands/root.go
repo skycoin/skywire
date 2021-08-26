@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -47,7 +48,8 @@ var (
 	confPath      string
 	delay         string
 	launchBrowser bool
-	stopVisorFn   func()
+	stopVisorFn   func() // nolint:unused
+	stopVisorWg   sync.WaitGroup
 )
 
 var rootCmd = &cobra.Command{
@@ -145,6 +147,10 @@ func runVisor(args []string) {
 
 	// Wait.
 	<-ctx.Done()
+
+	if err = v.Close(); err != nil {
+		log.Error("Error closing visor: ", err)
+	}
 }
 
 // Execute executes root CLI command.

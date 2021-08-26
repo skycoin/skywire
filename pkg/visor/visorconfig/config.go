@@ -13,37 +13,6 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
 
-var (
-	appDefaultConfigs = map[string]launcher.AppConfig{
-		skyenv.SkychatName: {
-			Name:      skyenv.SkychatName,
-			AutoStart: true,
-			Port:      routing.Port(skyenv.SkychatPort),
-			Args:      []string{"-addr", skyenv.SkychatAddr},
-		},
-		skyenv.SkysocksName: {
-			Name:      skyenv.SkysocksName,
-			AutoStart: true,
-			Port:      routing.Port(skyenv.SkysocksPort),
-		},
-		skyenv.SkysocksClientName: {
-			Name:      skyenv.SkysocksClientName,
-			AutoStart: false,
-			Port:      routing.Port(skyenv.SkysocksClientPort),
-		},
-		skyenv.VPNServerName: {
-			Name:      skyenv.VPNServerName,
-			AutoStart: false,
-			Port:      routing.Port(skyenv.VPNServerPort),
-		},
-		skyenv.VPNClientName: {
-			Name:      skyenv.VPNClientName,
-			AutoStart: false,
-			Port:      routing.Port(skyenv.VPNClientPort),
-		},
-	}
-)
-
 // MakeBaseConfig returns a visor config with 'enforced' fields only.
 // This is used as default values if no config is given, or for missing *required* fields.
 // This function always returns the latest config version.
@@ -86,16 +55,15 @@ func MakeBaseConfig(common *Common) *V1 {
 // The config's 'sk' field will be nil if not specified.
 // Generated config will be saved to 'confPath'.
 // This function always returns the latest config version.
-func MakeDefaultConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool,
-	genAppConfig map[string]bool) (*V1, error) {
+func MakeDefaultConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool) (*V1, error) {
 	cc, err := NewCommon(log, confPath, V1Name, sk)
 	if err != nil {
 		return nil, err
 	}
-	return defaultConfigFromCommon(cc, hypervisor, genAppConfig)
+	return defaultConfigFromCommon(cc, hypervisor)
 }
 
-func defaultConfigFromCommon(cc *Common, hypervisor bool, genAppConfig map[string]bool) (*V1, error) {
+func defaultConfigFromCommon(cc *Common, hypervisor bool) (*V1, error) {
 	// Enforce version and keys in 'cc'.
 	cc.Version = V1Name
 	if err := cc.ensureKeys(); err != nil {
@@ -125,12 +93,33 @@ func defaultConfigFromCommon(cc *Common, hypervisor bool, genAppConfig map[strin
 		ServiceDisc:    skyenv.DefaultServiceDiscAddr,
 	}
 
-	for appName, gen := range genAppConfig {
-		if gen {
-			if appConf, knownApp := appDefaultConfigs[appName]; knownApp {
-				conf.Launcher.Apps = append(conf.Launcher.Apps, appConf)
-			}
-		}
+	conf.Launcher.Apps = []launcher.AppConfig{
+		{
+			Name:      skyenv.SkychatName,
+			AutoStart: true,
+			Port:      routing.Port(skyenv.SkychatPort),
+			Args:      []string{"-addr", skyenv.SkychatAddr},
+		},
+		{
+			Name:      skyenv.SkysocksName,
+			AutoStart: true,
+			Port:      routing.Port(skyenv.SkysocksPort),
+		},
+		{
+			Name:      skyenv.SkysocksClientName,
+			AutoStart: false,
+			Port:      routing.Port(skyenv.SkysocksClientPort),
+		},
+		{
+			Name:      skyenv.VPNServerName,
+			AutoStart: false,
+			Port:      routing.Port(skyenv.VPNServerPort),
+		},
+		{
+			Name:      skyenv.VPNClientName,
+			AutoStart: false,
+			Port:      routing.Port(skyenv.VPNClientPort),
+		},
 	}
 
 	conf.Hypervisors = make([]cipher.PubKey, 0)
@@ -144,9 +133,8 @@ func defaultConfigFromCommon(cc *Common, hypervisor bool, genAppConfig map[strin
 }
 
 // MakeTestConfig acts like MakeDefaultConfig, however, test deployment service addresses are used instead.
-func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool,
-	genAppConfig map[string]bool) (*V1, error) {
-	conf, err := MakeDefaultConfig(log, confPath, sk, hypervisor, genAppConfig)
+func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool) (*V1, error) {
+	conf, err := MakeDefaultConfig(log, confPath, sk, hypervisor)
 	if err != nil {
 		return nil, err
 	}
@@ -159,9 +147,8 @@ func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKe
 }
 
 // MakePackageConfig acts like MakeDefaultConfig but use package config defaults
-func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool,
-	genAppConfig map[string]bool) (*V1, error) {
-	conf, err := MakeDefaultConfig(log, confPath, sk, hypervisor, genAppConfig)
+func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool) (*V1, error) {
+	conf, err := MakeDefaultConfig(log, confPath, sk, hypervisor)
 	if err != nil {
 		return nil, err
 	}
@@ -176,9 +163,36 @@ func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 
 	if conf.Hypervisor != nil {
 		conf.Hypervisor.EnableAuth = skyenv.DefaultEnableAuth
-		conf.Hypervisor.EnableTLS = skyenv.PackageEnableTLS
 		conf.Hypervisor.TLSKeyFile = skyenv.PackageTLSKey()
 		conf.Hypervisor.TLSCertFile = skyenv.PackageTLSCert()
+		conf.Hypervisor.TLSKeyFile = skyenv.PackageTLSKey()
+		conf.Hypervisor.TLSCertFile = skyenv.PackageTLSCert()
+		conf.Hypervisor.DBPath = skyenv.PackageDBPath()
+	}
+	return conf, nil
+}
+
+// MakeSkybianConfig acts like MakeDefaultConfig but uses default paths, etc. as found in skybian / produced by skyimager
+func MakeSkybianConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool) (*V1, error) {
+	conf, err := MakeDefaultConfig(log, confPath, sk, hypervisor)
+	if err != nil {
+		return nil, err
+	}
+
+	conf.Dmsgpty = &V1Dmsgpty{
+		Port:    skyenv.DmsgPtyPort,
+		CLINet:  skyenv.DefaultDmsgPtyCLINet,
+		CLIAddr: skyenv.SkybianDmsgPtyCLIAddr,
+	}
+	conf.LocalPath = skyenv.SkybianLocalPath
+	conf.Launcher.BinPath = skyenv.SkybianAppBinPath
+
+	if conf.Hypervisor != nil {
+		conf.Hypervisor.EnableAuth = skyenv.DefaultEnableAuth
+		conf.Hypervisor.EnableTLS = skyenv.SkybianEnableTLS
+		conf.Hypervisor.TLSKeyFile = skyenv.SkybianTLSKey
+		conf.Hypervisor.TLSCertFile = skyenv.SkybianTLSCert
+		conf.Hypervisor.DBPath = skyenv.SkybianDBPath
 	}
 	return conf, nil
 }
