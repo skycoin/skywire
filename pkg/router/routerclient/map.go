@@ -5,7 +5,7 @@ import (
 
 	"github.com/skycoin/dmsg/cipher"
 
-	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 // Map is a map of router RPC clients associated with the router's visor PK.
@@ -18,7 +18,7 @@ type dialResult struct {
 
 // MakeMap makes a Map of the router clients, where the key is the router's visor public key.
 // It creates these router clients by dialing to them concurrently.
-func MakeMap(ctx context.Context, dialer snet.Dialer, pks []cipher.PubKey) (Map, error) {
+func MakeMap(ctx context.Context, dialer network.Dialer, pks []cipher.PubKey) (Map, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 

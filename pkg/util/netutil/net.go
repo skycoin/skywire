@@ -118,3 +118,15 @@ func HasPublicIP() (bool, error) {
 	}
 	return false, nil
 }
+
+// ExtractPort returns port of the given UDP or TCP address
+func ExtractPort(addr net.Addr) (uint16, error) {
+	switch address := addr.(type) {
+	case *net.TCPAddr:
+		return uint16(address.Port), nil
+	case *net.UDPAddr:
+		return uint16(address.Port), nil
+	default:
+		return 0, fmt.Errorf("extract port: invalid address: %s", addr.String())
+	}
+}
