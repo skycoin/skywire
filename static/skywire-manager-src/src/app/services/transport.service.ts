@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
+import { PersistentTransport } from '../app.datatypes';
 
 import { ApiService } from './api.service';
 
@@ -35,6 +36,10 @@ export class TransportService {
 
   delete(nodeKey: string, transportId: string) {
     return this.apiService.delete(`visors/${nodeKey}/transports/${transportId}`);
+  }
+
+  savePersistentTransportsData(nodeKey: string, newData: PersistentTransport[]) {
+    return this.apiService.put(`visors/${nodeKey}/persistent-transports`, newData);
   }
 
   /**
