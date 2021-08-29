@@ -503,6 +503,9 @@
       "remote-key": "Remote public key",
       "label": "Identification name (optional)",
       "transport-type": "Transport type",
+      "make-persistent": "Make persistent",
+      "persistent-tooltip": "Persistent transports are created automatically when the visor is turned on and automatically recreated in case of disconnection.",
+      "only-persistent-created": "The persistent transport was created, but it may have not been activated.",
       "success": "Transport created.",
       "success-without-label": "The transport was created, but it was not possible to save the label.",
       "errors": {
