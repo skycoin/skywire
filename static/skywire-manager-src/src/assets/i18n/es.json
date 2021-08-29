@@ -503,6 +503,9 @@
       "remote-key": "Llave pública remota",
       "label": "Nombre del transporte (opcional)",
       "transport-type": "Tipo de transporte",
+      "make-persistent": "Hacer persistente",
+      "persistent-tooltip": "Los transportes persistentes son creados automáticamente al iniciar el visor y son recreados automáticamente en caso de desconexión.",
+      "only-persistent-created": "El transporte persistente fue creado, pero podría no haber sido activado.",
       "success": "Transporte creado.",
       "success-without-label": "El transporte fue creado, pero no fue posible guardar la etiqueta.",
       "errors": {
