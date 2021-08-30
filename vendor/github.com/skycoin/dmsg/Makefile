@@ -1,3 +1,5 @@
+SHELL := /bin/bash
+
 .DEFAULT_GOAL := help
 .PHONY : check lint install-linters dep test build
 
@@ -29,8 +31,8 @@ BUILDINFO_COMMIT := -X $(BUILDINFO_PATH).commit=$(COMMIT)
 
 BUILDINFO?=$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT)
 
-BUILD_OPTS?="-ldflags=$(BUILDINFO)"
-BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
+BUILD_OPTS?=-mod=vendor "-ldflags=$(BUILDINFO)"
+BUILD_OPTS_DEPLOY?=-mod=vendor "-ldflags=$(BUILDINFO) -w -s"
 
 check: lint test ## Run linters and tests
 
@@ -47,13 +49,12 @@ test: ## Run tests
 	${OPTS} go test ${TEST_OPTS} ./...
 
 install-linters: ## Install linters
-	- VERSION=1.23.1 ./ci_scripts/install-golangci-lint.sh
 	# GO111MODULE=off go get -u github.com/FiloSottile/vendorcheck
 	# For some reason this install method is not recommended, see https://github.com/golangci/golangci-lint#install
 	# However, they suggest `curl ... | bash` which we should not do
-	# ${OPTS} go get -u github.com/golangci/golangci-lint/cmd/golangci-lint
+	${OPTS} go get -u github.com/golangci/golangci-lint/cmd/golangci-lint
 	${OPTS} go get -u golang.org/x/tools/cmd/goimports
-	${OPTS} go get -u github.com/incu6us/goimports-reviser
+	${OPTS} go get -u github.com/incu6us/goimports-reviser/v2
 
 format: ## Formats the code. Must have goimports and goimports-reviser installed (use make install-linters).
 	${OPTS} goimports -w -local ${DMSG_REPO} .
@@ -62,12 +63,18 @@ dep: ## Sorts dependencies
 	${OPTS} go mod download
 	${OPTS} go mod tidy -v
 
+install: ## Install `dmsg-discovery`, `dmsg-server`, `dmsgget`,`dmsgpty-cli`, `dmsgpty-host`, `dmsgpty-ui`
+	${OPTS} go install ${BUILD_OPTS} ./cmd/*
+
 build: ## Build binaries into ./bin
 	mkdir -p ${BIN}; go build ${BUILD_OPTS} -o ${BIN} ./cmd/*
 
 build-deploy: ## Build for deployment Docker images
 	go build -tags netgo ${BUILD_OPTS_DEPLOY} -o /release/dmsg-discovery ./cmd/dmsg-discovery
 	go build -tags netgo ${BUILD_OPTS_DEPLOY} -o /release/dmsg-server ./cmd/dmsg-server
+
+build-docker:
+	./docker/scripts/docker-push.sh -t "develop" -b
 
 start-db: ## Init local database env.
 	source ./integration/env.sh && init_redis

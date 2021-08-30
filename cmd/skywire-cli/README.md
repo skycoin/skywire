@@ -218,7 +218,7 @@ Usage:
 
 Flags:
   -h, --help               help for add-tp
-      --public             whether to make the transport public (default true)
+      --public             whether to make the transport public (deprecated)
   -t, --timeout duration   if specified, sets an operation timeout
       --type string        type of transport to add; if unspecified, cli will attempt to establish a transport in the following order: stcp, stcpr, sudph, dmsg
 ```
