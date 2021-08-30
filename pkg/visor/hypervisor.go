@@ -778,7 +778,6 @@ func (hv *Hypervisor) postTransport() http.HandlerFunc {
 		var reqBody struct {
 			TpType string        `json:"transport_type"`
 			Remote cipher.PubKey `json:"remote_pk"`
-			Public bool          `json:"public"`
 		}
 
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
@@ -792,7 +791,7 @@ func (hv *Hypervisor) postTransport() http.HandlerFunc {
 		}
 
 		const timeout = 30 * time.Second
-		tSummary, err := ctx.API.AddTransport(reqBody.Remote, reqBody.TpType, reqBody.Public, timeout)
+		tSummary, err := ctx.API.AddTransport(reqBody.Remote, reqBody.TpType, timeout)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
@@ -1536,6 +1535,7 @@ func pkSliceFromQuery(r *http.Request, key string, defaultVal []cipher.PubKey) (
 
 func (hv *Hypervisor) serveDmsg(ctx context.Context, log *logging.Logger) {
 	go func() {
+		<-hv.dmsgC.Ready()
 		if err := hv.ServeRPC(ctx, hv.c.DmsgPort); err != nil {
 			log.WithError(err).Fatal("Failed to serve RPC client over dmsg.")
 		}
