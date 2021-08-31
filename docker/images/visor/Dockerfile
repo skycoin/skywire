@@ -1,6 +1,6 @@
 # Builder
-ARG base=alpine
-FROM golang:alpine  as builder
+ARG base=alpine3.13
+FROM golang:alpine3.13 as builder
 
 ARG BUILDINFO_LDFLAGS
 ARG CGO_ENABLED=0
