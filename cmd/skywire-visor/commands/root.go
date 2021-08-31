@@ -75,6 +75,7 @@ var rootCmd = &cobra.Command{
 		log.WithField("delay", delayDuration).
 			WithField("systemd", restartCtx.Systemd()).
 			WithField("parent_systemd", restartCtx.ParentSystemd()).
+			WithField("skybian_build_version", os.Getenv("SKYBIAN_BUILD_VERSION")).
 			Debugf("Process info")
 
 		// Versions v0.2.3 and below return 0 exit-code after update and do not trigger systemd to restart a process

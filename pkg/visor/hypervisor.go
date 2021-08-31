@@ -30,6 +30,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
@@ -261,6 +262,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/update/available/{channel}", hv.visorUpdateAvailable())
 				r.Get("/visors/{pk}/runtime-logs", hv.getRuntimeLogs())
 				r.Post("/visors/{pk}/min-hops", hv.postMinHops())
+				r.Put("/visors/{pk}/persistent-transports", hv.putPersistentTransports())
 			})
 		})
 
@@ -776,7 +778,6 @@ func (hv *Hypervisor) postTransport() http.HandlerFunc {
 		var reqBody struct {
 			TpType string        `json:"transport_type"`
 			Remote cipher.PubKey `json:"remote_pk"`
-			Public bool          `json:"public"`
 		}
 
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
@@ -790,7 +791,7 @@ func (hv *Hypervisor) postTransport() http.HandlerFunc {
 		}
 
 		const timeout = 30 * time.Second
-		tSummary, err := ctx.API.AddTransport(reqBody.Remote, reqBody.TpType, reqBody.Public, timeout)
+		tSummary, err := ctx.API.AddTransport(reqBody.Remote, reqBody.TpType, timeout)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
@@ -1321,6 +1322,26 @@ func (hv *Hypervisor) postMinHops() http.HandlerFunc {
 	})
 }
 
+func (hv *Hypervisor) putPersistentTransports() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var reqBody []transport.PersistentTransports
+
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("putPersistentTransports request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+
+		if err := ctx.API.SetPersistentTransports(reqBody); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
 /*
 	<<< Helper functions >>>
 */
@@ -1514,6 +1535,7 @@ func pkSliceFromQuery(r *http.Request, key string, defaultVal []cipher.PubKey) (
 
 func (hv *Hypervisor) serveDmsg(ctx context.Context, log *logging.Logger) {
 	go func() {
+		<-hv.dmsgC.Ready()
 		if err := hv.ServeRPC(ctx, hv.c.DmsgPort); err != nil {
 			log.WithError(err).Fatal("Failed to serve RPC client over dmsg.")
 		}
