@@ -46,6 +46,7 @@ func MakeBaseConfig(common *Common) *V1 {
 	conf.CLIAddr = skyenv.DefaultRPCAddr
 	conf.LogLevel = skyenv.DefaultLogLevel
 	conf.LocalPath = skyenv.DefaultLocalPath
+	conf.StunServers = skyenv.GetStunServers()
 	conf.ShutdownTimeout = DefaultTimeout
 	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
 	return conf
@@ -166,6 +167,32 @@ func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 		conf.Hypervisor.EnableTLS = skyenv.PackageEnableTLS
 		conf.Hypervisor.TLSKeyFile = skyenv.PackageTLSKey
 		conf.Hypervisor.TLSCertFile = skyenv.PackageTLSCert
+		conf.Hypervisor.DBPath = skyenv.PackageDBPath
+	}
+	return conf, nil
+}
+
+// MakeSkybianConfig acts like MakeDefaultConfig but uses default paths, etc. as found in skybian / produced by skyimager
+func MakeSkybianConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool) (*V1, error) {
+	conf, err := MakeDefaultConfig(log, confPath, sk, hypervisor)
+	if err != nil {
+		return nil, err
+	}
+
+	conf.Dmsgpty = &V1Dmsgpty{
+		Port:    skyenv.DmsgPtyPort,
+		CLINet:  skyenv.DefaultDmsgPtyCLINet,
+		CLIAddr: skyenv.SkybianDmsgPtyCLIAddr,
+	}
+	conf.LocalPath = skyenv.SkybianLocalPath
+	conf.Launcher.BinPath = skyenv.SkybianAppBinPath
+
+	if conf.Hypervisor != nil {
+		conf.Hypervisor.EnableAuth = skyenv.DefaultEnableAuth
+		conf.Hypervisor.EnableTLS = skyenv.SkybianEnableTLS
+		conf.Hypervisor.TLSKeyFile = skyenv.SkybianTLSKey
+		conf.Hypervisor.TLSCertFile = skyenv.SkybianTLSCert
+		conf.Hypervisor.DBPath = skyenv.SkybianDBPath
 	}
 	return conf, nil
 }

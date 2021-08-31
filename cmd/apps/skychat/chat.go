@@ -4,16 +4,17 @@ skychat app for skywire visor
 package main
 
 import (
-	"embed"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/fs"
 	"net"
 	"net/http"
 	"os"
 	"sync"
 	"time"
+
+	"embed"
+	"io/fs"
 
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cipher"

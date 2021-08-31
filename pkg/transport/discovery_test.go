@@ -22,12 +22,9 @@ func TestNewDiscoveryMock(t *testing.T) {
 
 	entryWS, err := dc.GetTransportByID(context.TODO(), sEntry.Entry.ID)
 	require.NoError(t, err)
-	require.True(t, entryWS.Entry.ID == sEntry.Entry.ID)
+	require.True(t, entryWS.ID == sEntry.Entry.ID)
 
 	entriesWS, err := dc.GetTransportsByEdge(context.TODO(), pk1)
 	require.NoError(t, err)
-	require.Equal(t, entry.Edges, entriesWS[0].Entry.Edges)
-
-	_, err = dc.UpdateStatuses(context.TODO(), &transport.Status{})
-	require.NoError(t, err)
+	require.Equal(t, entry.Edges, entriesWS[0].Edges)
 }

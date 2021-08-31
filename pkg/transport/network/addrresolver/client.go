@@ -202,7 +202,7 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 		Addresses: addresses,
 		Port:      port,
 	}
-
+	c.log.Infof("BindSTCPR: Address resolver binding with: %v", addresses)
 	resp, err := c.Post(ctx, stcprBindPath, localAddresses)
 	if err != nil {
 		return err
