@@ -1,5 +1,5 @@
 # Builder
-ARG base=alpine3.13
+ARG base=alpine
 FROM golang:alpine3.13 as builder
 
 ARG BUILDINFO_LDFLAGS
