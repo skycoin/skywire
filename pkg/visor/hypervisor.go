@@ -778,6 +778,7 @@ func (hv *Hypervisor) postTransport() http.HandlerFunc {
 		var reqBody struct {
 			TpType string        `json:"transport_type"`
 			Remote cipher.PubKey `json:"remote_pk"`
+			Public bool          `json:"public"` // Depricated, remove it from the UI request first.
 		}
 
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
