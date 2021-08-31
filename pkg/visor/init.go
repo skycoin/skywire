@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"strconv"
 	"sync"
 	"time"
 
+	"github.com/ccding/go-stun/stun"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
@@ -63,6 +63,14 @@ var (
 	ar vinit.Module
 	// App discovery
 	disc vinit.Module
+	// Stun module
+	sc vinit.Module
+	// SUDPH module
+	sudphC vinit.Module
+	// STCPR module
+	stcprC vinit.Module
+	// STCP module
+	stcpC vinit.Module
 	// dmsg pty: a remote terminal to the visor working over dmsg protocol
 	pty vinit.Module
 	// Dmsg module
@@ -85,6 +93,8 @@ var (
 	pvs vinit.Module
 	// Public visor: advertise current visor as public
 	pv vinit.Module
+	// Transport module (this is not a functional module but a grouping of all heavy transport types initializations)
+	tm vinit.Module
 	// hypervisor module
 	hv vinit.Module
 	// dmsg ctrl
@@ -105,20 +115,27 @@ func registerModules(logger *logging.MasterLogger) {
 	ebc = maker("event_broadcaster", initEventBroadcaster)
 	ar = maker("address_resolver", initAddressResolver)
 	disc = maker("discovery", initDiscovery)
+	tr = maker("transport", initTransport, &ar, &ebc)
+
+	sc = maker("stun_client", initStunClient)
+	sudphC = maker("sudph", initSudphClient, &sc, &tr)
+	stcprC = maker("stcpr", initStcprClient, &tr)
+	stcpC = maker("stcp", initStcpClient, &tr)
 	dmsgC = maker("dmsg", initDmsg, &ebc)
-	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &dmsgC)
+	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &dmsgC, &tr)
+
 	pty = maker("dmsg_pty", initDmsgpty, &dmsgC)
-	tr = maker("transport", initTransport, &ar, &ebc, &dmsgC)
 	rt = maker("router", initRouter, &tr, &dmsgC)
 	launch = maker("launcher", initLauncher, &ebc, &disc, &dmsgC, &tr, &rt)
 	cli = maker("cli", initCLI)
 	hvs = maker("hypervisors", initHypervisors, &dmsgC)
 	ut = maker("uptime_tracker", initUptimeTracker)
 	pv = maker("public_visors", initPublicVisors, &tr)
-	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc)
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
+	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl)
+	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &trs, &hvs, &ut, &pv, &pvs, &dmsgCtrl)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -181,6 +198,14 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
+func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	sc := network.GetStunDetails(v.conf.StunServers, log)
+	v.initLock.Lock()
+	v.stunClient = sc
+	v.initLock.Unlock()
+	return nil
+}
+
 func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if v.conf.Dmsg == nil {
 		return fmt.Errorf("cannot initialize dmsg: empty configuration")
@@ -194,10 +219,6 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.initLock.Lock()
 	v.dmsgC = dmsgC
 	v.initLock.Unlock()
-
-	v.pushCloseStack("dmsgC", func() error {
-		return dmsgC.Close()
-	})
 	return nil
 }
 
@@ -206,23 +227,52 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	if dmsgC == nil {
 		return nil
 	}
+
 	const dmsgTimeout = time.Second * 20
 	logger := dmsgC.Logger().WithField("timeout", dmsgTimeout)
 	logger.Info("Connecting to the dmsg network...")
 	select {
 	case <-time.After(dmsgTimeout):
 		logger.Warn("Failed to connect to the dmsg network, will try again later.")
+		go func() {
+			<-v.dmsgC.Ready()
+			logger.Info("Connected to the dmsg network.")
+			v.tpM.InitDmsgClient(ctx, dmsgC)
+		}()
 	case <-v.dmsgC.Ready():
 		logger.Info("Connected to the dmsg network.")
+		v.tpM.InitDmsgClient(ctx, dmsgC)
 	}
 	// dmsgctrl setup
 	cl, err := dmsgC.Listen(skyenv.DmsgCtrlPort)
 	if err != nil {
 		return err
 	}
-	v.pushCloseStack("snet.dmsgctrl", cl.Close)
+	v.pushCloseStack("dmsgctrl", cl.Close)
 
 	dmsgctrl.ServeListener(cl, 0)
+	return nil
+}
+
+func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	switch v.stunClient.NATType {
+	case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
+		log.Infof("SUDPH transport wont be available as visor is under %v", v.stunClient.NATType.String())
+	default:
+		v.tpM.InitClient(ctx, network.SUDPH)
+	}
+	return nil
+}
+
+func initStcprClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	v.tpM.InitClient(ctx, network.STCPR)
+	return nil
+}
+
+func initStcpClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	if v.conf.STCP != nil {
+		v.tpM.InitClient(ctx, network.STCP)
+	}
 	return nil
 }
 
@@ -237,30 +287,34 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	logS := transport.InMemoryTransportLogStore()
 
 	tpMConf := transport.ManagerConfig{
-		PubKey:          v.conf.PK,
-		SecKey:          v.conf.SK,
-		DiscoveryClient: tpdC,
-		LogStore:        logS,
+		PubKey:               v.conf.PK,
+		SecKey:               v.conf.SK,
+		DiscoveryClient:      tpdC,
+		LogStore:             logS,
+		PersistentTransports: v.conf.PersistentTransports,
 	}
 	managerLogger := v.MasterLogger().PackageLogger("transport_manager")
 
 	// todo: pass down configuration?
-	table := stcp.NewTable(v.conf.STCP.PKTable)
+	var table stcp.PKTable
+	var listenAddr string
+	if v.conf.STCP != nil {
+		table = stcp.NewTable(v.conf.STCP.PKTable)
+		listenAddr = v.conf.STCP.LocalAddr
+	}
 	factory := network.ClientFactory{
 		PK:         v.conf.PK,
 		SK:         v.conf.SK,
-		ListenAddr: v.conf.STCP.LocalAddr,
+		ListenAddr: listenAddr,
 		PKTable:    table,
 		ARClient:   v.arClient,
 		EB:         v.ebc,
-		DmsgC:      v.dmsgC,
 	}
 	tpM, err := transport.NewManager(managerLogger, v.arClient, v.ebc, &tpMConf, factory)
 	if err != nil {
 		err := fmt.Errorf("failed to start transport manager: %w", err)
 		return err
 	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
@@ -272,9 +326,9 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	v.pushCloseStack("transport.manager", func() error {
 		cancel()
-		err := tpM.Close()
+		tpM.Close()
 		wg.Wait()
-		return err
+		return nil
 	})
 
 	v.initLock.Lock()
@@ -285,12 +339,23 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) error {
 	ctx, cancel := context.WithCancel(ctx)
-	ts, err := ts.NewTransportListener(ctx, v.conf, v.dmsgC, v.tpM, v.MasterLogger())
-	if err != nil {
-		cancel()
-		return err
-	}
-	go ts.Serve(ctx)
+	// To remove the block set by NewTransportListener if dmsg is not initilized
+	go func() {
+		ts, err := ts.NewTransportListener(ctx, v.conf, v.dmsgC, v.tpM, v.MasterLogger())
+		if err != nil {
+			log.Warn(err)
+			cancel()
+		}
+		select {
+		case <-ctx.Done():
+		default:
+			go ts.Serve(ctx)
+		}
+	}()
+
+	// waiting for atleast one transport to initilize
+	<-v.tpM.Ready()
+
 	v.pushCloseStack("transport_setup.rpc", func() error {
 		cancel()
 		return nil
@@ -301,9 +366,9 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Routing
 	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout))
-
+	logger := v.MasterLogger().PackageLogger("router")
 	rConf := router.Config{
-		Logger:           v.MasterLogger().PackageLogger("router"),
+		Logger:           logger,
 		PubKey:           v.conf.PK,
 		SecKey:           v.conf.SK,
 		TransportManager: v.tpM,
@@ -320,40 +385,15 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	// todo: this piece is somewhat ugly and inherited from the times when init was
-	// calling init functions sequentially
-	// It is probably a hack to run init
-	// "somewhat concurrently", where the heaviest init functions will be partially concurrent
-
-	// to avoid this we can:
-	// either introduce some kind of "task" functionality that abstracts out
-	// something that has to be run concurrent to the init, and check on their status
-	// stop in close functions, etc
-
-	// or, we can completely rely on the module system, and just wait for everything
-	// in init functions, instead of spawning more goroutines.
-	// but, even though modules themselves are concurrent this can introduce some
-	// performance penalties, because dependencies will be waiting on complete init
-
-	// leaving as it is until future requirements about init and modules are known
-
 	serveCtx, cancel := context.WithCancel(context.Background())
-	wg := new(sync.WaitGroup)
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-		runtimeErrors := getErrors(ctx)
-		if err := r.Serve(serveCtx); err != nil {
-			runtimeErrors <- fmt.Errorf("serve router stopped: %w", err)
-		}
-	}()
+	if err := r.Serve(serveCtx); err != nil {
+		cancel()
+		return err
+	}
 
 	v.pushCloseStack("router.serve", func() error {
 		cancel()
-		err := r.Close()
-		wg.Wait()
-		return err
+		return r.Close()
 	})
 
 	v.initLock.Lock()
@@ -565,50 +605,38 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 	return nil
 }
 
-// this service is not considered critical and always returns true
 // advertise this visor as public in service discovery
+// this service is not considered critical and always returns true
 func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	if !v.conf.IsPublic {
 		return nil
 	}
-
-	// retrieve interface IPs and check if at least one is public
-	defaultIPs, err := netutil.DefaultNetworkInterfaceIPs()
+	logger := v.MasterLogger().PackageLogger("public_visor")
+	hasPublic, err := netutil.HasPublicIP()
 	if err != nil {
+		logger.WithError(err).Warn("Failed to check for existing public IP address")
 		return nil
 	}
-	var found bool
-	for _, IP := range defaultIPs {
-		if netutil.IsPublicIP(IP) {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !hasPublic {
+		logger.Warn("No public IP address found, stopping")
 		return nil
 	}
 
-	// todo: consider moving this to transport into some helper function
 	stcpr, ok := v.tpM.Stcpr()
 	if !ok {
+		logger.Warn("No stcpr client found, stopping")
 		return nil
 	}
-	la, err := stcpr.LocalAddr()
+	addr, err := stcpr.LocalAddr()
 	if err != nil {
-		log.WithError(err).Errorln("Failed to get STCPR local addr")
+		logger.Warn("Failed to get STCPR local addr")
 		return nil
 	}
-	_, portStr, err := net.SplitHostPort(la.String())
+	port, err := netutil.ExtractPort(addr)
 	if err != nil {
-		log.WithError(err).Errorf("Failed to extract port from addr %v", la.String())
+		logger.Warn("Failed to get STCPR port")
 		return nil
 	}
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		log.WithError(err).Errorf("Failed to convert port to int")
-		return nil
-	}
-
 	visorUpdater := v.serviceDisc.VisorUpdater(uint16(port))
 	visorUpdater.Start()
 
