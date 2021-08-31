@@ -5,18 +5,13 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log/syslog"
 	"os"
 	"strings"
 	"unicode"
 
 	jsoniter "github.com/json-iterator/go"
-	"github.com/sirupsen/logrus"
-	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
-
-	"github.com/skycoin/dmsg/discord"
 )
 
 // Associated errors.
@@ -37,6 +32,7 @@ const (
 // ServiceFlags represents common flags which are shared across services.
 type ServiceFlags struct {
 	MetricsAddr string
+	HTTPAddr    string
 	Syslog      string
 	SyslogNet   string
 	LogLevel    string
@@ -81,6 +77,7 @@ func (sf *ServiceFlags) Init(rootCmd *cobra.Command, defaultTag, defaultConf str
 
 	// flags
 	rootCmd.Flags().StringVarP(&sf.MetricsAddr, "metrics", "m", sf.MetricsAddr, "address to serve metrics API from")
+	rootCmd.Flags().StringVarP(&sf.HTTPAddr, "http", "p", ":8082", "address to serve http API for health endpoint")
 	rootCmd.Flags().StringVar(&sf.Syslog, "syslog", sf.Syslog, "address in which to dial to syslog server")
 	rootCmd.Flags().StringVar(&sf.SyslogNet, "syslog-net", sf.SyslogNet, "network in which to dial to syslog server")
 	rootCmd.Flags().StringVar(&sf.LogLevel, "syslog-lvl", sf.LogLevel, "minimum log level to report")
@@ -134,20 +131,7 @@ func (sf *ServiceFlags) Logger() *logging.Logger {
 	logging.SetLevel(logLvl)
 
 	if sf.Syslog != "" {
-		hook, err := logrussyslog.NewSyslogHook(sf.SyslogNet, sf.Syslog, sysLvl, sf.Tag)
-		if err != nil {
-			log.WithError(err).
-				WithField("net", sf.SyslogNet).
-				WithField("addr", sf.Syslog).
-				Fatal("Failed to connect to syslog daemon.")
-		}
-		logging.AddHook(hook)
-	}
-
-	if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
-		discordOpts := discord.GetDefaultOpts()
-		hook := discord.NewHook(sf.Tag, discordWebhookURL, discordOpts...)
-		logging.AddHook(hook)
+		sf.sysLogHook(log, sysLvl)
 	}
 
 	return log
@@ -155,13 +139,13 @@ func (sf *ServiceFlags) Logger() *logging.Logger {
 
 // ParseConfig parses config from service tags.
 // If checkArgs is set, we additionally parse os.Args to find a config path.
-func (sf *ServiceFlags) ParseConfig(args []string, checkArgs bool, v interface{}) error {
-	r, err := sf.obtainConfigReader(args, checkArgs)
+func (sf *ServiceFlags) ParseConfig(args []string, checkArgs bool, v interface{}, genDefaultFunc func() (io.ReadCloser, error)) error {
+	r, err := sf.obtainConfigReader(args, checkArgs, genDefaultFunc)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		if err := r.Close(); err != nil {
+		if err = r.Close(); err != nil {
 			sf.logger.WithError(err).Warn("Failed to close config source.")
 		}
 	}()
@@ -171,7 +155,7 @@ func (sf *ServiceFlags) ParseConfig(args []string, checkArgs bool, v interface{}
 		return fmt.Errorf("failed to read from config source: %w", err)
 	}
 
-	if err := json.Unmarshal(b, v); err != nil {
+	if err = json.Unmarshal(b, v); err != nil {
 		return fmt.Errorf("failed to decode config file: %w", err)
 	}
 
@@ -184,7 +168,7 @@ func (sf *ServiceFlags) ParseConfig(args []string, checkArgs bool, v interface{}
 	return nil
 }
 
-func (sf *ServiceFlags) obtainConfigReader(args []string, checkArgs bool) (io.ReadCloser, error) {
+func (sf *ServiceFlags) obtainConfigReader(args []string, checkArgs bool, genDefaultFunc func() (io.ReadCloser, error)) (io.ReadCloser, error) {
 	switch {
 	case sf.Stdin || strings.ToLower(sf.Config) == stdinConfig:
 		stdin := ioutil.NopCloser(os.Stdin) // ensure stdin is not closed
@@ -192,12 +176,14 @@ func (sf *ServiceFlags) obtainConfigReader(args []string, checkArgs bool) (io.Re
 
 	case checkArgs:
 		if len(args) == 1 {
-			break
+			return genDefaultFunc()
 		}
 
 		for i, arg := range args {
 			if strings.HasSuffix(arg, ".json") && i > 0 && !strings.HasPrefix(args[i-1], "-") {
-				f, err := os.Open(arg) //nolint:gosec
+				var f io.ReadCloser
+				var err error
+				f, err = os.Open(arg) //nolint:gosec
 				if err != nil {
 					return nil, fmt.Errorf("failed to open config file: %w", err)
 				}
@@ -211,6 +197,7 @@ func (sf *ServiceFlags) obtainConfigReader(args []string, checkArgs bool) (io.Re
 			return nil, fmt.Errorf("failed to open config file: %w", err)
 		}
 		return f, nil
+
 	}
 
 	return nil, errors.New("no config location specified")
@@ -245,26 +232,6 @@ func ValidTag(tag string) error {
 	}
 
 	return nil
-}
-
-// LevelFromString returns a logrus.Level and syslog.Priority from a string identifier.
-func LevelFromString(s string) (logrus.Level, syslog.Priority, error) {
-	switch strings.ToLower(s) {
-	case "debug":
-		return logrus.DebugLevel, syslog.LOG_DEBUG, nil
-	case "info", "notice":
-		return logrus.InfoLevel, syslog.LOG_INFO, nil
-	case "warn", "warning":
-		return logrus.WarnLevel, syslog.LOG_WARNING, nil
-	case "error":
-		return logrus.ErrorLevel, syslog.LOG_ERR, nil
-	case "fatal", "critical":
-		return logrus.FatalLevel, syslog.LOG_CRIT, nil
-	case "panic":
-		return logrus.PanicLevel, syslog.LOG_EMERG, nil
-	default:
-		return logrus.DebugLevel, syslog.LOG_DEBUG, ErrInvalidLogString
-	}
 }
 
 func alreadyDone(done *bool) bool {

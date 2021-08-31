@@ -206,7 +206,7 @@ func (w *huffmanBitWriter) write(b []byte) {
 }
 
 func (w *huffmanBitWriter) writeBits(b int32, nb uint16) {
-	w.bits |= uint64(b) << (w.nbits & 63)
+	w.bits |= uint64(b) << (w.nbits & reg16SizeMask64)
 	w.nbits += nb
 	if w.nbits >= 48 {
 		w.writeOutBits()
@@ -484,6 +484,9 @@ func (w *huffmanBitWriter) writeDynamicHeader(numLiterals int, numOffsets int, n
 	}
 }
 
+// writeStoredHeader will write a stored header.
+// If the stored block is only used for EOF,
+// it is replaced with a fixed huffman block.
 func (w *huffmanBitWriter) writeStoredHeader(length int, isEof bool) {
 	if w.err != nil {
 		return
@@ -493,6 +496,16 @@ func (w *huffmanBitWriter) writeStoredHeader(length int, isEof bool) {
 		w.writeCode(w.literalEncoding.codes[endBlockMarker])
 		w.lastHeader = 0
 	}
+
+	// To write EOF, use a fixed encoding block. 10 bits instead of 5 bytes.
+	if length == 0 && isEof {
+		w.writeFixedHeader(isEof)
+		// EOB: 7 bits, value: 0
+		w.writeBits(0, 7)
+		w.flush()
+		return
+	}
+
 	var flag int32
 	if isEof {
 		flag = 1
@@ -746,7 +759,7 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 		} else {
 			// inlined
 			c := lengths[lengthCode&31]
-			w.bits |= uint64(c.code) << (w.nbits & 63)
+			w.bits |= uint64(c.code) << (w.nbits & reg16SizeMask64)
 			w.nbits += c.len
 			if w.nbits >= 48 {
 				w.writeOutBits()
@@ -766,7 +779,7 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 		} else {
 			// inlined
 			c := offs[offsetCode&31]
-			w.bits |= uint64(c.code) << (w.nbits & 63)
+			w.bits |= uint64(c.code) << (w.nbits & reg16SizeMask64)
 			w.nbits += c.len
 			if w.nbits >= 48 {
 				w.writeOutBits()
@@ -865,7 +878,7 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 	for _, t := range input {
 		// Bitwriting inlined, ~30% speedup
 		c := encoding[t]
-		w.bits |= uint64(c.code) << ((w.nbits) & 63)
+		w.bits |= uint64(c.code) << ((w.nbits) & reg16SizeMask64)
 		w.nbits += c.len
 		if w.nbits >= 48 {
 			bits := w.bits
