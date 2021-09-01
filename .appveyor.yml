@@ -36,11 +36,12 @@ environment:
   #   GOARCH: amd64
   
 for:
-  - # Linux
+  - # Linux and MacOS
     skip_tags: true
     matrix:
       only:
         - job_name: Linux
+        - job_name: MacOS
 
     install:
       - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.42.0
@@ -56,36 +57,32 @@ for:
       - make build
       - make build-ui
 
-  - # Windows and MacOS
-    skip_tags: true
-    matrix:
-      only:
-        - job_name: MacOS
-        # - job_name: Windows
+  # - # Windows
+  #   skip_tags: true
+  #   matrix:
+  #     only:
+  #       - job_name: Windows
 
-    environment:
-      matrix:
-        - GOARCH: amd64
+  #   environment:
+  #     matrix:
+  #       - GOARCH: amd64
 
-    install:
-      - sh: curl -OL "https://golang.org/dl/go1.16.6.darwin-amd64.tar.gz" && sudo tar -C /usr/local -xzf go1.16.6.darwin-amd64.tar.gz && export GOPATH=$HOME/go && export GOROOT=/usr/local/go && export PATH=$GOROOT/bin:$GOPATH/bin:$PATH
-      - sh: ci_scripts/create-ip-aliases.sh
-      - cmd: choco install make
-      - go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.42.0
-      - make dep
-      - make install-deps-ui
+  #   install:
+  #     - choco install make
+  #     - go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.42.0
+  #     - make dep
+  #     - make install-deps-ui
     
-    before_build:
-      - cmd: set GO111MODULE=on
-      - cmd: make check-windows-appveyor
-      - sh: make check
-      - make lint-ui
+  #   before_build:
+  #     - set GO111MODULE=on
+  #     - make check-windows-appveyor
+  #     - make lint-ui
   
-    build_script:
-      - make build
-      - make build-ui
+  #   build_script:
+  #     - make build
+  #     - make build-ui
 
-  - # Linux (Release)
+  - # Linux and MacOS (Release)
     skip_non_tags: true
     matrix:
       only:
@@ -93,17 +90,18 @@ for:
         - job_name: linux-arm64
         - job_name: linux-amd64
         - job_name: linux-386
+        - job_name: darwin-amd64
 
     install:
       - make dep
-      - sh: ci_scripts/create-ip-aliases.sh
+      - ci_scripts/create-ip-aliases.sh
       - export GOARM=7
     
     build_script:
       - make build
 
     after_build:
-      - sh: tar -cvzf skywire-$APPVEYOR_REPO_TAG_NAME-$APPVEYOR_JOB_NAME.tar.gz ./apps/* ./skywire-visor ./skywire-cli ./setup-node
+      - tar -cvzf skywire-$APPVEYOR_REPO_TAG_NAME-$APPVEYOR_JOB_NAME.tar.gz ./apps/* ./skywire-visor ./skywire-cli ./setup-node
 
     artifacts:
       - path: skywire-$(APPVEYOR_REPO_TAG_NAME)-$(APPVEYOR_JOB_NAME).tar.gz
@@ -119,39 +117,38 @@ for:
         on:
           APPVEYOR_REPO_TAG: true
           
-  - # Windows and MacOS (Release)
-    skip_non_tags: true
-    matrix:
-      only:
-        - job_name: darwin-amd64
-        # - job_name: windows-amd64
+  # - # Windows (Release)
+  #   skip_non_tags: true
+  #   matrix:
+  #     only:
+  #       - job_name: windows-amd64
 
-    environment:
-      matrix:
-        - GOARCH: amd64
+  #   environment:
+  #     matrix:
+  #       - GOARCH: amd64
 
-    install:
-      - sh: curl -OL "https://golang.org/dl/go1.16.6.darwin-amd64.tar.gz" && sudo tar -C /usr/local -xzf go1.16.6.darwin-amd64.tar.gz && export GOPATH=$HOME/go && export GOROOT=/usr/local/go && export PATH=$GOROOT/bin:$GOPATH/bin:$PATH
-      - sh: ci_scripts/create-ip-aliases.sh
-      - cmd: choco install make
-      - make dep
+  #   install:
+  #     - sh: curl -OL "https://golang.org/dl/go1.16.6.darwin-amd64.tar.gz" && sudo tar -C /usr/local -xzf go1.16.6.darwin-amd64.tar.gz && export GOPATH=$HOME/go && export GOROOT=/usr/local/go && export PATH=$GOROOT/bin:$GOPATH/bin:$PATH
+  #     - sh: ci_scripts/create-ip-aliases.sh
+  #     - cmd: choco install make
+  #     - make dep
   
-    build_script:
-      - make build
+  #   build_script:
+  #     - make build
 
-    after_build:
-      - sh: tar -cvzf skywire-$APPVEYOR_REPO_TAG_NAME-$APPVEYOR_JOB_NAME.tar.gz ./apps/* ./skywire-visor ./skywire-cli ./setup-node
+  #   after_build:
+  #     - sh: tar -cvzf skywire-$APPVEYOR_REPO_TAG_NAME-$APPVEYOR_JOB_NAME.tar.gz ./apps/* ./skywire-visor ./skywire-cli ./setup-node
 
-    artifacts:
-      - path: skywire-$(APPVEYOR_REPO_TAG_NAME)-$(APPVEYOR_JOB_NAME).tar.gz
-        name: deploy
+  #   artifacts:
+  #     - path: skywire-$(APPVEYOR_REPO_TAG_NAME)-$(APPVEYOR_JOB_NAME).tar.gz
+  #       name: deploy
         
-    deploy:
-      - provider: GitHub
-        release: $(APPVEYOR_REPO_TAG_NAME)
-        auth_token:
-          secure: ZrbNBE2wSfGvHzEq5GqEAUmNy7myDIl7KK05CKlZdQfieV7XdIAPXpkdHNEyZbvT
-        draft: true
-        artifact: deploy
-        on:
-          APPVEYOR_REPO_TAG: true
+  #   deploy:
+  #     - provider: GitHub
+  #       release: $(APPVEYOR_REPO_TAG_NAME)
+  #       auth_token:
+  #         secure: ZrbNBE2wSfGvHzEq5GqEAUmNy7myDIl7KK05CKlZdQfieV7XdIAPXpkdHNEyZbvT
+  #       draft: true
+  #       artifact: deploy
+  #       on:
+  #         APPVEYOR_REPO_TAG: true
