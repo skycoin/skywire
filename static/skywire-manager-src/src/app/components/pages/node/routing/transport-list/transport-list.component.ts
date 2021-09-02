@@ -375,8 +375,8 @@ export class TransportListComponent implements OnDestroy {
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.componentInstance.showProcessing();
 
-      this.persistentTransportSubscription = this.nodeService.getNode(this.nodePK).subscribe((nodeData: Node) => {
-        const dataToUse = nodeData.persistentTransports;
+      this.persistentTransportSubscription = this.transportService.getPersistentTransports(this.nodePK).subscribe((list: any[]) => {
+        const dataToUse = list;
         let nothingToDo = false;
 
         const transportsMap: Map<String, Transport> = new Map<String, Transport>();
@@ -406,7 +406,7 @@ export class TransportListComponent implements OnDestroy {
           // Remove all selected transports.
           for (let i = 0; i < dataToUse.length; i++) {
             if (transportsMap.has(this.getPersistentTransportID(dataToUse[i].pk, dataToUse[i].type))) {
-              dataToUse.splice(i);
+              dataToUse.splice(i, 1);
               nothingToDo = false;
               i--;
             }
