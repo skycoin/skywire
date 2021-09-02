@@ -16,6 +16,8 @@
     "time-in-ms": "{{ time }}ms.",
     "time-in-segs": "{{ time }}s.",
     "ok": "Ok",
+    "yes": "Yes",
+    "no": "No",
     "unknown": "Desconocido",
     "close": "Cerrar",
     "window-size-error": "La ventana es demasiado estrecha para el contenido."
@@ -96,6 +98,8 @@
         "title": "Información del visor",
         "label": "Etiqueta:",
         "public-key": "Llave pública:",
+        "symmetic-nat": "NAT simétrica:",
+        "public-ip": "IP pública:",
         "ip": "IP:",
         "dmsg-server": "Servidor DMSG:",
         "ping": "Ping:",
