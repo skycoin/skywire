@@ -126,10 +126,10 @@ snapshot-clean: ## Cleans snapshot / release
 sysroot:
 	mkdir -p ./sysroot
 	@echo "getting sysroot for cross compilation"
-	if [[ ! -f /tmp/snapshot-05-12-2021.tar.gz ]]; then \
-  		curl -L -o /tmp/snapshot-05-12-2021.tar.gz "https://alexadhy-git.s3-ap-southeast-1.amazonaws.com/snapshot-05-12-2021.tar.gz"; \
+	if [[ ! -f /tmp/skywire-sysroot.tar.gz ]]; then \
+  		curl -L -o /tmp/skywire-sysroot.tar.gz "https://ap-south-1.linodeobjects.com/skywire-bucket/skywire-sysroot-latest_20210902.tar.gz"; \
 	fi
-	tar xf /tmp/snapshot-05-12-2021.tar.gz -C ./sysroot/
+	tar xf /tmp/skywire-sysroot.tar.gz -C ./sysroot/
 
 sysroot-clean:
 	@rm -rf ./sysroot
