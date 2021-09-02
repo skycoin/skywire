@@ -253,12 +253,11 @@ func (rc *rpcClient) Transport(tid uuid.UUID) (*TransportSummary, error) {
 }
 
 // AddTransport calls AddTransport.
-func (rc *rpcClient) AddTransport(remote cipher.PubKey, tpType string, public bool, timeout time.Duration) (*TransportSummary, error) {
+func (rc *rpcClient) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*TransportSummary, error) {
 	var summary TransportSummary
 	err := rc.Call("AddTransport", &AddTransportIn{
 		RemotePK: remote,
 		TpType:   tpType,
-		Public:   public,
 		Timeout:  timeout,
 	}, &summary)
 
@@ -826,7 +825,7 @@ func (mc *mockRPCClient) Transport(tid uuid.UUID) (*TransportSummary, error) {
 }
 
 // AddTransport implements API.
-func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ bool, _ time.Duration) (*TransportSummary, error) {
+func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ time.Duration) (*TransportSummary, error) {
 	summary := &TransportSummary{
 		ID:     transport.MakeTransportID(mc.o.PubKey, remote, network.Type(tpType)),
 		Local:  mc.o.PubKey,

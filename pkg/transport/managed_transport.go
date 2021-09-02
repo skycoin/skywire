@@ -287,9 +287,9 @@ func (mt *ManagedTransport) DialAsync(ctx context.Context, errCh chan error) {
 }
 
 func (mt *ManagedTransport) dial(ctx context.Context) error {
-	transport, err := mt.client.Dial(ctx, mt.rPK, skyenv.DmsgTransportPort)
+	transport, err := mt.client.Dial(ctx, mt.rPK, skyenv.TransportPort)
 	if err != nil {
-		return fmt.Errorf("snet.Dial: %w", err)
+		return fmt.Errorf("mt.client.Dial: %w", err)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
