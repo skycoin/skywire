@@ -262,6 +262,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/update/available/{channel}", hv.visorUpdateAvailable())
 				r.Get("/visors/{pk}/runtime-logs", hv.getRuntimeLogs())
 				r.Post("/visors/{pk}/min-hops", hv.postMinHops())
+				r.Get("/visors/{pk}/persistent-transports", hv.getPersistentTransports())
 				r.Put("/visors/{pk}/persistent-transports", hv.putPersistentTransports())
 			})
 		})
@@ -1339,6 +1340,17 @@ func (hv *Hypervisor) putPersistentTransports() http.HandlerFunc {
 			return
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
+func (hv *Hypervisor) getPersistentTransports() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		pts, err := ctx.API.GetPersistentTransports()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, pts)
 	})
 }
 
