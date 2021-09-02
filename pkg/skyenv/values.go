@@ -49,10 +49,14 @@ const (
 const (
 	DmsgCtrlPort           uint16 = 7   // Listening port for dmsgctrl protocol (similar to TCP Echo Protocol).
 	DmsgSetupPort          uint16 = 36  // Listening port of a setup node.
+	DmsgHypervisorPort     uint16 = 46  // Listening port of a hypervisor for incoming RPC visor connections over dmsg.
+	DmsgTransportSetupPort uint16 = 47  // Listening port for transport setup RPC over dmsg.
 	DmsgAwaitSetupPort     uint16 = 136 // Listening port of a visor for setup operations.
-	DmsgTransportPort      uint16 = 45  // Listening port of a visor for incoming transports.
-	DmsgHypervisorPort     uint16 = 46  // Listening port of a visor for incoming hypervisor connections.
-	DmsgTransportSetupPort uint16 = 47
+)
+
+// Transport port constants.
+const (
+	TransportPort uint16 = 45 // Listening port of a visor for incoming transports.
 )
 
 // Default dmsgpty constants.
@@ -189,4 +193,18 @@ func MustPK(pk string) cipher.PubKey {
 	}
 
 	return sPK
+}
+
+// GetStunServers gives back deafault Stun Servers
+func GetStunServers() []string {
+	return []string{
+		"45.118.133.242:3478",
+		"192.53.173.68:3478",
+		"192.46.228.39:3478",
+		"192.53.113.106:3478",
+		"192.53.117.158:3478",
+		"192.53.114.142:3478",
+		"139.177.189.166:3478",
+		"192.46.227.227:3478",
+	}
 }

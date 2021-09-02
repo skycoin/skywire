@@ -6,6 +6,7 @@ require (
 	github.com/AudriusButkevicius/pfilter v0.0.0-20210515103320-4b4b86609d51
 	github.com/VictoriaMetrics/metrics v1.17.2
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
+	github.com/ccding/go-stun/stun v0.0.0-20200514191101-4dc67bcdb029
 	github.com/creack/pty v1.1.11 // indirect
 	github.com/gen2brain/dlgs v0.0.0-20210609125024-bf6c92aaa984
 	github.com/getlantern/golog v0.0.0-20201105130739-9586b8bde3a9 // indirect
@@ -27,7 +28,7 @@ require (
 	github.com/schollz/progressbar/v2 v2.15.0
 	github.com/shirou/gopsutil/v3 v3.21.4
 	github.com/sirupsen/logrus v1.8.1
-	github.com/skycoin/dmsg v0.0.0-20210616115957-702a819a9b3d
+	github.com/skycoin/dmsg v0.0.0-20210827120633-3d20b41d46a2
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
