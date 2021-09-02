@@ -1,6 +1,8 @@
 export class Node {
   label: string;
   localPk: string;
+  isSymmeticNat?: boolean;
+  publicIp?: string;
   ip: string;
   version: string;
   apps: Application[];
