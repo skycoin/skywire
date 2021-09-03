@@ -22,7 +22,7 @@ DMSG_BASE := github.com/skycoin/dmsg
 OPTS?=GO111MODULE=on
 STATIC_OPTS?= $(OPTS) CC=musl-gcc
 MANAGER_UI_DIR = static/skywire-manager-src
-GO_BUILDER_VERSION=v1.16.4
+GO_BUILDER_VERSION=v1.17
 MANAGER_UI_BUILT_DIR=cmd/skywire-visor/static
 
 TEST_OPTS:=-cover -timeout=5m -mod=vendor
@@ -127,7 +127,7 @@ sysroot:
 	mkdir -p ./sysroot
 	@echo "getting sysroot for cross compilation"
 	if [[ ! -f /tmp/skywire-sysroot.tar.gz ]]; then \
-  		curl -L -o /tmp/skywire-sysroot.tar.gz "https://ap-south-1.linodeobjects.com/skywire-bucket/skywire-sysroot-latest_20210902.tar.gz"; \
+  		curl -L -o /tmp/skywire-sysroot.tar.gz "https://ap-south-1.linodeobjects.com/skywire-bucket/skywire-sysroot-latest_20210903.tar.gz"; \
 	fi
 	tar xf /tmp/skywire-sysroot.tar.gz -C ./sysroot/
 
