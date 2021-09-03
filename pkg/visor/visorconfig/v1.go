@@ -9,6 +9,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/dmsgc"
+	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
@@ -30,6 +31,7 @@ const V101Name = "v1.0.1"
 // Added transport_setup_nodes field to transport section
 // Removed authorization_file field from dmsgpty section
 // Default urls are changed to newer shortned ones
+// Added stun_servers field to the config
 const V110Name = "v1.1.0"
 
 // V1Name is the semantic version string for the most recent version of V1.
@@ -53,9 +55,12 @@ type V1 struct {
 
 	LogLevel          string   `json:"log_level"`
 	LocalPath         string   `json:"local_path"`
+	StunServers       []string `json:"stun_servers"`
 	ShutdownTimeout   Duration `json:"shutdown_timeout,omitempty"`    // time value, examples: 10s, 1m, etc
 	RestartCheckDelay Duration `json:"restart_check_delay,omitempty"` // time value, examples: 10s, 1m, etc
 	IsPublic          bool     `json:"is_public"`
+
+	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 
 	Hypervisor *hypervisorconfig.Config `json:"hypervisor,omitempty"`
 }
@@ -184,6 +189,22 @@ func (v1 *V1) UpdateMinHops(hops uint16) error {
 	v1.mu.Unlock()
 
 	return v1.flush(v1)
+}
+
+// UpdatePersistentTransports updates min_hops config
+func (v1 *V1) UpdatePersistentTransports(pts []transport.PersistentTransports) error {
+	v1.mu.Lock()
+	v1.PersistentTransports = pts
+	v1.mu.Unlock()
+
+	return v1.flush(v1)
+}
+
+// GetPersistentTransports updates min_hops config
+func (v1 *V1) GetPersistentTransports() ([]transport.PersistentTransports, error) {
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+	return v1.PersistentTransports, nil
 }
 
 // updateStringArg updates the cli non-boolean flag of the specified app config and also within the launcher.

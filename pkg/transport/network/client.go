@@ -21,25 +21,25 @@ import (
 
 // Client provides access to skywire network
 // It allows dialing remote visors using their public keys, as
-// well as listening to incoming connections from other visors
+// well as listening to incoming transports from other visors
 type Client interface {
 	// Dial remote visor, that is listening on the given skywire port
-	Dial(ctx context.Context, remote cipher.PubKey, port uint16) (Conn, error)
+	Dial(ctx context.Context, remote cipher.PubKey, port uint16) (Transport, error)
 	// Start initializes the client and prepares it for listening. It is required
-	// to be called to start accepting connections
+	// to be called to start accepting transports
 	Start() error
 	// Listen on the given skywire port. This can be called multiple times
 	// for different ports for the same client. It requires Start to be called
-	// to start accepting connections
+	// to start accepting transports
 	Listen(port uint16) (Listener, error)
 	// LocalAddr returns the actual network address under which this client listens to
-	// new connections
+	// new transports
 	LocalAddr() (net.Addr, error)
 	// PK returns public key of the visor running this client
 	PK() cipher.PubKey
 	// SK returns secret key of the visor running this client
 	SK() cipher.SecKey
-	// Close the client, stop accepting connections. Connections returned by the
+	// Close the client, stop accepting transports. Connections returned by the
 	// client should be closed manually
 	Close() error
 	// Type returns skywire network type in which this client operates
@@ -93,9 +93,9 @@ func (f *ClientFactory) MakeClient(netType Type) (Client, error) {
 // The main responsibility is handshaking over incoming
 // and outgoing raw network connections, obtaining remote information
 // from the handshake and wrapping raw connections with skywire
-// connection type.
-// Incoming connections also directed to appropriate listener using
-// skywire port, obtained from incoming connection handshake
+// transport type.
+// Incoming transports also directed to appropriate listener using
+// skywire port, obtained from incoming transport handshake
 type genericClient struct {
 	lPK        cipher.PubKey
 	lSK        cipher.SecKey
@@ -114,10 +114,10 @@ type genericClient struct {
 	closeOnce     sync.Once
 }
 
-// initConnection will initialize skywire connection over opened raw connection to
+// initTransport will initialize skywire transport over opened raw connection to
 // the remote client
 // The process will perform handshake over raw connection
-func (c *genericClient) initConnection(ctx context.Context, conn net.Conn, rPK cipher.PubKey, rPort uint16) (*conn, error) {
+func (c *genericClient) initTransport(ctx context.Context, conn net.Conn, rPK cipher.PubKey, rPort uint16) (*transport, error) {
 	lPort, freePort, err := c.porter.ReserveEphemeral(ctx)
 	if err != nil {
 		return nil, err
@@ -126,20 +126,20 @@ func (c *genericClient) initConnection(ctx context.Context, conn net.Conn, rPK c
 	remoteAddr := conn.RemoteAddr()
 	c.log.Infof("Performing handshake with %v", remoteAddr)
 	hs := handshake.InitiatorHandshake(c.lSK, lAddr, rAddr)
-	return c.wrapConn(conn, hs, true, freePort)
+	return c.wrapTransport(conn, hs, true, freePort)
 }
 
-// acceptConnections continuously accepts incoming connections that come from given listener
+// acceptTransports continuously accepts incoming transports that come from given listener
 // these connections will be properly handshaked and passed to an appropriate skywire listener
 // using skywire port
-func (c *genericClient) acceptConnections(lis net.Listener) {
+func (c *genericClient) acceptTransports(lis net.Listener) {
 	c.mu.Lock()
 	c.connListener = lis
 	close(c.listenStarted)
 	c.mu.Unlock()
 	c.log.Infof("listening on addr: %v", c.connListener.Addr())
 	for {
-		if err := c.acceptConn(); err != nil {
+		if err := c.acceptTransport(); err != nil {
 			if errors.Is(err, io.EOF) {
 				continue // likely it's a dummy connection from service discovery
 			}
@@ -152,26 +152,27 @@ func (c *genericClient) acceptConnections(lis net.Listener) {
 	}
 }
 
-// wrapConn performs handshake over provided raw connection and wraps it in
-// network.Conn type using the data obtained from handshake process
-func (c *genericClient) wrapConn(rawConn net.Conn, hs handshake.Handshake, initiator bool, onClose func()) (*conn, error) {
-	conn, err := doHandshake(rawConn, hs, c.netType, c.log)
+// wrapTransport performs handshake over provided raw connection and wraps it in
+// network.Transport type using the data obtained from handshake process
+func (c *genericClient) wrapTransport(rawConn net.Conn, hs handshake.Handshake, initiator bool, onClose func()) (*transport, error) {
+	transport, err := doHandshake(rawConn, hs, c.netType, c.log)
 	if err != nil {
 		onClose()
-	}
-	conn.freePort = onClose
-	c.log.Infof("Sent handshake to %v, local addr %v, remote addr %v", rawConn.RemoteAddr(), conn.lAddr, conn.rAddr)
-	if err := conn.encrypt(c.lPK, c.lSK, initiator); err != nil {
 		return nil, err
 	}
-	return conn, nil
+	transport.freePort = onClose
+	c.log.Infof("Sent handshake to %v, local addr %v, remote addr %v", rawConn.RemoteAddr(), transport.lAddr, transport.rAddr)
+	if err := transport.encrypt(c.lPK, c.lSK, initiator); err != nil {
+		return nil, err
+	}
+	return transport, nil
 }
 
-// acceptConn accepts new connection in underlying raw network listener,
+// acceptConn accepts new transport in underlying raw network listener,
 // performs handshake, and using the data from the handshake wraps
 // connection and delivers it to the appropriate listener.
-// The listener is chosen using skywire port from the incoming visor connection
-func (c *genericClient) acceptConn() error {
+// The listener is chosen using skywire port from the incoming visor transport
+func (c *genericClient) acceptTransport() error {
 	if c.isClosed() {
 		return io.ErrClosedPipe
 	}
@@ -184,15 +185,15 @@ func (c *genericClient) acceptConn() error {
 
 	onClose := func() {}
 	hs := handshake.ResponderHandshake(handshake.MakeF2PortChecker(c.checkListener))
-	wrappedConn, err := c.wrapConn(conn, hs, false, onClose)
+	wrappedTransport, err := c.wrapTransport(conn, hs, false, onClose)
 	if err != nil {
 		return err
 	}
-	lis, err := c.getListener(wrappedConn.lAddr.Port)
+	lis, err := c.getListener(wrappedTransport.lAddr.Port)
 	if err != nil {
 		return err
 	}
-	return lis.introduce(wrappedConn)
+	return lis.introduce(wrappedTransport)
 }
 
 // LocalAddr returns local address. This is network address the client
@@ -307,12 +308,10 @@ type dialFunc func(ctx context.Context, addr string) (net.Conn, error)
 // and dials that visor address(es)
 // dial process is specific to transport type and is provided by the client
 func (c *resolvedClient) dialVisor(ctx context.Context, rPK cipher.PubKey, dial dialFunc) (net.Conn, error) {
-	c.log.Infof("Dialing PK %v", rPK)
 	visorData, err := c.ar.Resolve(ctx, string(c.netType), rPK)
 	if err != nil {
 		return nil, fmt.Errorf("resolve PK: %w", err)
 	}
-	c.log.Infof("Resolved PK %v to visor data %v", rPK, visorData)
 
 	if visorData.IsLocal {
 		for _, host := range visorData.Addresses {
