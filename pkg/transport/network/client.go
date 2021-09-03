@@ -308,12 +308,10 @@ type dialFunc func(ctx context.Context, addr string) (net.Conn, error)
 // and dials that visor address(es)
 // dial process is specific to transport type and is provided by the client
 func (c *resolvedClient) dialVisor(ctx context.Context, rPK cipher.PubKey, dial dialFunc) (net.Conn, error) {
-	c.log.Infof("Dialing PK %v", rPK)
 	visorData, err := c.ar.Resolve(ctx, string(c.netType), rPK)
 	if err != nil {
 		return nil, fmt.Errorf("resolve PK: %w", err)
 	}
-	c.log.Infof("Resolved PK %v to visor data %v", rPK, visorData)
 
 	if visorData.IsLocal {
 		for _, host := range visorData.Addresses {
