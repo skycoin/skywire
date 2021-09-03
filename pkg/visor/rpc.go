@@ -125,7 +125,6 @@ type TransportSummary struct {
 	Type    network.Type        `json:"type"`
 	Log     *transport.LogEntry `json:"log,omitempty"`
 	IsSetup bool                `json:"is_setup"`
-	IsUp    bool                `json:"is_up"`
 	Label   transport.Label     `json:"label"`
 }
 
@@ -136,7 +135,6 @@ func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, 
 		Remote:  tp.Remote(),
 		Type:    tp.Type(),
 		IsSetup: isSetup,
-		IsUp:    tp.IsUp(),
 		Label:   tp.Entry.Label,
 	}
 	if includeLogs {
@@ -346,7 +344,6 @@ func (r *RPC) Transport(in *uuid.UUID, out *TransportSummary) (err error) {
 type AddTransportIn struct {
 	RemotePK cipher.PubKey
 	TpType   string
-	Public   bool
 	Timeout  time.Duration
 }
 
@@ -354,7 +351,7 @@ type AddTransportIn struct {
 func (r *RPC) AddTransport(in *AddTransportIn, out *TransportSummary) (err error) {
 	defer rpcutil.LogCall(r.log, "AddTransport", in)(out, &err)
 
-	tp, err := r.visor.AddTransport(in.RemotePK, in.TpType, in.Public, in.Timeout)
+	tp, err := r.visor.AddTransport(in.RemotePK, in.TpType, in.Timeout)
 	if tp != nil {
 		*out = *tp
 	}
@@ -374,7 +371,7 @@ func (r *RPC) RemoveTransport(tid *uuid.UUID, _ *struct{}) (err error) {
 */
 
 // DiscoverTransportsByPK obtains available transports via the transport discovery via given public key.
-func (r *RPC) DiscoverTransportsByPK(pk *cipher.PubKey, out *[]*transport.EntryWithStatus) (err error) {
+func (r *RPC) DiscoverTransportsByPK(pk *cipher.PubKey, out *[]*transport.Entry) (err error) {
 	defer rpcutil.LogCall(r.log, "DiscoverTransportsByPK", pk)(out, &err)
 
 	entries, err := r.visor.DiscoverTransportsByPK(*pk)
@@ -384,7 +381,7 @@ func (r *RPC) DiscoverTransportsByPK(pk *cipher.PubKey, out *[]*transport.EntryW
 }
 
 // DiscoverTransportByID obtains available transports via the transport discovery via a given transport ID.
-func (r *RPC) DiscoverTransportByID(id *uuid.UUID, out *transport.EntryWithStatus) (err error) {
+func (r *RPC) DiscoverTransportByID(id *uuid.UUID, out *transport.Entry) (err error) {
 	defer rpcutil.LogCall(r.log, "DiscoverTransportByID", id)(out, &err)
 
 	entry, err := r.visor.DiscoverTransportByID(*id)

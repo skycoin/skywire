@@ -613,6 +613,7 @@ export class NodeService {
         node.version = response.overview.build_info.version;
         node.secondsOnline = Math.floor(Number.parseFloat(response.uptime));
         node.minHops = response.min_hops;
+        node.skybianBuildVersion = response.skybian_build_version;
 
         // Ip.
         if (response.overview.local_ip && (response.overview.local_ip as string).trim()) {
