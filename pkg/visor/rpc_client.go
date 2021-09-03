@@ -253,12 +253,11 @@ func (rc *rpcClient) Transport(tid uuid.UUID) (*TransportSummary, error) {
 }
 
 // AddTransport calls AddTransport.
-func (rc *rpcClient) AddTransport(remote cipher.PubKey, tpType string, public bool, timeout time.Duration) (*TransportSummary, error) {
+func (rc *rpcClient) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*TransportSummary, error) {
 	var summary TransportSummary
 	err := rc.Call("AddTransport", &AddTransportIn{
 		RemotePK: remote,
 		TpType:   tpType,
-		Public:   public,
 		Timeout:  timeout,
 	}, &summary)
 
@@ -270,14 +269,14 @@ func (rc *rpcClient) RemoveTransport(tid uuid.UUID) error {
 	return rc.Call("RemoveTransport", &tid, &struct{}{})
 }
 
-func (rc *rpcClient) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error) {
-	entries := make([]*transport.EntryWithStatus, 0)
+func (rc *rpcClient) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error) {
+	entries := make([]*transport.Entry, 0)
 	err := rc.Call("DiscoverTransportsByPK", &pk, &entries)
 	return entries, err
 }
 
-func (rc *rpcClient) DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error) {
-	var entry transport.EntryWithStatus
+func (rc *rpcClient) DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error) {
+	var entry transport.Entry
 	err := rc.Call("DiscoverTransportByID", &id, &entry)
 	return &entry, err
 }
@@ -343,6 +342,19 @@ func (rc *rpcClient) RuntimeLogs() (string, error) {
 func (rc *rpcClient) SetMinHops(hops uint16) error {
 	err := rc.Call("SetMinHops", &hops, &struct{}{})
 	return err
+}
+
+// SetPersistentTransports sets the persistent_transports from visor routing config
+func (rc *rpcClient) SetPersistentTransports(pts []transport.PersistentTransports) error {
+	err := rc.Call("SetPersistentTransports", &pts, &struct{}{})
+	return err
+}
+
+// GetPersistentTransports gets the persistent_transports from visor routing config
+func (rc *rpcClient) GetPersistentTransports() ([]transport.PersistentTransports, error) {
+	var tps []transport.PersistentTransports
+	err := rc.Call("GetPersistentTransports", &struct{}{}, &tps)
+	return tps, err
 }
 
 // StatusMessage defines a status of visor update.
@@ -820,7 +832,7 @@ func (mc *mockRPCClient) Transport(tid uuid.UUID) (*TransportSummary, error) {
 }
 
 // AddTransport implements API.
-func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ bool, _ time.Duration) (*TransportSummary, error) {
+func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ time.Duration) (*TransportSummary, error) {
 	summary := &TransportSummary{
 		ID:     transport.MakeTransportID(mc.o.PubKey, remote, network.Type(tpType)),
 		Local:  mc.o.PubKey,
@@ -847,11 +859,11 @@ func (mc *mockRPCClient) RemoveTransport(tid uuid.UUID) error {
 	})
 }
 
-func (mc *mockRPCClient) DiscoverTransportsByPK(cipher.PubKey) ([]*transport.EntryWithStatus, error) {
+func (mc *mockRPCClient) DiscoverTransportsByPK(cipher.PubKey) ([]*transport.Entry, error) {
 	return nil, ErrNotImplemented
 }
 
-func (mc *mockRPCClient) DiscoverTransportByID(uuid.UUID) (*transport.EntryWithStatus, error) {
+func (mc *mockRPCClient) DiscoverTransportByID(uuid.UUID) (*transport.Entry, error) {
 	return nil, ErrNotImplemented
 }
 
@@ -936,6 +948,16 @@ func (mc *mockRPCClient) RuntimeLogs() (string, error) {
 }
 
 // SetMinHops implements API
-func (mc *mockRPCClient) SetMinHops(n uint16) error {
+func (mc *mockRPCClient) SetMinHops(_ uint16) error {
 	return nil
+}
+
+// SetPersistentTransports implements API
+func (mc *mockRPCClient) SetPersistentTransports(_ []transport.PersistentTransports) error {
+	return nil
+}
+
+// GetPersistentTransports implements API
+func (mc *mockRPCClient) GetPersistentTransports() ([]transport.PersistentTransports, error) {
+	return []transport.PersistentTransports{}, nil
 }

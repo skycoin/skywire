@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/ccding/go-stun/stun"
 	"github.com/google/uuid"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cipher"
@@ -51,11 +53,11 @@ type API interface {
 	TransportTypes() ([]string, error)
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
 	Transport(tid uuid.UUID) (*TransportSummary, error)
-	AddTransport(remote cipher.PubKey, tpType string, public bool, timeout time.Duration) (*TransportSummary, error)
+	AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*TransportSummary, error)
 	RemoveTransport(tid uuid.UUID) error
 
-	DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error)
-	DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error)
+	DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error)
+	DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error)
 
 	RoutingRules() ([]routing.Rule, error)
 	RoutingRule(key routing.RouteID) (routing.Rule, error)
@@ -73,6 +75,9 @@ type API interface {
 	RuntimeLogs() (string, error)
 
 	SetMinHops(uint16) error
+
+	GetPersistentTransports() ([]transport.PersistentTransports, error)
+	SetPersistentTransports([]transport.PersistentTransports) error
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -91,11 +96,15 @@ type Overview struct {
 	Transports      []*TransportSummary  `json:"transports"`
 	RoutesCount     int                  `json:"routes_count"`
 	LocalIP         string               `json:"local_ip"`
+	PublicIP        string               `json:"public_ip"`
+	IsSymmetricNAT  bool                 `json:"is_symmetic_nat"`
 }
 
 // Overview implements API.
 func (v *Visor) Overview() (*Overview, error) {
 	var tSummaries []*TransportSummary
+	var publicIP string
+	var isSymmetricNAT bool
 	if v == nil {
 		panic("v is nil")
 	}
@@ -107,6 +116,18 @@ func (v *Visor) Overview() (*Overview, error) {
 			newTransportSummary(v.tpM, tp, true, v.router.SetupIsTrusted(tp.Remote())))
 		return true
 	})
+	if v.stunClient != nil {
+		switch v.stunClient.NATType {
+		case stun.NATNone, stun.NATFull, stun.NATRestricted, stun.NATPortRestricted:
+			publicIP = v.stunClient.PublicIP.IP()
+			isSymmetricNAT = false
+		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
+			isSymmetricNAT = true
+		case stun.NATError, stun.NATUnknown, stun.NATBlocked:
+			publicIP = v.stunClient.NATType.String()
+			isSymmetricNAT = false
+		}
+	}
 
 	overview := &Overview{
 		PubKey:          v.conf.PK,
@@ -115,6 +136,8 @@ func (v *Visor) Overview() (*Overview, error) {
 		Apps:            v.appL.AppStates(),
 		Transports:      tSummaries,
 		RoutesCount:     v.router.RoutesCount(),
+		PublicIP:        publicIP,
+		IsSymmetricNAT:  isSymmetricNAT,
 	}
 
 	localIPs, err := netutil.DefaultNetworkInterfaceIPs()
@@ -133,14 +156,16 @@ func (v *Visor) Overview() (*Overview, error) {
 
 // Summary provides detailed info including overview and health of the visor.
 type Summary struct {
-	Overview     *Overview                      `json:"overview"`
-	Health       *HealthInfo                    `json:"health"`
-	Uptime       float64                        `json:"uptime"`
-	Routes       []routingRuleResp              `json:"routes"`
-	IsHypervisor bool                           `json:"is_hypervisor,omitempty"`
-	DmsgStats    *dmsgtracker.DmsgClientSummary `json:"dmsg_stats"`
-	Online       bool                           `json:"online"`
-	MinHops      uint16                         `json:"min_hops"`
+	Overview             *Overview                        `json:"overview"`
+	Health               *HealthInfo                      `json:"health"`
+	Uptime               float64                          `json:"uptime"`
+	Routes               []routingRuleResp                `json:"routes"`
+	IsHypervisor         bool                             `json:"is_hypervisor,omitempty"`
+	DmsgStats            *dmsgtracker.DmsgClientSummary   `json:"dmsg_stats"`
+	Online               bool                             `json:"online"`
+	MinHops              uint16                           `json:"min_hops"`
+	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
+	SkybianBuildVersion  string                           `json:"skybian_build_version"`
 }
 
 // Summary implements API.
@@ -165,6 +190,8 @@ func (v *Visor) Summary() (*Summary, error) {
 		return nil, fmt.Errorf("routes")
 	}
 
+	skybianBuildVersion := v.SkybianBuildVersion()
+
 	extraRoutes := make([]routingRuleResp, 0, len(routes))
 	for _, route := range routes {
 		extraRoutes = append(extraRoutes, routingRuleResp{
@@ -174,12 +201,19 @@ func (v *Visor) Summary() (*Summary, error) {
 		})
 	}
 
+	pts, err := v.conf.GetPersistentTransports()
+	if err != nil {
+		return nil, fmt.Errorf("pts")
+	}
+
 	summary := &Summary{
-		Overview: overview,
-		Health:   health,
-		Uptime:   uptime,
-		Routes:   extraRoutes,
-		MinHops:  v.conf.Routing.MinHops,
+		Overview:             overview,
+		Health:               health,
+		Uptime:               uptime,
+		Routes:               extraRoutes,
+		MinHops:              v.conf.Routing.MinHops,
+		PersistentTransports: pts,
+		SkybianBuildVersion:  skybianBuildVersion,
 	}
 
 	return summary, nil
@@ -272,6 +306,11 @@ func (v *Visor) Uptime() (float64, error) {
 // Apps implements API.
 func (v *Visor) Apps() ([]*launcher.AppState, error) {
 	return v.appL.AppStates(), nil
+}
+
+// SkybianBuildVersion implements API.
+func (v *Visor) SkybianBuildVersion() string {
+	return os.Getenv("SKYBIAN_BUILD_VERSION")
 }
 
 // StartApp implements API.
@@ -522,7 +561,7 @@ func (v *Visor) Transport(tid uuid.UUID) (*TransportSummary, error) {
 }
 
 // AddTransport implements API.
-func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, public bool, timeout time.Duration) (*TransportSummary, error) {
+func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*TransportSummary, error) {
 	ctx := context.Background()
 
 	if timeout > 0 {
@@ -550,7 +589,7 @@ func (v *Visor) RemoveTransport(tid uuid.UUID) error {
 }
 
 // DiscoverTransportsByPK implements API.
-func (v *Visor) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error) {
+func (v *Visor) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error) {
 	tpD := v.tpDiscClient()
 
 	entries, err := tpD.GetTransportsByEdge(context.Background(), pk)
@@ -562,7 +601,7 @@ func (v *Visor) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWith
 }
 
 // DiscoverTransportByID implements API.
-func (v *Visor) DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error) {
+func (v *Visor) DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error) {
 	tpD := v.tpDiscClient()
 
 	entry, err := tpD.GetTransportByID(context.Background(), id)
@@ -743,4 +782,14 @@ func (v *Visor) RuntimeLogs() (string, error) {
 // SetMinHops sets min_hops routing config of visor
 func (v *Visor) SetMinHops(in uint16) error {
 	return v.conf.UpdateMinHops(in)
+}
+
+// SetPersistentTransports sets min_hops routing config of visor
+func (v *Visor) SetPersistentTransports(pts []transport.PersistentTransports) error {
+	return v.conf.UpdatePersistentTransports(pts)
+}
+
+// GetPersistentTransports sets min_hops routing config of visor
+func (v *Visor) GetPersistentTransports() ([]transport.PersistentTransports, error) {
+	return v.conf.GetPersistentTransports()
 }
