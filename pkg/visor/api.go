@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ccding/go-stun/stun"
 	"github.com/google/uuid"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cipher"
@@ -52,7 +53,7 @@ type API interface {
 	TransportTypes() ([]string, error)
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
 	Transport(tid uuid.UUID) (*TransportSummary, error)
-	AddTransport(remote cipher.PubKey, tpType string, public bool, timeout time.Duration) (*TransportSummary, error)
+	AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*TransportSummary, error)
 	RemoveTransport(tid uuid.UUID) error
 
 	DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error)
@@ -75,6 +76,7 @@ type API interface {
 
 	SetMinHops(uint16) error
 
+	GetPersistentTransports() ([]transport.PersistentTransports, error)
 	SetPersistentTransports([]transport.PersistentTransports) error
 }
 
@@ -94,11 +96,15 @@ type Overview struct {
 	Transports      []*TransportSummary  `json:"transports"`
 	RoutesCount     int                  `json:"routes_count"`
 	LocalIP         string               `json:"local_ip"`
+	PublicIP        string               `json:"public_ip"`
+	IsSymmetricNAT  bool                 `json:"is_symmetic_nat"`
 }
 
 // Overview implements API.
 func (v *Visor) Overview() (*Overview, error) {
 	var tSummaries []*TransportSummary
+	var publicIP string
+	var isSymmetricNAT bool
 	if v == nil {
 		panic("v is nil")
 	}
@@ -110,6 +116,18 @@ func (v *Visor) Overview() (*Overview, error) {
 			newTransportSummary(v.tpM, tp, true, v.router.SetupIsTrusted(tp.Remote())))
 		return true
 	})
+	if v.stunClient != nil {
+		switch v.stunClient.NATType {
+		case stun.NATNone, stun.NATFull, stun.NATRestricted, stun.NATPortRestricted:
+			publicIP = v.stunClient.PublicIP.IP()
+			isSymmetricNAT = false
+		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
+			isSymmetricNAT = true
+		case stun.NATError, stun.NATUnknown, stun.NATBlocked:
+			publicIP = v.stunClient.NATType.String()
+			isSymmetricNAT = false
+		}
+	}
 
 	overview := &Overview{
 		PubKey:          v.conf.PK,
@@ -118,6 +136,8 @@ func (v *Visor) Overview() (*Overview, error) {
 		Apps:            v.appL.AppStates(),
 		Transports:      tSummaries,
 		RoutesCount:     v.router.RoutesCount(),
+		PublicIP:        publicIP,
+		IsSymmetricNAT:  isSymmetricNAT,
 	}
 
 	localIPs, err := netutil.DefaultNetworkInterfaceIPs()
@@ -541,7 +561,7 @@ func (v *Visor) Transport(tid uuid.UUID) (*TransportSummary, error) {
 }
 
 // AddTransport implements API.
-func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, public bool, timeout time.Duration) (*TransportSummary, error) {
+func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*TransportSummary, error) {
 	ctx := context.Background()
 
 	if timeout > 0 {
@@ -767,4 +787,9 @@ func (v *Visor) SetMinHops(in uint16) error {
 // SetPersistentTransports sets min_hops routing config of visor
 func (v *Visor) SetPersistentTransports(pts []transport.PersistentTransports) error {
 	return v.conf.UpdatePersistentTransports(pts)
+}
+
+// GetPersistentTransports sets min_hops routing config of visor
+func (v *Visor) GetPersistentTransports() ([]transport.PersistentTransports, error) {
+	return v.conf.GetPersistentTransports()
 }

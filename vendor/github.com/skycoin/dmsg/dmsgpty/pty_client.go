@@ -103,3 +103,22 @@ func (sc *PtyClient) call(method string, args, reply interface{}) error {
 		return call.Error
 	}
 }
+
+// Start starts the pty.
+func (sc *PtyClient) Start(name string, arg ...string) error {
+	return sc.call("Start", &CommandReq{
+		Name: name,
+		Arg:  arg,
+		Size: nil,
+	}, &empty)
+}
+
+// StartWithSize starts the pty with a specified size.
+func (sc *PtyClient) StartWithSize(name string, arg []string, c *WinSize) error {
+	return sc.call("Start", &CommandReq{Name: name, Arg: arg, Size: c}, &empty)
+}
+
+// SetPtySize sets the pty size.
+func (sc *PtyClient) SetPtySize(size *WinSize) error {
+	return sc.call("SetPtySize", size, &empty)
+}

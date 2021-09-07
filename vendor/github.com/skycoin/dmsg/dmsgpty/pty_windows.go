@@ -10,7 +10,6 @@ import (
 	"syscall"
 
 	"github.com/ActiveState/termtest/conpty"
-	"golang.org/x/sys/windows"
 )
 
 // Pty errors.
@@ -70,7 +69,7 @@ func (s *Pty) Write(b []byte) (int, error) {
 }
 
 // Start runs a command with the given command name, args and optional window size.
-func (s *Pty) Start(name string, args []string, size *windows.Coord) error {
+func (s *Pty) Start(name string, args []string, size *WinSize) error {
 	s.mx.Lock()
 	defer s.mx.Unlock()
 
@@ -85,10 +84,11 @@ func (s *Pty) Start(name string, args []string, size *windows.Coord) error {
 		if err != nil {
 			return err
 		}
-	}
 
+	}
+	fmt.Printf("Size of term: X=>%d, Y=>%d\n", size.X, size.Y)
 	pty, err := conpty.New(
-		size.X, size.Y,
+		int16(size.X), int16(size.Y),
 	)
 	if err != nil {
 		return err
@@ -113,7 +113,7 @@ func (s *Pty) Start(name string, args []string, size *windows.Coord) error {
 }
 
 // SetPtySize sets the pty size.
-func (s *Pty) SetPtySize(size *windows.Coord) error {
+func (s *Pty) SetPtySize(size *WinSize) error {
 	s.mx.RLock()
 	defer s.mx.RUnlock()
 

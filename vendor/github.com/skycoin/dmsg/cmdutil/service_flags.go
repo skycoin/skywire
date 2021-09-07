@@ -12,8 +12,6 @@ import (
 	jsoniter "github.com/json-iterator/go"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
-
-	"github.com/skycoin/dmsg/discord"
 )
 
 // Associated errors.
@@ -132,12 +130,6 @@ func (sf *ServiceFlags) Logger() *logging.Logger {
 
 	if sf.Syslog != "" {
 		sf.sysLogHook(log, sysLvl)
-	}
-
-	if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
-		discordOpts := discord.GetDefaultOpts()
-		hook := discord.NewHook(sf.Tag, discordWebhookURL, discordOpts...)
-		logging.AddHook(hook)
 	}
 
 	return log

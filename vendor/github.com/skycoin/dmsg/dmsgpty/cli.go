@@ -9,10 +9,6 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skycoin/src/util/logging"
-<<<<<<< HEAD
-=======
-	"golang.org/x/crypto/ssh/terminal"
->>>>>>> upstream/develop
 
 	"github.com/skycoin/dmsg/cipher"
 )
@@ -29,7 +25,7 @@ func DefaultCLI() CLI {
 	return CLI{
 		Log:  logging.MustGetLogger("dmsgpty-cli"),
 		Net:  DefaultCLINet,
-		Addr: DefaultCLIAddr,
+		Addr: DefaultCLIAddr(),
 	}
 }
 
@@ -95,7 +91,7 @@ func (cli *CLI) prepareConn() (net.Conn, error) {
 		cli.Net = DefaultCLINet
 	}
 	if cli.Addr == "" {
-		cli.Addr = DefaultCLIAddr
+		cli.Addr = DefaultCLIAddr()
 	}
 
 	cli.Log.

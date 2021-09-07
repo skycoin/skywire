@@ -5,8 +5,9 @@ go 1.16
 require (
 	github.com/AudriusButkevicius/pfilter v0.0.0-20210515103320-4b4b86609d51
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
-	github.com/VictoriaMetrics/metrics v1.17.2
+	github.com/VictoriaMetrics/metrics v1.17.3
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
+	github.com/ccding/go-stun/stun v0.0.0-20200514191101-4dc67bcdb029
 	github.com/creack/pty v1.1.11 // indirect
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-ole/go-ole v1.2.4 // indirect
@@ -16,6 +17,7 @@ require (
 	github.com/json-iterator/go v1.1.11 // indirect
 	github.com/klauspost/reedsolomon v1.9.9 // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2
+	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
 	github.com/mholt/archiver/v3 v3.3.0
 	github.com/mmcloughlin/avo v0.0.0-20200523190732-4439b6b2c061 // indirect
@@ -23,7 +25,7 @@ require (
 	github.com/schollz/progressbar/v2 v2.15.0
 	github.com/shirou/gopsutil v2.20.5+incompatible
 	github.com/sirupsen/logrus v1.8.1
-	github.com/skycoin/dmsg v0.0.0-20210616115957-702a819a9b3d
+	github.com/skycoin/dmsg v0.0.0-20210906173158-0aede72ec7bb
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
@@ -37,9 +39,10 @@ require (
 	github.com/xtaci/kcp-go v5.4.20+incompatible
 	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
 	go.etcd.io/bbolt v1.3.6
-	golang.org/x/crypto v0.0.0-20201208171446-5f87f3452ae9 // indirect
+	golang.org/x/crypto v0.0.0-20210817164053-32db794688a5 // indirect
 	golang.org/x/net v0.0.0-20210405180319-a5a99cb37ef4
-	golang.org/x/sys v0.0.0-20210616094352-59db8d763f22
+	golang.org/x/sys v0.0.0-20210906170528-6f6e22806c34
+	golang.org/x/term v0.0.0-20210615171337-6886f2dfbf5b // indirect
 	golang.org/x/tools v0.1.3 // indirect
 	golang.zx2c4.com/wireguard v0.0.20200320
 	nhooyr.io/websocket v1.8.2
@@ -47,5 +50,3 @@ require (
 
 // Uncomment for tests with alternate branches of 'dmsg'
 //replace github.com/skycoin/dmsg => ../dmsg
-
-replace github.com/skycoin/dmsg => github.com/alexadhy/dmsg v0.0.0-20210622015552-8649ac936224
