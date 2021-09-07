@@ -98,6 +98,8 @@
         "title": "Visor Info",
         "label": "Label:",
         "public-key": "Public key:",
+        "symmetic-nat": "Symmetic NAT:",
+        "public-ip": "Public IP:",
         "ip": "IP:",
         "dmsg-server": "DMSG server:",
         "ping": "Ping:",
