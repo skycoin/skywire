@@ -98,6 +98,8 @@
         "title": "Información del visor",
         "label": "Etiqueta:",
         "public-key": "Llave pública:",
+        "symmetic-nat": "NAT simétrica:",
+        "public-ip": "IP pública:",
         "ip": "IP:",
         "dmsg-server": "Servidor DMSG:",
         "ping": "Ping:",
