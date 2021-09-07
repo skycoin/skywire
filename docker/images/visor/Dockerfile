@@ -20,6 +20,7 @@ RUN apk add --no-cache make git && \
     cp ./apps/vpn-server /apps/ && \
     cp ./apps/vpn-client /apps/ && \
 	cp ./apps/skysocks /apps/ && \
+	cp ./apps/skysocks-client /apps/ && \
 	cp ./apps/skychat /apps/
 
 ## Resulting image
