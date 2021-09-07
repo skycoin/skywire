@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -664,6 +665,10 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	// Unlink dmsg socket files (just in case).
 	if conf.CLINet == "unix" {
+		if runtime.GOOS == "windows" {
+			conf.CLIAddr = dmsgpty.ParseWindowsEnv(conf.CLIAddr)
+		}
+
 		if err := osutil.UnlinkSocketFiles(v.conf.Dmsgpty.CLIAddr); err != nil {
 			return err
 		}
@@ -710,6 +715,8 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	if conf.CLINet != "" {
+
+
 		if conf.CLINet == "unix" {
 			if err := os.MkdirAll(filepath.Dir(conf.CLIAddr), ownerRWX); err != nil {
 				err := fmt.Errorf("failed to prepare unix file for dmsgpty cli listener: %w", err)
