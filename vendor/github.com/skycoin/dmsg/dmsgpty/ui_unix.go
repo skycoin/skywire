@@ -7,5 +7,9 @@ import (
 )
 
 func (ui *UI) uiStartSize(ptyC *PtyClient) error {
-	return ptyC.StartWithSize(ui.conf.CmdName, ui.conf.CmdArgs, &pty.Winsize{Rows: wsRows, Cols: wsCols})
+	winSize, err := NewWinSize(&pty.Winsize{Rows: wsRows, Cols: wsCols})
+	if err != nil {
+		return err
+	}
+	return ptyC.StartWithSize(ui.conf.CmdName, ui.conf.CmdArgs, winSize)
 }

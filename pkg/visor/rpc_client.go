@@ -253,12 +253,11 @@ func (rc *rpcClient) Transport(tid uuid.UUID) (*TransportSummary, error) {
 }
 
 // AddTransport calls AddTransport.
-func (rc *rpcClient) AddTransport(remote cipher.PubKey, tpType string, public bool, timeout time.Duration) (*TransportSummary, error) {
+func (rc *rpcClient) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*TransportSummary, error) {
 	var summary TransportSummary
 	err := rc.Call("AddTransport", &AddTransportIn{
 		RemotePK: remote,
 		TpType:   tpType,
-		Public:   public,
 		Timeout:  timeout,
 	}, &summary)
 
@@ -349,6 +348,13 @@ func (rc *rpcClient) SetMinHops(hops uint16) error {
 func (rc *rpcClient) SetPersistentTransports(pts []transport.PersistentTransports) error {
 	err := rc.Call("SetPersistentTransports", &pts, &struct{}{})
 	return err
+}
+
+// GetPersistentTransports gets the persistent_transports from visor routing config
+func (rc *rpcClient) GetPersistentTransports() ([]transport.PersistentTransports, error) {
+	var tps []transport.PersistentTransports
+	err := rc.Call("GetPersistentTransports", &struct{}{}, &tps)
+	return tps, err
 }
 
 // StatusMessage defines a status of visor update.
@@ -826,7 +832,7 @@ func (mc *mockRPCClient) Transport(tid uuid.UUID) (*TransportSummary, error) {
 }
 
 // AddTransport implements API.
-func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ bool, _ time.Duration) (*TransportSummary, error) {
+func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ time.Duration) (*TransportSummary, error) {
 	summary := &TransportSummary{
 		ID:     transport.MakeTransportID(mc.o.PubKey, remote, network.Type(tpType)),
 		Local:  mc.o.PubKey,
@@ -949,4 +955,9 @@ func (mc *mockRPCClient) SetMinHops(_ uint16) error {
 // SetPersistentTransports implements API
 func (mc *mockRPCClient) SetPersistentTransports(_ []transport.PersistentTransports) error {
 	return nil
+}
+
+// GetPersistentTransports implements API
+func (mc *mockRPCClient) GetPersistentTransports() ([]transport.PersistentTransports, error) {
+	return []transport.PersistentTransports{}, nil
 }

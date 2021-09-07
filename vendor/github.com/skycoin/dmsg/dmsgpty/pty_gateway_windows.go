@@ -3,31 +3,26 @@
 package dmsgpty
 
 import (
+	"errors"
+
 	"golang.org/x/sys/windows"
 )
 
-// PtyGateway represents a pty gateway, hosted by the pty.SessionServer
-type PtyGateway interface {
-	Start(req *CommandReq, _ *struct{}) error
-	Stop(_, _ *struct{}) error
-	Read(reqN *int, respB *[]byte) error
-	Write(reqB *[]byte, respN *int) error
-	SetPtySize(size *windows.Coord, _ *struct{}) error
+// NewWinSize creates a new WinSize object
+func NewWinSize(w *windows.Coord) (*WinSize, error) {
+	if w == nil {
+		return nil, errors.New("pty size is nil")
+	}
+	return &WinSize{
+		X: uint16(w.X),
+		Y: uint16(w.Y),
+	}, nil
 }
 
-// CommandReq represents a pty command.
-type CommandReq struct {
-	Name string
-	Arg  []string
-	Size *windows.Coord
-}
-
-// SetPtySize sets the local pty's window size.
-func (g *LocalPtyGateway) SetPtySize(size *windows.Coord, _ *struct{}) error {
-	return g.ses.SetPtySize(size)
-}
-
-// SetPtySize sets the remote pty's window size.
-func (g *ProxiedPtyGateway) SetPtySize(size *windows.Coord, _ *struct{}) error {
-	return g.ptyC.SetPtySize(size)
+// PtySize returns *windows.Coord object
+func (w *WinSize) PtySize() *windows.Coord {
+	return &windows.Coord{
+		X: int16(w.X),
+		Y: int16(w.Y),
+	}
 }

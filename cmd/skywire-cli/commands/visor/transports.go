@@ -81,7 +81,7 @@ func init() {
 	const (
 		typeFlagUsage = "type of transport to add; if unspecified, cli will attempt to establish a transport " +
 			"in the following order: stcp, stcpr, sudph, dmsg"
-		publicFlagUsage  = "whether to make the transport public"
+		publicFlagUsage  = "whether to make the transport public (deprecated)"
 		timeoutFlagUsage = "if specified, sets an operation timeout"
 	)
 
@@ -101,7 +101,7 @@ var addTpCmd = &cobra.Command{
 		var err error
 
 		if transportType != "" {
-			tp, err = rpcClient().AddTransport(pk, transportType, public, timeout)
+			tp, err = rpcClient().AddTransport(pk, transportType, timeout)
 			if err != nil {
 				logger.WithError(err).Fatalf("Failed to establish %v transport", transportType)
 			}
@@ -116,7 +116,7 @@ var addTpCmd = &cobra.Command{
 			}
 
 			for _, transportType := range transportTypes {
-				tp, err = rpcClient().AddTransport(pk, string(transportType), public, timeout)
+				tp, err = rpcClient().AddTransport(pk, string(transportType), timeout)
 				if err == nil {
 					logger.Infof("Established %v transport to %v", transportType, pk)
 					break
