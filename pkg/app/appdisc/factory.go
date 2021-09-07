@@ -26,7 +26,7 @@ func (f *Factory) setDefaults() {
 		f.Log = logging.MustGetLogger("appdisc")
 	}
 	if f.UpdateInterval == 0 {
-		f.UpdateInterval = skyenv.AppDiscUpdateInterval
+		f.UpdateInterval = skyenv.ServiceDiscUpdateInterval
 	}
 	if f.ServiceDisc == "" {
 		f.ServiceDisc = skyenv.DefaultServiceDiscAddr
