@@ -16,6 +16,8 @@
     "time-in-ms": "{{ time }}ms.",
     "time-in-segs": "{{ time }}s.",
     "ok": "Ok",
+    "yes": "Yes",
+    "no": "No",
     "unknown": "Unknown",
     "close": "Close",
     "window-size-error": "The window is too narrow for the content."
@@ -451,34 +453,41 @@
 
   "transports": {
     "title": "Transports",
-    "remove-all-offline": "Remove all offline transports",
-    "remove-all-offline-confirmation": "Are you sure you want to remove all offline transports?",
-    "remove-all-filtered-offline-confirmation": "All offline transports satisfying the current filtering criteria will be removed. Are you sure you want to continue?",
     "info": "Connections you have with remote Skywire visors, to allow local Skywire apps to communicate with apps running on those remote visors.",
     "list-title": "Transport list",
-    "state": "State",
-    "state-tooltip": "Current state",
+    "offline": "Offline",
+    "persistent": "Persistent",
+    "persistent-tooltip": "Persistent transports, which are created automatically when the visor is turned on and are automatically recreated in case of disconnection.",
+    "persistent-transport-tooltip": "This transport is persistent, so it is created automatically when the visor is turned on and automatically recreated in case of disconnection.",
+    "persistent-transport-button-tooltip": "This transport is persistent, so it is created automatically when the visor is turned on and automatically recreated in case of disconnection. Press to make non-persistent.",
+    "non-persistent-transport-button-tooltip": "Press to make this transport persistent. Persistent transports are created automatically when the visor is turned on and automatically recreated in case of disconnection.",
+    "make-persistent": "Make persistent",
+    "make-non-persistent": "Make non-persistent",
+    "make-selected-persistent": "Make all selected persistent",
+    "make-selected-non-persistent": "Make all selected non-persistent",
+    "changes-made": "Changes made.",
+    "no-changes-needed": "No changes were needed.",
     "id": "ID",
     "remote-node": "Remote",
     "type": "Type",
     "create": "Create transport",
+    "make-persistent-confirmation": "Are you sure you want to make the transport persistent?",
+    "make-non-persistent-confirmation": "Are you sure you want to make the transport non-persistent?",
+    "make-selected-persistent-confirmation": "Are you sure you want to make the selected transports persistent?",
+    "make-selected-non-persistent-confirmation": "Are you sure you want to make the selected transports non-persistent?",
+    "make-offline-non-persistent-confirmation": "Are you sure you want to make the transport non-persistent? It will not be shown in the list while offline anymore.",
     "delete-confirmation": "Are you sure you want to delete the transport?",
+    "delete-persistent-confirmation": "This transport is persistent, so it may be recreated shortly after deletion. Are you sure you want to delete it?",
     "delete-selected-confirmation": "Are you sure you want to delete the selected transports?",
     "delete": "Delete transport",
     "deleted": "Delete operation completed.",
     "empty": "Visor doesn't have any transports.",
     "empty-with-filter": "No transport matches the selected filtering criteria.",
-    "statuses": {
-      "online": "Online",
-      "online-tooltip": "Transport is online",
-      "offline": "Offline",
-      "offline-tooltip": "Transport is offline"
-    },
     "details": {
       "title": "Details",
       "basic": {
         "title": "Basic info",
-        "state": "State:",
+        "persistent": "Persistent:",
         "id": "ID:",
         "local-pk": "Local public key:",
         "remote-pk": "Remote public key:",
@@ -494,6 +503,9 @@
       "remote-key": "Remote public key",
       "label": "Identification name (optional)",
       "transport-type": "Transport type",
+      "make-persistent": "Make persistent",
+      "persistent-tooltip": "Persistent transports are created automatically when the visor is turned on and automatically recreated in case of disconnection.",
+      "only-persistent-created": "The persistent transport was created, but it may have not been activated.",
       "success": "Transport created.",
       "success-without-label": "The transport was created, but it was not possible to save the label.",
       "errors": {
@@ -503,14 +515,14 @@
       }
     },
     "filter-dialog": {
-      "online": "The transport must be",
+      "persistent": "The transport must be",
       "id": "The id must contain",
       "remote-node": "The remote key must contain",
 
-      "online-options": {
-        "any": "Online or offline",
-        "online": "Online",
-        "offline": "Offline"
+      "persistent-options": {
+        "any": "Any",
+        "persistent": "Persistent",
+        "non-persistent": "Non-persistent"
       }
     }
   },
