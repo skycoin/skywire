@@ -1,10 +1,11 @@
+//+build !windows
+
 package restart
 
 import (
 	"fmt"
 	"os"
 	"os/exec"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -45,16 +46,8 @@ func TestContext_Start(t *testing.T) {
 		cc := CaptureContext()
 		assert.NotZero(t, len(cc.cmd.Args))
 
-		var cmd string
-		var path string
-
-		if runtime.GOOS == "windows" {
-			cmd = "dir"
-			path = "C:\\"
-		} else {
-			cmd = "touch"
-			path = "/tmp/test_start"
-		}
+		cmd := "touch"
+		path := "/tmp/test_start"
 
 		cc.cmd = exec.Command(cmd, path) // nolint:gosec
 
@@ -83,16 +76,8 @@ func TestContext_Start(t *testing.T) {
 		cc := CaptureContext()
 		assert.NotZero(t, len(cc.cmd.Args))
 
-		var cmd string
-		var duration string
-
-		if runtime.GOOS == "windows" {
-			cmd = "timeout"
-			duration = "5"
-		} else {
-			cmd = "sleep"
-			duration = "5"
-		}
+		cmd := "sleep"
+		duration := "5"
 
 		cc.cmd = exec.Command(cmd, duration) // nolint:gosec
 
