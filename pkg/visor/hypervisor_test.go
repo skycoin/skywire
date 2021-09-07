@@ -87,7 +87,7 @@ func makeStartNode(t *testing.T, config hypervisorconfig.Config) (string, *http.
 
 	return srv.Listener.Addr().String(), client, func() {
 		srv.Close()
-		_ = visor.users.Close()
+		_ = visor.users.Close() // nolint:errcheck
 		require.NoError(t, os.Remove(config.DBPath))
 	}
 }
