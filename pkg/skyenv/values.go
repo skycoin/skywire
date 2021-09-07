@@ -1,6 +1,7 @@
 package skyenv
 
 import (
+	"github.com/skycoin/dmsg/dmsgpty"
 	"time"
 
 	"github.com/skycoin/dmsg/cipher"
@@ -61,11 +62,14 @@ const (
 
 // Default dmsgpty constants.
 const (
-	DmsgPtyPort uint16 = 22
-
-	DefaultDmsgPtyCLINet  = "unix"
-	DefaultDmsgPtyCLIAddr = "/tmp/dmsgpty.sock"
+	DmsgPtyPort          uint16 = 22
+	DefaultDmsgPtyCLINet        = "unix"
 )
+
+// DefaultDmsgPtyCLIAddr determines default CLI address per each platform
+func DefaultDmsgPtyCLIAddr() string {
+	return dmsgpty.DefaultCLIAddr()
+}
 
 // Default STCP constants.
 const (
