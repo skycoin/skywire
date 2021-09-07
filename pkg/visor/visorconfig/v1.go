@@ -100,15 +100,15 @@ type V1UptimeTracker struct {
 	Addr string `json:"addr"`
 }
 
-// V1Disc configures Skywire App Discovery Clients.
-type V1Disc struct {
+// V1ServiceDisc configures Skywire App Discovery Clients.
+type V1ServiceDisc struct {
 	UpdateInterval Duration `json:"update_interval,omitempty"`
 	ServiceDisc    string   `json:"service_discovery"`
 }
 
 // V1Launcher configures the app launcher.
 type V1Launcher struct {
-	Discovery  *V1Disc              `json:"discovery"`
+	Discovery  *V1ServiceDisc       `json:"discovery"`
 	Apps       []launcher.AppConfig `json:"apps"`
 	ServerAddr string               `json:"server_addr"`
 	BinPath    string               `json:"bin_path"`
