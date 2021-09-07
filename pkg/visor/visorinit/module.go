@@ -131,7 +131,7 @@ func (m *Module) InitConcurrent(ctx context.Context) {
 		}
 	}
 	if m.init == nil {
-		m.err = fmt.Errorf("init module %s error: %w", m.Name, ErrNoInit)
+		m.err = fmt.Errorf("unable to initialize module %s error: %w", m.Name, ErrNoInit)
 		return
 	}
 	startSelf := time.Now()
@@ -139,6 +139,6 @@ func (m *Module) InitConcurrent(ctx context.Context) {
 	err := m.init(ctx, m.log)
 	m.log.Infof("Initialized in %s (%s with dependencies)", time.Since(startSelf), time.Since(start))
 	if err != nil {
-		m.err = err
+		m.err = fmt.Errorf("initializing module %s returning error: %v", m.Name, err)
 	}
 }
