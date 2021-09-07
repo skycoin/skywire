@@ -7,6 +7,7 @@ export class Node {
   version: string;
   apps: Application[];
   transports: Transport[];
+  persistentTransports: PersistentTransport[];
   routesCount: number;
   minHops: number;
   routes?: Route[];
@@ -28,13 +29,21 @@ export interface Application {
 }
 
 export interface Transport {
-  isUp: boolean;
   id: string;
   localPk: string;
   remotePk: string;
   type: string;
   recv: number|null;
   sent: number|null;
+
+  // Calculated internally
+  isPersistent?: boolean;
+  notFound?: boolean;
+}
+
+export interface PersistentTransport {
+  pk: string;
+  type: string;
 }
 
 export interface Route {
