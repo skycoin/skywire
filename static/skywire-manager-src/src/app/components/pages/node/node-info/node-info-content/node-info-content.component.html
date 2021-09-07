@@ -13,6 +13,14 @@
       <span class="title">{{ 'node.details.node-info.public-key' | translate }}&nbsp;</span>
       <app-copy-to-clipboard-text text="{{ node.localPk }}"></app-copy-to-clipboard-text>
     </span>
+    <span class="info-line">
+      <span class="title">{{ 'node.details.node-info.symmetic-nat' | translate }}&nbsp;</span>
+      {{ (node.isSymmeticNat ? 'common.yes' : 'common.no') | translate }}
+    </span>
+    <span class="info-line" *ngIf="!node.isSymmeticNat">
+      <span class="title">{{ 'node.details.node-info.public-ip' | translate }}&nbsp;</span>
+      <app-copy-to-clipboard-text text="{{ node.publicIp }}"></app-copy-to-clipboard-text>
+    </span>
     <span class="info-line" *ngIf="node.ip">
       <span class="title">{{ 'node.details.node-info.ip' | translate }}&nbsp;</span>
       <app-copy-to-clipboard-text text="{{ node.ip }}"></app-copy-to-clipboard-text>
