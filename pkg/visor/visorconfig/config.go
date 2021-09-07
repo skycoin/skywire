@@ -33,7 +33,7 @@ func MakeBaseConfig(common *Common) *V1 {
 		RouteFinderTimeout: DefaultTimeout,
 	}
 	conf.Launcher = &V1Launcher{
-		Discovery: &V1Disc{
+		Discovery: &V1ServiceDisc{
 			ServiceDisc: skyenv.DefaultServiceDiscAddr,
 		},
 		Apps:       nil,
@@ -89,7 +89,7 @@ func defaultConfigFromCommon(cc *Common, hypervisor bool) (*V1, error) {
 		Addr: skyenv.DefaultUptimeTrackerAddr,
 	}
 
-	conf.Launcher.Discovery = &V1Disc{
+	conf.Launcher.Discovery = &V1ServiceDisc{
 		UpdateInterval: Duration(skyenv.ServiceDiscUpdateInterval),
 		ServiceDisc:    skyenv.DefaultServiceDiscAddr,
 	}
@@ -218,7 +218,7 @@ func SetDefaultProductionValues(conf *V1) {
 	conf.UptimeTracker = &V1UptimeTracker{
 		Addr: skyenv.DefaultUptimeTrackerAddr,
 	}
-	conf.Launcher.Discovery = &V1Disc{
+	conf.Launcher.Discovery = &V1ServiceDisc{
 		UpdateInterval: Duration(skyenv.ServiceDiscUpdateInterval),
 		ServiceDisc:    skyenv.DefaultServiceDiscAddr,
 	}
