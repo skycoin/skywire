@@ -602,7 +602,7 @@ export class NodeService {
   /**
    * Gets the details of a specific node.
    */
-  private getNode(nodeKey: string): Observable<Node> {
+  public getNode(nodeKey: string): Observable<Node> {
     // Get the node data.
     return this.apiService.get(`visors/${nodeKey}/summary`).pipe(
       map((response: any) => {
@@ -643,13 +643,23 @@ export class NodeService {
         if (response.overview.transports) {
           (response.overview.transports as any[]).forEach(transport => {
             node.transports.push({
-              isUp: transport.is_up,
               id: transport.id,
               localPk: transport.local_pk,
               remotePk: transport.remote_pk,
               type: transport.type,
               recv: transport.log.recv,
               sent: transport.log.sent,
+            });
+          });
+        }
+
+        // Persistent Transports.
+        node.persistentTransports = [];
+        if (response.persistent_transports) {
+          (response.persistent_transports as any[]).forEach(persistentTransport => {
+            node.persistentTransports.push({
+              pk: persistentTransport.pk,
+              type: persistentTransport.type,
             });
           });
         }
