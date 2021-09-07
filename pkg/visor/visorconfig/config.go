@@ -77,7 +77,7 @@ func defaultConfigFromCommon(cc *Common, hypervisor bool) (*V1, error) {
 	conf.Dmsgpty = &V1Dmsgpty{
 		Port:    skyenv.DmsgPtyPort,
 		CLINet:  skyenv.DefaultDmsgPtyCLINet,
-		CLIAddr: skyenv.DefaultDmsgPtyCLIAddr,
+		CLIAddr: skyenv.DefaultDmsgPtyCLIAddr(),
 	}
 
 	conf.STCP = &network.STCPConfig{
@@ -157,7 +157,7 @@ func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 	conf.Dmsgpty = &V1Dmsgpty{
 		Port:    skyenv.DmsgPtyPort,
 		CLINet:  skyenv.DefaultDmsgPtyCLINet,
-		CLIAddr: skyenv.DefaultDmsgPtyCLIAddr,
+		CLIAddr: skyenv.DefaultDmsgPtyCLIAddr(),
 	}
 	conf.LocalPath = skyenv.PackageLocalPath
 	conf.Launcher.BinPath = skyenv.PackageAppBinPath
