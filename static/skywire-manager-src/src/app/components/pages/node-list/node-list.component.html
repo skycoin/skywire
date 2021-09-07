@@ -81,7 +81,7 @@
         <!-- Column names. -->
         <tr>
           <th class="sortable-column small-column" (click)="dataSorter.changeSortingOrder(hypervisorSortData)" [matTooltip]="'nodes.hypervisor' | translate">
-            <mat-icon class="hypervisor-icon gray-text">star_outline</mat-icon>
+            <mat-icon class="hypervisor-icon grey-text">star_outline</mat-icon>
             <mat-icon *ngIf="dataSorter.currentSortingColumn === hypervisorSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
           </th>
           <th class="sortable-column small-column" (click)="dataSorter.changeSortingOrder(stateSortData)" [matTooltip]="'nodes.state-tooltip' | translate">
