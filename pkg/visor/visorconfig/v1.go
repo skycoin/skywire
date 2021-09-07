@@ -32,6 +32,9 @@ const V101Name = "v1.0.1"
 // Removed authorization_file field from dmsgpty section
 // Default urls are changed to newer shortned ones
 // Added stun_servers field to the config
+// Added persistent_transports field to the config
+// Changed proxy_discovery_addr field to service_discovery
+// Changed V1AppDisc struct to V1ServiceDisc
 const V110Name = "v1.1.0"
 
 // V1Name is the semantic version string for the most recent version of V1.
