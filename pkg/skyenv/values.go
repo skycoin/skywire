@@ -1,10 +1,10 @@
 package skyenv
 
 import (
-	"github.com/skycoin/dmsg/dmsgpty"
 	"time"
 
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/dmsgpty"
 )
 
 // Constants for skywire root directories.
