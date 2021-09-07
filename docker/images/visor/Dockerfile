@@ -1,6 +1,6 @@
 # Builder
 ARG base=alpine
-FROM golang:alpine  as builder
+FROM golang:alpine3.13 as builder
 
 ARG BUILDINFO_LDFLAGS
 ARG CGO_ENABLED=0
@@ -20,6 +20,7 @@ RUN apk add --no-cache make git && \
     cp ./apps/vpn-server /apps/ && \
     cp ./apps/vpn-client /apps/ && \
 	cp ./apps/skysocks /apps/ && \
+	cp ./apps/skysocks-client /apps/ && \
 	cp ./apps/skychat /apps/
 
 ## Resulting image

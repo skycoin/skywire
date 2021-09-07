@@ -8,14 +8,13 @@ import (
 	"time"
 
 	"github.com/ActiveState/termtest/conpty"
-	"golang.org/x/sys/windows"
 )
 
 // ptyResizeLoop informs the remote of changes to the local CLI terminal window size.
 func ptyResizeLoop(ctx context.Context, ptyC *PtyClient) error {
 	t := time.NewTicker(1 * time.Second)
 	mu := sync.RWMutex{}
-	var initialSize *windows.Coord
+	var initialSize *WinSize
 	for {
 		select {
 		case <-ctx.Done():

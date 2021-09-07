@@ -263,6 +263,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/update/available/{channel}", hv.visorUpdateAvailable())
 				r.Get("/visors/{pk}/runtime-logs", hv.getRuntimeLogs())
 				r.Post("/visors/{pk}/min-hops", hv.postMinHops())
+				r.Get("/visors/{pk}/persistent-transports", hv.getPersistentTransports())
 				r.Put("/visors/{pk}/persistent-transports", hv.putPersistentTransports())
 			})
 		})
@@ -779,7 +780,6 @@ func (hv *Hypervisor) postTransport() http.HandlerFunc {
 		var reqBody struct {
 			TpType string        `json:"transport_type"`
 			Remote cipher.PubKey `json:"remote_pk"`
-			Public bool          `json:"public"`
 		}
 
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
@@ -793,7 +793,7 @@ func (hv *Hypervisor) postTransport() http.HandlerFunc {
 		}
 
 		const timeout = 30 * time.Second
-		tSummary, err := ctx.API.AddTransport(reqBody.Remote, reqBody.TpType, reqBody.Public, timeout)
+		tSummary, err := ctx.API.AddTransport(reqBody.Remote, reqBody.TpType, timeout)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
@@ -1344,6 +1344,17 @@ func (hv *Hypervisor) putPersistentTransports() http.HandlerFunc {
 	})
 }
 
+func (hv *Hypervisor) getPersistentTransports() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		pts, err := ctx.API.GetPersistentTransports()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, pts)
+	})
+}
+
 /*
 	<<< Helper functions >>>
 */
@@ -1537,6 +1548,7 @@ func pkSliceFromQuery(r *http.Request, key string, defaultVal []cipher.PubKey) (
 
 func (hv *Hypervisor) serveDmsg(ctx context.Context, log *logging.Logger) {
 	go func() {
+		<-hv.dmsgC.Ready()
 		if err := hv.ServeRPC(ctx, hv.c.DmsgPort); err != nil {
 			log.WithError(err).Fatal("Failed to serve RPC client over dmsg.")
 		}

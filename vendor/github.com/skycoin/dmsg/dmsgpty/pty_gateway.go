@@ -1,5 +1,29 @@
 package dmsgpty
 
+// WinSize wraps around pty.Winsize and *windows.Coord
+type WinSize struct {
+	X    uint16
+	Y    uint16
+	Rows uint16
+	Cols uint16
+}
+
+// PtyGateway represents a pty gateway, hosted by the pty.SessionServer
+type PtyGateway interface {
+	Start(req *CommandReq, _ *struct{}) error
+	Stop(_, _ *struct{}) error
+	Read(reqN *int, respB *[]byte) error
+	Write(reqB *[]byte, respN *int) error
+	SetPtySize(size *WinSize, _ *struct{}) error
+}
+
+// CommandReq represents a pty command.
+type CommandReq struct {
+	Name string
+	Arg  []string
+	Size *WinSize
+}
+
 // LocalPtyGateway is the gateway to a local pty.
 type LocalPtyGateway struct {
 	ses *Pty
@@ -33,6 +57,16 @@ func (g *LocalPtyGateway) Write(wb *[]byte, n *int) error {
 	var err error
 	*n, err = g.ses.Write(*wb)
 	return err
+}
+
+// SetPtySize sets the local pty's window size.
+func (g *LocalPtyGateway) SetPtySize(size *WinSize, _ *struct{}) error {
+	return g.ses.SetPtySize(size)
+}
+
+// SetPtySize sets the remote pty's window size.
+func (g *ProxiedPtyGateway) SetPtySize(size *WinSize, _ *struct{}) error {
+	return g.ptyC.SetPtySize(size)
 }
 
 // ProxiedPtyGateway is an RPC gateway for a remote pty.
