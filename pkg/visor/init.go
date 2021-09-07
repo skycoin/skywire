@@ -190,7 +190,7 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 		factory.PK = v.conf.PK
 		factory.SK = v.conf.SK
 		factory.UpdateInterval = time.Duration(conf.Discovery.UpdateInterval)
-		factory.ProxyDisc = conf.Discovery.ServiceDisc
+		factory.ServiceDisc = conf.Discovery.ServiceDisc
 	}
 	v.initLock.Lock()
 	v.serviceDisc = factory
@@ -652,9 +652,9 @@ func initPublicVisors(ctx context.Context, v *Visor, log *logging.Logger) error 
 	if !v.conf.Transport.AutoconnectPublic {
 		return nil
 	}
-	proxyDisc := v.conf.Launcher.Discovery.ServiceDisc
-	if proxyDisc == "" {
-		proxyDisc = skyenv.DefaultServiceDiscAddr
+	serviceDisc := v.conf.Launcher.Discovery.ServiceDisc
+	if serviceDisc == "" {
+		serviceDisc = skyenv.DefaultServiceDiscAddr
 	}
 
 	// todo: refactor appdisc: split connecting to services in appdisc and
@@ -666,7 +666,7 @@ func initPublicVisors(ctx context.Context, v *Visor, log *logging.Logger) error 
 		PK:       v.conf.PK,
 		SK:       v.conf.SK,
 		Port:     uint16(0),
-		DiscAddr: proxyDisc,
+		DiscAddr: serviceDisc,
 	}
 	connector := servicedisc.MakeConnector(conf, 5, v.tpM, log)
 	go connector.Run(ctx) //nolint:errcheck
