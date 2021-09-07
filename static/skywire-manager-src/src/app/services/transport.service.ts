@@ -23,7 +23,6 @@ export class TransportService {
   create(nodeKey: string, remoteKey: string, type: string): Observable<any> {
     const data = {
       remote_pk: remoteKey,
-      public: true,
     };
 
     if (type) {
