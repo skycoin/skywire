@@ -162,7 +162,7 @@ func parseV0(cc *Common, raw []byte) (*V1, error) {
 
 func ensureAppDisc(conf *V1) *V1 {
 	if conf.Launcher.Discovery == nil {
-		conf.Launcher.Discovery = &V1AppDisc{
+		conf.Launcher.Discovery = &V1Disc{
 			ServiceDisc: skyenv.DefaultServiceDiscAddr,
 		}
 	}
