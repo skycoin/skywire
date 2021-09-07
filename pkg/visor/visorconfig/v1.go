@@ -103,7 +103,7 @@ type V1UptimeTracker struct {
 // V1AppDisc configures Skywire App Discovery Clients.
 type V1AppDisc struct {
 	UpdateInterval Duration `json:"update_interval,omitempty"`
-	ServiceDisc    string   `json:"proxy_discovery_addr"` // TODO: change JSON name
+	ServiceDisc    string   `json:"service_discovery"`
 }
 
 // V1Launcher configures the app launcher.
