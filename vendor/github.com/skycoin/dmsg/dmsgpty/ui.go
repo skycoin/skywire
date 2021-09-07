@@ -154,13 +154,9 @@ func (ui *UI) Handler() http.HandlerFunc {
 		}
 		defer func() { log.WithError(ptyC.Close()).Debug("Closed ptyC.") }()
 
-<<<<<<< HEAD
 		if err = ui.uiStartSize(ptyC); err != nil {
 			log.Print("xxxx")
 
-=======
-		if err := ptyC.StartWithSize(ui.conf.CmdName, ui.conf.CmdArgs, &pty.Winsize{Rows: wsRows, Cols: wsCols}); err != nil {
->>>>>>> upstream/develop
 			writeWSError(log, wsConn, err)
 			return
 		}

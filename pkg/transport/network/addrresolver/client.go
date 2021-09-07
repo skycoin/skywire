@@ -27,12 +27,14 @@ import (
 
 const (
 	// sudphPriority is used to set an order how connection filters apply.
-	sudphPriority        = 1
-	stcprBindPath        = "/bind/stcpr"
-	addrChSize           = 1024
-	udpKeepAliveInterval = 10 * time.Second
-	udpKeepAliveMessage  = "keepalive"
-	defaultUDPPort       = "30178"
+	sudphPriority              = 1
+	stcprBindPath              = "/bind/stcpr"
+	stcprHeartbeatPath         = "/heartbeat/stcpr"
+	stcprKeepHeartbeatInterval = 300 * time.Second
+	addrChSize                 = 1024
+	udpKeepHeartbeatInterval   = 10 * time.Second
+	udpKeepHeartbeatMessage    = "heartbeat"
+	defaultUDPPort             = "30178"
 )
 
 var (
@@ -200,7 +202,7 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 		Addresses: addresses,
 		Port:      port,
 	}
-
+	c.log.Infof("BindSTCPR: Address resolver binding with: %v", addresses)
 	resp, err := c.Post(ctx, stcprBindPath, localAddresses)
 	if err != nil {
 		return err
@@ -215,6 +217,12 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
 	}
+
+	go func() {
+		if err := c.keepStcprHeartbeatLoop(ctx); err != nil {
+			c.log.WithError(err).Errorf("Failed to send TCP heartbeat signal to address-resolver")
+		}
+	}()
 
 	return nil
 }
@@ -273,8 +281,8 @@ func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter, hs Handshake) (<-ch
 	addrCh := c.readSUDPHMessages(arConn)
 
 	go func() {
-		if err := c.keepAliveLoop(arConn); err != nil {
-			c.log.WithError(err).Errorf("Failed to send keep alive UDP packet to address-resolver")
+		if err := c.keepSudphHeartbeatLoop(arConn); err != nil {
+			c.log.WithError(err).Errorf("Failed to send UDP heartbeat packet to address-resolver")
 		}
 	}()
 
@@ -413,18 +421,36 @@ func (c *httpClient) Close() error {
 	return nil
 }
 
+// Keep stcpr heartbeat in address-resolver
+func (c *httpClient) keepStcprHeartbeatLoop(ctx context.Context) error {
+	for {
+		_, err := c.Get(ctx, stcprHeartbeatPath)
+		if err != nil {
+			return err
+		}
+
+		c.log.Debugf("Sent TCP heartbeat signal to address-resolver")
+		select {
+		case <-c.closed:
+			return nil
+		default:
+			time.Sleep(stcprKeepHeartbeatInterval)
+		}
+	}
+}
+
 // Keep NAT mapping alive.
-func (c *httpClient) keepAliveLoop(w io.Writer) error {
+func (c *httpClient) keepSudphHeartbeatLoop(w io.Writer) error {
 	for {
 		select {
 		case <-c.closed:
 			return nil
 		default:
-			if _, err := w.Write([]byte(udpKeepAliveMessage)); err != nil {
+			if _, err := w.Write([]byte(udpKeepHeartbeatMessage)); err != nil {
 				return err
 			}
 
-			time.Sleep(udpKeepAliveInterval)
+			time.Sleep(udpKeepHeartbeatInterval)
 		}
 	}
 }
