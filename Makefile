@@ -94,6 +94,9 @@ lint: ## Run linters. Use make install-linters first
 lint-windows:
 	powershell 'golangci-lint run -c .golangci.yml ./...'
 
+lint-appveyor-windows:
+	C:\Users\appveyor\go\bin\golangci-lint run -c .golangci.yml ./...
+
 lint-extra: ## Run linters with extra checks.
 	${OPTS} golangci-lint run --no-config --enable-all ./...
 	# The govet version in golangci-lint is out of date and has spurious warnings, run it separately
