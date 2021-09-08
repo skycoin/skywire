@@ -20,6 +20,7 @@ DMSG_BASE := github.com/skycoin/dmsg
 ifeq ($(OS),Windows_NT)
 	OPTS?=powershell -Command setx GO111MODULE on;
 	DATE := $(shell powershell -Command date -u ${RFC_3339})
+
 else
 	OPTS?=GO111MODULE=on
 endif
@@ -49,7 +50,7 @@ BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
 
 check: lint test ## Run linters and tests
 
-check-windows-appveyor: lint-windows-appveyor test ## Run linters and tests on appveyor windows image
+check-windows: lint-windows test-windows ## Run linters and tests on appveyor windows image
 
 build: host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
@@ -90,8 +91,8 @@ lint: ## Run linters. Use make install-linters first
 	${OPTS} golangci-lint run -c .golangci.yml ./...
 	# The govet version in golangci-lint is out of date and has spurious warnings, run it separately
 
-lint-windows-appveyor:
-	C:\Users\appveyor\go\bin\golangci-lint run -c .golangci.yml ./...
+lint-windows:
+	powershell 'golangci-lint run -c .golangci.yml ./...'
 
 lint-extra: ## Run linters with extra checks.
 	${OPTS} golangci-lint run --no-config --enable-all ./...
@@ -103,14 +104,19 @@ test: ## Run tests
 	${OPTS} go test ${TEST_OPTS} ./internal/...
 	${OPTS} go test ${TEST_OPTS} ./pkg/...
 
+test-windows: ## Run tests on windows
+	@go clean -testcache
+	${OPTS} go test ${TEST_OPTS} ./internal/...
+	${OPTS} go test ${TEST_OPTS} ./pkg/...
+
 install-linters: ## Install linters
 	- VERSION=latest ./ci_scripts/install-golangci-lint.sh
-	${OPTS} go get -u golang.org/x/tools/cmd/goimports
-	${OPTS} go get -u github.com/incu6us/goimports-reviser/v2
+	${OPTS} go install golang.org/x/tools/cmd/goimports@latest
+	${OPTS} go install github.com/incu6us/goimports-reviser/v2@latest
 
 install-linters-windows:
-	${OPTS} go get -u github.com/golangci/golangci-lint/cmd/golangci-lint@v1.41.0
-	${OPTS} go get -u golang.org/x/tools/cmd/goimports
+	${OPTS} go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	${OPTS} go install golang.org/x/tools/cmd/goimports@latest
 
 tidy: ## Tidies and vendors dependencies.
 	${OPTS} go mod tidy -v
@@ -125,6 +131,7 @@ format-windows: tidy ## Formats the code. Must have goimports and goimports-revi
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./cmd
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./internal
+	powershell 'Get-ChildItem -Directory | where Name -NotMatch vendor | % { Get-ChildItem $$_ -Recurse -Include *.go } | % {goimports -w -local ${PROJECT_BASE} $$_ }'
 
 dep: tidy ## Sorts dependencies
 	${OPTS} go mod vendor -v
