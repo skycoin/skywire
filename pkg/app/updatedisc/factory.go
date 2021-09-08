@@ -1,4 +1,4 @@
-package appdisc
+package updatedisc
 
 import (
 	"time"
