@@ -1,4 +1,4 @@
-package appdisc
+package updatedisc
 
 // ChangeValue keys. Each key changes a different value for serviceUpdater.ChangeValue
 const (
