@@ -286,7 +286,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	logS := transport.InMemoryTransportLogStore()
 
-	ptps, err := v.conf.GetPersistentTransports()
+	pTps, err := v.conf.GetPersistentTransports()
 	if err != nil {
 		err := fmt.Errorf("failed to get persistent transports: %w", err)
 		return err
@@ -297,7 +297,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		SecKey:                    v.conf.SK,
 		DiscoveryClient:           tpdC,
 		LogStore:                  logS,
-		PersistentTransportsCache: ptps,
+		PersistentTransportsCache: pTps,
 	}
 	managerLogger := v.MasterLogger().PackageLogger("transport_manager")
 
