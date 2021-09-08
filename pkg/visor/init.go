@@ -19,10 +19,10 @@ import (
 
 	"github.com/skycoin/skywire/internal/utclient"
 	"github.com/skycoin/skywire/internal/vpn"
-	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/app/updatedisc"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
@@ -180,7 +180,7 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 
 func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// Prepare app discovery factory.
-	factory := appdisc.Factory{
+	factory := updatedisc.Factory{
 		Log: v.MasterLogger().PackageLogger("app_discovery"),
 	}
 
@@ -657,7 +657,7 @@ func initPublicVisors(ctx context.Context, v *Visor, log *logging.Logger) error 
 		serviceDisc = skyenv.DefaultServiceDiscAddr
 	}
 
-	// todo: refactor appdisc: split connecting to services in appdisc and
+	// todo: refactor updatedisc: split connecting to services in updatedisc and
 	// advertising oneself as a service. Currently, config is tailored to
 	// advertising oneself and requires things like port that are not used
 	// in connecting to services
