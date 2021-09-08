@@ -76,6 +76,7 @@ type API interface {
 
 	SetMinHops(uint16) error
 
+	GetPersistentTransports() ([]transport.PersistentTransports, error)
 	SetPersistentTransports([]transport.PersistentTransports) error
 }
 
@@ -786,4 +787,9 @@ func (v *Visor) SetMinHops(in uint16) error {
 // SetPersistentTransports sets min_hops routing config of visor
 func (v *Visor) SetPersistentTransports(pts []transport.PersistentTransports) error {
 	return v.conf.UpdatePersistentTransports(pts)
+}
+
+// GetPersistentTransports sets min_hops routing config of visor
+func (v *Visor) GetPersistentTransports() ([]transport.PersistentTransports, error) {
+	return v.conf.GetPersistentTransports()
 }
