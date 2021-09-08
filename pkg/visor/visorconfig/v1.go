@@ -192,9 +192,9 @@ func (v1 *V1) UpdateMinHops(hops uint16) error {
 }
 
 // UpdatePersistentTransports updates persistent_transports in config
-func (v1 *V1) UpdatePersistentTransports(ptps []transport.PersistentTransports) error {
+func (v1 *V1) UpdatePersistentTransports(pTps []transport.PersistentTransports) error {
 	v1.mu.Lock()
-	v1.PersistentTransports = ptps
+	v1.PersistentTransports = pTps
 	v1.mu.Unlock()
 
 	return v1.flush(v1)
