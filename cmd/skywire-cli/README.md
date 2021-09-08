@@ -396,7 +396,7 @@ $ skywire-cli visor gen-config
 	"launcher": {
 		"discovery": {
 			"update_interval": "30s",
-			"proxy_discovery_addr": "http://service.discovery.skycoin.com"
+			"service_discovery": "http://service.discovery.skycoin.com"
 		},
 		"apps": [
 			{
@@ -512,7 +512,7 @@ $ skywire-cli visor gen-config -ip
 	"launcher": {
 		"discovery": {
 			"update_interval": "30s",
-			"proxy_discovery_addr": "http://service.discovery.skycoin.com"
+			"service_discovery": "http://service.discovery.skycoin.com"
 		},
 		"apps": [
 			{
@@ -886,7 +886,7 @@ skywire-cli visor update-config
  "launcher": {
 	 "discovery": {
 		 "update_interval": "30s",
-		 "proxy_discovery_addr": "http://service.discovery.skycoin.com"
+		 "service_discovery": "http://service.discovery.skycoin.com"
 	 },
 	 "apps": [
 		 {
