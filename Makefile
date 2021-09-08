@@ -128,9 +128,6 @@ format: tidy ## Formats the code. Must have goimports and goimports-reviser inst
 	find . -type f -name '*.go' -not -path "./vendor/*"  -exec goimports-reviser -project-name ${PROJECT_BASE} -file-path {} \;
 
 format-windows: tidy ## Formats the code. Must have goimports and goimports-reviser installed (use make install-linters).
-	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg
-	${OPTS} goimports -w -local ${PROJECT_BASE} ./cmd
-	${OPTS} goimports -w -local ${PROJECT_BASE} ./internal
 	powershell 'Get-ChildItem -Directory | where Name -NotMatch vendor | % { Get-ChildItem $$_ -Recurse -Include *.go } | % {goimports -w -local ${PROJECT_BASE} $$_ }'
 
 dep: tidy ## Sorts dependencies
