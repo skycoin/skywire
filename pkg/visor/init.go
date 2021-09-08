@@ -19,10 +19,10 @@ import (
 
 	"github.com/skycoin/skywire/internal/utclient"
 	"github.com/skycoin/skywire/internal/vpn"
-	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/app/updatedisc"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
@@ -180,7 +180,7 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 
 func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// Prepare app discovery factory.
-	factory := appdisc.Factory{
+	factory := updatedisc.Factory{
 		Log: v.MasterLogger().PackageLogger("app_discovery"),
 	}
 
@@ -190,7 +190,7 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 		factory.PK = v.conf.PK
 		factory.SK = v.conf.SK
 		factory.UpdateInterval = time.Duration(conf.Discovery.UpdateInterval)
-		factory.ProxyDisc = conf.Discovery.ServiceDisc
+		factory.ServiceDisc = conf.Discovery.ServiceDisc
 	}
 	v.initLock.Lock()
 	v.serviceDisc = factory
@@ -652,12 +652,12 @@ func initPublicVisors(ctx context.Context, v *Visor, log *logging.Logger) error 
 	if !v.conf.Transport.AutoconnectPublic {
 		return nil
 	}
-	proxyDisc := v.conf.Launcher.Discovery.ServiceDisc
-	if proxyDisc == "" {
-		proxyDisc = skyenv.DefaultServiceDiscAddr
+	serviceDisc := v.conf.Launcher.Discovery.ServiceDisc
+	if serviceDisc == "" {
+		serviceDisc = skyenv.DefaultServiceDiscAddr
 	}
 
-	// todo: refactor appdisc: split connecting to services in appdisc and
+	// todo: refactor updatedisc: split connecting to services in updatedisc and
 	// advertising oneself as a service. Currently, config is tailored to
 	// advertising oneself and requires things like port that are not used
 	// in connecting to services
@@ -666,7 +666,7 @@ func initPublicVisors(ctx context.Context, v *Visor, log *logging.Logger) error 
 		PK:       v.conf.PK,
 		SK:       v.conf.SK,
 		Port:     uint16(0),
-		DiscAddr: proxyDisc,
+		DiscAddr: serviceDisc,
 	}
 	connector := servicedisc.MakeConnector(conf, 5, v.tpM, log)
 	go connector.Run(ctx) //nolint:errcheck

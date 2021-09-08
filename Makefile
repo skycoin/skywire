@@ -46,6 +46,8 @@ BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
 
 check: lint test ## Run linters and tests
 
+check-windows-appveyor: lint-windows-appveyor test ## Run linters and tests on appveyor windows image
+
 build: host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
 build-systray: host-apps-systray bin-systray ## Install dependencies, build apps and binaries `go build` with ${OPTS}, with CGO and systray
@@ -78,8 +80,8 @@ lint: ## Run linters. Use make install-linters first
 	${OPTS} golangci-lint run -c .golangci.yml ./...
 	# The govet version in golangci-lint is out of date and has spurious warnings, run it separately
 
-lint-ci:
-	${OPTS} golangci-lint run --build-tags=musl -c .golangci.yml ./...
+lint-windows-appveyor:
+	C:\Users\appveyor\go\bin\golangci-lint run -c .golangci.yml ./...
 
 lint-extra: ## Run linters with extra checks.
 	${OPTS} golangci-lint run --no-config --enable-all ./...
