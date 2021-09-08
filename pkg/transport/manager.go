@@ -137,11 +137,11 @@ func (tm *Manager) getPTpsCache() []PersistentTransports {
 }
 
 // SetPTpsCache sets the PersistentTransportsCache
-func (tm *Manager) SetPTpsCache(ptps []PersistentTransports) {
+func (tm *Manager) SetPTpsCache(pTps []PersistentTransports) {
 	tm.Conf.PTpsCacheMu.Lock()
 	defer tm.Conf.PTpsCacheMu.Unlock()
 
-	tm.Conf.PersistentTransportsCache = ptps
+	tm.Conf.PersistentTransportsCache = pTps
 }
 
 // InitClient initilizes a network client
