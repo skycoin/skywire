@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - removed `--public` flag from `skywire-cli visor add-tp` command
 
 ### Added
+
 - added persistent_transports field to the config and UI
 - added stun_servers field to the config
 - added is_public field to root section
