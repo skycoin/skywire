@@ -785,8 +785,9 @@ func (v *Visor) SetMinHops(in uint16) error {
 }
 
 // SetPersistentTransports sets min_hops routing config of visor
-func (v *Visor) SetPersistentTransports(pts []transport.PersistentTransports) error {
-	return v.conf.UpdatePersistentTransports(pts)
+func (v *Visor) SetPersistentTransports(ptps []transport.PersistentTransports) error {
+	v.tpM.SetPTpsCache(ptps)
+	return v.conf.UpdatePersistentTransports(ptps)
 }
 
 // GetPersistentTransports sets min_hops routing config of visor
