@@ -191,16 +191,16 @@ func (v1 *V1) UpdateMinHops(hops uint16) error {
 	return v1.flush(v1)
 }
 
-// UpdatePersistentTransports updates min_hops config
-func (v1 *V1) UpdatePersistentTransports(pts []transport.PersistentTransports) error {
+// UpdatePersistentTransports updates persistent_transports in config
+func (v1 *V1) UpdatePersistentTransports(ptps []transport.PersistentTransports) error {
 	v1.mu.Lock()
-	v1.PersistentTransports = pts
+	v1.PersistentTransports = ptps
 	v1.mu.Unlock()
 
 	return v1.flush(v1)
 }
 
-// GetPersistentTransports updates min_hops config
+// GetPersistentTransports gets persistent_transports from config
 func (v1 *V1) GetPersistentTransports() ([]transport.PersistentTransports, error) {
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
