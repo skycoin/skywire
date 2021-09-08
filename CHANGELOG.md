@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## 0.5.0
+
+### Changed
+
+- config updated to `v1.1.0`
+- removed public_trusted_visor field from root section
+- removed trusted_visors field from transport section
+- removed authorization_file field from dmsgpty section
+- changed default urls to newer shortned ones
+- changed proxy_discovery_addr field to service_discovery
+- updated UI
+- removed `--public` flag from `skywire-cli visor add-tp` command
+
+### Added
+- added persistent_transports field to the config and UI
+- added stun_servers field to the config
+- added is_public field to root section
+- added public_autoconnect field to transport section
+- added transport_setup_nodes field to transport section
+- added MinHops field to V1Routing section of config
+
 ## 0.2.1 - 2020.04.07
 
 ### Changed
