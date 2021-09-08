@@ -31,11 +31,12 @@ type PersistentTransports struct {
 
 // ManagerConfig configures a Manager.
 type ManagerConfig struct {
-	PubKey               cipher.PubKey
-	SecKey               cipher.SecKey
-	DiscoveryClient      DiscoveryClient
-	LogStore             LogStore
-	PersistentTransports []PersistentTransports
+	PubKey                    cipher.PubKey
+	SecKey                    cipher.SecKey
+	DiscoveryClient           DiscoveryClient
+	LogStore                  LogStore
+	PersistentTransportsCache []PersistentTransports
+	PTpsCacheMu               sync.RWMutex
 }
 
 // Manager manages Transports.
@@ -114,7 +115,7 @@ func (tm *Manager) runReconnectPersistent(ctx context.Context) {
 }
 
 func (tm *Manager) reconnectPersistent(ctx context.Context) {
-	for _, remote := range tm.Conf.PersistentTransports {
+	for _, remote := range tm.getPTpsCache() {
 		tm.Logger.Debugf("Reconnecting to persistent transport to %s, type %s", remote.PK, remote.NetType)
 		deadlined, cancel := context.WithTimeout(ctx, reconnectRemoteTimeout)
 		_, err := tm.saveTransport(deadlined, remote.PK, remote.NetType, LabelUser)
@@ -126,6 +127,21 @@ func (tm *Manager) reconnectPersistent(ctx context.Context) {
 		}
 		cancel()
 	}
+}
+
+func (tm *Manager) getPTpsCache() []PersistentTransports {
+	tm.Conf.PTpsCacheMu.Lock()
+	defer tm.Conf.PTpsCacheMu.Unlock()
+
+	return tm.Conf.PersistentTransportsCache
+}
+
+// SetPTpsCache sets the PersistentTransportsCache
+func (tm *Manager) SetPTpsCache(ptps []PersistentTransports) {
+	tm.Conf.PTpsCacheMu.Lock()
+	defer tm.Conf.PTpsCacheMu.Unlock()
+
+	tm.Conf.PersistentTransportsCache = ptps
 }
 
 // InitClient initilizes a network client
