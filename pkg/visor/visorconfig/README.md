@@ -43,7 +43,7 @@
 # V1AppDisc
 
 - `update_interval` (Duration)
-- `proxy_discovery_addr` (string)
+- `service_discovery` (string)
 
 
 # V1LogStore
