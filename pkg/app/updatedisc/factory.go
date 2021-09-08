@@ -1,4 +1,4 @@
-package appdisc
+package updatedisc
 
 import (
 	"time"
@@ -18,7 +18,7 @@ type Factory struct {
 	PK             cipher.PubKey
 	SK             cipher.SecKey
 	UpdateInterval time.Duration
-	ProxyDisc      string // Address of proxy-discovery
+	ServiceDisc    string // Address of service-discovery
 }
 
 func (f *Factory) setDefaults() {
@@ -26,10 +26,10 @@ func (f *Factory) setDefaults() {
 		f.Log = logging.MustGetLogger("appdisc")
 	}
 	if f.UpdateInterval == 0 {
-		f.UpdateInterval = skyenv.AppDiscUpdateInterval
+		f.UpdateInterval = skyenv.ServiceDiscUpdateInterval
 	}
-	if f.ProxyDisc == "" {
-		f.ProxyDisc = skyenv.DefaultServiceDiscAddr
+	if f.ServiceDisc == "" {
+		f.ServiceDisc = skyenv.DefaultServiceDiscAddr
 	}
 }
 
@@ -45,7 +45,7 @@ func (f *Factory) VisorUpdater(port uint16) Updater {
 		PK:       f.PK,
 		SK:       f.SK,
 		Port:     port,
-		DiscAddr: f.ProxyDisc,
+		DiscAddr: f.ServiceDisc,
 	}
 
 	return &serviceUpdater{
@@ -63,7 +63,7 @@ func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
 
 	log := f.Log.WithField("appName", conf.AppName)
 
-	// Do not update in proxy discovery if passcode-protected.
+	// Do not update in service discovery if passcode-protected.
 	if conf.ContainsFlag("passcode") && conf.ArgVal("passcode") != "" {
 		return &emptyUpdater{}, false
 	}
@@ -74,7 +74,7 @@ func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
 			PK:       f.PK,
 			SK:       f.SK,
 			Port:     uint16(conf.RoutingPort),
-			DiscAddr: f.ProxyDisc,
+			DiscAddr: f.ServiceDisc,
 		}
 	}
 
