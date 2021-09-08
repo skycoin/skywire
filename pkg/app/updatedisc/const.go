@@ -1,6 +1,6 @@
-package appdisc
+package updatedisc
 
-// ChangeValue keys. Each key changes a different value for proxyUpdater.ChangeValue
+// ChangeValue keys. Each key changes a different value for serviceUpdater.ChangeValue
 const (
 	// ConnCountValue represents the number of remote connections to a given proc.
 	ConnCountValue = "conn_count"
