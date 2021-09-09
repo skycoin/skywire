@@ -12,12 +12,20 @@ import (
 // TODO (darkrengarius): change path
 const iconPath = "%LOCALDATA\\skywire\\icon.png"
 
+func deinstallerPath() string {
+	return filepath.Join(localDataPath, "skywire", "deinstaller.ps1")
+}
+
 func platformExecUninstall() error {
 	localDataPath := os.Getenv("LOCALDATA")
-	deinstallerPath = filepath.Join(localDataPath, "skywire", "deinstaller.ps1")
 	return osutil.Run("pwsh", "-c", deinstallerPath)
 }
 
 func preReadIcon() error {
 	return nil
+}
+
+func checkIsPackage() bool {
+	_, err := os.Stat(deinstallerPath())
+	return err == nil
 }
