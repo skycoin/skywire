@@ -10,6 +10,7 @@
 
 SHELL := /bin/bash
 VERSION := $(shell git describe)
+GIT_TAG := $(shell git describe --tags | tr -d '\n')
 #VERSION := v0.1.0 # for debugging updater
 
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
@@ -184,14 +185,7 @@ build-deploy: ## Build for deployment Docker images
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
 github-release: sysroot
-	goreleaser --rm-dist
-	docker run --rm --privileged \
-		-v $(CURDIR):/go/src/github.com/skycoin/skywire \
-		-v /var/run/docker.sock:/var/run/docker.sock \
-		-v $(GOPATH)/src:/go/src \
-		-v $(CURDIR)/sysroot:/sysroot \
-		-w /go/src/github.com/skycoin/skywire \
-		skycoin/golang-cross:$(GO_BUILDER_VERSION) -f /go/src/github.com/skycoin/skywire/.goreleaser-systray.yml --rm-dist
+	./scripts/upload-assets.sh ${GIT_TAG} ${GO_BUILDER_VERSION}
 
 build-docker: ## Build docker image
 	./ci_scripts/docker-push.sh -t ${BRANCH} -b
