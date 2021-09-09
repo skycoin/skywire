@@ -9,15 +9,15 @@ dist: xenial
 services:
   - docker
 
-addons:
-  apt:
-    packages:
+    #addons:
+    #  apt:
+    #    packages:
     # For building MUSL static builds on Linux.
     #      - musl-tools
     #- gcc-mingw-w64-i686
     #- g++-mingw-w64-i686
-    #- binutils-mingw-w64-i686
-    #- libsnmp-dev
+  #- binutils-mingw-w64-i686
+  #- libsnmp-dev
 
 matrix:
   include:
@@ -38,11 +38,11 @@ before_script:
   - ci_scripts/create-ip-aliases.sh
 
 script:
-  - make build
   - make check
   - make install-deps-ui
   - make lint-ui
   - make build-ui
+  - make build
 
 deploy:
   - provider: script
@@ -55,4 +55,7 @@ deploy:
     on:
       branch: develop
       condition: $TRAVIS_PULL_REQUEST = false
-
+  - provider: script
+    script: make github-release
+    on:
+      tags: true
