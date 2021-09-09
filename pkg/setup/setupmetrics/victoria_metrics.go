@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/VictoriaMetrics/metrics"
+
 	"github.com/skycoin/dmsg/metricsutil"
 
 	"github.com/skycoin/skywire/pkg/routing"
