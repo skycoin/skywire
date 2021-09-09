@@ -2,17 +2,18 @@ package commands
 
 import (
 	"context"
+	"embed"
 	"fmt"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"net/http"
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
-
-	"embed"
-	"io/fs"
 
 	"github.com/pkg/profile"
 	"github.com/skycoin/dmsg/buildinfo"
@@ -45,7 +46,18 @@ var (
 	confPath      string
 	delay         string
 	launchBrowser bool
+	stopVisorFn   func() // nolint:unused
+	stopVisorWg   sync.WaitGroup
 )
+
+var rootCmd = &cobra.Command{
+	Use:   "skywire-visor",
+	Short: "Skywire visor",
+	Run: func(_ *cobra.Command, args []string) {
+		runApp(args...)
+	},
+	Version: buildinfo.Version(),
+}
 
 func init() {
 	rootCmd.Flags().StringVar(&tag, "tag", "skywire", "logging tag")
@@ -55,62 +67,61 @@ func init() {
 	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file location. If the value is 'STDIN', config file will be read from stdin.")
 	rootCmd.Flags().StringVar(&delay, "delay", "0ns", "start delay (deprecated)") // deprecated
 	rootCmd.Flags().BoolVar(&launchBrowser, "launch-browser", false, "open hypervisor web ui (hypervisor only) with system browser")
+	extraFlags()
 }
 
-var rootCmd = &cobra.Command{
-	Use:   "skywire-visor",
-	Short: "Skywire visor",
-	Run: func(_ *cobra.Command, args []string) {
-		log := initLogger(tag, syslogAddr)
-		store, hook := logstore.MakeStore(runtimeLogMaxEntries)
-		log.AddHook(hook)
+func runVisor(args []string) {
+	log := initLogger(tag, syslogAddr)
+	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
+	log.AddHook(hook)
 
-		delayDuration, err := time.ParseDuration(delay)
-		if err != nil {
-			log.WithError(err).Error("Failed to parse delay duration.")
-			delayDuration = time.Duration(0)
-		}
+	delayDuration, err := time.ParseDuration(delay)
+	if err != nil {
+		log.WithError(err).Error("Failed to parse delay duration.")
+		delayDuration = time.Duration(0)
+	}
+	log.WithField("delay", delayDuration).
+		WithField("systemd", restartCtx.Systemd()).
+		WithField("parent_systemd", restartCtx.ParentSystemd()).
+		WithField("skybian_build_version", os.Getenv("SKYBIAN_BUILD_VERSION")).
+		Debugf("Process info")
 
-		log.WithField("delay", delayDuration).
-			WithField("systemd", restartCtx.Systemd()).
-			WithField("parent_systemd", restartCtx.ParentSystemd()).
-			WithField("skybian_build_version", os.Getenv("SKYBIAN_BUILD_VERSION")).
-			Debugf("Process info")
+	detachProcess(delayDuration, log)
 
-		detachProcess(delayDuration, log)
+	time.Sleep(delayDuration)
 
-		time.Sleep(delayDuration)
+	if _, err := buildinfo.Get().WriteTo(log.Out); err != nil {
+		log.WithError(err).Error("Failed to output build info.")
+	}
 
-		if _, err := buildinfo.Get().WriteTo(log.Out); err != nil {
-			log.WithError(err).Error("Failed to output build info.")
-		}
+	stopPProf := initPProf(log, tag, pprofMode, pprofAddr)
+	defer stopPProf()
 
-		stopPProf := initPProf(log, tag, pprofMode, pprofAddr)
-		defer stopPProf()
+	conf := initConfig(log, args, confPath)
 
-		conf := initConfig(log, args, confPath)
+	v, ok := visor.NewVisor(conf, restartCtx)
+	if !ok {
+		log.Errorln("Failed to start visor.")
+		quitSystray()
+		return
+	}
+	v.SetLogstore(store)
 
-		v, ok := visor.NewVisor(conf, restartCtx)
-		if !ok {
-			log.Fatal("Failed to start visor.")
-		}
-		v.SetLogstore(store)
+	if launchBrowser {
+		runBrowser(conf, log)
+	}
 
-		if launchBrowser {
-			runBrowser(conf, log)
-		}
+	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
+	setStopFunction(log, cancel, v.Close)
 
-		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
-		defer cancel()
+	defer cancel()
 
-		// Wait.
-		<-ctx.Done()
+	// Wait.
+	<-ctx.Done()
 
-		if err := v.Close(); err != nil {
-			log.WithError(err).Error("Visor closed with error.")
-		}
-	},
-	Version: buildinfo.Version(),
+	if err = v.Close(); err != nil {
+		log.Error("Error closing visor: ", err)
+	}
 }
 
 // Execute executes root CLI command.
@@ -198,7 +209,11 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 		}
 
 		if confPath == "" {
-			confPath = "/opt/skywire/" + defaultConfigName
+			if runtime.GOOS == "darwin" {
+				confPath = os.Getenv("HOME") + "/Skywire/" + defaultConfigName
+			} else {
+				confPath = "/opt/skywire/" + defaultConfigName
+			}
 		}
 
 		fallthrough

@@ -33,7 +33,7 @@ func MakeBaseConfig(common *Common) *V1 {
 		RouteFinderTimeout: DefaultTimeout,
 	}
 	conf.Launcher = &V1Launcher{
-		Discovery: &V1AppDisc{
+		Discovery: &V1ServiceDisc{
 			ServiceDisc: skyenv.DefaultServiceDiscAddr,
 		},
 		Apps:       nil,
@@ -89,8 +89,8 @@ func defaultConfigFromCommon(cc *Common, hypervisor bool) (*V1, error) {
 		Addr: skyenv.DefaultUptimeTrackerAddr,
 	}
 
-	conf.Launcher.Discovery = &V1AppDisc{
-		UpdateInterval: Duration(skyenv.AppDiscUpdateInterval),
+	conf.Launcher.Discovery = &V1ServiceDisc{
+		UpdateInterval: Duration(skyenv.ServiceDiscUpdateInterval),
 		ServiceDisc:    skyenv.DefaultServiceDiscAddr,
 	}
 
@@ -159,15 +159,16 @@ func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 		CLINet:  skyenv.DefaultDmsgPtyCLINet,
 		CLIAddr: skyenv.DefaultDmsgPtyCLIAddr(),
 	}
-	conf.LocalPath = skyenv.PackageLocalPath
-	conf.Launcher.BinPath = skyenv.PackageAppBinPath
+	conf.LocalPath = skyenv.PackageAppLocalPath()
+	conf.Launcher.BinPath = skyenv.PackageAppBinPath()
 
 	if conf.Hypervisor != nil {
 		conf.Hypervisor.EnableAuth = skyenv.DefaultEnableAuth
-		conf.Hypervisor.EnableTLS = skyenv.PackageEnableTLS
-		conf.Hypervisor.TLSKeyFile = skyenv.PackageTLSKey
-		conf.Hypervisor.TLSCertFile = skyenv.PackageTLSCert
-		conf.Hypervisor.DBPath = skyenv.PackageDBPath
+		conf.Hypervisor.TLSKeyFile = skyenv.PackageTLSKey()
+		conf.Hypervisor.TLSCertFile = skyenv.PackageTLSCert()
+		conf.Hypervisor.TLSKeyFile = skyenv.PackageTLSKey()
+		conf.Hypervisor.TLSCertFile = skyenv.PackageTLSCert()
+		conf.Hypervisor.DBPath = skyenv.PackageDBPath()
 	}
 	return conf, nil
 }
@@ -218,8 +219,8 @@ func SetDefaultProductionValues(conf *V1) {
 	conf.UptimeTracker = &V1UptimeTracker{
 		Addr: skyenv.DefaultUptimeTrackerAddr,
 	}
-	conf.Launcher.Discovery = &V1AppDisc{
-		UpdateInterval: Duration(skyenv.AppDiscUpdateInterval),
+	conf.Launcher.Discovery = &V1ServiceDisc{
+		UpdateInterval: Duration(skyenv.ServiceDiscUpdateInterval),
 		ServiceDisc:    skyenv.DefaultServiceDiscAddr,
 	}
 }
