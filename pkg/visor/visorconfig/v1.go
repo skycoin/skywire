@@ -32,6 +32,9 @@ const V101Name = "v1.0.1"
 // Removed authorization_file field from dmsgpty section
 // Default urls are changed to newer shortned ones
 // Added stun_servers field to the config
+// Added persistent_transports field to the config
+// Changed proxy_discovery_addr field to service_discovery
+// Changed V1AppDisc struct to V1ServiceDisc
 const V110Name = "v1.1.0"
 
 // V1Name is the semantic version string for the most recent version of V1.
@@ -100,15 +103,15 @@ type V1UptimeTracker struct {
 	Addr string `json:"addr"`
 }
 
-// V1AppDisc configures Skywire App Discovery Clients.
-type V1AppDisc struct {
+// V1ServiceDisc configures Skywire App Discovery Clients.
+type V1ServiceDisc struct {
 	UpdateInterval Duration `json:"update_interval,omitempty"`
-	ServiceDisc    string   `json:"proxy_discovery_addr"` // TODO: change JSON name
+	ServiceDisc    string   `json:"service_discovery"`
 }
 
 // V1Launcher configures the app launcher.
 type V1Launcher struct {
-	Discovery  *V1AppDisc           `json:"discovery"`
+	Discovery  *V1ServiceDisc       `json:"discovery"`
 	Apps       []launcher.AppConfig `json:"apps"`
 	ServerAddr string               `json:"server_addr"`
 	BinPath    string               `json:"bin_path"`
@@ -191,16 +194,16 @@ func (v1 *V1) UpdateMinHops(hops uint16) error {
 	return v1.flush(v1)
 }
 
-// UpdatePersistentTransports updates min_hops config
-func (v1 *V1) UpdatePersistentTransports(pts []transport.PersistentTransports) error {
+// UpdatePersistentTransports updates persistent_transports in config
+func (v1 *V1) UpdatePersistentTransports(pTps []transport.PersistentTransports) error {
 	v1.mu.Lock()
-	v1.PersistentTransports = pts
+	v1.PersistentTransports = pTps
 	v1.mu.Unlock()
 
 	return v1.flush(v1)
 }
 
-// GetPersistentTransports updates min_hops config
+// GetPersistentTransports gets persistent_transports from config
 func (v1 *V1) GetPersistentTransports() ([]transport.PersistentTransports, error) {
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
