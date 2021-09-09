@@ -212,6 +212,9 @@ func GetAvailPublicVPNServers(conf *visorconfig.V1) []string {
 
 func initUninstallBtn() {
 	mUninstall = systray.AddMenuItem("Uninstall", "")
+	if !checkIsPackage() {
+		mUninstall.Hide()
+	}
 }
 
 func initQuitBtn() {
