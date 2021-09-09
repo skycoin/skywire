@@ -10,7 +10,7 @@ $dot-size-sm: 7px;
 
 @each $color-name, $color-value in $dot-icons
 {
-  .dot-#{$color-name}
+  .dot-#{"" + $color-name}
   {
     height: $dot-size;
     width: $dot-size;
@@ -34,7 +34,7 @@ $outlines: (
 
 @each $color-name, $color-value in $outlines
 {
-  .dot-outline-#{$color-name}
+  .dot-outline-#{"" + $color-name}
   {
     height: $dot-size;
     width: $dot-size;
