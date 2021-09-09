@@ -2,6 +2,10 @@
 
 package gui
 
+import (
+	"os"
+)
+
 // TODO (darkrengarius): change path
 const (
 	iconPath        = "/opt/skywire/icon.png"
