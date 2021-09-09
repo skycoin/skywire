@@ -88,7 +88,7 @@ var genConfigCmd = &cobra.Command{
 		if packageConfig {
 			genConf = visorconfig.MakePackageConfig
 		} else if skybianConfig {
-			genConf = visorconfig.MakeSkybianConfig
+			genConf = visorconfig.MakeDefaultConfig
 		} else if testEnv {
 			genConf = visorconfig.MakeTestConfig
 		} else {
