@@ -64,9 +64,12 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc updated
 	}
 	moduleName := fmt.Sprintf("proc:%s:%s", conf.AppName, conf.ProcKey)
 
-	cmd := exec.Command(conf.BinaryLoc, conf.ProcArgs...) // nolint:gosec
+	var cmd *exec.Cmd
+	envs := conf.Envs()
+
+	cmd = exec.Command(conf.BinaryLoc, conf.ProcArgs...) // nolint:gosec
+	cmd.Env = append(os.Environ(), envs...)
 	cmd.Dir = conf.ProcWorkDir
-	cmd.Env = append(os.Environ(), conf.Envs()...)
 
 	appLog, appLogDB := appcommon.NewProcLogger(conf)
 	cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").Writer()
