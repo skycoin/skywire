@@ -46,7 +46,7 @@ func (h *Host) ServeCLI(ctx context.Context, lis net.Listener) error {
 		_ = lis.Close() //nolint:errcheck
 	}()
 
-	log := logging.MustGetLogger("dmsg_pty:cli-server")
+	log := logging.MustGetLogger("dmsgpty:cli-server")
 
 	mux := cliEndpoints(h)
 
@@ -86,11 +86,9 @@ func (h *Host) ListenAndServe(ctx context.Context, port uint16) error {
 		return err
 	}
 
-	log := logging.MustGetLogger("dmsg_pty")
-
 	go func() {
 		<-ctx.Done()
-		log.
+		h.log().
 			WithError(lis.Close()).
 			Info("Serve() ended.")
 	}()
@@ -98,7 +96,7 @@ func (h *Host) ListenAndServe(ctx context.Context, port uint16) error {
 	for {
 		stream, err := lis.AcceptStream()
 		if err != nil {
-			log := log.WithError(err)
+			log := h.log().WithError(err)
 			if err, ok := err.(net.Error); ok && err.Temporary() {
 				log.Warn("Failed to accept dmsg.Stream with temporary error, continuing...")
 				continue
@@ -113,7 +111,7 @@ func (h *Host) ListenAndServe(ctx context.Context, port uint16) error {
 		}
 
 		rPK := stream.RawRemoteAddr().PK
-		log := log.WithField("remote_pk", rPK.String())
+		log := h.log().WithField("remote_pk", rPK.String())
 		log.Info("Processing dmsg.Stream...")
 
 		if !h.authorize(log, rPK) {
