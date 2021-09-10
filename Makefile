@@ -61,6 +61,8 @@ build-windows: host-apps-windows bin-windows ## Install dependencies, build apps
 
 build-systray: host-apps-systray bin-systray ## Install dependencies, build apps and binaries `go build` with ${OPTS}, with CGO and systray
 
+build-windows-systray: host-apps-windows-systray bin-windows-systray
+
 build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
 install-generate: ## Installs required execs for go generate.
@@ -187,6 +189,14 @@ host-apps-systray: ## Build app
 	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps/vpn-server ./cmd/apps/vpn-server
 	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps/vpn-client ./cmd/apps/vpn-client
 
+host-apps-windows-systray:
+	powershell -Command new-item .\apps -itemtype directory -force
+	powershell 'go build ${BUILD_OPTS} -o .\apps\skychat .\cmd\apps\skychat'
+	powershell 'go build ${BUILD_OPTS} -o .\apps\skysocks .\cmd\apps\skysocks'
+	powershell 'go build ${BUILD_OPTS} -o .\apps\skysocks-client .\cmd\apps\skysocks-client'
+	powershell 'go build ${BUILD_OPTS} -tags systray -o .\apps\vpn-server .\cmd\apps\vpn-server'
+	powershell 'go build ${BUILD_OPTS} -tags systray -o .\apps\vpn-client .\cmd\apps\vpn-client'
+
 # Static Apps
 host-apps-static: ## Build app
 	mkdir -p ./apps
@@ -204,6 +214,9 @@ bin: ## Build `skywire-visor`, `skywire-cli`
 
 bin-windows:
 	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go build ${BUILD_OPTS} -o ./ $$_.FullName }'
+
+bin-windows-systray:
+	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ $$_.FullName }'
 
 bin-systray:
 	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./skywire-visor ./cmd/skywire-visor
