@@ -16,7 +16,7 @@ func SignalContext(ctx context.Context, log logrus.FieldLogger) (context.Context
 
 	ctx, cancel := context.WithCancel(ctx)
 
-	ch := make(chan os.Signal, 1)
+	ch := make(chan os.Signal)
 	listenSigs := listenSignals()
 	signal.Notify(ch, listenSigs...)
 
