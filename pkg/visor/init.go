@@ -216,9 +216,7 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		time.Sleep(200 * time.Millisecond)
-		go dmsgC.Serve(context.Background())
-		time.Sleep(200 * time.Millisecond)
+		dmsgC.Serve(context.Background())
 	}()
 
 	v.pushCloseStack("dmsg", func() error {
