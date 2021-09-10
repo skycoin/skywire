@@ -32,6 +32,7 @@ const (
 // ServiceFlags represents common flags which are shared across services.
 type ServiceFlags struct {
 	MetricsAddr string
+	HTTPAddr    string
 	Syslog      string
 	SyslogNet   string
 	LogLevel    string
@@ -76,6 +77,7 @@ func (sf *ServiceFlags) Init(rootCmd *cobra.Command, defaultTag, defaultConf str
 
 	// flags
 	rootCmd.Flags().StringVarP(&sf.MetricsAddr, "metrics", "m", sf.MetricsAddr, "address to serve metrics API from")
+	rootCmd.Flags().StringVarP(&sf.HTTPAddr, "http", "p", ":8082", "address to serve http API for health endpoint")
 	rootCmd.Flags().StringVar(&sf.Syslog, "syslog", sf.Syslog, "address in which to dial to syslog server")
 	rootCmd.Flags().StringVar(&sf.SyslogNet, "syslog-net", sf.SyslogNet, "network in which to dial to syslog server")
 	rootCmd.Flags().StringVar(&sf.LogLevel, "syslog-lvl", sf.LogLevel, "minimum log level to report")
