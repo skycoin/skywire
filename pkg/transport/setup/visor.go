@@ -27,8 +27,6 @@ func NewTransportListener(ctx context.Context, conf *visorconfig.V1, dmsgC *dmsg
 	log := masterLogger.PackageLogger("transport_setup")
 	log.WithField("local_pk", conf.PK).Info("Connecting to the dmsg network.")
 
-	go dmsgC.Serve(ctx)
-
 	select {
 	case <-dmsgC.Ready():
 		log.WithField("local_pk", conf.PK).Info("Connected!")
