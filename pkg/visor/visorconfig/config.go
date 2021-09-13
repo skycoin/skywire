@@ -90,8 +90,7 @@ func defaultConfigFromCommon(cc *Common, hypervisor bool) (*V1, error) {
 	}
 
 	conf.Launcher.Discovery = &V1ServiceDisc{
-		UpdateInterval: Duration(skyenv.ServiceDiscUpdateInterval),
-		ServiceDisc:    skyenv.DefaultServiceDiscAddr,
+		ServiceDisc: skyenv.DefaultServiceDiscAddr,
 	}
 
 	conf.Launcher.Apps = []launcher.AppConfig{
@@ -220,7 +219,6 @@ func SetDefaultProductionValues(conf *V1) {
 		Addr: skyenv.DefaultUptimeTrackerAddr,
 	}
 	conf.Launcher.Discovery = &V1ServiceDisc{
-		UpdateInterval: Duration(skyenv.ServiceDiscUpdateInterval),
-		ServiceDisc:    skyenv.DefaultServiceDiscAddr,
+		ServiceDisc: skyenv.DefaultServiceDiscAddr,
 	}
 }
