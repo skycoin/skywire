@@ -259,6 +259,9 @@ func (p *Proc) Stop() error {
 		}
 	}
 
+	// deregister discovery service
+	p.disc.Stop()
+
 	// the lock will be acquired as soon as the cmd finishes its work
 	p.waitMx.Lock()
 	defer func() {
