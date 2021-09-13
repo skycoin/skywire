@@ -22,7 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
-	"github.com/skycoin/skywire/pkg/app/updatedisc"
+	"github.com/skycoin/skywire/pkg/app/managedisc"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
@@ -180,7 +180,7 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 
 func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// Prepare app discovery factory.
-	factory := updatedisc.Factory{
+	factory := managedisc.Factory{
 		Log: v.MasterLogger().PackageLogger("app_discovery"),
 	}
 
@@ -189,7 +189,6 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if conf.Discovery != nil {
 		factory.PK = v.conf.PK
 		factory.SK = v.conf.SK
-		factory.UpdateInterval = time.Duration(conf.Discovery.UpdateInterval)
 		factory.ServiceDisc = conf.Discovery.ServiceDisc
 	}
 	v.initLock.Lock()
@@ -643,12 +642,12 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
 		logger.Warn("Failed to get STCPR port")
 		return nil
 	}
-	visorUpdater := v.serviceDisc.VisorUpdater(uint16(port))
-	visorUpdater.Start()
+	visorManager := v.serviceDisc.VisorManager(uint16(port))
+	visorManager.Start()
 
 	v.log.Infof("Sent request to register visor as public")
-	v.pushCloseStack("visor updater", func() error {
-		visorUpdater.Stop()
+	v.pushCloseStack("visor manager", func() error {
+		visorManager.Stop()
 		return nil
 	})
 	return nil
