@@ -230,8 +230,8 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 	return entry, err
 }
 
-// DeleteEntry calls 'DELETE /api/services/{entry_addr}'.
-func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
+// DeregisterEntry calls 'DELETE /api/services/{entry_addr}'.
+func (c *HTTPClient) DeregisterEntry(ctx context.Context) (err error) {
 	auth, err := c.Auth(ctx)
 	if err != nil {
 		return err
@@ -267,36 +267,6 @@ func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
 		return &hErr
 	}
 	return nil
-}
-
-// UpdateLoop repetitively calls 'POST /api/services' to update entry.
-func (c *HTTPClient) UpdateLoop(ctx context.Context, updateInterval time.Duration) {
-	defer func() { _ = c.DeleteEntry(context.Background()) }() //nolint:errcheck
-
-	ticker := time.NewTicker(updateInterval)
-	defer ticker.Stop()
-
-	for {
-		if err := c.Update(ctx); errors.Is(err, ErrVisorUnreachable) {
-			return
-		}
-		c.entryMx.Lock()
-		j, err := json.Marshal(c.entry)
-		c.entryMx.Unlock()
-		logger := c.log.WithField("entry", string(j))
-		if err == nil {
-			logger.Debug("Entry updated.")
-		} else {
-			logger.Errorf("Service returned malformed entry, error: %s", err)
-			return
-		}
-
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-	}
 }
 
 // Update calls 'POST /api/services' to update service discovery entry
