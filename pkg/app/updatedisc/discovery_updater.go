@@ -52,7 +52,9 @@ func (u *serviceUpdater) Start() {
 
 	u.wg.Add(1)
 	go func() {
-		u.client.UpdateLoop(ctx, u.interval)
+		if err := u.client.Update(ctx); err != nil {
+			return
+		}
 		u.wg.Done()
 	}()
 }
@@ -62,6 +64,11 @@ func (u *serviceUpdater) Stop() {
 	defer u.mu.Unlock()
 
 	if u.cancel == nil {
+		return
+	}
+
+	ctx := context.Background()
+	if err := u.client.DeregisterEntry(ctx); err != nil {
 		return
 	}
 
