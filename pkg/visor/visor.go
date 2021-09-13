@@ -15,7 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
-	"github.com/skycoin/skywire/pkg/app/updatedisc"
+	"github.com/skycoin/skywire/pkg/app/managedisc"
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
@@ -66,7 +66,7 @@ type Visor struct {
 
 	procM       appserver.ProcManager // proc manager
 	appL        *launcher.Launcher    // app launcher
-	serviceDisc updatedisc.Factory
+	serviceDisc managedisc.Factory
 	initLock    *sync.Mutex
 	// when module is failed it pushes its error to this channel
 	// used by init and shutdown to show/check for any residual errors

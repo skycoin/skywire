@@ -1,4 +1,4 @@
-package updatedisc
+package managedisc
 
 // ChangeValue keys. Each key changes a different value for serviceUpdater.ChangeValue
 const (
