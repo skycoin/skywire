@@ -269,10 +269,10 @@ func (c *HTTPClient) DeregisterEntry(ctx context.Context) (err error) {
 	return nil
 }
 
-// Update calls 'POST /api/services' to update service discovery entry
-// it performs exponential backoff in case of errors during update, unless
+// RegisterEntry calls 'POST /api/services' to register service discovery entry
+// it performs exponential backoff in case of errors during register, unless
 // the error is unrecoverable from
-func (c *HTTPClient) Update(ctx context.Context) error {
+func (c *HTTPClient) RegisterEntry(ctx context.Context) error {
 	retrier := nu.NewRetrier(updateRetryDelay, 0, 2).WithErrWhitelist(ErrVisorUnreachable)
 	run := func() error {
 		err := c.UpdateEntry(ctx)
@@ -283,7 +283,7 @@ func (c *HTTPClient) Update(ctx context.Context) error {
 		}
 
 		if err != nil {
-			c.log.WithError(err).Warn("Failed to update service entry in discovery. Retrying...")
+			c.log.WithError(err).Warn("Failed to register service entry in discovery. Retrying...")
 			return err
 		}
 		return nil

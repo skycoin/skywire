@@ -17,7 +17,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
-	"github.com/skycoin/skywire/pkg/app/updatedisc"
+	"github.com/skycoin/skywire/pkg/app/managedisc"
 )
 
 var (
@@ -29,7 +29,7 @@ var (
 // communication.
 // TODO(evanlinjin): In the future, we will implement the ability to run multiple instances (procs) of a single app.
 type Proc struct {
-	disc updatedisc.Updater // app discovery client
+	disc managedisc.Manager // app discovery client
 	conf appcommon.ProcConfig
 	log  *logging.Logger
 
@@ -57,7 +57,7 @@ type Proc struct {
 }
 
 // NewProc constructs `Proc`.
-func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc updatedisc.Updater, m ProcManager,
+func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc managedisc.Manager, m ProcManager,
 	appName string) *Proc {
 	if mLog == nil {
 		mLog = logging.NewMasterLogger()
@@ -139,8 +139,8 @@ func (p *Proc) awaitConn() bool {
 	connDelta := p.rpcGW.cm.AddDeltaInformer()
 	go func() {
 		for n := range connDelta.Chan() {
-			if err := p.disc.ChangeValue(updatedisc.ConnCountValue, []byte(strconv.Itoa(n))); err != nil {
-				p.log.WithError(err).WithField("value", updatedisc.ConnCountValue).
+			if err := p.disc.ChangeValue(managedisc.ConnCountValue, []byte(strconv.Itoa(n))); err != nil {
+				p.log.WithError(err).WithField("value", managedisc.ConnCountValue).
 					Error("Failed to change app discovery value.")
 			}
 		}
@@ -149,8 +149,8 @@ func (p *Proc) awaitConn() bool {
 	lisDelta := p.rpcGW.lm.AddDeltaInformer()
 	go func() {
 		for n := range lisDelta.Chan() {
-			if err := p.disc.ChangeValue(updatedisc.ListenerCountValue, []byte(strconv.Itoa(n))); err != nil {
-				p.log.WithError(err).WithField("value", updatedisc.ListenerCountValue).
+			if err := p.disc.ChangeValue(managedisc.ListenerCountValue, []byte(strconv.Itoa(n))); err != nil {
+				p.log.WithError(err).WithField("value", managedisc.ListenerCountValue).
 					Error("Failed to change app discovery value.")
 			}
 		}
