@@ -1550,7 +1550,7 @@ func (hv *Hypervisor) serveDmsg(ctx context.Context, log *logging.Logger) {
 		<-hv.dmsgC.Ready()
 		if err := hv.ServeRPC(ctx, hv.c.DmsgPort); err != nil {
 			log := log.WithError(err)
-			if err == dmsg.ErrEntityClosed {
+			if errors.Is(err, dmsg.ErrEntityClosed) {
 				log.Info("Dmsg client stopped serving.")
 				return
 			}
