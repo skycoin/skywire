@@ -349,7 +349,7 @@ func (r *router) serveSetup() {
 		conn, err := r.sl.AcceptStream()
 		if err != nil {
 			log := r.logger.WithError(err)
-			if err == dmsg.ErrEntityClosed {
+			if errors.Is(err, dmsg.ErrEntityClosed) {
 				log.Info("Setup client stopped serving.")
 				return
 			}

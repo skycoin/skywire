@@ -2,6 +2,7 @@ package setup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/rpc"
 
@@ -61,7 +62,7 @@ func (ts *TransportListener) Serve(ctx context.Context) {
 		conn, err := lis.AcceptStream()
 		if err != nil {
 			log := ts.log.WithError(err)
-			if err == dmsg.ErrEntityClosed {
+			if errors.Is(err, dmsg.ErrEntityClosed) {
 				log.Info("Dmsg client stopped serving.")
 				break
 			}
