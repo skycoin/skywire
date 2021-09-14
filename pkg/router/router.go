@@ -351,9 +351,9 @@ func (r *router) serveSetup() {
 			log := r.logger.WithError(err)
 			if err == dmsg.ErrEntityClosed {
 				log.Info("Setup client stopped serving.")
-			} else {
-				log.Error("Setup client stopped serving due to unexpected error.")
+				return
 			}
+			log.Error("Setup client stopped serving due to unexpected error.")
 			return
 		}
 
