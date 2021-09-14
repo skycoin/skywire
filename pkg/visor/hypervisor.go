@@ -1552,9 +1552,10 @@ func (hv *Hypervisor) serveDmsg(ctx context.Context, log *logging.Logger) {
 			log := log.WithError(err)
 			if err == dmsg.ErrEntityClosed {
 				log.Info("Dmsg client stopped serving.")
-			} else {
-				log.Error("Failed to serve RPC client over dmsg.")
+				return
 			}
+			log.Error("Failed to serve RPC client over dmsg.")
+			return
 		}
 	}()
 	log.WithField("addr", dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}).

@@ -63,9 +63,9 @@ func (ts *TransportListener) Serve(ctx context.Context) {
 			log := ts.log.WithError(err)
 			if err == dmsg.ErrEntityClosed {
 				log.Info("Dmsg client stopped serving.")
-			} else {
-				log.Error("Failed to accept")
+				break
 			}
+			log.Error("Failed to accept")
 			break
 		}
 		remotePK := conn.RawRemoteAddr().PK
