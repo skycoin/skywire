@@ -19,10 +19,10 @@ import (
 
 	"github.com/skycoin/skywire/internal/utclient"
 	"github.com/skycoin/skywire/internal/vpn"
+	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
-	"github.com/skycoin/skywire/pkg/app/managedisc"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
@@ -180,7 +180,7 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 
 func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// Prepare app discovery factory.
-	factory := managedisc.Factory{
+	factory := appdisc.Factory{
 		Log: v.MasterLogger().PackageLogger("app_discovery"),
 	}
 
