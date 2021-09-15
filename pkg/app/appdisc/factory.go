@@ -1,4 +1,4 @@
-package managedisc
+package appdisc
 
 import (
 	"github.com/sirupsen/logrus"
