@@ -170,11 +170,11 @@ func ReserveRouteIDs(ctx context.Context, log logrus.FieldLogger, dialer network
 	if err != nil {
 		return nil, fmt.Errorf("failed to instantiate route id reserver: %w", err)
 	}
-	defer func() {
+	defer func(idR IDReserver) {
 		if err != nil {
 			log.WithError(idR.Close()).Warn("Closing router clients due to error.")
 		}
-	}()
+	}(idR)
 
 	if err = idR.ReserveIDs(ctx); err != nil {
 		return nil, fmt.Errorf("failed to reserve route ids: %w", err)
