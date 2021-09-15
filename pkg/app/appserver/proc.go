@@ -29,7 +29,7 @@ var (
 // communication.
 // TODO(evanlinjin): In the future, we will implement the ability to run multiple instances (procs) of a single app.
 type Proc struct {
-	disc managedisc.Manager // app discovery client
+	disc managedisc.Updater // app discovery client
 	conf appcommon.ProcConfig
 	log  *logging.Logger
 
@@ -57,7 +57,7 @@ type Proc struct {
 }
 
 // NewProc constructs `Proc`.
-func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc managedisc.Manager, m ProcManager,
+func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc managedisc.Updater, m ProcManager,
 	appName string) *Proc {
 	if mLog == nil {
 		mLog = logging.NewMasterLogger()
