@@ -27,11 +27,11 @@ func (f *Factory) setDefaults() {
 	}
 }
 
-// VisorManager obtains a visor manager.
-func (f *Factory) VisorManager(port uint16) Manager {
-	// Always return empty manager if keys are not set.
+// VisorUpdater obtains a visor updater.
+func (f *Factory) VisorUpdater(port uint16) Updater {
+	// Always return empty updater if keys are not set.
 	if f.setDefaults(); f.PK.Null() || f.SK.Null() {
-		return &emptyManager{}
+		return &emptyUpdater{}
 	}
 
 	conf := servicedisc.Config{
@@ -42,23 +42,23 @@ func (f *Factory) VisorManager(port uint16) Manager {
 		DiscAddr: f.ServiceDisc,
 	}
 
-	return &serviceManager{
+	return &serviceUpdater{
 		client: servicedisc.NewClient(f.Log, conf),
 	}
 }
 
-// AppManager obtains an app manager based on the app name and configuration.
-func (f *Factory) AppManager(conf appcommon.ProcConfig) (Manager, bool) {
-	// Always return empty manager if keys are not set.
+// AppUpdater obtains an app updater based on the app name and configuration.
+func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
+	// Always return empty updater if keys are not set.
 	if f.setDefaults(); f.PK.Null() || f.SK.Null() {
-		return &emptyManager{}, false
+		return &emptyUpdater{}, false
 	}
 
 	log := f.Log.WithField("appName", conf.AppName)
 
-	// Do not manage in service discovery if passcode-protected.
+	// Do not update in service discovery if passcode-protected.
 	if conf.ContainsFlag("passcode") && conf.ArgVal("passcode") != "" {
-		return &emptyManager{}, false
+		return &emptyUpdater{}, false
 	}
 
 	getServiceDiscConf := func(conf appcommon.ProcConfig, sType string) servicedisc.Config {
@@ -73,10 +73,10 @@ func (f *Factory) AppManager(conf appcommon.ProcConfig) (Manager, bool) {
 
 	switch conf.AppName {
 	case skyenv.VPNServerName:
-		return &serviceManager{
+		return &serviceUpdater{
 			client: servicedisc.NewClient(log, getServiceDiscConf(conf, servicedisc.ServiceTypeVPN)),
 		}, true
 	default:
-		return &emptyManager{}, false
+		return &emptyUpdater{}, false
 	}
 }

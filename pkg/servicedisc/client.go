@@ -230,8 +230,8 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 	return entry, err
 }
 
-// DeregisterEntry calls 'DELETE /api/services/{entry_addr}'.
-func (c *HTTPClient) DeregisterEntry(ctx context.Context) (err error) {
+// DeleteEntry calls 'DELETE /api/services/{entry_addr}'.
+func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
 	auth, err := c.Auth(ctx)
 	if err != nil {
 		return err
