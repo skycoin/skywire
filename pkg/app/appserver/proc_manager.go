@@ -13,8 +13,8 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
-	"github.com/skycoin/skywire/pkg/app/managedisc"
 )
 
 //go:generate mockery -name ProcManager -case underscore -inpkg
@@ -57,7 +57,7 @@ type procManager struct {
 	conns   map[string]net.Conn
 	connsWG sync.WaitGroup
 
-	discF      *managedisc.Factory
+	discF      *appdisc.Factory
 	procs      map[string]*Proc
 	procsByKey map[appcommon.ProcKey]*Proc
 
@@ -69,12 +69,12 @@ type procManager struct {
 }
 
 // NewProcManager constructs `ProcManager`.
-func NewProcManager(mLog *logging.MasterLogger, discF *managedisc.Factory, eb *appevent.Broadcaster, addr string) (ProcManager, error) {
+func NewProcManager(mLog *logging.MasterLogger, discF *appdisc.Factory, eb *appevent.Broadcaster, addr string) (ProcManager, error) {
 	if mLog == nil {
 		mLog = logging.NewMasterLogger()
 	}
 	if discF == nil {
-		discF = new(managedisc.Factory)
+		discF = new(appdisc.Factory)
 	}
 	if eb == nil {
 		eb = appevent.NewBroadcaster(mLog.PackageLogger("event_broadcaster"), time.Second)
