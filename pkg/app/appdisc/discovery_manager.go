@@ -1,4 +1,4 @@
-package managedisc
+package appdisc
 
 import (
 	"context"
