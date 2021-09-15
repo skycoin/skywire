@@ -642,12 +642,12 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
 		logger.Warn("Failed to get STCPR port")
 		return nil
 	}
-	visorManager := v.serviceDisc.VisorManager(uint16(port))
-	visorManager.Start()
+	visorUpdater := v.serviceDisc.VisorUpdater(uint16(port))
+	visorUpdater.Start()
 
 	v.log.Infof("Sent request to register visor as public")
 	v.pushCloseStack("visor manager", func() error {
-		visorManager.Stop()
+		visorUpdater.Stop()
 		return nil
 	})
 	return nil

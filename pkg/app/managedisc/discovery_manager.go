@@ -8,33 +8,33 @@ import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 )
 
-// Manager manages the associated app discovery
-type Manager interface {
+// Updater update the associated app discovery
+type Updater interface {
 
-	// Start starts the manager.
+	// Start starts the updater.
 	Start()
 
-	// Stop stops the manager.
+	// Stop stops the updater.
 	Stop()
 
 	// ChangeValue changes the associated value of the discovery entry.
 	ChangeValue(name string, v []byte) error
 }
 
-// emptyManager is for apps that do not require discovery manages.
-type emptyManager struct{}
+// emptyUpdater is for apps that do not require discovery updates.
+type emptyUpdater struct{}
 
-func (emptyManager) Start()                                  {}
-func (emptyManager) Stop()                                   {}
-func (emptyManager) ChangeValue(name string, v []byte) error { return nil }
+func (emptyUpdater) Start()                                  {}
+func (emptyUpdater) Stop()                                   {}
+func (emptyUpdater) ChangeValue(name string, v []byte) error { return nil }
 
-// serviceManager manages service-discovery entry of locally running App.
-type serviceManager struct {
+// serviceUpdater updates service-discovery entry of locally running App.
+type serviceUpdater struct {
 	client *servicedisc.HTTPClient
 	mu     sync.Mutex
 }
 
-func (u *serviceManager) Start() {
+func (u *serviceUpdater) Start() {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 
@@ -44,17 +44,17 @@ func (u *serviceManager) Start() {
 	}
 }
 
-func (u *serviceManager) Stop() {
+func (u *serviceUpdater) Stop() {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 
 	ctx := context.Background()
-	if err := u.client.DeregisterEntry(ctx); err != nil {
+	if err := u.client.DeleteEntry(ctx); err != nil {
 		return
 	}
 }
 
-func (u *serviceManager) ChangeValue(name string, v []byte) error {
+func (u *serviceUpdater) ChangeValue(name string, v []byte) error {
 	switch name {
 	case ConnCountValue:
 		n, err := strconv.Atoi(string(v))
