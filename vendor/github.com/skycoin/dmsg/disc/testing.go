@@ -35,6 +35,12 @@ func (m *mockClient) entry(pk cipher.PubKey) (Entry, bool) {
 	return e, ok
 }
 
+func (m *mockClient) delEntry(pk cipher.PubKey) {
+	m.mx.Lock()
+	defer m.mx.Unlock()
+	delete(m.entries, pk)
+}
+
 func (m *mockClient) setEntry(entry Entry) {
 	m.mx.Lock()
 	defer m.mx.Unlock()
@@ -84,6 +90,12 @@ func (m *mockClient) PostEntry(_ context.Context, entry *Entry) error {
 	}
 
 	m.setEntry(*entry)
+	return nil
+}
+
+// DelEntry returns the mock client static public key associated entry
+func (m *mockClient) DelEntry(_ context.Context, entry *Entry) error {
+	m.delEntry(entry.Static)
 	return nil
 }
 
