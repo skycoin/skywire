@@ -1,6 +1,11 @@
+# github.com/ActiveState/termtest/conpty v0.5.0
+github.com/ActiveState/termtest/conpty
 # github.com/AudriusButkevicius/pfilter v0.0.0-20210515103320-4b4b86609d51
 ## explicit
 github.com/AudriusButkevicius/pfilter
+# github.com/Azure/go-ansiterm v0.0.0-20170929234023-d6e3b3328b78
+github.com/Azure/go-ansiterm
+github.com/Azure/go-ansiterm/winterm
 # github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d
 ## explicit
 github.com/StackExchange/wmi
@@ -128,7 +133,7 @@ github.com/shirou/gopsutil/process
 ## explicit
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v0.0.0-20210827120633-3d20b41d46a2
+# github.com/skycoin/dmsg v0.0.0-20210915195912-2f9b055f39fe
 ## explicit
 github.com/skycoin/dmsg
 github.com/skycoin/dmsg/buildinfo
