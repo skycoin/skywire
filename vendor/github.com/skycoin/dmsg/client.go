@@ -106,7 +106,7 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 	c.EntityCommon.init(pk, sk, dc, log, conf.UpdateInterval)
 
 	// Init callback: on set session.
-	c.EntityCommon.setSessionCallback = func(ctx context.Context, sessionCount int) error {
+	c.EntityCommon.setSessionCallback = func(ctx context.Context) error {
 		if err := c.EntityCommon.updateClientEntry(ctx, c.done); err != nil {
 			return err
 		}
@@ -118,7 +118,7 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 	}
 
 	// Init callback: on delete session.
-	c.EntityCommon.delSessionCallback = func(ctx context.Context, sessionCount int) error {
+	c.EntityCommon.delSessionCallback = func(ctx context.Context) error {
 		err := c.EntityCommon.updateClientEntry(ctx, c.done)
 		return err
 	}
@@ -148,9 +148,6 @@ func (ce *Client) Serve(ctx context.Context) {
 			cancel()
 		}
 	}(cancellabelCtx)
-
-	// Ensure we start updateClientEntryLoop once only.
-	updateEntryLoopOnce := new(sync.Once)
 
 	for {
 		if isClosed(ce.done) {
@@ -197,9 +194,6 @@ func (ce *Client) Serve(ctx context.Context) {
 				}
 				time.Sleep(serveWait)
 			}
-
-			// Only start the update entry loop once we have at least one session established.
-			updateEntryLoopOnce.Do(func() { go ce.updateClientEntryLoop(cancellabelCtx, ce.done) })
 		}
 	}
 }
@@ -224,7 +218,7 @@ func (ce *Client) Close() error {
 	if ce == nil {
 		return nil
 	}
-
+	var err error
 	ce.once.Do(func() {
 		close(ce.done)
 
@@ -241,11 +235,10 @@ func (ce *Client) Close() error {
 		ce.sessions = make(map[cipher.PubKey]*SessionCommon)
 		ce.log.Info("All sessions closed.")
 		ce.sessionsMx.Unlock()
-
 		ce.porter.CloseAll(ce.log)
+		err = ce.EntityCommon.delClientEntry(context.Background())
 	})
-
-	return nil
+	return err
 }
 
 // Listen listens on a given dmsg port.
