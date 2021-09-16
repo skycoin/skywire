@@ -7,7 +7,6 @@ import (
 	"net/rpc"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -135,26 +134,6 @@ func (p *Proc) awaitConn() bool {
 	if err := rpcS.RegisterName(p.conf.ProcKey.String(), p.rpcGW); err != nil {
 		panic(err)
 	}
-
-	connDelta := p.rpcGW.cm.AddDeltaInformer()
-	go func() {
-		for n := range connDelta.Chan() {
-			if err := p.disc.ChangeValue(appdisc.ConnCountValue, []byte(strconv.Itoa(n))); err != nil {
-				p.log.WithError(err).WithField("value", appdisc.ConnCountValue).
-					Error("Failed to change app discovery value.")
-			}
-		}
-	}()
-
-	lisDelta := p.rpcGW.lm.AddDeltaInformer()
-	go func() {
-		for n := range lisDelta.Chan() {
-			if err := p.disc.ChangeValue(appdisc.ListenerCountValue, []byte(strconv.Itoa(n))); err != nil {
-				p.log.WithError(err).WithField("value", appdisc.ListenerCountValue).
-					Error("Failed to change app discovery value.")
-			}
-		}
-	}()
 
 	go rpcS.ServeConn(p.conn)
 

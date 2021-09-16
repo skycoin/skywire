@@ -2,13 +2,12 @@ package appdisc
 
 import (
 	"context"
-	"strconv"
 	"sync"
 
 	"github.com/skycoin/skywire/pkg/servicedisc"
 )
 
-// Updater update the associated app discovery
+// Updater updates the associated app discovery
 type Updater interface {
 
 	// Start starts the updater.
@@ -16,17 +15,13 @@ type Updater interface {
 
 	// Stop stops the updater.
 	Stop()
-
-	// ChangeValue changes the associated value of the discovery entry.
-	ChangeValue(name string, v []byte) error
 }
 
 // emptyUpdater is for apps that do not require discovery updates.
 type emptyUpdater struct{}
 
-func (emptyUpdater) Start()                                  {}
-func (emptyUpdater) Stop()                                   {}
-func (emptyUpdater) ChangeValue(name string, v []byte) error { return nil }
+func (emptyUpdater) Start() {}
+func (emptyUpdater) Stop()  {}
 
 // serviceUpdater updates service-discovery entry of locally running App.
 type serviceUpdater struct {
@@ -52,16 +47,4 @@ func (u *serviceUpdater) Stop() {
 	if err := u.client.DeleteEntry(ctx); err != nil {
 		return
 	}
-}
-
-func (u *serviceUpdater) ChangeValue(name string, v []byte) error {
-	switch name {
-	case ConnCountValue:
-		n, err := strconv.Atoi(string(v))
-		if err != nil {
-			return err
-		}
-		go u.client.UpdateStats(servicedisc.Stats{ConnectedClients: n})
-	}
-	return nil
 }
