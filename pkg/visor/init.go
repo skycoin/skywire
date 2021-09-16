@@ -470,7 +470,7 @@ func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 // Make an env maker function for vpn application
 func vpnEnvMaker(conf *visorconfig.V1, dmsgC *dmsg.Client, tpRemoteAddrs []string) launcher.EnvMaker {
-	return launcher.EnvMaker(func() ([]string, error) {
+	return func() ([]string, error) {
 		var envCfg vpn.DirectRoutesEnvConfig
 
 		if conf.Dmsg != nil {
@@ -521,7 +521,7 @@ func vpnEnvMaker(conf *visorconfig.V1, dmsgC *dmsg.Client, tpRemoteAddrs []strin
 		}
 
 		return envs, nil
-	})
+	}
 }
 
 func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
