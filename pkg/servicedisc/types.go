@@ -97,11 +97,6 @@ type GeoLocation struct {
 	Region  string  `json:"region,omitempty"`
 }
 
-// Stats provides various statistics on the service-discovery service.
-type Stats struct {
-	ConnectedClients int `json:"connected_clients"`
-}
-
 // Service represents a service entry in service-discovery.
 type Service struct {
 	Addr     SWAddr       `json:"address"`
