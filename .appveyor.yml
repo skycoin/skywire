@@ -1,6 +1,6 @@
 version: "{build}"
 
-stack: node 10.16.3
+stack: node 16.8.0
 
 environment:
   matrix:
