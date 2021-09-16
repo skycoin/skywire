@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	// ServiceTypeProxy stands for the skysocks discovery.
-	ServiceTypeProxy = "skysocks"
+	// ServiceTypeSkysocks stands for the skysocks discovery.
+	ServiceTypeSkysocks = "skysocks"
 	// ServiceTypeVPN stands for the VPN discovery.
 	ServiceTypeVPN = "vpn"
 	// ServiceTypeVisor stands for visor.

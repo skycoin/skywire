@@ -78,7 +78,7 @@ func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
 		}, true
 	case skyenv.SkysocksName:
 		return &serviceUpdater{
-			client: servicedisc.NewClient(log, getServiceDiscConf(conf, servicedisc.ServiceTypeProxy)),
+			client: servicedisc.NewClient(log, getServiceDiscConf(conf, servicedisc.ServiceTypeSkysocks)),
 		}, true
 	default:
 		return &emptyUpdater{}, false
