@@ -51,17 +51,11 @@ type HTTPClient struct {
 
 // NewClient creates a new HTTPClient.
 func NewClient(log logrus.FieldLogger, conf Config) *HTTPClient {
-	var stats *Stats
-	if conf.Type != ServiceTypeVisor {
-		stats = &Stats{ConnectedClients: 0}
-	}
-
 	return &HTTPClient{
 		log:  log,
 		conf: conf,
 		entry: Service{
 			Addr:    NewSWAddr(conf.PK, conf.Port),
-			Stats:   stats,
 			Type:    conf.Type,
 			Version: buildinfo.Version(),
 		},
