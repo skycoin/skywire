@@ -9,12 +9,6 @@ dist: xenial
 services:
   - docker
 
-addons:
-  apt:
-    packages:
-      # For building MUSL static builds on Linux.
-      - musl-tools
-
 matrix:
   include:
     - os: linux
@@ -24,21 +18,22 @@ matrix:
       osx_image: xcode8.3
 
 before_install:
-  - nvm install 10.16
+  - nvm install 14.15
+  - curl -sfL https://install.goreleaser.com/github.com/goreleaser/goreleaser.sh | sh
+  - curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $GOPATH/bin v1.42.0
 
 install:
-  - curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $GOPATH/bin v1.40.1
   - make dep
 
 before_script:
   - ci_scripts/create-ip-aliases.sh
 
 script:
-  - make build
   - make check
   - make install-deps-ui
   - make lint-ui
   - make build-ui
+  - make build
 
 deploy:
   - provider: script
@@ -51,4 +46,7 @@ deploy:
     on:
       branch: develop
       condition: $TRAVIS_PULL_REQUEST = false
-
+  - provider: script
+    script: make github-release
+    on:
+      tags: true
