@@ -34,7 +34,7 @@ func (u *serviceUpdater) Start() {
 	defer u.mu.Unlock()
 
 	ctx := context.Background()
-	if err := u.client.RegisterEntry(ctx); err != nil {
+	if err := u.client.Register(ctx); err != nil {
 		return
 	}
 }
