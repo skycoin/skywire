@@ -290,10 +290,3 @@ func (c *HTTPClient) RegisterEntry(ctx context.Context) error {
 	}
 	return retrier.Do(run)
 }
-
-// UpdateStats updates the stats field of the internal service entry state.
-func (c *HTTPClient) UpdateStats(stats Stats) {
-	c.entryMx.Lock()
-	c.entry.Stats = &stats
-	c.entryMx.Unlock()
-}
