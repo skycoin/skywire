@@ -646,7 +646,7 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	visorUpdater.Start()
 
 	v.log.Infof("Sent request to register visor as public")
-	v.pushCloseStack("visor manager", func() error {
+	v.pushCloseStack("public visor updater", func() error {
 		visorUpdater.Stop()
 		return nil
 	})
