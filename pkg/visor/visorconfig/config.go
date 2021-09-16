@@ -159,15 +159,16 @@ func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 		CLINet:  skyenv.DefaultDmsgPtyCLINet,
 		CLIAddr: skyenv.DefaultDmsgPtyCLIAddr,
 	}
-	conf.LocalPath = skyenv.PackageLocalPath
-	conf.Launcher.BinPath = skyenv.PackageAppBinPath
+	conf.LocalPath = skyenv.PackageAppLocalPath()
+	conf.Launcher.BinPath = skyenv.PackageAppBinPath()
 
 	if conf.Hypervisor != nil {
 		conf.Hypervisor.EnableAuth = skyenv.DefaultEnableAuth
-		conf.Hypervisor.EnableTLS = skyenv.PackageEnableTLS
-		conf.Hypervisor.TLSKeyFile = skyenv.PackageTLSKey
-		conf.Hypervisor.TLSCertFile = skyenv.PackageTLSCert
-		conf.Hypervisor.DBPath = skyenv.PackageDBPath
+		conf.Hypervisor.TLSKeyFile = skyenv.PackageTLSKey()
+		conf.Hypervisor.TLSCertFile = skyenv.PackageTLSCert()
+		conf.Hypervisor.TLSKeyFile = skyenv.PackageTLSKey()
+		conf.Hypervisor.TLSCertFile = skyenv.PackageTLSCert()
+		conf.Hypervisor.DBPath = skyenv.PackageDBPath()
 	}
 	return conf, nil
 }
