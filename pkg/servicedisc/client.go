@@ -148,11 +148,11 @@ func (c *HTTPClient) Services(ctx context.Context, quantity int) (out []Service,
 	return out, err
 }
 
-// UpdateEntry calls 'POST /api/services', retrieves the entry
+// RegisterEntry calls 'POST /api/services', retrieves the entry
 // and updates local field with the result
 // if there are no ip addresses in the entry it also tries to fetch those
 // from local config
-func (c *HTTPClient) UpdateEntry(ctx context.Context) error {
+func (c *HTTPClient) RegisterEntry(ctx context.Context) error {
 	c.entryMx.Lock()
 	defer c.entryMx.Unlock()
 	if c.conf.Type == ServiceTypeVisor && len(c.entry.LocalIPs) == 0 {
@@ -269,13 +269,13 @@ func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
 	return nil
 }
 
-// RegisterEntry calls 'POST /api/services' to register service discovery entry
+// Register calls 'POST /api/services' to register service discovery entry
 // it performs exponential backoff in case of errors during register, unless
 // the error is unrecoverable from
-func (c *HTTPClient) RegisterEntry(ctx context.Context) error {
+func (c *HTTPClient) Register(ctx context.Context) error {
 	retrier := nu.NewRetrier(updateRetryDelay, 0, 2).WithErrWhitelist(ErrVisorUnreachable)
 	run := func() error {
-		err := c.UpdateEntry(ctx)
+		err := c.RegisterEntry(ctx)
 
 		if errors.Is(err, ErrVisorUnreachable) {
 			c.log.Errorf("Unable to register visor as public trusted as it's unreachable from WAN")
