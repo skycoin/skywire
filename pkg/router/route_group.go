@@ -619,6 +619,12 @@ func (rg *RouteGroup) handleNetworkProbePacket(packet routing.Packet) error {
 }
 
 func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
+	// not good fix
+	// defer func() {
+	// 	if x := recover(); x != nil {
+	// 		rg.logger.Errorf("run time panic: %v", x)
+	// 	}
+	// }()
 	rg.networkStats.AddBandwidthReceived(uint64(packet.Size()))
 
 	select {
