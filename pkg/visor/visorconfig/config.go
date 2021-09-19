@@ -33,12 +33,10 @@ func MakeBaseConfig(common *Common) *V1 {
 		RouteFinderTimeout: DefaultTimeout,
 	}
 	conf.Launcher = &V1Launcher{
-		Discovery: &V1ServiceDisc{
-			ServiceDisc: skyenv.DefaultServiceDiscAddr,
-		},
-		Apps:       nil,
-		ServerAddr: skyenv.DefaultAppSrvAddr,
-		BinPath:    skyenv.DefaultAppBinPath,
+		ServiceDisc: skyenv.DefaultServiceDiscAddr,
+		Apps:        nil,
+		ServerAddr:  skyenv.DefaultAppSrvAddr,
+		BinPath:     skyenv.DefaultAppBinPath,
 	}
 	conf.UptimeTracker = &V1UptimeTracker{
 		Addr: skyenv.DefaultUptimeTrackerAddr,
@@ -89,9 +87,7 @@ func defaultConfigFromCommon(cc *Common, hypervisor bool) (*V1, error) {
 		Addr: skyenv.DefaultUptimeTrackerAddr,
 	}
 
-	conf.Launcher.Discovery = &V1ServiceDisc{
-		ServiceDisc: skyenv.DefaultServiceDiscAddr,
-	}
+	conf.Launcher.ServiceDisc = skyenv.DefaultServiceDiscAddr
 
 	conf.Launcher.Apps = []launcher.AppConfig{
 		{
@@ -205,7 +201,7 @@ func SetDefaultTestingValues(conf *V1) {
 	conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
 	conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.TestSetupPK)}
 	conf.UptimeTracker.Addr = skyenv.TestUptimeTrackerAddr
-	conf.Launcher.Discovery.ServiceDisc = skyenv.TestServiceDiscAddr
+	conf.Launcher.ServiceDisc = skyenv.TestServiceDiscAddr
 }
 
 // SetDefaultProductionValues mutates configuration to use production values
@@ -218,7 +214,5 @@ func SetDefaultProductionValues(conf *V1) {
 	conf.UptimeTracker = &V1UptimeTracker{
 		Addr: skyenv.DefaultUptimeTrackerAddr,
 	}
-	conf.Launcher.Discovery = &V1ServiceDisc{
-		ServiceDisc: skyenv.DefaultServiceDiscAddr,
-	}
+	conf.Launcher.ServiceDisc = skyenv.DefaultServiceDiscAddr
 }
