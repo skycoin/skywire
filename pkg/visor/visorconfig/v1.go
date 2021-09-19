@@ -103,17 +103,12 @@ type V1UptimeTracker struct {
 	Addr string `json:"addr"`
 }
 
-// V1ServiceDisc configures Skywire App Discovery Clients.
-type V1ServiceDisc struct {
-	ServiceDisc string `json:"service_discovery"`
-}
-
 // V1Launcher configures the app launcher.
 type V1Launcher struct {
-	Discovery  *V1ServiceDisc       `json:"discovery"`
-	Apps       []launcher.AppConfig `json:"apps"`
-	ServerAddr string               `json:"server_addr"`
-	BinPath    string               `json:"bin_path"`
+	ServiceDisc string               `json:"service_discovery"`
+	Apps        []launcher.AppConfig `json:"apps"`
+	ServerAddr  string               `json:"server_addr"`
+	BinPath     string               `json:"bin_path"`
 }
 
 // Flush flushes the config to file (if specified).
