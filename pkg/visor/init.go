@@ -186,10 +186,10 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	conf := v.conf.Launcher
 
-	if conf.Discovery != nil {
+	if conf.ServiceDisc != "" {
 		factory.PK = v.conf.PK
 		factory.SK = v.conf.SK
-		factory.ServiceDisc = conf.Discovery.ServiceDisc
+		factory.ServiceDisc = conf.ServiceDisc
 	}
 	v.initLock.Lock()
 	v.serviceDisc = factory
@@ -668,7 +668,7 @@ func initPublicVisors(ctx context.Context, v *Visor, log *logging.Logger) error 
 	if !v.conf.Transport.AutoconnectPublic {
 		return nil
 	}
-	serviceDisc := v.conf.Launcher.Discovery.ServiceDisc
+	serviceDisc := v.conf.Launcher.ServiceDisc
 	if serviceDisc == "" {
 		serviceDisc = skyenv.DefaultServiceDiscAddr
 	}
