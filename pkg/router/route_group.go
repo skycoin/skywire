@@ -632,7 +632,6 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
 	case <-rg.closed:
 		return io.ErrClosedPipe
 	case rg.readCh <- packet.Payload():
-		rg.logger.Errorf("isRemoteClosed:", rg.isRemoteClosed())
 	}
 
 	return nil
