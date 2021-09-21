@@ -34,8 +34,9 @@ const (
 	addrChSize               = 1024
 	udpKeepHeartbeatInterval = 10 * time.Second
 	udpKeepHeartbeatMessage  = "heartbeat"
-	udpUnbindMessage         = "unbind"
 	defaultUDPPort           = "30178"
+	// UDPUnbindMessage is used in unbind packet on visor shutdown.
+	UDPUnbindMessage = "unbind"
 )
 
 var (
@@ -496,7 +497,7 @@ func (c *httpClient) unbindSUDPH(w io.Writer) error {
 	// send unbind packet on shutdown
 	<-c.closed
 	defer c.unbindSUDPHWg.Done()
-	if _, err := w.Write([]byte(udpUnbindMessage)); err != nil {
+	if _, err := w.Write([]byte(UDPUnbindMessage)); err != nil {
 		return err
 	}
 	return nil
