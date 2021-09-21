@@ -29,6 +29,7 @@ const (
 	// sudphPriority is used to set an order how connection filters apply.
 	sudphPriority            = 1
 	stcprBindPath            = "/bind/stcpr"
+	stcprUnbindPath          = "/unbind/stcpr"
 	addrChSize               = 1024
 	udpKeepHeartbeatInterval = 10 * time.Second
 	udpKeepHeartbeatMessage  = "heartbeat"
@@ -172,6 +173,25 @@ func (c *httpClient) Post(ctx context.Context, path string, payload interface{})
 	return c.httpClient.Do(req.WithContext(ctx))
 }
 
+// Delete performs a DELETE request.
+func (c *httpClient) Delete(ctx context.Context, path string) (*http.Response, error) {
+	<-c.ready
+	var payload struct{}
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(payload); err != nil {
+		return nil, err
+	}
+
+	addr := c.httpClient.Addr() + path
+
+	req, err := http.NewRequest(http.MethodDelete, addr, body)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.httpClient.Do(req.WithContext(ctx))
+}
+
 // BindRequest stores bind request values.
 type BindRequest struct {
 	Port string `json:"port"`
@@ -227,17 +247,8 @@ func (c *httpClient) unBindSTCPR(ctx context.Context) error {
 		c.log.Debugf("UnBindSTCPR: Address resolver became ready, unbinding")
 	}
 
-	addresses, err := netutil.LocalAddresses()
-	if err != nil {
-		return err
-	}
-
-	localAddresses := LocalAddresses{
-		Addresses: addresses,
-	}
-
-	c.log.Infof("UnBindSTCPR: Address resolver unbinding: %v", addresses)
-	resp, err := c.Post(ctx, stcprBindPath, localAddresses)
+	c.log.Debugf("UnBindSTCPR: Address resolver unbinding pk: %v", c.pk.String())
+	resp, err := c.Delete(ctx, stcprUnbindPath)
 	if err != nil {
 		return err
 	}
@@ -252,6 +263,7 @@ func (c *httpClient) unBindSTCPR(ctx context.Context) error {
 		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
 	}
 
+	c.log.Debugf("UnBindSTCPR: Address resolver successfully unbound pk: %v", c.pk.String())
 	return nil
 }
 
