@@ -555,6 +555,7 @@ func (tm *Manager) Close() {
 			tm.Logger.WithError(err).Warnf("Failed to close %s client", client.Type())
 		}
 	}
+	tm.arClient.Close()
 	tm.wg.Wait()
 	close(tm.readCh)
 }
