@@ -51,11 +51,11 @@ type Error struct {
 
 // APIClient implements address resolver API client.
 type APIClient interface {
-	io.Closer
 	BindSTCPR(ctx context.Context, port string) error
 	BindSUDPH(filter *pfilter.PacketFilter, handshake Handshake) (<-chan RemoteVisor, error)
 	Resolve(ctx context.Context, netType string, pk cipher.PubKey) (VisorData, error)
 	Health(ctx context.Context) (int, error)
+	Close() error
 }
 
 // VisorData stores visor data.
@@ -201,6 +201,42 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 		Port:      port,
 	}
 	c.log.Infof("BindSTCPR: Address resolver binding with: %v", addresses)
+	resp, err := c.Post(ctx, stcprBindPath, localAddresses)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.log.WithError(err).Warn("Failed to close response body")
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
+	}
+
+	return nil
+}
+
+// UnBindSTCPR uinbinds client PK to IP:port on address resolver.
+func (c *httpClient) unBindSTCPR(ctx context.Context) error {
+	if !c.isReady() {
+		c.log.Debugf("UnBindSTCPR: Address resolver is not ready yet, waiting...")
+		<-c.ready
+		c.log.Debugf("UnBindSTCPR: Address resolver became ready, unbinding")
+	}
+
+	addresses, err := netutil.LocalAddresses()
+	if err != nil {
+		return err
+	}
+
+	localAddresses := LocalAddresses{
+		Addresses: addresses,
+	}
+
+	c.log.Infof("UnBindSTCPR: Address resolver unbinding: %v", addresses)
 	resp, err := c.Post(ctx, stcprBindPath, localAddresses)
 	if err != nil {
 		return err
@@ -408,6 +444,10 @@ func (c *httpClient) Close() error {
 			c.log.WithError(err).Errorf("Failed to close SUDPH")
 		}
 		close(c.closed)
+	}
+
+	if err := c.unBindSTCPR(context.Background()); err != nil {
+		c.log.WithError(err).Errorf("Failed to unbind STCPR")
 	}
 
 	return nil
