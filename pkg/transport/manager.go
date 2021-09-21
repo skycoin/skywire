@@ -203,10 +203,16 @@ func (tm *Manager) acceptTransports(ctx context.Context, lis network.Listener, t
 			return
 		default:
 			if err := tm.acceptTransport(ctx, lis); err != nil {
-				tm.Logger.Warnf("Failed to accept transport: %v", err)
+				log := tm.Logger.WithError(err)
+				if errors.Is(err, dmsg.ErrEntityClosed) {
+					log.Info("Dmsg client stopped serving.")
+					return
+				}
 				if errors.Is(err, io.ErrClosedPipe) {
 					return
 				}
+				log.Warnf("Failed to accept transport")
+				return
 			}
 		}
 	}

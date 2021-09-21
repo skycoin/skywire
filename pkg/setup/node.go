@@ -177,7 +177,7 @@ func ReserveRouteIDs(ctx context.Context, log logrus.FieldLogger, dialer network
 	}()
 
 	if err = idR.ReserveIDs(ctx); err != nil {
-		return nil, fmt.Errorf("failed to reserve route ids: %w", err)
+		return idR, fmt.Errorf("failed to reserve route ids: %w", err)
 	}
 	return idR, nil
 }
