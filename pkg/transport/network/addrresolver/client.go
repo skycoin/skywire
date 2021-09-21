@@ -80,7 +80,7 @@ type httpClient struct {
 	sudphConn      net.PacketConn
 	ready          chan struct{}
 	closed         chan struct{}
-	unbindSUDPHWg  sync.WaitGroup
+	unbindSudphWg  sync.WaitGroup
 }
 
 // NewHTTP creates a new client setting a public key to the client to be used for auth.
@@ -462,9 +462,9 @@ func (c *httpClient) Close() error {
 	}()
 
 	if c.sudphConn != nil {
-		c.unbindSUDPHWg.Add(1)
+		c.unbindSudphWg.Add(1)
 		close(c.closed)
-		c.unbindSUDPHWg.Wait()
+		c.unbindSudphWg.Wait()
 		if err := c.sudphConn.Close(); err != nil {
 			c.log.WithError(err).Errorf("Failed to close SUDPH")
 		}
@@ -496,7 +496,7 @@ func (c *httpClient) keepSudphHeartbeatLoop(w io.Writer) error {
 func (c *httpClient) unbindSUDPH(w io.Writer) error {
 	// send unbind packet on shutdown
 	<-c.closed
-	defer c.unbindSUDPHWg.Done()
+	defer c.unbindSudphWg.Done()
 	if _, err := w.Write([]byte(UDPUnbindMessage)); err != nil {
 		return err
 	}
