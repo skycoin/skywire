@@ -430,6 +430,10 @@ func (c *httpClient) readSUDPHMessages(reader io.Reader) <-chan RemoteVisor {
 			default:
 				n, err := reader.Read(buf)
 				if err != nil {
+					if c.isClosed() {
+						c.log.Infof("SUDPH conn closed on shutdown message: %v", err)
+						return
+					}
 					c.log.Errorf("Failed to read SUDPH message: %v", err)
 					return
 				}
@@ -501,6 +505,15 @@ func (c *httpClient) unbindSUDPH(w io.Writer) error {
 		return err
 	}
 	return nil
+}
+
+func (c *httpClient) isClosed() bool {
+	select {
+	case <-c.closed:
+		return true
+	default:
+		return false
+	}
 }
 
 // extractError returns the decoded error message from Body.
