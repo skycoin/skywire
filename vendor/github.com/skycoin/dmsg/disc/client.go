@@ -25,6 +25,7 @@ type APIClient interface {
 	Entry(context.Context, cipher.PubKey) (*Entry, error)
 	PostEntry(context.Context, *Entry) error
 	PutEntry(context.Context, cipher.SecKey, *Entry) error
+	DelEntry(context.Context, *Entry) error
 	AvailableServers(context.Context) ([]*Entry, error)
 }
 
@@ -106,9 +107,61 @@ func (c *httpClient) PostEntry(ctx context.Context, e *Entry) error {
 
 	req.Header.Set("Content-Type", "application/json")
 
-	// Since v0.3.0 visors send ?timeout=true, before v0.3.0 do not.
 	q := req.URL.Query()
-	q.Add("timeout", "true")
+	req.URL.RawQuery = q.Encode()
+
+	req = req.WithContext(ctx)
+
+	resp, err := c.client.Do(req)
+	if resp != nil {
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				log.WithError(err).Warn("Failed to close response body.")
+			}
+		}()
+	}
+	if err != nil {
+		log.WithError(err).Error("Failed to perform request.")
+		return err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		var httpResponse HTTPMessage
+
+		bodyBytes, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		err = json.Unmarshal(bodyBytes, &httpResponse)
+		if err != nil {
+			return err
+		}
+		log.WithField("resp_body", httpResponse.Message).
+			WithField("resp_status", resp.StatusCode).
+			Error()
+		return errFromString(httpResponse.Message)
+	}
+	return nil
+}
+
+// DelEntry deletes an Entry.
+func (c *httpClient) DelEntry(ctx context.Context, e *Entry) error {
+	endpoint := c.address + "/dmsg-discovery/entry"
+	log := log.WithField("endpoint", endpoint)
+
+	marshaledEntry, err := json.Marshal(e)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, endpoint, bytes.NewBuffer(marshaledEntry))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	q := req.URL.Query()
 	req.URL.RawQuery = q.Encode()
 
 	req = req.WithContext(ctx)
