@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/AudriusButkevicius/pfilter"
@@ -33,6 +34,7 @@ const (
 	addrChSize               = 1024
 	udpKeepHeartbeatInterval = 10 * time.Second
 	udpKeepHeartbeatMessage  = "heartbeat"
+	udpUnbindMessage         = "unbind"
 	defaultUDPPort           = "30178"
 )
 
@@ -77,6 +79,7 @@ type httpClient struct {
 	sudphConn      net.PacketConn
 	ready          chan struct{}
 	closed         chan struct{}
+	unbindSUDPHWg  sync.WaitGroup
 }
 
 // NewHTTP creates a new client setting a public key to the client to be used for auth.
@@ -239,15 +242,15 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 	return nil
 }
 
-// UnBindSTCPR uinbinds client PK to IP:port on address resolver.
-func (c *httpClient) unBindSTCPR(ctx context.Context) error {
+// unbindSTCPR uinbinds STCPR entry PK to IP:port on address resolver.
+func (c *httpClient) unbindSTCPR(ctx context.Context) error {
 	if !c.isReady() {
-		c.log.Debugf("UnBindSTCPR: Address resolver is not ready yet, waiting...")
+		c.log.Debugf("UnbindSTCPR: Address resolver is not ready yet, waiting...")
 		<-c.ready
-		c.log.Debugf("UnBindSTCPR: Address resolver became ready, unbinding")
+		c.log.Debugf("UnbindSTCPR: Address resolver became ready, unbinding")
 	}
 
-	c.log.Debugf("UnBindSTCPR: Address resolver unbinding pk: %v", c.pk.String())
+	c.log.Debugf("UnbindSTCPR: Address resolver unbinding pk: %v", c.pk.String())
 	resp, err := c.Delete(ctx, stcprUnbindPath)
 	if err != nil {
 		return err
@@ -263,7 +266,7 @@ func (c *httpClient) unBindSTCPR(ctx context.Context) error {
 		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
 	}
 
-	c.log.Debugf("UnBindSTCPR: Address resolver successfully unbound pk: %v", c.pk.String())
+	c.log.Debugf("UnbindSTCPR: Address resolver successfully unbound pk: %v", c.pk.String())
 	return nil
 }
 
@@ -323,6 +326,12 @@ func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter, hs Handshake) (<-ch
 	go func() {
 		if err := c.keepSudphHeartbeatLoop(arConn); err != nil {
 			c.log.WithError(err).Errorf("Failed to send UDP heartbeat packet to address-resolver")
+		}
+	}()
+
+	go func() {
+		if err := c.unbindSUDPH(arConn); err != nil {
+			c.log.WithError(err).Errorf("Failed to send UDP unbind packet to address-resolver")
 		}
 	}()
 
@@ -452,13 +461,15 @@ func (c *httpClient) Close() error {
 	}()
 
 	if c.sudphConn != nil {
+		c.unbindSUDPHWg.Add(1)
+		close(c.closed)
+		c.unbindSUDPHWg.Wait()
 		if err := c.sudphConn.Close(); err != nil {
 			c.log.WithError(err).Errorf("Failed to close SUDPH")
 		}
-		close(c.closed)
 	}
 
-	if err := c.unBindSTCPR(context.Background()); err != nil {
+	if err := c.unbindSTCPR(context.Background()); err != nil {
 		c.log.WithError(err).Errorf("Failed to unbind STCPR")
 	}
 
@@ -475,10 +486,20 @@ func (c *httpClient) keepSudphHeartbeatLoop(w io.Writer) error {
 			if _, err := w.Write([]byte(udpKeepHeartbeatMessage)); err != nil {
 				return err
 			}
-
 			time.Sleep(udpKeepHeartbeatInterval)
 		}
 	}
+}
+
+// unbindSUDPH unbinds SUDPH entry in address resolver.
+func (c *httpClient) unbindSUDPH(w io.Writer) error {
+	// send unbind packet on shutdown
+	<-c.closed
+	defer c.unbindSUDPHWg.Done()
+	if _, err := w.Write([]byte(udpUnbindMessage)); err != nil {
+		return err
+	}
+	return nil
 }
 
 // extractError returns the decoded error message from Body.
