@@ -106,9 +106,9 @@ func (c *HTTPClient) Auth(ctx context.Context) (*httpauth.Client, error) {
 	return auth, nil
 }
 
-// Services calls 'GET /api/entries'.
+// Services calls 'GET /api/services'.
 func (c *HTTPClient) Services(ctx context.Context, quantity int) (out []Service, err error) {
-	url, err := c.addr("/api/entries", c.entry.Type, quantity)
+	url, err := c.addr("/api/services", c.entry.Type, quantity)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +142,7 @@ func (c *HTTPClient) Services(ctx context.Context, quantity int) (out []Service,
 	return out, err
 }
 
-// RegisterEntry calls 'POST /api/entries', retrieves the entry
+// RegisterEntry calls 'POST /api/services', retrieves the entry
 // and updates local field with the result
 // if there are no ip addresses in the entry it also tries to fetch those
 // from local config
@@ -169,7 +169,7 @@ func (c *HTTPClient) RegisterEntry(ctx context.Context) error {
 	return nil
 }
 
-// postEntry calls 'POST /api/entries' and sends current service entry
+// postEntry calls 'POST /api/services' and sends current service entry
 // as the payload
 func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 	auth, err := c.Auth(ctx)
@@ -177,7 +177,7 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 		return Service{}, err
 	}
 
-	url, err := c.addr("/api/entries", "", 1)
+	url, err := c.addr("/api/services", "", 1)
 	if err != nil {
 		return Service{}, nil
 	}
@@ -224,14 +224,14 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 	return entry, err
 }
 
-// DeleteEntry calls 'DELETE /api/entries/{entry_addr}'.
+// DeleteEntry calls 'DELETE /api/services/{entry_addr}'.
 func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
 	auth, err := c.Auth(ctx)
 	if err != nil {
 		return err
 	}
 
-	url, err := c.addr("/api/entries/"+c.entry.Addr.String(), c.entry.Type, 1)
+	url, err := c.addr("/api/services/"+c.entry.Addr.String(), c.entry.Type, 1)
 	if err != nil {
 		return err
 	}
@@ -263,7 +263,7 @@ func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
 	return nil
 }
 
-// Register calls 'POST /api/entries' to register service discovery entry
+// Register calls 'POST /api/services' to register service discovery entry
 // it performs exponential backoff in case of errors during register, unless
 // the error is unrecoverable from
 func (c *HTTPClient) Register(ctx context.Context) error {
