@@ -4,6 +4,7 @@ package commands
 
 import (
 	"context"
+
 	"github.com/getlantern/systray"
 	"github.com/skycoin/skycoin/src/util/logging"
 
