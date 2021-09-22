@@ -30,7 +30,6 @@ const (
 	// sudphPriority is used to set an order how connection filters apply.
 	sudphPriority            = 1
 	stcprBindPath            = "/bind/stcpr"
-	stcprUnbindPath          = "/unbind/stcpr"
 	addrChSize               = 1024
 	udpKeepHeartbeatInterval = 10 * time.Second
 	udpKeepHeartbeatMessage  = "heartbeat"
@@ -252,7 +251,7 @@ func (c *httpClient) delBindSTCPR(ctx context.Context) error {
 	}
 
 	c.log.Debugf("delBindSTCPR: deleting the binding pk: %v from Address resolver", c.pk.String())
-	resp, err := c.Delete(ctx, stcprUnbindPath)
+	resp, err := c.Delete(ctx, stcprBindPath)
 	if err != nil {
 		return err
 	}
@@ -475,7 +474,7 @@ func (c *httpClient) Close() error {
 	}
 
 	if err := c.delBindSTCPR(context.Background()); err != nil {
-		c.log.WithError(err).Errorf("Failed to unbind STCPR")
+		c.log.WithError(err).Errorf("Failed to delete STCPR binding")
 	}
 
 	return nil
