@@ -70,7 +70,7 @@ function build_installer() {
   }
 
   # build skywire binariea
-  make GOARCH="${go_arch}" build-systray
+  make CGO_ENABLED=1 GOOS=darwin GOARCH="${go_arch}" build-systray
 
   # Create directories
   mkdir -p ${installer_build_dir}/binaries/Skywireapp
@@ -181,7 +181,7 @@ done
 # call build_installer twice, once for the original host architecture
 # and one for the other one (x86_64 and arm64 or vice versa)
 
-#build_installer
+build_installer
 
 case ${go_arch} in
 amd64)
