@@ -2,10 +2,10 @@ package visor
 
 import (
 	"encoding/json"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -63,21 +63,9 @@ var genConfigCmd = &cobra.Command{
 
 		//set output for package and skybian configs
 		if packageConfig {
-			var basedir string
-
-			switch runtime.GOOS {
-			case "darwin":
-				basedir = "/usr/local/opt/skywire" //
-			default:
-				basedir = "/opt/skywire"
-			}
-
-			if hypervisor {
-				output = filepath.Join(basedir, "skywire.json")
-			} else {
-				output = filepath.Join(basedir, "skywire-visor.json")
-			}
+			output = filepath.Join(skyenv.PackageSkywirePath(), "skywire-visor.json")
 		}
+
 		if skybianConfig {
 			output = "/etc/skywire-config.json"
 		}
