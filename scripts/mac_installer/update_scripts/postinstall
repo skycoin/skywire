@@ -5,27 +5,33 @@ skywire_dir=/Users/${USER}/Skywire
 
 set -euo pipefail
 
-mv ${old_dir}/Skywireapp "${skywire_dir}"/
+sudo cp -Rv ${old_dir}/Skywireapp "${skywire_dir}"/
 
+echo "change directory perm"
+sudo chown -R "${USER}" "${old_dir}"
 sudo chown -R "${USER}" "${skywire_dir}"
+
+echo "updating apps"
 mkdir -p "${skywire_dir}"/apps
-mv "${skywire_dir}"/Skywireapp/Contents/MacOS/apps "${skywire_dir}"/
+mv "${skywire_dir}"/Skywireapp/Contents/MacOS/apps/* "${skywire_dir}"/apps/
 mv "${skywire_dir}"/Skywireapp/Contents/skywire-cli "${skywire_dir}"/skywire-cli
 
 echo "making vpn-client runnable as normal user"
 sudo chown root "${skywire_dir}"/apps/vpn-client
 sudo chmod 4755 "${skywire_dir}"/apps/vpn-client
 
+echo "reloading logcleaner"
 LOG_CLEANER_PLIST_PATH=/Users/${USER}/Library/LaunchAgents/com.skycoin.skywire.logcleaner.plist
 
 sudo -u "$USER" launchctl load -w "${LOG_CLEANER_PLIST_PATH}"
 
-rm -rf /Applications/Skywire.app
+sudo rm -rf /Applications/Skywire.app
 
-mv "${skywire_dir}"/Skywireapp /Applications/Skywire.app
+sudo mv "${skywire_dir}"/Skywireapp /Applications/Skywire.app
+sudo rm -rf "${old_dir}"/Skywireapp
 
 sudo chown -R "${USER}" /Applications/Skywire.app
 sudo chown root /Applications/Skywire.app/Contents/deinstaller
-sudo chmod 4755 "${skywire_dir}"/Skywireapp/Contents/deinstaller
+sudo chmod 4755 /Applications/Skywire.app/Contents/deinstaller
 
 sudo mdimport /Applications/Skywire.app
