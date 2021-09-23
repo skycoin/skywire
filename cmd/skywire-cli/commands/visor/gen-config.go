@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -62,10 +63,19 @@ var genConfigCmd = &cobra.Command{
 
 		//set output for package and skybian configs
 		if packageConfig {
+			var basedir string
+
+			switch runtime.GOOS {
+			case "darwin":
+				basedir = "/usr/local/opt/skywire" //
+			default:
+				basedir = "/opt/skywire"
+			}
+
 			if hypervisor {
-				output = "/opt/skywire/skywire.json"
+				output = filepath.Join(basedir, "skywire.json")
 			} else {
-				output = "/opt/skywire/skywire-visor.json"
+				output = filepath.Join(basedir, "skywire-visor.json")
 			}
 		}
 		if skybianConfig {

@@ -1,4 +1,5 @@
-//+build systray
+//go:build systray
+// +build systray
 
 package gui
 
@@ -49,9 +50,9 @@ var (
 func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 	doneCh := make(chan bool, 1)
 	return func() {
-		systray.SetTooltip("Skywire")
-
 		systray.SetTemplateIcon(icon, icon)
+
+		systray.SetTooltip("Skywire")
 
 		initOpenHypervisorBtn(conf)
 		//initVpnClientBtn()
@@ -66,14 +67,11 @@ func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 
 // OnGUIQuit is executed on GUI exit.
 func OnGUIQuit() {
-
+	systray.Quit()
 }
 
 // ReadSysTrayIcon reads system tray icon.
 func ReadSysTrayIcon() ([]byte, error) {
-	if err := preReadIcon(); err != nil {
-		return nil, err
-	}
 	contents, err := ioutil.ReadFile(iconPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read icon: %w", err)

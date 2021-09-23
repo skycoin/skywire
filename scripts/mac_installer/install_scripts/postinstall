@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+olddir=/usr/local/opt/skywire
+skywire_dir=/Users/${USER}/Skywire
+
+mkdir -p "${skywire_dir}"
+
+sudo mv ${olddir}/Skywireapp "${skywire_dir}"/
+
+sudo chown -R "${USER}" "$skywire_dir"
+
+mkdir -p "${skywire_dir}"/apps
+mv "${skywire_dir}"/Skywireapp/Contents/MacOS/apps "${skywire_dir}"/
+mv "${skywire_dir}"/Skywireapp/Contents/skywire-cli "${skywire_dir}"/skywire-cli
+
+echo "making vpn-client runnable as normal user"
+sudo chown root "${skywire_dir}"/apps/vpn-client
+sudo chmod 4755 "${skywire_dir}"/apps/vpn-client
+
+echo "generating skywire config"
+
+sudo "${skywire_dir}"/skywire-cli visor gen-config -p -o ./skywire-config.json --is-hypervisor
+
+LOG_CLEANER_PLIST_PATH=/Users/${USER}/Library/LaunchAgents/com.skycoin.skywire.logcleaner.plist
+LOG_PATH=${skywire_dir}/log.log
+
+cat <<EOF >"${LOG_CLEANER_PLIST_PATH}"
+<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
+<plist version=\"1.0\">
+<dict>
+ <key>Label</key>
+ <string>com.skycoin.skywire.logcleaner</string>
+ <key>ProgramArguments</key>
+ <array>
+  <string>/bin/bash</string>
+  <string>-c</string>
+  <string>echo \"\" > ${LOG_PATH}</string>
+ </array>
+ <key>StartInterval</key>
+ <integer>3600</integer>
+</dict>
+</plist>
+EOF
+
+sudo chown "${USER}" "${LOG_CLEANER_PLIST_PATH}"
+sudo -u "$USER" launchctl load -w "${LOG_CLEANER_PLIST_PATH}"
+
+sudo mv "${skywire_dir}"/Skywireapp /Applications/Skywire.app
+
+sudo chown -R "${USER}" /Applications/Skywire.app
+sudo chown root /Applications/Skywire.app/Contents/deinstaller
+sudo chmod 4755 /Applications/Skywire.app/Contents/deinstaller
+
+sudo mdimport /Applications/Skywire.app
