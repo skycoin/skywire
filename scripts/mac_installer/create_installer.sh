@@ -5,7 +5,7 @@ mac_script_dir="./scripts/mac_installer"
 installer_build_dir="./mac_build"
 installer_package_dir="${installer_build_dir}"/binaries/Skywireapp
 git_tag=$(git describe --tags)
-date_format=$(date -u "+%Y-%m-%d%T%H:%M:%SZ")
+date_format=$(date -u "+%Y-%m-%d")
 go_arch=$(go env GOARCH) # build for amd64 and arm64 from single host
 cert_path=
 developer_id=
@@ -42,6 +42,7 @@ function build_installer() {
     echo "Storing installer to ${output}"
   fi
 
+  # TODO: uncomment this once everything is working
   #if [ -z "$developer_id" ]; then
   #  echo "No Apple Developer ID provided, exiting..."
   #  exit 1
