@@ -263,9 +263,6 @@ golang.org/x/crypto/twofish
 golang.org/x/crypto/xtea
 # golang.org/x/image v0.0.0-20210628002857-a66eb6448b8d
 ## explicit
-golang.org/x/image/ccitt
-golang.org/x/image/tiff
-golang.org/x/image/tiff/lzw
 # golang.org/x/mod v0.4.2
 golang.org/x/mod/semver
 # golang.org/x/net v0.0.0-20210405180319-a5a99cb37ef4
