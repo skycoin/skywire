@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+old_dir=/usr/local/opt/skywire
+skywire_dir=/Users/${USER}/Skywire
+
+set -euo pipefail
+
+mv ${old_dir}/Skywireapp "${skywire_dir}"/
+
+sudo chown -R "${USER}" "${skywire_dir}"
+mkdir -p "${skywire_dir}"/apps
+mv "${skywire_dir}"/Skywireapp/Contents/MacOS/apps "${skywire_dir}"/
+mv "${skywire_dir}"/Skywireapp/Contents/skywire-cli "${skywire_dir}"/skywire-cli
+
+echo "making vpn-client runnable as normal user"
+sudo chown root "${skywire_dir}"/apps/vpn-client
+sudo chmod 4755 "${skywire_dir}"/apps/vpn-client
+
+LOG_CLEANER_PLIST_PATH=/Users/${USER}/Library/LaunchAgents/com.skycoin.skywire.logcleaner.plist
+
+sudo -u "$USER" launchctl load -w "${LOG_CLEANER_PLIST_PATH}"
+
+rm -rf /Applications/Skywire.app
+
+mv "${skywire_dir}"/Skywireapp /Applications/Skywire.app
+
+sudo chown -R "${USER}" /Applications/Skywire.app
+sudo chown root /Applications/Skywire.app/Contents/deinstaller
+sudo chmod 4755 "${skywire_dir}"/Skywireapp/Contents/deinstaller
+
+sudo mdimport /Applications/Skywire.app

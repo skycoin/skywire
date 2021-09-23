@@ -21,10 +21,6 @@ func platformExecUninstall() error {
 	return osutil.Run("pwsh", "-c", deinstallerPath)
 }
 
-func preReadIcon() error {
-	return nil
-}
-
 func checkIsPackage() bool {
 	_, err := os.Stat(deinstallerPath())
 	return err == nil

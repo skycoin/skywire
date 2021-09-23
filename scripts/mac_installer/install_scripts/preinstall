@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+mkdir -p /usr/local/opt/skywire
+mkdir -p /Users/"${USER}"/Skywire
+
+if [[ ! -d "$HOME"/Library/Logs/skywire ]]; then
+  mkdir -p "$HOME"/Library/Logs/skywire
+fi
