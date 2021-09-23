@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 
-old_dir=/usr/local/opt/skywire
-skywire_dir=/Users/${USER}/Skywire
+old_dir=/tmp/skywire
+skywire_dir=/Users/${USER}/Library/Application\ Support/Skywire
 
 set -euo pipefail
 
-sudo cp -Rv ${old_dir}/Skywireapp "${skywire_dir}"/
+cp -Rv ${old_dir}/Skywireapp "${skywire_dir}"/
 
 echo "change directory perm"
-sudo chown -R "${USER}" "${old_dir}"
 sudo chown -R "${USER}" "${skywire_dir}"
+echo "remove temp dir"
+sudo rm -rf ${old_dir}
 
 echo "updating apps"
 mkdir -p "${skywire_dir}"/apps
@@ -28,7 +29,6 @@ sudo -u "$USER" launchctl load -w "${LOG_CLEANER_PLIST_PATH}"
 sudo rm -rf /Applications/Skywire.app
 
 sudo mv "${skywire_dir}"/Skywireapp /Applications/Skywire.app
-sudo rm -rf "${old_dir}"/Skywireapp
 
 sudo chown -R "${USER}" /Applications/Skywire.app
 sudo chown root /Applications/Skywire.app/Contents/deinstaller

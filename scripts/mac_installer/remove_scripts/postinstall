@@ -1,6 +1,6 @@
 #!/bin/sh
 
-skywire_dir=/Users/${USER}/Skywire
+skywire_dir=/Users/${USER}/Library/Application\ Support/Skywire
 
 sudo -u "$USER" launchctl remove com.skycoin.skywire.logcleaner
 
