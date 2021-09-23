@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"io"
 	"io/fs"
 	"io/ioutil"
@@ -11,7 +12,7 @@ import (
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
 	"os/exec"
-	"runtime"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -36,7 +37,7 @@ var uiAssets fs.FS
 var restartCtx = restart.CaptureContext()
 
 const (
-	defaultConfigName    = "skywire-config.json"
+	defaultConfigName    = "skywire-visor.json"
 	runtimeLogMaxEntries = 300
 )
 
@@ -234,11 +235,7 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 		}
 
 		if confPath == "" {
-			if runtime.GOOS == "darwin" {
-				confPath = os.Getenv("HOME") + "/Skywire/" + defaultConfigName
-			} else {
-				confPath = "/opt/skywire/" + defaultConfigName
-			}
+			confPath = filepath.Join(skyenv.PackageSkywirePath(), defaultConfigName)
 		}
 
 		fallthrough
