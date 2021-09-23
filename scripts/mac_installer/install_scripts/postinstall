@@ -2,14 +2,14 @@
 
 set -euo pipefail
 
-olddir=/usr/local/opt/skywire
-skywire_dir=/Users/${USER}/Skywire
+olddir=/tmp/skywire
+skywire_dir=/Users/${USER}/Library/Application\ Support/Skywire
 
 mkdir -p "${skywire_dir}"
 
-sudo mv ${olddir}/Skywireapp "${skywire_dir}"/
+mv ${olddir}/Skywireapp "${skywire_dir}"/
 
-sudo chown -R "${USER}" "$skywire_dir"
+chown -R "${USER}" "$skywire_dir"
 
 mkdir -p "${skywire_dir}"/apps
 mv "${skywire_dir}"/Skywireapp/Contents/MacOS/apps "${skywire_dir}"/
@@ -20,8 +20,7 @@ sudo chown root "${skywire_dir}"/apps/vpn-client
 sudo chmod 4755 "${skywire_dir}"/apps/vpn-client
 
 echo "generating skywire config"
-sudo "${skywire_dir}"/skywire-cli visor gen-config -p -r -o ./skywire-config.json --is-hypervisor
-sudo chown -R "${USER}" ${olddir}
+"${skywire_dir}"/skywire-cli visor gen-config -p -r -o ./skywire-visor.json --is-hypervisor
 
 echo "generating logcleaner plist"
 LOG_CLEANER_PLIST_PATH=/Users/${USER}/Library/LaunchAgents/com.skycoin.skywire.logcleaner.plist
@@ -45,6 +44,8 @@ cat <<EOF >"${LOG_CLEANER_PLIST_PATH}"
 </dict>
 </plist>
 EOF
+
+sudo rm -rf ${olddir}
 
 echo "loading logcleaner as service"
 sudo chown "${USER}" "${LOG_CLEANER_PLIST_PATH}"

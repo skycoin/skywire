@@ -94,7 +94,7 @@ function build_installer() {
 #!/usr/bin/env bash
 
 
-/Applications/Skywire.app/Contents/skywire-visor -c /usr/local/opt/skywire/skywire.json --systray >> \${HOME}/Library/Logs/skywire/visor.log
+/Applications/Skywire.app/Contents/skywire-visor --systray >> \${HOME}/Library/Logs/skywire/visor.log
 
 EOF
 
@@ -107,8 +107,8 @@ EOF
   cp -Rv ${mac_script_dir}/remove_scripts/* ${installer_build_dir}/remove_scripts/
 
   # build installer
-  pkgbuild --root ${installer_build_dir}/binaries --identifier com.skycoin.skywire.visor --install-location /usr/local/opt/skywire --scripts ${installer_build_dir}/install_scripts ${installer_build_dir}/installer.pkg
-  pkgbuild --root ${installer_build_dir}/binaries --identifier com.skycoin.skywire.updater --install-location /usr/local/opt/skywire --scripts ${installer_build_dir}/update_scripts ${installer_build_dir}/updater.pkg
+  pkgbuild --root ${installer_build_dir}/binaries --identifier com.skycoin.skywire.visor --install-location /tmp/skywire --scripts ${installer_build_dir}/install_scripts ${installer_build_dir}/installer.pkg
+  pkgbuild --root ${installer_build_dir}/binaries --identifier com.skycoin.skywire.updater --install-location /tmp/skywire --scripts ${installer_build_dir}/update_scripts ${installer_build_dir}/updater.pkg
   pkgbuild --nopayload --identifier com.skycoin.skywire.remover --scripts ${installer_build_dir}/remove_scripts ${installer_build_dir}/remover.pkg
 
   package_name=SkywireInstaller-${git_tag}-${date_format}-${go_arch}.pkg

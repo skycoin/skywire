@@ -1,14 +1,18 @@
-//+build darwin
+//go:build darwin
+// +build darwin
 
 package skyenv
 
-import "os"
+import (
+	"os"
+	"path/filepath"
+)
 
 const (
-	packageSkywirePath = "/Skywire"
+	packageSkywirePath = "/Library/Application Support/Skywire"
 )
 
 // PackageSkywirePath gets Skywire installation folder.
 func PackageSkywirePath() string {
-	return os.Getenv("HOME") + packageSkywirePath
+	return filepath.Join(os.Getenv("HOME"), packageSkywirePath)
 }

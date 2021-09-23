@@ -2,8 +2,8 @@
 
 set -euo pipefail
 
-mkdir -p /usr/local/opt/skywire
-mkdir -p /Users/"${USER}"/Skywire
+mkdir -p /tmp/skywire
+mkdir -p /Users/"${USER}"/Library/Application\ Support/Skywire
 
 if [[ ! -d "$HOME"/Library/Logs/skywire ]]; then
   mkdir -p "$HOME"/Library/Logs/skywire
