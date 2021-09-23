@@ -48,5 +48,5 @@ Char
 /scripts/mac_installer/Icon-MacOS-128x128@1x.png
 /scripts/mac_installer/Icon-MacOS-128x128@2x.png
 /mac_build
-/SkywireInstaller.pkg
+/SkywireInstaller*.pkg
 *.dmg
