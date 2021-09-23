@@ -67,7 +67,6 @@ func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 
 // OnGUIQuit is executed on GUI exit.
 func OnGUIQuit() {
-	systray.Quit()
 }
 
 // ReadSysTrayIcon reads system tray icon.
