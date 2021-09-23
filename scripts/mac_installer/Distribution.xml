@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="1">
+    <pkg-ref id="com.skycoin.skywire.visor"/>
+    <options customize="never" require-scripts="false"/>
+    <choices-outline>
+        <line choice="default">
+            <line choice="com.skycoin.skywire.visor"/>
+        </line>
+    </choices-outline>
+    <choice id="default"/>
+    <choice id="com.skycoin.skywire.visor" visible="false">
+        <pkg-ref id="com.skycoin.skywire.visor"/>
+    </choice>
+    <pkg-ref id="com.skycoin.skywire.visor" version="0" onConclusion="none">installer.pkg</pkg-ref>
+    <title>Skywire</title>
+</installer-gui-script>

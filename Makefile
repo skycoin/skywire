@@ -54,6 +54,8 @@ build-systray: host-apps-systray bin-systray ## Install dependencies, build apps
 
 build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
+installer: mac-installer ## Builds MacOS installer for skywire-visor
+
 install-generate: ## Installs required execs for go generate.
 	${OPTS} go install github.com/mjibson/esc
 	${OPTS} go install github.com/vektra/mockery/cmd/mockery
@@ -212,6 +214,9 @@ build-ui: install-deps-ui  ## Builds the UI
 	rm -rf ${MANAGER_UI_BUILT_DIR}
 	mkdir ${MANAGER_UI_BUILT_DIR}
 	cp -r ${MANAGER_UI_DIR}/dist/. ${MANAGER_UI_BUILT_DIR}
+
+mac-installer: ## Create unsigned application
+	./scripts/mac_installer/create_installer.sh
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
