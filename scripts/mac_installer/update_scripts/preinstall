@@ -2,6 +2,4 @@
 
 sudo -u "$USER" launchctl remove com.skycoin.skywire.logcleaner
 
-sudo pkill -f skywire
-
-
+if pgrep skywire; then sudo pkill -f skywire; fi
