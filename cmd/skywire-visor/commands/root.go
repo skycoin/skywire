@@ -37,7 +37,7 @@ var uiAssets fs.FS
 var restartCtx = restart.CaptureContext()
 
 const (
-	defaultConfigName    = "skywire-visor.json"
+	defaultConfigName    = "skywire-config.json"
 	runtimeLogMaxEntries = 300
 )
 
