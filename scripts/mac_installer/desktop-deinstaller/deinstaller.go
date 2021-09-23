@@ -5,10 +5,9 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/skycoin/skywire/pkg/skyenv"
-
 	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 )
 

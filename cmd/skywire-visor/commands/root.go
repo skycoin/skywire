@@ -4,7 +4,6 @@ import (
 	"context"
 	"embed"
 	"fmt"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"io"
 	"io/fs"
 	"io/ioutil"
@@ -26,6 +25,7 @@ import (
 	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire/pkg/restart"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/syslog"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
