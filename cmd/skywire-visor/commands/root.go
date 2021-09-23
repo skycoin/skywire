@@ -143,14 +143,10 @@ func runVisor(args []string) {
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 	setStopFunction(log, cancel, v.Close)
 
-	defer cancel()
-
 	// Wait.
 	<-ctx.Done()
 
-	if err = v.Close(); err != nil {
-		log.Error("Error closing visor: ", err)
-	}
+	stopVisorFn()
 }
 
 // Execute executes root CLI command.
