@@ -45,8 +45,9 @@ static/skywire-manager-src/dist/*
 /dist
 Char
 /scripts/mac_installer/IconsSkycoin.tar.gz
-/scripts/mac_installer/Icon-MacOS-128x128@1x.png
-/scripts/mac_installer/Icon-MacOS-128x128@2x.png
+/scripts/mac_installer/icon_128x128.png
+/scripts/mac_installer/icon_128x128@2x.png
 /mac_build
 /SkywireInstaller*.pkg
 *.dmg
+/scripts/mac_installer/icon.iconset/

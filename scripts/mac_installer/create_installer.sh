@@ -83,7 +83,7 @@ function build_installer() {
   # prepare Distribution.xml
   cp ${mac_script_dir}/Distribution.xml ${installer_build_dir}/
 
-  cp ${mac_script_dir}/AppInfo.plist ${installer_package_dir}/Contents/
+  cp ${mac_script_dir}/AppInfo.plist ${installer_package_dir}/Contents/Info.plist
   cp ${mac_script_dir}/icon.icns ${installer_package_dir}/Contents/Resources/icon.icns
   cp ${mac_script_dir}/icon.tiff ${installer_package_dir}/Contents/Resources/icon.tiff
   mv ./skywire-visor ${installer_package_dir}/Contents/skywire-visor
