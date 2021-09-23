@@ -20,9 +20,10 @@ sudo chown root "${skywire_dir}"/apps/vpn-client
 sudo chmod 4755 "${skywire_dir}"/apps/vpn-client
 
 echo "generating skywire config"
+sudo "${skywire_dir}"/skywire-cli visor gen-config -p -r -o ./skywire-config.json --is-hypervisor
+sudo chown -R "${USER}" ${olddir}
 
-sudo "${skywire_dir}"/skywire-cli visor gen-config -p -o ./skywire-config.json --is-hypervisor
-
+echo "generating logcleaner plist"
 LOG_CLEANER_PLIST_PATH=/Users/${USER}/Library/LaunchAgents/com.skycoin.skywire.logcleaner.plist
 LOG_PATH=${skywire_dir}/log.log
 
@@ -45,9 +46,11 @@ cat <<EOF >"${LOG_CLEANER_PLIST_PATH}"
 </plist>
 EOF
 
+echo "loading logcleaner as service"
 sudo chown "${USER}" "${LOG_CLEANER_PLIST_PATH}"
 sudo -u "$USER" launchctl load -w "${LOG_CLEANER_PLIST_PATH}"
 
+echo "moving applications to /Applications"
 sudo mv "${skywire_dir}"/Skywireapp /Applications/Skywire.app
 
 sudo chown -R "${USER}" /Applications/Skywire.app
