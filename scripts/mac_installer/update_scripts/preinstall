@@ -1,0 +1,7 @@
+#!/bin/sh
+
+sudo -u "$USER" launchctl remove com.skycoin.skywire.logcleaner
+
+sudo pkill -f skywire
+
+
