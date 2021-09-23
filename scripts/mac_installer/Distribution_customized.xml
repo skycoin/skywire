@@ -9,7 +9,7 @@
     <allowed-os-versions>
         <os-version min="10.10"/>
     </allowed-os-versions>
-    <options customize="allow" require-scripts="false" rootVolumeOnly="true" hostArchitectures="x86_64"/>
+    <options customize="allow" require-scripts="false" rootVolumeOnly="true" hostArchitectures="x86_64,arm64"/>
     <title>Skywire</title>
     <script>
         <![CDATA[
