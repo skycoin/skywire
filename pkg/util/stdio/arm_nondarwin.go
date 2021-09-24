@@ -1,3 +1,4 @@
+//go:build (linux && arm64) || windows
 // +build linux,arm64 windows
 
 package stdio
