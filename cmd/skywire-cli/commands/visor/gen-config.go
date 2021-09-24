@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -63,7 +64,13 @@ var genConfigCmd = &cobra.Command{
 
 		//set output for package and skybian configs
 		if packageConfig {
-			output = filepath.Join(skyenv.PackageSkywirePath(), "skywire-visor.json")
+			var configName string
+			if runtime.GOOS == "linux" {
+				configName = "skywire-visor.json"
+			} else {
+				configName = "skywire-config.json"
+			}
+			output = filepath.Join(skyenv.PackageSkywirePath(), configName)
 		}
 
 		if skybianConfig {
