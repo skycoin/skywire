@@ -20,7 +20,8 @@ sudo chown root "${skywire_dir}"/apps/vpn-client
 sudo chmod 4755 "${skywire_dir}"/apps/vpn-client
 
 echo "generating skywire config"
-"${skywire_dir}"/skywire-cli visor gen-config -p -r -o ./skywire-visor.json --is-hypervisor
+"${skywire_dir}"/skywire-cli visor gen-config -p -r -o ./skywire-config.json --is-hypervisor
+sudo chown "${USER}" "${skywire_dir}"/skywire-config.json
 
 echo "generating logcleaner plist"
 LOG_CLEANER_PLIST_PATH=/Users/${USER}/Library/LaunchAgents/com.skycoin.skywire.logcleaner.plist
