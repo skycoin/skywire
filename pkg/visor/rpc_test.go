@@ -1,7 +1,6 @@
 package visor
 
 import (
-	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -15,8 +14,8 @@ import (
 	"github.com/skycoin/skywire/internal/testhelpers"
 	"github.com/skycoin/skywire/internal/utclient"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
-	"github.com/skycoin/skywire/pkg/snet/arclient"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -40,7 +39,7 @@ func TestHealth(t *testing.T) {
 		utClient := &utclient.MockAPIClient{}
 		utClient.On("Health", mock.Anything).Return(http.StatusOK, nil)
 
-		arClient := &arclient.MockAPIClient{}
+		arClient := &addrresolver.MockAPIClient{}
 		arClient.On("Health", mock.Anything).Return(http.StatusOK, nil)
 
 		rfClient := &rfclient.MockClient{}
@@ -103,7 +102,7 @@ func TestUptime(t *testing.T) {
 	err := rpc.Uptime(nil, &res)
 	require.NoError(t, err)
 
-	assert.Contains(t, fmt.Sprintf("%f", res), "1.0")
+	assert.GreaterOrEqual(t, res, 1.0)
 }
 
 // TODO(evanlinjin): These should be moved to /pkg/app/launcher

@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"os/signal"
-	"syscall"
 
 	"github.com/sirupsen/logrus"
 )
@@ -17,8 +16,9 @@ func SignalContext(ctx context.Context, log logrus.FieldLogger) (context.Context
 
 	ctx, cancel := context.WithCancel(ctx)
 
-	ch := make(chan os.Signal)
-	signal.Notify(ch, []os.Signal{syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT}...)
+	ch := make(chan os.Signal, 1)
+	listenSigs := listenSignals()
+	signal.Notify(ch, listenSigs...)
 
 	go func() {
 		select {
