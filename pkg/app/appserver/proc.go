@@ -7,7 +7,6 @@ import (
 	"net/rpc"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,8 +15,8 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appnet"
-	"github.com/skycoin/skywire/pkg/app/updatedisc"
 )
 
 var (
@@ -29,7 +28,7 @@ var (
 // communication.
 // TODO(evanlinjin): In the future, we will implement the ability to run multiple instances (procs) of a single app.
 type Proc struct {
-	disc updatedisc.Updater // app discovery client
+	disc appdisc.Updater // app discovery client
 	conf appcommon.ProcConfig
 	log  *logging.Logger
 
@@ -57,7 +56,7 @@ type Proc struct {
 }
 
 // NewProc constructs `Proc`.
-func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc updatedisc.Updater, m ProcManager,
+func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc.Updater, m ProcManager,
 	appName string) *Proc {
 	if mLog == nil {
 		mLog = logging.NewMasterLogger()
@@ -135,26 +134,6 @@ func (p *Proc) awaitConn() bool {
 	if err := rpcS.RegisterName(p.conf.ProcKey.String(), p.rpcGW); err != nil {
 		panic(err)
 	}
-
-	connDelta := p.rpcGW.cm.AddDeltaInformer()
-	go func() {
-		for n := range connDelta.Chan() {
-			if err := p.disc.ChangeValue(updatedisc.ConnCountValue, []byte(strconv.Itoa(n))); err != nil {
-				p.log.WithError(err).WithField("value", updatedisc.ConnCountValue).
-					Error("Failed to change app discovery value.")
-			}
-		}
-	}()
-
-	lisDelta := p.rpcGW.lm.AddDeltaInformer()
-	go func() {
-		for n := range lisDelta.Chan() {
-			if err := p.disc.ChangeValue(updatedisc.ListenerCountValue, []byte(strconv.Itoa(n))); err != nil {
-				p.log.WithError(err).WithField("value", updatedisc.ListenerCountValue).
-					Error("Failed to change app discovery value.")
-			}
-		}
-	}()
 
 	go rpcS.ServeConn(p.conn)
 
@@ -258,6 +237,9 @@ func (p *Proc) Stop() error {
 			return err
 		}
 	}
+
+	// deregister discovery service
+	p.disc.Stop()
 
 	// the lock will be acquired as soon as the cmd finishes its work
 	p.waitMx.Lock()
