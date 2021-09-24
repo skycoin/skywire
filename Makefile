@@ -80,9 +80,6 @@ install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 lint: ## Run linters. Use make install-linters first
 	${OPTS} golangci-lint run -c .golangci.yml ./...
 
-lint-windows-appveyor:
-	C:\Users\appveyor\go\bin\golangci-lint run -c .golangci.yml ./...
-
 test: ## Run tests
 	-go clean -testcache &>/dev/null
 	${OPTS} go test ${TEST_OPTS} ./internal/...
@@ -157,7 +154,7 @@ build-deploy: ## Build for deployment Docker images
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
-github-release: sysroot
+github-release:
 	goreleaser --rm-dist
 
 build-docker: ## Build docker image
