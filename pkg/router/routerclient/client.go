@@ -12,7 +12,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 // RPCName is the RPC gateway object name.
@@ -26,7 +26,7 @@ type Client struct {
 }
 
 // NewClient creates a new Client.
-func NewClient(ctx context.Context, dialer snet.Dialer, rPK cipher.PubKey) (*Client, error) {
+func NewClient(ctx context.Context, dialer network.Dialer, rPK cipher.PubKey) (*Client, error) {
 	s, err := dialer.Dial(ctx, rPK, skyenv.DmsgAwaitSetupPort)
 	if err != nil {
 		return nil, fmt.Errorf("dial %v@%v: %w", rPK, skyenv.DmsgAwaitSetupPort, err)
