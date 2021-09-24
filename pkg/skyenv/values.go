@@ -1,6 +1,7 @@
 package skyenv
 
 import (
+	"path/filepath"
 	"time"
 
 	"github.com/skycoin/dmsg/cipher"
@@ -9,17 +10,26 @@ import (
 // Constants for skywire root directories.
 const (
 	DefaultSkywirePath = "."
-	PackageSkywirePath = "/opt/skywire"
 )
 
-// Constants for default services.
+// Constants for old default services.
 const (
-	DefaultTpDiscAddr          = "http://transport.discovery.skywire.skycoin.com"
-	DefaultDmsgDiscAddr        = "http://dmsg.discovery.skywire.skycoin.com"
-	DefaultServiceDiscAddr     = "http://service.discovery.skycoin.com"
-	DefaultRouteFinderAddr     = "http://routefinder.skywire.skycoin.com"
-	DefaultUptimeTrackerAddr   = "http://uptime-tracker.skywire.skycoin.com"
-	DefaultAddressResolverAddr = "http://address.resolver.skywire.skycoin.com"
+	OldDefaultTpDiscAddr          = "http://transport.discovery.skywire.skycoin.com"
+	OldDefaultDmsgDiscAddr        = "http://dmsg.discovery.skywire.skycoin.com"
+	OldDefaultServiceDiscAddr     = "http://service.discovery.skycoin.com"
+	OldDefaultRouteFinderAddr     = "http://routefinder.skywire.skycoin.com"
+	OldDefaultUptimeTrackerAddr   = "http://uptime-tracker.skywire.skycoin.com"
+	OldDefaultAddressResolverAddr = "http://address.resolver.skywire.skycoin.com"
+)
+
+// Constants for new default services.
+const (
+	DefaultTpDiscAddr          = "http://tpd.skywire.skycoin.com"
+	DefaultDmsgDiscAddr        = "http://dmsgd.skywire.skycoin.com"
+	DefaultServiceDiscAddr     = "http://sd.skycoin.com"
+	DefaultRouteFinderAddr     = "http://rf.skywire.skycoin.com"
+	DefaultUptimeTrackerAddr   = "http://ut.skywire.skycoin.com"
+	DefaultAddressResolverAddr = "http://ar.skywire.skycoin.com"
 	DefaultSetupPK             = "0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557"
 )
 
@@ -39,18 +49,21 @@ const (
 const (
 	DmsgCtrlPort           uint16 = 7   // Listening port for dmsgctrl protocol (similar to TCP Echo Protocol).
 	DmsgSetupPort          uint16 = 36  // Listening port of a setup node.
+	DmsgHypervisorPort     uint16 = 46  // Listening port of a hypervisor for incoming RPC visor connections over dmsg.
+	DmsgTransportSetupPort uint16 = 47  // Listening port for transport setup RPC over dmsg.
 	DmsgAwaitSetupPort     uint16 = 136 // Listening port of a visor for setup operations.
-	DmsgTransportPort      uint16 = 45  // Listening port of a visor for incoming transports.
-	DmsgHypervisorPort     uint16 = 46  // Listening port of a visor for incoming hypervisor connections.
-	DmsgTransportSetupPort uint16 = 47
+)
+
+// Transport port constants.
+const (
+	TransportPort uint16 = 45 // Listening port of a visor for incoming transports.
 )
 
 // Default dmsgpty constants.
 const (
-	DmsgPtyPort uint16 = 22
-
-	DefaultDmsgPtyCLINet  = "unix"
-	DefaultDmsgPtyCLIAddr = "/tmp/dmsgpty.sock"
+	DmsgPtyPort           uint16 = 22
+	DefaultDmsgPtyCLINet         = "unix"
+	DefaultDmsgPtyCLIAddr        = "/tmp/dmsgpty.sock"
 )
 
 // Default STCP constants.
@@ -89,17 +102,33 @@ const (
 
 // Default skywire app server and discovery constants
 const (
-	DefaultAppSrvAddr     = "localhost:5505"
-	AppDiscUpdateInterval = time.Minute
-	DefaultAppBinPath     = DefaultSkywirePath + "/apps"
-	DefaultLogLevel       = "info"
-	PackageAppBinPath     = PackageSkywirePath + "/apps"
+	DefaultAppSrvAddr         = "localhost:5505"
+	ServiceDiscUpdateInterval = time.Minute
+	DefaultAppBinPath         = DefaultSkywirePath + "/apps"
+	DefaultLogLevel           = "info"
+)
+
+// Default routing constants
+const (
+	DefaultTpLogStore = DefaultSkywirePath + "/transport_logs"
+)
+
+// Skybian defaults
+const (
+	SkybianAppBinPath       = "/usr/bin/apps"
+	SkybianDmsgPtyWhiteList = "/var/skywire-visor/dsmgpty/whitelist.json"
+	SkybianDmsgPtyCLIAddr   = "/run/skywire-visor/dmsgpty/cli.sock"
+	SkybianLocalPath        = "/var/skywire-visor/apps"
+	SkybianTpLogStore       = "/var/skywire-visor/transports"
+	SkybianEnableTLS        = false
+	SkybianDBPath           = "/var/skywire-visor/users.db"
+	SkybianTLSKey           = "/var/skywire-visor/ssl/key.pem"
+	SkybianTLSCert          = "/var/skywire-visor/ssl/cert.pem"
 )
 
 // Default local constants
 const (
 	DefaultLocalPath = DefaultSkywirePath + "/local"
-	PackageLocalPath = PackageSkywirePath + "/local"
 )
 
 // Default hypervisor constants
@@ -109,10 +138,52 @@ const (
 	DefaultEnableTLS    = false
 	DefaultTLSKey       = DefaultSkywirePath + "/ssl/key.pem"
 	DefaultTLSCert      = DefaultSkywirePath + "/ssl/cert.pem"
-	PackageEnableTLS    = true
-	PackageTLSKey       = PackageSkywirePath + "/ssl/key.pem"
-	PackageTLSCert      = PackageSkywirePath + "/ssl/cert.pem"
 )
+
+// PackageLocalPath is the path to local directory
+func PackageLocalPath() string {
+	return filepath.Join(PackageSkywirePath(), "local")
+}
+
+// PackageDmsgPtyCLIAddr is the path to dmsgpty-cli file socket
+func PackageDmsgPtyCLIAddr() string {
+	return filepath.Join(PackageSkywirePath(), "dmsgpty", "cli.sock")
+}
+
+// PackageDBPath is the filepath location to the local db
+func PackageDBPath() string {
+	return filepath.Join(PackageSkywirePath(), "users.db")
+}
+
+// PackageDmsgPtyWhiteList gets dmsgpty whitelist path for installed Skywire.
+func PackageDmsgPtyWhiteList() string {
+	return filepath.Join(PackageSkywirePath(), "dmsgpty", "whitelist.json")
+}
+
+// PackageAppLocalPath gets `.local` path for installed Skywire.
+func PackageAppLocalPath() string {
+	return filepath.Join(PackageSkywirePath(), "local")
+}
+
+// PackageAppBinPath gets apps path for installed Skywire.
+func PackageAppBinPath() string {
+	return filepath.Join(PackageSkywirePath(), "apps")
+}
+
+// PackageTpLogStore gets transport logs path for installed Skywire.
+func PackageTpLogStore() string {
+	return filepath.Join(PackageSkywirePath(), "transport_logs")
+}
+
+// PackageTLSKey gets TLS key path for installed Skywire.
+func PackageTLSKey() string {
+	return filepath.Join(PackageSkywirePath(), "ssl", "key.pem")
+}
+
+// PackageTLSCert gets TLS cert path for installed Skywire.
+func PackageTLSCert() string {
+	return filepath.Join(PackageSkywirePath(), "ssl", "cert.pem")
+}
 
 // MustPK unmarshals string PK to cipher.PubKey. It panics if unmarshaling fails.
 func MustPK(pk string) cipher.PubKey {
@@ -122,4 +193,18 @@ func MustPK(pk string) cipher.PubKey {
 	}
 
 	return sPK
+}
+
+// GetStunServers gives back deafault Stun Servers
+func GetStunServers() []string {
+	return []string{
+		"45.118.133.242:3478",
+		"192.53.173.68:3478",
+		"192.46.228.39:3478",
+		"192.53.113.106:3478",
+		"192.53.117.158:3478",
+		"192.53.114.142:3478",
+		"139.177.189.166:3478",
+		"192.46.227.227:3478",
+	}
 }

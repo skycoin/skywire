@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -17,11 +16,11 @@ import (
 
 	"github.com/skycoin/skywire/pkg/router/routerclient"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 // creates a mock dialer
-func newMockDialer(t *testing.T, gateways map[cipher.PubKey]interface{}) snet.Dialer {
+func newMockDialer(t *testing.T, gateways map[cipher.PubKey]interface{}) network.Dialer {
 	newRPCConn := func(gw interface{}) net.Conn {
 		connC, connS := net.Pipe()
 		t.Cleanup(func() {
@@ -38,7 +37,7 @@ func newMockDialer(t *testing.T, gateways map[cipher.PubKey]interface{}) snet.Di
 
 	if gateways == nil {
 		conn := newRPCConn(new(mockGatewayForDialer))
-		dialer := new(snet.MockDialer)
+		dialer := new(network.MockDialer)
 		dialer.On("Dial", mock.Anything, mock.Anything, mock.Anything).Return(conn, nil)
 		return dialer
 	}
@@ -52,7 +51,7 @@ func newMockDialer(t *testing.T, gateways map[cipher.PubKey]interface{}) snet.Di
 
 type mockDialer map[cipher.PubKey]net.Conn
 
-func (d mockDialer) Type() string { return dmsg.Type }
+func (d mockDialer) Type() string { return string(network.DMSG) }
 
 func (d mockDialer) Dial(_ context.Context, remote cipher.PubKey, _ uint16) (net.Conn, error) {
 	conn, ok := d[remote]

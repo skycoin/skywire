@@ -1,24 +1,27 @@
 .DEFAULT_GOAL := help
 
-.PHONY : check lint lint-extra install-linters dep test
+.PHONY : check lint install-linters dep test
 .PHONY : build clean install format  bin
 .PHONY : host-apps bin
 .PHONY : docker-image docker-clean docker-network
 .PHONY : docker-apps docker-bin docker-volume
 .PHONY : docker-run docker-stop
 
+SHELL := /bin/bash
 VERSION := $(shell git describe)
 #VERSION := v0.1.0 # for debugging updater
 
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 DATE := $(shell date -u $(RFC_3339))
 COMMIT := $(shell git rev-list -1 HEAD)
+BRANCH := latest
 
 PROJECT_BASE := github.com/skycoin/skywire
 DMSG_BASE := github.com/skycoin/dmsg
 OPTS?=GO111MODULE=on
 STATIC_OPTS?= $(OPTS) CC=musl-gcc
 MANAGER_UI_DIR = static/skywire-manager-src
+GO_BUILDER_VERSION=v1.17
 MANAGER_UI_BUILT_DIR=cmd/skywire-visor/static
 
 TEST_OPTS:=-cover -timeout=5m -mod=vendor
@@ -42,12 +45,11 @@ BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
 
 check: lint test ## Run linters and tests
 
-move-built-frontend:
-	rm -rf ${MANAGER_UI_BUILT_DIR}
-	mkdir ${MANAGER_UI_BUILT_DIR}
-	cp -r ${MANAGER_UI_DIR}/dist/. ${MANAGER_UI_BUILT_DIR}
+check-windows-appveyor: lint-windows-appveyor test ## Run linters and tests on appveyor windows image
 
 build: host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
+
+build-systray: host-apps-systray bin-systray ## Install dependencies, build apps and binaries `go build` with ${OPTS}, with CGO and systray
 
 build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
@@ -75,12 +77,9 @@ install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 
 lint: ## Run linters. Use make install-linters first
 	${OPTS} golangci-lint run -c .golangci.yml ./...
-	# The govet version in golangci-lint is out of date and has spurious warnings, run it separately
 
-lint-extra: ## Run linters with extra checks.
-	${OPTS} golangci-lint run --no-config --enable-all ./...
-	# The govet version in golangci-lint is out of date and has spurious warnings, run it separately
-	${OPTS} go vet -all ./...
+lint-windows-appveyor:
+	C:\Users\appveyor\go\bin\golangci-lint run -c .golangci.yml ./...
 
 test: ## Run tests
 	-go clean -testcache &>/dev/null
@@ -104,12 +103,25 @@ format: tidy ## Formats the code. Must have goimports and goimports-reviser inst
 dep: tidy ## Sorts dependencies
 	${OPTS} go mod vendor -v
 
+snapshot:
+	goreleaser --snapshot --skip-publish --rm-dist
+
+snapshot-clean: ## Cleans snapshot / release
+	rm -rf ./dist
+
 host-apps: ## Build app
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat ./cmd/apps/skychat
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-server ./cmd/apps/vpn-server
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-client ./cmd/apps/vpn-client
+
+host-apps-systray: ## Build app
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat ./cmd/apps/skychat
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
+	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps/vpn-server ./cmd/apps/vpn-server
+	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps/vpn-client ./cmd/apps/vpn-client
 
 # Static Apps
 host-apps-static: ## Build app
@@ -125,6 +137,11 @@ bin: ## Build `skywire-visor`, `skywire-cli`
 	${OPTS} go build ${BUILD_OPTS} -o ./skywire-cli  ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS} -o ./setup-node ./cmd/setup-node
 
+bin-systray:
+	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./skywire-visor ./cmd/skywire-visor
+	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./skywire-cli ./cmd/skywire-cli
+	${OPTS} go build ${BUILD_OPTS} -o ./setup-node ./cmd/setup-node
+
 # Static Bin
 bin-static: ## Build `skywire-visor`, `skywire-cli`
 	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-visor ./cmd/skywire-visor
@@ -138,12 +155,18 @@ build-deploy: ## Build for deployment Docker images
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
-github-release: ## Create a GitHub release
+github-release: sysroot
 	goreleaser --rm-dist
+
+build-docker: ## Build docker image
+	./ci_scripts/docker-push.sh -t ${BRANCH} -b
 
 # Manager UI
 install-deps-ui:  ## Install the UI dependencies
 	cd $(MANAGER_UI_DIR) && npm ci
+
+run: ## Run skywire visor with skywire-config.json, and start a browser if running a hypervisor
+	./skywire-visor -c ./skywire-config.json
 
 lint-ui:  ## Lint the UI code
 	cd $(MANAGER_UI_DIR) && npm run lint
@@ -151,7 +174,9 @@ lint-ui:  ## Lint the UI code
 build-ui: install-deps-ui  ## Builds the UI
 	cd $(MANAGER_UI_DIR) && npm run build
 	mkdir -p ${PWD}/bin
-	make move-built-frontend
+	rm -rf ${MANAGER_UI_BUILT_DIR}
+	mkdir ${MANAGER_UI_BUILT_DIR}
+	cp -r ${MANAGER_UI_DIR}/dist/. ${MANAGER_UI_BUILT_DIR}
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'

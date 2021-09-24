@@ -1,4 +1,4 @@
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed, waitForAsync } from '@angular/core/testing';
 
 import { EditSkysocksClientNoteComponent } from './edit-skysocks-client-note.component';
 
@@ -6,7 +6,7 @@ describe('EditSkysocksClientNoteComponent', () => {
   let component: EditSkysocksClientNoteComponent;
   let fixture: ComponentFixture<EditSkysocksClientNoteComponent>;
 
-  beforeEach(async(() => {
+  beforeEach(waitForAsync(() => {
     TestBed.configureTestingModule({
       declarations: [ EditSkysocksClientNoteComponent ]
     })
