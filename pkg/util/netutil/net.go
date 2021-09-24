@@ -103,3 +103,30 @@ func DefaultNetworkInterfaceIPs() ([]net.IP, error) {
 	}
 	return localIPs, nil
 }
+
+// HasPublicIP returns true if this machine has at least one
+// publically available IP address
+func HasPublicIP() (bool, error) {
+	localIPs, err := LocalNetworkInterfaceIPs()
+	if err != nil {
+		return false, err
+	}
+	for _, IP := range localIPs {
+		if IsPublicIP(IP) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// ExtractPort returns port of the given UDP or TCP address
+func ExtractPort(addr net.Addr) (uint16, error) {
+	switch address := addr.(type) {
+	case *net.TCPAddr:
+		return uint16(address.Port), nil
+	case *net.UDPAddr:
+		return uint16(address.Port), nil
+	default:
+		return 0, fmt.Errorf("extract port: invalid address: %s", addr.String())
+	}
+}
