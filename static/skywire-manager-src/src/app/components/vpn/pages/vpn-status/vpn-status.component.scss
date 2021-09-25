@@ -51,6 +51,24 @@
     text-transform: uppercase;
   }
 
+  .state-line {
+    height: 1px;
+    width: 100%;
+    margin-bottom: 5px;
+  }
+
+  .green-line {
+    background-color: $green;
+  }
+  
+  .yellow-line {
+    background-color: $yellow;
+  }
+  
+  .red-line {
+    background-color: $red;
+  }
+
   .state-explanation {
     font-size: $font-size-mini;
   }

@@ -668,6 +668,7 @@
     },
 
     "connection-info" : {
+      "state-title": "Your connection is currently:",
       "state-connecting": "Connecting",
       "state-connecting-info": "The VPN protection is being activated.",
       "state-connected": "Connected",
@@ -722,6 +723,7 @@
       "connect-without-password": "Connect without password",
       "connect-without-password-confirmation": "The connection will be made without the password. Are you sure you want to continue?",
       "connect-using-password": "Connect using a password",
+      "connect-using-another-password": "Connect using another password",
       "edit-name": "Custom name",
       "edit-label": "Custom note",
       "make-favorite": "Make favorite",
