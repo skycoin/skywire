@@ -62,6 +62,8 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
   lastAppState: AppState = null;
   // If the UI must be shown busy.
   showBusy = false;
+  // If the user requested the VPN to be stopped and the code is still waiting for it to happen.
+  private stopRequested = false;
   // If the user has not blocked the option for showing the IP info.
   ipInfoAllowed: boolean;
   // Public IP of the machine running the app.
@@ -143,7 +145,7 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
             }
           }
 
-          this.showStarted = data.vpnClientAppData.running;
+          this.showStarted = data.vpnClientAppData.running || data.vpnClientAppData.appState !== AppState.Stopped;
           if (this.showStartedLastValue !== this.showStarted) {
             // If the running state changed, restart the values for the data graphs.
 
@@ -164,7 +166,12 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
 
           this.lastAppState = data.vpnClientAppData.appState;
           this.showStartedLastValue = this.showStarted;
-          this.showBusy = data.busy;
+          if (!this.stopRequested) {
+            this.showBusy = data.busy;
+          } else if (!this.showStarted) {
+            this.stopRequested = false;
+            this.showBusy = data.busy;
+          }
 
           // Update the values for the data graphs.
           if (data.vpnClientAppData.connectionData) {
@@ -256,6 +263,7 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
    * Makes the actual request for stopping the VPN.
    */
   private finishStoppingVpn() {
+    this.stopRequested = true;
     this.showBusy = true;
     this.vpnClientService.stop();
   }
@@ -327,6 +335,23 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
       return 'vpn.connection-info.state-disconnecting';
     } else if (this.backendState.vpnClientAppData.appState === AppState.Reconnecting) {
       return 'vpn.connection-info.state-reconnecting';
+    }
+  }
+
+  /**
+   * Class that should be used for the colored state bar.
+   */
+  get currentStateLineClass(): string {
+    if (this.backendState.vpnClientAppData.appState === AppState.Stopped) {
+      return 'red-line';
+    } else if (this.backendState.vpnClientAppData.appState === AppState.Connecting) {
+      return 'yellow-line';
+    } else if (this.backendState.vpnClientAppData.appState === AppState.Running) {
+      return 'green-line';
+    } else if (this.backendState.vpnClientAppData.appState === AppState.ShuttingDown) {
+      return 'yellow-line';
+    } else {
+      return 'yellow-line';
     }
   }
 
