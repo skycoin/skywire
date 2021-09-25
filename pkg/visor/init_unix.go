@@ -1,4 +1,5 @@
-//+build !windows
+//go:build !windows
+// +build !windows
 
 package visor
 
@@ -34,26 +35,19 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 		}
 	}
 
-	var wl dmsgpty.Whitelist
-	if conf.AuthFile == "" {
-		wl = dmsgpty.NewMemoryWhitelist()
-	} else {
-		var err error
-		if wl, err = dmsgpty.NewJSONFileWhiteList(v.conf.Dmsgpty.AuthFile); err != nil {
-			return err
-		}
-	}
+	wl := dmsgpty.NewMemoryWhitelist()
 
 	// Ensure hypervisors are added to the whitelist.
 	if err := wl.Add(v.conf.Hypervisors...); err != nil {
 		return err
 	}
+
 	// add itself to the whitelist to allow local pty
 	if err := wl.Add(v.conf.PK); err != nil {
 		v.log.Errorf("Cannot add itself to the pty whitelist: %s", err)
 	}
 
-	dmsgC := v.net.Dmsg()
+	dmsgC := v.dmsgC
 	if dmsgC == nil {
 		err := errors.New("cannot create dmsgpty with nil dmsg client")
 		return err

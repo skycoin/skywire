@@ -3,8 +3,9 @@ package visorconfig
 import (
 	"github.com/skycoin/dmsg/cipher"
 
+	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 // V0Name is the version string before proper versioning is implemented.
@@ -20,11 +21,11 @@ type V0 struct {
 		SecKey cipher.SecKey `json:"secret_key"`
 	} `json:"key_pair"`
 
-	Dmsg *snet.DmsgConfig `json:"dmsg"`
+	Dmsg *dmsgc.DmsgConfig `json:"dmsg"`
 
 	DmsgPty *V1Dmsgpty `json:"dmsg_pty,omitempty"`
 
-	STCP *snet.STCPConfig `json:"stcp,omitempty"`
+	STCP *network.STCPConfig `json:"stcp,omitempty"`
 
 	Transport *struct {
 		Discovery string      `json:"discovery"`

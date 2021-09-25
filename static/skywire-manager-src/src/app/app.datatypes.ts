@@ -1,10 +1,13 @@
 export class Node {
   label: string;
   localPk: string;
+  isSymmeticNat?: boolean;
+  publicIp?: string;
   ip: string;
   version: string;
   apps: Application[];
   transports: Transport[];
+  persistentTransports: PersistentTransport[];
   routesCount: number;
   minHops: number;
   routes?: Route[];
@@ -14,6 +17,7 @@ export class Node {
   dmsgServerPk?: string;
   roundTripPing?: string;
   isHypervisor?: boolean;
+  skybianBuildVersion?: string;
 }
 
 export interface Application {
@@ -25,13 +29,21 @@ export interface Application {
 }
 
 export interface Transport {
-  isUp: boolean;
   id: string;
   localPk: string;
   remotePk: string;
   type: string;
   recv: number|null;
   sent: number|null;
+
+  // Calculated internally
+  isPersistent?: boolean;
+  notFound?: boolean;
+}
+
+export interface PersistentTransport {
+  pk: string;
+  type: string;
 }
 
 export interface Route {

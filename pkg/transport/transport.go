@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
+
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 var log = logging.MustGetLogger("transport")
@@ -17,7 +19,8 @@ var log = logging.MustGetLogger("transport")
 // Generated uuid is:
 // - always the same for a given pair
 // - GenTransportUUID(keyA,keyB) == GenTransportUUID(keyB, keyA)
-func MakeTransportID(keyA, keyB cipher.PubKey, tpType string) uuid.UUID {
+func MakeTransportID(keyA, keyB cipher.PubKey, netType network.Type) uuid.UUID {
+	tpType := string(netType)
 	keys := SortEdges(keyA, keyB)
 	b := make([]byte, 33*2+len(tpType))
 	i := 0

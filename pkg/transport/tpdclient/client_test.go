@@ -41,11 +41,11 @@ var testPubKey, testSecKey = cipher.GenerateKeyPair()
 func newTestEntry() *transport.Entry {
 	pk1, _ := cipher.GenerateKeyPair()
 	entry := &transport.Entry{
-		ID:     transport.MakeTransportID(pk1, testPubKey, "dmsg"),
-		Type:   "dmsg",
-		Public: true,
+		ID:   transport.MakeTransportID(pk1, testPubKey, "dmsg"),
+		Type: "dmsg",
 	}
-	entry.SetEdges(pk1, testPubKey)
+	entry.Edges[0] = pk1
+	entry.Edges[1] = testPubKey
 
 	return entry
 }
@@ -186,59 +186,36 @@ func TestRegisterTransports(t *testing.T) {
 }
 
 func TestGetTransportByID(t *testing.T) {
-	entry := &transport.EntryWithStatus{Entry: newTestEntry(), IsUp: true}
+	entry := newTestEntry()
 	srv := httptest.NewServer(authHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, fmt.Sprintf("/transports/id:%s", entry.Entry.ID), r.URL.String())
+		assert.Equal(t, fmt.Sprintf("/transports/id:%s", entry.ID), r.URL.String())
 		require.NoError(t, json.NewEncoder(w).Encode(entry))
 	})))
 	defer srv.Close()
 
 	c, err := NewHTTP(srv.URL, testPubKey, testSecKey)
 	require.NoError(t, err)
-	resEntry, err := c.GetTransportByID(context.Background(), entry.Entry.ID)
+	resEntry, err := c.GetTransportByID(context.Background(), entry.ID)
 	require.NoError(t, err)
 
-	assert.Equal(t, entry.Entry, resEntry.Entry)
-	assert.True(t, entry.IsUp)
+	assert.Equal(t, entry, resEntry)
 }
 
 func TestGetTransportsByEdge(t *testing.T) {
-	entry := &transport.EntryWithStatus{Entry: newTestEntry(), IsUp: true}
+	entry := newTestEntry()
 	srv := httptest.NewServer(authHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, fmt.Sprintf("/transports/edge:%s", entry.Entry.Edges[0]), r.URL.String())
-		require.NoError(t, json.NewEncoder(w).Encode([]*transport.EntryWithStatus{entry}))
+		assert.Equal(t, fmt.Sprintf("/transports/edge:%s", entry.Edges[0]), r.URL.String())
+		require.NoError(t, json.NewEncoder(w).Encode([]*transport.Entry{entry}))
 	})))
 	defer srv.Close()
 
 	c, err := NewHTTP(srv.URL, testPubKey, testSecKey)
 	require.NoError(t, err)
-	entries, err := c.GetTransportsByEdge(context.Background(), entry.Entry.Edges[0])
+	entries, err := c.GetTransportsByEdge(context.Background(), entry.Edges[0])
 	require.NoError(t, err)
 
 	require.Len(t, entries, 1)
-	assert.Equal(t, entry.Entry, entries[0].Entry)
-	assert.True(t, entries[0].IsUp)
-}
-
-func TestUpdateStatuses(t *testing.T) {
-	entry := &transport.EntryWithStatus{Entry: newTestEntry(), IsUp: true}
-	srv := httptest.NewServer(authHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/statuses", r.URL.String())
-		statuses := make([]*transport.Status, 0)
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&statuses))
-		require.Len(t, statuses, 1)
-		assert.Equal(t, entry.Entry.ID, statuses[0].ID)
-		require.NoError(t, json.NewEncoder(w).Encode([]*transport.EntryWithStatus{entry}))
-	})))
-	defer srv.Close()
-
-	c, err := NewHTTP(srv.URL, testPubKey, testSecKey)
-	require.NoError(t, err)
-	entries, err := c.UpdateStatuses(context.Background(), &transport.Status{ID: entry.Entry.ID, IsUp: false})
-	require.NoError(t, err)
-
-	require.Len(t, entries, 1)
-	assert.Equal(t, entry.Entry, entries[0].Entry)
+	assert.Equal(t, entry, entries[0])
 }
 
 func authHandler(t *testing.T, next http.Handler) http.Handler {

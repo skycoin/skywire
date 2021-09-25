@@ -7,7 +7,6 @@ import (
 	"net/rpc"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -64,9 +63,12 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	}
 	moduleName := fmt.Sprintf("proc:%s:%s", conf.AppName, conf.ProcKey)
 
-	cmd := exec.Command(conf.BinaryLoc, conf.ProcArgs...) // nolint:gosec
+	var cmd *exec.Cmd
+	envs := conf.Envs()
+
+	cmd = exec.Command(conf.BinaryLoc, conf.ProcArgs...) // nolint:gosec
+	cmd.Env = append(os.Environ(), envs...)
 	cmd.Dir = conf.ProcWorkDir
-	cmd.Env = append(os.Environ(), conf.Envs()...)
 
 	appLog, appLogDB := appcommon.NewProcLogger(conf)
 	cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").Writer()
@@ -132,26 +134,6 @@ func (p *Proc) awaitConn() bool {
 	if err := rpcS.RegisterName(p.conf.ProcKey.String(), p.rpcGW); err != nil {
 		panic(err)
 	}
-
-	connDelta := p.rpcGW.cm.AddDeltaInformer()
-	go func() {
-		for n := range connDelta.Chan() {
-			if err := p.disc.ChangeValue(appdisc.ConnCountValue, []byte(strconv.Itoa(n))); err != nil {
-				p.log.WithError(err).WithField("value", appdisc.ConnCountValue).
-					Error("Failed to change app discovery value.")
-			}
-		}
-	}()
-
-	lisDelta := p.rpcGW.lm.AddDeltaInformer()
-	go func() {
-		for n := range lisDelta.Chan() {
-			if err := p.disc.ChangeValue(appdisc.ListenerCountValue, []byte(strconv.Itoa(n))); err != nil {
-				p.log.WithError(err).WithField("value", appdisc.ListenerCountValue).
-					Error("Failed to change app discovery value.")
-			}
-		}
-	}()
 
 	go rpcS.ServeConn(p.conn)
 
@@ -255,6 +237,9 @@ func (p *Proc) Stop() error {
 			return err
 		}
 	}
+
+	// deregister discovery service
+	p.disc.Stop()
 
 	// the lock will be acquired as soon as the cmd finishes its work
 	p.waitMx.Lock()
