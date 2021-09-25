@@ -67,10 +67,10 @@ func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Serv
 	s.done = make(chan struct{})
 	s.addrDone = make(chan struct{})
 	s.maxSessions = conf.MaxSessions
-	s.setSessionCallback = func(ctx context.Context, sessionCount int) error {
+	s.setSessionCallback = func(ctx context.Context) error {
 		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions)
 	}
-	s.delSessionCallback = func(ctx context.Context, sessionCount int) error {
+	s.delSessionCallback = func(ctx context.Context) error {
 		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions)
 	}
 	return s
@@ -80,7 +80,13 @@ func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Serv
 func (s *Server) GetSessions() map[cipher.PubKey]*SessionCommon {
 	s.sessionsMx.Lock()
 	defer s.sessionsMx.Unlock()
-	return s.sessions
+
+	sessions := make(map[cipher.PubKey]*SessionCommon, len(s.sessions))
+	for pk, session := range s.sessions {
+		sessions[pk] = session
+	}
+
+	return sessions
 }
 
 // Close implements io.Closer
@@ -143,7 +149,7 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 
 		s.wg.Add(1)
 		go func(conn net.Conn) {
-			func() {
+			defer func() {
 				err := recover()
 				if err != nil {
 					log.Warnf("panic in handleSession: %+v", err)

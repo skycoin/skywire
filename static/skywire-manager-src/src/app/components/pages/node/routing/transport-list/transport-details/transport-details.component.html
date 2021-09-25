@@ -4,10 +4,12 @@
       <mat-icon [inline]="true">list</mat-icon>{{ 'transports.details.basic.title' | translate }}
     </div>
     <div class="item">
-      <span>{{ 'transports.details.basic.state' | translate }}</span>
-      <div [class]="'d-inline ' + (data.isUp ? 'green-text' : 'red-text')">
-        {{ ('transports.statuses.' + (data.isUp ? 'online' : 'offline')) | translate }}
-      </div>
+      <span>{{ 'transports.details.basic.persistent' | translate }}</span>
+      <ng-container *ngIf="data.isPersistent">
+        {{ 'common.yes' | translate }}
+        <mat-icon [inline]="true" class="help-icon d-none d-md-inline" [matTooltip]="'transports.persistent-transport-tooltip' | translate">help</mat-icon>
+      </ng-container>
+      <ng-container *ngIf="!data.isPersistent">{{ 'common.no' | translate }}</ng-container>
     </div>
     <div class="item">
       <span>{{ 'transports.details.basic.id' | translate }}</span> {{ data.id }}

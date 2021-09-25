@@ -8,7 +8,9 @@ import (
 	"github.com/skycoin/dmsg/cipher"
 
 	"github.com/skycoin/skywire/pkg/app/launcher"
-	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/dmsgc"
+	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
 
@@ -17,61 +19,66 @@ import (
 // V100Name is the semantic version string for v1.0.0.
 const V100Name = "v1.0.0"
 
+// V101Name is the semantic version string for v1.0.1.
+const V101Name = "v1.0.1"
+
 // V110Name is the semantic version string for v1.1.0.
 // Added MinHops field to V1Routing section of config
-const V110Name = "v1.1.0"
-
-// V111Name is the semantic version string for v1.1.1.
 // Removed public_trusted_visor field from root section
 // Removed trusted_visors field from transport section
 // Added is_public field to root section
 // Added public_autoconnect field to transport section
-const V111Name = "v1.1.1"
-
-// V112Name is the semantic version string for v1.1.2.
 // Added transport_setup_nodes field to transport section
-const V112Name = "v1.1.2"
+// Removed authorization_file field from dmsgpty section
+// Default urls are changed to newer shortned ones
+// Added stun_servers field to the config
+// Added persistent_transports field to the config
+// Changed proxy_discovery_addr field to service_discovery
+// Changed V1AppDisc struct to V1ServiceDisc
+const V110Name = "v1.1.0"
 
 // V1Name is the semantic version string for the most recent version of V1.
-const V1Name = V112Name
+const V1Name = V110Name
 
 // V1 is visor config
 type V1 struct {
 	*Common
 	mu sync.RWMutex
 
-	Dmsg          *snet.DmsgConfig `json:"dmsg"`
-	Dmsgpty       *V1Dmsgpty       `json:"dmsgpty,omitempty"`
-	STCP          *snet.STCPConfig `json:"stcp,omitempty"`
-	Transport     *V1Transport     `json:"transport"`
-	Routing       *V1Routing       `json:"routing"`
-	UptimeTracker *V1UptimeTracker `json:"uptime_tracker,omitempty"`
-	Launcher      *V1Launcher      `json:"launcher"`
+	Dmsg          *dmsgc.DmsgConfig   `json:"dmsg"`
+	Dmsgpty       *V1Dmsgpty          `json:"dmsgpty,omitempty"`
+	STCP          *network.STCPConfig `json:"stcp,omitempty"`
+	Transport     *V1Transport        `json:"transport"`
+	Routing       *V1Routing          `json:"routing"`
+	UptimeTracker *V1UptimeTracker    `json:"uptime_tracker,omitempty"`
+	Launcher      *V1Launcher         `json:"launcher"`
 
 	Hypervisors []cipher.PubKey `json:"hypervisors"`
 	CLIAddr     string          `json:"cli_addr"`
 
 	LogLevel          string   `json:"log_level"`
+	LocalPath         string   `json:"local_path"`
+	StunServers       []string `json:"stun_servers"`
 	ShutdownTimeout   Duration `json:"shutdown_timeout,omitempty"`    // time value, examples: 10s, 1m, etc
 	RestartCheckDelay Duration `json:"restart_check_delay,omitempty"` // time value, examples: 10s, 1m, etc
 	IsPublic          bool     `json:"is_public"`
+
+	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 
 	Hypervisor *hypervisorconfig.Config `json:"hypervisor,omitempty"`
 }
 
 // V1Dmsgpty configures the dmsgpty-host.
 type V1Dmsgpty struct {
-	Port     uint16 `json:"port"`
-	AuthFile string `json:"authorization_file"`
-	CLINet   string `json:"cli_network"`
-	CLIAddr  string `json:"cli_address"`
+	Port    uint16 `json:"port"`
+	CLINet  string `json:"cli_network"`
+	CLIAddr string `json:"cli_address"`
 }
 
 // V1Transport defines a transport config.
 type V1Transport struct {
 	Discovery         string          `json:"discovery"`
 	AddressResolver   string          `json:"address_resolver"`
-	LogStore          *V1LogStore     `json:"log_store"`
 	AutoconnectPublic bool            `json:"public_autoconnect"`
 	TransportSetup    []cipher.PubKey `json:"transport_setup_nodes"`
 }
@@ -96,19 +103,12 @@ type V1UptimeTracker struct {
 	Addr string `json:"addr"`
 }
 
-// V1AppDisc configures Skywire App Discovery Clients.
-type V1AppDisc struct {
-	UpdateInterval Duration `json:"update_interval,omitempty"`
-	ServiceDisc    string   `json:"proxy_discovery_addr"` // TODO: change JSON name
-}
-
 // V1Launcher configures the app launcher.
 type V1Launcher struct {
-	Discovery  *V1AppDisc           `json:"discovery"`
-	Apps       []launcher.AppConfig `json:"apps"`
-	ServerAddr string               `json:"server_addr"`
-	BinPath    string               `json:"bin_path"`
-	LocalPath  string               `json:"local_path"`
+	ServiceDisc string               `json:"service_discovery"`
+	Apps        []launcher.AppConfig `json:"apps"`
+	ServerAddr  string               `json:"server_addr"`
+	BinPath     string               `json:"bin_path"`
 }
 
 // Flush flushes the config to file (if specified).
@@ -186,6 +186,22 @@ func (v1 *V1) UpdateMinHops(hops uint16) error {
 	v1.mu.Unlock()
 
 	return v1.flush(v1)
+}
+
+// UpdatePersistentTransports updates persistent_transports in config
+func (v1 *V1) UpdatePersistentTransports(pTps []transport.PersistentTransports) error {
+	v1.mu.Lock()
+	v1.PersistentTransports = pTps
+	v1.mu.Unlock()
+
+	return v1.flush(v1)
+}
+
+// GetPersistentTransports gets persistent_transports from config
+func (v1 *V1) GetPersistentTransports() ([]transport.PersistentTransports, error) {
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+	return v1.PersistentTransports, nil
 }
 
 // updateStringArg updates the cli non-boolean flag of the specified app config and also within the launcher.
