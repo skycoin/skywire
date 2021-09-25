@@ -8,14 +8,11 @@ import (
 	"github.com/skycoin/dmsg/metricsutil"
 )
 
-// Metrics collects metrics for metrics tracking system.
-type Metrics interface {
-	RecordSession(delta DeltaType)
-	RecordStream(delta DeltaType)
-}
-
 // VictoriaMetrics implements `Metrics` using `VictoriaMetrics`.
 type VictoriaMetrics struct {
+	packetsPerMinute   *metricsutil.VictoriaMetricsUintGaugeWrapper
+	packetsPerSecond   *metricsutil.VictoriaMetricsUintGaugeWrapper
+	clientsCount       *metricsutil.VictoriaMetricsIntGaugeWrapper
 	activeSessions     *metricsutil.VictoriaMetricsIntGaugeWrapper
 	successfulSessions *metrics.Counter
 	failedSessions     *metrics.Counter
@@ -27,6 +24,9 @@ type VictoriaMetrics struct {
 // NewVictoriaMetrics returns the Victoria Metrics implementation of Metrics.
 func NewVictoriaMetrics() *VictoriaMetrics {
 	return &VictoriaMetrics{
+		packetsPerMinute:   metricsutil.NewVictoriaMetricsUintGauge("packets_per_minute"),
+		packetsPerSecond:   metricsutil.NewVictoriaMetricsUintGauge("packets_per_second"),
+		clientsCount:       metricsutil.NewVictoriaMetricsIntGauge("clients_count"),
 		activeSessions:     metricsutil.NewVictoriaMetricsIntGauge("vm_active_sessions_count"),
 		successfulSessions: metrics.GetOrCreateCounter("vm_session_success_total"),
 		failedSessions:     metrics.GetOrCreateCounter("vm_session_fail_total"),
@@ -34,6 +34,21 @@ func NewVictoriaMetrics() *VictoriaMetrics {
 		successfulStreams:  metrics.GetOrCreateCounter("vm_stream_success_total"),
 		failedStreams:      metrics.GetOrCreateCounter("vm_stream_fail_total"),
 	}
+}
+
+// SetPacketsPerMinute implements `Metrics`.
+func (m *VictoriaMetrics) SetPacketsPerMinute(val uint64) {
+	m.packetsPerMinute.Set(val)
+}
+
+// SetPacketsPerSecond implements `Metrics`.
+func (m *VictoriaMetrics) SetPacketsPerSecond(val uint64) {
+	m.packetsPerSecond.Set(val)
+}
+
+// SetClientsCount implements `Metrics`.
+func (m *VictoriaMetrics) SetClientsCount(val int64) {
+	m.clientsCount.Set(val)
 }
 
 // RecordSession implements `Metrics`.

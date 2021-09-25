@@ -4,6 +4,7 @@
 
 $white: #F8F9F9;
 $black: #202226;
+$grey: #bbbbbb;
 
 $blue-medium: #215f9e;
 $blue-dark: #154B6C;
@@ -11,10 +12,16 @@ $blue-dark-Background1: #060a10;
 $blue-dark-Background2: #0a1421;
 
 $red: #DA3439;
+$red-clear: #ff393f;
 $green: #2ECC54;
+$green-clear: #84c826;
 $yellow: #d48b05;
+$yellow-clear: #ffa500;
 $light-gray: #777;
 $lighter-gray: #999;
+
+$dark-background: rgba(0, 0, 0, 0.7);
+$clear-background: #3d67a226;
 
 $modal-background: #e0e5ec;
 $modal-separator: scale-color($blue-medium, $alpha: -80%);
@@ -24,12 +31,13 @@ $separator: rgba(255, 255, 255, 0.15);
 $grey-separator: rgba(0, 0, 0, 0.12);
 
 $theme-colors: (
-  green:              $green,
-  red:                $red,
-  yellow:             $yellow,
-  translucid-hover:   rgba(0, 0, 0, 0.2),
-  white:              $white,
-  light-gray:         $light-gray
+  green:                   $green,
+  red:                     $red,
+  yellow:                  $yellow,
+  translucid-hover:        rgba(0, 0, 0, 0.2),
+  translucid-hover-hard:   rgba(0, 0, 0, 0.4),
+  white:                   $white,
+  light-gray:              $light-gray
 );
 
 //
@@ -42,6 +50,7 @@ $font-size-sm:                ($font-size-base * .875);
 $font-size-smaller:           ($font-size-base * .8);
 $font-size-mini:              ($font-size-base * .70);
 $font-size-mini-plus:         ($font-size-base * .60);
+$font-size-vpn-list:          12px;
 
 $font-weight-light:           lighter;
 $font-weight-bold:            700;
@@ -62,6 +71,7 @@ $mat-dialog-radius: 10px;
 // Container
 //
 $containers-padding: 15px;
+$internal-blue-box-margin: 3px;
 
 //
 // Sizes

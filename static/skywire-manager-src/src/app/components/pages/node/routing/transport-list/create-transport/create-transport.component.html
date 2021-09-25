@@ -39,6 +39,15 @@
         {{ 'transports.dialog.errors.transport-type-error' | translate }}
       </mat-error>
     </mat-form-field>
+
+    <mat-checkbox
+      color="primary"
+      [checked]="makePersistent"
+      (change)="setMakePersistent($event)"
+    >
+      {{ 'transports.dialog.make-persistent' | translate }}
+      <mat-icon [inline]="true" class="help-icon" [matTooltip]="'transports.dialog.persistent-tooltip' | translate">help</mat-icon>
+    </mat-checkbox>
   </form>
 
   <app-button
