@@ -69,6 +69,14 @@ func (c *sudphClient) listen() (net.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	_, localPort, err := net.SplitHostPort(packetListener.LocalAddr().String())
+	if err != nil {
+		return nil, err
+	}
+
+	c.log.Infof("Successfully bound sudph to port %s", localPort)
+
 	go c.acceptAddresses(sudphVisorsConn, addrCh)
 	return kcp.ServeConn(nil, 0, 0, sudphVisorsConn)
 }
