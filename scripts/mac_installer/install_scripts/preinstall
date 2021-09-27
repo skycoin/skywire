@@ -2,10 +2,12 @@
 
 set -euo pipefail
 
+log_dir=/Users/${USER}/Library/Logs/skywire
+
 mkdir -p /tmp/skywire
 mkdir -p /Users/"${USER}"/Library/Application\ Support/Skywire
 
-if [[ ! -d /Users/"${USER}"/Library/Logs/skywire ]]; then
-  mkdir -p /Users/"${USER}"/Library/Logs/skywire
-  sudo chown -R /Users/"${USER}"/Library/Logs/skywire
+if [[ ! -d "${log_dir}" ]]; then
+  mkdir -p "${log_dir}"
+  sudo chown -R "${USER}" "${log_dir}"
 fi
