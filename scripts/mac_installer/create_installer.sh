@@ -88,7 +88,7 @@ function build_installer() {
   cp ${mac_script_dir}/icon.tiff ${installer_package_dir}/Contents/Resources/icon.tiff
   mv ./skywire-visor ${installer_package_dir}/Contents/skywire-visor
   mv ./skywire-cli ${installer_package_dir}/Contents/skywire-cli
-  mv ./apps/* ${installer_package_dir}/Contents/MacOS/apps/
+  mv ./apps/vpn-client ${installer_package_dir}/Contents/MacOS/apps/vpn-client
 
   cat <<EOF >${installer_package_dir}/Contents/MacOS/Skywire
 #!/usr/bin/env bash
