@@ -478,17 +478,6 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 
 	// Deregister transport before closing the underlying transport.
 	if tp, ok := tm.tps[id]; ok {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		defer cancel()
-
-		// todo: this should probably be moved to tp.close because we want to deregister
-		// a transport completely and not deal with transport statuses at all
-		if err := tm.Conf.DiscoveryClient.DeleteTransport(ctx, id); err != nil {
-			tm.Logger.WithError(err).Warnf("Failed to deregister transport of ID %s from discovery.", id)
-		} else {
-			tm.Logger.Infof("De-registered transport of ID %s from discovery.", id)
-		}
-
 		// Close underlying transport.
 		tp.close()
 		delete(tm.tps, id)
