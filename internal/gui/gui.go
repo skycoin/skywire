@@ -404,7 +404,7 @@ func getVPNAddr(conf *visorconfig.V1) string {
 	}
 
 	if vpnPK != "" {
-		return hvAddr + "/#/vpn/" + vpnPK
+		return hvAddr + "/#/vpn/" + vpnPK + "/status"
 	}
 	return ""
 }
