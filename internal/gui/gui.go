@@ -16,11 +16,13 @@ import (
 
 	"github.com/gen2brain/dlgs"
 	"github.com/getlantern/systray"
+	"github.com/skycoin/skycoin/src/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -42,12 +44,13 @@ var (
 var (
 	mOpenHypervisor *systray.MenuItem
 	//mVPNClient      *systray.MenuItem
+	mVPNLink   *systray.MenuItem
 	mUninstall *systray.MenuItem
 	mQuit      *systray.MenuItem
 )
 
 // GetOnGUIReady creates func to run on GUI startup.
-func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
+func GetOnGUIReady(icon []byte, conf *visorconfig.V1, vis *visor.Visor) func() {
 	doneCh := make(chan bool, 1)
 	return func() {
 		systray.SetTemplateIcon(icon, icon)
@@ -55,6 +58,7 @@ func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 		systray.SetTooltip("Skywire")
 
 		initOpenHypervisorBtn(conf)
+		initOpenVPNLinkBtn(vis)
 		//initVpnClientBtn()
 		initUninstallBtn()
 		initQuitBtn()
@@ -134,6 +138,30 @@ func initOpenHypervisorBtn(conf *visorconfig.V1) {
 	}()
 }
 
+func initOpenVPNLinkBtn(vis *visor.Visor) {
+	mVPNLink = systray.AddMenuItem("Open VPN Link", "Open VPN Link")
+
+	if !mVPNLink.Disabled() {
+		return
+	}
+
+	// wait for the vpn client to start in the background
+	// if it's not started or if it isn't alive just disable the link.
+	go func() {
+		t := time.NewTicker(1 * time.Second)
+		defer t.Stop()
+
+		// we simply wait till the hypervisor is up
+		for {
+			<-t.C
+			if isVPNAlive(vis) {
+				mVPNLink.Enable()
+				break
+			}
+		}
+	}()
+}
+
 //func initVpnClientBtn() {
 //	mVPNClient = systray.AddMenuItem("VPN", "VPN Client Connection")
 //}
@@ -142,6 +170,21 @@ func initOpenHypervisorBtn(conf *visorconfig.V1) {
 //	//mVPNClient.AddSubMenuItem()
 //}
 
+func handleVPNLinkButton(conf *visorconfig.V1) {
+	vpnAddr := getVPNAddr(conf)
+
+	if vpnAddr == "" {
+		mVPNLink.Disable()
+		log.Error("empty vpn URL address")
+		return // do nothing
+	}
+
+	if err := webbrowser.Open(vpnAddr); err != nil {
+		log.WithError(err).Error("failed to open link")
+	}
+}
+
+// GetAvailPublicVPNServers gets all available public VPN server from service discovery URL
 func GetAvailPublicVPNServers(conf *visorconfig.V1) []string {
 	sdClient := servicedisc.NewClient(log, servicedisc.Config{
 		Type:     servicedisc.ServiceTypeVPN,
@@ -225,6 +268,8 @@ func handleUserInteraction(conf *visorconfig.V1, doneCh chan<- bool) {
 			handleOpenHypervisor(conf)
 		//case <-mVPNClient.ClickedCh:
 		//	handleVpnClientButton(conf)
+		case <-mVPNLink.ClickedCh:
+			handleVPNLinkButton(conf)
 		case <-mUninstall.ClickedCh:
 			handleUninstall()
 		case <-mQuit.ClickedCh:
@@ -247,6 +292,7 @@ func handleUninstall() {
 	}
 	if cond {
 		mOpenHypervisor.Disable()
+		mVPNLink.Disable()
 		mUninstall.Disable()
 		mQuit.Disable()
 
@@ -319,4 +365,46 @@ func getHVAddr(conf *visorconfig.V1) string {
 	}
 
 	return addr
+}
+
+func isVPNAlive(vis *visor.Visor) bool {
+	stats, err := vis.GetAppStats(skyenv.VPNClientName)
+
+	var status bool
+
+	if err != nil {
+		status = false
+	}
+
+	for _, c := range stats.Connections {
+		if c.IsAlive {
+			status = true
+		}
+	}
+
+	return status
+}
+
+func getVPNAddr(conf *visorconfig.V1) string {
+	hvAddr := getHVAddr(conf)
+	if hvAddr == "" {
+		return ""
+	}
+
+	var vpnPK string
+	for _, app := range conf.Launcher.Apps {
+		if app.Name == skyenv.VPNClientName {
+			for _, arg := range app.Args {
+				_, err := cipher.PubKeyFromHex(arg)
+				if err == nil {
+					vpnPK = strings.TrimSpace(vpnPK)
+				}
+			}
+		}
+	}
+
+	if vpnPK != "" {
+		return hvAddr + "/#/vpn/" + vpnPK
+	}
+	return ""
 }
