@@ -17,7 +17,6 @@ type DiscoveryClient interface {
 	GetTransportByID(ctx context.Context, id uuid.UUID) (*Entry, error)
 	GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*Entry, error)
 	DeleteTransport(ctx context.Context, id uuid.UUID) error
-	HeartBeat(ctx context.Context, id uuid.UUID) error
 	Health(ctx context.Context) (int, error)
 }
 
@@ -94,8 +93,4 @@ func (td *mockDiscoveryClient) DeleteTransport(ctx context.Context, id uuid.UUID
 
 func (td *mockDiscoveryClient) Health(_ context.Context) (int, error) {
 	return http.StatusOK, nil
-}
-
-func (td *mockDiscoveryClient) HeartBeat(_ context.Context, _ uuid.UUID) error {
-	return nil
 }
