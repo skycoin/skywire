@@ -45,7 +45,7 @@ type HTTPClient struct {
 	log     logrus.FieldLogger
 	conf    Config
 	entry   Service
-	entryMx sync.Mutex // only used if UpdateLoop && UpdateStats functions are used.
+	entryMx sync.Mutex // only used if RegisterEntry && DeleteEntry functions are used.
 	client  http.Client
 }
 
