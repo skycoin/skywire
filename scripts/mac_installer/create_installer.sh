@@ -83,7 +83,10 @@ function build_installer() {
   # prepare Distribution.xml
   cp ${mac_script_dir}/Distribution.xml ${installer_build_dir}/
 
-  cp ${mac_script_dir}/AppInfo.plist ${installer_package_dir}/Contents/Info.plist
+  # modify version info
+  cp ${mac_script_dir}/AppInfo.plist.tmpl ${installer_package_dir}/Contents/Info.plist
+  perl -i -pe "s/{{BundleVersion}}/${git_tag}/g" ${installer_package_dir}/Contents/Info.plist
+
   cp ${mac_script_dir}/icon.icns ${installer_package_dir}/Contents/Resources/icon.icns
   cp ${mac_script_dir}/icon.tiff ${installer_package_dir}/Contents/Resources/icon.tiff
   mv ./skywire-visor ${installer_package_dir}/Contents/MacOS/skywire-visor
