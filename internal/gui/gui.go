@@ -141,9 +141,11 @@ func initOpenHypervisorBtn(conf *visorconfig.V1) {
 func initOpenVPNLinkBtn(vis *visor.Visor) {
 	mVPNLink = systray.AddMenuItem("Open VPN Link", "Open VPN Link")
 
-	if !mVPNLink.Disabled() {
-		return
+	if mOpenHypervisor.Disabled() {
+		mVPNLink.Disable()
 	}
+
+	mVPNLink.Disable()
 
 	// wait for the vpn client to start in the background
 	// if it's not started or if it isn't alive just disable the link.
@@ -397,14 +399,14 @@ func getVPNAddr(conf *visorconfig.V1) string {
 			for _, arg := range app.Args {
 				_, err := cipher.PubKeyFromHex(arg)
 				if err == nil {
-					vpnPK = strings.TrimSpace(vpnPK)
+					vpnPK = strings.TrimSpace(arg)
 				}
 			}
 		}
 	}
 
 	if vpnPK != "" {
-		return hvAddr + "/#/vpn/" + vpnPK + "/status"
+		return hvAddr + "/#/vpn/" + vpnPK // + "/status"
 	}
 	return ""
 }
