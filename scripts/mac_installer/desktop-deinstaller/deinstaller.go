@@ -33,8 +33,6 @@ launchctl remove ` + logCleanerServiceIdentifier + `
 
 rm -rf $HOME/Library/LaunchAgents/` + logCleanerServiceIdentifier + `.plist
 
-#sudo sed -i '' '/.*skywire.*/d' /etc/newsyslog.conf
-
 exit 0
 `
 
