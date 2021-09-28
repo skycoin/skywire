@@ -167,7 +167,7 @@ func PackageAppLocalPath() string {
 
 // PackageAppBinPath gets apps path for installed Skywire.
 func PackageAppBinPath() string {
-	return filepath.Join(PackageSkywirePath(), "apps")
+	return filepath.Join(appBinPath(), "apps")
 }
 
 // PackageTpLogStore gets transport logs path for installed Skywire.
