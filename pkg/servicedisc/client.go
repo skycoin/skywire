@@ -166,6 +166,7 @@ func (c *HTTPClient) RegisterEntry(ctx context.Context) error {
 		return err
 	}
 	c.entry = entry
+	c.log.WithField("entry", c.entry).Debug("Entry registered successfully")
 	return nil
 }
 
@@ -263,6 +264,7 @@ func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
 		}
 		return &hErr
 	}
+	c.log.WithField("entry", c.entry).Debug("Entry deleted successfully")
 	return nil
 }
 
