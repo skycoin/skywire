@@ -16,12 +16,12 @@ mv "${skywire_dir}"/Skywireapp/Contents/MacOS/apps "${skywire_dir}"/
 mv "${skywire_dir}"/Skywireapp/Contents/skywire-cli "${skywire_dir}"/skywire-cli
 
 echo "making vpn-client runnable as normal user"
-sudo chown root "${skywire_dir}"/apps/vpn-client
-sudo chmod 4755 "${skywire_dir}"/apps/vpn-client
+chown root "${skywire_dir}"/apps/vpn-client
+chmod 4755 "${skywire_dir}"/apps/vpn-client
 
 echo "generating skywire config"
 "${skywire_dir}"/skywire-cli visor gen-config -p -r -o ./skywire-config.json --is-hypervisor
-sudo chown "${USER}" "${skywire_dir}"/skywire-config.json
+chown "${USER}" "${skywire_dir}"/skywire-config.json
 
 echo "generating logcleaner plist"
 LOG_CLEANER_PLIST_PATH=/Users/${USER}/Library/LaunchAgents/com.skycoin.skywire.logcleaner.plist
@@ -46,17 +46,17 @@ cat <<EOF >"${LOG_CLEANER_PLIST_PATH}"
 </plist>
 EOF
 
-sudo rm -rf ${olddir}
+rm -rf ${olddir}
 
 echo "loading logcleaner as service"
-sudo chown "${USER}" "${LOG_CLEANER_PLIST_PATH}"
+chown "${USER}" "${LOG_CLEANER_PLIST_PATH}"
 sudo -u "$USER" launchctl load -w "${LOG_CLEANER_PLIST_PATH}"
 
 echo "moving applications to /Applications"
-sudo mv "${skywire_dir}"/Skywireapp /Applications/Skywire.app
+mv "${skywire_dir}"/Skywireapp /Applications/Skywire.app
 
-sudo chown -R "${USER}" /Applications/Skywire.app
-sudo chown root /Applications/Skywire.app/Contents/deinstaller
-sudo chmod 4755 /Applications/Skywire.app/Contents/deinstaller
+chown -R "${USER}" /Applications/Skywire.app
+chown root /Applications/Skywire.app/Contents/deinstaller
+chmod 4755 /Applications/Skywire.app/Contents/deinstaller
 
-sudo mdimport /Applications/Skywire.app
+mdimport /Applications/Skywire.app
