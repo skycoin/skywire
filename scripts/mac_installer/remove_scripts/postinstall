@@ -5,18 +5,18 @@ log_dir=/Users/${USER}/Library/Logs/skywire
 
 sudo -u "$USER" launchctl remove com.skycoin.skywire.logcleaner
 
-sudo pkill -f skywire
+pkill -f skywire
 
-sudo rm -rf /Users/"$USER"/Library/LaunchAgents/com.skycoin.skywire.logcleaner.plist
-sudo rm -rf "${skywire_dir}"
-sudo rm -rf "${log_dir}"
+rm -rf /Users/"$USER"/Library/LaunchAgents/com.skycoin.skywire.logcleaner.plist
+rm -rf "${skywire_dir}"
+rm -rf "${log_dir}"
 
-#sudo sed -i '' '/.*skywire.*/d' /etc/newsyslog.conf
+#sed -i '' '/.*skywire.*/d' /etc/newsyslog.conf
 
-sudo pkgutil --forget com.skycoin.skywire.visor
-sudo pkgutil --forget com.skycoin.skywire.updater
-sudo pkgutil --forget com.skycoin.skywire.remover
+pkgutil --forget com.skycoin.skywire.visor
+pkgutil --forget com.skycoin.skywire.updater
+pkgutil --forget com.skycoin.skywire.remover
 
-sudo rm -rf /Applications/Skywire.app
+rm -rf /Applications/Skywire.app
 
 exit 0
