@@ -226,6 +226,9 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 
 // DeleteEntry calls 'DELETE /api/services/{entry_addr}'.
 func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
+	c.entryMx.Lock()
+	defer c.entryMx.Unlock()
+
 	auth, err := c.Auth(ctx)
 	if err != nil {
 		return err
