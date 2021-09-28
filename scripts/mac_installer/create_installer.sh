@@ -94,7 +94,8 @@ function build_installer() {
 #!/usr/bin/env bash
 
 
-/Applications/Skywire.app/Contents/skywire-visor --systray >> \${HOME}/Library/Logs/skywire/visor.log
+osascript -e "do shell script \"/Applications/Skywire.app/Contents/skywire-visor --systray >> /Users/\${USER}/Library/Logs/skywire/visor.log\" with administrator privileges"
+#/Applications/Skywire.app/Contents/skywire-visor --systray >> /Users/\${USER}/Library/Logs/skywire/visor.log
 
 EOF
 
