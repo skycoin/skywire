@@ -8,10 +8,9 @@ sudo -u "$USER" launchctl remove com.skycoin.skywire.logcleaner
 pkill -f skywire
 
 rm -rf /Users/"$USER"/Library/LaunchAgents/com.skycoin.skywire.logcleaner.plist
-rm -rf "${skywire_dir}"
+rm -rf "${skywire_dir}"/local
 rm -rf "${log_dir}"
-
-#sed -i '' '/.*skywire.*/d' /etc/newsyslog.conf
+unlink /usr/local/bin/skywire-cli
 
 pkgutil --forget com.skycoin.skywire.visor
 pkgutil --forget com.skycoin.skywire.updater

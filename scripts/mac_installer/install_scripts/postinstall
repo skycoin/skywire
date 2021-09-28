@@ -4,29 +4,28 @@ set -euo pipefail
 
 olddir=/tmp/skywire
 skywire_dir=/Users/${USER}/Library/Application\ Support/Skywire
+log_dir=/Users/${USER}/Library/Logs/skywire
 
 mkdir -p "${skywire_dir}"
 
+if [[ -d ${skywire_dir}/Skywireapp ]]; then
+  rm -rf "${skywire_dir}"/Skywireapp
+fi
 mv ${olddir}/Skywireapp "${skywire_dir}"/
 
 chown -R "${USER}" "$skywire_dir"
 
-mkdir -p "${skywire_dir}"/apps
-mv "${skywire_dir}"/Skywireapp/Contents/MacOS/apps "${skywire_dir}"/
-mv "${skywire_dir}"/Skywireapp/Contents/skywire-cli "${skywire_dir}"/skywire-cli
-
-echo "making vpn-client runnable as normal user"
-chown root "${skywire_dir}"/apps/vpn-client
-chmod 4755 "${skywire_dir}"/apps/vpn-client
-
-echo "generating skywire config"
-"${skywire_dir}"/skywire-cli visor gen-config -p -r -o ./skywire-config.json --is-hypervisor
+echo "generating skywire config if it doesn't exist"
+if [[ ! -f "${skywire_dir}"/skywire-config.json ]]; then
+  "${skywire_dir}"/Skywireapp/Contents/MacOS/skywire-cli visor gen-config -p -o ./skywire-config.json --is-hypervisor
+fi
 chown "${USER}" "${skywire_dir}"/skywire-config.json
 
 echo "generating logcleaner plist"
 LOG_CLEANER_PLIST_PATH=/Users/${USER}/Library/LaunchAgents/com.skycoin.skywire.logcleaner.plist
-LOG_PATH=${skywire_dir}/log.log
+LOG_PATH=${log_dir}/visor.log
 
+## Log cleaner to truncate logs every hour
 cat <<EOF >"${LOG_CLEANER_PLIST_PATH}"
 <?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
@@ -54,9 +53,14 @@ sudo -u "$USER" launchctl load -w "${LOG_CLEANER_PLIST_PATH}"
 
 echo "moving applications to /Applications"
 mv "${skywire_dir}"/Skywireapp /Applications/Skywire.app
+ln -s /Applications/Skywire.app/Contents/MacOS/skywire-cli /usr/local/bin/skywire-cli
 
 chown -R "${USER}" /Applications/Skywire.app
 chown root /Applications/Skywire.app/Contents/deinstaller
 chmod 4755 /Applications/Skywire.app/Contents/deinstaller
+
+echo "making vpn-client runnable as normal user"
+chown root /Applications/Skywire.app/Contents/MacOS/apps/vpn-client
+chmod 4755 /Applications/Skywire.app/Contents/MacOS/apps/vpn-client
 
 mdimport /Applications/Skywire.app
