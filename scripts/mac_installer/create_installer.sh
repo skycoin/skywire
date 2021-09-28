@@ -86,16 +86,15 @@ function build_installer() {
   cp ${mac_script_dir}/AppInfo.plist ${installer_package_dir}/Contents/Info.plist
   cp ${mac_script_dir}/icon.icns ${installer_package_dir}/Contents/Resources/icon.icns
   cp ${mac_script_dir}/icon.tiff ${installer_package_dir}/Contents/Resources/icon.tiff
-  mv ./skywire-visor ${installer_package_dir}/Contents/skywire-visor
-  mv ./skywire-cli ${installer_package_dir}/Contents/skywire-cli
+  mv ./skywire-visor ${installer_package_dir}/Contents/MacOS/skywire-visor
+  mv ./skywire-cli ${installer_package_dir}/Contents/MacOS/skywire-cli
   mv ./apps/vpn-client ${installer_package_dir}/Contents/MacOS/apps/vpn-client
 
   cat <<EOF >${installer_package_dir}/Contents/MacOS/Skywire
 #!/usr/bin/env bash
 
 
-osascript -e "do shell script \"/Applications/Skywire.app/Contents/skywire-visor --systray >> /Users/\${USER}/Library/Logs/skywire/visor.log\" with administrator privileges"
-#/Applications/Skywire.app/Contents/skywire-visor --systray >> /Users/\${USER}/Library/Logs/skywire/visor.log
+osascript -e "do shell script \"/Applications/Skywire.app/Contents/MacOS/skywire-visor --systray >> /Users/\${USER}/Library/Logs/skywire/visor.log\" with administrator privileges"
 
 EOF
 
