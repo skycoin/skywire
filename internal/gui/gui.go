@@ -16,7 +16,6 @@ import (
 
 	"github.com/gen2brain/dlgs"
 	"github.com/getlantern/systray"
-	"github.com/skycoin/skycoin/src/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/toqueteos/webbrowser"
 
@@ -393,20 +392,5 @@ func getVPNAddr(conf *visorconfig.V1) string {
 		return ""
 	}
 
-	var vpnPK string
-	for _, app := range conf.Launcher.Apps {
-		if app.Name == skyenv.VPNClientName {
-			for _, arg := range app.Args {
-				_, err := cipher.PubKeyFromHex(arg)
-				if err == nil {
-					vpnPK = strings.TrimSpace(arg)
-				}
-			}
-		}
-	}
-
-	if vpnPK != "" {
-		return hvAddr + "/#/vpn/" + vpnPK // + "/status"
-	}
-	return ""
+	return hvAddr + "/vpn/" + conf.PK.Hex() + "/status"
 }
