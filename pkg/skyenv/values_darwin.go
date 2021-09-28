@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	packageSkywirePath = "/Library/Application Support/Skywire"
+	packageSkywirePath     = "/Library/Application Support/Skywire"
 	skywireApplicationPath = "/Applications/Skywire.app"
 )
 
