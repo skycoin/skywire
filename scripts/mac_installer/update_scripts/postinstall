@@ -17,7 +17,10 @@ LOG_CLEANER_PLIST_PATH=/Users/${USER}/Library/LaunchAgents/com.skycoin.skywire.l
 
 sudo -u "$USER" launchctl load -w "${LOG_CLEANER_PLIST_PATH}"
 
-unlink /usr/local/bin/skywire-cli
+if [[ -L /usr/local/bin/skywire-cli ]]; then
+  unlink /usr/local/bin/skywire-cli
+fi
+
 rm -rf /Applications/Skywire.app
 
 if [[ ! -f "${skywire_dir}"/skywire-config.json ]]; then
@@ -27,8 +30,9 @@ chown "${USER}" "${skywire_dir}"/skywire-config.json
 
 echo "updating skywire"
 mv "${skywire_dir}"/Skywireapp /Applications/Skywire.app
-ln -s /Applications/Skywire.app/Contents/MacOS/skywire-cli /usr/local/bin/skywire-cli
-
+if [[ ! -L /usr/local/bin/skywire-cli ]]; then
+  ln -s /Applications/Skywire.app/Contents/MacOS/skywire-cli /usr/local/bin/skywire-cli
+fi
 
 echo "updating user permission in Skywire.app"
 chown -R "${USER}" /Applications/Skywire.app
