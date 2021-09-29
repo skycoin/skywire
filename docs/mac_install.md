@@ -23,7 +23,7 @@ arch / ISA.
 
 ### Directory Layout
 
-- Skywire's config directory as well as other binaries is in `/Users/${USER}/Library/Application\ Support/Skywire`
+- Skywire's config directory is in `/Users/${USER}/Library/Application\ Support/Skywire`
 - Runtime logs is in `/Users/${USER}/Library/Logs/Skywire/visor.log`
 
 ## Updating
