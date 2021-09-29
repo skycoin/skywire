@@ -158,6 +158,8 @@ func initOpenVPNLinkBtn(vis *visor.Visor) {
 			if isVPNAlive(vis) {
 				mVPNLink.Enable()
 				break
+			} else {
+				mVPNLink.Disable()
 			}
 		}
 	}()
@@ -392,5 +394,5 @@ func getVPNAddr(conf *visorconfig.V1) string {
 		return ""
 	}
 
-	return hvAddr + "/vpn/" + conf.PK.Hex() + "/status"
+	return hvAddr + "/#/vpn/" + conf.PK.Hex() + "/status"
 }
