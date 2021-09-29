@@ -5,6 +5,11 @@ skywire_dir=/Users/${USER}/Library/Application\ Support/Skywire
 
 set -euo pipefail
 
+if [[ ! -d "${skywire_dir}" ]]; then
+  mkdir -p "${skywire_dir}"
+  chown -R "${USER}" "${skywire_dir}"
+fi
+
 cp -Rv ${old_dir}/Skywireapp "${skywire_dir}"/
 
 echo "change directory perm"
