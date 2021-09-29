@@ -53,7 +53,9 @@ sudo -u "$USER" launchctl load -w "${LOG_CLEANER_PLIST_PATH}"
 
 echo "moving applications to /Applications"
 mv "${skywire_dir}"/Skywireapp /Applications/Skywire.app
-ln -s /Applications/Skywire.app/Contents/MacOS/skywire-cli /usr/local/bin/skywire-cli
+if [[ -L /usr/local/bin/skywire-cli ]]; then
+  ln -s /Applications/Skywire.app/Contents/MacOS/skywire-cli /usr/local/bin/skywire-cli
+fi
 
 chown -R "${USER}" /Applications/Skywire.app
 chown root /Applications/Skywire.app/Contents/deinstaller
