@@ -1,6 +1,8 @@
 package visorconfig
 
 import (
+	"runtime"
+
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 
@@ -89,34 +91,7 @@ func defaultConfigFromCommon(cc *Common, hypervisor bool) (*V1, error) {
 
 	conf.Launcher.ServiceDisc = skyenv.DefaultServiceDiscAddr
 
-	conf.Launcher.Apps = []launcher.AppConfig{
-		{
-			Name:      skyenv.SkychatName,
-			AutoStart: true,
-			Port:      routing.Port(skyenv.SkychatPort),
-			Args:      []string{"-addr", skyenv.SkychatAddr},
-		},
-		{
-			Name:      skyenv.SkysocksName,
-			AutoStart: true,
-			Port:      routing.Port(skyenv.SkysocksPort),
-		},
-		{
-			Name:      skyenv.SkysocksClientName,
-			AutoStart: false,
-			Port:      routing.Port(skyenv.SkysocksClientPort),
-		},
-		{
-			Name:      skyenv.VPNServerName,
-			AutoStart: false,
-			Port:      routing.Port(skyenv.VPNServerPort),
-		},
-		{
-			Name:      skyenv.VPNClientName,
-			AutoStart: false,
-			Port:      routing.Port(skyenv.VPNClientPort),
-		},
-	}
+	conf.Launcher.Apps = makeDefaultLauncherAppsConfig()
 
 	conf.Hypervisors = make([]cipher.PubKey, 0)
 
@@ -215,4 +190,55 @@ func SetDefaultProductionValues(conf *V1) {
 		Addr: skyenv.DefaultUptimeTrackerAddr,
 	}
 	conf.Launcher.ServiceDisc = skyenv.DefaultServiceDiscAddr
+}
+
+// makeDefaultLauncherAppsConfig creates default launcher config for apps,
+// for package based installation in other platform (Darwin, Windows) it only includes
+// the shipped apps for that platforms
+func makeDefaultLauncherAppsConfig() []launcher.AppConfig {
+	defaultConfig := []launcher.AppConfig{
+		{
+			Name:      skyenv.VPNClientName,
+			AutoStart: false,
+			Port:      routing.Port(skyenv.VPNClientPort),
+		},
+	}
+
+	switch runtime.GOOS {
+	case "linux":
+		return launcherAddAllApps(defaultConfig)
+	case "darwin":
+		return defaultConfig
+	case "windows":
+		return defaultConfig
+	default:
+		return defaultConfig
+	}
+}
+
+func launcherAddAllApps(launcherCfg []launcher.AppConfig) []launcher.AppConfig {
+	launcherCfg = append(launcherCfg, []launcher.AppConfig{
+		{
+			Name:      skyenv.SkychatName,
+			AutoStart: true,
+			Port:      routing.Port(skyenv.SkychatPort),
+			Args:      []string{"-addr", skyenv.SkychatAddr},
+		},
+		{
+			Name:      skyenv.SkysocksName,
+			AutoStart: true,
+			Port:      routing.Port(skyenv.SkysocksPort),
+		},
+		{
+			Name:      skyenv.SkysocksClientName,
+			AutoStart: false,
+			Port:      routing.Port(skyenv.SkysocksClientPort),
+		},
+		{
+			Name:      skyenv.VPNServerName,
+			AutoStart: false,
+			Port:      routing.Port(skyenv.VPNServerPort),
+		},
+	}...)
+	return launcherCfg
 }
