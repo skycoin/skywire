@@ -237,7 +237,7 @@ export class VpnClientService {
   start(): boolean {
     // Continue only if the service is not busy and the VPN is stopped.
     if (!this.working && this.lastServiceState < 20) {
-      this.checkBeforeChangingAppState(true);
+      this.changeAppState(true);
 
       return true;
     }
@@ -250,9 +250,9 @@ export class VpnClientService {
    * @returns If it was possible to start the process (true) or not (false).
    */
   stop(): boolean {
-    // Continue only if the service is not busy and the VPN is running.
-    if (!this.working && this.lastServiceState >= 20 && this.lastServiceState < 200) {
-      this.checkBeforeChangingAppState(false);
+    // Continue only if the service is not busy.
+    if (!this.working) {
+      this.changeAppState(false);
 
       return true;
     }
@@ -454,11 +454,11 @@ export class VpnClientService {
   }
 
   /**
-   * Checks and configures the local visor to make it posible to start or stop the VPN and then
-   * starts or stops it.
-   * @param startApp If the VPN must be started or stopped.
+   * Starts or stops the VPN client app in the local visor, which starts or stops the VPN
+   * protection.
+   * @param startApp If the app must be started or stopped.
    */
-  private checkBeforeChangingAppState(startApp: boolean) {
+  private changeAppState(startApp: boolean) {
     // Cancel if the service is busy.
     if (this.working) {
       return;
@@ -469,65 +469,6 @@ export class VpnClientService {
     this.working = true;
     this.sendUpdate();
 
-    // If the VPN is going to be stopped, just continue with the process, as no config is needed.
-    if (!startApp) {
-      this.changeAppState(startApp);
-
-      return;
-    }
-
-    if (this.dataSubscription) {
-      this.dataSubscription.unsubscribe();
-    }
-
-    // Get the current general state of the local visor.
-    this.dataSubscription = this.apiService.get(`visors/${this.nodeKey}`).pipe(
-      mergeMap(nodeInfo => {
-        // Check if the local visor already has a transport for connecting with the server.
-        let transportFound = false;
-        if (nodeInfo.transports && nodeInfo.transports.length > 0) {
-          (nodeInfo.transports as any[]).forEach(transport => {
-            if (transport.remote_pk === this.vpnSavedDataService.currentServer.pk) {
-              transportFound = true;
-            }
-          });
-        }
-
-        // If the transport was found, do nothing.
-        if (transportFound) {
-          return of(null);
-        }
-
-        // If the transport was not found, create one.
-        return this.transportService.create(
-          this.nodeKey,
-          this.vpnSavedDataService.currentServer.pk,
-          'dmsg',
-        );
-      }), retryWhen(errors =>
-        concat(errors.pipe(delay(this.standardWaitTime), take(3)), errors.pipe(mergeMap(err => throwError(err))))
-      ),
-    ).subscribe(() => {
-      // Continue with the process.
-      this.changeAppState(startApp);
-    }, (err: OperationError) => {
-      // Inform about the error.
-      err = processServiceError(err);
-      this.snackbarService.showError('vpn.status-page.problem-connecting-error', null, false, err.originalServerErrorMsg);
-
-      // Make the service work normally again.
-      this.working = false;
-      this.sendUpdate();
-      this.updateData();
-    });
-  }
-
-  /**
-   * Starts or stops the VPN client app in the local visor, which starts or stops the VPN
-   * protection. Must be called only by checkBeforeChangingAppState.
-   * @param startApp If the app must be started or stopped.
-   */
-  private changeAppState(startApp: boolean) {
     const data = { status: 1 };
 
     if (startApp) {
