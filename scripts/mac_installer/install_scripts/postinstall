@@ -53,7 +53,7 @@ sudo -u "$USER" launchctl load -w "${LOG_CLEANER_PLIST_PATH}"
 
 echo "moving applications to /Applications"
 mv "${skywire_dir}"/Skywireapp /Applications/Skywire.app
-if [[ -L /usr/local/bin/skywire-cli ]]; then
+if [[ ! -L /usr/local/bin/skywire-cli ]]; then
   ln -s /Applications/Skywire.app/Contents/MacOS/skywire-cli /usr/local/bin/skywire-cli
 fi
 

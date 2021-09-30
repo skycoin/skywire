@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"syscall"
 
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -41,12 +42,16 @@ exit 0
 	}
 
 	uninstallScript := `
-sudo pkgutil --forget ` + osxServiceIdentifier + `
-sudo pkgutil --forget com.skycoin.skywire.updater
-sudo pkgutil --forget com.skycoin.skywire.remover
+if pgrep vpn-client; then skywire-cli visor stop-app vpn-client; fi
+if pgrep skywire; then pkill -f skywire; fi
+pkgutil --forget ` + osxServiceIdentifier + `
+pkgutil --forget com.skycoin.skywire.updater
+pkgutil --forget com.skycoin.skywire.remover
 
-sudo rm -rf ` + skyenv.PackageSkywirePath() + `
-sudo rm -rf /Applications/Skywire.app
+rm -rf ` + filepath.Join(skyenv.PackageSkywirePath(), "local") + `
+rm -rf ` + filepath.Join(os.Getenv("HOME"), "Library", "Logs", "skywire") + `
+unlink /usr/local/bin/skywire-cli
+rm -rf /Applications/Skywire.app
 `
 
 	uid := syscall.Getuid()
