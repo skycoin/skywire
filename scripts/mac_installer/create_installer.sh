@@ -98,6 +98,7 @@ function build_installer() {
 
 
 osascript -e "do shell script \"/Applications/Skywire.app/Contents/MacOS/skywire-visor --systray >> /Users/\${USER}/Library/Logs/skywire/visor.log\" with administrator privileges"
+#/Applications/Skywire.app/Contents/MacOS/skywire-visor --systray >> /Users/\${USER}/Library/Logs/skywire/visor.log
 
 EOF
 
