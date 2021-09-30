@@ -189,10 +189,7 @@ func (l *Launcher) AppStates() []*AppState {
 		state := &AppState{AppConfig: app, Status: AppStatusStopped}
 		if proc, ok := l.procM.ProcByName(app.Name); ok {
 			state.DetailedStatus = proc.DetailedStatus()
-			connSummary := proc.ConnectionsSummary()
-			if connSummary != nil {
-				state.Status = AppStatusRunning
-			}
+			state.Status = AppStatusRunning
 		}
 		states = append(states, state)
 	}
