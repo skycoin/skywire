@@ -24,7 +24,7 @@ export class VpnServer {
   /**
    * 2 letter code of the country the server is in.
    */
-  countryCode: string;
+  countryCode = 'ZZ';
   /**
    * Sever name.
    */
@@ -82,7 +82,7 @@ export class VpnClientDiscoveryService {
   /**
    * URL of the discovery service.
    */
-  private readonly discoveryServiceUrl = 'https://service.discovery.skycoin.com/api/services?type=vpn';
+  private readonly discoveryServiceUrl = 'https://sd.skycoin.com/api/services?type=vpn';
 
   /**
    * Servers obtained from the discovery service.
