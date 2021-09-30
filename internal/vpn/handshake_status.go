@@ -1,5 +1,7 @@
 package vpn
 
+import "errors"
+
 // HandshakeStatus is a status of Client/Server handshake.
 type HandshakeStatus int
 
@@ -30,5 +32,22 @@ func (hs HandshakeStatus) String() string {
 		return "Forbidden"
 	default:
 		return "Unknown code"
+	}
+}
+
+func (hs HandshakeStatus) getError() error {
+	switch hs {
+	case HandshakeStatusOK:
+		return nil
+	case HandshakeStatusBadRequest:
+		return errHandshakeStatusBadRequest
+	case HandshakeNoFreeIPs:
+		return errHandshakeNoFreeIPs
+	case HandshakeStatusInternalError:
+		return errHandshakeStatusInternalError
+	case HandshakeStatusForbidden:
+		return errHandshakeStatusForbidden
+	default:
+		return errors.New("Unknown code")
 	}
 }
