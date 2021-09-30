@@ -188,7 +188,9 @@ func (c *Client) Serve() error {
 
 	c.setAppStatus(ClientStatusConnecting)
 
-	r := netutil.NewRetrier(c.log, netutil.DefaultInitBackoff, netutil.DefaultMaxBackoff, 3, netutil.DefaultFactor)
+	r := netutil.NewRetrier(c.log, netutil.DefaultInitBackoff, netutil.DefaultMaxBackoff, 3, netutil.DefaultFactor).
+		WithErrWhitelist(errHandshakeStatusForbidden).WithErrWhitelist(errHandshakeStatusInternalError).
+		WithErrWhitelist(errHandshakeNoFreeIPs).WithErrWhitelist(errHandshakeStatusBadRequest)
 
 	err := r.Do(context.Background(), func() error {
 		if c.isClosed() {
@@ -197,7 +199,12 @@ func (c *Client) Serve() error {
 
 		if err := c.dialServeConn(); err != nil {
 			c.setAppStatus(ClientStatusReconnecting)
-			fmt.Println("Connection broke, reconnecting...")
+			fmt.Println("\nConnection broke, reconnecting...")
+			switch err {
+			case errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
+				errHandshakeStatusBadRequest:
+				return err
+			}
 			return fmt.Errorf("dialServeConn: %w", err)
 		}
 
@@ -327,6 +334,11 @@ func (c *Client) setupTUN(tunIP, tunGateway net.IP) error {
 func (c *Client) serveConn(conn net.Conn) error {
 	tunIP, tunGateway, err := c.shakeHands(conn)
 	if err != nil {
+		switch err {
+		case errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
+			errHandshakeStatusBadRequest:
+			return err
+		}
 		return fmt.Errorf("error during client/server handshake: %w", err)
 	}
 
@@ -446,6 +458,11 @@ func (c *Client) dialServeConn() error {
 	}
 
 	if err := c.serveConn(conn); err != nil {
+		switch err {
+		case errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
+			errHandshakeStatusBadRequest:
+			return err
+		}
 		return fmt.Errorf("error serving app conn: %w", err)
 	}
 
@@ -664,7 +681,7 @@ func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error)
 	fmt.Printf("Got server hello: %v", sHello)
 
 	if sHello.Status != HandshakeStatusOK {
-		return nil, nil, fmt.Errorf("got status %d (%s) from the server", sHello.Status, sHello.Status)
+		return nil, nil, HandshakeStatusForbidden.getError()
 	}
 
 	return sHello.TUNIP, sHello.TUNGateway, nil
