@@ -188,7 +188,8 @@ func (c *Client) Serve() error {
 
 	c.setAppStatus(ClientStatusConnecting)
 
-	r := netutil.NewDefaultRetrier(c.log)
+	r := netutil.NewRetrier(c.log, netutil.DefaultInitBackoff, netutil.DefaultMaxBackoff, 3, netutil.DefaultFactor)
+
 	err := r.Do(context.Background(), func() error {
 		if c.isClosed() {
 			return nil
