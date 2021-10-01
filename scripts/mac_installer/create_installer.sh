@@ -20,7 +20,8 @@ fi
 
 function print_usage() {
   echo "Usage: sh create_installer.sh [-o|--output output_skywire_dir] [-d|--dev-id developer_id] [-c | --cert CERTIFICATE in p12 format]"
-  echo "You also need to set these environment variables:"
+  echo "You need to provide --dev-id / -d and --cert / -c options if you want to sign the binary"
+  echo "You also need to set these environment variables, if you want to sign the binary:"
   echo "APP_KEYCHAIN_PASSWORD    : Keychain password for skywireBuild keychain"
   echo "APP_CERTIFICATE_PASSWORD : Password of your p12 Developer Application Certificate"
   echo "AC_USERNAME              : Apple Developer account email"
@@ -40,29 +41,6 @@ function build_installer() {
     fi
 
     echo "Storing installer to ${output}"
-  fi
-
-  # TODO: uncomment this once everything is working
-  #if [ -z "$developer_id" ]; then
-  #  echo "No Apple Developer ID provided, exiting..."
-  #  exit 1
-  #fi
-  #
-  #if [ -z "$cert_path" ]; then
-  #  echo "No Certificate for Apple Developer ID provided, exiting..."
-  #  exit 1
-  #fi
-  #
-  #test -f "$cert_path" || {
-  #  echo "No valid certificate found at this path, exiting..."
-  #  exit 1
-  #}
-
-  if [[ -f "$cert_path" ]]; then
-    echo "Creating keychain and importing your certificate"
-    security create-keychain -p "$APP_KEYCHAIN_PASSWORD" skywireBuild.keychain
-    security default-keychain -s skywireBuild.keychain
-    security import "$cert_path" -k skywireBuild.keychain -P "$APP_CERTIFICATE_PASSWORD"
   fi
 
   test -x /usr/local/bin/gon || {
@@ -116,32 +94,48 @@ EOF
   pkgbuild --nopayload --identifier com.skycoin.skywire.remover --scripts ${installer_build_dir}/remove_scripts ${installer_build_dir}/remover.pkg
 
   package_name=SkywireInstaller-${git_tag}-${date_format}-${go_arch}.pkg
-  dmg_name=skywire-${git_tag}-${date_format}-${go_arch}.dmg
-
-  # create gon config
-  cat <<EOF >"${output}/package-signing-config.json"
-{
-    "source" : ["./$package_name"],
-    "bundle_id" : "com.skycoin.skywire.visor",
-    "apple_id": {
-        "username" : "@env:AC_USERNAME",
-        "password":  "@env:AC_PASSWORD"
-    },
-    "sign" :{
-        "application_identity" : "$developer_id"
-    },
-    "dmg" :{
-        "output_path":  "$dmg_name",
-        "volume_name":  "Skywire"
-    }
-}
-EOF
 
   cp ${mac_script_dir}/Distribution_customized.xml ${installer_build_dir}/Distribution.xml
   productbuild --distribution ${installer_build_dir}/Distribution.xml --package-path ${installer_build_dir} "${output}""${package_name}"
 
   cd "${output}"
-  #gon -log-level=debug -log-json ./package-signing-config.json
+
+  if [ -n "$developer_id" ]; then
+    if [ -n "$cert_path" ]; then
+      test -f "$cert_path" || {
+        echo "No valid certificate found at this path..."
+        exit 0
+      }
+    fi
+
+    echo "Creating keychain and importing your certificate"
+    security create-keychain -p "$APP_KEYCHAIN_PASSWORD" skywireBuild.keychain
+    security default-keychain -s skywireBuild.keychain
+    security import "$cert_path" -k skywireBuild.keychain -P "$APP_CERTIFICATE_PASSWORD"
+
+    dmg_name=skywire-${git_tag}-${date_format}-${go_arch}.dmg
+    # create gon config
+    cat <<EOF >"${output}/package-signing-config.json"
+    {
+        "source" : ["./$package_name"],
+        "bundle_id" : "com.skycoin.skywire.visor",
+        "apple_id": {
+            "username" : "@env:AC_USERNAME",
+            "password":  "@env:AC_PASSWORD"
+        },
+        "sign" :{
+            "application_identity" : "$developer_id"
+        },
+        "dmg" :{
+            "output_path":  "$dmg_name",
+            "volume_name":  "Skywire"
+        }
+    }
+EOF
+
+    # use gon to sign the binary
+    gon -log-level=debug -log-json ./package-signing-config.json
+  fi
 }
 
 while :; do
