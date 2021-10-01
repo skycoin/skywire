@@ -41,7 +41,7 @@ const (
 	TestRouteFinderAddr     = "http://routefinder.skywire.cc"
 	TestUptimeTrackerAddr   = "http://uptime.tracker.skywire.cc"
 	TestAddressResolverAddr = "http://address.resolver.skywire.cc"
-	TestSetupPK             = "026c5a07de617c5c488195b76e8671bf9e7ee654d0633933e202af9e111ffa358d"
+	TestSetupPK             = "026c2a3e92d6253c5abd71a42628db6fca9dd9aa037ab6f4e3a31108558dfd87cf"
 )
 
 // Dmsg port constants.
