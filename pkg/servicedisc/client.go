@@ -45,7 +45,7 @@ type HTTPClient struct {
 	log     logrus.FieldLogger
 	conf    Config
 	entry   Service
-	entryMx sync.Mutex // only used if UpdateLoop && UpdateStats functions are used.
+	entryMx sync.Mutex // only used if RegisterEntry && DeleteEntry functions are used.
 	client  http.Client
 }
 
@@ -166,6 +166,7 @@ func (c *HTTPClient) RegisterEntry(ctx context.Context) error {
 		return err
 	}
 	c.entry = entry
+	c.log.WithField("entry", c.entry).Debug("Entry registered successfully")
 	return nil
 }
 
@@ -226,6 +227,9 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 
 // DeleteEntry calls 'DELETE /api/services/{entry_addr}'.
 func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
+	c.entryMx.Lock()
+	defer c.entryMx.Unlock()
+
 	auth, err := c.Auth(ctx)
 	if err != nil {
 		return err
@@ -260,6 +264,7 @@ func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
 		}
 		return &hErr
 	}
+	c.log.WithField("entry", c.entry).Debug("Entry deleted successfully")
 	return nil
 }
 

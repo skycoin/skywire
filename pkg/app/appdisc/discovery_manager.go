@@ -2,6 +2,7 @@ package appdisc
 
 import (
 	"context"
+	"sync"
 
 	"github.com/skycoin/skywire/pkg/servicedisc"
 )
@@ -24,7 +25,8 @@ func (emptyUpdater) Stop()  {}
 
 // serviceUpdater updates service-discovery entry of locally running App.
 type serviceUpdater struct {
-	client *servicedisc.HTTPClient
+	client   *servicedisc.HTTPClient
+	stopOnce sync.Once
 }
 
 func (u *serviceUpdater) Start() {
@@ -35,8 +37,10 @@ func (u *serviceUpdater) Start() {
 }
 
 func (u *serviceUpdater) Stop() {
-	ctx := context.Background()
-	if err := u.client.DeleteEntry(ctx); err != nil {
-		return
-	}
+	u.stopOnce.Do(func() {
+		ctx := context.Background()
+		if err := u.client.DeleteEntry(ctx); err != nil {
+			return
+		}
+	})
 }
