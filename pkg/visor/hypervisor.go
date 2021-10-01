@@ -1549,7 +1549,13 @@ func (hv *Hypervisor) serveDmsg(ctx context.Context, log *logging.Logger) {
 	go func() {
 		<-hv.dmsgC.Ready()
 		if err := hv.ServeRPC(ctx, hv.c.DmsgPort); err != nil {
-			log.WithError(err).Fatal("Failed to serve RPC client over dmsg.")
+			log := log.WithError(err)
+			if errors.Is(err, dmsg.ErrEntityClosed) {
+				log.Info("Dmsg client stopped serving.")
+				return
+			}
+			log.Error("Failed to serve RPC client over dmsg.")
+			return
 		}
 	}()
 	log.WithField("addr", dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}).

@@ -2,6 +2,7 @@ package setup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/rpc"
 
@@ -26,8 +27,6 @@ type TransportListener struct {
 func NewTransportListener(ctx context.Context, conf *visorconfig.V1, dmsgC *dmsg.Client, tm *transport.Manager, masterLogger *logging.MasterLogger) (*TransportListener, error) {
 	log := masterLogger.PackageLogger("transport_setup")
 	log.WithField("local_pk", conf.PK).Info("Connecting to the dmsg network.")
-
-	go dmsgC.Serve(ctx)
 
 	select {
 	case <-dmsgC.Ready():
@@ -62,7 +61,12 @@ func (ts *TransportListener) Serve(ctx context.Context) {
 	for {
 		conn, err := lis.AcceptStream()
 		if err != nil {
-			ts.log.WithError(err).Error("failed to accept")
+			log := ts.log.WithError(err)
+			if errors.Is(err, dmsg.ErrEntityClosed) {
+				log.Info("Dmsg client stopped serving.")
+				break
+			}
+			log.Error("Failed to accept")
 			break
 		}
 		remotePK := conn.RawRemoteAddr().PK

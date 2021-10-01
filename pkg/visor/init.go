@@ -19,10 +19,10 @@ import (
 
 	"github.com/skycoin/skywire/internal/utclient"
 	"github.com/skycoin/skywire/internal/vpn"
+	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
-	"github.com/skycoin/skywire/pkg/app/updatedisc"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
@@ -180,17 +180,16 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 
 func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// Prepare app discovery factory.
-	factory := updatedisc.Factory{
+	factory := appdisc.Factory{
 		Log: v.MasterLogger().PackageLogger("app_discovery"),
 	}
 
 	conf := v.conf.Launcher
 
-	if conf.Discovery != nil {
+	if conf.ServiceDisc != "" {
 		factory.PK = v.conf.PK
 		factory.SK = v.conf.SK
-		factory.UpdateInterval = time.Duration(conf.Discovery.UpdateInterval)
-		factory.ServiceDisc = conf.Discovery.ServiceDisc
+		factory.ServiceDisc = conf.ServiceDisc
 	}
 	v.initLock.Lock()
 	v.serviceDisc = factory
@@ -212,9 +211,20 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg)
 
-	time.Sleep(200 * time.Millisecond)
-	go dmsgC.Serve(context.Background())
-	time.Sleep(200 * time.Millisecond)
+	wg := new(sync.WaitGroup)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		dmsgC.Serve(context.Background())
+	}()
+
+	v.pushCloseStack("dmsg", func() error {
+		if err := dmsgC.Close(); err != nil {
+			return err
+		}
+		wg.Wait()
+		return nil
+	})
 
 	v.initLock.Lock()
 	v.dmsgC = dmsgC
@@ -647,7 +657,7 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	visorUpdater.Start()
 
 	v.log.Infof("Sent request to register visor as public")
-	v.pushCloseStack("visor updater", func() error {
+	v.pushCloseStack("public visor updater", func() error {
 		visorUpdater.Stop()
 		return nil
 	})
@@ -658,7 +668,7 @@ func initPublicVisors(ctx context.Context, v *Visor, log *logging.Logger) error 
 	if !v.conf.Transport.AutoconnectPublic {
 		return nil
 	}
-	serviceDisc := v.conf.Launcher.Discovery.ServiceDisc
+	serviceDisc := v.conf.Launcher.ServiceDisc
 	if serviceDisc == "" {
 		serviceDisc = skyenv.DefaultServiceDiscAddr
 	}

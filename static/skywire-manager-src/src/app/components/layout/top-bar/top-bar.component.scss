@@ -1,3 +1,5 @@
+@use 'sass:math';
+
 @import 'variables';
 @import "~bootstrap/scss/functions";
 @import "bootstrap_overrides";
@@ -165,7 +167,7 @@ $top-bar-height: 56px;
     align-items: center;
 
     img {
-      height: $top-bar-height / 2;
+      height: math.div($top-bar-height, 2);
     }
   }
 
