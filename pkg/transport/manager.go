@@ -203,10 +203,16 @@ func (tm *Manager) acceptTransports(ctx context.Context, lis network.Listener, t
 			return
 		default:
 			if err := tm.acceptTransport(ctx, lis); err != nil {
-				tm.Logger.Warnf("Failed to accept transport: %v", err)
+				log := tm.Logger.WithError(err)
+				if errors.Is(err, dmsg.ErrEntityClosed) {
+					log.Info("Dmsg client stopped serving.")
+					return
+				}
 				if errors.Is(err, io.ErrClosedPipe) {
 					return
 				}
+				log.Warnf("Failed to accept transport")
+				return
 			}
 		}
 	}
@@ -472,17 +478,6 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 
 	// Deregister transport before closing the underlying transport.
 	if tp, ok := tm.tps[id]; ok {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		defer cancel()
-
-		// todo: this should probably be moved to tp.close because we want to deregister
-		// a transport completely and not deal with transport statuses at all
-		if err := tm.Conf.DiscoveryClient.DeleteTransport(ctx, id); err != nil {
-			tm.Logger.WithError(err).Warnf("Failed to deregister transport of ID %s from discovery.", id)
-		} else {
-			tm.Logger.Infof("De-registered transport of ID %s from discovery.", id)
-		}
-
 		// Close underlying transport.
 		tp.close()
 		delete(tm.tps, id)
@@ -548,6 +543,10 @@ func (tm *Manager) Close() {
 		if err != nil {
 			tm.Logger.WithError(err).Warnf("Failed to close %s client", client.Type())
 		}
+	}
+	err := tm.arClient.Close()
+	if err != nil {
+		tm.Logger.WithError(err).Warnf("Failed to close arClient")
 	}
 	tm.wg.Wait()
 	close(tm.readCh)

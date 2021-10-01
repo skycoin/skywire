@@ -161,10 +161,8 @@ func parseV0(cc *Common, raw []byte) (*V1, error) {
 }
 
 func ensureAppDisc(conf *V1) *V1 {
-	if conf.Launcher.Discovery == nil {
-		conf.Launcher.Discovery = &V1ServiceDisc{
-			ServiceDisc: skyenv.DefaultServiceDiscAddr,
-		}
+	if conf.Launcher.ServiceDisc == "" {
+		conf.Launcher.ServiceDisc = skyenv.DefaultServiceDiscAddr
 	}
 	return conf
 }
@@ -185,8 +183,8 @@ func updateUrls(conf *V1) *V1 {
 	if conf.UptimeTracker.Addr == skyenv.OldDefaultUptimeTrackerAddr {
 		conf.UptimeTracker.Addr = skyenv.DefaultUptimeTrackerAddr
 	}
-	if conf.Launcher.Discovery.ServiceDisc == skyenv.OldDefaultServiceDiscAddr {
-		conf.Launcher.Discovery.ServiceDisc = skyenv.DefaultServiceDiscAddr
+	if conf.Launcher.ServiceDisc == skyenv.OldDefaultServiceDiscAddr {
+		conf.Launcher.ServiceDisc = skyenv.DefaultServiceDiscAddr
 	}
 	return conf
 }
