@@ -1,4 +1,5 @@
-//+build darwin,systray
+//go:build darwin && systray
+// +build darwin,systray
 
 package gui
 
@@ -13,7 +14,7 @@ const (
 	pngIconPath     = "/Applications/Skywire.app/Contents/Resources/icon.png"
 	iconPath        = "/Applications/Skywire.app/Contents/Resources/tray_icon.tiff"
 	deinstallerPath = "/Applications/Skywire.app/Contents/deinstaller"
-	appPath = "/Applications/Skywire.app"
+	appPath         = "/Applications/Skywire.app"
 )
 
 func preReadIcon() error {

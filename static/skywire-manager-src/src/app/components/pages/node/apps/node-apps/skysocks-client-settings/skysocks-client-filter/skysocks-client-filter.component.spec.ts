@@ -1,4 +1,4 @@
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed, waitForAsync } from '@angular/core/testing';
 
 import { SkysocksClientFilterComponent } from './skysocks-client-filter.component';
 
@@ -6,7 +6,7 @@ describe('SkysocksClientFilterComponent', () => {
   let component: SkysocksClientFilterComponent;
   let fixture: ComponentFixture<SkysocksClientFilterComponent>;
 
-  beforeEach(async(() => {
+  beforeEach(waitForAsync(() => {
     TestBed.configureTestingModule({
       declarations: [ SkysocksClientFilterComponent ]
     })
