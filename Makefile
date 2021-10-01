@@ -43,6 +43,9 @@ BUILDINFO?=$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT)
 BUILD_OPTS?="-ldflags=$(BUILDINFO)" -mod=vendor $(RACE_FLAG)
 BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
 
+MACOS_DEV_ID :=
+MACOS_CERT_PATH :=
+
 check: lint test ## Run linters and tests
 
 check-windows-appveyor: lint-windows-appveyor test ## Run linters and tests on appveyor windows image
@@ -178,7 +181,7 @@ build-ui: install-deps-ui  ## Builds the UI
 	cp -r ${MANAGER_UI_DIR}/dist/. ${MANAGER_UI_BUILT_DIR}
 
 mac-installer: ## Create unsigned application
-	./scripts/mac_installer/create_installer.sh
+	./scripts/mac_installer/create_installer.sh -d ${MACOS_DEV_ID} -c ${MACOS_CERT_PATH}
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
