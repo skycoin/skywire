@@ -133,7 +133,7 @@ func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 	conf.Launcher.BinPath = skyenv.PackageAppBinPath()
 
 	if conf.Hypervisor != nil {
-		conf.Hypervisor.EnableAuth = skyenv.DefaultEnableAuth
+		conf.Hypervisor.EnableAuth = skyenv.DefaultPackageEnableAuth
 		conf.Hypervisor.TLSKeyFile = skyenv.PackageTLSKey()
 		conf.Hypervisor.TLSCertFile = skyenv.PackageTLSCert()
 		conf.Hypervisor.TLSKeyFile = skyenv.PackageTLSKey()
