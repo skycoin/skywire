@@ -22,10 +22,10 @@ function print_usage() {
   echo "Usage: sh create_installer.sh [-o|--output output_skywire_dir] [-d|--dev-id developer_id] [-c | --cert CERTIFICATE in p12 format]"
   echo "You need to provide --dev-id / -d and --cert / -c options if you want to sign the binary"
   echo "You also need to set these environment variables, if you want to sign the binary:"
-  echo "APP_KEYCHAIN_PASSWORD    : Keychain password for skywireBuild keychain"
-  echo "APP_CERTIFICATE_PASSWORD : Password of your p12 Developer Application Certificate"
-  echo "AC_USERNAME              : Apple Developer account email"
-  echo "AC_PASSWORD              : Apple Developer account password"
+  echo "MAC_APP_KEYCHAIN_PASSWORD    : Keychain password for skywireBuild keychain"
+  echo "MAC_APP_CERTIFICATE_PASSWORD : Password of your p12 Developer Application Certificate"
+  echo "MAC_APP_DEV_USERNAME              : Apple Developer account email"
+  echo "MAC_APP_DEV_PASSWORD              : Apple Developer account password"
 }
 
 function build_installer() {
@@ -100,8 +100,8 @@ EOF
 
   cd "${output}"
 
-  if [ -n "$developer_id" ]; then
-    if [ -n "$cert_path" ]; then
+  if [ -n "$developer_id" ] && [[ "$developer_id" != "" ]]; then
+    if [ -n "$cert_path" ] && [[ "$cert_path" != "" ]]; then
       test -f "$cert_path" || {
         echo "No valid certificate found at this path..."
         exit 0
@@ -109,9 +109,9 @@ EOF
     fi
 
     echo "Creating keychain and importing your certificate"
-    security create-keychain -p "$APP_KEYCHAIN_PASSWORD" skywireBuild.keychain
+    security create-keychain -p "$MAC_APP_KEYCHAIN_PASSWORD" skywireBuild.keychain
     security default-keychain -s skywireBuild.keychain
-    security import "$cert_path" -k skywireBuild.keychain -P "$APP_CERTIFICATE_PASSWORD"
+    security import "$cert_path" -k skywireBuild.keychain -P "$MAC_APP_CERTIFICATE_PASSWORD"
 
     dmg_name=skywire-${git_tag}-${date_format}-${go_arch}.dmg
     # create gon config
@@ -120,8 +120,8 @@ EOF
         "source" : ["./$package_name"],
         "bundle_id" : "com.skycoin.skywire.visor",
         "apple_id": {
-            "username" : "@env:AC_USERNAME",
-            "password":  "@env:AC_PASSWORD"
+            "username" : "@env:MAC_APP_DEV_USERNAME",
+            "password":  "@env:MAC_APP_DEV_PASSWORD"
         },
         "sign" :{
             "application_identity" : "$developer_id"
