@@ -5,6 +5,7 @@ package gui
 
 import (
 	"context"
+	"embed"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -25,6 +26,9 @@ import (
 )
 
 // TODO @alexadhy : Show VPN status, list all vpn servers, quick dial
+
+//go:embed icons/*
+var iconFS embed.FS
 
 var log = logging.NewMasterLogger()
 
@@ -72,10 +76,7 @@ func OnGUIQuit() {
 
 // ReadSysTrayIcon reads system tray icon.
 func ReadSysTrayIcon() ([]byte, error) {
-	if err := preReadIcon(); err != nil {
-		return nil, err
-	}
-	contents, err := ioutil.ReadFile(iconPath)
+	contents, err := iconFS.ReadFile(iconName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read icon: %w", err)
 	}
