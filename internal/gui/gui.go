@@ -1,9 +1,11 @@
-//+build systray
+//go:build systray
+// +build systray
 
 package gui
 
 import (
 	"context"
+	"embed"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -24,6 +26,9 @@ import (
 )
 
 // TODO @alexadhy : Show VPN status, list all vpn servers, quick dial
+
+//go:embed icons/*
+var iconFS embed.FS
 
 var log = logging.NewMasterLogger()
 
@@ -49,9 +54,9 @@ var (
 func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 	doneCh := make(chan bool, 1)
 	return func() {
-		systray.SetTooltip("Skywire")
-
 		systray.SetTemplateIcon(icon, icon)
+
+		systray.SetTooltip("Skywire")
 
 		initOpenHypervisorBtn(conf)
 		//initVpnClientBtn()
@@ -71,10 +76,7 @@ func OnGUIQuit() {
 
 // ReadSysTrayIcon reads system tray icon.
 func ReadSysTrayIcon() ([]byte, error) {
-	if err := preReadIcon(); err != nil {
-		return nil, err
-	}
-	contents, err := ioutil.ReadFile(iconPath)
+	contents, err := iconFS.ReadFile(iconName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read icon: %w", err)
 	}

@@ -1,4 +1,5 @@
-//+build linux,systray
+//go:build linux && systray
+// +build linux,systray
 
 package gui
 
@@ -8,13 +9,9 @@ import (
 
 // TODO (darkrengarius): change path
 const (
-	iconPath        = "/opt/skywire/icon.png"
+	iconName        = "icons/icon.png"
 	deinstallerPath = "/opt/skywire/deinstaller"
 )
-
-func preReadIcon() error {
-	return nil
-}
 
 func checkIsPackage() bool {
 	_, err := os.Stat(deinstallerPath)

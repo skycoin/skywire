@@ -1,14 +1,20 @@
 ### Windows
 
+Prequisites:
+
+- `gcc` (for systray)
+- `git`
+- `go`
+- `make`
+- `powershell` (we don't support running it from `CMD` at the moment)
+
 Skywire visor may be run on Windows, but this process requires some manual operations at the moment.
 
-In order to run the skywire visor on Windows, you will need to manually build it. Do not forget the `.exe` extensions.
+In order to run the skywire visor on Windows, you will need to build it first:
 
-`go build -o ./skywire-visor.exe ./cmd/skywire-visor`
-
-Apps may be built the same way:
-
-`go build -o ./apps/vpn-client.exe ./cmd/apps/vpn-client`
+```powershell
+> make build-windows 
+```
 
 Apps should be declared in the config without `.exe` extension.
 
@@ -18,12 +24,31 @@ Change the encoding of the logs in your terminal to increase legibility.
 CHCP 65001
 ```
 
+To run it, you can generate a config first via:
+
+```powershell
+> .\skywire-cli.exe visor gen-config -t
+```
+
+It will create a file called `skywire-config.json` on the root directory of this project.
+
+Then you can run the visor via:
+
+```powershell
+> .\skywire-visor.exe -c .\skywire-config.json
+```
+
 #### Unsupported features
 
-- `dmsgpty`
 - `syslog`
 
-Using `dmsgpty` and `syslog` is currently not supported on Windows.
+Using `syslog` is currently not supported on Windows.
+
+#### Partially Supported Features
+
+- `dmsgpty`
+
+Will only work on Windows Server 2019 and Windows 10.
 
 #### Running a VPN-client
 

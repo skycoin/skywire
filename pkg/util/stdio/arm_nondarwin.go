@@ -1,5 +1,5 @@
 //go:build (linux && arm64) || (windows && arm64)
-// +build linux,arm64 windows
+// +build linux,arm64 windows,arm64
 
 package stdio
 

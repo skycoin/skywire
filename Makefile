@@ -1,4 +1,3 @@
-.DEFAULT_GOAL := help
 
 .PHONY : check lint lint-extra install-linters dep test
 .PHONY : build clean install format  bin
@@ -8,23 +7,25 @@
 .PHONY : docker-run docker-stop
 .PHONY : sysroot sysroot-clean
 
-SHELL := /bin/bash
 VERSION := $(shell git describe)
 #VERSION := v0.1.0 # for debugging updater
 
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
-DATE := $(shell date -u $(RFC_3339))
 COMMIT := $(shell git rev-list -1 HEAD)
 BRANCH := latest
 
 PROJECT_BASE := github.com/skycoin/skywire
 DMSG_BASE := github.com/skycoin/dmsg
 ifeq ($(OS),Windows_NT)
+	SHELL := pwsh
 	OPTS?=powershell -Command setx GO111MODULE on;
 	DATE := $(shell powershell -Command date -u ${RFC_3339})
-
+	.DEFAULT_GOAL := help-windows
 else
+	SHELL := /bin/bash
 	OPTS?=GO111MODULE=on
+	DATE := $(shell date -u $(RFC_3339))
+	.DEFAULT_GOAL := help
 endif
 
 STATIC_OPTS?= $(OPTS) CC=musl-gcc
@@ -61,7 +62,7 @@ build-windows: host-apps-windows bin-windows ## Install dependencies, build apps
 
 build-systray: host-apps-systray bin-systray ## Install dependencies, build apps and binaries `go build` with ${OPTS}, with CGO and systray
 
-build-windows-systray: host-apps-windows-systray bin-windows-systray
+build-systray-windows: host-apps-systray-windows bin-systray-windows ## Builds systray binary in windows
 
 build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
@@ -81,14 +82,14 @@ clean: ## Clean project: remove created binaries and apps
 	-rm -rf ./apps
 	-rm -f ./skywire-visor ./skywire-cli ./setup-node
 
-clean-windows:
+clean-windows: ## Clean project: remove created binaries and apps
 	powershell -Command Remove-Item -Path ./apps -Force -Recurse
 	powershell -Command Remove-Item -Path .\skywire-visor.exe,.\skywire-cli.exe,.\setup-node.exe -Force
 
 install: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node
 
-install-windows:
+install-windows: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go install ${BUILD_OPTS} ./ $$_.FullName }'
 
 install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
@@ -96,12 +97,11 @@ install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 
 lint: ## Run linters. Use make install-linters first
 	${OPTS} golangci-lint run -c .golangci.yml ./...
-	# The govet version in golangci-lint is out of date and has spurious warnings, run it separately
 
-lint-windows:
+lint-windows: ## Run linters. Use make install-linters-windows first
 	powershell 'golangci-lint run -c .golangci.yml ./...'
 
-lint-appveyor-windows:
+lint-appveyor-windows: ## Run linters for appveyor only on windows
 	C:\Users\appveyor\go\bin\golangci-lint run -c .golangci.yml ./...
 
 lint-extra: ## Run linters with extra checks.
@@ -124,7 +124,7 @@ install-linters: ## Install linters
 	${OPTS} go install golang.org/x/tools/cmd/goimports@latest
 	${OPTS} go install github.com/incu6us/goimports-reviser/v2@latest
 
-install-linters-windows:
+install-linters-windows: ## Install linters
 	${OPTS} go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	${OPTS} go install golang.org/x/tools/cmd/goimports@latest
 
@@ -189,7 +189,7 @@ host-apps-systray: ## Build app
 	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps/vpn-server ./cmd/apps/vpn-server
 	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps/vpn-client ./cmd/apps/vpn-client
 
-host-apps-windows-systray:
+host-apps-systray-windows:
 	powershell -Command new-item .\apps -itemtype directory -force
 	powershell 'go build ${BUILD_OPTS} -o .\apps\skychat .\cmd\apps\skychat'
 	powershell 'go build ${BUILD_OPTS} -o .\apps\skysocks .\cmd\apps\skysocks'
@@ -212,13 +212,13 @@ bin: ## Build `skywire-visor`, `skywire-cli`
 	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/setup-node
 
-bin-windows:
+bin-windows: ## Build `skywire-visor`, `skywire-cli`
 	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go build ${BUILD_OPTS} -o ./ $$_.FullName }'
 
-bin-windows-systray:
+bin-systray-windows: ## Build `skywire-visor` and `skywire-cli` with systray support
 	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ $$_.FullName }'
 
-bin-systray:
+bin-systray: ## Build `skywire-visor`, `skywire-cli`
 	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./skywire-visor ./cmd/skywire-visor
 	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./skywire-cli ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS} -o ./setup-node ./cmd/setup-node
@@ -266,5 +266,15 @@ build-ui: install-deps-ui  ## Builds the UI
 	mkdir ${MANAGER_UI_BUILT_DIR}
 	cp -r ${MANAGER_UI_DIR}/dist/. ${MANAGER_UI_BUILT_DIR}
 
-help:
+build-ui-windows: install-deps-ui ## Builds the UI on windows
+	cd $(MANAGER_UI_DIR) && npm run build
+	powershell 'New-Item -Path ${PWD}\bin -ItemType Directory'
+	powershell 'Remove-Item -Recurse -Force -Path ${MANAGER_UI_BUILT_DIR}'
+	powershell 'New-Item -Path ${MANAGER_UI_BUILT_DIR} -ItemType Directory'
+	powershell 'Copy-Item -Recurse ${MANAGER_UI_DIR}\dist\. ${MANAGER_UI_BUILT_DIR}'
+
+help: ## Display help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+
+help-windows: ## Display help for windows
+	@powershell 'Select-String -Pattern "windows[a-zA-Z_-]*:.*## .*$$" $(MAKEFILE_LIST) | % { $$_.Line -split ":.*?## " -Join "`t:`t" } '
