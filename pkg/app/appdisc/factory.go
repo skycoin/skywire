@@ -1,8 +1,6 @@
-package updatedisc
+package appdisc
 
 import (
-	"time"
-
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -14,19 +12,15 @@ import (
 
 // Factory creates appdisc.Updater instances based on the app name.
 type Factory struct {
-	Log            logrus.FieldLogger
-	PK             cipher.PubKey
-	SK             cipher.SecKey
-	UpdateInterval time.Duration
-	ServiceDisc    string // Address of service-discovery
+	Log         logrus.FieldLogger
+	PK          cipher.PubKey
+	SK          cipher.SecKey
+	ServiceDisc string // Address of service-discovery
 }
 
 func (f *Factory) setDefaults() {
 	if f.Log == nil {
 		f.Log = logging.MustGetLogger("appdisc")
-	}
-	if f.UpdateInterval == 0 {
-		f.UpdateInterval = skyenv.ServiceDiscUpdateInterval
 	}
 	if f.ServiceDisc == "" {
 		f.ServiceDisc = skyenv.DefaultServiceDiscAddr
@@ -49,8 +43,7 @@ func (f *Factory) VisorUpdater(port uint16) Updater {
 	}
 
 	return &serviceUpdater{
-		client:   servicedisc.NewClient(f.Log, conf),
-		interval: f.UpdateInterval,
+		client: servicedisc.NewClient(f.Log, conf),
 	}
 }
 
@@ -81,8 +74,11 @@ func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
 	switch conf.AppName {
 	case skyenv.VPNServerName:
 		return &serviceUpdater{
-			client:   servicedisc.NewClient(log, getServiceDiscConf(conf, servicedisc.ServiceTypeVPN)),
-			interval: f.UpdateInterval,
+			client: servicedisc.NewClient(log, getServiceDiscConf(conf, servicedisc.ServiceTypeVPN)),
+		}, true
+	case skyenv.SkysocksName:
+		return &serviceUpdater{
+			client: servicedisc.NewClient(log, getServiceDiscConf(conf, servicedisc.ServiceTypeSkysocks)),
 		}, true
 	default:
 		return &emptyUpdater{}, false
