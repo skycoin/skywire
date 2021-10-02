@@ -32,6 +32,11 @@ export const AppConfig = {
       name: 'Deutsch',
       iconName: 'de.png',
     },
+    {
+      code: 'pt',
+      name: 'Português (Brazil)',
+      iconName: 'pt.png',
+    },
   ],
   /**
    * Default language.
