@@ -219,9 +219,20 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg)
 
-	time.Sleep(200 * time.Millisecond)
-	go dmsgC.Serve(context.Background())
-	time.Sleep(200 * time.Millisecond)
+	wg := new(sync.WaitGroup)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		dmsgC.Serve(context.Background())
+	}()
+
+	v.pushCloseStack("dmsg", func() error {
+		if err := dmsgC.Close(); err != nil {
+			return err
+		}
+		wg.Wait()
+		return nil
+	})
 
 	v.initLock.Lock()
 	v.dmsgC = dmsgC
