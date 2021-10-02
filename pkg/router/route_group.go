@@ -619,16 +619,18 @@ func (rg *RouteGroup) handleNetworkProbePacket(packet routing.Packet) error {
 }
 
 func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
+
+	// in this case remote is already closed, and `readCh` is closed too,
+	// but some packets may still reach the rg causing panic on writing
+	// to `readCh`, so we simple omit such packets
+	if rg.isRemoteClosed() {
+		return nil
+	}
 	rg.networkStats.AddBandwidthReceived(uint64(packet.Size()))
 
 	select {
 	case <-rg.closed:
 		return io.ErrClosedPipe
-	case <-rg.remoteClosed:
-		// in this case remote is already closed, and `readCh` is closed too,
-		// but some packets may still reach the rg causing panic on writing
-		// to `readCh`, so we simple omit such packets
-		return nil
 	case rg.readCh <- packet.Payload():
 	}
 

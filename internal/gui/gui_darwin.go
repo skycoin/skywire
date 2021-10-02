@@ -8,9 +8,9 @@ import (
 )
 
 const (
-	iconName        = "icons/icon.tiff"
 	deinstallerPath = "/Applications/Skywire.app/Contents/deinstaller"
 	appPath         = "/Applications/Skywire.app"
+	iconName        = "icons/icon.tiff"
 )
 
 func checkIsPackage() bool {
