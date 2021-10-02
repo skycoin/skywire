@@ -25,3 +25,9 @@ func TestGetAvailPublicVPNServers(t *testing.T) {
 	require.NotEqual(t, []string{}, servers)
 	t.Logf("Servers: %v", servers)
 }
+
+func TestReadEmbeddedIcon(t *testing.T) {
+	b, err := ReadSysTrayIcon()
+	require.NoError(t, err)
+	require.NotEqual(t, 0, len(b))
+}
