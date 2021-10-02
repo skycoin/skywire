@@ -171,7 +171,7 @@ func Pipe2(p []int, flags int) (err error) {
 
 // Getrlimit prefers the prlimit64 system call. See issue 38604.
 func Getrlimit(resource int, rlim *Rlimit) error {
-	err := Prlimit(0, resource, nil, rlim)
+	err := prlimit(0, resource, nil, rlim)
 	if err != ENOSYS {
 		return err
 	}
@@ -180,7 +180,7 @@ func Getrlimit(resource int, rlim *Rlimit) error {
 
 // Setrlimit prefers the prlimit64 system call. See issue 38604.
 func Setrlimit(resource int, rlim *Rlimit) error {
-	err := Prlimit(0, resource, rlim, nil)
+	err := prlimit(0, resource, rlim, nil)
 	if err != ENOSYS {
 		return err
 	}
@@ -209,6 +209,10 @@ func (cmsg *Cmsghdr) SetLen(length int) {
 
 func (rsa *RawSockaddrNFCLLCP) SetServiceNameLen(length int) {
 	rsa.Service_name_len = uint64(length)
+}
+
+func InotifyInit() (fd int, err error) {
+	return InotifyInit1(0)
 }
 
 // dup2 exists because func Dup3 in syscall_linux.go references
