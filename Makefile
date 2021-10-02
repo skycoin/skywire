@@ -1,11 +1,10 @@
 
-.PHONY : check lint lint-extra install-linters dep test
+.PHONY : check lint install-linters dep test
 .PHONY : build clean install format  bin
 .PHONY : host-apps bin
 .PHONY : docker-image docker-clean docker-network
 .PHONY : docker-apps docker-bin docker-volume
 .PHONY : docker-run docker-stop
-.PHONY : sysroot sysroot-clean
 
 VERSION := $(shell git describe)
 #VERSION := v0.1.0 # for debugging updater
@@ -104,11 +103,6 @@ lint-windows: ## Run linters. Use make install-linters-windows first
 lint-appveyor-windows: ## Run linters for appveyor only on windows
 	C:\Users\appveyor\go\bin\golangci-lint run -c .golangci.yml ./...
 
-lint-extra: ## Run linters with extra checks.
-	${OPTS} golangci-lint run --no-config --enable-all ./...
-	# The govet version in golangci-lint is out of date and has spurious warnings, run it separately
-	${OPTS} go vet -all ./...
-
 test: ## Run tests
 	-go clean -testcache &>/dev/null
 	${OPTS} go test ${TEST_OPTS} ./internal/...
@@ -143,32 +137,11 @@ format-windows: tidy ## Formats the code. Must have goimports and goimports-revi
 dep: tidy ## Sorts dependencies
 	${OPTS} go mod vendor -v
 
-snapshot-systray: sysroot ## create snapshot release
-	docker run --rm --privileged \
-		-v $(CURDIR):/go/src/github.com/skycoin/skywire \
-		-v /var/run/docker.sock:/var/run/docker.sock \
-		-v $(GOPATH)/src:/go/src \
-		-v $(CURDIR)/sysroot:/sysroot \
-		-w /go/src/github.com/skycoin/skywire \
-		skycoin/golang-cross:$(GO_BUILDER_VERSION) -f /go/src/github.com/skycoin/skywire/.goreleaser-systray.yml --snapshot --skip-publish --rm-dist
-
 snapshot:
 	goreleaser --snapshot --skip-publish --rm-dist
 
 snapshot-clean: ## Cleans snapshot / release
 	rm -rf ./dist
-
-sysroot:
-	mkdir -p ./sysroot
-	@echo "getting sysroot for cross compilation"
-	if [[ ! -f /tmp/skywire-sysroot.tar.gz ]]; then \
-  		curl -L -o /tmp/skywire-sysroot.tar.gz "https://ap-south-1.linodeobjects.com/skywire-bucket/skywire-sysroot-latest_20210903.tar.gz"; \
-	fi
-	tar xf /tmp/skywire-sysroot.tar.gz -C ./sysroot/
-
-sysroot-clean:
-	@rm -rf ./sysroot
-	@rm -rf /tmp/sysroot-git
 
 host-apps: ## Build app
 	mkdir -p ./apps
@@ -238,13 +211,6 @@ build-deploy: ## Build for deployment Docker images
 
 github-release: sysroot
 	goreleaser --rm-dist
-	docker run --rm --privileged \
-		-v $(CURDIR):/go/src/github.com/skycoin/skywire \
-		-v /var/run/docker.sock:/var/run/docker.sock \
-		-v $(GOPATH)/src:/go/src \
-		-v $(CURDIR)/sysroot:/sysroot \
-		-w /go/src/github.com/skycoin/skywire \
-		skycoin/golang-cross:$(GO_BUILDER_VERSION) -f /go/src/github.com/skycoin/skywire/.goreleaser-systray.yml --rm-dist
 
 build-docker: ## Build docker image
 	./ci_scripts/docker-push.sh -t ${BRANCH} -b

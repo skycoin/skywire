@@ -23,8 +23,7 @@ import (
 )
 
 const (
-	logWriteInterval  = time.Second * 3
-	heartbeatInterval = time.Minute * 10
+	logWriteInterval = time.Second * 3
 )
 
 // Records number of managedTransports.
@@ -109,9 +108,6 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 	}()
 
 	go mt.readLoop(readCh)
-	if mt.Entry.IsLeastSignificantEdge(mt.client.PK()) {
-		go mt.heartbeatLoop()
-	}
 	mt.logLoop()
 }
 
@@ -132,26 +128,6 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 		case <-mt.done:
 			return
 		case readCh <- p:
-		}
-	}
-}
-
-func (mt *ManagedTransport) heartbeatLoop() {
-	defer func() {
-		mt.wg.Done()
-		log.Debug("Stopped heartbeat loop")
-	}()
-	ticker := time.NewTicker(heartbeatInterval)
-	for {
-		select {
-		case <-mt.done:
-			ticker.Stop()
-			return
-		case <-ticker.C:
-			err := mt.dc.HeartBeat(context.Background(), mt.Entry.ID)
-			if err != nil {
-				log.Warn("Failed to send heartbeat")
-			}
 		}
 	}
 }

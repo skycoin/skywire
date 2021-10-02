@@ -43,12 +43,12 @@ require (
 	github.com/xtaci/kcp-go v5.4.20+incompatible
 	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
 	go.etcd.io/bbolt v1.3.6
-	golang.org/x/crypto v0.0.0-20210817164053-32db794688a5 // indirect
+	golang.org/x/crypto v0.0.0-20210513164829-c07d793c2f9a // indirect
 	golang.org/x/net v0.0.0-20210405180319-a5a99cb37ef4
-	golang.org/x/sys v0.0.0-20210906170528-6f6e22806c34
-	golang.org/x/term v0.0.0-20210615171337-6886f2dfbf5b // indirect
+	golang.org/x/sys v0.0.0-20210608053332-aa57babbf139
+	golang.org/x/term v0.0.0-20210503060354-a79de5458b56 // indirect
 	golang.org/x/text v0.3.6 // indirect
-	golang.org/x/tools v0.1.3 // indirect
+	golang.org/x/tools v0.1.2 // indirect
 	golang.zx2c4.com/wireguard v0.0.20200320
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	nhooyr.io/websocket v1.8.2
