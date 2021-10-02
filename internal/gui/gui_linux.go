@@ -9,7 +9,7 @@ import (
 
 // TODO (darkrengarius): change path
 const (
-	iconPath        = "/opt/skywire/icon.png"
+	iconName        = "icons/icon.png"
 	deinstallerPath = "/opt/skywire/deinstaller"
 )
 
