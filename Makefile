@@ -43,12 +43,10 @@ BUILDINFO?=$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT)
 BUILD_OPTS?="-ldflags=$(BUILDINFO)" -mod=vendor $(RACE_FLAG)
 BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
 
-MAC_DEV_ID := ""
-MAC_CERT_PATH := ""
+MAC_DEV_ID ?= ""
+MAC_CERT_PATH ?= ""
 
 check: lint test ## Run linters and tests
-
-check-windows-appveyor: lint-windows-appveyor test ## Run linters and tests on appveyor windows image
 
 build: host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
