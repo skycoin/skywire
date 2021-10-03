@@ -117,7 +117,7 @@ EOF
     cat <<EOF >"${output}/package-signing-config.json"
     {
         "source" : ["./$package_name"],
-        "bundle_id" : "com.skycoin.skywire.visor",
+        "bundle_id" : "com.skycoin.skywire",
         "apple_id": {
             "username" : "@env:MAC_APP_DEV_USERNAME",
             "password":  "@env:MAC_APP_DEV_PASSWORD"
