@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -50,6 +51,8 @@ type Client struct {
 	tunMu      sync.Mutex
 	tun        TUNDevice
 	tunCreated bool
+
+	connectedDuration int64
 }
 
 // NewClient creates VPN client instance.
@@ -181,10 +184,13 @@ func (c *Client) Serve() error {
 			fmt.Printf("Failed to close TUN: %v\n", err)
 		}
 
-		fmt.Println("Closed TUN")
+		c.log.Info("Closing TUN")
 	}()
 
-	defer c.setAppStatus(ClientStatusShuttingDown)
+	defer func() {
+		c.setAppStatus(ClientStatusShuttingDown)
+		c.resetConnDuration()
+	}()
 
 	c.setAppStatus(ClientStatusConnecting)
 
@@ -195,6 +201,7 @@ func (c *Client) Serve() error {
 		}
 
 		if err := c.dialServeConn(); err != nil {
+			c.resetConnDuration()
 			c.setAppStatus(ClientStatusReconnecting)
 			fmt.Println("Connection broke, reconnecting...")
 			return fmt.Errorf("dialServeConn: %w", err)
@@ -382,6 +389,8 @@ func (c *Client) serveConn(conn net.Conn) error {
 	}
 
 	c.setAppStatus(ClientStatusRunning)
+	c.resetConnDuration()
+	t := time.NewTicker(time.Second)
 
 	defer func() {
 		if !c.cfg.Killswitch {
@@ -412,10 +421,19 @@ func (c *Client) serveConn(conn net.Conn) error {
 	}()
 
 	// only one side may fail here, so we wait till at least one fails
-	select {
-	case <-connToTunDoneCh:
-	case <-tunToConnCh:
-	case <-c.closeC:
+serveLoop:
+	for {
+		select {
+		case <-connToTunDoneCh:
+			break serveLoop
+		case <-tunToConnCh:
+			break serveLoop
+		case <-c.closeC:
+			break serveLoop
+		case <-t.C:
+			atomic.AddInt64(&c.connectedDuration, 1)
+			c.log.Infof("VPN Connection Duration: %d seconds", c.connectedDuration)
+		}
 	}
 
 	// here we setup system privileges again, so deferred calls may be done safely
@@ -727,6 +745,10 @@ func (c *Client) isClosed() bool {
 	}
 
 	return false
+}
+
+func (c *Client) resetConnDuration() {
+	atomic.StoreInt64(&c.connectedDuration, 0)
 }
 
 func ipFromEnv(key string) (net.IP, error) {
