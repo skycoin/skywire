@@ -176,7 +176,7 @@ type SetAppStatusIn struct {
 	Status  string
 }
 
-// SetAppStatusIn is input for SetAppError.
+// SetAppErrorIn is input for SetAppError.
 type SetAppErrorIn struct {
 	AppName string
 	Err     string
