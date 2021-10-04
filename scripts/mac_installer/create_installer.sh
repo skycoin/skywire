@@ -108,9 +108,18 @@ EOF
     fi
 
     echo "Creating keychain and importing your certificate"
-    security create-keychain -p "$MAC_APP_KEYCHAIN_PASSWORD" skywireBuild.keychain
+    keychain_exists=$(security list-keychains | grep skywireBuild.keychain | tr -d '\n' | tr -d ' ')
+
+    if [[ ${keychain_exists} != "" ]]; then
+      security create-keychain -p "$MAC_APP_KEYCHAIN_PASSWORD" skywireBuild.keychain
+    fi
+
     security default-keychain -s skywireBuild.keychain
-    security import "$cert_path" -k skywireBuild.keychain -P "$MAC_APP_CERTIFICATE_PASSWORD"
+
+    cert_exists=$(security find-certificate -e "$MAC_APP_DEV_USERNAME" skywireBuild.keychain | tr -d '\n' | tr -d ' ')
+    if [[ ${cert_exists} != "" ]]; then
+      security import "$cert_path" -k skywireBuild.keychain -P "$MAC_APP_CERTIFICATE_PASSWORD"
+    fi
 
     dmg_name=skywire-${git_tag}-${date_format}-${go_arch}.dmg
     # create gon config
