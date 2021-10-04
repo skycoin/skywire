@@ -15,7 +15,7 @@ import (
 // RPCIngressClient describes RPC interface to communicate with the server.
 type RPCIngressClient interface {
 	SetDetailedStatus(status string) error
-	SetDetailedStatusError(aErr string) error
+	SetError(aErr string) error
 	Dial(remote appnet.Addr) (connID uint16, localPort routing.Port, err error)
 	Listen(local appnet.Addr) (uint16, error)
 	Accept(lisID uint16) (connID uint16, remote appnet.Addr, err error)
@@ -47,9 +47,9 @@ func (c *rpcIngressClient) SetDetailedStatus(status string) error {
 	return c.rpc.Call(c.formatMethod("SetDetailedStatus"), &status, nil)
 }
 
-// SetDetailedStatusError sets detailed status error of an app.
-func (c *rpcIngressClient) SetDetailedStatusError(statusErr string) error {
-	return c.rpc.Call(c.formatMethod("SetDetailedStatusError"), &statusErr, nil)
+// SetError sets error of an app.
+func (c *rpcIngressClient) SetError(aErr string) error {
+	return c.rpc.Call(c.formatMethod("SetError"), &aErr, nil)
 }
 
 // Dial sends `Dial` command to the server.

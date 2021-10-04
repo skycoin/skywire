@@ -201,11 +201,11 @@ func (c *Client) Serve() error {
 			switch err {
 			case errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
 				errHandshakeStatusBadRequest:
-				c.setAppStatusError(ClientStatus(err.Error()))
+				c.setAppError(err)
 				return err
 			default:
 				c.setAppStatus(ClientStatusReconnecting)
-				c.setAppStatusError(ClientStatus(errTimeout.Error()))
+				c.setAppError(errTimeout)
 				fmt.Println("\nConnection broke, reconnecting...")
 				return fmt.Errorf("dialServeConn: %w", err)
 			}
@@ -740,9 +740,9 @@ func (c *Client) setAppStatus(status ClientStatus) {
 	}
 }
 
-func (c *Client) setAppStatusError(statusErr ClientStatus) {
-	if err := c.appCl.SetDetailedStatusError(string(statusErr)); err != nil {
-		fmt.Printf("Failed to set status error %v: %v\n", statusErr, err)
+func (c *Client) setAppError(aErr error) {
+	if err := c.appCl.SetError(aErr.Error()); err != nil {
+		fmt.Printf("Failed to set error %v: %v\n", aErr, err)
 	}
 }
 

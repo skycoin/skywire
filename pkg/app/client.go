@@ -68,9 +68,9 @@ func (c *Client) SetDetailedStatus(status string) error {
 	return c.rpcC.SetDetailedStatus(status)
 }
 
-// SetDetailedStatusError sets detailed app status within the visor.
-func (c *Client) SetDetailedStatusError(aErr string) error {
-	return c.rpcC.SetDetailedStatusError(aErr)
+// SetError sets app error within the visor.
+func (c *Client) SetError(aErr string) error {
+	return c.rpcC.SetError(aErr)
 }
 
 // Dial dials the remote visor using `remote`.
