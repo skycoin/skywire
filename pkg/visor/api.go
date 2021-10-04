@@ -333,7 +333,7 @@ func (v *Visor) StartApp(appName string) error {
 
 // StopApp implements API.
 func (v *Visor) StopApp(appName string) error {
-	_, err := v.appL.StopApp(appName)
+	_, err := v.appL.StopApp(appName) //nolint:errcheck
 	return err
 }
 
@@ -365,7 +365,7 @@ func (v *Visor) SetAppDetailedStatusError(appName, aErr string) error {
 
 // RestartApp implements API.
 func (v *Visor) RestartApp(appName string) error {
-	if _, ok := v.procM.ProcByName(appName); ok {
+	if _, ok := v.procM.ProcByName(appName); ok { //nolint:errcheck
 		v.log.Infof("Updated %v password, restarting it", appName)
 		return v.appL.RestartApp(appName)
 	}
