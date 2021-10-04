@@ -170,8 +170,8 @@ func (_m *MockRPCIngressClient) SetDetailedStatus(status string) error {
 	return r0
 }
 
-// SetDetailedStatusError provides a mock function with given fields: aErr
-func (_m *MockRPCIngressClient) SetDetailedStatusError(aErr string) error {
+// SetError provides a mock function with given fields: aErr
+func (_m *MockRPCIngressClient) SetError(aErr string) error {
 	ret := _m.Called(aErr)
 
 	var r0 error
