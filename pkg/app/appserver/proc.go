@@ -172,8 +172,8 @@ func (p *Proc) Start() error {
 			// here will definitely be an error notifying that the process
 			// is already stopped. We do this to remove proc from the manager,
 			// therefore giving the correct app status to hypervisor.
-			_ = p.m.SetDetailedStatusError(p.appName, p.statusErr)
-			_ = p.m.Stop(p.appName)
+			_ = p.m.SetDetailedStatusError(p.appName, p.statusErr) //nolint:errcheck
+			_ = p.m.Stop(p.appName)                                //nolint:errcheck
 		}()
 
 		select {

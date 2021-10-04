@@ -173,10 +173,10 @@ func (l *Launcher) AppState(name string) (*AppState, bool) {
 		return nil, false
 	}
 	state := &AppState{AppConfig: ac, Status: AppStatusStopped}
-	if _, ok := l.procM.DetailedStatusErrorByName(ac.Name); ok {
+	if _, ok := l.procM.DetailedStatusErrorByName(ac.Name); ok { //nolint:errcheck
 		state.Status = AppStatusErrored
 	}
-	if _, ok := l.procM.ProcByName(ac.Name); ok {
+	if _, ok := l.procM.ProcByName(ac.Name); ok { //nolint:errcheck
 		state.Status = AppStatusRunning
 	}
 	return state, true
