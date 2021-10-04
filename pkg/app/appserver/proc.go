@@ -51,8 +51,10 @@ type Proc struct {
 	startTimeMx sync.RWMutex
 	startTime   time.Time
 
-	statusMx sync.RWMutex
-	status   string
+	statusMx  sync.RWMutex
+	status    string
+	errMx     sync.RWMutex
+	statusErr string
 }
 
 // NewProc constructs `Proc`.
@@ -170,7 +172,8 @@ func (p *Proc) Start() error {
 			// here will definitely be an error notifying that the process
 			// is already stopped. We do this to remove proc from the manager,
 			// therefore giving the correct app status to hypervisor.
-			_ = p.m.Stop(p.appName) //nolint:errcheck
+			_ = p.m.SetDetailedStatusError(p.appName, p.statusErr)
+			_ = p.m.Stop(p.appName)
 		}()
 
 		select {
@@ -283,6 +286,22 @@ func (p *Proc) DetailedStatus() string {
 	defer p.statusMx.RUnlock()
 
 	return p.status
+}
+
+// SetDetailedStatusError sets proc's detailed status error.
+func (p *Proc) SetDetailedStatusError(statusErr string) {
+	p.errMx.Lock()
+	defer p.errMx.Unlock()
+
+	p.statusErr = statusErr
+}
+
+// Error gets proc's error.
+func (p *Proc) Error() string {
+	p.errMx.RLock()
+	defer p.errMx.RUnlock()
+
+	return p.statusErr
 }
 
 // ConnectionSummary sums up the connection stats.
