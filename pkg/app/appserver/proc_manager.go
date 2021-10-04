@@ -235,7 +235,6 @@ func (m *procManager) DetailedStatusErrorByName(appName string) (string, bool) {
 
 // Stop stops the application.
 func (m *procManager) Stop(name string) error {
-	m.log.Error("111111111111111111111111111111111111")
 	p, err := m.pop(name)
 	if err != nil {
 		return err
