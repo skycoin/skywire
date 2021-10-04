@@ -173,6 +173,9 @@ func (l *Launcher) AppState(name string) (*AppState, bool) {
 		return nil, false
 	}
 	state := &AppState{AppConfig: ac, Status: AppStatusStopped}
+	if _, ok := l.procM.DetailedStatusErrorByName(ac.Name); ok {
+		state.Status = AppStatusErrored
+	}
 	if _, ok := l.procM.ProcByName(ac.Name); ok {
 		state.Status = AppStatusRunning
 	}
@@ -187,6 +190,10 @@ func (l *Launcher) AppStates() []*AppState {
 	var states []*AppState
 	for _, app := range l.apps {
 		state := &AppState{AppConfig: app, Status: AppStatusStopped}
+		if err, ok := l.procM.DetailedStatusErrorByName(app.Name); ok {
+			state.DetailedStatus = err
+			state.Status = AppStatusErrored
+		}
 		if proc, ok := l.procM.ProcByName(app.Name); ok {
 			state.DetailedStatus = proc.DetailedStatus()
 			state.Status = AppStatusRunning
