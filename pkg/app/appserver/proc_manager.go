@@ -38,8 +38,8 @@ type ProcManager interface {
 	io.Closer
 	Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 	ProcByName(appName string) (*Proc, bool)
-	SetDetailedStatusError(appName, status string) error
-	DetailedStatusErrorByName(appName string) (string, bool)
+	SetError(appName, status string) error
+	ErrorByName(appName string) (string, bool)
 	Stop(appName string) error
 	Wait(appName string) error
 	Range(next func(appName string, proc *Proc) bool)
@@ -225,7 +225,7 @@ func (m *procManager) ProcByName(appName string) (*Proc, bool) {
 	return proc, ok
 }
 
-func (m *procManager) DetailedStatusErrorByName(appName string) (string, bool) {
+func (m *procManager) ErrorByName(appName string) (string, bool) {
 	m.mx.RLock()
 	defer m.mx.RUnlock()
 
@@ -322,12 +322,12 @@ func (m *procManager) DetailedStatus(appName string) (string, error) {
 	return p.DetailedStatus(), nil
 }
 
-// SetDetailedStatusError error `statusErr` for app `appName`.
-func (m *procManager) SetDetailedStatusError(appName, statusErr string) error {
+// SetError error `aErr` for app `appName`.
+func (m *procManager) SetError(appName, aErr string) error {
 	m.mx.RLock()
 	defer m.mx.RUnlock()
 
-	m.errors[appName] = statusErr
+	m.errors[appName] = aErr
 
 	return nil
 }

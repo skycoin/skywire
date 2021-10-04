@@ -40,7 +40,7 @@ type API interface {
 	StartApp(appName string) error
 	StopApp(appName string) error
 	SetAppDetailedStatus(appName, state string) error
-	SetAppDetailedStatusError(appName, stateErr string) error
+	SetAppError(appName, stateErr string) error
 	RestartApp(appName string) error
 	SetAutoStart(appName string, autostart bool) error
 	SetAppPassword(appName, password string) error
@@ -350,15 +350,15 @@ func (v *Visor) SetAppDetailedStatus(appName, status string) error {
 	return nil
 }
 
-// SetAppDetailedStatusError implements API.
-func (v *Visor) SetAppDetailedStatusError(appName, aErr string) error {
+// SetAppError implements API.
+func (v *Visor) SetAppError(appName, aErr string) error {
 	proc, ok := v.procM.ProcByName(appName)
 	if !ok {
 		return ErrAppProcNotRunning
 	}
 
-	v.log.Infof("Setting app detailed status error %v for app %v", aErr, appName)
-	proc.SetDetailedStatusError(aErr)
+	v.log.Infof("Setting error %v for app %v", aErr, appName)
+	proc.SetError(aErr)
 
 	return nil
 }
