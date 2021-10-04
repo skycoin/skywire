@@ -85,6 +85,15 @@ func (r *RPCIngressGateway) SetDetailedStatus(status *string, _ *struct{}) (err 
 	return nil
 }
 
+// SetDetailedStatusError sets error of an app.
+func (r *RPCIngressGateway) SetDetailedStatusError(aErr *string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetDetailedStatusError", aErr)(nil, &err)
+
+	r.proc.SetDetailedStatusError(*aErr)
+
+	return nil
+}
+
 // DialResp contains response parameters for `Dial`.
 type DialResp struct {
 	ConnID    uint16

@@ -198,14 +198,17 @@ func (c *Client) Serve() error {
 		}
 
 		if err := c.dialServeConn(); err != nil {
-			c.setAppStatus(ClientStatusReconnecting)
-			fmt.Println("\nConnection broke, reconnecting...")
 			switch err {
 			case errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
 				errHandshakeStatusBadRequest:
+				c.setAppStatusError(ClientStatus(err.Error()))
 				return err
+			default:
+				c.setAppStatus(ClientStatusReconnecting)
+				c.setAppStatusError(ClientStatus(errTimeout.Error()))
+				fmt.Println("\nConnection broke, reconnecting...")
+				return fmt.Errorf("dialServeConn: %w", err)
 			}
-			return fmt.Errorf("dialServeConn: %w", err)
 		}
 
 		return nil
@@ -734,6 +737,12 @@ func (c *Client) dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, erro
 func (c *Client) setAppStatus(status ClientStatus) {
 	if err := c.appCl.SetDetailedStatus(string(status)); err != nil {
 		fmt.Printf("Failed to set status %v: %v\n", status, err)
+	}
+}
+
+func (c *Client) setAppStatusError(statusErr ClientStatus) {
+	if err := c.appCl.SetDetailedStatusError(string(statusErr)); err != nil {
+		fmt.Printf("Failed to set status error %v: %v\n", statusErr, err)
 	}
 }
 
