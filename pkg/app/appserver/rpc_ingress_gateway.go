@@ -86,10 +86,10 @@ func (r *RPCIngressGateway) SetDetailedStatus(status *string, _ *struct{}) (err 
 }
 
 // SetError sets error of an app.
-func (r *RPCIngressGateway) SetError(aErr *string, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "SetError", aErr)(nil, &err)
+func (r *RPCIngressGateway) SetError(appErr *string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetError", appErr)(nil, &err)
 
-	r.proc.SetError(*aErr)
+	r.proc.SetError(*appErr)
 
 	return nil
 }
