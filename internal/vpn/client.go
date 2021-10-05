@@ -187,9 +187,8 @@ func (c *Client) Serve() error {
 	}
 
 	r := netutil.NewRetrier(c.log, netutil.DefaultInitBackoff, netutil.DefaultMaxBackoff, 3, netutil.DefaultFactor).
-		WithErrWhitelist(errHandshakeStatusForbidden).WithErrWhitelist(errHandshakeStatusInternalError).
-		WithErrWhitelist(errHandshakeNoFreeIPs).WithErrWhitelist(errHandshakeStatusBadRequest).
-		WithErrWhitelist(errTransportNotFound)
+		WithErrWhitelist(errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
+			errHandshakeStatusBadRequest, errTransportNotFound)
 
 	err := r.Do(context.Background(), func() error {
 		if c.isClosed() {
