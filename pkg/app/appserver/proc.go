@@ -289,11 +289,11 @@ func (p *Proc) DetailedStatus() string {
 }
 
 // SetError sets proc's detailed status error.
-func (p *Proc) SetError(aErr string) {
+func (p *Proc) SetError(appErr string) {
 	p.errMx.Lock()
 	defer p.errMx.Unlock()
 
-	p.err = aErr
+	p.err = appErr
 }
 
 // Error gets proc's error.

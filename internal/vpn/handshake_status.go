@@ -48,6 +48,6 @@ func (hs HandshakeStatus) getError() error {
 	case HandshakeStatusForbidden:
 		return errHandshakeStatusForbidden
 	default:
-		return errors.New("Unknown code")
+		return errors.New("Unknown error code")
 	}
 }
