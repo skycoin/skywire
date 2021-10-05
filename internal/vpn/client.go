@@ -18,6 +18,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -181,10 +182,14 @@ func (c *Client) Serve() error {
 
 	c.setAppStatus(ClientStatusConnecting)
 
+	errTransportNotFound := appserver.RPCErr{
+		Err: rfclient.ErrTransportNotFound.Error(),
+	}
+
 	r := netutil.NewRetrier(c.log, netutil.DefaultInitBackoff, netutil.DefaultMaxBackoff, 3, netutil.DefaultFactor).
 		WithErrWhitelist(errHandshakeStatusForbidden).WithErrWhitelist(errHandshakeStatusInternalError).
 		WithErrWhitelist(errHandshakeNoFreeIPs).WithErrWhitelist(errHandshakeStatusBadRequest).
-		WithErrWhitelist(rfclient.ErrTransportNotFound)
+		WithErrWhitelist(errTransportNotFound)
 
 	err := r.Do(context.Background(), func() error {
 		if c.isClosed() {
@@ -194,7 +199,7 @@ func (c *Client) Serve() error {
 		if err := c.dialServeConn(); err != nil {
 			switch err {
 			case errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
-				errHandshakeStatusBadRequest, rfclient.ErrTransportNotFound:
+				errHandshakeStatusBadRequest, errTransportNotFound:
 				c.setAppError(err)
 				return err
 			default:
@@ -700,10 +705,6 @@ func (c *Client) dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, erro
 	})
 
 	if err != nil {
-		// WithErrWhitelist only recognizes the error if it's the same variable
-		if err.Error() == rfclient.ErrTransportNotFound.Error() {
-			return nil, rfclient.ErrTransportNotFound
-		}
 		return nil, err
 	}
 
