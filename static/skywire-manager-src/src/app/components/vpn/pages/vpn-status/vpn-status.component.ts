@@ -136,13 +136,19 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
       // Start getting and updating the state of the backend.
       this.dataSubscription = this.vpnClientService.backendState.subscribe(data => {
         if (data && data.serviceState !== VpnServiceStates.PerformingInitialCheck) {
+          const firstEventExecution = !!!this.backendState;
           this.backendState = data;
 
-          // If the state was changed, update the IP.
-          if (this.lastAppState !== data.vpnClientAppData.appState) {
-            if (data.vpnClientAppData.appState === AppState.Running || data.vpnClientAppData.appState === AppState.Stopped) {
-              this.getIp(true);
+          if (!firstEventExecution) {
+            // If the state was changed, update the IP.
+            if (this.lastAppState !== data.vpnClientAppData.appState) {
+              if (data.vpnClientAppData.appState === AppState.Running || data.vpnClientAppData.appState === AppState.Stopped) {
+                this.getIp(true);
+              }
             }
+          } else {
+            // Get the ip data for the first time.
+            this.getIp(true);
           }
 
           this.showStarted = data.vpnClientAppData.running || data.vpnClientAppData.appState !== AppState.Stopped;
@@ -200,9 +206,6 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
         this.currentRemoteServer = server;
       });
     });
-
-    // Get the current IP.
-    this.getIp(true);
   }
 
   ngOnDestroy() {
@@ -413,7 +416,7 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
    * @param ignoreTimeCheck If true, the operation will be performed even if the function
    * was called shortly before.
    */
-  private getIp(ignoreTimeCheck = false) {
+  public getIp(ignoreTimeCheck = false) {
     // Cancel the operation if the used blocked the IP checking functionality.
     if (!this.ipInfoAllowed) {
       return;
@@ -460,8 +463,8 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
         this.problemGettingIp = false;
         this.currentIp = response;
 
-        // Update the country, if the IP changed.
-        if (this.previousIp !== this.currentIp || this.problemGettingIpCountry) {
+        // Update the country, if no country has been loaded or the IP changed.
+        if (!this.ipCountry || this.previousIp !== this.currentIp || this.problemGettingIpCountry) {
           this.getIpCountry();
         } else {
           this.loadingIpCountry = false;
