@@ -14,6 +14,7 @@ const (
 // AppState defines state parameters for a registered App.
 type AppState struct {
 	AppConfig
-	Status         AppStatus `json:"status"`
-	DetailedStatus string    `json:"detailed_status"`
+	Status             AppStatus `json:"status"`
+	DetailedStatus     string    `json:"detailed_status"`
+	ConnectionDuration int64     `json:"connection_duration,omitempty"`
 }

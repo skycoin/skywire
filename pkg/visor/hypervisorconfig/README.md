@@ -1,11 +1,8 @@
 # Config
 
-- `-` (PubKey)
-- `-` (SecKey)
 - `db_path` (string)
 - `enable_auth` (bool)
 - `cookies` ([CookieConfig](#CookieConfig))
-- `-` (string)
 - `dmsg_port` (uint16)
 - `http_addr` (string)
 - `enable_tls` (bool)
@@ -20,4 +17,3 @@
 - `expires_duration` (Duration)
 - `path` (string)
 - `domain` (string)
-- `-` (bool)

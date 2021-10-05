@@ -432,7 +432,7 @@ serveLoop:
 			break serveLoop
 		case <-t.C:
 			atomic.AddInt64(&c.connectedDuration, 1)
-			c.log.Infof("VPN Connection Duration: %d seconds", c.connectedDuration)
+			c.setConnectionDuration()
 		}
 	}
 
@@ -737,6 +737,12 @@ func (c *Client) setAppStatus(status ClientStatus) {
 	}
 }
 
+func (c *Client) setConnectionDuration() {
+	if err := c.appCl.SetConnectionDuration(c.connectedDuration); err != nil {
+		fmt.Printf("Failed to set connection duration: %v\n", err)
+	}
+}
+
 func (c *Client) isClosed() bool {
 	select {
 	case <-c.closeC:
@@ -749,6 +755,7 @@ func (c *Client) isClosed() bool {
 
 func (c *Client) resetConnDuration() {
 	atomic.StoreInt64(&c.connectedDuration, 0)
+	c.setConnectionDuration()
 }
 
 func ipFromEnv(key string) (net.IP, error) {

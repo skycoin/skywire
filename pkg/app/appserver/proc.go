@@ -53,6 +53,10 @@ type Proc struct {
 
 	statusMx sync.RWMutex
 	status   string
+
+	// connection duration (i.e. when vpn client is connected, the app will set the connection duration)
+	connDuration   int64
+	connDurationMu sync.RWMutex
 }
 
 // NewProc constructs `Proc`.
@@ -275,6 +279,20 @@ func (p *Proc) SetDetailedStatus(status string) {
 	defer p.statusMx.Unlock()
 
 	p.status = status
+}
+
+// SetConnectionDuration sets the proc's connection duration
+func (p *Proc) SetConnectionDuration(dur int64) {
+	p.connDurationMu.Lock()
+	defer p.connDurationMu.Unlock()
+	p.connDuration = dur
+}
+
+// ConnectionDuration gets proc's connection duration
+func (p *Proc) ConnectionDuration() int64 {
+	p.connDurationMu.RLock()
+	defer p.connDurationMu.RUnlock()
+	return p.connDuration
 }
 
 // DetailedStatus gets proc's detailed status.
