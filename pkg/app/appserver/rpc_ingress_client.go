@@ -52,6 +52,7 @@ func (c *rpcIngressClient) SetError(appErr string) error {
 	return c.rpc.Call(c.formatMethod("SetError"), &appErr, nil)
 }
 
+// RPCErr is used to preserve the type of the errors we return via RPC
 type RPCErr struct {
 	Err string
 }
