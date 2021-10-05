@@ -35,7 +35,6 @@ type Client struct {
 	log            *logrus.Logger
 	cfg            ClientConfig
 	appCl          *app.Client
-	r              *netutil.Retrier
 	directIPSMu    sync.Mutex
 	directIPs      []net.IP
 	defaultGateway net.IP
@@ -110,13 +109,7 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 		directIPs = append(directIPs, utIP)
 	}
 
-	const (
-		serverDialInitBO = 1 * time.Second
-		serverDialMaxBO  = 10 * time.Second
-	)
-
 	log := logrus.New()
-	r := netutil.NewRetrier(log, serverDialInitBO, serverDialMaxBO, 0, 1).WithErrWhitelist(rfclient.ErrTransportNotFound)
 
 	defaultGateway, err := DefaultNetworkGateway()
 	if err != nil {
@@ -129,7 +122,6 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 		log:            log,
 		cfg:            cfg,
 		appCl:          appCl,
-		r:              r,
 		directIPs:      filterOutEqualIPs(directIPs),
 		defaultGateway: defaultGateway,
 		closeC:         make(chan struct{}),
@@ -700,30 +692,18 @@ func (c *Client) dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, erro
 	)
 
 	var conn net.Conn
-	err := c.r.Do(context.Background(), func() error {
-		var err error
-		conn, err = appCl.Dial(appnet.Addr{
-			Net:    netType,
-			PubKey: pk,
-			Port:   vpnPort,
-		})
-
-		if c.isClosed() {
-			// in this case client got closed, we return no error,
-			// so that retrier could stop gracefully
-			return nil
-		}
-
-		if err != nil {
-			// WithErrWhitelist only recognizes the error if it's the same variable
-			if err.Error() == rfclient.ErrTransportNotFound.Error() {
-				return rfclient.ErrTransportNotFound
-			}
-		}
-
-		return err
+	var err error
+	conn, err = appCl.Dial(appnet.Addr{
+		Net:    netType,
+		PubKey: pk,
+		Port:   vpnPort,
 	})
+
 	if err != nil {
+		// WithErrWhitelist only recognizes the error if it's the same variable
+		if err.Error() == rfclient.ErrTransportNotFound.Error() {
+			return nil, rfclient.ErrTransportNotFound
+		}
 		return nil, err
 	}
 
