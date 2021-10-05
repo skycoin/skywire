@@ -351,14 +351,14 @@ func (v *Visor) SetAppDetailedStatus(appName, status string) error {
 }
 
 // SetAppError implements API.
-func (v *Visor) SetAppError(appName, aErr string) error {
+func (v *Visor) SetAppError(appName, appErr string) error {
 	proc, ok := v.procM.ProcByName(appName)
 	if !ok {
 		return ErrAppProcNotRunning
 	}
 
-	v.log.Infof("Setting error %v for app %v", aErr, appName)
-	proc.SetError(aErr)
+	v.log.Infof("Setting error %v for app %v", appErr, appName)
+	proc.SetError(appErr)
 
 	return nil
 }

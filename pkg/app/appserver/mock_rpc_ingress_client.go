@@ -170,13 +170,13 @@ func (_m *MockRPCIngressClient) SetDetailedStatus(status string) error {
 	return r0
 }
 
-// SetError provides a mock function with given fields: aErr
-func (_m *MockRPCIngressClient) SetError(aErr string) error {
-	ret := _m.Called(aErr)
+// SetError provides a mock function with given fields: appErr
+func (_m *MockRPCIngressClient) SetError(appErr string) error {
+	ret := _m.Called(appErr)
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(string) error); ok {
-		r0 = rf(aErr)
+		r0 = rf(appErr)
 	} else {
 		r0 = ret.Error(0)
 	}

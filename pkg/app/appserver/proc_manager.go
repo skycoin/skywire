@@ -322,12 +322,12 @@ func (m *procManager) DetailedStatus(appName string) (string, error) {
 	return p.DetailedStatus(), nil
 }
 
-// SetError sets error `aErr` for app `appName`.
-func (m *procManager) SetError(appName, aErr string) error {
+// SetError sets error `appErr` for app `appName`.
+func (m *procManager) SetError(appName, appErr string) error {
 	m.mx.RLock()
 	defer m.mx.RUnlock()
 
-	m.errors[appName] = aErr
+	m.errors[appName] = appErr
 
 	return nil
 }
