@@ -248,10 +248,12 @@ func (tm *Manager) cleanupTransports(ctx context.Context) {
 }
 
 // Networks returns all the network types contained within the TransportManager.
-func (tm *Manager) Networks() []string {
-	var nets []string
+func (tm *Manager) Networks() []network.Type {
+	tm.mx.Lock()
+	defer tm.mx.Unlock()
+	var nets []network.Type
 	for netType := range tm.netClients {
-		nets = append(nets, string(netType))
+		nets = append(nets, netType)
 	}
 	return nets
 }
