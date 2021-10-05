@@ -130,6 +130,10 @@ const routes: Routes = [
     ],
   },
   {
+    path: 'vpnlogin/:key',
+    component: LoginComponent
+  },
+  {
     path: 'vpn',
     canActivate: [VpnAuthGuardService],
     canActivateChild: [VpnAuthGuardService],
