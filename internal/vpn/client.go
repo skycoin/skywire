@@ -18,6 +18,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	skynetutil "github.com/skycoin/skywire/pkg/util/netutil"
@@ -115,7 +116,7 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 	)
 
 	log := logrus.New()
-	r := netutil.NewRetrier(log, serverDialInitBO, serverDialMaxBO, 0, 1)
+	r := netutil.NewRetrier(log, serverDialInitBO, serverDialMaxBO, 0, 1).WithErrWhitelist(rfclient.ErrTransportNotFound)
 
 	defaultGateway, err := DefaultNetworkGateway()
 	if err != nil {
@@ -717,6 +718,11 @@ func (c *Client) dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, erro
 			// in this case client got closed, we return no error,
 			// so that retrier could stop gracefully
 			return nil
+		}
+
+		// WithErrWhitelist only recognizes the error if it's the same variable
+		if err.Error() == rfclient.ErrTransportNotFound.Error() {
+			return rfclient.ErrTransportNotFound
 		}
 
 		return err
