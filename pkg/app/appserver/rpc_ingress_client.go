@@ -52,11 +52,19 @@ func (c *rpcIngressClient) SetError(appErr string) error {
 	return c.rpc.Call(c.formatMethod("SetError"), &appErr, nil)
 }
 
+type RPCErr struct {
+	Err string
+}
+
+func (e RPCErr) Error() string {
+	return e.Err
+}
+
 // Dial sends `Dial` command to the server.
 func (c *rpcIngressClient) Dial(remote appnet.Addr) (connID uint16, localPort routing.Port, err error) {
 	var resp DialResp
 	if err := c.rpc.Call(c.formatMethod("Dial"), &remote, &resp); err != nil {
-		return 0, 0, err
+		return 0, 0, RPCErr{err.Error()}
 	}
 
 	return resp.ConnID, resp.LocalPort, nil
