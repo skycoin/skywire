@@ -42,60 +42,60 @@ function build_installer() {
 
     echo "Storing installer to ${output}"
   fi
-
-  test -x /usr/local/bin/gon || {
-    brew tap mitchellh/gon
-    brew install mitchellh/gon/gon
-  }
-
-  # build skywire binariea
-  make CGO_ENABLED=1 GOOS=darwin GOARCH="${go_arch}" build-systray
-
-  # Create directories
-  mkdir -p ${installer_build_dir}/binaries/Skywireapp
-  mkdir -p ${installer_package_dir}/Contents/{Resources,MacOS/apps}
-
-  # build deinstaller
-  go build -o ${installer_package_dir}/Contents/deinstaller ${mac_script_dir}/desktop-deinstaller
-
-  # prepare Distribution.xml
-  cp ${mac_script_dir}/Distribution.xml ${installer_build_dir}/
-
-  # modify version info
-  cp ${mac_script_dir}/AppInfo.plist.tmpl ${installer_package_dir}/Contents/Info.plist
-  perl -i -pe "s/{{BundleVersion}}/${git_tag}/g" ${installer_package_dir}/Contents/Info.plist
-
-  cp ${mac_script_dir}/icon.icns ${installer_package_dir}/Contents/Resources/icon.icns
-  mv ./skywire-visor ${installer_package_dir}/Contents/MacOS/skywire-visor
-  mv ./skywire-cli ${installer_package_dir}/Contents/MacOS/skywire-cli
-  mv ./apps/vpn-client ${installer_package_dir}/Contents/MacOS/apps/vpn-client
-
-  cat <<EOF >${installer_package_dir}/Contents/MacOS/Skywire
-#!/usr/bin/env bash
-
-
-osascript -e "do shell script \"/Applications/Skywire.app/Contents/MacOS/skywire-visor --systray >> /Users/\${USER}/Library/Logs/skywire/visor.log\" with administrator privileges"
-#/Applications/Skywire.app/Contents/MacOS/skywire-visor --systray >> /Users/\${USER}/Library/Logs/skywire/visor.log
-
+  
+    test -x /usr/local/bin/gon || {
+      brew tap mitchellh/gon
+      brew install mitchellh/gon/gon
+    }
+  
+    # build skywire binariea
+    make CGO_ENABLED=1 GOOS=darwin GOARCH="${go_arch}" build-systray
+  
+    # Create directories
+    mkdir -p ${installer_build_dir}/binaries/Skywireapp
+    mkdir -p ${installer_package_dir}/Contents/{Resources,MacOS/apps}
+  
+    # build deinstaller
+    go build -o ${installer_package_dir}/Contents/deinstaller ${mac_script_dir}/desktop-deinstaller
+  
+    # prepare Distribution.xml
+    cp ${mac_script_dir}/Distribution.xml ${installer_build_dir}/
+  
+    # modify version info
+    cp ${mac_script_dir}/AppInfo.plist.tmpl ${installer_package_dir}/Contents/Info.plist
+    perl -i -pe "s/{{BundleVersion}}/${git_tag}/g" ${installer_package_dir}/Contents/Info.plist
+  
+    cp ${mac_script_dir}/icon.icns ${installer_package_dir}/Contents/Resources/icon.icns
+    mv ./skywire-visor ${installer_package_dir}/Contents/MacOS/skywire-visor
+    mv ./skywire-cli ${installer_package_dir}/Contents/MacOS/skywire-cli
+    mv ./apps/vpn-client ${installer_package_dir}/Contents/MacOS/apps/vpn-client
+  
+    cat <<EOF >${installer_package_dir}/Contents/MacOS/Skywire
+  #!/usr/bin/env bash
+  
+  
+  osascript -e "do shell script \"/Applications/Skywire.app/Contents/MacOS/skywire-visor --systray >> /Users/\${USER}/Library/Logs/skywire/visor.log\" with administrator privileges"
+  #/Applications/Skywire.app/Contents/MacOS/skywire-visor --systray >> /Users/\${USER}/Library/Logs/skywire/visor.log
+  
 EOF
-
-  chmod +x ${installer_package_dir}/Contents/MacOS/Skywire
-
-  # prepare install scripts
-  mkdir -p ${installer_build_dir}/{install,update,remove}_scripts
-  cp -Rv ${mac_script_dir}/install_scripts/* ${installer_build_dir}/install_scripts/
-  cp -Rv ${mac_script_dir}/update_scripts/* ${installer_build_dir}/update_scripts/
-  cp -Rv ${mac_script_dir}/remove_scripts/* ${installer_build_dir}/remove_scripts/
-
-  # build installer
-  pkgbuild --root ${installer_build_dir}/binaries --identifier com.skycoin.skywire.visor --install-location /tmp/skywire --scripts ${installer_build_dir}/install_scripts ${installer_build_dir}/installer.pkg
-  pkgbuild --root ${installer_build_dir}/binaries --identifier com.skycoin.skywire.updater --install-location /tmp/skywire --scripts ${installer_build_dir}/update_scripts ${installer_build_dir}/updater.pkg
-  pkgbuild --nopayload --identifier com.skycoin.skywire.remover --scripts ${installer_build_dir}/remove_scripts ${installer_build_dir}/remover.pkg
-
+  
+    chmod +x ${installer_package_dir}/Contents/MacOS/Skywire
+  
+    # prepare install scripts
+    mkdir -p ${installer_build_dir}/{install,update,remove}_scripts
+    cp -Rv ${mac_script_dir}/install_scripts/* ${installer_build_dir}/install_scripts/
+    cp -Rv ${mac_script_dir}/update_scripts/* ${installer_build_dir}/update_scripts/
+    cp -Rv ${mac_script_dir}/remove_scripts/* ${installer_build_dir}/remove_scripts/
+  
+    # build installer
+    pkgbuild --root ${installer_build_dir}/binaries --identifier com.skycoin.skywire.visor --install-location /tmp/skywire --scripts ${installer_build_dir}/install_scripts ${installer_build_dir}/installer.pkg
+    pkgbuild --root ${installer_build_dir}/binaries --identifier com.skycoin.skywire.updater --install-location /tmp/skywire --scripts ${installer_build_dir}/update_scripts ${installer_build_dir}/updater.pkg
+    pkgbuild --nopayload --identifier com.skycoin.skywire.remover --scripts ${installer_build_dir}/remove_scripts ${installer_build_dir}/remover.pkg
+  
   package_name=SkywireInstaller-${git_tag}-${date_format}-${go_arch}.pkg
-
-  cp ${mac_script_dir}/Distribution_customized.xml ${installer_build_dir}/Distribution.xml
-  productbuild --distribution ${installer_build_dir}/Distribution.xml --package-path ${installer_build_dir} "${output}""${package_name}"
+  
+    cp ${mac_script_dir}/Distribution_customized.xml ${installer_build_dir}/Distribution.xml
+    productbuild --distribution ${installer_build_dir}/Distribution.xml --package-path ${installer_build_dir} "${output}""${package_name}"
 
   cd "${output}"
 
@@ -108,18 +108,11 @@ EOF
     fi
 
     echo "Creating keychain and importing your certificate"
-    keychain_exists=$(security list-keychains | grep skywireBuild | tr -d '\n' | tr -d ' ')
+    security create-keychain -p "$MAC_APP_KEYCHAIN_PASSWORD" skywireBuild.keychain || echo "already created"
+    security list-keychains -d user -s login.keychain skywireBuild.keychain
 
-    if [[ ${keychain_exists} == "" ]]; then
-      security create-keychain -p "$MAC_APP_KEYCHAIN_PASSWORD" skywireBuild.keychain
-    fi
-
-    security default-keychain -s skywireBuild.keychain
-
-    cert_exists=$(security find-certificate -e "$MAC_APP_DEV_USERNAME" skywireBuild.keychain | tr -d '\n' | tr -d ' ')
-    if [[ ${cert_exists} == "" ]]; then
-      security import "$cert_path" -k skywireBuild.keychain -P "$MAC_APP_CERTIFICATE_PASSWORD"
-    fi
+    echo "no certificate exists yet, importing..."
+    security import "$cert_path" -k skywireBuild.keychain -P "$MAC_APP_CERTIFICATE_PASSWORD" || echo "already imported"
 
     dmg_name=skywire-${git_tag}-${date_format}-${go_arch}.dmg
     # create gon config
@@ -128,8 +121,8 @@ EOF
         "source" : ["./$package_name"],
         "bundle_id" : "com.skycoin.skywire",
         "apple_id": {
-            "username" : "@env:MAC_APP_DEV_USERNAME",
-            "password":  "@env:MAC_APP_DEV_PASSWORD"
+            "username" : "$MAC_APP_DEV_USERNAME",
+            "password":  "$MAC_APP_DEV_PASSWORD"
         },
         "sign" :{
             "application_identity" : "$developer_id"
@@ -143,6 +136,8 @@ EOF
 
     # use gon to sign the binary
     gon -log-level=debug -log-json ./package-signing-config.json
+
+    security delete-keychain skywireBuild.keychain
   fi
 }
 
