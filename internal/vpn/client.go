@@ -738,7 +738,7 @@ func (c *Client) setAppStatus(status ClientStatus) {
 }
 
 func (c *Client) setConnectionDuration() {
-	if err := c.appCl.SetConnectionDuration(c.connectedDuration); err != nil {
+	if err := c.appCl.SetConnectionDuration(atomic.LoadInt64(&c.connectedDuration)); err != nil {
 		fmt.Printf("Failed to set connection duration: %v\n", err)
 	}
 }
