@@ -85,6 +85,13 @@ func (r *RPCIngressGateway) SetDetailedStatus(status *string, _ *struct{}) (err 
 	return nil
 }
 
+// SetConnectionDuration sets the connection duration of an app (vpn-client in this instance)
+func (r *RPCIngressGateway) SetConnectionDuration(dur int64, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetConnectionDuration", dur)(nil, &err)
+	r.proc.SetConnectionDuration(dur)
+	return nil
+}
+
 // DialResp contains response parameters for `Dial`.
 type DialResp struct {
 	ConnID    uint16

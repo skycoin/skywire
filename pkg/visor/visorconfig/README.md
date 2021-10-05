@@ -1,7 +1,5 @@
 # V1
 
-- `` (*[Common](#Common))
-- `mu` ([RWMutex](#RWMutex))
 - `dmsg` (*[DmsgConfig](#DmsgConfig))
 - `dmsgpty` (*[V1Dmsgpty](#V1Dmsgpty))
 - `stcp` (*[STCPConfig](#STCPConfig))
@@ -12,52 +10,29 @@
 - `hypervisors` ()
 - `cli_addr` (string)
 - `log_level` (string)
+- `local_path` (string)
+- `stun_servers` ([]string)
 - `shutdown_timeout` (Duration)
-- `restart_check_delay` (string)
-- `public_trusted_visor` (bool)
+- `restart_check_delay` (Duration)
+- `is_public` (bool)
+- `persistent_transports` ([][PersistentTransports](#PersistentTransports))
 - `hypervisor` (*[Config](#Config))
 
 
-# V1UptimeTracker
+# V1Launcher
 
-- `addr` (string)
+- `service_discovery` (string)
+- `apps` ([][AppConfig](#AppConfig))
+- `server_addr` (string)
+- `bin_path` (string)
 
 
 # V1Transport
 
 - `discovery` (string)
 - `address_resolver` (string)
-- `log_store` (*[V1LogStore](#V1LogStore))
-- `trusted_visors` ()
-
-
-# V1Launcher
-
-- `discovery` (*[V1AppDisc](#V1AppDisc))
-- `apps` ([][AppConfig](#AppConfig))
-- `server_addr` (string)
-- `bin_path` (string)
-- `local_path` (string)
-
-
-# V1AppDisc
-
-- `update_interval` (Duration)
-- `service_discovery` (string)
-
-
-# V1LogStore
-
-- `type` (string) - Type defines the log store type. Valid values: file, memory.
-- `location` (string)
-
-
-# V1Dmsgpty
-
-- `port` (uint16)
-- `authorization_file` (string)
-- `cli_network` (string)
-- `cli_address` (string)
+- `public_autoconnect` (bool)
+- `transport_setup_nodes` ()
 
 
 # V1Routing
@@ -65,15 +40,25 @@
 - `setup_nodes` ()
 - `route_finder` (string)
 - `route_finder_timeout` (Duration)
+- `min_hops` (uint16)
 
 
-# Common
+# V1UptimeTracker
 
-- `path` (string)
-- `log` (*[MasterLogger](#MasterLogger))
-- `version` (string)
-- `sk` (SecKey)
+- `addr` (string)
+
+
+# V1Dmsgpty
+
+- `port` (uint16)
+- `cli_network` (string)
+- `cli_address` (string)
+
+
+# PersistentTransports
+
 - `pk` (PubKey)
+- `type` (Type)
 
 
 # DmsgConfig
@@ -82,14 +67,17 @@
 - `sessions_count` (int)
 
 
+# STCPConfig
+
+- `pk_table` ()
+- `local_address` (string)
+
+
 # Config
 
-- `-` (PubKey)
-- `-` (SecKey)
 - `db_path` (string)
 - `enable_auth` (bool)
 - `cookies` ([CookieConfig](#CookieConfig))
-- `-` (string)
 - `dmsg_port` (uint16)
 - `http_addr` (string)
 - `enable_tls` (bool)
@@ -104,38 +92,6 @@
 - `expires_duration` (Duration)
 - `path` (string)
 - `domain` (string)
-- `-` (bool)
-
-
-# RWMutex
-
-- `w` ([Mutex](#Mutex))
-- `writerSem` (uint32)
-- `readerSem` (uint32)
-- `readerCount` (int32)
-- `readerWait` (int32)
-
-
-# Mutex
-
-- `state` (int32)
-- `sema` (uint32)
-
-
-# STCPConfig
-
-- `pk_table` ()
-- `local_address` (string)
-
-
-# MasterLogger
-
-- `` (*[Logger](#Logger))
-
-
-# Logger
-
-- `` (FieldLogger)
 
 
 # AppConfig
