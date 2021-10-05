@@ -191,7 +191,8 @@ func (c *Client) Serve() error {
 
 	r := netutil.NewRetrier(c.log, netutil.DefaultInitBackoff, netutil.DefaultMaxBackoff, 3, netutil.DefaultFactor).
 		WithErrWhitelist(errHandshakeStatusForbidden).WithErrWhitelist(errHandshakeStatusInternalError).
-		WithErrWhitelist(errHandshakeNoFreeIPs).WithErrWhitelist(errHandshakeStatusBadRequest)
+		WithErrWhitelist(errHandshakeNoFreeIPs).WithErrWhitelist(errHandshakeStatusBadRequest).
+		WithErrWhitelist(rfclient.ErrTransportNotFound)
 
 	err := r.Do(context.Background(), func() error {
 		if c.isClosed() {
@@ -201,7 +202,7 @@ func (c *Client) Serve() error {
 		if err := c.dialServeConn(); err != nil {
 			switch err {
 			case errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
-				errHandshakeStatusBadRequest:
+				errHandshakeStatusBadRequest, rfclient.ErrTransportNotFound:
 				c.setAppError(err)
 				return err
 			default:
@@ -338,12 +339,8 @@ func (c *Client) setupTUN(tunIP, tunGateway net.IP) error {
 func (c *Client) serveConn(conn net.Conn) error {
 	tunIP, tunGateway, err := c.shakeHands(conn)
 	if err != nil {
-		switch err {
-		case errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
-			errHandshakeStatusBadRequest:
-			return err
-		}
-		return fmt.Errorf("error during client/server handshake: %w", err)
+		fmt.Printf("error during client/server handshake: %s", err)
+		return err
 	}
 
 	fmt.Printf("Performed handshake with %s\n", conn.RemoteAddr())
@@ -446,7 +443,8 @@ func (c *Client) serveConn(conn net.Conn) error {
 func (c *Client) dialServeConn() error {
 	conn, err := c.dialServer(c.appCl, c.cfg.ServerPK)
 	if err != nil {
-		return fmt.Errorf("error connecting to VPN server: %w", err)
+		fmt.Printf("error connecting to VPN server: %s", err)
+		return err
 	}
 
 	fmt.Printf("Dialed %s\n", conn.RemoteAddr())
@@ -462,12 +460,8 @@ func (c *Client) dialServeConn() error {
 	}
 
 	if err := c.serveConn(conn); err != nil {
-		switch err {
-		case errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
-			errHandshakeStatusBadRequest:
-			return err
-		}
-		return fmt.Errorf("error serving app conn: %w", err)
+		fmt.Printf("error serving app conn: %s", err)
+		return err
 	}
 
 	return nil
@@ -685,7 +679,7 @@ func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error)
 	fmt.Printf("Got server hello: %v", sHello)
 
 	if sHello.Status != HandshakeStatusOK {
-		return nil, nil, HandshakeStatusForbidden.getError()
+		return nil, nil, sHello.Status.getError()
 	}
 
 	return sHello.TUNIP, sHello.TUNGateway, nil
@@ -720,9 +714,11 @@ func (c *Client) dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, erro
 			return nil
 		}
 
-		// WithErrWhitelist only recognizes the error if it's the same variable
-		if err.Error() == rfclient.ErrTransportNotFound.Error() {
-			return rfclient.ErrTransportNotFound
+		if err != nil {
+			// WithErrWhitelist only recognizes the error if it's the same variable
+			if err.Error() == rfclient.ErrTransportNotFound.Error() {
+				return rfclient.ErrTransportNotFound
+			}
 		}
 
 		return err
@@ -746,9 +742,9 @@ func (c *Client) setAppStatus(status ClientStatus) {
 	}
 }
 
-func (c *Client) setAppError(aErr error) {
-	if err := c.appCl.SetError(aErr.Error()); err != nil {
-		fmt.Printf("Failed to set error %v: %v\n", aErr, err)
+func (c *Client) setAppError(appErr error) {
+	if err := c.appCl.SetError(appErr.Error()); err != nil {
+		fmt.Printf("Failed to set error %v: %v\n", appErr, err)
 	}
 }
 
