@@ -525,7 +525,11 @@ func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.Connection
 
 // TransportTypes implements API.
 func (v *Visor) TransportTypes() ([]string, error) {
-	return v.tpM.Networks(), nil
+	var types []string
+	for _, netType := range v.tpM.Networks() {
+		types = append(types, string(netType))
+	}
+	return types, nil
 }
 
 // Transports implements API.

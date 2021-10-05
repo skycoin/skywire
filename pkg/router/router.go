@@ -218,6 +218,11 @@ func (r *router) DialRoutes(
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, lPort, rPort)
 
+	ok := r.checkIfTransportAvailabel(rPK)
+	if !ok {
+		return nil, rfclient.ErrTransportNotFound
+	}
+
 	forwardPath, reversePath, err := r.fetchBestRoutes(lPK, rPK, opts)
 	if err != nil {
 		return nil, fmt.Errorf("route finder: %w", err)
@@ -1029,4 +1034,17 @@ func (r *router) removeRouteGroupOfRule(rule routing.Rule) {
 		return
 	}
 	log.Debug("Noise route group closed.")
+}
+
+func (r *router) checkIfTransportAvailabel(rPK cipher.PubKey) (ok bool) {
+	networks := r.tm.Networks()
+
+	for _, network := range networks {
+		_, err := r.tm.GetTransport(rPK, network)
+		if err == nil {
+			ok = true
+		}
+	}
+
+	return ok
 }
