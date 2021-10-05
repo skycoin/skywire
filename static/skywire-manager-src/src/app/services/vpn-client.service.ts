@@ -2,9 +2,9 @@ import { Injectable } from '@angular/core';
 import { Router } from '@angular/router';
 import { Observable, Subscription, of, BehaviorSubject, concat, throwError } from 'rxjs';
 import { mergeMap, delay, retryWhen, take, catchError, map } from 'rxjs/operators';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 
-import { ApiService } from './api.service';
+import { ApiService, RequestOptions } from './api.service';
 import { AppsService } from './apps.service';
 import { VpnServer } from './vpn-client-discovery.service';
 import { ManualVpnServerData } from '../components/vpn/pages/vpn-server-list/add-vpn-server/add-vpn-server.component';
@@ -14,7 +14,6 @@ import { environment } from 'src/environments/environment';
 import { SnackbarService } from './snackbar.service';
 import { processServiceError } from '../utils/errors';
 import { OperationError } from '../utils/operation-error';
-import { TransportService } from './transport.service';
 
 /**
  * States in which the VPN client app of the local visor can be.
@@ -165,6 +164,8 @@ export class VpnClientService {
   private requestedServer: LocalServerData = null;
   // Password provided with requestedServer.
   private requestedPassword: string = null;
+  // If the continuous automatic updates were stopped due to a problem.
+  private updatesStopped = false;
 
   // Data transmission history values.
   private downloadSpeedHistory: number[];
@@ -183,7 +184,6 @@ export class VpnClientService {
     private vpnSavedDataService: VpnSavedDataService,
     private http: HttpClient,
     private snackbarService: SnackbarService,
-    private transportService: TransportService,
   ) {
     // Set the initial state. PerformingInitialCheck will be replaced when getting the state
     // for the first time. The busy state too, to start being able to perform other operations.
@@ -211,6 +211,9 @@ export class VpnClientService {
         // PK is provided, go to an error page.
         if (nodeKey !== this.nodeKey) {
           this.router.navigate(['vpn', 'unavailable'], { queryParams: {problem: 'pkChange'} });
+        } else if (this.updatesStopped) {
+          this.updatesStopped = false;
+          this.updateData();
         }
       }
     }
@@ -563,14 +566,32 @@ export class VpnClientService {
       this.continuousUpdateSubscription.unsubscribe();
     }
 
+    let retries = 0;
+
     this.continuousUpdateSubscription = of(0).pipe(
       delay(delayMs),
       mergeMap(() => this.getVpnClientState()),
-      retryWhen(errors => concat(
-        // During the initial check, retry only a few times.
-        errors.pipe(delay(this.standardWaitTime), take(this.lastServiceState === VpnServiceStates.PerformingInitialCheck ? 5 : 1000000000)),
-        throwError('')
-      )),
+      retryWhen(err => {
+        return err.pipe(mergeMap((error: OperationError) => {
+          error = processServiceError(error);
+          // If the problem was because the user is not authorized, don't retry.
+          if (
+            error.originalError &&
+            (error.originalError as HttpErrorResponse).status &&
+            (error.originalError as HttpErrorResponse).status === 401
+          ) {
+            return throwError(error);
+          }
+
+          // Retry a few times if this is the first connection, or indefinitely if it is not.
+          if (this.lastServiceState !== VpnServiceStates.PerformingInitialCheck || retries < 4) {
+            retries += 1;
+            return of(error).pipe(delay(this.standardWaitTime));
+          } else {
+            return throwError(error);
+          }
+        }));
+      }),
     ).subscribe(appData => {
       if (appData) {
         // Remove the busy state of the initial check.
@@ -594,14 +615,27 @@ export class VpnClientService {
         // Go to the error page, as it was not possible to connect with the local visor.
         this.router.navigate(['vpn', 'unavailable']);
         this.nodeKey = null;
+        this.updatesStopped = true;
       }
 
       // Program the next update.
       this.continuallyUpdateData(this.standardWaitTime);
-    }, () => {
-      // Go to the error page, as it was not possible to connect with the local visor.
-      this.router.navigate(['vpn', 'unavailable']);
-      this.nodeKey = null;
+    }, error => {
+      error = processServiceError(error);
+      if (
+        error.originalError &&
+        (error.originalError as HttpErrorResponse).status &&
+        (error.originalError as HttpErrorResponse).status === 401
+      ) {
+        // If the problem was because the user is not authorized, do nothing. The connection
+        // code should have redirected the user to the login page.
+      } else {
+        // Go to the error page, as it was not possible to connect with the local visor.
+        this.router.navigate(['vpn', 'unavailable']);
+        this.nodeKey = null;
+      }
+
+      this.updatesStopped = true;
     });
   }
 
@@ -620,8 +654,11 @@ export class VpnClientService {
   private getVpnClientState(): Observable<VpnClientAppData> {
     let vpnClientData: VpnClientAppData;
 
+    const options = new RequestOptions();
+    options.vpnKeyForAuth = this.nodeKey;
+
     // Get the basic info about the local visor.
-    return this.apiService.get(`visors/${this.nodeKey}/summary`).pipe(mergeMap(nodeInfo => {
+    return this.apiService.get(`visors/${this.nodeKey}/summary`, options).pipe(mergeMap(nodeInfo => {
       let appData: any;
 
       // Get the data of the VPN client app.
@@ -669,7 +706,10 @@ export class VpnClientService {
 
       // Get the data transmission data, is the app is running.
       if (vpnClientData && vpnClientData.running) {
-        return this.apiService.get(`visors/${this.nodeKey}/apps/${this.vpnClientAppName}/connections`);
+        const o = new RequestOptions();
+        o.vpnKeyForAuth = this.nodeKey;
+
+        return this.apiService.get(`visors/${this.nodeKey}/apps/${this.vpnClientAppName}/connections`, o);
       }
 
       return of(null);
