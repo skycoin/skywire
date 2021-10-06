@@ -47,7 +47,7 @@ type V1 struct {
 
 	Dmsg          *dmsgc.DmsgConfig   `json:"dmsg"`
 	Dmsgpty       *V1Dmsgpty          `json:"dmsgpty,omitempty"`
-	STCP          *network.STCPConfig `json:"stcp,omitempty"`
+	STCP          *network.STCPConfig `json:"skywire-tcp,omitempty"`
 	Transport     *V1Transport        `json:"transport"`
 	Routing       *V1Routing          `json:"routing"`
 	UptimeTracker *V1UptimeTracker    `json:"uptime_tracker,omitempty"`
@@ -70,9 +70,9 @@ type V1 struct {
 
 // V1Dmsgpty configures the dmsgpty-host.
 type V1Dmsgpty struct {
-	Port    uint16 `json:"port"`
-	CLINet  string `json:"cli_network"`
-	CLIAddr string `json:"cli_address"`
+	DmsgPort uint16 `json:"dmsg_port"`
+	CLINet   string `json:"cli_network"`
+	CLIAddr  string `json:"cli_address"`
 }
 
 // V1Transport defines a transport config.
