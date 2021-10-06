@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -166,10 +167,17 @@ type Summary struct {
 	MinHops              uint16                           `json:"min_hops"`
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 	SkybianBuildVersion  string                           `json:"skybian_build_version"`
+	BuildTag             string                           `json:"build_tag"`
 }
+
+// buildTag variable that will set when building binary
+var (
+	buildTag = "unknown"
+)
 
 // Summary implements API.
 func (v *Visor) Summary() (*Summary, error) {
+	buildTag := v.BuildTagValidation(buildTag)
 	overview, err := v.Overview()
 	if err != nil {
 		return nil, fmt.Errorf("overview")
@@ -214,6 +222,7 @@ func (v *Visor) Summary() (*Summary, error) {
 		MinHops:              v.conf.Routing.MinHops,
 		PersistentTransports: pts,
 		SkybianBuildVersion:  skybianBuildVersion,
+		BuildTag:             buildTag,
 	}
 
 	return summary, nil
@@ -311,6 +320,15 @@ func (v *Visor) Apps() ([]*launcher.AppState, error) {
 // SkybianBuildVersion implements API.
 func (v *Visor) SkybianBuildVersion() string {
 	return os.Getenv("SKYBIAN_BUILD_VERSION")
+}
+
+// BuildTagValidation implements API.
+func (v *Visor) BuildTagValidation(buildTag string) string {
+	reg, err := regexp.Compile("[^A-Za-z0-9]+")
+	if err != nil {
+		log.Fatal(err)
+	}
+	return reg.ReplaceAllString(buildTag, "")
 }
 
 // StartApp implements API.
