@@ -171,9 +171,7 @@ type Summary struct {
 }
 
 // buildTag variable that will set when building binary
-var (
-	buildTag = "unknown"
-)
+var buildTag string
 
 // Summary implements API.
 func (v *Visor) Summary() (*Summary, error) {
@@ -324,6 +322,9 @@ func (v *Visor) SkybianBuildVersion() string {
 
 // BuildTagValidation implements API.
 func (v *Visor) BuildTagValidation(buildTag string) string {
+	if buildTag == "" {
+		return "unknown"
+	}
 	reg, err := regexp.Compile("[^A-Za-z0-9]+")
 	if err != nil {
 		log.Fatal(err)
