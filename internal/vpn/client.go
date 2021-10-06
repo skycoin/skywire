@@ -86,7 +86,7 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 
 	stcpEntities, err := stcpEntitiesFromEnv()
 	if err != nil {
-		return nil, fmt.Errorf("error getting STCP entities: %w", err)
+		return nil, fmt.Errorf("error getting Skywire-TCP entities: %w", err)
 	}
 
 	tpRemoteIPs, err := tpRemoteIPsFromEnv()
@@ -612,7 +612,7 @@ func stcpEntitiesFromEnv() ([]net.IP, error) {
 	if stcpTableLenStr != "" {
 		stcpTableLen, err := strconv.Atoi(stcpTableLenStr)
 		if err != nil {
-			return nil, fmt.Errorf("invalid STCP table len: %s: %w", stcpTableLenStr, err)
+			return nil, fmt.Errorf("invalid Skywire-TCP table len: %s: %w", stcpTableLenStr, err)
 		}
 
 		stcpEntities = make([]net.IP, 0, stcpTableLen)
@@ -624,7 +624,7 @@ func stcpEntitiesFromEnv() ([]net.IP, error) {
 
 			stcpAddr, err := ipFromEnv(STCPValueEnvPrefix + stcpKey)
 			if err != nil {
-				return nil, fmt.Errorf("error getting STCP entity IP: %w", err)
+				return nil, fmt.Errorf("error getting Skywire-TCP entity IP: %w", err)
 			}
 
 			stcpEntities = append(stcpEntities, stcpAddr)
