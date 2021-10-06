@@ -73,9 +73,9 @@ func defaultConfigFromCommon(cc *Common, hypervisor bool) (*V1, error) {
 	conf := MakeBaseConfig(cc)
 
 	conf.Dmsgpty = &V1Dmsgpty{
-		Port:    skyenv.DmsgPtyPort,
-		CLINet:  skyenv.DefaultDmsgPtyCLINet,
-		CLIAddr: skyenv.DefaultDmsgPtyCLIAddr,
+		DmsgPort: skyenv.DmsgPtyPort,
+		CLINet:   skyenv.DefaultDmsgPtyCLINet,
+		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
 	}
 
 	conf.STCP = &network.STCPConfig{
