@@ -169,8 +169,8 @@ type Summary struct {
 	BuildTag             string                           `json:"build_tag"`
 }
 
-// buildTag variable that will set when building binary
-var buildTag string
+// BuildTag variable that will set when building binary
+var BuildTag string
 
 // Summary implements API.
 func (v *Visor) Summary() (*Summary, error) {
@@ -218,7 +218,7 @@ func (v *Visor) Summary() (*Summary, error) {
 		MinHops:              v.conf.Routing.MinHops,
 		PersistentTransports: pts,
 		SkybianBuildVersion:  skybianBuildVersion,
-		BuildTag:             buildTag,
+		BuildTag:             BuildTag,
 	}
 
 	return summary, nil
