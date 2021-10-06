@@ -79,8 +79,8 @@ func defaultConfigFromCommon(cc *Common, hypervisor bool) (*V1, error) {
 	}
 
 	conf.STCP = &network.STCPConfig{
-		LocalAddr: skyenv.DefaultSTCPAddr,
-		PKTable:   nil,
+		ListeningAddress: skyenv.DefaultSTCPAddr,
+		PKTable:          nil,
 	}
 
 	conf.UptimeTracker = &V1UptimeTracker{
@@ -150,9 +150,9 @@ func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 	}
 
 	conf.Dmsgpty = &V1Dmsgpty{
-		Port:    skyenv.DmsgPtyPort,
-		CLINet:  skyenv.DefaultDmsgPtyCLINet,
-		CLIAddr: skyenv.DefaultDmsgPtyCLIAddr,
+		DmsgPort: skyenv.DmsgPtyPort,
+		CLINet:   skyenv.DefaultDmsgPtyCLINet,
+		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
 	}
 	conf.LocalPath = skyenv.PackageAppLocalPath()
 	conf.Launcher.BinPath = skyenv.PackageAppBinPath()
@@ -176,9 +176,9 @@ func MakeSkybianConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 	}
 
 	conf.Dmsgpty = &V1Dmsgpty{
-		Port:    skyenv.DmsgPtyPort,
-		CLINet:  skyenv.DefaultDmsgPtyCLINet,
-		CLIAddr: skyenv.SkybianDmsgPtyCLIAddr,
+		DmsgPort: skyenv.DmsgPtyPort,
+		CLINet:   skyenv.DefaultDmsgPtyCLINet,
+		CLIAddr:  skyenv.SkybianDmsgPtyCLIAddr,
 	}
 	conf.LocalPath = skyenv.SkybianLocalPath
 	conf.Launcher.BinPath = skyenv.SkybianAppBinPath
