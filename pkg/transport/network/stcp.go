@@ -11,10 +11,10 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 )
 
-// STCPConfig defines config for STCP network.
+// STCPConfig defines config for Skywire-TCP network.
 type STCPConfig struct {
-	PKTable   map[cipher.PubKey]string `json:"pk_table"`
-	LocalAddr string                   `json:"local_address"`
+	PKTable          map[cipher.PubKey]string `json:"pk_table"`
+	ListeningAddress string                   `json:"listening_address"`
 }
 
 type stcpClient struct {
