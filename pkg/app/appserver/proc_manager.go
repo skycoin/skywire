@@ -324,8 +324,8 @@ func (m *procManager) DetailedStatus(appName string) (string, error) {
 
 // SetError sets error `appErr` for app `appName`.
 func (m *procManager) SetError(appName, appErr string) error {
-	m.mx.RLock()
-	defer m.mx.RUnlock()
+	m.mx.Lock()
+	defer m.mx.Unlock()
 
 	m.errors[appName] = appErr
 
