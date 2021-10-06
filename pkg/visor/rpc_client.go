@@ -140,9 +140,17 @@ func (rc *rpcClient) StopApp(appName string) error {
 
 // SetAppDetailedStatus sets app's detailed state.
 func (rc *rpcClient) SetAppDetailedStatus(appName, status string) error {
-	return rc.Call("SetAppDetailedStatus", &SetAppDetailedStatusIn{
+	return rc.Call("SetAppDetailedStatus", &SetAppStatusIn{
 		AppName: appName,
 		Status:  status,
+	}, &struct{}{})
+}
+
+// SetAppError sets app's error.
+func (rc *rpcClient) SetAppError(appName, appErr string) error {
+	return rc.Call("SetAppError", &SetAppErrorIn{
+		AppName: appName,
+		Err:     appErr,
 	}, &struct{}{})
 }
 
@@ -670,6 +678,20 @@ func (mc *mockRPCClient) SetAppDetailedStatus(appName, status string) error {
 		for _, a := range mc.o.Apps {
 			if a.Name == appName {
 				a.DetailedStatus = status
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", appName)
+	})
+}
+
+// SetAppError sets app's error.
+func (mc *mockRPCClient) SetAppError(appName, appErr string) error {
+	return mc.do(true, func() error {
+		for _, a := range mc.o.Apps {
+			if a.Name == appName {
+				a.DetailedStatus = appErr
 				return nil
 			}
 		}

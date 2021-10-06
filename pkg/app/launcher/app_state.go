@@ -9,6 +9,9 @@ const (
 
 	// AppStatusRunning represents status of a running App.
 	AppStatusRunning
+
+	// AppStatusErrored represents status of an errored App.
+	AppStatusErrored
 )
 
 // AppState defines state parameters for a registered App.
