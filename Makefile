@@ -56,9 +56,6 @@ build-static: host-apps-static bin-static ## Build apps and binaries. `go build`
 install-generate: ## Installs required execs for go generate.
 	${OPTS} go install github.com/mjibson/esc
 	${OPTS} go install github.com/vektra/mockery/cmd/mockery
-	# If the following does not work, you may need to run:
-	# 	git config --global url.git@github.com:.insteadOf https://github.com/
-	# Source: https://stackoverflow.com/questions/27500861/whats-the-proper-way-to-go-get-a-private-repository
 
 generate: ## Generate mocks and config README's
 	go generate ./...
