@@ -665,7 +665,7 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initPublicVisors(ctx context.Context, v *Visor, log *logging.Logger) error {
-	if !v.conf.Transport.AutoconnectPublic {
+	if !v.conf.Transport.PublicAutoconnect {
 		return nil
 	}
 	serviceDisc := v.conf.Launcher.ServiceDisc
