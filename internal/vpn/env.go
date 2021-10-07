@@ -30,9 +30,9 @@ const (
 
 	// STCPTableLenEnvKey is env arg holding Stcp table length.
 	STCPTableLenEnvKey = "STCP_TABLE_LEN"
-	// STCPKeyEnvPrefix is prefix for each env arg holding STCP entity key.
+	// STCPKeyEnvPrefix is prefix for each env arg holding Skywire-TCP entity key.
 	STCPKeyEnvPrefix = "STCP_TABLE_KEY_"
-	// STCPValueEnvPrefix is prefix for each env arg holding STCP entity value.
+	// STCPValueEnvPrefix is prefix for each env arg holding Skywire-TCP entity value.
 	STCPValueEnvPrefix = "STCP_TABLE_"
 
 	// TPRemoteIPsLenEnvKey is env arg holding TP remote IPs length.
