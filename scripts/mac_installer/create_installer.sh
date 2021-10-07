@@ -106,19 +106,17 @@ EOF
   cd "${output}"
 
   if [ -n "$developer_id" ] && [[ "$developer_id" != "" ]]; then
-
-    dmg_name=skywire-${git_tag}-${date_format}-${go_arch}.dmg
     # create gon config
     cat <<EOF >"${output}/package-signing-config.json"
     {
         "source" : ["./$package_name"],
         "bundle_id" : "com.skycoin.skywire",
         "apple_id": {
-            "username" : "$MAC_APP_DEV_USERNAME",
-            "password":  "$MAC_APP_DEV_PASSWORD"
+            "username" : "${MAC_APP_DEV_USERNAME}",
+            "password":  "${MAC_APP_DEV_PASSWORD}"
         },
         "sign" :{
-            "application_identity" : "$developer_id"
+            "application_identity" : "${developer_id}"
         },
         "dmg" :{
             "output_path":  "$dmg_name",
