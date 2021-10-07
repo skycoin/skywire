@@ -55,7 +55,7 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	pty := dmsgpty.NewHost(dmsgC, wl)
 
-	if ptyPort := conf.Port; ptyPort != 0 {
+	if ptyPort := conf.DmsgPort; ptyPort != 0 {
 		serveCtx, cancel := context.WithCancel(context.Background())
 		wg := new(sync.WaitGroup)
 		wg.Add(1)
