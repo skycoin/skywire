@@ -199,7 +199,6 @@ func (l *Launcher) AppStates() []*AppState {
 			connSummary := proc.ConnectionsSummary()
 			if connSummary != nil {
 				state.Status = AppStatusRunning
-				state.ConnectionDuration = proc.ConnectionDuration()
 			}
 		}
 		states = append(states, state)
