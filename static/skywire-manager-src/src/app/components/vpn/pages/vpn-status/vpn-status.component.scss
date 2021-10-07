@@ -434,19 +434,27 @@
     }
   }
 
-  .current-server-note {
+  .lower-text {
     display: inline-block;
     max-width: $max-server-box-size;
-    margin-top: 15px;
-    font-size: $font-size-mini;
-    color: $grey;
+    margin-top: 10px;
 
     mat-icon {
       position: relative;
-      top: 1px;
+      top: 2px;
       display: inline;
       user-select: none;
     }
+  }
+
+  .current-server-note {
+    font-size: $font-size-smaller;
+    color: $grey;
+  }
+
+  .last-error {
+    font-size: $font-size-smaller;
+    color: $red-clear;
   }
 }
 
