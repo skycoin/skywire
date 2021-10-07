@@ -80,7 +80,7 @@ var (
 func init() {
 	const (
 		typeFlagUsage = "type of transport to add; if unspecified, cli will attempt to establish a transport " +
-			"in the following order: stcp, stcpr, sudph, dmsg"
+			"in the following order: skywire-tcp, stcpr, sudph, dmsg"
 		publicFlagUsage  = "whether to make the transport public (deprecated)"
 		timeoutFlagUsage = "if specified, sets an operation timeout"
 	)
