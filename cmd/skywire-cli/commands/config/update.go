@@ -1,4 +1,4 @@
-package visor
+package config
 
 import (
 	"encoding/json"
@@ -37,7 +37,7 @@ func init() {
 }
 
 var updateConfigCmd = &cobra.Command{
-	Use:   "update-config",
+	Use:   "update",
 	Short: "Updates a config file",
 	PreRun: func(_ *cobra.Command, _ []string) {
 		var err error
