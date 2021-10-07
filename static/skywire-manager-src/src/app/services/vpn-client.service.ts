@@ -76,6 +76,10 @@ export class VpnClientAppData {
    * Min hops the reoutes must have.
    */
   minHops: number;
+  /**
+   * Error msg returned by the vpn-client app, for which the last excecution was stopped.
+   */
+  lasErrorMsg: string;
 }
 
 /**
@@ -253,8 +257,8 @@ export class VpnClientService {
    * @returns If it was possible to start the process (true) or not (false).
    */
   stop(): boolean {
-    // Continue only if the service is not busy.
-    if (!this.working) {
+    // Continue only if the service is not busy and the VPN is running.
+    if (!this.working && this.lastServiceState >= 20 && this.lastServiceState < 200) {
       this.changeAppState(false);
 
       return true;
@@ -673,17 +677,21 @@ export class VpnClientService {
       // Get the required data from the app properties.
       if (appData) {
         vpnClientData = new VpnClientAppData();
-        vpnClientData.running = appData.status !== 0;
+        vpnClientData.running = appData.status === 1;
 
         vpnClientData.appState = AppState.Stopped;
-        if (appData.detailed_status === AppState.Connecting) {
-          vpnClientData.appState = AppState.Connecting;
-        } else if (appData.detailed_status === AppState.Running) {
-          vpnClientData.appState = AppState.Running;
-        } else if (appData.detailed_status === AppState.ShuttingDown) {
-          vpnClientData.appState = AppState.ShuttingDown;
-        } else if (appData.detailed_status === AppState.Reconnecting) {
-          vpnClientData.appState = AppState.Reconnecting;
+        if (vpnClientData.running) {
+          if (appData.detailed_status === AppState.Connecting) {
+            vpnClientData.appState = AppState.Connecting;
+          } else if (appData.detailed_status === AppState.Running) {
+            vpnClientData.appState = AppState.Running;
+          } else if (appData.detailed_status === AppState.ShuttingDown) {
+            vpnClientData.appState = AppState.ShuttingDown;
+          } else if (appData.detailed_status === AppState.Reconnecting) {
+            vpnClientData.appState = AppState.Reconnecting;
+          }
+        } else if (appData.status === 2) {
+          vpnClientData.lasErrorMsg = appData.detailed_status;
         }
 
         vpnClientData.killswitch = false;
