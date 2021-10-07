@@ -47,6 +47,9 @@ var (
 
 	// ErrRemoteEmptyPK occurs when the specified remote public key is empty.
 	ErrRemoteEmptyPK = errors.New("empty remote public key")
+
+	// ErrNoTransportFound is returned when not even one transport is found.
+	ErrNoTransportFound = errors.New("no transport found")
 )
 
 // Config configures Router.
@@ -217,6 +220,11 @@ func (r *router) DialRoutes(
 
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, lPort, rPort)
+
+	ok := r.checkIfTransportAvalailable()
+	if !ok {
+		return nil, ErrNoTransportFound
+	}
 
 	forwardPath, reversePath, err := r.fetchBestRoutes(lPK, rPK, opts)
 	if err != nil {
@@ -1029,4 +1037,12 @@ func (r *router) removeRouteGroupOfRule(rule routing.Rule) {
 		return
 	}
 	log.Debug("Noise route group closed.")
+}
+
+func (r *router) checkIfTransportAvalailable() (ok bool) {
+	r.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
+		ok = true
+		return true
+	})
+	return ok
 }
