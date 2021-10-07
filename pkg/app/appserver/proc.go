@@ -53,10 +53,12 @@ type Proc struct {
 
 	statusMx sync.RWMutex
 	status   string
-
 	// connection duration (i.e. when vpn client is connected, the app will set the connection duration)
 	connDuration   int64
 	connDurationMu sync.RWMutex
+
+	errMx    sync.RWMutex
+	err      string
 }
 
 // NewProc constructs `Proc`.
@@ -174,7 +176,8 @@ func (p *Proc) Start() error {
 			// here will definitely be an error notifying that the process
 			// is already stopped. We do this to remove proc from the manager,
 			// therefore giving the correct app status to hypervisor.
-			_ = p.m.Stop(p.appName) //nolint:errcheck
+			_ = p.m.SetError(p.appName, p.err) //nolint:errcheck
+			_ = p.m.Stop(p.appName)            //nolint:errcheck
 		}()
 
 		select {
@@ -301,6 +304,22 @@ func (p *Proc) DetailedStatus() string {
 	defer p.statusMx.RUnlock()
 
 	return p.status
+}
+
+// SetError sets proc's detailed status error.
+func (p *Proc) SetError(appErr string) {
+	p.errMx.Lock()
+	defer p.errMx.Unlock()
+
+	p.err = appErr
+}
+
+// Error gets proc's error.
+func (p *Proc) Error() string {
+	p.errMx.RLock()
+	defer p.errMx.RUnlock()
+
+	return p.err
 }
 
 // ConnectionSummary sums up the connection stats.
