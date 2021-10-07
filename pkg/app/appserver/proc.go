@@ -57,8 +57,8 @@ type Proc struct {
 	connDuration   int64
 	connDurationMu sync.RWMutex
 
-	errMx    sync.RWMutex
-	err      string
+	errMx sync.RWMutex
+	err   string
 }
 
 // NewProc constructs `Proc`.
