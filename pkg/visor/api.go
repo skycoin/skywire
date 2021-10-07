@@ -40,6 +40,7 @@ type API interface {
 	StartApp(appName string) error
 	StopApp(appName string) error
 	SetAppDetailedStatus(appName, state string) error
+	SetAppError(appName, stateErr string) error
 	RestartApp(appName string) error
 	SetAutoStart(appName string, autostart bool) error
 	SetAppPassword(appName, password string) error
@@ -332,7 +333,7 @@ func (v *Visor) StartApp(appName string) error {
 
 // StopApp implements API.
 func (v *Visor) StopApp(appName string) error {
-	_, err := v.appL.StopApp(appName)
+	_, err := v.appL.StopApp(appName) //nolint:errcheck
 	return err
 }
 
@@ -349,9 +350,22 @@ func (v *Visor) SetAppDetailedStatus(appName, status string) error {
 	return nil
 }
 
+// SetAppError implements API.
+func (v *Visor) SetAppError(appName, appErr string) error {
+	proc, ok := v.procM.ProcByName(appName)
+	if !ok {
+		return ErrAppProcNotRunning
+	}
+
+	v.log.Infof("Setting error %v for app %v", appErr, appName)
+	proc.SetError(appErr)
+
+	return nil
+}
+
 // RestartApp implements API.
 func (v *Visor) RestartApp(appName string) error {
-	if _, ok := v.procM.ProcByName(appName); ok {
+	if _, ok := v.procM.ProcByName(appName); ok { //nolint:errcheck
 		v.log.Infof("Updated %v password, restarting it", appName)
 		return v.appL.RestartApp(appName)
 	}
@@ -511,7 +525,11 @@ func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.Connection
 
 // TransportTypes implements API.
 func (v *Visor) TransportTypes() ([]string, error) {
-	return v.tpM.Networks(), nil
+	var types []string
+	for _, netType := range v.tpM.Networks() {
+		types = append(types, string(netType))
+	}
+	return types, nil
 }
 
 // Transports implements API.
