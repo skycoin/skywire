@@ -167,6 +167,7 @@ type Summary struct {
 	MinHops              uint16                           `json:"min_hops"`
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 	SkybianBuildVersion  string                           `json:"skybian_build_version"`
+	AutoconnectPublic    bool                             `json:"public_autoconnect"`
 }
 
 // Summary implements API.
@@ -215,6 +216,7 @@ func (v *Visor) Summary() (*Summary, error) {
 		MinHops:              v.conf.Routing.MinHops,
 		PersistentTransports: pts,
 		SkybianBuildVersion:  skybianBuildVersion,
+		AutoconnectPublic:    v.conf.Transport.AutoconnectPublic,
 	}
 
 	return summary, nil
