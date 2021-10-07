@@ -44,7 +44,6 @@ BUILD_OPTS?="-ldflags=$(BUILDINFO)" -mod=vendor $(RACE_FLAG)
 BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
 
 MAC_DEV_ID ?= ""
-MAC_CERT_PATH ?= ""
 
 check: lint test ## Run linters and tests
 
@@ -179,7 +178,10 @@ build-ui: install-deps-ui  ## Builds the UI
 	cp -r ${MANAGER_UI_DIR}/dist/. ${MANAGER_UI_BUILT_DIR}
 
 mac-installer: ## Create unsigned application
-	./scripts/mac_installer/create_installer.sh -d ${MAC_DEV_ID} -c ${MAC_CERT_PATH}
+	./scripts/mac_installer/create_installer.sh -d ${MAC_DEV_ID}
+
+mac-installer-help: ## Show installer creation help
+	./scripts/mac_installer/create_installer.sh -h
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
