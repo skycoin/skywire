@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"github.com/skycoin/skywire/cmd/skywire-cli/commands/config"
 	"log"
 
 	"github.com/spf13/cobra"
@@ -20,6 +21,7 @@ func init() {
 		visor.RootCmd,
 		mdisc.RootCmd,
 		rtfind.RootCmd,
+		config.RootCmd,
 	)
 }
 
