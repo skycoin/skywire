@@ -268,10 +268,7 @@ func (c *Client) removeDirectRouteFn(ip net.IP, i int) error {
 	}
 	defer c.releaseSysPrivileges()
 
-	if err := c.removeDirectRoute(ip); err != nil {
-		return err
-	}
-	return nil
+	return c.removeDirectRoute(ip)
 }
 
 // RemoveDirectRoute removes direct route. Packets destined to `ip` will
