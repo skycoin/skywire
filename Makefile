@@ -59,8 +59,6 @@ install-generate: ## Installs required execs for go generate.
 	# If the following does not work, you may need to run:
 	# 	git config --global url.git@github.com:.insteadOf https://github.com/
 	# Source: https://stackoverflow.com/questions/27500861/whats-the-proper-way-to-go-get-a-private-repository
-	# We are using 'go get' instead of 'go install' here, because we don't have a git tag in which 'readmegen' is already implemented.
-	${OPTS} go get -u github.com/SkycoinPro/skywire-services/cmd/readmegen
 
 generate: ## Generate mocks and config README's
 	go generate ./...
