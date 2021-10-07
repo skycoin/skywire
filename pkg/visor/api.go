@@ -168,8 +168,12 @@ type Summary struct {
 	MinHops              uint16                           `json:"min_hops"`
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 	SkybianBuildVersion  string                           `json:"skybian_build_version"`
+	BuildTag             string                           `json:"build_tag"`
 	PublicAutoconnect    bool                             `json:"public_autoconnect"`
 }
+
+// BuildTag variable that will set when building binary
+var BuildTag string
 
 // Summary implements API.
 func (v *Visor) Summary() (*Summary, error) {
@@ -217,6 +221,7 @@ func (v *Visor) Summary() (*Summary, error) {
 		MinHops:              v.conf.Routing.MinHops,
 		PersistentTransports: pts,
 		SkybianBuildVersion:  skybianBuildVersion,
+		BuildTag:             BuildTag,
 		PublicAutoconnect:    v.conf.Transport.PublicAutoconnect,
 	}
 
