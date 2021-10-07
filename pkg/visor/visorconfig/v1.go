@@ -14,8 +14,6 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
 
-//go:generate readmegen -n V1 -o ./README.md ./v1.go
-
 // V100Name is the semantic version string for v1.0.0.
 const V100Name = "v1.0.0"
 
