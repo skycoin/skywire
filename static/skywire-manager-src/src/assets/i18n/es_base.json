@@ -689,6 +689,7 @@
       "start-title": "Start VPN",
       "no-server": "No server selected!",
       "disconnect": "Disconnect",
+      "last-error": "Last error:",
       "disconnect-confirmation": "Are you sure you want to stop the VPN protection?",
       "entered-manually": "Entered manually",
       "upload-info": "Uploaded data stats.",
