@@ -324,13 +324,14 @@ func (p *Proc) Error() string {
 
 // ConnectionSummary sums up the connection stats.
 type ConnectionSummary struct {
-	IsAlive           bool          `json:"is_alive"`
-	Latency           time.Duration `json:"latency"`
-	UploadSpeed       uint32        `json:"upload_speed"`
-	DownloadSpeed     uint32        `json:"download_speed"`
-	BandwidthSent     uint64        `json:"bandwidth_sent"`
-	BandwidthReceived uint64        `json:"bandwidth_received"`
-	Error             string        `json:"error"`
+	IsAlive            bool          `json:"is_alive"`
+	Latency            time.Duration `json:"latency"`
+	UploadSpeed        uint32        `json:"upload_speed"`
+	DownloadSpeed      uint32        `json:"download_speed"`
+	BandwidthSent      uint64        `json:"bandwidth_sent"`
+	BandwidthReceived  uint64        `json:"bandwidth_received"`
+	Error              string        `json:"error"`
+	ConnectionDuration int64         `json:"connection_duration,omitempty"`
 }
 
 // ConnectionsSummary returns all of the proc's connections stats.
@@ -366,12 +367,13 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 		}
 
 		summaries = append(summaries, ConnectionSummary{
-			IsAlive:           skywireConn.IsAlive(),
-			Latency:           skywireConn.Latency(),
-			UploadSpeed:       skywireConn.UploadSpeed(),
-			DownloadSpeed:     skywireConn.DownloadSpeed(),
-			BandwidthSent:     skywireConn.BandwidthSent(),
-			BandwidthReceived: skywireConn.BandwidthReceived(),
+			IsAlive:            skywireConn.IsAlive(),
+			Latency:            skywireConn.Latency(),
+			UploadSpeed:        skywireConn.UploadSpeed(),
+			DownloadSpeed:      skywireConn.DownloadSpeed(),
+			BandwidthSent:      skywireConn.BandwidthSent(),
+			BandwidthReceived:  skywireConn.BandwidthReceived(),
+			ConnectionDuration: p.ConnectionDuration(),
 		})
 
 		return true
