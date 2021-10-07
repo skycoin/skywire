@@ -289,7 +289,7 @@ func (m *procManager) Stats(appName string) (AppStats, error) {
 	}
 
 	stats := AppStats{
-		Connections:        p.ConnectionsSummary(),
+		Connections: p.ConnectionsSummary(),
 	}
 
 	startTime, ok := p.StartTime()
