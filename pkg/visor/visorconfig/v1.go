@@ -14,8 +14,6 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
 
-//go:generate readmegen -n V1 -o ./README.md ./v1.go
-
 // V100Name is the semantic version string for v1.0.0.
 const V100Name = "v1.0.0"
 
@@ -35,6 +33,9 @@ const V101Name = "v1.0.1"
 // Added persistent_transports field to the config
 // Changed proxy_discovery_addr field to service_discovery
 // Changed V1AppDisc struct to V1ServiceDisc
+// Changed stcp field to skywire-tcp
+// Changed local_address field to listening_address
+// Changed port field in dmsgpty to dmsg_port
 const V110Name = "v1.1.0"
 
 // V1Name is the semantic version string for the most recent version of V1.
@@ -47,7 +48,7 @@ type V1 struct {
 
 	Dmsg          *dmsgc.DmsgConfig   `json:"dmsg"`
 	Dmsgpty       *V1Dmsgpty          `json:"dmsgpty,omitempty"`
-	STCP          *network.STCPConfig `json:"stcp,omitempty"`
+	STCP          *network.STCPConfig `json:"skywire-tcp,omitempty"`
 	Transport     *V1Transport        `json:"transport"`
 	Routing       *V1Routing          `json:"routing"`
 	UptimeTracker *V1UptimeTracker    `json:"uptime_tracker,omitempty"`
@@ -70,9 +71,9 @@ type V1 struct {
 
 // V1Dmsgpty configures the dmsgpty-host.
 type V1Dmsgpty struct {
-	Port    uint16 `json:"port"`
-	CLINet  string `json:"cli_network"`
-	CLIAddr string `json:"cli_address"`
+	DmsgPort uint16 `json:"dmsg_port"`
+	CLINet   string `json:"cli_network"`
+	CLIAddr  string `json:"cli_address"`
 }
 
 // V1Transport defines a transport config.

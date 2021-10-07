@@ -16,13 +16,14 @@ import (
 	"time"
 
 	"embed"
+	"io/fs"
+
 	"github.com/pkg/profile"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cmdutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 	"github.com/toqueteos/webbrowser"
-	"io/fs"
 
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/syslog"
@@ -86,6 +87,7 @@ func runVisor(args []string) {
 		WithField("systemd", restartCtx.Systemd()).
 		WithField("parent_systemd", restartCtx.ParentSystemd()).
 		WithField("skybian_build_version", os.Getenv("SKYBIAN_BUILD_VERSION")).
+		WithField("build_tag", visor.BuildTag).
 		Debugf("Process info")
 
 	// Versions v0.2.3 and below return 0 exit-code after update and do not trigger systemd to restart a process
