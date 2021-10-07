@@ -38,6 +38,8 @@ type ProcManager interface {
 	io.Closer
 	Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 	ProcByName(appName string) (*Proc, bool)
+	SetError(appName, status string) error
+	ErrorByName(appName string) (string, bool)
 	Stop(appName string) error
 	Wait(appName string) error
 	Range(next func(appName string, proc *Proc) bool)
@@ -61,6 +63,7 @@ type procManager struct {
 	procs      map[string]*Proc
 	procsByKey map[appcommon.ProcKey]*Proc
 
+	errors map[string]string
 	// event broadcaster: broadcasts events to apps
 	eb *appevent.Broadcaster
 
@@ -93,6 +96,7 @@ func NewProcManager(mLog *logging.MasterLogger, discF *appdisc.Factory, eb *appe
 		discF:      discF,
 		procs:      make(map[string]*Proc),
 		procsByKey: make(map[appcommon.ProcKey]*Proc),
+		errors:     make(map[string]string),
 		eb:         eb,
 		done:       make(chan struct{}),
 	}
@@ -209,7 +213,7 @@ func (m *procManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 
 		return 0, err
 	}
-
+	delete(m.errors, conf.AppName)
 	return appcommon.ProcID(proc.cmd.Process.Pid), nil
 }
 
@@ -219,6 +223,14 @@ func (m *procManager) ProcByName(appName string) (*Proc, bool) {
 
 	proc, ok := m.procs[appName]
 	return proc, ok
+}
+
+func (m *procManager) ErrorByName(appName string) (string, bool) {
+	m.mx.RLock()
+	defer m.mx.RUnlock()
+
+	err, ok := m.errors[appName]
+	return err, ok
 }
 
 // Stop stops the application.
@@ -245,14 +257,14 @@ func (m *procManager) Wait(name string) error {
 			err = fmt.Errorf("failed to run app executable %s: %w", name, err)
 		}
 
-		if _, err := m.pop(name); err != nil {
+		if _, err := m.pop(name); err != nil { //nolint:errcheck
 			m.log.Debugf("Remove app <%v>: %v", name, err)
 		}
 
 		return err
 	}
 
-	_, err = m.pop(name)
+	_, err = m.pop(name) //nolint:errcheck
 
 	return err
 }
@@ -308,6 +320,16 @@ func (m *procManager) DetailedStatus(appName string) (string, error) {
 	}
 
 	return p.DetailedStatus(), nil
+}
+
+// SetError sets error `appErr` for app `appName`.
+func (m *procManager) SetError(appName, appErr string) error {
+	m.mx.Lock()
+	defer m.mx.Unlock()
+
+	m.errors[appName] = appErr
+
+	return nil
 }
 
 // ConnectionsSummary gets connections info for the app `appName`.
