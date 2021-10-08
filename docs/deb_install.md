@@ -33,14 +33,21 @@ $ gpg --allow-secret-key-import --import ~/mygpgkey_sec.gpg
 $ gpg --list-keys
 ```
 
-- Run the packaging script. Make sure the eamil and full_name is the same as the key in `gpg --list-keys`:
+- Run the packaging make target. Make sure the `Author Email` and `Author Name` is the same as the key in `gpg --list-keys`:
 (NOTE: the email should be the same as the email of the key you are sigining with)
 
-```bash
-$ make deb-package DEB_VERSION=0.5.0 DEB_AUTH_EMAIL=someemail@email.com DEB_AUTH_NAME='Some Name'
-```
+- The debian package should be created after a release has been made in `github.com/skycoin/skywire` and the version should follow the tag defined in the `skywire` repo. 
 
-The first argument is a package version. The debian package should be created after a release has been made in `github.com/skycoin/skywire` and the version should follow the tag defined in the `skywire` repo. 
+```bash
+$ make deb-package
+
+...
+...
+Version :
+Author Email : someemail@email.com
+Author Name : Some Name
+```
+- The Version, Author Email, and Author Name needs to be added via the terminal in order to build the packages.
 
 During its work script will create packages for the following architectures:
 - amd64
