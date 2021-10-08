@@ -1,260 +1,253 @@
 #!/bin/bash
 
-# TODO: consider using bash here document (cat<<EOF) instead of echo "..." for appending things.
+VER=$1
 
-ver=$1
+AUTHOREMAIL=$2
+AUTHORNAME=$3
 
-authoremail=$2
-authorname=$3
+USAGE="Usage: bash package.sh RELEASE_VERSION AUTHOR_EMAIL AUTHOR_FULL_NAME"
 
-usage="Usage: bash package_deb.sh RELEASE_VERSION AUTHOR_EMAIL AUTHOR_FULL_NAME"
-
-if [ -z "$1" ]; then
-  echo "$usage"
-  exit
+if [ -z "$1" ]
+then
+	echo "$USAGE"
+	exit
 fi
 
-if [ -z "$2" ]; then
-  echo "$usage"
-  exit
+if [ -z "$2" ]
+then
+	echo "$USAGE"
+	exit
 fi
 
-if [ -z "$3" ]; then
-  echo "$usage"
-  exit
+if [ -z "$3" ]
+then
+	echo "$USAGE"
+	exit
 fi
 
-orgname=skycoin
-reponame=skywire
-branch=master
+ORGNAME=skycoin
+REPONAME=skywire
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
-function create_control_file() {
-  if [ -z "$1" ]; then
-    exit
-  fi
+function create_control_file {
+	if [ -z "$1" ]
+	then
+		exit
+	fi
 
-  arch=$1
+	ARCH=$1
 
-  # shellcheck disable=SC2129
-  echo "Source: $reponame" >>./debian/control
-  echo "Maintainer: $authorname <$authoremail>" >>./debian/control
-  echo "Standards-Version: $ver" >>./debian/control
-  echo "Section: base" >>./debian/control
-  echo "Build-Depends: dh-systemd (>= 1.5)" >>./debian/control
-  echo "" >>./debian/control
-  echo "Package: $reponame" >>./debian/control
-  echo "Priority: optional" >>./debian/control
-  echo "Architecture: $arch" >>./debian/control
-  echo "Description: Skywire applications to participate in" >>"./debian/control"
-  echo " skywire network" >>"./debian/control"
+	echo "Source: $REPONAME" >> ./debian/control
+	echo "Maintainer: $AUTHORNAME <$AUTHOREMAIL>" >> ./debian/control
+	echo "Standards-Version: $VER" >> ./debian/control
+	echo "Section: base" >> ./debian/control
+	echo "Build-Depends: dh-systemd (>= 1.5)" >> ./debian/control
+	echo "" >> ./debian/control
+	echo "Package: $REPONAME" >> ./debian/control
+	echo "Priority: optional" >> ./debian/control
+	echo "Architecture: $ARCH" >> ./debian/control
+	echo "Description: Skywire applications to participate in" >> "./debian/control"
+	echo " skywire network" >> "./debian/control"
 }
 
-function pack_deb() {
-  if [ -z "$1" ]; then
-    exit
-  fi
+function pack_deb {
+	if [ -z $1 ]
+	then
+		exit
+	fi
 
-  if [ -z "$2" ]; then
-    exit
-  fi
+	if [ -z $2 ]
+	then
+		exit
+	fi
 
-  arch=$1
-  goarch=$2
+	ARCH=$1
+	GOARCH=$2
 
-  GOOS=linux GOARCH="$goarch" make bin
-  GOOS=linux GOARCH="$goarch" make host-apps
+	GOOS=linux GOARCH="$GOARCH" make bin
+	GOOS=linux GOARCH="$GOARCH" make host-apps
 
-  mkdir packages
-  cd ./packages
+  rm -rf packages
+	mkdir packages
+	cd ./packages
 
-  mkdir "./$reponame-$ver"
-  cp ../skywire-visor "./$reponame-$ver/"
-  cp ../skywire-cli "./$reponame-$ver/"
-  mkdir "./$reponame-$ver/apps"
-  cp ../apps/skychat "./$reponame-$ver/apps/"
-  cp ../apps/skysocks "./$reponame-$ver/apps/"
-  cp ../apps/skysocks-client "./$reponame-$ver/apps/"
-  cp ../apps/vpn-client "./$reponame-$ver/apps/"
-  cp ../apps/vpn-server "./$reponame-$ver/apps/"
+	mkdir "./$REPONAME-$VER"
+	cp ../skywire-visor "./$REPONAME-$VER/"
+	cp ../skywire-cli "./$REPONAME-$VER/"
+	mkdir "./$REPONAME-$VER/apps"
+	cp ../apps/skychat "./$REPONAME-$VER/apps/"
+	cp ../apps/skysocks "./$REPONAME-$VER/apps/"
+	cp ../apps/skysocks-client "./$REPONAME-$VER/apps/"
+	cp ../apps/vpn-client "./$REPONAME-$VER/apps/"
+	cp ../apps/vpn-server "./$REPONAME-$VER/apps/"
 
-  cd "./$reponame-$ver"
+	cd "./$REPONAME-$VER"
 
-  # well, okay, this may seem unnecessary, but for some reason the lack of distclean target
-  # prevents debuild from passing DESTDIR correctly. This is sick, but works this way
-  read -r -d '' mkrecipes <<"EOF"
-distclean:
-\techo "dummy"
+	# well, okay, this may seem unnecessary, but for some reason the lack of distclean target
+	# prevents debuild from passing DESTDIR correctly. This is sick, but works this way 
+	echo "distclean:" >> ./Makefile
+	echo "	echo dummy" >> ./Makefile
+	echo "install:" >> ./Makefile
+	echo "	mkdir -p \$(DESTDIR)/opt/skywire/apps" >> ./Makefile
+	echo "	mkdir -p \$(DESTDIR)/usr/bin" >> ./Makefile
+	echo "	install -m 0755 skywire-visor \$(DESTDIR)/opt/skywire/skywire-visor" >> ./Makefile
+	echo "	install -m 0755 skywire-cli \$(DESTDIR)/opt/skywire/skywire-cli" >> ./Makefile
+	echo "	install -m 0755 apps/skychat \$(DESTDIR)/opt/skywire/apps/skychat" >> ./Makefile
+	echo "	install -m 0755 apps/skysocks \$(DESTDIR)/opt/skywire/apps/skysocks" >> ./Makefile
+	echo "	install -m 0755 apps/skysocks-client \$(DESTDIR)/opt/skywire/apps/skysocks-client" >> ./Makefile
+	echo "	install -m 0755 apps/vpn-server \$(DESTDIR)/opt/skywire/apps/vpn-server" >> ./Makefile
+	echo "	install -m 0755 apps/vpn-client \$(DESTDIR)/opt/skywire/apps/vpn-client" >> ./Makefile
+	echo "	ln -s /opt/skywire/skywire-visor \$(DESTDIR)/usr/bin/skywire-visor" >> ./Makefile
+	echo "	ln -s /opt/skywire/skywire-cli \$(DESTDIR)/usr/bin/skywire-cli" >> ./Makefile
+	echo "" >> ./Makefile
+	echo "uninstall:" >> ./Makefile
+	echo "	rm -rf \$(DESTDIR)/usr/bin/skywire-visor" >> ./Makefile
+	echo "	rm -rf \$(DESTDIR)/usr/bin/skywire-cli" >> ./Makefile
+	echo "	rm -rf \$(DESTDIR)/opt/skywire" >> ./Makefile
 
-install:
-\tmkdir -p \$(DESTDIR)/opt/skywire/apps
-\tmkdir -p \$(DESTDIR)/usr/bin
-\tinstall -m 0755 skywire-visor \$(DESTDIR)/opt/skywire/skywire-visor
-\tinstall -m 0755 skywire-cli \$(DESTDIR)/opt/skywire/skywire-cli
-\tinstall -m 0755 apps/skychat \$(DESTDIR)/opt/skywire/apps/skychat
-\tinstall -m 0755 apps/skysocks \$(DESTDIR)/opt/skywire/apps/skysocks
-\tinstall -m 0755 apps/skysocks-client \$(DESTDIR)/opt/skywire/apps/skysocks-client
-\tinstall -m 0755 apps/vpn-server \$(DESTDIR)/opt/skywire/apps/vpn-server
-\tinstall -m 0755 apps/vpn-client \$(DESTDIR)/opt/skywire/apps/vpn-client
-\tln -s /opt/skywire/skywire-visor \$(DESTDIR)/usr/bin/skywire-visor
-\tln -s /opt/skywire/skywire-cli \$(DESTDIR)/usr/bin/skywire-cli
+	mkdir ./debian
 
-uninstall:
-\trm -rf \$(DESTDIR)/usr/bin/skywire-visor
-\trm -rf \$(DESTDIR)/usr/bin/skywire-cli
-\trm -rf \$(DESTDIR)/opt/skywire
-EOF
+	create_control_file "$ARCH"
 
-  echo -e "$mkrecipes" >>./Makefile
+	# this will bring up the editor
+	DEBEMAIL=$AUTHOREMAIL DEBFULLNAME=$AUTHORNAME dch --create -d --distribution stable
 
-  mkdir ./debian
+	echo "#!/usr/bin/make -f" >> ./debian/rules
+	echo "%:" >> ./debian/rules
+	echo "	dh \$@ --with systemd" >> ./debian/rules
 
-  create_control_file "$arch"
+	echo "Copyright $(date +%Y), Skycoin." >> ./debian/copyright
 
-  # this will bring up the editor
-  DEBEMAIL=$authoremail DEBFULLNAME=$authorname dch --create -d --distribution stable
+	echo "10" >> ./debian/compat
 
-  # shellcheck disable=SC2129
-  echo "#!/usr/bin/make -f" >>./debian/rules
-  echo "%:" >>./debian/rules
-  echo "	dh \$@ --with systemd" >>./debian/rules
+	echo "#!/bin/bash" >> "./debian/${REPONAME}.prerm"
+	echo "" >> "./debian/${REPONAME}.prerm"
+	echo "touch /opt/skywire/removing" >> "./debian/${REPONAME}.prerm"
+	echo "" >> "./debian/${REPONAME}.prerm"
+	echo "# Automatically added by dh_systemd_start/12.1.1" >> "./debian/${REPONAME}.prerm"
+	echo "if [ -d /run/systemd/system ] && [ \"\$1\" = remove ]; then" >> "./debian/${REPONAME}.prerm"
+  echo "	deb-systemd-invoke stop 'skywire.service' >/dev/null || true" >> "./debian/${REPONAME}.prerm"
+  echo "fi" >> "./debian/${REPONAME}.prerm"
+  echo "# End automatically added section" >> "./debian/${REPONAME}.prerm"
+	echo "" >> "./debian/${REPONAME}.prerm"
+	echo "#DEBHELPER#" >> "./debian/${REPONAME}.prerm"
 
-  echo "Copyright $(date +%Y), Skycoin." >>./debian/copyright
+	chmod 0555 "./debian/${REPONAME}.prerm"
 
-  echo "10" >>./debian/compat
+	echo "#!/bin/bash" >> "./debian/${REPONAME}.preinst"
+	echo "" >> "./debian/${REPONAME}.preinst"
+	echo "if [ -f "/opt/skywire/removing" ]" >> "./debian/${REPONAME}.preinst"
+	echo "then" >> "./debian/${REPONAME}.preinst"
+	echo "	touch /opt/skywire/upgrading" >> "./debian/${REPONAME}.preinst"
+	echo "fi" >> "./debian/${REPONAME}.preinst"
+	echo "" >> "./debian/${REPONAME}.preinst"
+	echo "#DEBHELPER#" >> "./debian/${REPONAME}.preinst"
 
-  # shellcheck disable=SC2129
-  echo "#!/bin/bash" >>"./debian/${reponame}.prerm"
-  echo "" >>"./debian/${reponame}.prerm"
-  echo "touch /opt/skywire/removing" >>"./debian/${reponame}.prerm"
-  echo "" >>"./debian/${reponame}.prerm"
-  echo "# Automatically added by dh_systemd_start/12.1.1" >>"./debian/${reponame}.prerm"
-  echo "if [ -d /run/systemd/system ] && [ \"\$1\" = remove ]; then" >>"./debian/${reponame}.prerm"
-  echo "	deb-systemd-invoke stop 'skywire.service' >/dev/null || true" >>"./debian/${reponame}.prerm"
-  echo "fi" >>"./debian/${reponame}.prerm"
-  echo "# End automatically added section" >>"./debian/${reponame}.prerm"
-  echo "" >>"./debian/${reponame}.prerm"
-  echo "#DEBHELPER#" >>"./debian/${reponame}.prerm"
+	chmod 0555 "./debian/${REPONAME}.preinst"
 
-  chmod 0555 "./debian/${reponame}.prerm"
+	echo "#!/bin/bash" >> "./debian/${REPONAME}.postrm"
+	echo "" >> "./debian/${REPONAME}.postrm"
+	echo "if [ ! -f "opt/skywire/upgrading" ]" >> "./debian/${REPONAME}.postrm"
+	echo "then" >> "./debian/${REPONAME}.postrm"
+	echo "	rm -rf /opt/skywire" >> "./debian/${REPONAME}.postrm"
+	echo "fi" >> "./debian/${REPONAME}.postrm"
+	echo "" >> "./debian/${REPONAME}.postrm"
+	echo "# Automatically added by dh_systemd_start/12.1.1" >> "./debian/${REPONAME}.postrm"
+	echo "if [ -d /run/systemd/system ]; then" >> "./debian/${REPONAME}.postrm"
+	echo "	systemctl --system daemon-reload >/dev/null || true" >> "./debian/${REPONAME}.postrm"
+	echo "fi" >> "./debian/${REPONAME}.postrm"
+	echo "# End automatically added section" >> "./debian/${REPONAME}.postrm"
+	echo "# Automatically added by dh_systemd_enable/12.1.1" >> "./debian/${REPONAME}.postrm"
+	echo "if [ \"\$1\" = \"remove\" ]; then" >> "./debian/${REPONAME}.postrm"
+	echo "	if [ -x \"/usr/bin/deb-systemd-helper\" ]; then" >> "./debian/${REPONAME}.postrm"
+	echo "		deb-systemd-helper mask 'skywire.service' >/dev/null || true" >> "./debian/${REPONAME}.postrm"
+	echo "	fi" >> "./debian/${REPONAME}.postrm"
+	echo "fi" >> "./debian/${REPONAME}.postrm"
+	echo "" >> "./debian/${REPONAME}.postrm"
+	echo "if [ \"\$1\" = \"purge\" ]; then" >> "./debian/${REPONAME}.postrm"
+	echo "	if [ -x \"/usr/bin/deb-systemd-helper\" ]; then" >> "./debian/${REPONAME}.postrm"
+	echo "		deb-systemd-helper purge 'skywire.service' >/dev/null || true" >> "./debian/${REPONAME}.postrm"
+	echo "		deb-systemd-helper unmask 'skywire.service' >/dev/null || true" >> "./debian/${REPONAME}.postrm"
+	echo "	fi" >> "./debian/${REPONAME}.postrm"
+	echo "fi" >> "./debian/${REPONAME}.postrm"
+	echo "# End automatically added section" >> "./debian/${REPONAME}.postrm"
+	echo "" >> "./debian/${REPONAME}.postrm"
+	echo "#DEBHELPER#" >> "./debian/${REPONAME}.postrm"
 
-  # shellcheck disable=SC2129
-  echo "#!/bin/bash" >>"./debian/${reponame}.preinst"
-  echo "" >>"./debian/${reponame}.preinst"
-  echo "if [ -f /opt/skywire/removing ]" >>"./debian/${reponame}.preinst"
-  echo "then" >>"./debian/${reponame}.preinst"
-  echo "	touch /opt/skywire/upgrading" >>"./debian/${reponame}.preinst"
-  echo "fi" >>"./debian/${reponame}.preinst"
-  echo "" >>"./debian/${reponame}.preinst"
-  echo "#DEBHELPER#" >>"./debian/${reponame}.preinst"
+	chmod 0555 "./debian/${REPONAME}.postrm"
 
-  chmod 0555 "./debian/${reponame}.preinst"
+	echo "#!/bin/bash" >> "./debian/${REPONAME}.postinst"
+	echo "" >> "./debian/${REPONAME}.postinst"
+	echo "rm -rf /opt/skywire/upgrading" >> "./debian/${REPONAME}.postinst"
+	echo "if [ -f "/opt/skywire/removing" ]" >> "./debian/${REPONAME}.postinst"
+	echo "then" >> "./debian/${REPONAME}.postinst"
+	echo "	rm -rf /opt/skywire/removing" >> "./debian/${REPONAME}.postinst"
+	echo "else" >> "./debian/${REPONAME}.postinst"
+	echo "	/opt/skywire/skywire-cli visor gen-config -o /opt/skywire/skywire-config.json" >> "./debian/${REPONAME}.postinst"
+	echo "fi" >> "./debian/${REPONAME}.postinst"
+	echo "" >> "./debian/${REPONAME}.postinst"
+	echo "setcap 'cap_net_admin+p' /opt/skywire/apps/vpn-client" >> "./debian/${REPONAME}.postinst"
+	echo "" >> "./debian/${REPONAME}.postinst"
+	echo "# Automatically added by dh_systemd_enable/12.1.1" >> "./debian/${REPONAME}.postinst"
+	echo "if [ \"\$1\" = \"configure\" ] || [ \"\$1\" = \"abort-upgrade\" ] || [ \"\$1\" = \"abort-deconfigure\" ] || [ \"\$1\" = \"abort-remove\" ] ; then" >> "./debian/${REPONAME}.postinst"
+	echo "	# This will only remove masks created by d-s-h on package removal." >> "./debian/${REPONAME}.postinst"
+	echo "	deb-systemd-helper unmask 'skywire.service' >/dev/null || true" >> "./debian/${REPONAME}.postinst"
+	echo "" >> "./debian/${REPONAME}.postinst"
+	echo "	# was-enabled defaults to true, so new installations run enable." >> "./debian/${REPONAME}.postinst"
+	echo "	if deb-systemd-helper --quiet was-enabled 'skywire.service'; then" >> "./debian/${REPONAME}.postinst"
+	echo "		# Enables the unit on first installation, creates new" >> "./debian/${REPONAME}.postinst"
+	echo "		# symlinks on upgrades if the unit file has changed." >> "./debian/${REPONAME}.postinst"
+	echo "		deb-systemd-helper enable 'skywire.service' >/dev/null || true" >> "./debian/${REPONAME}.postinst"
+	echo "	else" >> "./debian/${REPONAME}.postinst"
+	echo "		# Update the statefile to add new symlinks (if any), which need to be" >> "./debian/${REPONAME}.postinst"
+	echo "		# cleaned up on purge. Also remove old symlinks." >> "./debian/${REPONAME}.postinst"
+	echo "		deb-systemd-helper update-state 'skywire.service' >/dev/null || true" >> "./debian/${REPONAME}.postinst"
+	echo "	fi" >> "./debian/${REPONAME}.postinst"
+	echo "fi" >> "./debian/${REPONAME}.postinst"
+	echo "# End automatically added section" >> "./debian/${REPONAME}.postinst"
+	echo "# Automatically added by dh_systemd_start/12.1.1" >> "./debian/${REPONAME}.postinst"
+	echo "if [ \"\$1\" = \"configure\" ] || [ \"\$1\" = \"abort-upgrade\" ] || [ \"\$1\" = \"abort-deconfigure\" ] || [ \"\$1\" = \"abort-remove\" ] ; then" >> "./debian/${REPONAME}.postinst"
+	echo "	if [ -d /run/systemd/system ]; then" >> "./debian/${REPONAME}.postinst"
+	echo "		systemctl --system daemon-reload >/dev/null || true" >> "./debian/${REPONAME}.postinst"
+	echo "		if [ -n \"\$2\" ]; then" >> "./debian/${REPONAME}.postinst"
+	echo "			_dh_action=restart" >> "./debian/${REPONAME}.postinst"
+	echo "		else" >> "./debian/${REPONAME}.postinst"
+	echo "			_dh_action=start" >> "./debian/${REPONAME}.postinst"
+	echo "		fi" >> "./debian/${REPONAME}.postinst"
+	echo "		deb-systemd-invoke \$_dh_action 'skywire.service' >/dev/null || true" >> "./debian/${REPONAME}.postinst"
+	echo "	fi" >> "./debian/${REPONAME}.postinst"
+	echo "fi" >> "./debian/${REPONAME}.postinst"
+	echo "# End automatically added section" >> "./debian/${REPONAME}.postinst"
+	echo "" >> "./debian/${REPONAME}.postinst"
+	echo "#DEBHELPER#" >> "./debian/${REPONAME}.postinst"
 
-  # shellcheck disable=SC2129
-  echo "#!/bin/bash" >>"./debian/${reponame}.postrm"
-  echo "" >>"./debian/${reponame}.postrm"
-  echo "if [ ! -f /opt/skywire/upgrading ]" >>"./debian/${reponame}.postrm"
-  echo "then" >>"./debian/${reponame}.postrm"
-  echo "	rm -rf /opt/skywire" >>"./debian/${reponame}.postrm"
-  echo "fi" >>"./debian/${reponame}.postrm"
-  echo "" >>"./debian/${reponame}.postrm"
-  echo "# Automatically added by dh_systemd_start/12.1.1" >>"./debian/${reponame}.postrm"
-  echo "if [ -d /run/systemd/system ]; then" >>"./debian/${reponame}.postrm"
-  echo "	systemctl --system daemon-reload >/dev/null || true" >>"./debian/${reponame}.postrm"
-  echo "fi" >>"./debian/${reponame}.postrm"
-  echo "# End automatically added section" >>"./debian/${reponame}.postrm"
-  echo "# Automatically added by dh_systemd_enable/12.1.1" >>"./debian/${reponame}.postrm"
-  echo "if [ \"\$1\" = \"remove\" ]; then" >>"./debian/${reponame}.postrm"
-  echo "	if [ -x \"/usr/bin/deb-systemd-helper\" ]; then" >>"./debian/${reponame}.postrm"
-  echo "		deb-systemd-helper mask 'skywire.service' >/dev/null || true" >>"./debian/${reponame}.postrm"
-  echo "	fi" >>"./debian/${reponame}.postrm"
-  echo "fi" >>"./debian/${reponame}.postrm"
-  echo "" >>"./debian/${reponame}.postrm"
-  echo "if [ \"\$1\" = \"purge\" ]; then" >>"./debian/${reponame}.postrm"
-  echo "	if [ -x \"/usr/bin/deb-systemd-helper\" ]; then" >>"./debian/${reponame}.postrm"
-  echo "		deb-systemd-helper purge 'skywire.service' >/dev/null || true" >>"./debian/${reponame}.postrm"
-  echo "		deb-systemd-helper unmask 'skywire.service' >/dev/null || true" >>"./debian/${reponame}.postrm"
-  echo "	fi" >>"./debian/${reponame}.postrm"
-  echo "fi" >>"./debian/${reponame}.postrm"
-  echo "# End automatically added section" >>"./debian/${reponame}.postrm"
-  echo "" >>"./debian/${reponame}.postrm"
-  echo "#DEBHELPER#" >>"./debian/${reponame}.postrm"
+	chmod 0555 "./debian/${REPONAME}.postinst"
 
-  chmod 0555 "./debian/${reponame}.postrm"
+	echo "[Unit]" >> ./debian/skywire.service
+	echo "Description=Skywire Visor" >> ./debian/skywire.service
+	echo "After=network.target" >> ./debian/skywire.service
+  echo "" >> ./debian/skywire.service
+  echo "[Service]" >> ./debian/skywire.service
+  echo "Type=simple" >> ./debian/skywire.service
+  echo "User=root" >> ./debian/skywire.service
+  echo "Group=root" >> ./debian/skywire.service
+  echo "ExecStart=/usr/bin/skywire-visor /opt/skywire/skywire-config.json" >> ./debian/skywire.service
+  echo "Restart=on-failure" >> ./debian/skywire.service
+  echo "RestartSec=20" >> ./debian/skywire.service
+  echo "TimeoutSec=30" >> ./debian/skywire.service
+  echo "" >> ./debian/skywire.service
+  echo "[Install]" >> ./debian/skywire.service
+  echo "WantedBy=multi-user.target" >> ./debian/skywire.service
 
-  # shellcheck disable=SC2129
-  echo "#!/bin/bash" >>"./debian/${reponame}.postinst"
-  echo "" >>"./debian/${reponame}.postinst"
-  echo "rm -rf /opt/skywire/upgrading" >>"./debian/${reponame}.postinst"
-  echo "if [ -f /opt/skywire/removing ]" >>"./debian/${reponame}.postinst"
-  echo "then" >>"./debian/${reponame}.postinst"
-  echo "	rm -rf /opt/skywire/removing" >>"./debian/${reponame}.postinst"
-  echo "else" >>"./debian/${reponame}.postinst"
-  echo "	/opt/skywire/skywire-cli visor gen-config -o /opt/skywire/skywire-config.json" >>"./debian/${reponame}.postinst"
-  echo "fi" >>"./debian/${reponame}.postinst"
-  echo "" >>"./debian/${reponame}.postinst"
-  echo "setcap 'cap_net_admin+p' /opt/skywire/apps/vpn-client" >>"./debian/${reponame}.postinst"
-  echo "" >>"./debian/${reponame}.postinst"
-  echo "# Automatically added by dh_systemd_enable/12.1.1" >>"./debian/${reponame}.postinst"
-  echo "if [ \"\$1\" = \"configure\" ] || [ \"\$1\" = \"abort-upgrade\" ] || [ \"\$1\" = \"abort-deconfigure\" ] || [ \"\$1\" = \"abort-remove\" ] ; then" >>"./debian/${reponame}.postinst"
-  echo "	# This will only remove masks created by d-s-h on package removal." >>"./debian/${reponame}.postinst"
-  echo "	deb-systemd-helper unmask 'skywire.service' >/dev/null || true" >>"./debian/${reponame}.postinst"
-  echo "" >>"./debian/${reponame}.postinst"
-  echo "	# was-enabled defaults to true, so new installations run enable." >>"./debian/${reponame}.postinst"
-  echo "	if deb-systemd-helper --quiet was-enabled 'skywire.service'; then" >>"./debian/${reponame}.postinst"
-  echo "		# Enables the unit on first installation, creates new" >>"./debian/${reponame}.postinst"
-  echo "		# symlinks on upgrades if the unit file has changed." >>"./debian/${reponame}.postinst"
-  echo "		deb-systemd-helper enable 'skywire.service' >/dev/null || true" >>"./debian/${reponame}.postinst"
-  echo "	else" >>"./debian/${reponame}.postinst"
-  echo "		# Update the statefile to add new symlinks (if any), which need to be" >>"./debian/${reponame}.postinst"
-  echo "		# cleaned up on purge. Also remove old symlinks." >>"./debian/${reponame}.postinst"
-  echo "		deb-systemd-helper update-state 'skywire.service' >/dev/null || true" >>"./debian/${reponame}.postinst"
-  echo "	fi" >>"./debian/${reponame}.postinst"
-  echo "fi" >>"./debian/${reponame}.postinst"
-  echo "# End automatically added section" >>"./debian/${reponame}.postinst"
-  echo "# Automatically added by dh_systemd_start/12.1.1" >>"./debian/${reponame}.postinst"
-  echo "if [ \"\$1\" = \"configure\" ] || [ \"\$1\" = \"abort-upgrade\" ] || [ \"\$1\" = \"abort-deconfigure\" ] || [ \"\$1\" = \"abort-remove\" ] ; then" >>"./debian/${reponame}.postinst"
-  echo "	if [ -d /run/systemd/system ]; then" >>"./debian/${reponame}.postinst"
-  echo "		systemctl --system daemon-reload >/dev/null || true" >>"./debian/${reponame}.postinst"
-  echo "		if [ -n \"\$2\" ]; then" >>"./debian/${reponame}.postinst"
-  echo "			_dh_action=restart" >>"./debian/${reponame}.postinst"
-  echo "		else" >>"./debian/${reponame}.postinst"
-  echo "			_dh_action=start" >>"./debian/${reponame}.postinst"
-  echo "		fi" >>"./debian/${reponame}.postinst"
-  echo "		deb-systemd-invoke \$_dh_action 'skywire.service' >/dev/null || true" >>"./debian/${reponame}.postinst"
-  echo "	fi" >>"./debian/${reponame}.postinst"
-  echo "fi" >>"./debian/${reponame}.postinst"
-  echo "# End automatically added section" >>"./debian/${reponame}.postinst"
-  echo "" >>"./debian/${reponame}.postinst"
-  echo "#DEBHELPER#" >>"./debian/${reponame}.postinst"
+	DEBEMAIL=$AUTHOREMAIL DEBFULLNAME=$AUTHORNAME debuild -a"$ARCH" -us -uc
 
-  chmod 0555 "./debian/${reponame}.postinst"
-
-  # shellcheck disable=SC2129
-  echo "[Unit]" >>./debian/skywire.service
-  echo "Description=Skywire Visor" >>./debian/skywire.service
-  echo "After=network.target" >>./debian/skywire.service
-  echo "" >>./debian/skywire.service
-  echo "[Service]" >>./debian/skywire.service
-  echo "Type=simple" >>./debian/skywire.service
-  echo "User=root" >>./debian/skywire.service
-  echo "Group=root" >>./debian/skywire.service
-  echo "ExecStart=/usr/bin/skywire-visor /opt/skywire/skywire-config.json" >>./debian/skywire.service
-  echo "Restart=on-failure" >>./debian/skywire.service
-  echo "RestartSec=20" >>./debian/skywire.service
-  echo "TimeoutSec=30" >>./debian/skywire.service
-  echo "" >>./debian/skywire.service
-  echo "[Install]" >>./debian/skywire.service
-  echo "WantedBy=multi-user.target" >>./debian/skywire.service
-
-  DEBEMAIL=$authoremail DEBFULLNAME=$authorname debuild -a"$arch" -us -uc
-
-  cd ..
-  echo "$PWD"
-  ls -la
-  mv "./${reponame}_${ver}-1_${arch}.deb" ../../../deb/
-  cd ..
-  rm -rf ./packages
-  rm -rf ./debian
+	cd ..
+	echo "$PWD"
+	ls -la
+	mv "./${REPONAME}_${VER}-1_${ARCH}.deb" ../deb/
+	cd ..
+	rm -rf ./packages
+	rm -rf ./debian
 }
 
 set -euo pipefail
@@ -263,11 +256,6 @@ sudo dpkg --add-architecture armhf
 
 rm -rf ./deb
 mkdir ./deb
-
-mkdir ./packaging
-cd ./packaging
-git clone https://github.com/${orgname}/${reponame} --branch "$branch" --depth 1
-cd "./$reponame" || exit
 
 pack_deb amd64 amd64
 pack_deb i386 386
