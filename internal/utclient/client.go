@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/skycoin/skywire/internal/netutil"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -17,6 +16,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/httpauth"
+	"github.com/skycoin/skywire/internal/netutil"
 )
 
 //go:generate mockery -name APIClient -case underscore -inpkg
@@ -31,7 +31,6 @@ type Error struct {
 // APIClient implements uptime tracker API client.
 type APIClient interface {
 	UpdateVisorUptime(context.Context) error
-	Health(ctx context.Context) (int, error)
 }
 
 // httpClient implements Client for uptime tracker API.
@@ -99,23 +98,6 @@ func (c *httpClient) UpdateVisorUptime(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// Health gets the health status of uptime-tracker service.
-func (c *httpClient) Health(ctx context.Context) (int, error) {
-	resp, err := c.Get(ctx, "/health")
-	if err != nil {
-		return 0, err
-	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close response body")
-		}
-	}()
-
-	return resp.StatusCode, nil
-
 }
 
 // extractError returns the decoded error message from Body.
