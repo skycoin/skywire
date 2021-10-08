@@ -65,7 +65,7 @@ Once the script finishes, you'll see a `deb` directory in you current folder. Th
 To sign the packages use:<br>
 (NOTE: the email should be the same as the one used in `make deb-package`. as well as the email of the key you are sigining with)
 ```bash
-$ ./scripts/deb_installer/sign_deb.sh some@mail.ru
+$ ./scripts/deb_installer/sign_deb.sh someemail@email.com
 ```
 
 This will sign all packages.
