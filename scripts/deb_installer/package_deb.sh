@@ -1,29 +1,57 @@
 #!/bin/bash
 
-VER=$1
+print_usage()
+{
+   # Display Help
+   echo
+   echo "Usage: bash package_deb.sh [-v] [-e email] [-n 'name'] [-h]"
+   echo "You need to provide -v <VERSION> version number of the binary (eg. 0.5.0)."
+   echo "You need to provide -e <AUTH_EMAIL> email of the author you want to sign the binary with."
+   echo "You need to provide -n '<AUTH_NAME>' name of the author you want to sign the binary with."
+   echo
+}
 
-AUTHOREMAIL=$2
-AUTHORNAME=$3
+# Has to be run from Debian based distro
+current_os="$(cat /etc/os-release | grep ID_LIKE)"
+if [[ "$current_os" != "ID_LIKE=debian" ]]; then
+  echo "Can only be run from Debian based distro"
+  exit 1
+fi
 
-USAGE="Usage: bash package.sh RELEASE_VERSION AUTHOR_EMAIL AUTHOR_FULL_NAME"
+while getopts v:e:n:h flag
+do
+    case "${flag}" in
+        v) 	VER=${OPTARG};;
+        e) 	AUTHOREMAIL=${OPTARG};;
+        n) 	AUTHORNAME=${OPTARG};;
+        h)
+			print_usage
+			exit 0
+		;;
+    esac
+done
 
-if [ -z "$1" ]
+if [ -z "$VER" ]
 then
-	echo "$USAGE"
+	print_usage
 	exit
 fi
 
-if [ -z "$2" ]
+if [ -z "$AUTHOREMAIL" ]
 then
-	echo "$USAGE"
+	print_usage
 	exit
 fi
 
-if [ -z "$3" ]
+if [ -z "$AUTHORNAME" ]
 then
-	echo "$USAGE"
+	print_usage
 	exit
 fi
+
+echo VER: $VER
+echo AUTHOREMAIL: $AUTHOREMAIL
+echo AUTHORNAME: $AUTHORNAME
 
 ORGNAME=skycoin
 REPONAME=skywire
