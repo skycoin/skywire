@@ -2,10 +2,8 @@ package commands
 
 import (
 	"context"
-	"embed"
 	"fmt"
 	"io"
-	"io/fs"
 	"io/ioutil"
 	"net/http"
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
@@ -16,6 +14,9 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"embed"
+	"io/fs"
 
 	"github.com/pkg/profile"
 	"github.com/skycoin/dmsg/buildinfo"
@@ -86,6 +87,7 @@ func runVisor(args []string) {
 		WithField("systemd", restartCtx.Systemd()).
 		WithField("parent_systemd", restartCtx.ParentSystemd()).
 		WithField("skybian_build_version", os.Getenv("SKYBIAN_BUILD_VERSION")).
+		WithField("build_tag", visor.BuildTag).
 		Debugf("Process info")
 
 	// Versions v0.2.3 and below return 0 exit-code after update and do not trigger systemd to restart a process
