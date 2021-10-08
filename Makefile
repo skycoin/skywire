@@ -44,10 +44,6 @@ BUILDINFO?=$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT) $(BUILDTAG
 BUILD_OPTS?="-ldflags=$(BUILDINFO)" -mod=vendor $(RACE_FLAG)
 BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
 
-DEB_VERSION ?= ""
-DEB_AUTH_EMAIL ?= ""
-DEB_AUTH_NAME ?= ""
-
 check: lint test ## Run linters and tests
 
 check-windows-appveyor: lint-windows-appveyor test ## Run linters and tests on appveyor windows image
@@ -183,7 +179,7 @@ deb-install-prequisites: ## Create unsigned application
 	./scripts/deb_installer/prequisites.sh
 
 deb-package: deb-install-prequisites ## Create unsigned application
-	./scripts/deb_installer/package_deb.sh -v ${DEB_VERSION} -e ${DEB_AUTH_EMAIL} -n ${DEB_AUTH_NAME}
+	./scripts/deb_installer/package_deb.sh
 
 deb-package-help: ## Show installer creation help
 	./scripts/deb_installer/package_deb.sh -h
