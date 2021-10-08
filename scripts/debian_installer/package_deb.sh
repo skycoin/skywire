@@ -67,7 +67,7 @@ function pack_deb {
 	GOOS=linux GOARCH="$GOARCH" make bin
 	GOOS=linux GOARCH="$GOARCH" make host-apps
 
-  rm -rf packages
+	rm -rf packages
 	mkdir packages
 	cd ./packages
 
@@ -126,9 +126,9 @@ function pack_deb {
 	echo "" >> "./debian/${REPONAME}.prerm"
 	echo "# Automatically added by dh_systemd_start/12.1.1" >> "./debian/${REPONAME}.prerm"
 	echo "if [ -d /run/systemd/system ] && [ \"\$1\" = remove ]; then" >> "./debian/${REPONAME}.prerm"
-  echo "	deb-systemd-invoke stop 'skywire.service' >/dev/null || true" >> "./debian/${REPONAME}.prerm"
-  echo "fi" >> "./debian/${REPONAME}.prerm"
-  echo "# End automatically added section" >> "./debian/${REPONAME}.prerm"
+	echo "	deb-systemd-invoke stop 'skywire.service' >/dev/null || true" >> "./debian/${REPONAME}.prerm"
+	echo "fi" >> "./debian/${REPONAME}.prerm"
+	echo "# End automatically added section" >> "./debian/${REPONAME}.prerm"
 	echo "" >> "./debian/${REPONAME}.prerm"
 	echo "#DEBHELPER#" >> "./debian/${REPONAME}.prerm"
 
@@ -226,18 +226,18 @@ function pack_deb {
 	echo "[Unit]" >> ./debian/skywire.service
 	echo "Description=Skywire Visor" >> ./debian/skywire.service
 	echo "After=network.target" >> ./debian/skywire.service
-  echo "" >> ./debian/skywire.service
-  echo "[Service]" >> ./debian/skywire.service
-  echo "Type=simple" >> ./debian/skywire.service
-  echo "User=root" >> ./debian/skywire.service
-  echo "Group=root" >> ./debian/skywire.service
-  echo "ExecStart=/usr/bin/skywire-visor /opt/skywire/skywire-config.json" >> ./debian/skywire.service
-  echo "Restart=on-failure" >> ./debian/skywire.service
-  echo "RestartSec=20" >> ./debian/skywire.service
-  echo "TimeoutSec=30" >> ./debian/skywire.service
-  echo "" >> ./debian/skywire.service
-  echo "[Install]" >> ./debian/skywire.service
-  echo "WantedBy=multi-user.target" >> ./debian/skywire.service
+	echo "" >> ./debian/skywire.service
+	echo "[Service]" >> ./debian/skywire.service
+	echo "Type=simple" >> ./debian/skywire.service
+	echo "User=root" >> ./debian/skywire.service
+	echo "Group=root" >> ./debian/skywire.service
+	echo "ExecStart=/usr/bin/skywire-visor /opt/skywire/skywire-config.json" >> ./debian/skywire.service
+	echo "Restart=on-failure" >> ./debian/skywire.service
+	echo "RestartSec=20" >> ./debian/skywire.service
+	echo "TimeoutSec=30" >> ./debian/skywire.service
+	echo "" >> ./debian/skywire.service
+	echo "[Install]" >> ./debian/skywire.service
+	echo "WantedBy=multi-user.target" >> ./debian/skywire.service
 
 	DEBEMAIL=$AUTHOREMAIL DEBFULLNAME=$AUTHORNAME debuild -a"$ARCH" -us -uc
 
