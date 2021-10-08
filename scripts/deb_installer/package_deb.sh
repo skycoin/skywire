@@ -4,10 +4,10 @@ print_usage()
 {
    # Display Help
    echo
-   echo "Usage: bash package_deb.sh [-v] [-e email] [-n 'name'] [-h]"
-   echo "You need to provide -v <VERSION> version number of the binary (eg. 0.5.0)."
-   echo "You need to provide -e <AUTH_EMAIL> email of the author you want to sign the binary with."
-   echo "You need to provide -n '<AUTH_NAME>' name of the author you want to sign the binary with."
+   echo "Usage: bash package_deb.sh [-h]"
+   echo "You need to provide Version: version number of the binary (eg. 0.5.0)."
+   echo "You need to provide Author Email: email of the author you want to sign the binary with (eg. someemail@email)."
+   echo "You need to provide Author Name: name of the author you want to sign the binary with (eg. 'Some Name')."
    echo
 }
 
@@ -18,12 +18,9 @@ if [[ "$current_os" != "ID_LIKE=debian" ]]; then
   exit 1
 fi
 
-while getopts v:e:n:h flag
+while getopts h flag
 do
     case "${flag}" in
-        v) 	VER=${OPTARG};;
-        e) 	AUTHOREMAIL=${OPTARG};;
-        n) 	AUTHORNAME=${OPTARG};;
         h)
 			print_usage
 			exit 0
@@ -31,27 +28,36 @@ do
     esac
 done
 
-if [ -z "$VER" ]
-then
-	print_usage
-	exit
-fi
+function read_version() {
+	read -p 'Version : ' VER
+	if [ -z "$VER" ]
+	then
+		echo "Verson requires to be non-empty."
+		read_version
+	fi
+}
 
-if [ -z "$AUTHOREMAIL" ]
-then
-	print_usage
-	exit
-fi
+function read_email() {
+	read -p 'Author Email : ' AUTHOREMAIL
+	if [ -z "$AUTHOREMAIL" ]
+	then
+		echo "Author Email requires to be non-empty."
+		read_email
+	fi
+}
 
-if [ -z "$AUTHORNAME" ]
-then
-	print_usage
-	exit
-fi
+function read_name() {
+	read -p 'Author Name : ' AUTHORNAME
+	if [ -z "$AUTHORNAME" ]
+	then
+		echo "Author Name requires to be non-empty."
+		read_name
+	fi
+}
 
-echo VER: $VER
-echo AUTHOREMAIL: $AUTHOREMAIL
-echo AUTHORNAME: $AUTHORNAME
+read_version
+read_email
+read_name
 
 ORGNAME=skycoin
 REPONAME=skywire
