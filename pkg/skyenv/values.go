@@ -66,7 +66,7 @@ const (
 	DefaultDmsgPtyCLIAddr        = "/tmp/dmsgpty.sock"
 )
 
-// Default STCP constants.
+// Default Skywire-TCP constants.
 const (
 	DefaultSTCPAddr = ":7777"
 )
