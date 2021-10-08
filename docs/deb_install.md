@@ -43,7 +43,7 @@ $ make deb-package
 
 ...
 ...
-Version :
+Version : 0.5.0
 Author Email : someemail@email.com
 Author Name : Some Name
 ```
