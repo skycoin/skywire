@@ -84,7 +84,7 @@ func (c *httpClient) UpdateVisorUptime(ctx context.Context) error {
 	return nil
 }
 
-// UpdateVisorUptime updates visor uptime.
+// Health gets the health status of uptime-tracker service.
 func (c *httpClient) Health(ctx context.Context) (int, error) {
 	resp, err := c.Get(ctx, "/health")
 	if err != nil {
