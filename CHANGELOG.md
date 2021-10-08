@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - added public_autoconnect field to transport section
 - added transport_setup_nodes field to transport section
 - added MinHops field to V1Routing section of config
+- added connection_duration field to `/api/visor/{pk}/apps/vpn-client/connections` 
 
 ## 0.2.1 - 2020.04.07
 
