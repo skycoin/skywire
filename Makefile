@@ -37,8 +37,9 @@ BUILDINFO_PATH := $(DMSG_BASE)/buildinfo
 BUILDINFO_VERSION := -X $(BUILDINFO_PATH).version=$(VERSION)
 BUILDINFO_DATE := -X $(BUILDINFO_PATH).date=$(DATE)
 BUILDINFO_COMMIT := -X $(BUILDINFO_PATH).commit=$(COMMIT)
+BUILDTAGINFO := -X $(PROJECT_BASE)/pkg/visor.BuildTag=$(BUILDTAG)
 
-BUILDINFO?=$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT)
+BUILDINFO?=$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT) $(BUILDTAGINFO)
 
 BUILD_OPTS?="-ldflags=$(BUILDINFO)" -mod=vendor $(RACE_FLAG)
 BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
@@ -56,11 +57,6 @@ build-static: host-apps-static bin-static ## Build apps and binaries. `go build`
 install-generate: ## Installs required execs for go generate.
 	${OPTS} go install github.com/mjibson/esc
 	${OPTS} go install github.com/vektra/mockery/cmd/mockery
-	# If the following does not work, you may need to run:
-	# 	git config --global url.git@github.com:.insteadOf https://github.com/
-	# Source: https://stackoverflow.com/questions/27500861/whats-the-proper-way-to-go-get-a-private-repository
-	# We are using 'go get' instead of 'go install' here, because we don't have a git tag in which 'readmegen' is already implemented.
-	${OPTS} go get -u github.com/SkycoinPro/skywire-services/cmd/readmegen
 
 generate: ## Generate mocks and config README's
 	go generate ./...
