@@ -593,7 +593,6 @@ func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
 
 	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK)
 	if err != nil {
-		// TODO(evanlinjin): We should design utclient to retry automatically instead of returning error.
 		v.log.WithError(err).Warn("Failed to connect to uptime tracker.")
 		return nil
 	}
@@ -607,6 +606,7 @@ func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
 				v.isServicesHealthy.unset()
 				log.WithError(err).Warn("Failed to update visor uptime.")
 			} else {
+				log.Info("updating visor health status")
 				v.isServicesHealthy.set()
 			}
 		}
