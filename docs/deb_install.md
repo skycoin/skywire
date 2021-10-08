@@ -65,7 +65,7 @@ Once the script finishes, you'll see a `deb` directory in you current folder. Th
 - To sign the packages use:<br>
 (NOTE: the email should be the same as the one used in `make deb-package`. as well as the email of the key you are sigining with)
 ```bash
-$ ./scripts/debian_installer/sign_deb.sh some@mail.ru
+$ ./scripts/deb_installer/sign_deb.sh some@mail.ru
 ```
 
 This will sign all packages.
@@ -94,7 +94,7 @@ This should be repeated for all needed debian releases.
 
 - To add new packages to the repo, from the `/var/www/repos/apt/debian` use:
 ```bash
-$ reprepro includedeb jessie ./skywire_0.4.0-1_amd64.deb
+$ reprepro includedeb jessie ./skywire_0.5.0-1_amd64.deb
 ```
 
 This should be repeated for all needed debian releases and built packages.
