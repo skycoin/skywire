@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"sync"
 
 	"github.com/google/uuid"
@@ -17,7 +16,6 @@ type DiscoveryClient interface {
 	GetTransportByID(ctx context.Context, id uuid.UUID) (*Entry, error)
 	GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*Entry, error)
 	DeleteTransport(ctx context.Context, id uuid.UUID) error
-	Health(ctx context.Context) (int, error)
 }
 
 type mockDiscoveryClient struct {
@@ -89,8 +87,4 @@ func (td *mockDiscoveryClient) DeleteTransport(ctx context.Context, id uuid.UUID
 
 	delete(td.entries, id)
 	return nil
-}
-
-func (td *mockDiscoveryClient) Health(_ context.Context) (int, error) {
-	return http.StatusOK, nil
 }
