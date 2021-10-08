@@ -26,7 +26,7 @@ $ sudo apt install devscripts binutils-i686-linux-gnu binutils-aarch64-linux-gnu
 
 2. Make sure you make the packaging script exectuable:
 ```bash
-$ sudo chmod +x ./scripts/package_deb.sh
+$ sudo chmod +x ./scripts/debian_installer/package_deb.sh
 ```
 
 3. Symlink the binary:
@@ -50,7 +50,7 @@ $ gpg --list-keys
 6. Run the packaging script. Make sure the eamil and full_name is the same as the key in `gpg --list-keys`:
 (NOTE: the email should be the same as the email of the key you are sigining with)
 ```bash
-$ ./scripts/package_deb.sh 0.4.0 some@mail.ru full_name
+$ ./scripts/debian_installer/package_deb.sh 0.4.0 some@mail.ru 'full name'
 ```
 
 The first argument is a package version. The debian package should be created after a release has been made in `github.com/skycoin/skywire` and the version should follow the tag defined in the `skywire` repo. 
@@ -71,7 +71,7 @@ Once the script finishes, you'll see a `deb` directory in you current folder. Th
 7. To sign the packages use:<br>
 (NOTE: the email should be the same as the one used  in 6. as well as the email of the key you are sigining with)
 ```bash
-$ ./scripts/sign_deb.sh some@mail.ru
+$ ./scripts/debian_installer/sign_deb.sh some@mail.ru
 ```
 
 This will sign all packages.
