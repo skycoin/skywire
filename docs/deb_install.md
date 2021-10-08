@@ -63,7 +63,7 @@ The script will complain that there's no original code tarball. Ignore the warni
 Once the script finishes, you'll see a `deb` directory in you current folder. This is where the finished packages are. Put these to `/var/www/repos/apt/debian` on the `apt server` and remove the old packages there. 
 
 - To sign the packages use:<br>
-(NOTE: the email should be the same as the one used  in 6. as well as the email of the key you are sigining with)
+(NOTE: the email should be the same as the one used in `make deb-package`. as well as the email of the key you are sigining with)
 ```bash
 $ ./scripts/debian_installer/sign_deb.sh some@mail.ru
 ```
