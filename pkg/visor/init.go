@@ -581,8 +581,8 @@ func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error {
-	const tickDuration = 5 * time.Minute
+func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
+	const tickDuration = 1 * time.Minute
 
 	conf := v.conf.UptimeTracker
 
@@ -593,7 +593,6 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 
 	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK)
 	if err != nil {
-		// TODO(evanlinjin): We should design utclient to retry automatically instead of returning error.
 		v.log.WithError(err).Warn("Failed to connect to uptime tracker.")
 		return nil
 	}
@@ -602,9 +601,13 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 
 	go func() {
 		for range ticker.C {
-			ctx := context.Background()
-			if err := ut.UpdateVisorUptime(ctx); err != nil {
+			c := context.Background()
+			if err := ut.UpdateVisorUptime(c); err != nil {
+				v.isServicesHealthy.unset()
 				log.WithError(err).Warn("Failed to update visor uptime.")
+			} else {
+				log.Info("updating visor health status")
+				v.isServicesHealthy.set()
 			}
 		}
 	}()

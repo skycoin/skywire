@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - replaced stcp field to skywire-tcp in config and comments
 - replaced local_address field to listening_address in config
 - replaced port field to dmsg_port in config
+- updated visor health status checks, no longer querying multiple external services endpoints.
 
 ### Added
 
