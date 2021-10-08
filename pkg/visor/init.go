@@ -316,7 +316,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	var listenAddr string
 	if v.conf.STCP != nil {
 		table = stcp.NewTable(v.conf.STCP.PKTable)
-		listenAddr = v.conf.STCP.LocalAddr
+		listenAddr = v.conf.STCP.ListeningAddress
 	}
 	factory := network.ClientFactory{
 		PK:         v.conf.PK,
