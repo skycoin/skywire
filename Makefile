@@ -44,6 +44,10 @@ BUILDINFO?=$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT) $(BUILDTAG
 BUILD_OPTS?="-ldflags=$(BUILDINFO)" -mod=vendor $(RACE_FLAG)
 BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
 
+DEB_VERSION ?= ""
+DEB_AUTH_EMAIL ?= ""
+DEB_AUTH_NAME ?= ""
+
 check: lint test ## Run linters and tests
 
 check-windows-appveyor: lint-windows-appveyor test ## Run linters and tests on appveyor windows image
@@ -173,6 +177,16 @@ build-ui: install-deps-ui  ## Builds the UI
 	rm -rf ${MANAGER_UI_BUILT_DIR}
 	mkdir ${MANAGER_UI_BUILT_DIR}
 	cp -r ${MANAGER_UI_DIR}/dist/. ${MANAGER_UI_BUILT_DIR}
+
+deb-install-prequisites: ## Create unsigned application
+	sudo chmod +x ./scripts/deb_installer/prequisites.sh
+	./scripts/deb_installer/prequisites.sh
+
+deb-package: deb-install-prequisites ## Create unsigned application
+	./scripts/deb_installer/package_deb.sh -v ${DEB_VERSION} -e ${DEB_AUTH_EMAIL} -n ${DEB_AUTH_NAME}
+
+deb-package-help: ## Show installer creation help
+	./scripts/deb_installer/package_deb.sh -h
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
