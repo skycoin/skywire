@@ -225,11 +225,12 @@ func (v *Visor) Summary() (*Summary, error) {
 }
 
 // HealthInfo carries information about visor's services health represented as boolean value (i32 value)
-// It's thread-safe, and could be used in multiple goroutines
 type HealthInfo struct {
 	ServicesHealth bool `json:"services_health,omitempty"`
 }
 
+// internalHealthInfo contains information of the status of the visor itself.
+// It's thread-safe, and could be used in multiple goroutines
 type internalHealthInfo int32
 
 // newHealthInfo creates
