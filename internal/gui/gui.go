@@ -5,6 +5,7 @@ package gui
 
 import (
 	"context"
+	"embed"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -14,7 +15,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"embed"
 	"github.com/gen2brain/dlgs"
 	"github.com/getlantern/systray"
 	"github.com/skycoin/skycoin/src/util/logging"
