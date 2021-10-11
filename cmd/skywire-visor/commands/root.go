@@ -17,8 +17,6 @@ import (
 	"time"
 
 	"embed"
-	"io/fs"
-
 	"github.com/pkg/profile"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cmdutil"
@@ -26,6 +24,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/toqueteos/webbrowser"
 	"gopkg.in/yaml.v3"
+	"io/fs"
 
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/syslog"

@@ -58,7 +58,6 @@ func parseV1(cc *Common, raw []byte) (*V1, error) {
 	if err := conf.ensureKeys(); err != nil {
 		return nil, fmt.Errorf("%v: %w", ErrInvalidSK, err)
 	}
-	conf = ensureAppDisc(conf)
 	conf = updateUrls(conf)
 	conf.Version = V1Name
 	return conf, conf.flush(conf)
@@ -158,13 +157,6 @@ func parseV0(cc *Common, raw []byte) (*V1, error) {
 	conf.RestartCheckDelay = old.RestartCheckDelay
 
 	return conf, conf.flush(conf)
-}
-
-func ensureAppDisc(conf *V1) *V1 {
-	if conf.Launcher.ServiceDisc == "" {
-		conf.Launcher.ServiceDisc = skyenv.DefaultServiceDiscAddr
-	}
-	return conf
 }
 
 func updateUrls(conf *V1) *V1 {
