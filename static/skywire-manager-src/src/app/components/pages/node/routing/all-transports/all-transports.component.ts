@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Subscription } from 'rxjs';
 
-import { Node, Transport } from '../../../../../app.datatypes';
+import { Node } from '../../../../../app.datatypes';
 import { NodeComponent } from '../../node.component';
 
 /**
@@ -13,17 +13,13 @@ import { NodeComponent } from '../../node.component';
   styleUrls: ['./all-transports.component.scss']
 })
 export class AllTransportsComponent implements OnInit, OnDestroy {
-  transports: Transport[];
-  nodePK: string;
+  node: Node;
 
   private dataSubscription: Subscription;
 
   ngOnInit() {
     // Get the node data from the parent page.
-    this.dataSubscription = NodeComponent.currentNode.subscribe((node: Node) => {
-      this.nodePK = node.localPk;
-      this.transports = node.transports;
-    });
+    this.dataSubscription = NodeComponent.currentNode.subscribe((node: Node) => this.node = node);
   }
 
   ngOnDestroy() {

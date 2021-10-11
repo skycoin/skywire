@@ -14,6 +14,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
 	"github.com/skycoin/skywire/pkg/util/updater"
 )
@@ -121,10 +122,9 @@ type TransportSummary struct {
 	ID      uuid.UUID           `json:"id"`
 	Local   cipher.PubKey       `json:"local_pk"`
 	Remote  cipher.PubKey       `json:"remote_pk"`
-	Type    string              `json:"type"`
+	Type    network.Type        `json:"type"`
 	Log     *transport.LogEntry `json:"log,omitempty"`
 	IsSetup bool                `json:"is_setup"`
-	IsUp    bool                `json:"is_up"`
 	Label   transport.Label     `json:"label"`
 }
 
@@ -135,7 +135,6 @@ func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, 
 		Remote:  tp.Remote(),
 		Type:    tp.Type(),
 		IsSetup: isSetup,
-		IsUp:    tp.IsUp(),
 		Label:   tp.Entry.Label,
 	}
 	if includeLogs {
@@ -171,17 +170,30 @@ func (r *RPC) Overview(_ *struct{}, out *Overview) (err error) {
 	<<< APP MANAGEMENT >>>
 */
 
-// SetAppDetailedStatusIn is input for SetAppDetailedStatus.
-type SetAppDetailedStatusIn struct {
+// SetAppStatusIn is input for SetAppDetailedStatus.
+type SetAppStatusIn struct {
 	AppName string
 	Status  string
 }
 
+// SetAppErrorIn is input for SetAppError.
+type SetAppErrorIn struct {
+	AppName string
+	Err     string
+}
+
 // SetAppDetailedStatus sets app's detailed status.
-func (r *RPC) SetAppDetailedStatus(in *SetAppDetailedStatusIn, _ *struct{}) (err error) {
+func (r *RPC) SetAppDetailedStatus(in *SetAppStatusIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppDetailedStatus", in)(nil, &err)
 
 	return r.visor.SetAppDetailedStatus(in.AppName, in.Status)
+}
+
+// SetAppError sets app's error.
+func (r *RPC) SetAppError(in *SetAppErrorIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppError", in)(nil, &err)
+
+	return r.visor.SetAppError(in.AppName, in.Err)
 }
 
 // Apps returns list of Apps registered on the Visor.
@@ -345,7 +357,6 @@ func (r *RPC) Transport(in *uuid.UUID, out *TransportSummary) (err error) {
 type AddTransportIn struct {
 	RemotePK cipher.PubKey
 	TpType   string
-	Public   bool
 	Timeout  time.Duration
 }
 
@@ -353,7 +364,7 @@ type AddTransportIn struct {
 func (r *RPC) AddTransport(in *AddTransportIn, out *TransportSummary) (err error) {
 	defer rpcutil.LogCall(r.log, "AddTransport", in)(out, &err)
 
-	tp, err := r.visor.AddTransport(in.RemotePK, in.TpType, in.Public, in.Timeout)
+	tp, err := r.visor.AddTransport(in.RemotePK, in.TpType, in.Timeout)
 	if tp != nil {
 		*out = *tp
 	}
@@ -373,7 +384,7 @@ func (r *RPC) RemoveTransport(tid *uuid.UUID, _ *struct{}) (err error) {
 */
 
 // DiscoverTransportsByPK obtains available transports via the transport discovery via given public key.
-func (r *RPC) DiscoverTransportsByPK(pk *cipher.PubKey, out *[]*transport.EntryWithStatus) (err error) {
+func (r *RPC) DiscoverTransportsByPK(pk *cipher.PubKey, out *[]*transport.Entry) (err error) {
 	defer rpcutil.LogCall(r.log, "DiscoverTransportsByPK", pk)(out, &err)
 
 	entries, err := r.visor.DiscoverTransportsByPK(*pk)
@@ -383,7 +394,7 @@ func (r *RPC) DiscoverTransportsByPK(pk *cipher.PubKey, out *[]*transport.EntryW
 }
 
 // DiscoverTransportByID obtains available transports via the transport discovery via a given transport ID.
-func (r *RPC) DiscoverTransportByID(id *uuid.UUID, out *transport.EntryWithStatus) (err error) {
+func (r *RPC) DiscoverTransportByID(id *uuid.UUID, out *transport.Entry) (err error) {
 	defer rpcutil.LogCall(r.log, "DiscoverTransportByID", id)(out, &err)
 
 	entry, err := r.visor.DiscoverTransportByID(*id)

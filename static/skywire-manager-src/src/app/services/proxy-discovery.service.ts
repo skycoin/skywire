@@ -16,7 +16,7 @@ export class ProxyDiscoveryService {
   /**
    * URL of the discovery service.
    */
-  private readonly discoveryServiceUrl = 'https://service.discovery.skycoin.com/api/services?type=';
+  private readonly discoveryServiceUrl = 'https://sd.skycoin.com/api/services?type=';
 
   constructor(
     private http: HttpClient,

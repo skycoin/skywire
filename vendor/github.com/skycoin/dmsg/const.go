@@ -4,7 +4,7 @@ import "time"
 
 // Constants.
 const (
-	DefaultDiscAddr = "http://dmsg.discovery.skywire.skycoin.com"
+	DefaultDiscAddr = "http://dmsgd.skywire.skycoin.com"
 
 	DefaultMinSessions = 1
 

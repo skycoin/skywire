@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Subscription } from 'rxjs';
 
-import { Node, Transport, Route } from '../../../../app.datatypes';
+import { Node, Route } from '../../../../app.datatypes';
 import { NodeComponent } from '../node.component';
 
 /**
@@ -13,7 +13,7 @@ import { NodeComponent } from '../node.component';
   styleUrls: ['./routing.component.scss']
 })
 export class RoutingComponent implements OnInit, OnDestroy {
-  transports: Transport[];
+  node: Node;
   routes: Route[];
   nodePK: string;
 
@@ -23,7 +23,7 @@ export class RoutingComponent implements OnInit, OnDestroy {
     // Get the node data from the parent page.
     this.dataSubscription = NodeComponent.currentNode.subscribe((node: Node) => {
       this.nodePK = node.localPk;
-      this.transports = node.transports;
+      this.node = node;
       this.routes = node.routes;
     });
   }

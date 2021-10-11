@@ -3,7 +3,6 @@ package hypervisorconfig
 import (
 	"encoding/hex"
 	"encoding/json"
-	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -11,12 +10,11 @@ import (
 	"time"
 
 	"github.com/skycoin/dmsg/cipher"
+	"io/fs"
 
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/util/pathutil"
 )
-
-//go:generate readmegen -n Config -o ./README.md ./config.go
 
 const (
 	defaultHTTPAddr         = ":8000"

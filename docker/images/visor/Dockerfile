@@ -1,19 +1,18 @@
 # Builder
 ARG base=alpine
-FROM golang:alpine  as builder
+FROM golang:alpine3.13 as builder
 
 ARG BUILDINFO_LDFLAGS
 ARG CGO_ENABLED=0
 ENV CGO_ENABLED=${CGO_ENABLED} \
     GOOS=linux  \
-    GOARCH=amd64 \
     GO111MODULE=on
 
 COPY . /skywire
 
 WORKDIR /skywire
 
-RUN apk add --no-cache make && \
+RUN apk add --no-cache make git && \
     sh -c /skywire/docker/images/visor/install-preq.sh && \
     make host-apps && \
     make build-deploy && \
@@ -21,6 +20,7 @@ RUN apk add --no-cache make && \
     cp ./apps/vpn-server /apps/ && \
     cp ./apps/vpn-client /apps/ && \
 	cp ./apps/skysocks /apps/ && \
+	cp ./apps/skysocks-client /apps/ && \
 	cp ./apps/skychat /apps/
 
 ## Resulting image

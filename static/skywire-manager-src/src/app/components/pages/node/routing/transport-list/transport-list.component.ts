@@ -1,10 +1,10 @@
 import { Component, Input, OnDestroy } from '@angular/core';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { Observable, Subscription, forkJoin } from 'rxjs';
+import { Observable, Subscription } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 
-import { Transport } from '../../../../../app.datatypes';
+import { Node, PersistentTransport, Transport } from '../../../../../app.datatypes';
 import { CreateTransportComponent } from './create-transport/create-transport.component';
 import { TransportService } from '../../../../../services/transport.service';
 import { NodeComponent } from '../../node.component';
@@ -21,6 +21,7 @@ import { LabeledElementTypes, StorageService } from 'src/app/services/storage.se
 import { LabeledElementTextComponent } from 'src/app/components/layout/labeled-element-text/labeled-element-text.component';
 import { DataSorter, SortingColumn, SortingModes } from 'src/app/utils/lists/data-sorter';
 import { DataFilterer } from 'src/app/utils/lists/data-filterer';
+import { NodeService } from 'src/app/services/node.service';
 
 /**
  * Shows the list of transports of a node. I can be used to show a short preview, with just some
@@ -35,10 +36,10 @@ export class TransportListComponent implements OnDestroy {
   // Small text for identifying the list, needed for the helper objects.
   private readonly listId = 'tr';
 
-  @Input() nodePK: string;
+  nodePK: string;
 
   // Vars with the data of the columns used for sorting the data.
-  stateSortData = new SortingColumn(['isUp'], 'transports.state', SortingModes.Boolean);
+  persistentSortData = new SortingColumn(['isPersistent'], 'transports.persistent', SortingModes.Boolean);
   idSortData = new SortingColumn(['id'], 'transports.id', SortingModes.Text, ['id_label']);
   remotePkSortData = new SortingColumn(['remotePk'], 'transports.remote-node', SortingModes.Text, ['remote_pk_label']);
   typeSortData = new SortingColumn(['type'], 'transports.type', SortingModes.Text);
@@ -69,16 +70,43 @@ export class TransportListComponent implements OnDestroy {
     this.dataSorter.setData(this.filteredTransports);
   }
 
+  currentNode: Node;
   allTransports: Transport[];
   filteredTransports: Transport[];
   transportsToShow: Transport[];
-  hasOfflineTransports = false;
   numberOfPages = 1;
   currentPage = 1;
   // Used as a helper var, as the URL is read asynchronously.
   currentPageInUrl = 1;
-  @Input() set transports(val: Transport[]) {
-    this.allTransports = val;
+  @Input() set node(val: Node) {
+    this.currentNode = val;
+    this.allTransports = val.transports;
+    this.nodePK = val.localPk;
+
+    const persistentTransportsMap: Map<String, PersistentTransport> = new Map<String, PersistentTransport>();
+    val.persistentTransports.forEach(pt => persistentTransportsMap.set(this.getPersistentTransportID(pt.pk, pt.type), pt));
+
+    this.allTransports.forEach(transport => {
+      if (persistentTransportsMap.has(this.getPersistentTransportID(transport.remotePk, transport.type))) {
+        transport.isPersistent = true;
+        persistentTransportsMap.delete(this.getPersistentTransportID(transport.remotePk, transport.type));
+      } else {
+        transport.isPersistent = false;
+      }
+    });
+
+    persistentTransportsMap.forEach((persistentTransport, key) => {
+      this.allTransports.push({
+        id: this.getPersistentTransportID(persistentTransport.pk, persistentTransport.type),
+        localPk: val.localPk,
+        remotePk: persistentTransport.pk,
+        type: persistentTransport.type,
+        recv: 0,
+        sent: 0,
+        isPersistent: true,
+        notFound: true,
+      });
+    });
 
     // Add the label data to the array, to be able to use it for filtering and sorting.
     this.allTransports.forEach(transport => {
@@ -95,21 +123,21 @@ export class TransportListComponent implements OnDestroy {
   // Array with the properties of the columns that can be used for filtering the data.
   filterProperties: FilterProperties[] = [
     {
-      filterName: 'transports.filter-dialog.online',
-      keyNameInElementsArray: 'isUp',
+      filterName: 'transports.filter-dialog.persistent',
+      keyNameInElementsArray: 'isPersistent',
       type: FilterFieldTypes.Select,
       printableLabelsForValues: [
         {
           value: '',
-          label: 'transports.filter-dialog.online-options.any',
+          label: 'transports.filter-dialog.persistent-options.any',
         },
         {
           value: 'true',
-          label: 'transports.filter-dialog.online-options.online',
+          label: 'transports.filter-dialog.persistent-options.persistent',
         },
         {
           value: 'false',
-          label: 'transports.filter-dialog.online-options.offline',
+          label: 'transports.filter-dialog.persistent-options.non-persistent',
         }
       ],
     },
@@ -131,6 +159,7 @@ export class TransportListComponent implements OnDestroy {
 
   labeledElementTypes = LabeledElementTypes;
 
+  private persistentTransportSubscription: Subscription;
   private navigationsSubscription: Subscription;
   private operationSubscriptionsGroup: Subscription[] = [];
   private languageSubscription: Subscription;
@@ -143,10 +172,11 @@ export class TransportListComponent implements OnDestroy {
     private snackbarService: SnackbarService,
     private translateService: TranslateService,
     private storageService: StorageService,
+    private nodeService: NodeService,
   ) {
     // Initialize the data sorter.
     const sortableColumns: SortingColumn[] = [
-      this.stateSortData,
+      this.persistentSortData,
       this.idSortData,
       this.remotePkSortData,
       this.typeSortData,
@@ -162,14 +192,6 @@ export class TransportListComponent implements OnDestroy {
     this.dataFilterer = new DataFilterer(this.dialog, this.route, this.router, this.filterProperties, this.listId);
     this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
       this.filteredTransports = data;
-
-      // Check if there are offline transports.
-      this.hasOfflineTransports = false;
-      this.filteredTransports.forEach(transport => {
-        if (!transport.isUp) {
-          this.hasOfflineTransports = true;
-        }
-      });
 
       this.dataSorter.setData(this.filteredTransports);
     });
@@ -191,7 +213,7 @@ export class TransportListComponent implements OnDestroy {
     // Refresh the data after languaje changes, to ensure the labels used for filtering
     // are updated.
     this.languageSubscription = this.translateService.onLangChange.subscribe(() => {
-      this.transports = this.allTransports;
+      this.node = this.currentNode;
     });
   }
 
@@ -205,33 +227,9 @@ export class TransportListComponent implements OnDestroy {
 
     this.dataFiltererSubscription.unsubscribe();
     this.dataFilterer.dispose();
-  }
 
-  /**
-   * Returns the scss class to be used to show the current status of the transport.
-   * @param forDot If true, returns a class for creating a colored dot. If false,
-   * returns a class for a colored text.
-   */
-  transportStatusClass(transport: Transport, forDot: boolean): string {
-    switch (transport.isUp) {
-      case true:
-        return forDot ? 'dot-green' : 'green-clear-text';
-      default:
-        return forDot ? 'dot-red' : 'red-clear-text';
-    }
-  }
-
-  /**
-   * Returns the text to be used to indicate the current status of a transport.
-   * @param forTooltip If true, returns a text for a tooltip. If false, returns a
-   * text for the transport list shown on small screens.
-   */
-  transportStatusText(transport: Transport, forTooltip: boolean): string {
-    switch (transport.isUp) {
-      case true:
-        return 'transports.statuses.online' + (forTooltip ? '-tooltip' : '');
-      default:
-        return 'transports.statuses.offline' + (forTooltip ? '-tooltip' : '');
+    if (this.persistentTransportSubscription) {
+      this.persistentTransportSubscription.unsubscribe();
     }
   }
 
@@ -295,36 +293,6 @@ export class TransportListComponent implements OnDestroy {
   }
 
   /**
-   * Removes all offline transports.
-   */
-  removeOffline() {
-    let confirmationText = 'transports.remove-all-offline-confirmation';
-    if (this.dataFilterer.currentFiltersTexts && this.dataFilterer.currentFiltersTexts.length > 0) {
-      confirmationText = 'transports.remove-all-filtered-offline-confirmation';
-    }
-
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, confirmationText);
-
-    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-      // Prepare all offline transports to be removed.
-      const transportsToRemove: string[] = [];
-      this.filteredTransports.forEach(transport => {
-        if (!transport.isUp) {
-          transportsToRemove.push(transport.id);
-        }
-      });
-
-      if (transportsToRemove.length > 0) {
-        // Remove the transports.
-        confirmationDialog.componentInstance.showProcessing();
-        this.deleteRecursively(transportsToRemove, confirmationDialog);
-      } else {
-        confirmationDialog.close();
-      }
-    });
-  }
-
-  /**
    * Shows the transport creation modal window.
    */
   create() {
@@ -335,23 +303,142 @@ export class TransportListComponent implements OnDestroy {
    * Opens the modal window used on small screens with the options of an element.
    */
   showOptionsDialog(transport: Transport) {
-    const options: SelectableOption[] = [
-      {
+    const options: SelectableOption[] = [];
+    if (transport.isPersistent) {
+      options.push({
+        icon: 'star_outline',
+        label: 'transports.make-non-persistent',
+      });
+    } else {
+      options.push({
+        icon: 'star',
+        label: 'transports.make-persistent',
+      });
+    }
+
+    if (!transport.notFound) {
+      options.push({
         icon: 'visibility',
         label: 'transports.details.title',
-      },
-      {
+      });
+      options.push({
         icon: 'close',
         label: 'transports.delete',
-      }
-    ];
+      });
+    }
 
     SelectOptionComponent.openDialog(this.dialog, options, 'common.options').afterClosed().subscribe((selectedOption: number) => {
       if (selectedOption === 1) {
-        this.details(transport);
+        this.changeIfPersistent([transport], !transport.isPersistent);
       } else if (selectedOption === 2) {
-        this.delete(transport.id);
+        this.details(transport);
+      } else if (selectedOption === 3) {
+        this.delete(transport);
       }
+    });
+  }
+
+  /**
+   * Adds or removes the selected transports from the persistent transports list.
+   */
+  changeIfPersistentOfSelected(makePersistent: boolean) {
+    const elementsToChange: Transport[] = [];
+    this.allTransports.forEach(t => {
+      if (this.selections.has(t.id) && this.selections.get(t.id)) {
+        elementsToChange.push(t);
+      }
+    });
+    this.changeIfPersistent(elementsToChange, makePersistent);
+  }
+
+  /**
+   * Adds or removes transports from the persistent transports list.
+   */
+  changeIfPersistent(transports: Transport[], makePersistent: boolean) {
+    if (transports.length < 1) {
+      return;
+    }
+
+    let confirmationText = 'transports.';
+    if (transports.length === 1) {
+      if (makePersistent) {
+        confirmationText += 'make-persistent-confirmation';
+      } else {
+        confirmationText += 'make' + (transports[0].notFound ? '-offline' : '') + '-non-persistent-confirmation';
+      }
+    } else {
+      confirmationText += makePersistent ? 'make-selected-persistent-confirmation' : 'make-selected-non-persistent-confirmation';
+    }
+
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, confirmationText);
+
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmationDialog.componentInstance.showProcessing();
+
+      this.persistentTransportSubscription = this.transportService.getPersistentTransports(this.nodePK).subscribe((list: any[]) => {
+        const dataToUse = list;
+        let nothingToDo = false;
+
+        const transportsMap: Map<String, Transport> = new Map<String, Transport>();
+        transports.forEach(t => transportsMap.set(this.getPersistentTransportID(t.remotePk, t.type), t));
+
+        if (makePersistent) {
+          // Remove al transports that already are persistent.
+          dataToUse.forEach(tp => {
+            if (transportsMap.has(this.getPersistentTransportID(tp.pk, tp.type))) {
+              transportsMap.delete(this.getPersistentTransportID(tp.pk, tp.type));
+            }
+          });
+
+          nothingToDo = transportsMap.size === 0;
+
+          // Add the new transports to the persistent transports list.
+          if (!nothingToDo) {
+            transportsMap.forEach(t => {
+              dataToUse.push({
+                pk: t.remotePk,
+                type: t.type,
+              });
+            });
+          }
+        } else {
+          nothingToDo = true;
+          // Remove all selected transports.
+          for (let i = 0; i < dataToUse.length; i++) {
+            if (transportsMap.has(this.getPersistentTransportID(dataToUse[i].pk, dataToUse[i].type))) {
+              dataToUse.splice(i, 1);
+              nothingToDo = false;
+              i--;
+            }
+          }
+        }
+
+        if (!nothingToDo) {
+          // Update the list.
+          this.persistentTransportSubscription = this.transportService.savePersistentTransportsData(
+            NodeComponent.getCurrentNodeKey(),
+            dataToUse
+          ).subscribe(() => {
+            confirmationDialog.close();
+            // Make the parent page reload the data.
+            NodeComponent.refreshCurrentDisplayedData();
+            this.snackbarService.showDone('transports.changes-made');
+          }, (err: OperationError) => {
+            err = processServiceError(err);
+            confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
+          });
+        } else {
+          // The persistent transport list already has or not (as needed) the transport.
+          confirmationDialog.close();
+          this.snackbarService.showDone('transports.no-changes-needed');
+
+          // Make the parent page reload the data, to make sure the UI shows the correct values.
+          NodeComponent.refreshCurrentDisplayedData();
+        }
+      }, (err: OperationError) => {
+        err = processServiceError(err);
+        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
+      });
     });
   }
 
@@ -365,14 +452,15 @@ export class TransportListComponent implements OnDestroy {
   /**
    * Deletes a specific element.
    */
-  delete(id: string) {
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'transports.delete-confirmation');
+  delete(transport: Transport) {
+    const confirmationMsg = 'transports.delete-' + (transport.isPersistent ? 'persistent-' : '') + 'confirmation';
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, confirmationMsg);
 
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.componentInstance.showProcessing();
 
       // Start the operation and save it for posible cancellation.
-      this.operationSubscriptionsGroup.push(this.startDeleting(id).subscribe(() => {
+      this.operationSubscriptionsGroup.push(this.startDeleting(transport.id).subscribe(() => {
         confirmationDialog.close();
         // Make the parent page reload the data.
         NodeComponent.refreshCurrentDisplayedData();
@@ -389,6 +477,10 @@ export class TransportListComponent implements OnDestroy {
    */
   refreshData() {
     NodeComponent.refreshCurrentDisplayedData();
+  }
+
+  private getPersistentTransportID(pk: string, type: string): string {
+    return pk.toUpperCase() + type.toUpperCase();
   }
 
   /**

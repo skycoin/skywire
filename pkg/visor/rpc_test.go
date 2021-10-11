@@ -1,8 +1,6 @@
 package visor
 
 import (
-	"fmt"
-	"net/http"
 	"testing"
 	"time"
 
@@ -12,10 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/skycoin/skywire/internal/testhelpers"
 	"github.com/skycoin/skywire/internal/utclient"
-	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
-	"github.com/skycoin/skywire/pkg/snet/arclient"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -38,13 +33,8 @@ func TestHealth(t *testing.T) {
 		}
 
 		utClient := &utclient.MockAPIClient{}
-		utClient.On("Health", mock.Anything).Return(http.StatusOK, nil)
-
-		arClient := &arclient.MockAPIClient{}
-		arClient.On("Health", mock.Anything).Return(http.StatusOK, nil)
-
-		rfClient := &rfclient.MockClient{}
-		rfClient.On("Health", mock.Anything).Return(http.StatusOK, testhelpers.NoErr)
+		utClient.On("UpdateVisorUptime", mock.Anything).Return(nil)
+		utClient.On("Health", mock.Anything).Return(nil)
 
 		v := &Visor{
 			conf: c,
@@ -53,22 +43,18 @@ func TestHealth(t *testing.T) {
 					DiscoveryClient: transport.NewDiscoveryMock(),
 				},
 			},
-			uptimeTracker: utClient,
-			arClient:      arClient,
-			rfClient:      rfClient,
+			uptimeTracker:     utClient,
+			isServicesHealthy: newInternalHealthInfo(),
 		}
 
 		rpc := &RPC{visor: v, log: logrus.New()}
+		// mock initUptimeTracker
+		v.isServicesHealthy.set()
 		h := &HealthInfo{}
 		err := rpc.Health(nil, h)
 		require.NoError(t, err)
 
-		// Transport discovery needs to be mocked or will always fail
-		assert.Equal(t, http.StatusOK, h.TransportDiscovery)
-		assert.Equal(t, http.StatusOK, h.RouteFinder)
-		assert.Equal(t, http.StatusOK, h.SetupNode)
-		assert.Equal(t, http.StatusOK, h.UptimeTracker)
-		assert.Equal(t, http.StatusOK, h.AddressResolver)
+		assert.Equal(t, true, h.ServicesHealth)
 	})
 
 	t.Run("Report as unavailable", func(t *testing.T) {
@@ -80,6 +66,7 @@ func TestHealth(t *testing.T) {
 			tpM: &transport.Manager{
 				Conf: &transport.ManagerConfig{},
 			},
+			isServicesHealthy: newInternalHealthInfo(),
 		}
 
 		rpc := &RPC{visor: v, log: logrus.New()}
@@ -87,11 +74,7 @@ func TestHealth(t *testing.T) {
 		err := rpc.Health(nil, h)
 		require.NoError(t, err)
 
-		assert.Equal(t, http.StatusNotFound, h.TransportDiscovery)
-		assert.Equal(t, http.StatusNotFound, h.RouteFinder)
-		assert.Equal(t, http.StatusNotFound, h.SetupNode)
-		assert.Equal(t, http.StatusNotFound, h.UptimeTracker)
-		assert.Equal(t, http.StatusNotFound, h.AddressResolver)
+		assert.Equal(t, false, h.ServicesHealth)
 	})
 }
 
@@ -103,7 +86,7 @@ func TestUptime(t *testing.T) {
 	err := rpc.Uptime(nil, &res)
 	require.NoError(t, err)
 
-	assert.Contains(t, fmt.Sprintf("%f", res), "1.0")
+	assert.GreaterOrEqual(t, res, 1.0)
 }
 
 // TODO(evanlinjin): These should be moved to /pkg/app/launcher

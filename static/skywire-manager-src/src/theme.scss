@@ -1,11 +1,12 @@
+@use '~@angular/material' as mat;
 @import "~@angular/material/theming";
 @import "assets/scss/variables";
 
-$general-typography: mat-typography-config(
+$general-typography: mat.define-typography-config(
   $font-family: $skywire-font-family
 );
 
-@include mat-core($general-typography);
+@include mat.core($general-typography);
 
 $mat-skywire-primary: (
   100: $blue-medium,
@@ -23,16 +24,12 @@ $mat-skywire-accent: (
   )
 );
 
-$skywire-primary: mat-palette($mat-skywire-primary, 500, 100, 500);
-$skywire-accent: mat-palette($mat-skywire-accent, 500, 500, 500);
+$skywire-primary: mat.define-palette($mat-skywire-primary, 500, 100, 500);
+$skywire-accent: mat.define-palette($mat-skywire-accent, 500, 500, 500);
 
-$skywire-theme: mat-light-theme($skywire-primary, $skywire-accent);
+$skywire-theme: mat.define-light-theme($skywire-primary, $skywire-accent);
 
-@include angular-material-theme($skywire-theme);
-
-.main-theme {
-  @include angular-material-theme($skywire-theme);
-}
+@include mat.all-component-themes($skywire-theme);
 
 $mat-white-primary: (
   100: white,
@@ -43,9 +40,9 @@ $mat-white-primary: (
   )
 );
 
-$white-primary: mat-palette($mat-white-primary);
-$white-theme: mat-light-theme($white-primary, $skywire-accent);
+$white-primary: mat.define-palette($mat-white-primary);
+$white-theme: mat.define-light-theme($white-primary, $skywire-accent);
 
 .white-theme {
-  @include angular-material-theme($white-theme);
+  @include mat.all-component-colors($white-theme);
 }

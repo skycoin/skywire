@@ -30,9 +30,9 @@ const (
 
 	// STCPTableLenEnvKey is env arg holding Stcp table length.
 	STCPTableLenEnvKey = "STCP_TABLE_LEN"
-	// STCPKeyEnvPrefix is prefix for each env arg holding STCP entity key.
+	// STCPKeyEnvPrefix is prefix for each env arg holding Skywire-TCP entity key.
 	STCPKeyEnvPrefix = "STCP_TABLE_KEY_"
-	// STCPValueEnvPrefix is prefix for each env arg holding STCP entity value.
+	// STCPValueEnvPrefix is prefix for each env arg holding Skywire-TCP entity value.
 	STCPValueEnvPrefix = "STCP_TABLE_"
 
 	// TPRemoteIPsLenEnvKey is env arg holding TP remote IPs length.
@@ -114,6 +114,8 @@ func AppEnvArgs(config DirectRoutesEnvConfig) map[string]string {
 // - domain without port;
 // - IP with port;
 // - IP without port.
+// In case domain is provided instead of an IP address, a DNS lookup is also
+// performed to resolve the actual IP address
 func IPFromEnv(key string) (net.IP, bool, error) {
 	return ParseIP(os.Getenv(key))
 }
@@ -125,6 +127,8 @@ func IPFromEnv(key string) (net.IP, bool, error) {
 // - domain without port;
 // - IP with port;
 // - IP without port.
+// In case domain is provided instead of an IP address, a DNS lookup is also
+// performed to resolve the actual IP address
 func ParseIP(addr string) (net.IP, bool, error) {
 	if addr == "" {
 		return nil, false, nil

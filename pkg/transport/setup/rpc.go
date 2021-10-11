@@ -9,6 +9,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 // TransportGateway that exposes methods to be used via RPC
@@ -20,7 +21,7 @@ type TransportGateway struct {
 // TransportRequest to perform an action over RPC
 type TransportRequest struct {
 	RemotePK cipher.PubKey
-	Type     string
+	Type     network.Type
 }
 
 // UUIDRequest contains id in UUID format
@@ -33,8 +34,7 @@ type TransportResponse struct {
 	ID     uuid.UUID
 	Local  cipher.PubKey
 	Remote cipher.PubKey
-	Type   string
-	IsUp   bool
+	Type   network.Type
 }
 
 // BoolResponse is a simple boolean wrapped in structure for RPC responses
@@ -55,7 +55,6 @@ func (gw *TransportGateway) AddTransport(req TransportRequest, res *TransportRes
 	res.Local = gw.tm.Local()
 	res.Remote = tp.Remote()
 	res.Type = tp.Type()
-	res.IsUp = tp.IsUp()
 	return nil
 }
 
@@ -86,7 +85,6 @@ func (gw *TransportGateway) GetTransports(_ struct{}, res *[]TransportResponse) 
 			Local:  gw.tm.Local(),
 			Remote: tp.Remote(),
 			Type:   tp.Type(),
-			IsUp:   tp.IsUp(),
 		}
 		*res = append(*res, tResp)
 	}

@@ -1,8 +1,6 @@
 package appdisc
 
 import (
-	"time"
-
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -14,22 +12,18 @@ import (
 
 // Factory creates appdisc.Updater instances based on the app name.
 type Factory struct {
-	Log            logrus.FieldLogger
-	PK             cipher.PubKey
-	SK             cipher.SecKey
-	UpdateInterval time.Duration
-	ProxyDisc      string // Address of proxy-discovery
+	Log         logrus.FieldLogger
+	PK          cipher.PubKey
+	SK          cipher.SecKey
+	ServiceDisc string // Address of service-discovery
 }
 
 func (f *Factory) setDefaults() {
 	if f.Log == nil {
 		f.Log = logging.MustGetLogger("appdisc")
 	}
-	if f.UpdateInterval == 0 {
-		f.UpdateInterval = skyenv.AppDiscUpdateInterval
-	}
-	if f.ProxyDisc == "" {
-		f.ProxyDisc = skyenv.DefaultServiceDiscAddr
+	if f.ServiceDisc == "" {
+		f.ServiceDisc = skyenv.DefaultServiceDiscAddr
 	}
 }
 
@@ -45,12 +39,11 @@ func (f *Factory) VisorUpdater(port uint16) Updater {
 		PK:       f.PK,
 		SK:       f.SK,
 		Port:     port,
-		DiscAddr: f.ProxyDisc,
+		DiscAddr: f.ServiceDisc,
 	}
 
 	return &serviceUpdater{
-		client:   servicedisc.NewClient(f.Log, conf),
-		interval: f.UpdateInterval,
+		client: servicedisc.NewClient(f.Log, conf),
 	}
 }
 
@@ -63,7 +56,7 @@ func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
 
 	log := f.Log.WithField("appName", conf.AppName)
 
-	// Do not update in proxy discovery if passcode-protected.
+	// Do not update in service discovery if passcode-protected.
 	if conf.ContainsFlag("passcode") && conf.ArgVal("passcode") != "" {
 		return &emptyUpdater{}, false
 	}
@@ -74,15 +67,18 @@ func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
 			PK:       f.PK,
 			SK:       f.SK,
 			Port:     uint16(conf.RoutingPort),
-			DiscAddr: f.ProxyDisc,
+			DiscAddr: f.ServiceDisc,
 		}
 	}
 
 	switch conf.AppName {
 	case skyenv.VPNServerName:
 		return &serviceUpdater{
-			client:   servicedisc.NewClient(log, getServiceDiscConf(conf, servicedisc.ServiceTypeVPN)),
-			interval: f.UpdateInterval,
+			client: servicedisc.NewClient(log, getServiceDiscConf(conf, servicedisc.ServiceTypeVPN)),
+		}, true
+	case skyenv.SkysocksName:
+		return &serviceUpdater{
+			client: servicedisc.NewClient(log, getServiceDiscConf(conf, servicedisc.ServiceTypeSkysocks)),
 		}, true
 	default:
 		return &emptyUpdater{}, false
