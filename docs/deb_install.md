@@ -99,6 +99,16 @@ $ reprepro includedeb jessie ./skywire_0.5.0-1_amd64.deb
 
 This should be repeated for all needed debian releases and built packages.
 
+To install the package use:
+```
+$ sudo dpkg -i ./deb/skywire_0.5.0-1_amd64.deb
+```
+
+To uninstall the package use:
+```
+$ sudo apt-get remove skywire
+```
+
 ### End User
 
 Import the public key
@@ -115,4 +125,9 @@ $ deb http://subdomain.skycoin.com/ skywire main
 Run
 ```bash
 $ apt-get update
+```
+
+To uninstall use:
+```
+$ sudo apt-get remove skywire
 ```
