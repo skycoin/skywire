@@ -12,8 +12,8 @@ print_usage()
 }
 
 # Has to be run from Debian based distro
-current_os="$(cat /etc/os-release | grep ID_LIKE)"
-if [[ "$current_os" != "ID_LIKE=debian" ]]; then
+CURRENTOS="$(cat /etc/os-release | grep ID_LIKE)"
+if [[ "$CURRENTOS" != "ID_LIKE=debian" ]]; then
   echo "Can only be run from Debian based distro"
   exit 1
 fi
@@ -59,9 +59,8 @@ read_version
 read_email
 read_name
 
-ORGNAME=skycoin
 REPONAME=skywire
-BRANCH=$(git rev-parse --abbrev-ref HEAD)
+BUILDTAG=debian
 
 function create_control_file {
 	if [ -z "$1" ]
@@ -98,8 +97,7 @@ function pack_deb {
 	ARCH=$1
 	GOARCH=$2
 
-	GOOS=linux GOARCH="$GOARCH" make bin
-	GOOS=linux GOARCH="$GOARCH" make host-apps
+	GOOS=linux GOARCH="$GOARCH" make build BUILDTAG=$BUILDTAG
 
 	rm -rf packages
 	mkdir packages
