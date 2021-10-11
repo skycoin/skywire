@@ -20,7 +20,6 @@ func MakeBaseConfig(common *Common) *V1 {
 	conf := new(V1)
 	conf.Common = common
 	conf.Dmsg = &dmsgc.DmsgConfig{
-		Discovery:     skyenv.DefaultDmsgDiscAddr,
 		SessionsCount: 1,
 	}
 	conf.Transport = &V1Transport{}
@@ -29,7 +28,7 @@ func MakeBaseConfig(common *Common) *V1 {
 		RouteFinderTimeout: DefaultTimeout,
 	}
 	conf.Launcher = &V1Launcher{
-		ServiceDisc: skyenv.DefaultServiceDiscAddr,
+		ServiceDisc: "",
 		Apps:        nil,
 		ServerAddr:  skyenv.DefaultAppSrvAddr,
 		BinPath:     skyenv.DefaultAppBinPath,
@@ -78,12 +77,6 @@ func defaultConfigFromCommon(cc *Common, hypervisor bool) (*V1, error) {
 		ListeningAddress: skyenv.DefaultSTCPAddr,
 		PKTable:          nil,
 	}
-
-	conf.UptimeTracker = &V1UptimeTracker{
-		Addr: skyenv.DefaultUptimeTrackerAddr,
-	}
-
-	conf.Launcher.ServiceDisc = skyenv.DefaultServiceDiscAddr
 
 	conf.Launcher.Apps = []launcher.AppConfig{
 		{
@@ -193,15 +186,9 @@ func MakeSkybianConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 func SetDefaultTestingValues(conf *V1) {
 	conf.IsTest = true
 	conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.TestSetupPK)}
-	conf.UptimeTracker.Addr = skyenv.TestUptimeTrackerAddr
-	conf.Launcher.ServiceDisc = skyenv.TestServiceDiscAddr
 }
 
 // SetDefaultProductionValues mutates configuration to use production values
 func SetDefaultProductionValues(conf *V1) {
 	conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.DefaultSetupPK)}
-	conf.UptimeTracker = &V1UptimeTracker{
-		Addr: skyenv.DefaultUptimeTrackerAddr,
-	}
-	conf.Launcher.ServiceDisc = skyenv.DefaultServiceDiscAddr
 }
