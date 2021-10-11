@@ -28,10 +28,9 @@ func MakeBaseConfig(common *Common) *V1 {
 		RouteFinderTimeout: DefaultTimeout,
 	}
 	conf.Launcher = &V1Launcher{
-		ServiceDisc: "",
-		Apps:        nil,
-		ServerAddr:  skyenv.DefaultAppSrvAddr,
-		BinPath:     skyenv.DefaultAppBinPath,
+		Apps:       nil,
+		ServerAddr: skyenv.DefaultAppSrvAddr,
+		BinPath:    skyenv.DefaultAppBinPath,
 	}
 	conf.UptimeTracker = &V1UptimeTracker{}
 	conf.CLIAddr = skyenv.DefaultRPCAddr
