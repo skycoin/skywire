@@ -226,7 +226,7 @@ func (v *Visor) Summary() (*Summary, error) {
 
 // HealthInfo carries information about visor's services health represented as boolean value (i32 value)
 type HealthInfo struct {
-	ServicesHealth bool `json:"services_health,omitempty"`
+	ServicesHealth bool `json:"services_health"`
 }
 
 // internalHealthInfo contains information of the status of the visor itself.
