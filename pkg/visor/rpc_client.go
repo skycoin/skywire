@@ -288,6 +288,13 @@ func (rc *rpcClient) DiscoverTransportByID(id uuid.UUID) (*transport.Entry, erro
 	return &entry, err
 }
 
+// SetPublicAutoconnect implements API.
+func (rc *rpcClient) SetPublicAutoconnect(pAc bool) error {
+	return rc.Call("SetPublicAutoconnect", &publicAutoconnectReq{
+		PublicAutoconnect: pAc,
+	}, &struct{}{})
+}
+
 // RoutingRules calls RoutingRules.
 func (rc *rpcClient) RoutingRules() ([]routing.Rule, error) {
 	entries := make([]routing.Rule, 0)
@@ -882,6 +889,11 @@ func (mc *mockRPCClient) DiscoverTransportsByPK(cipher.PubKey) ([]*transport.Ent
 
 func (mc *mockRPCClient) DiscoverTransportByID(uuid.UUID) (*transport.Entry, error) {
 	return nil, ErrNotImplemented
+}
+
+// SetPublicAutoconnect implements API.
+func (mc *mockRPCClient) SetPublicAutoconnect(_ bool) error {
+	return nil
 }
 
 // RoutingRules implements API.
