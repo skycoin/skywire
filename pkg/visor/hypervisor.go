@@ -246,7 +246,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/transports/{tid}", hv.getTransport())
 				r.Delete("/visors/{pk}/transports/{tid}", hv.deleteTransport())
 				r.Delete("/visors/{pk}/transports/", hv.deleteTransports())
-				r.Put("/visors/{pk}/transport-public-autoconnect", hv.putPublicAutoconnect())
+				r.Put("/visors/{pk}/public-autoconnect", hv.putPublicAutoconnect())
 				r.Get("/visors/{pk}/routes", hv.getRoutes())
 				r.Post("/visors/{pk}/routes", hv.postRoute())
 				r.Get("/visors/{pk}/routes/{rid}", hv.getRoute())
