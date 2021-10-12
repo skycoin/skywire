@@ -7,8 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math/rand"
 	"net/http"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -24,6 +27,7 @@ import (
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/httputil"
 	"github.com/skycoin/skycoin/src/util/logging"
+	"gopkg.in/yaml.v3"
 	"nhooyr.io/websocket"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
@@ -35,6 +39,7 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 	"github.com/skycoin/skywire/pkg/visor/usermanager"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 const (
@@ -48,6 +53,8 @@ const (
 
 var (
 	log = logging.MustGetLogger("hypervisor") // nolint: gochecknoglobals
+	// DefaultServersName is exported because use in root file
+	DefaultServersName = "servers.yml"
 )
 
 // Conn represents a visor connection.
@@ -253,6 +260,8 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Delete("/visors/{pk}/routes/{rid}", hv.deleteRoute())
 				r.Delete("/visors/{pk}/routes/", hv.deleteRoutes())
 				r.Get("/visors/{pk}/routegroups", hv.getRouteGroups())
+				r.Get("/visors/{pk}/servers", hv.getServers())
+				r.Put("/visors/{pk}/change-server", hv.changeServer())
 				r.Post("/visors/{pk}/restart", hv.restart())
 				r.Post("/visors/{pk}/exec", hv.exec())
 				r.Post("/visors/{pk}/update", hv.updateVisor())
@@ -1354,6 +1363,32 @@ func (hv *Hypervisor) getPersistentTransports() http.HandlerFunc {
 	})
 }
 
+func (hv *Hypervisor) getServers() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		servers, err := GetServers(hv.visor.conf, DefaultServersName)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, servers)
+	}
+}
+
+func (hv *Hypervisor) changeServer() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var reqBody serverData
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("changeServer request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		SetServersConfig(hv.visor.conf, hv.visor.log, reqBody)
+		httputil.WriteJSON(w, r, http.StatusOK, nil)
+	})
+}
+
 /*
 	<<< Helper functions >>>
 */
@@ -1560,4 +1595,105 @@ func (hv *Hypervisor) serveDmsg(ctx context.Context, log *logging.Logger) {
 	}()
 	log.WithField("addr", dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}).
 		Info("Serving RPC client over dmsg.")
+}
+
+// GetServers return all available servers
+func GetServers(conf *visorconfig.V1, defaultServersName string) (ServersList, error) {
+	var fetchStatus bool
+	var serversListYml []byte
+	var servers ServersList
+	var err error
+	// trying to get servers list from skycoin, and save it in local
+	for !fetchStatus {
+		log.Info("Trying to fetch servers list from skycoin")
+		resp, err := http.Get(conf.ServersListAddress)
+		if err != nil {
+			log.Warn("Error during fetching servers list from skycoin")
+			break
+		}
+		defer func() {
+			err := resp.Body.Close()
+			if err != nil {
+				log.Warn(err)
+			}
+		}()
+		serversListYml, err = io.ReadAll(resp.Body)
+		if err != nil {
+			log.Warn("Error during fetching servers list from skycoin")
+			break
+		}
+		log.Info("Servers list fetched from skycoin")
+
+		out, err := os.Create(defaultServersName)
+		if err != nil {
+			log.Warn("Cannot create backup servers list file")
+		}
+		defer func() {
+			err := out.Close()
+			if err != nil {
+				log.Warn(err)
+			}
+		}()
+		_, err = io.Copy(out, resp.Body)
+		if err != nil {
+			log.Warn("Cannot save backup servers list file")
+		}
+		log.Info("Servers list backup saved")
+		fetchStatus = true
+	}
+
+	// if servers list not reached from skycoin, use stored backup file
+	for !fetchStatus {
+		log.Info("Trying to fetch servers list from stored backup")
+		filename := filepath.Clean(defaultServersName)
+		serversListYml, err = ioutil.ReadFile(filename)
+		if err != nil {
+			log.Warn("Cannot find backup file in path")
+			break
+		}
+		log.Info("Servers list fetched from backup file")
+		fetchStatus = true
+	}
+
+	if fetchStatus {
+		err := yaml.Unmarshal(serversListYml, &servers)
+		if err != nil {
+			log.Fatal("Error during parsing servers list")
+			return servers, err
+		}
+		return servers, err
+	}
+	return servers, err
+}
+
+// SetServersConfig set urls of services on config file
+func SetServersConfig(conf *visorconfig.V1, log *logging.Logger, server serverData) {
+	conf.Dmsg.Discovery = server.Dmsg
+	conf.Transport.AddressResolver = server.AddressResolver
+	conf.Transport.Discovery = server.Transport
+	conf.Routing.RouteFinder = server.Routing
+	conf.UptimeTracker.Addr = server.UptimeTracker
+	conf.Launcher.ServiceDisc = server.Launcher
+	conf.SelectedServer = server.Name
+	log.Infof("The %s selected", server.Name)
+	if err := conf.Flush(); err != nil {
+		log.Errorf("Failed to set service URLs.")
+	}
+}
+
+// ServersList return all servers list
+type ServersList struct {
+	Test      serverData
+	Local     serverData
+	Worldwide serverData
+}
+
+type serverData struct {
+	Name            string
+	Dmsg            string
+	Transport       string
+	AddressResolver string `yaml:"address_resolver"`
+	Routing         string
+	UptimeTracker   string `yaml:"uptime_tracker"`
+	Launcher        string
 }

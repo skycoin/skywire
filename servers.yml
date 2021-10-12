@@ -1,5 +1,5 @@
 test:
-  name: server_test
+  name: test
   dmsg: 'http://dmsg.discovery.skywire.cc:80'
   transport: 'http://transport.discovery.skywire.cc:80'
   address_resolver: 'http://address.resolver.skywire.cc:80'
@@ -7,7 +7,7 @@ test:
   uptime_tracker: 'http://uptime.tracker.skywire.cc:80'
   launcher: 'http://service.discovery.skywire.cc:80' 
 local:
-  name: server_local
+  name: local
   dmsg: 'http://dmsg.discovery.skywire.local:80'
   transport: 'http://transport.discovery.skywire.local:80'
   address_resolver: 'http://address.resolver.skywire.local:80'
@@ -15,7 +15,7 @@ local:
   uptime_tracker: 'http://uptime.tracker.skywire.local:80'
   launcher: 'http://service.discovery.skywire.local:80'
 worldwide:
-  name: server_worldwide
+  name: worldwide
   dmsg: 'http://dmsgd.skywire.skycoin.com:80'
   transport: 'http://tpd.skywire.skycoin.com:80'
   address_resolver: 'http://ar.skywire.skycoin.com:80'

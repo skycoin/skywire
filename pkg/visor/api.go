@@ -167,6 +167,7 @@ type Summary struct {
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 	SkybianBuildVersion  string                           `json:"skybian_build_version"`
 	BuildTag             string                           `json:"build_tag"`
+	SelectedServer       string                           `json:"selected_server"`
 }
 
 // BuildTag variable that will set when building binary
@@ -219,6 +220,7 @@ func (v *Visor) Summary() (*Summary, error) {
 		PersistentTransports: pts,
 		SkybianBuildVersion:  skybianBuildVersion,
 		BuildTag:             BuildTag,
+		SelectedServer:       v.conf.SelectedServer,
 	}
 
 	return summary, nil

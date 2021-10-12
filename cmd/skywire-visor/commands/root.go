@@ -11,7 +11,6 @@ import (
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -24,7 +23,6 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 	"github.com/toqueteos/webbrowser"
-	"gopkg.in/yaml.v3"
 
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/syslog"
@@ -39,7 +37,6 @@ var restartCtx = restart.CaptureContext()
 
 const (
 	defaultConfigName    = "skywire-config.json"
-	defaultServersName   = "servers.yml"
 	runtimeLogMaxEntries = 300
 )
 
@@ -290,92 +287,18 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 }
 
 func initAddresses(conf *visorconfig.V1, mLog *logging.MasterLogger) error {
-	var fetchStatus bool
-	var serversListYml []byte
-	var servers serversList
-	var err error
 	log := mLog.PackageLogger("visor:config")
+	servers, err := visor.GetServers(conf, visor.DefaultServersName)
 
-	// trying to get servers list from skycoin, and save it in local
-	for !fetchStatus {
-		log.Info("Trying to fetch servers list from skycoin")
-		resp, err := http.Get(conf.ServersListAddress)
-		if err != nil {
-			log.Warn("Error during fetching servers list from skycoin")
-			break
-		}
-		defer func() {
-			err := resp.Body.Close()
-			if err != nil {
-				log.Warn(err)
-			}
-		}()
-		serversListYml, err = io.ReadAll(resp.Body)
-		if err != nil {
-			log.Warn("Error during fetching servers list from skycoin")
-			break
-		}
-		log.Info("Servers list fetched from skycoin")
-
-		out, err := os.Create(defaultServersName)
-		if err != nil {
-			log.Warn("Cannot create backup servers list file")
-		}
-		defer func() {
-			err := out.Close()
-			if err != nil {
-				log.Warn(err)
-			}
-		}()
-		_, err = io.Copy(out, resp.Body)
-		if err != nil {
-			log.Warn("Cannot save backup servers list file")
-		}
-		log.Info("Servers list backup saved")
-		fetchStatus = true
+	if conf.IsTest {
+		visor.SetServersConfig(conf, log, servers.Test)
+	} else if localServer || checkLocalTime() {
+		visor.SetServersConfig(conf, log, servers.Local)
+	} else {
+		visor.SetServersConfig(conf, log, servers.Worldwide)
 	}
 
-	// if servers list not reached from skycoin, use stored backup file
-	for !fetchStatus {
-		log.Info("Trying to fetch servers list from stored backup")
-		filename := filepath.Clean(defaultServersName)
-		serversListYml, err = ioutil.ReadFile(filename)
-		if err != nil {
-			log.Warn("Cannot find backup file in path")
-			break
-		}
-		log.Info("Servers list fetched from backup file")
-		fetchStatus = true
-	}
-
-	// update conf values
-	if fetchStatus {
-		err := yaml.Unmarshal(serversListYml, &servers)
-		if err != nil {
-			log.Fatal("Error during parsing servers list")
-			return err
-		}
-
-		if conf.IsTest {
-			setServersConfig(conf, log, servers.Test)
-		} else if localServer || checkLocalTime() {
-			setServersConfig(conf, log, servers.Local)
-		} else {
-			setServersConfig(conf, log, servers.Worldwide)
-		}
-		return nil
-	}
 	return err
-}
-
-func setServersConfig(conf *visorconfig.V1, log *logging.Logger, servers serversData) {
-	conf.Dmsg.Discovery = servers.Dmsg
-	conf.Transport.AddressResolver = servers.AddressResolver
-	conf.Transport.Discovery = servers.Transport
-	conf.Routing.RouteFinder = servers.Routing
-	conf.UptimeTracker.Addr = servers.UptimeTracker
-	conf.Launcher.ServiceDisc = servers.Launcher
-	log.Infof("The %s selected", servers.Name)
 }
 
 func checkLocalTime() bool {
@@ -426,20 +349,4 @@ func checkHvIsRunning(addr string, retries int) bool {
 		}
 	}
 	return false
-}
-
-type serversList struct {
-	Test      serversData
-	Local     serversData
-	Worldwide serversData
-}
-
-type serversData struct {
-	Name            string
-	Dmsg            string
-	Transport       string
-	AddressResolver string `yaml:"address_resolver"`
-	Routing         string
-	UptimeTracker   string `yaml:"uptime_tracker"`
-	Launcher        string
 }

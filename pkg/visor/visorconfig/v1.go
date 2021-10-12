@@ -57,14 +57,16 @@ type V1 struct {
 	Hypervisors []cipher.PubKey `json:"hypervisors"`
 	CLIAddr     string          `json:"cli_addr"`
 
-	LogLevel           string   `json:"log_level"`
-	LocalPath          string   `json:"local_path"`
-	StunServers        []string `json:"stun_servers"`
-	ShutdownTimeout    Duration `json:"shutdown_timeout,omitempty"`    // time value, examples: 10s, 1m, etc
-	RestartCheckDelay  Duration `json:"restart_check_delay,omitempty"` // time value, examples: 10s, 1m, etc
-	IsPublic           bool     `json:"is_public"`
-	ServersListAddress string   `json:"servers_list_address"`
-	IsTest             bool     `json:"is_test"`
+	LogLevel          string   `json:"log_level"`
+	LocalPath         string   `json:"local_path"`
+	StunServers       []string `json:"stun_servers"`
+	ShutdownTimeout   Duration `json:"shutdown_timeout,omitempty"`    // time value, examples: 10s, 1m, etc
+	RestartCheckDelay Duration `json:"restart_check_delay,omitempty"` // time value, examples: 10s, 1m, etc
+	IsPublic          bool     `json:"is_public"`
+
+	ServersListAddress string `json:"servers_list_address"`
+	IsTest             bool   `json:"is_test"`
+	SelectedServer     string `json:"selected_server"`
 
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 
