@@ -28,10 +28,10 @@ fi
 function print_usage() {
   echo "Usage: sh create_installer.sh [-o|--output output_skywire_dir] [-s | --sign signs the binary] [-n | --notarize notarize the binary ] [-t <PACKAGE_PATH> | --staple <PACKAGE_PATH> ]"
   echo "You need to provide the following environment variables if you want to sign and notarize the binary:"
-  echo "${greent}MAC_HASH_APPLICATION_ID${nct}: Hash of Developer ID Application"
-  echo "${greent}MAC_HASH_INSTALLER_ID${nct}  : Hash of Developer ID Installer"
-  echo "${greent}MAC_DEVELOPER_USERNAME${nct} : Developer Account Email"
-  echo "${greent}MAC_DEVELOPER_PASSWORD${nct} : Application specific / Apple ID password ${yellowt}https://support.apple.com/en-us/HT204397${nct}"
+  echo -e "${greent}MAC_HASH_APPLICATION_ID${nct}: Hash of Developer ID Application"
+  echo -e "${greent}MAC_HASH_INSTALLER_ID${nct}  : Hash of Developer ID Installer"
+  echo -e "${greent}MAC_DEVELOPER_USERNAME${nct} : Developer Account Email"
+  echo -e "${greent}MAC_DEVELOPER_PASSWORD${nct} : Application specific / Apple ID password ${yellowt}https://support.apple.com/en-us/HT204397${nct}"
 }
 
 function staple_installer() {
@@ -93,7 +93,7 @@ EOF
     echo "signing the binary using codesign"
 
     if [ -z "$MAC_HASH_APPLICATION_ID" ]; then
-      echo "${yellowt}environment MAC_HASH_APPLICATION_ID has to be set before you sign the binary${nct}"
+      echo -e "${yellowt}environment MAC_HASH_APPLICATION_ID has to be set before you sign the binary${nct}"
       exit 1
     fi
 
@@ -121,7 +121,7 @@ EOF
   if [ "$sign_binary" == true ]; then
 
     if [ -z "$MAC_HASH_INSTALLER_ID" ]; then
-      echo "${yellowt}environment ${greent}MAC_HASH_INSTALLER_ID${nct}${yellowt} has to be set before you sign the binary${nct}"
+      echo -e "${yellowt}environment ${greent}MAC_HASH_INSTALLER_ID${nct}${yellowt} has to be set before you sign the binary${nct}"
       exit 1
     fi
 
@@ -134,10 +134,10 @@ EOF
 
   if [ "$notarize_binary" == true ]; then
     if [ -z "$MAC_DEVELOPER_USERNAME" ] || [ -z "$MAC_DEVELOPER_PASSWORD" ]; then
-      echo "${yellowt}environment variables: ${greent}MAC_DEVELOPER_USERNAME${nct}${yellowt} and ${greent}MAC_DEVELOPER_PASSWORD${nct}${yellowt} has to be set first before you can notarize the binary."
+      echo -e "${yellowt}environment variables: ${greent}MAC_DEVELOPER_USERNAME${nct}${yellowt} and ${greent}MAC_DEVELOPER_PASSWORD${nct}${yellowt} has to be set first before you can notarize the binary."
     fi
     xcrun altool --notarize-app --primary-bundle-id "com.skycoin.skywire" --username="$MAC_DEVELOPER_USERNAME" --password="$MAC_DEVELOPER_PASSWORD" --file "${output}""${package_name}" && {
-      echo "check your email for notarization status"
+      echo -e "${greent}check your email for notarization status${nct}"
     }
   fi
 }
