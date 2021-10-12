@@ -55,6 +55,7 @@ type API interface {
 	Transport(tid uuid.UUID) (*TransportSummary, error)
 	AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*TransportSummary, error)
 	RemoveTransport(tid uuid.UUID) error
+	SetPublicAutoconnect(pAc bool) error
 
 	DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error)
 	DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error)
@@ -167,6 +168,7 @@ type Summary struct {
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 	SkybianBuildVersion  string                           `json:"skybian_build_version"`
 	BuildTag             string                           `json:"build_tag"`
+	PublicAutoconnect    bool                             `json:"public_autoconnect"`
 }
 
 // BuildTag variable that will set when building binary
@@ -219,6 +221,7 @@ func (v *Visor) Summary() (*Summary, error) {
 		PersistentTransports: pts,
 		SkybianBuildVersion:  skybianBuildVersion,
 		BuildTag:             BuildTag,
+		PublicAutoconnect:    v.conf.Transport.PublicAutoconnect,
 	}
 
 	return summary, nil
@@ -770,4 +773,9 @@ func (v *Visor) SetPersistentTransports(pTps []transport.PersistentTransports) e
 // GetPersistentTransports sets min_hops routing config of visor
 func (v *Visor) GetPersistentTransports() ([]transport.PersistentTransports, error) {
 	return v.conf.GetPersistentTransports()
+}
+
+// SetPublicAutoconnect sets public_autoconnect config of visor
+func (v *Visor) SetPublicAutoconnect(pAc bool) error {
+	return v.conf.UpdatePublicAutoconnect(pAc)
 }
