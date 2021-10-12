@@ -7,6 +7,10 @@ installer_package_dir="${installer_build_dir}"/binaries/Skywireapp
 git_tag=$(git describe --tags)
 date_format=$(date -u "+%Y-%m-%d")
 go_arch=$(go env GOARCH) # build for amd64 and arm64 from single host
+sign_binary=false
+notarize_binary=false
+staple_notarization=false
+package_path=
 developer_id=
 output=
 
@@ -22,17 +26,19 @@ if [[ "$current_os" != "Darwin" ]]; then
 fi
 
 function print_usage() {
-  echo "Usage: sh create_installer.sh [-o|--output output_skywire_dir] [-d|--dev-id certificate_developer_id]"
-  echo "You need to provide --dev-id / -d <YOUR_CERTIFICATE_DEVELOPER_ID> flag if you want to sign the binary."
-  echo "You also need to import your certificate from Apple (Apple Developer ID Application certificate) to your keychain,"
-  echo "as per this instruction https://github.com/mitchellh/gon#prerequisite-acquiring-a-developer-id-certificate."
-  echo "You can get your certificate developer ID via running:"
-  echo -e "${greent}$ security find-identity -v${nct}"
-  echo -e "        ${greent}1) xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \"Developer ID Application: YOUR NAME (xxxxxxxxxx)\"${nct}"
-  echo -e "           ${greent}1 valid identities found${nct}"
-  echo -e "You also need to set these environment variables, if you want to sign and notarize the binary:"
-  echo -e "${yellowt}MAC_APP_DEV_USERNAME${nct}              : Apple Developer account email"
-  echo -e "${yellowt}MAC_APP_DEV_PASSWORD${nct}              : Apple Developer account password"
+  echo "Usage: sh create_installer.sh [-o|--output output_skywire_dir] [-s | --sign signs the binary] [-n | --notarize notarize the binary ] [-t <PACKAGE_PATH> | --staple <PACKAGE_PATH> ]"
+  echo "You need to provide the following environment variables if you want to sign and notarize the binary:"
+  echo "${greent}MAC_HASH_APPLICATION_ID${nct}: Hash of Developer ID Application"
+  echo "${greent}MAC_HASH_INSTALLER_ID${nct}  : Hash of Developer ID Installer"
+  echo "${greent}MAC_DEVELOPER_USERNAME${nct} : Developer Account Email"
+  echo "${greent}MAC_DEVELOPER_PASSWORD${nct} : Application specific / Apple ID password ${yellowt}https://support.apple.com/en-us/HT204397${nct}"
+}
+
+function staple_installer() {
+  if [ -z "$package_path" ]; then
+    echo "package_path of option -t cannot be empty"
+  fi
+  xcrun stapler staple "${package_path}"
 }
 
 function build_installer() {
@@ -49,11 +55,6 @@ function build_installer() {
 
     echo "Storing installer to ${output}"
   fi
-
-  test -x /usr/local/bin/gon || {
-    brew tap mitchellh/gon
-    brew install mitchellh/gon/gon
-  }
 
   # build skywire binariea
   make CGO_ENABLED=1 GOOS=darwin GOARCH="${go_arch}" build-systray
@@ -79,13 +80,28 @@ function build_installer() {
 
   cat <<EOF >${installer_package_dir}/Contents/MacOS/Skywire
   #!/usr/bin/env bash
-  
-  
+
+
   osascript -e "do shell script \"/Applications/Skywire.app/Contents/MacOS/skywire-visor --systray >> /Users/\${USER}/Library/Logs/skywire/visor.log\" with administrator privileges"
 
 EOF
 
   chmod +x ${installer_package_dir}/Contents/MacOS/Skywire
+
+  # https://stackoverflow.com/a/21210966
+  if [ "$sign_binary" == true ]; then
+    echo "signing the binary using codesign"
+
+    if [ -z "$MAC_HASH_APPLICATION_ID" ]; then
+      echo "${yellowt}environment MAC_HASH_APPLICATION_ID has to be set before you sign the binary${nct}"
+      exit 1
+    fi
+
+    mv ${installer_package_dir} /tmp/Skywire.app
+    codesign --deep --force --options=runtime --sign "$MAC_HASH_APPLICATION_ID" --timestamp /tmp/Skywire.app
+
+    mv /tmp/Skywire.app "${installer_build_dir}"/binaries/Skywireapp
+  fi
 
   # prepare install scripts
   mkdir -p ${installer_build_dir}/{install,update,remove}_scripts
@@ -101,32 +117,28 @@ EOF
   package_name=SkywireInstaller-${git_tag}-${date_format}-${go_arch}.pkg
 
   cp ${mac_script_dir}/Distribution_customized.xml ${installer_build_dir}/Distribution.xml
-  productbuild --distribution ${installer_build_dir}/Distribution.xml --package-path ${installer_build_dir} "${output}""${package_name}"
+
+  if [ "$sign_binary" == true ]; then
+
+    if [ -z "$MAC_HASH_INSTALLER_ID" ]; then
+      echo "${yellowt}environment ${greent}MAC_HASH_INSTALLER_ID${nct}${yellowt} has to be set before you sign the binary${nct}"
+      exit 1
+    fi
+
+    productbuild --sign "$MAC_HASH_INSTALLER_ID" --timestamp --distribution ${installer_build_dir}/Distribution.xml --package-path ${installer_build_dir} "${output}""${package_name}"
+  else
+    productbuild --timestamp --distribution ${installer_build_dir}/Distribution.xml --package-path ${installer_build_dir} "${output}""${package_name}"
+  fi
 
   cd "${output}"
 
-  if [ -n "$developer_id" ] && [[ "$developer_id" != "" ]]; then
-    # create gon config
-    cat <<EOF >"${output}/package-signing-config.json"
-    {
-        "source" : ["./$package_name"],
-        "bundle_id" : "com.skycoin.skywire",
-        "apple_id": {
-            "username" : "${MAC_APP_DEV_USERNAME}",
-            "password":  "${MAC_APP_DEV_PASSWORD}"
-        },
-        "sign" :{
-            "application_identity" : "${developer_id}"
-        },
-        "dmg" :{
-            "output_path":  "$dmg_name",
-            "volume_name":  "Skywire"
-        }
+  if [ "$notarize_binary" == true ]; then
+    if [ -z "$MAC_DEVELOPER_USERNAME" ] || [ -z "$MAC_DEVELOPER_PASSWORD" ]; then
+      echo "${yellowt}environment variables: ${greent}MAC_DEVELOPER_USERNAME${nct}${yellowt} and ${greent}MAC_DEVELOPER_PASSWORD${nct}${yellowt} has to be set first before you can notarize the binary."
+    fi
+    xcrun altool --notarize-app --primary-bundle-id "com.skycoin.skywire" --username="$MAC_DEVELOPER_USERNAME" --password="$MAC_DEVELOPER_PASSWORD" --file "${output}""${package_name}" && {
+      echo "check your email for notarization status"
     }
-EOF
-
-    # use gon to sign the binary
-    gon -log-level=debug -log-json ./package-signing-config.json
   fi
 }
 
@@ -152,8 +164,17 @@ while :; do
     print_usage
     exit 0
     ;;
-  -d | --dev-id)
-    developer_id="$2"
+  -s | --sign)
+    sign_binary=true
+    shift
+    ;;
+  -n | --notarize)
+    notarize_binary=true
+    shift
+    ;;
+  -t | --staple)
+    staple_notarization=true
+    package_path="${2}"
     shift
     ;;
   -?*)
@@ -169,15 +190,19 @@ done
 # call build_installer twice, once for the original host architecture
 # and one for the other one (x86_64 and arm64 or vice versa)
 
-build_installer
+if [ "$staple_notarization" == false ]; then
+  build_installer
 
-case ${go_arch} in
-amd64)
-  go_arch=arm64
-  build_installer
-  ;;
-arm64)
-  go_arch=amd64
-  build_installer
-  ;;
-esac
+  case ${go_arch} in
+  amd64)
+    go_arch=arm64
+    build_installer
+    ;;
+  arm64)
+    go_arch=amd64
+    build_installer
+    ;;
+  esac
+else
+  staple_installer
+fi
