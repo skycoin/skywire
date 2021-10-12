@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"net/http"
 	"net/rpc"
 	"sync"
 	"time"
@@ -634,11 +633,7 @@ func (mc *mockRPCClient) Summary() (*Summary, error) {
 // Health implements API
 func (mc *mockRPCClient) Health() (*HealthInfo, error) {
 	hi := &HealthInfo{
-		TransportDiscovery: http.StatusOK,
-		RouteFinder:        http.StatusOK,
-		SetupNode:          http.StatusOK,
-		UptimeTracker:      http.StatusOK,
-		AddressResolver:    http.StatusOK,
+		ServicesHealth: true,
 	}
 
 	return hi, nil

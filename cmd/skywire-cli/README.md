@@ -6,31 +6,33 @@ skywire command line interface
 
 - [Install](#install)
 - [skywire-cli usage](#skywire-cli-usage)
-	- [mdisc usage](#mdisc-usage)
+    - [mdisc usage](#mdisc-usage)
     - [available servers](#available-servers)
-		- [entry](#entry)
-	- [visor usage](#visor-usage)
-    - [add rule](#add-rule)
-		- [add tp](#add-tp)
-		- [app logs since](#app-logs-since)
-		- [disc tp](#disc-tp)
-		- [exec](#exec)
-		- [gen config](#gen-config)
-		- [ls apps](#ls-apps)
-		- [ls rules](#ls-rules)
-		- [ls tp](#ls-tp)
-		- [ls types](#ls-types)
-		- [pk](#pk)
-		- [rm rule](#rm-rule)
-		- [rm tp](#rm-tp)
-		- [rule](#rule)
-		- [set app autostart](#set-app-autostart)
-		- [start app](#start-app)
-		- [stop app](#stop-app)
-		- [tp](#tp)
-		- [update config](#update-config)
-		- [version](#version)
-  - [rtfind usage](#rtfind-usage)
+        - [entry](#entry)
+    - [visor usage](#visor-usage)
+        - [add rule](#add-rule)
+        - [add tp](#add-tp)
+        - [app logs since](#app-logs-since)
+        - [disc tp](#disc-tp)
+        - [exec](#exec)
+        - [ls apps](#ls-apps)
+        - [ls rules](#ls-rules)
+        - [ls tp](#ls-tp)
+        - [ls types](#ls-types)
+        - [pk](#pk)
+        - [rm rule](#rm-rule)
+        - [rm tp](#rm-tp)
+        - [rule](#rule)
+        - [set app autostart](#set-app-autostart)
+        - [start app](#start-app)
+        - [stop app](#stop-app)
+        - [tp](#tp)
+        - [version](#version)
+    - [rtfind usage](#rtfind-usage)
+    - [config usage](#config-usage)
+        - [gen](#gen)
+        - [update](#update)
+
 <!-- /MarkdownTOC -->
 
 ## Install
@@ -52,6 +54,7 @@ Usage:
   skywire-cli [command]
 
 Available Commands:
+  config      Contains sub-commands that interact with the config of local skywire-visor
   help        Help about any command
   mdisc       Contains sub-commands that interact with a remote DMSG Discovery
   rtfind      Queries the Route Finder for available routes between two visors
@@ -152,7 +155,6 @@ Available Commands:
   app-logs-since    Gets logs from given app since RFC3339Nano-formated timestamp. "beginning" is a special timestamp to fetch all the logs
   disc-tp           Queries the Transport Discovery to find transport(s) of given transport ID or edge public key
   exec              Executes the given command
-  gen-config        Generates a config file
   ls-apps           Lists apps running on the local visor
   ls-rules          Lists the local visor's routing rules
   ls-tp             Lists the available transports with optional filter flags
@@ -165,7 +167,6 @@ Available Commands:
   start-app         Starts an app of given name
   stop-app          Stops an app of given name
   tp                Returns summary of given transport by id
-  update-config     Updates a config file
   version           Obtains version and build info of the node
 
 Flags:
@@ -197,7 +198,6 @@ Flags:
       --keep-alive duration   duration after which routing rule will expire if no activity is present (default 30s)
 
 ```
-
 
 #### add tp
 
@@ -282,6 +282,7 @@ $ skywire-cli visor exec <command>
 ##### Example
 
 ls
+
 ```
 $ skywire-cli visor exec ls
 bin
@@ -321,18 +322,284 @@ $skywire-cli visor exec echo -- "-a"
 -a
 ```
 
+#### ls apps
 
-#### gen config
+list apps
 
 ```
-$ skywire-cli visor gen-config --help
+$ skywire-cli visor ls-apps
+```
+
+##### Example
+
+```
+$ skywire-cli visor ls-apps
+app                 ports     auto_start     status
+skychat             1         true           running
+skysocks            3         true           running
+skysocks-client     13        false          stopped
+vpn-server          44        false          stopped
+vpn-client          43        false          stopped
+```
+
+#### ls rules
+
+Lists the local visor's routing rules
+
+```
+$ skywire-cli visor ls-rules
+```
+
+##### Example
+
+```
+$ skywire-cli visor ls-rules
+id     type     local-port     remote-port     remote-pk     resp-id     next-route-id     next-transport-id     expire-at
+```
+
+#### ls tp
+
+list transports
+
+```
+$ skywire-cli visor ls-tp
+```
+
+##### Example
+
+```
+$ skywire-cli visor ls-tp
+type     id     remote     mode     is_up
+```
+
+#### ls types
+
+Lists transport types used by the local visor
+
+```
+$ skywire-cli visor ls-types
+```
+
+##### Example
+
+```
+$ skywire-cli visor ls-types
+dmsg
+stcp
+stcpr
+sudph
+```
+
+#### pk
+
+Obtains the public key of the visor
+
+```
+$ skywire-cli visor pk
+```
+
+##### Example
+
+```
+$ skywire-cli visor pk                                                          
+0359f02198933550ad5b41a21470a0bbe0f73c0eb6e93d7d279133a0d5bffc645c   
+```
+
+#### rm rule
+
+Removes a routing rule
+
+```
+$ skywire-cli visor rm-rule <route-id>
+```
+
+##### Example
+
+```
+$ skywire-cli visor rm-rule -h
+Removes a routing rule via route ID key
+
+Usage:
+  skywire-cli visor rm-rule <route-id> [flags]
+
+```
+
+#### rm tp
+
+removes a transport
+
+```
+$ skywire-cli visor rm-tp <transport-id>
+```
+
+##### Example
+
+```
+$ skywire-cli visor rm-tp -h
+Removes transport with given id
+
+Usage:
+  skywire-cli visor rm-tp <transport-id> [flags]
+
+```
+
+#### rule
+
+```
+$ skywire-cli visor rule <route-id>
+```
+
+##### Example
+
+```
+$ skywire-cli visor rule -h
+Returns a routing rule via route ID key
+
+Usage:
+  skywire-cli visor rule <route-id> [flags]
+
+```
+
+#### set-app-autostart
+
+set application autostart
+
+```
+$ skywire-cli visor set-app-autostart <name> (on|off)
+```
+
+##### Example
+
+```
+$ skywire-cli visor set-app-autostart -h
+Sets the autostart flag for an app of given name
+
+Usage:
+  skywire-cli visor set-app-autostart <name> (on|off) [flags]
+```
+
+#### start-app
+
+start application
+
+```
+$ skywire-cli visor set-app-autostart <name> (on|off)
+```
+
+##### Example
+
+```
+$ skywire-cli visor set-app-autostart -h
+Sets the autostart flag for an app of given name
+
+Usage:
+  skywire-cli visor set-app-autostart <name> (on|off) [flags]
+
+```
+
+#### stop-app
+
+stop application
+
+```
+$ skywire-cli visor stop app <name>
+```
+
+##### Example
+
+```
+$ skywire-cli visor stop-app skychat
+OK
+```
+
+#### tp
+
+Returns summary of given transport by id
+
+```
+$ skywire-cli visor tp <transport-id>
+```
+
+##### Example
+
+```
+$ skywire-cli visor tp -h
+Returns summary of given transport by id
+
+Usage:
+  skywire-cli visor tp <transport-id> [flags]
+```
+
+#### version
+
+version
+
+```
+$ skywire-cli visor version
+```
+
+##### Example
+
+```
+$ skywire-cli visor version
+Version "0.4.1" built on "2021-03-19T23:26:21Z" against commit "d804a8ce"
+```
+
+### rtfind usage
+
+```
+skywire-cli rtfind <public-key-visor-1> <public-key-visor-2>
+```
+
+##### Example
+
+```
+$ skywire-cli rtfind -h
+
+Queries the Route Finder for available routes between two visors
+
+Usage:
+skywire-cli rtfind <public-key-visor-1> <public-key-visor-2> [flags]
+
+Flags:
+--addr string        address in which to contact route finder service (default "http://routefinder.skywire.skycoin.com")
+-h, --help               help for rtfind
+--max-hops uint16    max hops for the returning routeFinderRoutesCmd (default 1000)
+--min-hops uint16    min hops for the returning routeFinderRoutesCmd (default 1)
+--timeout duration   timeout for remote server requests (default 10s)
+```
+
+### config usage
+
+```
+skywire-cli config -h
+
+Contains sub-commands that interact with the config of local skywire-visor
+
+Usage:
+  skywire-cli config [command]
+
+Available Commands:
+  gen         Generates a config file
+  update      Updates a config file
+
+Flags:
+  -h, --help         help for config
+
+Use "skywire-cli config [command] --help" for more information about a command.
+```
+
+#### gen
+
+```
+$ skywire-cli config gen --help
 Generates a config file
 
 Usage:
-  skywire-cli visor gen-config [flags]
+  skywire-cli config gen [flags]
 
 Flags:
-  -h, --help                    help for gen-config
+  -h, --help                    help for gen
       --hypervisor-pks string   public keys of hypervisors that should be added to this visor
   -i, --is-hypervisor           generate a hypervisor configuration.
   -o, --output string           path of output config file. (default "skywire-config.json")
@@ -354,7 +621,7 @@ The default visor config generation assumes the command is run from the root of 
 
 ```
 $ cd $GOPATH/src/github.com/skycoin/skywire
-$ skywire-cli visor gen-config
+$ skywire-cli config gen
 [2021-06-24T08:58:56-05:00] INFO [visor:config]: Flushing config to file. config_version="v1.0.0" filepath="/home/user/go/src/github.com/skycoin/skywire/skywire-config.json"
 [2021-06-24T08:58:56-05:00] INFO [skywire-cli]: Updated file '/home/user/go/src/github.com/skycoin/skywire/skywire-config.json' to: {
 	"version": "v1.0.0",
@@ -441,15 +708,19 @@ $ skywire-cli visor gen-config
 }
 ```
 
-The default configuration is for a visor only. To generate a configuration which provides the hypervisor web interface, the `-i` or `--is-hypervisor` flag should be specified.
+The default configuration is for a visor only. To generate a configuration which provides the hypervisor web interface,
+the `-i` or `--is-hypervisor` flag should be specified.
+
 ```
-$ skywire-cli visor gen-config -i
+$ skywire-cli config gen -i
 ```
 
 ##### Example hypervisor configuration for skybian
+
 ```
-$ skywire-cli visor gen-config -irs
+$ skywire-cli config gen -irs
 ```
+
 ##### Example visor configuration for skybian
 
 It is the typical arrangement to set a visor to use a remote hypervisor if a local instance is not started.
@@ -459,9 +730,11 @@ Determine the hypervisor public key by running the following command on the mach
 ```
 $ skywire-cli visor pk
 ```
+
 substitute the hypervisor public key in the following command:
+
 ```
-$ skywire-cli visor gen-config --hypervisor-pks <hypervisor-public-key> -rs
+$ skywire-cli config gen --hypervisor-pks <hypervisor-public-key> -rs
 ```
 
 ##### Example hypervisor configuration for package based installation
@@ -469,7 +742,7 @@ $ skywire-cli visor gen-config --hypervisor-pks <hypervisor-public-key> -rs
 This assumes the skywire installation is at `/opt/skywire` with binaries and apps in their own subdirectories.
 
 ```
-$ skywire-cli visor gen-config -ip
+$ skywire-cli config gen -ip
 [2021-06-24T09:09:39-05:00] INFO [visor:config]: Flushing config to file. config_version="v1.0.0" filepath="/opt/skywire/skywire.json"
 [2021-06-24T09:09:39-05:00] INFO [visor:config]: Flushing config to file. config_version="v1.0.0" filepath="/opt/skywire/skywire.json"
 [2021-06-24T09:09:39-05:00] INFO [skywire-cli]: Updated file '/opt/skywire/skywire.json' to: {
@@ -580,270 +853,61 @@ The configuration is written (or rewritten)
 
 It is the typical arrangement to set a visor to use a remote hypervisor if a local instance is not started.
 
-
 Determine the hypervisor public key by running the following command on the machine running the hypervisor
 
 ```
 $ skywire-cli visor pk
 ```
 
-When running a visor with or without a hypervisor on the same machine, it's wise to keep the same keys for the other config file.
+When running a visor with or without a hypervisor on the same machine, it's wise to keep the same keys for the other
+config file.
 
-Copy the `skywire.json` config file from the previous example to `skywire-visor.json`; then paste the public key from the above command output into the following command
+Copy the `skywire.json` config file from the previous example to `skywire-visor.json`; then paste the public key from
+the above command output into the following command
 
 ```
-$ skywire-cli visor gen-config --hypervisor-pks <hypervisor-public-key> -pr
+$ skywire-cli config gen --hypervisor-pks <hypervisor-public-key> -pr
 ```
 
 The configuration is written (or rewritten)
 
-The configuration files should be specified in corresponding systemd service files or init / startup scripts to start either a visor or hypervisor instance
+The configuration files should be specified in corresponding systemd service files or init / startup scripts to start
+either a visor or hypervisor instance
 
 starting the hypervisor intance
+
 ```
 skywire-visor -c /opt/skywire/skywire.json
 ```
 
 starting visor-only or with remote hypervisor
+
 ```
 skywire-visor -c /opt/skywire/skywire-visor.json
 ```
 
-#### ls apps
-
-list apps
+#### update
 
 ```
-$ skywire-cli visor ls-apps
-```
-
-##### Example
-
-```
-$ skywire-cli visor ls-apps
-app                 ports     auto_start     status
-skychat             1         true           running
-skysocks            3         true           running
-skysocks-client     13        false          stopped
-vpn-server          44        false          stopped
-vpn-client          43        false          stopped
-```
-
-#### ls rules
-
-Lists the local visor's routing rules
-
-```
-$ skywire-cli visor ls-rules
-```
-
-##### Example
-
-```
-$ skywire-cli visor ls-rules
-id     type     local-port     remote-port     remote-pk     resp-id     next-route-id     next-transport-id     expire-at
-```
-
-
-#### ls tp
-
-list transports
-```
-$ skywire-cli visor ls-tp
-```
-
-##### Example
-
-```
-$ skywire-cli visor ls-tp
-type     id     remote     mode     is_up
-```
-
-#### ls types
-
-Lists transport types used by the local visor
-
-```
-$ skywire-cli visor ls-types
-```
-
-##### Example
-
-```
-$ skywire-cli visor ls-types
-dmsg
-stcp
-stcpr
-sudph
-```
-
-#### pk
-
-Obtains the public key of the visor
-
-```
-$ skywire-cli visor pk
-```
-
-##### Example
-
-```
-$ skywire-cli visor pk                                                          
-0359f02198933550ad5b41a21470a0bbe0f73c0eb6e93d7d279133a0d5bffc645c   
-```
-
-#### rm rule
-
-Removes a routing rule
-
-```
-$ skywire-cli visor rm-rule <route-id>
-```
-
-##### Example
-
-```
-$ skywire-cli visor rm-rule -h
-Removes a routing rule via route ID key
-
-Usage:
-  skywire-cli visor rm-rule <route-id> [flags]
-
-```
-
-#### rm tp
-
-removes a transport
-```
-$ skywire-cli visor rm-tp <transport-id>
-```
-
-##### Example
-
-```
-$ skywire-cli visor rm-tp -h
-Removes transport with given id
-
-Usage:
-  skywire-cli visor rm-tp <transport-id> [flags]
-
-```
-
-
-#### rule
-
-```
-$ skywire-cli visor rule <route-id>
-```
-
-##### Example
-
-```
-$ skywire-cli visor rule -h
-Returns a routing rule via route ID key
-
-Usage:
-  skywire-cli visor rule <route-id> [flags]
-
-```
-
-#### set-app-autostart
-
-set application autostart
-
-```
-$ skywire-cli visor set-app-autostart <name> (on|off)
-```
-
-##### Example
-
-```
-$ skywire-cli visor set-app-autostart -h
-Sets the autostart flag for an app of given name
-
-Usage:
-  skywire-cli visor set-app-autostart <name> (on|off) [flags]
-```
-
-#### start-app
-
-start application
-```
-$ skywire-cli visor set-app-autostart <name> (on|off)
-```
-
-##### Example
-
-```
-$ skywire-cli visor set-app-autostart -h
-Sets the autostart flag for an app of given name
-
-Usage:
-  skywire-cli visor set-app-autostart <name> (on|off) [flags]
-
-```
-
-#### stop-app
-
-stop application
-
-```
-$ skywire-cli visor stop app <name>
-```
-
-##### Example
-
-```
-$ skywire-cli visor stop-app skychat
-OK
-```
-
-
-#### tp
-
-Returns summary of given transport by id
-
-```
-$ skywire-cli visor tp <transport-id>
-```
-
-##### Example
-
-```
-$ skywire-cli visor tp -h
-Returns summary of given transport by id
-
-Usage:
-  skywire-cli visor tp <transport-id> [flags]
-```
-
-
-#### update config
-
-```
-$ skywire-cli visor update-config -h
+$ ./skywire-cli config update --help
 Updates a config file
 
 Usage:
-  skywire-cli visor update-config [flags]
+  skywire-cli config update [flags]
 
 Flags:
       --add-hypervisor-pks string   public keys of hypervisors that should be added to this visor
   -e, --environment string          desired environment (values production or testing) (default "production")
-  -h, --help                        help for update-config
+  -h, --help                        help for update
   -i, --input string                path of input config file. (default "skywire-config.json")
   -o, --output string               path of output config file. (default "skywire-config.json")
       --reset-hypervisor-pks        resets hypervisor`s configuration
-
-Global Flags:
-      --rpc string   RPC server address (default "localhost:3435")
-
 ```
 
 ##### Example
 
 ```
-skywire-cli visor update-config
+skywire-cli config update
 [2021-06-24T10:42:33-05:00] INFO [visor:config]: Flushing config to file. config_version="v1.0.0" filepath="skywire-config.json"
 [2021-06-24T10:42:33-05:00] INFO [visor:config]: Flushing config to file. config_version="v1.0.0" filepath="skywire-config.json"
 [2021-06-24T10:42:33-05:00] INFO [skywire-cli]: Updated file '/home/d0mo/go/src/github.com/skycoin/skywire/skywire-config.json' to: {
@@ -929,45 +993,4 @@ skywire-cli visor update-config
  "shutdown_timeout": "10s",
  "restart_check_delay": "1s"
 }
-```
-
-
-#### version        
-
-version
-
-```
-$ skywire-cli visor version
-```
-
-##### Example
-
-```
-$ skywire-cli visor version
-Version "0.4.1" built on "2021-03-19T23:26:21Z" against commit "d804a8ce"
-```
-
-
-### rtfind usage
-
-```
-skywire-cli rtfind <public-key-visor-1> <public-key-visor-2>
-```
-
-##### Example
-
-```
-$ skywire-cli rtfind -h
-
-Queries the Route Finder for available routes between two visors
-
-Usage:
-skywire-cli rtfind <public-key-visor-1> <public-key-visor-2> [flags]
-
-Flags:
---addr string        address in which to contact route finder service (default "http://routefinder.skywire.skycoin.com")
--h, --help               help for rtfind
---max-hops uint16    max hops for the returning routeFinderRoutesCmd (default 1000)
---min-hops uint16    min hops for the returning routeFinderRoutesCmd (default 1)
---timeout duration   timeout for remote server requests (default 10s)
 ```
