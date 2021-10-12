@@ -37,14 +37,14 @@ Skywire can be statically built. For instructions check [the docs](docs/static-b
 In order to expose the hypervisor UI, generate a config file with `--is-hypervisor` or `-i` flag:
 
 ```bash
-$ skywire-cli visor gen-config -i
+$ skywire-cli config gen -i
 ```
 
 Docker container will create config automatically for you, should you want to run it manually, you can do:
 
 ```bash
 $ docker run --rm -v <YOUR_CONFIG_DIR>:/opt/skywire \
-  skycoin/skywire:test skywire-cli gen-config -i
+  skycoin/skywire:test skywire-cli config gen -i
 ```
 
 After starting up the visor, the UI will be exposed by default on `localhost:8000`.
@@ -55,14 +55,14 @@ Every visor can be controlled by one or more hypervisors. To allow a hypervisor 
 hypervisor needs to be specified in the configuration file. You can add a remote hypervisor to the config with:
 
 ```bash
-$ skywire-cli visor update-config --hypervisor-pks <public-key>
+$ skywire-cli config update --hypervisor-pks <public-key>
 ```
 
 Or from docker image:
 
 ```bash
 $ docker run --rm -v <YOUR_CONFIG_DIR>:/opt/skywire \
-  skycoin/skywire:test skywire-cli update-config hypervisor-pks <public-key>
+  skycoin/skywire:test skywire-cli config update hypervisor-pks <public-key>
 ```
 
 ## Run `skywire-visor`

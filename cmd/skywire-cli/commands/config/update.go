@@ -1,4 +1,4 @@
-package visor
+package config
 
 import (
 	"encoding/json"
@@ -37,12 +37,12 @@ func init() {
 }
 
 var updateConfigCmd = &cobra.Command{
-	Use:   "update-config",
+	Use:   "update",
 	Short: "Updates a config file",
 	PreRun: func(_ *cobra.Command, _ []string) {
 		var err error
 		if output, err = filepath.Abs(addOutput); err != nil {
-			logger.WithError(err).Fatal("Invalid output provided.")
+			logger.WithError(err).Fatal("Invalid config output.")
 		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
@@ -76,12 +76,13 @@ var updateConfigCmd = &cobra.Command{
 			}
 		}
 
-		if environment == "production" {
+		switch environment {
+		case "production":
 			visorconfig.SetDefaultProductionValues(conf)
-		}
-
-		if environment == "testing" {
+		case "testing":
 			visorconfig.SetDefaultTestingValues(conf)
+		default:
+			logger.Fatal("Unrecognized environment value: ", environment)
 		}
 
 		if resetHypervisor {

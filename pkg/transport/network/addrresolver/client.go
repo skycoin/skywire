@@ -57,7 +57,6 @@ type APIClient interface {
 	BindSTCPR(ctx context.Context, port string) error
 	BindSUDPH(filter *pfilter.PacketFilter, handshake Handshake) (<-chan RemoteVisor, error)
 	Resolve(ctx context.Context, netType string, pk cipher.PubKey) (VisorData, error)
-	Health(ctx context.Context) (int, error)
 	Close() error
 }
 
@@ -376,25 +375,6 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 	}
 
 	return resolveResp, nil
-}
-
-func (c *httpClient) Health(ctx context.Context) (int, error) {
-	if !c.isReady() {
-		return http.StatusNotFound, nil
-	}
-
-	resp, err := c.Get(ctx, "/health")
-	if err != nil {
-		return 0, err
-	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			c.log.WithError(err).Warn("Failed to close response body")
-		}
-	}()
-
-	return resp.StatusCode, nil
 }
 
 func (c *httpClient) isReady() bool {
