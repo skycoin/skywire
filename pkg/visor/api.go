@@ -5,11 +5,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ccding/go-stun/stun"
@@ -40,6 +39,7 @@ type API interface {
 	StartApp(appName string) error
 	StopApp(appName string) error
 	SetAppDetailedStatus(appName, state string) error
+	SetAppError(appName, stateErr string) error
 	RestartApp(appName string) error
 	SetAutoStart(appName string, autostart bool) error
 	SetAppPassword(appName, password string) error
@@ -166,7 +166,11 @@ type Summary struct {
 	MinHops              uint16                           `json:"min_hops"`
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 	SkybianBuildVersion  string                           `json:"skybian_build_version"`
+	BuildTag             string                           `json:"build_tag"`
 }
+
+// BuildTag variable that will set when building binary
+var BuildTag string
 
 // Summary implements API.
 func (v *Visor) Summary() (*Summary, error) {
@@ -214,88 +218,44 @@ func (v *Visor) Summary() (*Summary, error) {
 		MinHops:              v.conf.Routing.MinHops,
 		PersistentTransports: pts,
 		SkybianBuildVersion:  skybianBuildVersion,
+		BuildTag:             BuildTag,
 	}
 
 	return summary, nil
 }
 
-// collectHealthStats for given services and return health statuses
-func (v *Visor) collectHealthStats(services map[string]HealthCheckable) map[string]int {
-	type healthResponse struct {
-		name   string
-		status int
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), InnerHealthTimeout)
-	defer cancel()
-
-	responses := make(chan healthResponse, len(services))
-
-	var wg sync.WaitGroup
-	wg.Add(len(services))
-	for name, service := range services {
-		go func(name string, service HealthCheckable) {
-			defer wg.Done()
-
-			if service == nil {
-				responses <- healthResponse{name, http.StatusNotFound}
-				return
-			}
-
-			status, err := service.Health(ctx)
-			if err != nil {
-				v.log.WithError(err).Warnf("Failed to check service health, service name: %s", name)
-				status = http.StatusInternalServerError
-			}
-
-			responses <- healthResponse{name, status}
-		}(name, service)
-	}
-	wg.Wait()
-
-	close(responses)
-
-	results := make(map[string]int)
-	for response := range responses {
-		results[response.name] = response.status
-	}
-
-	return results
+// HealthInfo carries information about visor's services health represented as boolean value (i32 value)
+type HealthInfo struct {
+	ServicesHealth bool `json:"services_health,omitempty"`
 }
 
-// HealthInfo carries information about visor's external services health represented as http status codes
-type HealthInfo struct {
-	TransportDiscovery int `json:"transport_discovery"`
-	RouteFinder        int `json:"route_finder"`
-	SetupNode          int `json:"setup_node"`
-	UptimeTracker      int `json:"uptime_tracker"`
-	AddressResolver    int `json:"address_resolver"`
+// internalHealthInfo contains information of the status of the visor itself.
+// It's thread-safe, and could be used in multiple goroutines
+type internalHealthInfo int32
+
+// newHealthInfo creates
+func newInternalHealthInfo() *internalHealthInfo {
+	return new(internalHealthInfo)
+}
+
+// Set sets the internalHealthInfo status to true.
+func (h *internalHealthInfo) set() {
+	atomic.StoreInt32((*int32)(h), 1)
+}
+
+// Unset sets the internalHealthInfo to false.
+func (h *internalHealthInfo) unset() {
+	atomic.StoreInt32((*int32)(h), 0)
+}
+
+// value gets the internalHealthInfo value
+func (h *internalHealthInfo) value() bool {
+	return atomic.LoadInt32((*int32)(h)) == 1
 }
 
 // Health implements API.
 func (v *Visor) Health() (*HealthInfo, error) {
-	services := map[string]HealthCheckable{
-		"td": v.tpDiscClient(),
-		"rf": v.routeFinderClient(),
-		"ut": v.uptimeTrackerClient(),
-		"ar": v.addressResolverClient(),
-	}
-
-	stats := v.collectHealthStats(services)
-	healthInfo := &HealthInfo{
-		TransportDiscovery: stats["td"],
-		RouteFinder:        stats["rf"],
-		UptimeTracker:      stats["ut"],
-		AddressResolver:    stats["ar"],
-	}
-	// TODO(evanlinjin): This should actually poll the setup nodes services.
-	if len(v.conf.Routing.SetupNodes) == 0 {
-		healthInfo.SetupNode = http.StatusNotFound
-	} else {
-		healthInfo.SetupNode = http.StatusOK
-	}
-
-	return healthInfo, nil
+	return &HealthInfo{ServicesHealth: v.isServicesHealthy.value()}, nil
 }
 
 // Uptime implements API.
@@ -332,7 +292,7 @@ func (v *Visor) StartApp(appName string) error {
 
 // StopApp implements API.
 func (v *Visor) StopApp(appName string) error {
-	_, err := v.appL.StopApp(appName)
+	_, err := v.appL.StopApp(appName) //nolint:errcheck
 	return err
 }
 
@@ -349,9 +309,22 @@ func (v *Visor) SetAppDetailedStatus(appName, status string) error {
 	return nil
 }
 
+// SetAppError implements API.
+func (v *Visor) SetAppError(appName, appErr string) error {
+	proc, ok := v.procM.ProcByName(appName)
+	if !ok {
+		return ErrAppProcNotRunning
+	}
+
+	v.log.Infof("Setting error %v for app %v", appErr, appName)
+	proc.SetError(appErr)
+
+	return nil
+}
+
 // RestartApp implements API.
 func (v *Visor) RestartApp(appName string) error {
-	if _, ok := v.procM.ProcByName(appName); ok {
+	if _, ok := v.procM.ProcByName(appName); ok { //nolint:errcheck
 		v.log.Infof("Updated %v password, restarting it", appName)
 		return v.appL.RestartApp(appName)
 	}
@@ -511,7 +484,11 @@ func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.Connection
 
 // TransportTypes implements API.
 func (v *Visor) TransportTypes() ([]string, error) {
-	return v.tpM.Networks(), nil
+	var types []string
+	for _, netType := range v.tpM.Networks() {
+		types = append(types, string(netType))
+	}
+	return types, nil
 }
 
 // Transports implements API.

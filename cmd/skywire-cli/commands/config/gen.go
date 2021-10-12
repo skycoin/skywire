@@ -1,4 +1,4 @@
-package visor
+package config
 
 import (
 	"encoding/json"
@@ -43,7 +43,7 @@ func init() {
 }
 
 var genConfigCmd = &cobra.Command{
-	Use:   "gen-config",
+	Use:   "gen",
 	Short: "Generates a config file",
 	PreRun: func(_ *cobra.Command, _ []string) {
 		var err error

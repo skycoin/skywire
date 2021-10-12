@@ -66,15 +66,15 @@ const (
 	DefaultDmsgPtyCLINet        = "unix"
 )
 
+// Default Skywire-TCP constants.
+const (
+	DefaultSTCPAddr = ":7777"
+)
+
 // DefaultDmsgPtyCLIAddr determines default CLI address per each platform
 func DefaultDmsgPtyCLIAddr() string {
 	return dmsgpty.DefaultCLIAddr()
 }
-
-// Default STCP constants.
-const (
-	DefaultSTCPAddr = ":7777"
-)
 
 // Default skywire app constants.
 const (
