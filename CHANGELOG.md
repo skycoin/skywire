@@ -16,9 +16,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - changed proxy_discovery_addr field to service_discovery
 - updated UI
 - removed `--public` flag from `skywire-cli visor add-tp` command
+- removed `skywire-cli visor gen-config` and `skywire-cli visor update-config` subcommands.
 - replaced stcp field to skywire-tcp in config and comments
 - replaced local_address field to listening_address in config
 - replaced port field to dmsg_port in config
+- updated visor health status checks, no longer querying multiple external services endpoints.
+
 
 ### Added
 
@@ -28,7 +31,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - added public_autoconnect field to transport section
 - added transport_setup_nodes field to transport section
 - added MinHops field to V1Routing section of config
-- added connection_duration field to `/api/visor/{pk}/apps/vpn-client/connections` 
+- added `skywire-cli config` subcommand
+- added connection_duration field to `/api/visor/{pk}/apps/vpn-client/connections`
 
 ## 0.2.1 - 2020.04.07
 

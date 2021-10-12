@@ -52,7 +52,6 @@ type HTTPError struct {
 // Client implements route finding operations.
 type Client interface {
 	FindRoutes(ctx context.Context, rts []routing.PathEdges, opts *RouteOptions) (map[routing.PathEdges][][]routing.Hop, error)
-	Health(ctx context.Context) (int, error)
 }
 
 // APIClient implements Client interface
@@ -134,29 +133,6 @@ func (c *apiClient) FindRoutes(ctx context.Context, rts []routing.PathEdges, opt
 	}
 
 	return paths, nil
-}
-
-// Health checks route finder health.
-func (c *apiClient) Health(ctx context.Context) (int, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.addr+"/health", nil)
-	if err != nil {
-		return 0, err
-	}
-
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return 0, err
-	}
-
-	if res != nil {
-		defer func() {
-			if err := res.Body.Close(); err != nil {
-				log.WithError(err).Warn("Failed to close HTTP response body")
-			}
-		}()
-	}
-
-	return res.StatusCode, nil
 }
 
 func sanitizedAddr(addr string) string {
