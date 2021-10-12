@@ -64,7 +64,7 @@ func (s *networkStats) BandwidthReceived() uint64 {
 
 func (s *networkStats) AddBandwidthReceived(amount uint64) {
 	atomic.AddUint64(&s.bandwidthReceived, amount)
-	atomic.AddUint64(&s.bandwidthReceived, amount)
+	atomic.AddUint64(&s.totalBandwidthReceived, amount)
 }
 
 func (s *networkStats) RemoteThroughput() int64 {

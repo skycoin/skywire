@@ -248,10 +248,12 @@ func (tm *Manager) cleanupTransports(ctx context.Context) {
 }
 
 // Networks returns all the network types contained within the TransportManager.
-func (tm *Manager) Networks() []string {
-	var nets []string
+func (tm *Manager) Networks() []network.Type {
+	tm.mx.Lock()
+	defer tm.mx.Unlock()
+	var nets []network.Type
 	for netType := range tm.netClients {
-		nets = append(nets, string(netType))
+		nets = append(nets, netType)
 	}
 	return nets
 }
@@ -412,7 +414,7 @@ func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, netT
 	}
 
 	tm.mx.RLock()
-	client, ok := tm.netClients[network.Type(netType)]
+	client, ok := tm.netClients[netType]
 	tm.mx.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("client not found for the type %s", netType)
