@@ -279,17 +279,19 @@ func (c *Client) RemoveDirectRoute(ip net.IP) error {
 }
 
 func (c *Client) setSysPrivileges() error {
-	c.suidMu.Lock()
+	if runtime.GOOS != "windows" {
+		c.suidMu.Lock()
 
-	// we don't release the lock here to avoid races,
-	// lock will be released after reverting system privileges
+		// we don't release the lock here to avoid races,
+		// lock will be released after reverting system privileges
 
-	suid, err := setupClientSysPrivileges()
-	if err != nil {
-		return err
+		suid, err := setupClientSysPrivileges()
+		if err != nil {
+			return err
+		}
+
+		c.suid = suid
 	}
-
-	c.suid = suid
 
 	return nil
 }
@@ -348,6 +350,7 @@ func (c *Client) serveConn(conn net.Conn) error {
 	fmt.Printf("Local TUN IP: %s\n", tunIP.String())
 	fmt.Printf("Local TUN gateway: %s\n", tunGateway.String())
 
+	fmt.Println("SETUP SYS PRIVILEGE")
 	if err := c.setSysPrivileges(); err != nil {
 		return fmt.Errorf("failed to setup system privileges: %w", err)
 	}
@@ -355,8 +358,11 @@ func (c *Client) serveConn(conn net.Conn) error {
 	// this call is important. it will either run on an error down the line,
 	// or, in case VPN sessions finishes, it will be the last call in deferred stack,
 	// releasing system privileges after cleanup
-	defer c.releaseSysPrivileges()
+	defer func() {
+		c.releaseSysPrivileges()
+	}()
 
+	fmt.Println("CREATING TUN INTERFACE")
 	tun, err := c.createTUN()
 	if err != nil {
 		return fmt.Errorf("error allocating TUN interface: %w", err)
@@ -369,6 +375,7 @@ func (c *Client) serveConn(conn net.Conn) error {
 
 	fmt.Printf("Allocated TUN %s: %v\n", tun.Name(), err)
 
+	fmt.Printf("Setting up TUN device with: %s and Gateway %s", tunIP, tunGateway)
 	if err := c.setupTUN(tunIP, tunGateway); err != nil {
 		return fmt.Errorf("error setting up TUN %s: %w", tun.Name(), err)
 	}
@@ -378,8 +385,10 @@ func (c *Client) serveConn(conn net.Conn) error {
 		// interface doesn't get its values immediately. Reason is unknown,
 		// all credits go to Microsoft. Delay may be different, this one is
 		// fairly large to cover not really performant systems.
-		time.Sleep(10 * time.Second)
+		time.Sleep(13 * time.Second)
 	}
+
+	fmt.Printf("TUN %s all sets", tunIP)
 
 	isNewRoute := true
 	if c.cfg.Killswitch {
