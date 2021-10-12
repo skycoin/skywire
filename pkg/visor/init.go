@@ -606,7 +606,6 @@ func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
 				v.isServicesHealthy.unset()
 				log.WithError(err).Warn("Failed to update visor uptime.")
 			} else {
-				log.Info("updating visor health status")
 				v.isServicesHealthy.set()
 			}
 		}
