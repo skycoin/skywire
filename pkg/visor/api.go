@@ -5,11 +5,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ccding/go-stun/stun"
@@ -167,7 +166,11 @@ type Summary struct {
 	MinHops              uint16                           `json:"min_hops"`
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 	SkybianBuildVersion  string                           `json:"skybian_build_version"`
+	BuildTag             string                           `json:"build_tag"`
 }
+
+// BuildTag variable that will set when building binary
+var BuildTag string
 
 // Summary implements API.
 func (v *Visor) Summary() (*Summary, error) {
@@ -215,88 +218,44 @@ func (v *Visor) Summary() (*Summary, error) {
 		MinHops:              v.conf.Routing.MinHops,
 		PersistentTransports: pts,
 		SkybianBuildVersion:  skybianBuildVersion,
+		BuildTag:             BuildTag,
 	}
 
 	return summary, nil
 }
 
-// collectHealthStats for given services and return health statuses
-func (v *Visor) collectHealthStats(services map[string]HealthCheckable) map[string]int {
-	type healthResponse struct {
-		name   string
-		status int
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), InnerHealthTimeout)
-	defer cancel()
-
-	responses := make(chan healthResponse, len(services))
-
-	var wg sync.WaitGroup
-	wg.Add(len(services))
-	for name, service := range services {
-		go func(name string, service HealthCheckable) {
-			defer wg.Done()
-
-			if service == nil {
-				responses <- healthResponse{name, http.StatusNotFound}
-				return
-			}
-
-			status, err := service.Health(ctx)
-			if err != nil {
-				v.log.WithError(err).Warnf("Failed to check service health, service name: %s", name)
-				status = http.StatusInternalServerError
-			}
-
-			responses <- healthResponse{name, status}
-		}(name, service)
-	}
-	wg.Wait()
-
-	close(responses)
-
-	results := make(map[string]int)
-	for response := range responses {
-		results[response.name] = response.status
-	}
-
-	return results
+// HealthInfo carries information about visor's services health represented as boolean value (i32 value)
+type HealthInfo struct {
+	ServicesHealth bool `json:"services_health,omitempty"`
 }
 
-// HealthInfo carries information about visor's external services health represented as http status codes
-type HealthInfo struct {
-	TransportDiscovery int `json:"transport_discovery"`
-	RouteFinder        int `json:"route_finder"`
-	SetupNode          int `json:"setup_node"`
-	UptimeTracker      int `json:"uptime_tracker"`
-	AddressResolver    int `json:"address_resolver"`
+// internalHealthInfo contains information of the status of the visor itself.
+// It's thread-safe, and could be used in multiple goroutines
+type internalHealthInfo int32
+
+// newHealthInfo creates
+func newInternalHealthInfo() *internalHealthInfo {
+	return new(internalHealthInfo)
+}
+
+// Set sets the internalHealthInfo status to true.
+func (h *internalHealthInfo) set() {
+	atomic.StoreInt32((*int32)(h), 1)
+}
+
+// Unset sets the internalHealthInfo to false.
+func (h *internalHealthInfo) unset() {
+	atomic.StoreInt32((*int32)(h), 0)
+}
+
+// value gets the internalHealthInfo value
+func (h *internalHealthInfo) value() bool {
+	return atomic.LoadInt32((*int32)(h)) == 1
 }
 
 // Health implements API.
 func (v *Visor) Health() (*HealthInfo, error) {
-	services := map[string]HealthCheckable{
-		"td": v.tpDiscClient(),
-		"rf": v.routeFinderClient(),
-		"ut": v.uptimeTrackerClient(),
-		"ar": v.addressResolverClient(),
-	}
-
-	stats := v.collectHealthStats(services)
-	healthInfo := &HealthInfo{
-		TransportDiscovery: stats["td"],
-		RouteFinder:        stats["rf"],
-		UptimeTracker:      stats["ut"],
-		AddressResolver:    stats["ar"],
-	}
-	// TODO(evanlinjin): This should actually poll the setup nodes services.
-	if len(v.conf.Routing.SetupNodes) == 0 {
-		healthInfo.SetupNode = http.StatusNotFound
-	} else {
-		healthInfo.SetupNode = http.StatusOK
-	}
-
-	return healthInfo, nil
+	return &HealthInfo{ServicesHealth: v.isServicesHealthy.value()}, nil
 }
 
 // Uptime implements API.
