@@ -133,7 +133,7 @@ func registerModules(logger *logging.MasterLogger) {
 	pv = maker("public_visors", initPublicVisors, &tr)
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
 	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl)
-	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc)
+	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &pty,
 		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC)
 
