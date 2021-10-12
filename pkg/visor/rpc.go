@@ -170,17 +170,30 @@ func (r *RPC) Overview(_ *struct{}, out *Overview) (err error) {
 	<<< APP MANAGEMENT >>>
 */
 
-// SetAppDetailedStatusIn is input for SetAppDetailedStatus.
-type SetAppDetailedStatusIn struct {
+// SetAppStatusIn is input for SetAppDetailedStatus.
+type SetAppStatusIn struct {
 	AppName string
 	Status  string
 }
 
+// SetAppErrorIn is input for SetAppError.
+type SetAppErrorIn struct {
+	AppName string
+	Err     string
+}
+
 // SetAppDetailedStatus sets app's detailed status.
-func (r *RPC) SetAppDetailedStatus(in *SetAppDetailedStatusIn, _ *struct{}) (err error) {
+func (r *RPC) SetAppDetailedStatus(in *SetAppStatusIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppDetailedStatus", in)(nil, &err)
 
 	return r.visor.SetAppDetailedStatus(in.AppName, in.Status)
+}
+
+// SetAppError sets app's error.
+func (r *RPC) SetAppError(in *SetAppErrorIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppError", in)(nil, &err)
+
+	return r.visor.SetAppError(in.AppName, in.Err)
 }
 
 // Apps returns list of Apps registered on the Visor.

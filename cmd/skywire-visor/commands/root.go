@@ -84,6 +84,7 @@ func runVisor(args []string) {
 		WithField("systemd", restartCtx.Systemd()).
 		WithField("parent_systemd", restartCtx.ParentSystemd()).
 		WithField("skybian_build_version", os.Getenv("SKYBIAN_BUILD_VERSION")).
+		WithField("build_tag", visor.BuildTag).
 		Debugf("Process info")
 
 	detachProcess(delayDuration, log)
