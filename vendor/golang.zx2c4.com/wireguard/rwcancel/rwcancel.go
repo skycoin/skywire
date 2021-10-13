@@ -1,8 +1,13 @@
+//go:build !windows
+// +build !windows
+
 /* SPDX-License-Identifier: MIT
  *
- * Copyright (C) 2017-2019 WireGuard LLC. All Rights Reserved.
+ * Copyright (C) 2017-2021 WireGuard LLC. All Rights Reserved.
  */
 
+// Package rwcancel implements cancelable read/write operations on
+// a file descriptor.
 package rwcancel
 
 import (
@@ -12,13 +17,6 @@ import (
 
 	"golang.org/x/sys/unix"
 )
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
 
 type RWCancel struct {
 	fd            int
@@ -42,27 +40,16 @@ func NewRWCancel(fd int) (*RWCancel, error) {
 }
 
 func RetryAfterError(err error) bool {
-	if pe, ok := err.(*os.PathError); ok {
-		err = pe.Err
-	}
-	if errno, ok := err.(syscall.Errno); ok {
-		switch errno {
-		case syscall.EAGAIN, syscall.EINTR:
-			return true
-		}
-
-	}
-	return false
+	return errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EINTR)
 }
 
 func (rw *RWCancel) ReadyRead() bool {
-	closeFd := int(rw.closingReader.Fd())
-	fdset := fdSet{}
-	fdset.set(rw.fd)
-	fdset.set(closeFd)
+	closeFd := int32(rw.closingReader.Fd())
+
+	pollFds := []unix.PollFd{{Fd: int32(rw.fd), Events: unix.POLLIN}, {Fd: closeFd, Events: unix.POLLIN}}
 	var err error
 	for {
-		err = unixSelect(max(rw.fd, closeFd)+1, &fdset.FdSet, nil, nil, nil)
+		_, err = unix.Poll(pollFds, -1)
 		if err == nil || !RetryAfterError(err) {
 			break
 		}
@@ -70,20 +57,18 @@ func (rw *RWCancel) ReadyRead() bool {
 	if err != nil {
 		return false
 	}
-	if fdset.check(closeFd) {
+	if pollFds[1].Revents != 0 {
 		return false
 	}
-	return fdset.check(rw.fd)
+	return pollFds[0].Revents != 0
 }
 
 func (rw *RWCancel) ReadyWrite() bool {
-	closeFd := int(rw.closingReader.Fd())
-	fdset := fdSet{}
-	fdset.set(rw.fd)
-	fdset.set(closeFd)
+	closeFd := int32(rw.closingReader.Fd())
+	pollFds := []unix.PollFd{{Fd: int32(rw.fd), Events: unix.POLLOUT}, {Fd: closeFd, Events: unix.POLLOUT}}
 	var err error
 	for {
-		err = unixSelect(max(rw.fd, closeFd)+1, nil, &fdset.FdSet, nil, nil)
+		_, err = unix.Poll(pollFds, -1)
 		if err == nil || !RetryAfterError(err) {
 			break
 		}
@@ -91,10 +76,11 @@ func (rw *RWCancel) ReadyWrite() bool {
 	if err != nil {
 		return false
 	}
-	if fdset.check(closeFd) {
+
+	if pollFds[1].Revents != 0 {
 		return false
 	}
-	return fdset.check(rw.fd)
+	return pollFds[0].Revents != 0
 }
 
 func (rw *RWCancel) Read(p []byte) (n int, err error) {
@@ -104,7 +90,7 @@ func (rw *RWCancel) Read(p []byte) (n int, err error) {
 			return n, err
 		}
 		if !rw.ReadyRead() {
-			return 0, errors.New("fd closed")
+			return 0, os.ErrClosed
 		}
 	}
 }
@@ -116,7 +102,7 @@ func (rw *RWCancel) Write(p []byte) (n int, err error) {
 			return n, err
 		}
 		if !rw.ReadyWrite() {
-			return 0, errors.New("fd closed")
+			return 0, os.ErrClosed
 		}
 	}
 }
@@ -124,4 +110,9 @@ func (rw *RWCancel) Write(p []byte) (n int, err error) {
 func (rw *RWCancel) Cancel() (err error) {
 	_, err = rw.closingWriter.Write([]byte{0})
 	return
+}
+
+func (rw *RWCancel) Close() {
+	rw.closingReader.Close()
+	rw.closingWriter.Close()
 }
