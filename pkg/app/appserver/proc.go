@@ -7,6 +7,7 @@ import (
 	"net/rpc"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -239,10 +240,20 @@ func (p *Proc) Stop() error {
 	}
 
 	if p.cmd.Process != nil {
-		err := p.cmd.Process.Signal(os.Interrupt)
-		if err != nil {
-			return err
+		if runtime.GOOS != "windows" {
+			err := p.cmd.Process.Signal(os.Interrupt)
+			if err != nil {
+				return err
+			}
+		} else {
+			// because Windows has no concept of Signals, and as such interrupts aren't sendable
+			// CTRL_C or CTRL_BREAK are key events on windows,
+			err := p.cmd.Process.Kill()
+			if err != nil {
+				return err
+			}
 		}
+
 	}
 
 	// deregister discovery service
