@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -52,6 +53,8 @@ type Client struct {
 	tunMu      sync.Mutex
 	tun        TUNDevice
 	tunCreated bool
+
+	connectedDuration int64
 }
 
 // NewClient creates VPN client instance.
@@ -176,10 +179,13 @@ func (c *Client) Serve() error {
 			fmt.Printf("Failed to close TUN: %v\n", err)
 		}
 
-		fmt.Println("Closed TUN")
+		c.log.Info("Closing TUN")
 	}()
 
-	defer c.setAppStatus(ClientStatusShuttingDown)
+	defer func() {
+		c.setAppStatus(ClientStatusShuttingDown)
+		c.resetConnDuration()
+	}()
 
 	c.setAppStatus(ClientStatusConnecting)
 
@@ -205,8 +211,10 @@ func (c *Client) Serve() error {
 			case errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
 				errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound:
 				c.setAppError(err)
+				c.resetConnDuration()
 				return err
 			default:
+				c.resetConnDuration()
 				c.setAppStatus(ClientStatusReconnecting)
 				c.setAppError(errTimeout)
 				fmt.Println("\nConnection broke, reconnecting...")
@@ -252,6 +260,17 @@ func (c *Client) AddDirectRoute(ip net.IP) error {
 	return c.setupDirectRoute(ip)
 }
 
+func (c *Client) removeDirectRouteFn(ip net.IP, i int) error {
+	c.directIPs = append(c.directIPs[:i], c.directIPs[i+1:]...)
+
+	if err := c.setSysPrivileges(); err != nil {
+		return fmt.Errorf("failed to setup system privileges: %w", err)
+	}
+	defer c.releaseSysPrivileges()
+
+	return c.removeDirectRoute(ip)
+}
+
 // RemoveDirectRoute removes direct route. Packets destined to `ip` will
 // go through VPN.
 func (c *Client) RemoveDirectRoute(ip net.IP) error {
@@ -260,17 +279,9 @@ func (c *Client) RemoveDirectRoute(ip net.IP) error {
 
 	for i, storedIP := range c.directIPs {
 		if ip.Equal(storedIP) {
-			c.directIPs = append(c.directIPs[:i], c.directIPs[i+1:]...)
-
-			if err := c.setSysPrivileges(); err != nil {
-				return fmt.Errorf("failed to setup system privileges: %w", err)
-			}
-			defer c.releaseSysPrivileges()
-
-			if err := c.removeDirectRoute(ip); err != nil {
+			if err := c.removeDirectRouteFn(ip, i); err != nil {
 				return err
 			}
-
 			break
 		}
 	}
@@ -406,6 +417,8 @@ func (c *Client) serveConn(conn net.Conn) error {
 	}
 
 	c.setAppStatus(ClientStatusRunning)
+	c.resetConnDuration()
+	t := time.NewTicker(time.Second)
 
 	defer func() {
 		if !c.cfg.Killswitch {
@@ -436,10 +449,19 @@ func (c *Client) serveConn(conn net.Conn) error {
 	}()
 
 	// only one side may fail here, so we wait till at least one fails
-	select {
-	case <-connToTunDoneCh:
-	case <-tunToConnCh:
-	case <-c.closeC:
+serveLoop:
+	for {
+		select {
+		case <-connToTunDoneCh:
+			break serveLoop
+		case <-tunToConnCh:
+			break serveLoop
+		case <-c.closeC:
+			break serveLoop
+		case <-t.C:
+			atomic.AddInt64(&c.connectedDuration, 1)
+			c.setConnectionDuration()
+		}
 	}
 
 	// here we setup system privileges again, so deferred calls may be done safely
@@ -728,6 +750,12 @@ func (c *Client) setAppStatus(status ClientStatus) {
 	}
 }
 
+func (c *Client) setConnectionDuration() {
+	if err := c.appCl.SetConnectionDuration(atomic.LoadInt64(&c.connectedDuration)); err != nil {
+		fmt.Printf("Failed to set connection duration: %v\n", err)
+	}
+}
+
 func (c *Client) setAppError(appErr error) {
 	if err := c.appCl.SetError(appErr.Error()); err != nil {
 		fmt.Printf("Failed to set error %v: %v\n", appErr, err)
@@ -742,6 +770,11 @@ func (c *Client) isClosed() bool {
 	}
 
 	return false
+}
+
+func (c *Client) resetConnDuration() {
+	atomic.StoreInt64(&c.connectedDuration, 0)
+	c.setConnectionDuration()
 }
 
 func ipFromEnv(key string) (net.IP, error) {
