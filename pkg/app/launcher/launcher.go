@@ -196,7 +196,10 @@ func (l *Launcher) AppStates() []*AppState {
 		}
 		if proc, ok := l.procM.ProcByName(app.Name); ok {
 			state.DetailedStatus = proc.DetailedStatus()
-			state.Status = AppStatusRunning
+			connSummary := proc.ConnectionsSummary()
+			if connSummary != nil {
+				state.Status = AppStatusRunning
+			}
 		}
 		states = append(states, state)
 	}
