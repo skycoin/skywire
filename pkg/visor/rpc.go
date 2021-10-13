@@ -535,10 +535,12 @@ func (r *RPC) SetMinHops(n *uint16, _ *struct{}) (err error) {
 }
 
 // GetPersistentTransports gets persistent_transports from visor's routing config
-func (r *RPC) GetPersistentTransports(n *uint16, _ *struct{}) (pTs []transport.PersistentTransports, err error) {
-	defer rpcutil.LogCall(r.log, "GetPersistentTransports", *n)
-	pTs, err = r.visor.GetPersistentTransports()
-	return pTs, err
+func (r *RPC) GetPersistentTransports(_ *struct{}, out *[]transport.PersistentTransports) (err error) {
+	defer rpcutil.LogCall(r.log, "GetPersistentTransports", nil)(out, &err)
+
+	pTs, err := r.visor.GetPersistentTransports()
+	*out = pTs
+	return err
 }
 
 // SetPersistentTransports sets persistent_transports in visor's routing config
