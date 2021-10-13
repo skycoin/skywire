@@ -130,10 +130,10 @@ func registerModules(logger *logging.MasterLogger) {
 	cli = maker("cli", initCLI)
 	hvs = maker("hypervisors", initHypervisors, &dmsgC)
 	ut = maker("uptime_tracker", initUptimeTracker)
-	pv = maker("public_visors", initPublicVisors, &tr)
+	pv = maker("public_autoconnect", initPublicAutoconnect, &tr)
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
 	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl)
-	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc)
+	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &pty,
 		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC)
 
@@ -666,7 +666,7 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initPublicVisors(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if !v.conf.Transport.PublicAutoconnect {
 		return nil
 	}
