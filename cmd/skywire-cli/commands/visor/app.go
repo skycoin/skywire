@@ -41,6 +41,9 @@ var lsAppsCmd = &cobra.Command{
 			if state.Status == launcher.AppStatusRunning {
 				status = "running"
 			}
+			if state.Status == launcher.AppStatusErrored {
+				status = "errored"
+			}
 			_, err = fmt.Fprintf(w, "%s\t%s\t%t\t%s\n", state.Name, strconv.Itoa(int(state.Port)), state.AutoStart, status)
 			internal.Catch(err)
 		}
