@@ -613,7 +613,6 @@ func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
 				v.isServicesHealthy.unset()
 				log.WithError(err).Warn("Failed to update visor uptime.")
 			} else {
-				log.Info("updating visor health status")
 				v.isServicesHealthy.set()
 			}
 		}
@@ -772,7 +771,7 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initPublicVisors(ctx context.Context, v *Visor, log *logging.Logger) error {
-	if !v.conf.Transport.AutoconnectPublic {
+	if !v.conf.Transport.PublicAutoconnect {
 		return nil
 	}
 	serviceDisc := v.conf.Launcher.ServiceDisc

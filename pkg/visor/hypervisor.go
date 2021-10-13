@@ -247,6 +247,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/transports/{tid}", hv.getTransport())
 				r.Delete("/visors/{pk}/transports/{tid}", hv.deleteTransport())
 				r.Delete("/visors/{pk}/transports/", hv.deleteTransports())
+				r.Put("/visors/{pk}/public-autoconnect", hv.putPublicAutoconnect())
 				r.Get("/visors/{pk}/routes", hv.getRoutes())
 				r.Post("/visors/{pk}/routes", hv.postRoute())
 				r.Get("/visors/{pk}/routes/{rid}", hv.getRoute())
@@ -863,6 +864,30 @@ func (hv *Hypervisor) deleteTransports() http.HandlerFunc {
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, response)
 	})
+}
+
+func (hv *Hypervisor) putPublicAutoconnect() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var reqBody publicAutoconnectReq
+
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("putPublicAutoconnect request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+
+		if err := ctx.API.SetPublicAutoconnect(reqBody.PublicAutoconnect); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
+type publicAutoconnectReq struct {
+	PublicAutoconnect bool `json:"public_autoconnect"`
 }
 
 type routingRuleResp struct {
