@@ -87,11 +87,11 @@
     "not-found": "Visor not found.",
     "statuses": {
       "online": "Online",
-      "online-tooltip": "Visor is online.",
+      "online-tooltip": "The visor is online.",
       "partially-online": "Online with problems",
-      "partially-online-tooltip": "Visor is online but not all services are working. For more information, open the details page and check the \"Health info\" section.",
+      "partially-online-tooltip": "The visor is online, but disconnected from the uptime tracker.",
       "offline": "Offline",
-      "offline-tooltip": "Visor is offline."
+      "offline-tooltip": "The visor is offline."
     },
     "details": {
       "node-info": {
@@ -118,6 +118,19 @@
           "week": "1 week",
           "weeks": "{{ time }} weeks"
         }
+      },
+      "transports-info": {
+        "title": "Transports Info",
+        "autoconnect": "Autoconnect:",
+        "autoconnect-info": "When enabled, the visor will automatically create the transports needed when a connection to a public visor is requested. If disabled, the transports will have to be created before being able to make the connection.",
+        "enabled": "Enabled",
+        "disabled": "Disabled",
+        "enable-button": "Enable",
+        "disable-button": "Disable",
+        "enable-confirmation": "Are you sure you want to enable the autoconnect feature?",
+        "disable-confirmation": "Are you sure you want to disable the autoconnect feature?",
+        "enable-done": "The autoconnect feature has been enabled.",
+        "disable-done": "The autoconnect feature has been disabled."
       },
       "router-info": {
         "title": "Router Info",
