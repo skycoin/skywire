@@ -89,7 +89,7 @@
       "online": "Online",
       "online-tooltip": "El visor se encuentra online.",
       "partially-online": "Online con problemas",
-      "partially-online-tooltip": "El visor se encuentra online pero no todos los servicios están funcionando. Para más información, abra la página de detalles y consulte la sección \"Información de salud\".",
+      "partially-online-tooltip": "El visor se encuentra online, pero desconectado del uptime tracker.",
       "offline": "Offline",
       "offline-tooltip": "El visor se encuentra offline."
     },
@@ -118,6 +118,19 @@
           "week": "1 semana",
           "weeks": "{{ time }} semanas"
         }
+      },
+      "transports-info": {
+        "title": "Información de Transportes",
+        "autoconnect": "Autoconectar:",
+        "autoconnect-info": "Al activarse, el visor creará automáticamente los transportes necesarios cuando se solicite la conexión a un visor público. Al desactivarse, los transportes deberán ser creados antes de poder establecer la conexión.",
+        "enabled": "Activado",
+        "disabled": "Desactivado",
+        "enable-button": "Activar",
+        "disable-button": "Desactivar",
+        "enable-confirmation": "¿Seguro que desea activar la función de autoconectar?",
+        "disable-confirmation": "¿Seguro que desea desactivar la función de autoconectar?",
+        "enable-done": "La función de autoconectar ha sido activada.",
+        "disable-done": "La función de autoconectar ha sido desactivada."
       },
       "router-info": {
         "title": "Información del Enrutador",
