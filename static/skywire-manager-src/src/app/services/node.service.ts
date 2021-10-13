@@ -496,6 +496,7 @@ export class NodeService {
           // Basic data.
           node.online = response.online;
           node.localPk = response.overview.local_pk;
+          node.autoconnectTransports = response.public_autoconnect;
 
           // Ip.
           if (response.overview && response.overview.local_ip && (response.overview.local_ip as string).trim()) {
@@ -519,12 +520,7 @@ export class NodeService {
 
           // Health data.
           node.health = {
-            status: 200,
-            addressResolver: response.health.address_resolver,
-            routeFinder: response.health.route_finder,
-            setupNode: response.health.setup_node,
-            transportDiscovery: response.health.transport_discovery,
-            uptimeTracker: response.health.uptime_tracker,
+            servicesHealth: response.health.services_health,
           };
 
           // DMSG info.
@@ -616,6 +612,7 @@ export class NodeService {
         node.skybianBuildVersion = response.skybian_build_version;
         node.isSymmeticNat = response.overview.is_symmetic_nat;
         node.publicIp = response.overview.public_ip;
+        node.autoconnectTransports = response.public_autoconnect;
 
         // Ip.
         if (response.overview.local_ip && (response.overview.local_ip as string).trim()) {
@@ -630,12 +627,7 @@ export class NodeService {
 
         // Health info.
         node.health = {
-          status: 200,
-          addressResolver: response.health.address_resolver,
-          routeFinder: response.health.route_finder,
-          setupNode: response.health.setup_node,
-          transportDiscovery: response.health.transport_discovery,
-          uptimeTracker: response.health.uptime_tracker,
+          servicesHealth: response.health.services_health,
         };
 
         // Transports.
@@ -807,71 +799,10 @@ export class NodeService {
   }
 
   /**
-   * Checks the data of a node and returns an object indicating the state of its services.
+   * Checks if the health status of a node is ok or not, which is if it is connected to the
+   * uptime tracker.
    */
-  getHealthStatus(node: Node): HealthStatus {
-    const response = new HealthStatus();
-    response.allServicesOk = false;
-    response.services = [];
-
-    if (node.health) {
-      // General status.
-      let service: HealthService = {
-        name: 'node.details.node-health.status',
-        isOk: node.health.status && node.health.status === 200,
-        originalValue: node.health.status + ''
-      };
-      response.services.push(service);
-
-      // Transport discovery.
-      service = {
-        name: 'node.details.node-health.transport-discovery',
-        isOk: node.health.transportDiscovery && node.health.transportDiscovery === 200,
-        originalValue: node.health.transportDiscovery + ''
-      };
-      response.services.push(service);
-
-      // Route finder.
-      service = {
-        name: 'node.details.node-health.route-finder',
-        isOk: node.health.routeFinder && node.health.routeFinder === 200,
-        originalValue: node.health.routeFinder + ''
-      };
-      response.services.push(service);
-
-      // Setup node.
-      service = {
-        name: 'node.details.node-health.setup-node',
-        isOk: node.health.setupNode && node.health.setupNode === 200,
-        originalValue: node.health.setupNode + ''
-      };
-      response.services.push(service);
-
-      // Uptime tracker.
-      service = {
-        name: 'node.details.node-health.uptime-tracker',
-        isOk: node.health.uptimeTracker && node.health.uptimeTracker === 200,
-        originalValue: node.health.uptimeTracker + ''
-      };
-      response.services.push(service);
-
-      // Address resolver.
-      service = {
-        name: 'node.details.node-health.address-resolver',
-        isOk: node.health.addressResolver && node.health.addressResolver === 200,
-        originalValue: node.health.addressResolver + ''
-      };
-      response.services.push(service);
-
-      // Check if any service is not working.
-      response.allServicesOk = true;
-      response.services.forEach(v => {
-        if (!v.isOk) {
-          response.allServicesOk = false;
-        }
-      });
-    }
-
-    return response;
+  getIfHealthOk(node: Node): boolean {
+    return node.health && node.health.servicesHealth ? true : false;
   }
 }

@@ -55,6 +55,21 @@
     </span>
   </div>
   <div class="separator"></div>
+  <!-- Transports info section. -->
+  <div class="d-flex flex-column">
+    <span class="section-title">{{ 'node.details.transports-info.title' | translate }}</span>
+    <span class="info-line">
+      <span class="title">{{ 'node.details.transports-info.autoconnect' | translate }}</span>
+      {{ ('node.details.transports-info.' + (node.autoconnectTransports ? 'enabled' : 'disabled')) | translate }}
+      <mat-icon [inline]="true" [matTooltip]="'node.details.transports-info.autoconnect-info' | translate">info</mat-icon>
+    </span>
+    <div class="config-button-container">
+      <app-button color="primary" (action)="changeTransportsConfig()" [forDarkBackground]="true">
+        {{ ('node.details.transports-info.' + (node.autoconnectTransports ? 'disable' : 'enable') + '-button') | translate }}
+      </app-button>
+    </div>
+  </div>
+  <div class="separator"></div>
   <!-- Router info section. -->
   <div class="d-flex flex-column">
     <span class="section-title">{{ 'node.details.router-info.title' | translate }}</span>
@@ -62,7 +77,7 @@
       <span class="title">{{ 'node.details.router-info.min-hops' | translate }}</span>
       {{ node.minHops }}
     </span>
-    <div class="router-button-container">
+    <div class="config-button-container">
       <app-button color="primary" (action)="changeRouterConfig()" [forDarkBackground]="true">
         {{ 'node.details.router-info.change-config-button' | translate }}
       </app-button>
@@ -72,15 +87,15 @@
   <!-- Health info section. -->
   <div class="d-flex flex-column">
     <span class="section-title">{{ 'node.details.node-health.title' | translate }}</span>
-    <span *ngFor="let service of nodeHealthInfo.services" class="info-line">
-      <span class="title">{{ service.name | translate }}</span>
-      <ng-container *ngIf="service.isOk">
+    <span class="info-line">
+      <span class="title">{{ 'node.details.node-health.uptime-tracker' | translate }}</span>
+      <ng-container *ngIf="nodeHealthIsOk">
         <i class="dot-green"></i>
-        {{ 'common.ok' | translate }}
+        {{ 'node.details.node-health.connected' | translate }}
       </ng-container>
-      <ng-container *ngIf="!service.isOk">
-        <i class="dot-red"></i>
-        {{ service.originalValue ? service.originalValue : ('node.details.node-health.element-offline' | translate) }}
+      <ng-container *ngIf="!nodeHealthIsOk">
+        <i class="dot-yellow blinking"></i>
+        {{ 'node.details.node-health.disconnected' | translate }}
       </ng-container>
     </span>
   </div>
