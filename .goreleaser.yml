@@ -27,7 +27,6 @@ builds:
       - arm
     goarm:
       - 6
-      - 7
     ignore:
       - goos: darwin
         goarch: 386
@@ -48,7 +47,6 @@ builds:
       - arm
     goarm:
       - 6
-      - 7
     ignore:
       - goos: darwin
         goarch: 386
@@ -69,7 +67,6 @@ builds:
       - arm
     goarm:
       - 6
-      - 7
     ignore:
       - goos: darwin
         goarch: 386
@@ -90,7 +87,6 @@ builds:
       - arm
     goarm:
       - 6
-      - 7
     ignore:
       - goos: darwin
         goarch: 386
@@ -110,7 +106,6 @@ builds:
       - arm
     goarm:
       - 6
-      - 7
     ignore:
       - goos: darwin
         goarch: 386
@@ -130,7 +125,6 @@ builds:
       - arm
     goarm:
       - 6
-      - 7
     ignore:
       - goos: darwin
         goarch: 386
@@ -150,7 +144,6 @@ builds:
       - arm
     goarm:
       - 6
-      - 7
     ignore:
       - goos: darwin
         goarch: 386
@@ -161,7 +154,7 @@ builds:
 archives:
   - format: tar.gz
     wrap_in_directory: false
-    name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
+    name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
 checksum:
   name_template: 'checksums.txt'
 snapshot:
