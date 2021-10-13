@@ -246,6 +246,7 @@ func (p *Proc) Stop() error {
 				return err
 			}
 		} else {
+			// TODO @alexadhy: This is harmful and is just a hack!
 			// because Windows has no concept of Signals, and as such interrupts aren't sendable
 			// CTRL_C or CTRL_BREAK are key events on windows,
 			err := p.cmd.Process.Kill()
