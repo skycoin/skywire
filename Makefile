@@ -151,7 +151,7 @@ build-deploy: ## Build for deployment Docker images
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
-github-release: sysroot
+github-release: 
 	goreleaser --rm-dist
 
 build-docker: ## Build docker image
