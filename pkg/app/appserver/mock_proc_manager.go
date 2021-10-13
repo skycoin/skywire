@@ -152,6 +152,27 @@ func (_m *MockProcManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, e
 	return r0, r1
 }
 
+// Stats provides a mock function with given fields: appName
+func (_m *MockProcManager) Stats(appName string) (AppStats, error) {
+	ret := _m.Called(appName)
+
+	var r0 AppStats
+	if rf, ok := ret.Get(0).(func(string) AppStats); ok {
+		r0 = rf(appName)
+	} else {
+		r0 = ret.Get(0).(AppStats)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(string) error); ok {
+		r1 = rf(appName)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // Stop provides a mock function with given fields: appName
 func (_m *MockProcManager) Stop(appName string) error {
 	ret := _m.Called(appName)
