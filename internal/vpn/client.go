@@ -361,7 +361,6 @@ func (c *Client) serveConn(conn net.Conn) error {
 	fmt.Printf("Local TUN IP: %s\n", tunIP.String())
 	fmt.Printf("Local TUN gateway: %s\n", tunGateway.String())
 
-	fmt.Println("SETUP SYS PRIVILEGE")
 	if err := c.setSysPrivileges(); err != nil {
 		return fmt.Errorf("failed to setup system privileges: %w", err)
 	}
