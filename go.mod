@@ -7,7 +7,7 @@ require (
 	github.com/VictoriaMetrics/metrics v1.18.0
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/ccding/go-stun/stun v0.0.0-20200514191101-4dc67bcdb029
-	github.com/gen2brain/dlgs v0.0.0-20210609125024-bf6c92aaa984
+	github.com/gen2brain/dlgs v0.0.0-20210911090025-cbd38e821b98
 	github.com/getlantern/golog v0.0.0-20201105130739-9586b8bde3a9 // indirect
 	github.com/getlantern/hidden v0.0.0-20201229170000-e66e7f878730 // indirect
 	github.com/getlantern/ops v0.0.0-20200403153110-8476b16edcd6 // indirect

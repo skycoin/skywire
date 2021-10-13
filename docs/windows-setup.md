@@ -47,4 +47,16 @@ Will only work on Windows Server 2019 and Windows 10.
 
 #### Running a VPN-client
 
-Running the Skywire VPN-client on Windows requires the `wintun` version `0.14` driver to be installed. You can either install the driver itself or install `Wireguard` which includes the driver.
+Running the Skywire VPN-client on Windows requires the `wintun` version `0.14` driver to be installed. 
+
+- Download it from [here](https://wintun.net/builds/wintun-0.14.zip)
+- Extract the file
+- Copy the `wintun.dll` in the `wintun\bin\<YOUR_ARCH>\wintun.dll` to the `C:\Windows\System32\wintun.dll`
+- For better output (formatted logs, etc), install [Windows Terminal](https://github.com/microsoft/terminal)
+- Run windows terminal as administrator and run
+
+```powershell 
+> .\skywire-visor.exe -c .\skywire-config.json
+```
+
+- You can follow the rest of the guide for connecting the VPN Client in skywire wiki.
