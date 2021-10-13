@@ -1,10 +1,10 @@
-//+build windows
+//go:build windows
+// +build windows
 
 package dmsgpty
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"sync"
 	"syscall"
@@ -86,7 +86,6 @@ func (s *Pty) Start(name string, args []string, size *WinSize) error {
 		}
 
 	}
-	fmt.Printf("Size of term: X=>%d, Y=>%d\n", size.X, size.Y)
 	pty, err := conpty.New(
 		int16(size.X), int16(size.Y),
 	)
@@ -94,7 +93,7 @@ func (s *Pty) Start(name string, args []string, size *WinSize) error {
 		return err
 	}
 
-	pid, _, err := pty.Spawn(
+	_, _, err = pty.Spawn(
 		name,
 		args,
 		&syscall.ProcAttr{
@@ -105,8 +104,6 @@ func (s *Pty) Start(name string, args []string, size *WinSize) error {
 	if err != nil {
 		return err
 	}
-
-	fmt.Printf("starting process with pid %d \n", pid)
 
 	s.pty = pty
 	return nil
@@ -121,5 +118,5 @@ func (s *Pty) SetPtySize(size *WinSize) error {
 		return ErrPtyNotRunning
 	}
 
-	return s.pty.Resize(uint16(size.X), uint16(size.Y))
+	return s.pty.Resize(size.X, size.Y)
 }
