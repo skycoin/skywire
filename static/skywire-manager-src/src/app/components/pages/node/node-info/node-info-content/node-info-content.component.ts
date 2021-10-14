@@ -8,7 +8,7 @@ import { NodeComponent } from '../../node.component';
 import TimeUtils, { ElapsedTime } from 'src/app/utils/timeUtils';
 import { LabeledElementTypes, StorageService } from 'src/app/services/storage.service';
 import { NodeService } from 'src/app/services/node.service';
-import { RouterConfigComponent } from './router-config/router-config.component';
+import { RouterConfigComponent, RouterConfigParams } from './router-config/router-config.component';
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { TransportService } from 'src/app/services/transport.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
@@ -68,7 +68,8 @@ export class NodeInfoContentComponent implements OnDestroy {
   }
 
   changeRouterConfig() {
-    RouterConfigComponent.openDialog(this.dialog, this.node).afterClosed().subscribe((changed: boolean) => {
+    const params: RouterConfigParams = {nodePk: this.node.localPk, minHops: this.node.minHops};
+    RouterConfigComponent.openDialog(this.dialog, params).afterClosed().subscribe((changed: boolean) => {
       if (changed) {
         NodeComponent.refreshCurrentDisplayedData();
       }
