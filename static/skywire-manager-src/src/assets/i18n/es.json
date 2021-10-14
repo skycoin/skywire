@@ -681,6 +681,7 @@
     },
 
     "connection-info" : {
+      "state-title": "El estado de tu conexión es actualmente:",
       "state-connecting": "Conectando",
       "state-connecting-info": "Se está activando la protección VPN.",
       "state-connected": "Conectado",
@@ -701,6 +702,7 @@
       "start-title": "Iniciar VPN",
       "no-server": "¡Ningún servidor seleccionado!",
       "disconnect": "Desconectar",
+      "last-error": "Último error:",
       "disconnect-confirmation": "¿Realmente desea detener la protección VPN?",
       "entered-manually": "Ingresado manualmente",
       "upload-info": "Estadísticas de datos subidos.",
@@ -735,6 +737,7 @@
       "connect-without-password": "Conectarse sin contraseña",
       "connect-without-password-confirmation": "La conexión se realizará sin la contraseña. ¿Seguro que desea continuar?",
       "connect-using-password": "Conectarse usando una contraseña",
+      "connect-using-another-password": "Conectarse usando otra contraseña",
       "edit-name": "Nombre personalizado",
       "edit-label": "Nota personalizada",
       "make-favorite": "Hacer favorito",
@@ -861,6 +864,8 @@
       "get-ip-info": "Cuando está activa, la aplicación utilizará servicios externos para obtener información sobre la IP actual.",
       "data-units": "Unidades de datos",
       "data-units-info": "Permite seleccionar las unidades que se utilizarán para mostrar las estadísticas de transmisión de datos.",
+      "minimum-hops": "Saltos mínimos",
+      "minimum-hops-info": "Permite configurar la cantidad mínima de saltos que la conexión deberá realizar a través de otros visores de Skywire antes de alcanzar el destino final.",
       "setting-on": "Encendido",
       "setting-off": "Apagado",
       "working-warning": "El sistema está ocupado. Por favor, espere a que finalice la operación anterior.",
