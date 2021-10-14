@@ -250,6 +250,9 @@ export class VpnHelpers {
     if (server.usedWithPassword) {
       options.push({ icon: 'lock_open', label: 'vpn.server-options.connect-without-password' });
       optionCodes.push(201);
+
+      options.push({ icon: 'lock_outlined', label: 'vpn.server-options.connect-using-another-password' });
+      optionCodes.push(202);
     } else {
       // Allow to use a password only if the server was added manually.
       if (server.enteredManually) {
