@@ -62,38 +62,6 @@ export class TrafficData {
 }
 
 /**
- * Data for knowing if the services of a node are working.
- */
-export class HealthStatus {
-  /**
-   * If all services are working.
-   */
-  allServicesOk: boolean;
-  /**
-   * Details about the individual services.
-   */
-  services: HealthService[];
-}
-
-/**
- * Data for knowing if a service of a node is working.
- */
-export class HealthService {
-  /**
-   * Name of the service, as a translatable var.
-   */
-  name: string;
-  /**
-   * If the service is working.
-   */
-  isOk: boolean;
-  /**
-   * Status text returned by the node.
-   */
-  originalValue: string;
-}
-
-/**
  * Keys for saving custom settings for the calls to the updater API endpoints.
  */
 export enum UpdaterStorageKeys {
