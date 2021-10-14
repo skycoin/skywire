@@ -290,9 +290,7 @@ func (rc *rpcClient) DiscoverTransportByID(id uuid.UUID) (*transport.Entry, erro
 
 // SetPublicAutoconnect implements API.
 func (rc *rpcClient) SetPublicAutoconnect(pAc bool) error {
-	return rc.Call("SetPublicAutoconnect", &publicAutoconnectReq{
-		PublicAutoconnect: pAc,
-	}, &struct{}{})
+	return rc.Call("SetPublicAutoconnect", &pAc, &struct{}{})
 }
 
 // RoutingRules calls RoutingRules.
