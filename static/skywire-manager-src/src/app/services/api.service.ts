@@ -21,6 +21,7 @@ export class RequestOptions {
   responseType = ResponseTypes.Json;
   requestType = RequestTypes.Json;
   ignoreAuth = false;
+  vpnKeyForAuth: string;
 
   public constructor(init?: Partial<RequestOptions>) {
     Object.assign(this, init);
@@ -167,11 +168,13 @@ export class ApiService {
     // user is redirected to the login page.
     if (!options.ignoreAuth) {
       if (error.status === 401) {
-        this.ngZone.run(() => this.router.navigate(['login'], { replaceUrl: true }));
+        const destination = !options.vpnKeyForAuth ? ['login'] : ['vpnlogin', options.vpnKeyForAuth];
+        this.ngZone.run(() => this.router.navigate(destination, { replaceUrl: true }));
       }
 
       if (error.error && typeof error.error === 'string' && error.error.includes('change password')) {
-        this.ngZone.run(() => this.router.navigate(['login'], { replaceUrl: true }));
+        const destination = !options.vpnKeyForAuth ? ['login'] : ['vpnlogin', options.vpnKeyForAuth];
+        this.ngZone.run(() => this.router.navigate(destination, { replaceUrl: true }));
       }
     }
 
