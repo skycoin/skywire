@@ -94,7 +94,7 @@ format: tidy ## Formats the code. Must have goimports and goimports-reviser inst
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./cmd
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./internal
-	find . -type f -name '*.go' -not -path "./vendor/*"  -exec goimports-reviser -project-name ${PROJECT_BASE} -file-path {} \;
+	find . -type f -name '*.go' -not -path "./.git/*" -not -path "./vendor/*"  -exec goimports-reviser -project-name ${PROJECT_BASE} -file-path {} \;
 
 dep: tidy ## Sorts dependencies
 	${OPTS} go mod vendor -v
@@ -151,7 +151,7 @@ build-deploy: ## Build for deployment Docker images
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
-github-release: sysroot
+github-release: 
 	goreleaser --rm-dist
 
 build-docker: ## Build docker image

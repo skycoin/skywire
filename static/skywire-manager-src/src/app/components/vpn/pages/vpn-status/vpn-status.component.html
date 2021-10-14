@@ -86,9 +86,17 @@
         </div>
         <!-- Current server note. -->
         <div>
-          <div class="current-server-note" *ngIf="currentRemoteServer && (currentRemoteServer.note || currentRemoteServer.personalNote)">
+          <div class="lower-text current-server-note" *ngIf="currentRemoteServer && (currentRemoteServer.note || currentRemoteServer.personalNote)">
             <mat-icon [inline]="true">info_outline</mat-icon>
             {{ getNoteVar() | translate:{custom: currentRemoteServer.personalNote, original: currentRemoteServer.note} }}
+          </div>
+        </div>
+        <!-- Last error. -->
+        <div>
+          <div class="lower-text last-error" *ngIf="backendState && backendState.vpnClientAppData && backendState.vpnClientAppData.lasErrorMsg">
+            <mat-icon [inline]="true">cancel</mat-icon>
+            {{ 'vpn.status-page.last-error' | translate }}
+            {{ backendState.vpnClientAppData.lasErrorMsg }}
           </div>
         </div>
       </div>
@@ -96,15 +104,21 @@
     <!-- VPN started info. -->
     <div *ngIf="showStarted" class="col-7 column left-area-connected">
       <div class="column-container">
+        <!-- Time. -->
+        <!-- Commented until we have a good way to calculate the connection time. -->
+        <!--
         <div class="time-container">
           <div class="time-content">
-            <!-- Time. -->
             <mat-icon [inline]="true">timer</mat-icon>
-            <span>01:12:21</span>
+            <span>00:00:00</span>
           </div>
         </div>
-        <div class="state-title">Your connection is currently:</div>
-        <div class="state-text">{{ currentStateText | translate }}</div>
+        -->
+        <div class="state-title">{{ 'vpn.connection-info.state-title' | translate }}</div>
+        <div class="d-inline-block">
+          <div class="state-text">{{ currentStateText | translate }}</div>
+          <div [class]="'state-line ' + currentStateLineClass"></div>
+        </div>
         <div class="state-explanation">{{ (currentStateText + '-info') | translate }}</div>
         <!-- Square graphs. -->
         <div class="data-container">
