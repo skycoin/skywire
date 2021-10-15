@@ -7,7 +7,7 @@ import { EditLabelComponent } from 'src/app/components/layout/edit-label/edit-la
 import { NodeComponent } from '../../node.component';
 import TimeUtils, { ElapsedTime } from 'src/app/utils/timeUtils';
 import { LabeledElementTypes, StorageService } from 'src/app/services/storage.service';
-import { NodeService } from 'src/app/services/node.service';
+import { KnownHealthStatuses, NodeService } from 'src/app/services/node.service';
 import { RouterConfigComponent, RouterConfigParams } from './router-config/router-config.component';
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { TransportService } from 'src/app/services/transport.service';
@@ -26,13 +26,28 @@ import { processServiceError } from 'src/app/utils/errors';
 export class NodeInfoContentComponent implements OnDestroy {
   @Input() set nodeInfo(val: Node) {
     this.node = val;
-    this.nodeHealthIsOk = this.nodeService.getIfHealthOk(val);
     this.timeOnline = TimeUtils.getElapsedTime(val.secondsOnline);
+
+    if (val.health && val.health.servicesHealth === KnownHealthStatuses.Healthy) {
+      this.nodeHealthText = 'node.statuses.online';
+      this.nodeHealthClass = 'dot-green';
+    } else if (val.health && val.health.servicesHealth === KnownHealthStatuses.Unhealthy) {
+      this.nodeHealthText = 'node.statuses.partially-online';
+      this.nodeHealthClass = 'dot-yellow blinking';
+    } else if (val.health && val.health.servicesHealth === KnownHealthStatuses.Connecting) {
+      console.info('123');
+      this.nodeHealthText = 'node.statuses.connecting';
+      this.nodeHealthClass = 'dot-outline-gray';
+    } else {
+      this.nodeHealthText = 'node.statuses.unknown';
+      this.nodeHealthClass = 'dot-outline-gray';
+    }
   }
 
   node: Node;
-  nodeHealthIsOk: boolean;
   timeOnline: ElapsedTime;
+  nodeHealthClass: string;
+  nodeHealthText: string;
 
   private autoconnectSubscription: Subscription;
 

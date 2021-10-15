@@ -80,7 +80,7 @@ interface RouteDescriptor {
 }
 
 export interface HealthInfo {
-  servicesHealth?: boolean;
+  servicesHealth?: String;
 }
 
 export class ProxyDiscoveryEntry {

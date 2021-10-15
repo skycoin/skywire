@@ -89,14 +89,8 @@
     <span class="section-title">{{ 'node.details.node-health.title' | translate }}</span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-health.uptime-tracker' | translate }}</span>
-      <ng-container *ngIf="nodeHealthIsOk">
-        <i class="dot-green"></i>
-        {{ 'node.details.node-health.connected' | translate }}
-      </ng-container>
-      <ng-container *ngIf="!nodeHealthIsOk">
-        <i class="dot-yellow blinking"></i>
-        {{ 'node.details.node-health.disconnected' | translate }}
-      </ng-container>
+      <i [class]="nodeHealthClass"></i>
+      {{ nodeHealthText | translate }}
     </span>
   </div>
   <div class="separator"></div>
