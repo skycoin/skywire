@@ -5,7 +5,7 @@ import { Router, ActivatedRoute } from '@angular/router';
 import { catchError, mergeMap } from 'rxjs/operators';
 import { TranslateService } from '@ngx-translate/core';
 
-import { NodeService, BackendData } from '../../../services/node.service';
+import { NodeService, BackendData, KnownHealthStatuses } from '../../../services/node.service';
 import { Node } from '../../../app.datatypes';
 import { AuthService, AuthStates } from '../../../services/auth.service';
 import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
@@ -304,13 +304,16 @@ export class NodeListComponent implements OnInit, OnDestroy {
    * returns a class for a colored text.
    */
   nodeStatusClass(node: Node, forDot: boolean): string {
-    switch (node.online) {
-      case true:
-        return this.nodeService.getIfHealthOk(node) ?
-          (forDot ? 'dot-green' : 'green-text') :
-          (forDot ? 'dot-yellow blinking' : 'yellow-text');
-      default:
-        return forDot ? 'dot-red' : 'red-text';
+    if (node.online) {
+      if (node.health && node.health.servicesHealth === KnownHealthStatuses.Unhealthy) {
+        return forDot ? 'dot-yellow blinking' : 'yellow-text';
+      } else if (node.health && node.health.servicesHealth === KnownHealthStatuses.Healthy) {
+        return forDot ? 'dot-green' : 'green-text';
+      } else {
+        return forDot ? 'dot-outline-gray' : '';
+      }
+    } else {
+      return forDot ? 'dot-red' : 'red-text';
     }
   }
 
@@ -320,13 +323,18 @@ export class NodeListComponent implements OnInit, OnDestroy {
    * text for the node list shown on small screens.
    */
   nodeStatusText(node: Node, forTooltip: boolean): string {
-    switch (node.online) {
-      case true:
-        return this.nodeService.getIfHealthOk(node) ?
-          ('node.statuses.online' + (forTooltip ? '-tooltip' : '')) :
-          ('node.statuses.partially-online' + (forTooltip ? '-tooltip' : ''));
-      default:
-        return 'node.statuses.offline' + (forTooltip ? '-tooltip' : '');
+    if (node.online) {
+      if (node.health && node.health.servicesHealth === KnownHealthStatuses.Healthy) {
+        return 'node.statuses.online' + (forTooltip ? '-tooltip' : '');
+      } else if (node.health && node.health.servicesHealth === KnownHealthStatuses.Unhealthy) {
+        return 'node.statuses.partially-online' + (forTooltip ? '-tooltip' : '');
+      } else if (node.health && node.health.servicesHealth === KnownHealthStatuses.Connecting) {
+        return 'node.statuses.connecting' + (forTooltip ? '-tooltip' : '');
+      } else {
+        return 'node.statuses.unknown' + (forTooltip ? '-tooltip' : '');
+      }
+    } else {
+      return 'node.statuses.offline' + (forTooltip ? '-tooltip' : '');
     }
   }
 
