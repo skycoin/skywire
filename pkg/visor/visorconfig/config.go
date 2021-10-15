@@ -26,6 +26,7 @@ func MakeBaseConfig(common *Common) *V1 {
 	conf.Transport = &V1Transport{
 		Discovery:       skyenv.DefaultTpDiscAddr,
 		AddressResolver: skyenv.DefaultAddressResolverAddr,
+		PublicAutoconnect: true,
 	}
 	conf.Routing = &V1Routing{
 		SetupNodes:         []cipher.PubKey{skyenv.MustPK(skyenv.DefaultSetupPK)},
