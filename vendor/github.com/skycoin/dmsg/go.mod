@@ -5,7 +5,7 @@ go 1.16
 require (
 	github.com/ActiveState/termtest/conpty v0.5.0
 	github.com/VictoriaMetrics/metrics v1.12.3
-	github.com/creack/pty v1.1.10
+	github.com/creack/pty v1.1.15
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-redis/redis v6.15.8+incompatible
 	github.com/google/go-cmp v0.5.5 // indirect
