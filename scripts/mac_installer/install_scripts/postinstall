@@ -17,7 +17,7 @@ chown -R "${USER}" "$skywire_dir"
 
 echo "generating skywire config if it doesn't exist"
 if [[ ! -f "${skywire_dir}"/skywire-config.json ]]; then
-  "${skywire_dir}"/Skywireapp/Contents/MacOS/skywire-cli visor gen-config -p -o ./skywire-config.json --is-hypervisor
+  "${skywire_dir}"/Skywireapp/Contents/MacOS/skywire-cli config gen -p -o ./skywire-config.json --is-hypervisor
 fi
 chown "${USER}" "${skywire_dir}"/skywire-config.json
 
