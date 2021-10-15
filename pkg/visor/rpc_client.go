@@ -638,7 +638,7 @@ func (mc *mockRPCClient) Summary() (*Summary, error) {
 // Health implements API
 func (mc *mockRPCClient) Health() (*HealthInfo, error) {
 	hi := &HealthInfo{
-		ServicesHealth: true,
+		ServicesHealth: "healthy",
 	}
 
 	return hi, nil
