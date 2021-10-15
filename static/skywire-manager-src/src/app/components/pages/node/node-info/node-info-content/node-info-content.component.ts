@@ -7,7 +7,7 @@ import { EditLabelComponent } from 'src/app/components/layout/edit-label/edit-la
 import { NodeComponent } from '../../node.component';
 import TimeUtils, { ElapsedTime } from 'src/app/utils/timeUtils';
 import { LabeledElementTypes, StorageService } from 'src/app/services/storage.service';
-import { KnownHealthStatuses, NodeService } from 'src/app/services/node.service';
+import { KnownHealthStatuses } from 'src/app/services/node.service';
 import { RouterConfigComponent, RouterConfigParams } from './router-config/router-config.component';
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { TransportService } from 'src/app/services/transport.service';
@@ -35,7 +35,6 @@ export class NodeInfoContentComponent implements OnDestroy {
       this.nodeHealthText = 'node.statuses.partially-online';
       this.nodeHealthClass = 'dot-yellow blinking';
     } else if (val.health && val.health.servicesHealth === KnownHealthStatuses.Connecting) {
-      console.info('123');
       this.nodeHealthText = 'node.statuses.connecting';
       this.nodeHealthClass = 'dot-outline-gray';
     } else {
@@ -54,7 +53,6 @@ export class NodeInfoContentComponent implements OnDestroy {
   constructor(
     private dialog: MatDialog,
     public storageService: StorageService,
-    private nodeService: NodeService,
     private transportService: TransportService,
     private snackbarService: SnackbarService,
   ) { }
