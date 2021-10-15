@@ -106,6 +106,8 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 		isServicesHealthy: newInternalHealthInfo(),
 	}
 
+	v.isServicesHealthy.init()
+
 	if logLvl, err := logging.LevelFromString(conf.LogLevel); err != nil {
 		v.log.WithError(err).Warn("Failed to read log level from config.")
 	} else {

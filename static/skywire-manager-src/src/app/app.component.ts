@@ -50,7 +50,7 @@ export class AppComponent {
 
     // Check if the app is showing the VPN client.
     router.events.subscribe(() => {
-      this.inVpnClient = router.url.includes('/vpn/');
+      this.inVpnClient = router.url.includes('/vpn/') || router.url.includes('vpnlogin');
 
       // Show the correct document title.
       if (router.url.length > 2) {
