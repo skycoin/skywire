@@ -24,8 +24,8 @@ func MakeBaseConfig(common *Common) *V1 {
 		SessionsCount: 1,
 	}
 	conf.Transport = &V1Transport{
-		Discovery:       skyenv.DefaultTpDiscAddr,
-		AddressResolver: skyenv.DefaultAddressResolverAddr,
+		Discovery:         skyenv.DefaultTpDiscAddr,
+		AddressResolver:   skyenv.DefaultAddressResolverAddr,
 		PublicAutoconnect: true,
 	}
 	conf.Routing = &V1Routing{
