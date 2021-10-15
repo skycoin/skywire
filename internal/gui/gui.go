@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -77,13 +78,18 @@ func OnGUIQuit() {
 }
 
 // ReadSysTrayIcon reads system tray icon.
-func ReadSysTrayIcon() ([]byte, error) {
-	contents, err := iconFS.ReadFile(iconName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read icon: %w", err)
+func ReadSysTrayIcon() (contents []byte, err error) {
+	if runtime.GOOS != "darwin" {
+		contents, err = iconFS.ReadFile(iconName)
+	} else {
+		contents, err = ioutil.ReadFile(iconName)
 	}
 
-	return contents, nil
+	if err != nil {
+		err = fmt.Errorf("failed to read icon: %w", err)
+	}
+
+	return contents, err
 }
 
 // SetStopVisorFn sets function to stop running visor.

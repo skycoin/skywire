@@ -3,7 +3,7 @@
 # variables
 mac_script_dir="./scripts/mac_installer"
 installer_build_dir="./mac_build"
-installer_package_dir="${installer_build_dir}"/binaries/Skywireapp
+installer_package_dir="${installer_build_dir}"/binaries/Skywire.app
 git_tag=$(git describe --tags)
 date_format=$(date -u "+%Y-%m-%d")
 go_arch=$(go env GOARCH) # build for amd64 and arm64 from single host
@@ -59,12 +59,16 @@ function build_installer() {
   # build skywire binariea
   make CGO_ENABLED=1 GOOS=darwin GOARCH="${go_arch}" build-systray
 
+  if [ -d ${installer_build_dir}/binaries/Skywire.app ]; then
+    rm -rf ${installer_build_dir}/binaries/Skywire.app
+  fi
+
   # Create directories
-  mkdir -p ${installer_build_dir}/binaries/Skywireapp
+  mkdir -p ${installer_build_dir}/binaries/Skywire.app
   mkdir -p ${installer_package_dir}/Contents/{Resources,MacOS/apps}
 
   # build deinstaller
-  go build -o ${installer_package_dir}/Contents/deinstaller ${mac_script_dir}/desktop-deinstaller
+  go build -o ${installer_package_dir}/Contents/MacOS/deinstaller ${mac_script_dir}/desktop-deinstaller
 
   # prepare Distribution.xml
   cp ${mac_script_dir}/Distribution.xml ${installer_build_dir}/
@@ -74,13 +78,13 @@ function build_installer() {
   perl -i -pe "s/{{BundleVersion}}/${git_tag}/g" ${installer_package_dir}/Contents/Info.plist
 
   cp ${mac_script_dir}/icon.icns ${installer_package_dir}/Contents/Resources/icon.icns
+  cp ${mac_script_dir}/icon.tiff ${installer_package_dir}/Contents/Resources/icon.tiff
   mv ./skywire-visor ${installer_package_dir}/Contents/MacOS/skywire-visor
   mv ./skywire-cli ${installer_package_dir}/Contents/MacOS/skywire-cli
   mv ./apps/vpn-client ${installer_package_dir}/Contents/MacOS/apps/vpn-client
 
   cat <<EOF >${installer_package_dir}/Contents/MacOS/Skywire
   #!/usr/bin/env bash
-
 
   osascript -e "do shell script \"/Applications/Skywire.app/Contents/MacOS/skywire-visor --systray >> /Users/\${USER}/Library/Logs/skywire/visor.log\" with administrator privileges"
 
@@ -97,10 +101,10 @@ EOF
       exit 1
     fi
 
-    mv ${installer_package_dir} /tmp/Skywire.app
-    codesign --deep --force --options=runtime --sign --verbose "$MAC_HASH_APPLICATION_ID" --timestamp /tmp/Skywire.app
+    #    mv ${installer_package_dir} /tmp/Skywire.app
+    codesign --verbose --deep --force --options=runtime --sign "$MAC_HASH_APPLICATION_ID" --timestamp "$installer_package_dir"
 
-    mv /tmp/Skywire.app "${installer_build_dir}"/binaries/Skywireapp
+    #    mv /tmp/Skywire.app "${installer_build_dir}"/binaries/Skywireapp
   fi
 
   # prepare install scripts
@@ -110,24 +114,18 @@ EOF
   cp -Rv ${mac_script_dir}/remove_scripts/* ${installer_build_dir}/remove_scripts/
 
   # build installer
-  pkgbuild --root ${installer_build_dir}/binaries --identifier com.skycoin.skywire.visor --install-location /tmp/skywire --scripts ${installer_build_dir}/install_scripts ${installer_build_dir}/installer.pkg
-  pkgbuild --root ${installer_build_dir}/binaries --identifier com.skycoin.skywire.updater --install-location /tmp/skywire --scripts ${installer_build_dir}/update_scripts ${installer_build_dir}/updater.pkg
+  pkgbuild --root ${installer_build_dir}/binaries --identifier com.skycoin.skywire.visor --install-location /Applications/ --scripts ${installer_build_dir}/install_scripts ${installer_build_dir}/installer.pkg
+  pkgbuild --root ${installer_build_dir}/binaries --identifier com.skycoin.skywire.updater --install-location /Applications/ --scripts ${installer_build_dir}/update_scripts ${installer_build_dir}/updater.pkg
   pkgbuild --nopayload --identifier com.skycoin.skywire.remover --scripts ${installer_build_dir}/remove_scripts ${installer_build_dir}/remover.pkg
 
   package_name=SkywireInstaller-${git_tag}-${date_format}-${go_arch}.pkg
 
   cp ${mac_script_dir}/Distribution_customized.xml ${installer_build_dir}/Distribution.xml
 
-  if [ "$sign_binary" == true ]; then
-
-    if [ -z "$MAC_HASH_INSTALLER_ID" ]; then
-      echo -e "${yellowt}environment ${greent}MAC_HASH_INSTALLER_ID${nct}${yellowt} has to be set before you sign the binary${nct}"
-      exit 1
-    fi
-
-    productbuild --sign "$MAC_HASH_INSTALLER_ID" --timestamp --distribution ${installer_build_dir}/Distribution.xml --package-path ${installer_build_dir} "${output}""${package_name}"
+  if [ "$sign_binary" == true ] && [ ! -z ${MAC_HASH_INSTALLER_ID+x} ]; then
+    productbuild --sign "$MAC_HASH_INSTALLER_ID" --distribution ${installer_build_dir}/Distribution.xml --package-path ${installer_build_dir} "${output}""${package_name}"
   else
-    productbuild --timestamp --distribution ${installer_build_dir}/Distribution.xml --package-path ${installer_build_dir} "${output}""${package_name}"
+    productbuild --distribution ${installer_build_dir}/Distribution.xml --package-path ${installer_build_dir} "${output}""${package_name}"
   fi
 
   cd "${output}"
