@@ -14,6 +14,15 @@ import { OperationError } from '../utils/operation-error';
 import { AppConfig } from '../app.config';
 
 /**
+ * Known statuses the API returns in the health property of the visors.
+ */
+export enum KnownHealthStatuses {
+  Connecting = 'connecting',
+  Unhealthy = 'unhealthy',
+  Healthy = 'healthy',
+}
+
+/**
  * Response returned by the node and node list observables.
  */
 export interface BackendData {
@@ -764,13 +773,5 @@ export class NodeService {
     }
 
     return this.apiService.ws(`visors/${nodeKey}/update/ws`, body);
-  }
-
-  /**
-   * Checks if the health status of a node is ok or not, which is if it is connected to the
-   * uptime tracker.
-   */
-  getIfHealthOk(node: Node): boolean {
-    return node.health && node.health.servicesHealth ? true : false;
   }
 }

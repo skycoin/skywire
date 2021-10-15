@@ -88,6 +88,10 @@
     "statuses": {
       "online": "Online",
       "online-tooltip": "The visor is online.",
+      "connecting": "Connecting",
+      "connecting-tooltip": "The visor is online, but still connecting to the uptime tracker.",
+      "unknown": "Unknown",
+      "unknown-tooltip": "The visor is online, but it has not been possible to determine if it is connected to the uptime tracker.",
       "partially-online": "Online with problems",
       "partially-online-tooltip": "The visor is online, but disconnected from the uptime tracker.",
       "offline": "Offline",
