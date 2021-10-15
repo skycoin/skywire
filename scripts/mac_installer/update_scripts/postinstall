@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-old_dir=/tmp/skywire
 skywire_dir=/Users/${USER}/Library/Application\ Support/Skywire
 
 set -euo pipefail
@@ -10,12 +9,8 @@ if [[ ! -d "${skywire_dir}" ]]; then
   chown -R "${USER}" "${skywire_dir}"
 fi
 
-cp -Rv ${old_dir}/Skywireapp "${skywire_dir}"/
-
 echo "change directory perm"
 chown -R "${USER}" "${skywire_dir}"
-echo "remove temp dir"
-rm -rf ${old_dir}
 
 echo "reloading logcleaner"
 LOG_CLEANER_PLIST_PATH=/Users/${USER}/Library/LaunchAgents/com.skycoin.skywire.logcleaner.plist
@@ -26,26 +21,24 @@ if [[ -L /usr/local/bin/skywire-cli ]]; then
   unlink /usr/local/bin/skywire-cli
 fi
 
-rm -rf /Applications/Skywire.app
-
 if [[ ! -f "${skywire_dir}"/skywire-config.json ]]; then
-  "${skywire_dir}"/Skywireapp/Contents/MacOS/skywire-cli visor gen-config -p -o ./skywire-config.json --is-hypervisor
+  /Applications/Skywireapp/Contents/MacOS/skywire-cli config gen -p -o "${skywire_dir}"/skywire-config.json --is-hypervisor
+  chown "${USER}" "${skywire_dir}"/skywire-config.json
 fi
-chown "${USER}" "${skywire_dir}"/skywire-config.json
 
 echo "updating skywire"
-mv "${skywire_dir}"/Skywireapp /Applications/Skywire.app
 if [[ ! -L /usr/local/bin/skywire-cli ]]; then
   ln -s /Applications/Skywire.app/Contents/MacOS/skywire-cli /usr/local/bin/skywire-cli
 fi
 
 echo "updating user permission in Skywire.app"
-chown -R "${USER}" /Applications/Skywire.app
-chown root /Applications/Skywire.app/Contents/deinstaller
-chmod 4755 /Applications/Skywire.app/Contents/deinstaller
+chown root /Applications/Skywire.app/Contents/MacOS/deinstaller
+chmod 4755 /Applications/Skywire.app/Contents/MacOS/deinstaller
 
 echo "making vpn-client runnable as normal user"
 chown root /Applications/Skywire.app/Contents/MacOS/apps/vpn-client
 chmod 4755 /Applications/Skywire.app/Contents/MacOS/apps/vpn-client
 
 mdimport /Applications/Skywire.app
+
+
