@@ -2,7 +2,6 @@
 
 set -euo pipefail
 
-olddir=/tmp/skywire
 skywire_dir=/Users/${USER}/Library/Application\ Support/Skywire
 log_dir=/Users/${USER}/Library/Logs/skywire
 
@@ -11,13 +10,12 @@ mkdir -p "${skywire_dir}"
 if [[ -d ${skywire_dir}/Skywireapp ]]; then
   rm -rf "${skywire_dir}"/Skywireapp
 fi
-mv ${olddir}/Skywireapp "${skywire_dir}"/
 
 chown -R "${USER}" "$skywire_dir"
 
 echo "generating skywire config if it doesn't exist"
 if [[ ! -f "${skywire_dir}"/skywire-config.json ]]; then
-  "${skywire_dir}"/Skywireapp/Contents/MacOS/skywire-cli config gen -p -o ./skywire-config.json --is-hypervisor
+  /Applications/Skywire.app/Contents/MacOS/skywire-cli config gen -p -o "${skywire_dir}"/skywire-config.json --is-hypervisor
 fi
 chown "${USER}" "${skywire_dir}"/skywire-config.json
 
@@ -45,21 +43,17 @@ cat <<EOF >"${LOG_CLEANER_PLIST_PATH}"
 </plist>
 EOF
 
-rm -rf ${olddir}
-
 echo "loading logcleaner as service"
 chown "${USER}" "${LOG_CLEANER_PLIST_PATH}"
 sudo -u "$USER" launchctl load -w "${LOG_CLEANER_PLIST_PATH}"
 
 echo "moving applications to /Applications"
-mv "${skywire_dir}"/Skywireapp /Applications/Skywire.app
 if [[ ! -L /usr/local/bin/skywire-cli ]]; then
   ln -s /Applications/Skywire.app/Contents/MacOS/skywire-cli /usr/local/bin/skywire-cli
 fi
 
-chown -R "${USER}" /Applications/Skywire.app
-chown root /Applications/Skywire.app/Contents/deinstaller
-chmod 4755 /Applications/Skywire.app/Contents/deinstaller
+chown root /Applications/Skywire.app/Contents/MacOS/deinstaller
+chmod 4755 /Applications/Skywire.app/Contents/MacOS/deinstaller
 
 echo "making vpn-client runnable as normal user"
 chown root /Applications/Skywire.app/Contents/MacOS/apps/vpn-client
