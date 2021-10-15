@@ -41,7 +41,10 @@ func WriteConfig(conf Config, path string) error {
 	}
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "    ")
-	return enc.Encode(&conf)
+	if err = enc.Encode(&conf); err != nil {
+		return err
+	}
+	return f.Close()
 }
 
 func findStringsEnclosedBy(str string, sep string, result []string, lastIndex int) ([]string, int) {

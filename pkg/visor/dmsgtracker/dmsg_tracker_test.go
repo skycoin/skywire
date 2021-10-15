@@ -16,8 +16,11 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
+const (
+	timeout = time.Second * 10
+)
+
 func TestDmsgTracker_Update(t *testing.T) {
-	const timeout = time.Second * 5
 	const nServers = 1
 	conf := dmsg.Config{MinSessions: 1}
 
@@ -48,7 +51,6 @@ func TestDmsgTracker_Update(t *testing.T) {
 }
 
 func TestDmsgTrackerManager_MustGet(t *testing.T) {
-	const timeout = time.Second * 5
 	const nServers = 1
 	conf := dmsg.Config{MinSessions: 1}
 
