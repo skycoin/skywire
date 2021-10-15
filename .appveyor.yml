@@ -44,7 +44,7 @@ for:
         - job_name: MacOS
 
     install:
-      - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.42.0
+      - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.42.1
       - make dep
       - sh: ci_scripts/create-ip-aliases.sh
       - make install-deps-ui

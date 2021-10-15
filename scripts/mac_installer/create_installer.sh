@@ -98,7 +98,7 @@ EOF
     fi
 
     mv ${installer_package_dir} /tmp/Skywire.app
-    codesign --deep --force --options=runtime --sign "$MAC_HASH_APPLICATION_ID" --timestamp /tmp/Skywire.app
+    codesign --deep --force --options=runtime --sign --verbose "$MAC_HASH_APPLICATION_ID" --timestamp /tmp/Skywire.app
 
     mv /tmp/Skywire.app "${installer_build_dir}"/binaries/Skywireapp
   fi

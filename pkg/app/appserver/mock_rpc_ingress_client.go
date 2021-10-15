@@ -142,6 +142,20 @@ func (_m *MockRPCIngressClient) Read(connID uint16, b []byte) (int, error) {
 	return r0, r1
 }
 
+// SetConnectionDuration provides a mock function with given fields: dur
+func (_m *MockRPCIngressClient) SetConnectionDuration(dur int64) error {
+	ret := _m.Called(dur)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(int64) error); ok {
+		r0 = rf(dur)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // SetDeadline provides a mock function with given fields: connID, d
 func (_m *MockRPCIngressClient) SetDeadline(connID uint16, d time.Time) error {
 	ret := _m.Called(connID, d)
