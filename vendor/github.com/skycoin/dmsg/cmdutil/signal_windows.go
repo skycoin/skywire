@@ -1,3 +1,4 @@
+//go:build windows
 // +build windows
 
 package cmdutil
@@ -9,5 +10,5 @@ import (
 )
 
 func listenSignals() []os.Signal {
-	return []os.Signal{windows.SIGINT, windows.SIGTERM, windows.SIGQUIT}
+	return []os.Signal{os.Interrupt, windows.SIGINT, windows.SIGTERM, windows.SIGQUIT}
 }
