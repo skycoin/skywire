@@ -22,7 +22,6 @@ import (
 
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -54,14 +53,14 @@ var (
 )
 
 // GetOnGUIReady creates func to run on GUI startup.
-func GetOnGUIReady(icon []byte, conf *visorconfig.V1, vis *visor.Visor) func() {
+func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 	doneCh := make(chan bool, 1)
 	return func() {
 		systray.SetTemplateIcon(icon, icon)
 
 		systray.SetTooltip("Skywire")
 
-		initOpenVPNLinkBtn(vis)
+		initOpenVPNLinkBtn(conf)
 		initAdvancedButton(conf)
 		//initVpnClientBtn()
 		initQuitBtn()
@@ -147,7 +146,7 @@ func initAdvancedButton(conf *visorconfig.V1) {
 	}()
 }
 
-func initOpenVPNLinkBtn(vis *visor.Visor) {
+func initOpenVPNLinkBtn(vc *visorconfig.V1) {
 	mVPNLink = systray.AddMenuItem("Open VPN UI", "Open VPN UI in browser")
 
 	mVPNLink.Disable()
@@ -161,7 +160,7 @@ func initOpenVPNLinkBtn(vis *visor.Visor) {
 		// we simply wait till the hypervisor is up
 		for {
 			<-t.C
-			if isVPNExists(vis) {
+			if isVPNExists(vc) {
 				mVPNLink.Enable()
 				break
 			} else {
@@ -330,21 +329,11 @@ func getHVAddr(conf *visorconfig.V1) string {
 	return addr
 }
 
-func isVPNExists(vis *visor.Visor) bool {
-	apps, err := vis.Apps()
-
-	var status bool
-
-	if err != nil {
-		status = false
-	}
-
-	for _, app := range apps {
+func isVPNExists(vc *visorconfig.V1) bool {
+	status := false
+	for _, app := range vc.Launcher.Apps {
 		if app.Name == skyenv.VPNClientName {
 			status = true
-			//if app.Status == launcher.AppStatusRunning {
-			//	status = true
-			//}
 		}
 	}
 
