@@ -4,7 +4,6 @@ set -euo pipefail
 
 log_dir=/Users/${USER}/Library/Logs/skywire
 
-mkdir -p /tmp/skywire
 mkdir -p /Users/"${USER}"/Library/Application\ Support/Skywire
 
 if [[ ! -d "${log_dir}" ]]; then

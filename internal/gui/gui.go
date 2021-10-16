@@ -10,7 +10,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -79,11 +78,7 @@ func OnGUIQuit() {
 
 // ReadSysTrayIcon reads system tray icon.
 func ReadSysTrayIcon() (contents []byte, err error) {
-	if runtime.GOOS != "darwin" {
-		contents, err = iconFS.ReadFile(iconName)
-	} else {
-		contents, err = ioutil.ReadFile(iconName)
-	}
+	contents, err = iconFS.ReadFile(iconName)
 
 	if err != nil {
 		err = fmt.Errorf("failed to read icon: %w", err)

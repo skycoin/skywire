@@ -76,17 +76,17 @@ function build_installer() {
   # modify version info
   cp ${mac_script_dir}/AppInfo.plist.tmpl ${installer_package_dir}/Contents/Info.plist
   perl -i -pe "s/{{BundleVersion}}/${git_tag}/g" ${installer_package_dir}/Contents/Info.plist
+  cp ${mac_script_dir}/Entitlements.plist ${installer_build_dir}/entitlements.plist
 
   cp ${mac_script_dir}/icon.icns ${installer_package_dir}/Contents/Resources/icon.icns
-  cp ${mac_script_dir}/icon.tiff ${installer_package_dir}/Contents/Resources/icon.tiff
   mv ./skywire-visor ${installer_package_dir}/Contents/MacOS/skywire-visor
   mv ./skywire-cli ${installer_package_dir}/Contents/MacOS/skywire-cli
   mv ./apps/vpn-client ${installer_package_dir}/Contents/MacOS/apps/vpn-client
 
   cat <<EOF >${installer_package_dir}/Contents/MacOS/Skywire
-  #!/usr/bin/env bash
+#!/bin/bash
 
-  osascript -e "do shell script \"/Applications/Skywire.app/Contents/MacOS/skywire-visor --systray >> /Users/\${USER}/Library/Logs/skywire/visor.log\" with administrator privileges"
+osascript -e "do shell script \"/Applications/Skywire.app/Contents/MacOS/skywire-visor --systray > /Users/\${USER}/Library/Logs/skywire/visor.log\" with administrator privileges"
 
 EOF
 
@@ -100,11 +100,8 @@ EOF
       echo -e "${yellowt}environment MAC_HASH_APPLICATION_ID has to be set before you sign the binary${nct}"
       exit 1
     fi
-
-    #    mv ${installer_package_dir} /tmp/Skywire.app
+    # --entitlements "${installer_build_dir}"/entitlements.plist
     codesign --verbose --deep --force --options=runtime --sign "$MAC_HASH_APPLICATION_ID" --timestamp "$installer_package_dir"
-
-    #    mv /tmp/Skywire.app "${installer_build_dir}"/binaries/Skywireapp
   fi
 
   # prepare install scripts
@@ -196,10 +193,10 @@ if [ "$staple_notarization" == false ]; then
     go_arch=arm64
     build_installer
     ;;
-  arm64)
-    go_arch=amd64
-    build_installer
-    ;;
+    # arm64)
+    #   go_arch=amd64
+    #   build_installer
+    #   ;;
   esac
 else
   staple_installer
