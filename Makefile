@@ -171,7 +171,7 @@ build-ui: install-deps-ui  ## Builds the UI
 	mkdir ${MANAGER_UI_BUILT_DIR}
 	cp -r ${MANAGER_UI_DIR}/dist/. ${MANAGER_UI_BUILT_DIR}
 
-mac-installer: ## Create unsigned application
+mac-installer: ## Create signed and notarized application, run make mac-installer-help for more
 	./scripts/mac_installer/create_installer.sh -s -n
 
 mac-installer-help: ## Show installer creation help
