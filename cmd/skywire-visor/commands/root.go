@@ -51,8 +51,6 @@ var (
 	launchBrowser bool
 	stopVisorFn   func() // nolint:unused
 	stopVisorWg   sync.WaitGroup
-	vis           *visor.Visor
-	visAssignChan chan bool
 )
 
 var rootCmd = &cobra.Command{
@@ -77,7 +75,6 @@ func init() {
 
 func runVisor(args []string) {
 	var ok bool
-	visAssignChan = make(chan bool, 1)
 	log := initLogger(tag, syslogAddr)
 	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
 	log.AddHook(hook)
@@ -134,13 +131,12 @@ func runVisor(args []string) {
 
 	conf := initConfig(log, args, confPath)
 
-	vis, ok = visor.NewVisor(conf, restartCtx)
+	vis, ok := visor.NewVisor(conf, restartCtx)
 	if !ok {
 		log.Errorln("Failed to start visor.")
 		quitSystray()
 		return
 	}
-	visAssignChan <- ok
 	vis.SetLogstore(store)
 
 	if launchBrowser {
