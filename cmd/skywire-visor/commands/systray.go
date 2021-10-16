@@ -34,9 +34,7 @@ func runApp(args ...string) {
 
 	conf := initConfig(l, args, confPath)
 
-	<-visAssignChan
-
-	systray.Run(gui.GetOnGUIReady(sysTrayIcon, conf, vis), gui.OnGUIQuit)
+	systray.Run(gui.GetOnGUIReady(sysTrayIcon, conf), gui.OnGUIQuit)
 
 }
 
