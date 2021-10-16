@@ -18,6 +18,7 @@ export class Node {
   roundTripPing?: string;
   isHypervisor?: boolean;
   skybianBuildVersion?: string;
+  autoconnectTransports: boolean;
 }
 
 export interface Application {
@@ -79,12 +80,7 @@ interface RouteDescriptor {
 }
 
 export interface HealthInfo {
-  status: number;
-  transportDiscovery: number;
-  routeFinder: number;
-  setupNode: number;
-  uptimeTracker: number;
-  addressResolver: number;
+  servicesHealth?: String;
 }
 
 export class ProxyDiscoveryEntry {
