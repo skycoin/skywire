@@ -10,7 +10,7 @@ import (
 const (
 	deinstallerPath = "/Applications/Skywire.app/Contents/MacOS/deinstaller"
 	appPath         = "/Applications/Skywire.app"
-	iconName        = "/Applications/Skywire.app/Contents/Resources/icon.tiff"
+	iconName        = "icons/icon.tiff"
 )
 
 func checkIsPackage() bool {
