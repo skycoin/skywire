@@ -30,15 +30,3 @@ echo "updating skywire"
 if [[ ! -L /usr/local/bin/skywire-cli ]]; then
   ln -s /Applications/Skywire.app/Contents/MacOS/skywire-cli /usr/local/bin/skywire-cli
 fi
-
-echo "updating user permission in Skywire.app"
-chown root /Applications/Skywire.app/Contents/MacOS/deinstaller
-chmod 4755 /Applications/Skywire.app/Contents/MacOS/deinstaller
-
-echo "making vpn-client runnable as normal user"
-chown root /Applications/Skywire.app/Contents/MacOS/apps/vpn-client
-chmod 4755 /Applications/Skywire.app/Contents/MacOS/apps/vpn-client
-
-mdimport /Applications/Skywire.app
-
-
