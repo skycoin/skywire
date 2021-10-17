@@ -130,10 +130,10 @@ func registerModules(logger *logging.MasterLogger) {
 	cli = maker("cli", initCLI)
 	hvs = maker("hypervisors", initHypervisors, &dmsgC)
 	ut = maker("uptime_tracker", initUptimeTracker)
-	pv = maker("public_visors", initPublicVisors, &tr)
+	pv = maker("public_autoconnect", initPublicAutoconnect, &tr)
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
 	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl)
-	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc)
+	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &pty,
 		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC)
 
@@ -316,7 +316,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	var listenAddr string
 	if v.conf.STCP != nil {
 		table = stcp.NewTable(v.conf.STCP.PKTable)
-		listenAddr = v.conf.STCP.LocalAddr
+		listenAddr = v.conf.STCP.ListeningAddress
 	}
 	factory := network.ClientFactory{
 		PK:         v.conf.PK,
@@ -581,8 +581,8 @@ func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error {
-	const tickDuration = 5 * time.Minute
+func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
+	const tickDuration = 1 * time.Minute
 
 	conf := v.conf.UptimeTracker
 
@@ -593,7 +593,6 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 
 	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK)
 	if err != nil {
-		// TODO(evanlinjin): We should design utclient to retry automatically instead of returning error.
 		v.log.WithError(err).Warn("Failed to connect to uptime tracker.")
 		return nil
 	}
@@ -602,9 +601,12 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 
 	go func() {
 		for range ticker.C {
-			ctx := context.Background()
-			if err := ut.UpdateVisorUptime(ctx); err != nil {
+			c := context.Background()
+			if err := ut.UpdateVisorUptime(c); err != nil {
+				v.isServicesHealthy.unset()
 				log.WithError(err).Warn("Failed to update visor uptime.")
+			} else {
+				v.isServicesHealthy.set()
 			}
 		}
 	}()
@@ -664,8 +666,8 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initPublicVisors(ctx context.Context, v *Visor, log *logging.Logger) error {
-	if !v.conf.Transport.AutoconnectPublic {
+func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) error {
+	if !v.conf.Transport.PublicAutoconnect {
 		return nil
 	}
 	serviceDisc := v.conf.Launcher.ServiceDisc

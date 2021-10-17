@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -18,6 +19,9 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
+	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	skynetutil "github.com/skycoin/skywire/pkg/util/netutil"
@@ -34,7 +38,6 @@ type Client struct {
 	log            *logrus.Logger
 	cfg            ClientConfig
 	appCl          *app.Client
-	r              *netutil.Retrier
 	directIPSMu    sync.Mutex
 	directIPs      []net.IP
 	defaultGateway net.IP
@@ -50,6 +53,8 @@ type Client struct {
 	tunMu      sync.Mutex
 	tun        TUNDevice
 	tunCreated bool
+
+	connectedDuration int64
 }
 
 // NewClient creates VPN client instance.
@@ -86,7 +91,7 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 
 	stcpEntities, err := stcpEntitiesFromEnv()
 	if err != nil {
-		return nil, fmt.Errorf("error getting STCP entities: %w", err)
+		return nil, fmt.Errorf("error getting Skywire-TCP entities: %w", err)
 	}
 
 	tpRemoteIPs, err := tpRemoteIPsFromEnv()
@@ -109,13 +114,7 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 		directIPs = append(directIPs, utIP)
 	}
 
-	const (
-		serverDialInitBO = 1 * time.Second
-		serverDialMaxBO  = 10 * time.Second
-	)
-
 	log := logrus.New()
-	r := netutil.NewRetrier(log, serverDialInitBO, serverDialMaxBO, 0, 1)
 
 	defaultGateway, err := DefaultNetworkGateway()
 	if err != nil {
@@ -128,7 +127,6 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 		log:            log,
 		cfg:            cfg,
 		appCl:          appCl,
-		r:              r,
 		directIPs:      filterOutEqualIPs(directIPs),
 		defaultGateway: defaultGateway,
 		closeC:         make(chan struct{}),
@@ -181,23 +179,47 @@ func (c *Client) Serve() error {
 			fmt.Printf("Failed to close TUN: %v\n", err)
 		}
 
-		fmt.Println("Closed TUN")
+		c.log.Info("Closing TUN")
 	}()
 
-	defer c.setAppStatus(ClientStatusShuttingDown)
+	defer func() {
+		c.setAppStatus(ClientStatusShuttingDown)
+		c.resetConnDuration()
+	}()
 
 	c.setAppStatus(ClientStatusConnecting)
 
-	r := netutil.NewDefaultRetrier(c.log)
+	errNoTransportFound := appserver.RPCErr{
+		Err: router.ErrNoTransportFound.Error(),
+	}
+
+	errTransportNotFound := appserver.RPCErr{
+		Err: rfclient.ErrTransportNotFound.Error(),
+	}
+
+	r := netutil.NewRetrier(c.log, netutil.DefaultInitBackoff, netutil.DefaultMaxBackoff, 3, netutil.DefaultFactor).
+		WithErrWhitelist(errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
+			errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound)
+
 	err := r.Do(context.Background(), func() error {
 		if c.isClosed() {
 			return nil
 		}
 
 		if err := c.dialServeConn(); err != nil {
-			c.setAppStatus(ClientStatusReconnecting)
-			fmt.Println("Connection broke, reconnecting...")
-			return fmt.Errorf("dialServeConn: %w", err)
+			switch err {
+			case errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
+				errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound:
+				c.setAppError(err)
+				c.resetConnDuration()
+				return err
+			default:
+				c.resetConnDuration()
+				c.setAppStatus(ClientStatusReconnecting)
+				c.setAppError(errTimeout)
+				fmt.Println("\nConnection broke, reconnecting...")
+				return fmt.Errorf("dialServeConn: %w", err)
+			}
 		}
 
 		return nil
@@ -238,6 +260,17 @@ func (c *Client) AddDirectRoute(ip net.IP) error {
 	return c.setupDirectRoute(ip)
 }
 
+func (c *Client) removeDirectRouteFn(ip net.IP, i int) error {
+	c.directIPs = append(c.directIPs[:i], c.directIPs[i+1:]...)
+
+	if err := c.setSysPrivileges(); err != nil {
+		return fmt.Errorf("failed to setup system privileges: %w", err)
+	}
+	defer c.releaseSysPrivileges()
+
+	return c.removeDirectRoute(ip)
+}
+
 // RemoveDirectRoute removes direct route. Packets destined to `ip` will
 // go through VPN.
 func (c *Client) RemoveDirectRoute(ip net.IP) error {
@@ -246,17 +279,9 @@ func (c *Client) RemoveDirectRoute(ip net.IP) error {
 
 	for i, storedIP := range c.directIPs {
 		if ip.Equal(storedIP) {
-			c.directIPs = append(c.directIPs[:i], c.directIPs[i+1:]...)
-
-			if err := c.setSysPrivileges(); err != nil {
-				return fmt.Errorf("failed to setup system privileges: %w", err)
-			}
-			defer c.releaseSysPrivileges()
-
-			if err := c.removeDirectRoute(ip); err != nil {
+			if err := c.removeDirectRouteFn(ip, i); err != nil {
 				return err
 			}
-
 			break
 		}
 	}
@@ -326,7 +351,8 @@ func (c *Client) setupTUN(tunIP, tunGateway net.IP) error {
 func (c *Client) serveConn(conn net.Conn) error {
 	tunIP, tunGateway, err := c.shakeHands(conn)
 	if err != nil {
-		return fmt.Errorf("error during client/server handshake: %w", err)
+		fmt.Printf("error during client/server handshake: %s", err)
+		return err
 	}
 
 	fmt.Printf("Performed handshake with %s\n", conn.RemoteAddr())
@@ -382,6 +408,8 @@ func (c *Client) serveConn(conn net.Conn) error {
 	}
 
 	c.setAppStatus(ClientStatusRunning)
+	c.resetConnDuration()
+	t := time.NewTicker(time.Second)
 
 	defer func() {
 		if !c.cfg.Killswitch {
@@ -412,10 +440,19 @@ func (c *Client) serveConn(conn net.Conn) error {
 	}()
 
 	// only one side may fail here, so we wait till at least one fails
-	select {
-	case <-connToTunDoneCh:
-	case <-tunToConnCh:
-	case <-c.closeC:
+serveLoop:
+	for {
+		select {
+		case <-connToTunDoneCh:
+			break serveLoop
+		case <-tunToConnCh:
+			break serveLoop
+		case <-c.closeC:
+			break serveLoop
+		case <-t.C:
+			atomic.AddInt64(&c.connectedDuration, 1)
+			c.setConnectionDuration()
+		}
 	}
 
 	// here we setup system privileges again, so deferred calls may be done safely
@@ -429,7 +466,8 @@ func (c *Client) serveConn(conn net.Conn) error {
 func (c *Client) dialServeConn() error {
 	conn, err := c.dialServer(c.appCl, c.cfg.ServerPK)
 	if err != nil {
-		return fmt.Errorf("error connecting to VPN server: %w", err)
+		fmt.Printf("error connecting to VPN server: %s", err)
+		return err
 	}
 
 	fmt.Printf("Dialed %s\n", conn.RemoteAddr())
@@ -445,7 +483,8 @@ func (c *Client) dialServeConn() error {
 	}
 
 	if err := c.serveConn(conn); err != nil {
-		return fmt.Errorf("error serving app conn: %w", err)
+		fmt.Printf("error serving app conn: %s", err)
+		return err
 	}
 
 	return nil
@@ -612,7 +651,7 @@ func stcpEntitiesFromEnv() ([]net.IP, error) {
 	if stcpTableLenStr != "" {
 		stcpTableLen, err := strconv.Atoi(stcpTableLenStr)
 		if err != nil {
-			return nil, fmt.Errorf("invalid STCP table len: %s: %w", stcpTableLenStr, err)
+			return nil, fmt.Errorf("invalid Skywire-TCP table len: %s: %w", stcpTableLenStr, err)
 		}
 
 		stcpEntities = make([]net.IP, 0, stcpTableLen)
@@ -624,7 +663,7 @@ func stcpEntitiesFromEnv() ([]net.IP, error) {
 
 			stcpAddr, err := ipFromEnv(STCPValueEnvPrefix + stcpKey)
 			if err != nil {
-				return nil, fmt.Errorf("error getting STCP entity IP: %w", err)
+				return nil, fmt.Errorf("error getting Skywire-TCP entity IP: %w", err)
 			}
 
 			stcpEntities = append(stcpEntities, stcpAddr)
@@ -663,7 +702,7 @@ func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error)
 	fmt.Printf("Got server hello: %v", sHello)
 
 	if sHello.Status != HandshakeStatusOK {
-		return nil, nil, fmt.Errorf("got status %d (%s) from the server", sHello.Status, sHello.Status)
+		return nil, nil, sHello.Status.getError()
 	}
 
 	return sHello.TUNIP, sHello.TUNGateway, nil
@@ -684,22 +723,13 @@ func (c *Client) dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, erro
 	)
 
 	var conn net.Conn
-	err := c.r.Do(context.Background(), func() error {
-		var err error
-		conn, err = appCl.Dial(appnet.Addr{
-			Net:    netType,
-			PubKey: pk,
-			Port:   vpnPort,
-		})
-
-		if c.isClosed() {
-			// in this case client got closed, we return no error,
-			// so that retrier could stop gracefully
-			return nil
-		}
-
-		return err
+	var err error
+	conn, err = appCl.Dial(appnet.Addr{
+		Net:    netType,
+		PubKey: pk,
+		Port:   vpnPort,
 	})
+
 	if err != nil {
 		return nil, err
 	}
@@ -719,6 +749,18 @@ func (c *Client) setAppStatus(status ClientStatus) {
 	}
 }
 
+func (c *Client) setConnectionDuration() {
+	if err := c.appCl.SetConnectionDuration(atomic.LoadInt64(&c.connectedDuration)); err != nil {
+		fmt.Printf("Failed to set connection duration: %v\n", err)
+	}
+}
+
+func (c *Client) setAppError(appErr error) {
+	if err := c.appCl.SetError(appErr.Error()); err != nil {
+		fmt.Printf("Failed to set error %v: %v\n", appErr, err)
+	}
+}
+
 func (c *Client) isClosed() bool {
 	select {
 	case <-c.closeC:
@@ -727,6 +769,11 @@ func (c *Client) isClosed() bool {
 	}
 
 	return false
+}
+
+func (c *Client) resetConnDuration() {
+	atomic.StoreInt64(&c.connectedDuration, 0)
+	c.setConnectionDuration()
 }
 
 func ipFromEnv(key string) (net.IP, error) {

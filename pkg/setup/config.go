@@ -8,8 +8,6 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsgc"
 )
 
-//go:generate readmegen -n Config -o ./README.md ./config.go
-
 // Various timeouts for setup node.
 const (
 	RequestTimeout = time.Second * 60

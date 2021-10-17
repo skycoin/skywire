@@ -68,6 +68,16 @@ func (c *Client) SetDetailedStatus(status string) error {
 	return c.rpcC.SetDetailedStatus(status)
 }
 
+// SetConnectionDuration sets the detailed app connection duration within the visor.
+func (c *Client) SetConnectionDuration(dur int64) error {
+	return c.rpcC.SetConnectionDuration(dur)
+}
+
+// SetError sets app error within the visor.
+func (c *Client) SetError(appErr string) error {
+	return c.rpcC.SetError(appErr)
+}
+
 // Dial dials the remote visor using `remote`.
 func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 	connID, localPort, err := c.rpcC.Dial(remote)

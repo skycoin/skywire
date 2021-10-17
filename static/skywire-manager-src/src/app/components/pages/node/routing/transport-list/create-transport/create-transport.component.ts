@@ -102,11 +102,14 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
 
     if (this.makePersistent) {
       // Check the current visor config.
-      this.operationSubscription = this.nodeService.getNode(NodeComponent.getCurrentNodeKey()).subscribe(nodeData => {
+      const operation = this.transportService.getPersistentTransports(NodeComponent.getCurrentNodeKey());
+      this.operationSubscription = operation.subscribe((list: any[]) => {
+        const dataToUse = list ? list : [];
+
         let noNeedToAddToPersistents = false;
 
         // Check if the transport is already in the persistent list.
-        nodeData.persistentTransports.forEach(t => {
+        dataToUse.forEach(t => {
           if (t.pk.toUpperCase() === newTransportPk.toUpperCase() && t.type.toUpperCase() === newTransportType.toUpperCase()) {
             noNeedToAddToPersistents = true;
           }
@@ -115,7 +118,7 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
         if (noNeedToAddToPersistents) {
           this.createTransport(newTransportPk, newTransportType, newTransportLabel, true);
         } else {
-          this.createPersistent(nodeData.persistentTransports, newTransportPk, newTransportType, newTransportLabel);
+          this.createPersistent(dataToUse, newTransportPk, newTransportType, newTransportLabel);
         }
       }, err => {
         this.onError(err);

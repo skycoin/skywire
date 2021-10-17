@@ -72,6 +72,8 @@ type Visor struct {
 	// used by init and shutdown to show/check for any residual errors
 	// produced by concurrent parts of modules
 	runtimeErrors chan error
+
+	isServicesHealthy *internalHealthInfo
 }
 
 // todo: consider moving module closing to the module system
@@ -97,11 +99,14 @@ func (v *Visor) MasterLogger() *logging.MasterLogger {
 // NewVisor constructs new Visor.
 func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) {
 	v := &Visor{
-		log:        conf.MasterLogger().PackageLogger("visor"),
-		conf:       conf,
-		restartCtx: restartCtx,
-		initLock:   new(sync.Mutex),
+		log:               conf.MasterLogger().PackageLogger("visor"),
+		conf:              conf,
+		restartCtx:        restartCtx,
+		initLock:          new(sync.Mutex),
+		isServicesHealthy: newInternalHealthInfo(),
 	}
+
+	v.isServicesHealthy.init()
 
 	if logLvl, err := logging.LevelFromString(conf.LogLevel); err != nil {
 		v.log.WithError(err).Warn("Failed to read log level from config.")
@@ -209,19 +214,4 @@ func (v *Visor) SetLogstore(store logstore.Store) {
 // tpDiscClient is a convenience function to obtain transport discovery client.
 func (v *Visor) tpDiscClient() transport.DiscoveryClient {
 	return v.tpM.Conf.DiscoveryClient
-}
-
-// routeFinderClient is a convenience function to obtain route finder client.
-func (v *Visor) routeFinderClient() rfclient.Client {
-	return v.rfClient
-}
-
-// uptimeTrackerClient is a convenience function to obtain uptime tracker client.
-func (v *Visor) uptimeTrackerClient() utclient.APIClient {
-	return v.uptimeTracker
-}
-
-// addressResolverClient is a convenience function to obtain uptime address resovler client.
-func (v *Visor) addressResolverClient() addrresolver.APIClient {
-	return v.arClient
 }
