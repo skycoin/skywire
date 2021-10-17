@@ -685,11 +685,17 @@
       "download-info": "Download speed."
     },
 
+    "connection-error" : {
+      "text": "Connection error",
+      "info": "Problem connecting with the vpn app. Some data being displayed could be outdated."
+    },
+
     "status-page": {
       "start-title": "Start VPN",
       "no-server": "No server selected!",
       "disconnect": "Disconnect",
       "last-error": "Last error:",
+      "unknown-error": "Unknown error.",
       "disconnect-confirmation": "Are you sure you want to stop the VPN protection?",
       "entered-manually": "Entered manually",
       "upload-info": "Uploaded data stats.",

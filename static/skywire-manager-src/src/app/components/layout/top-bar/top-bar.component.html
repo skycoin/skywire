@@ -121,11 +121,20 @@
 
   <!-- VPN connection info. -->
   <div *ngIf="showVpnInfo">
-    <!-- Languaje button. -->
-    <div class="languaje-button-vpn" *ngIf="!hideLanguageButton && language">
-      <div class="text-container" (click)="openLanguageWindow()">
-        <img [src]="'assets/img/lang/' + language.iconName" class="language-flag" />
-        {{ (language ? language.name : '') | translate }}
+    <div class="top-text-vpn-container">
+      <!-- Languaje button. -->
+      <div class="languaje-button-vpn" *ngIf="!hideLanguageButton && language">
+        <div class="text-container" (click)="openLanguageWindow()">
+          <img [src]="'assets/img/lang/' + language.iconName" class="language-flag" />
+          {{ (language ? language.name : '') | translate }}
+        </div>
+      </div>
+      <!-- Separator. -->
+      <div class="elements-separator"></div>
+      <!-- Connection error msg. -->
+      <div *ngIf="errorsConnectingToVpn" class="connection-error-msg-vpn blinking" [matTooltip]="'vpn.connection-error.info' | translate">
+        <mat-icon [inline]="true">warning</mat-icon>
+        {{ 'vpn.connection-error.text' | translate }}
       </div>
     </div>
     <div class="vpn-info vpn-dark-box-radius">
