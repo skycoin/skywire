@@ -30,7 +30,7 @@
     <div *ngIf="!showStarted" class="col-7 column left-area">
       <div class="column-container">
         <div class="title">{{ 'vpn.status-page.start-title' | translate }}</div>
-        <!-- Staert button. -->
+        <!-- Start button. -->
         <div>
           <div class="start-button" (click)="start()" [ngClass]="{'disabled-button': showBusy}">
             <div class="start-button-img-container">
@@ -93,10 +93,10 @@
         </div>
         <!-- Last error. -->
         <div>
-          <div class="lower-text last-error" *ngIf="backendState && backendState.vpnClientAppData && backendState.vpnClientAppData.lasErrorMsg">
+          <div class="lower-text last-error" *ngIf="backendState && backendState.vpnClientAppData && backendState.vpnClientAppData.lastErrorMsg">
             <mat-icon [inline]="true">cancel</mat-icon>
             {{ 'vpn.status-page.last-error' | translate }}
-            {{ backendState.vpnClientAppData.lasErrorMsg }}
+            {{ backendState.vpnClientAppData.lastErrorMsg }}
           </div>
         </div>
       </div>
@@ -105,21 +105,26 @@
     <div *ngIf="showStarted" class="col-7 column left-area-connected">
       <div class="column-container">
         <!-- Time. -->
-        <!-- Commented until we have a good way to calculate the connection time. -->
-        <!--
         <div class="time-container">
           <div class="time-content">
             <mat-icon [inline]="true">timer</mat-icon>
-            <span>00:00:00</span>
+            <span>{{ connectionTimeString }}</span>
           </div>
         </div>
-        -->
+        <!-- Title. -->
         <div class="state-title">{{ 'vpn.connection-info.state-title' | translate }}</div>
+        <!-- Current state. -->
         <div class="d-inline-block">
           <div class="state-text">{{ currentStateText | translate }}</div>
           <div [class]="'state-line ' + currentStateLineClass"></div>
         </div>
         <div class="state-explanation">{{ (currentStateText + '-info') | translate }}</div>
+        <!-- Last error. -->
+        <div class="last-connected-error" *ngIf="backendState && backendState.vpnClientAppData && backendState.vpnClientAppData.connectionData && backendState.vpnClientAppData.connectionData.error">
+          <mat-icon [inline]="true">cancel</mat-icon>
+          {{ 'vpn.status-page.last-error' | translate }}
+          {{ backendState.vpnClientAppData.connectionData.error }}
+        </div>
         <!-- Square graphs. -->
         <div class="data-container">
           <!-- Uploaded data. -->

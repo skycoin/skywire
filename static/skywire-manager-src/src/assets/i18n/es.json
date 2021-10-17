@@ -685,11 +685,17 @@
       "download-info": "Velocidad de descarga."
     },
 
+    "connection-error" : {
+      "text": "Error de conexión",
+      "info": "Problema conectando con la app vpn. Algunos datos mostrados podrían estar desactualizados."
+    },
+
     "status-page": {
       "start-title": "Iniciar VPN",
       "no-server": "¡Ningún servidor seleccionado!",
       "disconnect": "Desconectar",
       "last-error": "Último error:",
+      "unknown-error": "Error desconocido.",
       "disconnect-confirmation": "¿Realmente desea detener la protección VPN?",
       "entered-manually": "Ingresado manualmente",
       "upload-info": "Estadísticas de datos subidos.",
