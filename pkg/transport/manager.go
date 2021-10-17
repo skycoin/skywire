@@ -248,17 +248,19 @@ func (tm *Manager) cleanupTransports(ctx context.Context) {
 }
 
 // Networks returns all the network types contained within the TransportManager.
-func (tm *Manager) Networks() []string {
-	var nets []string
+func (tm *Manager) Networks() []network.Type {
+	tm.mx.Lock()
+	defer tm.mx.Unlock()
+	var nets []network.Type
 	for netType := range tm.netClients {
-		nets = append(nets, string(netType))
+		nets = append(nets, netType)
 	}
 	return nets
 }
 
 // Stcpr returns stcpr client
 func (tm *Manager) Stcpr() (network.Client, bool) {
-	c, ok := tm.netClients[network.STCP]
+	c, ok := tm.netClients[network.STCPR]
 	return c, ok
 }
 
@@ -412,7 +414,7 @@ func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, netT
 	}
 
 	tm.mx.RLock()
-	client, ok := tm.netClients[network.Type(netType)]
+	client, ok := tm.netClients[netType]
 	tm.mx.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("client not found for the type %s", netType)
@@ -478,17 +480,6 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 
 	// Deregister transport before closing the underlying transport.
 	if tp, ok := tm.tps[id]; ok {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		defer cancel()
-
-		// todo: this should probably be moved to tp.close because we want to deregister
-		// a transport completely and not deal with transport statuses at all
-		if err := tm.Conf.DiscoveryClient.DeleteTransport(ctx, id); err != nil {
-			tm.Logger.WithError(err).Warnf("Failed to deregister transport of ID %s from discovery.", id)
-		} else {
-			tm.Logger.Infof("De-registered transport of ID %s from discovery.", id)
-		}
-
 		// Close underlying transport.
 		tp.close()
 		delete(tm.tps, id)
@@ -554,6 +545,10 @@ func (tm *Manager) Close() {
 		if err != nil {
 			tm.Logger.WithError(err).Warnf("Failed to close %s client", client.Type())
 		}
+	}
+	err := tm.arClient.Close()
+	if err != nil {
+		tm.Logger.WithError(err).Warnf("Failed to close arClient")
 	}
 	tm.wg.Wait()
 	close(tm.readCh)

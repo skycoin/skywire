@@ -19,8 +19,7 @@ github.com/armon/go-socks5
 # github.com/ccding/go-stun/stun v0.0.0-20200514191101-4dc67bcdb029
 ## explicit
 github.com/ccding/go-stun/stun
-# github.com/creack/pty v1.1.11
-## explicit
+# github.com/creack/pty v1.1.15
 github.com/creack/pty
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
@@ -100,8 +99,7 @@ github.com/klauspost/pgzip
 github.com/klauspost/reedsolomon
 # github.com/mattn/go-colorable v0.1.8
 github.com/mattn/go-colorable
-# github.com/mattn/go-isatty v0.0.13
-## explicit
+# github.com/mattn/go-isatty v0.0.12
 github.com/mattn/go-isatty
 # github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
 ## explicit
@@ -160,7 +158,7 @@ github.com/shirou/gopsutil/v3/process
 ## explicit
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v0.0.0-20210915195912-2f9b055f39fe
+# github.com/skycoin/dmsg v0.0.0-20211007145032-962409e5845f
 ## explicit
 github.com/skycoin/dmsg
 github.com/skycoin/dmsg/buildinfo
@@ -261,11 +259,6 @@ golang.org/x/crypto/ssh/terminal
 golang.org/x/crypto/tea
 golang.org/x/crypto/twofish
 golang.org/x/crypto/xtea
-# golang.org/x/image v0.0.0-20210628002857-a66eb6448b8d
-## explicit
-golang.org/x/image/ccitt
-golang.org/x/image/tiff
-golang.org/x/image/tiff/lzw
 # golang.org/x/mod v0.4.2
 golang.org/x/mod/semver
 # golang.org/x/net v0.0.0-20210405180319-a5a99cb37ef4
@@ -279,7 +272,7 @@ golang.org/x/net/ipv4
 golang.org/x/net/ipv6
 golang.org/x/net/nettest
 golang.org/x/net/proxy
-# golang.org/x/sys v0.0.0-20210608053332-aa57babbf139
+# golang.org/x/sys v0.0.0-20210927094055-39ccf1dd6fa6
 ## explicit
 golang.org/x/sys/cpu
 golang.org/x/sys/execabs
@@ -292,6 +285,7 @@ golang.org/x/sys/windows/registry
 ## explicit
 golang.org/x/term
 # golang.org/x/text v0.3.6
+## explicit
 golang.org/x/text/transform
 golang.org/x/text/unicode/norm
 # golang.org/x/tools v0.1.2

@@ -166,33 +166,3 @@ func (c *apiClient) DeleteTransport(ctx context.Context, id uuid.UUID) error {
 
 	return httputil.ErrorFromResp(resp)
 }
-
-func (c *apiClient) Health(ctx context.Context) (int, error) {
-	resp, err := c.Get(ctx, "/health")
-	if err != nil {
-		return 0, err
-	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close HTTP response body")
-		}
-	}()
-
-	return resp.StatusCode, nil
-}
-
-func (c *apiClient) HeartBeat(ctx context.Context, id uuid.UUID) error {
-	resp, err := c.Post(ctx, fmt.Sprintf("/heartbeat/id:%s", id.String()), nil)
-	if err != nil {
-		return err
-	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close HTTP response body")
-		}
-	}()
-
-	return nil
-}

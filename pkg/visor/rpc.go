@@ -170,17 +170,30 @@ func (r *RPC) Overview(_ *struct{}, out *Overview) (err error) {
 	<<< APP MANAGEMENT >>>
 */
 
-// SetAppDetailedStatusIn is input for SetAppDetailedStatus.
-type SetAppDetailedStatusIn struct {
+// SetAppStatusIn is input for SetAppDetailedStatus.
+type SetAppStatusIn struct {
 	AppName string
 	Status  string
 }
 
+// SetAppErrorIn is input for SetAppError.
+type SetAppErrorIn struct {
+	AppName string
+	Err     string
+}
+
 // SetAppDetailedStatus sets app's detailed status.
-func (r *RPC) SetAppDetailedStatus(in *SetAppDetailedStatusIn, _ *struct{}) (err error) {
+func (r *RPC) SetAppDetailedStatus(in *SetAppStatusIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppDetailedStatus", in)(nil, &err)
 
 	return r.visor.SetAppDetailedStatus(in.AppName, in.Status)
+}
+
+// SetAppError sets app's error.
+func (r *RPC) SetAppError(in *SetAppErrorIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppError", in)(nil, &err)
+
+	return r.visor.SetAppError(in.AppName, in.Err)
 }
 
 // Apps returns list of Apps registered on the Visor.
@@ -514,9 +527,32 @@ func (r *RPC) RuntimeLogs(_ *struct{}, logs *string) (err error) {
 	return
 }
 
-// SetMinHops sets min_hops from visor's routing config
+// SetMinHops sets min_hops in visor's routing config
 func (r *RPC) SetMinHops(n *uint16, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetMinHops", *n)
 	err = r.visor.SetMinHops(*n)
 	return
+}
+
+// GetPersistentTransports gets persistent_transports from visor's routing config
+func (r *RPC) GetPersistentTransports(_ *struct{}, out *[]transport.PersistentTransports) (err error) {
+	defer rpcutil.LogCall(r.log, "GetPersistentTransports", nil)(out, &err)
+
+	pTs, err := r.visor.GetPersistentTransports()
+	*out = pTs
+	return err
+}
+
+// SetPersistentTransports sets persistent_transports in visor's routing config
+func (r *RPC) SetPersistentTransports(pTs *[]transport.PersistentTransports, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetPersistentTransports", *pTs)
+	err = r.visor.SetPersistentTransports(*pTs)
+	return err
+}
+
+// SetPublicAutoconnect sets public_autoconnect in visor's routing config
+func (r *RPC) SetPublicAutoconnect(pAc *bool, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetPublicAutoconnect", *pAc)
+	err = r.visor.SetPublicAutoconnect(*pAc)
+	return err
 }
