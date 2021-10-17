@@ -376,7 +376,7 @@ export class TransportListComponent implements OnDestroy {
       confirmationDialog.componentInstance.showProcessing();
 
       this.persistentTransportSubscription = this.transportService.getPersistentTransports(this.nodePK).subscribe((list: any[]) => {
-        const dataToUse = list;
+        const dataToUse = list ? list : [];
         let nothingToDo = false;
 
         const transportsMap: Map<String, Transport> = new Map<String, Transport>();

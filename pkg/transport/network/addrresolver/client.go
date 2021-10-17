@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/AudriusButkevicius/pfilter"
@@ -27,14 +28,14 @@ import (
 
 const (
 	// sudphPriority is used to set an order how connection filters apply.
-	sudphPriority              = 1
-	stcprBindPath              = "/bind/stcpr"
-	stcprHeartbeatPath         = "/heartbeat/stcpr"
-	stcprKeepHeartbeatInterval = 300 * time.Second
-	addrChSize                 = 1024
-	udpKeepHeartbeatInterval   = 10 * time.Second
-	udpKeepHeartbeatMessage    = "heartbeat"
-	defaultUDPPort             = "30178"
+	sudphPriority            = 1
+	stcprBindPath            = "/bind/stcpr"
+	addrChSize               = 1024
+	udpKeepHeartbeatInterval = 10 * time.Second
+	udpKeepHeartbeatMessage  = "heartbeat"
+	defaultUDPPort           = "30178"
+	// UDPDelBindMessage is used as a deletebind packet on visor shutdown.
+	UDPDelBindMessage = "delBind"
 )
 
 var (
@@ -53,11 +54,10 @@ type Error struct {
 
 // APIClient implements address resolver API client.
 type APIClient interface {
-	io.Closer
 	BindSTCPR(ctx context.Context, port string) error
 	BindSUDPH(filter *pfilter.PacketFilter, handshake Handshake) (<-chan RemoteVisor, error)
 	Resolve(ctx context.Context, netType string, pk cipher.PubKey) (VisorData, error)
-	Health(ctx context.Context) (int, error)
+	Close() error
 }
 
 // VisorData stores visor data.
@@ -78,6 +78,7 @@ type httpClient struct {
 	sudphConn      net.PacketConn
 	ready          chan struct{}
 	closed         chan struct{}
+	delBindSudphWg sync.WaitGroup
 }
 
 // NewHTTP creates a new client setting a public key to the client to be used for auth.
@@ -174,6 +175,25 @@ func (c *httpClient) Post(ctx context.Context, path string, payload interface{})
 	return c.httpClient.Do(req.WithContext(ctx))
 }
 
+// Delete performs a DELETE request.
+func (c *httpClient) Delete(ctx context.Context, path string) (*http.Response, error) {
+	<-c.ready
+	var payload struct{}
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(payload); err != nil {
+		return nil, err
+	}
+
+	addr := c.httpClient.Addr() + path
+
+	req, err := http.NewRequest(http.MethodDelete, addr, body)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.httpClient.Do(req.WithContext(ctx))
+}
+
 // BindRequest stores bind request values.
 type BindRequest struct {
 	Port string `json:"port"`
@@ -218,12 +238,34 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
 	}
 
-	go func() {
-		if err := c.keepStcprHeartbeatLoop(ctx); err != nil {
-			c.log.WithError(err).Errorf("Failed to send TCP heartbeat signal to address-resolver")
+	return nil
+}
+
+// delBindSTCPR uinbinds STCPR entry PK to IP:port on address resolver.
+func (c *httpClient) delBindSTCPR(ctx context.Context) error {
+	if !c.isReady() {
+		c.log.Debugf("delBindSTCPR: Address resolver is not ready yet, waiting...")
+		<-c.ready
+		c.log.Debugf("delBindSTCPR: Address resolver became ready, unbinding")
+	}
+
+	c.log.Debugf("delBindSTCPR: deleting the binding pk: %v from Address resolver", c.pk.String())
+	resp, err := c.Delete(ctx, stcprBindPath)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.log.WithError(err).Warn("Failed to close response body")
 		}
 	}()
 
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
+	}
+
+	c.log.Debugf("delBindSTCPR: Deleted bind pk: %v from Address resolver successfully", c.pk.String())
 	return nil
 }
 
@@ -286,6 +328,12 @@ func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter, hs Handshake) (<-ch
 		}
 	}()
 
+	go func() {
+		if err := c.delBindSUDPH(arConn); err != nil {
+			c.log.WithError(err).Errorf("Failed to send UDP unbind packet to address-resolver")
+		}
+	}()
+
 	return addrCh, nil
 }
 
@@ -329,25 +377,6 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 	return resolveResp, nil
 }
 
-func (c *httpClient) Health(ctx context.Context) (int, error) {
-	if !c.isReady() {
-		return http.StatusNotFound, nil
-	}
-
-	resp, err := c.Get(ctx, "/health")
-	if err != nil {
-		return 0, err
-	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			c.log.WithError(err).Warn("Failed to close response body")
-		}
-	}()
-
-	return resp.StatusCode, nil
-}
-
 func (c *httpClient) isReady() bool {
 	select {
 	case <-c.ready:
@@ -380,6 +409,10 @@ func (c *httpClient) readSUDPHMessages(reader io.Reader) <-chan RemoteVisor {
 			default:
 				n, err := reader.Read(buf)
 				if err != nil {
+					if c.isClosed() {
+						c.log.Infof("SUDPH conn closed on shutdown message: %v", err)
+						return
+					}
 					c.log.Errorf("Failed to read SUDPH message: %v", err)
 					return
 				}
@@ -412,31 +445,19 @@ func (c *httpClient) Close() error {
 	}()
 
 	if c.sudphConn != nil {
+		c.delBindSudphWg.Add(1)
+		close(c.closed)
+		c.delBindSudphWg.Wait()
 		if err := c.sudphConn.Close(); err != nil {
 			c.log.WithError(err).Errorf("Failed to close SUDPH")
 		}
-		close(c.closed)
+	}
+
+	if err := c.delBindSTCPR(context.Background()); err != nil {
+		c.log.WithError(err).Errorf("Failed to delete STCPR binding")
 	}
 
 	return nil
-}
-
-// Keep stcpr heartbeat in address-resolver
-func (c *httpClient) keepStcprHeartbeatLoop(ctx context.Context) error {
-	for {
-		_, err := c.Get(ctx, stcprHeartbeatPath)
-		if err != nil {
-			return err
-		}
-
-		c.log.Debugf("Sent TCP heartbeat signal to address-resolver")
-		select {
-		case <-c.closed:
-			return nil
-		default:
-			time.Sleep(stcprKeepHeartbeatInterval)
-		}
-	}
 }
 
 // Keep NAT mapping alive.
@@ -449,9 +470,30 @@ func (c *httpClient) keepSudphHeartbeatLoop(w io.Writer) error {
 			if _, err := w.Write([]byte(udpKeepHeartbeatMessage)); err != nil {
 				return err
 			}
-
 			time.Sleep(udpKeepHeartbeatInterval)
 		}
+	}
+}
+
+// delBindSUDPH unbinds SUDPH entry in address resolver.
+func (c *httpClient) delBindSUDPH(w io.Writer) error {
+	// send unbind packet on shutdown
+	<-c.closed
+	defer c.delBindSudphWg.Done()
+	if _, err := w.Write([]byte(UDPDelBindMessage)); err != nil {
+		return err
+	}
+	c.log.Debugf("delBindSUDPH: Deleted bind pk: %v from Address resolver successfully", c.pk.String())
+
+	return nil
+}
+
+func (c *httpClient) isClosed() bool {
+	select {
+	case <-c.closed:
+		return true
+	default:
+		return false
 	}
 }
 

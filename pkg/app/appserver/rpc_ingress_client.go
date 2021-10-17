@@ -15,6 +15,8 @@ import (
 // RPCIngressClient describes RPC interface to communicate with the server.
 type RPCIngressClient interface {
 	SetDetailedStatus(status string) error
+	SetConnectionDuration(dur int64) error
+	SetError(appErr string) error
 	Dial(remote appnet.Addr) (connID uint16, localPort routing.Port, err error)
 	Listen(local appnet.Addr) (uint16, error)
 	Accept(lisID uint16) (connID uint16, remote appnet.Addr, err error)
@@ -46,11 +48,30 @@ func (c *rpcIngressClient) SetDetailedStatus(status string) error {
 	return c.rpc.Call(c.formatMethod("SetDetailedStatus"), &status, nil)
 }
 
+// SetConnectionDuration sets the connection duration for an app
+func (c *rpcIngressClient) SetConnectionDuration(dur int64) error {
+	return c.rpc.Call(c.formatMethod("SetConnectionDuration"), dur, nil)
+}
+
+// SetError sets error of an app.
+func (c *rpcIngressClient) SetError(appErr string) error {
+	return c.rpc.Call(c.formatMethod("SetError"), &appErr, nil)
+}
+
+// RPCErr is used to preserve the type of the errors we return via RPC
+type RPCErr struct {
+	Err string
+}
+
+func (e RPCErr) Error() string {
+	return e.Err
+}
+
 // Dial sends `Dial` command to the server.
 func (c *rpcIngressClient) Dial(remote appnet.Addr) (connID uint16, localPort routing.Port, err error) {
 	var resp DialResp
 	if err := c.rpc.Call(c.formatMethod("Dial"), &remote, &resp); err != nil {
-		return 0, 0, err
+		return 0, 0, RPCErr{err.Error()}
 	}
 
 	return resp.ConnID, resp.LocalPort, nil
