@@ -449,6 +449,13 @@ export class VpnSavedDataService {
 
         this.currentServerSubject.next(this.currentServer);
       }
+    } else {
+      if (this.currentServerPk) {
+        this.currentServerPk = null;
+        this.saveData();
+
+        this.currentServerSubject.next(this.currentServer);
+      }
     }
   }
 

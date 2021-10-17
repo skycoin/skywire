@@ -180,11 +180,14 @@ export class TopBarComponent implements OnInit, OnDestroy {
   showVpnDataStatsInBits = true;
   // Allows to know if the app is being accessed from a remote localtion.
   remoteAccess = false;
+  // If there was an error the last time the vpn app status was checked.
+  errorsConnectingToVpn = false;
 
   private langSubscriptionsGroup: Subscription[] = [];
   private vpnDataSubscription: Subscription;
   private showVpnStateChangeAnimationSubscription: Subscription;
   private showVpnStateAnimatedDotSubscription: Subscription;
+  private errorsConnectingToVpnSubscription: Subscription;
 
   constructor(
     private languageService: LanguageService,
@@ -282,6 +285,11 @@ export class TopBarComponent implements OnInit, OnDestroy {
         this.showVpnStateAnimatedDotSubscription = of(0).pipe(delay(1)).subscribe(() => this.showVpnStateAnimatedDot = true);
       }
     });
+
+    // Check if there are errors getting the updates.
+    this.errorsConnectingToVpnSubscription = this.vpnClientService.errorsConnecting.subscribe(errorsFound => {
+      this.errorsConnectingToVpn = errorsFound;
+    });
   }
 
   // Stop getting and showing the vpn info.
@@ -290,6 +298,10 @@ export class TopBarComponent implements OnInit, OnDestroy {
 
     if (this.vpnDataSubscription) {
       this.vpnDataSubscription.unsubscribe();
+    }
+
+    if (this.errorsConnectingToVpnSubscription) {
+      this.errorsConnectingToVpnSubscription.unsubscribe();
     }
   }
 
