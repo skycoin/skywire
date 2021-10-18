@@ -486,6 +486,7 @@
 
     .big-text {
       font-size: $font-size-lg;
+      overflow-wrap: break-word;
 
       mat-spinner {
         display: inline-block;
@@ -518,6 +519,7 @@
     .small-text {
       font-size: $font-size-mini;
       margin-top: 1px;
+      overflow-wrap: break-word;
     }
 
     .margin {
