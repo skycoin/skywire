@@ -11,3 +11,7 @@ const (
 func PackageSkywirePath() string {
 	return packageSkywirePath
 }
+
+func appBinPath() string {
+	return packageSkywirePath
+}
