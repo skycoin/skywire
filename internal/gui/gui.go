@@ -44,8 +44,10 @@ var (
 )
 
 var (
+	mAdvancedButton *systray.MenuItem
 	mOpenHypervisor *systray.MenuItem
 	//mVPNClient      *systray.MenuItem
+	mVPNLink   *systray.MenuItem
 	mUninstall *systray.MenuItem
 	mQuit      *systray.MenuItem
 )
@@ -54,13 +56,13 @@ var (
 func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 	doneCh := make(chan bool, 1)
 	return func() {
-		systray.SetTooltip("Skywire")
-
 		systray.SetTemplateIcon(icon, icon)
 
-		initOpenHypervisorBtn(conf)
+		systray.SetTooltip("Skywire")
+
+		initOpenVPNLinkBtn(conf)
+		initAdvancedButton(conf)
 		//initVpnClientBtn()
-		initUninstallBtn()
 		initQuitBtn()
 
 		//go updateVPNConnectionStatus(conf, doneCh)
@@ -71,17 +73,17 @@ func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 
 // OnGUIQuit is executed on GUI exit.
 func OnGUIQuit() {
-
 }
 
 // ReadSysTrayIcon reads system tray icon.
-func ReadSysTrayIcon() ([]byte, error) {
-	contents, err := iconFS.ReadFile(iconName)
+func ReadSysTrayIcon() (contents []byte, err error) {
+	contents, err = iconFS.ReadFile(iconName)
+
 	if err != nil {
-		return nil, fmt.Errorf("failed to read icon: %w", err)
+		err = fmt.Errorf("failed to read icon: %w", err)
 	}
 
-	return contents, nil
+	return contents, err
 }
 
 // SetStopVisorFn sets function to stop running visor.
@@ -101,10 +103,15 @@ func Stop() {
 	systray.Quit()
 }
 
-func initOpenHypervisorBtn(conf *visorconfig.V1) {
+func initAdvancedButton(conf *visorconfig.V1) {
 	hvAddr := getHVAddr(conf)
 
-	mOpenHypervisor = systray.AddMenuItem("Open Hypervisor", "")
+	mAdvancedButton = systray.AddMenuItem("Advanced", "Advanced Menu")
+	mOpenHypervisor = mAdvancedButton.AddSubMenuItem("Open Hypervisor", "Open Hypervisor")
+	mUninstall = mAdvancedButton.AddSubMenuItem("Uninstall", "Uninstall Application")
+
+	// if it's not installed via package, hide the uninstall button
+	initUninstallBtn()
 
 	// if visor's not running or hypervisor config is absent,
 	// there won't be any way to open the hypervisor, so disable button
@@ -139,6 +146,30 @@ func initOpenHypervisorBtn(conf *visorconfig.V1) {
 	}()
 }
 
+func initOpenVPNLinkBtn(vc *visorconfig.V1) {
+	mVPNLink = systray.AddMenuItem("Open VPN UI", "Open VPN UI in browser")
+
+	mVPNLink.Disable()
+
+	// wait for the vpn client to start in the background
+	// if it's not started or if it isn't alive just disable the link.
+	go func() {
+		t := time.NewTicker(1 * time.Second)
+		defer t.Stop()
+
+		// we simply wait till the hypervisor is up
+		for {
+			<-t.C
+			if isVPNExists(vc) {
+				mVPNLink.Enable()
+				break
+			} else {
+				mVPNLink.Disable()
+			}
+		}
+	}()
+}
+
 //func initVpnClientBtn() {
 //	mVPNClient = systray.AddMenuItem("VPN", "VPN Client Connection")
 //}
@@ -147,12 +178,27 @@ func initOpenHypervisorBtn(conf *visorconfig.V1) {
 //	//mVPNClient.AddSubMenuItem()
 //}
 
+func handleVPNLinkButton(conf *visorconfig.V1) {
+	vpnAddr := getVPNAddr(conf)
+
+	if vpnAddr == "" {
+		mVPNLink.Disable()
+		log.Error("empty vpn URL address")
+		return // do nothing
+	}
+
+	if err := webbrowser.Open(vpnAddr); err != nil {
+		log.WithError(err).Error("failed to open link")
+	}
+}
+
+// GetAvailPublicVPNServers gets all available public VPN server from service discovery URL
 func GetAvailPublicVPNServers(conf *visorconfig.V1) []string {
 	sdClient := servicedisc.NewClient(log, servicedisc.Config{
 		Type:     servicedisc.ServiceTypeVPN,
 		PK:       conf.PK,
 		SK:       conf.SK,
-		DiscAddr: skyenv.DefaultServiceDiscAddr,
+		DiscAddr: conf.Launcher.ServiceDisc,
 	})
 	//ctx, _ := context.WithTimeout(context.Background(), 7*time.Second)
 	vpnServers, err := sdClient.Services(context.Background(), 0)
@@ -167,53 +213,7 @@ func GetAvailPublicVPNServers(conf *visorconfig.V1) []string {
 	return serverAddrs
 }
 
-//func updateVPNConnectionStatus(conf *visorconfig.V1, doneCh <-chan bool) {
-//	rpcDialTimeout := time.Second * 5
-//	conn, err := net.DialTimeout("tcp", conf.CLIAddr, rpcDialTimeout)
-//	if err != nil {
-//		log.Fatal("RPC Connection failed: ", err)
-//	}
-//	rpcClient := visor.NewRPCClient(log, conn, visor.RPCPrefix, 0)
-//
-//	vpnSumChan := make(chan appserver.ConnectionSummary)
-//
-//	// polls vpn client summary
-//	go func(done <-chan bool) {
-//		for {
-//			if <-done {
-//				break
-//			}
-//			vpnSummary, err := rpcClient.GetAppConnectionsSummary(skyenv.VPNClientName)
-//			if err != nil {
-//				vpnClientStatusMu.Lock()
-//				vpnClientStatus = false
-//				vpnClientStatusMu.Unlock()
-//			}
-//
-//			for _, sum := range vpnSummary {
-//				vpnSumChan <- sum
-//			}
-//		}
-//	}(doneCh)
-//
-//	for {
-//		select {
-//		case sum := <-vpnSumChan:
-//			if sum.IsAlive {
-//				vpnClientStatusMu.Lock()
-//				vpnClientStatus = true
-//				vpnClientStatusMu.Unlock()
-//			}
-//		case <-doneCh:
-//			close(vpnSumChan)
-//			break
-//		}
-//	}
-//
-//}
-
 func initUninstallBtn() {
-	mUninstall = systray.AddMenuItem("Uninstall", "")
 	if !checkIsPackage() {
 		mUninstall.Hide()
 	}
@@ -230,6 +230,8 @@ func handleUserInteraction(conf *visorconfig.V1, doneCh chan<- bool) {
 			handleOpenHypervisor(conf)
 		//case <-mVPNClient.ClickedCh:
 		//	handleVpnClientButton(conf)
+		case <-mVPNLink.ClickedCh:
+			handleVPNLinkButton(conf)
 		case <-mUninstall.ClickedCh:
 			handleUninstall()
 		case <-mQuit.ClickedCh:
@@ -252,6 +254,7 @@ func handleUninstall() {
 	}
 	if cond {
 		mOpenHypervisor.Disable()
+		mVPNLink.Disable()
 		mUninstall.Disable()
 		mQuit.Disable()
 
@@ -324,4 +327,24 @@ func getHVAddr(conf *visorconfig.V1) string {
 	}
 
 	return addr
+}
+
+func isVPNExists(vc *visorconfig.V1) bool {
+	status := false
+	for _, app := range vc.Launcher.Apps {
+		if app.Name == skyenv.VPNClientName {
+			status = true
+		}
+	}
+
+	return status
+}
+
+func getVPNAddr(conf *visorconfig.V1) string {
+	hvAddr := getHVAddr(conf)
+	if hvAddr == "" {
+		return ""
+	}
+
+	return hvAddr + "/#/vpn/" + conf.PK.Hex() + "/status"
 }

@@ -46,13 +46,13 @@ BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
 
 check: lint test ## Run linters and tests
 
-check-windows-appveyor: lint-windows-appveyor test ## Run linters and tests on appveyor windows image
-
 build: host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
 build-systray: host-apps-systray bin-systray ## Install dependencies, build apps and binaries `go build` with ${OPTS}, with CGO and systray
 
 build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
+
+installer: mac-installer ## Builds MacOS installer for skywire-visor
 
 install-generate: ## Installs required execs for go generate.
 	${OPTS} go install github.com/mjibson/esc
@@ -73,9 +73,6 @@ install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 
 lint: ## Run linters. Use make install-linters first
 	${OPTS} golangci-lint run -c .golangci.yml ./...
-
-lint-windows-appveyor:
-	C:\Users\appveyor\go\bin\golangci-lint run -c .golangci.yml ./...
 
 test: ## Run tests
 	-go clean -testcache &>/dev/null
@@ -173,6 +170,12 @@ build-ui: install-deps-ui  ## Builds the UI
 	rm -rf ${MANAGER_UI_BUILT_DIR}
 	mkdir ${MANAGER_UI_BUILT_DIR}
 	cp -r ${MANAGER_UI_DIR}/dist/. ${MANAGER_UI_BUILT_DIR}
+
+mac-installer: ## Create signed and notarized application, run make mac-installer-help for more
+	./scripts/mac_installer/create_installer.sh -s -n
+
+mac-installer-help: ## Show installer creation help
+	./scripts/mac_installer/create_installer.sh -h
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
