@@ -686,7 +686,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 		Port:     uint16(0),
 		DiscAddr: serviceDisc,
 	}
-	connector := servicedisc.MakeConnector(conf, 5, v.tpM, log)
+	connector := servicedisc.MakeConnector(conf, 3, v.tpM, log)
 	go connector.Run(ctx) //nolint:errcheck
 
 	return nil
