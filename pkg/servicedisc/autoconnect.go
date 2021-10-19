@@ -16,7 +16,7 @@ const (
 	// PublicServiceDelay defines a delay before adding transports to public services.
 	PublicServiceDelay = 10 * time.Second
 
-	fetchServicesDelay = 2 * time.Second
+	fetchServicesDelay = 5 * time.Second
 )
 
 // ConnectFn provides a way to connect to remote service
@@ -83,9 +83,9 @@ func (a *autoconnector) fetchPubAddresses(ctx context.Context) ([]cipher.PubKey,
 	if err := retrier.Do(fetch); err != nil {
 		return nil, err
 	}
-	var pks []cipher.PubKey
-	for _, service := range services {
-		pks = append(pks, service.Addr.PubKey())
+	pks := make([]cipher.PubKey, len(services))
+	for i, service := range services {
+		pks[i] = service.Addr.PubKey()
 	}
 	return pks, nil
 }
