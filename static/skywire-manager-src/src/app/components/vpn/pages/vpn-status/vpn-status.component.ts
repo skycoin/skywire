@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { Subscription } from 'rxjs';
+import { interval, Subscription } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
@@ -41,6 +41,11 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
 
   // Top margin of the data graphs.
   graphsTopInternalMargin = LineChartComponent.topInternalMargin;
+
+  // Current connection time.
+  connectionTimeString = '00:00:00';
+  private calculatedSegs = -1;
+  private timeUpdateSubscription: Subscription;
 
   // Current data transmission stats.
   uploadSpeed = 0;
@@ -140,11 +145,12 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
           this.backendState = data;
 
           if (!firstEventExecution) {
-            // If the state was changed, update the IP.
-            if (this.lastAppState !== data.vpnClientAppData.appState) {
-              if (data.vpnClientAppData.appState === AppState.Running || data.vpnClientAppData.appState === AppState.Stopped) {
-                this.getIp(true);
-              }
+            // If the app enters or leaves the Running state, update the IP.
+            if (
+              (this.lastAppState === AppState.Running && data.vpnClientAppData.appState !== AppState.Running) ||
+              (this.lastAppState !== AppState.Running && data.vpnClientAppData.appState === AppState.Running)
+            ) {
+              this.getIp(true);
             }
           } else {
             // Get the ip data for the first time.
@@ -197,6 +203,39 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
             this.latency = data.vpnClientAppData.connectionData.latency;
           }
 
+          if (
+            data.vpnClientAppData.running &&
+            data.vpnClientAppData.appState === AppState.Running &&
+            data.vpnClientAppData.connectionData &&
+            data.vpnClientAppData.connectionData.connectionDuration
+          ) {
+            if (
+              this.calculatedSegs === -1 ||
+              data.vpnClientAppData.connectionData.connectionDuration > this.calculatedSegs + 2 ||
+              data.vpnClientAppData.connectionData.connectionDuration < this.calculatedSegs - 2
+            ) {
+              this.calculatedSegs = data.vpnClientAppData.connectionData.connectionDuration;
+              this.refreshConnectionTimeString();
+
+              if (this.timeUpdateSubscription) {
+                this.timeUpdateSubscription.unsubscribe();
+              }
+
+              this.timeUpdateSubscription = interval(1000).subscribe(() => {
+                this.calculatedSegs += 1;
+                this.refreshConnectionTimeString();
+              });
+            }
+          } else {
+            if (this.timeUpdateSubscription) {
+              this.timeUpdateSubscription.unsubscribe();
+              this.timeUpdateSubscription = null;
+
+              this.calculatedSegs = -1;
+              this.connectionTimeString = '00:00:00';
+            }
+          }
+
           this.loading = false;
         }
       });
@@ -208,6 +247,21 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
     });
   }
 
+  /**
+   * Uses the value of calculatedSegs to update connectionTimeString.
+   */
+  private refreshConnectionTimeString() {
+    const segs = this.calculatedSegs % 60;
+    const totalMinutes = Math.floor(this.calculatedSegs / 60);
+    const minutes = totalMinutes % 60;
+    const hours = Math.floor(totalMinutes / 60);
+
+    this.connectionTimeString =
+      String(hours).padStart(2, '0') + ':' +
+      String(minutes).padStart(2, '0') + ':' +
+      String(segs).padStart(2, '0');
+  }
+
   ngOnDestroy() {
     this.dataSubscription.unsubscribe();
     this.navigationsSubscription.unsubscribe();
@@ -216,6 +270,10 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
 
     if (this.ipSubscription) {
       this.ipSubscription.unsubscribe();
+    }
+
+    if (this.timeUpdateSubscription) {
+      this.timeUpdateSubscription.unsubscribe();
     }
   }
 

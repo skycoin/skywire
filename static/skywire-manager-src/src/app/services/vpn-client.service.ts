@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { Observable, Subscription, of, BehaviorSubject, concat, throwError } from 'rxjs';
 import { mergeMap, delay, retryWhen, take, catchError, map } from 'rxjs/operators';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { TranslateService } from '@ngx-translate/core';
 
 import { ApiService, RequestOptions } from './api.service';
 import { AppsService } from './apps.service';
@@ -79,7 +80,11 @@ export class VpnClientAppData {
   /**
    * Error msg returned by the vpn-client app, for which the last excecution was stopped.
    */
-  lasErrorMsg: string;
+   lastErrorMsg: string;
+   /**
+    * Time the VPN has been connected, as returned by the backend. Undefined if the vpn is not connected.
+    */
+   connectionDuration: number;
 }
 
 /**
@@ -91,6 +96,8 @@ export class VpnClientConnectionsData {
   downloadSpeed = 0;
   totalUploaded = 0;
   totalDownloaded = 0;
+  connectionDuration = 0;
+  error = '';
   downloadSpeedHistory: number[];
   uploadSpeedHistory: number[];
   latencyHistory: number[];
@@ -158,6 +165,8 @@ export class VpnClientService {
   private nodeKey: string;
   // Subject for sending updates about the state of the VPN.
   private stateSubject = new BehaviorSubject<BackendState>(null);
+  // Subject for sending updates about errors while connecting to the backend.
+  private errorSubject = new BehaviorSubject<boolean>(false);
   // Object with the data about the current state of the VPN.
   private currentEventData: BackendState;
   // Last state of the service.
@@ -188,6 +197,7 @@ export class VpnClientService {
     private vpnSavedDataService: VpnSavedDataService,
     private http: HttpClient,
     private snackbarService: SnackbarService,
+    private translateService: TranslateService,
   ) {
     // Set the initial state. PerformingInitialCheck will be replaced when getting the state
     // for the first time. The busy state too, to start being able to perform other operations.
@@ -228,6 +238,14 @@ export class VpnClientService {
    */
   get backendState(): Observable<BackendState> {
     return this.stateSubject.asObservable();
+  }
+
+  /**
+   * Observable which continually emits if there are errors connecting to the backend.
+   * It only informs if an error was found during the last status request.
+   */
+   get errorsConnecting(): Observable<boolean> {
+    return this.errorSubject.asObservable();
   }
 
   /**
@@ -577,6 +595,8 @@ export class VpnClientService {
       mergeMap(() => this.getVpnClientState()),
       retryWhen(err => {
         return err.pipe(mergeMap((error: OperationError) => {
+          this.errorSubject.next(true);
+
           error = processServiceError(error);
           // If the problem was because the user is not authorized, don't retry.
           if (
@@ -598,6 +618,8 @@ export class VpnClientService {
       }),
     ).subscribe(appData => {
       if (appData) {
+        this.errorSubject.next(false);
+
         // Remove the busy state of the initial check.
         if (this.lastServiceState === VpnServiceStates.PerformingInitialCheck) {
           this.working = false;
@@ -678,6 +700,7 @@ export class VpnClientService {
       if (appData) {
         vpnClientData = new VpnClientAppData();
         vpnClientData.running = appData.status === 1;
+        vpnClientData.connectionDuration = appData.connection_duration;
 
         vpnClientData.appState = AppState.Stopped;
         if (vpnClientData.running) {
@@ -691,7 +714,11 @@ export class VpnClientService {
             vpnClientData.appState = AppState.Reconnecting;
           }
         } else if (appData.status === 2) {
-          vpnClientData.lasErrorMsg = appData.detailed_status;
+          vpnClientData.lastErrorMsg = appData.detailed_status;
+
+          if (!vpnClientData.lastErrorMsg) {
+            vpnClientData.lastErrorMsg = this.translateService.instant('vpn.status-page.unknown-error');
+          }
         }
 
         vpnClientData.killswitch = false;
@@ -732,6 +759,12 @@ export class VpnClientService {
           vpnClientConnectionsData.downloadSpeed += connection.download_speed / connectionsInfo.length;
           vpnClientConnectionsData.totalUploaded += connection.bandwidth_sent;
           vpnClientConnectionsData.totalDownloaded += connection.bandwidth_received;
+          if (connection.error) {
+            vpnClientConnectionsData.error = connection.error;
+          }
+          if (connection.connection_duration > vpnClientConnectionsData.connectionDuration) {
+            vpnClientConnectionsData.connectionDuration = connection.connection_duration;
+          }
         });
 
         // If the server was changed, reset the history data.
