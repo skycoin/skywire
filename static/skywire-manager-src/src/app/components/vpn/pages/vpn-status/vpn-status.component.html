@@ -59,8 +59,9 @@
                   [isBlocked]="currentRemoteServer.flag === serverFlags.Blocked"
                   [hasPassword]="currentRemoteServer.usedWithPassword"
                   [name]="currentRemoteServer.name"
+                  [pk]="currentRemoteServer.pk"
                   [customName]="currentRemoteServer.customName"
-                  defaultName="vpn.status-page.entered-manually">
+                  defaultName="vpn.unnamed">
                 </app-vpn-server-name>
               </div>
               <div class="bottom-line">
@@ -309,8 +310,9 @@
                 [hasPassword]="currentRemoteServer.usedWithPassword"
                 [adjustIconsForBigText]="true"
                 [name]="currentRemoteServer.name"
+                [pk]="currentRemoteServer.pk"
                 [customName]="currentRemoteServer.customName"
-                defaultName="vpn.status-page.entered-manually">
+                defaultName="vpn.unnamed">
               </app-vpn-server-name>
               <mat-icon
                 (click)="openServerOptions()"
