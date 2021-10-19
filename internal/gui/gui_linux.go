@@ -13,10 +13,6 @@ const (
 	deinstallerPath = "/opt/skywire/deinstaller"
 )
 
-func preReadIcon() error {
-	return nil
-}
-
 func checkIsPackage() bool {
 	_, err := os.Stat(deinstallerPath)
 	return err == nil

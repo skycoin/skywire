@@ -1,0 +1,9 @@
+#!/bin/sh
+
+sudo -u "$USER" launchctl remove com.skycoin.skywire.logcleaner
+
+if pgrep vpn-client; then skywire-cli visor stop-app vpn-client; fi
+
+if pgrep skywire; then pkill -f skywire; fi
+
+rm -rf /Applications/Skywire.app

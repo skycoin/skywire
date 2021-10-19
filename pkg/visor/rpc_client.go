@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"net/http"
 	"net/rpc"
 	"sync"
 	"time"
@@ -287,6 +286,11 @@ func (rc *rpcClient) DiscoverTransportByID(id uuid.UUID) (*transport.Entry, erro
 	var entry transport.Entry
 	err := rc.Call("DiscoverTransportByID", &id, &entry)
 	return &entry, err
+}
+
+// SetPublicAutoconnect implements API.
+func (rc *rpcClient) SetPublicAutoconnect(pAc bool) error {
+	return rc.Call("SetPublicAutoconnect", &pAc, &struct{}{})
 }
 
 // RoutingRules calls RoutingRules.
@@ -634,11 +638,7 @@ func (mc *mockRPCClient) Summary() (*Summary, error) {
 // Health implements API
 func (mc *mockRPCClient) Health() (*HealthInfo, error) {
 	hi := &HealthInfo{
-		TransportDiscovery: http.StatusOK,
-		RouteFinder:        http.StatusOK,
-		SetupNode:          http.StatusOK,
-		UptimeTracker:      http.StatusOK,
-		AddressResolver:    http.StatusOK,
+		ServicesHealth: "healthy",
 	}
 
 	return hi, nil
@@ -887,6 +887,11 @@ func (mc *mockRPCClient) DiscoverTransportsByPK(cipher.PubKey) ([]*transport.Ent
 
 func (mc *mockRPCClient) DiscoverTransportByID(uuid.UUID) (*transport.Entry, error) {
 	return nil, ErrNotImplemented
+}
+
+// SetPublicAutoconnect implements API.
+func (mc *mockRPCClient) SetPublicAutoconnect(_ bool) error {
+	return nil
 }
 
 // RoutingRules implements API.

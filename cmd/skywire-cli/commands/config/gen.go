@@ -1,4 +1,4 @@
-package visor
+package config
 
 import (
 	"encoding/json"
@@ -13,6 +13,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -43,7 +44,7 @@ func init() {
 }
 
 var genConfigCmd = &cobra.Command{
-	Use:   "gen-config",
+	Use:   "gen",
 	Short: "Generates a config file",
 	PreRun: func(_ *cobra.Command, _ []string) {
 		var err error
@@ -62,12 +63,10 @@ var genConfigCmd = &cobra.Command{
 
 		//set output for package and skybian configs
 		if packageConfig {
-			if hypervisor {
-				output = "/opt/skywire/skywire.json"
-			} else {
-				output = "/opt/skywire/skywire-visor.json"
-			}
+			configName := "skywire-config.json"
+			output = filepath.Join(skyenv.PackageSkywirePath(), configName)
 		}
+
 		if skybianConfig {
 			output = "/etc/skywire-config.json"
 		}

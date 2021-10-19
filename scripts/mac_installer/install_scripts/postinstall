@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+skywire_dir=/Users/${USER}/Library/Application\ Support/Skywire
+log_dir=/Users/${USER}/Library/Logs/skywire
+
+mkdir -p "${skywire_dir}"
+
+if [[ -d ${skywire_dir}/Skywireapp ]]; then
+  rm -rf "${skywire_dir}"/Skywireapp
+fi
+
+chown -R "${USER}" "$skywire_dir"
+
+echo "generating skywire config if it doesn't exist"
+if [[ ! -f "${skywire_dir}"/skywire-config.json ]]; then
+  /Applications/Skywire.app/Contents/MacOS/skywire-cli config gen -p -o "${skywire_dir}"/skywire-config.json --is-hypervisor
+fi
+chown "${USER}" "${skywire_dir}"/skywire-config.json
+
+echo "generating logcleaner plist"
+LOG_CLEANER_PLIST_PATH=/Users/${USER}/Library/LaunchAgents/com.skycoin.skywire.logcleaner.plist
+LOG_PATH=${log_dir}/visor.log
+
+## Log cleaner to truncate logs every hour
+cat <<EOF >"${LOG_CLEANER_PLIST_PATH}"
+<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
+<plist version=\"1.0\">
+<dict>
+ <key>Label</key>
+ <string>com.skycoin.skywire.logcleaner</string>
+ <key>ProgramArguments</key>
+ <array>
+  <string>/bin/bash</string>
+  <string>-c</string>
+  <string>echo \"\" > ${LOG_PATH}</string>
+ </array>
+ <key>StartInterval</key>
+ <integer>3600</integer>
+</dict>
+</plist>
+EOF
+
+echo "loading logcleaner as service"
+chown "${USER}" "${LOG_CLEANER_PLIST_PATH}"
+
+echo "moving applications to /Applications"
+if [[ ! -L /usr/local/bin/skywire-cli ]]; then
+  ln -s /Applications/Skywire.app/Contents/MacOS/skywire-cli /usr/local/bin/skywire-cli
+fi

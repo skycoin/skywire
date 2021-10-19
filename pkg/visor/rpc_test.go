@@ -1,7 +1,6 @@
 package visor
 
 import (
-	"net/http"
 	"testing"
 	"time"
 
@@ -11,11 +10,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/skycoin/skywire/internal/testhelpers"
 	"github.com/skycoin/skywire/internal/utclient"
-	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -37,13 +33,8 @@ func TestHealth(t *testing.T) {
 		}
 
 		utClient := &utclient.MockAPIClient{}
-		utClient.On("Health", mock.Anything).Return(http.StatusOK, nil)
-
-		arClient := &addrresolver.MockAPIClient{}
-		arClient.On("Health", mock.Anything).Return(http.StatusOK, nil)
-
-		rfClient := &rfclient.MockClient{}
-		rfClient.On("Health", mock.Anything).Return(http.StatusOK, testhelpers.NoErr)
+		utClient.On("UpdateVisorUptime", mock.Anything).Return(nil)
+		utClient.On("Health", mock.Anything).Return(nil)
 
 		v := &Visor{
 			conf: c,
@@ -52,25 +43,22 @@ func TestHealth(t *testing.T) {
 					DiscoveryClient: transport.NewDiscoveryMock(),
 				},
 			},
-			uptimeTracker: utClient,
-			arClient:      arClient,
-			rfClient:      rfClient,
+			uptimeTracker:     utClient,
+			isServicesHealthy: newInternalHealthInfo(),
 		}
+		v.isServicesHealthy.init()
 
 		rpc := &RPC{visor: v, log: logrus.New()}
+		// mock initUptimeTracker
+		v.isServicesHealthy.set()
 		h := &HealthInfo{}
 		err := rpc.Health(nil, h)
 		require.NoError(t, err)
 
-		// Transport discovery needs to be mocked or will always fail
-		assert.Equal(t, http.StatusOK, h.TransportDiscovery)
-		assert.Equal(t, http.StatusOK, h.RouteFinder)
-		assert.Equal(t, http.StatusOK, h.SetupNode)
-		assert.Equal(t, http.StatusOK, h.UptimeTracker)
-		assert.Equal(t, http.StatusOK, h.AddressResolver)
+		assert.Equal(t, "healthy", h.ServicesHealth)
 	})
 
-	t.Run("Report as unavailable", func(t *testing.T) {
+	t.Run("Report as connecting", func(t *testing.T) {
 		c := baseConfig(t)
 		c.Routing = &visorconfig.V1Routing{}
 
@@ -79,19 +67,18 @@ func TestHealth(t *testing.T) {
 			tpM: &transport.Manager{
 				Conf: &transport.ManagerConfig{},
 			},
+			isServicesHealthy: newInternalHealthInfo(),
 		}
 
+		v.isServicesHealthy.init()
 		rpc := &RPC{visor: v, log: logrus.New()}
 		h := &HealthInfo{}
 		err := rpc.Health(nil, h)
 		require.NoError(t, err)
 
-		assert.Equal(t, http.StatusNotFound, h.TransportDiscovery)
-		assert.Equal(t, http.StatusNotFound, h.RouteFinder)
-		assert.Equal(t, http.StatusNotFound, h.SetupNode)
-		assert.Equal(t, http.StatusNotFound, h.UptimeTracker)
-		assert.Equal(t, http.StatusNotFound, h.AddressResolver)
+		assert.Equal(t, "connecting", h.ServicesHealth)
 	})
+
 }
 
 func TestUptime(t *testing.T) {
