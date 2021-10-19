@@ -60,7 +60,7 @@ $ gnome-extensions enable ubuntu-appindicators@ubuntu.com
 
 #### Mac / Darwin
 
-You need to have an icon defined in `/Applications/Skywire.app/Contents/Resources/tray_icon.png`
+You need to have an icon defined in `/Applications/Skywire.app/Contents/Resources/icon.tiff`
 
 #### Windows
 

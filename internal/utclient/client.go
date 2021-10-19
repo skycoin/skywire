@@ -10,11 +10,13 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"time"
 
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/httpauth"
+	"github.com/skycoin/skywire/internal/netutil"
 )
 
 //go:generate mockery -name APIClient -case underscore -inpkg
@@ -29,7 +31,6 @@ type Error struct {
 // APIClient implements uptime tracker API client.
 type APIClient interface {
 	UpdateVisorUptime(context.Context) error
-	Health(ctx context.Context) (int, error)
 }
 
 // httpClient implements Client for uptime tracker API.
@@ -39,6 +40,10 @@ type httpClient struct {
 	sk     cipher.SecKey
 }
 
+const (
+	createRetryDelay = 5 * time.Second
+)
+
 // NewHTTP creates a new client setting a public key to the client to be used for auth.
 // When keys are set, the client will sign request before submitting.
 // The signature information is transmitted in the header using:
@@ -46,9 +51,20 @@ type httpClient struct {
 // * SW-Nonce:  The nonce for that public key
 // * SW-Sig:    The signature of the payload + the nonce
 func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, error) {
-	client, err := httpauth.NewClient(context.Background(), addr, pk, sk)
-	if err != nil {
-		return nil, fmt.Errorf("uptime tracker httpauth: %w", err)
+	var client *httpauth.Client
+	var err error
+
+	retrier := netutil.NewRetrier(createRetryDelay, 10, 2)
+	retrierFunc := func() error {
+		client, err = httpauth.NewClient(context.Background(), addr, pk, sk)
+		if err != nil {
+			return fmt.Errorf("uptime tracker httpauth: %w", err)
+		}
+		return nil
+	}
+
+	if err := retrier.Do(retrierFunc); err != nil {
+		return nil, err
 	}
 
 	return &httpClient{client: client, pk: pk, sk: sk}, nil
@@ -82,23 +98,6 @@ func (c *httpClient) UpdateVisorUptime(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// UpdateVisorUptime updates visor uptime.
-func (c *httpClient) Health(ctx context.Context) (int, error) {
-	resp, err := c.Get(ctx, "/health")
-	if err != nil {
-		return 0, err
-	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close response body")
-		}
-	}()
-
-	return resp.StatusCode, nil
-
 }
 
 // extractError returns the decoded error message from Body.

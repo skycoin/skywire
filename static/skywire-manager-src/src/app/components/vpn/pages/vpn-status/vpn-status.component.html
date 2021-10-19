@@ -30,7 +30,7 @@
     <div *ngIf="!showStarted" class="col-7 column left-area">
       <div class="column-container">
         <div class="title">{{ 'vpn.status-page.start-title' | translate }}</div>
-        <!-- Staert button. -->
+        <!-- Start button. -->
         <div>
           <div class="start-button" (click)="start()" [ngClass]="{'disabled-button': showBusy}">
             <div class="start-button-img-container">
@@ -59,8 +59,9 @@
                   [isBlocked]="currentRemoteServer.flag === serverFlags.Blocked"
                   [hasPassword]="currentRemoteServer.usedWithPassword"
                   [name]="currentRemoteServer.name"
+                  [pk]="currentRemoteServer.pk"
                   [customName]="currentRemoteServer.customName"
-                  defaultName="vpn.status-page.entered-manually">
+                  defaultName="vpn.unnamed">
                 </app-vpn-server-name>
               </div>
               <div class="bottom-line">
@@ -86,9 +87,17 @@
         </div>
         <!-- Current server note. -->
         <div>
-          <div class="current-server-note" *ngIf="currentRemoteServer && (currentRemoteServer.note || currentRemoteServer.personalNote)">
+          <div class="lower-text current-server-note" *ngIf="currentRemoteServer && (currentRemoteServer.note || currentRemoteServer.personalNote)">
             <mat-icon [inline]="true">info_outline</mat-icon>
             {{ getNoteVar() | translate:{custom: currentRemoteServer.personalNote, original: currentRemoteServer.note} }}
+          </div>
+        </div>
+        <!-- Last error. -->
+        <div>
+          <div class="lower-text last-error" *ngIf="backendState && backendState.vpnClientAppData && backendState.vpnClientAppData.lastErrorMsg">
+            <mat-icon [inline]="true">cancel</mat-icon>
+            {{ 'vpn.status-page.last-error' | translate }}
+            {{ backendState.vpnClientAppData.lastErrorMsg }}
           </div>
         </div>
       </div>
@@ -96,16 +105,27 @@
     <!-- VPN started info. -->
     <div *ngIf="showStarted" class="col-7 column left-area-connected">
       <div class="column-container">
+        <!-- Time. -->
         <div class="time-container">
           <div class="time-content">
-            <!-- Time. -->
             <mat-icon [inline]="true">timer</mat-icon>
-            <span>01:12:21</span>
+            <span>{{ connectionTimeString }}</span>
           </div>
         </div>
-        <div class="state-title">Your connection is currently:</div>
-        <div class="state-text">{{ currentStateText | translate }}</div>
+        <!-- Title. -->
+        <div class="state-title">{{ 'vpn.connection-info.state-title' | translate }}</div>
+        <!-- Current state. -->
+        <div class="d-inline-block">
+          <div class="state-text">{{ currentStateText | translate }}</div>
+          <div [class]="'state-line ' + currentStateLineClass"></div>
+        </div>
         <div class="state-explanation">{{ (currentStateText + '-info') | translate }}</div>
+        <!-- Last error. -->
+        <div class="last-connected-error" *ngIf="backendState && backendState.vpnClientAppData && backendState.vpnClientAppData.connectionData && backendState.vpnClientAppData.connectionData.error">
+          <mat-icon [inline]="true">cancel</mat-icon>
+          {{ 'vpn.status-page.last-error' | translate }}
+          {{ backendState.vpnClientAppData.connectionData.error }}
+        </div>
         <!-- Square graphs. -->
         <div class="data-container">
           <!-- Uploaded data. -->
@@ -290,8 +310,9 @@
                 [hasPassword]="currentRemoteServer.usedWithPassword"
                 [adjustIconsForBigText]="true"
                 [name]="currentRemoteServer.name"
+                [pk]="currentRemoteServer.pk"
                 [customName]="currentRemoteServer.customName"
-                defaultName="vpn.status-page.entered-manually">
+                defaultName="vpn.unnamed">
               </app-vpn-server-name>
               <mat-icon
                 (click)="openServerOptions()"

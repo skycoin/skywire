@@ -260,7 +260,7 @@ func (tm *Manager) Networks() []network.Type {
 
 // Stcpr returns stcpr client
 func (tm *Manager) Stcpr() (network.Client, bool) {
-	c, ok := tm.netClients[network.STCP]
+	c, ok := tm.netClients[network.STCPR]
 	return c, ok
 }
 
@@ -414,7 +414,7 @@ func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, netT
 	}
 
 	tm.mx.RLock()
-	client, ok := tm.netClients[network.Type(netType)]
+	client, ok := tm.netClients[netType]
 	tm.mx.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("client not found for the type %s", netType)

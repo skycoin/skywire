@@ -52,6 +52,6 @@ export const AppConfig = {
     /**
      * If true, a hardcoded ip will be shown in the UI while in development mode.
      */
-    hardcodedIpWhileDeveloping: true,
+    hardcodedIpWhileDeveloping: false,
   },
 };

@@ -44,7 +44,7 @@ Flags:
 Refer to the skywire-cli documentation for more detailed information regarding additional flags and argument that may be passed to the following command:
 
 ```
-skywire-cli visor gen-config
+skywire-cli config gen
 ```
 
 With no additional flags or arguments, the configuration is written to skywire-config.json and stdout.
@@ -94,14 +94,14 @@ The configuration file is generated in the following way
 for a visor with local hypervisor:
 
 ```
-$ skywire-cli visor gen-config -ip
+$ skywire-cli config gen -ip
 ```
 
 for visor with remote hypervisor; first copy the existing configuration file to keep the same keys.
 
 ```
 # cp /opt/skywire/skywire.json /opt/skywire/skywire-visor.json
-# skywire-cli visor gen-config --hypervisor-pks <remote-hypervisor-public-key> -p
+# skywire-cli config gen --hypervisor-pks <remote-hypervisor-public-key> -p
 ```
 
 These two configuration files can be referenced in systemd service files or init scripts to start skywire with either a local or remote hypervisor.

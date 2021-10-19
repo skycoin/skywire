@@ -57,4 +57,14 @@ export class TransportService {
   types(nodeKey: string): Observable<string[]> {
     return this.apiService.get(`visors/${nodeKey}/transport-types`);
   }
+
+  /**
+   * Enables or disables the transport.public_autoconnect setting.
+   */
+  changeAutoconnectSetting(nodeKey: string, enable: boolean): Observable<any> {
+    const data = {};
+    data['public_autoconnect'] = enable;
+
+    return this.apiService.put(`visors/${nodeKey}/public-autoconnect`, data);
+  }
 }
