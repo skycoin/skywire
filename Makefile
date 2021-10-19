@@ -46,13 +46,13 @@ BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
 
 check: lint test ## Run linters and tests
 
-check-windows-appveyor: lint-windows-appveyor test ## Run linters and tests on appveyor windows image
-
 build: host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
 build-systray: host-apps-systray bin-systray ## Install dependencies, build apps and binaries `go build` with ${OPTS}, with CGO and systray
 
 build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
+
+installer: mac-installer ## Builds MacOS installer for skywire-visor
 
 install-generate: ## Installs required execs for go generate.
 	${OPTS} go install github.com/mjibson/esc
@@ -74,9 +74,6 @@ install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 lint: ## Run linters. Use make install-linters first
 	${OPTS} golangci-lint run -c .golangci.yml ./...
 
-lint-windows-appveyor:
-	C:\Users\appveyor\go\bin\golangci-lint run -c .golangci.yml ./...
-
 test: ## Run tests
 	-go clean -testcache &>/dev/null
 	${OPTS} go test ${TEST_OPTS} ./internal/...
@@ -94,7 +91,7 @@ format: tidy ## Formats the code. Must have goimports and goimports-reviser inst
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./cmd
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./internal
-	find . -type f -name '*.go' -not -path "./vendor/*"  -exec goimports-reviser -project-name ${PROJECT_BASE} -file-path {} \;
+	find . -type f -name '*.go' -not -path "./.git/*" -not -path "./vendor/*"  -exec goimports-reviser -project-name ${PROJECT_BASE} -file-path {} \;
 
 dep: tidy ## Sorts dependencies
 	${OPTS} go mod vendor -v
@@ -151,7 +148,7 @@ build-deploy: ## Build for deployment Docker images
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
-github-release: sysroot
+github-release: 
 	goreleaser --rm-dist
 
 build-docker: ## Build docker image
@@ -183,6 +180,12 @@ deb-package: deb-install-prequisites ## Create unsigned application
 
 deb-package-help: ## Show installer creation help
 	./scripts/deb_installer/package_deb.sh -h
+	
+mac-installer: ## Create signed and notarized application, run make mac-installer-help for more
+	./scripts/mac_installer/create_installer.sh -s -n
+
+mac-installer-help: ## Show installer creation help
+	./scripts/mac_installer/create_installer.sh -h
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'

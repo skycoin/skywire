@@ -29,13 +29,13 @@ func (_m *MockAPIClient) BindSTCPR(ctx context.Context, port string) error {
 	return r0
 }
 
-// BindSUDPH provides a mock function with given fields: filter
+// BindSUDPH provides a mock function with given fields: filter, handshake
 func (_m *MockAPIClient) BindSUDPH(filter *pfilter.PacketFilter, handshake Handshake) (<-chan RemoteVisor, error) {
-	ret := _m.Called(filter)
+	ret := _m.Called(filter, handshake)
 
 	var r0 <-chan RemoteVisor
-	if rf, ok := ret.Get(0).(func(*pfilter.PacketFilter) <-chan RemoteVisor); ok {
-		r0 = rf(filter)
+	if rf, ok := ret.Get(0).(func(*pfilter.PacketFilter, Handshake) <-chan RemoteVisor); ok {
+		r0 = rf(filter, handshake)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(<-chan RemoteVisor)
@@ -43,8 +43,8 @@ func (_m *MockAPIClient) BindSUDPH(filter *pfilter.PacketFilter, handshake Hands
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*pfilter.PacketFilter) error); ok {
-		r1 = rf(filter)
+	if rf, ok := ret.Get(1).(func(*pfilter.PacketFilter, Handshake) error); ok {
+		r1 = rf(filter, handshake)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -87,20 +87,20 @@ func (_m *MockAPIClient) Health(ctx context.Context) (int, error) {
 	return r0, r1
 }
 
-// Resolve provides a mock function with given fields: ctx, tType, pk
-func (_m *MockAPIClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey) (VisorData, error) {
-	ret := _m.Called(ctx, tType, pk)
+// Resolve provides a mock function with given fields: ctx, netType, pk
+func (_m *MockAPIClient) Resolve(ctx context.Context, netType string, pk cipher.PubKey) (VisorData, error) {
+	ret := _m.Called(ctx, netType, pk)
 
 	var r0 VisorData
 	if rf, ok := ret.Get(0).(func(context.Context, string, cipher.PubKey) VisorData); ok {
-		r0 = rf(ctx, tType, pk)
+		r0 = rf(ctx, netType, pk)
 	} else {
 		r0 = ret.Get(0).(VisorData)
 	}
 
 	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, string, cipher.PubKey) error); ok {
-		r1 = rf(ctx, tType, pk)
+		r1 = rf(ctx, netType, pk)
 	} else {
 		r1 = ret.Error(1)
 	}

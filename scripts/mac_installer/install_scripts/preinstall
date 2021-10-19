@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+log_dir=/Users/${USER}/Library/Logs/skywire
+
+mkdir -p /Users/"${USER}"/Library/Application\ Support/Skywire
+
+if [[ ! -d "${log_dir}" ]]; then
+  mkdir -p "${log_dir}"
+  chown -R "${USER}" "${log_dir}"
+fi

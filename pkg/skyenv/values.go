@@ -133,11 +133,12 @@ const (
 
 // Default hypervisor constants
 const (
-	DefaultHypervisorDB = ".skycoin/hypervisor/users.db"
-	DefaultEnableAuth   = true
-	DefaultEnableTLS    = false
-	DefaultTLSKey       = DefaultSkywirePath + "/ssl/key.pem"
-	DefaultTLSCert      = DefaultSkywirePath + "/ssl/cert.pem"
+	DefaultHypervisorDB      = ".skycoin/hypervisor/users.db"
+	DefaultEnableAuth        = true
+	DefaultPackageEnableAuth = false
+	DefaultEnableTLS         = false
+	DefaultTLSKey            = DefaultSkywirePath + "/ssl/key.pem"
+	DefaultTLSCert           = DefaultSkywirePath + "/ssl/cert.pem"
 )
 
 // PackageLocalPath is the path to local directory
@@ -167,7 +168,7 @@ func PackageAppLocalPath() string {
 
 // PackageAppBinPath gets apps path for installed Skywire.
 func PackageAppBinPath() string {
-	return filepath.Join(PackageSkywirePath(), "apps")
+	return filepath.Join(appBinPath(), "apps")
 }
 
 // PackageTpLogStore gets transport logs path for installed Skywire.

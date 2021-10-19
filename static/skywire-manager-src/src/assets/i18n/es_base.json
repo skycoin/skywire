@@ -87,11 +87,15 @@
     "not-found": "Visor not found.",
     "statuses": {
       "online": "Online",
-      "online-tooltip": "Visor is online.",
+      "online-tooltip": "The visor is online.",
+      "connecting": "Connecting",
+      "connecting-tooltip": "The visor is online, but still connecting to the uptime tracker.",
+      "unknown": "Unknown",
+      "unknown-tooltip": "The visor is online, but it has not been possible to determine if it is connected to the uptime tracker.",
       "partially-online": "Online with problems",
-      "partially-online-tooltip": "Visor is online but not all services are working. For more information, open the details page and check the \"Health info\" section.",
+      "partially-online-tooltip": "The visor is online, but disconnected from the uptime tracker.",
       "offline": "Offline",
-      "offline-tooltip": "Visor is offline."
+      "offline-tooltip": "The visor is offline."
     },
     "details": {
       "node-info": {
@@ -118,6 +122,19 @@
           "week": "1 week",
           "weeks": "{{ time }} weeks"
         }
+      },
+      "transports-info": {
+        "title": "Transports Info",
+        "autoconnect": "Autoconnect:",
+        "autoconnect-info": "When enabled, the visor will automatically create the transports needed when a connection to a public visor is requested. If disabled, the transports will have to be created before being able to make the connection.",
+        "enabled": "Enabled",
+        "disabled": "Disabled",
+        "enable-button": "Enable",
+        "disable-button": "Disable",
+        "enable-confirmation": "Are you sure you want to enable the autoconnect feature?",
+        "disable-confirmation": "Are you sure you want to disable the autoconnect feature?",
+        "enable-done": "The autoconnect feature has been enabled.",
+        "disable-done": "The autoconnect feature has been disabled."
       },
       "router-info": {
         "title": "Router Info",
@@ -642,6 +659,8 @@
     "servers": "Servers",
     "settings": "Settings",
 
+    "unnamed": "Unnamed",
+
     "starting-blocked-server-error": "Unable to connect to the selected server because it has been added to the blocked servers list.",
     "unexpedted-error": "An unexpected error occurred and the operation could not be completed.",
 
@@ -668,6 +687,7 @@
     },
 
     "connection-info" : {
+      "state-title": "Your connection is currently:",
       "state-connecting": "Connecting",
       "state-connecting-info": "The VPN protection is being activated.",
       "state-connected": "Connected",
@@ -684,12 +704,18 @@
       "download-info": "Download speed."
     },
 
+    "connection-error" : {
+      "text": "Connection error",
+      "info": "Problem connecting with the vpn app. Some data being displayed could be outdated."
+    },
+
     "status-page": {
       "start-title": "Start VPN",
       "no-server": "No server selected!",
       "disconnect": "Disconnect",
+      "last-error": "Last error:",
+      "unknown-error": "Unknown error.",
       "disconnect-confirmation": "Are you sure you want to stop the VPN protection?",
-      "entered-manually": "Entered manually",
       "upload-info": "Uploaded data stats.",
       "download-info": "Downloaded data stats.",
       "latency-info": "Latency stats.",
@@ -722,6 +748,7 @@
       "connect-without-password": "Connect without password",
       "connect-without-password-confirmation": "The connection will be made without the password. Are you sure you want to continue?",
       "connect-using-password": "Connect using a password",
+      "connect-using-another-password": "Connect using another password",
       "edit-name": "Custom name",
       "edit-label": "Custom note",
       "make-favorite": "Make favorite",
@@ -848,6 +875,8 @@
       "get-ip-info": "When active, the application will use external services to obtain information about the current IP.",
       "data-units": "Data units",
       "data-units-info": "Allows to select the units that will be used to display the data transmission statistics.",
+      "minimum-hops": "Minimum hops",
+      "minimum-hops-info": "Allows to set the minimum number of hops the connections must pass through other Skywire visors before reaching the final destination.",
       "setting-on": "On",
       "setting-off": "Off",
       "working-warning": "The system is busy. Please wait for the previous operation to finish.",
