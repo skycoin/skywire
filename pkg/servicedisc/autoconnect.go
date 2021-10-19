@@ -53,14 +53,22 @@ func (a *autoconnector) Run(ctx context.Context) (err error) {
 
 	for {
 		time.Sleep(PublicServiceDelay)
+
+		// successfully established transports
+		tps := a.tm.GetTransportsByLabel(transport.LabelAutomatic)
+
+		// don't fetch public addresses if there are more or equal to the number of maximum transport defined.
+		if len(tps) >= a.maxConns {
+			a.log.Infoln("autoconnect: maximum number of established transports reached: ", a.maxConns)
+			return err
+		}
+
 		a.log.Infoln("Fetching public visors")
 		addrs, err := a.fetchPubAddresses(ctx)
 		if err != nil {
 			a.log.Errorf("Cannot fetch public services: %s", err)
 		}
 
-		// successfully established transports
-		tps := a.tm.GetTransportsByLabel(transport.LabelAutomatic)
 		// filter out any established transports
 		absent := a.filterDuplicates(addrs, tps)
 
