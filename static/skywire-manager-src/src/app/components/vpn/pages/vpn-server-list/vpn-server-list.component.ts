@@ -343,7 +343,7 @@ export class VpnServerListComponent implements OnDestroy {
     if (!savedVersion || savedVersion.flag !== ServerFlags.Blocked) {
       // To prevent overriding any password, if the currently selected server is selected again,
       // the case is managed here.
-      if (this.currentServer.pk === server.pk) {
+      if (this.currentServer && this.currentServer.pk === server.pk) {
         if (this.vpnRunning) {
           // Inform that the VPN is already connected to the server.
           this.snackbarService.showWarning('vpn.server-change.already-selected-warning');
