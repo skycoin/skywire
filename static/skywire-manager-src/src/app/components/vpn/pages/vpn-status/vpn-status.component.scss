@@ -73,6 +73,19 @@
     font-size: $font-size-mini;
   }
 
+  .last-connected-error {
+    margin-top: 15px;
+    font-size: $font-size-smaller;
+    color: $red-clear;
+
+    mat-icon {
+      position: relative;
+      top: 2px;
+      display: inline;
+      user-select: none;
+    }
+  }
+
   .data-container {
     margin-top: 20px;
   }
@@ -473,6 +486,7 @@
 
     .big-text {
       font-size: $font-size-lg;
+      overflow-wrap: break-word;
 
       mat-spinner {
         display: inline-block;
@@ -505,6 +519,7 @@
     .small-text {
       font-size: $font-size-mini;
       margin-top: 1px;
+      overflow-wrap: break-word;
     }
 
     .margin {
