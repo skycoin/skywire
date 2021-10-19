@@ -171,6 +171,16 @@ build-ui: install-deps-ui  ## Builds the UI
 	mkdir ${MANAGER_UI_BUILT_DIR}
 	cp -r ${MANAGER_UI_DIR}/dist/. ${MANAGER_UI_BUILT_DIR}
 
+deb-install-prequisites: ## Create unsigned application
+	sudo chmod +x ./scripts/deb_installer/prequisites.sh
+	./scripts/deb_installer/prequisites.sh
+
+deb-package: deb-install-prequisites ## Create unsigned application
+	./scripts/deb_installer/package_deb.sh
+
+deb-package-help: ## Show installer creation help
+	./scripts/deb_installer/package_deb.sh -h
+	
 mac-installer: ## Create signed and notarized application, run make mac-installer-help for more
 	./scripts/mac_installer/create_installer.sh -s -n
 
