@@ -115,29 +115,9 @@ function pack_deb {
 
 	cd "./$REPONAME-$VER"
 
-	# well, okay, this may seem unnecessary, but for some reason the lack of distclean target
-	# prevents debuild from passing DESTDIR correctly. This is sick, but works this way 
-	cat <<EOF >./Makefile
-distclean:
-	echo dummy
-install:
-	mkdir -p \$(DESTDIR)/opt/skywire/apps
-	mkdir -p \$(DESTDIR)/usr/bin
-	install -m 0755 skywire-visor \$(DESTDIR)/opt/skywire/skywire-visor
-	install -m 0755 skywire-cli \$(DESTDIR)/opt/skywire/skywire-cli
-	install -m 0755 apps/skychat \$(DESTDIR)/opt/skywire/apps/skychat
-	install -m 0755 apps/skysocks \$(DESTDIR)/opt/skywire/apps/skysocks
-	install -m 0755 apps/skysocks-client \$(DESTDIR)/opt/skywire/apps/skysocks-client
-	install -m 0755 apps/vpn-server \$(DESTDIR)/opt/skywire/apps/vpn-server
-	install -m 0755 apps/vpn-client \$(DESTDIR)/opt/skywire/apps/vpn-client
-	ln -s /opt/skywire/skywire-visor \$(DESTDIR)/usr/bin/skywire-visor
-	ln -s /opt/skywire/skywire-cli \$(DESTDIR)/usr/bin/skywire-cli
-
-uninstall:
-	rm -rf \$(DESTDIR)/usr/bin/skywire-visor
-	rm -rf \$(DESTDIR)/usr/bin/skywire-cli
-	rm -rf \$(DESTDIR)/opt/skywire
-EOF
+	# this may seem unnecessary, but for some reason the lack of distclean target
+	# prevents debuild from passing DESTDIR correctly in the makefile.
+	cp ../../scripts/deb_installer/Makefile ./Makefile
 	mkdir ./debian
 
 	create_control_file "$ARCH"
@@ -145,143 +125,29 @@ EOF
 	# this will bring up the editor
 	DEBEMAIL=$AUTHOREMAIL DEBFULLNAME=$AUTHORNAME dch --create -d --distribution stable
 	
-	cat <<EOF >./debian/rules
-#!/usr/bin/make -f
-%:
-	dh \$@ --with systemd
-EOF
+	cp ../../scripts/deb_installer/rules ./debian/rules
 
 	echo "Copyright $(date +%Y), Skycoin." >> ./debian/copyright
 
 	echo "10" >> ./debian/compat
 
-	cat <<EOF >./debian/${REPONAME}.prerm
-#!/bin/bash
-
-touch /opt/skywire/removing
-
-# Automatically added by dh_systemd_start/12.1.1
-if [ -d /run/systemd/system ] && [ \"\$1\" = remove ]; then
-	deb-systemd-invoke stop 'skywire.service' >/dev/null || true
-fi
-# End automatically added section
-
-#DEBHELPER#
-EOF
+	cp ../../scripts/deb_installer/deb.prerm "./debian/${REPONAME}.prerm"
 
 	chmod 0555 "./debian/${REPONAME}.prerm"
 
-	cat <<EOF >./debian/${REPONAME}.preinst
-#!/bin/bash
-
-if [ -f "/opt/skywire/removing" ]
-then
-	touch /opt/skywire/upgrading
-fi
-
-#DEBHELPER#
-EOF
+	cp ../../scripts/deb_installer/deb.preinst "./debian/${REPONAME}.preinst"
 
 	chmod 0555 "./debian/${REPONAME}.preinst"
 
-	cat <<EOF >./debian/${REPONAME}.postrm
-#!/bin/bash
-
-if [ ! -f "opt/skywire/upgrading" ]
-then
-	rm -rf /opt/skywire
-fi
-
-# Automatically added by dh_systemd_start/12.1.1
-if [ -d /run/systemd/system ]; then
-	systemctl --system daemon-reload >/dev/null || true
-fi
-# End automatically added section
-# Automatically added by dh_systemd_enable/12.1.1
-if [ \"\$1\" = \"remove\" ]; then
-	if [ -x \"/usr/bin/deb-systemd-helper\" ]; then
-		deb-systemd-helper mask 'skywire.service' >/dev/null || true
-	fi
-fi
-
-if [ \"\$1\" = \"purge\" ]; then
-	if [ -x \"/usr/bin/deb-systemd-helper\" ]; then
-		deb-systemd-helper purge 'skywire.service' >/dev/null || true
-		deb-systemd-helper unmask 'skywire.service' >/dev/null || true
-	fi
-fi
-# End automatically added section
-
-#DEBHELPER#
-EOF
+	cp ../../scripts/deb_installer/deb.postrm "./debian/${REPONAME}.postrm"
 
 	chmod 0555 "./debian/${REPONAME}.postrm"
 
-	cat <<EOF >./debian/${REPONAME}.postinst
-#!/bin/bash
+	cp ../../scripts/deb_installer/deb.postinst "./debian/${REPONAME}.postinst"
 
-rm -rf /opt/skywire/upgrading
-if [ -f "/opt/skywire/removing" ]
-then
-	rm -rf /opt/skywire/removing
-else
-	/opt/skywire/skywire-cli visor gen-config -o /opt/skywire/skywire-config.json
-fi
-
-setcap 'cap_net_admin+p' /opt/skywire/apps/vpn-client
-
-# Automatically added by dh_systemd_enable/12.1.1
-if [ \"\$1\" = \"configure\" ] || [ \"\$1\" = \"abort-upgrade\" ] || [ \"\$1\" = \"abort-deconfigure\" ] || [ \"\$1\" = \"abort-remove\" ] ; then
-	# This will only remove masks created by d-s-h on package removal.
-	deb-systemd-helper unmask 'skywire.service' >/dev/null || true
-
-	# was-enabled defaults to true, so new installations run enable.
-	if deb-systemd-helper --quiet was-enabled 'skywire.service'; then
-		# Enables the unit on first installation, creates new
-		# symlinks on upgrades if the unit file has changed.
-		deb-systemd-helper enable 'skywire.service' >/dev/null || true
-	else
-		# Update the statefile to add new symlinks (if any), which need to be
-		# cleaned up on purge. Also remove old symlinks.
-		deb-systemd-helper update-state 'skywire.service' >/dev/null || true
-	fi
-fi
-# End automatically added section
-# Automatically added by dh_systemd_start/12.1.1
-if [ \"\$1\" = \"configure\" ] || [ \"\$1\" = \"abort-upgrade\" ] || [ \"\$1\" = \"abort-deconfigure\" ] || [ \"\$1\" = \"abort-remove\" ] ; then
-	if [ -d /run/systemd/system ]; then
-		systemctl --system daemon-reload >/dev/null || true
-		if [ -n \"\$2\" ]; then
-			_dh_action=restart
-		else
-			_dh_action=start
-		fi
-		deb-systemd-invoke \$_dh_action 'skywire.service' >/dev/null || true
-	fi
-fi
-# End automatically added section
-
-#DEBHELPER#
-EOF
 	chmod 0555 "./debian/${REPONAME}.postinst"
 
-	cat <<EOF >./debian/skywire.service
-[Unit]
-Description=Skywire Visor
-After=network.target
-
-[Service]
-Type=simple
-User=root
-Group=root
-ExecStart=/usr/bin/skywire-visor /opt/skywire/skywire-config.json
-Restart=on-failure
-RestartSec=20
-TimeoutSec=30
-
-[Install]
-WantedBy=multi-user.target
-EOF
+	cp ../../scripts/deb_installer/skywire.service ./debian/skywire.service
 
 	DEBEMAIL=$AUTHOREMAIL DEBFULLNAME=$AUTHORNAME debuild -a"$ARCH" -us -uc
 

@@ -1,0 +1,8 @@
+#!/bin/bash
+
+if [ -f "/opt/skywire/removing" ]
+then
+	touch /opt/skywire/upgrading
+fi
+
+#DEBHELPER#
