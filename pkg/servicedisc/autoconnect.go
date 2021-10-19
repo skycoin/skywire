@@ -48,7 +48,7 @@ func MakeConnector(conf Config, maxConns int, tm *transport.Manager, log *loggin
 
 // Run implements Autoconnector interface
 func (a *autoconnector) Run(ctx context.Context) (err error) {
-	// failed addresses will be populated everytime any
+	// failed addresses will be populated everytime any failed attempt at establishing transport occurs.
 	failedAddresses := map[cipher.PubKey]int{}
 
 	for {
@@ -59,7 +59,7 @@ func (a *autoconnector) Run(ctx context.Context) (err error) {
 
 		// don't fetch public addresses if there are more or equal to the number of maximum transport defined.
 		if len(tps) >= a.maxConns {
-			a.log.Infoln("autoconnect: maximum number of established transports reached: ", a.maxConns)
+			a.log.Debugln("autoconnect: maximum number of established transports reached: ", a.maxConns)
 			return err
 		}
 
