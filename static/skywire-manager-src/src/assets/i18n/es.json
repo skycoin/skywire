@@ -659,6 +659,8 @@
     "servers": "Servidores",
     "settings": "Configuracion",
 
+    "unnamed": "Sin nombre",
+
     "starting-blocked-server-error": "No se puede conectar con el servidor seleccionado porque se ha agregado a la lista de servidores bloqueados.",
     "unexpedted-error": "Se produjo un error inesperado y no se pudo completar la operación.",
 
@@ -714,7 +716,6 @@
       "last-error": "Último error:",
       "unknown-error": "Error desconocido.",
       "disconnect-confirmation": "¿Realmente desea detener la protección VPN?",
-      "entered-manually": "Ingresado manualmente",
       "upload-info": "Estadísticas de datos subidos.",
       "download-info": "Estadísticas de datos descargados.",
       "latency-info": "Estadísticas de latencia.",

@@ -19,6 +19,8 @@ export class VpnServerNameComponent {
   // Names.
   @Input() name = '';
   @Input() customName = '';
+  // Server pk, for checking if the name of the server is just the PK.
+  @Input() pk = '';
   // Text that will be shown if there is no name.
   @Input() defaultName = '';
   // The icons will be positioned for big text.
