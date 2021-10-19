@@ -80,7 +80,7 @@ type V1Dmsgpty struct {
 type V1Transport struct {
 	Discovery         string          `json:"discovery"`
 	AddressResolver   string          `json:"address_resolver"`
-	AutoconnectPublic bool            `json:"public_autoconnect"`
+	PublicAutoconnect bool            `json:"public_autoconnect"`
 	TransportSetup    []cipher.PubKey `json:"transport_setup_nodes"`
 }
 
@@ -203,6 +203,15 @@ func (v1 *V1) GetPersistentTransports() ([]transport.PersistentTransports, error
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
 	return v1.PersistentTransports, nil
+}
+
+// UpdatePublicAutoconnect updates public_autoconnect in config
+func (v1 *V1) UpdatePublicAutoconnect(pAc bool) error {
+	v1.mu.Lock()
+	v1.Transport.PublicAutoconnect = pAc
+	v1.mu.Unlock()
+
+	return v1.flush(v1)
 }
 
 // updateStringArg updates the cli non-boolean flag of the specified app config and also within the launcher.

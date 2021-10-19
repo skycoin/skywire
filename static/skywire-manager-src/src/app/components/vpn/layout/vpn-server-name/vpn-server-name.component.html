@@ -35,11 +35,11 @@
   [matTooltip]="'vpn.server-conditions.has-password-info' | translate"
 >lock_outlined</mat-icon>
 <!-- Name. -->
-<ng-container *ngIf="customName && name">
+<ng-container *ngIf="customName && name && (!pk || name !== pk)">
   {{ customName }}
   <mat-icon [inline]="true" class="name-separator">fiber_manual_record</mat-icon>
   {{ name }}
 </ng-container>
-<ng-container *ngIf="!name && customName">{{ customName }}</ng-container>
-<ng-container *ngIf="name && !customName">{{ name }}</ng-container>
-<ng-container *ngIf="!name && !customName">{{ defaultName | translate }}</ng-container>
+<ng-container *ngIf="(!name || (pk && name === pk)) && customName">{{ customName }}</ng-container>
+<ng-container *ngIf="name && (!pk || name !== pk) && !customName">{{ name }}</ng-container>
+<ng-container *ngIf="(!name || (pk && name === pk)) && !customName">{{ defaultName | translate }}</ng-container>
