@@ -103,6 +103,12 @@ To install the package use:
 ```
 $ sudo dpkg -i ./deb/skywire_0.5.0-1_amd64.deb
 ```
+This will install `skywire` and `skywire-cli`
+
+To generate a config use
+```
+$ skywire-cli config gen -pro /opt/skywire/skywire-visor.json
+```
 
 To uninstall the package use:
 ```
