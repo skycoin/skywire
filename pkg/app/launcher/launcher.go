@@ -191,8 +191,10 @@ func (l *Launcher) AppStates() []*AppState {
 	for _, app := range l.apps {
 		state := &AppState{AppConfig: app, Status: AppStatusStopped}
 		if err, ok := l.procM.ErrorByName(app.Name); ok {
-			state.DetailedStatus = err
-			state.Status = AppStatusErrored
+			if err != "" {
+				state.DetailedStatus = err
+				state.Status = AppStatusErrored
+			}
 		}
 		if proc, ok := l.procM.ProcByName(app.Name); ok {
 			state.DetailedStatus = proc.DetailedStatus()
