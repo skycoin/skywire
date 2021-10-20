@@ -47,15 +47,12 @@ for:
       - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.42.1
       - make dep
       - sh: ci_scripts/create-ip-aliases.sh
-      - make install-deps-ui
     
     before_build:
       - make check
-      - make lint-ui
    
     build_script:
       - make build
-      - make build-ui
 
   - # Windows
     skip_tags: true
@@ -71,16 +68,13 @@ for:
       - choco install make
       - go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.42.0
       - make dep
-      - make install-deps-ui
     
     before_build:
       - set GO111MODULE=on
       - make check-windows-appveyor
-      - make lint-ui
   
     build_script:
       - make build
-      - make build-ui
 
   - # Linux and MacOS (Release)
     skip_non_tags: true
