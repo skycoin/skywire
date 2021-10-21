@@ -11,30 +11,7 @@ environment:
   - job_name: MacOS
     appveyor_build_worker_image: macos
     GOARCH: amd64
-  # - job_name: Windows
-  #   appveyor_build_worker_image: Visual Studio 2019
-  #   GOARCH: amd64 
-  
-  # For release, by pushing tag
-  - job_name: linux-amd64
-    appveyor_build_worker_image: ubuntu1804
-    GOARCH: amd64
-  - job_name: linux-arm
-    appveyor_build_worker_image: ubuntu1804
-    GOARCH: arm
-  - job_name: linux-arm64
-    appveyor_build_worker_image: ubuntu1804
-    GOARCH: arm64
-  - job_name: linux-386
-    appveyor_build_worker_image: ubuntu1804
-    GOARCH: 386
-  - job_name: darwin-amd64
-    appveyor_build_worker_image: macos
-    GOARCH: amd64
-  # - job_name: windows-amd64
-  #   appveyor_build_worker_image: Visual Studio 2019
-  #   GOARCH: amd64
-  
+
 for:
   - # Linux and MacOS
     skip_tags: true
