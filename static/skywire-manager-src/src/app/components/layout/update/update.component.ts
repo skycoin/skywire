@@ -5,7 +5,6 @@ import { Subscription, forkJoin, interval } from 'rxjs';
 
 import { AppConfig } from 'src/app/app.config';
 import { NodeService, UpdaterStorageKeys } from 'src/app/services/node.service';
-import { StorageService } from 'src/app/services/storage.service';
 import { OperationError } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
 
@@ -44,6 +43,14 @@ export interface NodeData {
 }
 
 /**
+ * Data about an error found while making the initial check for a node.
+ */
+export interface NodeWithErrorData {
+  nodeLabel: string;
+  errorMsg: string;
+}
+
+/**
  * Extended data about a node to update, for internal use.
  */
 interface NodeToUpdate extends NodeData {
@@ -52,6 +59,10 @@ interface NodeToUpdate extends NodeData {
    * function must be called for it.
    */
   update: boolean;
+  /**
+   * If there was an error while making the initial check for the node.
+   */
+  hadErrorDuringInitialCheck: boolean;
   /**
    * Info about the current state of the update procedure.
    */
@@ -138,6 +149,8 @@ export class UpdateComponent implements AfterViewInit, OnDestroy {
   // List with all the nodes that should be updated. It includes all requested nodes, so it
   // may include nodes without updates available and nodes which are already being updated.
   nodesToUpdate: NodeToUpdate[];
+  // List with the nodes which had errors during the initial check.
+  nodesWithError: NodeWithErrorData[] = [];
   // List with the indexes, inside nodesToUpdate, of all nodes which were detected as already
   // being updated.
   indexesAlreadyBeingUpdated: number[] = [];
@@ -151,6 +164,7 @@ export class UpdateComponent implements AfterViewInit, OnDestroy {
   updatingStates = UpdatingStates;
 
   private subscription: Subscription;
+  private initialCheckSubscriptions: Subscription[];
   private progressSubscriptions: Subscription[];
   private uiUpdateSubscription: Subscription;
 
@@ -171,7 +185,6 @@ export class UpdateComponent implements AfterViewInit, OnDestroy {
     private dialogRef: MatDialogRef<UpdateComponent>,
     @Inject(MAT_DIALOG_DATA) public data: NodeData[],
     private nodeService: NodeService,
-    private storageService: StorageService,
     private translateService: TranslateService,
     private changeDetectorRef: ChangeDetectorRef,
   ) { }
@@ -192,34 +205,67 @@ export class UpdateComponent implements AfterViewInit, OnDestroy {
         key: node.key,
         label: node.label,
         update: false,
+        hadErrorDuringInitialCheck: false,
         updateProgressInfo: new UpdateProgressInfo(),
       });
 
       this.nodesToUpdate[this.nodesToUpdate.length - 1].updateProgressInfo.rawMsg = this.translateService.instant('update.starting');
     });
 
-    // Check which nodes are already being updated.
-    this.subscription = forkJoin(this.data.map(node => this.nodeService.checkIfUpdating(node.key))).subscribe(nodesBeingUpdated => {
-      // Save the list of nodes already being updated.
-      nodesBeingUpdated.forEach((r, i) => {
-        if (r.running) {
-          this.indexesAlreadyBeingUpdated.push(i);
-          this.nodesToUpdate[i].update = true;
-        }
-      });
+    let checkedVisors = 0;
 
-      if (this.indexesAlreadyBeingUpdated.length === this.data.length) {
-        // If all nodes are already being updated, call the update function for all of them and
-        // start showing the progress.
-        this.update();
-      } else {
-        // Continue to the next step.
-        this.checkUpdates();
-      }
-    }, (err: OperationError) => {
-      this.changeState(UpdatingStates.Error);
-      this.errorText = processServiceError(err).translatableErrorMsg;
+    // Check if the nodes are currently being updated.
+    this.initialCheckSubscriptions = [];
+    this.nodesToUpdate.forEach((node, i) => {
+      this.initialCheckSubscriptions.push(
+        this.nodeService.checkIfUpdating(node.key).subscribe(response => {
+          // Save the list of nodes already being updated.
+          if (response.running) {
+            this.indexesAlreadyBeingUpdated.push(i);
+            this.nodesToUpdate[i].update = true;
+          }
+
+          checkedVisors += 1;
+          if (checkedVisors === this.nodesToUpdate.length) {
+            this.finishInitialCheck();
+          }
+        }, (err: OperationError) => {
+          // Save the error.
+          this.nodesWithError.push({
+            nodeLabel: node.label,
+            errorMsg: processServiceError(err).translatableErrorMsg
+          });
+          node.hadErrorDuringInitialCheck = true;
+
+          checkedVisors += 1;
+          if (checkedVisors === this.nodesToUpdate.length) {
+            this.finishInitialCheck();
+          }
+        })
+      );
     });
+  }
+
+  /**
+   * Continues the process by calling the correct function after making the initial check.
+   */
+  private finishInitialCheck() {
+    // Check if all have errors.
+    if (this.nodesWithError.length === this.nodesToUpdate.length) {
+      this.changeState(UpdatingStates.Error);
+      this.errorText = this.nodesWithError[0].errorMsg;
+
+      return;
+    }
+
+    if (this.indexesAlreadyBeingUpdated.length === (this.data.length - this.nodesWithError.length)) {
+      // If all nodes are already being updated, call the update function for all of them and
+      // start showing the progress.
+      this.update();
+    } else {
+      // Continue to the next step.
+      this.checkUpdates();
+    }
   }
 
   /**
@@ -229,10 +275,11 @@ export class UpdateComponent implements AfterViewInit, OnDestroy {
     this.nodesForUpdatesFound = 0;
     this.updatesFound = [];
 
-    // Create a list with the nodes to check, ignoring the ones which are already being updated.
+    // Create a list with the nodes to check, ignoring the ones which are already being updated
+    // or have errors.
     const nodesToCheck: NodeToUpdate[] = [];
     this.nodesToUpdate.forEach(node => {
-      if (!node.update) {
+      if (!node.update && !node.hadErrorDuringInitialCheck) {
         nodesToCheck.push(node);
       }
     });
@@ -427,6 +474,10 @@ export class UpdateComponent implements AfterViewInit, OnDestroy {
 
     if (this.progressSubscriptions) {
       this.progressSubscriptions.forEach(e => e.unsubscribe());
+    }
+
+    if (this.initialCheckSubscriptions) {
+      this.initialCheckSubscriptions.forEach(e => e.unsubscribe());
     }
   }
 
