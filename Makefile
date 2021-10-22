@@ -232,10 +232,9 @@ build-ui: install-deps-ui  ## Builds the UI
 
 build-ui-windows: install-deps-ui ## Builds the UI on windows
 	cd $(MANAGER_UI_DIR) && npm run build
-	powershell 'New-Item -Path ${PWD}\bin -ItemType Directory'
 	powershell 'Remove-Item -Recurse -Force -Path ${MANAGER_UI_BUILT_DIR}'
 	powershell 'New-Item -Path ${MANAGER_UI_BUILT_DIR} -ItemType Directory'
-	powershell 'Copy-Item -Recurse ${MANAGER_UI_DIR}\dist\. ${MANAGER_UI_BUILT_DIR}'
+	powershell 'Copy-Item -Recurse ${MANAGER_UI_DIR}\dist\* ${MANAGER_UI_BUILT_DIR}'
 
 deb-install-prequisites: ## Create unsigned application
 	sudo chmod +x ./scripts/deb_installer/prequisites.sh
