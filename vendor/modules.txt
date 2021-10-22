@@ -304,7 +304,7 @@ golang.org/x/crypto/xtea
 # golang.org/x/mod v0.4.2
 ## explicit; go 1.12
 golang.org/x/mod/semver
-# golang.org/x/net v0.0.0-20210927181540-4e4d966f7476
+# golang.org/x/net v0.0.0-20211020060615-d418f374d309
 ## explicit; go 1.17
 golang.org/x/net/bpf
 golang.org/x/net/context
@@ -315,7 +315,7 @@ golang.org/x/net/ipv4
 golang.org/x/net/ipv6
 golang.org/x/net/nettest
 golang.org/x/net/proxy
-# golang.org/x/sys v0.0.0-20211007075335-d3039528d8ac
+# golang.org/x/sys v0.0.0-20211020174200-9d6173849985
 ## explicit; go 1.17
 golang.org/x/sys/cpu
 golang.org/x/sys/execabs
@@ -344,12 +344,11 @@ golang.org/x/tools/internal/typesinternal
 ## explicit; go 1.11
 golang.org/x/xerrors
 golang.org/x/xerrors/internal
-# golang.zx2c4.com/wireguard v0.0.0-20211012180210-dfd688b6aa7b
+# golang.zx2c4.com/wireguard v0.0.0-20211022192229-f1f626090e3b
 ## explicit; go 1.17
 golang.zx2c4.com/wireguard/rwcancel
 golang.zx2c4.com/wireguard/tun
 golang.zx2c4.com/wireguard/tun/wintun
-golang.zx2c4.com/wireguard/tun/wintun/memmod
 # gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f
 ## explicit
 # gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c

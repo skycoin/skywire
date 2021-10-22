@@ -36,12 +36,12 @@ const (
 
 // Constants for testing deployment.
 const (
-	TestTpDiscAddr          = "http://tpd.skywire.dev/"
-	TestDmsgDiscAddr        = "http://dmsgd.skywire.dev/"
-	TestServiceDiscAddr     = "http://sd.skywire.dev/"
-	TestRouteFinderAddr     = "http://rf.skywire.dev/"
-	TestUptimeTrackerAddr   = "http://ut.skywire.dev/"
-	TestAddressResolverAddr = "http://ar.skywire.dev/"
+	TestTpDiscAddr          = "http://tpd.skywire.dev"
+	TestDmsgDiscAddr        = "http://dmsgd.skywire.dev"
+	TestServiceDiscAddr     = "http://sd.skywire.dev"
+	TestRouteFinderAddr     = "http://rf.skywire.dev"
+	TestUptimeTrackerAddr   = "http://ut.skywire.dev"
+	TestAddressResolverAddr = "http://ar.skywire.dev"
 	TestSetupPK             = "026c2a3e92d6253c5abd71a42628db6fca9dd9aa037ab6f4e3a31108558dfd87cf"
 )
 
