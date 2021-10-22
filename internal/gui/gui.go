@@ -60,12 +60,8 @@ func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 
 		systray.SetTooltip("Skywire")
 
-<<<<<<< HEAD
-		initOpenHypervisorBtn(conf)
-=======
 		initOpenVPNLinkBtn(conf)
 		initAdvancedButton(conf)
->>>>>>> upstream/develop
 		//initVpnClientBtn()
 		initQuitBtn()
 
