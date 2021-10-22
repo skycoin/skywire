@@ -66,6 +66,8 @@ build-systray-windows: host-apps-systray-windows bin-systray-windows ## Builds s
 
 build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
+installer: mac-installer ## Builds MacOS installer for skywire-visor
+
 install-generate: ## Installs required execs for go generate.
 	${OPTS} go install github.com/mjibson/esc
 	${OPTS} go install github.com/vektra/mockery/cmd/mockery
@@ -125,7 +127,7 @@ format: tidy ## Formats the code. Must have goimports and goimports-reviser inst
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./cmd
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./internal
-	find . -type f -name '*.go' -not -path "./vendor/*"  -exec goimports-reviser -project-name ${PROJECT_BASE} -file-path {} \;
+	find . -type f -name '*.go' -not -path "./.git/*" -not -path "./vendor/*"  -exec goimports-reviser -project-name ${PROJECT_BASE} -file-path {} \;
 
 format-windows: tidy ## Formats the code. Must have goimports and goimports-reviser installed (use make install-linters).
 	powershell 'Get-ChildItem -Directory | where Name -NotMatch vendor | % { Get-ChildItem $$_ -Recurse -Include *.go } | % {goimports -w -local ${PROJECT_BASE} $$_ }'
@@ -205,7 +207,7 @@ build-deploy: ## Build for deployment Docker images
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
-github-release: sysroot
+github-release: 
 	goreleaser --rm-dist
 
 build-docker: ## Build docker image
@@ -235,7 +237,23 @@ build-ui-windows: install-deps-ui ## Builds the UI on windows
 	powershell 'New-Item -Path ${MANAGER_UI_BUILT_DIR} -ItemType Directory'
 	powershell 'Copy-Item -Recurse ${MANAGER_UI_DIR}\dist\. ${MANAGER_UI_BUILT_DIR}'
 
-help: ## Display help
+deb-install-prequisites: ## Create unsigned application
+	sudo chmod +x ./scripts/deb_installer/prequisites.sh
+	./scripts/deb_installer/prequisites.sh
+
+deb-package: deb-install-prequisites ## Create unsigned application
+	./scripts/deb_installer/package_deb.sh
+
+deb-package-help: ## Show installer creation help
+	./scripts/deb_installer/package_deb.sh -h
+	
+mac-installer: ## Create signed and notarized application, run make mac-installer-help for more
+	./scripts/mac_installer/create_installer.sh -s -n
+
+mac-installer-help: ## Show installer creation help
+	./scripts/mac_installer/create_installer.sh -h
+
+help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
 help-windows: ## Display help for windows

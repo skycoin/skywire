@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { Subscription } from 'rxjs';
+import { interval, Subscription } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
@@ -42,6 +42,11 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
   // Top margin of the data graphs.
   graphsTopInternalMargin = LineChartComponent.topInternalMargin;
 
+  // Current connection time.
+  connectionTimeString = '00:00:00';
+  private calculatedSegs = -1;
+  private timeUpdateSubscription: Subscription;
+
   // Current data transmission stats.
   uploadSpeed = 0;
   downloadSpeed = 0;
@@ -62,6 +67,8 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
   lastAppState: AppState = null;
   // If the UI must be shown busy.
   showBusy = false;
+  // If the user requested the VPN to be stopped and the code is still waiting for it to happen.
+  private stopRequested = false;
   // If the user has not blocked the option for showing the IP info.
   ipInfoAllowed: boolean;
   // Public IP of the machine running the app.
@@ -134,16 +141,23 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
       // Start getting and updating the state of the backend.
       this.dataSubscription = this.vpnClientService.backendState.subscribe(data => {
         if (data && data.serviceState !== VpnServiceStates.PerformingInitialCheck) {
+          const firstEventExecution = !!!this.backendState;
           this.backendState = data;
 
-          // If the state was changed, update the IP.
-          if (this.lastAppState !== data.vpnClientAppData.appState) {
-            if (data.vpnClientAppData.appState === AppState.Running || data.vpnClientAppData.appState === AppState.Stopped) {
+          if (!firstEventExecution) {
+            // If the app enters or leaves the Running state, update the IP.
+            if (
+              (this.lastAppState === AppState.Running && data.vpnClientAppData.appState !== AppState.Running) ||
+              (this.lastAppState !== AppState.Running && data.vpnClientAppData.appState === AppState.Running)
+            ) {
               this.getIp(true);
             }
+          } else {
+            // Get the ip data for the first time.
+            this.getIp(true);
           }
 
-          this.showStarted = data.vpnClientAppData.running;
+          this.showStarted = data.vpnClientAppData.running || data.vpnClientAppData.appState !== AppState.Stopped;
           if (this.showStartedLastValue !== this.showStarted) {
             // If the running state changed, restart the values for the data graphs.
 
@@ -164,7 +178,12 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
 
           this.lastAppState = data.vpnClientAppData.appState;
           this.showStartedLastValue = this.showStarted;
-          this.showBusy = data.busy;
+          if (!this.stopRequested) {
+            this.showBusy = data.busy;
+          } else if (!this.showStarted) {
+            this.stopRequested = false;
+            this.showBusy = data.busy;
+          }
 
           // Update the values for the data graphs.
           if (data.vpnClientAppData.connectionData) {
@@ -184,6 +203,39 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
             this.latency = data.vpnClientAppData.connectionData.latency;
           }
 
+          if (
+            data.vpnClientAppData.running &&
+            data.vpnClientAppData.appState === AppState.Running &&
+            data.vpnClientAppData.connectionData &&
+            data.vpnClientAppData.connectionData.connectionDuration
+          ) {
+            if (
+              this.calculatedSegs === -1 ||
+              data.vpnClientAppData.connectionData.connectionDuration > this.calculatedSegs + 2 ||
+              data.vpnClientAppData.connectionData.connectionDuration < this.calculatedSegs - 2
+            ) {
+              this.calculatedSegs = data.vpnClientAppData.connectionData.connectionDuration;
+              this.refreshConnectionTimeString();
+
+              if (this.timeUpdateSubscription) {
+                this.timeUpdateSubscription.unsubscribe();
+              }
+
+              this.timeUpdateSubscription = interval(1000).subscribe(() => {
+                this.calculatedSegs += 1;
+                this.refreshConnectionTimeString();
+              });
+            }
+          } else {
+            if (this.timeUpdateSubscription) {
+              this.timeUpdateSubscription.unsubscribe();
+              this.timeUpdateSubscription = null;
+
+              this.calculatedSegs = -1;
+              this.connectionTimeString = '00:00:00';
+            }
+          }
+
           this.loading = false;
         }
       });
@@ -193,9 +245,21 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
         this.currentRemoteServer = server;
       });
     });
+  }
 
-    // Get the current IP.
-    this.getIp(true);
+  /**
+   * Uses the value of calculatedSegs to update connectionTimeString.
+   */
+  private refreshConnectionTimeString() {
+    const segs = this.calculatedSegs % 60;
+    const totalMinutes = Math.floor(this.calculatedSegs / 60);
+    const minutes = totalMinutes % 60;
+    const hours = Math.floor(totalMinutes / 60);
+
+    this.connectionTimeString =
+      String(hours).padStart(2, '0') + ':' +
+      String(minutes).padStart(2, '0') + ':' +
+      String(segs).padStart(2, '0');
   }
 
   ngOnDestroy() {
@@ -206,6 +270,10 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
 
     if (this.ipSubscription) {
       this.ipSubscription.unsubscribe();
+    }
+
+    if (this.timeUpdateSubscription) {
+      this.timeUpdateSubscription.unsubscribe();
     }
   }
 
@@ -256,6 +324,7 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
    * Makes the actual request for stopping the VPN.
    */
   private finishStoppingVpn() {
+    this.stopRequested = true;
     this.showBusy = true;
     this.vpnClientService.stop();
   }
@@ -330,6 +399,23 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Class that should be used for the colored state bar.
+   */
+  get currentStateLineClass(): string {
+    if (this.backendState.vpnClientAppData.appState === AppState.Stopped) {
+      return 'red-line';
+    } else if (this.backendState.vpnClientAppData.appState === AppState.Connecting) {
+      return 'yellow-line';
+    } else if (this.backendState.vpnClientAppData.appState === AppState.Running) {
+      return 'green-line';
+    } else if (this.backendState.vpnClientAppData.appState === AppState.ShuttingDown) {
+      return 'yellow-line';
+    } else {
+      return 'yellow-line';
+    }
+  }
+
   private closeOperationSubscription() {
     if (this.operationSubscription) {
       this.operationSubscription.unsubscribe();
@@ -388,7 +474,7 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
    * @param ignoreTimeCheck If true, the operation will be performed even if the function
    * was called shortly before.
    */
-  private getIp(ignoreTimeCheck = false) {
+  public getIp(ignoreTimeCheck = false) {
     // Cancel the operation if the used blocked the IP checking functionality.
     if (!this.ipInfoAllowed) {
       return;
@@ -435,8 +521,8 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
         this.problemGettingIp = false;
         this.currentIp = response;
 
-        // Update the country, if the IP changed.
-        if (this.previousIp !== this.currentIp || this.problemGettingIpCountry) {
+        // Update the country, if no country has been loaded or the IP changed.
+        if (!this.ipCountry || this.previousIp !== this.currentIp || this.problemGettingIpCountry) {
           this.getIpCountry();
         } else {
           this.loadingIpCountry = false;

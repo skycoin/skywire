@@ -1,0 +1,22 @@
+#!/bin/sh
+
+skywire_dir=/Users/${USER}/Library/Application\ Support/Skywire
+log_dir=/Users/${USER}/Library/Logs/skywire
+
+sudo -u "$USER" launchctl remove com.skycoin.skywire.logcleaner
+
+pkill -f vpn-client
+pkill -f skywire
+
+rm -rf /Users/"$USER"/Library/LaunchAgents/com.skycoin.skywire.logcleaner.plist
+rm -rf "${skywire_dir}"/local
+rm -rf "${log_dir}"
+unlink /usr/local/bin/skywire-cli
+
+pkgutil --forget com.skycoin.skywire.visor
+pkgutil --forget com.skycoin.skywire.updater
+pkgutil --forget com.skycoin.skywire.remover
+
+rm -rf /Applications/Skywire.app
+
+exit 0

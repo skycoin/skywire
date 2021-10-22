@@ -44,18 +44,15 @@ for:
         - job_name: MacOS
 
     install:
-      - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.42.0
+      - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.42.1
       - make dep
       - sh: ci_scripts/create-ip-aliases.sh
-      - make install-deps-ui
     
     before_build:
       - make check
-      - make lint-ui
    
     build_script:
       - make build
-      - make build-ui
 
   - # Windows
     skip_tags: true
@@ -131,23 +128,6 @@ for:
     install:
       - cmd: choco install make
       - make dep
-  
+
     build_script:
       - make build
-
-    after_build:
-      - sh: tar -cvzf skywire-$APPVEYOR_REPO_TAG_NAME-$APPVEYOR_JOB_NAME.tar.gz ./apps/* ./skywire-visor ./skywire-cli ./setup-node
-
-    artifacts:
-      - path: skywire-$(APPVEYOR_REPO_TAG_NAME)-$(APPVEYOR_JOB_NAME).tar.gz
-        name: deploy
-        
-    deploy:
-      - provider: GitHub
-        release: $(APPVEYOR_REPO_TAG_NAME)
-        auth_token:
-          secure: ZrbNBE2wSfGvHzEq5GqEAUmNy7myDIl7KK05CKlZdQfieV7XdIAPXpkdHNEyZbvT
-        draft: true
-        artifact: deploy
-        on:
-          APPVEYOR_REPO_TAG: true

@@ -32,6 +32,11 @@ export const AppConfig = {
       name: 'Deutsch',
       iconName: 'de.png',
     },
+    {
+      code: 'pt',
+      name: 'Português (Brazil)',
+      iconName: 'pt.png',
+    },
   ],
   /**
    * Default language.
@@ -52,6 +57,6 @@ export const AppConfig = {
     /**
      * If true, a hardcoded ip will be shown in the UI while in development mode.
      */
-    hardcodedIpWhileDeveloping: true,
+    hardcodedIpWhileDeveloping: false,
   },
 };

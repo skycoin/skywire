@@ -46,6 +46,7 @@ func TestHealth(t *testing.T) {
 			uptimeTracker:     utClient,
 			isServicesHealthy: newInternalHealthInfo(),
 		}
+		v.isServicesHealthy.init()
 
 		rpc := &RPC{visor: v, log: logrus.New()}
 		// mock initUptimeTracker
@@ -54,10 +55,10 @@ func TestHealth(t *testing.T) {
 		err := rpc.Health(nil, h)
 		require.NoError(t, err)
 
-		assert.Equal(t, true, h.ServicesHealth)
+		assert.Equal(t, "healthy", h.ServicesHealth)
 	})
 
-	t.Run("Report as unavailable", func(t *testing.T) {
+	t.Run("Report as connecting", func(t *testing.T) {
 		c := baseConfig(t)
 		c.Routing = &visorconfig.V1Routing{}
 
@@ -69,13 +70,15 @@ func TestHealth(t *testing.T) {
 			isServicesHealthy: newInternalHealthInfo(),
 		}
 
+		v.isServicesHealthy.init()
 		rpc := &RPC{visor: v, log: logrus.New()}
 		h := &HealthInfo{}
 		err := rpc.Health(nil, h)
 		require.NoError(t, err)
 
-		assert.Equal(t, false, h.ServicesHealth)
+		assert.Equal(t, "connecting", h.ServicesHealth)
 	})
+
 }
 
 func TestUptime(t *testing.T) {
