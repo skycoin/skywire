@@ -240,7 +240,6 @@ func (c *httpClient) AvailableServers(ctx context.Context) ([]*Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	req = req.WithContext(ctx)
 
 	resp, err := c.client.Do(req)

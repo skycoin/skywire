@@ -63,6 +63,8 @@ github.com/go-stack/stack
 # github.com/golang/gddo v0.0.0-20190419222130-af0f2af80721
 github.com/golang/gddo/httputil
 github.com/golang/gddo/httputil/header
+# github.com/golang/protobuf v1.4.2
+## explicit
 # github.com/golang/snappy v0.0.1
 github.com/golang/snappy
 # github.com/google/go-github v17.0.0+incompatible
