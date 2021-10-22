@@ -16,6 +16,8 @@
     "time-in-ms": "{{ time }}ms.",
     "time-in-segs": "{{ time }}s.",
     "ok": "Ok",
+    "yes": "Sí",
+    "no": "No",
     "unknown": "Desconocido",
     "close": "Cerrar",
     "window-size-error": "La ventana es demasiado estrecha para el contenido."
@@ -86,8 +88,12 @@
     "statuses": {
       "online": "Online",
       "online-tooltip": "El visor se encuentra online.",
+      "connecting": "Conectando",
+      "connecting-tooltip": "El visor se encuentra online, pero todavía está conectando con el uptime tracker.",
+      "unknown": "Desconocido",
+      "unknown-tooltip": "El visor se encuentra online, pero no ha sido posible determinar si está conectado con el uptime tracker.",
       "partially-online": "Online con problemas",
-      "partially-online-tooltip": "El visor se encuentra online pero no todos los servicios están funcionando. Para más información, abra la página de detalles y consulte la sección \"Información de salud\".",
+      "partially-online-tooltip": "El visor se encuentra online, pero desconectado del uptime tracker.",
       "offline": "Offline",
       "offline-tooltip": "El visor se encuentra offline."
     },
@@ -96,10 +102,14 @@
         "title": "Información del visor",
         "label": "Etiqueta:",
         "public-key": "Llave pública:",
+        "symmetic-nat": "NAT simétrica:",
+        "public-ip": "IP pública:",
         "ip": "IP:",
         "dmsg-server": "Servidor DMSG:",
         "ping": "Ping:",
         "node-version": "Versión del visor:",
+        "skybian-version": "Versión de Skybian:",
+        "no-skybian-version": "(no se usa Skybian)",
         "time": {
           "title": "Tiempo online:",
           "seconds": "unos segundos",
@@ -112,6 +122,19 @@
           "week": "1 semana",
           "weeks": "{{ time }} semanas"
         }
+      },
+      "transports-info": {
+        "title": "Información de Transportes",
+        "autoconnect": "Autoconectar:",
+        "autoconnect-info": "Al activarse, el visor creará automáticamente los transportes necesarios cuando se solicite la conexión a un visor público. Al desactivarse, los transportes deberán ser creados antes de poder establecer la conexión.",
+        "enabled": "Activado",
+        "disabled": "Desactivado",
+        "enable-button": "Activar",
+        "disable-button": "Desactivar",
+        "enable-confirmation": "¿Seguro que desea activar la función de autoconectar?",
+        "disable-confirmation": "¿Seguro que desea desactivar la función de autoconectar?",
+        "enable-done": "La función de autoconectar ha sido activada.",
+        "disable-done": "La función de autoconectar ha sido desactivada."
       },
       "router-info": {
         "title": "Información del Enrutador",
@@ -449,34 +472,41 @@
 
   "transports": {
     "title": "Transportes",
-    "remove-all-offline": "Remover todos los transportes offline",
-    "remove-all-offline-confirmation": "¿Seguro que desea remover todos los transportes offline?",
-    "remove-all-filtered-offline-confirmation": "Todos los transportes offline que satisfagan los criterios de filtrado actuales serán removidos. ¿Seguro que desea continuar?",
     "info": "Conexiones que tiene con visores remotos de Skywire, para permitir que las aplicaciones Skywire locales se comuniquen con las aplicaciones que se ejecutan en esos visores remotos.",
     "list-title": "Lista de transportes",
-    "state": "Estado",
-    "state-tooltip": "Estado actual",
+    "offline": "Offline",
+    "persistent": "Persistente",
+    "persistent-tooltip": "Transportes persistentes, los cuales son creados automáticamente al iniciar el visor y son recreados automáticamente en caso de desconexión.",
+    "persistent-transport-tooltip": "Este transporte es persistente, así que es creado automáticamente al iniciar el visor y es recreado automáticamente en caso de desconexión.",
+    "persistent-transport-button-tooltip": "Este transporte es persistente, así que es creado automáticamente al iniciar el visor y es recreado automáticamente en caso de desconexión. Presione aquí para volverlo no persistente.",
+    "non-persistent-transport-button-tooltip": "Presione aquí para volver persistente el transporte. Los transportes persistentes son creados automáticamente al iniciar el visor y son recreados automáticamente en caso de desconexión.",
+    "make-persistent": "Volver persistente",
+    "make-non-persistent": "Volver no persistente",
+    "make-selected-persistent": "Volver persistentes los seleccionados",
+    "make-selected-non-persistent": "Volver no persistentes los seleccionados",
+    "changes-made": "Cambios hechos.",
+    "no-changes-needed": "Ningún cambio fue necesario.",
     "id": "ID",
     "remote-node": "Remoto",
     "type": "Tipo",
     "create": "Crear transporte",
+    "make-persistent-confirmation": "¿Seguro que desea volver persistente el transporte?",
+    "make-non-persistent-confirmation": "¿Seguro que desea volver no persistente el transporte?",
+    "make-selected-persistent-confirmation": "¿Seguro que desea volver persistentes los transportes seleccionados?",
+    "make-selected-non-persistent-confirmation": "¿Seguro que desea volver no persistentes los transportes seleccionados?",
+    "make-offline-non-persistent-confirmation": "¿Seguro que desea volver no persistente el transporte? No seguirá siendo mostrado en la lista mientras se encuentre offline.",
     "delete-confirmation": "¿Seguro que desea borrar el transporte?",
+    "delete-persistent-confirmation": "Este transporte es persistente, así que puede ser recreado poco después de ser borrado. ¿Seguro que desea borrarlo?",
     "delete-selected-confirmation": "¿Seguro que desea borrar los transportes seleccionados?",
     "delete": "Borrar transporte",
     "deleted": "Operación de borrado completada.",
     "empty": "El visor no tiene ningún transporte.",
     "empty-with-filter": "Ningun transporte coincide con los criterios de filtrado seleccionados.",
-    "statuses": {
-      "online": "Online",
-      "online-tooltip": "El transporte está online",
-      "offline": "Offline",
-      "offline-tooltip": "El transporte está offline"
-    },
     "details": {
       "title": "Detalles",
       "basic": {
         "title": "Información básica",
-        "state": "Estado:",
+        "persistent": "Persistente:",
         "id": "ID:",
         "local-pk": "Llave pública local:",
         "remote-pk": "Llave pública remota:",
@@ -492,6 +522,9 @@
       "remote-key": "Llave pública remota",
       "label": "Nombre del transporte (opcional)",
       "transport-type": "Tipo de transporte",
+      "make-persistent": "Hacer persistente",
+      "persistent-tooltip": "Los transportes persistentes son creados automáticamente al iniciar el visor y son recreados automáticamente en caso de desconexión.",
+      "only-persistent-created": "El transporte persistente fue creado, pero podría no haber sido activado.",
       "success": "Transporte creado.",
       "success-without-label": "El transporte fue creado, pero no fue posible guardar la etiqueta.",
       "errors": {
@@ -501,14 +534,14 @@
       }
     },
     "filter-dialog": {
-      "online": "El transporte debe estar",
+      "persistent": "El transporte debe ser",
       "id": "El id debe contener",
       "remote-node": "La llave remota debe contener",
 
-      "online-options": {
-        "any": "Online u offline",
-        "online": "Online",
-        "offline": "Offline"
+      "persistent-options": {
+        "any": "Cualquiera",
+        "persistent": "Persistente",
+        "non-persistent": "No persistente"
       }
     }
   },
@@ -626,6 +659,8 @@
     "servers": "Servidores",
     "settings": "Configuracion",
 
+    "unnamed": "Sin nombre",
+
     "starting-blocked-server-error": "No se puede conectar con el servidor seleccionado porque se ha agregado a la lista de servidores bloqueados.",
     "unexpedted-error": "Se produjo un error inesperado y no se pudo completar la operación.",
 
@@ -652,6 +687,7 @@
     },
 
     "connection-info" : {
+      "state-title": "El estado de tu conexión es actualmente:",
       "state-connecting": "Conectando",
       "state-connecting-info": "Se está activando la protección VPN.",
       "state-connected": "Conectado",
@@ -668,12 +704,18 @@
       "download-info": "Velocidad de descarga."
     },
 
+    "connection-error" : {
+      "text": "Error de conexión",
+      "info": "Problema conectando con la app vpn. Algunos datos mostrados podrían estar desactualizados."
+    },
+
     "status-page": {
       "start-title": "Iniciar VPN",
       "no-server": "¡Ningún servidor seleccionado!",
       "disconnect": "Desconectar",
+      "last-error": "Último error:",
+      "unknown-error": "Error desconocido.",
       "disconnect-confirmation": "¿Realmente desea detener la protección VPN?",
-      "entered-manually": "Ingresado manualmente",
       "upload-info": "Estadísticas de datos subidos.",
       "download-info": "Estadísticas de datos descargados.",
       "latency-info": "Estadísticas de latencia.",
@@ -706,6 +748,7 @@
       "connect-without-password": "Conectarse sin contraseña",
       "connect-without-password-confirmation": "La conexión se realizará sin la contraseña. ¿Seguro que desea continuar?",
       "connect-using-password": "Conectarse usando una contraseña",
+      "connect-using-another-password": "Conectarse usando otra contraseña",
       "edit-name": "Nombre personalizado",
       "edit-label": "Nota personalizada",
       "make-favorite": "Hacer favorito",
@@ -832,6 +875,8 @@
       "get-ip-info": "Cuando está activa, la aplicación utilizará servicios externos para obtener información sobre la IP actual.",
       "data-units": "Unidades de datos",
       "data-units-info": "Permite seleccionar las unidades que se utilizarán para mostrar las estadísticas de transmisión de datos.",
+      "minimum-hops": "Saltos mínimos",
+      "minimum-hops-info": "Permite configurar la cantidad mínima de saltos que la conexión deberá realizar a través de otros visores de Skywire antes de alcanzar el destino final.",
       "setting-on": "Encendido",
       "setting-off": "Apagado",
       "working-warning": "El sistema está ocupado. Por favor, espere a que finalice la operación anterior.",
