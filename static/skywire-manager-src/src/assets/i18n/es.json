@@ -303,6 +303,7 @@
     "no-update": "No hay ninguna actualización para el visor. La versión instalada actualmente es:",
     "no-updates": "No se encontraron nuevas actualizaciones.",
     "already-updating": "Algunos visores ya están siendo actualizandos:",
+    "with-error": "No fue posible verificar los siguientes visores:",
     "update-available": "Las siguientes actualizaciones fueron encontradas:",
     "update-available-singular": "Las siguientes actualizaciones para 1 visor fueron encontradas:",
     "update-available-plural": "Las siguientes actualizaciones para {{ number }} visores fueron encontradas:",
