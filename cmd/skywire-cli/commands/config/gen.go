@@ -13,6 +13,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -62,12 +63,10 @@ var genConfigCmd = &cobra.Command{
 
 		//set output for package and skybian configs
 		if packageConfig {
-			if hypervisor {
-				output = "/opt/skywire/skywire.json"
-			} else {
-				output = "/opt/skywire/skywire-visor.json"
-			}
+			configName := "skywire-config.json"
+			output = filepath.Join(skyenv.PackageSkywirePath(), configName)
 		}
+
 		if skybianConfig {
 			output = "/etc/skywire-config.json"
 		}
