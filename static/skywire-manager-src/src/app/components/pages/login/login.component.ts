@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { FormControl, FormGroup, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { Subscription } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -22,23 +22,34 @@ import { processServiceError } from '../../../utils/errors';
 export class LoginComponent implements OnInit, OnDestroy {
   form: FormGroup;
   loading = false;
+  isForVpn = false;
+  vpnKey = '';
 
   private verificationSubscription: Subscription;
   private loginSubscription: Subscription;
+  private routeSubscription: Subscription;
 
   constructor(
     private authService: AuthService,
     private router: Router,
     private snackbarService: SnackbarService,
     private dialog: MatDialog,
+    private route: ActivatedRoute,
   ) { }
 
   ngOnInit() {
-    // Check if the user is already logged.
-    this.verificationSubscription = this.authService.checkLogin().subscribe(response => {
-      if (response !== AuthStates.NotLogged) {
-        this.router.navigate(['nodes'], { replaceUrl: true });
-      }
+    this.routeSubscription = this.route.paramMap.subscribe(params => {
+      this.vpnKey = params.get('key');
+
+      this.isForVpn = window.location.href.indexOf('vpnlogin') !== -1;
+
+      // Check if the user is already logged.
+      this.verificationSubscription = this.authService.checkLogin().subscribe(response => {
+        if (response !== AuthStates.NotLogged) {
+          const destination = !this.isForVpn ? ['nodes'] : ['vpn', this.vpnKey, 'status'];
+          this.router.navigate(destination, { replaceUrl: true });
+        }
+      });
     });
 
     this.form = new FormGroup({
@@ -52,6 +63,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     }
 
     this.verificationSubscription.unsubscribe();
+    this.routeSubscription.unsubscribe();
   }
 
   login() {
@@ -71,7 +83,8 @@ export class LoginComponent implements OnInit, OnDestroy {
   }
 
   private onLoginSuccess() {
-    this.router.navigate(['nodes'], { replaceUrl: true });
+    const destination = !this.isForVpn ? ['nodes'] : ['vpn', this.vpnKey, 'status'];
+    this.router.navigate(destination, { replaceUrl: true });
   }
 
   private onLoginError(err: OperationError) {

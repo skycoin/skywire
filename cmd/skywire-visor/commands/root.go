@@ -10,7 +10,7 @@ import (
 	"net/http"
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
-	"runtime"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +23,7 @@ import (
 	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire/pkg/restart"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/syslog"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
@@ -71,6 +72,7 @@ func init() {
 }
 
 func runVisor(args []string) {
+	var ok bool
 	log := initLogger(tag, syslogAddr)
 	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
 	log.AddHook(hook)
@@ -100,20 +102,21 @@ func runVisor(args []string) {
 
 	conf := initConfig(log, args, confPath)
 
-	v, ok := visor.NewVisor(conf, restartCtx)
+	vis, ok := visor.NewVisor(conf, restartCtx)
 	if !ok {
 		log.Errorln("Failed to start visor.")
 		quitSystray()
 		return
 	}
-	v.SetLogstore(store)
+	vis.SetLogstore(store)
 
 	if launchBrowser {
 		runBrowser(conf, log)
 	}
 
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
-	setStopFunction(log, cancel, v.Close)
+
+	setStopFunction(log, cancel, vis.Close)
 
 	// Wait.
 	<-ctx.Done()
@@ -206,11 +209,7 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 		}
 
 		if confPath == "" {
-			if runtime.GOOS == "darwin" {
-				confPath = os.Getenv("HOME") + "/Skywire/" + defaultConfigName
-			} else {
-				confPath = "/opt/skywire/" + defaultConfigName
-			}
+			confPath = filepath.Join(skyenv.PackageSkywirePath(), defaultConfigName)
 		}
 
 		fallthrough

@@ -38,9 +38,18 @@ go.mod-e
 
 # goreleaser and frontend builds
 *.deb
+/packages
+/deb
 /sysroot
 static/skywire-manager-src/dist/*
 /visor
 /dist-linux
 /dist
 Char
+/scripts/mac_installer/IconsSkycoin.tar.gz
+/scripts/mac_installer/icon_128x128.png
+/scripts/mac_installer/icon_128x128@2x.png
+/mac_build
+/SkywireInstaller*.pkg
+*.dmg
+/scripts/mac_installer/icon.iconset/
