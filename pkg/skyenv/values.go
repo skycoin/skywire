@@ -36,12 +36,12 @@ const (
 
 // Constants for testing deployment.
 const (
-	TestTpDiscAddr          = "http://transport.discovery.skywire.cc"
-	TestDmsgDiscAddr        = "http://dmsg.discovery.skywire.cc"
-	TestServiceDiscAddr     = "http://service.discovery.skywire.cc"
-	TestRouteFinderAddr     = "http://routefinder.skywire.cc"
-	TestUptimeTrackerAddr   = "http://uptime.tracker.skywire.cc"
-	TestAddressResolverAddr = "http://address.resolver.skywire.cc"
+	TestTpDiscAddr          = "http://tpd.skywire.dev/"
+	TestDmsgDiscAddr        = "http://dmsgd.skywire.dev/"
+	TestServiceDiscAddr     = "http://sd.skywire.dev/"
+	TestRouteFinderAddr     = "http://rf.skywire.dev/"
+	TestUptimeTrackerAddr   = "http://ut.skywire.dev/"
+	TestAddressResolverAddr = "http://ar.skywire.dev/"
 	TestSetupPK             = "026c2a3e92d6253c5abd71a42628db6fca9dd9aa037ab6f4e3a31108558dfd87cf"
 )
 
@@ -138,11 +138,12 @@ const (
 
 // Default hypervisor constants
 const (
-	DefaultHypervisorDB = ".skycoin/hypervisor/users.db"
-	DefaultEnableAuth   = true
-	DefaultEnableTLS    = false
-	DefaultTLSKey       = DefaultSkywirePath + "/ssl/key.pem"
-	DefaultTLSCert      = DefaultSkywirePath + "/ssl/cert.pem"
+	DefaultHypervisorDB      = ".skycoin/hypervisor/users.db"
+	DefaultEnableAuth        = true
+	DefaultPackageEnableAuth = false
+	DefaultEnableTLS         = false
+	DefaultTLSKey            = DefaultSkywirePath + "/ssl/key.pem"
+	DefaultTLSCert           = DefaultSkywirePath + "/ssl/cert.pem"
 )
 
 // PackageLocalPath is the path to local directory
@@ -172,7 +173,7 @@ func PackageAppLocalPath() string {
 
 // PackageAppBinPath gets apps path for installed Skywire.
 func PackageAppBinPath() string {
-	return filepath.Join(PackageSkywirePath(), "apps")
+	return filepath.Join(appBinPath(), "apps")
 }
 
 // PackageTpLogStore gets transport logs path for installed Skywire.

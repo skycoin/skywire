@@ -275,24 +275,37 @@ $top-bar-height: 56px;
   }
 }
 
-.languaje-button-vpn {
+.top-text-vpn-container {
+  display: flex;
+  flex-direction: row-reverse;
   font-size: $font-size-mini-plus;
-  text-align: right;
-  margin: -5px 10px 5px 0px;
 
-  .text-container {
-    cursor: pointer;
-    display: inline;
-    opacity: 0.8;
+  .connection-error-msg-vpn {
+    margin: -5px 0px 5px 10px;
+    color: $yellow-clear;
+  }
 
-    &:hover {
-      opacity: 1;
-    }
+  .elements-separator {
+    flex-grow: 1;
+  }
 
-    .language-flag {
-      width: 11px;
-      height: 11px;
-      margin-right: 2px;
+  .languaje-button-vpn {
+    margin: -5px 10px 5px 0px;
+
+    .text-container {
+      cursor: pointer;
+      display: inline;
+      opacity: 0.8;
+
+      &:hover {
+        opacity: 1;
+      }
+
+      .language-flag {
+        width: 11px;
+        height: 11px;
+        margin-right: 2px;
+      }
     }
   }
 }

@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+
+skywire_dir=/Users/${USER}/Library/Application\ Support/Skywire
+
+set -euo pipefail
+
+if [[ ! -d "${skywire_dir}" ]]; then
+  mkdir -p "${skywire_dir}"
+  chown -R "${USER}" "${skywire_dir}"
+fi
+
+echo "change directory perm"
+chown -R "${USER}" "${skywire_dir}"
+
+echo "reloading logcleaner"
+LOG_CLEANER_PLIST_PATH=/Users/${USER}/Library/LaunchAgents/com.skycoin.skywire.logcleaner.plist
+
+sudo -u "$USER" launchctl load -w "${LOG_CLEANER_PLIST_PATH}"
+
+if [[ -L /usr/local/bin/skywire-cli ]]; then
+  unlink /usr/local/bin/skywire-cli
+fi
+
+if [[ ! -f "${skywire_dir}"/skywire-config.json ]]; then
+  /Applications/Skywireapp/Contents/MacOS/skywire-cli config gen -p -o "${skywire_dir}"/skywire-config.json --is-hypervisor
+  chown "${USER}" "${skywire_dir}"/skywire-config.json
+fi
+
+echo "updating skywire"
+if [[ ! -L /usr/local/bin/skywire-cli ]]; then
+  ln -s /Applications/Skywire.app/Contents/MacOS/skywire-cli /usr/local/bin/skywire-cli
+fi
