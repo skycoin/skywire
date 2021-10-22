@@ -16,7 +16,7 @@ const (
 	// PublicServiceDelay defines a delay before adding transports to public services.
 	PublicServiceDelay = 10 * time.Second
 
-	fetchServicesDelay           = 5 * time.Second
+	fetchServicesDelay           = 3 * time.Minute
 	maxFailedAddressRetryAttempt = 2
 )
 
