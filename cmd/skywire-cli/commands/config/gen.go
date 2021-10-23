@@ -24,6 +24,7 @@ func init() {
 var (
 	sk            cipher.SecKey
 	output        string
+	outputunset		bool
 	replace       bool
 	testEnv       bool
 	packageConfig bool
@@ -34,7 +35,7 @@ var (
 
 func init() {
 	genConfigCmd.Flags().Var(&sk, "sk", "if unspecified, a random key pair will be generated.\n")
-	genConfigCmd.Flags().StringVarP(&output, "output", "o", "skywire-config.json", "path of output config file.")
+	genConfigCmd.Flags().StringVarP(&output, "output", "o", "", "path of output config file. default: skywire-config.json")
 	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "rewrite existing config (retains keys).")
 	genConfigCmd.Flags().BoolVarP(&packageConfig, "package", "p", false, "use defaults for package-based installations in /opt/skywire")
 	genConfigCmd.Flags().BoolVarP(&skybianConfig, "skybian", "s", false, "use defaults paths found in skybian\n writes config to /etc/skywire-config.json")
@@ -48,6 +49,11 @@ var genConfigCmd = &cobra.Command{
 	Short: "Generates a config file",
 	PreRun: func(_ *cobra.Command, _ []string) {
 		var err error
+		// check to see if output was set
+		if output == "" {
+			outputunset = true
+			output = "skywire-config.json"
+		}
 		if output, err = filepath.Abs(output); err != nil {
 			logger.WithError(err).Fatal("Invalid output provided.")
 		}
@@ -61,15 +67,22 @@ var genConfigCmd = &cobra.Command{
 			logger.Fatal("Failed to create config: use of mutually exclusive flags")
 		}
 
-		//set output for package and skybian configs
-		if packageConfig {
-			configName := "skywire-config.json"
-			output = filepath.Join(skyenv.PackageSkywirePath(), configName)
-		}
+		//set output for package and skybian configs if unspecified
+		if outputunset {
+			if packageConfig {
+				if hypervisor{
+					configName := "skywire.json"
+					output = filepath.Join(skyenv.PackageSkywirePath(), configName)
+					} else { //for visor
+						configName := "skywire-visor.json"
+						output = filepath.Join(skyenv.PackageSkywirePath(), configName)
+					}
+				}
+				if skybianConfig {
+					output = "/etc/skywire-config.json"
+				}
+			}
 
-		if skybianConfig {
-			output = "/etc/skywire-config.json"
-		}
 
 		// Read in old config (if any) and obtain old secret key.
 		// Otherwise, we generate a new random secret key.
