@@ -145,6 +145,10 @@ const (
 func PackageLocalPath() string {
 	return filepath.Join(PackageSkywirePath(), "local")
 }
+// PackageLocalPath is the path to local directory
+func PackageEnableAuth() bool {
+	return true
+}
 
 // PackageDmsgPtyCLIAddr is the path to dmsgpty-cli file socket
 func PackageDmsgPtyCLIAddr() string {
