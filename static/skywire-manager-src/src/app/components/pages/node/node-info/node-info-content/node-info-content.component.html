@@ -38,8 +38,12 @@
       {{ node.version ? node.version : ('common.unknown' | translate) }}
     </span>
     <span class="info-line">
+      <span class="title">{{ 'node.details.node-info.build-type' | translate }}</span>
+      {{ node.buildTag ? node.buildTag : ('node.details.node-info.unknown-build' | translate) }}
+    </span>
+    <span class="info-line" *ngIf="node.skybianBuildVersion">
       <span class="title">{{ 'node.details.node-info.skybian-version' | translate }}</span>
-      {{ node.skybianBuildVersion ? node.skybianBuildVersion : ('node.details.node-info.no-skybian-version' | translate) }}
+      {{ node.skybianBuildVersion }}
     </span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-info.time.title' | translate }}</span>
