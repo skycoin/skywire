@@ -24,6 +24,7 @@ const (
 	dialConnPriority   = 2
 	visorsConnPriority = 3
 	dialTimeout        = 30 * time.Second
+	keepaliveDuration  = 45 * time.Second
 )
 
 type sudphClient struct {
@@ -110,6 +111,27 @@ func (c *sudphClient) acceptAddresses(conn net.PacketConn, addrCh <-chan addrres
 			continue
 		}
 		c.log.Infof("Sent hole punch packet to %v", addr)
+		go func() {
+			tick := time.NewTicker(keepaliveDuration)
+			isClosedChan := make(chan struct{}, 1)
+			for {
+				select {
+				case <-tick.C:
+					c.sendKeepalive(conn, udpAddr, isClosedChan)
+				case <-isClosedChan:
+					_ = c.Close() // nolint:errcheck
+				}
+			}
+		}()
+	}
+}
+
+// sendKeepalive will send keepalive message to the other node,
+// will close transport if the other node doesn't respond within specified deadline
+func (c *sudphClient) sendKeepalive(conn net.PacketConn, addr *net.UDPAddr, closeBucket chan<- struct{}) {
+	if _, err := conn.WriteTo([]byte("NOP"), addr); err != nil {
+		c.log.WithError(err).Errorf("Failed sending keepalive message to %s", addr.IP)
+		closeBucket <- struct{}{}
 	}
 }
 
