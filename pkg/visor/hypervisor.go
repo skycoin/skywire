@@ -9,7 +9,6 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -270,15 +269,13 @@ func (hv *Hypervisor) makeMux() chi.Router {
 		})
 
 		// we don't enable `dmsgpty` endpoints for Windows
-		if runtime.GOOS != "windows" {
-			r.Route("/pty", func(r chi.Router) {
-				if hv.c.EnableAuth {
-					r.Use(hv.users.Authorize)
-				}
+		r.Route("/pty", func(r chi.Router) {
+			if hv.c.EnableAuth {
+				r.Use(hv.users.Authorize)
+			}
 
-				r.Get("/{pk}", hv.getPty())
-			})
-		}
+			r.Get("/{pk}", hv.getPty())
+		})
 
 		r.Handle("/*", http.FileServer(http.FS(hv.c.UIAssets)))
 	})
