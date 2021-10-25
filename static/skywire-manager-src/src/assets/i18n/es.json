@@ -108,8 +108,9 @@
         "dmsg-server": "Servidor DMSG:",
         "ping": "Ping:",
         "node-version": "Versión del visor:",
+        "build-type": "Tipo de build:",
         "skybian-version": "Versión de Skybian:",
-        "no-skybian-version": "(no se usa Skybian)",
+        "unknown-build": "Desconocido",
         "time": {
           "title": "Tiempo online:",
           "seconds": "unos segundos",
