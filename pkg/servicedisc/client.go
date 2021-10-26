@@ -139,6 +139,11 @@ func (c *HTTPClient) Services(ctx context.Context, quantity int) (out []Service,
 		return nil, &hErr
 	}
 	err = json.NewDecoder(resp.Body).Decode(&out)
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no service of type %s registered", c.entry.Type)
+	}
+
 	return out, err
 }
 
