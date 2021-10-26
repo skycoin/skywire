@@ -586,6 +586,7 @@ export class NodeService {
         node.version = response.overview.build_info.version;
         node.secondsOnline = Math.floor(Number.parseFloat(response.uptime));
         node.minHops = response.min_hops;
+        node.buildTag = response.build_tag;
         node.skybianBuildVersion = response.skybian_build_version;
         node.isSymmeticNat = response.overview.is_symmetic_nat;
         node.publicIp = response.overview.public_ip;
