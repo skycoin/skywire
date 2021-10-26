@@ -108,8 +108,9 @@
         "dmsg-server": "DMSG server:",
         "ping": "Ping:",
         "node-version": "Visor version:",
+        "build-type": "Build type:",
         "skybian-version": "Skybian version:",
-        "no-skybian-version": "(not using Skybian)",
+        "unknown-build": "Unknown",
         "time": {
           "title": "Time online:",
           "seconds": "a few seconds",
