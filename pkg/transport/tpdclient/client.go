@@ -105,6 +105,7 @@ func (c *apiClient) RegisterTransports(ctx context.Context, entries ...*transpor
 func (c *apiClient) GetTransportByID(ctx context.Context, id uuid.UUID) (*transport.Entry, error) {
 	resp, err := c.Get(ctx, fmt.Sprintf("/transports/id:%s", id.String()))
 	if err != nil {
+		log.WithError(err).Warnf("Failed to get transport of ID %v", id)
 		return nil, err
 	}
 
