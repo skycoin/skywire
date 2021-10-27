@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skycoin/src/util/logging"
 )
 
 // Package errors
@@ -22,11 +21,11 @@ type Retrier struct {
 	exponentialFactor  uint32        // multiplier for the backoff duration that is applied on every retry
 	times              uint32        // number of times that the given function is going to be retried until success, if 0 it will be retried forever until success
 	errWhitelist       map[error]struct{}
-	log                *logrus.Entry
+	log                logrus.FieldLogger
 }
 
 // NewRetrier returns a retrier that is ready to call Do() method
-func NewRetrier(exponentialBackoff time.Duration, times, factor uint32, log *logging.Logger) *Retrier {
+func NewRetrier(exponentialBackoff time.Duration, times, factor uint32, log logrus.FieldLogger) *Retrier {
 	logger := log.WithField("func", "retrier")
 	return &Retrier{
 		exponentialBackoff: exponentialBackoff,
