@@ -68,6 +68,7 @@ func (r Retrier) retryNTimes(f RetryFunc) error {
 			}
 
 			log.Warn(err)
+			log.Warn("zzzzzzzzzzzzzzzzzzzzzzzzz")
 			currentBackoff *= time.Duration(r.exponentialFactor)
 			time.Sleep(currentBackoff)
 			continue
@@ -90,6 +91,7 @@ func (r Retrier) retryUntilSuccess(f RetryFunc) error {
 			}
 
 			log.Warn(err)
+			log.Warn("dddddddddddddddddddddddddd")
 			currentBackoff *= time.Duration(r.exponentialFactor)
 			time.Sleep(currentBackoff)
 			continue
