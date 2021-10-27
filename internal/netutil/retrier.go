@@ -12,8 +12,6 @@ var (
 	ErrMaximumRetriesReached = errors.New("maximum retries attempted without success")
 )
 
-var log = logging.MustGetLogger("retrier")
-
 // RetryFunc is a function used as argument of (*Retrier).Do(), which will retry on error unless it is whitelisted
 type RetryFunc func() error
 
@@ -23,15 +21,18 @@ type Retrier struct {
 	exponentialFactor  uint32        // multiplier for the backoff duration that is applied on every retry
 	times              uint32        // number of times that the given function is going to be retried until success, if 0 it will be retried forever until success
 	errWhitelist       map[error]struct{}
+	log                *logging.Logger
 }
 
 // NewRetrier returns a retrier that is ready to call Do() method
-func NewRetrier(exponentialBackoff time.Duration, times, factor uint32) *Retrier {
+func NewRetrier(exponentialBackoff time.Duration, times, factor uint32, log *logging.Logger) *Retrier {
+	log = logging.MustGetLogger("retrier")
 	return &Retrier{
 		exponentialBackoff: exponentialBackoff,
 		times:              times,
 		exponentialFactor:  factor,
 		errWhitelist:       make(map[error]struct{}),
+		log:                log,
 	}
 }
 
@@ -67,8 +68,8 @@ func (r Retrier) retryNTimes(f RetryFunc) error {
 				return err
 			}
 
-			log.Warn(err)
-			log.Warn("zzzzzzzzzzzzzzzzzzzzzzzzz")
+			r.log.Warn(err)
+			r.log.Warn("zzzzzzzzzzzzzzzzzzzzzzzzz")
 			currentBackoff *= time.Duration(r.exponentialFactor)
 			time.Sleep(currentBackoff)
 			continue
@@ -90,8 +91,8 @@ func (r Retrier) retryUntilSuccess(f RetryFunc) error {
 				return err
 			}
 
-			log.Warn(err)
-			log.Warn("dddddddddddddddddddddddddd")
+			r.log.Warn(err)
+			r.log.Warn("dddddddddddddddddddddddddd")
 			currentBackoff *= time.Duration(r.exponentialFactor)
 			time.Sleep(currentBackoff)
 			continue
