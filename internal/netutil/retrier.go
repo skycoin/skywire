@@ -26,7 +26,6 @@ type Retrier struct {
 
 // NewRetrier returns a retrier that is ready to call Do() method
 func NewRetrier(exponentialBackoff time.Duration, times, factor uint32, log *logging.Logger) *Retrier {
-	log = logging.MustGetLogger("retrier")
 	return &Retrier{
 		exponentialBackoff: exponentialBackoff,
 		times:              times,
