@@ -156,6 +156,7 @@ func (c *apiClient) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) (
 func (c *apiClient) DeleteTransport(ctx context.Context, id uuid.UUID) error {
 	resp, err := c.Delete(ctx, fmt.Sprintf("/transports/id:%s", id.String()))
 	if err != nil {
+		log.WithError(err).Warnf("Failed to delete transport with ID %v", id)
 		return err
 	}
 
