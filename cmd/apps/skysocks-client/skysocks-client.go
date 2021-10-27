@@ -29,7 +29,7 @@ const (
 
 var log = logrus.New()
 
-var r = netutil.NewRetrier(time.Second, 0, 1)
+var r = netutil.NewRetrier(time.Second, 0, 1, nil)
 
 func dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
 	var conn net.Conn
