@@ -5,11 +5,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRetrier_Do(t *testing.T) {
-	r := NewRetrier(time.Millisecond*100, 3, 2)
+	log := logging.MustGetLogger("test")
+	r := NewRetrier(time.Millisecond*100, 3, 2, log)
 	c := 0
 	threshold := 2
 	f := func() error {
@@ -41,7 +43,7 @@ func TestRetrier_Do(t *testing.T) {
 
 	t.Run("should return whitelisted errors if any instead of retry", func(t *testing.T) {
 		bar := errors.New("bar")
-		wR := NewRetrier(50*time.Millisecond, 1, 2).WithErrWhitelist(bar)
+		wR := NewRetrier(50*time.Millisecond, 1, 2, log).WithErrWhitelist(bar)
 		barF := func() error {
 			return bar
 		}
@@ -52,7 +54,7 @@ func TestRetrier_Do(t *testing.T) {
 
 	t.Run("if times is 0, should retry until success", func(t *testing.T) {
 		c = 0
-		loopR := NewRetrier(50*time.Millisecond, 0, 1)
+		loopR := NewRetrier(50*time.Millisecond, 0, 1, log)
 		err := loopR.Do(f)
 		require.NoError(t, err)
 
