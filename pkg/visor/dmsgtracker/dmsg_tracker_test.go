@@ -38,7 +38,7 @@ func TestDmsgTracker_Update(t *testing.T) {
 	// arrange: tracking client
 	cT, err := env.NewClient(&conf)
 	require.NoError(t, err)
-	dt, err := NewDmsgTracker(context.TODO(), cT, cL.LocalPK())
+	dt, err := newDmsgTracker(context.TODO(), cT, cL.LocalPK())
 	require.NoError(t, err)
 
 	// act: attempt update
