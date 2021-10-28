@@ -1,9 +1,9 @@
 package visor
 
 import (
-	"github.com/skycoin/skywire/pkg/util/updater"
-
 	"github.com/spf13/cobra"
+
+	"github.com/skycoin/skywire/pkg/util/updater"
 )
 
 func init() {
