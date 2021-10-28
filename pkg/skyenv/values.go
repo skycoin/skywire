@@ -145,7 +145,8 @@ const (
 func PackageLocalPath() string {
 	return filepath.Join(PackageSkywirePath(), "local")
 }
-// PackageLocalPath is the path to local directory
+
+// PackageEnableAuth enables or disable authentication (login screen) for the hypervisor UI
 func PackageEnableAuth() bool {
 	return true
 }

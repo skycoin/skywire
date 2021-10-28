@@ -24,7 +24,7 @@ func init() {
 var (
 	sk            cipher.SecKey
 	output        string
-	outputunset		bool
+	outputunset   bool
 	replace       bool
 	testEnv       bool
 	packageConfig bool
@@ -70,19 +70,18 @@ var genConfigCmd = &cobra.Command{
 		//set output for package and skybian configs if unspecified
 		if outputunset {
 			if packageConfig {
-				if hypervisor{
+				if hypervisor {
 					configName := "skywire.json"
 					output = filepath.Join(skyenv.PackageSkywirePath(), configName)
-					} else { //for visor
-						configName := "skywire-visor.json"
-						output = filepath.Join(skyenv.PackageSkywirePath(), configName)
-					}
-				}
-				if skybianConfig {
-					output = "/etc/skywire-config.json"
+				} else { //for visor
+					configName := "skywire-visor.json"
+					output = filepath.Join(skyenv.PackageSkywirePath(), configName)
 				}
 			}
-
+			if skybianConfig {
+				output = "/etc/skywire-config.json"
+			}
+		}
 
 		// Read in old config (if any) and obtain old secret key.
 		// Otherwise, we generate a new random secret key.
