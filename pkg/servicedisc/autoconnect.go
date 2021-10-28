@@ -89,7 +89,7 @@ func (a *autoconnector) Run(ctx context.Context) (err error) {
 }
 
 func (a *autoconnector) fetchPubAddresses(ctx context.Context) ([]cipher.PubKey, error) {
-	retrier := netutil.NewRetrier(fetchServicesDelay, 5, 3)
+	retrier := netutil.NewRetrier(fetchServicesDelay, 5, 3, a.log)
 	var services []Service
 	fetch := func() (err error) {
 		// "return" services up from the closure
