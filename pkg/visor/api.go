@@ -222,6 +222,7 @@ func (v *Visor) Summary() (*Summary, error) {
 		SkybianBuildVersion:  skybianBuildVersion,
 		BuildTag:             BuildTag,
 		PublicAutoconnect:    v.conf.Transport.PublicAutoconnect,
+		DmsgStats:            &dmsgtracker.DmsgClientSummary{},
 	}
 
 	return summary, nil
