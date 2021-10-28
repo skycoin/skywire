@@ -212,6 +212,11 @@ func (v *Visor) Summary() (*Summary, error) {
 		return nil, fmt.Errorf("pts")
 	}
 
+	dmsgStatValue := &dmsgtracker.DmsgClientSummary{}
+	if v.trackers != nil {
+		dmsgStatValue = &v.trackers.GetBulk([]cipher.PubKey{v.conf.PK})[0]
+	}
+
 	summary := &Summary{
 		Overview:             overview,
 		Health:               health,
@@ -222,7 +227,7 @@ func (v *Visor) Summary() (*Summary, error) {
 		SkybianBuildVersion:  skybianBuildVersion,
 		BuildTag:             BuildTag,
 		PublicAutoconnect:    v.conf.Transport.PublicAutoconnect,
-		DmsgStats:            &dmsgtracker.DmsgClientSummary{},
+		DmsgStats:            dmsgStatValue,
 	}
 
 	return summary, nil
