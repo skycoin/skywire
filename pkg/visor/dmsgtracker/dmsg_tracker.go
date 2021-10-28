@@ -179,9 +179,6 @@ func (dtm *Manager) updateAllTrackers(ctx context.Context, dts map[cipher.PubKey
 // MustGet obtains a DmsgClientSummary of the client of given pk.
 // If one is not found internally, a new tracker stream is to be established, returning error on failure.
 func (dtm *Manager) MustGet(ctx context.Context, pk cipher.PubKey) (DmsgClientSummary, error) {
-	ctx, cancel := context.WithDeadline(ctx, time.Now().Add(dtm.updateTimeout))
-	defer cancel()
-
 	dtm.mx.Lock()
 	defer dtm.mx.Unlock()
 
