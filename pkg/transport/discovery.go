@@ -74,7 +74,7 @@ func (td *mockDiscoveryClient) GetTransportsByEdge(ctx context.Context, pk ciphe
 	return res, nil
 }
 
-// NOTE that mock implementation doesn't checks whether the transport to be deleted is valid or not, this is, that
+//DeleteTransport  NOTE that mock implementation doesn't checks whether the transport to be deleted is valid or not, this is, that
 // it can be deleted by the visor who called DeleteTransport
 func (td *mockDiscoveryClient) DeleteTransport(ctx context.Context, id uuid.UUID) error {
 	td.Lock()

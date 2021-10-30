@@ -2,7 +2,6 @@ package network
 
 import (
 	"context"
-	"errors"
 	"net"
 
 	"github.com/skycoin/dmsg/cipher"
@@ -32,19 +31,29 @@ type Dialer interface {
 	Type() string
 }
 
+// Error represents network error type
+type Error struct {
+	desc string
+}
+
+// Error returns error value (string), satisfies error interface
+func (e Error) Error() string {
+	return e.desc
+}
+
 var (
 	// ErrUnknownTransportType is returned when transport type is unknown.
-	ErrUnknownTransportType = errors.New("unknown transport type")
+	ErrUnknownTransportType = Error{"unknown transport type"}
 
 	// ErrTimeout indicates a timeout.
-	ErrTimeout = errors.New("timeout")
+	ErrTimeout = Error{"timeout"}
 
 	// ErrAlreadyListening is returned when transport is already listening.
-	ErrAlreadyListening = errors.New("already listening")
+	ErrAlreadyListening = Error{"already listening"}
 
 	// ErrNotListening is returned when transport is not listening.
-	ErrNotListening = errors.New("not listening")
+	ErrNotListening = Error{"not listening"}
 
 	// ErrPortOccupied is returned when port is occupied.
-	ErrPortOccupied = errors.New("port is already occupied")
+	ErrPortOccupied = Error{"port is already occupied"}
 )
