@@ -332,9 +332,10 @@ func (mt *ManagedTransport) setTransport(newTransport network.Transport) error {
 }
 
 func (mt *ManagedTransport) deleteFromDiscovery() error {
-	retrier := netutil.NewRetrier(1*time.Second, 5, 2)
+	retrier := netutil.NewRetrier(1*time.Second, 5, 2, mt.log)
 	return retrier.Do(func() error {
 		err := mt.dc.DeleteTransport(context.Background(), mt.Entry.ID)
+		mt.log.WithField("tp-id", mt.Entry.ID).WithError(err).Debug("Error deleting transport")
 		if netErr, ok := err.(net.Error); ok && netErr.Temporary() {
 			mt.log.
 				WithError(err).

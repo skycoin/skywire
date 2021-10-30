@@ -54,7 +54,7 @@ func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, error)
 	var client *httpauth.Client
 	var err error
 
-	retrier := netutil.NewRetrier(createRetryDelay, 10, 2)
+	retrier := netutil.NewRetrier(createRetryDelay, 10, 2, log)
 	retrierFunc := func() error {
 		client, err = httpauth.NewClient(context.Background(), addr, pk, sk)
 		if err != nil {
