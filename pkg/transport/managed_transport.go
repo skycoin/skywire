@@ -84,17 +84,19 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 	if to == 0 {
 		to = defaultTransportDeadline * 2
 	}
+	timer := time.NewTimer(to)
 	mt := &ManagedTransport{
-		log:         logging.MustGetLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6])),
-		rPK:         conf.RemotePK,
-		dc:          conf.DC,
-		ls:          conf.LS,
-		client:      conf.client,
-		Entry:       MakeEntry(aPK, bPK, conf.client.Type(), conf.TransportLabel),
-		LogEntry:    new(LogEntry),
-		transportCh: make(chan struct{}, 1),
-		done:        make(chan struct{}),
-		timeout:     to,
+		log:          logging.MustGetLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6])),
+		rPK:          conf.RemotePK,
+		dc:           conf.DC,
+		ls:           conf.LS,
+		client:       conf.client,
+		Entry:        MakeEntry(aPK, bPK, conf.client.Type(), conf.TransportLabel),
+		LogEntry:     new(LogEntry),
+		transportCh:  make(chan struct{}, 1),
+		done:         make(chan struct{}),
+		timeout:      to,
+		timeoutTimer: timer,
 	}
 	return mt
 }
