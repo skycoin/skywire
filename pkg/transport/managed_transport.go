@@ -259,7 +259,7 @@ func (mt *ManagedTransport) close() {
 	default:
 		close(mt.done)
 	}
-	if mt.transport.Network() == network.SUDPH {
+	if mt.isServing() && mt.transport.Network() == network.SUDPH {
 		_ = mt.WritePacket(context.TODO(), routing.MakeNoopPacket(0)) //nolint:errcheck
 	}
 	mt.log.Debug("Locking transportMx")
