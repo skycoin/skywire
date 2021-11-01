@@ -72,8 +72,9 @@ type ManagedTransport struct {
 	done chan struct{}
 	wg   sync.WaitGroup
 
-	timeoutMu sync.Mutex
-	timeout   time.Duration
+	timeoutMu    sync.Mutex
+	timeout      time.Duration
+	timeoutTimer *time.Timer
 }
 
 // NewManagedTransport creates a new ManagedTransport.
@@ -150,11 +151,12 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 	go func() {
 		for {
 			select {
-			case <-time.After(mt.timeout):
+			case <-mt.timeoutTimer.C:
 				if mt.getTransport() != nil && mt.getTransport().Network() == network.SUDPH {
 					log.Warn("reached deadline, closing transport....")
 					mt.close()
 				}
+				mt.timeoutTimer.Stop()
 				return
 			}
 		}
@@ -175,7 +177,8 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 				return
 			} else {
 				mt.timeoutMu.Lock()
-				mt.timeout += defaultTransportDeadline
+				mt.timeoutTimer.Stop()
+				mt.timeoutTimer.Reset(mt.timeout)
 				mt.timeoutMu.Unlock()
 			}
 		}
