@@ -95,7 +95,7 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 		LogEntry:     new(LogEntry),
 		transportCh:  make(chan struct{}, 1),
 		done:         make(chan struct{}),
-		timeout:      to,
+		timeout:      defaultTransportDeadline,
 		timeoutTimer: timer,
 	}
 	return mt
@@ -122,9 +122,7 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 }
 
 func (mt *ManagedTransport) writeHealthPkt(l *logrus.Entry) {
-	defer mt.wg.Done()
 	t := time.NewTicker(mt.timeout)
-	defer t.Stop()
 
 	for range t.C {
 		if mt.getTransport() == nil || !mt.isServing() {
