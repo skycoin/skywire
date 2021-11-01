@@ -133,7 +133,7 @@ func (mt *ManagedTransport) writeHealthPkt(l *logrus.Entry) {
 		if mt.getTransport().Network() != network.SUDPH {
 			return
 		}
-		l.Debug("sending sudph no-op packet")
+		l.Info("sending sudph no-op packet")
 		if err := mt.WritePacket(context.TODO(), routing.MakeNoopPacket(1)); err != nil {
 			l.WithError(err).WithField("remote_pk", mt.transport.RemotePK()).WithField("tp_type", network.SUDPH).
 				Warn("error writing no-op transport bytes")
@@ -154,12 +154,14 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 		for {
 			select {
 			case <-mt.timeoutTimer.C:
-				if mt.getTransport() != nil && mt.getTransport().Network() == network.SUDPH {
-					log.Warn("reached deadline, closing transport....")
-					mt.close()
+				if mt.getTransport() != nil {
+					if mt.getTransport().Network() == network.SUDPH {
+						log.Warn("reached deadline, closing transport....")
+						mt.close()
+					}
+					mt.timeoutTimer.Stop()
+					return
 				}
-				mt.timeoutTimer.Stop()
-				return
 			}
 		}
 	}()
