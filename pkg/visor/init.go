@@ -357,7 +357,7 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 	ctx, cancel := context.WithCancel(ctx)
 	// To remove the block set by NewTransportListener if dmsg is not initilized
 	go func() {
-		ts, err := ts.NewTransportListener(ctx, v.conf, v.dmsgC, v.tpM, v.MasterLogger())
+		transportListener, err := ts.NewTransportListener(ctx, v.conf, v.dmsgC, v.tpM, v.MasterLogger())
 		if err != nil {
 			log.Warn(err)
 			cancel()
@@ -365,7 +365,7 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 		select {
 		case <-ctx.Done():
 		default:
-			go ts.Serve(ctx)
+			go transportListener.Serve(ctx)
 		}
 	}()
 

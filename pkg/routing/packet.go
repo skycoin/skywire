@@ -45,6 +45,8 @@ func (t PacketType) String() string {
 		return "NetworkProbe"
 	case HandshakePacket:
 		return "Handshake"
+	case NoopPacket:
+		return "No-OpPacket"
 	default:
 		return fmt.Sprintf("Unknown(%d)", t)
 	}
@@ -60,6 +62,7 @@ const (
 	KeepAlivePacket
 	HandshakePacket
 	NetworkProbePacket
+	NoopPacket
 )
 
 // CloseCode represents close code for ClosePacket.
@@ -119,6 +122,16 @@ func MakeKeepAlivePacket(id RouteID) Packet {
 	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
 	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(0))
 
+	return packet
+}
+
+// MakeNoopPacket constructs a new no-op packet
+func MakeNoopPacket(payload int) Packet {
+	packet := make([]byte, PacketHeaderSize+1)
+	packet[PacketTypeOffset] = byte(NoopPacket)
+
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(1))
+	packet[PacketPayloadOffset] = byte(payload)
 	return packet
 }
 

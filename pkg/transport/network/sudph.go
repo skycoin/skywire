@@ -24,7 +24,6 @@ const (
 	dialConnPriority   = 2
 	visorsConnPriority = 3
 	dialTimeout        = 30 * time.Second
-	keepaliveDuration  = 45 * time.Second
 )
 
 type sudphClient struct {

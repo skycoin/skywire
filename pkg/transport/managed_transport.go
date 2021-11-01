@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/httputil"
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -23,7 +24,8 @@ import (
 )
 
 const (
-	logWriteInterval = time.Second * 3
+	logWriteInterval         = time.Second * 3
+	defaultTransportDeadline = 30 * time.Second
 )
 
 // Records number of managedTransports.
@@ -70,12 +72,17 @@ type ManagedTransport struct {
 	done chan struct{}
 	wg   sync.WaitGroup
 
-	timeout time.Duration
+	timeoutMu sync.Mutex
+	timeout   time.Duration
 }
 
 // NewManagedTransport creates a new ManagedTransport.
 func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 	aPK, bPK := conf.client.PK(), conf.RemotePK
+	to := conf.InactiveTimeout
+	if to == 0 {
+		to = defaultTransportDeadline * 2
+	}
 	mt := &ManagedTransport{
 		log:         logging.MustGetLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6])),
 		rPK:         conf.RemotePK,
@@ -86,7 +93,7 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 		LogEntry:    new(LogEntry),
 		transportCh: make(chan struct{}, 1),
 		done:        make(chan struct{}),
-		timeout:     conf.InactiveTimeout,
+		timeout:     to,
 	}
 	return mt
 }
@@ -111,18 +118,66 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 	mt.logLoop()
 }
 
+func (mt *ManagedTransport) writeHealthPkt(l *logrus.Entry) {
+	defer mt.wg.Done()
+	t := time.NewTicker(mt.timeout)
+	defer t.Stop()
+
+	for range t.C {
+		if mt.getTransport() == nil || !mt.isServing() {
+			return
+		}
+		if mt.getTransport().Network() != network.SUDPH {
+			return
+		}
+		l.Debug("sending sudph no-op packet")
+		if err := mt.WritePacket(context.TODO(), routing.MakeNoopPacket(1)); err != nil {
+			l.WithError(err).WithField("remote_pk", mt.transport.RemotePK()).WithField("tp_type", network.SUDPH).
+				Warn("error writing no-op transport bytes")
+			mt.close()
+			return
+		}
+	}
+}
+
 // readLoop continuously reads packets from the underlying transport
 // and sends them to readCh
 // This is a blocking call
 func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 	log := mt.log.WithField("src", "read_loop")
 	defer mt.wg.Done()
+
+	go func() {
+		for {
+			select {
+			case <-time.After(mt.timeout):
+				if mt.getTransport() != nil && mt.getTransport().Network() == network.SUDPH {
+					log.Warn("reached deadline, closing transport....")
+					mt.close()
+				}
+				return
+			}
+		}
+	}()
+
 	for {
 		p, err := mt.readPacket()
 		if err != nil {
 			log.WithError(err).Warn("Failed to read packet, closing transport")
 			mt.close()
 			return
+		}
+		if p.Type() == routing.NoopPacket {
+			op := int(p.Payload()[0])
+			if op == 0 {
+				log.Debug("received transport close signal from the other edge")
+				mt.close()
+				return
+			} else {
+				mt.timeoutMu.Lock()
+				mt.timeout += defaultTransportDeadline
+				mt.timeoutMu.Unlock()
+			}
 		}
 		select {
 		case <-mt.done:
@@ -196,6 +251,9 @@ func (mt *ManagedTransport) close() {
 		return
 	default:
 		close(mt.done)
+	}
+	if mt.transport.Network() == network.SUDPH {
+		_ = mt.WritePacket(context.TODO(), routing.MakeNoopPacket(0)) //nolint:errcheck
 	}
 	mt.log.Debug("Locking transportMx")
 	mt.transportMx.Lock()
@@ -328,6 +386,13 @@ func (mt *ManagedTransport) setTransport(newTransport network.Transport) error {
 		mt.log.Debug("Sent signal to 'mt.transportCh'.")
 	default:
 	}
+
+	l := mt.log.
+		WithField("tp_id", mt.Entry.ID).
+		WithField("remote_pk", mt.rPK).
+		WithField("tp_index", atomic.AddInt32(&mTpCount, 1))
+
+	go mt.writeHealthPkt(l)
 	return nil
 }
 
@@ -355,7 +420,7 @@ func (mt *ManagedTransport) deleteFromDiscovery() error {
 */
 
 // WritePacket writes a packet to the remote.
-func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Packet) error {
+func (mt *ManagedTransport) WritePacket(_ context.Context, packet routing.Packet) error {
 	mt.transportMx.Lock()
 	defer mt.transportMx.Unlock()
 

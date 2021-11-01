@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"sync"
-	"time"
 
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
@@ -194,35 +193,7 @@ func (c *genericClient) acceptTransport() error {
 	if err != nil {
 		return err
 	}
-	go func() {
-		if wrappedTransport.transportType == SUDPH {
-			tick := time.NewTicker(keepaliveDuration)
-			isClosedChan := make(chan struct{}, 1)
-			udpAddr, err2 := net.ResolveUDPAddr("udp", remoteAddr.String())
-			if err2 != nil {
-				return
-			}
-			for {
-				select {
-				case <-tick.C:
-					c.sendKeepalive(conn, udpAddr, isClosedChan)
-				case <-isClosedChan:
-					_ = c.Close() // nolint:errcheck
-				}
-			}
-		}
-	}()
 	return lis.introduce(wrappedTransport)
-}
-
-// sendKeepalive will send keepalive message to the other node,
-// will close transport if the other node doesn't respond within specified deadline
-func (c *genericClient) sendKeepalive(conn net.Conn, addr *net.UDPAddr, closeBucket chan<- struct{}) {
-	c.log.Infof("sending keepalive packet to %v", addr)
-	if _, err := conn.Write([]byte("NOP")); err != nil {
-		c.log.WithError(err).Errorf("Failed sending keepalive message to %s", addr.IP)
-		closeBucket <- struct{}{}
-	}
 }
 
 // LocalAddr returns local address. This is network address the client

@@ -30,7 +30,7 @@ type Table interface {
 
 	UpdateActivity(RouteID) error
 
-	// AllRules returns all non timed out rules with a given route descriptor.
+	// RulesWithDesc returns all non timed out rules with a given route descriptor.
 	RulesWithDesc(RouteDescriptor) []Rule
 
 	// AllRules returns all non timed out rules.

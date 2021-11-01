@@ -81,12 +81,12 @@ func (l *listener) Addr() net.Addr {
 	return l.lAddr
 }
 
-// Addr implements net.Listener
+// PK implements net.Listener
 func (l *listener) PK() cipher.PubKey {
 	return l.lAddr.PK
 }
 
-// Addr implements net.Listener
+// Port implements net.Listener
 func (l *listener) Port() uint16 {
 	return l.lAddr.Port
 }
