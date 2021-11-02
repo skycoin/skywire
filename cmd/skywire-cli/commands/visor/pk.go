@@ -5,9 +5,10 @@ import (
 	"io/ioutil"
 	"os"
 
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skycoin/src/util/logging"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/spf13/cobra"
 )
 
