@@ -99,6 +99,7 @@ type Overview struct {
 	LocalIP         string               `json:"local_ip"`
 	PublicIP        string               `json:"public_ip"`
 	IsSymmetricNAT  bool                 `json:"is_symmetic_nat"`
+	Hypervisors     []cipher.PubKey      `json:"hypervisors"`
 }
 
 // Overview implements API.
@@ -151,6 +152,8 @@ func (v *Visor) Overview() (*Overview, error) {
 		// active network interface, there's usually just a single IP
 		overview.LocalIP = localIPs[0].String()
 	}
+
+	overview.Hypervisors = v.conf.Hypervisors
 
 	return overview, nil
 }
