@@ -22,20 +22,22 @@ func init() {
 }
 
 var (
-	sk            cipher.SecKey
-	output        string
-	replace       bool
-	testEnv       bool
-	packageConfig bool
-	skybianConfig bool
-	hypervisor    bool
-	hypervisorPKs string
+	sk                 cipher.SecKey
+	output             string
+	replace            bool
+	replaceHypervisors bool
+	testEnv            bool
+	packageConfig      bool
+	skybianConfig      bool
+	hypervisor         bool
+	hypervisorPKs      string
 )
 
 func init() {
 	genConfigCmd.Flags().Var(&sk, "sk", "if unspecified, a random key pair will be generated.\n")
 	genConfigCmd.Flags().StringVarP(&output, "output", "o", "skywire-config.json", "path of output config file.")
 	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "rewrite existing config (retains keys).")
+	genConfigCmd.Flags().BoolVarP(&replaceHypervisors, "use-old-hypervisors", "H", false, "use old hypervisors keys.")
 	genConfigCmd.Flags().BoolVarP(&packageConfig, "package", "p", false, "use defaults for package-based installations in /opt/skywire")
 	genConfigCmd.Flags().BoolVarP(&skybianConfig, "skybian", "s", false, "use defaults paths found in skybian\n writes config to /etc/skywire-config.json")
 	genConfigCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "use test deployment service.")
@@ -98,6 +100,13 @@ var genConfigCmd = &cobra.Command{
 		conf, err := genConf(mLog, output, &sk, hypervisor)
 		if err != nil {
 			logger.WithError(err).Fatal("Failed to create config.")
+		}
+
+		// Read in old config (if any) and obtain old hypervisors.
+		if replaceHypervisors {
+			if oldConf, ok := readOldConfig(mLog, output, true); ok {
+				conf.Hypervisors = oldConf.Hypervisors
+			}
 		}
 
 		if hypervisorPKs != "" {
