@@ -17,6 +17,7 @@ import (
 
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/netutil"
 	"github.com/skycoin/skywire/pkg/app"
@@ -29,8 +30,9 @@ const (
 	port    = routing.Port(1)
 )
 
+var log = logging.MustGetLogger("chat")
 var addr = flag.String("addr", ":8001", "address to bind")
-var r = netutil.NewRetrier(50*time.Millisecond, 5, 2)
+var r = netutil.NewRetrier(50*time.Millisecond, 5, 2, log)
 
 var (
 	appC     *app.Client

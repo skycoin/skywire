@@ -23,86 +23,88 @@ This article represents the central source of information for the Skywire mainne
 * Please join [SkywirePSA](https://t.me/SkywirePSA) as well to get structured public service announcements (PSA) about the Skywire project.
 * In case you bought an official Skyminer in the [Skycoin hardware store](https://store.skycoin.com/) please read [the Official Skyminer Guide](https://github.com/skycoin/skywire/wiki/Skyminer-Official-Guide) if you haven't done that already. 
 * Participants will be contacted at the beginning of every month via the so-called *Skywire Status Update Emails* including details of their last month's Skywire mainnet participation.
-* You can contact support at store.skycoin.com/pages/support
+* You can contact support at store.skycoin.com/pages/support or via email at `support [at] skycoin.com`
 
 ***
 
 ## Rules
 This section covers the rules of the mainnet. Dependent on the amount of miners that are associated with your emails, some of these rules may apply to you or not.
 
-As of now, each person participating in the Skywire mainnet may own one DIY miner and multiple official Skyminers wrt. to being eligible for rewards.
-<div align="center"><b>"A DIY miner cannot be in the same location as another DIY or official Skyminer.</b></div><br>
+Currently, each person participating in the Skywire mainnet may own one DIY miner and/or multiple official Skyminers to be eligible for rewards.
+<div align="center"><b>A DIY miner cannot be in the same location as another DIY or official Skyminer.</b></div><br>
 
-Based on this central rule, each whitelisted person is eligible for receiving rewards for:
-* one or multiple official miners 
+Based on this central rule, each whitelisted person is eligible to receive rewards for:
+* one or multiple official Skyminers 
 
 *and/or*
 
-* one DIY miner with up to 8 (eight) nodes
+* one DIY miner with up to 8 (eight) visors, (provided it is at a different location if you also have an official Skyminer).
 
-<div align="center"><b>You must use the <a href="https://whitelist.skycoin.com">Skywire Whitelisting System</a> to keep your submitted data up to date</b>
+<div align="center"><b>You must use the <a href="https://whitelist.skycoin.com">Skywire Whitelisting System</a> to keep your submitted data up-to-date</b>
 <br><em> Read<a href="https://github.com/skycoin/skywire/wiki/Skywire-Whitelisting-System"> the Skywire whitelisting system user guide</a> to familiarize yourself with the new system.</em></div>
 <br>
 Different locations are required due to the fact that we want to spread out the meshnet and not create built-up areas. This prevents paying people to simply run single board computers (SBC) and to require them to provide a service to the network.
 
-* If you are running two separate miners in the same location because you're joining the network living in the same house you still have to move one of your miners to another location. 
+* If you are running two separate miners in the same location because you're joining the network with someone living in the same house you still have to move one of your miners to another location. 
 
-<div align="center"><em>Submitting miners under multiple email addresses is illegal and very likely to be detected - measures will be taken if such actions are recognized.</em></div>
+<div align="center"><em>Submitting miners under multiple email addresses is forbidden and very likely to be detected - measures will be taken if such actions are recognized.</em></div>
 
 ***
 
 ## Rewards
-**Skywire Visors must be running Skywire v0.3.0 or higher to receive rewards.** Note that the required minimal Skywire version is subject to change and will be updated from time to time.
+**Skywire Visors must be running Skywire v0.4.2 or higher to receive rewards.** Note that the required minimal Skywire version is subject to change and will be updated from time-to-time. We'll keep the minimal version requirement at least one release behind the most recent one to provide everyone with sufficient time to upgrade.
 <br>
 * The rewards are **paid every subsequent month around the 5th** (short delays are possible)
 * Adjustments of previous months are included in these reward distributions on the 5th.
 * The deadline to submit complaints is being published in the monthly Skywire status update emails and in the [Skywire PSA channel on Telegram](https://t.me/SkywirePSA).
-* Eligible for rewards are only the whitelisted nodes, that **comply with the Skywire mainnet rules** and **meet the uptime requirement** of the respective month (usually 75%).
-
-<div align="center">
-<em>During Skywire’s testnet phase, owners of official Skyminers were required to have all eight nodes online in order to qualify for full uptime rewards. With the launch of Mainnet, official Skyminers now only require seven nodes to be online at least 75% of the time in order to earn full rewards.
-</em>
-</div>
-<br> 
+* Eligible for rewards are only the whitelisted visors that **comply with the Skywire mainnet rules** and **meet the uptime requirement** of the respective month (usually 75%).
+* Updates of user data in the Skywire Whitelisting System are only guaranteed to be recognized for reward distributions if they are submitted during the respective calendar month for which the rewards are being calculated.
 
 ### Official Skyminers 
 
-There are two different reward categories for official miners:
-* official Skyminers first & second batch - **not sold through** the hardware store 
-* official Skyminers new batches - **sold through** the [hardware store](https://store.skycoin.com)
+There are two different reward methods for official miners:
+* official Skyminers Skycoin Pool Method:
+  - first & second batch official Skyminer
+  - third batch official Skyminers that have received all of the 24 fixed Skycoin payments
+* official Skyminers SKY/USD Method:
+  - **sold through** the [hardware store](https://store.skycoin.com)
 
-<em>Faulty orange pi prime's/routers of official Skyminers will be rewarded regardless of your uptime until you receive a replacement. If the replacement doesn't arrive in time for you to make the uptime requirement because it arrived on short notice or not on the schedule at all you will be rewarded as well. Since we are taking care of this manually you are requested to contact one of our team members on Telegram (@Paperstream @asxtree) or at store.skycoin.com/pages/support</em>
+<em>Faulty Orange Pi Primes/routers of official Skyminers will be rewarded regardless of your uptime until you receive a replacement. If the replacement doesn't arrive in time for you to make the uptime requirement because it arrived on short notice or not on the schedule at all you will be rewarded as well. Since we are taking care of this manually you are requested to contact one of our team members on Telegram (@Paperstream @asxtree) or at store.skycoin.com/pages/support</em>
 
-<h4>Official Skyminers -  First & Second Batch</h4>
-<div align="center"><em><u>We are currently revising the reward strucure for our early supporters. Details of the rewards going forward will be announced very soon. </u></em></div><br/>
+<h4>Official Skyminers - Pool Method</h4>
 
-Rewards are being paid on a node by node basis. The total amount of rewards is limited by a pool size that is subject to change:
-* You can receive a maximum of 13.714 Skycoin per node
-    - official Skyminer consist of seven nodes (visors) and one manager (hypervisor)
-* Rewards are being calculated on a node by node basis
-    - you'll receive up to 7 Skycoin per-node rewards
-* The total pool size is being divided evenly between all nodes eligible for receiving rewards. This implies that you will receive less than 13.714 Skycoin per-node rewards in case the pool size would be surpassed. 
+Rewards are being paid on a visor by visor basis. The total amount of rewards is limited by a pool size that is subject to change:
+* You can receive a maximum of 12.0 Skycoin per visor
+    - official Skyminers consist of eight visors and one visor that may be additionally serving as hypervisor
+* Rewards are being calculated on a visor by visor basis
+    - you'll receive up to 8 Skycoin per-visor rewards
+* The total pool size is being divided evenly between all visors eligible for receiving rewards. This implies that you will receive less than 12.0 Skycoin per-visor rewards in case the pool size would be surpassed. 
 
 ***
 
 ### Official Skyminers - New Batches
 
+<h4>Official Skyminers - SKY/USD Method</h4>
+
 <div align="center">
 <em><u>Fixed Skycoin payments can be claimed within three years after purchase.</u></em><br/><br/>
-You will receive a fixed Skycoin payment per month <b>in addition</b> to any traffic forwarding payments <br/> that you will receive in the Skywire mainnet.<br/><strong>
-Fixed Skycoin payments per month = USD Miner Price / 24 = $83.30 USD.</strong></div>
-<br/>
-<div align="center"><i>Your fixed Skycoin payments are dependent on your the uptime of your nodes. All of your 7 nodes must meet the uptime requirement for you to receive the full $83.30 USD, it is therefore <strong>superimportant to keep your nodes online.</strong></i></div>
+You will receive a fixed Skycoin payments per month <b>in addition</b> to any traffic forwarding payments <br/> that you will receive in the Skywire mainnet.<br/><strong>
+Fixed Skycoin payments per month = USD Miner Price / 24 = $83.30 USD.</strong>
 <br>
-<em>Faulty orange pi prime's/routers of official Skyminers will be rewarded regardless of your uptime until you receive a replacement. If the replacement doesn't arrive in time for you to make the uptime requirement because it arrived on short notice or not on the schedule at all you will be rewarded as well. Since we are taking care of this manually you are requested to contact one of our team members on Telegram (@Paperstream @asxtree) or at store.skycoin.com/pages/support</em>
+</div>
+<br/>
+<div align="center"><i>Your fixed Skycoin payments are dependent on the uptime of your visors. All of your 8 visors must meet the uptime requirement for you to receive the full $83.30 USD, it is therefore <strong>super important to keep your visors online.</strong></i></div>
+<br>
+<em>Faulty Orange Pi Primes/Orange Pi 3s or Skyminer Routers of official Skyminers will be rewarded regardless of your uptime until you receive a replacement. If the replacement doesn't arrive in time for you to make the uptime requirement because it arrived on short notice or not on the schedule at all you will be rewarded as well. Since we are taking care of this manually you are requested to contact one of our team members on Telegram (@Paperstream @asxtree) or at store.skycoin.com/pages/support</em>
 
 Summary:
 * You are eligible to receive 24 fixed Skycoin payments ($83.30 USD)
-* The 24 fixed Skycoin payments are comprised of 7 Skycoin node payments ($11.9 USD)
-    - official Skyminer consist of seven nodes (visors) and one manager (hypervisor)
-* You'll receive up to 7 Skycoin node payments per month based on the individual uptime of your nodes 
-* The uptime of all nodes in your official Skyminer is being evaluated on a node by node basis
-* *You will receive traffic forwarding payments once the Skywire mainnet is live*
+* The 24 fixed Skycoin payments are comprised of 8 Skycoin visor payments ($10.4125 USD)
+    - official Skyminers consist of eight visors and one visor that may be additionally serving as hypervisor
+    - you'll receive up to 8 Skycoin visor payments per month based on the individual uptime of your visors 
+* The uptime of all visors in your official Skyminer is being evaluated on a visor-by-visor basis
+* After these 24 payments, the reward model automatically changes to the [pool method reward model](https://github.com/skycoin/skywire/blob/master/mainnet_rules.md#official-skyminers)
+* *You will receive traffic forwarding payments once the Skywire mainnet with bandwidth metering is live*
 
 #### Skycoin Price Calculation
 We are calculating the underlying Skycoin price for your rewards based on the moving average exponential method:
@@ -114,29 +116,30 @@ We are calculating the underlying Skycoin price for your rewards based on the mo
 
 ### DIY Skyminers
 
-- Rewards are being paid on a node by node basis wrt. to the uptime requirement of 75%.
-- Up to eight (8) DIY nodes are being rewarded per user account in the Skywire Whitelisting System.
+- Rewards are being paid on a visor-by-visor basis according to the uptime requirement of 75%.
+- You can receive a maximum of 6.0 Skycoin per visor
+- Up to eight (8) DIY visors are being rewarded per user account in the Skywire Whitelisting System.
 - The total amount of DIY rewards is limited by a pool size that is subject to change. 
 
 ***
 
 ## Requirements
 
-<div align="center"><b>Each node must have at least 75% uptime during the month to be eligible for rewards.</b></div> 
+<div align="center"><b>Each visor must have at least 75% uptime during the month to be eligible for rewards.</b></div> 
 
 As of now, you are provided with two tools to check whether or not you're online and generating uptime:
-* The [discovery website](https://uptime-tracker.skywire.skycoin.com/visors)
+* The [discovery website](https://uptime-tracker.skywire.skycoin.com/uptimes)
 * The [Skywire whitelisting system](https://whitelist.skycoin.com)
    - along with the [Skywire whitelisting system user guide](https://github.com/skycoin/skywire/wiki/Skywire-Whitelisting-System)
 
-You are advised to use [this guide](https://github.com/skycoin/skywire/wiki/Troubleshooting#online-status-verification) to **verify that your nodes are online & connected to the discovery server**.
-<div align="center"><em><b>Make sure to verify the online status of your nodes on a regular basis!</em></b></div>
+You are advised to use [this guide](https://github.com/skycoin/skywire/wiki/Troubleshooting#online-status-verification) to **verify that your visors are online & connected to the discovery server**.
+<div align="center"><em><b>Make sure to verify the online status of your visors on a regular basis!</em></b></div>
 
 ***
 ## Whitelist
 
 <div align="center">Whitelist applications must be submitted using the <a href="https://whitelist.skycoin.com">Skywire Whitelisting System</a>.<br> 
-All necessary steps to get up and running are described in  <a href="https://github.com/skycoin/skywire/wiki/Skywire-Whitelisting-System">this guide</a></div>
+All necessary steps to get up and running are described in  <a href="https://github.com/skycoin/skywire/wiki/Skywire-Whitelisting-System">this guide</a><br></div>
 
 
 <div align="center">
@@ -146,6 +149,7 @@ All necessary steps to get up and running are described in  <a href="https://git
           </em>
      </p>
 </div>
+
 - The whitelist is being **updated retroactively on a monthly basis** so it is **not important** in which week you are being approved for the whitelist.
 - **Official Skyminers are whitelisted by default after purchase.**
 - There is no waiting period at the moment
@@ -157,7 +161,7 @@ All necessary steps to get up and running are described in  <a href="https://git
           - view your whitelisted miners 
           - adjust public keys if necessary
           - adjust your Skycoin wallet reward address as you like
-    - Contact support@skycoin.net in case your account is disabled or other issues occur
+    - Contact support@skycoin.com in case your account is disabled or other issues occur
     - You can double check with our team members (see above) if we received your application.
 
 
@@ -172,7 +176,7 @@ All necessary steps to get up and running are described in  <a href="https://git
      - Update public keys if it's necessary
      - Add more boards and include new pictures to receive the verification of an admin
      - Transfer your whitelisted miner to another email address
-* The whitelist is a queue based on a first come first serve basis, the benchmark for applications is the hardware list above + the official miner specifications.
+* The whitelist is a queue based on a first come first served basis, the benchmark for applications is the hardware list above + the official miner specifications.
 * For email address changes of official miners please use the [transfer miner function](https://github.com/skycoin/skywire/wiki/Skywire-Whitelisting-System#transfer-miner) of the Skywire Whitelisting System.
 
 #### Official Miner - Required Data for the Whitelisting System
@@ -188,9 +192,9 @@ All necessary steps to get up and running are described in  <a href="https://git
      - Miner photos: At least three photos, each from a different perspective and max. 3 MB in size.
      - Description: Go into detail of the used hardware components (the router, boards etc. which are presented in the pictures
           - Telegram account. Join us, there is an awesome community waiting for you!
-          - Node quantity: The number of pis you're running in your miner.
-          - Node Hardware: Specify the hardware you're using. Add a note if you have merged more than 1 type of board in your miner. Elaborate on boards that may be in the pictures but were not (yet) submitted.
-          - Node OS: The OS you're running on the boards.
+          - Visor quantity: The number of pis you're running in your miner.
+          - Visor Hardware: Specify the hardware you're using. Add a note if you have merged more than 1 type of board in your miner. Elaborate on boards that may be in the pictures but were not (yet) submitted.
+          - Visor OS: The OS you're running on the boards.
      - Your public keys.
 
 ***
@@ -223,6 +227,7 @@ The following hardware is accepted in the Skywire mainnet:
      - Zero LTS
      - Zero-Plus
      - Zero-Plus2
+     - 3
 
 #### Raspberry Pi
      - 1-Model-A+
@@ -231,7 +236,8 @@ The following hardware is accepted in the Skywire mainnet:
      - 3-Model-B
      - 3-Model-B+
      - 4-Model-B
-     - Compute Model 3
+     - Compute Module 3
+     - Compute Module 4
      - Zero-W
      - Zero
 
@@ -300,6 +306,7 @@ The following hardware is accepted in the Skywire mainnet:
 
 #### Odroid
      - C2
+     - C4
      - HC1
      - HC2
      - MC1
@@ -318,6 +325,12 @@ The following hardware is accepted in the Skywire mainnet:
      - Sopine-A64
      - Rock64
      - ROCKPro64
+
+#### ROCKPI
+     - Rockpi 4
+     - Rockpi S
+     - Rockpi E
+     - Rockpi N10
 
 #### SolidRun
      - CuBox-i
@@ -345,4 +358,7 @@ The following hardware is accepted in the Skywire mainnet:
 #### Radxa
      - ROCK Pi S
 
+#### ZTE
+     - ZXV10 B860H
+     
 **If you like to use other boards please contact the team first to be approved before you buy them, only the boards on the list are guaranteed to be whitelisted.**
