@@ -139,6 +139,11 @@ func (c *HTTPClient) Services(ctx context.Context, quantity int) (out []Service,
 		return nil, &hErr
 	}
 	err = json.NewDecoder(resp.Body).Decode(&out)
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no service of type %s registered", c.entry.Type)
+	}
+
 	return out, err
 }
 
@@ -272,7 +277,7 @@ func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
 // it performs exponential backoff in case of errors during register, unless
 // the error is unrecoverable from
 func (c *HTTPClient) Register(ctx context.Context) error {
-	retrier := nu.NewRetrier(updateRetryDelay, 0, 2).WithErrWhitelist(ErrVisorUnreachable)
+	retrier := nu.NewRetrier(updateRetryDelay, 0, 2, c.log).WithErrWhitelist(ErrVisorUnreachable)
 	run := func() error {
 		err := c.RegisterEntry(ctx)
 
