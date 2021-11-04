@@ -37,7 +37,7 @@ func init() {
 	genConfigCmd.Flags().Var(&sk, "sk", "if unspecified, a random key pair will be generated.\n")
 	genConfigCmd.Flags().StringVarP(&output, "output", "o", "skywire-config.json", "path of output config file.")
 	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "rewrite existing config (retains keys).")
-	genConfigCmd.Flags().BoolVarP(&replaceHypervisors, "use-old-hypervisors", "H", false, "use old hypervisors keys.")
+	genConfigCmd.Flags().BoolVarP(&replaceHypervisors, "use-old-hypervisors", "x", false, "use old hypervisors keys.")
 	genConfigCmd.Flags().BoolVarP(&packageConfig, "package", "p", false, "use defaults for package-based installations in /opt/skywire")
 	genConfigCmd.Flags().BoolVarP(&skybianConfig, "skybian", "s", false, "use defaults paths found in skybian\n writes config to /etc/skywire-config.json")
 	genConfigCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "use test deployment service.")
