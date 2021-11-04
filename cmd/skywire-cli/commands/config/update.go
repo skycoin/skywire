@@ -38,7 +38,7 @@ var (
 	skysocksPasscode       string
 	resetSkysocks          bool
 	setPublicAutoconnect   string
-	minhops                int
+	minHops                int
 )
 
 func init() {
@@ -46,26 +46,26 @@ func init() {
 	updateConfigCmd.Flags().StringVarP(&addInput, "input", "i", "skywire-config.json", "path of input config file.")
 	updateConfigCmd.Flags().StringVarP(&environment, "environment", "e", "production", "desired environment (values production or testing)")
 	updateConfigCmd.Flags().StringVar(&addHypervisorPKs, "add-hypervisor-pks", "", "public keys of hypervisors that should be added to this visor")
-	updateConfigCmd.Flags().BoolVar(&resetHypervisor, "reset-hypervisor-pks", false, "resets hypervisor`s configuration")
+	updateConfigCmd.Flags().BoolVar(&resetHypervisor, "reset-hypervisor-pks", false, "resets hypervisor configuration")
 
 	updateConfigCmd.Flags().StringVar(&setVPNClientKillswitch, "vpn-client-killswitch", "", "change killswitch status of vpn-client")
 	updateConfigCmd.Flags().StringVar(&addVPNClientSrv, "add-vpn-client-server", "", "add server address to vpn-client")
 	updateConfigCmd.Flags().StringVar(&addVPNClientPasscode, "add-vpn-client-passcode", "", "add passcode of server if needed")
-	updateConfigCmd.Flags().BoolVar(&resetVPNclient, "reset-vpn-client", false, "reset vpn-client's configurations")
+	updateConfigCmd.Flags().BoolVar(&resetVPNclient, "reset-vpn-client", false, "reset vpn-client configurations")
 
 	updateConfigCmd.Flags().StringVar(&addVPNServerPasscode, "add-vpn-server-passcode", "", "add passcode to vpn-server")
 	updateConfigCmd.Flags().StringVar(&setVPNServerSecure, "vpn-server-secure", "", "change secure mode status of vpn-server")
-	updateConfigCmd.Flags().BoolVar(&resetVPNServer, "reset-vpn-server", false, "reset vpn-server's configurations")
+	updateConfigCmd.Flags().BoolVar(&resetVPNServer, "reset-vpn-server", false, "reset vpn-server configurations")
 
 	updateConfigCmd.Flags().StringVar(&addSkysocksClientSrv, "add-skysocks-client-server", "", "add skysocks server address to skysock-client")
-	updateConfigCmd.Flags().BoolVar(&resetSkysocksClient, "reset-skysocks-client", false, "reset skysocks-client's configuration")
+	updateConfigCmd.Flags().BoolVar(&resetSkysocksClient, "reset-skysocks-client", false, "reset skysocks-client configuration")
 
 	updateConfigCmd.Flags().StringVar(&skysocksPasscode, "add-skysocks-passcode", "", "add passcode to skysocks server")
-	updateConfigCmd.Flags().BoolVar(&resetSkysocks, "reset-skysocks", false, "reset skysocks's configuration")
+	updateConfigCmd.Flags().BoolVar(&resetSkysocks, "reset-skysocks", false, "reset skysocks configuration")
 
 	updateConfigCmd.Flags().StringVar(&setPublicAutoconnect, "set-public-autoconnect", "", "change public autoconnect configuration")
 
-	updateConfigCmd.Flags().IntVar(&minhops, "set-minhop", -1, "change min hops value")
+	updateConfigCmd.Flags().IntVar(&minHops, "set-minhop", -1, "change min hops value")
 }
 
 var updateConfigCmd = &cobra.Command{
@@ -186,8 +186,8 @@ var updateConfigCmd = &cobra.Command{
 			conf.Transport.PublicAutoconnect = false
 		}
 
-		if minhops >= 0 {
-			conf.Routing.MinHops = uint16(minhops)
+		if minHops >= 0 {
+			conf.Routing.MinHops = uint16(minHops)
 		}
 
 		// Save config to file.
