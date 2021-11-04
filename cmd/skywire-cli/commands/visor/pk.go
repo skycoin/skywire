@@ -5,11 +5,11 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
-
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
+
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var addInput string
