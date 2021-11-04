@@ -24,7 +24,7 @@ func init() {
 var (
 	sk            cipher.SecKey
 	output        string
-	outputunset   bool
+	outputUnset   bool
 	replace       bool
 	testEnv       bool
 	packageConfig bool
@@ -51,7 +51,7 @@ var genConfigCmd = &cobra.Command{
 		var err error
 		// check to see if output was set
 		if output == "" {
-			outputunset = true
+			outputUnset = true
 			output = "skywire-config.json"
 		}
 		if output, err = filepath.Abs(output); err != nil {
@@ -68,7 +68,7 @@ var genConfigCmd = &cobra.Command{
 		}
 
 		//set output for package and skybian configs if unspecified
-		if outputunset {
+		if outputUnset {
 			if packageConfig {
 				if hypervisor {
 					configName := "skywire.json"
