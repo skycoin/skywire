@@ -16,7 +16,7 @@ const (
 	// PublicServiceDelay defines a delay before adding transports to public services.
 	PublicServiceDelay = 10 * time.Second
 
-	fetchServicesDelay           = 3 * time.Minute
+	fetchServicesDelay           = 10 * time.Second
 	maxFailedAddressRetryAttempt = 2
 )
 
@@ -89,7 +89,7 @@ func (a *autoconnector) Run(ctx context.Context) (err error) {
 }
 
 func (a *autoconnector) fetchPubAddresses(ctx context.Context) ([]cipher.PubKey, error) {
-	retrier := netutil.NewRetrier(fetchServicesDelay, 0, 2)
+	retrier := netutil.NewRetrier(fetchServicesDelay, 5, 3, a.log)
 	var services []Service
 	fetch := func() (err error) {
 		// "return" services up from the closure

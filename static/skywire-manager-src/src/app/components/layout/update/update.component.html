@@ -50,6 +50,21 @@
       {{ 'update.update-instructions' | translate }}
     </div>
   </ng-container>
+  <!-- List with the nodes with errors during the initial check, shown while asking for confirmation and when there are no updates. -->
+  <ng-container *ngIf="(state === updatingStates.Asking || state === updatingStates.NoUpdatesFound) && nodesWithError.length > 0">
+    <div style="height: 10px;"></div>
+    <div class="text-container">
+      {{ 'update.with-error' | translate }}
+    </div>
+    <div class="list-container">
+      <div *ngFor="let node of nodesWithError" class="list-element">
+        <div class="left-part">-</div>
+        <div class="right-part">
+          {{ node.nodeLabel }}: <span class="red-text">{{ node.errorMsg | translate }}</span>
+        </div>
+      </div>
+    </div>
+  </ng-container>
 
   <!-- Content shown while updating. -->
   <ng-container *ngIf="state === updatingStates.Updating">
