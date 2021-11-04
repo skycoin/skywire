@@ -108,8 +108,9 @@
         "dmsg-server": "DMSG server:",
         "ping": "Ping:",
         "node-version": "Visor version:",
+        "build-type": "Build type:",
         "skybian-version": "Skybian version:",
-        "no-skybian-version": "(not using Skybian)",
+        "unknown-build": "Unknown",
         "time": {
           "title": "Time online:",
           "seconds": "a few seconds",
@@ -299,6 +300,7 @@
     "no-update": "There is no update for the visor. The currently installed version is:",
     "no-updates": "No new updates were found.",
     "already-updating": "Some visors are already being updated:",
+    "with-error": "It was not possible to check the following visors:",
     "update-available": "The following updates were found:",
     "update-available-singular": "The following updates for 1 visor were found:",
     "update-available-plural": "The following updates for {{ number }} visors were found:",
