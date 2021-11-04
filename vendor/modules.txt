@@ -144,9 +144,6 @@ github.com/pkg/errors
 github.com/pkg/profile
 # github.com/pmezard/go-difflib v1.0.0
 github.com/pmezard/go-difflib/difflib
-# github.com/rakyll/statik v0.1.7
-## explicit
-github.com/rakyll/statik/fs
 # github.com/schollz/progressbar/v2 v2.15.0
 ## explicit
 github.com/schollz/progressbar/v2
