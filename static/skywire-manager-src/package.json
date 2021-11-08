@@ -25,7 +25,7 @@
     "@angular/router": "^12.2.5",
     "@ngx-translate/core": "^10.0.2",
     "bignumber.js": "^7.2.1",
-    "chart.js": "^2.7.2",
+    "chart.js": "^2.9.4",
     "core-js": "^2.5.4",
     "ng": "0.0.0",
     "rxjs": "^6.5.3",
