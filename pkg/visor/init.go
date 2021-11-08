@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rakyll/statik/fs"
+	"github.com/ccding/go-stun/stun"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
@@ -17,188 +17,320 @@ import (
 	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 
-	_ "github.com/skycoin/skywire/cmd/skywire-visor/statik" // embedded static files
 	"github.com/skycoin/skywire/internal/utclient"
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/setup/setupclient"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/snet"
-	"github.com/skycoin/skywire/pkg/snet/arclient"
-	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
+	"github.com/skycoin/skywire/pkg/transport/network/stcp"
+	ts "github.com/skycoin/skywire/pkg/transport/setup"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
+	"github.com/skycoin/skywire/pkg/util/netutil"
 	"github.com/skycoin/skywire/pkg/util/updater"
-	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+	vinit "github.com/skycoin/skywire/pkg/visor/visorinit"
 )
 
-type initFunc func(v *Visor) bool
+type visorCtxKey int
 
-func initStack() []initFunc {
-	return []initFunc{
-		initUpdater,
-		initEventBroadcaster,
-		initAddressResolver,
-		initDiscovery,
-		initSNet,
-		initDmsgpty,
-		initTransport,
-		initRouter,
-		initLauncher,
-		initCLI,
-		initHypervisors,
-		initUptimeTracker,
-		initTrustedVisors,
-		initHypervisor,
+const visorKey visorCtxKey = iota
+
+type runtimeErrsCtxKey int
+
+const runtimeErrsKey runtimeErrsCtxKey = iota
+
+// Visor initialization is split into modules, that can be initialized independently
+// Modules are declared here as package-level variables, but also need to be registered
+// in the modules system: they need init function and dependencies and their name to be set
+// To add new piece of functionality to visor, you need to create a new module variable
+// and register it properly in registerModules function
+var (
+	// Event broadcasting system
+	ebc vinit.Module
+	// visor updater
+	up vinit.Module
+	// Address resolver
+	ar vinit.Module
+	// App discovery
+	disc vinit.Module
+	// Stun module
+	sc vinit.Module
+	// SUDPH module
+	sudphC vinit.Module
+	// STCPR module
+	stcprC vinit.Module
+	// STCP module
+	stcpC vinit.Module
+	// dmsg pty: a remote terminal to the visor working over dmsg protocol
+	pty vinit.Module
+	// Dmsg module
+	dmsgC vinit.Module
+	// Transport manager
+	tr vinit.Module
+	// Transport setup
+	trs vinit.Module
+	// Routing system
+	rt vinit.Module
+	// Application launcer
+	launch vinit.Module
+	// CLI
+	cli vinit.Module
+	// hypervisors to control this visor
+	hvs vinit.Module
+	// Uptime tracker
+	ut vinit.Module
+	// Public visors: automatically establish connections to public visors
+	pvs vinit.Module
+	// Public visor: advertise current visor as public
+	pv vinit.Module
+	// Transport module (this is not a functional module but a grouping of all heavy transport types initializations)
+	tm vinit.Module
+	// hypervisor module
+	hv vinit.Module
+	// dmsg ctrl
+	dmsgCtrl vinit.Module
+	// visor that groups all modules together
+	vis vinit.Module
+)
+
+// register all modules: instantiate modules with correct names and dependencies, wrap init
+// functions to have access to visor and runtime errors channel
+func registerModules(logger *logging.MasterLogger) {
+	// utility module maker, to avoid passing logger and wrapping each init function
+	// in withVisorCtx
+	maker := func(name string, f initFn, deps ...*vinit.Module) vinit.Module {
+		return vinit.MakeModule(name, withInitCtx(f), logger, deps...)
 	}
+	up = maker("updater", initUpdater)
+	ebc = maker("event_broadcaster", initEventBroadcaster)
+	ar = maker("address_resolver", initAddressResolver)
+	disc = maker("discovery", initDiscovery)
+	tr = maker("transport", initTransport, &ar, &ebc)
+
+	sc = maker("stun_client", initStunClient)
+	sudphC = maker("sudph", initSudphClient, &sc, &tr)
+	stcprC = maker("stcpr", initStcprClient, &tr)
+	stcpC = maker("stcp", initStcpClient, &tr)
+	dmsgC = maker("dmsg", initDmsg, &ebc)
+	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &dmsgC, &tr)
+
+	pty = maker("dmsg_pty", initDmsgpty, &dmsgC)
+	rt = maker("router", initRouter, &tr, &dmsgC)
+	launch = maker("launcher", initLauncher, &ebc, &disc, &dmsgC, &tr, &rt)
+	cli = maker("cli", initCLI)
+	hvs = maker("hypervisors", initHypervisors, &dmsgC)
+	ut = maker("uptime_tracker", initUptimeTracker)
+	pv = maker("public_autoconnect", initPublicAutoconnect, &tr)
+	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
+	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl)
+	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
+	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &pty,
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC)
+
+	hv = maker("hypervisor", initHypervisor, &vis)
 }
 
-func initUpdater(v *Visor) bool {
-	report := v.makeReporter("updater")
+type initFn func(context.Context, *Visor, *logging.Logger) error
 
+func initUpdater(ctx context.Context, v *Visor, log *logging.Logger) error {
+	updater := updater.New(v.log, v.restartCtx, v.conf.Launcher.BinPath)
+
+	v.initLock.Lock()
+	defer v.initLock.Unlock()
 	v.restartCtx.SetCheckDelay(time.Duration(v.conf.RestartCheckDelay))
 	v.restartCtx.RegisterLogger(v.log)
-	v.updater = updater.New(v.log, v.restartCtx, v.conf.Launcher.BinPath)
-	return report(nil)
+	v.updater = updater
+	return nil
 }
 
-func initEventBroadcaster(v *Visor) bool {
-	report := v.makeReporter("event_broadcaster")
-
-	log := v.MasterLogger().PackageLogger("event_broadcaster")
+func initEventBroadcaster(ctx context.Context, v *Visor, log *logging.Logger) error {
 	const ebcTimeout = time.Second
 	ebc := appevent.NewBroadcaster(log, ebcTimeout)
+	v.pushCloseStack("event_broadcaster", ebc.Close)
 
-	v.pushCloseStack("event_broadcaster", func() bool {
-		return report(ebc.Close())
-	})
-
+	v.initLock.Lock()
 	v.ebc = ebc
-	return report(nil)
+	v.initLock.Unlock()
+	return nil
 }
 
-func initSNet(v *Visor) bool {
-	report := v.makeReporter("snet")
+func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) error {
+	conf := v.conf.Transport
 
-	nc := snet.NetworkConfigs{
-		Dmsg: v.conf.Dmsg,
-		STCP: v.conf.STCP,
-	}
-
-	conf := snet.Config{
-		PubKey:         v.conf.PK,
-		SecKey:         v.conf.SK,
-		ARClient:       v.arClient,
-		NetworkConfigs: nc,
-		ServiceDisc:    v.serviceDisc,
-		PublicTrusted:  v.conf.PublicTrustedVisor,
-	}
-
-	n, err := snet.New(conf, v.ebc)
+	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, log)
 	if err != nil {
-		return report(err)
+		err := fmt.Errorf("failed to create address resolver client: %w", err)
+		return err
+	}
+	v.initLock.Lock()
+	v.arClient = arClient
+	v.initLock.Unlock()
+	return nil
+}
+
+func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
+	// Prepare app discovery factory.
+	factory := appdisc.Factory{
+		Log: v.MasterLogger().PackageLogger("app_discovery"),
 	}
 
-	if err := n.Init(); err != nil {
-		return report(err)
-	}
+	conf := v.conf.Launcher
 
-	v.pushCloseStack("snet", func() bool {
-		return report(n.Close())
+	if conf.ServiceDisc != "" {
+		factory.PK = v.conf.PK
+		factory.SK = v.conf.SK
+		factory.ServiceDisc = conf.ServiceDisc
+	}
+	v.initLock.Lock()
+	v.serviceDisc = factory
+	v.initLock.Unlock()
+	return nil
+}
+
+func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	sc := network.GetStunDetails(v.conf.StunServers, log)
+	v.initLock.Lock()
+	v.stunClient = sc
+	v.initLock.Unlock()
+	return nil
+}
+
+func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) error {
+	if v.conf.Dmsg == nil {
+		return fmt.Errorf("cannot initialize dmsg: empty configuration")
+	}
+	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg)
+
+	wg := new(sync.WaitGroup)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		dmsgC.Serve(context.Background())
+	}()
+
+	v.pushCloseStack("dmsg", func() error {
+		if err := dmsgC.Close(); err != nil {
+			return err
+		}
+		wg.Wait()
+		return nil
 	})
 
-	if dmsgC := n.Dmsg(); dmsgC != nil {
-		const dmsgTimeout = time.Second * 20
-		log := dmsgC.Logger().WithField("timeout", dmsgTimeout)
-		log.Info("Connecting to the dmsg network...")
-		select {
-		case <-time.After(dmsgTimeout):
-			log.Warn("Failed to connect to the dmsg network, will try again later.")
-		case <-n.Dmsg().Ready():
-			log.Info("Connected to the dmsg network.")
-		}
-
-		// dmsgctrl setup
-		cl, err := dmsgC.Listen(skyenv.DmsgCtrlPort)
-		if err != nil {
-			return report(err)
-		}
-		v.pushCloseStack("snet.dmsgctrl", func() bool {
-			return report(cl.Close())
-		})
-
-		dmsgctrl.ServeListener(cl, 0)
-	}
-
-	v.net = n
-	return report(nil)
+	v.initLock.Lock()
+	v.dmsgC = dmsgC
+	v.initLock.Unlock()
+	return nil
 }
 
-func initAddressResolver(v *Visor) bool {
-	report := v.makeReporter("address-resolver")
-	conf := v.conf.Transport
+func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
+	dmsgC := v.dmsgC
+	if dmsgC == nil {
+		return nil
+	}
 
-	arClient, err := arclient.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK)
+	const dmsgTimeout = time.Second * 20
+	logger := dmsgC.Logger().WithField("timeout", dmsgTimeout)
+	logger.Info("Connecting to the dmsg network...")
+	select {
+	case <-time.After(dmsgTimeout):
+		logger.Warn("Failed to connect to the dmsg network, will try again later.")
+		go func() {
+			<-v.dmsgC.Ready()
+			logger.Info("Connected to the dmsg network.")
+			v.tpM.InitDmsgClient(ctx, dmsgC)
+		}()
+	case <-v.dmsgC.Ready():
+		logger.Info("Connected to the dmsg network.")
+		v.tpM.InitDmsgClient(ctx, dmsgC)
+	}
+	// dmsgctrl setup
+	cl, err := dmsgC.Listen(skyenv.DmsgCtrlPort)
 	if err != nil {
-		return report(fmt.Errorf("failed to create address resolver client: %w", err))
+		return err
 	}
+	v.pushCloseStack("dmsgctrl", cl.Close)
 
-	v.arClient = arClient
-
-	return report(nil)
+	dmsgctrl.ServeListener(cl, 0)
+	return nil
 }
 
-func initTransport(v *Visor) bool {
-	report := v.makeReporter("transport")
-	conf := v.conf.Transport
+func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	switch v.stunClient.NATType {
+	case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
+		log.Infof("SUDPH transport wont be available as visor is under %v", v.stunClient.NATType.String())
+	default:
+		v.tpM.InitClient(ctx, network.SUDPH)
+	}
+	return nil
+}
+
+func initStcprClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	v.tpM.InitClient(ctx, network.STCPR)
+	return nil
+}
+
+func initStcpClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	if v.conf.STCP != nil {
+		v.tpM.InitClient(ctx, network.STCP)
+	}
+	return nil
+}
+
+func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	tpdC, err := connectToTpDisc(v)
 	if err != nil {
-		return report(fmt.Errorf("failed to create transport discovery client: %w", err))
+		err := fmt.Errorf("failed to create transport discovery client: %w", err)
+		return err
 	}
 
-	var logS transport.LogStore
-	switch conf.LogStore.Type {
-	case visorconfig.FileLogStore:
-		logS, err = transport.FileTransportLogStore(conf.LogStore.Location)
-		if err != nil {
-			return report(fmt.Errorf("failed to create %s log store: %w", visorconfig.FileLogStore, err))
-		}
-	case visorconfig.MemoryLogStore:
-		logS = transport.InMemoryTransportLogStore()
-	default:
-		return report(fmt.Errorf("invalid log store type: %s", conf.LogStore.Type))
+	logS := transport.InMemoryTransportLogStore()
+
+	pTps, err := v.conf.GetPersistentTransports()
+	if err != nil {
+		err := fmt.Errorf("failed to get persistent transports: %w", err)
+		return err
 	}
 
 	tpMConf := transport.ManagerConfig{
-		PubKey:          v.conf.PK,
-		SecKey:          v.conf.SK,
-		DefaultVisors:   conf.TrustedVisors,
-		DiscoveryClient: tpdC,
-		LogStore:        logS,
+		PubKey:                    v.conf.PK,
+		SecKey:                    v.conf.SK,
+		DiscoveryClient:           tpdC,
+		LogStore:                  logS,
+		PersistentTransportsCache: pTps,
 	}
+	managerLogger := v.MasterLogger().PackageLogger("transport_manager")
 
-	tpM, err := transport.NewManager(v.MasterLogger().PackageLogger("transport_manager"), v.net, &tpMConf)
+	// todo: pass down configuration?
+	var table stcp.PKTable
+	var listenAddr string
+	if v.conf.STCP != nil {
+		table = stcp.NewTable(v.conf.STCP.PKTable)
+		listenAddr = v.conf.STCP.ListeningAddress
+	}
+	factory := network.ClientFactory{
+		PK:         v.conf.PK,
+		SK:         v.conf.SK,
+		ListenAddr: listenAddr,
+		PKTable:    table,
+		ARClient:   v.arClient,
+		EB:         v.ebc,
+	}
+	tpM, err := transport.NewManager(managerLogger, v.arClient, v.ebc, &tpMConf, factory)
 	if err != nil {
-		return report(fmt.Errorf("failed to start transport manager: %w", err))
+		err := fmt.Errorf("failed to start transport manager: %w", err)
+		return err
 	}
-
-	tpM.OnAfterTPClosed(func(network, addr string) {
-		if network == tptypes.STCPR && addr != "" {
-			data := appevent.TCPCloseData{RemoteNet: network, RemoteAddr: addr}
-			event := appevent.NewEvent(appevent.TCPClose, data)
-			if err := v.ebc.Broadcast(context.Background(), event); err != nil {
-				v.log.WithError(err).Errorln("Failed to broadcast TCPClose event")
-			}
-		}
-	})
-
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
@@ -208,25 +340,51 @@ func initTransport(v *Visor) bool {
 		tpM.Serve(ctx)
 	}()
 
-	v.pushCloseStack("transport.manager", func() bool {
+	v.pushCloseStack("transport.manager", func() error {
 		cancel()
-		ok := report(tpM.Close())
+		tpM.Close()
 		wg.Wait()
-		return ok
+		return nil
 	})
 
+	v.initLock.Lock()
 	v.tpM = tpM
-
-	return report(nil)
+	v.initLock.Unlock()
+	return nil
 }
 
-func initRouter(v *Visor) bool {
-	report := v.makeReporter("router")
+func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) error {
+	ctx, cancel := context.WithCancel(ctx)
+	// To remove the block set by NewTransportListener if dmsg is not initilized
+	go func() {
+		ts, err := ts.NewTransportListener(ctx, v.conf, v.dmsgC, v.tpM, v.MasterLogger())
+		if err != nil {
+			log.Warn(err)
+			cancel()
+		}
+		select {
+		case <-ctx.Done():
+		default:
+			go ts.Serve(ctx)
+		}
+	}()
+
+	// waiting for atleast one transport to initilize
+	<-v.tpM.Ready()
+
+	v.pushCloseStack("transport_setup.rpc", func() error {
+		cancel()
+		return nil
+	})
+	return nil
+}
+
+func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Routing
 	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout))
-
+	logger := v.MasterLogger().PackageLogger("router")
 	rConf := router.Config{
-		Logger:           v.MasterLogger().PackageLogger("router"),
+		Logger:           logger,
 		PubKey:           v.conf.PK,
 		SecKey:           v.conf.SK,
 		TransportManager: v.tpM,
@@ -234,72 +392,45 @@ func initRouter(v *Visor) bool {
 		RouteGroupDialer: setupclient.NewSetupNodeDialer(),
 		SetupNodes:       conf.SetupNodes,
 		RulesGCInterval:  0, // TODO
+		MinHops:          v.conf.Routing.MinHops,
 	}
 
-	r, err := router.New(v.net, &rConf)
+	r, err := router.New(v.dmsgC, &rConf)
 	if err != nil {
-		return report(fmt.Errorf("failed to create router: %w", err))
+		err := fmt.Errorf("failed to create router: %w", err)
+		return err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	wg := new(sync.WaitGroup)
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-		if err := r.Serve(ctx); err != nil {
-			report(fmt.Errorf("serve router stopped: %w", err))
-		}
-	}()
-
-	v.pushCloseStack("router.serve", func() bool {
+	serveCtx, cancel := context.WithCancel(context.Background())
+	if err := r.Serve(serveCtx); err != nil {
 		cancel()
-		ok := report(r.Close())
-		wg.Wait()
-		return ok
+		return err
+	}
+
+	v.pushCloseStack("router.serve", func() error {
+		cancel()
+		return r.Close()
 	})
 
+	v.initLock.Lock()
 	v.rfClient = rfClient
 	v.router = r
+	v.initLock.Unlock()
 
-	return report(nil)
+	return nil
 }
 
-func initDiscovery(v *Visor) bool {
-	report := v.makeReporter("discovery")
-
-	// Prepare app discovery factory.
-	factory := appdisc.Factory{
-		Log: v.MasterLogger().PackageLogger("app_discovery"),
-	}
-
-	conf := v.conf.Launcher
-
-	if conf.Discovery != nil {
-		factory.PK = v.conf.PK
-		factory.SK = v.conf.SK
-		factory.UpdateInterval = time.Duration(conf.Discovery.UpdateInterval)
-		factory.ProxyDisc = conf.Discovery.ServiceDisc
-	}
-
-	v.serviceDisc = factory
-
-	return report(nil)
-}
-
-func initLauncher(v *Visor) bool {
-	report := v.makeReporter("launcher")
+func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Launcher
 
 	// Prepare proc manager.
 	procM, err := appserver.NewProcManager(v.MasterLogger(), &v.serviceDisc, v.ebc, conf.ServerAddr)
 	if err != nil {
-		return report(fmt.Errorf("failed to start proc_manager: %w", err))
+		err := fmt.Errorf("failed to start proc_manager: %w", err)
+		return err
 	}
 
-	v.pushCloseStack("launcher.proc_manager", func() bool {
-		return report(procM.Close())
-	})
+	v.pushCloseStack("launcher.proc_manager", procM.Close)
 
 	// Prepare launcher.
 	launchConf := launcher.Config{
@@ -307,113 +438,115 @@ func initLauncher(v *Visor) bool {
 		Apps:       conf.Apps,
 		ServerAddr: conf.ServerAddr,
 		BinPath:    conf.BinPath,
-		LocalPath:  conf.LocalPath,
+		LocalPath:  v.conf.LocalPath,
 	}
 
 	launchLog := v.MasterLogger().PackageLogger("launcher")
 
-	launch, err := launcher.NewLauncher(launchLog, launchConf, v.net.Dmsg(), v.router, procM)
+	launch, err := launcher.NewLauncher(launchLog, launchConf, v.dmsgC, v.router, procM)
 	if err != nil {
-		return report(fmt.Errorf("failed to start launcher: %w", err))
+		err := fmt.Errorf("failed to start launcher: %w", err)
+		return err
 	}
 
-	err = launch.AutoStart(map[string]func() ([]string, error){
-		skyenv.VPNClientName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net, v.tpM.STCPRRemoteAddrs()) },
-		skyenv.VPNServerName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net, nil) },
+	err = launch.AutoStart(launcher.EnvMap{
+		skyenv.VPNClientName: vpnEnvMaker(v.conf, v.dmsgC, v.tpM.STCPRRemoteAddrs()),
+		skyenv.VPNServerName: vpnEnvMaker(v.conf, v.dmsgC, nil),
 	})
 
 	if err != nil {
-		return report(fmt.Errorf("failed to autostart apps: %w", err))
+		err := fmt.Errorf("failed to autostart apps: %w", err)
+		return err
 	}
 
+	v.initLock.Lock()
 	v.procM = procM
 	v.appL = launch
+	v.initLock.Unlock()
 
-	return report(nil)
+	return nil
 }
 
-func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network, tpRemoteAddrs []string) ([]string, error) {
-	var envCfg vpn.DirectRoutesEnvConfig
+// Make an env maker function for vpn application
+func vpnEnvMaker(conf *visorconfig.V1, dmsgC *dmsg.Client, tpRemoteAddrs []string) launcher.EnvMaker {
+	return func() ([]string, error) {
+		var envCfg vpn.DirectRoutesEnvConfig
 
-	if conf.Dmsg != nil {
-		envCfg.DmsgDiscovery = conf.Dmsg.Discovery
+		if conf.Dmsg != nil {
+			envCfg.DmsgDiscovery = conf.Dmsg.Discovery
 
-		r := dmsgnetutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
-		err := r.Do(context.Background(), func() error {
-			for _, ses := range n.Dmsg().AllSessions() {
-				envCfg.DmsgServers = append(envCfg.DmsgServers, ses.RemoteTCPAddr().String())
+			r := dmsgnetutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
+			err := r.Do(context.Background(), func() error {
+				for _, ses := range dmsgC.AllSessions() {
+					envCfg.DmsgServers = append(envCfg.DmsgServers, ses.RemoteTCPAddr().String())
+				}
+
+				if len(envCfg.DmsgServers) == 0 {
+					return errors.New("no dmsg servers found")
+				}
+
+				return nil
+			})
+
+			if err != nil {
+				return nil, fmt.Errorf("error getting Dmsg servers: %w", err)
 			}
-
-			if len(envCfg.DmsgServers) == 0 {
-				return errors.New("no dmsg servers found")
-			}
-
-			return nil
-		})
-
-		if err != nil {
-			return nil, fmt.Errorf("error getting Dmsg servers: %w", err)
 		}
+
+		if conf.Transport != nil {
+			envCfg.TPDiscovery = conf.Transport.Discovery
+			envCfg.AddressResolver = conf.Transport.AddressResolver
+		}
+
+		if conf.Routing != nil {
+			envCfg.RF = conf.Routing.RouteFinder
+		}
+
+		if conf.UptimeTracker != nil {
+			envCfg.UptimeTracker = conf.UptimeTracker.Addr
+		}
+
+		if conf.STCP != nil && len(conf.STCP.PKTable) != 0 {
+			envCfg.STCPTable = conf.STCP.PKTable
+		}
+
+		envCfg.TPRemoteIPs = tpRemoteAddrs
+
+		envMap := vpn.AppEnvArgs(envCfg)
+
+		envs := make([]string, 0, len(envMap))
+		for k, v := range envMap {
+			envs = append(envs, fmt.Sprintf("%s=%s", k, v))
+		}
+
+		return envs, nil
 	}
-
-	if conf.Transport != nil {
-		envCfg.TPDiscovery = conf.Transport.Discovery
-		envCfg.AddressResolver = conf.Transport.AddressResolver
-	}
-
-	if conf.Routing != nil {
-		envCfg.RF = conf.Routing.RouteFinder
-	}
-
-	if conf.UptimeTracker != nil {
-		envCfg.UptimeTracker = conf.UptimeTracker.Addr
-	}
-
-	if conf.STCP != nil && len(conf.STCP.PKTable) != 0 {
-		envCfg.STCPTable = conf.STCP.PKTable
-	}
-
-	envCfg.TPRemoteIPs = tpRemoteAddrs
-
-	envMap := vpn.AppEnvArgs(envCfg)
-
-	envs := make([]string, 0, len(envMap))
-	for k, v := range envMap {
-		envs = append(envs, fmt.Sprintf("%s=%s", k, v))
-	}
-
-	return envs, nil
 }
 
-func initCLI(v *Visor) bool {
-	report := v.makeReporter("cli")
-
+func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if v.conf.CLIAddr == "" {
 		v.log.Info("'cli_addr' is not configured, skipping.")
-		return report(nil)
+		return nil
 	}
 
 	cliL, err := net.Listen("tcp", v.conf.CLIAddr)
 	if err != nil {
-		return report(err)
+		return err
 	}
 
-	v.pushCloseStack("cli.listener", func() bool {
-		return report(cliL.Close())
-	})
+	v.pushCloseStack("cli.listener", cliL.Close)
 
 	rpcS, err := newRPCServer(v, "CLI")
 	if err != nil {
-		return report(fmt.Errorf("failed to start rpc server for cli: %w", err))
+		err := fmt.Errorf("failed to start rpc server for cli: %w", err)
+		return err
 	}
 	go rpcS.Accept(cliL) // We do not use sync.WaitGroup here as it will never return anyway.
 
-	return report(nil)
+	return nil
 }
 
-func initHypervisors(v *Visor) bool {
-	report := v.makeReporter("hypervisors")
-
+func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error {
 	hvErrs := make(map[cipher.PubKey]chan error, len(v.conf.Hypervisors))
 	for _, hv := range v.conf.Hypervisors {
 		hvErrs[hv] = make(chan error, 1)
@@ -425,7 +558,8 @@ func initHypervisors(v *Visor) bool {
 		addr := dmsg.Addr{PK: hvPK, Port: skyenv.DmsgHypervisorPort}
 		rpcS, err := newRPCServer(v, addr.PK.String()[:shortHashLen])
 		if err != nil {
-			return report(fmt.Errorf("failed to start RPC server for hypervisor %s: %w", hvPK, err))
+			err := fmt.Errorf("failed to start RPC server for hypervisor %s: %w", hvPK, err)
+			return err
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -434,99 +568,134 @@ func initHypervisors(v *Visor) bool {
 
 		go func(hvErrs chan error) {
 			defer wg.Done()
-			ServeRPCClient(ctx, log, v.net, rpcS, addr, hvErrs)
+			ServeRPCClient(ctx, log, v.dmsgC, rpcS, addr, hvErrs)
 		}(hvErrs)
 
-		v.pushCloseStack("hypervisor."+hvPK.String()[:shortHashLen], func() bool {
+		v.pushCloseStack("hypervisor."+hvPK.String()[:shortHashLen], func() error {
 			cancel()
 			wg.Wait()
-			return true
+			return nil
 		})
 	}
 
-	return report(nil)
+	return nil
 }
 
-func initUptimeTracker(v *Visor) bool {
-	const tickDuration = 5 * time.Minute
+func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
+	const tickDuration = 1 * time.Minute
 
-	report := v.makeReporter("uptime_tracker")
 	conf := v.conf.UptimeTracker
 
 	if conf == nil {
 		v.log.Info("'uptime_tracker' is not configured, skipping.")
-		return true
+		return nil
 	}
 
 	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK)
 	if err != nil {
-		// TODO(evanlinjin): We should design utclient to retry automatically instead of returning error.
-		// return report(err)
 		v.log.WithError(err).Warn("Failed to connect to uptime tracker.")
-		return true
+		return nil
 	}
 
-	log := v.MasterLogger().PackageLogger("uptime_tracker")
 	ticker := time.NewTicker(tickDuration)
 
 	go func() {
 		for range ticker.C {
-			ctx := context.Background()
-			if err := ut.UpdateVisorUptime(ctx); err != nil {
+			c := context.Background()
+			if err := ut.UpdateVisorUptime(c); err != nil {
+				v.isServicesHealthy.unset()
 				log.WithError(err).Warn("Failed to update visor uptime.")
+			} else {
+				v.isServicesHealthy.set()
 			}
 		}
 	}()
 
-	v.pushCloseStack("uptime_tracker", func() bool {
+	v.pushCloseStack("uptime_tracker", func() error {
 		ticker.Stop()
-		return report(nil)
+		return nil
 	})
 
+	v.initLock.Lock()
 	v.uptimeTracker = ut
+	v.initLock.Unlock()
 
-	return true
+	return nil
 }
 
-func initTrustedVisors(v *Visor) bool {
-	const trustedVisorsTransportType = tptypes.STCPR
-
-	go func() {
-		time.Sleep(transport.TrustedVisorsDelay)
-		for _, pk := range v.tpM.Conf.DefaultVisors {
-			v.log.WithField("pk", pk).Infof("Adding trusted visor")
-
-			if _, err := v.tpM.SaveTransport(context.Background(), pk, trustedVisorsTransportType); err != nil {
-				v.log.
-					WithError(err).
-					WithField("pk", pk).
-					WithField("type", trustedVisorsTransportType).
-					Warnf("Failed to add transport to trusted visor via")
-			} else {
-				v.log.
-					WithField("pk", pk).
-					WithField("type", trustedVisorsTransportType).
-					Infof("Added transport to trusted visor")
-			}
-		}
-	}()
-
-	return true
-}
-
-func initHypervisor(v *Visor) bool {
-	if v.conf.Hypervisor == nil {
-		return true
+// advertise this visor as public in service discovery
+// this service is not considered critical and always returns true
+func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
+	if !v.conf.IsPublic {
+		return nil
+	}
+	logger := v.MasterLogger().PackageLogger("public_visor")
+	hasPublic, err := netutil.HasPublicIP()
+	if err != nil {
+		logger.WithError(err).Warn("Failed to check for existing public IP address")
+		return nil
+	}
+	if !hasPublic {
+		logger.Warn("No public IP address found, stopping")
+		return nil
 	}
 
+	stcpr, ok := v.tpM.Stcpr()
+	if !ok {
+		logger.Warn("No stcpr client found, stopping")
+		return nil
+	}
+	addr, err := stcpr.LocalAddr()
+	if err != nil {
+		logger.Warn("Failed to get STCPR local addr")
+		return nil
+	}
+	port, err := netutil.ExtractPort(addr)
+	if err != nil {
+		logger.Warn("Failed to get STCPR port")
+		return nil
+	}
+	visorUpdater := v.serviceDisc.VisorUpdater(uint16(port))
+	visorUpdater.Start()
+
+	v.log.Infof("Sent request to register visor as public")
+	v.pushCloseStack("public visor updater", func() error {
+		visorUpdater.Stop()
+		return nil
+	})
+	return nil
+}
+
+func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) error {
+	if !v.conf.Transport.PublicAutoconnect {
+		return nil
+	}
+	serviceDisc := v.conf.Launcher.ServiceDisc
+	if serviceDisc == "" {
+		serviceDisc = skyenv.DefaultServiceDiscAddr
+	}
+
+	// todo: refactor updatedisc: split connecting to services in updatedisc and
+	// advertising oneself as a service. Currently, config is tailored to
+	// advertising oneself and requires things like port that are not used
+	// in connecting to services
+	conf := servicedisc.Config{
+		Type:     servicedisc.ServiceTypeVisor,
+		PK:       v.conf.PK,
+		SK:       v.conf.SK,
+		Port:     uint16(0),
+		DiscAddr: serviceDisc,
+	}
+	connector := servicedisc.MakeConnector(conf, 3, v.tpM, log)
+	go connector.Run(ctx) //nolint:errcheck
+
+	return nil
+}
+
+func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	v.log.Infof("Initializing hypervisor")
 
 	ctx, cancel := context.WithCancel(context.Background())
-
-	assets, err := fs.New()
-	if err != nil {
-		v.log.Fatalf("Failed to obtain embedded static files: %v", err)
-	}
 
 	conf := *v.conf.Hypervisor
 	conf.PK = v.conf.PK
@@ -534,12 +703,12 @@ func initHypervisor(v *Visor) bool {
 	conf.DmsgDiscovery = v.conf.Dmsg.Discovery
 
 	// Prepare hypervisor.
-	hv, err := New(conf, assets, v, v.net.Dmsg())
+	hv, err := New(conf, v, v.dmsgC)
 	if err != nil {
 		v.log.Fatalln("Failed to start hypervisor:", err)
 	}
 
-	serveDmsg(ctx, v.log, hv, conf)
+	hv.serveDmsg(ctx, v.log)
 
 	// Serve HTTP(s).
 	v.log.WithField("addr", conf.HTTPAddr).
@@ -562,7 +731,7 @@ func initHypervisor(v *Visor) bool {
 
 	v.log.Infof("Hypervisor initialized")
 
-	return true
+	return nil
 }
 
 func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
@@ -599,12 +768,41 @@ func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
 	return tpdC, nil
 }
 
-func serveDmsg(ctx context.Context, log *logging.Logger, hv *Hypervisor, conf hypervisorconfig.Config) {
-	go func() {
-		if err := hv.ServeRPC(ctx, conf.DmsgPort); err != nil {
-			log.WithError(err).Fatal("Failed to serve RPC client over dmsg.")
+// ErrNoVisorInCtx is returned when visor is not set in module initialization context
+var ErrNoVisorInCtx = errors.New("visor not set in module initialization context")
+
+// ErrNoErrorsCtx is returned when errors channel is not set in module initialization context
+var ErrNoErrorsCtx = errors.New("errors not set in module initialization context")
+
+// withInitCtx wraps init function and returns a hook that can be used in
+// the module system
+// Passed context should have visor value under visorKey key, this visor will be used
+// in the passed function
+// Passed context should have errors channel for module runtime errors. It can be accessed
+// through a function call
+func withInitCtx(f initFn) vinit.Hook {
+	return func(ctx context.Context, log *logging.Logger) error {
+		val := ctx.Value(visorKey)
+		v, ok := val.(*Visor)
+		if !ok && v == nil {
+			return ErrNoVisorInCtx
 		}
-	}()
-	log.WithField("addr", dmsg.Addr{PK: conf.PK, Port: conf.DmsgPort}).
-		Info("Serving RPC client over dmsg.")
+		val = ctx.Value(runtimeErrsKey)
+		errs, ok := val.(chan error)
+		if !ok && errs == nil {
+			return ErrNoErrorsCtx
+		}
+		return f(ctx, v, log)
+	}
+}
+
+func getErrors(ctx context.Context) chan error {
+	val := ctx.Value(runtimeErrsKey)
+	errs, ok := val.(chan error)
+	if !ok && errs == nil {
+		// ok to panic because with check for this value in withInitCtx
+		// probably will never be reached, but better than generic NPE just in case
+		panic("runtime errors channel is not set in context")
+	}
+	return errs
 }

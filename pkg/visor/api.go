@@ -5,12 +5,13 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"net/http"
+	"os"
 	"os/exec"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/ccding/go-stun/stun"
 	"github.com/google/uuid"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cipher"
@@ -20,14 +21,16 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/util/netutil"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 )
 
 // API represents visor API.
 type API interface {
+	Overview() (*Overview, error)
 	Summary() (*Summary, error)
-	ExtraSummary() (*ExtraSummary, error)
 
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
@@ -35,6 +38,8 @@ type API interface {
 	Apps() ([]*launcher.AppState, error)
 	StartApp(appName string) error
 	StopApp(appName string) error
+	SetAppDetailedStatus(appName, state string) error
+	SetAppError(appName, stateErr string) error
 	RestartApp(appName string) error
 	SetAutoStart(appName string, autostart bool) error
 	SetAppPassword(appName, password string) error
@@ -42,16 +47,18 @@ type API interface {
 	SetAppSecure(appName string, isSecure bool) error
 	SetAppKillswitch(appName string, killswitch bool) error
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
+	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
 
 	TransportTypes() ([]string, error)
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
 	Transport(tid uuid.UUID) (*TransportSummary, error)
-	AddTransport(remote cipher.PubKey, tpType string, public bool, timeout time.Duration) (*TransportSummary, error)
+	AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*TransportSummary, error)
 	RemoveTransport(tid uuid.UUID) error
+	SetPublicAutoconnect(pAc bool) error
 
-	DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error)
-	DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error)
+	DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error)
+	DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error)
 
 	RoutingRules() ([]routing.Rule, error)
 	RoutingRule(key routing.RouteID) (routing.Rule, error)
@@ -66,6 +73,12 @@ type API interface {
 	UpdateWithStatus(config updater.UpdateConfig) <-chan StatusMessage
 	UpdateAvailable(channel updater.Channel) (*updater.Version, error)
 	UpdateStatus() (string, error)
+	RuntimeLogs() (string, error)
+
+	SetMinHops(uint16) error
+
+	GetPersistentTransports() ([]transport.PersistentTransports, error)
+	SetPersistentTransports([]transport.PersistentTransports) error
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -75,19 +88,24 @@ type HealthCheckable interface {
 	Health(ctx context.Context) (int, error)
 }
 
-// Summary provides a summary of a Skywire Visor.
-type Summary struct {
+// Overview provides a range of basic information about a Visor.
+type Overview struct {
 	PubKey          cipher.PubKey        `json:"local_pk"`
 	BuildInfo       *buildinfo.Info      `json:"build_info"`
 	AppProtoVersion string               `json:"app_protocol_version"`
 	Apps            []*launcher.AppState `json:"apps"`
 	Transports      []*TransportSummary  `json:"transports"`
 	RoutesCount     int                  `json:"routes_count"`
+	LocalIP         string               `json:"local_ip"`
+	PublicIP        string               `json:"public_ip"`
+	IsSymmetricNAT  bool                 `json:"is_symmetic_nat"`
 }
 
-// Summary implements API.
-func (v *Visor) Summary() (*Summary, error) {
-	var summaries []*TransportSummary
+// Overview implements API.
+func (v *Visor) Overview() (*Overview, error) {
+	var tSummaries []*TransportSummary
+	var publicIP string
+	var isSymmetricNAT bool
 	if v == nil {
 		panic("v is nil")
 	}
@@ -95,37 +113,72 @@ func (v *Visor) Summary() (*Summary, error) {
 		panic("tpM is nil")
 	}
 	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
-		summaries = append(summaries,
+		tSummaries = append(tSummaries,
 			newTransportSummary(v.tpM, tp, true, v.router.SetupIsTrusted(tp.Remote())))
 		return true
 	})
+	if v.stunClient != nil {
+		switch v.stunClient.NATType {
+		case stun.NATNone, stun.NATFull, stun.NATRestricted, stun.NATPortRestricted:
+			publicIP = v.stunClient.PublicIP.IP()
+			isSymmetricNAT = false
+		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
+			isSymmetricNAT = true
+		case stun.NATError, stun.NATUnknown, stun.NATBlocked:
+			publicIP = v.stunClient.NATType.String()
+			isSymmetricNAT = false
+		}
+	}
 
-	summary := &Summary{
+	overview := &Overview{
 		PubKey:          v.conf.PK,
 		BuildInfo:       buildinfo.Get(),
 		AppProtoVersion: supportedProtocolVersion,
 		Apps:            v.appL.AppStates(),
-		Transports:      summaries,
+		Transports:      tSummaries,
 		RoutesCount:     v.router.RoutesCount(),
+		PublicIP:        publicIP,
+		IsSymmetricNAT:  isSymmetricNAT,
 	}
 
-	return summary, nil
-}
-
-// ExtraSummary provides an extra summary of a Skywire Visor.
-type ExtraSummary struct {
-	Summary *Summary                        `json:"summary"`
-	Dmsg    []dmsgtracker.DmsgClientSummary `json:"dmsg"`
-	Health  *HealthInfo                     `json:"health"`
-	Uptime  float64                         `json:"uptime"`
-	Routes  []routingRuleResp               `json:"routes"`
-}
-
-// ExtraSummary implements API.
-func (v *Visor) ExtraSummary() (*ExtraSummary, error) {
-	summary, err := v.Summary()
+	localIPs, err := netutil.DefaultNetworkInterfaceIPs()
 	if err != nil {
-		return nil, fmt.Errorf("summary")
+		return nil, err
+	}
+
+	if len(localIPs) > 0 {
+		// should be okay to have the first one, in the case of
+		// active network interface, there's usually just a single IP
+		overview.LocalIP = localIPs[0].String()
+	}
+
+	return overview, nil
+}
+
+// Summary provides detailed info including overview and health of the visor.
+type Summary struct {
+	Overview             *Overview                        `json:"overview"`
+	Health               *HealthInfo                      `json:"health"`
+	Uptime               float64                          `json:"uptime"`
+	Routes               []routingRuleResp                `json:"routes"`
+	IsHypervisor         bool                             `json:"is_hypervisor,omitempty"`
+	DmsgStats            *dmsgtracker.DmsgClientSummary   `json:"dmsg_stats"`
+	Online               bool                             `json:"online"`
+	MinHops              uint16                           `json:"min_hops"`
+	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
+	SkybianBuildVersion  string                           `json:"skybian_build_version"`
+	BuildTag             string                           `json:"build_tag"`
+	PublicAutoconnect    bool                             `json:"public_autoconnect"`
+}
+
+// BuildTag variable that will set when building binary
+var BuildTag string
+
+// Summary implements API.
+func (v *Visor) Summary() (*Summary, error) {
+	overview, err := v.Overview()
+	if err != nil {
+		return nil, fmt.Errorf("overview")
 	}
 
 	health, err := v.Health()
@@ -143,6 +196,8 @@ func (v *Visor) ExtraSummary() (*ExtraSummary, error) {
 		return nil, fmt.Errorf("routes")
 	}
 
+	skybianBuildVersion := v.SkybianBuildVersion()
+
 	extraRoutes := make([]routingRuleResp, 0, len(routes))
 	for _, route := range routes {
 		extraRoutes = append(extraRoutes, routingRuleResp{
@@ -152,93 +207,74 @@ func (v *Visor) ExtraSummary() (*ExtraSummary, error) {
 		})
 	}
 
-	extraSummary := &ExtraSummary{
-		Summary: summary,
-		Health:  health,
-		Uptime:  uptime,
-		Routes:  extraRoutes,
+	pts, err := v.conf.GetPersistentTransports()
+	if err != nil {
+		return nil, fmt.Errorf("pts")
 	}
 
-	return extraSummary, nil
+	summary := &Summary{
+		Overview:             overview,
+		Health:               health,
+		Uptime:               uptime,
+		Routes:               extraRoutes,
+		MinHops:              v.conf.Routing.MinHops,
+		PersistentTransports: pts,
+		SkybianBuildVersion:  skybianBuildVersion,
+		BuildTag:             BuildTag,
+		PublicAutoconnect:    v.conf.Transport.PublicAutoconnect,
+	}
+
+	return summary, nil
 }
 
-// collectHealthStats for given services and return health statuses
-func (v *Visor) collectHealthStats(services map[string]HealthCheckable) map[string]int {
-	type healthResponse struct {
-		name   string
-		status int
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), InnerHealthTimeout)
-	defer cancel()
-
-	responses := make(chan healthResponse, len(services))
-
-	var wg sync.WaitGroup
-	wg.Add(len(services))
-	for name, service := range services {
-		go func(name string, service HealthCheckable) {
-			defer wg.Done()
-
-			if service == nil {
-				responses <- healthResponse{name, http.StatusNotFound}
-				return
-			}
-
-			status, err := service.Health(ctx)
-			if err != nil {
-				v.log.WithError(err).Warnf("Failed to check service health, service name: %s", name)
-				status = http.StatusInternalServerError
-			}
-
-			responses <- healthResponse{name, status}
-		}(name, service)
-	}
-	wg.Wait()
-
-	close(responses)
-
-	results := make(map[string]int)
-	for response := range responses {
-		results[response.name] = response.status
-	}
-
-	return results
-}
-
-// HealthInfo carries information about visor's external services health represented as http status codes
+// HealthInfo carries information about visor's services health represented as boolean value (i32 value)
 type HealthInfo struct {
-	TransportDiscovery int `json:"transport_discovery"`
-	RouteFinder        int `json:"route_finder"`
-	SetupNode          int `json:"setup_node"`
-	UptimeTracker      int `json:"uptime_tracker"`
-	AddressResolver    int `json:"address_resolver"`
+	ServicesHealth string `json:"services_health"`
+}
+
+// internalHealthInfo contains information of the status of the visor itself.
+// It's thread-safe, and could be used in multiple goroutines
+type internalHealthInfo int32
+
+// newHealthInfo creates
+func newInternalHealthInfo() *internalHealthInfo {
+	return new(internalHealthInfo)
+}
+
+// init sets the internalHealthInfo status to initial value (2)
+func (h *internalHealthInfo) init() {
+	atomic.StoreInt32((*int32)(h), 2)
+}
+
+// set sets the internalHealthInfo status to true.
+func (h *internalHealthInfo) set() {
+	atomic.StoreInt32((*int32)(h), 1)
+}
+
+// unset sets the internalHealthInfo to false.
+func (h *internalHealthInfo) unset() {
+	atomic.StoreInt32((*int32)(h), 0)
+}
+
+// value gets the internalHealthInfo value
+func (h *internalHealthInfo) value() string {
+	val := atomic.LoadInt32((*int32)(h))
+	switch val {
+	case 0:
+		return "connecting"
+	case 1:
+		return "healthy"
+	default:
+		return "connecting"
+	}
 }
 
 // Health implements API.
 func (v *Visor) Health() (*HealthInfo, error) {
-	services := map[string]HealthCheckable{
-		"td": v.tpDiscClient(),
-		"rf": v.routeFinderClient(),
-		"ut": v.uptimeTrackerClient(),
-		"ar": v.addressResolverClient(),
+	if v.isServicesHealthy == nil {
+		return &HealthInfo{}, nil
 	}
-
-	stats := v.collectHealthStats(services)
-	healthInfo := &HealthInfo{
-		TransportDiscovery: stats["td"],
-		RouteFinder:        stats["rf"],
-		UptimeTracker:      stats["ut"],
-		AddressResolver:    stats["ar"],
-	}
-	// TODO(evanlinjin): This should actually poll the setup nodes services.
-	if len(v.conf.Routing.SetupNodes) == 0 {
-		healthInfo.SetupNode = http.StatusNotFound
-	} else {
-		healthInfo.SetupNode = http.StatusOK
-	}
-
-	return healthInfo, nil
+	return &HealthInfo{ServicesHealth: v.isServicesHealthy.value()}, nil
 }
 
 // Uptime implements API.
@@ -251,12 +287,20 @@ func (v *Visor) Apps() ([]*launcher.AppState, error) {
 	return v.appL.AppStates(), nil
 }
 
+// SkybianBuildVersion implements API.
+func (v *Visor) SkybianBuildVersion() string {
+	return os.Getenv("SKYBIAN_BUILD_VERSION")
+}
+
 // StartApp implements API.
 func (v *Visor) StartApp(appName string) error {
 	var envs []string
 	var err error
 	if appName == skyenv.VPNClientName {
-		envs, err = makeVPNEnvs(v.conf, v.net, v.tpM.STCPRRemoteAddrs())
+		// todo: can we use some kind of app start hook that will be used for both autostart
+		// and start? Reason: this is also called in init for autostart
+		maker := vpnEnvMaker(v.conf, v.dmsgC, v.tpM.STCPRRemoteAddrs())
+		envs, err = maker()
 		if err != nil {
 			return err
 		}
@@ -267,13 +311,39 @@ func (v *Visor) StartApp(appName string) error {
 
 // StopApp implements API.
 func (v *Visor) StopApp(appName string) error {
-	_, err := v.appL.StopApp(appName)
+	_, err := v.appL.StopApp(appName) //nolint:errcheck
 	return err
+}
+
+// SetAppDetailedStatus implements API.
+func (v *Visor) SetAppDetailedStatus(appName, status string) error {
+	proc, ok := v.procM.ProcByName(appName)
+	if !ok {
+		return ErrAppProcNotRunning
+	}
+
+	v.log.Infof("Setting app detailed status %v for app %v", status, appName)
+	proc.SetDetailedStatus(status)
+
+	return nil
+}
+
+// SetAppError implements API.
+func (v *Visor) SetAppError(appName, appErr string) error {
+	proc, ok := v.procM.ProcByName(appName)
+	if !ok {
+		return ErrAppProcNotRunning
+	}
+
+	v.log.Infof("Setting error %v for app %v", appErr, appName)
+	proc.SetError(appErr)
+
+	return nil
 }
 
 // RestartApp implements API.
 func (v *Visor) RestartApp(appName string) error {
-	if _, ok := v.procM.ProcByName(appName); ok {
+	if _, ok := v.procM.ProcByName(appName); ok { //nolint:errcheck
 		v.log.Infof("Updated %v password, restarting it", appName)
 		return v.appL.RestartApp(appName)
 	}
@@ -411,29 +481,43 @@ func (v *Visor) LogsSince(timestamp time.Time, appName string) ([]string, error)
 	return res, nil
 }
 
+// GetAppStats implements API.
+func (v *Visor) GetAppStats(appName string) (appserver.AppStats, error) {
+	stats, err := v.procM.Stats(appName)
+	if err != nil {
+		return appserver.AppStats{}, err
+	}
+
+	return stats, nil
+}
+
 // GetAppConnectionsSummary implements API.
 func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error) {
-	summary, err := v.procM.ConnectionsSummary(appName)
+	cSummary, err := v.procM.ConnectionsSummary(appName)
 	if err != nil {
 		return nil, err
 	}
 
-	return summary, nil
+	return cSummary, nil
 }
 
 // TransportTypes implements API.
 func (v *Visor) TransportTypes() ([]string, error) {
-	return v.tpM.Networks(), nil
+	var types []string
+	for _, netType := range v.tpM.Networks() {
+		types = append(types, string(netType))
+	}
+	return types, nil
 }
 
 // Transports implements API.
 func (v *Visor) Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error) {
 	var result []*TransportSummary
 
-	typeIncluded := func(tType string) bool {
+	typeIncluded := func(tType network.Type) bool {
 		if types != nil {
 			for _, ft := range types {
-				if tType == ft {
+				if string(tType) == ft {
 					return true
 				}
 			}
@@ -473,7 +557,7 @@ func (v *Visor) Transport(tid uuid.UUID) (*TransportSummary, error) {
 }
 
 // AddTransport implements API.
-func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, public bool, timeout time.Duration) (*TransportSummary, error) {
+func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*TransportSummary, error) {
 	ctx := context.Background()
 
 	if timeout > 0 {
@@ -484,12 +568,12 @@ func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, public bool, t
 
 	v.log.Debugf("Saving transport to %v via %v", remote, tpType)
 
-	tp, err := v.tpM.SaveTransport(ctx, remote, tpType)
+	tp, err := v.tpM.SaveTransport(ctx, remote, network.Type(tpType), transport.LabelUser)
 	if err != nil {
 		return nil, err
 	}
 
-	v.log.Debugf("Saved transport to %v via %v", remote, tpType)
+	v.log.Debugf("Saved transport to %v via %v, label %s", remote, tpType, tp.Entry.Label)
 
 	return newTransportSummary(v.tpM, tp, false, v.router.SetupIsTrusted(tp.Remote())), nil
 }
@@ -501,7 +585,7 @@ func (v *Visor) RemoveTransport(tid uuid.UUID) error {
 }
 
 // DiscoverTransportsByPK implements API.
-func (v *Visor) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error) {
+func (v *Visor) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error) {
 	tpD := v.tpDiscClient()
 
 	entries, err := tpD.GetTransportsByEdge(context.Background(), pk)
@@ -513,7 +597,7 @@ func (v *Visor) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWith
 }
 
 // DiscoverTransportByID implements API.
-func (v *Visor) DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error) {
+func (v *Visor) DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error) {
 	tpD := v.tpDiscClient()
 
 	entry, err := tpD.GetTransportByID(context.Background(), id)
@@ -679,4 +763,35 @@ func (v *Visor) UpdateAvailable(channel updater.Channel) (*updater.Version, erro
 // UpdateStatus returns status of the current updating operation.
 func (v *Visor) UpdateStatus() (string, error) {
 	return v.updater.Status(), nil
+}
+
+// RuntimeLogs returns visor runtime logs
+func (v *Visor) RuntimeLogs() (string, error) {
+	var builder strings.Builder
+	builder.WriteString("[")
+	logs, _ := v.logstore.GetLogs()
+	builder.WriteString(strings.Join(logs, ","))
+	builder.WriteString("]")
+	return builder.String(), nil
+}
+
+// SetMinHops sets min_hops routing config of visor
+func (v *Visor) SetMinHops(in uint16) error {
+	return v.conf.UpdateMinHops(in)
+}
+
+// SetPersistentTransports sets min_hops routing config of visor
+func (v *Visor) SetPersistentTransports(pTps []transport.PersistentTransports) error {
+	v.tpM.SetPTpsCache(pTps)
+	return v.conf.UpdatePersistentTransports(pTps)
+}
+
+// GetPersistentTransports sets min_hops routing config of visor
+func (v *Visor) GetPersistentTransports() ([]transport.PersistentTransports, error) {
+	return v.conf.GetPersistentTransports()
+}
+
+// SetPublicAutoconnect sets public_autoconnect config of visor
+func (v *Visor) SetPublicAutoconnect(pAc bool) error {
+	return v.conf.UpdatePublicAutoconnect(pAc)
 }

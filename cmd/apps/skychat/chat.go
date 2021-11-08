@@ -1,14 +1,14 @@
-//go:generate esc -o static.go -prefix static static
-
 /*
 skychat app for skywire visor
 */
 package main
 
 import (
+	"embed"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
@@ -17,6 +17,7 @@ import (
 
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/netutil"
 	"github.com/skycoin/skywire/pkg/app"
@@ -29,8 +30,9 @@ const (
 	port    = routing.Port(1)
 )
 
+var log = logging.MustGetLogger("chat")
 var addr = flag.String("addr", ":8001", "address to bind")
-var r = netutil.NewRetrier(50*time.Millisecond, 5, 2)
+var r = netutil.NewRetrier(50*time.Millisecond, 5, 2, log)
 
 var (
 	appC     *app.Client
@@ -38,6 +40,11 @@ var (
 	conns    map[cipher.PubKey]net.Conn // Chat connections
 	connsMu  sync.Mutex
 )
+
+// the go embed static points to skywire/cmd/apps/skychat/static
+
+//go:embed static
+var embededFiles embed.FS
 
 func main() {
 	appC = app.NewClient(nil)
@@ -56,7 +63,7 @@ func main() {
 	conns = make(map[cipher.PubKey]net.Conn)
 	go listenLoop()
 
-	http.Handle("/", http.FileServer(FS(false)))
+	http.Handle("/", http.FileServer(getFileSystem()))
 	http.HandleFunc("/message", messageHandler)
 	http.HandleFunc("/sse", sseHandler)
 
@@ -199,4 +206,12 @@ func sseHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 	}
+}
+
+func getFileSystem() http.FileSystem {
+	fsys, err := fs.Sub(embededFiles, "static")
+	if err != nil {
+		panic(err)
+	}
+	return http.FS(fsys)
 }

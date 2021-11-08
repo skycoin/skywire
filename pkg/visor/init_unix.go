@@ -1,4 +1,5 @@
-//+build !windows
+//go:build !windows
+// +build !windows
 
 package visor
 
@@ -12,101 +13,102 @@ import (
 	"sync"
 
 	"github.com/skycoin/dmsg/dmsgpty"
+	"github.com/skycoin/skycoin/src/util/logging"
+
+	"github.com/skycoin/skywire/pkg/util/osutil"
 )
 
 const ownerRWX = 0700
 
-func initDmsgpty(v *Visor) bool {
-	report := v.makeReporter("dmsgpty")
+func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Dmsgpty
 
 	if conf == nil {
-		v.log.Info("'dmsgpty' is not configured, skipping.")
-		return report(nil)
+		log.Info("'dmsgpty' is not configured, skipping.")
+		return nil
 	}
 
 	// Unlink dmsg socket files (just in case).
 	if conf.CLINet == "unix" {
-		if err := unlinkSocketFiles(v.conf.Dmsgpty.CLIAddr); err != nil {
-			return report(err)
+		if err := osutil.UnlinkSocketFiles(v.conf.Dmsgpty.CLIAddr); err != nil {
+			return err
 		}
 	}
 
-	var wl dmsgpty.Whitelist
-	if conf.AuthFile == "" {
-		wl = dmsgpty.NewMemoryWhitelist()
-	} else {
-		var err error
-		if wl, err = dmsgpty.NewJSONFileWhiteList(v.conf.Dmsgpty.AuthFile); err != nil {
-			return report(err)
-		}
-	}
+	wl := dmsgpty.NewMemoryWhitelist()
 
 	// Ensure hypervisors are added to the whitelist.
 	if err := wl.Add(v.conf.Hypervisors...); err != nil {
-		return report(err)
+		return err
 	}
+
 	// add itself to the whitelist to allow local pty
 	if err := wl.Add(v.conf.PK); err != nil {
 		v.log.Errorf("Cannot add itself to the pty whitelist: %s", err)
 	}
 
-	dmsgC := v.net.Dmsg()
+	dmsgC := v.dmsgC
 	if dmsgC == nil {
-		return report(errors.New("cannot create dmsgpty with nil dmsg client"))
+		err := errors.New("cannot create dmsgpty with nil dmsg client")
+		return err
 	}
 
 	pty := dmsgpty.NewHost(dmsgC, wl)
 
-	if ptyPort := conf.Port; ptyPort != 0 {
-		ctx, cancel := context.WithCancel(context.Background())
+	if ptyPort := conf.DmsgPort; ptyPort != 0 {
+		serveCtx, cancel := context.WithCancel(context.Background())
 		wg := new(sync.WaitGroup)
 		wg.Add(1)
 
 		go func() {
 			defer wg.Done()
-			if err := pty.ListenAndServe(ctx, ptyPort); err != nil {
-				report(fmt.Errorf("listen and serve stopped: %w", err))
+			runtimeErrors := getErrors(ctx)
+			if err := pty.ListenAndServe(serveCtx, ptyPort); err != nil {
+				runtimeErrors <- fmt.Errorf("listen and serve stopped: %w", err)
 			}
 		}()
 
-		v.pushCloseStack("dmsgpty.serve", func() bool {
+		v.pushCloseStack("router.serve", func() error {
 			cancel()
 			wg.Wait()
-			return report(nil)
+			return nil
 		})
+
 	}
 
 	if conf.CLINet != "" {
 		if conf.CLINet == "unix" {
 			if err := os.MkdirAll(filepath.Dir(conf.CLIAddr), ownerRWX); err != nil {
-				return report(fmt.Errorf("failed to prepare unix file for dmsgpty cli listener: %w", err))
+				err := fmt.Errorf("failed to prepare unix file for dmsgpty cli listener: %w", err)
+				return err
 			}
 		}
 
 		cliL, err := net.Listen(conf.CLINet, conf.CLIAddr)
 		if err != nil {
-			return report(fmt.Errorf("failed to start dmsgpty cli listener: %w", err))
+			err := fmt.Errorf("failed to start dmsgpty cli listener: %w", err)
+			return err
 		}
 
-		ctx, cancel := context.WithCancel(context.Background())
+		serveCtx, cancel := context.WithCancel(context.Background())
 		wg := new(sync.WaitGroup)
 		wg.Add(1)
 
 		go func() {
 			defer wg.Done()
-			if err := pty.ServeCLI(ctx, cliL); err != nil {
-				report(fmt.Errorf("serve cli stopped: %w", err))
+			runtimeErrors := getErrors(ctx)
+			if err := pty.ServeCLI(serveCtx, cliL); err != nil {
+				runtimeErrors <- fmt.Errorf("serve cli stopped: %w", err)
 			}
 		}()
 
-		v.pushCloseStack("dmsgpty.cli", func() bool {
+		v.pushCloseStack("router.serve", func() error {
 			cancel()
-			ok := report(cliL.Close())
+			err := cliL.Close()
 			wg.Wait()
-			return ok
+			return err
 		})
 	}
 
-	return report(nil)
+	return nil
 }

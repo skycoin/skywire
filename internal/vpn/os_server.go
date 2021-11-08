@@ -1,4 +1,5 @@
-//+build !linux
+//go:build !linux
+// +build !linux
 
 package vpn
 
@@ -36,11 +37,6 @@ func AllowIPToLocalNetwork(_, _ net.IP) error {
 // to private IP ranges.
 func BlockIPToLocalNetwork(_, _ net.IP) error {
 	return errServerMethodsNotSupported
-}
-
-// DefaultNetworkInterface fetches default network interface name.
-func DefaultNetworkInterface() (string, error) {
-	return "", errServerMethodsNotSupported
 }
 
 // GetIPv4ForwardingValue gets current value of IPv4 forwarding.

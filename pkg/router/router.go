@@ -21,9 +21,8 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/setup/setupclient"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/snet"
-	"github.com/skycoin/skywire/pkg/snet/directtp/noisewrapper"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 //go:generate mockery -name Router -case underscore -inpkg
@@ -37,9 +36,8 @@ const (
 
 	handshakeAwaitTimeout = 2 * time.Second
 
-	minHops       = 0
 	maxHops       = 50
-	retryDuration = 10 * time.Second
+	retryDuration = 2 * time.Second
 	retryInterval = 500 * time.Millisecond
 )
 
@@ -49,6 +47,9 @@ var (
 
 	// ErrRemoteEmptyPK occurs when the specified remote public key is empty.
 	ErrRemoteEmptyPK = errors.New("empty remote public key")
+
+	// ErrNoTransportFound is returned when not even one transport is found.
+	ErrNoTransportFound = errors.New("no transport found")
 )
 
 // Config configures Router.
@@ -61,6 +62,8 @@ type Config struct {
 	RouteGroupDialer setupclient.RouteGroupDialer
 	SetupNodes       []cipher.PubKey
 	RulesGCInterval  time.Duration
+	MinHops          uint16
+	MaxHops          uint16
 }
 
 // SetDefaults sets default values for certain empty values.
@@ -75,6 +78,10 @@ func (c *Config) SetDefaults() {
 
 	if c.RulesGCInterval <= 0 {
 		c.RulesGCInterval = DefaultRulesGCInterval
+	}
+
+	if c.MaxHops == 0 {
+		c.MaxHops = maxHops
 	}
 }
 
@@ -124,7 +131,7 @@ type Router interface {
 	Serve(context.Context) error
 	SetupIsTrusted(cipher.PubKey) bool
 
-	// routing table related methods
+	// Routing table related methods
 	RoutesCount() int
 	Rules() []routing.Rule
 	Rule(routing.RouteID) (routing.Rule, error)
@@ -139,8 +146,8 @@ type router struct {
 	mx            sync.Mutex
 	conf          *Config
 	logger        *logging.Logger
-	n             *snet.Network
-	sl            *snet.Listener
+	sl            *dmsg.Listener
+	dmsgC         *dmsg.Client
 	trustedVisors map[cipher.PubKey]struct{}
 	tm            *transport.Manager
 	rt            routing.Table
@@ -149,15 +156,14 @@ type router struct {
 	rpcSrv        *rpc.Server
 	accept        chan routing.EdgeRules
 	done          chan struct{}
-	wg            sync.WaitGroup
 	once          sync.Once
 }
 
 // New constructs a new Router.
-func New(n *snet.Network, config *Config) (Router, error) {
+func New(dmsgC *dmsg.Client, config *Config) (Router, error) {
 	config.SetDefaults()
 
-	sl, err := n.Listen(dmsg.Type, skyenv.DmsgAwaitSetupPort)
+	sl, err := dmsgC.Listen(skyenv.DmsgAwaitSetupPort)
 	if err != nil {
 		return nil, err
 	}
@@ -170,10 +176,10 @@ func New(n *snet.Network, config *Config) (Router, error) {
 	r := &router{
 		conf:          config,
 		logger:        config.Logger,
-		n:             n,
 		tm:            config.TransportManager,
 		rt:            routing.NewTable(),
 		sl:            sl,
+		dmsgC:         dmsgC,
 		rgsNs:         make(map[routing.RouteDescriptor]*NoiseRouteGroup),
 		rgsRaw:        make(map[routing.RouteDescriptor]*RouteGroup),
 		rpcSrv:        rpc.NewServer(),
@@ -215,6 +221,11 @@ func (r *router) DialRoutes(
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, lPort, rPort)
 
+	ok := r.checkIfTransportAvalailable()
+	if !ok {
+		return nil, ErrNoTransportFound
+	}
+
 	forwardPath, reversePath, err := r.fetchBestRoutes(lPK, rPK, opts)
 	if err != nil {
 		return nil, fmt.Errorf("route finder: %w", err)
@@ -227,7 +238,7 @@ func (r *router) DialRoutes(
 		Reverse:   reversePath,
 	}
 
-	rules, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.n, r.conf.SetupNodes, req)
+	rules, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.dmsgC, r.conf.SetupNodes, req)
 	if err != nil {
 		r.logger.WithError(err).Error("Error dialing route group")
 		return nil, err
@@ -312,14 +323,7 @@ func (r *router) Serve(ctx context.Context) error {
 
 	go r.serveTransportManager(ctx)
 
-	r.wg.Add(1)
-
-	go func() {
-		defer r.wg.Done()
-		r.serveSetup()
-	}()
-
-	r.tm.Serve(ctx)
+	go r.serveSetup()
 
 	return nil
 }
@@ -350,23 +354,24 @@ func (r *router) serveTransportManager(ctx context.Context) {
 
 func (r *router) serveSetup() {
 	for {
-		conn, err := r.sl.AcceptConn()
+		conn, err := r.sl.AcceptStream()
 		if err != nil {
 			log := r.logger.WithError(err)
-			if err == dmsg.ErrEntityClosed {
+			if errors.Is(err, dmsg.ErrEntityClosed) {
 				log.Info("Setup client stopped serving.")
-			} else {
-				log.Error("Setup client stopped serving due to unexpected error.")
+				return
 			}
+			log.Error("Setup client stopped serving due to unexpected error.")
 			return
 		}
 
-		if !r.SetupIsTrusted(conn.RemotePK()) {
+		remotePK := conn.RawRemoteAddr().PK
+		if !r.SetupIsTrusted(remotePK) {
 			r.logger.Warnf("closing conn from untrusted setup node: %v", conn.Close())
 			continue
 		}
 
-		r.logger.Infof("handling setup request: setupPK(%s)", conn.RemotePK())
+		r.logger.Infof("handling setup request: setupPK(%s)", remotePK)
 
 		go r.rpcSrv.ServeConn(conn)
 	}
@@ -451,7 +456,7 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 
 	if rg.encrypt {
 		// wrapping rg with noise
-		wrappedRG, err := noisewrapper.WrapConn(nsConf, rg)
+		wrappedRG, err := network.EncryptConn(nsConf, rg)
 		if err != nil {
 			r.logger.WithError(err).Errorf("Failed to wrap route group (%s): %v, closing...", &rules.Desc, err)
 			if err := rg.Close(); err != nil {
@@ -729,19 +734,16 @@ func (r *router) Close() error {
 
 	r.once.Do(func() {
 		close(r.done)
-
 		r.mx.Lock()
 		close(r.accept)
 		r.mx.Unlock()
 	})
-
 	if err := r.sl.Close(); err != nil {
 		r.logger.WithError(err).Warnf("closing route_manager returned error")
+		return err
 	}
 
-	r.wg.Wait()
-
-	return r.tm.Close()
+	return nil
 }
 
 func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule routing.Rule) error {
@@ -827,7 +829,7 @@ fetchRoutesAgain:
 	ctx := context.Background()
 
 	paths, err := r.conf.RouteFinder.FindRoutes(ctx, []routing.PathEdges{forward, backward},
-		&rfclient.RouteOptions{MinHops: minHops, MaxHops: maxHops})
+		&rfclient.RouteOptions{MinHops: r.conf.MinHops, MaxHops: r.conf.MaxHops})
 
 	if err == rfclient.ErrTransportNotFound {
 		return nil, nil, err
@@ -1035,4 +1037,12 @@ func (r *router) removeRouteGroupOfRule(rule routing.Rule) {
 		return
 	}
 	log.Debug("Noise route group closed.")
+}
+
+func (r *router) checkIfTransportAvalailable() (ok bool) {
+	r.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
+		ok = true
+		return true
+	})
+	return ok
 }

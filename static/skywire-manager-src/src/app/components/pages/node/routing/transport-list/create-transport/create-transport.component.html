@@ -40,14 +40,23 @@
       </mat-error>
     </mat-form-field>
 
-    <app-button
-      #button
-      (action)="create()"
-      [disabled]="!form.valid"
+    <mat-checkbox
       color="primary"
-      class="float-right"
+      [checked]="makePersistent"
+      (change)="setMakePersistent($event)"
     >
-      {{ 'transports.create' | translate }}
-    </app-button>
+      {{ 'transports.dialog.make-persistent' | translate }}
+      <mat-icon [inline]="true" class="help-icon" [matTooltip]="'transports.dialog.persistent-tooltip' | translate">help</mat-icon>
+    </mat-checkbox>
   </form>
+
+  <app-button
+    #button
+    (action)="create()"
+    [disabled]="!form.valid"
+    color="primary"
+    class="float-right"
+  >
+    {{ 'transports.create' | translate }}
+  </app-button>
 </app-dialog>

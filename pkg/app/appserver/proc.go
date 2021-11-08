@@ -7,7 +7,6 @@ import (
 	"net/rpc"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -48,6 +47,18 @@ type Proc struct {
 
 	m       ProcManager
 	appName string
+
+	startTimeMx sync.RWMutex
+	startTime   time.Time
+
+	statusMx sync.RWMutex
+	status   string
+	// connection duration (i.e. when vpn client is connected, the app will set the connection duration)
+	connDuration   int64
+	connDurationMu sync.RWMutex
+
+	errMx sync.RWMutex
+	err   string
 }
 
 // NewProc constructs `Proc`.
@@ -58,9 +69,12 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	}
 	moduleName := fmt.Sprintf("proc:%s:%s", conf.AppName, conf.ProcKey)
 
-	cmd := exec.Command(conf.BinaryLoc, conf.ProcArgs...) // nolint:gosec
+	var cmd *exec.Cmd
+	envs := conf.Envs()
+
+	cmd = exec.Command(conf.BinaryLoc, conf.ProcArgs...) // nolint:gosec
+	cmd.Env = append(os.Environ(), envs...)
 	cmd.Dir = conf.ProcWorkDir
-	cmd.Env = append(os.Environ(), conf.Envs()...)
 
 	appLog, appLogDB := appcommon.NewProcLogger(conf)
 	cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").Writer()
@@ -88,6 +102,18 @@ func (p *Proc) Cmd() *exec.Cmd {
 	return p.cmd
 }
 
+// StartTime returns app start time.
+func (p *Proc) StartTime() (time.Time, bool) {
+	if !p.IsRunning() {
+		return time.Time{}, false
+	}
+
+	p.startTimeMx.RLock()
+	defer p.startTimeMx.RUnlock()
+
+	return p.startTime, true
+}
+
 // InjectConn introduces the connection to the Proc after it is started.
 // Only the first call will return true.
 // It also prepares the RPC gateway.
@@ -98,7 +124,7 @@ func (p *Proc) InjectConn(conn net.Conn) bool {
 		ok = true
 		p.conn = conn
 		p.rpcGWMu.Lock()
-		p.rpcGW = NewRPCGateway(p.log)
+		p.rpcGW = NewRPCGateway(p.log, p)
 		p.rpcGWMu.Unlock()
 
 		// Send ready signal.
@@ -114,26 +140,6 @@ func (p *Proc) awaitConn() bool {
 	if err := rpcS.RegisterName(p.conf.ProcKey.String(), p.rpcGW); err != nil {
 		panic(err)
 	}
-
-	connDelta := p.rpcGW.cm.AddDeltaInformer()
-	go func() {
-		for n := range connDelta.Chan() {
-			if err := p.disc.ChangeValue(appdisc.ConnCountValue, []byte(strconv.Itoa(n))); err != nil {
-				p.log.WithError(err).WithField("value", appdisc.ConnCountValue).
-					Error("Failed to change app discovery value.")
-			}
-		}
-	}()
-
-	lisDelta := p.rpcGW.lm.AddDeltaInformer()
-	go func() {
-		for n := range lisDelta.Chan() {
-			if err := p.disc.ChangeValue(appdisc.ListenerCountValue, []byte(strconv.Itoa(n))); err != nil {
-				p.log.WithError(err).WithField("value", appdisc.ListenerCountValue).
-					Error("Failed to change app discovery value.")
-			}
-		}
-	}()
 
 	go rpcS.ServeConn(p.conn)
 
@@ -155,6 +161,10 @@ func (p *Proc) Start() error {
 		return err
 	}
 
+	p.startTimeMx.Lock()
+	p.startTime = time.Now().UTC()
+	p.startTimeMx.Unlock()
+
 	go func() {
 		waitErrCh := make(chan error)
 		go func() {
@@ -166,7 +176,8 @@ func (p *Proc) Start() error {
 			// here will definitely be an error notifying that the process
 			// is already stopped. We do this to remove proc from the manager,
 			// therefore giving the correct app status to hypervisor.
-			_ = p.m.Stop(p.appName) //nolint:errcheck
+			_ = p.m.SetError(p.appName, p.err) //nolint:errcheck
+			_ = p.m.Stop(p.appName)            //nolint:errcheck
 		}()
 
 		select {
@@ -234,6 +245,9 @@ func (p *Proc) Stop() error {
 		}
 	}
 
+	// deregister discovery service
+	p.disc.Stop()
+
 	// the lock will be acquired as soon as the cmd finishes its work
 	p.waitMx.Lock()
 	defer func() {
@@ -262,13 +276,62 @@ func (p *Proc) IsRunning() bool {
 	return atomic.LoadInt32(&p.isRunning) == 1
 }
 
+// SetDetailedStatus sets proc's detailed status.
+func (p *Proc) SetDetailedStatus(status string) {
+	p.statusMx.Lock()
+	defer p.statusMx.Unlock()
+
+	p.status = status
+}
+
+// SetConnectionDuration sets the proc's connection duration
+func (p *Proc) SetConnectionDuration(dur int64) {
+	p.connDurationMu.Lock()
+	defer p.connDurationMu.Unlock()
+	p.connDuration = dur
+}
+
+// ConnectionDuration gets proc's connection duration
+func (p *Proc) ConnectionDuration() int64 {
+	p.connDurationMu.RLock()
+	defer p.connDurationMu.RUnlock()
+	return p.connDuration
+}
+
+// DetailedStatus gets proc's detailed status.
+func (p *Proc) DetailedStatus() string {
+	p.statusMx.RLock()
+	defer p.statusMx.RUnlock()
+
+	return p.status
+}
+
+// SetError sets proc's detailed status error.
+func (p *Proc) SetError(appErr string) {
+	p.errMx.Lock()
+	defer p.errMx.Unlock()
+
+	p.err = appErr
+}
+
+// Error gets proc's error.
+func (p *Proc) Error() string {
+	p.errMx.RLock()
+	defer p.errMx.RUnlock()
+
+	return p.err
+}
+
 // ConnectionSummary sums up the connection stats.
 type ConnectionSummary struct {
-	IsAlive       bool          `json:"is_alive"`
-	Latency       time.Duration `json:"latency"`
-	Throughput    uint32        `json:"throughput"`
-	BandwidthSent uint64        `json:"bandwidth_sent"`
-	Error         string        `json:"error"`
+	IsAlive            bool          `json:"is_alive"`
+	Latency            time.Duration `json:"latency"`
+	UploadSpeed        uint32        `json:"upload_speed"`
+	DownloadSpeed      uint32        `json:"download_speed"`
+	BandwidthSent      uint64        `json:"bandwidth_sent"`
+	BandwidthReceived  uint64        `json:"bandwidth_received"`
+	Error              string        `json:"error"`
+	ConnectionDuration int64         `json:"connection_duration,omitempty"`
 }
 
 // ConnectionsSummary returns all of the proc's connections stats.
@@ -304,10 +367,13 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 		}
 
 		summaries = append(summaries, ConnectionSummary{
-			IsAlive:       skywireConn.IsAlive(),
-			Latency:       skywireConn.Latency(),
-			Throughput:    skywireConn.Throughput(),
-			BandwidthSent: skywireConn.BandwidthSent(),
+			IsAlive:            skywireConn.IsAlive(),
+			Latency:            skywireConn.Latency(),
+			UploadSpeed:        skywireConn.UploadSpeed(),
+			DownloadSpeed:      skywireConn.DownloadSpeed(),
+			BandwidthSent:      skywireConn.BandwidthSent(),
+			BandwidthReceived:  skywireConn.BandwidthReceived(),
+			ConnectionDuration: p.ConnectionDuration(),
 		})
 
 		return true

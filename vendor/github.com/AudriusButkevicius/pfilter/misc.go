@@ -2,16 +2,9 @@ package pfilter
 
 import (
 	"net"
-	"sync"
 )
 
 var (
-	maxPacketSize = 1500
-	bufPool       = sync.Pool{
-		New: func() interface{} {
-			return make([]byte, maxPacketSize)
-		},
-	}
 	errTimeout = &netError{
 		msg:       "i/o timeout",
 		timeout:   true,
@@ -37,15 +30,19 @@ func (e *netError) Error() string   { return e.msg }
 func (e *netError) Timeout() bool   { return e.timeout }
 func (e *netError) Temporary() bool { return e.temporary }
 
-type filteredConnList []*FilteredConn
+type filteredConnList []*filteredConn
 
 func (r filteredConnList) Len() int           { return len(r) }
 func (r filteredConnList) Swap(i, j int)      { r[i], r[j] = r[j], r[i] }
 func (r filteredConnList) Less(i, j int) bool { return r[i].priority < r[j].priority }
 
 type packet struct {
-	n    int
-	addr net.Addr
-	err  error
-	buf  []byte
+	n       int
+	oobn    int
+	flags   int
+	addr    net.Addr
+	udpAddr *net.UDPAddr
+	err     error
+	buf     []byte
+	oobBuf  []byte
 }

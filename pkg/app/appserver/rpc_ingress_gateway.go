@@ -57,21 +57,46 @@ func (e *RPCIOErr) ToError() error {
 
 // RPCIngressGateway is a RPC interface for the app server.
 type RPCIngressGateway struct {
-	lm  *idmanager.Manager // contains listeners associated with their IDs
-	cm  *idmanager.Manager // contains connections associated with their IDs
-	log *logging.Logger
+	proc *Proc
+	lm   *idmanager.Manager // contains listeners associated with their IDs
+	cm   *idmanager.Manager // contains connections associated with their IDs
+	log  *logging.Logger
 }
 
 // NewRPCGateway constructs new server RPC interface.
-func NewRPCGateway(log *logging.Logger) *RPCIngressGateway {
+func NewRPCGateway(log *logging.Logger, proc *Proc) *RPCIngressGateway {
 	if log == nil {
 		log = logging.MustGetLogger("app_rpc_ingress_gateway")
 	}
 	return &RPCIngressGateway{
-		lm:  idmanager.New(),
-		cm:  idmanager.New(),
-		log: log,
+		proc: proc,
+		lm:   idmanager.New(),
+		cm:   idmanager.New(),
+		log:  log,
 	}
+}
+
+// SetDetailedStatus sets detailed status of an app.
+func (r *RPCIngressGateway) SetDetailedStatus(status *string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetDetailedStatus", status)(nil, &err)
+
+	r.proc.SetDetailedStatus(*status)
+
+	return nil
+}
+
+// SetConnectionDuration sets the connection duration of an app (vpn-client in this instance)
+func (r *RPCIngressGateway) SetConnectionDuration(dur int64, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetConnectionDuration", dur)(nil, &err)
+	r.proc.SetConnectionDuration(dur)
+	return nil
+}
+
+// SetError sets error of an app.
+func (r *RPCIngressGateway) SetError(appErr *string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetError", appErr)(nil, &err)
+	r.proc.SetError(*appErr)
+	return nil
 }
 
 // DialResp contains response parameters for `Dial`.

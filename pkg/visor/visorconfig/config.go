@@ -1,14 +1,17 @@
 package visorconfig
 
 import (
+	"runtime"
+
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
 
@@ -18,16 +21,14 @@ import (
 func MakeBaseConfig(common *Common) *V1 {
 	conf := new(V1)
 	conf.Common = common
-	conf.Dmsg = &snet.DmsgConfig{
+	conf.Dmsg = &dmsgc.DmsgConfig{
 		Discovery:     skyenv.DefaultDmsgDiscAddr,
 		SessionsCount: 1,
 	}
 	conf.Transport = &V1Transport{
-		Discovery:       skyenv.DefaultTpDiscAddr,
-		AddressResolver: skyenv.DefaultAddressResolverAddr,
-		LogStore: &V1LogStore{
-			Type: "memory",
-		},
+		Discovery:         skyenv.DefaultTpDiscAddr,
+		AddressResolver:   skyenv.DefaultAddressResolverAddr,
+		PublicAutoconnect: true,
 	}
 	conf.Routing = &V1Routing{
 		SetupNodes:         []cipher.PubKey{skyenv.MustPK(skyenv.DefaultSetupPK)},
@@ -35,19 +36,18 @@ func MakeBaseConfig(common *Common) *V1 {
 		RouteFinderTimeout: DefaultTimeout,
 	}
 	conf.Launcher = &V1Launcher{
-		Discovery: &V1AppDisc{
-			ServiceDisc: skyenv.DefaultServiceDiscAddr,
-		},
-		Apps:       nil,
-		ServerAddr: skyenv.DefaultAppSrvAddr,
-		BinPath:    skyenv.DefaultAppBinPath,
-		LocalPath:  skyenv.DefaultAppLocalPath,
+		ServiceDisc: skyenv.DefaultServiceDiscAddr,
+		Apps:        nil,
+		ServerAddr:  skyenv.DefaultAppSrvAddr,
+		BinPath:     skyenv.DefaultAppBinPath,
 	}
 	conf.UptimeTracker = &V1UptimeTracker{
 		Addr: skyenv.DefaultUptimeTrackerAddr,
 	}
 	conf.CLIAddr = skyenv.DefaultRPCAddr
 	conf.LogLevel = skyenv.DefaultLogLevel
+	conf.LocalPath = skyenv.DefaultLocalPath
+	conf.StunServers = skyenv.GetStunServers()
 	conf.ShutdownTimeout = DefaultTimeout
 	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
 	return conf
@@ -76,59 +76,23 @@ func defaultConfigFromCommon(cc *Common, hypervisor bool) (*V1, error) {
 	conf := MakeBaseConfig(cc)
 
 	conf.Dmsgpty = &V1Dmsgpty{
-		Port:     skyenv.DmsgPtyPort,
-		AuthFile: skyenv.DefaultDmsgPtyWhitelist,
+		DmsgPort: skyenv.DmsgPtyPort,
 		CLINet:   skyenv.DefaultDmsgPtyCLINet,
 		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
 	}
 
-	conf.STCP = &snet.STCPConfig{
-		LocalAddr: skyenv.DefaultSTCPAddr,
-		PKTable:   nil,
-	}
-
-	conf.Transport.LogStore = &V1LogStore{
-		Type:     "file",
-		Location: skyenv.DefaultTpLogStore,
+	conf.STCP = &network.STCPConfig{
+		ListeningAddress: skyenv.DefaultSTCPAddr,
+		PKTable:          nil,
 	}
 
 	conf.UptimeTracker = &V1UptimeTracker{
 		Addr: skyenv.DefaultUptimeTrackerAddr,
 	}
 
-	conf.Launcher.Discovery = &V1AppDisc{
-		UpdateInterval: Duration(skyenv.AppDiscUpdateInterval),
-		ServiceDisc:    skyenv.DefaultServiceDiscAddr,
-	}
+	conf.Launcher.ServiceDisc = skyenv.DefaultServiceDiscAddr
 
-	conf.Launcher.Apps = []launcher.AppConfig{
-		{
-			Name:      skyenv.SkychatName,
-			AutoStart: true,
-			Port:      routing.Port(skyenv.SkychatPort),
-			Args:      []string{"-addr", skyenv.SkychatAddr},
-		},
-		{
-			Name:      skyenv.SkysocksName,
-			AutoStart: true,
-			Port:      routing.Port(skyenv.SkysocksPort),
-		},
-		{
-			Name:      skyenv.SkysocksClientName,
-			AutoStart: false,
-			Port:      routing.Port(skyenv.SkysocksClientPort),
-		},
-		{
-			Name:      skyenv.VPNServerName,
-			AutoStart: false,
-			Port:      routing.Port(skyenv.VPNServerPort),
-		},
-		{
-			Name:      skyenv.VPNClientName,
-			AutoStart: false,
-			Port:      routing.Port(skyenv.VPNClientPort),
-		},
-	}
+	conf.Launcher.Apps = makeDefaultLauncherAppsConfig()
 
 	conf.Hypervisors = make([]cipher.PubKey, 0)
 
@@ -162,25 +126,45 @@ func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 	}
 
 	conf.Dmsgpty = &V1Dmsgpty{
-		Port:     skyenv.DmsgPtyPort,
-		AuthFile: skyenv.PackageDmsgPtyWhiteList,
+		DmsgPort: skyenv.DmsgPtyPort,
 		CLINet:   skyenv.DefaultDmsgPtyCLINet,
 		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
 	}
+	conf.LocalPath = skyenv.PackageAppLocalPath()
+	conf.Launcher.BinPath = skyenv.PackageAppBinPath()
 
-	conf.Transport.LogStore = &V1LogStore{
-		Type:     "file",
-		Location: skyenv.PackageTpLogStore,
+	if conf.Hypervisor != nil {
+		conf.Hypervisor.EnableAuth = skyenv.DefaultPackageEnableAuth
+		conf.Hypervisor.TLSKeyFile = skyenv.PackageTLSKey()
+		conf.Hypervisor.TLSCertFile = skyenv.PackageTLSCert()
+		conf.Hypervisor.TLSKeyFile = skyenv.PackageTLSKey()
+		conf.Hypervisor.TLSCertFile = skyenv.PackageTLSCert()
+		conf.Hypervisor.DBPath = skyenv.PackageDBPath()
+	}
+	return conf, nil
+}
+
+// MakeSkybianConfig acts like MakeDefaultConfig but uses default paths, etc. as found in skybian / produced by skyimager
+func MakeSkybianConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool) (*V1, error) {
+	conf, err := MakeDefaultConfig(log, confPath, sk, hypervisor)
+	if err != nil {
+		return nil, err
 	}
 
-	conf.Launcher.BinPath = skyenv.PackageAppBinPath
-	conf.Launcher.LocalPath = skyenv.PackageAppLocalPath
+	conf.Dmsgpty = &V1Dmsgpty{
+		DmsgPort: skyenv.DmsgPtyPort,
+		CLINet:   skyenv.DefaultDmsgPtyCLINet,
+		CLIAddr:  skyenv.SkybianDmsgPtyCLIAddr,
+	}
+	conf.LocalPath = skyenv.SkybianLocalPath
+	conf.Launcher.BinPath = skyenv.SkybianAppBinPath
 
 	if conf.Hypervisor != nil {
 		conf.Hypervisor.EnableAuth = skyenv.DefaultEnableAuth
-		conf.Hypervisor.EnableTLS = skyenv.PackageEnableTLS
-		conf.Hypervisor.TLSKeyFile = skyenv.PackageTLSKey
-		conf.Hypervisor.TLSCertFile = skyenv.PackageTLSCert
+		conf.Hypervisor.EnableTLS = skyenv.SkybianEnableTLS
+		conf.Hypervisor.TLSKeyFile = skyenv.SkybianTLSKey
+		conf.Hypervisor.TLSCertFile = skyenv.SkybianTLSCert
+		conf.Hypervisor.DBPath = skyenv.SkybianDBPath
 	}
 	return conf, nil
 }
@@ -193,7 +177,7 @@ func SetDefaultTestingValues(conf *V1) {
 	conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
 	conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.TestSetupPK)}
 	conf.UptimeTracker.Addr = skyenv.TestUptimeTrackerAddr
-	conf.Launcher.Discovery.ServiceDisc = skyenv.TestServiceDiscAddr
+	conf.Launcher.ServiceDisc = skyenv.TestServiceDiscAddr
 }
 
 // SetDefaultProductionValues mutates configuration to use production values
@@ -206,8 +190,56 @@ func SetDefaultProductionValues(conf *V1) {
 	conf.UptimeTracker = &V1UptimeTracker{
 		Addr: skyenv.DefaultUptimeTrackerAddr,
 	}
-	conf.Launcher.Discovery = &V1AppDisc{
-		UpdateInterval: Duration(skyenv.AppDiscUpdateInterval),
-		ServiceDisc:    skyenv.DefaultServiceDiscAddr,
+	conf.Launcher.ServiceDisc = skyenv.DefaultServiceDiscAddr
+}
+
+// makeDefaultLauncherAppsConfig creates default launcher config for apps,
+// for package based installation in other platform (Darwin, Windows) it only includes
+// the shipped apps for that platforms
+func makeDefaultLauncherAppsConfig() []launcher.AppConfig {
+	defaultConfig := []launcher.AppConfig{
+		{
+			Name:      skyenv.VPNClientName,
+			AutoStart: false,
+			Port:      routing.Port(skyenv.VPNClientPort),
+		},
 	}
+
+	switch runtime.GOOS {
+	case "linux":
+		return launcherAddAllApps(defaultConfig)
+	case "darwin":
+		return defaultConfig
+	case "windows":
+		return defaultConfig
+	default:
+		return defaultConfig
+	}
+}
+
+func launcherAddAllApps(launcherCfg []launcher.AppConfig) []launcher.AppConfig {
+	launcherCfg = append(launcherCfg, []launcher.AppConfig{
+		{
+			Name:      skyenv.SkychatName,
+			AutoStart: true,
+			Port:      routing.Port(skyenv.SkychatPort),
+			Args:      []string{"-addr", skyenv.SkychatAddr},
+		},
+		{
+			Name:      skyenv.SkysocksName,
+			AutoStart: true,
+			Port:      routing.Port(skyenv.SkysocksPort),
+		},
+		{
+			Name:      skyenv.SkysocksClientName,
+			AutoStart: false,
+			Port:      routing.Port(skyenv.SkysocksClientPort),
+		},
+		{
+			Name:      skyenv.VPNServerName,
+			AutoStart: false,
+			Port:      routing.Port(skyenv.VPNServerPort),
+		},
+	}...)
+	return launcherCfg
 }

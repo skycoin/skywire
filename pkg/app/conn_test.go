@@ -18,7 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/idmanager"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/snet/snettest"
+	"github.com/skycoin/skywire/pkg/util/cipherutil"
 )
 
 func TestConn_Read(t *testing.T) {
@@ -175,7 +175,7 @@ func (p *wrappedConn) RemoteAddr() net.Addr {
 func TestConn_TestConn(t *testing.T) {
 	mp := func() (net.Conn, net.Conn, func(), error) {
 		netType := appnet.TypeSkynet
-		keys := snettest.GenKeyPairs(2)
+		keys := cipherutil.GenKeyPairs(2)
 		fmt.Printf("C1 Local: %s\n", keys[0].PK)
 		fmt.Printf("C2 Local: %s\n", keys[1].PK)
 		p1, p2 := net.Pipe()
@@ -219,7 +219,7 @@ func TestConn_TestConn(t *testing.T) {
 
 		rpcS := rpc.NewServer()
 
-		appKeys := snettest.GenKeyPairs(2)
+		appKeys := cipherutil.GenKeyPairs(2)
 
 		var (
 			procKey1 appcommon.ProcKey
@@ -228,8 +228,8 @@ func TestConn_TestConn(t *testing.T) {
 		copy(procKey1[:], appKeys[0].PK[:])
 		copy(procKey2[:], appKeys[1].PK[:])
 
-		gateway1 := appserver.NewRPCGateway(logging.MustGetLogger("test_app_rpc_gateway1"))
-		gateway2 := appserver.NewRPCGateway(logging.MustGetLogger("test_app_rpc_gateway2"))
+		gateway1 := appserver.NewRPCGateway(logging.MustGetLogger("test_app_rpc_gateway1"), nil)
+		gateway2 := appserver.NewRPCGateway(logging.MustGetLogger("test_app_rpc_gateway2"), nil)
 
 		err = rpcS.RegisterName(procKey1.String(), gateway1)
 		if err != nil {

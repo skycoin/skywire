@@ -31,6 +31,8 @@ while getopts ":t:pb" o; do
       tag="test"
     elif [[ $tag == "master" ]]; then
       tag="latest"
+    else
+      tag=$tag
     fi
     ;;
   p)

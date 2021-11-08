@@ -3,15 +3,29 @@ package transport
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/skycoin/dmsg/cipher"
+
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 var (
 	// ErrEdgeIndexNotFound is returned when no edge index was found.
 	ErrEdgeIndexNotFound = errors.New("edge index not found")
+)
+
+// Label is a part of transport entry that signifies the origin
+// of this entry
+type Label string
+
+const (
+	// LabelUser signifies a user-created transport entry
+	LabelUser Label = "user"
+	// LabelAutomatic are transports to publically advertised visors
+	LabelAutomatic = "automatic"
+	// LabelSkycoin are transports created by skycoin system to improve network resiliency
+	LabelSkycoin = "skycoin"
 )
 
 // Entry is the unsigned representation of a Transport.
@@ -20,31 +34,25 @@ type Entry struct {
 	// ID is the Transport ID that uniquely identifies the Transport.
 	ID uuid.UUID `json:"t_id"`
 
-	// Edges contains the public keys of the Transport's edge nodes (should only have 2 edges and the least-significant edge should come first).
+	// Edges contains the public keys of the Transport's edge nodes
+	// Edges should always be sorted in ascending order
 	Edges [2]cipher.PubKey `json:"edges"`
 
 	// Type represents the transport type.
-	Type string `json:"type"`
+	Type network.Type `json:"type"`
 
-	// Public determines whether the transport is to be exposed to other nodes or not.
-	// Public transports are to be registered in the Transport Discovery.
-	Public bool `json:"public"` // TODO(evanlinjin): remove this.
+	Label Label `json:"label"`
 }
 
-// NewEntry constructs *Entry
-func NewEntry(localPK, remotePK cipher.PubKey, tpType string, public bool) *Entry {
-	return &Entry{
-		ID:     MakeTransportID(localPK, remotePK, tpType),
-		Edges:  SortEdges(localPK, remotePK),
-		Type:   tpType,
-		Public: public,
+// MakeEntry creates a new transport entry
+func MakeEntry(aPK, bPK cipher.PubKey, netType network.Type, label Label) Entry {
+	entry := Entry{
+		ID:    MakeTransportID(aPK, bPK, netType),
+		Type:  netType,
+		Label: label,
+		Edges: SortEdges(aPK, bPK),
 	}
-}
-
-// SetEdges sets edges of Entry
-func (e *Entry) SetEdges(localPK, remotePK cipher.PubKey) {
-	e.ID = MakeTransportID(localPK, remotePK, e.Type)
-	e.Edges = SortEdges(localPK, remotePK)
+	return entry
 }
 
 // RemoteEdge returns the remote edge's public key.
@@ -69,6 +77,12 @@ func (e *Entry) EdgeIndex(pk cipher.PubKey) int {
 	return -1
 }
 
+// IsLeastSignificantEdge returns true if given pk is least significant edge
+// of this entry
+func (e *Entry) IsLeastSignificantEdge(pk cipher.PubKey) bool {
+	return e.EdgeIndex(pk) == 0
+}
+
 // HasEdge returns true if the provided edge is present in 'e.Edges' field.
 func (e *Entry) HasEdge(edge cipher.PubKey) bool {
 	for _, pk := range e.Edges {
@@ -82,11 +96,6 @@ func (e *Entry) HasEdge(edge cipher.PubKey) bool {
 // String implements stringer
 func (e *Entry) String() string {
 	res := ""
-	if e.Public {
-		res += "visibility: public\n"
-	} else {
-		res += "visibility: private\n"
-	}
 	res += fmt.Sprintf("\ttype: %s\n", e.Type)
 	res += fmt.Sprintf("\tid: %s\n", e.ID)
 	res += "\tedges:\n"
@@ -154,44 +163,4 @@ func (se *SignedEntry) Signature(pk cipher.PubKey) (cipher.Sig, error) {
 func NewSignedEntry(entry *Entry, pk cipher.PubKey, secKey cipher.SecKey) (*SignedEntry, error) {
 	se := &SignedEntry{Entry: entry}
 	return se, se.Sign(pk, secKey)
-}
-
-// Status represents the current state of a Transport from a Transport's single edge.
-// Each Transport will have two perspectives; one from each of it's edges.
-type Status struct {
-
-	// ID is the Transport ID that identifies the Transport that this status is regarding.
-	ID uuid.UUID `json:"t_id"`
-
-	// IsUp represents whether the Transport is up.
-	// A Transport that is down will fail to forward Packets.
-	IsUp bool `json:"is_up"`
-
-	// Updated is the epoch timestamp of when the status is last updated.
-	Updated int64 `json:"updated,omitempty"`
-}
-
-// EntryWithStatus stores Entry and Statuses returned by both Edges.
-type EntryWithStatus struct {
-	Entry      *Entry  `json:"entry"`
-	IsUp       bool    `json:"is_up"`
-	Registered int64   `json:"registered"`
-	Statuses   [2]bool `json:"statuses"`
-}
-
-// String implements stringer
-func (e *EntryWithStatus) String() string {
-	res := "entry:\n"
-	res += fmt.Sprintf("\tregistered at: %d\n", e.Registered)
-	res += fmt.Sprintf("\tstatus returned by edge 1: %t\n", e.Statuses[0])
-	res += fmt.Sprintf("\tstatus returned by edge 2: %t\n", e.Statuses[1])
-	if e.IsUp {
-		res += "\ttransport: up\n"
-	} else {
-		res += "\ttransport: down\n"
-	}
-	indentedStr := strings.Replace(e.Entry.String(), "\n\t", "\n\t\t", -1)
-	res += fmt.Sprintf("\ttransport info: \n\t\t%s", indentedStr)
-
-	return res
 }

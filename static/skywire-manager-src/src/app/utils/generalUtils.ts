@@ -4,21 +4,6 @@ import { ConfirmationComponent, ConfirmationData } from '../components/layout/co
 import { AppConfig } from '../app.config';
 
 /**
- * Represents a possible value of a property. It allows to separate the actual value of the
- * property and the text that will be shown in the UI.
- */
-export interface PrintableLabel {
-  /**
-   * Actual value.
-   */
-  value: string;
-  /**
-   * Value to be shown in the UI. Preferably a var for the translate pipe.
-   */
-  label: string;
-}
-
-/**
  * Helper functions for the app.
  */
 export default class GeneralUtils {

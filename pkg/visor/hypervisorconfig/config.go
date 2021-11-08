@@ -3,6 +3,7 @@ package hypervisorconfig
 import (
 	"encoding/hex"
 	"encoding/json"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -14,8 +15,6 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/util/pathutil"
 )
-
-//go:generate readmegen -n Config -o ./README.md ./config.go
 
 const (
 	defaultHTTPAddr         = ":8000"
@@ -47,6 +46,7 @@ func (hk *Key) UnmarshalText(text []byte) error {
 
 // Config configures the hypervisor.
 type Config struct {
+	UIAssets      fs.FS         `json:"-"`
 	PK            cipher.PubKey `json:"-"`
 	SK            cipher.SecKey `json:"-"`
 	DBPath        string        `json:"db_path"`             // Path to store database file.

@@ -35,6 +35,7 @@ export class NodeAppsListComponent implements OnDestroy {
   private readonly listId = 'ap';
 
   @Input() nodePK: string;
+  @Input() nodeIp: string;
 
   // Vars with the data of the columns used for sorting the data.
   stateSortData = new SortingColumn(['status'], 'apps.apps-list.state', SortingModes.NumberReversed);
@@ -199,6 +200,33 @@ export class NodeAppsListComponent implements OnDestroy {
     this.dataFiltererSubscription.unsubscribe();
     this.dataSorter.dispose();
     this.dataFilterer.dispose();
+  }
+
+  /**
+   * Gets the link for openning the UI of an app. Currently only works for the Skychat app.
+   */
+  getLink(app: Application): string {
+    if (app.name.toLocaleLowerCase() === 'skychat' && this.nodeIp) {
+      // Default port.
+      let port = '8001';
+
+      // Try to get the port from the config array.
+      if (app.args) {
+        for (let i = 0; i < app.args.length; i++) {
+          if (app.args[i] === '-addr' && i + 1 < app.args.length) {
+            port = (app.args[i + 1] as string).trim();
+          }
+        }
+      }
+
+      if (!port.startsWith(':')) {
+        port = ':' + port;
+      }
+
+      return 'http://' + this.nodeIp + port;
+    }
+
+    return null;
   }
 
   /**

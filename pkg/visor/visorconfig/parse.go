@@ -34,8 +34,11 @@ func Parse(log *logging.MasterLogger, path string, raw []byte) (*V1, error) {
 	}
 
 	switch cc.Version {
-	case V101Name: // Current version.
+	// parse any v1-compatible version with v1 parse procedure
+	case V110Name:
 		fallthrough
+	case V101Name:
+		return parseV1(cc, raw)
 	case V100Name:
 		return parseV1(cc, raw)
 	case V0Name, V0NameOldFormat, "":
@@ -47,9 +50,7 @@ func Parse(log *logging.MasterLogger, path string, raw []byte) (*V1, error) {
 
 func parseV1(cc *Common, raw []byte) (*V1, error) {
 	conf := MakeBaseConfig(cc)
-
 	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
 	if err := dec.Decode(&conf); err != nil {
 		return nil, err
 	}
@@ -57,9 +58,8 @@ func parseV1(cc *Common, raw []byte) (*V1, error) {
 	if err := conf.ensureKeys(); err != nil {
 		return nil, fmt.Errorf("%v: %w", ErrInvalidSK, err)
 	}
-
+	conf = ensureAppDisc(conf)
 	conf = updateUrls(conf)
-
 	conf.Version = V1Name
 	return conf, conf.flush(conf)
 }
@@ -106,10 +106,8 @@ func parseV0(cc *Common, raw []byte) (*V1, error) {
 
 	if old.Transport != nil {
 		conf.Transport.Discovery = old.Transport.Discovery
-		conf.Transport.LogStore = old.Transport.LogStore
 	}
 
-	conf.Transport.TrustedVisors = old.TrustedVisors
 	if old.Routing != nil {
 		conf.Routing = old.Routing
 	}
@@ -143,8 +141,8 @@ func parseV0(cc *Common, raw []byte) (*V1, error) {
 
 	conf.Launcher.Apps = append(conf.Launcher.Apps, vpnApps...)
 
+	conf.LocalPath = old.LocalPath
 	conf.Launcher.BinPath = old.AppsPath
-	conf.Launcher.LocalPath = old.LocalPath
 	conf.Launcher.ServerAddr = old.AppServerAddr
 
 	for _, hv := range old.Hypervisors {
@@ -160,6 +158,13 @@ func parseV0(cc *Common, raw []byte) (*V1, error) {
 	conf.RestartCheckDelay = old.RestartCheckDelay
 
 	return conf, conf.flush(conf)
+}
+
+func ensureAppDisc(conf *V1) *V1 {
+	if conf.Launcher.ServiceDisc == "" {
+		conf.Launcher.ServiceDisc = skyenv.DefaultServiceDiscAddr
+	}
+	return conf
 }
 
 func updateUrls(conf *V1) *V1 {
@@ -178,8 +183,8 @@ func updateUrls(conf *V1) *V1 {
 	if conf.UptimeTracker.Addr == skyenv.OldDefaultUptimeTrackerAddr {
 		conf.UptimeTracker.Addr = skyenv.DefaultUptimeTrackerAddr
 	}
-	if conf.Launcher.Discovery.ServiceDisc == skyenv.OldDefaultServiceDiscAddr {
-		conf.Launcher.Discovery.ServiceDisc = skyenv.DefaultServiceDiscAddr
+	if conf.Launcher.ServiceDisc == skyenv.OldDefaultServiceDiscAddr {
+		conf.Launcher.ServiceDisc = skyenv.DefaultServiceDiscAddr
 	}
 	return conf
 }

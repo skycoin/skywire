@@ -1,30 +1,12 @@
 package vpn
 
-import (
-	"errors"
-)
+import "errors"
 
 var (
-	errCouldFindDefaultNetworkGateway = errors.New("could not find default network gateway")
+	errCouldFindDefaultNetworkGateway = errors.New("Could not find default network gateway")
+	errHandshakeStatusForbidden       = errors.New("Password didn't match")
+	errHandshakeStatusInternalError   = errors.New("Internal server error")
+	errHandshakeNoFreeIPs             = errors.New("No free IPs left to serve")
+	errHandshakeStatusBadRequest      = errors.New("Request was malformed")
+	errTimeout                        = errors.New("Internal error: Timeout")
 )
-
-// ErrorWithStderr is an error raised by the external process.
-// `Err` is an actual error coming from `exec`, while `Stderr` contains
-// stderr output of the process.
-type ErrorWithStderr struct {
-	Err    error
-	Stderr []byte
-}
-
-// NewErrorWithStderr constructs new `ErrorWithStderr`.
-func NewErrorWithStderr(err error, stderr []byte) *ErrorWithStderr {
-	return &ErrorWithStderr{
-		Err:    err,
-		Stderr: stderr,
-	}
-}
-
-// Error implements `error`.
-func (e *ErrorWithStderr) Error() string {
-	return e.Err.Error() + ": " + string(e.Stderr)
-}

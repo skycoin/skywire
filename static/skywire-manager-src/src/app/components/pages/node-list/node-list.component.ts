@@ -5,7 +5,7 @@ import { Router, ActivatedRoute } from '@angular/router';
 import { catchError, mergeMap } from 'rxjs/operators';
 import { TranslateService } from '@ngx-translate/core';
 
-import { NodeService, BackendData, HealthStatus } from '../../../services/node.service';
+import { NodeService, BackendData, KnownHealthStatuses } from '../../../services/node.service';
 import { Node } from '../../../app.datatypes';
 import { AuthService, AuthStates } from '../../../services/auth.service';
 import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
@@ -51,7 +51,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
   loading = true;
   dataSource: Node[];
-  nodesHealthInfo: Map<string, HealthStatus>;
   tabsData: TabButtonData[] = [];
   options: MenuOptionData[] = [];
   showDmsgInfo = false;
@@ -168,7 +167,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
       sortableColumns.push(this.pingSortData);
     }
     this.dataSorter = new DataSorter(
-      this.dialog, this.translateService, sortableColumns, 2, this.showDmsgInfo ? this.dmsgListId : this.nodesListId
+      this.dialog, this.translateService, sortableColumns, 3, this.showDmsgInfo ? this.dmsgListId : this.nodesListId
     );
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
       // When this happens, the data in allNodes has already been sorted.
@@ -305,13 +304,16 @@ export class NodeListComponent implements OnInit, OnDestroy {
    * returns a class for a colored text.
    */
   nodeStatusClass(node: Node, forDot: boolean): string {
-    switch (node.online) {
-      case true:
-        return this.nodesHealthInfo.get(node.localPk).allServicesOk ?
-          (forDot ? 'dot-green' : 'green-text') :
-          (forDot ? 'dot-yellow online-warning' : 'yellow-text');
-      default:
-        return forDot ? 'dot-red' : 'red-text';
+    if (node.online) {
+      if (node.health && node.health.servicesHealth === KnownHealthStatuses.Unhealthy) {
+        return forDot ? 'dot-yellow blinking' : 'yellow-text';
+      } else if (node.health && node.health.servicesHealth === KnownHealthStatuses.Healthy) {
+        return forDot ? 'dot-green' : 'green-text';
+      } else {
+        return forDot ? 'dot-outline-gray' : '';
+      }
+    } else {
+      return forDot ? 'dot-red' : 'red-text';
     }
   }
 
@@ -321,13 +323,18 @@ export class NodeListComponent implements OnInit, OnDestroy {
    * text for the node list shown on small screens.
    */
   nodeStatusText(node: Node, forTooltip: boolean): string {
-    switch (node.online) {
-      case true:
-        return this.nodesHealthInfo.get(node.localPk).allServicesOk ?
-          ('node.statuses.online' + (forTooltip ? '-tooltip' : '')) :
-          ('node.statuses.partially-online' + (forTooltip ? '-tooltip' : ''));
-      default:
-        return 'node.statuses.offline' + (forTooltip ? '-tooltip' : '');
+    if (node.online) {
+      if (node.health && node.health.servicesHealth === KnownHealthStatuses.Healthy) {
+        return 'node.statuses.online' + (forTooltip ? '-tooltip' : '');
+      } else if (node.health && node.health.servicesHealth === KnownHealthStatuses.Unhealthy) {
+        return 'node.statuses.partially-online' + (forTooltip ? '-tooltip' : '');
+      } else if (node.health && node.health.servicesHealth === KnownHealthStatuses.Connecting) {
+        return 'node.statuses.connecting' + (forTooltip ? '-tooltip' : '');
+      } else {
+        return 'node.statuses.unknown' + (forTooltip ? '-tooltip' : '');
+      }
+    } else {
+      return 'node.statuses.offline' + (forTooltip ? '-tooltip' : '');
     }
   }
 
@@ -357,7 +364,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
         this.ngZone.run(() => {
           if (result) {
             // If the data was obtained.
-            if (result.data) {
+            if (result.data && !result.error) {
               this.allNodes = result.data as Node[];
               if (this.showDmsgInfo) {
                 // Add the label data to the array, to be able to use it for filtering and sorting.
@@ -427,12 +434,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
     }
 
     if (this.nodesToShow) {
-      // Get the health status of each node.
-      this.nodesHealthInfo = new Map<string, HealthStatus>();
-      this.nodesToShow.forEach(node => {
-        this.nodesHealthInfo.set(node.localPk, this.nodeService.getHealthStatus(node));
-      });
-
       this.dataSource = this.nodesToShow;
     }
   }
@@ -460,10 +461,12 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
     const nodesData: NodeData[] = [];
     this.dataSource.forEach(node => {
-      nodesData.push({
-        key: node.localPk,
-        label: node.label,
-      });
+      if (node.online) {
+        nodesData.push({
+          key: node.localPk,
+          label: node.label,
+        });
+      }
     });
 
     UpdateComponent.openDialog(this.dialog, nodesData);
@@ -620,7 +623,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.close();
-      this.storageService.setLocalNodesAsHidden([node.localPk]);
+      this.storageService.setLocalNodesAsHidden([node.localPk], [node.ip]);
       this.forceDataRefresh();
       this.snackbarService.showDone('nodes.deleted');
     });
@@ -642,15 +645,17 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
       // Prepare all offline nodes to be removed.
       const nodesToRemove: string[] = [];
+      const ipsToRemove: string[] = [];
       this.filteredNodes.forEach(node => {
         if (!node.online) {
           nodesToRemove.push(node.localPk);
+          ipsToRemove.push(node.ip);
         }
       });
 
       // Remove the nodes and show the result.
       if (nodesToRemove.length > 0) {
-        this.storageService.setLocalNodesAsHidden(nodesToRemove);
+        this.storageService.setLocalNodesAsHidden(nodesToRemove, ipsToRemove);
 
         this.forceDataRefresh();
 
