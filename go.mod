@@ -23,7 +23,6 @@ require (
 	github.com/mmcloughlin/avo v0.0.0-20200523190732-4439b6b2c061 // indirect
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/pkg/profile v1.5.0
-	github.com/rakyll/statik v0.1.7
 	github.com/schollz/progressbar/v2 v2.15.0
 	github.com/shirou/gopsutil/v3 v3.21.4
 	github.com/sirupsen/logrus v1.8.1

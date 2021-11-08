@@ -33,7 +33,7 @@ builds:
     env:
       - CGO_ENABLED=0
     main: ./cmd/skywire-visor/
-    ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version=v{{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag=skybian
+    ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version=v{{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
   - id: skywire-cli
     binary: skywire-cli
@@ -53,7 +53,7 @@ builds:
     env:
       - CGO_ENABLED=0
     main: ./cmd/skywire-cli/
-    ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version=v{{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}} 
+    ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version=v{{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
   - id: skychat
     binary: apps/skychat
