@@ -147,14 +147,14 @@ var updateConfigCmd = &cobra.Command{
 		}
 
 		if addVPNServerPasscode != "" {
-			changeAppsConfig(conf, "vpn-server", "--passcode", addVPNClientPasscode)
+			changeAppsConfig(conf, "vpn-server", "--passcode", addVPNServerPasscode)
 		}
 
 		switch setVPNServerSecure {
 		case "true":
-			changeAppsConfig(conf, "vpn-server", "--secure", setVPNClientKillswitch)
+			changeAppsConfig(conf, "vpn-server", "--secure", setVPNServerSecure)
 		case "false":
-			changeAppsConfig(conf, "vpn-server", "--secure", setVPNClientKillswitch)
+			changeAppsConfig(conf, "vpn-server", "--secure", setVPNServerSecure)
 		default:
 			logger.Fatal("Unrecognized environment value: ", setVPNServerSecure)
 		}
