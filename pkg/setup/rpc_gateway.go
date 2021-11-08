@@ -10,7 +10,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/setup/setupmetrics"
-	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 // RPCGateway is a RPC interface for setup node.
@@ -19,7 +19,7 @@ type RPCGateway struct {
 	Ctx     context.Context
 	Conn    net.Conn
 	ReqPK   cipher.PubKey
-	Dialer  snet.Dialer
+	Dialer  network.Dialer
 	Timeout time.Duration
 }
 
@@ -38,7 +38,7 @@ func (g *RPCGateway) DialRouteGroup(route routing.BidirectionalRoute, rules *rou
 		}
 	}()
 
-	initRules, err := CreateRouteGroup(ctx, g.Dialer, route)
+	initRules, err := CreateRouteGroup(ctx, g.Dialer, route, g.Metrics)
 	if err != nil {
 		return err
 	}

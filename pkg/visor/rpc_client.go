@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"net/http"
 	"net/rpc"
 	"sync"
 	"time"
@@ -25,8 +24,9 @@ import (
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/snet/snettest"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/util/cipherutil"
 	"github.com/skycoin/skywire/pkg/util/updater"
 )
 
@@ -92,17 +92,17 @@ func (rc *rpcClient) Call(method string, args, reply interface{}) error {
 	}
 }
 
-// ExtraSummary calls ExtraSummary.
-func (rc *rpcClient) ExtraSummary() (*ExtraSummary, error) {
-	out := new(ExtraSummary)
-	err := rc.Call("ExtraSummary", &struct{}{}, out)
-	return out, err
-}
-
 // Summary calls Summary.
 func (rc *rpcClient) Summary() (*Summary, error) {
 	out := new(Summary)
 	err := rc.Call("Summary", &struct{}{}, out)
+	return out, err
+}
+
+// Overview calls Overview.
+func (rc *rpcClient) Overview() (*Overview, error) {
+	out := new(Overview)
+	err := rc.Call("Overview", &struct{}{}, out)
 	return out, err
 }
 
@@ -135,6 +135,22 @@ func (rc *rpcClient) StartApp(appName string) error {
 // StopApp calls StopApp.
 func (rc *rpcClient) StopApp(appName string) error {
 	return rc.Call("StopApp", &appName, &struct{}{})
+}
+
+// SetAppDetailedStatus sets app's detailed state.
+func (rc *rpcClient) SetAppDetailedStatus(appName, status string) error {
+	return rc.Call("SetAppDetailedStatus", &SetAppStatusIn{
+		AppName: appName,
+		Status:  status,
+	}, &struct{}{})
+}
+
+// SetAppError sets app's error.
+func (rc *rpcClient) SetAppError(appName, appErr string) error {
+	return rc.Call("SetAppError", &SetAppErrorIn{
+		AppName: appName,
+		Err:     appErr,
+	}, &struct{}{})
 }
 
 // RestartApp calls `RestartApp`.
@@ -197,6 +213,16 @@ func (rc *rpcClient) LogsSince(timestamp time.Time, appName string) ([]string, e
 	return res, nil
 }
 
+func (rc *rpcClient) GetAppStats(appName string) (appserver.AppStats, error) {
+	var stats appserver.AppStats
+
+	if err := rc.Call("GetAppStats", &appName, &stats); err != nil {
+		return appserver.AppStats{}, err
+	}
+
+	return stats, nil
+}
+
 // GetAppConnectionsSummary get connections stats for the app.
 func (rc *rpcClient) GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error) {
 	var summary []appserver.ConnectionSummary
@@ -234,12 +260,11 @@ func (rc *rpcClient) Transport(tid uuid.UUID) (*TransportSummary, error) {
 }
 
 // AddTransport calls AddTransport.
-func (rc *rpcClient) AddTransport(remote cipher.PubKey, tpType string, public bool, timeout time.Duration) (*TransportSummary, error) {
+func (rc *rpcClient) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*TransportSummary, error) {
 	var summary TransportSummary
 	err := rc.Call("AddTransport", &AddTransportIn{
 		RemotePK: remote,
 		TpType:   tpType,
-		Public:   public,
 		Timeout:  timeout,
 	}, &summary)
 
@@ -251,16 +276,21 @@ func (rc *rpcClient) RemoveTransport(tid uuid.UUID) error {
 	return rc.Call("RemoveTransport", &tid, &struct{}{})
 }
 
-func (rc *rpcClient) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error) {
-	entries := make([]*transport.EntryWithStatus, 0)
+func (rc *rpcClient) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error) {
+	entries := make([]*transport.Entry, 0)
 	err := rc.Call("DiscoverTransportsByPK", &pk, &entries)
 	return entries, err
 }
 
-func (rc *rpcClient) DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error) {
-	var entry transport.EntryWithStatus
+func (rc *rpcClient) DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error) {
+	var entry transport.Entry
 	err := rc.Call("DiscoverTransportByID", &id, &entry)
 	return &entry, err
+}
+
+// SetPublicAutoconnect implements API.
+func (rc *rpcClient) SetPublicAutoconnect(pAc bool) error {
+	return rc.Call("SetPublicAutoconnect", &pAc, &struct{}{})
 }
 
 // RoutingRules calls RoutingRules.
@@ -311,6 +341,32 @@ func (rc *rpcClient) Update(config updater.UpdateConfig) (bool, error) {
 	var updated bool
 	err := rc.Call("Update", &config, &updated)
 	return updated, err
+}
+
+// RuntimeLogs calls RuntimeLogs.
+func (rc *rpcClient) RuntimeLogs() (string, error) {
+	var logs string
+	err := rc.Call("RuntimeLogs", &struct{}{}, &logs)
+	return logs, err
+}
+
+// SetMinHops sets the min_hops from visor routing config
+func (rc *rpcClient) SetMinHops(hops uint16) error {
+	err := rc.Call("SetMinHops", &hops, &struct{}{})
+	return err
+}
+
+// SetPersistentTransports sets the persistent_transports from visor routing config
+func (rc *rpcClient) SetPersistentTransports(pts []transport.PersistentTransports) error {
+	err := rc.Call("SetPersistentTransports", &pts, &struct{}{})
+	return err
+}
+
+// GetPersistentTransports gets the persistent_transports from visor routing config
+func (rc *rpcClient) GetPersistentTransports() ([]transport.PersistentTransports, error) {
+	var tps []transport.PersistentTransports
+	err := rc.Call("GetPersistentTransports", &struct{}{}, &tps)
+	return tps, err
 }
 
 // StatusMessage defines a status of visor update.
@@ -399,7 +455,7 @@ func (rc *rpcClient) UpdateAvailable(channel updater.Channel) (*updater.Version,
 	return &version, err
 }
 
-// UpdateAvailable calls UpdateAvailable.
+// UpdateStatus calls UpdateStatus
 func (rc *rpcClient) UpdateStatus() (string, error) {
 	var result string
 	err := rc.Call("UpdateStatus", &struct{}{}, &result)
@@ -413,8 +469,8 @@ func (rc *rpcClient) UpdateStatus() (string, error) {
 // MockRPCClient mocks API.
 type mockRPCClient struct {
 	startedAt time.Time
-	s         *Summary
-	tpTypes   []string
+	o         *Overview
+	tpTypes   []network.Type
 	rt        routing.Table
 	logS      appcommon.LogStore
 	sync.RWMutex
@@ -424,7 +480,7 @@ type mockRPCClient struct {
 func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, API, error) {
 	log := logging.MustGetLogger("mock-rpc-client")
 
-	types := []string{"messaging", "native"}
+	types := []network.Type{"messaging", "native"}
 	localPK, _ := cipher.GenerateKeyPair()
 
 	log.Infof("generating mock client with: localPK(%s) maxTps(%d) maxRules(%d)", localPK, maxTps, maxRules)
@@ -465,7 +521,7 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, AP
 			panic(err)
 		}
 
-		keys := snettest.GenKeyPairs(2)
+		keys := cipherutil.GenKeyPairs(2)
 
 		fwdRule := routing.ForwardRule(ruleKeepAlive, fwdRID[0], routing.RouteID(r.Uint32()), uuid.New(), keys[0].PK, keys[1].PK, 0, 0)
 		if err := rt.SaveRule(fwdRule); err != nil {
@@ -489,7 +545,7 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, AP
 	log.Printf("rtCount: %d", rt.Count())
 
 	client := &mockRPCClient{
-		s: &Summary{
+		o: &Overview{
 			PubKey:          localPK,
 			BuildInfo:       buildinfo.Get(),
 			AppProtoVersion: supportedProtocolVersion,
@@ -519,28 +575,28 @@ func (mc *mockRPCClient) do(write bool, f func() error) error {
 	return f()
 }
 
-// Summary implements API.
-func (mc *mockRPCClient) Summary() (*Summary, error) {
-	var out Summary
+// Overview implements API.
+func (mc *mockRPCClient) Overview() (*Overview, error) {
+	var out Overview
 	err := mc.do(false, func() error {
-		out = *mc.s
-		for _, a := range mc.s.Apps {
+		out = *mc.o
+		for _, a := range mc.o.Apps {
 			a := a
 			out.Apps = append(out.Apps, a)
 		}
-		for _, tp := range mc.s.Transports {
+		for _, tp := range mc.o.Transports {
 			tp := tp
 			out.Transports = append(out.Transports, tp)
 		}
-		out.RoutesCount = mc.s.RoutesCount
+		out.RoutesCount = mc.o.RoutesCount
 		return nil
 	})
 	return &out, err
 }
 
-// ExtraSummary implements API.
-func (mc *mockRPCClient) ExtraSummary() (*ExtraSummary, error) {
-	summary, err := mc.Summary()
+// Summary implements API.
+func (mc *mockRPCClient) Summary() (*Summary, error) {
+	overview, err := mc.Overview()
 	if err != nil {
 		return nil, err
 	}
@@ -569,24 +625,20 @@ func (mc *mockRPCClient) ExtraSummary() (*ExtraSummary, error) {
 		})
 	}
 
-	extraSummary := &ExtraSummary{
-		Summary: summary,
-		Health:  health,
-		Uptime:  uptime,
-		Routes:  extraRoutes,
+	summary := &Summary{
+		Overview: overview,
+		Health:   health,
+		Uptime:   uptime,
+		Routes:   extraRoutes,
 	}
 
-	return extraSummary, nil
+	return summary, nil
 }
 
 // Health implements API
 func (mc *mockRPCClient) Health() (*HealthInfo, error) {
 	hi := &HealthInfo{
-		TransportDiscovery: http.StatusOK,
-		RouteFinder:        http.StatusOK,
-		SetupNode:          http.StatusOK,
-		UptimeTracker:      http.StatusOK,
-		AddressResolver:    http.StatusOK,
+		ServicesHealth: "healthy",
 	}
 
 	return hi, nil
@@ -601,7 +653,7 @@ func (mc *mockRPCClient) Uptime() (float64, error) {
 func (mc *mockRPCClient) Apps() ([]*launcher.AppState, error) {
 	var apps []*launcher.AppState
 	err := mc.do(false, func() error {
-		for _, a := range mc.s.Apps {
+		for _, a := range mc.o.Apps {
 			a := a
 			apps = append(apps, a)
 		}
@@ -620,6 +672,34 @@ func (*mockRPCClient) StopApp(string) error {
 	return nil
 }
 
+// SetAppDetailedStatus sets app's detailed state.
+func (mc *mockRPCClient) SetAppDetailedStatus(appName, status string) error {
+	return mc.do(true, func() error {
+		for _, a := range mc.o.Apps {
+			if a.Name == appName {
+				a.DetailedStatus = status
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", appName)
+	})
+}
+
+// SetAppError sets app's error.
+func (mc *mockRPCClient) SetAppError(appName, appErr string) error {
+	return mc.do(true, func() error {
+		for _, a := range mc.o.Apps {
+			if a.Name == appName {
+				a.DetailedStatus = appErr
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", appName)
+	})
+}
+
 // RestartApp implements API.
 func (*mockRPCClient) RestartApp(string) error {
 	return nil
@@ -628,7 +708,7 @@ func (*mockRPCClient) RestartApp(string) error {
 // SetAutoStart implements API.
 func (mc *mockRPCClient) SetAutoStart(appName string, autostart bool) error {
 	return mc.do(true, func() error {
-		for _, a := range mc.s.Apps {
+		for _, a := range mc.o.Apps {
 			if a.Name == appName {
 				a.AutoStart = autostart
 				return nil
@@ -643,8 +723,8 @@ func (mc *mockRPCClient) SetAppPassword(string, string) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks"
 
-		for i := range mc.s.Apps {
-			if mc.s.Apps[i].Name == socksName {
+		for i := range mc.o.Apps {
+			if mc.o.Apps[i].Name == socksName {
 				return nil
 			}
 		}
@@ -658,8 +738,8 @@ func (mc *mockRPCClient) SetAppPK(string, cipher.PubKey) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks-client"
 
-		for i := range mc.s.Apps {
-			if mc.s.Apps[i].Name == socksName {
+		for i := range mc.o.Apps {
+			if mc.o.Apps[i].Name == socksName {
 				return nil
 			}
 		}
@@ -673,8 +753,8 @@ func (mc *mockRPCClient) SetAppKillswitch(appName string, killswitch bool) error
 	return mc.do(true, func() error {
 		const socksName = "skysocks"
 
-		for i := range mc.s.Apps {
-			if mc.s.Apps[i].Name == socksName {
+		for i := range mc.o.Apps {
+			if mc.o.Apps[i].Name == socksName {
 				return nil
 			}
 		}
@@ -688,8 +768,8 @@ func (mc *mockRPCClient) SetAppSecure(appName string, isSecure bool) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks"
 
-		for i := range mc.s.Apps {
-			if mc.s.Apps[i].Name == socksName {
+		for i := range mc.o.Apps {
+			if mc.o.Apps[i].Name == socksName {
 				return nil
 			}
 		}
@@ -703,25 +783,33 @@ func (mc *mockRPCClient) LogsSince(timestamp time.Time, _ string) ([]string, err
 	return mc.logS.LogsSince(timestamp)
 }
 
+func (mc *mockRPCClient) GetAppStats(_ string) (appserver.AppStats, error) {
+	return appserver.AppStats{}, nil
+}
+
 // GetAppConnectionsSummary get connections stats for the app.
-func (mc *mockRPCClient) GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error) {
+func (mc *mockRPCClient) GetAppConnectionsSummary(_ string) ([]appserver.ConnectionSummary, error) {
 	return nil, nil
 }
 
 // TransportTypes implements API.
 func (mc *mockRPCClient) TransportTypes() ([]string, error) {
-	return mc.tpTypes, nil
+	var res []string
+	for _, tptype := range mc.tpTypes {
+		res = append(res, string(tptype))
+	}
+	return res, nil
 }
 
 // Transports implements API.
 func (mc *mockRPCClient) Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error) {
 	var summaries []*TransportSummary
 	err := mc.do(false, func() error {
-		for _, tp := range mc.s.Transports {
+		for _, tp := range mc.o.Transports {
 			tp := tp
 			if types != nil {
 				for _, reqT := range types {
-					if tp.Type == reqT {
+					if string(tp.Type) == reqT {
 						goto TypeOK
 					}
 				}
@@ -754,7 +842,7 @@ func (mc *mockRPCClient) Transports(types []string, pks []cipher.PubKey, logs bo
 func (mc *mockRPCClient) Transport(tid uuid.UUID) (*TransportSummary, error) {
 	var summary TransportSummary
 	err := mc.do(false, func() error {
-		for _, tp := range mc.s.Transports {
+		for _, tp := range mc.o.Transports {
 			if tp.ID == tid {
 				summary = *tp
 				return nil
@@ -766,16 +854,16 @@ func (mc *mockRPCClient) Transport(tid uuid.UUID) (*TransportSummary, error) {
 }
 
 // AddTransport implements API.
-func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ bool, _ time.Duration) (*TransportSummary, error) {
+func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ time.Duration) (*TransportSummary, error) {
 	summary := &TransportSummary{
-		ID:     transport.MakeTransportID(mc.s.PubKey, remote, tpType),
-		Local:  mc.s.PubKey,
+		ID:     transport.MakeTransportID(mc.o.PubKey, remote, network.Type(tpType)),
+		Local:  mc.o.PubKey,
 		Remote: remote,
-		Type:   tpType,
+		Type:   network.Type(tpType),
 		Log:    new(transport.LogEntry),
 	}
 	return summary, mc.do(true, func() error {
-		mc.s.Transports = append(mc.s.Transports, summary)
+		mc.o.Transports = append(mc.o.Transports, summary)
 		return nil
 	})
 }
@@ -783,9 +871,9 @@ func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ boo
 // RemoveTransport implements API.
 func (mc *mockRPCClient) RemoveTransport(tid uuid.UUID) error {
 	return mc.do(true, func() error {
-		for i, tp := range mc.s.Transports {
+		for i, tp := range mc.o.Transports {
 			if tp.ID == tid {
-				mc.s.Transports = append(mc.s.Transports[:i], mc.s.Transports[i+1:]...)
+				mc.o.Transports = append(mc.o.Transports[:i], mc.o.Transports[i+1:]...)
 				return nil
 			}
 		}
@@ -793,12 +881,17 @@ func (mc *mockRPCClient) RemoveTransport(tid uuid.UUID) error {
 	})
 }
 
-func (mc *mockRPCClient) DiscoverTransportsByPK(cipher.PubKey) ([]*transport.EntryWithStatus, error) {
+func (mc *mockRPCClient) DiscoverTransportsByPK(cipher.PubKey) ([]*transport.Entry, error) {
 	return nil, ErrNotImplemented
 }
 
-func (mc *mockRPCClient) DiscoverTransportByID(uuid.UUID) (*transport.EntryWithStatus, error) {
+func (mc *mockRPCClient) DiscoverTransportByID(uuid.UUID) (*transport.Entry, error) {
 	return nil, ErrNotImplemented
+}
+
+// SetPublicAutoconnect implements API.
+func (mc *mockRPCClient) SetPublicAutoconnect(_ bool) error {
+	return nil
 }
 
 // RoutingRules implements API.
@@ -874,4 +967,24 @@ func (mc *mockRPCClient) UpdateAvailable(_ updater.Channel) (*updater.Version, e
 // UpdateStatus implements API.
 func (mc *mockRPCClient) UpdateStatus() (string, error) {
 	return "", nil
+}
+
+// RuntimeLogs implements API.
+func (mc *mockRPCClient) RuntimeLogs() (string, error) {
+	return "", nil
+}
+
+// SetMinHops implements API
+func (mc *mockRPCClient) SetMinHops(_ uint16) error {
+	return nil
+}
+
+// SetPersistentTransports implements API
+func (mc *mockRPCClient) SetPersistentTransports(_ []transport.PersistentTransports) error {
+	return nil
+}
+
+// GetPersistentTransports implements API
+func (mc *mockRPCClient) GetPersistentTransports() ([]transport.PersistentTransports, error) {
+	return []transport.PersistentTransports{}, nil
 }

@@ -2,44 +2,65 @@ package commands
 
 import (
 	"context"
+	"embed"
 	"fmt"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"net/http"
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/pkg/profile"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cmdutil"
-	"github.com/skycoin/dmsg/discord"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
+	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire/pkg/restart"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/syslog"
 	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/logstore"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
+
+var uiAssets fs.FS
 
 var restartCtx = restart.CaptureContext()
 
 const (
-	defaultConfigName = "skywire-config.json"
+	defaultConfigName    = "skywire-config.json"
+	runtimeLogMaxEntries = 300
 )
 
 var (
-	tag        string
-	syslogAddr string
-	pprofMode  string
-	pprofAddr  string
-	confPath   string
-	delay      string
+	tag           string
+	syslogAddr    string
+	pprofMode     string
+	pprofAddr     string
+	confPath      string
+	delay         string
+	launchBrowser bool
+	stopVisorFn   func() // nolint:unused
+	stopVisorWg   sync.WaitGroup
 )
+
+var rootCmd = &cobra.Command{
+	Use:   "skywire-visor",
+	Short: "Skywire visor",
+	Run: func(_ *cobra.Command, args []string) {
+		runApp(args...)
+	},
+	Version: buildinfo.Version(),
+}
 
 func init() {
 	rootCmd.Flags().StringVar(&tag, "tag", "skywire", "logging tag")
@@ -48,94 +69,99 @@ func init() {
 	rootCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port if mode is 'http'")
 	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file location. If the value is 'STDIN', config file will be read from stdin.")
 	rootCmd.Flags().StringVar(&delay, "delay", "0ns", "start delay (deprecated)") // deprecated
+	rootCmd.Flags().BoolVar(&launchBrowser, "launch-browser", false, "open hypervisor web ui (hypervisor only) with system browser")
+	extraFlags()
 }
 
-var rootCmd = &cobra.Command{
-	Use:   "skywire-visor",
-	Short: "Skywire visor",
-	Run: func(_ *cobra.Command, args []string) {
-		log := initLogger(tag, syslogAddr)
+func runVisor(args []string) {
+	var ok bool
+	log := initLogger(tag, syslogAddr)
+	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
+	log.AddHook(hook)
 
-		if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
-			// Workaround for Discord logger hook. Actually, it's Info.
-			log.Error(discord.StartLogMessage)
-			defer log.Error(discord.StopLogMessage)
+	delayDuration, err := time.ParseDuration(delay)
+	if err != nil {
+		log.WithError(err).Error("Failed to parse delay duration.")
+		delayDuration = time.Duration(0)
+	}
+	log.WithField("delay", delayDuration).
+		WithField("systemd", restartCtx.Systemd()).
+		WithField("parent_systemd", restartCtx.ParentSystemd()).
+		WithField("skybian_build_version", os.Getenv("SKYBIAN_BUILD_VERSION")).
+		WithField("build_tag", visor.BuildTag).
+		Debugf("Process info")
+
+	// Versions v0.2.3 and below return 0 exit-code after update and do not trigger systemd to restart a process
+	// and therefore do not support restart via systemd.
+	// If --delay flag is passed, version is v0.2.3 or below.
+	// Systemd has PID 1. If PPID is not 1 and PPID of parent process is 1, then
+	// this process is a child process that is run after updating by a skywire-visor that is run by systemd.
+	if delayDuration != 0 && !restartCtx.Systemd() && restartCtx.ParentSystemd() {
+		// As skywire-visor checks if new process is run successfully in `restart.DefaultCheckDelay` after update,
+		// new process should be alive after `restart.DefaultCheckDelay`.
+		time.Sleep(restart.DefaultCheckDelay)
+
+		// When a parent process exits, systemd kills child processes as well,
+		// so a child process can ask systemd to restart service between after restart.DefaultCheckDelay
+		// but before (restart.DefaultCheckDelay + restart.extraWaitingTime),
+		// because after that time a parent process would exit and then systemd would kill its children.
+		// In this case, systemd would kill both parent and child processes,
+		// then restart service using an updated binary.
+		cmd := exec.Command("systemctl", "restart", "skywire-visor") // nolint:gosec
+		if err := cmd.Run(); err != nil {
+			log.WithError(err).Errorf("Failed to restart skywire-visor service")
 		} else {
-			log.Info(discord.StartLogMessage)
-			defer log.Info(discord.StopLogMessage)
+			log.WithError(err).Infof("Restarted skywire-visor service")
 		}
 
-		delayDuration, err := time.ParseDuration(delay)
-		if err != nil {
-			log.WithError(err).Error("Failed to parse delay duration.")
-			delayDuration = time.Duration(0)
+		// Detach child from parent.
+		if _, err := syscall.Setsid(); err != nil {
+			log.WithError(err).Errorf("Failed to call setsid()")
 		}
+	}
 
-		log.WithField("delay", delayDuration).
-			WithField("systemd", restartCtx.Systemd()).
-			WithField("parent_systemd", restartCtx.ParentSystemd()).
-			Debugf("Process info")
+	time.Sleep(delayDuration)
 
-		// Versions v0.2.3 and below return 0 exit-code after update and do not trigger systemd to restart a process
-		// and therefore do not support restart via systemd.
-		// If --delay flag is passed, version is v0.2.3 or below.
-		// Systemd has PID 1. If PPID is not 1 and PPID of parent process is 1, then
-		// this process is a child process that is run after updating by a skywire-visor that is run by systemd.
-		if delayDuration != 0 && !restartCtx.Systemd() && restartCtx.ParentSystemd() {
-			// As skywire-visor checks if new process is run successfully in `restart.DefaultCheckDelay` after update,
-			// new process should be alive after `restart.DefaultCheckDelay`.
-			time.Sleep(restart.DefaultCheckDelay)
+	if _, err := buildinfo.Get().WriteTo(log.Out); err != nil {
+		log.WithError(err).Error("Failed to output build info.")
+	}
 
-			// When a parent process exits, systemd kills child processes as well,
-			// so a child process can ask systemd to restart service between after restart.DefaultCheckDelay
-			// but before (restart.DefaultCheckDelay + restart.extraWaitingTime),
-			// because after that time a parent process would exit and then systemd would kill its children.
-			// In this case, systemd would kill both parent and child processes,
-			// then restart service using an updated binary.
-			cmd := exec.Command("systemctl", "restart", "skywire-visor") // nolint:gosec
-			if err := cmd.Run(); err != nil {
-				log.WithError(err).Errorf("Failed to restart skywire-visor service")
-			} else {
-				log.WithError(err).Infof("Restarted skywire-visor service")
-			}
+	stopPProf := initPProf(log, tag, pprofMode, pprofAddr)
+	defer stopPProf()
 
-			// Detach child from parent.
-			if _, err := syscall.Setsid(); err != nil {
-				log.WithError(err).Errorf("Failed to call setsid()")
-			}
-		}
+	conf := initConfig(log, args, confPath)
 
-		time.Sleep(delayDuration)
+	vis, ok := visor.NewVisor(conf, restartCtx)
+	if !ok {
+		log.Errorln("Failed to start visor.")
+		quitSystray()
+		return
+	}
+	vis.SetLogstore(store)
 
-		if _, err := buildinfo.Get().WriteTo(log.Out); err != nil {
-			log.WithError(err).Error("Failed to output build info.")
-		}
+	if launchBrowser {
+		runBrowser(conf, log)
+	}
 
-		stopPProf := initPProf(log, tag, pprofMode, pprofAddr)
-		defer stopPProf()
+	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
+	setStopFunction(log, cancel, vis.Close)
 
-		conf := initConfig(log, args, confPath)
+	// Wait.
+	<-ctx.Done()
 
-		v, ok := visor.NewVisor(conf, restartCtx)
-		if !ok {
-			log.Fatal("Failed to start visor.")
-		}
-
-		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
-		defer cancel()
-
-		// Wait.
-		<-ctx.Done()
-
-		if err := v.Close(); err != nil {
-			log.WithError(err).Error("Visor closed with error.")
-		}
-	},
-	Version: buildinfo.Version(),
+	stopVisorFn()
 }
 
 // Execute executes root CLI command.
-func Execute() {
+func Execute(ui embed.FS) {
+	uiFS, err := fs.Sub(ui, "static")
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	uiAssets = uiFS
+
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 	}
@@ -152,12 +178,6 @@ func initLogger(tag string, syslogAddr string) *logging.MasterLogger {
 			log.AddHook(hook)
 			log.Out = ioutil.Discard
 		}
-	}
-
-	if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
-		discordOpts := discord.GetDefaultOpts()
-		hook := discord.NewHook(tag, discordWebhookURL, discordOpts...)
-		log.AddHook(hook)
 	}
 
 	return log
@@ -217,7 +237,7 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 		}
 
 		if confPath == "" {
-			confPath = "/opt/skywire/" + defaultConfigName
+			confPath = filepath.Join(skyenv.PackageSkywirePath(), defaultConfigName)
 		}
 
 		fallthrough
@@ -247,5 +267,55 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 		log.WithError(err).Fatal("Failed to parse config.")
 	}
 
+	if conf.Hypervisor != nil {
+		conf.Hypervisor.UIAssets = uiAssets
+	}
+
 	return conf
+}
+
+func runBrowser(conf *visorconfig.V1, log *logging.MasterLogger) {
+	if conf.Hypervisor == nil {
+		log.Errorln("Cannot start browser with a regular visor")
+		return
+	}
+	addr := conf.Hypervisor.HTTPAddr
+	if addr[0] == ':' {
+		addr = "localhost" + addr
+	}
+	if addr[:4] != "http" {
+		if conf.Hypervisor.EnableTLS {
+			addr = "https://" + addr
+		} else {
+			addr = "http://" + addr
+		}
+	}
+	go func() {
+		if !checkHvIsRunning(addr, 5) {
+			log.Error("Cannot open hypervisor in browser: status check failed")
+			return
+		}
+		if err := webbrowser.Open(addr); err != nil {
+			log.WithError(err).Error("webbrowser.Open failed")
+		}
+	}()
+}
+
+func checkHvIsRunning(addr string, retries int) bool {
+	url := addr + "/api/ping"
+	for i := 0; i < retries; i++ {
+		time.Sleep(500 * time.Millisecond)
+		resp, err := http.Get(url) // nolint: gosec
+		if err != nil {
+			continue
+		}
+		err = resp.Body.Close()
+		if err != nil {
+			continue
+		}
+		if resp.StatusCode < 400 {
+			return true
+		}
+	}
+	return false
 }

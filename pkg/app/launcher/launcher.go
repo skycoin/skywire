@@ -122,10 +122,17 @@ func (l *Launcher) ResetConfig(conf Config) {
 	l.conf.ServerAddr = conf.ServerAddr
 }
 
+// EnvMaker makes a list of environment variables with their values set
+// It is used to let other code to decide how environment variables should be built
+type EnvMaker func() ([]string, error)
+
+// EnvMap is a mapping from application name to environment maker function
+type EnvMap map[string]EnvMaker
+
 // AutoStart auto-starts marked apps.
-func (l *Launcher) AutoStart(envMap map[string]func() ([]string, error)) error {
+func (l *Launcher) AutoStart(envMap EnvMap) error {
 	if envMap == nil {
-		envMap = make(map[string]func() ([]string, error))
+		envMap = make(EnvMap)
 	}
 	log := l.log.WithField("func", "AutoStart")
 
@@ -166,7 +173,10 @@ func (l *Launcher) AppState(name string) (*AppState, bool) {
 		return nil, false
 	}
 	state := &AppState{AppConfig: ac, Status: AppStatusStopped}
-	if _, ok := l.procM.ProcByName(ac.Name); ok {
+	if _, ok := l.procM.ErrorByName(ac.Name); ok { //nolint:errcheck
+		state.Status = AppStatusErrored
+	}
+	if _, ok := l.procM.ProcByName(ac.Name); ok { //nolint:errcheck
 		state.Status = AppStatusRunning
 	}
 	return state, true
@@ -180,9 +190,16 @@ func (l *Launcher) AppStates() []*AppState {
 	var states []*AppState
 	for _, app := range l.apps {
 		state := &AppState{AppConfig: app, Status: AppStatusStopped}
+		if err, ok := l.procM.ErrorByName(app.Name); ok {
+			if err != "" {
+				state.DetailedStatus = err
+				state.Status = AppStatusErrored
+			}
+		}
 		if proc, ok := l.procM.ProcByName(app.Name); ok {
-			summary := proc.ConnectionsSummary()
-			if summary != nil {
+			state.DetailedStatus = proc.DetailedStatus()
+			connSummary := proc.ConnectionsSummary()
+			if connSummary != nil {
 				state.Status = AppStatusRunning
 			}
 		}
@@ -293,7 +310,7 @@ func ensureDir(path *string) error {
 	if _, err := os.Stat(*path); !os.IsNotExist(err) {
 		return nil
 	}
-	if err := os.MkdirAll(*path, 0750); err != nil {
+	if err := os.MkdirAll(*path, 0707); err != nil {
 		return fmt.Errorf("failed to create dir: %s", err)
 	}
 	return nil
@@ -304,7 +321,7 @@ func ensureDir(path *string) error {
 */
 
 func (l *Launcher) pidFile() (*os.File, error) {
-	return os.OpenFile(filepath.Join(l.conf.LocalPath, appsPIDFileName), os.O_RDWR|os.O_CREATE, 0600)
+	return os.OpenFile(filepath.Join(l.conf.LocalPath, appsPIDFileName), os.O_RDWR|os.O_CREATE, 0606) //nolint:gosec
 }
 
 func (l *Launcher) persistPID(appName string, pid appcommon.ProcID) error {

@@ -256,14 +256,24 @@ func (rg *RouteGroup) Latency() time.Duration {
 	return rg.networkStats.Latency()
 }
 
-// Throughput returns throughput till remote (bytes/s).
-func (rg *RouteGroup) Throughput() uint32 {
-	return rg.networkStats.LocalThroughput()
+// UploadSpeed returns upload speed (bytes/s).
+func (rg *RouteGroup) UploadSpeed() uint32 {
+	return rg.networkStats.UploadSpeed()
+}
+
+// DownloadSpeed returns download speed (bytes/s).
+func (rg *RouteGroup) DownloadSpeed() uint32 {
+	return rg.networkStats.DownloadSpeed()
 }
 
 // BandwidthSent returns amount of bandwidth sent (bytes).
 func (rg *RouteGroup) BandwidthSent() uint64 {
 	return rg.networkStats.BandwidthSent()
+}
+
+// BandwidthReceived returns amount of bandwidth received (bytes).
+func (rg *RouteGroup) BandwidthReceived() uint64 {
+	return rg.networkStats.BandwidthReceived()
 }
 
 // read reads incoming data. It tries to fetch the data from the internal buffer.
@@ -414,13 +424,11 @@ func (rg *RouteGroup) sendNetworkProbe() error {
 	throughput := rg.networkStats.RemoteThroughput()
 	timestamp := time.Now().UnixNano() / int64(time.Millisecond)
 
+	rg.networkStats.SetDownloadSpeed(uint32(throughput))
+
 	packet := routing.MakeNetworkProbePacket(rule.NextRouteID(), timestamp, throughput)
 
-	if err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID()); err != nil {
-		return err
-	}
-
-	return nil
+	return rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
 }
 
 func (rg *RouteGroup) networkProbeServiceFn(_ time.Duration) {
@@ -605,22 +613,24 @@ func (rg *RouteGroup) handleNetworkProbePacket(packet routing.Packet) error {
 	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond))
 
 	rg.networkStats.SetLatency(time.Since(sentAt))
-	rg.networkStats.SetLocalThroughput(uint32(throughput))
+	rg.networkStats.SetUploadSpeed(uint32(throughput))
 
 	return nil
 }
 
 func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
+
+	// in this case remote is already closed, and `readCh` is closed too,
+	// but some packets may still reach the rg causing panic on writing
+	// to `readCh`, so we simple omit such packets
+	if rg.isRemoteClosed() {
+		return nil
+	}
 	rg.networkStats.AddBandwidthReceived(uint64(packet.Size()))
 
 	select {
 	case <-rg.closed:
 		return io.ErrClosedPipe
-	case <-rg.remoteClosed:
-		// in this case remote is already closed, and `readCh` is closed too,
-		// but some packets may still reach the rg causing panic on writing
-		// to `readCh`, so we simple omit such packets
-		return nil
 	case rg.readCh <- packet.Payload():
 	}
 

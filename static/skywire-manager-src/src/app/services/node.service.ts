@@ -1,17 +1,26 @@
 import { Injectable } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Observable, Subscription, BehaviorSubject, of, forkJoin } from 'rxjs';
-import { flatMap, map, mergeMap, delay, tap } from 'rxjs/operators';
+import { Observable, Subscription, BehaviorSubject, of } from 'rxjs';
+import { flatMap, map, delay, tap } from 'rxjs/operators';
 import BigNumber from 'bignumber.js';
 
 import { StorageService } from './storage.service';
-import { HealthInfo, Node, Route, Transport } from '../app.datatypes';
+import { Node, Transport } from '../app.datatypes';
 import { ApiService } from './api.service';
 import { TransportService } from './transport.service';
 import { RouteService } from './route.service';
 import { processServiceError } from '../utils/errors';
 import { OperationError } from '../utils/operation-error';
 import { AppConfig } from '../app.config';
+
+/**
+ * Known statuses the API returns in the health property of the visors.
+ */
+export enum KnownHealthStatuses {
+  Connecting = 'connecting',
+  Unhealthy = 'unhealthy',
+  Healthy = 'healthy',
+}
 
 /**
  * Response returned by the node and node list observables.
@@ -59,38 +68,6 @@ export class TrafficData {
    * but the service will try it best to provided good data.
    */
   receivedHistory: number[] = [];
-}
-
-/**
- * Data for knowing if the services of a node are working.
- */
-export class HealthStatus {
-  /**
-   * If all services are working.
-   */
-  allServicesOk: boolean;
-  /**
-   * Details about the individual services.
-   */
-  services: HealthService[];
-}
-
-/**
- * Data for knowing if a service of a node is working.
- */
-export class HealthService {
-  /**
-   * Name of the service, as a translatable var.
-   */
-  name: string;
-  /**
-   * If the service is working.
-   */
-  isOk: boolean;
-  /**
-   * Status text returned by the node.
-   */
-  originalValue: string;
 }
 
 /**
@@ -486,9 +463,8 @@ export class NodeService {
    */
   private getNodes(): Observable<Node[]> {
     let nodes: Node[] = [];
-    let dmsgInfo: any[];
 
-    return this.apiService.get('visors').pipe(mergeMap((result: any[]) => {
+    return this.apiService.get('visors-summary').pipe(map((result: any[]) => {
       // Save the visor list.
       if (result) {
         result.forEach(response => {
@@ -496,66 +472,59 @@ export class NodeService {
 
           // Basic data.
           node.online = response.online;
-          node.tcpAddr = response.tcp_addr;
-          node.ip = this.getAddressPart(node.tcpAddr, 0);
-          node.port = this.getAddressPart(node.tcpAddr, 1);
-          node.localPk = response.local_pk;
+          node.localPk = response.overview.local_pk;
+          node.autoconnectTransports = response.public_autoconnect;
+
+          // Ip.
+          if (response.overview && response.overview.local_ip && (response.overview.local_ip as string).trim()) {
+            node.ip = response.overview.local_ip;
+          } else {
+            node.ip = null;
+          }
 
           // Label.
           const labelInfo = this.storageService.getLabelInfo(node.localPk);
-          node.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node.localPk);
+          node.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node);
+
+          // If the node is offline, there if no need for getting the rest of the data.
+          if (!node.online) {
+            node.dmsgServerPk = '';
+            node.roundTripPing = '';
+            nodes.push(node);
+
+            return;
+          }
+
+          // Health data.
+          node.health = {
+            servicesHealth: response.health.services_health,
+          };
+
+          // DMSG info.
+          node.dmsgServerPk = response.dmsg_stats.server_public_key;
+          node.roundTripPing = this.nsToMs(response.dmsg_stats.round_trip);
+
+          // Check if is hypervisor.
+          node.isHypervisor = response.is_hypervisor;
 
           nodes.push(node);
         });
       }
 
-      // Get the dmsg info.
-      return this.apiService.get('dmsg');
-    }), mergeMap((result: any[]) => {
-      dmsgInfo = result;
-
-      // Get the health info of each node.
-      return forkJoin(nodes.map(node => this.apiService.get(`visors/${node.localPk}/health`)));
-    }), mergeMap((result: any[]) => {
-      nodes.forEach((node, i) => {
-        node.health = {
-          status: result[i].status,
-          addressResolver: result[i].address_resolver,
-          routeFinder: result[i].route_finder,
-          setupNode: result[i].setup_node,
-          transportDiscovery: result[i].transport_discovery,
-          uptimeTracker: result[i].uptime_tracker,
-        };
-      });
-
-      // Get the basic info about the hypervisor.
-      return this.apiService.get('about');
-    }), map((aboutInfo: any) => {
-      // Create a map to associate the dmsg info with the visors.
-      const dmsgInfoMap = new Map<string, any>();
-      dmsgInfo.forEach(info => dmsgInfoMap.set(info.public_key, info));
-
-      // Process the node data and create a helper map.
+      // Create lists with the nodes returned by the api.
       const obtainedNodes = new Map<string, Node>();
       const nodesToRegisterInLocalStorageAsOnline: string[] = [];
+      const ipsToRegisterInLocalStorageAsOnline: string[] = [];
       nodes.forEach(node => {
-        if (dmsgInfoMap.has(node.localPk)) {
-          node.dmsgServerPk = dmsgInfoMap.get(node.localPk).server_public_key;
-          node.roundTripPing = this.nsToMs(dmsgInfoMap.get(node.localPk).round_trip);
-        } else {
-          node.dmsgServerPk = '-';
-          node.roundTripPing = '-1';
-        }
-
-        node.isHypervisor = node.localPk === aboutInfo.public_key;
-
         obtainedNodes.set(node.localPk, node);
         if (node.online) {
           nodesToRegisterInLocalStorageAsOnline.push(node.localPk);
+          ipsToRegisterInLocalStorageAsOnline.push(node.ip);
         }
       });
 
-      this.storageService.includeVisibleLocalNodes(nodesToRegisterInLocalStorageAsOnline);
+      // Save all online nodes.
+      this.storageService.includeVisibleLocalNodes(nodesToRegisterInLocalStorageAsOnline, ipsToRegisterInLocalStorageAsOnline);
 
       const missingSavedNodes: Node[] = [];
       this.storageService.getSavedLocalNodes().forEach(node => {
@@ -564,8 +533,10 @@ export class NodeService {
           const newNode: Node = new Node();
           newNode.localPk = node.publicKey;
           const labelInfo = this.storageService.getLabelInfo(node.publicKey);
-          newNode.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node.publicKey);
+          newNode.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(newNode);
           newNode.online = false;
+          newNode.dmsgServerPk = '';
+          newNode.roundTripPing = '';
 
           missingSavedNodes.push(newNode);
         }
@@ -604,47 +575,61 @@ export class NodeService {
   /**
    * Gets the details of a specific node.
    */
-  private getNode(nodeKey: string): Observable<Node> {
+  public getNode(nodeKey: string): Observable<Node> {
     // Get the node data.
     return this.apiService.get(`visors/${nodeKey}/summary`).pipe(
       map((response: any) => {
         const node = new Node();
 
         // Basic data.
-        node.online = response.online;
-        node.tcpAddr = response.tcp_addr;
-        node.ip = this.getAddressPart(node.tcpAddr, 0);
-        node.port = this.getAddressPart(node.tcpAddr, 1);
-        node.localPk = response.summary.local_pk;
-        node.version = response.summary.build_info.version;
+        node.localPk = response.overview.local_pk;
+        node.version = response.overview.build_info.version;
         node.secondsOnline = Math.floor(Number.parseFloat(response.uptime));
+        node.minHops = response.min_hops;
+        node.buildTag = response.build_tag;
+        node.skybianBuildVersion = response.skybian_build_version;
+        node.isSymmeticNat = response.overview.is_symmetic_nat;
+        node.publicIp = response.overview.public_ip;
+        node.autoconnectTransports = response.public_autoconnect;
+
+        // Ip.
+        if (response.overview.local_ip && (response.overview.local_ip as string).trim()) {
+          node.ip = response.overview.local_ip;
+        } else {
+          node.ip = null;
+        }
 
         // Label.
         const labelInfo = this.storageService.getLabelInfo(node.localPk);
-        node.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node.localPk);
+        node.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node);
 
         // Health info.
         node.health = {
-          status: 200,
-          addressResolver: response.health.address_resolver,
-          routeFinder: response.health.route_finder,
-          setupNode: response.health.setup_node,
-          transportDiscovery: response.health.transport_discovery,
-          uptimeTracker: response.health.uptime_tracker,
+          servicesHealth: response.health.services_health,
         };
 
         // Transports.
         node.transports = [];
-        if (response.summary.transports) {
-          (response.summary.transports as any[]).forEach(transport => {
+        if (response.overview.transports) {
+          (response.overview.transports as any[]).forEach(transport => {
             node.transports.push({
-              isUp: transport.is_up,
               id: transport.id,
               localPk: transport.local_pk,
               remotePk: transport.remote_pk,
               type: transport.type,
               recv: transport.log.recv,
               sent: transport.log.sent,
+            });
+          });
+        }
+
+        // Persistent Transports.
+        node.persistentTransports = [];
+        if (response.persistent_transports) {
+          (response.persistent_transports as any[]).forEach(persistentTransport => {
+            node.persistentTransports.push({
+              pk: persistentTransport.pk,
+              type: persistentTransport.type,
             });
           });
         }
@@ -709,8 +694,8 @@ export class NodeService {
 
         // Apps.
         node.apps = [];
-        if (response.summary.apps) {
-          (response.summary.apps as any[]).forEach(app => {
+        if (response.overview.apps) {
+          (response.overview.apps as any[]).forEach(app => {
             node.apps.push({
               name: app.name,
               status: app.status,
@@ -722,14 +707,11 @@ export class NodeService {
         }
 
         let dmsgServerFound = false;
-        for (let i = 0; i < response.dmsg.length; i++) {
-          if (response.dmsg[i].public_key === node.localPk) {
-            node.dmsgServerPk = response.dmsg[i].server_public_key;
-            node.roundTripPing = this.nsToMs(response.dmsg[i].round_trip);
+        if (response.dmsg_stats) {
+          node.dmsgServerPk = response.dmsg_stats.server_public_key;
+          node.roundTripPing = this.nsToMs(response.dmsg_stats.round_trip);
 
-            dmsgServerFound = true;
-            break;
-          }
+          dmsgServerFound = true;
         }
 
         if (!dmsgServerFound) {
@@ -740,22 +722,6 @@ export class NodeService {
         return node;
       })
     );
-  }
-
-  /**
-   * Gets a part of the node address: the ip or the port.
-   * @param tcpAddr Complete address.
-   * @param part 0 for the ip or 1 for the port.
-   */
-  private getAddressPart(tcpAddr: string, part: number): string {
-    const addressParts = tcpAddr.split(':');
-    let port = tcpAddr;
-
-    if (addressParts && addressParts.length === 2) {
-      port = addressParts[part];
-    }
-
-    return port;
   }
 
   /**
@@ -808,74 +774,5 @@ export class NodeService {
     }
 
     return this.apiService.ws(`visors/${nodeKey}/update/ws`, body);
-  }
-
-  /**
-   * Checks the data of a node and returns an object indicating the state of its services.
-   */
-  getHealthStatus(node: Node): HealthStatus {
-    const response = new HealthStatus();
-    response.allServicesOk = false;
-    response.services = [];
-
-    if (node.health) {
-      // General status.
-      let service: HealthService = {
-        name: 'node.details.node-health.status',
-        isOk: node.health.status && node.health.status === 200,
-        originalValue: node.health.status + ''
-      };
-      response.services.push(service);
-
-      // Transport discovery.
-      service = {
-        name: 'node.details.node-health.transport-discovery',
-        isOk: node.health.transportDiscovery && node.health.transportDiscovery === 200,
-        originalValue: node.health.transportDiscovery + ''
-      };
-      response.services.push(service);
-
-      // Route finder.
-      service = {
-        name: 'node.details.node-health.route-finder',
-        isOk: node.health.routeFinder && node.health.routeFinder === 200,
-        originalValue: node.health.routeFinder + ''
-      };
-      response.services.push(service);
-
-      // Setup node.
-      service = {
-        name: 'node.details.node-health.setup-node',
-        isOk: node.health.setupNode && node.health.setupNode === 200,
-        originalValue: node.health.setupNode + ''
-      };
-      response.services.push(service);
-
-      // Uptime tracker.
-      service = {
-        name: 'node.details.node-health.uptime-tracker',
-        isOk: node.health.uptimeTracker && node.health.uptimeTracker === 200,
-        originalValue: node.health.uptimeTracker + ''
-      };
-      response.services.push(service);
-
-      // Address resolver.
-      service = {
-        name: 'node.details.node-health.address-resolver',
-        isOk: node.health.addressResolver && node.health.addressResolver === 200,
-        originalValue: node.health.addressResolver + ''
-      };
-      response.services.push(service);
-
-      // Check if any service is not working.
-      response.allServicesOk = true;
-      response.services.forEach(v => {
-        if (!v.isOk) {
-          response.allServicesOk = false;
-        }
-      });
-    }
-
-    return response;
   }
 }

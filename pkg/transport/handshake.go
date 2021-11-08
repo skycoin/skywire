@@ -11,20 +11,21 @@ import (
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/httputil"
 
-	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
-func makeEntry(pk1, pk2 cipher.PubKey, tpType string) Entry {
-	return Entry{
-		ID:     MakeTransportID(pk1, pk2, tpType),
-		Edges:  SortEdges(pk1, pk2),
-		Type:   tpType,
-		Public: true,
-	}
-}
+type hsResponse byte
 
-func makeEntryFromTpConn(conn *snet.Conn) Entry {
-	return makeEntry(conn.LocalPK(), conn.RemotePK(), conn.Network())
+const (
+	responseFailure hsResponse = iota
+	responseOK
+	responseSignatureErr
+	responseInvalidEntry
+)
+
+func makeEntryFromTransport(transport network.Transport) Entry {
+	aPK, bPK := transport.LocalPK(), transport.RemotePK()
+	return MakeEntry(aPK, bPK, transport.Network(), LabelUser)
 }
 
 func compareEntries(expected, received *Entry) error {
@@ -40,10 +41,6 @@ func compareEntries(expected, received *Entry) error {
 		return errors.New("received entry's 'type' is not of expected")
 	}
 
-	if expected.Public != received.Public {
-		return errors.New("received entry's 'public' is not of expected")
-	}
-
 	return nil
 }
 
@@ -52,6 +49,10 @@ func receiveAndVerifyEntry(r io.Reader, expected *Entry, remotePK cipher.PubKey)
 
 	if err := json.NewDecoder(r).Decode(&recvSE); err != nil {
 		return nil, fmt.Errorf("failed to read entry: %w", err)
+	}
+
+	if recvSE.Entry == nil {
+		return nil, fmt.Errorf("failed to read entry: entry part of singed entry is empty")
 	}
 
 	if err := compareEntries(expected, recvSE.Entry); err != nil {
@@ -72,13 +73,13 @@ func receiveAndVerifyEntry(r io.Reader, expected *Entry, remotePK cipher.PubKey)
 
 // SettlementHS represents a settlement handshake.
 // This is the handshake responsible for registering a transport to transport discovery.
-type SettlementHS func(ctx context.Context, dc DiscoveryClient, conn *snet.Conn, sk cipher.SecKey) error
+type SettlementHS func(ctx context.Context, dc DiscoveryClient, transport network.Transport, sk cipher.SecKey) error
 
 // Do performs the settlement handshake.
-func (hs SettlementHS) Do(ctx context.Context, dc DiscoveryClient, conn *snet.Conn, sk cipher.SecKey) (err error) {
+func (hs SettlementHS) Do(ctx context.Context, dc DiscoveryClient, transport network.Transport, sk cipher.SecKey) (err error) {
 	done := make(chan struct{})
 	go func() {
-		err = hs(ctx, dc, conn, sk)
+		err = hs(ctx, dc, transport, sk)
 		close(done)
 	}()
 	select {
@@ -94,48 +95,50 @@ func (hs SettlementHS) Do(ctx context.Context, dc DiscoveryClient, conn *snet.Co
 // The handshake logic only REGISTERS the transport, and does not update the status of the transport.
 func MakeSettlementHS(init bool) SettlementHS {
 	// initiating logic.
-	initHS := func(ctx context.Context, dc DiscoveryClient, conn *snet.Conn, sk cipher.SecKey) (err error) {
-		entry := makeEntryFromTpConn(conn)
-
-		// TODO(evanlinjin): Probably not needed as this is called in mTp already. Need to double check.
-		//defer func() {
-		//	// @evanlinjin: I used background context to ensure status is always updated.
-		//	if _, err := dc.UpdateStatuses(context.Background(), &Status{ID: entry.ID, IsUp: err == nil}); err != nil {
-		//		log.WithError(err).Error("Failed to update statuses")
-		//	}
-		//}()
+	initHS := func(ctx context.Context, dc DiscoveryClient, transport network.Transport, sk cipher.SecKey) (err error) {
+		entry := makeEntryFromTransport(transport)
 
 		// create signed entry and send it to responding visor.
-		se, err := NewSignedEntry(&entry, conn.LocalPK(), sk)
+		se, err := NewSignedEntry(&entry, transport.LocalPK(), sk)
 		if err != nil {
 			return fmt.Errorf("failed to sign entry: %w", err)
 		}
-		if err := json.NewEncoder(conn).Encode(se); err != nil {
+		if err := json.NewEncoder(transport).Encode(se); err != nil {
 			return fmt.Errorf("failed to write entry: %w", err)
 		}
 
 		// await okay signal.
 		accepted := make([]byte, 1)
-		if _, err := io.ReadFull(conn, accepted); err != nil {
+		if _, err := io.ReadFull(transport, accepted); err != nil {
 			return fmt.Errorf("failed to read response: %w", err)
 		}
-		if accepted[0] == 0 {
+		switch hsResponse(accepted[0]) {
+		case responseOK:
+			return nil
+		case responseFailure:
 			return fmt.Errorf("transport settlement rejected by remote")
+		case responseInvalidEntry:
+			return fmt.Errorf("invalid entry")
+		case responseSignatureErr:
+			return fmt.Errorf("signature error")
+		default:
+			return fmt.Errorf("invalid remote response")
 		}
-		return nil
 	}
 
 	// responding logic.
-	respHS := func(ctx context.Context, dc DiscoveryClient, conn *snet.Conn, sk cipher.SecKey) error {
-		entry := makeEntryFromTpConn(conn)
+	respHS := func(ctx context.Context, dc DiscoveryClient, transport network.Transport, sk cipher.SecKey) error {
+		entry := makeEntryFromTransport(transport)
 
 		// receive, verify and sign entry.
-		recvSE, err := receiveAndVerifyEntry(conn, &entry, conn.RemotePK())
+		recvSE, err := receiveAndVerifyEntry(transport, &entry, transport.RemotePK())
 		if err != nil {
+			writeHsResponse(transport, responseInvalidEntry) //nolint:errcheck, gosec
 			return err
 		}
 
-		if err := recvSE.Sign(conn.LocalPK(), sk); err != nil {
+		if err := recvSE.Sign(transport.LocalPK(), sk); err != nil {
+			writeHsResponse(transport, responseSignatureErr) //nolint:errcheck, gosec
 			return fmt.Errorf("failed to sign received entry: %w", err)
 		}
 
@@ -150,16 +153,18 @@ func MakeSettlementHS(init bool) SettlementHS {
 				log.WithError(err).Error("Failed to register transport.")
 			}
 		}
-
-		// inform initiating visor.
-		if _, err := conn.Write([]byte{1}); err != nil {
-			return fmt.Errorf("failed to accept transport settlement: write failed: %w", err)
-		}
-		return nil
+		return writeHsResponse(transport, responseOK)
 	}
 
 	if init {
 		return initHS
 	}
 	return respHS
+}
+
+func writeHsResponse(w io.Writer, response hsResponse) error {
+	if _, err := w.Write([]byte{byte(response)}); err != nil {
+		return fmt.Errorf("failed to accept transport settlement: write failed: %w", err)
+	}
+	return nil
 }

@@ -3,6 +3,7 @@ package setupclient
 import (
 	"context"
 	"errors"
+	"net"
 	"net/rpc"
 
 	"github.com/skycoin/dmsg"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/snet"
 )
 
 const rpcName = "RPCGateway"
@@ -19,21 +19,19 @@ const rpcName = "RPCGateway"
 // Client is an RPC client for setup node.
 type Client struct {
 	log        *logging.Logger
-	n          *snet.Network
 	setupNodes []cipher.PubKey
-	conn       *snet.Conn
+	conn       net.Conn
 	rpc        *rpc.Client
 }
 
 // NewClient creates a new Client.
-func NewClient(ctx context.Context, log *logging.Logger, n *snet.Network, setupNodes []cipher.PubKey) (*Client, error) {
+func NewClient(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, setupNodes []cipher.PubKey) (*Client, error) {
 	client := &Client{
 		log:        log,
-		n:          n,
 		setupNodes: setupNodes,
 	}
 
-	conn, err := client.dial(ctx)
+	conn, err := client.dial(ctx, dmsgC)
 	if err != nil {
 		return nil, err
 	}
@@ -45,9 +43,10 @@ func NewClient(ctx context.Context, log *logging.Logger, n *snet.Network, setupN
 	return client, nil
 }
 
-func (c *Client) dial(ctx context.Context) (*snet.Conn, error) {
+func (c *Client) dial(ctx context.Context, dmsgC *dmsg.Client) (net.Conn, error) {
 	for _, sPK := range c.setupNodes {
-		conn, err := c.n.Dial(ctx, dmsg.Type, sPK, skyenv.DmsgSetupPort)
+		addr := dmsg.Addr{PK: sPK, Port: skyenv.DmsgSetupPort}
+		conn, err := dmsgC.Dial(ctx, addr)
 		if err != nil {
 			c.log.WithError(err).Warnf("failed to dial to setup node: setupPK(%s)", sPK)
 			continue
@@ -69,11 +68,7 @@ func (c *Client) Close() error {
 		return err
 	}
 
-	if err := c.conn.Close(); err != nil {
-		return err
-	}
-
-	return nil
+	return c.conn.Close()
 }
 
 // DialRouteGroup generates rules for routes from a visor and sends them to visors.

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="1">
+    <pkg-ref id="com.skycoin.skywire.visor"/>
+    <pkg-ref id="com.skycoin.skywire.updater"/>
+    <pkg-ref id="com.skycoin.skywire.remover"/>
+    <pkg-ref id="com.skycoin.skywire.visor" version="0" onConclusion="none">installer.pkg</pkg-ref>
+    <pkg-ref id="com.skycoin.skywire.updater" version="0" onConclusion="none">updater.pkg</pkg-ref>
+    <pkg-ref id="com.skycoin.skywire.remover" version="0" onConclusion="none">remover.pkg</pkg-ref>
+    <allowed-os-versions>
+        <os-version min="10.14"/>
+    </allowed-os-versions>
+    <options customize="allow" require-scripts="false" rootVolumeOnly="true" hostArchitectures="x86_64,arm64"/>
+    <title>Skywire</title>
+    <script>
+        <![CDATA[
+function is_skywire_installed() {
+  return system.files.fileExistsAtPath("/Applications/Skywire.app");
+}
+]]>
+    </script>
+    <choices-outline>
+        <line choice="install"/>
+        <line choice="update"/>
+        <line choice="remove"/>
+    </choices-outline>
+    <choice id="install" title="Install" description="Install Skywire" start_selected="!is_skywire_installed()" visible="!is_skywire_installed()">
+        <pkg-ref id="com.skycoin.skywire.visor"/>
+    </choice>
+    <choice id="update" title="Update" description="Update current installation" visible="is_skywire_installed()" start_selected="is_skywire_installed()">
+        <pkg-ref id="com.skycoin.skywire.updater"/>
+    </choice>
+    <choice id="remove" title="Remove" description="Remove current installation" visible="is_skywire_installed()" start_selected="false">
+        <pkg-ref id="com.skycoin.skywire.remover"/>
+    </choice>
+</installer-gui-script>

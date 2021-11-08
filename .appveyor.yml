@@ -1,0 +1,54 @@
+version: "{build}"
+
+stack: node 16.8.0
+
+environment:
+  matrix:
+  # For regular jobs, such as push, pr and etc.
+  - job_name: Linux
+    appveyor_build_worker_image: ubuntu1804
+    GOARCH: amd64
+  - job_name: MacOS
+    appveyor_build_worker_image: macos
+    GOARCH: amd64
+
+for:
+  - # Linux and MacOS
+    skip_tags: true
+    matrix:
+      only:
+        - job_name: Linux
+        - job_name: MacOS
+
+    install:
+      - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.42.1
+      - make dep
+      - sh: ci_scripts/create-ip-aliases.sh
+    
+    before_build:
+      - make check
+   
+    build_script:
+      - make build
+
+  - # Windows
+    skip_tags: true
+    matrix:
+      only:
+        - job_name: Windows
+
+    environment:
+      matrix:
+        - GOARCH: amd64
+
+    install:
+      - choco install make
+      - go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.42.0
+      - make dep
+    
+    before_build:
+      - set GO111MODULE=on
+      - make check-windows-appveyor
+  
+    build_script:
+      - make build

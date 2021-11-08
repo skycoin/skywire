@@ -14,23 +14,8 @@ func TestNewEntry(t *testing.T) {
 	pkA, _ := cipher.GenerateKeyPair()
 	pkB, _ := cipher.GenerateKeyPair()
 
-	entryAB := transport.NewEntry(pkA, pkB, "", true)
-	entryBA := transport.NewEntry(pkA, pkB, "", true)
-
-	assert.True(t, entryAB.Edges == entryBA.Edges)
-	assert.True(t, entryAB.ID == entryBA.ID)
-	assert.NotNil(t, entryAB.ID)
-	assert.NotNil(t, entryBA.ID)
-}
-
-func TestEntry_SetEdges(t *testing.T) {
-	pkA, _ := cipher.GenerateKeyPair()
-	pkB, _ := cipher.GenerateKeyPair()
-
-	entryAB, entryBA := transport.Entry{}, transport.Entry{}
-
-	entryAB.SetEdges(pkA, pkB)
-	entryBA.SetEdges(pkA, pkB)
+	entryAB := transport.MakeEntry(pkA, pkB, "", transport.LabelUser)
+	entryBA := transport.MakeEntry(pkA, pkB, "", transport.LabelUser)
 
 	assert.True(t, entryAB.Edges == entryBA.Edges)
 	assert.True(t, entryAB.ID == entryBA.ID)
@@ -42,8 +27,8 @@ func ExampleSignedEntry_Sign() {
 	pkA, skA := cipher.GenerateKeyPair()
 	pkB, skB := cipher.GenerateKeyPair()
 
-	entry := transport.NewEntry(pkA, pkB, "mock", true)
-	sEntry := &transport.SignedEntry{Entry: entry}
+	entry := transport.MakeEntry(pkA, pkB, "mock", transport.LabelUser)
+	sEntry := &transport.SignedEntry{Entry: &entry}
 
 	if sEntry.Signatures[0].Null() && sEntry.Signatures[1].Null() {
 		fmt.Println("No signatures set")
@@ -77,8 +62,8 @@ func ExampleSignedEntry_Signature() {
 	pkA, skA := cipher.GenerateKeyPair()
 	pkB, skB := cipher.GenerateKeyPair()
 
-	entry := transport.NewEntry(pkA, pkB, "mock", true)
-	sEntry := &transport.SignedEntry{Entry: entry}
+	entry := transport.MakeEntry(pkA, pkB, "mock", transport.LabelUser)
+	sEntry := &transport.SignedEntry{Entry: &entry}
 
 	if err := sEntry.Sign(pkA, skA); err != nil {
 		fmt.Println("Error signing sEntry with (pkA,skA)")

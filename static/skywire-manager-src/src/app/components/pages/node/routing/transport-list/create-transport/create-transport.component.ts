@@ -12,6 +12,8 @@ import { AppConfig } from 'src/app/app.config';
 import { processServiceError } from 'src/app/utils/errors';
 import { OperationError } from 'src/app/utils/operation-error';
 import { LabeledElementTypes, StorageService } from 'src/app/services/storage.service';
+import { NodeService } from 'src/app/services/node.service';
+import { PersistentTransport } from 'src/app/app.datatypes';
 
 /**
  * Modal window used for creating trnasports. It creates the transport and shows a
@@ -27,6 +29,8 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
   @ViewChild('firstInput') firstInput: ElementRef;
   types: string[];
   form: FormGroup;
+
+  makePersistent = false;
 
   private shouldShowError = true;
   private dataSubscription: Subscription;
@@ -49,6 +53,7 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
     private dialogRef: MatDialogRef<CreateTransportComponent>,
     private snackbarService: SnackbarService,
     private storageService: StorageService,
+    private nodeService: NodeService,
   ) { }
 
   ngOnInit() {
@@ -75,6 +80,13 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Used by the checkbox for the persistent setting.
+   */
+   setMakePersistent(event) {
+    this.makePersistent = event.checked ? true : false;
+  }
+
+  /**
    * Creates the transport.
    */
   create() {
@@ -84,37 +96,106 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
 
     this.button.showLoading();
 
-    this.operationSubscription = this.transportService.create(
-      // The node pk is obtained from the currently openned node page.
+    const newTransportPk: string = this.form.get('remoteKey').value;
+    const newTransportType: string = this.form.get('type').value;
+    const newTransportLabel: string = this.form.get('label').value;
+
+    if (this.makePersistent) {
+      // Check the current visor config.
+      const operation = this.transportService.getPersistentTransports(NodeComponent.getCurrentNodeKey());
+      this.operationSubscription = operation.subscribe((list: any[]) => {
+        const dataToUse = list ? list : [];
+
+        let noNeedToAddToPersistents = false;
+
+        // Check if the transport is already in the persistent list.
+        dataToUse.forEach(t => {
+          if (t.pk.toUpperCase() === newTransportPk.toUpperCase() && t.type.toUpperCase() === newTransportType.toUpperCase()) {
+            noNeedToAddToPersistents = true;
+          }
+        });
+
+        if (noNeedToAddToPersistents) {
+          this.createTransport(newTransportPk, newTransportType, newTransportLabel, true);
+        } else {
+          this.createPersistent(dataToUse, newTransportPk, newTransportType, newTransportLabel);
+        }
+      }, err => {
+        this.onError(err);
+      });
+    } else {
+      this.createTransport(newTransportPk, newTransportType, newTransportLabel, false);
+    }
+  }
+
+  /**
+   * Updates the persistent transports list.
+   * @param currentList Current persistent transports list.
+   * @param newTransportPk Public key of the new transport.
+   * @param newTransportType Type of the new transport.
+   */
+  private createPersistent(
+    currentList: PersistentTransport[],
+    newTransportPk: string,
+    newTransportType: string,
+    newTransportLabel: string
+  ) {
+    // Add the new transport.
+    currentList.push({
+      pk: newTransportPk,
+      type: newTransportType,
+    });
+
+    this.operationSubscription = this.transportService.savePersistentTransportsData(
       NodeComponent.getCurrentNodeKey(),
-      this.form.get('remoteKey').value,
-      this.form.get('type').value,
-    ).subscribe({
-      next: this.onSuccess.bind(this),
-      error: this.onError.bind(this)
+      currentList
+    ).subscribe(() => {
+      this.createTransport(newTransportPk, newTransportType, newTransportLabel, true);
+    }, err => {
+      this.onError(err);
     });
   }
 
-  private onSuccess(response: any) {
-    // Save the label.
-    const label = this.form.get('label').value;
-    let errorSavingLabel = false;
-    if (label) {
-      if (response && response.id) {
-        this.storageService.saveLabel(response.id, label, LabeledElementTypes.Transport);
-      } else {
-        errorSavingLabel = true;
+  /**
+   * Creates a transport with the data entered in the form.
+   * @param newTransportPk Public key of the new transport.
+   * @param newTransportType Type of the new transport.
+   */
+  private createTransport(newTransportPk: string, newTransportType: string, newTransportLabel: string, creatingAfterPersistent: boolean) {
+    this.operationSubscription = this.transportService.create(
+      // The node pk is obtained from the currently openned node page.
+      NodeComponent.getCurrentNodeKey(),
+      newTransportPk,
+      newTransportType,
+    ).subscribe(response => {
+      // Save the label.
+      let errorSavingLabel = false;
+      if (newTransportLabel) {
+        if (response && response.id) {
+          this.storageService.saveLabel(response.id, newTransportLabel, LabeledElementTypes.Transport);
+        } else {
+          errorSavingLabel = true;
+        }
       }
-    }
 
-    NodeComponent.refreshCurrentDisplayedData();
-    this.dialogRef.close();
+      NodeComponent.refreshCurrentDisplayedData();
+      this.dialogRef.close();
 
-    if (!errorSavingLabel) {
-      this.snackbarService.showDone('transports.dialog.success');
-    } else {
-      this.snackbarService.showWarning('transports.dialog.success-without-label');
-    }
+      if (!errorSavingLabel) {
+        this.snackbarService.showDone('transports.dialog.success');
+      } else {
+        this.snackbarService.showWarning('transports.dialog.success-without-label');
+      }
+    }, err => {
+      if (!creatingAfterPersistent) {
+        this.onError(err);
+      } else {
+        NodeComponent.refreshCurrentDisplayedData();
+        this.dialogRef.close();
+
+        this.snackbarService.showWarning('transports.dialog.only-persistent-created');
+      }
+    });
   }
 
   private onError(err: OperationError) {

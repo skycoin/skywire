@@ -14,7 +14,7 @@
 
 ## Build
 
-Skywire requires a Golang version of `1.13` or higher.
+Skywire requires a Golang version of `1.16` or higher.
 
 ```bash
 # Clone.
@@ -25,7 +25,7 @@ $ cd skywire
 $ make build; make install
 
 # OR build docker image
-$ ./ci_scripts/docker-push.sh -t $(git rev-parse --abbrev HEAD) -b
+$ ./ci_scripts/docker-push.sh -t $(git rev-parse --abbrev-ref HEAD) -b
 ```
 
 Skywire can be statically built. For instructions check [the docs](docs/static-builds.md).
@@ -34,10 +34,17 @@ Skywire can be statically built. For instructions check [the docs](docs/static-b
 
 ### Expose hypervisorUI
 
-In order to expose the hypervisor UI, generate a config file with `--is-hypervisor` flag:
+In order to expose the hypervisor UI, generate a config file with `--is-hypervisor` or `-i` flag:
 
 ```bash
-$ skywire-cli visor gen-config --is-hypervisor
+$ skywire-cli config gen -i
+```
+
+Docker container will create config automatically for you, should you want to run it manually, you can do:
+
+```bash
+$ docker run --rm -v <YOUR_CONFIG_DIR>:/opt/skywire \
+  skycoin/skywire:test skywire-cli config gen -i
 ```
 
 Docker container will create config automatically for you, should you want to run it manually, you can do:
@@ -55,7 +62,14 @@ Every visor can be controlled by one or more hypervisors. To allow a hypervisor 
 hypervisor needs to be specified in the configuration file. You can add a remote hypervisor to the config with:
 
 ```bash
-$ skywire-cli visor update-config --hypervisor-pks <public-key>
+$ skywire-cli config update --hypervisor-pks <public-key>
+```
+
+Or from docker image:
+
+```bash
+$ docker run --rm -v <YOUR_CONFIG_DIR>:/opt/skywire \
+  skycoin/skywire:test skywire-cli config update hypervisor-pks <public-key>
 ```
 
 Or from docker image:
@@ -80,7 +94,10 @@ $ sudo skywire-visor -c skywire-config.json
 Or from docker image:
 
 ```bash
-docker run --rm -p 8000:8000 -v <YOUR_CONFIG_DIR>:/opt/skywire --name=skywire skycoin/skywire:latest skywire-visor
+# with custom config mounted on docker volume
+$ docker run --rm -p 8000:8000 -v <YOUR_CONFIG_DIR>:/opt/skywire --name=skywire skycoin/skywire:test skywire-visor -c /opt/skywire/<YOUR_CONFIG_NAME>.json
+# without custom config (config is automatically generated)
+$ docker run --rm -p 8000:8000 --name=skywire skycoin/skywire:test skywire-visor
 ```
 
 `skywire-visor` can be run on Windows. The setup requires additional setup steps that are specified

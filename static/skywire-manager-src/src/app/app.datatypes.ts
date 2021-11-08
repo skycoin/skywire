@@ -1,13 +1,15 @@
 export class Node {
   label: string;
   localPk: string;
-  tcpAddr: string;
+  isSymmeticNat?: boolean;
+  publicIp?: string;
   ip: string;
-  port: string;
   version: string;
   apps: Application[];
   transports: Transport[];
+  persistentTransports: PersistentTransport[];
   routesCount: number;
+  minHops: number;
   routes?: Route[];
   online?: boolean;
   secondsOnline?: number;
@@ -15,6 +17,9 @@ export class Node {
   dmsgServerPk?: string;
   roundTripPing?: string;
   isHypervisor?: boolean;
+  buildTag: string;
+  skybianBuildVersion?: string;
+  autoconnectTransports: boolean;
 }
 
 export interface Application {
@@ -26,13 +31,21 @@ export interface Application {
 }
 
 export interface Transport {
-  isUp: boolean;
   id: string;
   localPk: string;
   remotePk: string;
   type: string;
   recv: number|null;
   sent: number|null;
+
+  // Calculated internally
+  isPersistent?: boolean;
+  notFound?: boolean;
+}
+
+export interface PersistentTransport {
+  pk: string;
+  type: string;
 }
 
 export interface Route {
@@ -68,12 +81,7 @@ interface RouteDescriptor {
 }
 
 export interface HealthInfo {
-  status: number;
-  transportDiscovery: number;
-  routeFinder: number;
-  setupNode: number;
-  uptimeTracker: number;
-  addressResolver: number;
+  servicesHealth?: String;
 }
 
 export class ProxyDiscoveryEntry {

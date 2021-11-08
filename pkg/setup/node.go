@@ -16,7 +16,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/setup/setupmetrics"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 var log = logging.MustGetLogger("setup_node")
@@ -106,19 +106,10 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 // * Intermediary rules are broadcasted to the intermediary routers.
 // * Edge rules are broadcasted to the responding router.
 // * Edge rules is returned (to the initiating router).
-func CreateRouteGroup(ctx context.Context, dialer snet.Dialer, biRt routing.BidirectionalRoute) (resp routing.EdgeRules, err error) {
-	start := time.Now()
+func CreateRouteGroup(ctx context.Context, dialer network.Dialer, biRt routing.BidirectionalRoute, metrics setupmetrics.Metrics) (resp routing.EdgeRules, err error) {
 	log := logging.MustGetLogger(fmt.Sprintf("request:%s->%s", biRt.Desc.SrcPK(), biRt.Desc.DstPK()))
 	log.Info("Processing request.")
-	defer func() {
-		elapsed := time.Since(start)
-		log := log.WithField("elapsed", elapsed)
-		if err != nil {
-			log.WithError(err).Warn("Request processed with error.")
-		} else {
-			log.Info("Request processed successfully.")
-		}
-	}()
+	defer metrics.RecordRoute()(&err)
 
 	// Ensure bi routes input is valid.
 	if err = biRt.Check(); err != nil {
@@ -167,7 +158,7 @@ func CreateRouteGroup(ctx context.Context, dialer snet.Dialer, biRt routing.Bidi
 
 // ReserveRouteIDs dials to all routers and reserves required route IDs from them.
 // The number of route IDs to be reserved per router, is extrapolated from the 'route' input.
-func ReserveRouteIDs(ctx context.Context, log logrus.FieldLogger, dialer snet.Dialer, route routing.BidirectionalRoute) (idR IDReserver, err error) {
+func ReserveRouteIDs(ctx context.Context, log logrus.FieldLogger, dialer network.Dialer, route routing.BidirectionalRoute) (idR IDReserver, err error) {
 	log.Debug("Reserving route IDs...")
 	defer func() {
 		if err != nil {
@@ -186,7 +177,7 @@ func ReserveRouteIDs(ctx context.Context, log logrus.FieldLogger, dialer snet.Di
 	}()
 
 	if err = idR.ReserveIDs(ctx); err != nil {
-		return nil, fmt.Errorf("failed to reserve route ids: %w", err)
+		return idR, fmt.Errorf("failed to reserve route ids: %w", err)
 	}
 	return idR, nil
 }

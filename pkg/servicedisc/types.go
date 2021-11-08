@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	// ServiceTypeProxy stands for the proxy discovery.
-	ServiceTypeProxy = "proxy"
+	// ServiceTypeSkysocks stands for the skysocks discovery.
+	ServiceTypeSkysocks = "skysocks"
 	// ServiceTypeVPN stands for the VPN discovery.
 	ServiceTypeVPN = "vpn"
 	// ServiceTypeVisor stands for visor.
@@ -97,18 +97,13 @@ type GeoLocation struct {
 	Region  string  `json:"region,omitempty"`
 }
 
-// Stats provides various statistics on the service-discovery service.
-type Stats struct {
-	ConnectedClients int `json:"connected_clients"`
-}
-
 // Service represents a service entry in service-discovery.
 type Service struct {
-	Addr    SWAddr       `json:"address"`
-	Type    string       `json:"type"`
-	Stats   *Stats       `json:"stats,omitempty"` // TODO: Have this implemented.
-	Geo     *GeoLocation `json:"geo,omitempty"`
-	Version string       `json:"version,omitempty"`
+	Addr     SWAddr       `json:"address"`
+	Type     string       `json:"type"`
+	Geo      *GeoLocation `json:"geo,omitempty"`
+	Version  string       `json:"version,omitempty"`
+	LocalIPs []string     `json:"local_ips,omitempty"`
 }
 
 // MarshalBinary implements encoding.BinaryMarshaller
