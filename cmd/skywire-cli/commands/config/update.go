@@ -127,7 +127,7 @@ var updateConfigCmd = &cobra.Command{
 		case "false":
 			changeAppsConfig(conf, "vpn-client", "--killswitch", setVPNClientKillswitch)
 		default:
-			logger.Fatal("Unrecognized environment value: ", environment)
+			logger.Fatal("Unrecognized environment value: ", setVPNClientKillswitch)
 		}
 
 		if addVPNClientSrv != "" {
@@ -156,7 +156,7 @@ var updateConfigCmd = &cobra.Command{
 		case "false":
 			changeAppsConfig(conf, "vpn-server", "--secure", setVPNClientKillswitch)
 		default:
-			logger.Fatal("Unrecognized environment value: ", environment)
+			logger.Fatal("Unrecognized environment value: ", setVPNServerSecure)
 		}
 
 		if resetVPNServer {
@@ -189,7 +189,7 @@ var updateConfigCmd = &cobra.Command{
 		case "false":
 			conf.Transport.PublicAutoconnect = false
 		default:
-			logger.Fatal("Unrecognized environment value: ", environment)
+			logger.Fatal("Unrecognized environment value: ", setPublicAutoconnect)
 		}
 
 		if minHops >= 0 {
