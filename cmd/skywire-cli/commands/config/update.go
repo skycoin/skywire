@@ -211,9 +211,9 @@ func changeAppsConfig(conf *visorconfig.V1, appName string, argName string, argV
 			continue
 		}
 		updated := false
-		for index, arg := range apps[index].Args {
+		for ind, arg := range apps[index].Args {
 			if arg == argName {
-				apps[index].Args[index+1] = argValue
+				apps[index].Args[ind+1] = argValue
 				updated = true
 			}
 		}
