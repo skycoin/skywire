@@ -25,7 +25,7 @@ require (
 	github.com/mmcloughlin/avo v0.0.0-20200523190732-4439b6b2c061 // indirect
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/pkg/profile v1.5.0
-	github.com/rakyll/statik v0.1.7
+	github.com/rakyll/statik v0.1.7 // indirect
 	github.com/schollz/progressbar/v2 v2.15.0
 	github.com/shirou/gopsutil/v3 v3.21.4
 	github.com/sirupsen/logrus v1.8.1
@@ -47,7 +47,7 @@ require (
 	golang.org/x/sys v0.0.0-20211020174200-9d6173849985
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	golang.org/x/tools v0.1.2 // indirect
-	golang.zx2c4.com/wireguard v0.0.0-20211022192229-f1f626090e3b
+	golang.zx2c4.com/wireguard v0.0.0-20211012180210-dfd688b6aa7b
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	nhooyr.io/websocket v1.8.2
 )
