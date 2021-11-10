@@ -13,7 +13,10 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/direct"
 	"github.com/skycoin/dmsg/dmsgctrl"
+	"github.com/skycoin/dmsg/dmsgget"
+	"github.com/skycoin/dmsg/dmsghttp"
 	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 
@@ -205,11 +208,28 @@ func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	if v.conf.Dmsg == nil {
 		return fmt.Errorf("cannot initialize dmsg: empty configuration")
 	}
-	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg)
+
+	var disc dmsgget.URL
+	if err := disc.Fill(v.conf.Dmsg.Discovery); err != nil {
+		return fmt.Errorf("provided URL is invalid: %w", err)
+	}
+	var closeDmsgD func()
+	var httpC http.Client
+	var dmsgD *dmsg.Client
+
+	if disc.Scheme == "dmsg" {
+		dmsgD, closeDmsgD, err = direct.StartDmsg(ctx, log, v.conf.PK, v.conf.SK)
+		if err != nil {
+			return fmt.Errorf("failed to start dmsg: %w", err)
+		}
+		httpC = http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgD)}
+	}
+
+	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg, httpC)
 
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
@@ -222,6 +242,7 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) error {
 		if err := dmsgC.Close(); err != nil {
 			return err
 		}
+		closeDmsgD()
 		wg.Wait()
 		return nil
 	})
