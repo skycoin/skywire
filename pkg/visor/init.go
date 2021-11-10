@@ -222,7 +222,7 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	var dmsgD *dmsg.Client
 
 	if disc.Scheme == "dmsg" {
-		dmsgD, closeDmsgD, err = direct.StartDmsg(ctx, log, v.conf.PK, v.conf.SK)
+		dmsgD, closeDmsgD, err = direct.StartDmsg(ctx, log, disc.Addr.PK, v.conf.PK, v.conf.SK)
 		if err != nil {
 			return fmt.Errorf("failed to start dmsg: %w", err)
 		}
