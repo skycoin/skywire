@@ -3,6 +3,7 @@ package setup
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/rpc"
 	"time"
 
@@ -33,7 +34,7 @@ func NewNode(conf *Config) (*Node, error) {
 	}
 
 	// Connect to dmsg network.
-	dmsgDisc := disc.NewHTTP(conf.Dmsg.Discovery)
+	dmsgDisc := disc.NewHTTP(conf.Dmsg.Discovery, http.Client{})
 	dmsgConf := &dmsg.Config{MinSessions: conf.Dmsg.SessionsCount}
 	dmsgC := dmsg.NewClient(conf.PK, conf.SK, dmsgDisc, dmsgConf)
 	go dmsgC.Serve(context.Background())
