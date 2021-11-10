@@ -129,7 +129,7 @@ func Uninstall() (err error) {
 	return
 }
 
-// RunningVersion returns the version of the loaded driver.
+// RunningVersion returns the version of the running Wintun driver.
 func RunningVersion() (version uint32, err error) {
 	r0, _, e1 := syscall.Syscall(procWintunGetRunningDriverVersion.Addr(), 0, 0, 0, 0)
 	version = uint32(r0)
