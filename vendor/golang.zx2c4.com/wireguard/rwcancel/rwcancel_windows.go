@@ -1,5 +1,3 @@
-//go:build windows || js
-
 // SPDX-License-Identifier: MIT
 
 package rwcancel
