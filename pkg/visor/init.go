@@ -230,6 +230,10 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 		}
 		dmsgHTTPC = http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgD)}
 
+		v.pushCloseStack("dmsg", func() error {
+			closeDmsgD()
+			return nil
+		})
 	}
 
 	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg, dmsgHTTPC)
@@ -245,7 +249,6 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 		if err := dmsgC.Close(); err != nil {
 			return err
 		}
-		closeDmsgD()
 		wg.Wait()
 		return nil
 	})
