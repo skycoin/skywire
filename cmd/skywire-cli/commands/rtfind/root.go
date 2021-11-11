@@ -2,6 +2,7 @@ package rtfind
 
 import (
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/skycoin/dmsg/cipher"
@@ -31,7 +32,7 @@ var RootCmd = &cobra.Command{
 	Short: "Queries the Route Finder for available routes between two visors",
 	Args:  cobra.MinimumNArgs(2),
 	Run: func(_ *cobra.Command, args []string) {
-		rfc := rfclient.NewHTTP(frAddr, timeout)
+		rfc := rfclient.NewHTTP(frAddr, timeout, http.Client{})
 
 		var srcPK, dstPK cipher.PubKey
 		internal.Catch(srcPK.Set(args[0]))
