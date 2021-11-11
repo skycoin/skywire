@@ -214,22 +214,25 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	}
 
 	var disc dmsgget.URL
-	if err := disc.Fill(v.conf.Dmsg.Discovery); err != nil {
-		return fmt.Errorf("provided URL is invalid: %w", err)
-	}
 	var closeDmsgD func()
-	var httpC http.Client
+	var dmsgHTTPC http.Client
 	var dmsgD *dmsg.Client
 
+	err = disc.Fill(v.conf.Dmsg.Discovery)
+
 	if disc.Scheme == "dmsg" {
+		if err != nil {
+			return fmt.Errorf("provided URL is invalid: %w", err)
+		}
 		dmsgD, closeDmsgD, err = direct.StartDmsg(ctx, log, disc.Addr.PK, v.conf.PK, v.conf.SK)
 		if err != nil {
 			return fmt.Errorf("failed to start dmsg: %w", err)
 		}
-		httpC = http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgD)}
+		dmsgHTTPC = http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgD)}
+
 	}
 
-	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg, httpC)
+	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg, dmsgHTTPC)
 
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
@@ -402,7 +405,31 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 
 func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Routing
-	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout))
+
+	var disc dmsgget.URL
+	var closeDmsgD func()
+	var dmsgHTTPC http.Client
+	var dmsgD *dmsg.Client
+	var err error
+
+	err = disc.Fill(conf.RouteFinder)
+
+	if disc.Scheme == "dmsg" {
+		if err != nil {
+			return fmt.Errorf("provided URL is invalid: %w", err)
+		}
+		dmsgD, closeDmsgD, err = direct.StartDmsg(ctx, log, disc.Addr.PK, v.conf.PK, v.conf.SK)
+		if err != nil {
+			return fmt.Errorf("failed to start dmsg: %w", err)
+		}
+		dmsgHTTPC = http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgD)}
+		v.pushCloseStack("router.serve", func() error {
+			closeDmsgD()
+			return nil
+		})
+	}
+
+	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout), dmsgHTTPC)
 	logger := v.MasterLogger().PackageLogger("router")
 	rConf := router.Config{
 		Logger:           logger,
