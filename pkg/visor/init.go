@@ -315,7 +315,7 @@ func initStcpClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 
-	tpdC, err := connectToTpDisc(v)
+	tpdC, err := connectToTpDisc(ctx, v)
 	if err != nil {
 		err := fmt.Errorf("failed to create transport discovery client: %w", err)
 		return err
@@ -785,7 +785,7 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
+func connectToTpDisc(ctx context.Context, v *Visor) (transport.DiscoveryClient, error) {
 	const (
 		initBO = 1 * time.Second
 		maxBO  = 10 * time.Second
@@ -796,6 +796,30 @@ func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
 
 	conf := v.conf.Transport
 
+	var disc dmsgget.URL
+	var closeDmsgD func()
+	var httpC http.Client
+	var dmsgD *dmsg.Client
+	var err error
+
+	err = disc.Fill(conf.Discovery)
+
+	if disc.Scheme == "dmsg" {
+		if err != nil {
+			return nil, fmt.Errorf("provided URL is invalid: %w", err)
+		}
+		dmsgD, closeDmsgD, err = direct.StartDmsg(ctx, log, disc.Addr.PK, v.conf.PK, v.conf.SK)
+		if err != nil {
+			return nil, fmt.Errorf("failed to start dmsg: %w", err)
+		}
+		httpC = http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgD)}
+
+		v.pushCloseStack("transport_discovery", func() error {
+			closeDmsgD()
+			return nil
+		})
+	}
+
 	log := v.MasterLogger().PackageLogger("tp_disc_retrier")
 	tpdCRetrier := dmsgnetutil.NewRetrier(log,
 		initBO, maxBO, tries, factor)
@@ -803,7 +827,7 @@ func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
 	var tpdC transport.DiscoveryClient
 	retryFunc := func() error {
 		var err error
-		tpdC, err = tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK)
+		tpdC, err = tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK, httpC)
 		if err != nil {
 			log.WithError(err).Error("Failed to connect to transport discovery, retrying...")
 			return err
