@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// RootCmd contains commands that interact with the auto-completion scripts of skywire-cli
 var RootCmd = &cobra.Command{
 	Use:                   "completion [bash|zsh|fish|powershell]",
 	Short:                 "Generate completion script",
