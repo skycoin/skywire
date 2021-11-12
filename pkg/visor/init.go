@@ -170,7 +170,31 @@ func initEventBroadcaster(ctx context.Context, v *Visor, log *logging.Logger) er
 func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Transport
 
-	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, log)
+	var disc dmsgget.URL
+	var closeDmsgD func()
+	var httpC http.Client
+	var dmsgD *dmsg.Client
+	var err error
+
+	err = disc.Fill(conf.AddressResolver)
+
+	if disc.Scheme == "dmsg" {
+		if err != nil {
+			return fmt.Errorf("provided URL is invalid: %w", err)
+		}
+		dmsgD, closeDmsgD, err = direct.StartDmsg(ctx, log, disc.Addr.PK, v.conf.PK, v.conf.SK)
+		if err != nil {
+			return fmt.Errorf("failed to start dmsg: %w", err)
+		}
+		httpC = http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgD)}
+
+		v.pushCloseStack("address_resolver", func() error {
+			closeDmsgD()
+			return nil
+		})
+	}
+
+	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, httpC, log)
 	if err != nil {
 		err := fmt.Errorf("failed to create address resolver client: %w", err)
 		return err
