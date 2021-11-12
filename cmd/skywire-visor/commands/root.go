@@ -63,7 +63,7 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(CompletionCmd)
+	rootCmd.AddCommand(completionCmd)
 	rootCmd.Flags().StringVar(&tag, "tag", "skywire", "logging tag")
 	rootCmd.Flags().StringVar(&syslogAddr, "syslog", "", "syslog server address. E.g. localhost:514")
 	rootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "p", "", "pprof profiling mode. Valid values: cpu, mem, mutex, block, trace, http")
