@@ -170,19 +170,19 @@ func initEventBroadcaster(ctx context.Context, v *Visor, log *logging.Logger) er
 func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Transport
 
-	var disc dmsgget.URL
+	var serviceURL dmsgget.URL
 	var closeDmsgD func()
 	var httpC http.Client
 	var dmsgD *dmsg.Client
 	var err error
 
-	err = disc.Fill(conf.AddressResolver)
+	err = serviceURL.Fill(conf.AddressResolver)
 
-	if disc.Scheme == "dmsg" {
+	if serviceURL.Scheme == "dmsg" {
 		if err != nil {
 			return fmt.Errorf("provided URL is invalid: %w", err)
 		}
-		dmsgD, closeDmsgD, err = direct.StartDmsg(ctx, log, disc.Addr.PK, v.conf.PK, v.conf.SK)
+		dmsgD, closeDmsgD, err = direct.StartDmsg(ctx, log, serviceURL.Addr.PK, v.conf.PK, v.conf.SK)
 		if err != nil {
 			return fmt.Errorf("failed to start dmsg: %w", err)
 		}
@@ -213,19 +213,19 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	conf := v.conf.Launcher
 
-	var disc dmsgget.URL
+	var serviceURL dmsgget.URL
 	var closeDmsgD func()
 	var httpC http.Client
 	var dmsgD *dmsg.Client
 	var err error
 
-	err = disc.Fill(conf.ServerAddr)
+	err = serviceURL.Fill(conf.ServerAddr)
 
-	if disc.Scheme == "dmsg" {
+	if serviceURL.Scheme == "dmsg" {
 		if err != nil {
 			return fmt.Errorf("provided URL is invalid: %w", err)
 		}
-		dmsgD, closeDmsgD, err = direct.StartDmsg(ctx, log, disc.Addr.PK, v.conf.PK, v.conf.SK)
+		dmsgD, closeDmsgD, err = direct.StartDmsg(ctx, log, serviceURL.Addr.PK, v.conf.PK, v.conf.SK)
 		if err != nil {
 			return fmt.Errorf("failed to start dmsg: %w", err)
 		}
@@ -263,18 +263,18 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 		return fmt.Errorf("cannot initialize dmsg: empty configuration")
 	}
 
-	var disc dmsgget.URL
+	var serviceURL dmsgget.URL
 	var closeDmsgD func()
 	var httpC http.Client
 	var dmsgD *dmsg.Client
 
-	err = disc.Fill(v.conf.Dmsg.Discovery)
+	err = serviceURL.Fill(v.conf.Dmsg.Discovery)
 
-	if disc.Scheme == "dmsg" {
+	if serviceURL.Scheme == "dmsg" {
 		if err != nil {
 			return fmt.Errorf("provided URL is invalid: %w", err)
 		}
-		dmsgD, closeDmsgD, err = direct.StartDmsg(ctx, log, disc.Addr.PK, v.conf.PK, v.conf.SK)
+		dmsgD, closeDmsgD, err = direct.StartDmsg(ctx, log, serviceURL.Addr.PK, v.conf.PK, v.conf.SK)
 		if err != nil {
 			return fmt.Errorf("failed to start dmsg: %w", err)
 		}
@@ -459,19 +459,19 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Routing
 
-	var disc dmsgget.URL
+	var serviceURL dmsgget.URL
 	var closeDmsgD func()
 	var httpC http.Client
 	var dmsgD *dmsg.Client
 	var err error
 
-	err = disc.Fill(conf.RouteFinder)
+	err = serviceURL.Fill(conf.RouteFinder)
 
-	if disc.Scheme == "dmsg" {
+	if serviceURL.Scheme == "dmsg" {
 		if err != nil {
 			return fmt.Errorf("provided URL is invalid: %w", err)
 		}
-		dmsgD, closeDmsgD, err = direct.StartDmsg(ctx, log, disc.Addr.PK, v.conf.PK, v.conf.SK)
+		dmsgD, closeDmsgD, err = direct.StartDmsg(ctx, log, serviceURL.Addr.PK, v.conf.PK, v.conf.SK)
 		if err != nil {
 			return fmt.Errorf("failed to start dmsg: %w", err)
 		}
@@ -691,24 +691,24 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 		v.log.Info("'uptime_tracker' is not configured, skipping.")
 		return nil
 	}
-	var disc dmsgget.URL
+	var serviceURL dmsgget.URL
 	var closeDmsgD func()
 	var httpC http.Client
 	var dmsgD *dmsg.Client
 	var err error
 
-	err = disc.Fill(conf.Addr)
+	err = serviceURL.Fill(conf.Addr)
 
-	if disc.Scheme == "dmsg" {
+	if serviceURL.Scheme == "dmsg" {
 		if err != nil {
 			return fmt.Errorf("provided URL is invalid: %w", err)
 		}
-		dmsgD, closeDmsgD, err = direct.StartDmsg(ctx, log, disc.Addr.PK, v.conf.PK, v.conf.SK)
+		dmsgD, closeDmsgD, err = direct.StartDmsg(ctx, log, serviceURL.Addr.PK, v.conf.PK, v.conf.SK)
 		if err != nil {
 			return fmt.Errorf("failed to start dmsg: %w", err)
 		}
 		httpC = http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgD)}
-		v.pushCloseStack("router.serve", func() error {
+		v.pushCloseStack("uptime_tracker", func() error {
 			closeDmsgD()
 			return nil
 		})
@@ -868,19 +868,19 @@ func connectToTpDisc(ctx context.Context, v *Visor) (transport.DiscoveryClient, 
 
 	conf := v.conf.Transport
 
-	var disc dmsgget.URL
+	var serviceURL dmsgget.URL
 	var closeDmsgD func()
 	var httpC http.Client
 	var dmsgD *dmsg.Client
 	var err error
 
-	err = disc.Fill(conf.Discovery)
+	err = serviceURL.Fill(conf.Discovery)
 
-	if disc.Scheme == "dmsg" {
+	if serviceURL.Scheme == "dmsg" {
 		if err != nil {
 			return nil, fmt.Errorf("provided URL is invalid: %w", err)
 		}
-		dmsgD, closeDmsgD, err = direct.StartDmsg(ctx, log, disc.Addr.PK, v.conf.PK, v.conf.SK)
+		dmsgD, closeDmsgD, err = direct.StartDmsg(ctx, log, serviceURL.Addr.PK, v.conf.PK, v.conf.SK)
 		if err != nil {
 			return nil, fmt.Errorf("failed to start dmsg: %w", err)
 		}
