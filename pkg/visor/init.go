@@ -664,7 +664,7 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 		})
 	}
 
-	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK)
+	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK, httpC)
 	if err != nil {
 		v.log.WithError(err).Warn("Failed to connect to uptime tracker.")
 		return nil
