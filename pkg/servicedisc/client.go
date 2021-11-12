@@ -50,7 +50,7 @@ type HTTPClient struct {
 }
 
 // NewClient creates a new HTTPClient.
-func NewClient(log logrus.FieldLogger, conf Config) *HTTPClient {
+func NewClient(log logrus.FieldLogger, conf Config, client http.Client) *HTTPClient {
 	return &HTTPClient{
 		log:  log,
 		conf: conf,
@@ -59,7 +59,7 @@ func NewClient(log logrus.FieldLogger, conf Config) *HTTPClient {
 			Type:    conf.Type,
 			Version: buildinfo.Version(),
 		},
-		client: http.Client{},
+		client: client,
 	}
 }
 
@@ -96,7 +96,7 @@ func (c *HTTPClient) Auth(ctx context.Context) (*httpauth.Client, error) {
 		return auth, nil
 	}
 
-	auth, err := httpauth.NewClient(ctx, c.conf.DiscAddr, c.conf.PK, c.conf.SK)
+	auth, err := httpauth.NewClient(ctx, c.conf.DiscAddr, c.conf.PK, c.conf.SK, &c.client)
 	if err != nil {
 		return nil, err
 	}
