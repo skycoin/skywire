@@ -87,7 +87,7 @@ type httpClient struct {
 // * SW-Public: The specified public key.
 // * SW-Nonce:  The nonce for that public key.
 // * SW-Sig:    The signature of the payload + the nonce.
-func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, log *logging.Logger) (APIClient, error) {
+func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC http.Client, log *logging.Logger) (APIClient, error) {
 	remoteURL, err := url.Parse(remoteAddr)
 	if err != nil {
 		return nil, fmt.Errorf("parse URL: %w", err)
@@ -110,13 +110,13 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, log *logging
 
 	client.log.Infof("Remote UDP server: %q", remoteUDP)
 
-	go client.initHTTPClient()
+	go client.initHTTPClient(httpC)
 
 	return client, nil
 }
 
-func (c *httpClient) initHTTPClient() {
-	httpAuthClient, err := httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk)
+func (c *httpClient) initHTTPClient(httpC http.Client) {
+	httpAuthClient, err := httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, &httpC)
 	if err != nil {
 		c.log.WithError(err).
 			Warnf("Failed to connect to address resolver. STCPR/SUDPH services are temporarily unavailable. Retrying...")
@@ -125,7 +125,7 @@ func (c *httpClient) initHTTPClient() {
 		retry := dmsgnetutil.NewRetrier(retryLog, 1*time.Second, 10*time.Second, 0, 1)
 
 		err := retry.Do(context.Background(), func() error {
-			httpAuthClient, err = httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk)
+			httpAuthClient, err = httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, &httpC)
 			return err
 		})
 
