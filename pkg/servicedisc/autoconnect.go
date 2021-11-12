@@ -2,6 +2,7 @@ package servicedisc
 
 import (
 	"context"
+	"net/http"
 	"time"
 
 	"github.com/skycoin/dmsg/cipher"
@@ -37,9 +38,9 @@ type autoconnector struct {
 
 // MakeConnector returns a new connector that will try to connect to at most maxConns
 // services
-func MakeConnector(conf Config, maxConns int, tm *transport.Manager, log *logging.Logger) Autoconnector {
+func MakeConnector(conf Config, maxConns int, tm *transport.Manager, httpC http.Client, log *logging.Logger) Autoconnector {
 	connector := &autoconnector{}
-	connector.client = NewClient(log, conf)
+	connector.client = NewClient(log, conf, httpC)
 	connector.maxConns = maxConns
 	connector.log = log
 	connector.tm = tm
