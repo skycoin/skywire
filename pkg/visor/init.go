@@ -632,7 +632,7 @@ func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
+func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error {
 	const tickDuration = 1 * time.Minute
 
 	conf := v.conf.UptimeTracker
@@ -640,6 +640,28 @@ func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
 	if conf == nil {
 		v.log.Info("'uptime_tracker' is not configured, skipping.")
 		return nil
+	}
+	var disc dmsgget.URL
+	var closeDmsgD func()
+	var httpC http.Client
+	var dmsgD *dmsg.Client
+	var err error
+
+	err = disc.Fill(conf.Addr)
+
+	if disc.Scheme == "dmsg" {
+		if err != nil {
+			return fmt.Errorf("provided URL is invalid: %w", err)
+		}
+		dmsgD, closeDmsgD, err = direct.StartDmsg(ctx, log, disc.Addr.PK, v.conf.PK, v.conf.SK)
+		if err != nil {
+			return fmt.Errorf("failed to start dmsg: %w", err)
+		}
+		httpC = http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgD)}
+		v.pushCloseStack("router.serve", func() error {
+			closeDmsgD()
+			return nil
+		})
 	}
 
 	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK)
