@@ -215,7 +215,7 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 
 	var disc dmsgget.URL
 	var closeDmsgD func()
-	var dmsgHTTPC http.Client
+	var httpC http.Client
 	var dmsgD *dmsg.Client
 
 	err = disc.Fill(v.conf.Dmsg.Discovery)
@@ -228,7 +228,7 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 		if err != nil {
 			return fmt.Errorf("failed to start dmsg: %w", err)
 		}
-		dmsgHTTPC = http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgD)}
+		httpC = http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgD)}
 
 		v.pushCloseStack("dmsg", func() error {
 			closeDmsgD()
@@ -236,7 +236,7 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 		})
 	}
 
-	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg, dmsgHTTPC)
+	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg, httpC)
 
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
@@ -411,7 +411,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	var disc dmsgget.URL
 	var closeDmsgD func()
-	var dmsgHTTPC http.Client
+	var httpC http.Client
 	var dmsgD *dmsg.Client
 	var err error
 
@@ -425,14 +425,14 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		if err != nil {
 			return fmt.Errorf("failed to start dmsg: %w", err)
 		}
-		dmsgHTTPC = http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgD)}
+		httpC = http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgD)}
 		v.pushCloseStack("router.serve", func() error {
 			closeDmsgD()
 			return nil
 		})
 	}
 
-	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout), dmsgHTTPC)
+	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout), httpC)
 	logger := v.MasterLogger().PackageLogger("router")
 	rConf := router.Config{
 		Logger:           logger,
