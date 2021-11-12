@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/cmd/skywire-cli/commands/completion"
 	"github.com/skycoin/skywire/cmd/skywire-cli/commands/config"
 	"github.com/skycoin/skywire/cmd/skywire-cli/commands/mdisc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/commands/rtfind"
@@ -22,6 +23,7 @@ func init() {
 		mdisc.RootCmd,
 		rtfind.RootCmd,
 		config.RootCmd,
+		completion.RootCmd,
 	)
 }
 
