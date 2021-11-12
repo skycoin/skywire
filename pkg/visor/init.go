@@ -189,11 +189,37 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	conf := v.conf.Launcher
 
+	var disc dmsgget.URL
+	var closeDmsgD func()
+	var httpC http.Client
+	var dmsgD *dmsg.Client
+	var err error
+
+	err = disc.Fill(conf.ServerAddr)
+
+	if disc.Scheme == "dmsg" {
+		if err != nil {
+			return fmt.Errorf("provided URL is invalid: %w", err)
+		}
+		dmsgD, closeDmsgD, err = direct.StartDmsg(ctx, log, disc.Addr.PK, v.conf.PK, v.conf.SK)
+		if err != nil {
+			return fmt.Errorf("failed to start dmsg: %w", err)
+		}
+		httpC = http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgD)}
+
+		v.pushCloseStack("service_discovery", func() error {
+			closeDmsgD()
+			return nil
+		})
+	}
+
 	if conf.ServiceDisc != "" {
 		factory.PK = v.conf.PK
 		factory.SK = v.conf.SK
 		factory.ServiceDisc = conf.ServiceDisc
+		factory.Client = httpC
 	}
+
 	v.initLock.Lock()
 	v.serviceDisc = factory
 	v.initLock.Unlock()
