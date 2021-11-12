@@ -133,7 +133,7 @@ func registerModules(logger *logging.MasterLogger) {
 	cli = maker("cli", initCLI)
 	hvs = maker("hypervisors", initHypervisors, &dmsgC)
 	ut = maker("uptime_tracker", initUptimeTracker)
-	pv = maker("public_autoconnect", initPublicAutoconnect, &tr)
+	pv = maker("public_autoconnect", initPublicAutoconnect, &tr, &disc)
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
 	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl)
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
@@ -785,7 +785,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 		Port:     uint16(0),
 		DiscAddr: serviceDisc,
 	}
-	connector := servicedisc.MakeConnector(conf, 3, v.tpM, log)
+	connector := servicedisc.MakeConnector(conf, 3, v.tpM, v.serviceDisc.Client, log)
 	go connector.Run(ctx) //nolint:errcheck
 
 	return nil
