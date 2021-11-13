@@ -222,8 +222,8 @@ func (p *Proc) Start() error {
 		p.disc.Start()
 		defer p.disc.Stop()
 
-		if p.appName == skyenv.VPNClientName {
-			ipcServer, err := ipc.StartServer(skyenv.VPNClientName, nil)
+		if runtime.GOOS == "windows" {
+			ipcServer, err := ipc.StartServer(p.appName, nil)
 			if err != nil {
 				_ = p.cmd.Process.Kill() //nolint:errcheck
 				p.waitMx.Unlock()
@@ -262,22 +262,10 @@ func (p *Proc) Stop() error {
 				return err
 			}
 		} else {
-			if p.ipcServer != nil {
-				if err := p.ipcServer.Write(skyenv.IPCShutdownMessageType, []byte("")); err != nil {
-					return err
-				}
-			} else {
-				// TODO @alexadhy: This is harmful and is just a hack!
-				// because Windows has no concept of Signals, and as such interrupts aren't sendable
-				// CTRL_C or CTRL_BREAK are key events on windows,
-				// alternatively do what vpn-client does use named pipes in windows
-				err := p.cmd.Process.Kill()
-				if err != nil {
-					return err
-				}
+			if err := p.ipcServer.Write(skyenv.IPCShutdownMessageType, []byte("")); err != nil {
+				return err
 			}
 		}
-
 	}
 
 	// deregister discovery service

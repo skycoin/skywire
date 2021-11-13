@@ -151,9 +151,9 @@ func main() {
 		ipcClient, err := ipc.StartClient(skyenv.VPNClientName, nil)
 		if err != nil {
 			fmt.Printf("Error creating ipc server for VPN client: %v\n", err)
+			os.Exit(1)
 		}
-		fmt.Println("STARTING IPC VPN_CLIENT")
-		go vpnClient.StartIPCClient(ipcClient)
+		go vpnClient.ListenIPC(ipcClient)
 	}
 
 	if err := vpnClient.Serve(); err != nil {

@@ -8,10 +8,13 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	ipc "github.com/james-barrow/golang-ipc"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"io/fs"
 	"net"
 	"net/http"
 	"os"
+	"runtime"
 	"sync"
 	"time"
 
@@ -62,6 +65,15 @@ func main() {
 
 	conns = make(map[cipher.PubKey]net.Conn)
 	go listenLoop()
+
+	if runtime.GOOS == "windows" {
+		ipcClient, err := ipc.StartClient(skyenv.SkychatName, nil)
+		if err != nil {
+			fmt.Printf("Error creating ipc server for skychat client: %v\n", err)
+			os.Exit(1)
+		}
+		go handleIPCSignal(ipcClient)
+	}
 
 	http.Handle("/", http.FileServer(getFileSystem()))
 	http.HandleFunc("/message", messageHandler)
@@ -214,4 +226,18 @@ func getFileSystem() http.FileSystem {
 		panic(err)
 	}
 	return http.FS(fsys)
+}
+
+func handleIPCSignal(client *ipc.Client) {
+	for {
+		m, err := client.Read()
+		if err != nil {
+			fmt.Printf("%s IPC received error: %v", skyenv.SkychatName, err)
+		}
+		if m.MsgType == skyenv.IPCShutdownMessageType {
+			fmt.Println("Stopping " + skyenv.SkychatName + " via IPC")
+			break
+		}
+	}
+	os.Exit(0)
 }

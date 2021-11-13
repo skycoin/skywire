@@ -2,6 +2,8 @@ package skysocks
 
 import (
 	"fmt"
+	ipc "github.com/james-barrow/golang-ipc"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"io"
 	"net"
 	"sync"
@@ -154,6 +156,16 @@ func (c *Client) close() {
 	if err := c.Close(); err != nil {
 		Log.WithError(err).Error("Error closing skysocks client")
 	}
+}
+
+// ListenIPC starts named-pipe based connection server for windows or unix socket for other OSes
+func (c *Client) ListenIPC(client *ipc.Client, log *logrus.Logger) {
+	listenIPC(client, skyenv.SkychatName+"-client", func() {
+		client.Close()
+		if err := c.Close(); err != nil {
+			log.Errorf("Error closing skysocks-client: %v", err)
+		}
+	})
 }
 
 // Close implement io.Closer.
