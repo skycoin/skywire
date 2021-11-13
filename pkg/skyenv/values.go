@@ -146,6 +146,10 @@ const (
 	DefaultTLSCert           = DefaultSkywirePath + "/ssl/cert.pem"
 )
 
+const (
+	IPCShutdownMessageType = 68
+)
+
 // PackageLocalPath is the path to local directory
 func PackageLocalPath() string {
 	return filepath.Join(PackageSkywirePath(), "local")
