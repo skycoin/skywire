@@ -3,13 +3,16 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"net"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 
 	"github.com/skycoin/dmsg/cipher"
 
+	"github.com/james-barrow/golang-ipc"
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appevent"
@@ -97,6 +100,7 @@ func main() {
 		Killswitch: *killswitch,
 		ServerPK:   serverPK,
 	}
+
 	vpnClient, err := vpn.NewClient(vpnClientCfg, appClient)
 	if err != nil {
 		fmt.Printf("Error creating VPN client: %v\n", err)
@@ -130,16 +134,26 @@ func main() {
 		}
 	}()
 
-	osSigs := make(chan os.Signal, 2)
-	sigs := []os.Signal{syscall.SIGTERM, syscall.SIGINT}
-	for _, sig := range sigs {
-		signal.Notify(osSigs, sig)
-	}
+	if runtime.GOOS != "windows" {
+		osSigs := make(chan os.Signal, 2)
+		sigs := []os.Signal{syscall.SIGTERM, syscall.SIGINT}
+		for _, sig := range sigs {
+			signal.Notify(osSigs, sig)
+		}
 
-	go func() {
-		<-osSigs
-		vpnClient.Close()
-	}()
+		go func() {
+			<-osSigs
+			vpnClient.Close()
+		}()
+	} else {
+		ipcSrv, err := ipc.StartServer(skyenv.VPNClientName, &ipc.ServerConfig{
+			Encryption: true,
+		})
+		if err != nil {
+			fmt.Printf("Error creating ipc server for VPN client: %v\n", err)
+		}
+		go vpnClient.StartIPCServer(ipcSrv)
+	}
 
 	if err := vpnClient.Serve(); err != nil {
 		fmt.Printf("Failed to serve VPN: %v\n", err)
