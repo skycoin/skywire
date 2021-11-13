@@ -3,6 +3,9 @@ package appserver
 import (
 	"errors"
 	"fmt"
+	ipc "github.com/james-barrow/golang-ipc"
+	"github.com/skycoin/skywire/internal/vpn"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"net"
 	"net/rpc"
 	"os"
@@ -29,9 +32,10 @@ var (
 // communication.
 // TODO(evanlinjin): In the future, we will implement the ability to run multiple instances (procs) of a single app.
 type Proc struct {
-	disc appdisc.Updater // app discovery client
-	conf appcommon.ProcConfig
-	log  *logging.Logger
+	ipcClient *ipc.Client
+	disc      appdisc.Updater // app discovery client
+	conf      appcommon.ProcConfig
+	log       *logging.Logger
 
 	logDB appcommon.LogStore
 
@@ -60,6 +64,9 @@ type Proc struct {
 
 	errMx sync.RWMutex
 	err   string
+
+	// windows only shutdown channel
+	winShutdownChan chan struct{}
 }
 
 // NewProc constructs `Proc`.
@@ -81,16 +88,18 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").Writer()
 	cmd.Stderr = appLog.WithField("_module", moduleName).WithField("func", "(STDERR)").Writer()
 
-	return &Proc{
-		disc:    disc,
-		conf:    conf,
-		log:     mLog.PackageLogger(moduleName),
-		logDB:   appLogDB,
-		cmd:     cmd,
-		connCh:  make(chan struct{}, 1),
-		m:       m,
-		appName: appName,
+	p := &Proc{
+		disc:            disc,
+		conf:            conf,
+		log:             mLog.PackageLogger(moduleName),
+		logDB:           appLogDB,
+		cmd:             cmd,
+		connCh:          make(chan struct{}, 1),
+		m:               m,
+		appName:         appName,
+		winShutdownChan: make(chan struct{}, 1),
 	}
+	return p
 }
 
 // Logs obtains the log store.
@@ -216,6 +225,26 @@ func (p *Proc) Start() error {
 		p.disc.Start()
 		defer p.disc.Stop()
 
+		if p.appName == skyenv.VPNClientName {
+			ipcClient, err := ipc.StartClient(skyenv.VPNClientName, nil)
+			if err != nil {
+				_ = p.cmd.Process.Kill() //nolint:errcheck
+				p.waitMx.Unlock()
+				return
+			}
+			p.ipcClient = ipcClient
+			go func() {
+				for {
+					select {
+					case <-p.winShutdownChan:
+						_ = p.ipcClient.Write(vpn.ShutdownMessageType, []byte("")) //nolint:errcheck
+						return
+					default:
+					}
+				}
+			}()
+		}
+
 		// Wait for proc to exit.
 		p.waitErr = <-waitErrCh
 
@@ -246,12 +275,17 @@ func (p *Proc) Stop() error {
 				return err
 			}
 		} else {
-			// TODO @alexadhy: This is harmful and is just a hack!
-			// because Windows has no concept of Signals, and as such interrupts aren't sendable
-			// CTRL_C or CTRL_BREAK are key events on windows,
-			err := p.cmd.Process.Kill()
-			if err != nil {
-				return err
+			if p.ipcClient != nil {
+				p.winShutdownChan <- struct{}{}
+			} else {
+				// TODO @alexadhy: This is harmful and is just a hack!
+				// because Windows has no concept of Signals, and as such interrupts aren't sendable
+				// CTRL_C or CTRL_BREAK are key events on windows,
+				// alternatively do what vpn-client does use named pipes in windows
+				err := p.cmd.Process.Kill()
+				if err != nil {
+					return err
+				}
 			}
 		}
 
