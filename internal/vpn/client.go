@@ -232,12 +232,15 @@ func (c *Client) Serve() error {
 	return nil
 }
 
-// StartIPCClient starts named-pipe based connection server for windows or unix socket in Linux/Mac
-func (c *Client) StartIPCClient(client *ipc.Client) {
+// ListenIPC starts named-pipe based connection server for windows or unix socket in Linux/Mac
+func (c *Client) ListenIPC(client *ipc.Client) {
 	for {
 		m, err := client.Read()
-		if err != nil || m.MsgType == skyenv.IPCShutdownMessageType {
-			fmt.Println("STOPPING VPN CLIENT VIA IPC MESSAGE")
+		if err != nil {
+			fmt.Printf("%s IPC received error: %v", skyenv.VPNClientName, err)
+		}
+		if m.MsgType == skyenv.IPCShutdownMessageType {
+			fmt.Println("Stopping " + skyenv.VPNClientName + " via IPC")
 			break
 		}
 	}
