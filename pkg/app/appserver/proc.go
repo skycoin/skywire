@@ -65,9 +65,6 @@ type Proc struct {
 
 	errMx sync.RWMutex
 	err   string
-
-	// windows only shutdown channel
-	winShutdownChan chan struct{}
 }
 
 // NewProc constructs `Proc`.
@@ -90,15 +87,14 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	cmd.Stderr = appLog.WithField("_module", moduleName).WithField("func", "(STDERR)").Writer()
 
 	p := &Proc{
-		disc:            disc,
-		conf:            conf,
-		log:             mLog.PackageLogger(moduleName),
-		logDB:           appLogDB,
-		cmd:             cmd,
-		connCh:          make(chan struct{}, 1),
-		m:               m,
-		appName:         appName,
-		winShutdownChan: make(chan struct{}, 1),
+		disc:    disc,
+		conf:    conf,
+		log:     mLog.PackageLogger(moduleName),
+		logDB:   appLogDB,
+		cmd:     cmd,
+		connCh:  make(chan struct{}, 1),
+		m:       m,
+		appName: appName,
 	}
 	return p
 }
@@ -234,16 +230,6 @@ func (p *Proc) Start() error {
 				return
 			}
 			p.ipcServer = ipcServer
-			go func() {
-				for {
-					select {
-					case <-p.winShutdownChan:
-						_ = p.ipcServer.Write(skyenv.IPCShutdownMessageType, []byte("")) //nolint:errcheck
-						return
-					default:
-					}
-				}
-			}()
 		}
 
 		// Wait for proc to exit.
@@ -277,7 +263,9 @@ func (p *Proc) Stop() error {
 			}
 		} else {
 			if p.ipcServer != nil {
-				p.winShutdownChan <- struct{}{}
+				if err := p.ipcServer.Write(skyenv.IPCShutdownMessageType, []byte("")); err != nil {
+					return err
+				}
 			} else {
 				// TODO @alexadhy: This is harmful and is just a hack!
 				// because Windows has no concept of Signals, and as such interrupts aren't sendable
@@ -298,6 +286,9 @@ func (p *Proc) Stop() error {
 	// the lock will be acquired as soon as the cmd finishes its work
 	p.waitMx.Lock()
 	defer func() {
+		if p.ipcServer != nil {
+			p.ipcServer.Close()
+		}
 		p.waitMx.Unlock()
 		p.connOnce.Do(func() { close(p.connCh) })
 	}()
