@@ -23,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/util/updater"
+	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorinit"
@@ -55,8 +56,9 @@ type Visor struct {
 	updater       *updater.Updater
 	uptimeTracker utclient.APIClient
 
-	ebc   *appevent.Broadcaster // event broadcaster
-	dmsgC *dmsg.Client
+	ebc      *appevent.Broadcaster // event broadcaster
+	dmsgC    *dmsg.Client
+	trackers *dmsgtracker.Manager
 
 	stunClient *network.StunDetails
 	tpM        *transport.Manager
@@ -141,6 +143,7 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 	if !v.processRuntimeErrs() {
 		return nil, false
 	}
+	v.trackers = dmsgtracker.NewDmsgTrackerManager(nil, v.dmsgC, 0, 0)
 	return v, true
 }
 
