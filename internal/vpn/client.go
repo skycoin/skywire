@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/netutil"
@@ -31,6 +32,7 @@ const (
 	ipv4FirstHalfAddr      = "0.0.0.0/1"
 	ipv4SecondHalfAddr     = "128.0.0.0/1"
 	directRouteNetmaskCIDR = "/32"
+	ShutdownMessageType    = 68
 )
 
 // Client is a VPN client.
@@ -229,6 +231,18 @@ func (c *Client) Serve() error {
 	}
 
 	return nil
+}
+
+// StartIPCServer starts named-pipe based connection server for windows or unix socket in Linux/Mac
+func (c *Client) StartIPCServer(srv *ipc.Server) {
+	for {
+		m, err := srv.Read()
+		if err != nil || m.MsgType == ShutdownMessageType {
+			break
+		}
+	}
+	srv.Close()
+	c.Close()
 }
 
 // Close closes client.
