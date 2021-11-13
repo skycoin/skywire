@@ -3,9 +3,6 @@ package appserver
 import (
 	"errors"
 	"fmt"
-	ipc "github.com/james-barrow/golang-ipc"
-	"github.com/skycoin/skywire/internal/vpn"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"net"
 	"net/rpc"
 	"os"
@@ -15,6 +12,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	ipc "github.com/james-barrow/golang-ipc"
+
+	"github.com/skycoin/skywire/pkg/skyenv"
 
 	"github.com/skycoin/skycoin/src/util/logging"
 
@@ -32,7 +33,7 @@ var (
 // communication.
 // TODO(evanlinjin): In the future, we will implement the ability to run multiple instances (procs) of a single app.
 type Proc struct {
-	ipcClient *ipc.Client
+	ipcServer *ipc.Server
 	disc      appdisc.Updater // app discovery client
 	conf      appcommon.ProcConfig
 	log       *logging.Logger
@@ -226,18 +227,18 @@ func (p *Proc) Start() error {
 		defer p.disc.Stop()
 
 		if p.appName == skyenv.VPNClientName {
-			ipcClient, err := ipc.StartClient(skyenv.VPNClientName, nil)
+			ipcServer, err := ipc.StartServer(skyenv.VPNClientName, nil)
 			if err != nil {
 				_ = p.cmd.Process.Kill() //nolint:errcheck
 				p.waitMx.Unlock()
 				return
 			}
-			p.ipcClient = ipcClient
+			p.ipcServer = ipcServer
 			go func() {
 				for {
 					select {
 					case <-p.winShutdownChan:
-						_ = p.ipcClient.Write(vpn.ShutdownMessageType, []byte("")) //nolint:errcheck
+						_ = p.ipcServer.Write(skyenv.IPCShutdownMessageType, []byte("")) //nolint:errcheck
 						return
 					default:
 					}
@@ -275,7 +276,7 @@ func (p *Proc) Stop() error {
 				return err
 			}
 		} else {
-			if p.ipcClient != nil {
+			if p.ipcServer != nil {
 				p.winShutdownChan <- struct{}{}
 			} else {
 				// TODO @alexadhy: This is harmful and is just a hack!

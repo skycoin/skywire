@@ -3,16 +3,18 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"net"
 	"os"
 	"os/signal"
 	"runtime"
 	"syscall"
 
+	"github.com/skycoin/skywire/pkg/skyenv"
+
 	"github.com/skycoin/dmsg/cipher"
 
-	"github.com/james-barrow/golang-ipc"
+	ipc "github.com/james-barrow/golang-ipc"
+
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appevent"
@@ -146,13 +148,12 @@ func main() {
 			vpnClient.Close()
 		}()
 	} else {
-		ipcSrv, err := ipc.StartServer(skyenv.VPNClientName, &ipc.ServerConfig{
-			Encryption: true,
-		})
+		ipcClient, err := ipc.StartClient(skyenv.VPNClientName, nil)
 		if err != nil {
 			fmt.Printf("Error creating ipc server for VPN client: %v\n", err)
 		}
-		go vpnClient.StartIPCServer(ipcSrv)
+		fmt.Println("STARTING IPC VPN_CLIENT")
+		go vpnClient.StartIPCClient(ipcClient)
 	}
 
 	if err := vpnClient.Serve(); err != nil {
