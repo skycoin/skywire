@@ -32,7 +32,6 @@ const (
 	ipv4FirstHalfAddr      = "0.0.0.0/1"
 	ipv4SecondHalfAddr     = "128.0.0.0/1"
 	directRouteNetmaskCIDR = "/32"
-	ShutdownMessageType    = 68
 )
 
 // Client is a VPN client.
@@ -233,15 +232,16 @@ func (c *Client) Serve() error {
 	return nil
 }
 
-// StartIPCServer starts named-pipe based connection server for windows or unix socket in Linux/Mac
-func (c *Client) StartIPCServer(srv *ipc.Server) {
+// StartIPCClient starts named-pipe based connection server for windows or unix socket in Linux/Mac
+func (c *Client) StartIPCClient(client *ipc.Client) {
 	for {
-		m, err := srv.Read()
-		if err != nil || m.MsgType == ShutdownMessageType {
+		m, err := client.Read()
+		if err != nil || m.MsgType == skyenv.IPCShutdownMessageType {
+			fmt.Println("STOPPING VPN CLIENT VIA IPC MESSAGE")
 			break
 		}
 	}
-	srv.Close()
+	client.Close()
 	c.Close()
 }
 
