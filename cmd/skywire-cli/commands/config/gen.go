@@ -115,13 +115,23 @@ var genConfigCmd = &cobra.Command{
 			if err != nil {
 				logger.WithError(err).Fatal("Error during parsing servers list")
 			}
-			conf.Dmsg.Servers = localServersData.DMSGServers
-			conf.Dmsg.Discovery = localServersData.DMSGDiscovery
-			conf.Transport.AddressResolver = localServersData.AddressResolver
-			conf.Transport.Discovery = localServersData.TransportDiscovery
-			conf.UptimeTracker.Addr = localServersData.UptimeTracker
-			conf.Routing.RouteFinder = localServersData.RouteFinder
-			conf.Launcher.ServiceDisc = localServersData.ServiceDiscovery
+			if testEnv {
+				conf.Dmsg.Servers = localServersData.Test.DMSGServers
+				conf.Dmsg.Discovery = localServersData.Test.DMSGDiscovery
+				conf.Transport.AddressResolver = localServersData.Test.AddressResolver
+				conf.Transport.Discovery = localServersData.Test.TransportDiscovery
+				conf.UptimeTracker.Addr = localServersData.Test.UptimeTracker
+				conf.Routing.RouteFinder = localServersData.Test.RouteFinder
+				conf.Launcher.ServiceDisc = localServersData.Test.ServiceDiscovery
+			} else {
+				conf.Dmsg.Servers = localServersData.Prod.DMSGServers
+				conf.Dmsg.Discovery = localServersData.Prod.DMSGDiscovery
+				conf.Transport.AddressResolver = localServersData.Prod.AddressResolver
+				conf.Transport.Discovery = localServersData.Prod.TransportDiscovery
+				conf.UptimeTracker.Addr = localServersData.Prod.UptimeTracker
+				conf.Routing.RouteFinder = localServersData.Prod.RouteFinder
+				conf.Launcher.ServiceDisc = localServersData.Prod.ServiceDiscovery
+			}
 		}
 
 		// Read in old config (if any) and obtain old hypervisors.
@@ -178,6 +188,10 @@ func readOldConfig(log *logging.MasterLogger, confPath string, replace bool) (*v
 }
 
 type localServers struct {
+	Test localServersData `json:"test"`
+	Prod localServersData `json:"prod"`
+}
+type localServersData struct {
 	DMSGServers        []string `json:"dmsg_servers"`
 	DMSGDiscovery      string   `json:"dmsg_discovery"`
 	TransportDiscovery string   `json:"transport_discovery"`
