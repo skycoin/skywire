@@ -219,7 +219,7 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 	var dmsgD *dmsg.Client
 	var err error
 
-	err = serviceURL.Fill(conf.ServerAddr)
+	err = serviceURL.Fill(conf.ServiceDisc)
 
 	if serviceURL.Scheme == "dmsg" {
 		if err != nil {
