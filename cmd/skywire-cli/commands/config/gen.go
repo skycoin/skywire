@@ -31,7 +31,7 @@ var (
 	skybianConfig      bool
 	hypervisor         bool
 	hypervisorPKs      string
-	dmsgHttp           bool
+	dmsgHTTP           bool
 )
 
 func init() {
@@ -44,7 +44,7 @@ func init() {
 	genConfigCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "use test deployment service.")
 	genConfigCmd.Flags().BoolVarP(&hypervisor, "is-hypervisor", "i", false, "generate a hypervisor configuration.")
 	genConfigCmd.Flags().StringVar(&hypervisorPKs, "hypervisor-pks", "", "public keys of hypervisors that should be added to this visor")
-	genConfigCmd.Flags().BoolVarP(&dmsgHttp, "dmsghttp", "d", false, "connect to Skywire Services via dmsg")
+	genConfigCmd.Flags().BoolVarP(&dmsgHTTP, "dmsghttp", "d", false, "connect to Skywire Services via dmsg")
 }
 
 var genConfigCmd = &cobra.Command{
@@ -105,7 +105,7 @@ var genConfigCmd = &cobra.Command{
 		}
 
 		// Use local servers
-		if dmsgHttp {
+		if dmsgHTTP {
 			var localServersData localServers
 			serversListJSON, err := ioutil.ReadFile("localServers.json")
 			if err != nil {
