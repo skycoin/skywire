@@ -179,6 +179,8 @@ var BuildTag string
 
 // Summary implements API.
 func (v *Visor) Summary() (*Summary, error) {
+	v.wgTrackers.Wait()
+
 	overview, err := v.Overview()
 	if err != nil {
 		return nil, fmt.Errorf("overview")
