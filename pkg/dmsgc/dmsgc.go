@@ -15,7 +15,6 @@ import (
 type DmsgConfig struct {
 	Discovery     string   `json:"discovery"`
 	SessionsCount int      `json:"sessions_count"`
-	IsLocal       bool     `json:"is_local"`
 	Servers       []string `json:"servers"`
 }
 

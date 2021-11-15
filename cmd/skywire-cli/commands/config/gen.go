@@ -115,13 +115,13 @@ var genConfigCmd = &cobra.Command{
 			if err != nil {
 				logger.WithError(err).Fatal("Error during parsing servers list")
 			}
-			conf.IsPublic = true
-			conf.Dmsg.Servers = localServersData.DSMG
+			conf.Dmsg.Servers = localServersData.DMSGServers
+			conf.Dmsg.Discovery = localServersData.DMSGDiscovery
 			conf.Transport.AddressResolver = localServersData.AddressResolver
-			conf.Transport.Discovery = localServersData.Transport
+			conf.Transport.Discovery = localServersData.TransportDiscovery
 			conf.UptimeTracker.Addr = localServersData.UptimeTracker
-			conf.Routing.RouteFinder = localServersData.Routing
-			conf.Launcher.ServiceDisc = localServersData.Launcher
+			conf.Routing.RouteFinder = localServersData.RouteFinder
+			conf.Launcher.ServiceDisc = localServersData.ServiceDiscovery
 		}
 
 		// Read in old config (if any) and obtain old hypervisors.
@@ -178,10 +178,11 @@ func readOldConfig(log *logging.MasterLogger, confPath string, replace bool) (*v
 }
 
 type localServers struct {
-	DSMG            []string `json:"dmsg"`
-	Transport       string   `json:"transport"`
-	AddressResolver string   `json:"address_resolver"`
-	Routing         string   `json:"routing"`
-	UptimeTracker   string   `json:"uptime_tracker"`
-	Launcher        string   `json:"launcher"`
+	DMSGServers        []string `json:"dmsg_servers"`
+	DMSGDiscovery      string   `json:"dmsg_discovery"`
+	TransportDiscovery string   `json:"transport_discovery"`
+	AddressResolver    string   `json:"address_resolver"`
+	RouteFinder        string   `json:"route_finder"`
+	UptimeTracker      string   `json:"uptime_tracker"`
+	ServiceDiscovery   string   `json:"service_discovery"`
 }
