@@ -31,6 +31,7 @@ var (
 	skybianConfig      bool
 	hypervisor         bool
 	hypervisorPKs      string
+	localConfig        bool
 )
 
 func init() {
@@ -43,6 +44,7 @@ func init() {
 	genConfigCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "use test deployment service.")
 	genConfigCmd.Flags().BoolVarP(&hypervisor, "is-hypervisor", "i", false, "generate a hypervisor configuration.")
 	genConfigCmd.Flags().StringVar(&hypervisorPKs, "hypervisor-pks", "", "public keys of hypervisors that should be added to this visor")
+	genConfigCmd.Flags().BoolVarP(&localConfig, "local", "l", false, "use local servers PK instead global")
 }
 
 var genConfigCmd = &cobra.Command{
@@ -102,6 +104,26 @@ var genConfigCmd = &cobra.Command{
 			logger.WithError(err).Fatal("Failed to create config.")
 		}
 
+		// Use local servers
+		if localConfig {
+			var localServersData localServers
+			serversListJSON, err := ioutil.ReadFile("localServers.json")
+			if err != nil {
+				logger.WithError(err).Fatal("Failed to read servers.json file.")
+			}
+			err = json.Unmarshal(serversListJSON, &localServersData)
+			if err != nil {
+				logger.WithError(err).Fatal("Error during parsing servers list")
+			}
+			conf.IsPublic = true
+			conf.Dmsg.Servers = localServersData.DSMG
+			conf.Transport.AddressResolver = localServersData.AddressResolver
+			conf.Transport.Discovery = localServersData.Transport
+			conf.UptimeTracker.Addr = localServersData.UptimeTracker
+			conf.Routing.RouteFinder = localServersData.Routing
+			conf.Launcher.ServiceDisc = localServersData.Launcher
+		}
+
 		// Read in old config (if any) and obtain old hypervisors.
 		if replaceHypervisors {
 			if oldConf, ok := readOldConfig(mLog, output, true); ok {
@@ -153,4 +175,13 @@ func readOldConfig(log *logging.MasterLogger, confPath string, replace bool) (*v
 	}
 
 	return conf, true
+}
+
+type localServers struct {
+	DSMG            []string `json:"dmsg"`
+	Transport       string   `json:"transport"`
+	AddressResolver string   `json:"address_resolver"`
+	Routing         string   `json:"routing"`
+	UptimeTracker   string   `json:"uptime_tracker"`
+	Launcher        string   `json:"launcher"`
 }
