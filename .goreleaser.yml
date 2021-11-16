@@ -6,7 +6,7 @@ release:
   # Default is extracted from the origin remote URL or empty if its private hosted.
   # Note: it can only be one: either github or gitlab or gitea
   github:
-    owner: skycoin
+    owner: specter25
     name: skywire
 
   draft: true
