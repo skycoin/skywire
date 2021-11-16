@@ -191,4 +191,5 @@ help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
 custom-github-release:
-	./ci_scripts/readFile.sh ./CHANGELOG.md $(GITHUB_TOKEN)
+	chmod +x ./ci_scripts/github_release.sh
+	./ci_scripts/github_release.sh ./CHANGELOG.md $(GITHUB_TOKEN)
