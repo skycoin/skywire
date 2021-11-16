@@ -99,6 +99,7 @@ type Overview struct {
 	LocalIP         string               `json:"local_ip"`
 	PublicIP        string               `json:"public_ip"`
 	IsSymmetricNAT  bool                 `json:"is_symmetic_nat"`
+	Hypervisors     []cipher.PubKey      `json:"hypervisors"`
 }
 
 // Overview implements API.
@@ -152,6 +153,8 @@ func (v *Visor) Overview() (*Overview, error) {
 		overview.LocalIP = localIPs[0].String()
 	}
 
+	overview.Hypervisors = v.conf.Hypervisors
+
 	return overview, nil
 }
 
@@ -176,6 +179,8 @@ var BuildTag string
 
 // Summary implements API.
 func (v *Visor) Summary() (*Summary, error) {
+	v.wgTrackers.Wait()
+
 	overview, err := v.Overview()
 	if err != nil {
 		return nil, fmt.Errorf("overview")
@@ -212,6 +217,13 @@ func (v *Visor) Summary() (*Summary, error) {
 		return nil, fmt.Errorf("pts")
 	}
 
+	dmsgStatValue := &dmsgtracker.DmsgClientSummary{}
+	if v.trackers != nil {
+		if dmsgTracker := v.trackers.GetBulk([]cipher.PubKey{v.conf.PK}); len(dmsgTracker) > 0 {
+			dmsgStatValue = &dmsgTracker[0]
+		}
+	}
+
 	summary := &Summary{
 		Overview:             overview,
 		Health:               health,
@@ -222,6 +234,7 @@ func (v *Visor) Summary() (*Summary, error) {
 		SkybianBuildVersion:  skybianBuildVersion,
 		BuildTag:             BuildTag,
 		PublicAutoconnect:    v.conf.Transport.PublicAutoconnect,
+		DmsgStats:            dmsgStatValue,
 	}
 
 	return summary, nil
