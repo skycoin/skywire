@@ -8,12 +8,12 @@
 .PHONY : docker-run docker-stop
 
 SHELL := /bin/bash
-VERSION := $(shell git describe)
+VERSION ?= $(shell git describe 2> /dev/null)
 #VERSION := v0.1.0 # for debugging updater
 
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 DATE := $(shell date -u $(RFC_3339))
-COMMIT := $(shell git rev-list -1 HEAD)
+COMMIT ?= $(shell git rev-list -1 HEAD 2> /dev/null)
 BRANCH := latest
 
 PROJECT_BASE := github.com/skycoin/skywire
@@ -148,7 +148,7 @@ build-deploy: ## Build for deployment Docker images
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
-github-release: 
+github-release:
 	goreleaser --rm-dist
 
 build-docker: ## Build docker image
@@ -180,7 +180,7 @@ deb-package: deb-install-prequisites ## Create unsigned application
 
 deb-package-help: ## Show installer creation help
 	./scripts/deb_installer/package_deb.sh -h
-	
+
 mac-installer: ## Create signed and notarized application, run make mac-installer-help for more
 	./scripts/mac_installer/create_installer.sh -s -n
 
