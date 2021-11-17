@@ -234,15 +234,23 @@ func (c *Client) Serve() error {
 
 // ListenIPC starts named-pipe based connection server for windows or unix socket in Linux/Mac
 func (c *Client) ListenIPC(client *ipc.Client) {
+	if client == nil {
+		fmt.Println("Unable to create IPC Client: server is non-existent")
+		return
+	}
 	for {
 		m, err := client.Read()
 		if err != nil {
 			fmt.Printf("%s IPC received error: %v", skyenv.VPNClientName, err)
 		}
-		if m.MsgType == skyenv.IPCShutdownMessageType {
-			fmt.Println("Stopping " + skyenv.VPNClientName + " via IPC")
-			break
+
+		if m != nil {
+			if m.MsgType == skyenv.IPCShutdownMessageType {
+				fmt.Println("Stopping " + skyenv.VPNClientName + " via IPC")
+				break
+			}
 		}
+
 	}
 	client.Close()
 	c.Close()
