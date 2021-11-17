@@ -179,6 +179,8 @@ var BuildTag string
 
 // Summary implements API.
 func (v *Visor) Summary() (*Summary, error) {
+	v.wgTrackers.Wait()
+
 	overview, err := v.Overview()
 	if err != nil {
 		return nil, fmt.Errorf("overview")
@@ -217,7 +219,9 @@ func (v *Visor) Summary() (*Summary, error) {
 
 	dmsgStatValue := &dmsgtracker.DmsgClientSummary{}
 	if v.trackers != nil {
-		dmsgStatValue = &v.trackers.GetBulk([]cipher.PubKey{v.conf.PK})[0]
+		if dmsgTracker := v.trackers.GetBulk([]cipher.PubKey{v.conf.PK}); len(dmsgTracker) > 0 {
+			dmsgStatValue = &dmsgTracker[0]
+		}
 	}
 
 	summary := &Summary{

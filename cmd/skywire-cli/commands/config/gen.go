@@ -31,6 +31,7 @@ var (
 	skybianConfig      bool
 	hypervisor         bool
 	hypervisorPKs      string
+	dmsgHTTP           bool
 )
 
 func init() {
@@ -43,6 +44,7 @@ func init() {
 	genConfigCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "use test deployment service.")
 	genConfigCmd.Flags().BoolVarP(&hypervisor, "is-hypervisor", "i", false, "generate a hypervisor configuration.")
 	genConfigCmd.Flags().StringVar(&hypervisorPKs, "hypervisor-pks", "", "public keys of hypervisors that should be added to this visor")
+	genConfigCmd.Flags().BoolVarP(&dmsgHTTP, "dmsghttp", "d", false, "connect to Skywire Services via dmsg")
 }
 
 var genConfigCmd = &cobra.Command{
@@ -102,6 +104,36 @@ var genConfigCmd = &cobra.Command{
 			logger.WithError(err).Fatal("Failed to create config.")
 		}
 
+		// Use local servers
+		if dmsgHTTP {
+			var dmsgHTTPServersList dmsgHTTPServers
+			serversListJSON, err := ioutil.ReadFile("localServers.json")
+			if err != nil {
+				logger.WithError(err).Fatal("Failed to read servers.json file.")
+			}
+			err = json.Unmarshal(serversListJSON, &dmsgHTTPServersList)
+			if err != nil {
+				logger.WithError(err).Fatal("Error during parsing servers list")
+			}
+			if testEnv {
+				conf.Dmsg.Servers = dmsgHTTPServersList.Test.DMSGServers
+				conf.Dmsg.Discovery = dmsgHTTPServersList.Test.DMSGDiscovery
+				conf.Transport.AddressResolver = dmsgHTTPServersList.Test.AddressResolver
+				conf.Transport.Discovery = dmsgHTTPServersList.Test.TransportDiscovery
+				conf.UptimeTracker.Addr = dmsgHTTPServersList.Test.UptimeTracker
+				conf.Routing.RouteFinder = dmsgHTTPServersList.Test.RouteFinder
+				conf.Launcher.ServiceDisc = dmsgHTTPServersList.Test.ServiceDiscovery
+			} else {
+				conf.Dmsg.Servers = dmsgHTTPServersList.Prod.DMSGServers
+				conf.Dmsg.Discovery = dmsgHTTPServersList.Prod.DMSGDiscovery
+				conf.Transport.AddressResolver = dmsgHTTPServersList.Prod.AddressResolver
+				conf.Transport.Discovery = dmsgHTTPServersList.Prod.TransportDiscovery
+				conf.UptimeTracker.Addr = dmsgHTTPServersList.Prod.UptimeTracker
+				conf.Routing.RouteFinder = dmsgHTTPServersList.Prod.RouteFinder
+				conf.Launcher.ServiceDisc = dmsgHTTPServersList.Prod.ServiceDiscovery
+			}
+		}
+
 		// Read in old config (if any) and obtain old hypervisors.
 		if replaceHypervisors {
 			if oldConf, ok := readOldConfig(mLog, output, true); ok {
@@ -153,4 +185,18 @@ func readOldConfig(log *logging.MasterLogger, confPath string, replace bool) (*v
 	}
 
 	return conf, true
+}
+
+type dmsgHTTPServers struct {
+	Test dmsgHTTPServersData `json:"test"`
+	Prod dmsgHTTPServersData `json:"prod"`
+}
+type dmsgHTTPServersData struct {
+	DMSGServers        []string `json:"dmsg_servers"`
+	DMSGDiscovery      string   `json:"dmsg_discovery"`
+	TransportDiscovery string   `json:"transport_discovery"`
+	AddressResolver    string   `json:"address_resolver"`
+	RouteFinder        string   `json:"route_finder"`
+	UptimeTracker      string   `json:"uptime_tracker"`
+	ServiceDiscovery   string   `json:"service_discovery"`
 }
