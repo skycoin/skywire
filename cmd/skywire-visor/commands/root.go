@@ -64,13 +64,13 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(completionCmd)
-	rootCmd.Flags().StringVar(&tag, "tag", "skywire", "logging tag")
-	rootCmd.Flags().StringVar(&syslogAddr, "syslog", "", "syslog server address. E.g. localhost:514")
-	rootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "p", "", "pprof profiling mode. Valid values: cpu, mem, mutex, block, trace, http")
-	rootCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port if mode is 'http'")
-	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file location. If the value is 'STDIN', config file will be read from stdin.")
-	rootCmd.Flags().StringVar(&delay, "delay", "0ns", "start delay (deprecated)") // deprecated
-	rootCmd.Flags().BoolVar(&launchBrowser, "launch-browser", false, "open hypervisor web ui (hypervisor only) with system browser")
+	rootCmd.PersistentFlags().StringVar(&tag, "tag", "skywire", "logging tag")
+	rootCmd.PersistentFlags().StringVar(&syslogAddr, "syslog", "", "syslog server address. E.g. localhost:514")
+	rootCmd.PersistentFlags().StringVarP(&pprofMode, "pprofmode", "p", "", "pprof profiling mode. Valid values: cpu, mem, mutex, block, trace, http")
+	rootCmd.PersistentFlags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port if mode is 'http'")
+	rootCmd.PersistentFlags().StringVarP(&confPath, "config", "c", "", "config file location. If the value is 'STDIN', config file will be read from stdin.")
+	rootCmd.PersistentFlags().StringVar(&delay, "delay", "0ns", "start delay (deprecated)") // deprecated
+	rootCmd.PersistentFlags().BoolVar(&launchBrowser, "launch-browser", false, "open hypervisor web ui (hypervisor only) with system browser")
 	extraFlags()
 }
 
