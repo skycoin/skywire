@@ -53,4 +53,4 @@ Char
 /SkywireInstaller*.pkg
 *.dmg
 /scripts/mac_installer/icon.iconset/
-CACHE.md
+release-notes.md

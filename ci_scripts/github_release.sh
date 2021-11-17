@@ -1,22 +1,22 @@
 #!/bin/bash
-VAR=0
-FINAL=""
+var=0
+final=""
 while IFS= read -r line; do
     if [ "${line:0:3}" = "## " ]; then
-        VAR=$(($VAR + 1))
+        var=$(($var + 1))
     fi
-    if [ $VAR -eq 1 ]; then
+    if [ $var -eq 1 ]; then
         if [ "${line}" = '' ]; then
-            FINAL+="\n"
+            final+="\n"
         else
-            FINAL+=$line
-            FINAL+="\n"
+            final+=$line
+            final+="\n"
         fi
     fi
 done <"$1"
 
-echo -e $FINAL >> CACHE.md
+echo -e $final >release-notes.md
 
-GITHUB_TOKEN="$2" goreleaser release  --rm-dist --release-notes  ../CACHE.md
+GITHUB_TOKEN="$2" goreleaser release --rm-dist --release-notes ../release-notes.md
 
-rm CACHE.md
+rm release-notes.md

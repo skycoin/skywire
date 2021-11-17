@@ -149,7 +149,8 @@ build-deploy: ## Build for deployment Docker images
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
 github-release:
-	goreleaser --rm-dist
+	chmod +x ./ci_scripts/github_release.sh
+	./ci_scripts/github_release.sh ./CHANGELOG.md $(GITHUB_TOKEN)
 
 build-docker: ## Build docker image
 	./ci_scripts/docker-push.sh -t ${BRANCH} -b
@@ -189,7 +190,3 @@ mac-installer-help: ## Show installer creation help
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
-
-custom-github-release:
-	chmod +x ./ci_scripts/github_release.sh
-	./ci_scripts/github_release.sh ./CHANGELOG.md $(GITHUB_TOKEN)

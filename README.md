@@ -128,5 +128,5 @@ use [goreleaser](https://goreleaser.com) for creating them.
    where `0.1.0` is release version and `First release` is release name.
 8. Push the created tag to the repository: `git push origin 0.1.0`, where `0.1.0` is release version.
 9. [Issue a personal GitHub access token.](https://github.com/settings/tokens)
-10. Run `make GITHUB_TOKEN=your_token custom-github-release`
+10. Run `make GITHUB_TOKEN=your_token github-release`
 11. [Check the created GitHub release.](https://github.com/skycoin/skywire/releases/)
