@@ -5,10 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
 	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/direct"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/utclient"
@@ -58,6 +60,8 @@ type Visor struct {
 
 	ebc      *appevent.Broadcaster // event broadcaster
 	dmsgC    *dmsg.Client
+	dClient  direct.APIClient // dmsg direct client
+	dmsgHTTP *http.Client     // dmsghttp client
 	trackers *dmsgtracker.Manager
 
 	stunClient *network.StunDetails
