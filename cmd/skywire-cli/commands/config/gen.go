@@ -9,6 +9,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/disc"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
@@ -192,11 +193,11 @@ type dmsgHTTPServers struct {
 	Prod dmsgHTTPServersData `json:"prod"`
 }
 type dmsgHTTPServersData struct {
-	DMSGServers        []string `json:"dmsg_servers"`
-	DMSGDiscovery      string   `json:"dmsg_discovery"`
-	TransportDiscovery string   `json:"transport_discovery"`
-	AddressResolver    string   `json:"address_resolver"`
-	RouteFinder        string   `json:"route_finder"`
-	UptimeTracker      string   `json:"uptime_tracker"`
-	ServiceDiscovery   string   `json:"service_discovery"`
+	DMSGServers        []*disc.Entry `json:"dmsg_servers"`
+	DMSGDiscovery      string        `json:"dmsg_discovery"`
+	TransportDiscovery string        `json:"transport_discovery"`
+	AddressResolver    string        `json:"address_resolver"`
+	RouteFinder        string        `json:"route_finder"`
+	UptimeTracker      string        `json:"uptime_tracker"`
+	ServiceDiscovery   string        `json:"service_discovery"`
 }

@@ -4,6 +4,7 @@ import (
 	"runtime"
 
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/disc"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/app/launcher"
@@ -24,7 +25,7 @@ func MakeBaseConfig(common *Common) *V1 {
 	conf.Dmsg = &dmsgc.DmsgConfig{
 		Discovery:     skyenv.DefaultDmsgDiscAddr,
 		SessionsCount: 1,
-		Servers:       []string{},
+		Servers:       []*disc.Entry{},
 	}
 	conf.Transport = &V1Transport{
 		Discovery:         skyenv.DefaultTpDiscAddr,
