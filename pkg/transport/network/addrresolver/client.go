@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/skycoin/skywire/pkg/transport/network"
 	"io"
 	"io/ioutil"
 	"net"
@@ -43,6 +44,8 @@ var (
 	ErrNoEntry = errors.New("no entry for this PK")
 	// ErrNotReady is returned when address resolver is not ready.
 	ErrNotReady = errors.New("address resolver is not ready")
+	// ErrNoTransportsFound returned when no transports are found.
+	ErrNoTransportsFound = errors.New("failed to get response data from AR transports endpoint")
 )
 
 // Error is the object returned to the client when there's an error.
@@ -57,6 +60,7 @@ type APIClient interface {
 	BindSTCPR(ctx context.Context, port string) error
 	BindSUDPH(filter *pfilter.PacketFilter, handshake Handshake) (<-chan RemoteVisor, error)
 	Resolve(ctx context.Context, netType string, pk cipher.PubKey) (VisorData, error)
+	Transports(ctx context.Context) (map[cipher.PubKey][]network.Type, error)
 	Close() error
 }
 
@@ -375,6 +379,58 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 	}
 
 	return resolveResp, nil
+}
+
+func (c *httpClient) Transports(ctx context.Context) (map[cipher.PubKey][]network.Type, error) {
+	if !c.isReady() {
+		return nil, ErrNotReady
+	}
+	resp, err := c.Get(ctx, "/transports")
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err = resp.Body.Close(); err != nil {
+			c.log.WithError(err).Warn("Failed to close response body")
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		c.log.Warn(ErrNoTransportsFound.Error())
+		return nil, ErrNoTransportsFound
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	transportsMap := map[string]string{}
+	if err = json.Unmarshal(body, &transportsMap); err != nil {
+		return nil, err
+	}
+
+	var results map[cipher.PubKey][]network.Type
+
+	for k, v := range transportsMap {
+		rPK, err := cipher.NewPubKey([]byte(v))
+		if err != nil {
+			continue
+		}
+
+		// Two kinds of network, SUDPH and STCPR
+		if _, ok := results[rPK]; ok {
+			kType := network.Type(k)
+			if len(results[rPK]) == 1 && kType != results[rPK][0] {
+				results[rPK] = append(results[rPK], network.Type(k))
+			}
+		} else {
+			nTypeSlice := make([]network.Type, 0, 2)
+			nTypeSlice = append(nTypeSlice, network.Type(k))
+			results[rPK] = nTypeSlice
+		}
+	}
+	return results, nil
 }
 
 func (c *httpClient) isReady() bool {
