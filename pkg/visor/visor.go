@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/skycoin/dmsg/cipher"
 	"sync"
 	"time"
 
@@ -77,6 +78,7 @@ type Visor struct {
 	runtimeErrors chan error
 
 	isServicesHealthy *internalHealthInfo
+	transportsCache   map[cipher.PubKey][]network.Type
 }
 
 // todo: consider moving module closing to the module system

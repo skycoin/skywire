@@ -172,8 +172,17 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 		err := fmt.Errorf("failed to create address resolver client: %w", err)
 		return err
 	}
+
+	// initialize cache for available transports
+	m, err := v.arClient.Transports(ctx)
+	if err != nil {
+		log.Warn("failed to fetch transports from AR")
+		return err
+	}
+
 	v.initLock.Lock()
 	v.arClient = arClient
+	v.transportsCache = m
 	v.initLock.Unlock()
 	return nil
 }
@@ -655,7 +664,7 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
 		logger.Warn("Failed to get STCPR port")
 		return nil
 	}
-	visorUpdater := v.serviceDisc.VisorUpdater(uint16(port))
+	visorUpdater := v.serviceDisc.VisorUpdater(port)
 	visorUpdater.Start()
 
 	v.log.Infof("Sent request to register visor as public")
