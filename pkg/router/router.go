@@ -52,6 +52,13 @@ var (
 	ErrNoTransportFound = errors.New("no transport found")
 )
 
+// RouteSetupHook is an alias for a function that takes remote public key
+// and a reference to transport manager in order to setup i.e:
+// 1. If the remote is either available stcpr or sudph, establish the transport to the remote and then continue with the route creation process.
+// 2. If neither of these direct transports is available, check if automatic transports are currently active. If they are continue with route creation.
+// 3. If none of the first two checks was successful, establish a dmsg transport and then continue with route creation.
+type RouteSetupHook func(cipher.PubKey, *transport.Manager) error
+
 // Config configures Router.
 type Config struct {
 	Logger           *logging.Logger
@@ -143,24 +150,26 @@ type Router interface {
 // communicating with setup nodes, forward packets according to local
 // rules and manages route groups for apps.
 type router struct {
-	mx            sync.Mutex
-	conf          *Config
-	logger        *logging.Logger
-	sl            *dmsg.Listener
-	dmsgC         *dmsg.Client
-	trustedVisors map[cipher.PubKey]struct{}
-	tm            *transport.Manager
-	rt            routing.Table
-	rgsNs         map[routing.RouteDescriptor]*NoiseRouteGroup // Noise-wrapped route groups to push incoming reads from transports.
-	rgsRaw        map[routing.RouteDescriptor]*RouteGroup      // Not-yet-noise-wrapped route groups. when one of these gets wrapped, it gets removed from here
-	rpcSrv        *rpc.Server
-	accept        chan routing.EdgeRules
-	done          chan struct{}
-	once          sync.Once
+	mx               sync.Mutex
+	conf             *Config
+	logger           *logging.Logger
+	sl               *dmsg.Listener
+	dmsgC            *dmsg.Client
+	trustedVisors    map[cipher.PubKey]struct{}
+	tm               *transport.Manager
+	rt               routing.Table
+	rgsNs            map[routing.RouteDescriptor]*NoiseRouteGroup // Noise-wrapped route groups to push incoming reads from transports.
+	rgsRaw           map[routing.RouteDescriptor]*RouteGroup      // Not-yet-noise-wrapped route groups. when one of these gets wrapped, it gets removed from here
+	rpcSrv           *rpc.Server
+	accept           chan routing.EdgeRules
+	done             chan struct{}
+	once             sync.Once
+	routeSetupHookMu sync.Mutex
+	routeSetupHooks  []RouteSetupHook // see RouteSetupHook description
 }
 
 // New constructs a new Router.
-func New(dmsgC *dmsg.Client, config *Config) (Router, error) {
+func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (Router, error) {
 	config.SetDefaults()
 
 	sl, err := dmsgC.Listen(skyenv.DmsgAwaitSetupPort)
@@ -173,19 +182,24 @@ func New(dmsgC *dmsg.Client, config *Config) (Router, error) {
 		trustedVisors[node] = struct{}{}
 	}
 
+	if routeSetupHooks == nil {
+		routeSetupHooks = []RouteSetupHook{}
+	}
+
 	r := &router{
-		conf:          config,
-		logger:        config.Logger,
-		tm:            config.TransportManager,
-		rt:            routing.NewTable(),
-		sl:            sl,
-		dmsgC:         dmsgC,
-		rgsNs:         make(map[routing.RouteDescriptor]*NoiseRouteGroup),
-		rgsRaw:        make(map[routing.RouteDescriptor]*RouteGroup),
-		rpcSrv:        rpc.NewServer(),
-		accept:        make(chan routing.EdgeRules, acceptSize),
-		done:          make(chan struct{}),
-		trustedVisors: trustedVisors,
+		conf:            config,
+		logger:          config.Logger,
+		tm:              config.TransportManager,
+		rt:              routing.NewTable(),
+		sl:              sl,
+		dmsgC:           dmsgC,
+		rgsNs:           make(map[routing.RouteDescriptor]*NoiseRouteGroup),
+		rgsRaw:          make(map[routing.RouteDescriptor]*RouteGroup),
+		rpcSrv:          rpc.NewServer(),
+		accept:          make(chan routing.EdgeRules, acceptSize),
+		done:            make(chan struct{}),
+		trustedVisors:   trustedVisors,
+		routeSetupHooks: routeSetupHooks,
 	}
 
 	go r.rulesGCLoop()
@@ -195,6 +209,14 @@ func New(dmsgC *dmsg.Client, config *Config) (Router, error) {
 	}
 
 	return r, nil
+}
+
+// RegisterSetupHooks takes variadic RouteSetupHook to add to router's setup functions
+// currently not in use
+func (r *router) RegisterSetupHooks(rshooks ...RouteSetupHook) {
+	r.routeSetupHookMu.Lock()
+	r.routeSetupHooks = append(r.routeSetupHooks, rshooks...)
+	r.routeSetupHookMu.Unlock()
 }
 
 // DialRoutes dials to a given visor of 'rPK'.
@@ -221,6 +243,17 @@ func (r *router) DialRoutes(
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, lPort, rPort)
 
+	r.routeSetupHookMu.Lock()
+	if len(r.routeSetupHooks) != 0 {
+		for _, rsf := range r.routeSetupHooks {
+			if err := rsf(rPK, r.tm); err != nil {
+				return nil, err
+			}
+		}
+	}
+	r.routeSetupHookMu.Unlock()
+
+	// check if transports are available
 	ok := r.checkIfTransportAvalailable()
 	if !ok {
 		return nil, ErrNoTransportFound
@@ -1042,7 +1075,7 @@ func (r *router) removeRouteGroupOfRule(rule routing.Rule) {
 func (r *router) checkIfTransportAvalailable() (ok bool) {
 	r.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
 		ok = true
-		return true
+		return ok
 	})
 	return ok
 }

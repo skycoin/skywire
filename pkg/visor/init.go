@@ -174,7 +174,7 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 	}
 
 	// initialize cache for available transports
-	m, err := v.arClient.Transports(ctx)
+	m, err := arClient.Transports(ctx)
 	if err != nil {
 		log.Warn("failed to fetch transports from AR")
 		return err
@@ -184,7 +184,35 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 	v.arClient = arClient
 	v.transportsCache = m
 	v.initLock.Unlock()
+
+	doneCh := make(chan struct{}, 1)
+	t := time.NewTicker(1 * time.Hour)
+	go fetchARTransports(ctx, v, log, doneCh, t)
+	v.pushCloseStack("address_resolver", func() error {
+		doneCh <- struct{}{}
+		return nil
+	})
+
 	return nil
+}
+
+func fetchARTransports(ctx context.Context, v *Visor, log *logging.Logger, doneCh <-chan struct{}, tick *time.Ticker) {
+	for {
+		select {
+		case <-tick.C:
+			log.Debug("Fetching PKs from AR")
+			m, err := v.arClient.Transports(ctx)
+			if err != nil {
+				log.WithError(err).Warn("failed to fetch AR transport")
+			}
+			v.transportCacheMu.Lock()
+			v.transportsCache = m
+			v.transportCacheMu.Unlock()
+		case <-doneCh:
+			tick.Stop()
+			return
+		}
+	}
 }
 
 func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
@@ -388,6 +416,40 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 	return nil
 }
 
+func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []router.RouteSetupHook {
+	return []router.RouteSetupHook{
+		func(rPK cipher.PubKey, tm *transport.Manager) error {
+			dmsgFallback := func() error {
+				_, err := tm.SaveTransport(ctx, rPK, network.DMSG, transport.LabelAutomatic)
+				return err
+			}
+			// check visor's AR transport cache
+			if v.transportsCache == nil {
+				// skips if there's no AR transports
+				log.Warn("empty AR transports cache")
+				return dmsgFallback()
+			}
+			transports, ok := v.transportsCache[rPK]
+			if !ok {
+				log.WithField("pk", rPK.String()).Warn("pk not found in the transports cache")
+				// check if automatic transport is available, if it does,
+				// continue with route creation
+				if v.conf.Transport.PublicAutoconnect {
+					return nil
+				}
+			}
+			// try to establish direct connection to rPK (single hop)
+			errCh := make(chan error, 1)
+			for _, t := range transports {
+				if _, err := tm.SaveTransport(ctx, rPK, network.Type(t), transport.LabelAutomatic); err != nil {
+					errCh <- err
+				}
+			}
+			return <-errCh
+		},
+	}
+}
+
 func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Routing
 	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout))
@@ -404,7 +466,9 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		MinHops:          v.conf.Routing.MinHops,
 	}
 
-	r, err := router.New(v.dmsgC, &rConf)
+	routeSetupHooks := getRouteSetupHooks(ctx, v, log)
+
+	r, err := router.New(v.dmsgC, &rConf, routeSetupHooks)
 	if err != nil {
 		err := fmt.Errorf("failed to create router: %w", err)
 		return err
