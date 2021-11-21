@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/skycoin/skywire/pkg/transport/network"
 	"io"
 	"io/ioutil"
 	"net"
@@ -60,7 +59,7 @@ type APIClient interface {
 	BindSTCPR(ctx context.Context, port string) error
 	BindSUDPH(filter *pfilter.PacketFilter, handshake Handshake) (<-chan RemoteVisor, error)
 	Resolve(ctx context.Context, netType string, pk cipher.PubKey) (VisorData, error)
-	Transports(ctx context.Context) (map[cipher.PubKey][]network.Type, error)
+	Transports(ctx context.Context) (map[cipher.PubKey][]string, error)
 	Close() error
 }
 
@@ -381,7 +380,7 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 	return resolveResp, nil
 }
 
-func (c *httpClient) Transports(ctx context.Context) (map[cipher.PubKey][]network.Type, error) {
+func (c *httpClient) Transports(ctx context.Context) (map[cipher.PubKey][]string, error) {
 	if !c.isReady() {
 		return nil, ErrNotReady
 	}
@@ -410,7 +409,7 @@ func (c *httpClient) Transports(ctx context.Context) (map[cipher.PubKey][]networ
 		return nil, err
 	}
 
-	var results map[cipher.PubKey][]network.Type
+	results := map[cipher.PubKey][]string{}
 
 	for k, v := range transportsMap {
 		rPK, err := cipher.NewPubKey([]byte(v))
@@ -420,13 +419,12 @@ func (c *httpClient) Transports(ctx context.Context) (map[cipher.PubKey][]networ
 
 		// Two kinds of network, SUDPH and STCPR
 		if _, ok := results[rPK]; ok {
-			kType := network.Type(k)
-			if len(results[rPK]) == 1 && kType != results[rPK][0] {
-				results[rPK] = append(results[rPK], network.Type(k))
+			if len(results[rPK]) == 1 && k != results[rPK][0] {
+				results[rPK] = append(results[rPK], k)
 			}
 		} else {
-			nTypeSlice := make([]network.Type, 0, 2)
-			nTypeSlice = append(nTypeSlice, network.Type(k))
+			nTypeSlice := make([]string, 0, 2)
+			nTypeSlice = append(nTypeSlice, k)
 			results[rPK] = nTypeSlice
 		}
 	}
