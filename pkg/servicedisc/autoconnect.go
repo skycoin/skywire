@@ -2,8 +2,10 @@ package servicedisc
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 
@@ -77,15 +79,32 @@ func (a *autoconnector) Run(ctx context.Context) (err error) {
 			if !ok || val < maxFailedAddressRetryAttempt {
 				a.log.WithField("pk", pk).WithField("attempt", val).Debugln("Trying to add transport to public visor")
 				logger := a.log.WithField("pk", pk).WithField("type", string(network.STCPR))
-				if _, err := a.tm.SaveTransport(ctx, pk, network.STCPR, transport.LabelAutomatic); err != nil {
+				if err = a.tryEstablishTransport(ctx, pk, logger); err != nil {
 					logger.WithError(err).Warnln("Failed to add transport to public visor")
 					failedAddresses[pk]++
 					continue
 				}
-				logger.Infoln("Added transport to public visor")
 			}
 		}
 	}
+}
+
+// tryEstablish transport will try to establish transport to the remote pk via STCPR or SUDPH, if both failed, return error.
+func (a *autoconnector) tryEstablishTransport(ctx context.Context, pk cipher.PubKey, logger *logrus.Entry) error {
+	errSlice := make([]error, 0, 2)
+	if _, err := a.tm.SaveTransport(ctx, pk, network.STCPR, transport.LabelAutomatic); err != nil {
+		errSlice = append(errSlice, err)
+	}
+	if _, err := a.tm.SaveTransport(ctx, pk, network.SUDPH, transport.LabelAutomatic); err != nil {
+		errSlice = append(errSlice, err)
+	}
+
+	if len(errSlice) > 1 {
+		return fmt.Errorf("unable to establish both SUDPH: %v and STCPR: %v to %s", errSlice[0], errSlice[1], pk)
+	}
+
+	logger.Debugln("Added transport to public visor")
+	return nil
 }
 
 func (a *autoconnector) fetchPubAddresses(ctx context.Context) ([]cipher.PubKey, error) {
