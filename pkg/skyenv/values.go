@@ -147,6 +147,7 @@ const (
 )
 
 const (
+	// IPCShutdownMessageType sends IPC shutdown message type
 	IPCShutdownMessageType = 68
 )
 

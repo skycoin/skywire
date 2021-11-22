@@ -6,12 +6,11 @@ package main
 import (
 	"flag"
 	"fmt"
-	ipc "github.com/james-barrow/golang-ipc"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"os"
 	"os/signal"
 	"runtime"
 
+	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/buildinfo"
 
@@ -19,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 const (

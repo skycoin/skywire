@@ -2,18 +2,18 @@ package skysocks
 
 import (
 	"fmt"
-	ipc "github.com/james-barrow/golang-ipc"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"io"
 	"net"
 	"sync"
 	"time"
 
+	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/yamux"
 
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 // Log is skysocks package level logger, it can be replaced with a different one from outside the package
