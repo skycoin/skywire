@@ -70,6 +70,7 @@ type Visor struct {
 	appL        *launcher.Launcher    // app launcher
 	serviceDisc appdisc.Factory
 	initLock    *sync.Mutex
+	wgTrackers  *sync.WaitGroup
 	// when module is failed it pushes its error to this channel
 	// used by init and shutdown to show/check for any residual errors
 	// produced by concurrent parts of modules
@@ -106,7 +107,10 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 		restartCtx:        restartCtx,
 		initLock:          new(sync.Mutex),
 		isServicesHealthy: newInternalHealthInfo(),
+		wgTrackers:        new(sync.WaitGroup),
 	}
+	v.wgTrackers.Add(1)
+	defer v.wgTrackers.Done()
 
 	v.isServicesHealthy.init()
 
