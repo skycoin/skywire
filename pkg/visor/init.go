@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -445,7 +444,12 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 			// try to establish direct connection to rPK (single hop)
 			errSlice := make([]error, 0, 2)
 			for _, trans := range transports {
-				if _, err := tm.SaveTransport(ctx, rPK, network.Type(strings.ToUpper(trans)), transport.LabelAutomatic); err != nil {
+				ntype := network.Type(trans)
+				// skip if SUDPH is under symmetric NAT / under UDP firewall.
+				if ntype == network.SUDPH && (v.stunClient.NATType == stun.NATSymmetric || v.stunClient.NATType == stun.NATSymmetricUDPFirewall) {
+					continue
+				}
+				if _, err := tm.SaveTransport(ctx, rPK, ntype, transport.LabelAutomatic); err != nil {
 					errSlice = append(errSlice, err)
 				}
 			}

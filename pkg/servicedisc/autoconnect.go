@@ -2,7 +2,6 @@ package servicedisc
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -91,16 +90,8 @@ func (a *autoconnector) Run(ctx context.Context) (err error) {
 
 // tryEstablish transport will try to establish transport to the remote pk via STCPR or SUDPH, if both failed, return error.
 func (a *autoconnector) tryEstablishTransport(ctx context.Context, pk cipher.PubKey, logger *logrus.Entry) error {
-	errSlice := make([]error, 0, 2)
 	if _, err := a.tm.SaveTransport(ctx, pk, network.STCPR, transport.LabelAutomatic); err != nil {
-		errSlice = append(errSlice, err)
-	}
-	if _, err := a.tm.SaveTransport(ctx, pk, network.SUDPH, transport.LabelAutomatic); err != nil {
-		errSlice = append(errSlice, err)
-	}
-
-	if len(errSlice) > 1 {
-		return fmt.Errorf("unable to establish both SUDPH: %v and STCPR: %v to %s", errSlice[0], errSlice[1], pk)
+		return err
 	}
 
 	logger.Debugln("Added transport to public visor")
