@@ -8,8 +8,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	ipc "github.com/james-barrow/golang-ipc"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"io/fs"
 	"net"
 	"net/http"
@@ -18,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -26,6 +25,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 const (

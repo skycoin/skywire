@@ -2,16 +2,17 @@ package skysocks
 
 import (
 	"fmt"
-	ipc "github.com/james-barrow/golang-ipc"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"net"
 	"os"
 	"sync"
 	"sync/atomic"
 
 	"github.com/armon/go-socks5"
+	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/yamux"
+
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 // Server implements multiplexing proxy server using yamux.
