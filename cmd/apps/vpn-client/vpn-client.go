@@ -9,15 +9,13 @@ import (
 	"runtime"
 	"syscall"
 
-	"github.com/skycoin/skywire/pkg/skyenv"
-
-	"github.com/skycoin/dmsg/cipher"
-
 	ipc "github.com/james-barrow/golang-ipc"
+	"github.com/skycoin/dmsg/cipher"
 
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appevent"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 var (
