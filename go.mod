@@ -14,7 +14,7 @@ require (
 	github.com/getlantern/systray v1.1.0
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/google/go-github v17.0.0+incompatible
-	github.com/google/uuid v1.1.1
+	github.com/google/uuid v1.1.2
 	github.com/gorilla/securecookie v1.1.1
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/reedsolomon v1.9.9 // indirect
@@ -32,8 +32,8 @@ require (
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
-	github.com/spf13/cobra v0.0.5
-	github.com/stretchr/testify v1.6.1
+	github.com/spf13/cobra v1.2.1
+	github.com/stretchr/testify v1.7.0
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
 	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect
 	github.com/templexxx/xor v0.0.0-20191217153810-f85b25db303b // indirect
@@ -85,7 +85,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6 // indirect
-	github.com/spf13/pflag v1.0.3 // indirect
+	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stretchr/objx v0.1.1 // indirect
 	github.com/tklauser/go-sysconf v0.3.4 // indirect
 	github.com/tklauser/numcpus v0.2.1 // indirect
@@ -96,7 +96,7 @@ require (
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519 // indirect
 	golang.org/x/mod v0.4.2 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
-	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c // indirect
+	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'
