@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -169,7 +170,7 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 
 	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, log)
 	if err != nil {
-		err := fmt.Errorf("failed to create address resolver client: %w", err)
+		err = fmt.Errorf("failed to create address resolver client: %w", err)
 		return err
 	}
 
@@ -435,17 +436,23 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 				// check if automatic transport is available, if it does,
 				// continue with route creation
 				if v.conf.Transport.PublicAutoconnect {
+					// we return nil here, if there's no transport available it wlll be checked
+					// by the router itself next.
 					return nil
 				}
+				return dmsgFallback()
 			}
 			// try to establish direct connection to rPK (single hop)
-			errCh := make(chan error, 1)
-			for _, t := range transports {
-				if _, err := tm.SaveTransport(ctx, rPK, network.Type(t), transport.LabelAutomatic); err != nil {
-					errCh <- err
+			errSlice := make([]error, 0, 2)
+			for _, trans := range transports {
+				if _, err := tm.SaveTransport(ctx, rPK, network.Type(strings.ToUpper(trans)), transport.LabelAutomatic); err != nil {
+					errSlice = append(errSlice, err)
 				}
 			}
-			return <-errCh
+			if len(errSlice) != 2 {
+				return nil
+			}
+			return errors.New(errSlice[0].Error())
 		},
 	}
 }
