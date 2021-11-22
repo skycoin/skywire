@@ -221,7 +221,16 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
     ).subscribe(
       types => {
         // Sort the types and select dmsg as default, if posible.
-        types.sort((a, b) => a.localeCompare(b));
+        types.sort((a, b) => {
+          // Put stcp at the end.
+          if (a.toLowerCase() === 'stcp') {
+            return 1;
+          } else if (b.toLowerCase() === 'stcp') {
+            return -1;
+          }
+
+          return a.localeCompare(b);
+        });
         let defaultIndex = types.findIndex(type => type.toLowerCase() === 'dmsg');
         defaultIndex = defaultIndex !== -1 ? defaultIndex : 0;
 
