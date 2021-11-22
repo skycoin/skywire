@@ -243,7 +243,6 @@ func (r *router) DialRoutes(
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, lPort, rPort)
 
-	r.routeSetupHookMu.Lock()
 	if len(r.routeSetupHooks) != 0 {
 		for _, rsf := range r.routeSetupHooks {
 			if err := rsf(rPK, r.tm); err != nil {
@@ -251,7 +250,6 @@ func (r *router) DialRoutes(
 			}
 		}
 	}
-	r.routeSetupHookMu.Unlock()
 
 	// check if transports are available
 	ok := r.checkIfTransportAvalailable()
