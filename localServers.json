@@ -1,0 +1,28 @@
+{
+  "test": {
+    "dmsg_servers": [
+      "ip:port",
+      "ip:port",
+      "ip:port"
+    ],
+    "dmsg_discovery": "dmsg://pk:port",
+    "transport_discovery": "dmsg://pk:port",
+    "address_resolver": "dmsg://pk:port",
+    "route_finder": "dmsg://pk:port",
+    "uptime_tracker": "dmsg://pk:port",
+    "service_discovery": "dmsg://pk:port"
+  },
+"prod": {
+  "dmsg_servers": [
+    "ip:port",
+    "ip:port",
+    "ip:port"
+  ],
+  "dmsg_discovery": "dmsg://pk:port",
+  "transport_discovery": "dmsg://pk:port",
+  "address_resolver": "dmsg://pk:port",
+  "route_finder": "dmsg://pk:port",
+  "uptime_tracker": "dmsg://pk:port",
+  "service_discovery": "dmsg://pk:port"
+}
+}

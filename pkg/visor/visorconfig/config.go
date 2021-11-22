@@ -24,6 +24,7 @@ func MakeBaseConfig(common *Common) *V1 {
 	conf.Dmsg = &dmsgc.DmsgConfig{
 		Discovery:     skyenv.DefaultDmsgDiscAddr,
 		SessionsCount: 1,
+		Servers:       []string{},
 	}
 	conf.Transport = &V1Transport{
 		Discovery:         skyenv.DefaultTpDiscAddr,
