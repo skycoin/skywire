@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - added `update` and `summary` as subcommand to `skywire-cli visor`
 - added multiple new flag to update configuration in `skywire-cli config update`
+- added shell autocompletion command to `skywire-cli` and `skywire-visor`
 ## 0.5.0
 
 ### Changed
