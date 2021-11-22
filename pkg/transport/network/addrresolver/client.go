@@ -380,10 +380,8 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 	return resolveResp, nil
 }
 
+// Transports query available transports.
 func (c *httpClient) Transports(ctx context.Context) (map[cipher.PubKey][]string, error) {
-	if !c.isReady() {
-		return nil, ErrNotReady
-	}
 	resp, err := c.Get(ctx, "/transports")
 	if err != nil {
 		return nil, err
@@ -404,28 +402,31 @@ func (c *httpClient) Transports(ctx context.Context) (map[cipher.PubKey][]string
 		return nil, err
 	}
 
-	transportsMap := map[string]string{}
+	transportsMap := map[string][]string{}
 	if err = json.Unmarshal(body, &transportsMap); err != nil {
 		return nil, err
 	}
 
 	results := map[cipher.PubKey][]string{}
 
-	for k, v := range transportsMap {
-		rPK, err := cipher.NewPubKey([]byte(v))
-		if err != nil {
-			continue
-		}
-
-		// Two kinds of network, SUDPH and STCPR
-		if _, ok := results[rPK]; ok {
-			if len(results[rPK]) == 1 && k != results[rPK][0] {
-				results[rPK] = append(results[rPK], k)
+	for k, pks := range transportsMap {
+		for _, pk := range pks {
+			rPK := cipher.PubKey{}
+			if err := rPK.Set(pk); err != nil {
+				c.log.WithError(err).Warn("unable to transform PK")
+				continue
 			}
-		} else {
-			nTypeSlice := make([]string, 0, 2)
-			nTypeSlice = append(nTypeSlice, k)
-			results[rPK] = nTypeSlice
+
+			// Two kinds of network, SUDPH and STCPR
+			if _, ok := results[rPK]; ok {
+				if len(results[rPK]) == 1 && k != results[rPK][0] {
+					results[rPK] = append(results[rPK], k)
+				}
+			} else {
+				nTypeSlice := make([]string, 0, 2)
+				nTypeSlice = append(nTypeSlice, k)
+				results[rPK] = nTypeSlice
+			}
 		}
 	}
 	return results, nil
