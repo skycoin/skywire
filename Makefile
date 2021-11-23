@@ -6,12 +6,8 @@
 .PHONY : docker-apps docker-bin docker-volume
 .PHONY : docker-run docker-stop
 
-SHELL := /bin/bash
-
 VERSION := $(shell git describe)
-
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
-DATE := $(shell date -u $(RFC_3339))
 COMMIT := $(shell git rev-list -1 HEAD)
 BRANCH := latest
 
