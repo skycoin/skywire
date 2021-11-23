@@ -20,7 +20,7 @@ type DmsgConfig struct {
 }
 
 // New makes new dmsg client from configuration
-func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *DmsgConfig, httpC http.Client) (dmsgC *dmsg.Client) {
+func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *DmsgConfig, httpC http.Client) *dmsg.Client {
 	dmsgConf := &dmsg.Config{
 		MinSessions: conf.SessionsCount,
 		Callbacks: &dmsg.ClientCallbacks{
@@ -39,7 +39,7 @@ func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *Dms
 		},
 	}
 
-	dmsgC = dmsg.NewClient(pk, sk, disc.NewHTTP(conf.Discovery, httpC), dmsgConf)
+	dmsgC := dmsg.NewClient(pk, sk, disc.NewHTTP(conf.Discovery, httpC), dmsgConf)
 	dmsgC.SetLogger(logging.MustGetLogger("dmsgC"))
 	return dmsgC
 }
