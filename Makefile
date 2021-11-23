@@ -7,13 +7,14 @@
 .PHONY : docker-run docker-stop
 
 SHELL := /bin/bash
-VERSION ?= $(shell git describe 2> /dev/null)
-#VERSION := v0.1.0 # for debugging updater
+
+VERSION := $(shell git describe)
 
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 DATE := $(shell date -u $(RFC_3339))
-COMMIT ?= $(shell git rev-list -1 HEAD 2> /dev/null)
+COMMIT := $(shell git rev-list -1 HEAD)
 BRANCH := latest
+
 
 PROJECT_BASE := github.com/skycoin/skywire
 DMSG_BASE := github.com/skycoin/dmsg
