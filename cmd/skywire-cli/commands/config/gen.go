@@ -106,7 +106,7 @@ var genConfigCmd = &cobra.Command{
 
 		// Use local servers
 		if dmsgHTTP {
-			var dmsgHTTPServersList dmsgHTTPServers
+			var dmsgHTTPServersList visorconfig.DmsgHTTPServers
 			serversListJSON, err := ioutil.ReadFile("localServers.json")
 			if err != nil {
 				logger.WithError(err).Fatal("Failed to read servers.json file.")
@@ -185,18 +185,4 @@ func readOldConfig(log *logging.MasterLogger, confPath string, replace bool) (*v
 	}
 
 	return conf, true
-}
-
-type dmsgHTTPServers struct {
-	Test dmsgHTTPServersData `json:"test"`
-	Prod dmsgHTTPServersData `json:"prod"`
-}
-type dmsgHTTPServersData struct {
-	DMSGServers        []string `json:"dmsg_servers"`
-	DMSGDiscovery      string   `json:"dmsg_discovery"`
-	TransportDiscovery string   `json:"transport_discovery"`
-	AddressResolver    string   `json:"address_resolver"`
-	RouteFinder        string   `json:"route_finder"`
-	UptimeTracker      string   `json:"uptime_tracker"`
-	ServiceDiscovery   string   `json:"service_discovery"`
 }
