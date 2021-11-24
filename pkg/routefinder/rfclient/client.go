@@ -12,15 +12,12 @@ import (
 	"time"
 
 	"github.com/skycoin/skycoin/src/util/logging"
-
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
 //go:generate mockery -name Client -case underscore -inpkg
 
 const defaultContextTimeout = 10 * time.Second
-
-var log = logging.MustGetLogger("routefinder")
 
 // ErrTransportNotFound is returned when transport is not found.
 var ErrTransportNotFound = errors.New("transport not found")
@@ -59,18 +56,23 @@ type apiClient struct {
 	addr       string
 	client     http.Client
 	apiTimeout time.Duration
+	log        *logging.Logger
 }
 
 // NewHTTP constructs new Client that communicates over http.
-func NewHTTP(addr string, apiTimeout time.Duration) Client {
+func NewHTTP(addr string, apiTimeout time.Duration, mlogger *logging.MasterLogger) Client {
 	if apiTimeout == 0 {
 		apiTimeout = defaultContextTimeout
 	}
-
+	log := logging.MustGetLogger("routefinder")
+	if mlogger != nil {
+		log = mlogger.PackageLogger("routefinder")
+	}
 	return &apiClient{
 		addr:       sanitizedAddr(addr),
 		client:     http.Client{},
 		apiTimeout: apiTimeout,
+		log:        log,
 	}
 }
 
@@ -102,7 +104,7 @@ func (c *apiClient) FindRoutes(ctx context.Context, rts []routing.PathEdges, opt
 	if res != nil {
 		defer func() {
 			if err := res.Body.Close(); err != nil {
-				log.WithError(err).Warn("Failed to close HTTP response body")
+				c.log.WithError(err).Warn("Failed to close HTTP response body")
 			}
 		}()
 	}
