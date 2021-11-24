@@ -46,6 +46,7 @@ type ManagedTransportConfig struct {
 	RemotePK        cipher.PubKey
 	TransportLabel  Label
 	InactiveTimeout time.Duration
+	mlog            *logging.MasterLogger
 }
 
 // ManagedTransport manages a direct line of communication between two visor nodes.
@@ -76,8 +77,13 @@ type ManagedTransport struct {
 // NewManagedTransport creates a new ManagedTransport.
 func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 	aPK, bPK := conf.client.PK(), conf.RemotePK
+	log = logging.MustGetLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6]))
+	if conf.mlog != nil {
+		log = conf.mlog.PackageLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6]))
+	}
+
 	mt := &ManagedTransport{
-		log:         logging.MustGetLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6])),
+		log:         log,
 		rPK:         conf.RemotePK,
 		dc:          conf.DC,
 		ls:          conf.LS,

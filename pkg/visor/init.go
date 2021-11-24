@@ -325,6 +325,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		PKTable:    table,
 		ARClient:   v.arClient,
 		EB:         v.ebc,
+		MLogger:    v.MasterLogger(),
 	}
 	tpM, err := transport.NewManager(managerLogger, v.arClient, v.ebc, &tpMConf, factory)
 	if err != nil {
