@@ -209,7 +209,7 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if v.conf.Dmsg == nil {
 		return fmt.Errorf("cannot initialize dmsg: empty configuration")
 	}
-	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg)
+	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg, v.MasterLogger())
 
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
