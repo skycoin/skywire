@@ -386,6 +386,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	logger := v.MasterLogger().PackageLogger("router")
 	rConf := router.Config{
 		Logger:           logger,
+		MasterLogger:     v.MasterLogger(),
 		PubKey:           v.conf.PK,
 		SecKey:           v.conf.SK,
 		TransportManager: v.tpM,
