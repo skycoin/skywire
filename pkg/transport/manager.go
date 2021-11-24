@@ -301,6 +301,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 			RemotePK:       transport.RemotePK(),
 			TransportLabel: LabelUser,
 			ebc:            tm.ebc,
+			mlog:           tm.factory.MLogger,
 		})
 
 		go func() {
@@ -427,6 +428,7 @@ func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, netT
 		LS:             tm.Conf.LogStore,
 		RemotePK:       remote,
 		TransportLabel: label,
+		mlog:           tm.factory.MLogger,
 	})
 
 	tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.client.Type())
