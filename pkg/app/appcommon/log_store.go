@@ -26,9 +26,6 @@ func NewProcLogger(conf ProcConfig, mLog *logging.MasterLogger) (log *logging.Ma
 	if err != nil {
 		panic(err)
 	}
-	if mLog == nil {
-		log = logging.NewMasterLogger()
-	}
 	log = mLog
 
 	log.Logger.AddHook(db)
