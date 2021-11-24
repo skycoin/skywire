@@ -76,7 +76,7 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	cmd.Env = append(os.Environ(), envs...)
 	cmd.Dir = conf.ProcWorkDir
 
-	appLog, appLogDB := appcommon.NewProcLogger(conf)
+	appLog, appLogDB := appcommon.NewProcLogger(conf, mLog)
 	cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").Writer()
 	cmd.Stderr = appLog.WithField("_module", moduleName).WithField("func", "(STDERR)").Writer()
 
