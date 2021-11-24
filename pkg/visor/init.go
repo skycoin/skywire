@@ -382,7 +382,7 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 
 func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Routing
-	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout))
+	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout), v.MasterLogger())
 	logger := v.MasterLogger().PackageLogger("router")
 	rConf := router.Config{
 		Logger:           logger,
