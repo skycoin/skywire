@@ -56,11 +56,16 @@ type ClientFactory struct {
 	ARClient   addrresolver.APIClient
 	EB         *appevent.Broadcaster
 	DmsgC      *dmsg.Client
+	MLogger    *logging.MasterLogger
 }
 
 // MakeClient creates a new client of specified type
 func (f *ClientFactory) MakeClient(netType Type) (Client, error) {
 	log := logging.MustGetLogger(string(netType))
+	if f.MLogger != nil {
+		log = f.MLogger.PackageLogger(string(netType))
+	}
+
 	p := porter.New(porter.MinEphemeral)
 
 	generic := &genericClient{}
