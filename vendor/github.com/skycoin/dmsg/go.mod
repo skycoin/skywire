@@ -28,7 +28,6 @@ require (
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 	golang.org/x/net v0.0.0-20201202161906-c7110b5ffcbb
 	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c
-	golang.org/x/term v0.0.0-20210406210042-72f3dc4e9b72 // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	nhooyr.io/websocket v1.8.2
 )

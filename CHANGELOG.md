@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - added multiple new flag to update configuration in `skywire-cli config update`
 - added shell autocompletion command to `skywire-cli` and `skywire-visor`
 - added `dsmgHTTPStruct` in visorconfig pkg to usable other repos, such as `skybian`
+- added `dmsghttp-config.json` which contains the `dmsg-urls` of services and info of `dmsg-servers` for both prod and test
+- added `servers` filed to `dmsg` in config
+- added `-d,--dmsghttp` flag to `skywire-cli config gen`
+- added `dmsgdirect` client to connect to services over dmsg
 ## 0.5.0
 
 ### Changed
