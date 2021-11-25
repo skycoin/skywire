@@ -88,13 +88,18 @@ func New(config hypervisorconfig.Config, visor *Visor, dmsgC *dmsg.Client) (*Hyp
 		API:   visor,
 		PtyUI: nil,
 	}
+	var log *logging.Logger
+	log = nil
+	if visor != nil {
+		log = visor.MasterLogger().PackageLogger("dmsg_trackers")
+	}
 
 	hv := &Hypervisor{
 		c:            config,
 		visor:        visor,
 		dmsgC:        dmsgC,
 		visors:       make(map[cipher.PubKey]Conn),
-		trackers:     dmsgtracker.NewDmsgTrackerManager(visor.MasterLogger().PackageLogger("dmsg_trackers"), dmsgC, 0, 0),
+		trackers:     dmsgtracker.NewDmsgTrackerManager(log, dmsgC, 0, 0),
 		users:        usermanager.NewUserManager(singleUserDB, config.Cookies),
 		mu:           new(sync.RWMutex),
 		visorChanMux: make(map[cipher.PubKey]*chanMux),
