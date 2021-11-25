@@ -62,14 +62,14 @@ type apiClient struct {
 }
 
 // NewHTTP constructs new Client that communicates over http.
-func NewHTTP(addr string, apiTimeout time.Duration) Client {
+func NewHTTP(addr string, apiTimeout time.Duration, client http.Client) Client {
 	if apiTimeout == 0 {
 		apiTimeout = defaultContextTimeout
 	}
 
 	return &apiClient{
 		addr:       sanitizedAddr(addr),
-		client:     http.Client{},
+		client:     client,
 		apiTimeout: apiTimeout,
 	}
 }
