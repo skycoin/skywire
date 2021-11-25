@@ -17,8 +17,6 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
-var log = logging.MustGetLogger("transport-discovery")
-
 // JSONError is the object returned to the client when there's an error.
 type JSONError struct {
 	Error string `json:"error"`
@@ -26,6 +24,7 @@ type JSONError struct {
 
 // apiClient implements Client for discovery API.
 type apiClient struct {
+	log    *logging.Logger
 	client *httpauth.Client
 	key    cipher.PubKey
 	sec    cipher.SecKey
@@ -37,13 +36,18 @@ type apiClient struct {
 // * SW-Public: The specified public key
 // * SW-Nonce:  The nonce for that public key
 // * SW-Sig:    The signature of the payload + the nonce
-func NewHTTP(addr string, key cipher.PubKey, sec cipher.SecKey) (transport.DiscoveryClient, error) {
-	client, err := httpauth.NewClient(context.Background(), addr, key, sec)
+func NewHTTP(addr string, key cipher.PubKey, sec cipher.SecKey, mLogger *logging.MasterLogger) (transport.DiscoveryClient, error) {
+	client, err := httpauth.NewClient(context.Background(), addr, key, sec, mLogger)
 	if err != nil {
 		return nil, fmt.Errorf("transport discovery httpauth: %w", err)
 	}
-
-	return &apiClient{client: client, key: key, sec: sec}, nil
+	apiClient := &apiClient{
+		log:    mLogger.PackageLogger("transport-discovery"),
+		client: client,
+		key:    key,
+		sec:    sec,
+	}
+	return apiClient, nil
 }
 
 // Post performs a POST request.
@@ -94,7 +98,7 @@ func (c *apiClient) RegisterTransports(ctx context.Context, entries ...*transpor
 
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close HTTP response body")
+			c.log.WithError(err).Warn("Failed to close HTTP response body")
 		}
 	}()
 
@@ -110,7 +114,7 @@ func (c *apiClient) GetTransportByID(ctx context.Context, id uuid.UUID) (*transp
 
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close HTTP response body")
+			c.log.WithError(err).Warn("Failed to close HTTP response body")
 		}
 	}()
 
@@ -135,7 +139,7 @@ func (c *apiClient) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) (
 
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close HTTP response body")
+			c.log.WithError(err).Warn("Failed to close HTTP response body")
 		}
 	}()
 
@@ -160,7 +164,7 @@ func (c *apiClient) DeleteTransport(ctx context.Context, id uuid.UUID) error {
 
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close HTTP response body")
+			c.log.WithError(err).Warn("Failed to close HTTP response body")
 		}
 	}()
 

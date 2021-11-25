@@ -18,6 +18,8 @@ import (
 	"github.com/skycoin/skywire/internal/httpauth"
 )
 
+var masterLogger = logging.NewMasterLogger()
+
 func TestClientAuth(t *testing.T) {
 	testPubKey, testSecKey := cipher.GenerateKeyPair()
 
@@ -44,7 +46,7 @@ func TestClientAuth(t *testing.T) {
 
 	defer srv.Close()
 	log := logging.MustGetLogger("test_client_auth")
-	apiClient, err := NewHTTP(srv.URL, testPubKey, testSecKey, log)
+	apiClient, err := NewHTTP(srv.URL, testPubKey, testSecKey, log, masterLogger)
 	require.NoError(t, err)
 
 	c := apiClient.(*httpClient)
@@ -73,7 +75,7 @@ func TestBind(t *testing.T) {
 
 	defer srv.Close()
 	log := logging.MustGetLogger("test_bind")
-	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, log)
+	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, log, masterLogger)
 	require.NoError(t, err)
 
 	err = c.BindSTCPR(context.TODO(), "1234")

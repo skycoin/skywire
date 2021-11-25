@@ -21,8 +21,6 @@ import (
 
 //go:generate mockery -name APIClient -case underscore -inpkg
 
-var log = logging.MustGetLogger("utclient")
-
 // Error is the object returned to the client when there's an error.
 type Error struct {
 	Error string `json:"error"`
@@ -38,6 +36,7 @@ type httpClient struct {
 	client *httpauth.Client
 	pk     cipher.PubKey
 	sk     cipher.SecKey
+	log    *logging.Logger
 }
 
 const (
@@ -50,13 +49,15 @@ const (
 // * SW-Public: The specified public key
 // * SW-Nonce:  The nonce for that public key
 // * SW-Sig:    The signature of the payload + the nonce
-func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, error) {
+func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey, mLogger *logging.MasterLogger) (APIClient, error) {
 	var client *httpauth.Client
 	var err error
 
+	log := mLogger.PackageLogger("utclient")
+
 	retrier := netutil.NewRetrier(createRetryDelay, 10, 2, log)
 	retrierFunc := func() error {
-		client, err = httpauth.NewClient(context.Background(), addr, pk, sk)
+		client, err = httpauth.NewClient(context.Background(), addr, pk, sk, mLogger)
 		if err != nil {
 			return fmt.Errorf("uptime tracker httpauth: %w", err)
 		}
@@ -67,7 +68,14 @@ func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, error)
 		return nil, err
 	}
 
-	return &httpClient{client: client, pk: pk, sk: sk}, nil
+	httpClient := &httpClient{
+		client: client,
+		pk:     pk,
+		sk:     sk,
+		log:    log,
+	}
+
+	return httpClient, nil
 }
 
 // Get performs a new GET request.
@@ -89,7 +97,7 @@ func (c *httpClient) UpdateVisorUptime(ctx context.Context) error {
 
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close response body")
+			c.log.WithError(err).Warn("Failed to close response body")
 		}
 	}()
 
