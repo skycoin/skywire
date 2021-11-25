@@ -46,10 +46,6 @@ const (
 	statusStart
 )
 
-var (
-	log = logging.MustGetLogger("hypervisor") // nolint: gochecknoglobals
-)
-
 // Conn represents a visor connection.
 type Conn struct {
 	Addr  dmsg.Addr
@@ -70,6 +66,7 @@ type Hypervisor struct {
 	visorMu      sync.Mutex
 	visorChanMux map[cipher.PubKey]*chanMux
 	selfConn     Conn
+	logger       *logging.Logger
 }
 
 // New creates a new Hypervisor.
@@ -88,10 +85,9 @@ func New(config hypervisorconfig.Config, visor *Visor, dmsgC *dmsg.Client) (*Hyp
 		API:   visor,
 		PtyUI: nil,
 	}
-	var log *logging.Logger
-	log = nil
+	mLogger := logging.NewMasterLogger()
 	if visor != nil {
-		log = visor.MasterLogger().PackageLogger("dmsg_trackers")
+		mLogger = visor.MasterLogger()
 	}
 
 	hv := &Hypervisor{
@@ -99,11 +95,12 @@ func New(config hypervisorconfig.Config, visor *Visor, dmsgC *dmsg.Client) (*Hyp
 		visor:        visor,
 		dmsgC:        dmsgC,
 		visors:       make(map[cipher.PubKey]Conn),
-		trackers:     dmsgtracker.NewDmsgTrackerManager(log, dmsgC, 0, 0),
-		users:        usermanager.NewUserManager(singleUserDB, config.Cookies),
+		trackers:     dmsgtracker.NewDmsgTrackerManager(mLogger, dmsgC, 0, 0),
+		users:        usermanager.NewUserManager(mLogger, singleUserDB, config.Cookies),
 		mu:           new(sync.RWMutex),
 		visorChanMux: make(map[cipher.PubKey]*chanMux),
 		selfConn:     selfConn,
+		logger:       mLogger.PackageLogger("hypervisor"),
 	}
 
 	return hv, nil
@@ -119,7 +116,7 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 	if hv.visor != nil {
 		// Track hypervisor node.
 		if _, err := hv.trackers.MustGet(ctx, hv.visor.conf.PK); err != nil {
-			log.WithField("addr", hv.c.DmsgDiscovery).WithError(err).Warn("Failed to dial tracker stream.")
+			hv.logger.WithField("addr", hv.c.DmsgDiscovery).WithError(err).Warn("Failed to dial tracker stream.")
 		}
 	}
 
@@ -135,7 +132,7 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 		}
 
 		addr := conn.RawRemoteAddr()
-		log := logging.MustGetLogger(fmt.Sprintf("rpc_client:%s", addr.PK))
+		log := hv.visor.MasterLogger().PackageLogger(fmt.Sprintf("rpc_client:%s", addr.PK))
 
 		visorConn := &Conn{
 			Addr:  addr,
@@ -207,7 +204,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-	r.Use(httputil.SetLoggerMiddleware(log))
+	r.Use(httputil.SetLoggerMiddleware(hv.logger))
 
 	r.Route("/", func(r chi.Router) {
 		r.Route("/api", func(r chi.Router) {
@@ -411,7 +408,7 @@ func (hv *Hypervisor) getVisors() http.HandlerFunc {
 		if hv.visor != nil {
 			overview, err := hv.visor.Overview()
 			if err != nil {
-				log.WithError(err).Warn("Failed to obtain overview of this visor.")
+				hv.logger.WithError(err).Warn("Failed to obtain overview of this visor.")
 				overview = &Overview{PubKey: hv.visor.conf.PK}
 			}
 
@@ -512,7 +509,7 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 
 		summary, err := hv.visor.Summary()
 		if err != nil {
-			log.WithError(err).Warn("Failed to obtain summary of this visor.")
+			hv.logger.WithError(err).Warn("Failed to obtain summary of this visor.")
 			summary = &Summary{
 				Overview: &Overview{
 					PubKey: hv.visor.conf.PK,
