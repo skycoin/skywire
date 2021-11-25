@@ -167,7 +167,7 @@ func initEventBroadcaster(ctx context.Context, v *Visor, log *logging.Logger) er
 func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Transport
 
-	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, log)
+	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, log, v.MasterLogger())
 	if err != nil {
 		err := fmt.Errorf("failed to create address resolver client: %w", err)
 		return err
@@ -181,7 +181,8 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// Prepare app discovery factory.
 	factory := appdisc.Factory{
-		Log: v.MasterLogger().PackageLogger("app_discovery"),
+		Log:  v.MasterLogger().PackageLogger("app_discovery"),
+		MLog: v.MasterLogger(),
 	}
 
 	conf := v.conf.Launcher
@@ -593,7 +594,7 @@ func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
 		return nil
 	}
 
-	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK)
+	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK, v.MasterLogger())
 	if err != nil {
 		v.log.WithError(err).Warn("Failed to connect to uptime tracker.")
 		return nil
@@ -688,7 +689,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 		Port:     uint16(0),
 		DiscAddr: serviceDisc,
 	}
-	connector := servicedisc.MakeConnector(conf, 3, v.tpM, log)
+	connector := servicedisc.MakeConnector(conf, 3, v.tpM, log, v.MasterLogger())
 	go connector.Run(ctx) //nolint:errcheck
 
 	return nil
@@ -754,7 +755,7 @@ func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
 	var tpdC transport.DiscoveryClient
 	retryFunc := func() error {
 		var err error
-		tpdC, err = tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK)
+		tpdC, err = tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK, v.MasterLogger())
 		if err != nil {
 			log.WithError(err).Error("Failed to connect to transport discovery, retrying...")
 			return err
