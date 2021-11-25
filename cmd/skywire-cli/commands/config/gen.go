@@ -104,7 +104,7 @@ var genConfigCmd = &cobra.Command{
 			logger.WithError(err).Fatal("Failed to create config.")
 		}
 
-		// Use local servers
+		// Use dmsg urls for services and add dmsg-servers
 		if dmsgHTTP {
 			var dmsgHTTPServersList visorconfig.DmsgHTTPServers
 			serversListJSON, err := ioutil.ReadFile("dmsghttp-config.json")
