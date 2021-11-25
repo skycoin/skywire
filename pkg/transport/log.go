@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 
 	"github.com/google/uuid"
+	"github.com/skycoin/skycoin/src/util/logging"
 )
 
 // LogEntry represents a logging entry for a given Transport.
@@ -111,6 +112,7 @@ func (tls *inMemoryTransportLogStore) Record(id uuid.UUID, entry *LogEntry) erro
 
 type fileTransportLogStore struct {
 	dir string
+	log *logging.Logger
 }
 
 // FileTransportLogStore implements file TransportLogStore.
@@ -118,7 +120,8 @@ func FileTransportLogStore(dir string) (LogStore, error) {
 	if err := os.MkdirAll(dir, 0707); err != nil {
 		return nil, err
 	}
-	return &fileTransportLogStore{dir}, nil
+	log := logging.MustGetLogger("transport")
+	return &fileTransportLogStore{dir, log}, nil
 }
 
 func (tls *fileTransportLogStore) Entry(id uuid.UUID) (*LogEntry, error) {
@@ -128,7 +131,7 @@ func (tls *fileTransportLogStore) Entry(id uuid.UUID) (*LogEntry, error) {
 	}
 	defer func() {
 		if err := f.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close file")
+			tls.log.WithError(err).Warn("Failed to close file")
 		}
 	}()
 
@@ -147,7 +150,7 @@ func (tls *fileTransportLogStore) Record(id uuid.UUID, entry *LogEntry) error {
 	}
 	defer func() {
 		if err := f.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close file")
+			tls.log.WithError(err).Warn("Failed to close file")
 		}
 	}()
 
