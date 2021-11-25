@@ -59,9 +59,9 @@ type UserManager struct {
 }
 
 // NewUserManager creates a new UserManager.
-func NewUserManager(users UserStore, config hypervisorconfig.CookieConfig) *UserManager {
+func NewUserManager(mLog *logging.MasterLogger, users UserStore, config hypervisorconfig.CookieConfig) *UserManager {
 	return &UserManager{
-		log:      logging.MustGetLogger("user_manager"),
+		log:      mLog.PackageLogger("user_manager"),
 		db:       users,
 		c:        config,
 		sessions: make(map[uuid.UUID]Session),
