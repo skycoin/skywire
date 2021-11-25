@@ -49,12 +49,6 @@ type Config struct {
 
 // Ensure ensures all config values are set.
 func (c *Config) Ensure() {
-	if c.MinSessions == 0 {
-		c.MinSessions = DefaultMinSessions
-	}
-	if c.UpdateInterval == 0 {
-		c.UpdateInterval = DefaultUpdateInterval
-	}
 	if c.Callbacks == nil {
 		c.Callbacks = new(ClientCallbacks)
 	}
@@ -173,9 +167,9 @@ func (ce *Client) Serve(ctx context.Context) {
 			if isClosed(ce.done) {
 				return
 			}
-
-			// If we have enough sessions, we wait for error or done signal.
-			if ce.SessionCount() >= ce.conf.MinSessions {
+			// If MinSessions is set to 0 then we connect to all available servers.
+			// If MinSessions is not 0 AND we have enough sessions, we wait for error or done signal.
+			if ce.conf.MinSessions != 0 && ce.SessionCount() >= ce.conf.MinSessions {
 				select {
 				case <-ce.done:
 					return
@@ -193,6 +187,16 @@ func (ce *Client) Serve(ctx context.Context) {
 					return
 				}
 				time.Sleep(serveWait)
+			}
+		}
+		// We dial all servers and wait for error or done signal.
+		select {
+		case <-ce.done:
+			return
+		case err := <-ce.errCh:
+			ce.log.WithError(err).Info("Session stopped.")
+			if isClosed(ce.done) {
+				return
 			}
 		}
 	}
@@ -236,7 +240,7 @@ func (ce *Client) Close() error {
 		ce.log.Info("All sessions closed.")
 		ce.sessionsMx.Unlock()
 		ce.porter.CloseAll(ce.log)
-		err = ce.EntityCommon.delClientEntry(context.Background())
+		err = ce.EntityCommon.delEntry(context.Background())
 	})
 	return err
 }
