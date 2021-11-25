@@ -70,6 +70,7 @@ type VisorData struct {
 // httpClient implements APIClient for address resolver API.
 type httpClient struct {
 	log            *logging.Logger
+	mLog           *logging.MasterLogger
 	httpClient     *httpauth.Client
 	pk             cipher.PubKey
 	sk             cipher.SecKey
@@ -87,7 +88,8 @@ type httpClient struct {
 // * SW-Public: The specified public key.
 // * SW-Nonce:  The nonce for that public key.
 // * SW-Sig:    The signature of the payload + the nonce.
-func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, log *logging.Logger) (APIClient, error) {
+func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, log *logging.Logger,
+	mLog *logging.MasterLogger) (APIClient, error) {
 	remoteURL, err := url.Parse(remoteAddr)
 	if err != nil {
 		return nil, fmt.Errorf("parse URL: %w", err)
@@ -100,6 +102,7 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, log *logging
 
 	client := &httpClient{
 		log:            log,
+		mLog:           mLog,
 		pk:             pk,
 		sk:             sk,
 		remoteHTTPAddr: remoteAddr,
@@ -116,7 +119,7 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, log *logging
 }
 
 func (c *httpClient) initHTTPClient() {
-	httpAuthClient, err := httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk)
+	httpAuthClient, err := httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, c.mLog)
 	if err != nil {
 		c.log.WithError(err).
 			Warnf("Failed to connect to address resolver. STCPR/SUDPH services are temporarily unavailable. Retrying...")
@@ -125,7 +128,7 @@ func (c *httpClient) initHTTPClient() {
 		retry := dmsgnetutil.NewRetrier(retryLog, 1*time.Second, 10*time.Second, 0, 1)
 
 		err := retry.Do(context.Background(), func() error {
-			httpAuthClient, err = httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk)
+			httpAuthClient, err = httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, c.mLog)
 			return err
 		})
 
