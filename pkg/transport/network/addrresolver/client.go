@@ -287,7 +287,7 @@ func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter, hs Handshake) (<-ch
 		return nil, err
 	}
 
-	c.sudphConn = filter.NewConn(sudphPriority, packetfilter.NewAddressFilter(rAddr))
+	c.sudphConn = filter.NewConn(sudphPriority, packetfilter.NewAddressFilter(rAddr, c.mLog))
 
 	_, localPort, err := net.SplitHostPort(c.sudphConn.LocalAddr().String())
 	if err != nil {
