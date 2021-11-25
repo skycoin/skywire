@@ -193,7 +193,7 @@ func New(dmsgC *dmsg.Client, config *Config) (Router, error) {
 
 	go r.rulesGCLoop()
 
-	if err := r.rpcSrv.Register(NewRPCGateway(r)); err != nil {
+	if err := r.rpcSrv.Register(NewRPCGateway(r, config.MasterLogger)); err != nil {
 		return nil, fmt.Errorf("failed to register RPC server")
 	}
 
