@@ -73,6 +73,7 @@ func (f *ClientFactory) MakeClient(netType Type) (Client, error) {
 	generic.done = make(chan struct{})
 	generic.listeners = make(map[uint16]*listener)
 	generic.log = log
+	generic.mLog = f.MLogger
 	generic.porter = p
 	generic.eb = f.EB
 	generic.lPK = f.PK
@@ -108,6 +109,7 @@ type genericClient struct {
 	netType    Type
 
 	log    *logging.Logger
+	mLog   *logging.MasterLogger
 	porter *porter.Porter
 	eb     *appevent.Broadcaster
 
