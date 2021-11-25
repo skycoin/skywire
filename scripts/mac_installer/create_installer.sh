@@ -13,6 +13,7 @@ staple_notarization=false
 package_path=
 developer_id=
 output=
+BUILDTAG=MacOS
 
 greent='\033[0;32m'
 yellowt='\033[0;33m'
@@ -57,7 +58,7 @@ function build_installer() {
   fi
 
   # build skywire binariea
-  make CGO_ENABLED=1 GOOS=darwin GOARCH="${go_arch}" build-systray
+  make CGO_ENABLED=1 GOOS=darwin GOARCH="${go_arch}" build-systray BUILDTAG=$BUILDTAG
 
   if [ -d ${installer_build_dir}/binaries/Skywire.app ]; then
     rm -rf ${installer_build_dir}/binaries/Skywire.app
