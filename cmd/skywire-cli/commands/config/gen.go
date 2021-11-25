@@ -108,7 +108,7 @@ var genConfigCmd = &cobra.Command{
 		// Use local servers
 		if dmsgHTTP {
 			var dmsgHTTPServersList dmsgHTTPServers
-			serversListJSON, err := ioutil.ReadFile("localServers.json")
+			serversListJSON, err := ioutil.ReadFile("dmsghttp-config.json")
 			if err != nil {
 				logger.WithError(err).Fatal("Failed to read servers.json file.")
 			}
