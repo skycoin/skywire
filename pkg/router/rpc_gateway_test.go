@@ -4,11 +4,14 @@ import (
 	"testing"
 
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/internal/testhelpers"
 	"github.com/skycoin/skywire/pkg/routing"
 )
+
+var mlog = logging.NewMasterLogger()
 
 func TestRPCGateway_AddEdgeRules(t *testing.T) {
 	srcPK, _ := cipher.GenerateKeyPair()
@@ -29,7 +32,7 @@ func TestRPCGateway_AddEdgeRules(t *testing.T) {
 		r.On("IntroduceRules", rules).Return(testhelpers.NoErr)
 		r.On("SaveRoutingRules", rules.Forward, rules.Reverse).Return(testhelpers.NoErr)
 
-		gateway := NewRPCGateway(r)
+		gateway := NewRPCGateway(r, mlog)
 
 		var ok bool
 		err := gateway.AddEdgeRules(rules, &ok)
@@ -41,7 +44,7 @@ func TestRPCGateway_AddEdgeRules(t *testing.T) {
 		r := &MockRouter{}
 		r.On("IntroduceRules", rules).Return(testhelpers.Err)
 
-		gateway := NewRPCGateway(r)
+		gateway := NewRPCGateway(r, mlog)
 
 		var ok bool
 		err := gateway.AddEdgeRules(rules, &ok)
@@ -59,7 +62,7 @@ func TestRPCGateway_AddEdgeRules(t *testing.T) {
 		r := &MockRouter{}
 		r.On("IntroduceRules", rules).Return(testhelpers.Err)
 
-		gateway := NewRPCGateway(r)
+		gateway := NewRPCGateway(r, mlog)
 
 		wantErr := routing.Failure{
 			Code: routing.FailureAddRules,
@@ -83,7 +86,7 @@ func TestRPCGateway_AddIntermediaryRules(t *testing.T) {
 		r := &MockRouter{}
 		r.On("SaveRoutingRules", rulesIfc...).Return(testhelpers.NoErr)
 
-		gateway := NewRPCGateway(r)
+		gateway := NewRPCGateway(r, mlog)
 
 		var ok bool
 		err := gateway.AddIntermediaryRules(rules, &ok)
@@ -95,7 +98,7 @@ func TestRPCGateway_AddIntermediaryRules(t *testing.T) {
 		r := &MockRouter{}
 		r.On("SaveRoutingRules", rulesIfc...).Return(testhelpers.Err)
 
-		gateway := NewRPCGateway(r)
+		gateway := NewRPCGateway(r, mlog)
 
 		wantErr := routing.Failure{
 			Code: routing.FailureAddRules,
@@ -117,7 +120,7 @@ func TestRPCGateway_ReserveIDs(t *testing.T) {
 		r := &MockRouter{}
 		r.On("ReserveKeys", n).Return(ids, testhelpers.NoErr)
 
-		gateway := NewRPCGateway(r)
+		gateway := NewRPCGateway(r, mlog)
 
 		var gotIds []routing.RouteID
 		err := gateway.ReserveIDs(uint8(n), &gotIds)
@@ -129,7 +132,7 @@ func TestRPCGateway_ReserveIDs(t *testing.T) {
 		r := &MockRouter{}
 		r.On("ReserveKeys", n).Return(nil, testhelpers.Err)
 
-		gateway := NewRPCGateway(r)
+		gateway := NewRPCGateway(r, mlog)
 
 		wantErr := routing.Failure{
 			Code: routing.FailureReserveRtIDs,
