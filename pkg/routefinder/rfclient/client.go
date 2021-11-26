@@ -55,13 +55,13 @@ type Client interface {
 // APIClient implements Client interface
 type apiClient struct {
 	addr       string
-	client     http.Client
+	client     *http.Client
 	apiTimeout time.Duration
 	log        *logging.Logger
 }
 
 // NewHTTP constructs new Client that communicates over http.
-func NewHTTP(addr string, apiTimeout time.Duration, mlogger *logging.MasterLogger) Client {
+func NewHTTP(addr string, apiTimeout time.Duration, client *http.Client, mlogger *logging.MasterLogger) Client {
 	if apiTimeout == 0 {
 		apiTimeout = defaultContextTimeout
 	}
@@ -71,7 +71,7 @@ func NewHTTP(addr string, apiTimeout time.Duration, mlogger *logging.MasterLogge
 	}
 	return &apiClient{
 		addr:       sanitizedAddr(addr),
-		client:     http.Client{},
+		client:     client,
 		apiTimeout: apiTimeout,
 		log:        log,
 	}

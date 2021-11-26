@@ -49,7 +49,7 @@ const (
 // * SW-Public: The specified public key
 // * SW-Nonce:  The nonce for that public key
 // * SW-Sig:    The signature of the payload + the nonce
-func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey, mLogger *logging.MasterLogger) (APIClient, error) {
+func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.Client, mLogger *logging.MasterLogger) (APIClient, error) {
 	var client *httpauth.Client
 	var err error
 
@@ -57,7 +57,7 @@ func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey, mLogger *logging.M
 
 	retrier := netutil.NewRetrier(createRetryDelay, 10, 2, log)
 	retrierFunc := func() error {
-		client, err = httpauth.NewClient(context.Background(), addr, pk, sk, mLogger)
+		client, err = httpauth.NewClient(context.Background(), addr, pk, sk, httpC, mLogger)
 		if err != nil {
 			return fmt.Errorf("uptime tracker httpauth: %w", err)
 		}

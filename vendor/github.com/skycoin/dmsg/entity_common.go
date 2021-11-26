@@ -242,7 +242,7 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 	return c.dc.PutEntry(ctx, c.sk, entry)
 }
 
-func (c *EntityCommon) delClientEntry(ctx context.Context) (err error) {
+func (c *EntityCommon) delEntry(ctx context.Context) (err error) {
 
 	entry, err := c.dc.Entry(ctx, c.pk)
 	if err != nil {
