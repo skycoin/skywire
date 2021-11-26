@@ -14,13 +14,13 @@ import (
 
 // DmsgConfig defines config for Dmsg network.
 type DmsgConfig struct {
-	Discovery     string   `json:"discovery"`
-	SessionsCount int      `json:"sessions_count"`
-	Servers       []string `json:"servers"`
+	Discovery     string        `json:"discovery"`
+	SessionsCount int           `json:"sessions_count"`
+	Servers       []*disc.Entry `json:"servers"`
 }
 
 // New makes new dmsg client from configuration
-func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *DmsgConfig, masterLogger *logging.MasterLogger) *dmsg.Client {
+func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *DmsgConfig, httpC *http.Client, masterLogger *logging.MasterLogger) *dmsg.Client {
 	dmsgConf := &dmsg.Config{
 		MinSessions: conf.SessionsCount,
 		Callbacks: &dmsg.ClientCallbacks{
@@ -38,7 +38,7 @@ func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *Dms
 			},
 		},
 	}
-	dmsgC := dmsg.NewClient(pk, sk, disc.NewHTTP(conf.Discovery, http.Client{}, masterLogger.PackageLogger("dmsgC:disc")), dmsgConf)
+	dmsgC := dmsg.NewClient(pk, sk, disc.NewHTTP(conf.Discovery, httpC, masterLogger.PackageLogger("dmsgC:disc")), dmsgConf)
 	dmsgC.SetLogger(masterLogger.PackageLogger("dmsgC"))
 	dmsgC.SetMasterLogger(masterLogger)
 	return dmsgC

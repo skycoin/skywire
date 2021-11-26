@@ -1,6 +1,8 @@
 package appdisc
 
 import (
+	"net/http"
+
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -17,6 +19,7 @@ type Factory struct {
 	PK          cipher.PubKey
 	SK          cipher.SecKey
 	ServiceDisc string // Address of service-discovery
+	Client      *http.Client
 }
 
 func (f *Factory) setDefaults() {
@@ -44,7 +47,7 @@ func (f *Factory) VisorUpdater(port uint16) Updater {
 	}
 
 	return &serviceUpdater{
-		client: servicedisc.NewClient(f.Log, f.MLog, conf),
+		client: servicedisc.NewClient(f.Log, f.MLog, conf, f.Client),
 	}
 }
 
@@ -75,11 +78,11 @@ func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
 	switch conf.AppName {
 	case skyenv.VPNServerName:
 		return &serviceUpdater{
-			client: servicedisc.NewClient(log, f.MLog, getServiceDiscConf(conf, servicedisc.ServiceTypeVPN)),
+			client: servicedisc.NewClient(log, f.MLog, getServiceDiscConf(conf, servicedisc.ServiceTypeVPN), f.Client),
 		}, true
 	case skyenv.SkysocksName:
 		return &serviceUpdater{
-			client: servicedisc.NewClient(log, f.MLog, getServiceDiscConf(conf, servicedisc.ServiceTypeSkysocks)),
+			client: servicedisc.NewClient(log, f.MLog, getServiceDiscConf(conf, servicedisc.ServiceTypeSkysocks), f.Client),
 		}, true
 	default:
 		return &emptyUpdater{}, false
