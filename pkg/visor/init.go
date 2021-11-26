@@ -13,7 +13,11 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/direct"
+	dmsgdisc "github.com/skycoin/dmsg/disc"
 	"github.com/skycoin/dmsg/dmsgctrl"
+	"github.com/skycoin/dmsg/dmsgget"
+	"github.com/skycoin/dmsg/dmsghttp"
 	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 
@@ -97,8 +101,10 @@ var (
 	tm vinit.Module
 	// hypervisor module
 	hv vinit.Module
-	// dmsg ctrl
+	// Dmsg ctrl module
 	dmsgCtrl vinit.Module
+	// Dmsg http module
+	dmsgHTTP vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 )
@@ -112,25 +118,26 @@ func registerModules(logger *logging.MasterLogger) {
 		return vinit.MakeModule(name, withInitCtx(f), logger, deps...)
 	}
 	up = maker("updater", initUpdater)
+	dmsgHTTP = maker("dmsg_http", initDmsgHTTP)
 	ebc = maker("event_broadcaster", initEventBroadcaster)
-	ar = maker("address_resolver", initAddressResolver)
-	disc = maker("discovery", initDiscovery)
-	tr = maker("transport", initTransport, &ar, &ebc)
+	ar = maker("address_resolver", initAddressResolver, &dmsgHTTP)
+	disc = maker("discovery", initDiscovery, &dmsgHTTP)
+	tr = maker("transport", initTransport, &ar, &ebc, &dmsgHTTP)
 
 	sc = maker("stun_client", initStunClient)
 	sudphC = maker("sudph", initSudphClient, &sc, &tr)
 	stcprC = maker("stcpr", initStcprClient, &tr)
 	stcpC = maker("stcp", initStcpClient, &tr)
-	dmsgC = maker("dmsg", initDmsg, &ebc)
+	dmsgC = maker("dmsg", initDmsg, &ebc, &dmsgHTTP)
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &dmsgC, &tr)
 
 	pty = maker("dmsg_pty", initDmsgpty, &dmsgC)
-	rt = maker("router", initRouter, &tr, &dmsgC)
+	rt = maker("router", initRouter, &tr, &dmsgC, &dmsgHTTP)
 	launch = maker("launcher", initLauncher, &ebc, &disc, &dmsgC, &tr, &rt)
 	cli = maker("cli", initCLI)
 	hvs = maker("hypervisors", initHypervisors, &dmsgC)
-	ut = maker("uptime_tracker", initUptimeTracker)
-	pv = maker("public_autoconnect", initPublicAutoconnect, &tr)
+	ut = maker("uptime_tracker", initUptimeTracker, &dmsgHTTP)
+	pv = maker("public_autoconnect", initPublicAutoconnect, &tr, &disc)
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
 	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl)
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
@@ -153,6 +160,31 @@ func initUpdater(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
+func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error {
+	var keys cipher.PubKeys
+	servers := v.conf.Dmsg.Servers
+
+	keys = append(keys, v.conf.PK)
+	dClient := direct.NewDirectClient(direct.GetAllEntries(keys, servers))
+
+	dmsgD, closeDmsgD, err := direct.StartDmsg(ctx, log, v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
+	if err != nil {
+		return fmt.Errorf("failed to start dmsg: %w", err)
+	}
+	dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgD)}
+
+	v.pushCloseStack("dmsg_http", func() error {
+		closeDmsgD()
+		return nil
+	})
+
+	v.initLock.Lock()
+	v.dClient = dClient
+	v.dmsgHTTP = &dmsgHTTP
+	v.initLock.Unlock()
+	return nil
+}
+
 func initEventBroadcaster(ctx context.Context, v *Visor, log *logging.Logger) error {
 	const ebcTimeout = time.Second
 	ebc := appevent.NewBroadcaster(log, ebcTimeout)
@@ -167,7 +199,12 @@ func initEventBroadcaster(ctx context.Context, v *Visor, log *logging.Logger) er
 func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Transport
 
-	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, log, v.MasterLogger())
+	httpC, err := getHTTPClient(ctx, v, conf.AddressResolver)
+	if err != nil {
+		return err
+	}
+
+	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, httpC, log, v.MasterLogger())
 	if err != nil {
 		err := fmt.Errorf("failed to create address resolver client: %w", err)
 		return err
@@ -187,11 +224,18 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	conf := v.conf.Launcher
 
+	httpC, err := getHTTPClient(ctx, v, conf.ServiceDisc)
+	if err != nil {
+		return err
+	}
+
 	if conf.ServiceDisc != "" {
 		factory.PK = v.conf.PK
 		factory.SK = v.conf.SK
 		factory.ServiceDisc = conf.ServiceDisc
+		factory.Client = httpC
 	}
+
 	v.initLock.Lock()
 	v.serviceDisc = factory
 	v.initLock.Unlock()
@@ -206,11 +250,17 @@ func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	if v.conf.Dmsg == nil {
 		return fmt.Errorf("cannot initialize dmsg: empty configuration")
 	}
-	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg, v.MasterLogger())
+
+	httpC, err := getHTTPClient(ctx, v, v.conf.Dmsg.Discovery)
+	if err != nil {
+		return err
+	}
+
+	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg, httpC, v.MasterLogger())
 
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
@@ -289,7 +339,7 @@ func initStcpClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 
-	tpdC, err := connectToTpDisc(v)
+	tpdC, err := connectToTpDisc(ctx, v)
 	if err != nil {
 		err := fmt.Errorf("failed to create transport discovery client: %w", err)
 		return err
@@ -383,7 +433,13 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 
 func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Routing
-	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout), v.MasterLogger())
+
+	httpC, err := getHTTPClient(ctx, v, conf.RouteFinder)
+	if err != nil {
+		return err
+	}
+
+	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout), httpC, v.MasterLogger())
 	logger := v.MasterLogger().PackageLogger("router")
 	rConf := router.Config{
 		Logger:           logger,
@@ -584,7 +640,7 @@ func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
+func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error {
 	const tickDuration = 1 * time.Minute
 
 	conf := v.conf.UptimeTracker
@@ -594,7 +650,12 @@ func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
 		return nil
 	}
 
-	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK, v.MasterLogger())
+	httpC, err := getHTTPClient(ctx, v, conf.Addr)
+	if err != nil {
+		return err
+	}
+
+	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK, httpC, v.MasterLogger())
 	if err != nil {
 		v.log.WithError(err).Warn("Failed to connect to uptime tracker.")
 		return nil
@@ -689,7 +750,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 		Port:     uint16(0),
 		DiscAddr: serviceDisc,
 	}
-	connector := servicedisc.MakeConnector(conf, 3, v.tpM, log, v.MasterLogger())
+	connector := servicedisc.MakeConnector(conf, 3, v.tpM, v.serviceDisc.Client, log, v.MasterLogger())
 	go connector.Run(ctx) //nolint:errcheck
 
 	return nil
@@ -737,7 +798,7 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
+func connectToTpDisc(ctx context.Context, v *Visor) (transport.DiscoveryClient, error) {
 	const (
 		initBO = 1 * time.Second
 		maxBO  = 10 * time.Second
@@ -748,6 +809,11 @@ func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
 
 	conf := v.conf.Transport
 
+	httpC, err := getHTTPClient(ctx, v, conf.Discovery)
+	if err != nil {
+		return nil, err
+	}
+
 	log := v.MasterLogger().PackageLogger("tp_disc_retrier")
 	tpdCRetrier := dmsgnetutil.NewRetrier(log,
 		initBO, maxBO, tries, factor)
@@ -755,7 +821,7 @@ func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
 	var tpdC transport.DiscoveryClient
 	retryFunc := func() error {
 		var err error
-		tpdC, err = tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK, v.MasterLogger())
+		tpdC, err = tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK, httpC, v.MasterLogger())
 		if err != nil {
 			log.WithError(err).Error("Failed to connect to transport discovery, retrying...")
 			return err
@@ -808,4 +874,28 @@ func getErrors(ctx context.Context) chan error {
 		panic("runtime errors channel is not set in context")
 	}
 	return errs
+}
+
+func getHTTPClient(ctx context.Context, v *Visor, service string) (httpC *http.Client, err error) {
+
+	var serviceURL dmsgget.URL
+
+	err = serviceURL.Fill(service)
+
+	if serviceURL.Scheme == "dmsg" {
+		if err != nil {
+			return nil, fmt.Errorf("provided URL is invalid: %w", err)
+		}
+		clientEntry := &dmsgdisc.Entry{
+			Client: &dmsgdisc.Client{},
+			Static: serviceURL.Addr.PK,
+		}
+		err = v.dClient.PostEntry(ctx, clientEntry)
+		if err != nil {
+			return nil, fmt.Errorf("Error saving clientEntry: %w", err)
+		}
+		httpC = v.dmsgHTTP
+		return httpC, nil
+	}
+	return httpC, nil
 }
