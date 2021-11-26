@@ -2,6 +2,7 @@ package dmsgc
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
@@ -37,7 +38,7 @@ func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *Dms
 			},
 		},
 	}
-	dmsgC := dmsg.NewClient(pk, sk, disc.NewHTTP(conf.Discovery, masterLogger.PackageLogger("dmsgC:disc")), dmsgConf)
+	dmsgC := dmsg.NewClient(pk, sk, disc.NewHTTP(conf.Discovery, http.Client{}, masterLogger.PackageLogger("dmsgC:disc")), dmsgConf)
 	dmsgC.SetLogger(masterLogger.PackageLogger("dmsgC"))
 	dmsgC.SetMasterLogger(masterLogger)
 	return dmsgC
