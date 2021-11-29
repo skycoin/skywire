@@ -28,6 +28,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/syslog"
 	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -49,6 +50,7 @@ var (
 	confPath      string
 	delay         string
 	launchBrowser bool
+	hypervisorUI  bool
 	stopVisorFn   func() // nolint:unused
 	stopVisorWg   sync.WaitGroup
 )
@@ -70,6 +72,7 @@ func init() {
 	rootCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port if mode is 'http'")
 	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file location. If the value is 'STDIN', config file will be read from stdin.")
 	rootCmd.Flags().StringVar(&delay, "delay", "0ns", "start delay (deprecated)") // deprecated
+	rootCmd.Flags().BoolVarP(&hypervisorUI, "with-hypervisor-ui", "f", false, "run visor with hypervisor UI config.")
 	rootCmd.Flags().BoolVar(&launchBrowser, "launch-browser", false, "open hypervisor web ui (hypervisor only) with system browser")
 	extraFlags()
 }
@@ -266,6 +269,11 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 	conf, err := visorconfig.Parse(mLog, confPath, raw)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to parse config.")
+	}
+
+	if hypervisorUI {
+		config := hypervisorconfig.GenerateWorkDirConfig(false)
+		conf.Hypervisor = &config
 	}
 
 	if conf.Hypervisor != nil {
