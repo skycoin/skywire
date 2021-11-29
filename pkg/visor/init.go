@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/skycoin/dmsg/dmsgpty"
 	"net"
 	"net/http"
 	"os"
@@ -22,6 +21,7 @@ import (
 	"github.com/skycoin/dmsg/dmsgctrl"
 	"github.com/skycoin/dmsg/dmsgget"
 	"github.com/skycoin/dmsg/dmsghttp"
+	"github.com/skycoin/dmsg/dmsgpty"
 	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 
