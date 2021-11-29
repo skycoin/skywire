@@ -417,14 +417,17 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 }
 
 func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []router.RouteSetupHook {
+	retrier := dmsgnetutil.NewRetrier(log, time.Second, time.Second*20, 3, 1.3)
 	return []router.RouteSetupHook{
 		func(rPK cipher.PubKey, tm *transport.Manager) error {
 			dmsgFallback := func() error {
-				_, err := tm.SaveTransport(ctx, rPK, network.DMSG, transport.LabelAutomatic)
-				return err
+				return retrier.Do(ctx, func() error {
+					_, err := tm.SaveTransport(ctx, rPK, network.DMSG, transport.LabelAutomatic)
+					return err
+				})
 			}
 			// check visor's AR transport cache
-			if v.transportsCache == nil {
+			if v.transportsCache == nil && !v.conf.Transport.PublicAutoconnect {
 				// skips if there's no AR transports
 				log.Warn("empty AR transports cache")
 				return dmsgFallback()
@@ -435,13 +438,12 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 				// check if automatic transport is available, if it does,
 				// continue with route creation
 				if v.conf.Transport.PublicAutoconnect {
-					// we return nil here, if there's no transport available it wlll be checked
-					// by the router itself next.
+					// we return nil here, router will use multi-hop STCPR rather than one hop DMSG
 					return nil
 				}
 				return dmsgFallback()
 			}
-			// try to establish direct connection to rPK (single hop)
+			// try to establish direct connection to rPK (single hop) using SUDPH or STCPR
 			errSlice := make([]error, 0, 2)
 			for _, trans := range transports {
 				ntype := network.Type(trans)
@@ -449,7 +451,11 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 				if ntype == network.SUDPH && (v.stunClient.NATType == stun.NATSymmetric || v.stunClient.NATType == stun.NATSymmetricUDPFirewall) {
 					continue
 				}
-				if _, err := tm.SaveTransport(ctx, rPK, ntype, transport.LabelAutomatic); err != nil {
+				err := retrier.Do(ctx, func() error {
+					_, err := tm.SaveTransport(ctx, rPK, ntype, transport.LabelAutomatic)
+					return err
+				})
+				if err != nil {
 					errSlice = append(errSlice, err)
 				}
 			}
