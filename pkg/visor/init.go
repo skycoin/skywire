@@ -164,6 +164,10 @@ func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error {
 	var keys cipher.PubKeys
 	servers := v.conf.Dmsg.Servers
 
+	if len(servers) == 0 {
+		return nil
+	}
+
 	keys = append(keys, v.conf.PK)
 	dClient := direct.NewDirectClient(direct.GetAllEntries(keys, servers))
 
