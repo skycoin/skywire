@@ -98,6 +98,10 @@ func (s *Server) Close() error {
 		close(s.done)
 		s.wg.Wait()
 	})
+	err := s.delEntry(context.Background())
+	if err != nil {
+		s.log.Warn("Cannot delete entry from db.")
+	}
 	return nil
 }
 
