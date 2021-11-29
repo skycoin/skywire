@@ -25,6 +25,7 @@ for:
       - go mod vendor
 
     before_build:
+      - golangci-lint cache clean
       - make check
 
   - # Windows
@@ -45,6 +46,7 @@ for:
 
     before_build:
       - set GO111MODULE=on
+      - golangci-lint cache clean
       - make check-windows
 
     build_script:
