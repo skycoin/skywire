@@ -207,7 +207,10 @@ build-deploy: ## Build for deployment Docker images
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
 github-release:
-	goreleaser --rm-dist
+	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags | cut -c 2-))
+	sed '/^## ${GITHUB_TAG}$$/,/^## .*/!d;//d;/^$$/d' ./CHANGELOG.md > releaseChangelog.md
+	goreleaser --rm-dist --release-notes releaseChangelog.md 
+
 
 build-docker: ## Build docker image
 	./ci_scripts/docker-push.sh -t ${BRANCH} -b

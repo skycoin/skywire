@@ -3,6 +3,7 @@ package mdisc
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"text/tabwriter"
 	"time"
@@ -41,7 +42,7 @@ var entryCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
 		pk := internal.ParsePK("visor-public-key", args[0])
-		entry, err := disc.NewHTTP(mdAddr).Entry(ctx, pk)
+		entry, err := disc.NewHTTP(mdAddr, http.Client{}).Entry(ctx, pk)
 		internal.Catch(err)
 		fmt.Println(entry)
 	},
@@ -53,7 +54,7 @@ var availableServersCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, _ []string) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
-		entries, err := disc.NewHTTP(mdAddr).AvailableServers(ctx)
+		entries, err := disc.NewHTTP(mdAddr, http.Client{}).AvailableServers(ctx)
 		internal.Catch(err)
 		printAvailableServers(entries)
 	},
