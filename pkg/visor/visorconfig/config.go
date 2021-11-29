@@ -4,6 +4,7 @@ import (
 	"runtime"
 
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/disc"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/app/launcher"
@@ -24,7 +25,7 @@ func MakeBaseConfig(common *Common) *V1 {
 	conf.Dmsg = &dmsgc.DmsgConfig{
 		Discovery:     skyenv.DefaultDmsgDiscAddr,
 		SessionsCount: 1,
-		Servers:       []string{},
+		Servers:       []*disc.Entry{},
 	}
 	conf.Transport = &V1Transport{
 		Discovery:         skyenv.DefaultTpDiscAddr,
@@ -243,4 +244,21 @@ func launcherAddAllApps(launcherCfg []launcher.AppConfig) []launcher.AppConfig {
 		},
 	}...)
 	return launcherCfg
+}
+
+// DmsgHTTPServers struct use to unmarshal dmsghttp file
+type DmsgHTTPServers struct {
+	Test DmsgHTTPServersData `json:"test"`
+	Prod DmsgHTTPServersData `json:"prod"`
+}
+
+// DmsgHTTPServersData is a part of DmsgHTTPServers
+type DmsgHTTPServersData struct {
+	DMSGServers        []*disc.Entry `json:"dmsg_servers"`
+	DMSGDiscovery      string        `json:"dmsg_discovery"`
+	TransportDiscovery string        `json:"transport_discovery"`
+	AddressResolver    string        `json:"address_resolver"`
+	RouteFinder        string        `json:"route_finder"`
+	UptimeTracker      string        `json:"uptime_tracker"`
+	ServiceDiscovery   string        `json:"service_discovery"`
 }
