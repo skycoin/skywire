@@ -171,20 +171,21 @@ func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error {
 	keys = append(keys, v.conf.PK)
 	dClient := direct.NewDirectClient(direct.GetAllEntries(keys, servers))
 
-	dmsgD, closeDmsgD, err := direct.StartDmsg(ctx, log, v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
+	dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, log, v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
 	if err != nil {
 		return fmt.Errorf("failed to start dmsg: %w", err)
 	}
-	dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgD)}
+	dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgDC)}
 
 	v.pushCloseStack("dmsg_http", func() error {
-		closeDmsgD()
+		closeDmsgDC()
 		return nil
 	})
 
 	v.initLock.Lock()
 	v.dClient = dClient
 	v.dmsgHTTP = &dmsgHTTP
+	v.dmsgDC = dmsgDC
 	v.initLock.Unlock()
 	return nil
 }
@@ -510,8 +511,8 @@ func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	err = launch.AutoStart(launcher.EnvMap{
-		skyenv.VPNClientName: vpnEnvMaker(v.conf, v.dmsgC, v.tpM.STCPRRemoteAddrs()),
-		skyenv.VPNServerName: vpnEnvMaker(v.conf, v.dmsgC, nil),
+		skyenv.VPNClientName: vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.STCPRRemoteAddrs()),
+		skyenv.VPNServerName: vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, nil),
 	})
 
 	if err != nil {
@@ -528,7 +529,7 @@ func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 // Make an env maker function for vpn application
-func vpnEnvMaker(conf *visorconfig.V1, dmsgC *dmsg.Client, tpRemoteAddrs []string) launcher.EnvMaker {
+func vpnEnvMaker(conf *visorconfig.V1, dmsgC, dmsgDC *dmsg.Client, tpRemoteAddrs []string) launcher.EnvMaker {
 	return func() ([]string, error) {
 		var envCfg vpn.DirectRoutesEnvConfig
 
@@ -545,6 +546,11 @@ func vpnEnvMaker(conf *visorconfig.V1, dmsgC *dmsg.Client, tpRemoteAddrs []strin
 					return errors.New("no dmsg servers found")
 				}
 
+				if dmsgDC != nil {
+					for _, ses := range dmsgDC.AllSessions() {
+						envCfg.DmsgServers = append(envCfg.DmsgServers, ses.RemoteTCPAddr().String())
+					}
+				}
 				return nil
 			})
 
