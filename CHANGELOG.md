@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - added `servers` filed to `dmsg` in config
 - added `-d,--dmsghttp` flag to `skywire-cli config gen`
 - added `dmsgdirect` client to connect to services over dmsg
+- added `-f` flag to `skywire-visor` to fun a visor with hypervisor UI
 ## 0.5.0
 
 ### Changed
