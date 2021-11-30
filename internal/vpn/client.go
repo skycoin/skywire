@@ -792,11 +792,13 @@ func filterOutEqualIPs(ips []net.IP) []net.IP {
 	ipsSet := make(map[string]struct{})
 	var filteredIPs []net.IP
 	for _, ip := range ips {
-		ipStr := ip.String()
+		if ip != nil {
+			ipStr := ip.String()
 
-		if _, ok := ipsSet[ipStr]; !ok {
-			filteredIPs = append(filteredIPs, ip)
-			ipsSet[ip.String()] = struct{}{}
+			if _, ok := ipsSet[ipStr]; !ok {
+				filteredIPs = append(filteredIPs, ip)
+				ipsSet[ip.String()] = struct{}{}
+			}
 		}
 	}
 
