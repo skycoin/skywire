@@ -99,6 +99,7 @@ type UserStore interface {
 	AddUser(user User) error
 	SetUser(user User) error
 	RemoveUser(name string) error
+	Close() error
 }
 
 // BoltUserStore implements UserStore, storing users in a bbolt database file.
