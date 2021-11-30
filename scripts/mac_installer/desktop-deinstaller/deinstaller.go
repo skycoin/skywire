@@ -1,3 +1,6 @@
+//go:build darwin && systray
+// +build darwin,systray
+
 package main
 
 import (

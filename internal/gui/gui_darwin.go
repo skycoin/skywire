@@ -14,6 +14,6 @@ const (
 )
 
 func checkIsPackage() bool {
-	_, err := os.Stat(appPath)
+	_, err := os.Stat(deinstallerPath)
 	return err == nil
 }

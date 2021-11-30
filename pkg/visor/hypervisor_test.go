@@ -36,7 +36,7 @@ func TestNewNode(t *testing.T) {
 	confDir, err := ioutil.TempDir(os.TempDir(), "SWHV")
 	require.NoError(t, err)
 
-	config.DBPath = filepath.Join(confDir, "users.db")
+	config.DBPath = filepath.Join(confDir, "users_test.db")
 
 	t.Run("no_access_without_login", func(t *testing.T) {
 		testNodeNoAccessWithoutLogin(t, config)
@@ -87,6 +87,7 @@ func makeStartNode(t *testing.T, config hypervisorconfig.Config) (string, *http.
 
 	return srv.Listener.Addr().String(), client, func() {
 		srv.Close()
+		_ = visor.users.Close() // nolint:errcheck
 		require.NoError(t, os.Remove(config.DBPath))
 	}
 }
