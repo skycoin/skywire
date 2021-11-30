@@ -211,13 +211,50 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 
 	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, httpC, log)
 	if err != nil {
-		err := fmt.Errorf("failed to create address resolver client: %w", err)
+		err = fmt.Errorf("failed to create address resolver client: %w", err)
 		return err
 	}
+
+	// initialize cache for available transports
+	m, err := arClient.Transports(ctx)
+	if err != nil {
+		log.Warn("failed to fetch transports from AR")
+		return err
+	}
+
 	v.initLock.Lock()
 	v.arClient = arClient
+	v.transportsCache = m
 	v.initLock.Unlock()
+
+	doneCh := make(chan struct{}, 1)
+	t := time.NewTicker(1 * time.Hour)
+	go fetchARTransports(ctx, v, log, doneCh, t)
+	v.pushCloseStack("address_resolver", func() error {
+		doneCh <- struct{}{}
+		return nil
+	})
+
 	return nil
+}
+
+func fetchARTransports(ctx context.Context, v *Visor, log *logging.Logger, doneCh <-chan struct{}, tick *time.Ticker) {
+	for {
+		select {
+		case <-tick.C:
+			log.Debug("Fetching PKs from AR")
+			m, err := v.arClient.Transports(ctx)
+			if err != nil {
+				log.WithError(err).Warn("failed to fetch AR transport")
+			}
+			v.transportCacheMu.Lock()
+			v.transportsCache = m
+			v.transportCacheMu.Unlock()
+		case <-doneCh:
+			tick.Stop()
+			return
+		}
+	}
 }
 
 func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
@@ -434,6 +471,57 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 	return nil
 }
 
+func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []router.RouteSetupHook {
+	retrier := dmsgnetutil.NewRetrier(log, time.Second, time.Second*20, 3, 1.3)
+	return []router.RouteSetupHook{
+		func(rPK cipher.PubKey, tm *transport.Manager) error {
+			dmsgFallback := func() error {
+				return retrier.Do(ctx, func() error {
+					_, err := tm.SaveTransport(ctx, rPK, network.DMSG, transport.LabelAutomatic)
+					return err
+				})
+			}
+			// check visor's AR transport cache
+			if v.transportsCache == nil && !v.conf.Transport.PublicAutoconnect {
+				// skips if there's no AR transports
+				log.Warn("empty AR transports cache")
+				return dmsgFallback()
+			}
+			transports, ok := v.transportsCache[rPK]
+			if !ok {
+				log.WithField("pk", rPK.String()).Warn("pk not found in the transports cache")
+				// check if automatic transport is available, if it does,
+				// continue with route creation
+				if v.conf.Transport.PublicAutoconnect {
+					// we return nil here, router will use multi-hop STCPR rather than one hop DMSG
+					return nil
+				}
+				return dmsgFallback()
+			}
+			// try to establish direct connection to rPK (single hop) using SUDPH or STCPR
+			errSlice := make([]error, 0, 2)
+			for _, trans := range transports {
+				ntype := network.Type(trans)
+				// skip if SUDPH is under symmetric NAT / under UDP firewall.
+				if ntype == network.SUDPH && (v.stunClient.NATType == stun.NATSymmetric || v.stunClient.NATType == stun.NATSymmetricUDPFirewall) {
+					continue
+				}
+				err := retrier.Do(ctx, func() error {
+					_, err := tm.SaveTransport(ctx, rPK, ntype, transport.LabelAutomatic)
+					return err
+				})
+				if err != nil {
+					errSlice = append(errSlice, err)
+				}
+			}
+			if len(errSlice) != 2 {
+				return nil
+			}
+			return errors.New(errSlice[0].Error())
+		},
+	}
+}
+
 func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Routing
 
@@ -456,7 +544,9 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		MinHops:          v.conf.Routing.MinHops,
 	}
 
-	r, err := router.New(v.dmsgC, &rConf)
+	routeSetupHooks := getRouteSetupHooks(ctx, v, log)
+
+	r, err := router.New(v.dmsgC, &rConf, routeSetupHooks)
 	if err != nil {
 		err := fmt.Errorf("failed to create router: %w", err)
 		return err
@@ -726,7 +816,7 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
 		logger.Warn("Failed to get STCPR port")
 		return nil
 	}
-	visorUpdater := v.serviceDisc.VisorUpdater(uint16(port))
+	visorUpdater := v.serviceDisc.VisorUpdater(port)
 	visorUpdater.Start()
 
 	v.log.Infof("Sent request to register visor as public")
