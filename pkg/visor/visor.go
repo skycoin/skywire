@@ -60,7 +60,8 @@ type Visor struct {
 
 	ebc      *appevent.Broadcaster // event broadcaster
 	dmsgC    *dmsg.Client
-	dClient  direct.APIClient // dmsg direct client
+	dmsgDC   *dmsg.Client     // dmsg direct client
+	dClient  direct.APIClient // dmsg direct api client
 	dmsgHTTP *http.Client     // dmsghttp client
 	trackers *dmsgtracker.Manager
 
