@@ -17,18 +17,18 @@ type tunDevice struct {
 func newTUNDevice() (TUNDevice, error) {
 	const tunName = "tun0"
 
-	tun, err := tun.CreateTUN(tunName, TUNMTU)
+	dev, err := tun.CreateTUN(tunName, TUNMTU)
 	if err != nil {
 		return nil, fmt.Errorf("error allocating TUN interface: %w", err)
 	}
 
-	name, err := tun.Name()
+	name, err := dev.Name()
 	if err != nil {
 		return nil, fmt.Errorf("error getting interface name: %w", err)
 	}
 
 	return &tunDevice{
-		tun:  tun,
+		tun:  dev,
 		name: name,
 	}, nil
 }

@@ -313,6 +313,11 @@ func (s *UserManager) newSession(w http.ResponseWriter, session Session) error {
 	return nil
 }
 
+// Close closes the underlying db, used for Windows.
+func (s *UserManager) Close() error {
+	return s.db.Close()
+}
+
 func (s *UserManager) delSession(w http.ResponseWriter, r *http.Request) error {
 	cookie, err := r.Cookie(sessionCookieName)
 	if err != nil {
