@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -18,6 +21,7 @@ import (
 	"github.com/skycoin/dmsg/dmsgctrl"
 	"github.com/skycoin/dmsg/dmsgget"
 	"github.com/skycoin/dmsg/dmsghttp"
+	"github.com/skycoin/dmsg/dmsgpty"
 	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 
@@ -40,6 +44,7 @@ import (
 	ts "github.com/skycoin/skywire/pkg/transport/setup"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	"github.com/skycoin/skywire/pkg/util/netutil"
+	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	vinit "github.com/skycoin/skywire/pkg/visor/visorinit"
@@ -52,6 +57,8 @@ const visorKey visorCtxKey = iota
 type runtimeErrsCtxKey int
 
 const runtimeErrsKey runtimeErrsCtxKey = iota
+
+const ownerRWX = 0700
 
 // Visor initialization is split into modules, that can be initialized independently
 // Modules are declared here as package-level variables, but also need to be registered
@@ -164,23 +171,28 @@ func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error {
 	var keys cipher.PubKeys
 	servers := v.conf.Dmsg.Servers
 
+	if len(servers) == 0 {
+		return nil
+	}
+
 	keys = append(keys, v.conf.PK)
 	dClient := direct.NewDirectClient(direct.GetAllEntries(keys, servers))
 
-	dmsgD, closeDmsgD, err := direct.StartDmsg(ctx, log, v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
+	dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, log, v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
 	if err != nil {
 		return fmt.Errorf("failed to start dmsg: %w", err)
 	}
-	dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgD)}
+	dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgDC)}
 
 	v.pushCloseStack("dmsg_http", func() error {
-		closeDmsgD()
+		closeDmsgDC()
 		return nil
 	})
 
 	v.initLock.Lock()
 	v.dClient = dClient
 	v.dmsgHTTP = &dmsgHTTP
+	v.dmsgDC = dmsgDC
 	v.initLock.Unlock()
 	return nil
 }
@@ -206,13 +218,50 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 
 	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, httpC, log)
 	if err != nil {
-		err := fmt.Errorf("failed to create address resolver client: %w", err)
+		err = fmt.Errorf("failed to create address resolver client: %w", err)
 		return err
 	}
+
+	// initialize cache for available transports
+	m, err := arClient.Transports(ctx)
+	if err != nil {
+		log.Warn("failed to fetch transports from AR")
+		return err
+	}
+
 	v.initLock.Lock()
 	v.arClient = arClient
+	v.transportsCache = m
 	v.initLock.Unlock()
+
+	doneCh := make(chan struct{}, 1)
+	t := time.NewTicker(1 * time.Hour)
+	go fetchARTransports(ctx, v, log, doneCh, t)
+	v.pushCloseStack("address_resolver", func() error {
+		doneCh <- struct{}{}
+		return nil
+	})
+
 	return nil
+}
+
+func fetchARTransports(ctx context.Context, v *Visor, log *logging.Logger, doneCh <-chan struct{}, tick *time.Ticker) {
+	for {
+		select {
+		case <-tick.C:
+			log.Debug("Fetching PKs from AR")
+			m, err := v.arClient.Transports(ctx)
+			if err != nil {
+				log.WithError(err).Warn("failed to fetch AR transport")
+			}
+			v.transportCacheMu.Lock()
+			v.transportsCache = m
+			v.transportCacheMu.Unlock()
+		case <-doneCh:
+			tick.Stop()
+			return
+		}
+	}
 }
 
 func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
@@ -429,6 +478,57 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 	return nil
 }
 
+func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []router.RouteSetupHook {
+	retrier := dmsgnetutil.NewRetrier(log, time.Second, time.Second*20, 3, 1.3)
+	return []router.RouteSetupHook{
+		func(rPK cipher.PubKey, tm *transport.Manager) error {
+			dmsgFallback := func() error {
+				return retrier.Do(ctx, func() error {
+					_, err := tm.SaveTransport(ctx, rPK, network.DMSG, transport.LabelAutomatic)
+					return err
+				})
+			}
+			// check visor's AR transport cache
+			if v.transportsCache == nil && !v.conf.Transport.PublicAutoconnect {
+				// skips if there's no AR transports
+				log.Warn("empty AR transports cache")
+				return dmsgFallback()
+			}
+			transports, ok := v.transportsCache[rPK]
+			if !ok {
+				log.WithField("pk", rPK.String()).Warn("pk not found in the transports cache")
+				// check if automatic transport is available, if it does,
+				// continue with route creation
+				if v.conf.Transport.PublicAutoconnect {
+					// we return nil here, router will use multi-hop STCPR rather than one hop DMSG
+					return nil
+				}
+				return dmsgFallback()
+			}
+			// try to establish direct connection to rPK (single hop) using SUDPH or STCPR
+			errSlice := make([]error, 0, 2)
+			for _, trans := range transports {
+				ntype := network.Type(trans)
+				// skip if SUDPH is under symmetric NAT / under UDP firewall.
+				if ntype == network.SUDPH && (v.stunClient.NATType == stun.NATSymmetric || v.stunClient.NATType == stun.NATSymmetricUDPFirewall) {
+					continue
+				}
+				err := retrier.Do(ctx, func() error {
+					_, err := tm.SaveTransport(ctx, rPK, ntype, transport.LabelAutomatic)
+					return err
+				})
+				if err != nil {
+					errSlice = append(errSlice, err)
+				}
+			}
+			if len(errSlice) != 2 {
+				return nil
+			}
+			return errors.New(errSlice[0].Error())
+		},
+	}
+}
+
 func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Routing
 
@@ -451,7 +551,9 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		MinHops:          v.conf.Routing.MinHops,
 	}
 
-	r, err := router.New(v.dmsgC, &rConf)
+	routeSetupHooks := getRouteSetupHooks(ctx, v, log)
+
+	r, err := router.New(v.dmsgC, &rConf, routeSetupHooks)
 	if err != nil {
 		err := fmt.Errorf("failed to create router: %w", err)
 		return err
@@ -506,8 +608,8 @@ func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	err = launch.AutoStart(launcher.EnvMap{
-		skyenv.VPNClientName: vpnEnvMaker(v.conf, v.dmsgC, v.tpM.STCPRRemoteAddrs()),
-		skyenv.VPNServerName: vpnEnvMaker(v.conf, v.dmsgC, nil),
+		skyenv.VPNClientName: vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.STCPRRemoteAddrs()),
+		skyenv.VPNServerName: vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, nil),
 	})
 
 	if err != nil {
@@ -524,7 +626,7 @@ func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 // Make an env maker function for vpn application
-func vpnEnvMaker(conf *visorconfig.V1, dmsgC *dmsg.Client, tpRemoteAddrs []string) launcher.EnvMaker {
+func vpnEnvMaker(conf *visorconfig.V1, dmsgC, dmsgDC *dmsg.Client, tpRemoteAddrs []string) launcher.EnvMaker {
 	return func() ([]string, error) {
 		var envCfg vpn.DirectRoutesEnvConfig
 
@@ -541,6 +643,11 @@ func vpnEnvMaker(conf *visorconfig.V1, dmsgC *dmsg.Client, tpRemoteAddrs []strin
 					return errors.New("no dmsg servers found")
 				}
 
+				if dmsgDC != nil {
+					for _, ses := range dmsgDC.AllSessions() {
+						envCfg.DmsgServers = append(envCfg.DmsgServers, ses.RemoteTCPAddr().String())
+					}
+				}
 				return nil
 			})
 
@@ -716,7 +823,7 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
 		logger.Warn("Failed to get STCPR port")
 		return nil
 	}
-	visorUpdater := v.serviceDisc.VisorUpdater(uint16(port))
+	visorUpdater := v.serviceDisc.VisorUpdater(port)
 	visorUpdater.Start()
 
 	v.log.Infof("Sent request to register visor as public")
@@ -724,6 +831,103 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
 		visorUpdater.Stop()
 		return nil
 	})
+	return nil
+}
+
+func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
+	conf := v.conf.Dmsgpty
+
+	if conf == nil {
+		log.Info("'dmsgpty' is not configured, skipping.")
+		return nil
+	}
+
+	// Unlink dmsg socket files (just in case).
+	if conf.CLINet == "unix" {
+		if runtime.GOOS == "windows" {
+			conf.CLIAddr = dmsgpty.ParseWindowsEnv(conf.CLIAddr)
+		}
+
+		if err := osutil.UnlinkSocketFiles(v.conf.Dmsgpty.CLIAddr); err != nil {
+			return err
+		}
+	}
+
+	wl := dmsgpty.NewMemoryWhitelist()
+
+	// Ensure hypervisors are added to the whitelist.
+	if err := wl.Add(v.conf.Hypervisors...); err != nil {
+		return err
+	}
+	// add itself to the whitelist to allow local pty
+	if err := wl.Add(v.conf.PK); err != nil {
+		v.log.Errorf("Cannot add itself to the pty whitelist: %s", err)
+	}
+
+	dmsgC := v.dmsgC
+	if dmsgC == nil {
+		err := errors.New("cannot create dmsgpty with nil dmsg client")
+		return err
+	}
+
+	pty := dmsgpty.NewHost(dmsgC, wl)
+
+	if ptyPort := conf.DmsgPort; ptyPort != 0 {
+		serveCtx, cancel := context.WithCancel(context.Background())
+		wg := new(sync.WaitGroup)
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+			runtimeErrors := getErrors(ctx)
+			if err := pty.ListenAndServe(serveCtx, ptyPort); err != nil {
+				runtimeErrors <- fmt.Errorf("listen and serve stopped: %w", err)
+			}
+		}()
+
+		v.pushCloseStack("router.serve", func() error {
+			cancel()
+			wg.Wait()
+			return nil
+		})
+
+	}
+
+	if conf.CLINet != "" {
+
+		if conf.CLINet == "unix" {
+			if err := os.MkdirAll(filepath.Dir(conf.CLIAddr), ownerRWX); err != nil {
+				err := fmt.Errorf("failed to prepare unix file for dmsgpty cli listener: %w", err)
+				return err
+			}
+		}
+
+		cliL, err := net.Listen(conf.CLINet, conf.CLIAddr)
+		if err != nil {
+			err := fmt.Errorf("failed to start dmsgpty cli listener: %w", err)
+			return err
+		}
+
+		serveCtx, cancel := context.WithCancel(context.Background())
+		wg := new(sync.WaitGroup)
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+			runtimeErrors := getErrors(ctx)
+			if err := pty.ServeCLI(serveCtx, cliL); err != nil {
+				runtimeErrors <- fmt.Errorf("serve cli stopped: %w", err)
+			}
+		}()
+
+		v.pushCloseStack("router.serve", func() error {
+			cancel()
+			err := cliL.Close()
+			wg.Wait()
+			return err
+		})
+	}
+
 	return nil
 }
 

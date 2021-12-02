@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/dmsgpty"
 )
 
 // Constants for skywire root directories.
@@ -61,15 +62,19 @@ const (
 
 // Default dmsgpty constants.
 const (
-	DmsgPtyPort           uint16 = 22
-	DefaultDmsgPtyCLINet         = "unix"
-	DefaultDmsgPtyCLIAddr        = "/tmp/dmsgpty.sock"
+	DmsgPtyPort          uint16 = 22
+	DefaultDmsgPtyCLINet        = "unix"
 )
 
 // Default Skywire-TCP constants.
 const (
 	DefaultSTCPAddr = ":7777"
 )
+
+// DefaultDmsgPtyCLIAddr determines default CLI address per each platform
+func DefaultDmsgPtyCLIAddr() string {
+	return dmsgpty.DefaultCLIAddr()
+}
 
 // Default skywire app constants.
 const (
@@ -139,6 +144,11 @@ const (
 	DefaultEnableTLS         = false
 	DefaultTLSKey            = DefaultSkywirePath + "/ssl/key.pem"
 	DefaultTLSCert           = DefaultSkywirePath + "/ssl/cert.pem"
+)
+
+const (
+	// IPCShutdownMessageType sends IPC shutdown message type
+	IPCShutdownMessageType = 68
 )
 
 // PackageLocalPath is the path to local directory
