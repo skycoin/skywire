@@ -422,7 +422,7 @@ func (rg *RouteGroup) sendNetworkProbe() error {
 	}
 
 	throughput := rg.networkStats.RemoteThroughput()
-	timestamp := time.Now().UnixNano() / int64(time.Millisecond)
+	timestamp := time.Now().UTC().UnixNano() / int64(time.Millisecond)
 
 	rg.networkStats.SetDownloadSpeed(uint32(throughput))
 
@@ -612,7 +612,7 @@ func (rg *RouteGroup) handleNetworkProbePacket(packet routing.Packet) error {
 	ms := sentAtMs % 1000
 	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond))
 
-	rg.networkStats.SetLatency(time.Since(sentAt))
+	rg.networkStats.SetLatency(time.Now().UTC().Sub(sentAt))
 	rg.networkStats.SetUploadSpeed(uint32(throughput))
 
 	return nil
