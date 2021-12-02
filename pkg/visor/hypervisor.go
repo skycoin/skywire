@@ -9,7 +9,6 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,6 +21,7 @@ import (
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/dmsgpty"
 	"github.com/skycoin/dmsg/httputil"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"nhooyr.io/websocket"
@@ -269,15 +269,13 @@ func (hv *Hypervisor) makeMux() chi.Router {
 		})
 
 		// we don't enable `dmsgpty` endpoints for Windows
-		if runtime.GOOS != "windows" {
-			r.Route("/pty", func(r chi.Router) {
-				if hv.c.EnableAuth {
-					r.Use(hv.users.Authorize)
-				}
+		r.Route("/pty", func(r chi.Router) {
+			if hv.c.EnableAuth {
+				r.Use(hv.users.Authorize)
+			}
 
-				r.Get("/{pk}", hv.getPty())
-			})
-		}
+			r.Get("/{pk}", hv.getPty())
+		})
 
 		r.Handle("/*", http.FileServer(http.FS(hv.c.UIAssets)))
 	})
@@ -1585,4 +1583,23 @@ func (hv *Hypervisor) serveDmsg(ctx context.Context, log *logging.Logger) {
 	}()
 	log.WithField("addr", dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}).
 		Info("Serving RPC client over dmsg.")
+}
+
+// dmsgPtyUI servers as a wrapper for `*dmsgpty.UI`. this way source file with
+// `*dmsgpty.UI` will be included for Unix systems and excluded for Windows.
+type dmsgPtyUI struct {
+	PtyUI *dmsgpty.UI
+}
+
+func setupDmsgPtyUI(dmsgC *dmsg.Client, visorPK cipher.PubKey) *dmsgPtyUI {
+	ptyDialer := dmsgpty.DmsgUIDialer(dmsgC, dmsg.Addr{PK: visorPK, Port: skyenv.DmsgPtyPort})
+	return &dmsgPtyUI{
+		PtyUI: dmsgpty.NewUI(ptyDialer, dmsgpty.DefaultUIConfig()),
+	}
+}
+
+func (hv *Hypervisor) getPty() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		ctx.PtyUI.PtyUI.Handler()(w, r)
+	})
 }

@@ -30,6 +30,7 @@ pkg/visor/foo/
 /*-cli
 /*-server
 /*.json
+!/dmsghttp-config.json
 /*.sh
 /*.log
 
