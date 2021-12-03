@@ -10,11 +10,9 @@ import (
 	"net/http"
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/pkg/profile"
@@ -28,6 +26,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/syslog"
 	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -49,6 +48,7 @@ var (
 	confPath      string
 	delay         string
 	launchBrowser bool
+	hypervisorUI  bool
 	stopVisorFn   func() // nolint:unused
 	stopVisorWg   sync.WaitGroup
 )
@@ -70,6 +70,7 @@ func init() {
 	rootCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port if mode is 'http'")
 	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file location. If the value is 'STDIN', config file will be read from stdin.")
 	rootCmd.Flags().StringVar(&delay, "delay", "0ns", "start delay (deprecated)") // deprecated
+	rootCmd.Flags().BoolVarP(&hypervisorUI, "with-hypervisor-ui", "f", false, "run visor with hypervisor UI config.")
 	rootCmd.Flags().BoolVar(&launchBrowser, "launch-browser", false, "open hypervisor web ui (hypervisor only) with system browser")
 	extraFlags()
 }
@@ -92,34 +93,7 @@ func runVisor(args []string) {
 		WithField("build_tag", visor.BuildTag).
 		Debugf("Process info")
 
-	// Versions v0.2.3 and below return 0 exit-code after update and do not trigger systemd to restart a process
-	// and therefore do not support restart via systemd.
-	// If --delay flag is passed, version is v0.2.3 or below.
-	// Systemd has PID 1. If PPID is not 1 and PPID of parent process is 1, then
-	// this process is a child process that is run after updating by a skywire-visor that is run by systemd.
-	if delayDuration != 0 && !restartCtx.Systemd() && restartCtx.ParentSystemd() {
-		// As skywire-visor checks if new process is run successfully in `restart.DefaultCheckDelay` after update,
-		// new process should be alive after `restart.DefaultCheckDelay`.
-		time.Sleep(restart.DefaultCheckDelay)
-
-		// When a parent process exits, systemd kills child processes as well,
-		// so a child process can ask systemd to restart service between after restart.DefaultCheckDelay
-		// but before (restart.DefaultCheckDelay + restart.extraWaitingTime),
-		// because after that time a parent process would exit and then systemd would kill its children.
-		// In this case, systemd would kill both parent and child processes,
-		// then restart service using an updated binary.
-		cmd := exec.Command("systemctl", "restart", "skywire-visor") // nolint:gosec
-		if err := cmd.Run(); err != nil {
-			log.WithError(err).Errorf("Failed to restart skywire-visor service")
-		} else {
-			log.WithError(err).Infof("Restarted skywire-visor service")
-		}
-
-		// Detach child from parent.
-		if _, err := syscall.Setsid(); err != nil {
-			log.WithError(err).Errorf("Failed to call setsid()")
-		}
-	}
+	detachProcess(delayDuration, log)
 
 	time.Sleep(delayDuration)
 
@@ -145,6 +119,7 @@ func runVisor(args []string) {
 	}
 
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
+
 	setStopFunction(log, cancel, vis.Close)
 
 	// Wait.
@@ -266,6 +241,11 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 	conf, err := visorconfig.Parse(mLog, confPath, raw)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to parse config.")
+	}
+
+	if hypervisorUI {
+		config := hypervisorconfig.GenerateWorkDirConfig(false)
+		conf.Hypervisor = &config
 	}
 
 	if conf.Hypervisor != nil {

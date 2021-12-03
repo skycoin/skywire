@@ -7,16 +7,19 @@ import (
 	"net/rpc"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 var (
@@ -28,9 +31,10 @@ var (
 // communication.
 // TODO(evanlinjin): In the future, we will implement the ability to run multiple instances (procs) of a single app.
 type Proc struct {
-	disc appdisc.Updater // app discovery client
-	conf appcommon.ProcConfig
-	log  *logging.Logger
+	ipcServer *ipc.Server
+	disc      appdisc.Updater // app discovery client
+	conf      appcommon.ProcConfig
+	log       *logging.Logger
 
 	logDB appcommon.LogStore
 
@@ -80,7 +84,7 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").Writer()
 	cmd.Stderr = appLog.WithField("_module", moduleName).WithField("func", "(STDERR)").Writer()
 
-	return &Proc{
+	p := &Proc{
 		disc:    disc,
 		conf:    conf,
 		log:     mLog.PackageLogger(moduleName),
@@ -90,6 +94,7 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 		m:       m,
 		appName: appName,
 	}
+	return p
 }
 
 // Logs obtains the log store.
@@ -215,6 +220,16 @@ func (p *Proc) Start() error {
 		p.disc.Start()
 		defer p.disc.Stop()
 
+		if runtime.GOOS == "windows" {
+			ipcServer, err := ipc.StartServer(p.appName, nil)
+			if err != nil {
+				_ = p.cmd.Process.Kill() //nolint:errcheck
+				p.waitMx.Unlock()
+				return
+			}
+			p.ipcServer = ipcServer
+		}
+
 		// Wait for proc to exit.
 		p.waitErr = <-waitErrCh
 
@@ -239,9 +254,15 @@ func (p *Proc) Stop() error {
 	}
 
 	if p.cmd.Process != nil {
-		err := p.cmd.Process.Signal(os.Interrupt)
-		if err != nil {
-			return err
+		if runtime.GOOS != "windows" {
+			err := p.cmd.Process.Signal(os.Interrupt)
+			if err != nil {
+				return err
+			}
+		} else {
+			if err := p.ipcServer.Write(skyenv.IPCShutdownMessageType, []byte("")); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -251,6 +272,9 @@ func (p *Proc) Stop() error {
 	// the lock will be acquired as soon as the cmd finishes its work
 	p.waitMx.Lock()
 	defer func() {
+		if p.ipcServer != nil {
+			p.ipcServer.Close()
+		}
 		p.waitMx.Unlock()
 		p.connOnce.Do(func() { close(p.connCh) })
 	}()

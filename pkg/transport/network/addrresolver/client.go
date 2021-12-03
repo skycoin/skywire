@@ -43,6 +43,8 @@ var (
 	ErrNoEntry = errors.New("no entry for this PK")
 	// ErrNotReady is returned when address resolver is not ready.
 	ErrNotReady = errors.New("address resolver is not ready")
+	// ErrNoTransportsFound returned when no transports are found.
+	ErrNoTransportsFound = errors.New("failed to get response data from AR transports endpoint")
 )
 
 // Error is the object returned to the client when there's an error.
@@ -57,6 +59,7 @@ type APIClient interface {
 	BindSTCPR(ctx context.Context, port string) error
 	BindSUDPH(filter *pfilter.PacketFilter, handshake Handshake) (<-chan RemoteVisor, error)
 	Resolve(ctx context.Context, netType string, pk cipher.PubKey) (VisorData, error)
+	Transports(ctx context.Context) (map[cipher.PubKey][]string, error)
 	Close() error
 }
 
@@ -378,6 +381,58 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 	}
 
 	return resolveResp, nil
+}
+
+// Transports query available transports.
+func (c *httpClient) Transports(ctx context.Context) (map[cipher.PubKey][]string, error) {
+	resp, err := c.Get(ctx, "/transports")
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err = resp.Body.Close(); err != nil {
+			c.log.WithError(err).Warn("Failed to close response body")
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		c.log.Warn(ErrNoTransportsFound.Error())
+		return nil, ErrNoTransportsFound
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	transportsMap := map[string][]string{}
+	if err = json.Unmarshal(body, &transportsMap); err != nil {
+		return nil, err
+	}
+
+	results := map[cipher.PubKey][]string{}
+
+	for k, pks := range transportsMap {
+		for _, pk := range pks {
+			rPK := cipher.PubKey{}
+			if err := rPK.Set(pk); err != nil {
+				c.log.WithError(err).Warn("unable to transform PK")
+				continue
+			}
+
+			// Two kinds of network, SUDPH and STCPR
+			if _, ok := results[rPK]; ok {
+				if len(results[rPK]) == 1 && k != results[rPK][0] {
+					results[rPK] = append(results[rPK], k)
+				}
+			} else {
+				nTypeSlice := make([]string, 0, 2)
+				nTypeSlice = append(nTypeSlice, k)
+				results[rPK] = nTypeSlice
+			}
+		}
+	}
+	return results, nil
 }
 
 func (c *httpClient) isReady() bool {
