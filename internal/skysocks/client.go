@@ -7,11 +7,13 @@ import (
 	"sync"
 	"time"
 
+	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/yamux"
 
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 // Log is skysocks package level logger, it can be replaced with a different one from outside the package
@@ -154,6 +156,16 @@ func (c *Client) close() {
 	if err := c.Close(); err != nil {
 		Log.WithError(err).Error("Error closing skysocks client")
 	}
+}
+
+// ListenIPC starts named-pipe based connection server for windows or unix socket for other OSes
+func (c *Client) ListenIPC(client *ipc.Client, log *logrus.Logger) {
+	listenIPC(client, skyenv.SkychatName+"-client", func() {
+		client.Close()
+		if err := c.Close(); err != nil {
+			log.Errorf("Error closing skysocks-client: %v", err)
+		}
+	})
 }
 
 // Close implement io.Closer.

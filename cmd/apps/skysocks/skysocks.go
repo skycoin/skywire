@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
 
+	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/buildinfo"
 
@@ -16,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 const (
@@ -50,17 +53,27 @@ func main() {
 
 	fmt.Println("Starting serving proxy server")
 
-	termCh := make(chan os.Signal, 1)
-	signal.Notify(termCh, os.Interrupt)
-
-	go func() {
-		<-termCh
-
-		if err := srv.Close(); err != nil {
-			fmt.Println(err)
+	if runtime.GOOS == "windows" {
+		ipcClient, err := ipc.StartClient(skyenv.VPNClientName, nil)
+		if err != nil {
+			fmt.Printf("Error creating ipc server for VPN client: %v\n", err)
 			os.Exit(1)
 		}
-	}()
+		go srv.ListenIPC(ipcClient)
+	} else {
+		termCh := make(chan os.Signal, 1)
+		signal.Notify(termCh, os.Interrupt)
+
+		go func() {
+			<-termCh
+
+			if err := srv.Close(); err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+		}()
+
+	}
 
 	if err := srv.Serve(l); err != nil {
 		fmt.Println(err)
