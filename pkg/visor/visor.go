@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/direct"
 	"github.com/skycoin/skycoin/src/util/logging"
 
@@ -60,7 +61,8 @@ type Visor struct {
 
 	ebc      *appevent.Broadcaster // event broadcaster
 	dmsgC    *dmsg.Client
-	dClient  direct.APIClient // dmsg direct client
+	dmsgDC   *dmsg.Client     // dmsg direct client
+	dClient  direct.APIClient // dmsg direct api client
 	dmsgHTTP *http.Client     // dmsghttp client
 	trackers *dmsgtracker.Manager
 
@@ -81,6 +83,8 @@ type Visor struct {
 	runtimeErrors chan error
 
 	isServicesHealthy *internalHealthInfo
+	transportCacheMu  *sync.Mutex
+	transportsCache   map[cipher.PubKey][]string
 }
 
 // todo: consider moving module closing to the module system
@@ -112,6 +116,7 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 		initLock:          new(sync.Mutex),
 		isServicesHealthy: newInternalHealthInfo(),
 		wgTrackers:        new(sync.WaitGroup),
+		transportCacheMu:  new(sync.Mutex),
 	}
 	v.wgTrackers.Add(1)
 	defer v.wgTrackers.Done()

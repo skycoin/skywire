@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/netutil"
@@ -231,6 +232,30 @@ func (c *Client) Serve() error {
 	return nil
 }
 
+// ListenIPC starts named-pipe based connection server for windows or unix socket in Linux/Mac
+func (c *Client) ListenIPC(client *ipc.Client) {
+	if client == nil {
+		fmt.Println("Unable to create IPC Client: server is non-existent")
+		return
+	}
+	for {
+		m, err := client.Read()
+		if err != nil {
+			fmt.Printf("%s IPC received error: %v", skyenv.VPNClientName, err)
+		}
+
+		if m != nil {
+			if m.MsgType == skyenv.IPCShutdownMessageType {
+				fmt.Println("Stopping " + skyenv.VPNClientName + " via IPC")
+				break
+			}
+		}
+
+	}
+	client.Close()
+	c.Close()
+}
+
 // Close closes client.
 func (c *Client) Close() {
 	c.closeOnce.Do(func() {
@@ -290,17 +315,19 @@ func (c *Client) RemoveDirectRoute(ip net.IP) error {
 }
 
 func (c *Client) setSysPrivileges() error {
-	c.suidMu.Lock()
+	if runtime.GOOS != "windows" {
+		c.suidMu.Lock()
 
-	// we don't release the lock here to avoid races,
-	// lock will be released after reverting system privileges
+		// we don't release the lock here to avoid races,
+		// lock will be released after reverting system privileges
 
-	suid, err := setupClientSysPrivileges()
-	if err != nil {
-		return err
+		suid, err := setupClientSysPrivileges()
+		if err != nil {
+			return err
+		}
+
+		c.suid = suid
 	}
-
-	c.suid = suid
 
 	return nil
 }
@@ -366,8 +393,11 @@ func (c *Client) serveConn(conn net.Conn) error {
 	// this call is important. it will either run on an error down the line,
 	// or, in case VPN sessions finishes, it will be the last call in deferred stack,
 	// releasing system privileges after cleanup
-	defer c.releaseSysPrivileges()
+	defer func() {
+		c.releaseSysPrivileges()
+	}()
 
+	fmt.Println("CREATING TUN INTERFACE")
 	tun, err := c.createTUN()
 	if err != nil {
 		return fmt.Errorf("error allocating TUN interface: %w", err)
@@ -380,6 +410,7 @@ func (c *Client) serveConn(conn net.Conn) error {
 
 	fmt.Printf("Allocated TUN %s: %v\n", tun.Name(), err)
 
+	fmt.Printf("Setting up TUN device with: %s and Gateway %s", tunIP, tunGateway)
 	if err := c.setupTUN(tunIP, tunGateway); err != nil {
 		return fmt.Errorf("error setting up TUN %s: %w", tun.Name(), err)
 	}
@@ -389,8 +420,10 @@ func (c *Client) serveConn(conn net.Conn) error {
 		// interface doesn't get its values immediately. Reason is unknown,
 		// all credits go to Microsoft. Delay may be different, this one is
 		// fairly large to cover not really performant systems.
-		time.Sleep(10 * time.Second)
+		time.Sleep(13 * time.Second)
 	}
+
+	fmt.Printf("TUN %s all sets", tunIP)
 
 	isNewRoute := true
 	if c.cfg.Killswitch {
@@ -708,14 +741,6 @@ func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error)
 	return sHello.TUNIP, sHello.TUNGateway, nil
 }
 
-func (c *Client) releaseSysPrivileges() {
-	defer c.suidMu.Unlock()
-
-	if err := releaseClientSysPrivileges(c.suid); err != nil {
-		fmt.Printf("Failed to release system privileges: %v\n", err)
-	}
-}
-
 func (c *Client) dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
 	const (
 		netType = appnet.TypeSkynet
@@ -792,11 +817,13 @@ func filterOutEqualIPs(ips []net.IP) []net.IP {
 	ipsSet := make(map[string]struct{})
 	var filteredIPs []net.IP
 	for _, ip := range ips {
-		ipStr := ip.String()
+		if ip != nil {
+			ipStr := ip.String()
 
-		if _, ok := ipsSet[ipStr]; !ok {
-			filteredIPs = append(filteredIPs, ip)
-			ipsSet[ip.String()] = struct{}{}
+			if _, ok := ipsSet[ipStr]; !ok {
+				filteredIPs = append(filteredIPs, ip)
+				ipsSet[ip.String()] = struct{}{}
+			}
 		}
 	}
 

@@ -1,5 +1,5 @@
-//go:build !arm64
-// +build !arm64
+//go:build !arm64 && !windows
+// +build !arm64,!windows
 
 package stdio
 
