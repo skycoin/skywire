@@ -68,17 +68,14 @@ for:
       - choco install make
       - go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.42.0
       - make dep
-      - make install-deps-ui
       - set PATH=C:\Users\appveyor\go\bin;C:\msys64\mingw64\bin;C:\msys64\usr\bin;%PATH%
 
     before_build:
       - set GO111MODULE=on
       - make check-windows
-      - make lint-ui
   
     build_script:
       - make build-windows
-      - make build-ui-windows
 
   - # Linux and MacOS (Release)
     skip_non_tags: true
