@@ -3,12 +3,16 @@ package skysocks
 import (
 	"fmt"
 	"net"
+	"os"
 	"sync"
 	"sync/atomic"
 
 	"github.com/armon/go-socks5"
+	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/yamux"
+
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 // Server implements multiplexing proxy server using yamux.
@@ -74,6 +78,17 @@ func (s *Server) Serve(l net.Listener) error {
 			}
 		}()
 	}
+}
+
+// ListenIPC starts named-pipe based connection server for windows or unix socket in Linux/Mac
+func (s *Server) ListenIPC(client *ipc.Client) {
+	listenIPC(client, skyenv.SkychatName, func() {
+		client.Close()
+		if err := s.Close(); err != nil {
+			fmt.Println("Error closing skysocks server: ", err.Error())
+			os.Exit(1)
+		}
+	})
 }
 
 // Close implement io.Closer.
