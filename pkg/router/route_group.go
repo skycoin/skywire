@@ -422,13 +422,13 @@ func (rg *RouteGroup) sendNetworkProbe() error {
 	}
 
 	throughput := rg.networkStats.RemoteThroughput()
-	timestamp := time.Now().UTC().UnixNano() / int64(time.Millisecond)
+	timestamp := time.Now().UTC().UnixMilli()
 
 	rg.networkStats.SetDownloadSpeed(uint32(throughput))
 
 	packet := routing.MakeNetworkProbePacket(rule.NextRouteID(), timestamp, throughput)
 
-	return rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
+	return rg.writePacket(context.Background(), tp, packet, rule.NextRouteID())
 }
 
 func (rg *RouteGroup) networkProbeServiceFn(_ time.Duration) {
@@ -609,8 +609,7 @@ func (rg *RouteGroup) handleNetworkProbePacket(packet routing.Packet) error {
 	sentAtMs := binary.BigEndian.Uint64(payload)
 	throughput := binary.BigEndian.Uint64(payload[8:])
 
-	ms := sentAtMs % 1000
-	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond)).UTC()
+	sentAt := time.Unix(int64(sentAtMs/1000), int64(sentAtMs)*int64(time.Millisecond)).UTC()
 	latency := time.Now().UTC().Sub(sentAt)
 
 	rg.networkStats.SetLatency(latency)
