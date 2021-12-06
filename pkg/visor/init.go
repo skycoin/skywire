@@ -1080,11 +1080,11 @@ func getErrors(ctx context.Context) chan error {
 	return errs
 }
 
-func getHTTPClient(ctx context.Context, v *Visor, service string) (httpC *http.Client, err error) {
+func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client, error) {
 
 	var serviceURL dmsgget.URL
 
-	err = serviceURL.Fill(service)
+	err := serviceURL.Fill(service)
 
 	if serviceURL.Scheme == "dmsg" {
 		if err != nil {
@@ -1098,8 +1098,7 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (httpC *http.C
 		if err != nil {
 			return nil, fmt.Errorf("Error saving clientEntry: %w", err)
 		}
-		httpC = v.dmsgHTTP
-		return httpC, nil
+		return v.dmsgHTTP, nil
 	}
-	return httpC, nil
+	return &http.Client{}, nil
 }
