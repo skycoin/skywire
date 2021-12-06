@@ -176,7 +176,7 @@ func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	keys = append(keys, v.conf.PK)
-	dClient := direct.NewDirectClient(direct.GetAllEntries(keys, servers))
+	dClient := direct.NewClient(direct.GetAllEntries(keys, servers), log)
 
 	dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, log, v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
 	if err != nil {
