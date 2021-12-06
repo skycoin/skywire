@@ -176,12 +176,14 @@ func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	keys = append(keys, v.conf.PK)
-	dClient := direct.NewClient(direct.GetAllEntries(keys, servers), log)
+	dClient := direct.NewClient(direct.GetAllEntries(keys, servers), v.MasterLogger().PackageLogger("dmsg_http:direct_client"))
 
-	dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, log, v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
+	dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, v.MasterLogger().PackageLogger("dmsg_http:dmsgDC"),
+		v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
 	if err != nil {
 		return fmt.Errorf("failed to start dmsg: %w", err)
 	}
+
 	dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgDC)}
 
 	v.pushCloseStack("dmsg_http", func() error {
