@@ -12,6 +12,8 @@ import (
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/disc"
 	"github.com/skycoin/dmsg/netutil"
+
+	"github.com/skycoin/skycoin/src/util/logging"
 )
 
 // EntityCommon contains the common fields and methods for server and client entities.
@@ -28,7 +30,8 @@ type EntityCommon struct {
 
 	updateInterval time.Duration // Minimum duration between discovery entry updates.
 
-	log logrus.FieldLogger
+	log  logrus.FieldLogger
+	mlog *logging.MasterLogger
 
 	setSessionCallback func(ctx context.Context) error
 	delSessionCallback func(ctx context.Context) error
@@ -59,6 +62,13 @@ func (c *EntityCommon) Logger() logrus.FieldLogger { return c.log }
 // SetLogger sets the internal logger.
 // This should be called before we serve.
 func (c *EntityCommon) SetLogger(log logrus.FieldLogger) { c.log = log }
+
+// MasterLogger obtains the master logger.
+func (c *EntityCommon) MasterLogger() *logging.MasterLogger { return c.mlog }
+
+// SetMasterLogger sets the internal master logger.
+// This should be called before we serve.
+func (c *EntityCommon) SetMasterLogger(mlog *logging.MasterLogger) { c.mlog = mlog }
 
 func (c *EntityCommon) session(pk cipher.PubKey) (*SessionCommon, bool) {
 	c.sessionsMx.Lock()

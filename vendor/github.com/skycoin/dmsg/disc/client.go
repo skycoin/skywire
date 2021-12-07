@@ -16,8 +16,6 @@ import (
 	"github.com/skycoin/dmsg/cipher"
 )
 
-var log = logging.MustGetLogger("disc")
-
 var json = jsoniter.ConfigFastest
 
 // APIClient implements dmsg discovery API client.
@@ -32,26 +30,28 @@ type APIClient interface {
 // HTTPClient represents a client that communicates with a dmsg-discovery service through http, it
 // implements APIClient
 type httpClient struct {
-	client    http.Client
+	client    *http.Client
 	address   string
 	updateMux sync.Mutex // for thread-safe sequence incrementing
+	log       *logging.Logger
 }
 
 // NewHTTP constructs a new APIClient that communicates with discovery via http.
-func NewHTTP(address string, client http.Client) APIClient {
+func NewHTTP(address string, client *http.Client, log *logging.Logger) APIClient {
 	log.WithField("func", "disc.NewHTTP").
 		WithField("addr", address).
 		Debug("Created HTTP client.")
 	return &httpClient{
 		client:  client,
 		address: address,
+		log:     log,
 	}
 }
 
 // Entry retrieves an entry associated with the given public key.
 func (c *httpClient) Entry(ctx context.Context, publicKey cipher.PubKey) (*Entry, error) {
 	endpoint := fmt.Sprintf("%s/dmsg-discovery/entry/%s", c.address, publicKey)
-	log := log.WithField("endpoint", endpoint)
+	log := c.log.WithField("endpoint", endpoint)
 
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -93,7 +93,7 @@ func (c *httpClient) Entry(ctx context.Context, publicKey cipher.PubKey) (*Entry
 // PostEntry creates a new Entry.
 func (c *httpClient) PostEntry(ctx context.Context, e *Entry) error {
 	endpoint := c.address + "/dmsg-discovery/entry/"
-	log := log.WithField("endpoint", endpoint)
+	log := c.log.WithField("endpoint", endpoint)
 
 	marshaledEntry, err := json.Marshal(e)
 	if err != nil {
@@ -147,7 +147,7 @@ func (c *httpClient) PostEntry(ctx context.Context, e *Entry) error {
 // DelEntry deletes an Entry.
 func (c *httpClient) DelEntry(ctx context.Context, e *Entry) error {
 	endpoint := c.address + "/dmsg-discovery/entry"
-	log := log.WithField("endpoint", endpoint)
+	log := c.log.WithField("endpoint", endpoint)
 
 	marshaledEntry, err := json.Marshal(e)
 	if err != nil {
@@ -246,7 +246,7 @@ func (c *httpClient) AvailableServers(ctx context.Context) ([]*Entry, error) {
 	if resp != nil {
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
-				log.WithError(err).Warn("Failed to close response body")
+				c.log.WithError(err).Warn("Failed to close response body")
 			}
 		}()
 	}

@@ -2,22 +2,30 @@ package direct
 
 import (
 	"context"
-
-	"github.com/sirupsen/logrus"
+	"sync"
 
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
+
+	"github.com/skycoin/skycoin/src/util/logging"
 )
 
 // StartDmsg starts dmsg directly without the discovery
-func StartDmsg(ctx context.Context, log logrus.FieldLogger, pk cipher.PubKey, sk cipher.SecKey,
-	dClient APIClient, config *dmsg.Config) (dmsgC *dmsg.Client, stop func(), err error) {
+func StartDmsg(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey,
+	dClient APIClient, config *dmsg.Config) (dmsgDC *dmsg.Client, stop func(), err error) {
 
-	dmsgC = dmsg.NewClient(pk, sk, dClient, config)
-	go dmsgC.Serve(context.Background())
+	dmsgDC = dmsg.NewClient(pk, sk, dClient, config)
+	dmsgDC.SetLogger(log)
+
+	wg := new(sync.WaitGroup)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		dmsgDC.Serve(context.Background())
+	}()
 
 	stop = func() {
-		err := dmsgC.Close()
+		err := dmsgDC.Close()
 		log.WithError(err).Info("Disconnected from dmsg network.")
 	}
 
@@ -29,8 +37,8 @@ func StartDmsg(ctx context.Context, log logrus.FieldLogger, pk cipher.PubKey, sk
 		stop()
 		return nil, nil, ctx.Err()
 
-	case <-dmsgC.Ready():
+	case <-dmsgDC.Ready():
 		log.Info("Dmsg network ready.")
-		return dmsgC, stop, nil
+		return dmsgDC, stop, nil
 	}
 }
