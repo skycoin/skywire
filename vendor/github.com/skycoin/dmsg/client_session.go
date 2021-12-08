@@ -1,11 +1,14 @@
 package dmsg
 
 import (
+	"errors"
 	"net"
 	"time"
 
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/netutil"
+
+	"github.com/skycoin/yamux"
 )
 
 // ClientSession represents a session from the perspective of a dmsg client.
@@ -81,6 +84,11 @@ func (cs *ClientSession) serve() error {
 					WithError(err).
 					Info("Failed to accept stream.")
 				continue
+			}
+
+			if errors.Is(err, yamux.ErrSessionShutdown) {
+				cs.log.WithError(err).Info("Stopped accepting streams.")
+				return err
 			}
 			cs.log.WithError(err).Warn("Stopped accepting streams.")
 			return err

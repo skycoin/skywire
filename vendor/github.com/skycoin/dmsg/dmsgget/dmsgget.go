@@ -192,7 +192,7 @@ func parseOutputFile(name string, urlPath string) (*os.File, error) {
 }
 
 func (dg *DmsgGet) startDmsg(ctx context.Context, log logrus.FieldLogger, pk cipher.PubKey, sk cipher.SecKey) (dmsgC *dmsg.Client, stop func(), err error) {
-	dmsgC = dmsg.NewClient(pk, sk, disc.NewHTTP(dg.dmsgF.Disc, http.Client{}), &dmsg.Config{MinSessions: dg.dmsgF.Sessions})
+	dmsgC = dmsg.NewClient(pk, sk, disc.NewHTTP(dg.dmsgF.Disc, &http.Client{}, nil), &dmsg.Config{MinSessions: dg.dmsgF.Sessions})
 	go dmsgC.Serve(context.Background())
 
 	stop = func() {
