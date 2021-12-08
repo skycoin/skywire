@@ -116,14 +116,17 @@ type RouteGroup struct {
 }
 
 // NewRouteGroup creates a new RouteGroup.
-func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDescriptor) *RouteGroup {
+func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDescriptor, mLoggger *logging.MasterLogger) *RouteGroup {
 	if cfg == nil {
 		cfg = DefaultRouteGroupConfig()
 	}
-
+	logger := logging.MustGetLogger(fmt.Sprintf("RouteGroup %s", desc.String()))
+	if mLoggger != nil {
+		logger = mLoggger.PackageLogger(fmt.Sprintf("RouteGroup %s", desc.String()))
+	}
 	rg := &RouteGroup{
 		cfg:                cfg,
-		logger:             logging.MustGetLogger(fmt.Sprintf("RouteGroup %s", desc.String())),
+		logger:             logger,
 		desc:               desc,
 		rt:                 rt,
 		tps:                make([]*transport.ManagedTransport, 0),
