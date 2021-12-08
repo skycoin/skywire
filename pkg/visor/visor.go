@@ -155,7 +155,7 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 	if !v.processRuntimeErrs() {
 		return nil, false
 	}
-	v.trackers = dmsgtracker.NewDmsgTrackerManager(nil, v.dmsgC, 0, 0)
+	v.trackers = dmsgtracker.NewDmsgTrackerManager(v.MasterLogger(), v.dmsgC, 0, 0)
 	return v, true
 }
 

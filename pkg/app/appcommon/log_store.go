@@ -21,13 +21,13 @@ const (
 var re = regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))")
 
 // NewProcLogger returns a new proc logger.
-func NewProcLogger(conf ProcConfig) (*logging.MasterLogger, LogStore) {
+func NewProcLogger(conf ProcConfig, mLog *logging.MasterLogger) (log *logging.MasterLogger, db LogStore) {
 	db, err := NewBBoltLogStore(conf.LogDBLoc, conf.AppName)
 	if err != nil {
 		panic(err)
 	}
+	log = mLog
 
-	log := logging.NewMasterLogger()
 	log.Logger.AddHook(db)
 
 	return log, db

@@ -104,8 +104,9 @@ func serveRouterRPC(t *testing.T, r router.Router) (addr string) {
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, l.Close()) })
 
+	mlog := logging.NewMasterLogger()
 	rpcS := rpc.NewServer()
-	require.NoError(t, rpcS.Register(router.NewRPCGateway(r)))
+	require.NoError(t, rpcS.Register(router.NewRPCGateway(r, mlog)))
 	go rpcS.Accept(l)
 
 	return l.Addr().String()
