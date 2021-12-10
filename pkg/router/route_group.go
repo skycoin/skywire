@@ -331,7 +331,7 @@ func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule ro
 			return 0, err
 		}
 
-		atomic.StoreInt64(&rg.lastSent, time.Now().UnixNano())
+		atomic.StoreInt64(&rg.lastSent, time.Now().UTC().UnixNano())
 
 		return len(data), nil
 	}
@@ -422,13 +422,13 @@ func (rg *RouteGroup) sendNetworkProbe() error {
 	}
 
 	throughput := rg.networkStats.RemoteThroughput()
-	timestamp := time.Now().UTC().UnixMilli()
+	timestamp := time.Now().UTC().UnixNano() / int64(time.Millisecond)
 
 	rg.networkStats.SetDownloadSpeed(uint32(throughput))
 
 	packet := routing.MakeNetworkProbePacket(rule.NextRouteID(), timestamp, throughput)
 
-	return rg.writePacket(context.Background(), tp, packet, rule.NextRouteID())
+	return rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
 }
 
 func (rg *RouteGroup) networkProbeServiceFn(_ time.Duration) {
@@ -609,10 +609,10 @@ func (rg *RouteGroup) handleNetworkProbePacket(packet routing.Packet) error {
 	sentAtMs := binary.BigEndian.Uint64(payload)
 	throughput := binary.BigEndian.Uint64(payload[8:])
 
-	sentAt := time.Unix(int64(sentAtMs/1000), int64(sentAtMs)*int64(time.Millisecond)).UTC()
-	latency := time.Now().UTC().Sub(sentAt)
+	ms := sentAtMs % 1000
+	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond))
 
-	rg.networkStats.SetLatency(latency)
+	rg.networkStats.SetLatency(time.Since(sentAt))
 	rg.networkStats.SetUploadSpeed(uint32(throughput))
 
 	return nil
