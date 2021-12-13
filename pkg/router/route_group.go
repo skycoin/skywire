@@ -116,14 +116,17 @@ type RouteGroup struct {
 }
 
 // NewRouteGroup creates a new RouteGroup.
-func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDescriptor) *RouteGroup {
+func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDescriptor, mLoggger *logging.MasterLogger) *RouteGroup {
 	if cfg == nil {
 		cfg = DefaultRouteGroupConfig()
 	}
-
+	logger := logging.MustGetLogger(fmt.Sprintf("RouteGroup %s", desc.String()))
+	if mLoggger != nil {
+		logger = mLoggger.PackageLogger(fmt.Sprintf("RouteGroup %s", desc.String()))
+	}
 	rg := &RouteGroup{
 		cfg:                cfg,
-		logger:             logging.MustGetLogger(fmt.Sprintf("RouteGroup %s", desc.String())),
+		logger:             logger,
 		desc:               desc,
 		rt:                 rt,
 		tps:                make([]*transport.ManagedTransport, 0),
@@ -331,7 +334,7 @@ func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule ro
 			return 0, err
 		}
 
-		atomic.StoreInt64(&rg.lastSent, time.Now().UTC().UnixNano())
+		atomic.StoreInt64(&rg.lastSent, time.Now().UnixNano())
 
 		return len(data), nil
 	}
@@ -422,7 +425,7 @@ func (rg *RouteGroup) sendNetworkProbe() error {
 	}
 
 	throughput := rg.networkStats.RemoteThroughput()
-	timestamp := time.Now().UTC().UnixNano() / int64(time.Millisecond)
+	timestamp := time.Now().UTC().UnixMilli()
 
 	rg.networkStats.SetDownloadSpeed(uint32(throughput))
 
@@ -611,6 +614,8 @@ func (rg *RouteGroup) handleNetworkProbePacket(packet routing.Packet) error {
 
 	ms := sentAtMs % 1000
 	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond))
+
+	rg.logger.Debugf("Latency is around %d ms", time.Since(sentAt).Milliseconds())
 
 	rg.networkStats.SetLatency(time.Since(sentAt))
 	rg.networkStats.SetUploadSpeed(uint32(throughput))

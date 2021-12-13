@@ -431,7 +431,7 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 	nrg, ok := r.rgsNs[rules.Desc]
 
 	r.logger.Infof("Creating new route group rule with desc: %s", &rules.Desc)
-	rg := NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc)
+	rg := NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc, nil)
 	rg.appendRules(rules.Forward, rules.Reverse, r.tm.Transport(rules.Forward.NextTransportID()))
 	// we put raw rg so it can be accessible to the router when handshake packets come in
 	r.rgsRaw[rules.Desc] = rg
