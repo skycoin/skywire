@@ -3,9 +3,8 @@ package router
 import (
 	"testing"
 
-	"github.com/skycoin/skycoin/src/util/logging"
-
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/routing"
