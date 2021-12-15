@@ -46,6 +46,7 @@ type ManagedTransportConfig struct {
 	RemotePK        cipher.PubKey
 	TransportLabel  Label
 	InactiveTimeout time.Duration
+	mlog            *logging.MasterLogger
 }
 
 // ManagedTransport manages a direct line of communication between two visor nodes.
@@ -76,8 +77,13 @@ type ManagedTransport struct {
 // NewManagedTransport creates a new ManagedTransport.
 func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 	aPK, bPK := conf.client.PK(), conf.RemotePK
+	log := logging.MustGetLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6]))
+	if conf.mlog != nil {
+		log = conf.mlog.PackageLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6]))
+	}
+
 	mt := &ManagedTransport{
-		log:         logging.MustGetLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6])),
+		log:         log,
 		rPK:         conf.RemotePK,
 		dc:          conf.DC,
 		ls:          conf.LS,
@@ -202,7 +208,7 @@ func (mt *ManagedTransport) close() {
 	close(mt.transportCh)
 	if mt.transport != nil {
 		if err := mt.transport.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close underlying transport.")
+			mt.log.WithError(err).Warn("Failed to close underlying transport.")
 		}
 		mt.transport = nil
 	}
@@ -233,7 +239,7 @@ func (mt *ManagedTransport) Accept(ctx context.Context, transport network.Transp
 	defer cancel()
 
 	mt.log.Debug("Performing settlement handshake...")
-	if err := MakeSettlementHS(false).Do(ctx, mt.dc, transport, mt.client.SK()); err != nil {
+	if err := MakeSettlementHS(false, mt.log).Do(ctx, mt.dc, transport, mt.client.SK()); err != nil {
 		return fmt.Errorf("settlement handshake failed: %w", err)
 	}
 
@@ -271,7 +277,7 @@ func (mt *ManagedTransport) dial(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
 	defer cancel()
 
-	if err := MakeSettlementHS(true).Do(ctx, mt.dc, transport, mt.client.SK()); err != nil {
+	if err := MakeSettlementHS(true, mt.log).Do(ctx, mt.dc, transport, mt.client.SK()); err != nil {
 		return fmt.Errorf("settlement handshake failed: %w", err)
 	}
 
@@ -309,14 +315,14 @@ func (mt *ManagedTransport) setTransport(newTransport network.Transport) error {
 		if mt.isLeastSignificantEdge() {
 			mt.log.Debug("Underlying transport already exists, closing new transport.")
 			if err := newTransport.Close(); err != nil {
-				log.WithError(err).Warn("Failed to close new transport.")
+				mt.log.WithError(err).Warn("Failed to close new transport.")
 			}
 			return ErrTransportAlreadyExists
 		}
 
 		mt.log.Debug("Underlying transport already exists, closing old transport.")
 		if err := mt.transport.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close old transport.")
+			mt.log.WithError(err).Warn("Failed to close old transport.")
 		}
 		mt.transport = nil
 	}
@@ -447,7 +453,7 @@ func (mt *ManagedTransport) recordLog() {
 		return
 	}
 	if err := mt.ls.Record(mt.Entry.ID, mt.LogEntry); err != nil {
-		log.WithError(err).Warn("Failed to record log entry.")
+		mt.log.WithError(err).Warn("Failed to record log entry.")
 	}
 }
 

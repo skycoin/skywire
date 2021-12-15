@@ -47,6 +47,10 @@ func (h *Host) ServeCLI(ctx context.Context, lis net.Listener) error {
 	}()
 
 	log := logging.MustGetLogger("dmsg_pty:cli-server")
+	masterLogger := h.dmsgC.MasterLogger()
+	if masterLogger != nil {
+		log = masterLogger.PackageLogger("dmsg_pty:cli-server")
+	}
 
 	mux := cliEndpoints(h)
 
@@ -87,6 +91,10 @@ func (h *Host) ListenAndServe(ctx context.Context, port uint16) error {
 	}
 
 	log := logging.MustGetLogger("dmsg_pty")
+	masterLogger := h.dmsgC.MasterLogger()
+	if masterLogger != nil {
+		log = masterLogger.PackageLogger("dmsg_pty")
+	}
 
 	go func() {
 		<-ctx.Done()

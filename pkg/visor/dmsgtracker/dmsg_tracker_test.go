@@ -11,6 +11,7 @@ import (
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/dmsgctrl"
 	"github.com/skycoin/dmsg/dmsgtest"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -63,11 +64,11 @@ func TestDmsgTrackerManager_MustGet(t *testing.T) {
 	env := dmsgtest.NewEnv(t, timeout)
 	require.NoError(t, env.Startup(0, nServers, 0, &conf))
 	t.Cleanup(env.Shutdown)
-
+	mLog := logging.NewMasterLogger()
 	// arrange: tracker manager
 	tmC, err := env.NewClient(&conf)
 	require.NoError(t, err)
-	tm := NewDmsgTrackerManager(nil, tmC, 0, 0)
+	tm := NewDmsgTrackerManager(mLog, tmC, 0, 0)
 	t.Cleanup(func() { assert.NoError(t, tm.Close()) })
 
 	type testCase struct {
