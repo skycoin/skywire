@@ -156,7 +156,7 @@ func (c *sudphClient) dial(remoteAddr string) (net.Conn, error) {
 		return nil, fmt.Errorf("net.ResolveUDPAddr (remote): %w", err)
 	}
 
-	dialConn := c.filter.NewConn(dialConnPriority, packetfilter.NewKCPConversationFilter())
+	dialConn := c.filter.NewConn(dialConnPriority, packetfilter.NewKCPConversationFilter(c.mLog))
 
 	if _, err := dialConn.WriteTo([]byte(holePunchMessage), rAddr); err != nil {
 		return nil, fmt.Errorf("dialConn.WriteTo: %w", err)

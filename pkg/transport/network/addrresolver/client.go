@@ -73,6 +73,7 @@ type VisorData struct {
 // httpClient implements APIClient for address resolver API.
 type httpClient struct {
 	log            *logging.Logger
+	mLog           *logging.MasterLogger
 	httpClient     *httpauth.Client
 	pk             cipher.PubKey
 	sk             cipher.SecKey
@@ -90,7 +91,8 @@ type httpClient struct {
 // * SW-Public: The specified public key.
 // * SW-Nonce:  The nonce for that public key.
 // * SW-Sig:    The signature of the payload + the nonce.
-func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC http.Client, log *logging.Logger) (APIClient, error) {
+func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.Client, log *logging.Logger,
+	mLog *logging.MasterLogger) (APIClient, error) {
 	remoteURL, err := url.Parse(remoteAddr)
 	if err != nil {
 		return nil, fmt.Errorf("parse URL: %w", err)
@@ -103,6 +105,7 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC http.C
 
 	client := &httpClient{
 		log:            log,
+		mLog:           mLog,
 		pk:             pk,
 		sk:             sk,
 		remoteHTTPAddr: remoteAddr,
@@ -118,17 +121,17 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC http.C
 	return client, nil
 }
 
-func (c *httpClient) initHTTPClient(httpC http.Client) {
-	httpAuthClient, err := httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, &httpC)
+func (c *httpClient) initHTTPClient(httpC *http.Client) {
+	httpAuthClient, err := httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, httpC, c.mLog)
 	if err != nil {
 		c.log.WithError(err).
 			Warnf("Failed to connect to address resolver. STCPR/SUDPH services are temporarily unavailable. Retrying...")
 
-		retryLog := logging.MustGetLogger("snet.arclient.retrier")
+		retryLog := c.mLog.PackageLogger("network.arclient.retrier")
 		retry := dmsgnetutil.NewRetrier(retryLog, 1*time.Second, 10*time.Second, 0, 1)
 
 		err := retry.Do(context.Background(), func() error {
-			httpAuthClient, err = httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, &httpC)
+			httpAuthClient, err = httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, httpC, c.mLog)
 			return err
 		})
 
@@ -287,7 +290,7 @@ func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter, hs Handshake) (<-ch
 		return nil, err
 	}
 
-	c.sudphConn = filter.NewConn(sudphPriority, packetfilter.NewAddressFilter(rAddr))
+	c.sudphConn = filter.NewConn(sudphPriority, packetfilter.NewAddressFilter(rAddr, c.mLog))
 
 	_, localPort, err := net.SplitHostPort(c.sudphConn.LocalAddr().String())
 	if err != nil {

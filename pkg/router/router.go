@@ -62,6 +62,7 @@ type RouteSetupHook func(cipher.PubKey, *transport.Manager) error
 // Config configures Router.
 type Config struct {
 	Logger           *logging.Logger
+	MasterLogger     *logging.MasterLogger
 	PubKey           cipher.PubKey
 	SecKey           cipher.SecKey
 	TransportManager *transport.Manager
@@ -153,6 +154,7 @@ type router struct {
 	mx               sync.Mutex
 	conf             *Config
 	logger           *logging.Logger
+	mLogger          *logging.MasterLogger
 	sl               *dmsg.Listener
 	dmsgC            *dmsg.Client
 	trustedVisors    map[cipher.PubKey]struct{}
@@ -189,6 +191,7 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 	r := &router{
 		conf:            config,
 		logger:          config.Logger,
+		mLogger:         config.MasterLogger,
 		tm:              config.TransportManager,
 		rt:              routing.NewTable(),
 		sl:              sl,
@@ -204,7 +207,7 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 
 	go r.rulesGCLoop()
 
-	if err := r.rpcSrv.Register(NewRPCGateway(r)); err != nil {
+	if err := r.rpcSrv.Register(NewRPCGateway(r, config.MasterLogger)); err != nil {
 		return nil, fmt.Errorf("failed to register RPC server")
 	}
 
@@ -431,7 +434,7 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 	nrg, ok := r.rgsNs[rules.Desc]
 
 	r.logger.Infof("Creating new route group rule with desc: %s", &rules.Desc)
-	rg := NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc, nil)
+	rg := NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc, r.mLogger)
 	rg.appendRules(rules.Forward, rules.Reverse, r.tm.Transport(rules.Forward.NextTransportID()))
 	// we put raw rg so it can be accessible to the router when handshake packets come in
 	r.rgsRaw[rules.Desc] = rg

@@ -32,9 +32,10 @@ func NewNode(conf *Config) (*Node, error) {
 	if lvl, err := logging.LevelFromString(conf.LogLevel); err == nil {
 		logging.SetLevel(lvl)
 	}
-
+	masterLogger := logging.NewMasterLogger()
+	packageLogger := masterLogger.PackageLogger("node:disc")
 	// Connect to dmsg network.
-	dmsgDisc := disc.NewHTTP(conf.Dmsg.Discovery, http.Client{})
+	dmsgDisc := disc.NewHTTP(conf.Dmsg.Discovery, &http.Client{}, packageLogger)
 	dmsgConf := &dmsg.Config{MinSessions: conf.Dmsg.SessionsCount}
 	dmsgC := dmsg.NewClient(conf.PK, conf.SK, dmsgDisc, dmsgConf)
 	go dmsgC.Serve(context.Background())

@@ -41,6 +41,5 @@ func createRouteGroup(cfg *RouteGroupConfig) *RouteGroup {
 	desc := routing.NewRouteDescriptor(pk1, pk2, port1, port2)
 
 	rg := NewRouteGroup(cfg, rt, desc, l)
-
 	return rg
 }
