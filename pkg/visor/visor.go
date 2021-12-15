@@ -11,7 +11,7 @@ import (
 
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/dmsg/direct"
+	dmsgdisc "github.com/skycoin/dmsg/disc"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/utclient"
@@ -61,9 +61,9 @@ type Visor struct {
 
 	ebc      *appevent.Broadcaster // event broadcaster
 	dmsgC    *dmsg.Client
-	dmsgDC   *dmsg.Client     // dmsg direct client
-	dClient  direct.APIClient // dmsg direct api client
-	dmsgHTTP *http.Client     // dmsghttp client
+	dmsgDC   *dmsg.Client       // dmsg direct client
+	dClient  dmsgdisc.APIClient // dmsg direct api client
+	dmsgHTTP *http.Client       // dmsghttp client
 	trackers *dmsgtracker.Manager
 
 	stunClient *network.StunDetails
@@ -155,7 +155,7 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 	if !v.processRuntimeErrs() {
 		return nil, false
 	}
-	v.trackers = dmsgtracker.NewDmsgTrackerManager(nil, v.dmsgC, 0, 0)
+	v.trackers = dmsgtracker.NewDmsgTrackerManager(v.MasterLogger(), v.dmsgC, 0, 0)
 	return v, true
 }
 

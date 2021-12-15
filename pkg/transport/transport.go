@@ -8,12 +8,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
-
-var log = logging.MustGetLogger("transport")
 
 // MakeTransportID generates uuid.UUID from pair of keys + type + public
 // Generated uuid is:

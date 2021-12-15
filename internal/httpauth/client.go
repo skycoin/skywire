@@ -23,8 +23,6 @@ const (
 	invalidNonceErrorMessage = "SW-Nonce does not match"
 )
 
-var log = logging.MustGetLogger("httpauth")
-
 // NextNonceResponse represents a ServeHTTP response for json encoding
 type NextNonceResponse struct {
 	Edge      cipher.PubKey `json:"edge"`
@@ -55,6 +53,7 @@ type Client struct {
 	key         cipher.PubKey
 	sec         cipher.SecKey
 	addr        string // sanitized address of the client, which may differ from addr used in NewClient
+	log         *logging.Logger
 }
 
 // NewClient creates a new client setting a public key to the client to be used for Auth.
@@ -63,13 +62,14 @@ type Client struct {
 // * SW-Public: The specified public key
 // * SW-Nonce:  The nonce for that public key
 // * SW-Sig:    The signature of the payload + the nonce
-func NewClient(ctx context.Context, addr string, key cipher.PubKey, sec cipher.SecKey, client *http.Client) (*Client, error) {
+func NewClient(ctx context.Context, addr string, key cipher.PubKey, sec cipher.SecKey, client *http.Client, mLog *logging.MasterLogger) (*Client, error) {
 	c := &Client{
 		client:      client,
 		reuseClient: client,
 		key:         key,
 		sec:         sec,
 		addr:        sanitizedAddr(addr),
+		log:         mLog.PackageLogger("httpauth"),
 	}
 
 	// request server for a nonce
@@ -118,7 +118,7 @@ func (c *Client) do(client *http.Client, req *http.Request) (*http.Response, err
 			return nil, err
 		}
 		if err := req.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close HTTP request body")
+			c.log.WithError(err).Warn("Failed to close HTTP request body")
 		}
 		req.Body = ioutil.NopCloser(bytes.NewBuffer(auxBody))
 		body = auxBody
@@ -142,7 +142,7 @@ func (c *Client) do(client *http.Client, req *http.Request) (*http.Response, err
 		c.SetNonce(nonce)
 
 		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close HTTP response body")
+			c.log.WithError(err).Warn("Failed to close HTTP response body")
 		}
 
 		req.Body = ioutil.NopCloser(bytes.NewBuffer(body))
@@ -178,7 +178,7 @@ func (c *Client) Nonce(ctx context.Context, key cipher.PubKey) (Nonce, error) {
 
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close HTTP response body")
+			c.log.WithError(err).Warn("Failed to close HTTP response body")
 		}
 	}()
 

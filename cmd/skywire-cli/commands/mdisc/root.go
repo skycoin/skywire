@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/skycoin/dmsg/disc"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
@@ -16,6 +17,8 @@ import (
 )
 
 var mdAddr string
+var masterLogger = logging.NewMasterLogger()
+var packageLogger = masterLogger.PackageLogger("mdisc:disc")
 
 func init() {
 	RootCmd.PersistentFlags().StringVar(&mdAddr, "addr", skyenv.DefaultDmsgDiscAddr, "address of DMSG discovery server")
@@ -42,7 +45,7 @@ var entryCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
 		pk := internal.ParsePK("visor-public-key", args[0])
-		entry, err := disc.NewHTTP(mdAddr, http.Client{}).Entry(ctx, pk)
+		entry, err := disc.NewHTTP(mdAddr, &http.Client{}, packageLogger).Entry(ctx, pk)
 		internal.Catch(err)
 		fmt.Println(entry)
 	},
@@ -54,7 +57,7 @@ var availableServersCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, _ []string) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
-		entries, err := disc.NewHTTP(mdAddr, http.Client{}).AvailableServers(ctx)
+		entries, err := disc.NewHTTP(mdAddr, &http.Client{}, packageLogger).AvailableServers(ctx)
 		internal.Catch(err)
 		printAvailableServers(entries)
 	},

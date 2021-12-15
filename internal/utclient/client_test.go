@@ -11,13 +11,17 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/internal/httpauth"
 )
 
-var testPubKey, testSecKey = cipher.GenerateKeyPair()
+var (
+	testPubKey, testSecKey = cipher.GenerateKeyPair()
+	masterLogger           = logging.NewMasterLogger()
+)
 
 func TestClientAuth(t *testing.T) {
 	wg := sync.WaitGroup{}
@@ -42,7 +46,7 @@ func TestClientAuth(t *testing.T) {
 	))
 	defer srv.Close()
 
-	client, err := NewHTTP(srv.URL, testPubKey, testSecKey, http.Client{})
+	client, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, masterLogger)
 	require.NoError(t, err)
 	c := client.(*httpClient)
 
@@ -67,7 +71,7 @@ func TestUpdateVisorUptime(t *testing.T) {
 
 	defer srv.Close()
 
-	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, http.Client{})
+	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, masterLogger)
 	require.NoError(t, err)
 
 	err = c.UpdateVisorUptime(context.TODO())
@@ -78,7 +82,7 @@ func TestUpdateVisorUptime(t *testing.T) {
 
 func authHandler(next http.Handler) http.Handler {
 	r := chi.NewRouter()
-
+	log := logging.MustGetLogger("utclient")
 	r.Handle("/security/nonces/{pk}", http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			if err := json.NewEncoder(w).Encode(&httpauth.NextNonceResponse{Edge: testPubKey, NextNonce: 1}); err != nil {

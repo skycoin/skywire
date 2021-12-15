@@ -10,6 +10,7 @@ import (
 
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/httputil"
+	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
@@ -93,7 +94,7 @@ func (hs SettlementHS) Do(ctx context.Context, dc DiscoveryClient, transport net
 // MakeSettlementHS creates a settlement handshake.
 // `init` determines whether the local side is initiating or responding.
 // The handshake logic only REGISTERS the transport, and does not update the status of the transport.
-func MakeSettlementHS(init bool) SettlementHS {
+func MakeSettlementHS(init bool, log *logging.Logger) SettlementHS {
 	// initiating logic.
 	initHS := func(ctx context.Context, dc DiscoveryClient, transport network.Transport, sk cipher.SecKey) (err error) {
 		entry := makeEntryFromTransport(transport)
