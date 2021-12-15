@@ -176,12 +176,14 @@ func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	keys = append(keys, v.conf.PK)
-	dClient := direct.NewDirectClient(direct.GetAllEntries(keys, servers))
+	dClient := direct.NewClient(direct.GetAllEntries(keys, servers), v.MasterLogger().PackageLogger("dmsg_http:direct_client"))
 
-	dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, log, v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
+	dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, v.MasterLogger().PackageLogger("dmsg_http:dmsgDC"),
+		v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
 	if err != nil {
 		return fmt.Errorf("failed to start dmsg: %w", err)
 	}
+
 	dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgDC)}
 
 	v.pushCloseStack("dmsg_http", func() error {
@@ -216,7 +218,7 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 		return err
 	}
 
-	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, httpC, log)
+	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, httpC, log, v.MasterLogger())
 	if err != nil {
 		err = fmt.Errorf("failed to create address resolver client: %w", err)
 		return err
@@ -267,7 +269,8 @@ func fetchARTransports(ctx context.Context, v *Visor, log *logging.Logger, doneC
 func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// Prepare app discovery factory.
 	factory := appdisc.Factory{
-		Log: v.MasterLogger().PackageLogger("app_discovery"),
+		Log:  v.MasterLogger().PackageLogger("app_discovery"),
+		MLog: v.MasterLogger(),
 	}
 
 	conf := v.conf.Launcher
@@ -308,7 +311,7 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 		return err
 	}
 
-	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg, httpC)
+	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg, httpC, v.MasterLogger())
 
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
@@ -424,6 +427,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		PKTable:    table,
 		ARClient:   v.arClient,
 		EB:         v.ebc,
+		MLogger:    v.MasterLogger(),
 	}
 	tpM, err := transport.NewManager(managerLogger, v.arClient, v.ebc, &tpMConf, factory)
 	if err != nil {
@@ -510,7 +514,8 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 			for _, trans := range transports {
 				ntype := network.Type(trans)
 				// skip if SUDPH is under symmetric NAT / under UDP firewall.
-				if ntype == network.SUDPH && (v.stunClient.NATType == stun.NATSymmetric || v.stunClient.NATType == stun.NATSymmetricUDPFirewall) {
+				if ntype == network.SUDPH && v.stunClient != nil && (v.stunClient.NATType == stun.NATSymmetric ||
+					v.stunClient.NATType == stun.NATSymmetricUDPFirewall) {
 					continue
 				}
 				err := retrier.Do(ctx, func() error {
@@ -537,10 +542,11 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout), httpC)
+	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout), httpC, v.MasterLogger())
 	logger := v.MasterLogger().PackageLogger("router")
 	rConf := router.Config{
 		Logger:           logger,
+		MasterLogger:     v.MasterLogger(),
 		PubKey:           v.conf.PK,
 		SecKey:           v.conf.SK,
 		TransportManager: v.tpM,
@@ -759,7 +765,7 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 		return err
 	}
 
-	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK, httpC)
+	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK, httpC, v.MasterLogger())
 	if err != nil {
 		v.log.WithError(err).Warn("Failed to connect to uptime tracker.")
 		return nil
@@ -951,7 +957,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 		Port:     uint16(0),
 		DiscAddr: serviceDisc,
 	}
-	connector := servicedisc.MakeConnector(conf, 3, v.tpM, v.serviceDisc.Client, log)
+	connector := servicedisc.MakeConnector(conf, 3, v.tpM, v.serviceDisc.Client, log, v.MasterLogger())
 	go connector.Run(ctx) //nolint:errcheck
 
 	return nil
@@ -1022,7 +1028,7 @@ func connectToTpDisc(ctx context.Context, v *Visor) (transport.DiscoveryClient, 
 	var tpdC transport.DiscoveryClient
 	retryFunc := func() error {
 		var err error
-		tpdC, err = tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK, httpC)
+		tpdC, err = tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK, httpC, v.MasterLogger())
 		if err != nil {
 			log.WithError(err).Error("Failed to connect to transport discovery, retrying...")
 			return err
@@ -1077,15 +1083,15 @@ func getErrors(ctx context.Context) chan error {
 	return errs
 }
 
-func getHTTPClient(ctx context.Context, v *Visor, service string) (httpC http.Client, err error) {
+func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client, error) {
 
 	var serviceURL dmsgget.URL
 
-	err = serviceURL.Fill(service)
+	err := serviceURL.Fill(service)
 
 	if serviceURL.Scheme == "dmsg" {
 		if err != nil {
-			return http.Client{}, fmt.Errorf("provided URL is invalid: %w", err)
+			return nil, fmt.Errorf("provided URL is invalid: %w", err)
 		}
 		clientEntry := &dmsgdisc.Entry{
 			Client: &dmsgdisc.Client{},
@@ -1093,10 +1099,9 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (httpC http.Cl
 		}
 		err = v.dClient.PostEntry(ctx, clientEntry)
 		if err != nil {
-			return http.Client{}, fmt.Errorf("Error saving clientEntry: %w", err)
+			return nil, fmt.Errorf("Error saving clientEntry: %w", err)
 		}
-		httpC = *v.dmsgHTTP
-		return httpC, nil
+		return v.dmsgHTTP, nil
 	}
-	return httpC, nil
+	return &http.Client{}, nil
 }
