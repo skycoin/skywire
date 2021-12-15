@@ -514,7 +514,8 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 			for _, trans := range transports {
 				ntype := network.Type(trans)
 				// skip if SUDPH is under symmetric NAT / under UDP firewall.
-				if ntype == network.SUDPH && (v.stunClient.NATType == stun.NATSymmetric || v.stunClient.NATType == stun.NATSymmetricUDPFirewall) {
+				if ntype == network.SUDPH && v.stunClient != nil && (v.stunClient.NATType == stun.NATSymmetric ||
+					v.stunClient.NATType == stun.NATSymmetricUDPFirewall) {
 					continue
 				}
 				err := retrier.Do(ctx, func() error {
