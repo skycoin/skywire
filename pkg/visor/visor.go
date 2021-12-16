@@ -120,8 +120,6 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 		wgStunClient:      new(sync.WaitGroup),
 		transportCacheMu:  new(sync.Mutex),
 	}
-	v.wgTrackers.Add(1)
-	defer v.wgTrackers.Done()
 
 	v.isServicesHealthy.init()
 
@@ -157,6 +155,8 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 	if !v.processRuntimeErrs() {
 		return nil, false
 	}
+	v.wgTrackers.Add(1)
+	defer v.wgTrackers.Done()
 	v.trackers = dmsgtracker.NewDmsgTrackerManager(v.MasterLogger(), v.dmsgC, 0, 0)
 	return v, true
 }
