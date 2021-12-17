@@ -2,7 +2,6 @@ package network
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net"
 
@@ -27,11 +26,6 @@ func (c *stcprClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16)
 		return nil, io.ErrClosedPipe
 	}
 	c.log.Infof("Dialing PK %v", rPK)
-	visorData, err := c.ar.Resolve(ctx, string(STCPR), rPK)
-	if err != nil {
-		return nil, fmt.Errorf("resolve PK: %w", err)
-	}
-	c.log.Infof("Resolved PK %v to visor data %v", rPK, visorData)
 	conn, err := c.dialVisor(ctx, rPK, c.dial)
 	if err != nil {
 		return nil, err
