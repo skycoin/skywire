@@ -175,11 +175,12 @@ func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return nil
 	}
 
-	keys = append(keys, v.conf.PK)
+	pk, sk := cipher.GenerateKeyPair()
+	keys = append(keys, pk)
 	dClient := direct.NewClient(direct.GetAllEntries(keys, servers), v.MasterLogger().PackageLogger("dmsg_http:direct_client"))
 
 	dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, v.MasterLogger().PackageLogger("dmsg_http:dmsgDC"),
-		v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
+		pk, sk, dClient, dmsg.DefaultConfig())
 	if err != nil {
 		return fmt.Errorf("failed to start dmsg: %w", err)
 	}
