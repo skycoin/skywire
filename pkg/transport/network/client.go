@@ -319,6 +319,7 @@ func (c *resolvedClient) dialVisor(ctx context.Context, rPK cipher.PubKey, dial 
 	if err != nil {
 		return nil, fmt.Errorf("resolve PK: %w", err)
 	}
+	c.log.Infof("Resolved PK %v to visor data %v", rPK, visorData)
 
 	if visorData.IsLocal {
 		for _, host := range visorData.Addresses {
