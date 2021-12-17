@@ -294,6 +294,8 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	v.wgStunClient.Add(1)
+	defer v.wgStunClient.Done()
 	sc := network.GetStunDetails(v.conf.StunServers, log)
 	v.initLock.Lock()
 	v.stunClient = sc
@@ -513,8 +515,9 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 			errSlice := make([]error, 0, 2)
 			for _, trans := range transports {
 				ntype := network.Type(trans)
+				v.wgStunClient.Wait()
 				// skip if SUDPH is under symmetric NAT / under UDP firewall.
-				if ntype == network.SUDPH && v.stunClient != nil && (v.stunClient.NATType == stun.NATSymmetric ||
+				if ntype == network.SUDPH && (v.stunClient.NATType == stun.NATSymmetric ||
 					v.stunClient.NATType == stun.NATSymmetricUDPFirewall) {
 					continue
 				}
