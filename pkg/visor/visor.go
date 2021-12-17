@@ -66,11 +66,12 @@ type Visor struct {
 	dmsgHTTP *http.Client       // dmsghttp client
 	trackers *dmsgtracker.Manager
 
-	stunClient *network.StunDetails
-	tpM        *transport.Manager
-	arClient   addrresolver.APIClient
-	router     router.Router
-	rfClient   rfclient.Client
+	stunClient   *network.StunDetails
+	wgStunClient *sync.WaitGroup
+	tpM          *transport.Manager
+	arClient     addrresolver.APIClient
+	router       router.Router
+	rfClient     rfclient.Client
 
 	procM       appserver.ProcManager // proc manager
 	appL        *launcher.Launcher    // app launcher
@@ -116,10 +117,9 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 		initLock:          new(sync.Mutex),
 		isServicesHealthy: newInternalHealthInfo(),
 		wgTrackers:        new(sync.WaitGroup),
+		wgStunClient:      new(sync.WaitGroup),
 		transportCacheMu:  new(sync.Mutex),
 	}
-	v.wgTrackers.Add(1)
-	defer v.wgTrackers.Done()
 
 	v.isServicesHealthy.init()
 
@@ -155,6 +155,8 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 	if !v.processRuntimeErrs() {
 		return nil, false
 	}
+	v.wgTrackers.Add(1)
+	defer v.wgTrackers.Done()
 	v.trackers = dmsgtracker.NewDmsgTrackerManager(v.MasterLogger(), v.dmsgC, 0, 0)
 	return v, true
 }
