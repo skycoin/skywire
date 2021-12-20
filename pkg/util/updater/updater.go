@@ -60,6 +60,8 @@ var (
 	ErrUnknownTarget = errors.New("target is unknown")
 	// ErrNoReleases is returned when no releases are found.
 	ErrNoReleases = errors.New("no releases found")
+	// ErrRateLimit is returned when rate limited happened.
+	ErrRateLimit = errors.New("rate limiting for checking update exceeded")
 )
 
 // Updater checks if a new version of skywire is available, downloads its binary files
@@ -538,8 +540,11 @@ func latestVersion(channel Channel) (*Version, error) {
 
 	switch channel {
 	case ChannelStable:
-		release, _, err := client.Repositories.GetLatestRelease(ctx, owner, gitProjectName)
+		release, resp, err := client.Repositories.GetLatestRelease(ctx, owner, gitProjectName)
 		if err != nil {
+			if resp.StatusCode == 403 {
+				return nil, ErrRateLimit
+			}
 			return nil, err
 		}
 
@@ -550,8 +555,11 @@ func latestVersion(channel Channel) (*Version, error) {
 		return VersionFromString(*release.TagName)
 
 	case ChannelTesting:
-		releases, _, err := client.Repositories.ListReleases(ctx, owner, gitProjectName, nil)
+		releases, resp, err := client.Repositories.ListReleases(ctx, owner, gitProjectName, nil)
 		if err != nil {
+			if resp.StatusCode == 403 {
+				return nil, ErrRateLimit
+			}
 			return nil, err
 		}
 
