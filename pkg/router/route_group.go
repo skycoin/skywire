@@ -362,7 +362,7 @@ func (rg *RouteGroup) writePacket(ctx context.Context, tp *transport.ManagedTran
 	err := tp.WritePacket(ctx, packet)
 	// note equality here. update activity only if there was NO error
 	if err == nil {
-		if packet.Type() == routing.DataPacket {
+		if packet.Type() != routing.ClosePacket || packet.Type() != routing.HandshakePacket {
 			rg.networkStats.AddBandwidthSent(uint64(packet.Size()))
 		}
 
@@ -603,6 +603,10 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 		})
 	}
 
+	if packet.Type() != routing.ClosePacket || packet.Type() != routing.HandshakePacket {
+		rg.networkStats.AddBandwidthReceived(uint64(packet.Size()))
+	}
+
 	return nil
 }
 
@@ -631,7 +635,6 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
 	if rg.isRemoteClosed() {
 		return nil
 	}
-	rg.networkStats.AddBandwidthReceived(uint64(packet.Size()))
 
 	select {
 	case <-rg.closed:
