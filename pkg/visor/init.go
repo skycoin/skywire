@@ -1096,7 +1096,7 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 		if err != nil {
 			return nil, fmt.Errorf("provided URL is invalid: %w", err)
 		}
-		// get delegated servers and add the, to the client entry
+		// get delegated servers and add them to the client entry
 		servers, err := v.dClient.AvailableServers(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("Error getting AvailableServers: %w", err)
