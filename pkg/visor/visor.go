@@ -12,12 +12,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jaypipes/ghw/pkg/product"
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	dmsgdisc "github.com/skycoin/dmsg/disc"
 	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/jaypipes/ghw/pkg/product"
 	"github.com/skycoin/skywire/internal/httpauth"
 	"github.com/skycoin/skywire/internal/utclient"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
