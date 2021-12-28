@@ -96,6 +96,8 @@ func defaultConfigFromCommon(cc *Common, hypervisor bool) (*V1, error) {
 
 	conf.Launcher.Apps = makeDefaultLauncherAppsConfig()
 
+	conf.HostKeeper = skyenv.DefaultHostKeeperAddr
+
 	conf.Hypervisors = make([]cipher.PubKey, 0)
 
 	if hypervisor {
