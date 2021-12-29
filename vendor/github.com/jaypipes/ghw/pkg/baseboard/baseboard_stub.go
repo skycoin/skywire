@@ -4,7 +4,7 @@
 // See the COPYING file in the root project directory for full text.
 //
 
-package product
+package baseboard
 
 import (
 	"runtime"
@@ -13,5 +13,5 @@ import (
 )
 
 func (i *Info) load() error {
-	return errors.New("productFillInfo not implemented on " + runtime.GOOS)
+	return errors.New("baseboardFillInfo not implemented on " + runtime.GOOS)
 }
