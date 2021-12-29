@@ -51,7 +51,10 @@ require (
 	nhooyr.io/websocket v1.8.2
 )
 
-require github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
+require (
+	github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
+	github.com/jaypipes/ghw v0.8.0
+)
 
 require (
 	github.com/ActiveState/termtest/conpty v0.5.0 // indirect
@@ -65,6 +68,7 @@ require (
 	github.com/getlantern/context v0.0.0-20190109183933-c447772a6520 // indirect
 	github.com/getlantern/errors v1.0.1 // indirect
 	github.com/getlantern/hex v0.0.0-20190417191902-c6586a6fe0b7 // indirect
+	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/go-stack/stack v1.8.0 // indirect
 	github.com/golang/gddo v0.0.0-20190419222130-af0f2af80721 // indirect
@@ -96,6 +100,7 @@ require (
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519 // indirect
 	golang.org/x/mod v0.4.2 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )
 
