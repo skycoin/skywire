@@ -246,21 +246,21 @@ func (v *Visor) HostKeeper(skybianBuildVersion string) {
 	if skybianBuildVersion != "" {
 		modelByte, err := exec.Command("cat", "/proc/device-tree/model").Output()
 		if err != nil {
-			logger.Errorf("Error during get model of board due to %w", err)
+			logger.Errorf("Error during get model of board due to %v", err)
 			return
 		}
 		model = string(modelByte)
 
 		serialNumberByte, err := exec.Command("cat", "/proc/device-tree/serial-number").Output()
 		if err != nil {
-			logger.Errorf("Error during get serial number of board due to %w", err)
+			logger.Errorf("Error during get serial number of board due to %v", err)
 			return
 		}
 		serialNumber = string(serialNumberByte)
 	} else {
 		baseboardInfo, err := baseboard.New()
 		if err != nil {
-			logger.Errorf("Error during get information of host due to %w", err)
+			logger.Errorf("Error during get information of host due to %v", err)
 			return
 		}
 		model = baseboardInfo.Vendor
@@ -273,25 +273,25 @@ func (v *Visor) HostKeeper(skybianBuildVersion string) {
 
 	client, err := httpauth.NewClient(context.Background(), v.conf.HostKeeper, v.conf.PK, v.conf.SK, &http.Client{}, v.MasterLogger())
 	if err != nil {
-		logger.Errorf("Host Keeper httpauth: %w", err)
+		logger.Errorf("Host Keeper httpauth: %v", err)
 		return
 	}
 
 	keeperInfoByte, err := json.Marshal(keeperInfo)
 	if err != nil {
-		logger.Errorf("Error during marshal host info due to %w", err)
+		logger.Errorf("Error during marshal host info due to %v", err)
 		return
 	}
 
 	req, err := http.NewRequest(http.MethodPost, v.conf.HostKeeper+"/update", bytes.NewReader(keeperInfoByte))
 	if err != nil {
-		logger.Errorf("Error during make request of host info due to %w", err)
+		logger.Errorf("Error during make request of host info due to %v", err)
 		return
 	}
 
 	_, err = client.Do(req)
 	if err != nil {
-		logger.Errorf("Error during send host info to host-keeper service due to %w", err)
+		logger.Errorf("Error during send host info to host-keeper service due to %v", err)
 		return
 	}
 
