@@ -10,24 +10,17 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 )
 
-// APIClient implements dmsg discovery API client.
-type APIClient interface {
-	Entry(context.Context, cipher.PubKey) (*disc.Entry, error)
-	PostEntry(context.Context, *disc.Entry) error
-	PutEntry(context.Context, cipher.SecKey, *disc.Entry) error
-	DelEntry(context.Context, *disc.Entry) error
-	AvailableServers(context.Context) ([]*disc.Entry, error)
-}
-
-// directClient represents a client that doesnot communicates with a dmsg-discovery, instead directly gets the dmsg-server info via the user or is hardcoded, it
-// implements APIClient
+// directClient represents a client that doesnot communicates with a dmsg-discovery,
+// instead directly gets the dmsg-server info via the user or is hardcoded,
+// all the data is stored in memory and
+// it implements disc.APIClient
 type directClient struct {
 	entries map[cipher.PubKey]*disc.Entry
 	mx      sync.RWMutex
 }
 
 // NewClient constructs a new APIClient that communicates with discovery via http.
-func NewClient(entries []*disc.Entry, log *logging.Logger) APIClient {
+func NewClient(entries []*disc.Entry, log *logging.Logger) disc.APIClient {
 	entriesMap := make(map[cipher.PubKey]*disc.Entry)
 	for _, entry := range entries {
 		entriesMap[entry.Static] = entry
@@ -39,7 +32,7 @@ func NewClient(entries []*disc.Entry, log *logging.Logger) APIClient {
 	}
 }
 
-// Entry retrieves an entry associated with the given public key.
+// Entry retrieves an entry associated with the given public key from the entries field of directClient.
 func (c *directClient) Entry(ctx context.Context, pubKey cipher.PubKey) (*disc.Entry, error) {
 	c.mx.RLock()
 	defer c.mx.RUnlock()
@@ -51,46 +44,23 @@ func (c *directClient) Entry(ctx context.Context, pubKey cipher.PubKey) (*disc.E
 	return &disc.Entry{}, nil
 }
 
-// PostEntry adds a new Entry.
-func (c *directClient) PostEntry(ctx context.Context, e *disc.Entry) error {
+// PostEntry adds a new Entry to the entries field of directClient.
+func (c *directClient) PostEntry(ctx context.Context, entry *disc.Entry) error {
 	c.mx.Lock()
 	defer c.mx.Unlock()
-	var servers cipher.PubKeys
-
-	for _, entry := range c.entries {
-		if entry.Server != nil {
-			servers = append(servers, entry.Static)
-		}
-	}
-
-	if e.Client != nil {
-		e.Client.DelegatedServers = servers
-		c.entries[e.Static] = e
-	}
-
-	if e.Server != nil {
-		servers = append(servers, e.Static)
-		c.entries[e.Static] = e
-	}
-
-	for _, entry := range c.entries {
-		if entry.Client != nil {
-			entry.Client.DelegatedServers = servers
-		}
-	}
-
+	c.entries[entry.Static] = entry
 	return nil
 }
 
-// DelEntry deletes an Entry.
-func (c *directClient) DelEntry(ctx context.Context, e *disc.Entry) error {
+// DelEntry deletes an Entry from the entries field of directClient.
+func (c *directClient) DelEntry(ctx context.Context, entry *disc.Entry) error {
 	c.mx.Lock()
 	defer c.mx.Unlock()
-	delete(c.entries, e.Static)
+	delete(c.entries, entry.Static)
 	return nil
 }
 
-// PutEntry updates Entry.
+// PutEntry updates Entry in the entries field of directClient.
 func (c *directClient) PutEntry(ctx context.Context, _ cipher.SecKey, entry *disc.Entry) error {
 	c.mx.Lock()
 	defer c.mx.Unlock()
@@ -98,7 +68,7 @@ func (c *directClient) PutEntry(ctx context.Context, _ cipher.SecKey, entry *dis
 	return nil
 }
 
-// AvailableServers returns list of available servers.
+// AvailableServers returns list of available servers from the entries field of directClient.
 func (c *directClient) AvailableServers(ctx context.Context) (entries []*disc.Entry, err error) {
 	c.mx.RLock()
 	defer c.mx.RUnlock()

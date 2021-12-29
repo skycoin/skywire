@@ -91,11 +91,11 @@ func (c *httpClient) Entry(ctx context.Context, publicKey cipher.PubKey) (*Entry
 }
 
 // PostEntry creates a new Entry.
-func (c *httpClient) PostEntry(ctx context.Context, e *Entry) error {
+func (c *httpClient) PostEntry(ctx context.Context, entry *Entry) error {
 	endpoint := c.address + "/dmsg-discovery/entry/"
 	log := c.log.WithField("endpoint", endpoint)
 
-	marshaledEntry, err := json.Marshal(e)
+	marshaledEntry, err := json.Marshal(entry)
 	if err != nil {
 		return err
 	}
@@ -145,11 +145,11 @@ func (c *httpClient) PostEntry(ctx context.Context, e *Entry) error {
 }
 
 // DelEntry deletes an Entry.
-func (c *httpClient) DelEntry(ctx context.Context, e *Entry) error {
+func (c *httpClient) DelEntry(ctx context.Context, entry *Entry) error {
 	endpoint := c.address + "/dmsg-discovery/entry"
 	log := c.log.WithField("endpoint", endpoint)
 
-	marshaledEntry, err := json.Marshal(e)
+	marshaledEntry, err := json.Marshal(entry)
 	if err != nil {
 		return err
 	}
