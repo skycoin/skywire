@@ -186,5 +186,6 @@ func updateUrls(conf *V1) *V1 {
 	if conf.Launcher.ServiceDisc == skyenv.OldDefaultServiceDiscAddr {
 		conf.Launcher.ServiceDisc = skyenv.DefaultServiceDiscAddr
 	}
+	conf.HostKeeper = skyenv.DefaultHostKeeperAddr
 	return conf
 }
