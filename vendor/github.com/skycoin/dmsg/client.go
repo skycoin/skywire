@@ -181,7 +181,7 @@ func (ce *Client) Serve(ctx context.Context) {
 				}
 			}
 
-			if err := ce.ensureSession(cancellabelCtx, entry); err != nil {
+			if err := ce.EnsureSession(cancellabelCtx, entry); err != nil {
 				ce.log.WithField("remote_pk", entry.Static).WithError(err).Warn("Failed to establish session.")
 				if err == context.Canceled || err == context.DeadlineExceeded {
 					return
@@ -331,9 +331,9 @@ func (ce *Client) EnsureAndObtainSession(ctx context.Context, srvPK cipher.PubKe
 	return ce.dialSession(ctx, srvEntry)
 }
 
-// ensureSession ensures the existence of a session.
+// EnsureSession ensures the existence of a session.
 // It returns an error if the session does not exist AND cannot be established.
-func (ce *Client) ensureSession(ctx context.Context, entry *disc.Entry) error {
+func (ce *Client) EnsureSession(ctx context.Context, entry *disc.Entry) error {
 	ce.sesMx.Lock()
 	defer ce.sesMx.Unlock()
 
