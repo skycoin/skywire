@@ -1090,17 +1090,30 @@ func getErrors(ctx context.Context) chan error {
 func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client, error) {
 
 	var serviceURL dmsgget.URL
-
+	var delegatedServers []cipher.PubKey
 	err := serviceURL.Fill(service)
 
 	if serviceURL.Scheme == "dmsg" {
 		if err != nil {
 			return nil, fmt.Errorf("provided URL is invalid: %w", err)
 		}
+		// get delegated servers and add them to the client entry
+		servers, err := v.dClient.AvailableServers(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("Error getting AvailableServers: %w", err)
+		}
+
+		for _, server := range servers {
+			delegatedServers = append(delegatedServers, server.Static)
+		}
+
 		clientEntry := &dmsgdisc.Entry{
-			Client: &dmsgdisc.Client{},
+			Client: &dmsgdisc.Client{
+				DelegatedServers: delegatedServers,
+			},
 			Static: serviceURL.Addr.PK,
 		}
+
 		err = v.dClient.PostEntry(ctx, clientEntry)
 		if err != nil {
 			return nil, fmt.Errorf("Error saving clientEntry: %w", err)
