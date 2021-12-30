@@ -52,6 +52,7 @@ func MakeBaseConfig(common *Common) *V1 {
 	conf.StunServers = skyenv.GetStunServers()
 	conf.ShutdownTimeout = DefaultTimeout
 	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
+	conf.HostKeeper = skyenv.DefaultHostKeeperAddr
 	return conf
 }
 
