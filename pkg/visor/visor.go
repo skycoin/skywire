@@ -12,7 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jaypipes/ghw"
 	"github.com/jaypipes/ghw/pkg/baseboard"
+	"github.com/jaypipes/ghw/pkg/product"
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	dmsgdisc "github.com/skycoin/dmsg/disc"
@@ -258,13 +260,22 @@ func (v *Visor) HostKeeper(skybianBuildVersion string) {
 		}
 		serialNumber = string(serialNumberByte)
 	} else {
-		baseboardInfo, err := baseboard.New()
+		baseboardInfo, err := baseboard.New(ghw.WithDisableWarnings())
 		if err != nil {
 			logger.Errorf("Error during get information of host due to %v", err)
 			return
 		}
 		model = baseboardInfo.Vendor
 		serialNumber = baseboardInfo.SerialNumber
+		if model == "" || serialNumber == "" {
+			productInfo, err := product.New(ghw.WithDisableWarnings())
+			if err != nil {
+				logger.Errorf("Error during get information of host due to %v", err)
+				return
+			}
+			model = productInfo.Vendor
+			serialNumber = productInfo.SerialNumber
+		}
 	}
 
 	var keeperInfo HostKeeperData
