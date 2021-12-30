@@ -274,7 +274,7 @@ func (v *Visor) HostKeeper(skybianBuildVersion string) {
 				return
 			}
 			model = productInfo.Vendor
-			serialNumber = productInfo.SerialNumber
+			serialNumber = productInfo.UUID
 		}
 	}
 
