@@ -267,7 +267,7 @@ func (v *Visor) HostKeeper(skybianBuildVersion string) {
 		}
 		model = baseboardInfo.Vendor
 		serialNumber = baseboardInfo.SerialNumber
-		if model == "" || serialNumber == "" {
+		if model == "unknown" || serialNumber == "unknown" {
 			productInfo, err := product.New(ghw.WithDisableWarnings())
 			if err != nil {
 				logger.Errorf("Error during get information of host due to %v", err)
