@@ -35,7 +35,7 @@ func TestClientAuth(t *testing.T) {
 
 			case fmt.Sprintf("/security/nonces/%s", testPubKey):
 				if _, err := fmt.Fprintf(w, `{"edge": "%s", "next_nonce": 1}`, testPubKey); err != nil {
-					t.Errorf("Failed to write nonce response: %w", err)
+					t.Errorf("Failed to write nonce response: %s", err)
 				}
 
 			default:
