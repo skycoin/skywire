@@ -175,11 +175,12 @@ func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return nil
 	}
 
-	keys = append(keys, v.conf.PK)
+	pk, sk := cipher.GenerateKeyPair()
+	keys = append(keys, pk)
 	dClient := direct.NewClient(direct.GetAllEntries(keys, servers), v.MasterLogger().PackageLogger("dmsg_http:direct_client"))
 
 	dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, v.MasterLogger().PackageLogger("dmsg_http:dmsgDC"),
-		v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
+		pk, sk, dClient, dmsg.DefaultConfig())
 	if err != nil {
 		return fmt.Errorf("failed to start dmsg: %w", err)
 	}
@@ -294,6 +295,8 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	v.wgStunClient.Add(1)
+	defer v.wgStunClient.Done()
 	sc := network.GetStunDetails(v.conf.StunServers, log)
 	v.initLock.Lock()
 	v.stunClient = sc
@@ -513,8 +516,9 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 			errSlice := make([]error, 0, 2)
 			for _, trans := range transports {
 				ntype := network.Type(trans)
+				v.wgStunClient.Wait()
 				// skip if SUDPH is under symmetric NAT / under UDP firewall.
-				if ntype == network.SUDPH && v.stunClient != nil && (v.stunClient.NATType == stun.NATSymmetric ||
+				if ntype == network.SUDPH && (v.stunClient.NATType == stun.NATSymmetric ||
 					v.stunClient.NATType == stun.NATSymmetricUDPFirewall) {
 					continue
 				}
@@ -1086,17 +1090,30 @@ func getErrors(ctx context.Context) chan error {
 func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client, error) {
 
 	var serviceURL dmsgget.URL
-
+	var delegatedServers []cipher.PubKey
 	err := serviceURL.Fill(service)
 
 	if serviceURL.Scheme == "dmsg" {
 		if err != nil {
 			return nil, fmt.Errorf("provided URL is invalid: %w", err)
 		}
+		// get delegated servers and add them to the client entry
+		servers, err := v.dClient.AvailableServers(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("Error getting AvailableServers: %w", err)
+		}
+
+		for _, server := range servers {
+			delegatedServers = append(delegatedServers, server.Static)
+		}
+
 		clientEntry := &dmsgdisc.Entry{
-			Client: &dmsgdisc.Client{},
+			Client: &dmsgdisc.Client{
+				DelegatedServers: delegatedServers,
+			},
 			Static: serviceURL.Addr.PK,
 		}
+
 		err = v.dClient.PostEntry(ctx, clientEntry)
 		if err != nil {
 			return nil, fmt.Errorf("Error saving clientEntry: %w", err)
