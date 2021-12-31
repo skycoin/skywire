@@ -46,7 +46,7 @@ func TestClientAuth(t *testing.T) {
 	))
 	defer srv.Close()
 
-	client, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, masterLogger)
+	client, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, nil, masterLogger)
 	require.NoError(t, err)
 	c := client.(*httpClient)
 
@@ -71,7 +71,7 @@ func TestUpdateVisorUptime(t *testing.T) {
 
 	defer srv.Close()
 
-	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, masterLogger)
+	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, nil, masterLogger)
 	require.NoError(t, err)
 
 	err = c.UpdateVisorUptime(context.TODO())
