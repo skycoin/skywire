@@ -2,18 +2,25 @@
 package visor
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"os/exec"
 	"sync"
 	"time"
 
+	"github.com/jaypipes/ghw"
+	"github.com/jaypipes/ghw/pkg/baseboard"
+	"github.com/jaypipes/ghw/pkg/product"
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	dmsgdisc "github.com/skycoin/dmsg/disc"
 	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire/internal/httpauth"
 	"github.com/skycoin/skywire/internal/utclient"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
@@ -66,11 +73,12 @@ type Visor struct {
 	dmsgHTTP *http.Client       // dmsghttp client
 	trackers *dmsgtracker.Manager
 
-	stunClient *network.StunDetails
-	tpM        *transport.Manager
-	arClient   addrresolver.APIClient
-	router     router.Router
-	rfClient   rfclient.Client
+	stunClient   *network.StunDetails
+	wgStunClient *sync.WaitGroup
+	tpM          *transport.Manager
+	arClient     addrresolver.APIClient
+	router       router.Router
+	rfClient     rfclient.Client
 
 	procM       appserver.ProcManager // proc manager
 	appL        *launcher.Launcher    // app launcher
@@ -116,10 +124,9 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 		initLock:          new(sync.Mutex),
 		isServicesHealthy: newInternalHealthInfo(),
 		wgTrackers:        new(sync.WaitGroup),
+		wgStunClient:      new(sync.WaitGroup),
 		transportCacheMu:  new(sync.Mutex),
 	}
-	v.wgTrackers.Add(1)
-	defer v.wgTrackers.Done()
 
 	v.isServicesHealthy.init()
 
@@ -155,6 +162,8 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 	if !v.processRuntimeErrs() {
 		return nil, false
 	}
+	v.wgTrackers.Add(1)
+	defer v.wgTrackers.Done()
 	v.trackers = dmsgtracker.NewDmsgTrackerManager(v.MasterLogger(), v.dmsgC, 0, 0)
 	return v, true
 }
@@ -229,4 +238,81 @@ func (v *Visor) SetLogstore(store logstore.Store) {
 // tpDiscClient is a convenience function to obtain transport discovery client.
 func (v *Visor) tpDiscClient() transport.DiscoveryClient {
 	return v.tpM.Conf.DiscoveryClient
+}
+
+// HostKeeper save host info of running visor.
+func (v *Visor) HostKeeper(skybianBuildVersion string) {
+	var model, serialNumber string
+	logger := v.MasterLogger().PackageLogger("host-keeper")
+
+	if skybianBuildVersion != "" {
+		modelByte, err := exec.Command("cat", "/proc/device-tree/model").Output()
+		if err != nil {
+			logger.Errorf("Error during get model of board due to %v", err)
+			return
+		}
+		model = string(modelByte)
+
+		serialNumberByte, err := exec.Command("cat", "/proc/device-tree/serial-number").Output()
+		if err != nil {
+			logger.Errorf("Error during get serial number of board due to %v", err)
+			return
+		}
+		serialNumber = string(serialNumberByte)
+	} else {
+		baseboardInfo, err := baseboard.New(ghw.WithDisableWarnings())
+		if err != nil {
+			logger.Errorf("Error during get information of host due to %v", err)
+			return
+		}
+		model = baseboardInfo.Vendor
+		serialNumber = baseboardInfo.SerialNumber
+		if model == "unknown" || serialNumber == "unknown" {
+			productInfo, err := product.New(ghw.WithDisableWarnings())
+			if err != nil {
+				logger.Errorf("Error during get information of host due to %v", err)
+				return
+			}
+			model = productInfo.Vendor
+			serialNumber = productInfo.UUID
+		}
+	}
+
+	var keeperInfo HostKeeperData
+	keeperInfo.Model = model
+	keeperInfo.SerialNumber = serialNumber
+
+	logger.WithField("Info", keeperInfo).Info("Host information achieved.")
+
+	client, err := httpauth.NewClient(context.Background(), v.conf.HostKeeper, v.conf.PK, v.conf.SK, &http.Client{}, v.MasterLogger())
+	if err != nil {
+		logger.Errorf("Host Keeper httpauth: %v", err)
+		return
+	}
+
+	keeperInfoByte, err := json.Marshal(keeperInfo)
+	if err != nil {
+		logger.Errorf("Error during marshal host info due to %v", err)
+		return
+	}
+
+	req, err := http.NewRequest(http.MethodPost, v.conf.HostKeeper+"/update", bytes.NewReader(keeperInfoByte))
+	if err != nil {
+		logger.Errorf("Error during make request of host info due to %v", err)
+		return
+	}
+
+	_, err = client.Do(req)
+	if err != nil {
+		logger.Errorf("Error during send host info to host-keeper service due to %v", err)
+		return
+	}
+
+	logger.Info("Host info successfully updated.")
+}
+
+// HostKeeperData the struct of host keeper data
+type HostKeeperData struct {
+	Model        string
+	SerialNumber string
 }

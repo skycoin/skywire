@@ -24,6 +24,7 @@ import (
 	"github.com/skycoin/skywire/internal/httpauth"
 	"github.com/skycoin/skywire/internal/netutil"
 	"github.com/skycoin/skywire/internal/packetfilter"
+	pkgnetutil "github.com/skycoin/skywire/pkg/util/netutil"
 )
 
 const (
@@ -196,7 +197,6 @@ func (c *httpClient) Delete(ctx context.Context, path string) (*http.Response, e
 	if err != nil {
 		return nil, err
 	}
-
 	return c.httpClient.Do(req.WithContext(ctx))
 }
 
@@ -511,8 +511,14 @@ func (c *httpClient) Close() error {
 		}
 	}
 
-	if err := c.delBindSTCPR(context.Background()); err != nil {
-		c.log.WithError(err).Errorf("Failed to delete STCPR binding")
+	hasPublic, err := pkgnetutil.HasPublicIP()
+	if err != nil {
+		c.log.Errorf("Failed to check for public IP: %v", err)
+	}
+	if hasPublic {
+		if err := c.delBindSTCPR(context.Background()); err != nil {
+			c.log.WithError(err).Errorf("Failed to delete STCPR binding")
+		}
 	}
 
 	return nil
