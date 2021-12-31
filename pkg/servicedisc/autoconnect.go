@@ -39,9 +39,10 @@ type autoconnector struct {
 
 // MakeConnector returns a new connector that will try to connect to at most maxConns
 // services
-func MakeConnector(conf Config, maxConns int, tm *transport.Manager, httpC *http.Client, log *logging.Logger, mLog *logging.MasterLogger) Autoconnector {
+func MakeConnector(conf Config, maxConns int, tm *transport.Manager, httpC *http.Client, clientPublicIP *string,
+	log *logging.Logger, mLog *logging.MasterLogger) Autoconnector {
 	connector := &autoconnector{}
-	connector.client = NewClient(log, mLog, conf, httpC)
+	connector.client = NewClient(log, mLog, conf, httpC, clientPublicIP)
 	connector.maxConns = maxConns
 	connector.log = log
 	connector.tm = tm
