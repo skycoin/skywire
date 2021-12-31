@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/skycoin/dmsg/direct"
+	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/disc"
 
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -35,7 +35,7 @@ func GetServers(ctx context.Context, dmsgDisc string, log *logging.Logger) (entr
 }
 
 // UpdateServers is used to update the servers in the direct client.
-func UpdateServers(ctx context.Context, dClient direct.APIClient, dmsgDisc string, log *logging.Logger) (entries []*disc.Entry) {
+func UpdateServers(ctx context.Context, dClient disc.APIClient, dmsgDisc string, dmsgC *dmsg.Client, log *logging.Logger) (entries []*disc.Entry) {
 	dmsgclient := disc.NewHTTP(dmsgDisc, &http.Client{}, log)
 	ticker := time.NewTicker(time.Second * 10)
 	defer ticker.Stop()
@@ -50,7 +50,8 @@ func UpdateServers(ctx context.Context, dClient direct.APIClient, dmsgDisc strin
 				break
 			}
 			for _, server := range servers {
-				dClient.PostEntry(ctx, server) //nolint
+				dClient.PostEntry(ctx, server)   //nolint
+				dmsgC.EnsureSession(ctx, server) //nolint
 			}
 		}
 	}
