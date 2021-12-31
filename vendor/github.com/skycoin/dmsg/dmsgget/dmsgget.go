@@ -69,7 +69,7 @@ func (dg *DmsgGet) flagGroups() []FlagGroup {
 }
 
 // Run runs the download logic.
-func (dg *DmsgGet) Run(ctx context.Context, log logrus.FieldLogger, skStr string, args []string) (err error) {
+func (dg *DmsgGet) Run(ctx context.Context, log *logging.Logger, skStr string, args []string) (err error) {
 	if log == nil {
 		log = logging.MustGetLogger("dmsgget")
 	}
@@ -191,8 +191,8 @@ func parseOutputFile(name string, urlPath string) (*os.File, error) {
 	return nil, os.ErrExist
 }
 
-func (dg *DmsgGet) startDmsg(ctx context.Context, log logrus.FieldLogger, pk cipher.PubKey, sk cipher.SecKey) (dmsgC *dmsg.Client, stop func(), err error) {
-	dmsgC = dmsg.NewClient(pk, sk, disc.NewHTTP(dg.dmsgF.Disc, &http.Client{}, nil), &dmsg.Config{MinSessions: dg.dmsgF.Sessions})
+func (dg *DmsgGet) startDmsg(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey) (dmsgC *dmsg.Client, stop func(), err error) {
+	dmsgC = dmsg.NewClient(pk, sk, disc.NewHTTP(dg.dmsgF.Disc, &http.Client{}, log), &dmsg.Config{MinSessions: dg.dmsgF.Sessions})
 	go dmsgC.Serve(context.Background())
 
 	stop = func() {
