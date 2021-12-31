@@ -45,15 +45,16 @@ type HTTPError struct {
 // As Client needs to dial both with reusing address and without it, it uses two http clients: reuseClient and client.
 type Client struct {
 	// atomic requires 64-bit alignment for struct field access
-	nonce       uint64
-	mu          sync.Mutex
-	reqMu       sync.Mutex
-	client      *http.Client
-	reuseClient *http.Client
-	key         cipher.PubKey
-	sec         cipher.SecKey
-	addr        string // sanitized address of the client, which may differ from addr used in NewClient
-	log         *logging.Logger
+	nonce          uint64
+	mu             sync.Mutex
+	reqMu          sync.Mutex
+	client         *http.Client
+	reuseClient    *http.Client
+	key            cipher.PubKey
+	sec            cipher.SecKey
+	addr           string // sanitized address of the client, which may differ from addr used in NewClient
+	clientPublicIP string // public ip of the local client needed as a header for dmsghttp
+	log            *logging.Logger
 }
 
 // NewClient creates a new client setting a public key to the client to be used for Auth.
@@ -62,14 +63,16 @@ type Client struct {
 // * SW-Public: The specified public key
 // * SW-Nonce:  The nonce for that public key
 // * SW-Sig:    The signature of the payload + the nonce
-func NewClient(ctx context.Context, addr string, key cipher.PubKey, sec cipher.SecKey, client *http.Client, mLog *logging.MasterLogger) (*Client, error) {
+func NewClient(ctx context.Context, addr string, key cipher.PubKey, sec cipher.SecKey, client *http.Client, clientPublicIP *string,
+	mLog *logging.MasterLogger) (*Client, error) {
 	c := &Client{
-		client:      client,
-		reuseClient: client,
-		key:         key,
-		sec:         sec,
-		addr:        sanitizedAddr(addr),
-		log:         mLog.PackageLogger("httpauth"),
+		client:         client,
+		reuseClient:    client,
+		key:            key,
+		sec:            sec,
+		addr:           sanitizedAddr(addr),
+		clientPublicIP: *clientPublicIP,
+		log:            mLog.PackageLogger("httpauth"),
 	}
 
 	// request server for a nonce
@@ -97,6 +100,9 @@ func (c *Client) Header() (http.Header, error) {
 	header.Set("SW-Nonce", strconv.FormatUint(uint64(nonce), 10))
 	header.Set("SW-Sig", sign.Hex())
 	header.Set("SW-Public", c.key.Hex())
+	if c.clientPublicIP != "" {
+		header.Set("SW-PublicIP", c.clientPublicIP)
+	}
 
 	return header, nil
 }
