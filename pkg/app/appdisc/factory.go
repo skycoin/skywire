@@ -20,7 +20,7 @@ type Factory struct {
 	SK             cipher.SecKey
 	ServiceDisc    string // Address of service-discovery
 	Client         *http.Client
-	ClientPublicIP *string
+	ClientPublicIP string
 }
 
 func (f *Factory) setDefaults() {
