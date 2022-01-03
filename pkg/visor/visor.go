@@ -127,7 +127,7 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 		wgStunClient:      new(sync.WaitGroup),
 		transportCacheMu:  new(sync.Mutex),
 	}
-
+	v.wgStunClient.Add(1)
 	v.isServicesHealthy.init()
 
 	if logLvl, err := logging.LevelFromString(conf.LogLevel); err != nil {
@@ -151,9 +151,10 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 	} else {
 		mainModule = hv
 	}
-	tm.InitConcurrent(ctx)
+	// run Transport module in a non blocking mode
+	go tm.InitConcurrent(ctx)
 	mainModule.InitConcurrent(ctx)
-	if err := mainModule.Wait(ctx); err != nil {
+	if err := tm.Wait(ctx); err != nil {
 		log.Error(err)
 		return nil, false
 	}
