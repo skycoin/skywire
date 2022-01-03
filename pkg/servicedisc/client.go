@@ -49,11 +49,11 @@ type HTTPClient struct {
 	entry          Service
 	entryMx        sync.Mutex // only used if RegisterEntry && DeleteEntry functions are used.
 	client         *http.Client
-	clientPublicIP *string
+	clientPublicIP string
 }
 
 // NewClient creates a new HTTPClient.
-func NewClient(log logrus.FieldLogger, mLog *logging.MasterLogger, conf Config, client *http.Client, clientPublicIP *string) *HTTPClient {
+func NewClient(log logrus.FieldLogger, mLog *logging.MasterLogger, conf Config, client *http.Client, clientPublicIP string) *HTTPClient {
 	return &HTTPClient{
 		log:  log,
 		mLog: mLog,

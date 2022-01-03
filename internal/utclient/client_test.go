@@ -21,6 +21,7 @@ import (
 var (
 	testPubKey, testSecKey = cipher.GenerateKeyPair()
 	masterLogger           = logging.NewMasterLogger()
+	ip                     = ""
 )
 
 func TestClientAuth(t *testing.T) {
@@ -46,7 +47,7 @@ func TestClientAuth(t *testing.T) {
 	))
 	defer srv.Close()
 
-	client, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, nil, masterLogger)
+	client, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, ip, masterLogger)
 	require.NoError(t, err)
 	c := client.(*httpClient)
 
@@ -71,7 +72,7 @@ func TestUpdateVisorUptime(t *testing.T) {
 
 	defer srv.Close()
 
-	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, nil, masterLogger)
+	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, ip, masterLogger)
 	require.NoError(t, err)
 
 	err = c.UpdateVisorUptime(context.TODO())

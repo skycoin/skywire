@@ -284,7 +284,7 @@ func (v *Visor) HostKeeper(skybianBuildVersion string) {
 
 	logger.WithField("Info", keeperInfo).Info("Host information achieved.")
 
-	client, err := httpauth.NewClient(context.Background(), v.conf.HostKeeper, v.conf.PK, v.conf.SK, &http.Client{}, nil, v.MasterLogger())
+	client, err := httpauth.NewClient(context.Background(), v.conf.HostKeeper, v.conf.PK, v.conf.SK, &http.Client{}, "", v.MasterLogger())
 	if err != nil {
 		logger.Errorf("Host Keeper httpauth: %v", err)
 		return
