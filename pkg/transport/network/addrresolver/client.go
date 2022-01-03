@@ -81,7 +81,7 @@ type httpClient struct {
 	remoteHTTPAddr string
 	remoteUDPAddr  string
 	sudphConn      net.PacketConn
-	clientPublicIP *string
+	clientPublicIP string
 	ready          chan struct{}
 	closed         chan struct{}
 	delBindSudphWg sync.WaitGroup
@@ -93,7 +93,7 @@ type httpClient struct {
 // * SW-Public: The specified public key.
 // * SW-Nonce:  The nonce for that public key.
 // * SW-Sig:    The signature of the payload + the nonce.
-func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.Client, clientPublicIP *string, log *logging.Logger,
+func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.Client, clientPublicIP string, log *logging.Logger,
 	mLog *logging.MasterLogger) (APIClient, error) {
 	remoteURL, err := url.Parse(remoteAddr)
 	if err != nil {

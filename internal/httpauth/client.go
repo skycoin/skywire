@@ -63,7 +63,7 @@ type Client struct {
 // * SW-Public: The specified public key
 // * SW-Nonce:  The nonce for that public key
 // * SW-Sig:    The signature of the payload + the nonce
-func NewClient(ctx context.Context, addr string, key cipher.PubKey, sec cipher.SecKey, client *http.Client, clientPublicIP *string,
+func NewClient(ctx context.Context, addr string, key cipher.PubKey, sec cipher.SecKey, client *http.Client, clientPublicIP string,
 	mLog *logging.MasterLogger) (*Client, error) {
 	c := &Client{
 		client:         client,
@@ -71,7 +71,7 @@ func NewClient(ctx context.Context, addr string, key cipher.PubKey, sec cipher.S
 		key:            key,
 		sec:            sec,
 		addr:           sanitizedAddr(addr),
-		clientPublicIP: *clientPublicIP,
+		clientPublicIP: clientPublicIP,
 		log:            mLog.PackageLogger("httpauth"),
 	}
 
