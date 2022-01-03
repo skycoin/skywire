@@ -225,7 +225,7 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 		return err
 	}
 
-	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, httpC, &pIP, log, v.MasterLogger())
+	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, httpC, pIP, log, v.MasterLogger())
 	if err != nil {
 		err = fmt.Errorf("failed to create address resolver client: %w", err)
 		return err
@@ -297,7 +297,7 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 		if err != nil {
 			return err
 		}
-		factory.ClientPublicIP = &pIP
+		factory.ClientPublicIP = pIP
 	}
 
 	v.initLock.Lock()
@@ -786,7 +786,7 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 		return err
 	}
 
-	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK, httpC, &pIP, v.MasterLogger())
+	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
 	if err != nil {
 		v.log.WithError(err).Warn("Failed to connect to uptime tracker.")
 		return nil
@@ -983,7 +983,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 	if err != nil {
 		return err
 	}
-	connector := servicedisc.MakeConnector(conf, 3, v.tpM, v.serviceDisc.Client, &pIP, log, v.MasterLogger())
+	connector := servicedisc.MakeConnector(conf, 3, v.tpM, v.serviceDisc.Client, pIP, log, v.MasterLogger())
 	go connector.Run(ctx) //nolint:errcheck
 
 	return nil
@@ -1060,7 +1060,7 @@ func connectToTpDisc(ctx context.Context, v *Visor) (transport.DiscoveryClient, 
 	var tpdC transport.DiscoveryClient
 	retryFunc := func() error {
 		var err error
-		tpdC, err = tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK, httpC, &pIP, v.MasterLogger())
+		tpdC, err = tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
 		if err != nil {
 			log.WithError(err).Error("Failed to connect to transport discovery, retrying...")
 			return err
