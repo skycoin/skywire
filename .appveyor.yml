@@ -37,8 +37,8 @@ environment:
 
   - job_name: DockerDeployMaster
       appveyor_build_worker_image: ubuntu2004
-    - job_name: DockerDeployDevelop
-      appveyor_build_worker_image: ubuntu2004
+  - job_name: DockerDeployDevelop
+    appveyor_build_worker_image: ubuntu2004
   
 for:
   - # Linux and MacOS
