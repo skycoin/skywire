@@ -34,6 +34,11 @@ environment:
   - job_name: windows-amd64
     appveyor_build_worker_image: Visual Studio 2019
     GOARCH: amd64
+
+  - job_name: DockerDeployMaster
+      appveyor_build_worker_image: ubuntu2004
+    - job_name: DockerDeployDevelop
+      appveyor_build_worker_image: ubuntu2004
   
 for:
   - # Linux and MacOS
@@ -128,3 +133,29 @@ for:
 
     build_script:
       - make build
+    
+  - # Docker Deploy (Master)
+    build: off
+    matrix:
+      only:
+        - job_name: DockerDeployMaster
+    branches:
+      only:
+        - master
+    before_deploy:
+      - make build-docker
+    deploy_script:
+      - echo "Master Docker Push Complete!"
+
+  - # Docker Deploy (Develop)
+    build: off
+    matrix:
+      only:
+        - job_name: DockerDeployDevelop
+    branches:
+      only:
+        - develop
+    before_deploy:
+      - make build-docker
+    deploy_script:
+      - echo "Develop Docker Push Complete!"
