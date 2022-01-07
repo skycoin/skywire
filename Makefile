@@ -9,7 +9,7 @@
 VERSION := $(shell git describe)
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 COMMIT := $(shell git rev-list -1 HEAD)
-BRANCH := develop
+
 
 
 PROJECT_BASE := github.com/skycoin/skywire
