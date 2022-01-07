@@ -221,7 +221,13 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 		return err
 	}
 
-	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, httpC, log, v.MasterLogger())
+	// only needed for dmsghttp
+	pIP, err := getPublicIP(v, conf.AddressResolver)
+	if err != nil {
+		return err
+	}
+
+	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, httpC, pIP, log, v.MasterLogger())
 	if err != nil {
 		err = fmt.Errorf("failed to create address resolver client: %w", err)
 		return err
@@ -288,6 +294,12 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 		factory.SK = v.conf.SK
 		factory.ServiceDisc = conf.ServiceDisc
 		factory.Client = httpC
+		// only needed for dmsghttp
+		pIP, err := getPublicIP(v, conf.ServiceDisc)
+		if err != nil {
+			return err
+		}
+		factory.ClientPublicIP = pIP
 	}
 
 	v.initLock.Lock()
@@ -297,8 +309,8 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error {
-	v.wgStunClient.Add(1)
 	defer v.wgStunClient.Done()
+
 	sc := network.GetStunDetails(v.conf.StunServers, log)
 	v.initLock.Lock()
 	v.stunClient = sc
@@ -518,7 +530,10 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 			errSlice := make([]error, 0, 2)
 			for _, trans := range transports {
 				ntype := network.Type(trans)
+
+				// Wait until stun client is ready
 				v.wgStunClient.Wait()
+
 				// skip if SUDPH is under symmetric NAT / under UDP firewall.
 				if ntype == network.SUDPH && (v.stunClient.NATType == stun.NATSymmetric ||
 					v.stunClient.NATType == stun.NATSymmetricUDPFirewall) {
@@ -771,7 +786,12 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 		return err
 	}
 
-	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK, httpC, v.MasterLogger())
+	pIP, err := getPublicIP(v, conf.Addr)
+	if err != nil {
+		return err
+	}
+
+	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
 	if err != nil {
 		v.log.WithError(err).Warn("Failed to connect to uptime tracker.")
 		return nil
@@ -963,7 +983,12 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 		Port:     uint16(0),
 		DiscAddr: serviceDisc,
 	}
-	connector := servicedisc.MakeConnector(conf, 3, v.tpM, v.serviceDisc.Client, log, v.MasterLogger())
+	// only needed for dmsghttp
+	pIP, err := getPublicIP(v, serviceDisc)
+	if err != nil {
+		return err
+	}
+	connector := servicedisc.MakeConnector(conf, 3, v.tpM, v.serviceDisc.Client, pIP, log, v.MasterLogger())
 	go connector.Run(ctx) //nolint:errcheck
 
 	return nil
@@ -1027,6 +1052,12 @@ func connectToTpDisc(ctx context.Context, v *Visor) (transport.DiscoveryClient, 
 		return nil, err
 	}
 
+	// only needed for dmsghttp
+	pIP, err := getPublicIP(v, conf.AddressResolver)
+	if err != nil {
+		return nil, err
+	}
+
 	log := v.MasterLogger().PackageLogger("tp_disc_retrier")
 	tpdCRetrier := dmsgnetutil.NewRetrier(log,
 		initBO, maxBO, tries, factor)
@@ -1034,7 +1065,7 @@ func connectToTpDisc(ctx context.Context, v *Visor) (transport.DiscoveryClient, 
 	var tpdC transport.DiscoveryClient
 	retryFunc := func() error {
 		var err error
-		tpdC, err = tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK, httpC, v.MasterLogger())
+		tpdC, err = tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
 		if err != nil {
 			log.WithError(err).Error("Failed to connect to transport discovery, retrying...")
 			return err
@@ -1123,4 +1154,23 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 		return v.dmsgHTTP, nil
 	}
 	return &http.Client{}, nil
+}
+
+func getPublicIP(v *Visor, service string) (pIP string, err error) {
+	var serviceURL dmsgget.URL
+	err = serviceURL.Fill(service)
+	// only get the IP from the stun client if the url is of dmsg
+	// else just send empty string as ip
+	if serviceURL.Scheme != "dmsg" {
+		return pIP, nil
+	}
+	if err != nil {
+		return pIP, fmt.Errorf("provided URL is invalid: %w", err)
+	}
+
+	// Wait until stun client is ready
+	v.wgStunClient.Wait()
+
+	pIP = v.stunClient.PublicIP.IP()
+	return pIP, nil
 }
