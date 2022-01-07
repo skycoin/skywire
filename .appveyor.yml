@@ -143,7 +143,7 @@ for:
       only:
         - master
     before_deploy:
-      - ./ci_scripts/docker-push.sh -t develop -b
+      - ./ci_scripts/docker-push.sh -t master -b
     deploy_script:
       - echo "Master Docker Push Complete!"
 
@@ -156,6 +156,6 @@ for:
       only:
         - develop
     before_deploy:
-      - ./ci_scripts/docker-push.sh -t master -b
+      - ./ci_scripts/docker-push.sh -t develop -b
     deploy_script:
       - echo "Develop Docker Push Complete!"
