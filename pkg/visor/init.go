@@ -177,7 +177,8 @@ func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	pk, sk := cipher.GenerateKeyPair()
 	keys = append(keys, pk)
-	dClient := direct.NewClient(direct.GetAllEntries(keys, servers), v.MasterLogger().PackageLogger("dmsg_http:direct_client"))
+	entries := direct.GetAllEntries(keys, servers)
+	dClient := direct.NewClient(entries, v.MasterLogger().PackageLogger("dmsg_http:direct_client"))
 
 	dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, v.MasterLogger().PackageLogger("dmsg_http:dmsgDC"),
 		pk, sk, dClient, dmsg.DefaultConfig())
@@ -197,6 +198,7 @@ func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.dmsgHTTP = &dmsgHTTP
 	v.dmsgDC = dmsgDC
 	v.initLock.Unlock()
+	time.Sleep(time.Duration(len(entries)) * time.Second)
 	return nil
 }
 
