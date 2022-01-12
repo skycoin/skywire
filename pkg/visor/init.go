@@ -388,7 +388,7 @@ func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 	var serviceURL dmsgget.URL
 	_ = serviceURL.Fill(v.conf.Transport.AddressResolver)
 	// don't start sudph if we are connection to AR via dmsghttp
-	if serviceURL.Scheme != "dmsg" {
+	if serviceURL.Scheme == "dmsg" {
 		log.Info("SUDPH transport wont be available under dmsghttp")
 		return nil
 	}
