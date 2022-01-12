@@ -32,6 +32,7 @@ var (
 	hypervisor         bool
 	hypervisorPKs      string
 	dmsgHTTP           bool
+	publicRPC          bool
 )
 
 func init() {
@@ -45,6 +46,7 @@ func init() {
 	genConfigCmd.Flags().BoolVarP(&hypervisor, "is-hypervisor", "i", false, "generate a hypervisor configuration.")
 	genConfigCmd.Flags().StringVar(&hypervisorPKs, "hypervisor-pks", "", "public keys of hypervisors that should be added to this visor")
 	genConfigCmd.Flags().BoolVarP(&dmsgHTTP, "dmsghttp", "d", false, "connect to Skywire Services via dmsg")
+	genConfigCmd.Flags().BoolVar(&publicRPC, "public-rpc", false, "change rpc service to publice.")
 }
 
 var genConfigCmd = &cobra.Command{
@@ -139,6 +141,11 @@ var genConfigCmd = &cobra.Command{
 			if oldConf, ok := readOldConfig(mLog, output, true); ok {
 				conf.Hypervisors = oldConf.Hypervisors
 			}
+		}
+
+		// change rpc address from local to public
+		if publicRPC {
+			conf.CLIAddr = "0.0.0.0:3435"
 		}
 
 		if hypervisorPKs != "" {
