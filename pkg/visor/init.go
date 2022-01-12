@@ -384,6 +384,15 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 }
 
 func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+
+	var serviceURL dmsgget.URL
+	_ = serviceURL.Fill(v.conf.Transport.AddressResolver)
+	// don't start sudph if we are connection to AR via dmsghttp
+	if serviceURL.Scheme != "dmsg" {
+		log.Info("SUDPH transport wont be available under dmsghttp")
+		return nil
+	}
+
 	switch v.stunClient.NATType {
 	case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
 		log.Infof("SUDPH transport wont be available as visor is under %v", v.stunClient.NATType.String())
