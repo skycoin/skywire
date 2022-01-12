@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - added `dmsgdirect` client to connect to services over dmsg
 - added `-f` flag to skywire-visor to configure a visor to expose hypervisor UI with default values at runtime
 - added `host-keeper` update routine on starting visor process.
+- added `--public-rpc` falg to `skywire-cli config gen`
 ## 0.5.0
 
 ### Changed
