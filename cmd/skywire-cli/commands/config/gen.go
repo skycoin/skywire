@@ -106,6 +106,28 @@ var genConfigCmd = &cobra.Command{
 			logger.WithError(err).Fatal("Failed to create config.")
 		}
 
+		// Manipulate Hypervisor PKs
+		if hypervisorPKs != "" {
+			keys := strings.Split(hypervisorPKs, ",")
+			for _, key := range keys {
+				keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(key))
+				if err != nil {
+					logger.WithError(err).Fatalf("Failed to parse hypervisor private key: %s.", key)
+				}
+				conf.Hypervisors = append(conf.Hypervisors, cipher.PubKey(keyParsed))
+
+				// Compare key value and visor PK, if same, then this visor should be hypervisor
+				if key == conf.PK.Hex() {
+					conf, err = genConf(mLog, output, &sk, true)
+					if err != nil {
+						logger.WithError(err).Fatal("Failed to create config.")
+					}
+					conf.Hypervisors = []cipher.PubKey{}
+					break
+				}
+			}
+		}
+
 		// Use dmsg urls for services and add dmsg-servers
 		if dmsgHTTP {
 			var dmsgHTTPServersList visorconfig.DmsgHTTPServers
@@ -146,17 +168,6 @@ var genConfigCmd = &cobra.Command{
 		// change rpc address from local to public
 		if publicRPC {
 			conf.CLIAddr = "0.0.0.0:3435"
-		}
-
-		if hypervisorPKs != "" {
-			keys := strings.Split(hypervisorPKs, ",")
-			for _, key := range keys {
-				keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(key))
-				if err != nil {
-					logger.WithError(err).Fatalf("Failed to parse hypervisor private key: %s.", key)
-				}
-				conf.Hypervisors = append(conf.Hypervisors, cipher.PubKey(keyParsed))
-			}
 		}
 
 		// Save config to file.
