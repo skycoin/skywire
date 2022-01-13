@@ -237,6 +237,9 @@ func (c *Client) doRequest(client *http.Client, req *http.Request, body []byte) 
 	req.Header.Set("SW-Nonce", strconv.FormatUint(uint64(nonce), 10))
 	req.Header.Set("SW-Sig", sign.Hex())
 	req.Header.Set("SW-Public", c.key.Hex())
+	if c.clientPublicIP != "" {
+		req.Header.Set("SW-PublicIP", c.clientPublicIP)
+	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
