@@ -167,7 +167,7 @@ var genConfigCmd = &cobra.Command{
 
 		// change rpc address from local to public
 		if publicRPC {
-			conf.CLIAddr = "0.0.0.0:3435"
+			conf.CLIAddr = ":3435"
 		}
 
 		// Save config to file.
