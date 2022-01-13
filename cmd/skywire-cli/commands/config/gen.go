@@ -33,6 +33,7 @@ var (
 	hypervisorPKs      string
 	dmsgHTTP           bool
 	publicRPC          bool
+	vpnServerEnable    bool
 )
 
 func init() {
@@ -47,6 +48,7 @@ func init() {
 	genConfigCmd.Flags().StringVar(&hypervisorPKs, "hypervisor-pks", "", "public keys of hypervisors that should be added to this visor")
 	genConfigCmd.Flags().BoolVarP(&dmsgHTTP, "dmsghttp", "d", false, "connect to Skywire Services via dmsg")
 	genConfigCmd.Flags().BoolVar(&publicRPC, "public-rpc", false, "change rpc service to publice.")
+	genConfigCmd.Flags().BoolVar(&vpnServerEnable, "vpn-server-enable", false, "enable vpn server in generated config.")
 }
 
 var genConfigCmd = &cobra.Command{
@@ -165,9 +167,18 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 
-		// change rpc address from local to public
+		// Change rpc address from local to public
 		if publicRPC {
 			conf.CLIAddr = ":3435"
+		}
+
+		// Set autostart enable for vpn-server
+		if vpnServerEnable {
+			for i, app := range conf.Launcher.Apps {
+				if app.Name == "vpn-server" {
+					conf.Launcher.Apps[i].AutoStart = true
+				}
+			}
 		}
 
 		// Save config to file.
