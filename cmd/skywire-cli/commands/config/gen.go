@@ -60,7 +60,7 @@ var genConfigCmd = &cobra.Command{
 			logger.WithError(err).Fatal("Invalid output provided.")
 		}
 	},
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
 
@@ -69,9 +69,18 @@ var genConfigCmd = &cobra.Command{
 			logger.Fatal("Failed to create config: use of mutually exclusive flags")
 		}
 
+		//check -o --output flag set manually or not, if yes override package and skybian config flag
+		if cmd.Flags().Changed("output") {
+			packageConfig = false
+			skybianConfig = false
+		}
+
 		//set output for package and skybian configs
 		if packageConfig {
 			configName := "skywire-config.json"
+			if hypervisor {
+				configName = "skywire.json"
+			}
 			output = filepath.Join(skyenv.PackageSkywirePath(), configName)
 		}
 
