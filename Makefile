@@ -207,7 +207,7 @@ build-deploy: ## Build for deployment Docker images
 github-release:
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags | cut -c 2-))
 	sed '/^## ${GITHUB_TAG}$$/,/^## .*/!d;//d;/^$$/d' ./CHANGELOG.md > releaseChangelog.md
-	goreleaser --rm-dist --release-notes releaseChangelog.md 
+	goreleaser --rm-dist --release-notes releaseChangelog.md
 
 
 build-docker: ## Build docker image
@@ -219,6 +219,14 @@ install-deps-ui:  ## Install the UI dependencies
 
 run: ## Run skywire visor with skywire-config.json, and start a browser if running a hypervisor
 	./skywire-visor -c ./skywire-config.json
+
+## Run skywire from source, without compiling binaries - requires skywire cloned
+run-source: #to standard gopath $HOME/go/src/github.com/skycoin/skywire
+	test -d apps && rm -r apps || true
+	ln -s _apps apps
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -iro ./skywire-config.json
+	go run ./cmd/skywire-visor/skywire-visor.go -c ./skywire-config.json || true
+
 
 lint-ui:  ## Lint the UI code
 	cd $(MANAGER_UI_DIR) && npm run lint
