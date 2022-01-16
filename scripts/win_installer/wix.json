@@ -12,7 +12,8 @@
       "build/amd64/apps/skysocks.exe",
       "build/amd64/apps/skysocks-client.exe",
       "build/amd64/apps/vpn-server.exe",
-      "build/amd64/apps/vpn-client.exe"
+      "build/amd64/apps/vpn-client.exe",
+      "build/amd64/skywire.bat"
     ]
   },
   "env": {
@@ -32,9 +33,9 @@
     "guid": "",
     "items": [
       {
-        "name": "skywire-cli",
-        "description": "skywire command-line utility",
-        "target": "[INSTALLDIR]\\skywire-cli.exe",
+        "name": "skywire",
+        "description": "run skywire",
+        "target": "[INSTALLDIR]\\skywire.bat",
         "wdir": "INSTALLDIR",
         "icon":"ico.ico"
       }
