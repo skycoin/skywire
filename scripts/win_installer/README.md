@@ -7,14 +7,16 @@ Requires windows host + go-msi and its dependencies (wix, .Net 3.5 sp1)
 Compile the windows executables into the specified path
 
 ```
+rm -rf build
 mkdir -p build/amd64
 go build -o build/amd64/skywire-visor.exe ../../cmd/skywire-visor/skywire-visor.go
 go build -o build/amd64/skywire-cli.exe ../../cmd/skywire-cli/skywire-cli.go
-go build -o build/amd64/skysocks.exe ../../cmd/apps/skysocks/skysocks.go
-go build -o build/amd64/skychat.exe ../../cmd/apps/skychat/chat.go
-go build -o build/amd64/skysocks-client.exe ../../cmd/apps/skysocks-client/skysocks-client.go
-go build -o build/amd64/vpn-server.exe ../../cmd/apps/vpn-server/vpn-server.go
-go build -o build/amd64/vpn-client.exe ../../cmd/apps/vpn-client/vpn-client.go
+go build -o build/amd64/apps/skysocks.exe ../../cmd/apps/skysocks/skysocks.go
+go build -o build/amd64/apps/skychat.exe ../../cmd/apps/skychat/chat.go
+go build -o build/amd64/apps/skysocks-client.exe ../../cmd/apps/skysocks-client/skysocks-client.go
+go build -o build/amd64/apps/vpn-server.exe ../../cmd/apps/vpn-server/vpn-server.go
+go build -o build/amd64/apps/vpn-client.exe ../../cmd/apps/vpn-client/vpn-client.go
+cp -b skywire.bat build/amd64/skywire.bat
 ```
 
 create the skywire windows installer
@@ -23,7 +25,7 @@ create the skywire windows installer
  go-msi make --msi skywire.msi --version 0.5.1 --arch amd64 --keep
 ```
 
-doublle click the created installer to install skywire and test the installer function.
+double click the created installer to install skywire and test the installer function.
 
 **Note: by default windows does not install executables into the PATH**
 
