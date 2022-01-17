@@ -8,22 +8,19 @@
     "items": [
       "build/amd64/skywire-cli.exe",
       "build/amd64/skywire-visor.exe",
-      "build/amd64/apps/skychat.exe",
-      "build/amd64/apps/skysocks.exe",
-      "build/amd64/apps/skysocks-client.exe",
-      "build/amd64/apps/vpn-server.exe",
       "build/amd64/apps/vpn-client.exe",
-      "build/amd64/skywire.bat"
+      "build/amd64/skywire.bat",
+      "ico.ico"
     ]
   },
   "env": {
     "guid": "",
     "vars": [
       {
-        "name": "some",
-        "value": "value",
-        "permanent": "no",
-        "system": "no",
+        "name": "PATH",
+        "value": "[INSTALLDIR]",
+        "permanent": "yes",
+        "system": "yes",
         "action": "set",
         "part": "last"
       }
@@ -43,7 +40,7 @@
   },
   "hooks": [ ],
   "choco": {
-    "description": "skywire vpn",
+    "description": "skywire",
     "project-url": "https://github.com/skycoin/skywire",
     "tags": "skywire",
     "license-url": ""
