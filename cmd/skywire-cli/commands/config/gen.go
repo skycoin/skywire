@@ -132,6 +132,7 @@ var genConfigCmd = &cobra.Command{
 				conf.Routing.RouteFinder = dmsgHTTPServersList.Prod.RouteFinder
 				conf.Launcher.ServiceDisc = dmsgHTTPServersList.Prod.ServiceDiscovery
 			}
+			conf.ConnectionType = "dmsghttp"
 		}
 
 		// Read in old config (if any) and obtain old hypervisors.

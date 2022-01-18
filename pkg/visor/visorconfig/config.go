@@ -53,6 +53,7 @@ func MakeBaseConfig(common *Common) *V1 {
 	conf.ShutdownTimeout = DefaultTimeout
 	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
 	conf.HostKeeper = skyenv.DefaultHostKeeperAddr
+	conf.ConnectionType = "direct"
 	return conf
 }
 

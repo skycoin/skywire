@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"net/http"
 	"os/exec"
 	"sync"
@@ -316,4 +318,69 @@ func (v *Visor) HostKeeper(skybianBuildVersion string) {
 type HostKeeperData struct {
 	Model        string
 	SerialNumber string
+}
+
+// MigrateLocalVisor trying to make migration from direct connection to dmsghttp for local visors
+func (v *Visor) MigrateLocalVisor() bool {
+	if v.conf.ConnectionType == "dmsghttp" {
+		v.log.Info("The connection type is dmsghttp. No migration process need.")
+		return false
+	}
+
+	if !v.isLocalVisor() {
+		v.log.Info("The visor is not local. No migration process need.")
+		return false
+	}
+
+	if !v.setDMSGHTTP() {
+		v.log.Warn("Setting dmsghttp config not complete.")
+		return false
+	}
+
+	err := v.conf.Flush()
+	if err != nil {
+		v.log.Warn("Saving dmsghttp config not complete.")
+		return false
+	}
+
+	return true
+}
+
+func (v *Visor) isLocalVisor() bool {
+	resp, err := http.Get("https://ipinfo.io/country")
+	if err != nil {
+		v.log.WithError(err).Warn("Failed to fetch data from server. Migration process not complete.")
+		return false
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		v.log.WithError(err).Warn("Failed to read fetched data. Migration process not complete.")
+		return false
+	}
+
+	return string(body) != "CN\n"
+}
+
+func (v *Visor) setDMSGHTTP() bool {
+	var dmsgHTTPServersList visorconfig.DmsgHTTPServers
+	serversListJSON, err := ioutil.ReadFile("dmsghttp-config.json")
+	if err != nil {
+		v.log.WithError(err).Warn("Failed to read servers.json file. Migration process not complete.")
+		return false
+	}
+	err = json.Unmarshal(serversListJSON, &dmsgHTTPServersList)
+	if err != nil {
+		v.log.WithError(err).Warn("Error during parsing servers list. Migration process not complete.")
+		return false
+	}
+	v.conf.Dmsg.Servers = dmsgHTTPServersList.Prod.DMSGServers
+	v.conf.Dmsg.Discovery = dmsgHTTPServersList.Prod.DMSGDiscovery
+	v.conf.Transport.AddressResolver = dmsgHTTPServersList.Prod.AddressResolver
+	v.conf.Transport.Discovery = dmsgHTTPServersList.Prod.TransportDiscovery
+	v.conf.UptimeTracker.Addr = dmsgHTTPServersList.Prod.UptimeTracker
+	v.conf.Routing.RouteFinder = dmsgHTTPServersList.Prod.RouteFinder
+	v.conf.Launcher.ServiceDisc = dmsgHTTPServersList.Prod.ServiceDiscovery
+	v.conf.ConnectionType = "dmsghttp"
+
+	return true
 }

@@ -68,6 +68,8 @@ type V1 struct {
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 
 	Hypervisor *hypervisorconfig.Config `json:"hypervisor,omitempty"`
+
+	ConnectionType string `json:"connection_type"`
 }
 
 // V1Dmsgpty configures the dmsgpty-host.

@@ -112,6 +112,11 @@ func runVisor(args []string) {
 		quitSystray()
 		return
 	}
+
+	if vis.MigrateLocalVisor() {
+		vis.Restart()
+	}
+
 	vis.SetLogstore(store)
 
 	go vis.HostKeeper(os.Getenv("SKYBIAN_BUILD_VERSION"))
