@@ -114,7 +114,11 @@ func runVisor(args []string) {
 	}
 
 	if vis.MigrateLocalVisor() {
-		vis.Restart()
+		err := vis.Restart()
+		if err != nil {
+			log.Errorln("Failed to restart visor.")
+			return
+		}
 	}
 
 	vis.SetLogstore(store)
