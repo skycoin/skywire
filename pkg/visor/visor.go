@@ -358,7 +358,7 @@ func (v *Visor) isLocalVisor() bool {
 		return false
 	}
 
-	return string(body) != "CN\n"
+	return string(body) == "CN\n"
 }
 
 func (v *Visor) setDMSGHTTP() bool {
