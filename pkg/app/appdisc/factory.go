@@ -5,6 +5,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/dmsghttp"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
@@ -20,6 +21,7 @@ type Factory struct {
 	SK             cipher.SecKey
 	ServiceDisc    string // Address of service-discovery
 	Client         *http.Client
+	StreamCloser   *dmsghttp.StreamCloser
 	ClientPublicIP string
 }
 
@@ -48,7 +50,7 @@ func (f *Factory) VisorUpdater(port uint16) Updater {
 	}
 
 	return &serviceUpdater{
-		client: servicedisc.NewClient(f.Log, f.MLog, conf, f.Client, f.ClientPublicIP),
+		client: servicedisc.NewClient(f.Log, f.MLog, conf, f.Client, f.StreamCloser, f.ClientPublicIP),
 	}
 }
 
@@ -79,11 +81,11 @@ func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
 	switch conf.AppName {
 	case skyenv.VPNServerName:
 		return &serviceUpdater{
-			client: servicedisc.NewClient(log, f.MLog, getServiceDiscConf(conf, servicedisc.ServiceTypeVPN), f.Client, f.ClientPublicIP),
+			client: servicedisc.NewClient(log, f.MLog, getServiceDiscConf(conf, servicedisc.ServiceTypeVPN), f.Client, f.StreamCloser, f.ClientPublicIP),
 		}, true
 	case skyenv.SkysocksName:
 		return &serviceUpdater{
-			client: servicedisc.NewClient(log, f.MLog, getServiceDiscConf(conf, servicedisc.ServiceTypeSkysocks), f.Client, f.ClientPublicIP),
+			client: servicedisc.NewClient(log, f.MLog, getServiceDiscConf(conf, servicedisc.ServiceTypeSkysocks), f.Client, f.StreamCloser, f.ClientPublicIP),
 		}, true
 	default:
 		return &emptyUpdater{}, false

@@ -17,6 +17,7 @@ import (
 
 	"github.com/AudriusButkevicius/pfilter"
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/dmsghttp"
 	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/xtaci/kcp-go"
@@ -76,6 +77,7 @@ type httpClient struct {
 	log            *logging.Logger
 	mLog           *logging.MasterLogger
 	httpClient     *httpauth.Client
+	streamCloser   *dmsghttp.StreamCloser
 	pk             cipher.PubKey
 	sk             cipher.SecKey
 	remoteHTTPAddr string
@@ -93,8 +95,8 @@ type httpClient struct {
 // * SW-Public: The specified public key.
 // * SW-Nonce:  The nonce for that public key.
 // * SW-Sig:    The signature of the payload + the nonce.
-func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.Client, clientPublicIP string, log *logging.Logger,
-	mLog *logging.MasterLogger) (APIClient, error) {
+func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.Client, streamCloser *dmsghttp.StreamCloser, clientPublicIP string,
+	log *logging.Logger, mLog *logging.MasterLogger) (APIClient, error) {
 	remoteURL, err := url.Parse(remoteAddr)
 	if err != nil {
 		return nil, fmt.Errorf("parse URL: %w", err)
@@ -113,6 +115,7 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.
 		remoteHTTPAddr: remoteAddr,
 		remoteUDPAddr:  remoteUDP,
 		clientPublicIP: clientPublicIP,
+		streamCloser:   streamCloser,
 		ready:          make(chan struct{}),
 		closed:         make(chan struct{}),
 	}
@@ -125,7 +128,7 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.
 }
 
 func (c *httpClient) initHTTPClient(httpC *http.Client) {
-	httpAuthClient, err := httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, httpC, c.clientPublicIP, c.mLog)
+	httpAuthClient, err := httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, httpC, c.streamCloser, c.clientPublicIP, c.mLog)
 	if err != nil {
 		c.log.WithError(err).
 			Warnf("Failed to connect to address resolver. STCPR/SUDPH services are temporarily unavailable. Retrying...")
@@ -134,7 +137,7 @@ func (c *httpClient) initHTTPClient(httpC *http.Client) {
 		retry := dmsgnetutil.NewRetrier(retryLog, 1*time.Second, 10*time.Second, 0, 1)
 
 		err := retry.Do(context.Background(), func() error {
-			httpAuthClient, err = httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, httpC, c.clientPublicIP, c.mLog)
+			httpAuthClient, err = httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, httpC, c.streamCloser, c.clientPublicIP, c.mLog)
 			return err
 		})
 

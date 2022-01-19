@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/dmsghttp"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -49,7 +50,7 @@ func TestClient(t *testing.T) {
 	ts := newTestServer(t, pk, headerCh)
 	defer ts.Close()
 
-	c, err := NewClient(context.TODO(), ts.URL, pk, sk, &http.Client{}, ip, masterLogger)
+	c, err := NewClient(context.TODO(), ts.URL, pk, sk, &http.Client{}, &dmsghttp.StreamCloser{}, ip, masterLogger)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, ts.URL+"/foo", bytes.NewBufferString(payload))
@@ -75,7 +76,7 @@ func TestClient_BadNonce(t *testing.T) {
 	ts := newTestServer(t, pk, headerCh)
 	defer ts.Close()
 
-	c, err := NewClient(context.TODO(), ts.URL, pk, sk, &http.Client{}, ip, masterLogger)
+	c, err := NewClient(context.TODO(), ts.URL, pk, sk, &http.Client{}, &dmsghttp.StreamCloser{}, ip, masterLogger)
 	require.NoError(t, err)
 
 	c.nonce = 999

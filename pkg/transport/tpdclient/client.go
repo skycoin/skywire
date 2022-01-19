@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/dmsghttp"
 	"github.com/skycoin/dmsg/httputil"
 	"github.com/skycoin/skycoin/src/util/logging"
 
@@ -36,8 +37,9 @@ type apiClient struct {
 // * SW-Public: The specified public key
 // * SW-Nonce:  The nonce for that public key
 // * SW-Sig:    The signature of the payload + the nonce
-func NewHTTP(addr string, key cipher.PubKey, sec cipher.SecKey, httpC *http.Client, clientPublicIP string, mLogger *logging.MasterLogger) (transport.DiscoveryClient, error) {
-	client, err := httpauth.NewClient(context.Background(), addr, key, sec, httpC, clientPublicIP, mLogger)
+func NewHTTP(addr string, key cipher.PubKey, sec cipher.SecKey, httpC *http.Client, streamCloser *dmsghttp.StreamCloser,
+	clientPublicIP string, mLogger *logging.MasterLogger) (transport.DiscoveryClient, error) {
+	client, err := httpauth.NewClient(context.Background(), addr, key, sec, httpC, streamCloser, clientPublicIP, mLogger)
 	if err != nil {
 		return nil, fmt.Errorf("transport discovery httpauth: %w", err)
 	}
@@ -51,38 +53,50 @@ func NewHTTP(addr string, key cipher.PubKey, sec cipher.SecKey, httpC *http.Clie
 }
 
 // Post performs a POST request.
-func (c *apiClient) Post(ctx context.Context, path string, payload interface{}) (*http.Response, error) {
+func (c *apiClient) Post(ctx context.Context, path string, payload interface{}) (*http.Request, *http.Response, error) {
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(payload); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	req, err := http.NewRequest(http.MethodPost, c.client.Addr()+path, body)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	resp, err := c.client.Do(req.WithContext(ctx))
+	if err != nil {
+		return nil, nil, err
 	}
 
-	return c.client.Do(req.WithContext(ctx))
+	return req, resp, nil
 }
 
 // Get performs a new GET request.
-func (c *apiClient) Get(ctx context.Context, path string) (*http.Response, error) {
+func (c *apiClient) Get(ctx context.Context, path string) (*http.Request, *http.Response, error) {
 	req, err := http.NewRequest(http.MethodGet, c.client.Addr()+path, new(bytes.Buffer))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	resp, err := c.client.Do(req.WithContext(ctx))
+	if err != nil {
+		return nil, nil, err
 	}
 
-	return c.client.Do(req.WithContext(ctx))
+	return req, resp, nil
 }
 
 // Delete performs a new DELETE request.
-func (c *apiClient) Delete(ctx context.Context, path string) (*http.Response, error) {
+func (c *apiClient) Delete(ctx context.Context, path string) (*http.Request, *http.Response, error) {
 	req, err := http.NewRequest(http.MethodDelete, c.client.Addr()+path, new(bytes.Buffer))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	resp, err := c.client.Do(req.WithContext(ctx))
+	if err != nil {
+		return nil, nil, err
 	}
 
-	return c.client.Do(req.WithContext(ctx))
+	return req, resp, nil
 }
 
 // RegisterTransports registers new Transports.
@@ -91,13 +105,16 @@ func (c *apiClient) RegisterTransports(ctx context.Context, entries ...*transpor
 		return nil
 	}
 
-	resp, err := c.Post(ctx, "/transports/", entries)
+	req, resp, err := c.Post(ctx, "/transports/", entries)
 	if err != nil {
 		return err
 	}
 
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
+			c.log.WithError(err).Warn("Failed to close HTTP response body")
+		}
+		if err := c.client.CloseStream(req); err != nil {
 			c.log.WithError(err).Warn("Failed to close HTTP response body")
 		}
 	}()
@@ -107,13 +124,16 @@ func (c *apiClient) RegisterTransports(ctx context.Context, entries ...*transpor
 
 // GetTransportByID returns Transport for corresponding ID.
 func (c *apiClient) GetTransportByID(ctx context.Context, id uuid.UUID) (*transport.Entry, error) {
-	resp, err := c.Get(ctx, fmt.Sprintf("/transports/id:%s", id.String()))
+	req, resp, err := c.Get(ctx, fmt.Sprintf("/transports/id:%s", id.String()))
 	if err != nil {
 		return nil, err
 	}
 
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
+			c.log.WithError(err).Warn("Failed to close HTTP response body")
+		}
+		if err := c.client.CloseStream(req); err != nil {
 			c.log.WithError(err).Warn("Failed to close HTTP response body")
 		}
 	}()
@@ -132,13 +152,16 @@ func (c *apiClient) GetTransportByID(ctx context.Context, id uuid.UUID) (*transp
 
 // GetTransportsByEdge returns all Transports registered for the edge.
 func (c *apiClient) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
-	resp, err := c.Get(ctx, fmt.Sprintf("/transports/edge:%s", pk))
+	req, resp, err := c.Get(ctx, fmt.Sprintf("/transports/edge:%s", pk))
 	if err != nil {
 		return nil, err
 	}
 
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
+			c.log.WithError(err).Warn("Failed to close HTTP response body")
+		}
+		if err := c.client.CloseStream(req); err != nil {
 			c.log.WithError(err).Warn("Failed to close HTTP response body")
 		}
 	}()
@@ -157,13 +180,16 @@ func (c *apiClient) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) (
 
 // DeleteTransport deletes given transport by it's ID. A visor can only delete transports if he is one of it's edges.
 func (c *apiClient) DeleteTransport(ctx context.Context, id uuid.UUID) error {
-	resp, err := c.Delete(ctx, fmt.Sprintf("/transports/id:%s", id.String()))
+	req, resp, err := c.Delete(ctx, fmt.Sprintf("/transports/id:%s", id.String()))
 	if err != nil {
 		return err
 	}
 
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
+			c.log.WithError(err).Warn("Failed to close HTTP response body")
+		}
+		if err := c.client.CloseStream(req); err != nil {
 			c.log.WithError(err).Warn("Failed to close HTTP response body")
 		}
 	}()

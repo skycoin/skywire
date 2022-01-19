@@ -16,6 +16,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/dmsghttp"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/httpauth"
@@ -49,11 +50,13 @@ type HTTPClient struct {
 	entry          Service
 	entryMx        sync.Mutex // only used if RegisterEntry && DeleteEntry functions are used.
 	client         *http.Client
+	streamCloser   *dmsghttp.StreamCloser
 	clientPublicIP string
 }
 
 // NewClient creates a new HTTPClient.
-func NewClient(log logrus.FieldLogger, mLog *logging.MasterLogger, conf Config, client *http.Client, clientPublicIP string) *HTTPClient {
+func NewClient(log logrus.FieldLogger, mLog *logging.MasterLogger, conf Config, client *http.Client, streamCloser *dmsghttp.StreamCloser,
+	clientPublicIP string) *HTTPClient {
 	return &HTTPClient{
 		log:  log,
 		mLog: mLog,
@@ -64,6 +67,7 @@ func NewClient(log logrus.FieldLogger, mLog *logging.MasterLogger, conf Config, 
 			Version: buildinfo.Version(),
 		},
 		client:         client,
+		streamCloser:   streamCloser,
 		clientPublicIP: clientPublicIP,
 	}
 }
@@ -101,7 +105,7 @@ func (c *HTTPClient) Auth(ctx context.Context) (*httpauth.Client, error) {
 		return auth, nil
 	}
 
-	auth, err := httpauth.NewClient(ctx, c.conf.DiscAddr, c.conf.PK, c.conf.SK, c.client, c.clientPublicIP, c.mLog)
+	auth, err := httpauth.NewClient(ctx, c.conf.DiscAddr, c.conf.PK, c.conf.SK, c.client, c.streamCloser, c.clientPublicIP, c.mLog)
 	if err != nil {
 		return nil, err
 	}
@@ -133,6 +137,10 @@ func (c *HTTPClient) Services(ctx context.Context, quantity int) (out []Service,
 			if cErr := resp.Body.Close(); cErr != nil && err == nil {
 				err = cErr
 			}
+			if cErr := c.streamCloser.CloseStream(req); cErr != nil && err == nil {
+				err = cErr
+			}
+
 		}()
 	}
 
@@ -213,6 +221,9 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 			if cErr := resp.Body.Close(); cErr != nil && err == nil {
 				err = cErr
 			}
+			if cErr := c.streamCloser.CloseStream(req); cErr != nil && err == nil {
+				err = cErr
+			}
 		}()
 	}
 
@@ -262,6 +273,9 @@ func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
 	if resp != nil {
 		defer func() {
 			if cErr := resp.Body.Close(); cErr != nil && err == nil {
+				err = cErr
+			}
+			if cErr := c.streamCloser.CloseStream(req); cErr != nil && err == nil {
 				err = cErr
 			}
 		}()

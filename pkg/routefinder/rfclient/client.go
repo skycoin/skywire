@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/dmsg/dmsghttp"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/routing"
@@ -54,14 +55,15 @@ type Client interface {
 
 // APIClient implements Client interface
 type apiClient struct {
-	addr       string
-	client     *http.Client
-	apiTimeout time.Duration
-	log        *logging.Logger
+	addr         string
+	client       *http.Client
+	streamCloser *dmsghttp.StreamCloser
+	apiTimeout   time.Duration
+	log          *logging.Logger
 }
 
 // NewHTTP constructs new Client that communicates over http.
-func NewHTTP(addr string, apiTimeout time.Duration, client *http.Client, mlogger *logging.MasterLogger) Client {
+func NewHTTP(addr string, apiTimeout time.Duration, client *http.Client, streamCloser *dmsghttp.StreamCloser, mlogger *logging.MasterLogger) Client {
 	if apiTimeout == 0 {
 		apiTimeout = defaultContextTimeout
 	}
@@ -70,10 +72,11 @@ func NewHTTP(addr string, apiTimeout time.Duration, client *http.Client, mlogger
 		log = mlogger.PackageLogger("routefinder")
 	}
 	return &apiClient{
-		addr:       sanitizedAddr(addr),
-		client:     client,
-		apiTimeout: apiTimeout,
-		log:        log,
+		addr:         sanitizedAddr(addr),
+		client:       client,
+		streamCloser: streamCloser,
+		apiTimeout:   apiTimeout,
+		log:          log,
 	}
 }
 
@@ -105,6 +108,9 @@ func (c *apiClient) FindRoutes(ctx context.Context, rts []routing.PathEdges, opt
 	if res != nil {
 		defer func() {
 			if err := res.Body.Close(); err != nil {
+				c.log.WithError(err).Warn("Failed to close HTTP response body")
+			}
+			if err := c.streamCloser.CloseStream(req); err != nil {
 				c.log.WithError(err).Warn("Failed to close HTTP response body")
 			}
 		}()

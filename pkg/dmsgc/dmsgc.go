@@ -7,6 +7,7 @@ import (
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/disc"
+	"github.com/skycoin/dmsg/dmsghttp"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/app/appevent"
@@ -20,7 +21,8 @@ type DmsgConfig struct {
 }
 
 // New makes new dmsg client from configuration
-func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *DmsgConfig, httpC *http.Client, masterLogger *logging.MasterLogger) *dmsg.Client {
+func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *DmsgConfig, httpC *http.Client, streamCloser *dmsghttp.StreamCloser,
+	masterLogger *logging.MasterLogger) *dmsg.Client {
 	dmsgConf := &dmsg.Config{
 		MinSessions: conf.SessionsCount,
 		Callbacks: &dmsg.ClientCallbacks{

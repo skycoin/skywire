@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	dmsgdisc "github.com/skycoin/dmsg/disc"
+	"github.com/skycoin/dmsg/dmsghttp"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/httpauth"
@@ -66,12 +67,13 @@ type Visor struct {
 	updater       *updater.Updater
 	uptimeTracker utclient.APIClient
 
-	ebc      *appevent.Broadcaster // event broadcaster
-	dmsgC    *dmsg.Client
-	dmsgDC   *dmsg.Client       // dmsg direct client
-	dClient  dmsgdisc.APIClient // dmsg direct api client
-	dmsgHTTP *http.Client       // dmsghttp client
-	trackers *dmsgtracker.Manager
+	ebc          *appevent.Broadcaster // event broadcaster
+	dmsgC        *dmsg.Client
+	dmsgDC       *dmsg.Client           // dmsg direct client
+	dClient      dmsgdisc.APIClient     // dmsg direct api client
+	dmsgHTTP     *http.Client           // dmsghttp client
+	streamCloser *dmsghttp.StreamCloser // dmsghttp stream closer
+	trackers     *dmsgtracker.Manager
 
 	stunClient   *network.StunDetails
 	wgStunClient *sync.WaitGroup
@@ -285,7 +287,7 @@ func (v *Visor) HostKeeper(skybianBuildVersion string) {
 
 	logger.WithField("Info", keeperInfo).Info("Host information achieved.")
 
-	client, err := httpauth.NewClient(context.Background(), v.conf.HostKeeper, v.conf.PK, v.conf.SK, &http.Client{}, "", v.MasterLogger())
+	client, err := httpauth.NewClient(context.Background(), v.conf.HostKeeper, v.conf.PK, v.conf.SK, &http.Client{}, &dmsghttp.StreamCloser{}, "", v.MasterLogger())
 	if err != nil {
 		logger.Errorf("Host Keeper httpauth: %v", err)
 		return

@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/dmsghttp"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -47,7 +48,7 @@ func TestClientAuth(t *testing.T) {
 	))
 	defer srv.Close()
 
-	client, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, ip, masterLogger)
+	client, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, &dmsghttp.StreamCloser{}, ip, masterLogger)
 	require.NoError(t, err)
 	c := client.(*httpClient)
 
@@ -72,7 +73,7 @@ func TestUpdateVisorUptime(t *testing.T) {
 
 	defer srv.Close()
 
-	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, ip, masterLogger)
+	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, &dmsghttp.StreamCloser{}, ip, masterLogger)
 	require.NoError(t, err)
 
 	err = c.UpdateVisorUptime(context.TODO())

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/dmsghttp"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/httpauth"
@@ -49,7 +50,7 @@ const (
 // * SW-Public: The specified public key
 // * SW-Nonce:  The nonce for that public key
 // * SW-Sig:    The signature of the payload + the nonce
-func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.Client, clientPublicIP string, mLogger *logging.MasterLogger) (APIClient, error) {
+func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.Client, streamCloser *dmsghttp.StreamCloser, clientPublicIP string, mLogger *logging.MasterLogger) (APIClient, error) {
 	var client *httpauth.Client
 	var err error
 
@@ -57,7 +58,7 @@ func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.Client
 
 	retrier := netutil.NewRetrier(createRetryDelay, 10, 2, log)
 	retrierFunc := func() error {
-		client, err = httpauth.NewClient(context.Background(), addr, pk, sk, httpC, clientPublicIP, mLogger)
+		client, err = httpauth.NewClient(context.Background(), addr, pk, sk, httpC, streamCloser, clientPublicIP, mLogger)
 		if err != nil {
 			return fmt.Errorf("uptime tracker httpauth: %w", err)
 		}

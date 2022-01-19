@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/dmsghttp"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/context"
 
@@ -32,7 +33,7 @@ var RootCmd = &cobra.Command{
 	Short: "Queries the Route Finder for available routes between two visors",
 	Args:  cobra.MinimumNArgs(2),
 	Run: func(_ *cobra.Command, args []string) {
-		rfc := rfclient.NewHTTP(frAddr, timeout, &http.Client{}, nil)
+		rfc := rfclient.NewHTTP(frAddr, timeout, &http.Client{}, &dmsghttp.StreamCloser{}, nil)
 
 		var srcPK, dstPK cipher.PubKey
 		internal.Catch(srcPK.Set(args[0]))

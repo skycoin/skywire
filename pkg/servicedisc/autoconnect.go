@@ -7,6 +7,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/dmsghttp"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/netutil"
@@ -39,10 +40,10 @@ type autoconnector struct {
 
 // MakeConnector returns a new connector that will try to connect to at most maxConns
 // services
-func MakeConnector(conf Config, maxConns int, tm *transport.Manager, httpC *http.Client, clientPublicIP string,
+func MakeConnector(conf Config, maxConns int, tm *transport.Manager, httpC *http.Client, streamCloser *dmsghttp.StreamCloser, clientPublicIP string,
 	log *logging.Logger, mLog *logging.MasterLogger) Autoconnector {
 	connector := &autoconnector{}
-	connector.client = NewClient(log, mLog, conf, httpC, clientPublicIP)
+	connector.client = NewClient(log, mLog, conf, httpC, streamCloser, clientPublicIP)
 	connector.maxConns = maxConns
 	connector.log = log
 	connector.tm = tm

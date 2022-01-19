@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/dmsghttp"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -79,12 +80,12 @@ func TestClientAuth(t *testing.T) {
 	))
 	defer srv.Close()
 
-	client, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, ip, masterLogger)
+	client, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, &dmsghttp.StreamCloser{}, ip, masterLogger)
 	require.NoError(t, err)
 	c := client.(*apiClient)
 
 	wg.Add(1)
-	_, err = c.Post(context.Background(), "/", bytes.NewBufferString("test payload"))
+	_, _, err = c.Post(context.Background(), "/", bytes.NewBufferString("test payload"))
 	require.NoError(t, err)
 
 	wg.Wait()
@@ -160,7 +161,7 @@ func TestRegisterTransportResponses(t *testing.T) {
 			})))
 			defer srv.Close()
 
-			c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, ip, masterLogger)
+			c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, &dmsghttp.StreamCloser{}, ip, masterLogger)
 			require.NoError(t, err)
 			err = c.RegisterTransports(context.Background(), &transport.SignedEntry{})
 			if tc.assert != nil {
@@ -186,7 +187,7 @@ func TestRegisterTransports(t *testing.T) {
 	})))
 	defer srv.Close()
 
-	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, ip, masterLogger)
+	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, &dmsghttp.StreamCloser{}, ip, masterLogger)
 	require.NoError(t, err)
 	require.NoError(t, c.RegisterTransports(context.Background(), sEntry))
 }
@@ -199,7 +200,7 @@ func TestGetTransportByID(t *testing.T) {
 	})))
 	defer srv.Close()
 
-	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, ip, masterLogger)
+	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, &dmsghttp.StreamCloser{}, ip, masterLogger)
 	require.NoError(t, err)
 	resEntry, err := c.GetTransportByID(context.Background(), entry.ID)
 	require.NoError(t, err)
@@ -215,7 +216,7 @@ func TestGetTransportsByEdge(t *testing.T) {
 	})))
 	defer srv.Close()
 
-	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, ip, masterLogger)
+	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, &dmsghttp.StreamCloser{}, ip, masterLogger)
 	require.NoError(t, err)
 	entries, err := c.GetTransportsByEdge(context.Background(), entry.Edges[0])
 	require.NoError(t, err)

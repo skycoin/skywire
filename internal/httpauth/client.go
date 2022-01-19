@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/dmsghttp"
 	"github.com/skycoin/skycoin/src/util/logging"
 )
 
@@ -50,6 +51,7 @@ type Client struct {
 	reqMu          sync.Mutex
 	client         *http.Client
 	reuseClient    *http.Client
+	streamCloser   *dmsghttp.StreamCloser
 	key            cipher.PubKey
 	sec            cipher.SecKey
 	addr           string // sanitized address of the client, which may differ from addr used in NewClient
@@ -63,11 +65,12 @@ type Client struct {
 // * SW-Public: The specified public key
 // * SW-Nonce:  The nonce for that public key
 // * SW-Sig:    The signature of the payload + the nonce
-func NewClient(ctx context.Context, addr string, key cipher.PubKey, sec cipher.SecKey, client *http.Client, clientPublicIP string,
-	mLog *logging.MasterLogger) (*Client, error) {
+func NewClient(ctx context.Context, addr string, key cipher.PubKey, sec cipher.SecKey, client *http.Client, streamCloser *dmsghttp.StreamCloser,
+	clientPublicIP string, mLog *logging.MasterLogger) (*Client, error) {
 	c := &Client{
 		client:         client,
 		reuseClient:    client,
+		streamCloser:   streamCloser,
 		key:            key,
 		sec:            sec,
 		addr:           sanitizedAddr(addr),
@@ -186,6 +189,11 @@ func (c *Client) Nonce(ctx context.Context, key cipher.PubKey) (Nonce, error) {
 		if err := resp.Body.Close(); err != nil {
 			c.log.WithError(err).Warn("Failed to close HTTP response body")
 		}
+		// if c.streamCloser != nil {
+		if err := c.streamCloser.CloseStream(req); err != nil {
+			c.log.WithError(err).Warn("Failed to close dmsgHTTP stream")
+		}
+		// }
 	}()
 
 	if resp.StatusCode != http.StatusOK {
@@ -254,6 +262,11 @@ func (c *Client) getCurrentNonce() Nonce {
 // IncrementNonce increments client's current nonce.
 func (c *Client) IncrementNonce() {
 	atomic.AddUint64(&c.nonce, 1)
+}
+
+// CloseStream closes the dmsg stream related to the http request.
+func (c *Client) CloseStream(req *http.Request) error {
+	return c.streamCloser.CloseStream(req)
 }
 
 // isNonceValid checks if `res` contains an invalid nonce error.

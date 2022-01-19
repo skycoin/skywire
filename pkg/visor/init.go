@@ -186,8 +186,12 @@ func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return fmt.Errorf("failed to start dmsg: %w", err)
 	}
 
-	dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgDC)}
+	streamMap := make(chan map[*http.Request]uint32)
 
+	streamCloser := dmsghttp.NewStreamCloser(dmsgDC)
+	dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgDC, streamMap)}
+
+	go streamCloser.GetMap(ctx, streamMap)
 	v.pushCloseStack("dmsg_http", func() error {
 		closeDmsgDC()
 		return nil
@@ -196,6 +200,7 @@ func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.initLock.Lock()
 	v.dClient = dClient
 	v.dmsgHTTP = &dmsgHTTP
+	v.streamCloser = streamCloser
 	v.dmsgDC = dmsgDC
 	v.initLock.Unlock()
 	time.Sleep(time.Duration(len(entries)) * time.Second)
@@ -216,7 +221,7 @@ func initEventBroadcaster(ctx context.Context, v *Visor, log *logging.Logger) er
 func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Transport
 
-	httpC, err := getHTTPClient(ctx, v, conf.AddressResolver)
+	httpC, streamCloser, err := getHTTPClient(ctx, v, conf.AddressResolver)
 	if err != nil {
 		return err
 	}
@@ -227,7 +232,7 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 		return err
 	}
 
-	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, httpC, pIP, log, v.MasterLogger())
+	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, httpC, streamCloser, pIP, log, v.MasterLogger())
 	if err != nil {
 		err = fmt.Errorf("failed to create address resolver client: %w", err)
 		return err
@@ -284,7 +289,7 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	conf := v.conf.Launcher
 
-	httpC, err := getHTTPClient(ctx, v, conf.ServiceDisc)
+	httpC, streamCloser, err := getHTTPClient(ctx, v, conf.ServiceDisc)
 	if err != nil {
 		return err
 	}
@@ -294,6 +299,7 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 		factory.SK = v.conf.SK
 		factory.ServiceDisc = conf.ServiceDisc
 		factory.Client = httpC
+		factory.StreamCloser = streamCloser
 		// only needed for dmsghttp
 		pIP, err := getPublicIP(v, conf.ServiceDisc)
 		if err != nil {
@@ -323,12 +329,12 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 		return fmt.Errorf("cannot initialize dmsg: empty configuration")
 	}
 
-	httpC, err := getHTTPClient(ctx, v, v.conf.Dmsg.Discovery)
+	httpC, streamCloser, err := getHTTPClient(ctx, v, v.conf.Dmsg.Discovery)
 	if err != nil {
 		return err
 	}
 
-	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg, httpC, v.MasterLogger())
+	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg, httpC, streamCloser, v.MasterLogger())
 
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
@@ -567,12 +573,12 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Routing
 
-	httpC, err := getHTTPClient(ctx, v, conf.RouteFinder)
+	httpC, streamCloser, err := getHTTPClient(ctx, v, conf.RouteFinder)
 	if err != nil {
 		return err
 	}
 
-	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout), httpC, v.MasterLogger())
+	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout), httpC, streamCloser, v.MasterLogger())
 	logger := v.MasterLogger().PackageLogger("router")
 	rConf := router.Config{
 		Logger:           logger,
@@ -790,7 +796,7 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 		return nil
 	}
 
-	httpC, err := getHTTPClient(ctx, v, conf.Addr)
+	httpC, streamCloser, err := getHTTPClient(ctx, v, conf.Addr)
 	if err != nil {
 		return err
 	}
@@ -800,7 +806,7 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 		return err
 	}
 
-	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
+	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK, httpC, streamCloser, pIP, v.MasterLogger())
 	if err != nil {
 		v.log.WithError(err).Warn("Failed to connect to uptime tracker.")
 		return nil
@@ -997,7 +1003,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 	if err != nil {
 		return err
 	}
-	connector := servicedisc.MakeConnector(conf, 3, v.tpM, v.serviceDisc.Client, pIP, log, v.MasterLogger())
+	connector := servicedisc.MakeConnector(conf, 3, v.tpM, v.serviceDisc.Client, v.serviceDisc.StreamCloser, pIP, log, v.MasterLogger())
 	go connector.Run(ctx) //nolint:errcheck
 
 	return nil
@@ -1056,7 +1062,7 @@ func connectToTpDisc(ctx context.Context, v *Visor) (transport.DiscoveryClient, 
 
 	conf := v.conf.Transport
 
-	httpC, err := getHTTPClient(ctx, v, conf.Discovery)
+	httpC, streamCloser, err := getHTTPClient(ctx, v, conf.Discovery)
 	if err != nil {
 		return nil, err
 	}
@@ -1074,7 +1080,7 @@ func connectToTpDisc(ctx context.Context, v *Visor) (transport.DiscoveryClient, 
 	var tpdC transport.DiscoveryClient
 	retryFunc := func() error {
 		var err error
-		tpdC, err = tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
+		tpdC, err = tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK, httpC, streamCloser, pIP, v.MasterLogger())
 		if err != nil {
 			log.WithError(err).Error("Failed to connect to transport discovery, retrying...")
 			return err
@@ -1129,7 +1135,7 @@ func getErrors(ctx context.Context) chan error {
 	return errs
 }
 
-func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client, error) {
+func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client, *dmsghttp.StreamCloser, error) {
 
 	var serviceURL dmsgget.URL
 	var delegatedServers []cipher.PubKey
@@ -1137,12 +1143,12 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 
 	if serviceURL.Scheme == "dmsg" {
 		if err != nil {
-			return nil, fmt.Errorf("provided URL is invalid: %w", err)
+			return nil, nil, fmt.Errorf("provided URL is invalid: %w", err)
 		}
 		// get delegated servers and add them to the client entry
 		servers, err := v.dClient.AvailableServers(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("Error getting AvailableServers: %w", err)
+			return nil, nil, fmt.Errorf("Error getting AvailableServers: %w", err)
 		}
 
 		for _, server := range servers {
@@ -1158,11 +1164,11 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 
 		err = v.dClient.PostEntry(ctx, clientEntry)
 		if err != nil {
-			return nil, fmt.Errorf("Error saving clientEntry: %w", err)
+			return nil, nil, fmt.Errorf("Error saving clientEntry: %w", err)
 		}
-		return v.dmsgHTTP, nil
+		return v.dmsgHTTP, v.streamCloser, nil
 	}
-	return &http.Client{}, nil
+	return &http.Client{}, &dmsghttp.StreamCloser{}, nil
 }
 
 func getPublicIP(v *Visor, service string) (pIP string, err error) {
