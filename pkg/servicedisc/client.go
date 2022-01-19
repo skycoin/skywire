@@ -43,16 +43,17 @@ type Config struct {
 
 // HTTPClient is responsible for interacting with the service-discovery
 type HTTPClient struct {
-	log     logrus.FieldLogger
-	mLog    *logging.MasterLogger
-	conf    Config
-	entry   Service
-	entryMx sync.Mutex // only used if RegisterEntry && DeleteEntry functions are used.
-	client  *http.Client
+	log            logrus.FieldLogger
+	mLog           *logging.MasterLogger
+	conf           Config
+	entry          Service
+	entryMx        sync.Mutex // only used if RegisterEntry && DeleteEntry functions are used.
+	client         *http.Client
+	clientPublicIP string
 }
 
 // NewClient creates a new HTTPClient.
-func NewClient(log logrus.FieldLogger, mLog *logging.MasterLogger, conf Config, client *http.Client) *HTTPClient {
+func NewClient(log logrus.FieldLogger, mLog *logging.MasterLogger, conf Config, client *http.Client, clientPublicIP string) *HTTPClient {
 	return &HTTPClient{
 		log:  log,
 		mLog: mLog,
@@ -62,7 +63,8 @@ func NewClient(log logrus.FieldLogger, mLog *logging.MasterLogger, conf Config, 
 			Type:    conf.Type,
 			Version: buildinfo.Version(),
 		},
-		client: client,
+		client:         client,
+		clientPublicIP: clientPublicIP,
 	}
 }
 
@@ -99,7 +101,7 @@ func (c *HTTPClient) Auth(ctx context.Context) (*httpauth.Client, error) {
 		return auth, nil
 	}
 
-	auth, err := httpauth.NewClient(ctx, c.conf.DiscAddr, c.conf.PK, c.conf.SK, c.client, c.mLog)
+	auth, err := httpauth.NewClient(ctx, c.conf.DiscAddr, c.conf.PK, c.conf.SK, c.client, c.clientPublicIP, c.mLog)
 	if err != nil {
 		return nil, err
 	}

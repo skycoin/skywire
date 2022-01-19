@@ -9,8 +9,6 @@
 VERSION := $(shell git describe)
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 COMMIT := $(shell git rev-list -1 HEAD)
-BRANCH := latest
-
 
 PROJECT_BASE := github.com/skycoin/skywire
 DMSG_BASE := github.com/skycoin/dmsg
@@ -213,7 +211,7 @@ github-release:
 
 
 build-docker: ## Build docker image
-	./ci_scripts/docker-push.sh -t ${BRANCH} -b
+	./ci_scripts/docker-push.sh -t latest -b
 
 # Manager UI
 install-deps-ui:  ## Install the UI dependencies
