@@ -21,7 +21,10 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
-var masterLogger = logging.NewMasterLogger()
+var (
+	masterLogger = logging.NewMasterLogger()
+	ip           = ""
+)
 
 func TestMain(m *testing.M) {
 	loggingLevel, ok := os.LookupEnv("TEST_LOGGING_LEVEL")
@@ -76,7 +79,7 @@ func TestClientAuth(t *testing.T) {
 	))
 	defer srv.Close()
 
-	client, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, masterLogger)
+	client, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, ip, masterLogger)
 	require.NoError(t, err)
 	c := client.(*apiClient)
 
@@ -157,7 +160,7 @@ func TestRegisterTransportResponses(t *testing.T) {
 			})))
 			defer srv.Close()
 
-			c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, masterLogger)
+			c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, ip, masterLogger)
 			require.NoError(t, err)
 			err = c.RegisterTransports(context.Background(), &transport.SignedEntry{})
 			if tc.assert != nil {
@@ -183,7 +186,7 @@ func TestRegisterTransports(t *testing.T) {
 	})))
 	defer srv.Close()
 
-	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, masterLogger)
+	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, ip, masterLogger)
 	require.NoError(t, err)
 	require.NoError(t, c.RegisterTransports(context.Background(), sEntry))
 }
@@ -196,7 +199,7 @@ func TestGetTransportByID(t *testing.T) {
 	})))
 	defer srv.Close()
 
-	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, masterLogger)
+	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, ip, masterLogger)
 	require.NoError(t, err)
 	resEntry, err := c.GetTransportByID(context.Background(), entry.ID)
 	require.NoError(t, err)
@@ -212,7 +215,7 @@ func TestGetTransportsByEdge(t *testing.T) {
 	})))
 	defer srv.Close()
 
-	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, masterLogger)
+	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, ip, masterLogger)
 	require.NoError(t, err)
 	entries, err := c.GetTransportsByEdge(context.Background(), entry.Edges[0])
 	require.NoError(t, err)
