@@ -28,13 +28,14 @@ var (
 	replaceHypervisors bool
 	testEnv            bool
 	packageConfig      bool
-	skybianConfig      bool
 	hypervisor         bool
 	hypervisorPKs      string
 	dmsgHTTP           bool
 	publicRPC          bool
 	vpnServerEnable    bool
 	disableAUTH        bool
+	enableAUTH         bool
+	selectedOS         string
 )
 
 func init() {
@@ -43,7 +44,6 @@ func init() {
 	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "rewrite existing config (retains keys).")
 	genConfigCmd.Flags().BoolVarP(&replaceHypervisors, "use-old-hypervisors", "x", false, "use old hypervisors keys.")
 	genConfigCmd.Flags().BoolVarP(&packageConfig, "package", "p", false, "use defaults for package-based installations in /opt/skywire")
-	genConfigCmd.Flags().BoolVarP(&skybianConfig, "skybian", "s", false, "use defaults paths found in skybian\n writes config to /etc/skywire-config.json")
 	genConfigCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "use test deployment service.")
 	genConfigCmd.Flags().BoolVarP(&hypervisor, "is-hypervisor", "i", false, "generate a hypervisor configuration.")
 	genConfigCmd.Flags().StringVar(&hypervisorPKs, "hypervisor-pks", "", "public keys of hypervisors that should be added to this visor")
@@ -51,6 +51,8 @@ func init() {
 	genConfigCmd.Flags().BoolVar(&publicRPC, "public-rpc", false, "change rpc service to publice.")
 	genConfigCmd.Flags().BoolVar(&vpnServerEnable, "vpn-server-enable", false, "enable vpn server in generated config.")
 	genConfigCmd.Flags().BoolVar(&disableAUTH, "disable-auth", false, "disable auth on hypervisor UI.")
+	genConfigCmd.Flags().BoolVar(&enableAUTH, "enable-auth", false, "enable auth on hypervisor UI.")
+	genConfigCmd.Flags().StringVar(&selectedOS, "os", "linux", "set OS during generate config, linux is default, windows and macos are other options")
 }
 
 var genConfigCmd = &cobra.Command{
@@ -66,15 +68,14 @@ var genConfigCmd = &cobra.Command{
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
 
-		//Fail on -pst combination
-		if (packageConfig && skybianConfig) || (packageConfig && testEnv) || (skybianConfig && testEnv) {
+		//Fail on -pt combination
+		if packageConfig && testEnv {
 			logger.Fatal("Failed to create config: use of mutually exclusive flags")
 		}
 
 		//check -o --output flag set manually or not, if yes override package and skybian config flag
 		if cmd.Flags().Changed("output") {
 			packageConfig = false
-			skybianConfig = false
 		}
 
 		//set output for package and skybian configs
@@ -84,10 +85,6 @@ var genConfigCmd = &cobra.Command{
 				configName = "skywire.json"
 			}
 			output = filepath.Join(skyenv.PackageSkywirePath(), configName)
-		}
-
-		if skybianConfig {
-			output = "/etc/skywire-config.json"
 		}
 
 		// Read in old config (if any) and obtain old secret key.
@@ -105,8 +102,6 @@ var genConfigCmd = &cobra.Command{
 		//  default paths for different installations
 		if packageConfig {
 			genConf = visorconfig.MakePackageConfig
-		} else if skybianConfig {
-			genConf = visorconfig.MakeDefaultConfig
 		} else if testEnv {
 			genConf = visorconfig.MakeTestConfig
 		} else {
@@ -172,6 +167,11 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 
+		// Check os to set bin_path address
+		if selectedOS == "windows" {
+			conf.Launcher.BinPath = "C:\\Program Files\\Skywire"
+		}
+
 		// Read in old config (if any) and obtain old hypervisors.
 		if replaceHypervisors {
 			if oldConf, ok := readOldConfig(mLog, output, true); ok {
@@ -193,10 +193,24 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 
-		// Disable auth for hypervisor UI
+		// Make false EnableAuth for hypervisor UI by --disable-auth flag
 		if disableAUTH {
 			if hypervisor {
 				conf.Hypervisor.EnableAuth = false
+			}
+		}
+
+		// Make true EnableAuth for hypervisor UI by --enable-auth flag
+		if enableAUTH {
+			if hypervisor {
+				conf.Hypervisor.EnableAuth = true
+			}
+		}
+
+		// Check OS and enable auth for windows or macos
+		if selectedOS == "windows" || selectedOS == "macos" {
+			if hypervisor {
+				conf.Hypervisor.EnableAuth = true
 			}
 		}
 
