@@ -13,6 +13,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -36,6 +37,7 @@ var (
 	disableAUTH        bool
 	enableAUTH         bool
 	selectedOS         string
+	disableApps        string
 )
 
 func init() {
@@ -53,6 +55,7 @@ func init() {
 	genConfigCmd.Flags().BoolVar(&disableAUTH, "disable-auth", false, "disable auth on hypervisor UI.")
 	genConfigCmd.Flags().BoolVar(&enableAUTH, "enable-auth", false, "enable auth on hypervisor UI.")
 	genConfigCmd.Flags().StringVar(&selectedOS, "os", "linux", "set OS during generate config, linux is default, windows and macos are other options")
+	genConfigCmd.Flags().StringVar(&disableApps, "disable-apps", "", "set list of apps that should be disable, skychat | skysocks | skysocks-client | vpn-server | vpn-client")
 }
 
 var genConfigCmd = &cobra.Command{
@@ -191,6 +194,22 @@ var genConfigCmd = &cobra.Command{
 					conf.Launcher.Apps[i].AutoStart = true
 				}
 			}
+		}
+
+		// Disable apps that listed on --disable-apps flag
+		if disableApps != "" {
+			apps := strings.Split(disableApps, ",")
+			appsSlice := make(map[string]bool)
+			for _, app := range apps {
+				appsSlice[app] = true
+			}
+			var newConfLauncherApps []launcher.AppConfig
+			for _, app := range conf.Launcher.Apps {
+				if _, ok := appsSlice[app.Name]; !ok {
+					newConfLauncherApps = append(newConfLauncherApps, app)
+				}
+			}
+			conf.Launcher.Apps = newConfLauncherApps
 		}
 
 		// Make false EnableAuth for hypervisor UI by --disable-auth flag
