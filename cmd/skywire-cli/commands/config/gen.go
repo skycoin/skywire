@@ -34,6 +34,7 @@ var (
 	dmsgHTTP           bool
 	publicRPC          bool
 	vpnServerEnable    bool
+	disableAUTH        bool
 )
 
 func init() {
@@ -49,6 +50,7 @@ func init() {
 	genConfigCmd.Flags().BoolVarP(&dmsgHTTP, "dmsghttp", "d", false, "connect to Skywire Services via dmsg")
 	genConfigCmd.Flags().BoolVar(&publicRPC, "public-rpc", false, "change rpc service to publice.")
 	genConfigCmd.Flags().BoolVar(&vpnServerEnable, "vpn-server-enable", false, "enable vpn server in generated config.")
+	genConfigCmd.Flags().BoolVar(&disableAUTH, "disable-auth", false, "disable auth on hypervisor UI.")
 }
 
 var genConfigCmd = &cobra.Command{
@@ -129,7 +131,8 @@ var genConfigCmd = &cobra.Command{
 
 				// Compare key value and visor PK, if same, then this visor should be hypervisor
 				if key == conf.PK.Hex() {
-					conf, err = genConf(mLog, output, &sk, true)
+					hypervisor = true
+					conf, err = genConf(mLog, output, &sk, hypervisor)
 					if err != nil {
 						logger.WithError(err).Fatal("Failed to create config.")
 					}
@@ -187,6 +190,13 @@ var genConfigCmd = &cobra.Command{
 				if app.Name == "vpn-server" {
 					conf.Launcher.Apps[i].AutoStart = true
 				}
+			}
+		}
+
+		// Disable auth for hypervisor UI
+		if disableAUTH {
+			if hypervisor {
+				conf.Hypervisor.EnableAuth = false
 			}
 		}
 
