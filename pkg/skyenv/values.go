@@ -42,7 +42,6 @@ const (
 	TestRouteFinderAddr     = "http://rf.skywire.dev"
 	TestUptimeTrackerAddr   = "http://ut.skywire.dev"
 	TestAddressResolverAddr = "http://ar.skywire.dev"
-	TestHostKeeperAddr      = "http://hk.skywire.dev"
 	TestSetupPK             = "026c2a3e92d6253c5abd71a42628db6fca9dd9aa037ab6f4e3a31108558dfd87cf"
 )
 
