@@ -52,7 +52,6 @@ func MakeBaseConfig(common *Common) *V1 {
 	conf.StunServers = skyenv.GetStunServers()
 	conf.ShutdownTimeout = DefaultTimeout
 	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
-	conf.HostKeeper = skyenv.DefaultHostKeeperAddr
 	return conf
 }
 
@@ -181,7 +180,6 @@ func SetDefaultTestingValues(conf *V1) {
 	conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.TestSetupPK)}
 	conf.UptimeTracker.Addr = skyenv.TestUptimeTrackerAddr
 	conf.Launcher.ServiceDisc = skyenv.TestServiceDiscAddr
-	conf.HostKeeper = skyenv.TestHostKeeperAddr
 }
 
 // SetDefaultProductionValues mutates configuration to use production values
@@ -195,7 +193,6 @@ func SetDefaultProductionValues(conf *V1) {
 		Addr: skyenv.DefaultUptimeTrackerAddr,
 	}
 	conf.Launcher.ServiceDisc = skyenv.DefaultServiceDiscAddr
-	conf.HostKeeper = skyenv.DefaultHostKeeperAddr
 }
 
 // makeDefaultLauncherAppsConfig creates default launcher config for apps,
