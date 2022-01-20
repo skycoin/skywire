@@ -31,7 +31,6 @@ const (
 	DefaultRouteFinderAddr     = "http://rf.skywire.skycoin.com"
 	DefaultUptimeTrackerAddr   = "http://ut.skywire.skycoin.com"
 	DefaultAddressResolverAddr = "http://ar.skywire.skycoin.com"
-	DefaultHostKeeperAddr      = "http://hk.skywire.skycoin.com"
 	DefaultSetupPK             = "0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557"
 )
 
