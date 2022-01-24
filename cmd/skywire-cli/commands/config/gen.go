@@ -50,12 +50,12 @@ func init() {
 	genConfigCmd.Flags().BoolVarP(&hypervisor, "is-hypervisor", "i", false, "generate a hypervisor configuration.")
 	genConfigCmd.Flags().StringVar(&hypervisorPKs, "hypervisor-pks", "", "public keys of hypervisors that should be added to this visor")
 	genConfigCmd.Flags().BoolVarP(&dmsgHTTP, "dmsghttp", "d", false, "connect to Skywire Services via dmsg")
-	genConfigCmd.Flags().BoolVar(&publicRPC, "public-rpc", false, "change rpc service to publice.")
+	genConfigCmd.Flags().BoolVar(&publicRPC, "public-rpc", false, "change rpc service to public.")
 	genConfigCmd.Flags().BoolVar(&vpnServerEnable, "vpn-server-enable", false, "enable vpn server in generated config.")
 	genConfigCmd.Flags().BoolVar(&disableAUTH, "disable-auth", false, "disable auth on hypervisor UI.")
 	genConfigCmd.Flags().BoolVar(&enableAUTH, "enable-auth", false, "enable auth on hypervisor UI.")
-	genConfigCmd.Flags().StringVar(&selectedOS, "os", "linux", "set OS during generate config, linux is default, windows and macos are other options")
-	genConfigCmd.Flags().StringVar(&disableApps, "disable-apps", "", "set list of apps that should be disable, skychat | skysocks | skysocks-client | vpn-server | vpn-client")
+	genConfigCmd.Flags().StringVar(&selectedOS, "os", "linux", "generate configuration with paths for 'macos' or 'windows'")
+	genConfigCmd.Flags().StringVar(&disableApps, "disable-apps", "", "set list of apps to disable, separated by ','")
 }
 
 var genConfigCmd = &cobra.Command{
