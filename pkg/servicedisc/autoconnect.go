@@ -2,6 +2,8 @@ package servicedisc
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net/http"
 	"time"
 
@@ -81,7 +83,9 @@ func (a *autoconnector) Run(ctx context.Context) (err error) {
 				a.log.WithField("pk", pk).WithField("attempt", val).Debugln("Trying to add transport to public visor")
 				logger := a.log.WithField("pk", pk).WithField("type", string(network.STCPR))
 				if err = a.tryEstablishTransport(ctx, pk, logger); err != nil {
-					logger.WithError(err).Warnln("Failed to add transport to public visor")
+					if !errors.Is(err, io.ErrClosedPipe) {
+						logger.WithError(err).Warnln("Failed to add transport to public visor")
+					}
 					failedAddresses[pk]++
 					continue
 				}
