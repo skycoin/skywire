@@ -139,8 +139,8 @@ const (
 // Default hypervisor constants
 const (
 	DefaultHypervisorDB      = ".skycoin/hypervisor/users.db"
-	DefaultEnableAuth        = true
-	DefaultPackageEnableAuth = false
+	DefaultEnableAuth        = false
+	DefaultPackageEnableAuth = true
 	DefaultEnableTLS         = false
 	DefaultTLSKey            = DefaultSkywirePath + "/ssl/key.pem"
 	DefaultTLSCert           = DefaultSkywirePath + "/ssl/cert.pem"
