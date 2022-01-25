@@ -1,5 +1,7 @@
 [![Build Status](https://travis-ci.com/skycoin/skywire.svg?branch=master)](https://travis-ci.com/skycoin/skywire)
 
+Skywire requires a Golang version of `1.16` or higher.
+
 # Skywire
 
 - [Skywire](#skywire)
@@ -12,9 +14,16 @@
     - [Creating a GitHub release](#creating-a-github-release)
         - [How to create a GitHub release](#how-to-create-a-github-release)
 
-## Build
+## Run from source
 
-Skywire requires a Golang version of `1.16` or higher.
+```bash
+$ mkdir -p $HOME/go/src/github.com/skycoin && cd $HOME/go/src/github.com/skycoin
+$ git clone https://github.com/skycoin/skywire.git
+$ cd skywire
+$ make run-source
+```
+
+## Build
 
 ```bash
 # Clone.
@@ -65,6 +74,18 @@ hypervisor needs to be specified in the configuration file. You can add a remote
 $ skywire-cli config update --hypervisor-pks <public-key>
 ```
 
+If the rpc server is exposed on the local network, or the config has been generated with the `--public-rpc` flag, the hypervisor public key can be queried over the network with skywire-cli:
+
+```bash
+$ skywire-cli --rpc <ip-address> visor pk
+```
+
+The previous two commands can be nested:
+
+```bash
+$ skywire-cli config update --hypervisor-pks $(skywire-cli --rpc <ip-address> visor pk)
+```
+
 Or from docker image:
 
 ```bash
@@ -77,7 +98,6 @@ Or from docker image:
 ```bash
 $ docker run --rm -v <YOUR_CONFIG_DIR>:/opt/skywire \
   skycoin/skywire:latest skywire-cli update-config hypervisor-pks <public-key>
-
 ```
 
 ## Run `skywire-visor`
