@@ -186,7 +186,7 @@ func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return fmt.Errorf("failed to start dmsg: %w", err)
 	}
 
-	dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgDC)}
+	dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC)}
 
 	v.pushCloseStack("dmsg_http", func() error {
 		closeDmsgDC()
