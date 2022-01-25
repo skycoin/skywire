@@ -114,8 +114,6 @@ func runVisor(args []string) {
 	}
 	vis.SetLogstore(store)
 
-	go vis.HostKeeper(os.Getenv("SKYBIAN_BUILD_VERSION"))
-
 	if launchBrowser {
 		runBrowser(conf, log)
 	}
