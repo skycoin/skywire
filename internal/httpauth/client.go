@@ -135,7 +135,7 @@ func (c *Client) do(client *http.Client, req *http.Request) (*http.Response, err
 		return nil, err
 	}
 
-	resp, isNonceValid, err := isNonceValid(resp, c.log)
+	resp, isNonceValid, err := isNonceValid(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -259,7 +259,7 @@ func (c *Client) IncrementNonce() {
 // isNonceValid checks if `res` contains an invalid nonce error.
 // The error is occurred if status code equals to `http.StatusUnauthorized`
 // and body contains `invalidNonceErrorMessage`.
-func isNonceValid(res *http.Response, log *logging.Logger) (*http.Response, bool, error) {
+func isNonceValid(res *http.Response) (*http.Response, bool, error) {
 	var serverResponse HTTPResponse
 	var auxResp http.Response
 
