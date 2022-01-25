@@ -25,7 +25,7 @@ make win-installer
 Double click the created installer to install skywire.
 
 ### Run
-To run skywire open a terminal or cmd window and run
+To run skywire open a terminal or cmd window as administrator and run
 ```
 skywire
 ```
