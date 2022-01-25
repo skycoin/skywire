@@ -1,30 +1,31 @@
-### Windows installer
+## Windows installer
 
-Requires windows host + go-msi and its dependencies (wix, .Net 3.5 sp1)
+### Requirments
+- windows machine
+- Install **chocolatey** by its instruction [here](https://chocolatey.org/install).
+- Install **GNU Make** by choco
+  ```
+  choco install make
+  ```
+- Install **go-msi** by choco
+  ```
+  choco install go-msi
+  ```
+- Download and Install **Wix** from [here](https://github.com/wixtoolset/wix3/releases/tag/wix3112rtm).
+  - Need to add `C:\Program Files (x86)\WiX Toolset v3.11\bin` to path.
+- We need to install **.Net Framework 3.5 SP1**, you can download and install from [here](https://dotnet.microsoft.com/en-us/download/dotnet-framework/thank-you/net35-sp1-web-installer).
 
-**The path to the wix toolset needs to be added to the environmental variables on the system**
-
-Compile the windows executables into the specified path
-
+### Build
+You can build **skywire.msi** by
 ```
-rm -rf build
-mkdir -p build/amd64
-go build -o build/amd64/skywire-visor.exe ../../cmd/skywire-visor/skywire-visor.go
-go build -o build/amd64/skywire-cli.exe ../../cmd/skywire-cli/skywire-cli.go
-go build -o build/amd64/apps/vpn-client.exe ../../cmd/apps/vpn-client/vpn-client.go
-cp -b skywire.bat build/amd64/skywire.bat
+make win-installer
 ```
 
-create the skywire windows installer
+### Install
+Double click the created installer to install skywire.
 
-```
- go-msi make --msi skywire.msi --version 0.5.1 --arch amd64 --keep
-```
-
-double click the created installer to install skywire.
-
-to run skywire open a terminal or cmd window and run
-
+### Run
+To run skywire open a terminal or cmd window and run
 ```
 skywire
 ```
