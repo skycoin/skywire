@@ -2,7 +2,9 @@ package config
 
 import (
 	"encoding/json"
+	"io"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,6 +40,7 @@ var (
 	enableAUTH         bool
 	selectedOS         string
 	disableApps        string
+	bestProtocol       bool
 )
 
 func init() {
@@ -56,6 +59,7 @@ func init() {
 	genConfigCmd.Flags().BoolVar(&enableAUTH, "enable-auth", false, "enable auth on hypervisor UI.")
 	genConfigCmd.Flags().StringVar(&selectedOS, "os", "linux", "generate configuration with paths for 'macos' or 'windows'")
 	genConfigCmd.Flags().StringVar(&disableApps, "disable-apps", "", "set list of apps to disable, separated by ','")
+	genConfigCmd.Flags().BoolVarP(&bestProtocol, "best-protocol", "b", false, "choose best protocol (dmsg / direct) to connect based on location")
 }
 
 var genConfigCmd = &cobra.Command{
@@ -137,6 +141,12 @@ var genConfigCmd = &cobra.Command{
 					conf.Hypervisors = []cipher.PubKey{}
 					break
 				}
+			}
+		}
+
+		if bestProtocol {
+			if dmsgProtocol() {
+				dmsgHTTP = true
 			}
 		}
 
@@ -266,4 +276,19 @@ func readOldConfig(log *logging.MasterLogger, confPath string, replace bool) (*v
 	}
 
 	return conf, true
+}
+
+func dmsgProtocol() bool {
+	resp, err := http.Get("https://ipinfo.io/country")
+	if err != nil {
+		return false
+	}
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false
+	}
+	if string(respBody)[:2] == "CN" {
+		return true
+	}
+	return false
 }
