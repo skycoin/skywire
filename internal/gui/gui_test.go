@@ -6,10 +6,7 @@ package gui
 import (
 	"testing"
 
-	"github.com/skycoin/dmsg/cipher"
 	"github.com/stretchr/testify/require"
-
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 func TestReadEmbeddedIcon(t *testing.T) {
