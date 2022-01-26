@@ -30,7 +30,7 @@
     "guid": "",
     "items": [
       {
-        "name": "skywire",
+        "name": "Skywire",
         "description": "run skywire",
         "target": "[INSTALLDIR]\\skywire.bat",
         "wdir": "INSTALLDIR",
