@@ -135,7 +135,7 @@ func (c *Client) do(client *http.Client, req *http.Request) (*http.Response, err
 		return nil, err
 	}
 
-	isNonceValid, err := isNonceValid(resp)
+	resp, isNonceValid, err := isNonceValid(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -259,26 +259,28 @@ func (c *Client) IncrementNonce() {
 // isNonceValid checks if `res` contains an invalid nonce error.
 // The error is occurred if status code equals to `http.StatusUnauthorized`
 // and body contains `invalidNonceErrorMessage`.
-func isNonceValid(res *http.Response) (bool, error) {
+func isNonceValid(res *http.Response) (*http.Response, bool, error) {
 	var serverResponse HTTPResponse
+	var auxResp http.Response
 
 	auxRespBody, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		return false, err
+		return nil, false, err
 	}
 	if err := res.Body.Close(); err != nil {
-		return false, err
+		return nil, false, err
 	}
-	res.Body = ioutil.NopCloser(bytes.NewBuffer(auxRespBody))
+	auxResp = *res
+	auxResp.Body = ioutil.NopCloser(bytes.NewBuffer(auxRespBody))
 
 	if err := json.Unmarshal(auxRespBody, &serverResponse); err != nil || serverResponse.Error == nil {
-		return true, nil
+		return &auxResp, true, nil
 	}
 
 	isAuthorized := serverResponse.Error.Code != http.StatusUnauthorized
 	hasValidNonce := serverResponse.Error.Message != invalidNonceErrorMessage
 
-	return isAuthorized && hasValidNonce, nil
+	return &auxResp, isAuthorized && hasValidNonce, nil
 }
 
 func sanitizedAddr(addr string) string {
