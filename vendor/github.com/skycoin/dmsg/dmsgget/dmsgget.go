@@ -110,7 +110,7 @@ func (dg *DmsgGet) Run(ctx context.Context, log *logging.Logger, skStr string, a
 	}
 	defer closeDmsg()
 
-	httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(dmsgC)}
+	httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
 
 	for i := 0; i < dg.dlF.Tries; i++ {
 		log.Infof("Download attempt %d/%d ...", i, dg.dlF.Tries)
