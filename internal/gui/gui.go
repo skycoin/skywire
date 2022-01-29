@@ -4,6 +4,7 @@
 package gui
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"io"
@@ -19,6 +20,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/toqueteos/webbrowser"
 
+	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -188,6 +190,27 @@ func handleVPNLinkButton(conf *visorconfig.V1) {
 	if err := webbrowser.Open(vpnAddr); err != nil {
 		log.WithError(err).Error("failed to open link")
 	}
+}
+
+// GetAvailPublicVPNServers gets all available public VPN server from service discovery URL
+func GetAvailPublicVPNServers(conf *visorconfig.V1) []string {
+	sdClient := servicedisc.NewClient(log, servicedisc.Config{
+		Type:     servicedisc.ServiceTypeVPN,
+		PK:       conf.PK,
+		SK:       conf.SK,
+		DiscAddr: conf.Launcher.ServiceDisc,
+	})
+	//ctx, _ := context.WithTimeout(context.Background(), 7*time.Second)
+	vpnServers, err := sdClient.Services(context.Background(), 0)
+	if err != nil {
+		log.Error("Error getting public vpn servers: ", err)
+		return nil
+	}
+	serverAddrs := make([]string, len(vpnServers))
+	for idx, server := range vpnServers {
+		serverAddrs[idx] = server.Addr.PubKey().String()
+	}
+	return serverAddrs
 }
 
 func initUninstallBtn() {
