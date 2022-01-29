@@ -339,6 +339,7 @@ func (ce *Client) EnsureSession(ctx context.Context, entry *disc.Entry) error {
 
 	// If session with server of pk already exists, skip.
 	if _, ok := ce.clientSession(ce.porter, entry.Static); ok {
+		ce.log.WithField("remote_pk", entry.Static).Info("Session already exists...")
 		return nil
 	}
 
