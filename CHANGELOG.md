@@ -8,7 +8,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Changed
 
-- 
+- detecting OS in runtime removed
+- skybian flag `-s` removed from `skywire-cli config gen`
 
 
 ### Added
@@ -22,7 +23,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - added `-d,--dmsghttp` flag to `skywire-cli config gen`
 - added `dmsgdirect` client to connect to services over dmsg
 - added `-f` flag to skywire-visor to configure a visor to expose hypervisor UI with default values at runtime
-- added `host-keeper` update routine on starting visor process.
+- added `--public-rpc` falg to `skywire-cli config gen`
+- added `--vpn-server-enable` falg to `skywire-cli config gen`
+- added `--os` flag to `skywire-cli config gen`
+- added `--disable-apps` flag to `skywire-cli config gen`
+- added `--disable-auth` and `--enable-auth` flags to `skywire-cli config gen`
+- added `--best-protocol` flag to `skywire-cli config gen`
 ## 0.5.0
 
 ### Changed
