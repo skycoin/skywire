@@ -425,8 +425,7 @@ func (rg *RouteGroup) sendNetworkProbe() error {
 	}
 
 	throughput := rg.networkStats.RemoteThroughput()
-	timestamp := time.Now().UTC().UnixMilli()
-
+	timestamp := time.Now().UTC().UnixNano() / int64(time.Millisecond)
 	rg.networkStats.SetDownloadSpeed(uint32(throughput))
 
 	packet := routing.MakeNetworkProbePacket(rule.NextRouteID(), timestamp, throughput)
