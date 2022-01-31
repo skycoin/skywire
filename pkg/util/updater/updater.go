@@ -104,7 +104,7 @@ func (u *Updater) Update(updateConfig UpdateConfig) (updated bool, err error) {
 
 	u.status.Set(fmt.Sprintf("Found version %q", version))
 
-	u.status.Set(fmt.Sprintf("Checking/Adding repo %s", "127.0.0.1")) // add if not exist
+	u.status.Set(fmt.Sprintf("Checking/Adding repo %s", "https://deb.skywire.skycoin.com/")) // add if not exist
 	if err := u.addRepo(); err != nil {
 		return false, err
 	}
@@ -186,20 +186,23 @@ func (u *Updater) getVersion(updateConfig UpdateConfig) (string, error) {
 }
 
 func (u *Updater) addRepo() error {
-	if err := exec.Command("sudo", "add-apt-repository", "deb http://176.9.28.105 sid main").Run(); err != nil {
-		u.log.Error("Get error during add repository")
-		return err
+	output, err := exec.Command("bash", "-c", "cat /etc/apt/sources.list | grep https://deb.skywire.skycoin.com").Output()
+	if err != nil {
+		u.log.Error("Cannot check repository on /etc/apt/sources.list")
 	}
-	if err := exec.Command("curl", "-L", "https://deb.skywire.skycoin.com/KEY.asc", "-o", "key.asc").Run(); err != nil {
-		u.log.Error("Get error during get key")
-		return err
-	}
-	if err := exec.Command("sudo", "apt-key", "add", "key.asc").Run(); err != nil {
-		u.log.Error("Get error during add key")
-		return err
-	}
-	if err := exec.Command("rm", "key.asc"); err != nil {
-		u.log.Warn("Get error during remove downloaded key")
+
+	if len(output) == 0 {
+		if err := exec.Command("bash", "-c", "sudo add-apt-repository 'deb https://deb.skywire.skycoin.com sid main'").Run(); err != nil {
+			u.log.Error("Get error during add repository")
+			return err
+		}
+		if err := exec.Command("bash", "-c", "curl -L https://deb.skywire.skycoin.com/KEY.asc | sudo apt-key add -").Run(); err != nil {
+			u.log.Error("Get error during add key")
+			return err
+		}
+		u.log.Info("Repository added")
+	} else {
+		u.log.Info("Repository exist")
 	}
 	return nil
 }
