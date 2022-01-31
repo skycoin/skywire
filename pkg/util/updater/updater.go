@@ -113,6 +113,7 @@ func (u *Updater) Update(updateConfig UpdateConfig) (updated bool, err error) {
 	if err := u.aptUpdate(); err != nil {
 		return false, err
 	}
+	u.log.Info("Updating repositories by 'apt update' compeleted.")
 
 	// uninstall current installed skywire if its version is equal or lower that 0.4.2
 	currentVersion, err := currentVersion()
@@ -124,15 +125,18 @@ func (u *Updater) Update(updateConfig UpdateConfig) (updated bool, err error) {
 		if err := u.aptRemove(); err != nil {
 			return false, err
 		}
+		u.log.Info("Uninstalling old version compeleted.")
 	}
 
 	u.status.Set(fmt.Sprintf("Installing Skywire %q", version))
 	if err := u.aptInstall(); err != nil {
 		return false, err
 	}
+	u.log.Info("Installing new version compeleted.")
 
 	u.status.Set("Updating completed. Restarting board.")
 	defer u.restartBoard()
+	u.log.Info("Updating completed. Restarting board.")
 
 	return true, nil
 }
@@ -186,10 +190,7 @@ func (u *Updater) getVersion(updateConfig UpdateConfig) (string, error) {
 }
 
 func (u *Updater) addRepo() error {
-	output, err := exec.Command("bash", "-c", "cat /etc/apt/sources.list | grep https://deb.skywire.skycoin.com").Output()
-	if err != nil {
-		u.log.Error("Cannot check repository on /etc/apt/sources.list")
-	}
+	output, _ := exec.Command("bash", "-c", "cat /etc/apt/sources.list | grep https://deb.skywire.skycoin.com").Output() //nolint
 
 	if len(output) == 0 {
 		if err := exec.Command("bash", "-c", "sudo add-apt-repository 'deb https://deb.skywire.skycoin.com sid main'").Run(); err != nil {
