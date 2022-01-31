@@ -1,0 +1,47 @@
+{
+  "product": "Skywire",
+  "company": "Skycoin",
+  "upgrade-code": "",
+  "files": {
+    "guid": "",
+    "items": [
+      "build/amd64/skywire-cli.exe",
+      "build/amd64/skywire-visor.exe",
+      "build/amd64/apps/vpn-client.exe",
+      "build/amd64/skywire.bat",
+      "ico.ico"
+    ]
+  },
+  "env": {
+    "guid": "",
+    "vars": [
+      {
+        "name": "PATH",
+        "value": "[INSTALLDIR]",
+        "permanent": "yes",
+        "system": "yes",
+        "action": "set",
+        "part": "last"
+      }
+    ]
+  },
+  "shortcuts": {
+    "guid": "",
+    "items": [
+      {
+        "name": "Skywire",
+        "description": "run skywire",
+        "target": "[INSTALLDIR]\\skywire.bat",
+        "wdir": "INSTALLDIR",
+        "icon":"ico.ico"
+      }
+    ]
+  },
+  "hooks": [ ],
+  "choco": {
+    "description": "skywire",
+    "project-url": "https://github.com/skycoin/skywire",
+    "tags": "skywire",
+    "license-url": ""
+  }
+}
