@@ -289,49 +289,30 @@ export class VpnClientService {
    * Gets the public IP of the machine running this app. If there is an error, it could
    * return null.
    */
-  getIp(): Observable<string> {
+   getIpData(): Observable<string[]> {
     // Use a test value if in development mode.
     if (!environment.production && AppConfig.vpn.hardcodedIpWhileDeveloping) {
-      return of('8.8.8.8 (testing)');
+      return of(['8.8.8.8 (testing)', 'United States (testing)']);
     }
 
-    return this.http.request('GET', 'https://api.ipify.org?format=json').pipe(
+    return this.http.request('GET', window.location.protocol + '//ip.skycoin.com/').pipe(
       retryWhen(errors => concat(errors.pipe(delay(this.standardWaitTime), take(4)), throwError(''))),
       map(data => {
-        if (data && data['ip']) {
-          return  data['ip'];
+        let ip = '';
+        if (data && data['ip_address']) {
+          ip = data['ip_address'];
+        } else {
+          ip = this.translateService.instant('common.unknown');
         }
 
-        return null;
-      })
-    );
-  }
-
-  /**
-   * Gets the country of the public IP of the machine running this app. If there is an error,
-   * it could return null.
-   */
-  getIpCountry(ip: string): Observable<string> {
-    // Use a test value if in development mode.
-    if (!environment.production && AppConfig.vpn.hardcodedIpWhileDeveloping) {
-      return of('United States (testing)');
-    }
-
-    return this.http.request('GET', 'https://ip2c.org/' + ip, { responseType: 'text' }).pipe(
-      retryWhen(errors => concat(errors.pipe(delay(2000), take(4)), throwError(''))),
-      map(data => {
-        let country: string = null;
-
-        // The name must be the fourth element of the retrieved value.
-        if (data) {
-          const dataParts: string[] = data.split(';');
-
-          if (dataParts.length === 4) {
-            country = dataParts[3];
-          }
+        let country = '';
+        if (data && data['country_name']) {
+          country = data['country_name'];
+        } else {
+          country = this.translateService.instant('common.unknown');
         }
 
-        return country;
+        return [ip, country];
       })
     );
   }
