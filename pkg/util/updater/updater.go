@@ -135,7 +135,7 @@ func (u *Updater) Update(updateConfig UpdateConfig) (updated bool, err error) {
 	u.log.Info("Installing new version compeleted.")
 
 	u.status.Set("Updating completed. Restarting board.")
-	defer u.restartBoard()
+	defer u.restartService()
 	u.log.Info("Updating completed. Restarting board.")
 
 	return true, nil
@@ -209,7 +209,7 @@ func (u *Updater) addRepo() error {
 }
 
 func (u *Updater) aptUpdate() error {
-	if err := exec.Command("sudo", "apt", "update").Run(); err != nil {
+	if err := exec.Command("bash", "-c", "sudo apt update").Run(); err != nil {
 		u.log.Error("Get error during update apt repositories")
 		return err
 	}
@@ -217,7 +217,7 @@ func (u *Updater) aptUpdate() error {
 }
 
 func (u *Updater) aptRemove() error {
-	if err := exec.Command("sudo", "apt", "remove", "skywire-bin", "-y").Run(); err != nil {
+	if err := exec.Command("bash", "-c", "sudo apt remove skywire-bin", "-y").Run(); err != nil {
 		u.log.Error("Get error during remove skywire-bin package")
 		return err
 	}
@@ -225,16 +225,16 @@ func (u *Updater) aptRemove() error {
 }
 
 func (u *Updater) aptInstall() error {
-	if err := exec.Command("sudo", "apt", "install", "skywire-bin", "-y").Run(); err != nil {
+	if err := exec.Command("bash", "-c", "sudo apt install skywire-bin", "-y").Run(); err != nil {
 		u.log.Error("Get error during installing skywire-bin package")
 		return err
 	}
 	return nil
 }
 
-func (u *Updater) restartBoard() {
-	if err := exec.Command("sudo", "reboot").Run(); err != nil {
-		u.log.Error("Get error during rebooting board")
+func (u *Updater) restartService() {
+	if err := exec.Command("bash", "-c", "sudo systemctl restart skywire-visor.service").Run(); err != nil {
+		u.log.Error("Get error during restarting service")
 	}
 }
 
