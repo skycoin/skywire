@@ -134,9 +134,9 @@ func (u *Updater) Update(updateConfig UpdateConfig) (updated bool, err error) {
 	}
 	u.log.Info("Installing new version compeleted.")
 
-	u.status.Set("Updating completed. Restarting board.")
-	defer u.restartService()
-	u.log.Info("Updating completed. Restarting board.")
+	u.status.Set("Updating completed. Running autoconfig script and restart services.")
+	defer u.runningAutoconfig()
+	u.log.Info("Updating completed. Running autoconfig script and restart services.")
 
 	return true, nil
 }
@@ -217,7 +217,7 @@ func (u *Updater) aptUpdate() error {
 }
 
 func (u *Updater) aptRemove() error {
-	if err := exec.Command("bash", "-c", "sudo apt remove skywire-bin", "-y").Run(); err != nil {
+	if err := exec.Command("bash", "-c", "sudo apt remove skywire-bin -y").Run(); err != nil {
 		u.log.Error("Get error during remove skywire-bin package")
 		return err
 	}
@@ -225,15 +225,22 @@ func (u *Updater) aptRemove() error {
 }
 
 func (u *Updater) aptInstall() error {
-	if err := exec.Command("bash", "-c", "sudo apt install skywire-bin", "-y").Run(); err != nil {
+	// set NOAUTOCONFIG=true to disable autoconfig postscript
+	if err := exec.Command("bash", "-c", "export NOAUTOCONFIG=true").Run(); err != nil {
+		u.log.Error("Get error during set environment variable")
+		return err
+	}
+
+	// install skywire-bin
+	if err := exec.Command("bash", "-c", "sudo apt install skywire-bin -y").Run(); err != nil {
 		u.log.Error("Get error during installing skywire-bin package")
 		return err
 	}
 	return nil
 }
 
-func (u *Updater) restartService() {
-	if err := exec.Command("bash", "-c", "sudo systemctl restart skywire-visor.service").Run(); err != nil {
+func (u *Updater) runningAutoconfig() {
+	if err := exec.Command("bash", "-c", "sudo skywire-autoconfig").Run(); err != nil {
 		u.log.Error("Get error during restarting service")
 	}
 }
