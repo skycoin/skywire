@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"sync/atomic"
 
@@ -300,17 +299,4 @@ func latestVersion(channel Channel) (*Version, error) {
 
 func currentVersion() (*Version, error) {
 	return VersionFromString(buildinfo.Version())
-}
-
-func detachProcess(args ...string) error {
-	bin, err := exec.LookPath(args[0])
-	if err != nil {
-		return err
-	}
-
-	var procAttr os.ProcAttr
-	procAttr.Files = []*os.File{os.Stdin,
-		os.Stdout, os.Stderr}
-	p, _ := os.StartProcess(bin, args, &procAttr) //nolint
-	return p.Release()
 }
