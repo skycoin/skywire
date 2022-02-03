@@ -136,7 +136,9 @@ func (u *Updater) Update(updateConfig UpdateConfig) (updated bool, err error) {
 	u.log.Info("Installing new version compeleted.")
 
 	u.status.Set("Updating completed. Running autoconfig script and restart services.")
-	defer u.runningAutoconfig()
+	defer func() {
+		go u.runningAutoconfig()
+	}()
 	u.log.Info("Updating completed. Running autoconfig script and restart services.")
 
 	return true, nil
@@ -226,7 +228,6 @@ func (u *Updater) aptRemove() error {
 }
 
 func (u *Updater) aptInstall() error {
-	// install skywire-bin
 	if err := exec.Command("bash", "-c", "sudo NOAUTOCONFIG=true apt install skywire-bin -y").Run(); err != nil {
 		u.log.Error("Get error during installing skywire-bin package")
 		return err
@@ -235,9 +236,8 @@ func (u *Updater) aptInstall() error {
 }
 
 func (u *Updater) runningAutoconfig() {
-	err := detachProcess("bash", "-c", "sudo skywire-autoconfig")
-	if err != nil {
-		u.log.Error("Get error during restarting service")
+	if err := exec.Command("bash", "-c", "sleep 2 ; sudo skywire-autoconfig").Process.Release(); err != nil {
+		u.log.Error("Get error during installing skywire-bin package")
 	}
 }
 
