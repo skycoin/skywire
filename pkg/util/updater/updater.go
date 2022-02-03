@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"sync/atomic"
 
@@ -193,7 +194,7 @@ func (u *Updater) addRepo() error {
 	output, _ := exec.Command("bash", "-c", "cat /etc/apt/sources.list | grep https://deb.skywire.skycoin.com").Output() //nolint
 
 	if len(output) == 0 {
-		if err := exec.Command("bash", "-c", "sudo add-apt-repository 'deb https://deb.skywire.skycoin.com sid main'").Run(); err != nil {
+		if err := exec.Command("bash", "-c", "echo 'deb https://deb.skywire.skycoin.com sid main' | sudo tee -a /etc/apt/sources.list").Run(); err != nil {
 			u.log.Error("Get error during add repository")
 			return err
 		}
@@ -225,14 +226,8 @@ func (u *Updater) aptRemove() error {
 }
 
 func (u *Updater) aptInstall() error {
-	// set NOAUTOCONFIG=true to disable autoconfig postscript
-	if err := exec.Command("bash", "-c", "export NOAUTOCONFIG=true").Run(); err != nil {
-		u.log.Error("Get error during set environment variable")
-		return err
-	}
-
 	// install skywire-bin
-	if err := exec.Command("bash", "-c", "sudo apt install skywire-bin -y").Run(); err != nil {
+	if err := exec.Command("bash", "-c", "sudo NOAUTOCONFIG=true apt install skywire-bin -y").Run(); err != nil {
 		u.log.Error("Get error during installing skywire-bin package")
 		return err
 	}
@@ -240,7 +235,8 @@ func (u *Updater) aptInstall() error {
 }
 
 func (u *Updater) runningAutoconfig() {
-	if err := exec.Command("bash", "-c", "sudo skywire-autoconfig").Run(); err != nil {
+	err := detachProcess("bash", "-c", "sudo skywire-autoconfig")
+	if err != nil {
 		u.log.Error("Get error during restarting service")
 	}
 }
@@ -304,4 +300,17 @@ func latestVersion(channel Channel) (*Version, error) {
 
 func currentVersion() (*Version, error) {
 	return VersionFromString(buildinfo.Version())
+}
+
+func detachProcess(args ...string) error {
+	bin, err := exec.LookPath(args[0])
+	if err != nil {
+		return err
+	}
+
+	var procAttr os.ProcAttr
+	procAttr.Files = []*os.File{os.Stdin,
+		os.Stdout, os.Stderr}
+	p, _ := os.StartProcess(bin, args, &procAttr) //nolint
+	return p.Release()
 }
