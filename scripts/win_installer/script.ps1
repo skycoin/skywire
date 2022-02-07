@@ -1,5 +1,6 @@
 echo "Building Systray Windows Binaries..."
 if (Test-Path ".\skywire.msi") { Remove-Item ".\skywire.msi" -Recurse -Force}
+if (Test-Path ".\wintun.zip") { Remove-Item ".\wintun.zip" -Recurse -Force}
 make build-systray-windows > $null
 echo "Build Complete!"
 echo "Setting go-msi configuration..."
@@ -12,6 +13,11 @@ mv ..\..\apps\vpn-client .\build\amd64\apps\vpn-client.exe
 rm ..\..\setup-node.exe
 rm -r -fo ..\..\apps
 cp skywire.bat .\build\amd64\skywire.bat
+curl "https://www.wintun.net/builds/wintun-0.14.1.zip" -o wintun.zip
+tar -xf wintun.zip
+cp .\wintun\bin\amd64\wintun.dll .\build\amd64\wintun.dll
+rm -r -fo wintun
+rm wintun.zip
 echo "Configuration complete!"
 echo "Building msi..."
 go-msi make --msi skywire.msi --version 0.5.1 --arch amd64
