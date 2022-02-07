@@ -12,6 +12,7 @@ mv ..\..\apps\vpn-client .\build\amd64\apps\vpn-client.exe
 rm ..\..\setup-node.exe
 rm -r -fo ..\..\apps
 cp skywire.bat .\build\amd64\skywire.bat
+cp wintun.dll .\build\amd64\wintun.dll
 echo "Configuration complete!"
 echo "Building msi..."
 go-msi make --msi skywire.msi --version 0.5.1 --arch amd64
