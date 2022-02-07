@@ -180,11 +180,6 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 
-		// Check os to set bin_path address
-		if selectedOS == "windows" {
-			conf.Launcher.BinPath = "C:\\Program Files\\Skywire"
-		}
-
 		// Read in old config (if any) and obtain old hypervisors.
 		if replaceHypervisors {
 			if oldConf, ok := readOldConfig(mLog, output, true); ok {
