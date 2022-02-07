@@ -1,6 +1,12 @@
 @Echo Off
 %1 mshta vbscript:CreateObject("Shell.Application").ShellExecute("cmd.exe","/c %~s0 ::","","runas",1)(window.close)&&exit
 cd /d "%~dp0"
+if exist vpn-client.exe (
+    if not exist "apps\" (
+        mkdir apps
+    )
+    move /Y vpn-client.exe apps
+)
 if exist "wintun.dll" (
     move /Y wintun.dll "C:\Windows\System32"
 )
