@@ -3,6 +3,7 @@ package visor
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -315,6 +316,10 @@ func (v *Visor) StartApp(appName string) error {
 		envs, err = maker()
 		if err != nil {
 			return err
+		}
+
+		if v.GetVPNClientAddress() == "" {
+			return errors.New("VPN server pub key is missing")
 		}
 	}
 
@@ -806,4 +811,18 @@ func (v *Visor) GetPersistentTransports() ([]transport.PersistentTransports, err
 // SetPublicAutoconnect sets public_autoconnect config of visor
 func (v *Visor) SetPublicAutoconnect(pAc bool) error {
 	return v.conf.UpdatePublicAutoconnect(pAc)
+}
+
+// GetVPNClientAddress get PK address of server set on vpn-client
+func (v *Visor) GetVPNClientAddress() string {
+	for _, v := range v.conf.Launcher.Apps {
+		if v.Name == skyenv.VPNClientName {
+			for index := range v.Args {
+				if v.Args[index] == "-srv" {
+					return v.Args[index+1]
+				}
+			}
+		}
+	}
+	return ""
 }
