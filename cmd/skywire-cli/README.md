@@ -172,7 +172,7 @@ Available Commands:
   stop-app          Stops an app of given name
   summary           Obtains summary of visor information
   tp                Returns summary of given transport by id
-  update            Obtains summary of visor information
+  update            Update a visor
   version           Obtains version and build info of the node
 
 Flags:
