@@ -26,8 +26,10 @@ skywire command line interface
         - [set app autostart](#set-app-autostart)
         - [start app](#start-app)
         - [stop app](#stop-app)
+        - [summary](#summary)
         - [tp](#tp)
         - [version](#version)
+        - [update](#update)
     - [rtfind usage](#rtfind-usage)
     - [config usage](#config-usage)
         - [gen](#gen)
@@ -573,6 +575,14 @@ $ skywire-cli visor version
 ```
 $ skywire-cli visor version
 Version "0.4.1" built on "2021-03-19T23:26:21Z" against commit "d804a8ce"
+```
+
+#### update
+
+update
+
+```
+$ skywire-cli visor update
 ```
 
 ### rtfind usage
