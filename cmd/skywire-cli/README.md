@@ -763,22 +763,6 @@ Note that it is possible to start the visor with the hypervisor interface explic
 skywire-visor -f sky
 ```
 
-##### Example visor configuration for skybian
-
-It is the typical arrangement to set a visor to use a remote hypervisor if a local instance is not started.
-
-Determine the hypervisor public key by running the following command on the machine running the hypervisor
-
-```
-$ skywire-cli visor pk
-```
-
-substitute the hypervisor public key in the following command:
-
-```
-$ skywire-cli config gen --hypervisor-pks <hypervisor-public-key> -rs
-```
-
 ##### Example hypervisor configuration for package based installation
 
 This assumes the skywire installation is at `/opt/skywire` with binaries and apps in their own subdirectories.
@@ -899,7 +883,7 @@ This assumes the skywire installation is at `/opt/skywire` with binaries and app
 
 The configuration is written (or rewritten)
 
-##### Example - visor configuration for package based installation
+##### Example remote hypervisor configuration for package based installation
 
 It is the typical arrangement to set a visor to use a remote hypervisor if a local instance is not started.
 
