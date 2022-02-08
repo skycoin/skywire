@@ -221,7 +221,7 @@ run: ## Run skywire visor with skywire-config.json, and start a browser if runni
 	./skywire-visor -c ./skywire-config.json
 
 ## Run skywire from source, without compiling binaries - requires skywire cloned
-run-source: #to standard gopath $HOME/go/src/github.com/skycoin/skywire
+run-source:
 	test -d apps && rm -r apps || true
 	ln -s scripts/_apps apps
 	chmod +x apps/*
