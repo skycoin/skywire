@@ -2,9 +2,7 @@ package config
 
 import (
 	"encoding/json"
-	"io"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +13,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/internal/netutil"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -145,7 +144,7 @@ var genConfigCmd = &cobra.Command{
 		}
 
 		if bestProtocol {
-			if dmsgProtocol() {
+			if netutil.LocalProtocol() {
 				dmsgHTTP = true
 			}
 		}
@@ -271,19 +270,4 @@ func readOldConfig(log *logging.MasterLogger, confPath string, replace bool) (*v
 	}
 
 	return conf, true
-}
-
-func dmsgProtocol() bool {
-	resp, err := http.Get("https://ipinfo.io/country")
-	if err != nil {
-		return false
-	}
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return false
-	}
-	if string(respBody)[:2] == "CN" {
-		return true
-	}
-	return false
 }
