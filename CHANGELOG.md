@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - added `--disable-apps` flag to `skywire-cli config gen`
 - added `--disable-auth` and `--enable-auth` flags to `skywire-cli config gen`
 - added `--best-protocol` flag to `skywire-cli config gen`
+- added `skywire-cli visor vpn-ui` and `skywire-cli visor vpn-url` commands
 ## 0.5.0
 
 ### Changed
