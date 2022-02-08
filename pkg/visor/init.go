@@ -997,9 +997,14 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 	if err != nil {
 		return err
 	}
+	cCtx, cancel := context.WithCancel(context.Background())
 	connector := servicedisc.MakeConnector(conf, 3, v.tpM, v.serviceDisc.Client, pIP, log, v.MasterLogger())
-	go connector.Run(ctx) //nolint:errcheck
+	go connector.Run(cCtx) //nolint:errcheck
 
+	v.pushCloseStack("public_autoconnect", func() error {
+		cancel()
+		return err
+	})
 	return nil
 }
 
