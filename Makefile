@@ -224,6 +224,7 @@ run: ## Run skywire visor with skywire-config.json, and start a browser if runni
 run-source: #to standard gopath $HOME/go/src/github.com/skycoin/skywire
 	test -d apps && rm -r apps || true
 	ln -s scripts/_apps apps
+	chmod +x apps/*
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -ibro ./skywire-config.json
 	go run ./cmd/skywire-visor/skywire-visor.go -c ./skywire-config.json || true
 
