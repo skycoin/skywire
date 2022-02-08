@@ -10,7 +10,7 @@ mkdir -p ".\build\amd64\apps" > $null
 mv ..\..\skywire-visor.exe .\build\amd64\skywire-visor.exe
 mv ..\..\skywire-cli.exe .\build\amd64\skywire-cli.exe
 mv ..\..\apps\vpn-client .\build\amd64\apps\vpn-client.exe
-cp ..\..\dmsghttp-config.json .\build\amd64\apps\dmsghttp-config.json
+cp ..\..\dmsghttp-config.json .\build\amd64\dmsghttp-config.json
 rm ..\..\setup-node.exe
 rm -r -fo ..\..\apps
 cp skywire.bat .\build\amd64\skywire.bat
