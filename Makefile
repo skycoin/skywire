@@ -221,12 +221,12 @@ run: ## Run skywire visor with skywire-config.json, and start a browser if runni
 	./skywire-visor -c ./skywire-config.json
 
 ## Run skywire from source, without compiling binaries - requires skywire cloned
-run-source: #to standard gopath $HOME/go/src/github.com/skycoin/skywire
+run-source:
 	test -d apps && rm -r apps || true
-	ln -s _apps apps
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -iro ./skywire-config.json
+	ln -s scripts/_apps apps
+	chmod +x apps/*
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -ibro ./skywire-config.json
 	go run ./cmd/skywire-visor/skywire-visor.go -c ./skywire-config.json || true
-
 
 lint-ui:  ## Lint the UI code
 	cd $(MANAGER_UI_DIR) && npm run lint
