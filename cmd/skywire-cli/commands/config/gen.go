@@ -87,7 +87,7 @@ var genConfigCmd = &cobra.Command{
 
 		//set output for package and skybian configs
 		if packageConfig {
-			configName := "skywire-config.json"
+			configName := "skywire-visor.json"
 			if hypervisor {
 				configName = "skywire.json"
 			}
