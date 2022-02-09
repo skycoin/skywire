@@ -18,7 +18,7 @@ func init() {
 
 var updateCmd = &cobra.Command{
 	Use:   "update",
-	Short: "Obtains summary of visor information",
+	Short: "Update the local visor",
 	Run: func(_ *cobra.Command, _ []string) {
 		// Set channel for check/get available update
 		channel := updater.ChannelStable

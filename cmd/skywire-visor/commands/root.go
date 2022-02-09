@@ -10,7 +10,6 @@ import (
 	"net/http"
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -23,7 +22,6 @@ import (
 	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire/pkg/restart"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/syslog"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
@@ -213,7 +211,7 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 		}
 
 		if confPath == "" {
-			confPath = filepath.Join(skyenv.PackageSkywirePath(), defaultConfigName)
+			confPath = defaultConfigName
 		}
 
 		fallthrough
