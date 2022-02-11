@@ -1,7 +1,7 @@
 ## Windows installer
 
 ### Requirments
-- windows machine
+- Windows Machine
 - Install **chocolatey** by its instruction [here](https://chocolatey.org/install).
 - Install **GNU Make** by choco
   ```
@@ -20,6 +20,7 @@ You can build **skywire.msi** by
 ```
 make win-installer
 ```
+__Note:__ _Make sure cloned this repo in `C:\` (or other partition that Windows installed)._
 
 ### Install
 Double click the created installer to install skywire.
