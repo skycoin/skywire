@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -21,6 +22,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/toqueteos/webbrowser"
 
+	"github.com/skycoin/skywire/internal/netutil"
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/syslog"
 	"github.com/skycoin/skywire/pkg/visor"
@@ -103,6 +105,28 @@ func runVisor(args []string) {
 	defer stopPProf()
 
 	conf := initConfig(log, args, confPath)
+
+	if netutil.LocalProtocol() {
+		var dmsgHTTPServersList visorconfig.DmsgHTTPServers
+		serversListJSON, err := ioutil.ReadFile("dmsghttp-config.json")
+		if err != nil {
+			log.WithError(err).Fatal("Failed to read servers.json file.")
+		}
+		err = json.Unmarshal(serversListJSON, &dmsgHTTPServersList)
+		if err != nil {
+			log.WithError(err).Fatal("Error during parsing servers list")
+		}
+
+		conf.Dmsg.Servers = dmsgHTTPServersList.Prod.DMSGServers
+		conf.Dmsg.Discovery = dmsgHTTPServersList.Prod.DMSGDiscovery
+		conf.Transport.AddressResolver = dmsgHTTPServersList.Prod.AddressResolver
+		conf.Transport.Discovery = dmsgHTTPServersList.Prod.TransportDiscovery
+		conf.UptimeTracker.Addr = dmsgHTTPServersList.Prod.UptimeTracker
+		conf.Routing.RouteFinder = dmsgHTTPServersList.Prod.RouteFinder
+		conf.Launcher.ServiceDisc = dmsgHTTPServersList.Prod.ServiceDiscovery
+
+		conf.Flush() //nolint
+	}
 
 	vis, ok := visor.NewVisor(conf, restartCtx)
 	if !ok {
@@ -223,7 +247,7 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 				WithField("filepath", confPath).
 				Fatal("Failed to read config file.")
 		}
-		defer func() {
+		defer func() { //nolint
 			if err := f.Close(); err != nil {
 				log.WithError(err).Error("Closing config file resulted in error.")
 			}
