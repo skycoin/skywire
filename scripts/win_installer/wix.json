@@ -10,7 +10,8 @@
       "build/amd64/apps/vpn-client.exe",
       "build/amd64/skywire.bat",
       "ico.ico",
-      "build/amd64/wintun.dll"
+      "build/amd64/wintun.dll",
+      "build/amd64/dmsghttp-config.json"
     ]
   },
   "env": {
