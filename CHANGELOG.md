@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - added `--best-protocol` flag to `skywire-cli config gen`
 - added `skywire-cli visor vpn-ui` and `skywire-cli visor vpn-url` commands
 - added dsmghttp migration to skywire-visor starting
+- added network monitor PKs to skyenv
 ## 0.5.0
 
 ### Changed
