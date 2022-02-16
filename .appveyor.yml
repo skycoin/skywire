@@ -100,23 +100,6 @@ for:
     build_script:
       - make build
 
-    after_build:
-      - tar -cvzf skywire-$APPVEYOR_REPO_TAG_NAME-$APPVEYOR_JOB_NAME.tar.gz ./apps/* ./skywire-visor ./skywire-cli ./setup-node
-
-    artifacts:
-      - path: skywire-$(APPVEYOR_REPO_TAG_NAME)-$(APPVEYOR_JOB_NAME).tar.gz
-        name: deploy
-
-    deploy:
-      - provider: GitHub
-        release: $(APPVEYOR_REPO_TAG_NAME)
-        auth_token:
-          secure: ZrbNBE2wSfGvHzEq5GqEAUmNy7myDIl7KK05CKlZdQfieV7XdIAPXpkdHNEyZbvT
-        draft: true
-        artifact: deploy
-        on:
-          APPVEYOR_REPO_TAG: true
-          
   - # Windows (Release)
     skip_non_tags: true
     matrix:
