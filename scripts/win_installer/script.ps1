@@ -1,7 +1,7 @@
 echo "Building Systray Windows Binaries..."
 if (Test-Path ".\skywire.msi") { Remove-Item ".\skywire.msi" -Recurse -Force}
 if (Test-Path ".\wintun.zip") { Remove-Item ".\wintun.zip" -Recurse -Force}
-make build-systray-windows > $null
+make build-systray-windows BUILDTAG="Windows" > $null
 echo "Build Complete!"
 echo "Setting go-msi configuration..."
 cd .\scripts\win_installer
@@ -21,7 +21,7 @@ rm -r -fo wintun
 rm wintun.zip
 echo "Configuration complete!"
 echo "Building msi..."
-go-msi make --msi skywire.msi --version 0.5.1 --arch amd64
+go-msi make --msi skywire.msi --version 0.6.0 --arch amd64
 mv skywire.msi ../../skywire.msi
 Remove-Item ".\build" -Recurse -Force
 cd ../../
