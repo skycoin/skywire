@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - detecting OS in runtime removed
 - skybian flag `-s` removed from `skywire-cli config gen`
+- config updated to `v1.1.1`
 
 
 ### Added
