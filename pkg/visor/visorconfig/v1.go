@@ -38,7 +38,7 @@ const V101Name = "v1.0.1"
 // Changed port field in dmsgpty to dmsg_port
 const V110Name = "v1.1.0"
 
-// V111Name is the semantic version string for v1.0.1.
+// V111Name is the semantic version string for v1.1.1.
 // Added support for dmsghttp
 // Added servers field in dmsg for dmsghttp
 const V111Name = "v1.1.1"
