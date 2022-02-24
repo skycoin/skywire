@@ -4,6 +4,7 @@ skychat app for skywire visor
 package main
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"flag"
@@ -17,11 +18,13 @@ import (
 	"time"
 
 	ipc "github.com/james-barrow/golang-ipc"
+
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cipher"
+	dmsgnetutil "github.com/skycoin/dmsg/netutil"
+
 	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/internal/netutil"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -35,7 +38,7 @@ const (
 
 var log = logging.MustGetLogger("chat")
 var addr = flag.String("addr", ":8001", "address to bind")
-var r = netutil.NewRetrier(50*time.Millisecond, 5, 2, log)
+var r = dmsgnetutil.NewRetrier(log, 50*time.Millisecond, dmsgnetutil.DefaultMaxBackoff, 5, 2)
 
 var (
 	appC     *app.Client
@@ -74,9 +77,11 @@ func main() {
 		}
 		go handleIPCSignal(ipcClient)
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	http.Handle("/", http.FileServer(getFileSystem()))
-	http.HandleFunc("/message", messageHandler)
+	http.HandleFunc("/message", messageHandler(ctx))
 	http.HandleFunc("/sse", sseHandler)
 
 	fmt.Print("Serving HTTP on", *addr)
@@ -140,55 +145,58 @@ func handleConn(conn net.Conn) {
 	}
 }
 
-func messageHandler(w http.ResponseWriter, req *http.Request) {
-	data := map[string]string{}
-	if err := json.NewDecoder(req.Body).Decode(&data); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.Request) {
+	return func(w http.ResponseWriter, req *http.Request) {
 
-	pk := cipher.PubKey{}
-	if err := pk.UnmarshalText([]byte(data["recipient"])); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	addr := appnet.Addr{
-		Net:    netType,
-		PubKey: pk,
-		Port:   1,
-	}
-	connsMu.Lock()
-	conn, ok := conns[pk]
-	connsMu.Unlock()
-
-	if !ok {
-		var err error
-		err = r.Do(func() error {
-			conn, err = appC.Dial(addr)
-			return err
-		})
-		if err != nil {
+		data := map[string]string{}
+		if err := json.NewDecoder(req.Body).Decode(&data); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
+		pk := cipher.PubKey{}
+		if err := pk.UnmarshalText([]byte(data["recipient"])); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		addr := appnet.Addr{
+			Net:    netType,
+			PubKey: pk,
+			Port:   1,
+		}
 		connsMu.Lock()
-		conns[pk] = conn
+		conn, ok := conns[pk]
 		connsMu.Unlock()
 
-		go handleConn(conn)
-	}
+		if !ok {
+			var err error
+			err = r.Do(ctx, func() error {
+				conn, err = appC.Dial(addr)
+				return err
+			})
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
 
-	_, err := conn.Write([]byte(data["message"]))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+			connsMu.Lock()
+			conns[pk] = conn
+			connsMu.Unlock()
 
-		connsMu.Lock()
-		delete(conns, pk)
-		connsMu.Unlock()
+			go handleConn(conn)
+		}
 
-		return
+		_, err := conn.Write([]byte(data["message"]))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+
+			connsMu.Lock()
+			delete(conns, pk)
+			connsMu.Unlock()
+
+			return
+		}
 	}
 }
 
