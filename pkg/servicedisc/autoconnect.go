@@ -106,7 +106,7 @@ func (a *autoconnector) tryEstablishTransport(ctx context.Context, pk cipher.Pub
 }
 
 func (a *autoconnector) fetchPubAddresses(ctx context.Context) ([]cipher.PubKey, error) {
-	retrier := dmsgnetutil.NewRetrier(a.log, fetchServicesDelay, dmsgnetutil.DefaultMaxBackoff, 5, 3)
+	retrier := dmsgnetutil.NewRetrier(a.log, fetchServicesDelay, 0, 5, 3)
 	var services []Service
 	fetch := func() (err error) {
 		// "return" services up from the closure
