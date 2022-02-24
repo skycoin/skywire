@@ -13,10 +13,11 @@ import (
 	"time"
 
 	"github.com/skycoin/dmsg/cipher"
+	dmsgnetutil "github.com/skycoin/dmsg/netutil"
+
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/httpauth"
-	"github.com/skycoin/skywire/internal/netutil"
 )
 
 //go:generate mockery -name APIClient -case underscore -inpkg
@@ -55,7 +56,7 @@ func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.Client
 
 	log := mLogger.PackageLogger("utclient")
 
-	retrier := netutil.NewRetrier(createRetryDelay, 10, 2, log)
+	retrier := dmsgnetutil.NewRetrier(log, createRetryDelay, dmsgnetutil.DefaultMaxBackoff, 10, 2)
 	retrierFunc := func() error {
 		client, err = httpauth.NewClient(context.Background(), addr, pk, sk, httpC, clientPublicIP, mLogger)
 		if err != nil {
@@ -64,7 +65,7 @@ func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.Client
 		return nil
 	}
 
-	if err := retrier.Do(retrierFunc); err != nil {
+	if err := retrier.Do(context.Background(), retrierFunc); err != nil {
 		return nil, err
 	}
 
