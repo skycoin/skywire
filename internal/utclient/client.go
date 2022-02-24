@@ -14,7 +14,6 @@ import (
 
 	"github.com/skycoin/dmsg/cipher"
 	dmsgnetutil "github.com/skycoin/dmsg/netutil"
-
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/httpauth"
