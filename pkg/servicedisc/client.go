@@ -16,10 +16,11 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cipher"
+	dmsgnetutil "github.com/skycoin/dmsg/netutil"
+
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/httpauth"
-	nu "github.com/skycoin/skywire/internal/netutil"
 	"github.com/skycoin/skywire/pkg/util/netutil"
 )
 
@@ -282,7 +283,7 @@ func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
 // it performs exponential backoff in case of errors during register, unless
 // the error is unrecoverable from
 func (c *HTTPClient) Register(ctx context.Context) error {
-	retrier := nu.NewRetrier(updateRetryDelay, 0, 2, c.log).WithErrWhitelist(ErrVisorUnreachable)
+	retrier := dmsgnetutil.NewRetrier(c.log, updateRetryDelay, dmsgnetutil.DefaultMaxBackoff, 0, 2).WithErrWhitelist(ErrVisorUnreachable)
 	run := func() error {
 		err := c.RegisterEntry(ctx)
 
@@ -297,5 +298,5 @@ func (c *HTTPClient) Register(ctx context.Context) error {
 		}
 		return nil
 	}
-	return retrier.Do(run)
+	return retrier.Do(ctx, run)
 }
