@@ -56,7 +56,7 @@ func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.Client
 
 	log := mLogger.PackageLogger("utclient")
 
-	retrier := dmsgnetutil.NewRetrier(log, createRetryDelay, dmsgnetutil.DefaultMaxBackoff, 10, 2)
+	retrier := dmsgnetutil.NewRetrier(log, createRetryDelay, 0, 10, 2)
 	retrierFunc := func() error {
 		client, err = httpauth.NewClient(context.Background(), addr, pk, sk, httpC, clientPublicIP, mLogger)
 		if err != nil {
