@@ -17,7 +17,6 @@ import (
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cipher"
 	dmsgnetutil "github.com/skycoin/dmsg/netutil"
-
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/httpauth"
@@ -293,7 +292,6 @@ func (c *HTTPClient) Register(ctx context.Context) error {
 		}
 
 		if err != nil {
-			c.log.WithError(err).Warn("Failed to register service entry in discovery. Retrying...")
 			return err
 		}
 		return nil
