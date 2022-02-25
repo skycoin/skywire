@@ -108,7 +108,7 @@ func runVisor(args []string) {
 
 	if netutil.LocalProtocol() {
 		var dmsgHTTPServersList visorconfig.DmsgHTTPServers
-		serversListJSON, err := ioutil.ReadFile("dmsghttp-config.json")
+		serversListJSON, err := ioutil.ReadFile(conf.DMSGHTTPPath)
 		if err != nil {
 			log.WithError(err).Fatal("Failed to read servers.json file.")
 		}
