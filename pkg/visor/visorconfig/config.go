@@ -50,6 +50,7 @@ func MakeBaseConfig(common *Common) *V1 {
 	conf.StunServers = skyenv.GetStunServers()
 	conf.ShutdownTimeout = DefaultTimeout
 	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
+	conf.DMSGHTTPPath = skyenv.DefaultDMSGHTTPPath
 	return conf
 }
 
@@ -132,6 +133,7 @@ func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 	}
 	conf.LocalPath = skyenv.PackageAppLocalPath()
 	conf.Launcher.BinPath = skyenv.PackageAppBinPath()
+	conf.DMSGHTTPPath = skyenv.PackageDMSGHTTPPath()
 
 	if conf.Hypervisor != nil {
 		conf.Hypervisor.EnableAuth = skyenv.DefaultPackageEnableAuth
