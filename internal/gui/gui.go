@@ -60,7 +60,7 @@ func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 
 		initOpenVPNLinkBtn(conf)
 		initAdvancedButton(conf)
-		//initVpnClientBtn()
+		initVpnClientBtn()
 		initQuitBtn()
 
 		//go updateVPNConnectionStatus(conf, doneCh)
@@ -168,9 +168,13 @@ func initOpenVPNLinkBtn(vc *visorconfig.V1) {
 	}()
 }
 
-//func initVpnClientBtn() {
-//	mVPNClient = systray.AddMenuItem("VPN", "VPN Client Connection")
-//}
+func initVpnClientBtn() {
+	mVPNClient := systray.AddMenuItem("VPN", "VPN Client Connection")
+	mVPNStatus := mVPNClient.AddSubMenuItem("Status", "VPN Client Status")
+	greenCircle, _ := iconFS.ReadFile("icons/green.png")
+	mVPNStatus.SetIcon(greenCircle)
+	mVPNClient.SetIcon(greenCircle)
+}
 
 //func handleVpnClientButton(conf *visorconfig.V1) {
 //	//mVPNClient.AddSubMenuItem()
