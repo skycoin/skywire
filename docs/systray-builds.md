@@ -23,6 +23,7 @@ $ sudo dnf install gtk3-devel libappindicator-gtk3-devel
 ```bash
 $ sudo pacman -S libappindicator-gtk3 gtk3
 ```
+also need install `libayatana-appindicator`. You can install it by [AUR](https://aur.archlinux.org/packages/libayatana-appindicator).
 
 Other distros might require the installation of said library in their own respective name.
 
