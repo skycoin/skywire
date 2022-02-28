@@ -62,7 +62,7 @@ github.com/getlantern/hidden
 # github.com/getlantern/ops v0.0.0-20200403153110-8476b16edcd6
 ## explicit
 github.com/getlantern/ops
-# github.com/getlantern/systray v1.1.0
+# github.com/getlantern/systray v1.2.0
 ## explicit; go 1.13
 github.com/getlantern/systray
 # github.com/go-chi/chi v4.1.2+incompatible
