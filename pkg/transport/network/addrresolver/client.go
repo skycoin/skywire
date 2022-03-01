@@ -243,7 +243,7 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
+		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, httpauth.ExtractError(resp.Body))
 	}
 
 	return nil
@@ -270,7 +270,7 @@ func (c *httpClient) delBindSTCPR(ctx context.Context) error {
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
+		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, httpauth.ExtractError(resp.Body))
 	}
 
 	c.log.Debugf("delBindSTCPR: Deleted bind pk: %v from Address resolver successfully", c.pk.String())
@@ -368,7 +368,7 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return VisorData{}, fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
+		return VisorData{}, fmt.Errorf("status: %d, error: %w", resp.StatusCode, httpauth.ExtractError(resp.Body))
 	}
 
 	rawBody, err := ioutil.ReadAll(resp.Body)
@@ -561,20 +561,4 @@ func (c *httpClient) isClosed() bool {
 	default:
 		return false
 	}
-}
-
-// extractError returns the decoded error message from Body.
-func extractError(r io.Reader) error {
-	var apiError Error
-
-	body, err := ioutil.ReadAll(r)
-	if err != nil {
-		return err
-	}
-
-	if err := json.Unmarshal(body, &apiError); err != nil {
-		return errors.New(string(body))
-	}
-
-	return errors.New(apiError.Error)
 }
