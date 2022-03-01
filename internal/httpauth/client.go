@@ -23,6 +23,11 @@ const (
 	invalidNonceErrorMessage = "SW-Nonce does not match"
 )
 
+// Error is the object returned to the client when there's an error.
+type Error struct {
+	Error string `json:"error"`
+}
+
 // NextNonceResponse represents a ServeHTTP response for json encoding
 type NextNonceResponse struct {
 	Edge      cipher.PubKey `json:"edge"`
@@ -164,7 +169,7 @@ func (c *Client) Nonce(ctx context.Context, key cipher.PubKey) (Nonce, error) {
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("error getting current nonce: status: %d <- %v", resp.StatusCode, extractError(resp.Body))
+		return 0, fmt.Errorf("error getting current nonce: status: %d <- %v", resp.StatusCode, extractHTTPError(resp.Body))
 	}
 
 	var nr NextNonceResponse
@@ -260,8 +265,8 @@ func sanitizedAddr(addr string) string {
 	return u.String()
 }
 
-// extractError returns the decoded error message from Body.
-func extractError(r io.Reader) error {
+// extractHTTPError returns the decoded error message from Body.
+func extractHTTPError(r io.Reader) error {
 	var serverError HTTPResponse
 
 	body, err := ioutil.ReadAll(r)
@@ -274,4 +279,20 @@ func extractError(r io.Reader) error {
 	}
 
 	return errors.New(serverError.Error.Message)
+}
+
+// ExtractError returns the decoded error message from Body.
+func ExtractError(r io.Reader) error {
+	var apiError Error
+
+	body, err := ioutil.ReadAll(r)
+	if err != nil {
+		return err
+	}
+
+	if err := json.Unmarshal(body, &apiError); err != nil {
+		return errors.New(string(body))
+	}
+
+	return errors.New(apiError.Error)
 }
