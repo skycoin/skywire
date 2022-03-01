@@ -85,27 +85,27 @@ func NewClient(ctx context.Context, addr string, key cipher.PubKey, sec cipher.S
 	return c, nil
 }
 
-// Header returns headers for httpauth.
-func (c *Client) Header() (http.Header, error) {
-	nonce := c.getCurrentNonce()
-	body := make([]byte, 0)
-	sign, err := Sign(body, nonce, c.sec)
-	if err != nil {
-		return nil, err
-	}
+// // Header returns headers for httpauth.
+// func (c *Client) Header() (http.Header, error) {
+// 	nonce := c.getCurrentNonce()
+// 	body := make([]byte, 0)
+// 	sign, err := Sign(body, nonce, c.sec)
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	header := make(http.Header)
+// 	header := make(http.Header)
 
-	// use nonce, later, if no err from req update such nonce
-	header.Set("SW-Nonce", strconv.FormatUint(uint64(nonce), 10))
-	header.Set("SW-Sig", sign.Hex())
-	header.Set("SW-Public", c.key.Hex())
-	if c.clientPublicIP != "" {
-		header.Set("SW-PublicIP", c.clientPublicIP)
-	}
+// 	// use nonce, later, if no err from req update such nonce
+// 	header.Set("SW-Nonce", strconv.FormatUint(uint64(nonce), 10))
+// 	header.Set("SW-Sig", sign.Hex())
+// 	header.Set("SW-Public", c.key.Hex())
+// 	if c.clientPublicIP != "" {
+// 		header.Set("SW-PublicIP", c.clientPublicIP)
+// 	}
 
-	return header, nil
-}
+// 	return header, nil
+// }
 
 // Do performs a new authenticated Request and returns the response. Internally, if the request was
 // successful nonce is incremented
@@ -200,21 +200,21 @@ func (c *Client) Nonce(ctx context.Context, key cipher.PubKey) (Nonce, error) {
 	return nr.NextNonce, nil
 }
 
-// ReuseClient returns HTTP client that reuses port for dialing.
-func (c *Client) ReuseClient() *http.Client {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+// // ReuseClient returns HTTP client that reuses port for dialing.
+// func (c *Client) ReuseClient() *http.Client {
+// 	c.mu.Lock()
+// 	defer c.mu.Unlock()
 
-	return c.reuseClient
-}
+// 	return c.reuseClient
+// }
 
-// SetTransport sets transport for HTTP client that reuses port for dialing.
-func (c *Client) SetTransport(transport http.RoundTripper) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+// // SetTransport sets transport for HTTP client that reuses port for dialing.
+// func (c *Client) SetTransport(transport http.RoundTripper) {
+// 	c.mu.Lock()
+// 	defer c.mu.Unlock()
 
-	c.reuseClient.Transport = transport
-}
+// 	c.reuseClient.Transport = transport
+// }
 
 // SetNonce sets client current nonce to given nonce
 func (c *Client) SetNonce(n Nonce) {
