@@ -34,6 +34,11 @@ environment:
   - job_name: windows-amd64
     appveyor_build_worker_image: Visual Studio 2019
     GOARCH: amd64
+
+  - job_name: DockerDeployMaster
+    appveyor_build_worker_image: ubuntu2004
+  - job_name: DockerDeployDevelop
+    appveyor_build_worker_image: ubuntu2004
   
 for:
   - # Linux and MacOS
@@ -95,23 +100,6 @@ for:
     build_script:
       - make build
 
-    after_build:
-      - tar -cvzf skywire-$APPVEYOR_REPO_TAG_NAME-$APPVEYOR_JOB_NAME.tar.gz ./apps/* ./skywire-visor ./skywire-cli ./setup-node
-
-    artifacts:
-      - path: skywire-$(APPVEYOR_REPO_TAG_NAME)-$(APPVEYOR_JOB_NAME).tar.gz
-        name: deploy
-
-    deploy:
-      - provider: GitHub
-        release: $(APPVEYOR_REPO_TAG_NAME)
-        auth_token:
-          secure: ZrbNBE2wSfGvHzEq5GqEAUmNy7myDIl7KK05CKlZdQfieV7XdIAPXpkdHNEyZbvT
-        draft: true
-        artifact: deploy
-        on:
-          APPVEYOR_REPO_TAG: true
-          
   - # Windows (Release)
     skip_non_tags: true
     matrix:
@@ -128,3 +116,29 @@ for:
 
     build_script:
       - make build
+    
+  - # Docker Deploy (Master)
+    build: off
+    matrix:
+      only:
+        - job_name: DockerDeployMaster
+    branches:
+      only:
+        - master
+    before_deploy:
+      - ./ci_scripts/docker-push.sh -t master -p
+    deploy_script:
+      - echo "Master Docker Push Complete!"
+
+  - # Docker Deploy (Develop)
+    build: off
+    matrix:
+      only:
+        - job_name: DockerDeployDevelop
+    branches:
+      only:
+        - develop
+    before_deploy:
+      - ./ci_scripts/docker-push.sh -t develop -p
+    deploy_script:
+      - echo "Develop Docker Push Complete!"

@@ -9,8 +9,6 @@
 VERSION := $(shell git describe)
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 COMMIT := $(shell git rev-list -1 HEAD)
-BRANCH := latest
-
 
 PROJECT_BASE := github.com/skycoin/skywire
 DMSG_BASE := github.com/skycoin/dmsg
@@ -209,11 +207,11 @@ build-deploy: ## Build for deployment Docker images
 github-release:
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags | cut -c 2-))
 	sed '/^## ${GITHUB_TAG}$$/,/^## .*/!d;//d;/^$$/d' ./CHANGELOG.md > releaseChangelog.md
-	goreleaser --rm-dist --release-notes releaseChangelog.md 
+	goreleaser --rm-dist --release-notes releaseChangelog.md
 
 
 build-docker: ## Build docker image
-	./ci_scripts/docker-push.sh -t ${BRANCH} -b
+	./ci_scripts/docker-push.sh -t latest -b
 
 # Manager UI
 install-deps-ui:  ## Install the UI dependencies
@@ -221,6 +219,14 @@ install-deps-ui:  ## Install the UI dependencies
 
 run: ## Run skywire visor with skywire-config.json, and start a browser if running a hypervisor
 	./skywire-visor -c ./skywire-config.json
+
+## Run skywire from source, without compiling binaries - requires skywire cloned
+run-source:
+	test -d apps && rm -r apps || true
+	ln -s scripts/_apps apps
+	chmod +x apps/*
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -ibro ./skywire-config.json
+	go run ./cmd/skywire-visor/skywire-visor.go -c ./skywire-config.json || true
 
 lint-ui:  ## Lint the UI code
 	cd $(MANAGER_UI_DIR) && npm run lint
@@ -253,6 +259,9 @@ mac-installer: ## Create signed and notarized application, run make mac-installe
 
 mac-installer-help: ## Show installer creation help
 	./scripts/mac_installer/create_installer.sh -h
+
+win-installer:
+	@powershell '.\scripts\win_installer\script.ps1'
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
