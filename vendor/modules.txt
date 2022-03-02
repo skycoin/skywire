@@ -69,6 +69,10 @@ github.com/getlantern/systray
 ## explicit
 github.com/go-chi/chi
 github.com/go-chi/chi/middleware
+# github.com/go-chi/chi/v5 v5.0.8-0.20220103230436-7dbe9a0bd10f
+## explicit; go 1.14
+github.com/go-chi/chi/v5
+github.com/go-chi/chi/v5/middleware
 # github.com/go-ole/go-ole v1.2.4
 ## explicit; go 1.12
 github.com/go-ole/go-ole
