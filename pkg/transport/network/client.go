@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync"
 
 	"github.com/skycoin/dmsg"
@@ -150,6 +151,12 @@ func (c *genericClient) acceptTransports(lis net.Listener) {
 			if errors.Is(err, io.EOF) {
 				continue // likely it's a dummy connection from service discovery
 			}
+
+			if c.isClosed() && (errors.Is(err, io.ErrClosedPipe) || strings.Contains(err.Error(), "use of closed network connection")) {
+				c.log.Info("Cleanly stopped serving.")
+				return
+			}
+
 			c.log.Warnf("failed to accept incoming connection: %v", err)
 			if !handshake.IsHandshakeError(err) {
 				c.log.Warnf("stopped serving")
