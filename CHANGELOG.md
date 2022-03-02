@@ -4,11 +4,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## 0.7.0
+
+### Changed
+
+
+### Added
+- added `add-rhv` and `disable-rhv` flags to `skywire-visor` for adding remote hypervisor PK and disable remote hypervisor PK(s) on config file
+
 ## 0.6.0
 
 ### Changed
 
-- 
+- detecting OS in runtime removed
+- skybian flag `-s` removed from `skywire-cli config gen`
 
 
 ### Added
@@ -22,7 +31,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - added `-d,--dmsghttp` flag to `skywire-cli config gen`
 - added `dmsgdirect` client to connect to services over dmsg
 - added `-f` flag to skywire-visor to configure a visor to expose hypervisor UI with default values at runtime
-- added `host-keeper` update routine on starting visor process.
+- added `--public-rpc` falg to `skywire-cli config gen`
+- added `--vpn-server-enable` falg to `skywire-cli config gen`
+- added `--os` flag to `skywire-cli config gen`
+- added `--disable-apps` flag to `skywire-cli config gen`
+- added `--disable-auth` and `--enable-auth` flags to `skywire-cli config gen`
+- added `--best-protocol` flag to `skywire-cli config gen`
+- added `skywire-cli visor vpn-ui` and `skywire-cli visor vpn-url` commands
+- added dsmghttp migration to skywire-visor starting
+- added network monitor PKs to skyenv
 ## 0.5.0
 
 ### Changed

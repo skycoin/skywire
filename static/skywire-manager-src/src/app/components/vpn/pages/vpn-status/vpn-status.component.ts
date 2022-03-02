@@ -73,18 +73,12 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
   ipInfoAllowed: boolean;
   // Public IP of the machine running the app.
   currentIp: string;
-  // IP the machine running the app had the last time it was checked.
-  previousIp: string;
   // Country of the public IP of the machine running the app.
   ipCountry: string;
   // If the current IP is being checked.
   loadingCurrentIp = true;
-  // If the country of the current IP is being checked.
-  loadingIpCountry = true;
   // If there was a problem the last time the code tried to get the current IP.
   problemGettingIp = false;
-  // If there was a problem the last time the code tried to get the country of the current IP.
-  problemGettingIpCountry = false;
   // Moment in which the IP was refreshed for the last time.
   private lastIpRefresDate = 0;
   // Pk of the local visor.
@@ -482,7 +476,7 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
 
     if (!ignoreTimeCheck) {
       // Cancel the operation if the IP or its country is already being obtained.
-      if (this.loadingCurrentIp || this.loadingIpCountry) {
+      if (this.loadingCurrentIp) {
         this.snackbarService.showWarning('vpn.status-page.data.ip-refresh-loading-warning');
 
         return;
@@ -507,73 +501,26 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
 
     // Indicate that the IP and its country are being loaded.
     this.loadingCurrentIp = true;
-    this.loadingIpCountry = true;
 
-    this.previousIp = this.currentIp;
-
-    // Get the IP.
-    this.ipSubscription = this.vpnClientService.getIp().subscribe(response => {
+    // Get the IP and country.
+    this.ipSubscription = this.vpnClientService.getIpData().subscribe(response => {
       this.loadingCurrentIp = false;
       this.lastIpRefresDate = Date.now();
 
       if (response) {
-        // Update the IP.
+        // Update the data.
         this.problemGettingIp = false;
-        this.currentIp = response;
-
-        // Update the country, if no country has been loaded or the IP changed.
-        if (!this.ipCountry || this.previousIp !== this.currentIp || this.problemGettingIpCountry) {
-          this.getIpCountry();
-        } else {
-          this.loadingIpCountry = false;
-        }
+        this.currentIp = response[0];
+        this.ipCountry = response[1];
       } else {
         // Indicate that there was a problem.
         this.problemGettingIp = true;
-        this.problemGettingIpCountry = true;
-        this.loadingIpCountry = false;
       }
     }, () => {
       // Indicate that there was a problem.
       this.lastIpRefresDate = Date.now();
       this.loadingCurrentIp = false;
-      this.loadingIpCountry = false;
       this.problemGettingIp = false;
-      this.problemGettingIpCountry = true;
-    });
-  }
-
-  /**
-   * Checks and updates the country of the public IP of the machine running the app. It was made
-   * to be called from getIp().
-   */
-  private getIpCountry() {
-    if (!this.ipInfoAllowed) {
-      return;
-    }
-
-    if (this.ipSubscription) {
-      this.ipSubscription.unsubscribe();
-    }
-
-    this.loadingIpCountry = true;
-
-    // Get the country.
-    this.ipSubscription = this.vpnClientService.getIpCountry(this.currentIp).subscribe(response => {
-      this.loadingIpCountry = false;
-
-      this.lastIpRefresDate = Date.now();
-
-      if (response) {
-        this.problemGettingIpCountry = false;
-        this.ipCountry = response;
-      } else {
-        this.problemGettingIpCountry = true;
-      }
-    }, () => {
-      this.lastIpRefresDate = Date.now();
-      this.loadingIpCountry = false;
-      this.problemGettingIpCountry = true;
     });
   }
 }

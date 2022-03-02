@@ -2,6 +2,8 @@ package servicedisc
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net/http"
 	"time"
 
@@ -39,9 +41,10 @@ type autoconnector struct {
 
 // MakeConnector returns a new connector that will try to connect to at most maxConns
 // services
-func MakeConnector(conf Config, maxConns int, tm *transport.Manager, httpC *http.Client, log *logging.Logger, mLog *logging.MasterLogger) Autoconnector {
+func MakeConnector(conf Config, maxConns int, tm *transport.Manager, httpC *http.Client, clientPublicIP string,
+	log *logging.Logger, mLog *logging.MasterLogger) Autoconnector {
 	connector := &autoconnector{}
-	connector.client = NewClient(log, mLog, conf, httpC)
+	connector.client = NewClient(log, mLog, conf, httpC, clientPublicIP)
 	connector.maxConns = maxConns
 	connector.log = log
 	connector.tm = tm
@@ -80,7 +83,9 @@ func (a *autoconnector) Run(ctx context.Context) (err error) {
 				a.log.WithField("pk", pk).WithField("attempt", val).Debugln("Trying to add transport to public visor")
 				logger := a.log.WithField("pk", pk).WithField("type", string(network.STCPR))
 				if err = a.tryEstablishTransport(ctx, pk, logger); err != nil {
-					logger.WithError(err).Warnln("Failed to add transport to public visor")
+					if !errors.Is(err, io.ErrClosedPipe) {
+						logger.WithError(err).Warnln("Failed to add transport to public visor")
+					}
 					failedAddresses[pk]++
 					continue
 				}
