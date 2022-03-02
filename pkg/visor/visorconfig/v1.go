@@ -39,8 +39,13 @@ const V101Name = "v1.0.1"
 // Added dmsghttp_path field to the config
 const V110Name = "v1.1.0"
 
+// V111Name is the semantic version string for v1.1.1.
+// Added support for dmsghttp
+// Added servers field in dmsg for dmsghttp
+const V111Name = "v1.1.1"
+
 // V1Name is the semantic version string for the most recent version of V1.
-const V1Name = V110Name
+const V1Name = V111Name
 
 // V1 is visor config
 type V1 struct {
