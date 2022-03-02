@@ -27,7 +27,7 @@ require (
 	github.com/schollz/progressbar/v2 v2.15.0
 	github.com/shirou/gopsutil/v3 v3.21.4
 	github.com/sirupsen/logrus v1.8.1
-	github.com/skycoin/dmsg v0.0.0-20211229130221-70e9ab64c1be
+	github.com/skycoin/dmsg v0.0.0-20220125173526-46bb07d7fd64
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
@@ -77,13 +77,11 @@ require (
 	github.com/google/go-querystring v1.0.0 // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
-	github.com/jaypipes/pcidb v0.6.0 // indirect
 	github.com/klauspost/compress v1.11.0 // indirect
 	github.com/klauspost/cpuid v1.2.4 // indirect
 	github.com/klauspost/pgzip v1.2.1 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
-	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/nwaples/rardecode v1.0.0 // indirect
@@ -103,9 +101,7 @@ require (
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519 // indirect
 	golang.org/x/mod v0.4.2 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
-	howett.net/plist v0.0.0-20181124034731-591f970eefbb // indirect
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'

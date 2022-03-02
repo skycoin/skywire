@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -10,20 +11,20 @@ import (
 	"net/http"
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/pkg/profile"
 	"github.com/skycoin/dmsg/buildinfo"
+	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/cmdutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 	"github.com/toqueteos/webbrowser"
 
+	"github.com/skycoin/skywire/internal/netutil"
 	"github.com/skycoin/skywire/pkg/restart"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/syslog"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
@@ -41,16 +42,18 @@ const (
 )
 
 var (
-	tag           string
-	syslogAddr    string
-	pprofMode     string
-	pprofAddr     string
-	confPath      string
-	delay         string
-	launchBrowser bool
-	hypervisorUI  bool
-	stopVisorFn   func() // nolint:unused
-	stopVisorWg   sync.WaitGroup
+	tag                  string
+	syslogAddr           string
+	pprofMode            string
+	pprofAddr            string
+	confPath             string
+	delay                string
+	launchBrowser        bool
+	hypervisorUI         bool
+	remoteHypervisorPKs  string
+	disableHypervisorPKs bool
+	stopVisorFn          func() // nolint:unused
+	stopVisorWg          sync.WaitGroup
 )
 
 var rootCmd = &cobra.Command{
@@ -72,6 +75,8 @@ func init() {
 	rootCmd.Flags().StringVar(&delay, "delay", "0ns", "start delay (deprecated)") // deprecated
 	rootCmd.Flags().BoolVarP(&hypervisorUI, "with-hypervisor-ui", "f", false, "run visor with hypervisor UI config.")
 	rootCmd.Flags().BoolVar(&launchBrowser, "launch-browser", false, "open hypervisor web ui (hypervisor only) with system browser")
+	rootCmd.Flags().StringVar(&remoteHypervisorPKs, "add-rhv", "", "add remote hypervisor PKs in runtime")
+	rootCmd.Flags().BoolVar(&disableHypervisorPKs, "disable-rhv", false, "disable remote hypervisor PKs on config file")
 	extraFlags()
 }
 
@@ -106,6 +111,45 @@ func runVisor(args []string) {
 
 	conf := initConfig(log, args, confPath)
 
+	if netutil.LocalProtocol() {
+		var dmsgHTTPServersList visorconfig.DmsgHTTPServers
+		serversListJSON, err := ioutil.ReadFile("dmsghttp-config.json")
+		if err != nil {
+			log.WithError(err).Fatal("Failed to read servers.json file.")
+		}
+		err = json.Unmarshal(serversListJSON, &dmsgHTTPServersList)
+		if err != nil {
+			log.WithError(err).Fatal("Error during parsing servers list")
+		}
+
+		conf.Dmsg.Servers = dmsgHTTPServersList.Prod.DMSGServers
+		conf.Dmsg.Discovery = dmsgHTTPServersList.Prod.DMSGDiscovery
+		conf.Transport.AddressResolver = dmsgHTTPServersList.Prod.AddressResolver
+		conf.Transport.Discovery = dmsgHTTPServersList.Prod.TransportDiscovery
+		conf.UptimeTracker.Addr = dmsgHTTPServersList.Prod.UptimeTracker
+		conf.Routing.RouteFinder = dmsgHTTPServersList.Prod.RouteFinder
+		conf.Launcher.ServiceDisc = dmsgHTTPServersList.Prod.ServiceDiscovery
+
+		conf.Flush() //nolint
+	}
+
+	if disableHypervisorPKs {
+		conf.Hypervisors = []cipher.PubKey{}
+	}
+
+	if remoteHypervisorPKs != "" {
+		hypervisorPKsSlice := strings.Split(remoteHypervisorPKs, ",")
+		for _, pubkeyString := range hypervisorPKsSlice {
+			pubkey := cipher.PubKey{}
+			if err := pubkey.Set(pubkeyString); err != nil {
+				log.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
+				continue
+			}
+			log.Infof("%s PK added as remote hypervisor PK", pubkeyString)
+			conf.Hypervisors = append(conf.Hypervisors, pubkey)
+		}
+	}
+
 	vis, ok := visor.NewVisor(conf, restartCtx)
 	if !ok {
 		log.Errorln("Failed to start visor.")
@@ -113,8 +157,6 @@ func runVisor(args []string) {
 		return
 	}
 	vis.SetLogstore(store)
-
-	go vis.HostKeeper(os.Getenv("SKYBIAN_BUILD_VERSION"))
 
 	if launchBrowser {
 		runBrowser(conf, log)
@@ -215,7 +257,7 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 		}
 
 		if confPath == "" {
-			confPath = filepath.Join(skyenv.PackageSkywirePath(), defaultConfigName)
+			confPath = defaultConfigName
 		}
 
 		fallthrough
@@ -227,7 +269,7 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 				WithField("filepath", confPath).
 				Fatal("Failed to read config file.")
 		}
-		defer func() {
+		defer func() { //nolint
 			if err := f.Close(); err != nil {
 				log.WithError(err).Error("Closing config file resulted in error.")
 			}

@@ -23,6 +23,7 @@ var masterLogger = logging.NewMasterLogger()
 const (
 	payload      = "Hello, client\n"
 	errorMessage = `{"error":{"message":"SW-Nonce does not match","code":401}}`
+	ip           = ""
 )
 
 func TestMain(m *testing.M) {
@@ -48,7 +49,7 @@ func TestClient(t *testing.T) {
 	ts := newTestServer(t, pk, headerCh)
 	defer ts.Close()
 
-	c, err := NewClient(context.TODO(), ts.URL, pk, sk, &http.Client{}, masterLogger)
+	c, err := NewClient(context.TODO(), ts.URL, pk, sk, &http.Client{}, ip, masterLogger)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, ts.URL+"/foo", bytes.NewBufferString(payload))
@@ -74,7 +75,7 @@ func TestClient_BadNonce(t *testing.T) {
 	ts := newTestServer(t, pk, headerCh)
 	defer ts.Close()
 
-	c, err := NewClient(context.TODO(), ts.URL, pk, sk, &http.Client{}, masterLogger)
+	c, err := NewClient(context.TODO(), ts.URL, pk, sk, &http.Client{}, ip, masterLogger)
 	require.NoError(t, err)
 
 	c.nonce = 999

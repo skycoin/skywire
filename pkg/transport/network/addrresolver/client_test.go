@@ -18,7 +18,10 @@ import (
 	"github.com/skycoin/skywire/internal/httpauth"
 )
 
-var masterLogger = logging.NewMasterLogger()
+var (
+	masterLogger = logging.NewMasterLogger()
+	ip           = ""
+)
 
 func TestClientAuth(t *testing.T) {
 	testPubKey, testSecKey := cipher.GenerateKeyPair()
@@ -35,7 +38,7 @@ func TestClientAuth(t *testing.T) {
 
 			case fmt.Sprintf("/security/nonces/%s", testPubKey):
 				if _, err := fmt.Fprintf(w, `{"edge": "%s", "next_nonce": 1}`, testPubKey); err != nil {
-					t.Errorf("Failed to write nonce response: %w", err)
+					t.Errorf("Failed to write nonce response: %s", err)
 				}
 
 			default:
@@ -46,7 +49,8 @@ func TestClientAuth(t *testing.T) {
 
 	defer srv.Close()
 	log := logging.MustGetLogger("test_client_auth")
-	apiClient, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, log, masterLogger)
+
+	apiClient, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, ip, log, masterLogger)
 	require.NoError(t, err)
 
 	c := apiClient.(*httpClient)
@@ -75,7 +79,7 @@ func TestBind(t *testing.T) {
 
 	defer srv.Close()
 	log := logging.MustGetLogger("test_bind")
-	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, log, masterLogger)
+	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, ip, log, masterLogger)
 	require.NoError(t, err)
 
 	err = c.BindSTCPR(context.TODO(), "1234")
