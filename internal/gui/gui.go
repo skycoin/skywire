@@ -4,6 +4,7 @@
 package gui
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"io"
@@ -16,9 +17,15 @@ import (
 
 	"github.com/gen2brain/dlgs"
 	"github.com/getlantern/systray"
+	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/direct"
+	"github.com/skycoin/dmsg/dmsgget"
+	"github.com/skycoin/dmsg/dmsghttp"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/toqueteos/webbrowser"
 
+	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -44,10 +51,11 @@ var (
 var (
 	mAdvancedButton *systray.MenuItem
 	mOpenHypervisor *systray.MenuItem
-	//mVPNClient      *systray.MenuItem
-	mVPNLink   *systray.MenuItem
-	mUninstall *systray.MenuItem
-	mQuit      *systray.MenuItem
+	mVPNClient      *systray.MenuItem
+	mVPNLink        *systray.MenuItem
+	mVPNButton      *systray.MenuItem
+	mUninstall      *systray.MenuItem
+	mQuit           *systray.MenuItem
 )
 
 // GetOnGUIReady creates func to run on GUI startup.
@@ -60,7 +68,7 @@ func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 
 		initOpenVPNLinkBtn(conf)
 		initAdvancedButton(conf)
-		initVpnClientBtn()
+		initVpnClientBtn(conf)
 		initQuitBtn()
 
 		//go updateVPNConnectionStatus(conf, doneCh)
@@ -168,17 +176,84 @@ func initOpenVPNLinkBtn(vc *visorconfig.V1) {
 	}()
 }
 
-func initVpnClientBtn() {
+func initVpnClientBtn(conf *visorconfig.V1) {
 	mVPNClient := systray.AddMenuItem("VPN", "VPN Client Connection")
-	mVPNStatus := mVPNClient.AddSubMenuItem("Status", "VPN Client Status")
-	greenCircle, _ := iconFS.ReadFile("icons/green.png")
-	mVPNStatus.SetIcon(greenCircle)
-	mVPNClient.SetIcon(greenCircle)
+	// VPN Status
+	mVPNStatus := mVPNClient.AddSubMenuItem("Disconnect", "VPN Client Status")
+	mVPNStatus.Disable()
+	go vpnStatusBtn(mVPNStatus)
+	// VPN On/Off Button
+	mVPNButton = mVPNClient.AddSubMenuItem("On", "VPN Client Button")
+	// VPN Public Servers List
+	mVPNServersList := mVPNClient.AddSubMenuItem("Servers", "VPN Client Servers")
+	mVPNServers := []*systray.MenuItem{}
+	for _, server := range GetAvailPublicVPNServers(conf) {
+		mVPNServers = append(mVPNServers, mVPNServersList.AddSubMenuItemCheckbox(server, "", false))
+	}
+	go serversBtn(mVPNServers)
 }
 
-//func handleVpnClientButton(conf *visorconfig.V1) {
-//	//mVPNClient.AddSubMenuItem()
-//}
+func vpnStatusBtn(vpnStatus *systray.MenuItem) {
+	time.Sleep(5 * time.Second)
+	vpnStatus.SetTitle("Connecting...")
+	time.Sleep(5 * time.Second)
+	vpnStatus.SetTitle("Connected")
+}
+
+func getHTTPClient(conf *visorconfig.V1, ctx context.Context) *http.Client {
+	var serviceURL dmsgget.URL
+	serviceURL.Fill(conf.Launcher.ServiceDisc)
+	logger := logging.NewMasterLogger()
+	if serviceURL.Scheme == "dmsg" {
+		var keys cipher.PubKeys
+		servers := conf.Dmsg.Servers
+
+		if len(servers) == 0 {
+			return &http.Client{}
+		}
+
+		pk, sk := conf.PK, conf.SK
+		keys = append(keys, pk)
+		entries := direct.GetAllEntries(keys, servers)
+		dClient := direct.NewClient(entries, logger.PackageLogger("dmsg_http_systray:direct_client"))
+		dmsgDC, _, err := direct.StartDmsg(ctx, logger.PackageLogger("dmsg_http_systray:dmsgDC"),
+			pk, sk, dClient, dmsg.DefaultConfig())
+		if err != nil {
+			return &http.Client{}
+		}
+		dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC)}
+		return &dmsgHTTP
+	}
+	return &http.Client{}
+}
+
+func serversBtn(servers []*systray.MenuItem) {
+	btnChannel := make(chan int)
+	for index, server := range servers {
+		go func(chn chan int, server *systray.MenuItem, index int) {
+
+			select {
+			case <-server.ClickedCh:
+				chn <- index
+			}
+		}(btnChannel, server, index)
+	}
+
+	for {
+		selectedServer := servers[<-btnChannel]
+		serverTempValue := strings.Split(selectedServer.String(), ",")[2]
+		serverPK := serverTempValue[2 : len(serverTempValue)-5]
+		for _, server := range servers {
+			server.Uncheck()
+		}
+		selectedServer.Check()
+		fmt.Println(serverPK)
+	}
+}
+
+func handleVPNButton(conf *visorconfig.V1) {
+	mVPNButton.SetTitle("Off")
+}
 
 func handleVPNLinkButton(conf *visorconfig.V1) {
 	vpnAddr := getVPNAddr(conf)
@@ -195,25 +270,27 @@ func handleVPNLinkButton(conf *visorconfig.V1) {
 }
 
 // GetAvailPublicVPNServers gets all available public VPN server from service discovery URL
-// func GetAvailPublicVPNServers(conf *visorconfig.V1) []string {
-// 	sdClient := servicedisc.NewClient(log, servicedisc.Config{
-// 		Type:     servicedisc.ServiceTypeVPN,
-// 		PK:       conf.PK,
-// 		SK:       conf.SK,
-// 		DiscAddr: conf.Launcher.ServiceDisc,
-// 	})
-// 	//ctx, _ := context.WithTimeout(context.Background(), 7*time.Second)
-// 	vpnServers, err := sdClient.Services(context.Background(), 0)
-// 	if err != nil {
-// 		log.Error("Error getting public vpn servers: ", err)
-// 		return nil
-// 	}
-// 	serverAddrs := make([]string, len(vpnServers))
-// 	for idx, server := range vpnServers {
-// 		serverAddrs[idx] = server.Addr.PubKey().String()
-// 	}
-// 	return serverAddrs
-// }
+func GetAvailPublicVPNServers(conf *visorconfig.V1) []string {
+	svrConfig := servicedisc.Config{
+		Type:     servicedisc.ServiceTypeVPN,
+		PK:       conf.PK,
+		SK:       conf.SK,
+		DiscAddr: conf.Launcher.ServiceDisc,
+	}
+	httpC := getHTTPClient(conf, context.Background())
+	sdClient := servicedisc.NewClient(log, log, svrConfig, httpC, "")
+	vpnServers, err := sdClient.Services(context.Background(), 0)
+	if err != nil {
+		log.Error("Error getting public vpn servers: ", err)
+		return nil
+	}
+	serverAddrs := make([]string, len(vpnServers))
+	for idx, server := range vpnServers {
+		serverAddrs[idx] = server.Addr.PubKey().String() + ";" + server.Geo.Country
+	}
+	fmt.Println(serverAddrs)
+	return serverAddrs
+}
 
 func initUninstallBtn() {
 	if !checkIsPackage() {
@@ -230,8 +307,8 @@ func handleUserInteraction(conf *visorconfig.V1, doneCh chan<- bool) {
 		select {
 		case <-mOpenHypervisor.ClickedCh:
 			handleOpenHypervisor(conf)
-		//case <-mVPNClient.ClickedCh:
-		//	handleVpnClientButton(conf)
+		case <-mVPNButton.ClickedCh:
+			handleVPNButton(conf)
 		case <-mVPNLink.ClickedCh:
 			handleVPNLinkButton(conf)
 		case <-mUninstall.ClickedCh:
