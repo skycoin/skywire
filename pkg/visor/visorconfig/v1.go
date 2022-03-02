@@ -36,6 +36,7 @@ const V101Name = "v1.0.1"
 // Changed stcp field to skywire-tcp
 // Changed local_address field to listening_address
 // Changed port field in dmsgpty to dmsg_port
+// Added dmsghttp_path field to the config
 const V110Name = "v1.1.0"
 
 // V1Name is the semantic version string for the most recent version of V1.
@@ -63,6 +64,7 @@ type V1 struct {
 	ShutdownTimeout   Duration `json:"shutdown_timeout,omitempty"`    // time value, examples: 10s, 1m, etc
 	RestartCheckDelay Duration `json:"restart_check_delay,omitempty"` // time value, examples: 10s, 1m, etc
 	IsPublic          bool     `json:"is_public"`
+	DMSGHTTPPath      string   `json:"dmsghttp_path"`
 
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 
