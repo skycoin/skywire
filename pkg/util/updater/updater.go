@@ -4,45 +4,22 @@ package updater
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"net/http"
-	"os"
-	"path/filepath"
-	"runtime"
-	"strings"
+	"os/exec"
 	"sync/atomic"
-	"unicode"
 
 	"github.com/google/go-github/github"
-	"github.com/mholt/archiver/v3"
-	"github.com/schollz/progressbar/v2"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/restart"
-	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/util/rename"
-	"github.com/skycoin/skywire/pkg/util/stdio"
 )
 
 const (
-	owner             = "skycoin"
-	gitProjectName    = "skywire"
-	projectName       = "skywire"
-	releaseURL        = "https://github.com/" + owner + "/" + gitProjectName + "/releases"
-	checksumsFilename = "checksums.txt"
-	checkSumLength    = 64
-	permRWX           = 0755
-	oldSuffix         = ".old"
-	appsSubfolder     = "apps"
-	archiveFormat     = ".tar.gz"
-	visorBinary       = "skywire-visor"
-	cliBinary         = "skywire-cli"
+	owner          = "skycoin"
+	gitProjectName = "skywire"
+	releaseURL     = "https://github.com/" + owner + "/" + gitProjectName + "/releases"
 )
 
 var (
@@ -125,36 +102,42 @@ func (u *Updater) Update(updateConfig UpdateConfig) (updated bool, err error) {
 		return false, nil
 	}
 
-	u.status.Set(fmt.Sprintf("Found version %q, downloading", version))
+	u.status.Set(fmt.Sprintf("Found version %q", version))
 
-	downloadedBinariesPath, err := u.download(updateConfig, version)
+	u.status.Set(fmt.Sprintf("Checking/Adding repo %s", "https://deb.skywire.skycoin.com/")) // add if not exist
+	if err := u.addRepo(); err != nil {
+		return false, err
+	}
+
+	u.status.Set("Update repositories")
+	if err := u.aptUpdate(); err != nil {
+		return false, err
+	}
+	u.log.Info("Updating repositories by 'apt update' compeleted.")
+
+	// uninstall current installed skywire if its version is equal or lower that 0.4.2
+	currentVersion, err := currentVersion()
 	if err != nil {
 		return false, err
 	}
-
-	u.status.Set("Downloading completed, updating binaries")
-
-	currentBasePath := filepath.Dir(u.restartCtx.CmdPath())
-	if err := u.updateBinaries(downloadedBinariesPath, currentBasePath); err != nil {
-		return false, err
+	if currentVersion.Minor == 4 && currentVersion.Patch <= 2 {
+		u.status.Set("Uninstall current skywire version") // if needed
+		if err := u.aptRemove(); err != nil {
+			return false, err
+		}
+		u.log.Info("Uninstalling old version compeleted.")
 	}
 
-	u.status.Set("Binaries updated, restarting current process")
-
-	if err := u.restartCurrentProcess(); err != nil {
-		currentVisorPath := filepath.Join(currentBasePath, visorBinary)
-		oldVisorPath := filepath.Join(downloadedBinariesPath, visorBinary+oldSuffix)
-
-		u.restore(currentVisorPath, oldVisorPath)
-
+	u.status.Set(fmt.Sprintf("Installing Skywire %q", version))
+	if err := u.aptInstall(); err != nil {
 		return false, err
 	}
+	u.log.Info("Installing new version compeleted.")
 
-	u.status.Set("Removing downloaded files")
+	u.status.Set("Updating completed. Running autoconfig script and restart services.")
+	u.log.Info("Updating completed. Running autoconfig script and restart services.")
 
-	u.removeFiles(downloadedBinariesPath)
-
-	u.status.Set("")
+	go u.runningAutoconfig()
 
 	return true, nil
 }
@@ -207,321 +190,53 @@ func (u *Updater) getVersion(updateConfig UpdateConfig) (string, error) {
 	return version, nil
 }
 
-func (u *Updater) updateBinaries(downloadedBinariesPath string, currentBasePath string) error {
-	for _, app := range apps() {
-		if err := u.updateBinary(downloadedBinariesPath, u.appsPath, app); err != nil {
-			return fmt.Errorf("failed to update %s binary: %w", app, err)
+func (u *Updater) addRepo() error {
+	output, _ := exec.Command("bash", "-c", "cat /etc/apt/sources.list | grep https://deb.skywire.skycoin.com").Output() //nolint
+
+	if len(output) == 0 {
+		if err := exec.Command("bash", "-c", "echo 'deb https://deb.skywire.skycoin.com sid main' | sudo tee -a /etc/apt/sources.list").Run(); err != nil {
+			u.log.Error("Get error during add repository")
+			return err
 		}
+		if err := exec.Command("bash", "-c", "curl -L https://deb.skywire.skycoin.com/KEY.asc | sudo apt-key add -").Run(); err != nil {
+			u.log.Error("Get error during add key")
+			return err
+		}
+		u.log.Info("Repository added")
+	} else {
+		u.log.Info("Repository exist")
 	}
-
-	if err := u.updateBinary(downloadedBinariesPath, currentBasePath, cliBinary); err != nil {
-		return fmt.Errorf("failed to update %s binary: %w", cliBinary, err)
-	}
-
-	if err := u.updateBinary(downloadedBinariesPath, currentBasePath, visorBinary); err != nil {
-		return fmt.Errorf("failed to update %s binary: %w", visorBinary, err)
-	}
-
 	return nil
 }
 
-func (u *Updater) updateBinary(downloadedBinariesPath, basePath, binary string) error {
-	downloadedBinaryPath := filepath.Join(downloadedBinariesPath, binary)
-	if _, err := os.Stat(downloadedBinaryPath); os.IsNotExist(err) {
-		downloadedBinaryPath = filepath.Join(downloadedBinariesPath, appsSubfolder, binary)
-	}
-
-	if _, err := os.Stat(downloadedBinaryPath); os.IsNotExist(err) {
-		u.log.Warnf("%v is not found in update, skipping", binary)
-		return nil
-	}
-
-	currentBinaryPath := filepath.Join(basePath, binary)
-	oldBinaryPath := downloadedBinaryPath + oldSuffix
-
-	if _, err := os.Stat(oldBinaryPath); err == nil {
-		if err := os.Remove(oldBinaryPath); err != nil {
-			return fmt.Errorf("remove %s: %w", oldBinaryPath, err)
-		}
-	}
-
-	currentBinaryExists := false
-	if _, err := os.Stat(currentBinaryPath); err == nil {
-		currentBinaryExists = true
-
-		if err := rename.Rename(currentBinaryPath, oldBinaryPath); err != nil {
-			return fmt.Errorf("rename %s to %s: %w", currentBinaryPath, oldBinaryPath, err)
-		}
-	}
-
-	if err := rename.Rename(downloadedBinaryPath, currentBinaryPath); err != nil {
-		// Try to revert previous rename.
-		if currentBinaryExists {
-			if err := rename.Rename(oldBinaryPath, currentBinaryPath); err != nil {
-				u.log.Errorf("Failed to rename file %q to %q: %v", oldBinaryPath, currentBinaryPath, err)
-			}
-		}
-
-		return fmt.Errorf("rename %s to %s: %w", downloadedBinaryPath, currentBinaryPath, err)
-	}
-
-	u.log.Infof("Successfully updated %s binary", binary)
-	return nil
-}
-
-// restore restores old binary file.
-func (u *Updater) restore(currentPath, oldPath string) {
-	if _, err := os.Stat(oldPath); err != nil {
-		return
-	}
-
-	u.removeFiles(currentPath)
-
-	if err := rename.Rename(oldPath, currentPath); err != nil {
-		u.log.Errorf("Failed to rename file %q to %q: %v", oldPath, currentPath, err)
-	}
-}
-
-func (u *Updater) download(updateConfig UpdateConfig, version string) (string, error) {
-	checksumsURL := fileURL(version, checksumsFilename)
-	if updateConfig.ChecksumsURL != "" {
-		checksumsURL = updateConfig.ChecksumsURL
-	}
-
-	u.log.Infof("Checksums file URL: %q", checksumsURL)
-
-	checksums, err := u.downloadChecksums(checksumsURL)
-	if err != nil {
-		return "", fmt.Errorf("failed to download checksums: %w", err)
-	}
-
-	u.log.Infof("Checksums file downloaded")
-
-	archiveFilename := archiveFilename(projectName, version, runtime.GOOS, runtime.GOARCH)
-	u.log.Infof("Archive filename: %v", archiveFilename)
-
-	checksum, err := getChecksum(checksums, archiveFilename)
-	if err != nil {
-		return "", fmt.Errorf("failed to get checksum: %w", err)
-	}
-
-	u.log.Infof("Archive checksum should be %q", checksum)
-
-	archiveURL := fileURL(version, archiveFilename)
-	if updateConfig.ArchiveURL != "" {
-		archiveURL = updateConfig.ArchiveURL
-	}
-
-	u.log.Infof("Downloading archive from %q", archiveURL)
-
-	archivePath, err := u.downloadFile(archiveURL, archiveFilename)
-	if err != nil {
-		return "", fmt.Errorf("failed to download archive file from URL %q: %w", archiveURL, err)
-	}
-
-	u.log.Infof("Downloaded archive file to %q", archivePath)
-
-	valid, err := isChecksumValid(archivePath, checksum)
-	if err != nil {
-		return "", fmt.Errorf("failed to check file %q sum: %w", archivePath, err)
-	}
-
-	if !valid {
-		return "", fmt.Errorf("checksum is not valid")
-	}
-
-	destPath := filepath.Join(filepath.Dir(archivePath), projectName)
-
-	if _, err := os.Stat(destPath); err == nil {
-		u.removeFiles(destPath)
-	}
-
-	if err := archiver.Unarchive(archivePath, destPath); err != nil {
-		return "", err
-	}
-
-	u.removeFiles(archivePath)
-
-	return destPath, nil
-}
-
-func (u *Updater) restartCurrentProcess() error {
-	u.log.Infof("Starting new file instance")
-
-	if err := u.restartCtx.Restart(); err != nil {
-		u.log.Errorf("Failed to start binary: %v", err)
+func (u *Updater) aptUpdate() error {
+	if err := exec.Command("bash", "-c", "sudo apt update").Run(); err != nil {
+		u.log.Error("Get error during update apt repositories")
 		return err
 	}
-
 	return nil
 }
 
-func (u *Updater) removeFiles(names ...string) {
-	for _, name := range names {
-		u.log.Infof("Removing file %q", name)
-		if err := os.RemoveAll(name); err != nil {
-			u.log.Errorf("Failed to remove file %q: %v", name, err)
-		}
+func (u *Updater) aptRemove() error {
+	if err := exec.Command("bash", "-c", "sudo apt remove skywire-bin -y").Run(); err != nil {
+		u.log.Error("Get error during remove skywire-bin package")
+		return err
 	}
+	return nil
 }
 
-func isChecksumValid(filename, wantSum string) (bool, error) {
-	f, err := os.Open(filepath.Clean(filename))
-	if err != nil {
-		return false, err
+func (u *Updater) aptInstall() error {
+	if err := exec.Command("bash", "-c", "sudo NOAUTOCONFIG=true apt install skywire-bin -y").Run(); err != nil {
+		u.log.Error("Get error during installing skywire-bin package")
+		return err
 	}
-
-	hasher := sha256.New()
-	if _, err := io.Copy(hasher, f); err != nil {
-		return false, err
-	}
-
-	if err := f.Close(); err != nil {
-		return false, err
-	}
-
-	gotSum := hex.EncodeToString(hasher.Sum(nil))
-
-	return gotSum == wantSum, nil
+	return nil
 }
 
-// NOTE: getChecksum does not support Unicode in checksums file.
-func getChecksum(checksums, filename string) (string, error) {
-	idx := strings.Index(checksums, filename)
-	if idx == -1 {
-		return "", ErrNoChecksumFound
+func (u *Updater) runningAutoconfig() {
+	if err := exec.Command("bash", "-c", "sleep 5s ; sudo skywire-autoconfig").Process.Release(); err != nil {
+		u.log.Error("Get error during installing skywire-bin package")
 	}
-
-	// Remove space(s) separator.
-	last := idx
-	for last > 0 && unicode.IsSpace(rune(checksums[last-1])) {
-		last--
-	}
-
-	first := last - checkSumLength
-
-	if first < 0 {
-		return "", ErrMalformedChecksumFile
-	}
-
-	return checksums[first:last], nil
-}
-
-func (u *Updater) downloadChecksums(url string) (checksums string, err error) {
-	resp, err := http.Get(url) // nolint:gosec
-	if err != nil {
-		return "", err
-	}
-
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
-			err = closeErr
-		}
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("received bad status code: %d", resp.StatusCode)
-	}
-
-	capturer := stdio.NewCapturer()
-	stdoutWriter, err := capturer.CaptureStdout()
-	if err != nil {
-		return "", err
-	}
-
-	defer func() {
-		if err := capturer.Release(); err != nil {
-			u.log.Errorf("Failed to release output: %w", err)
-		}
-	}()
-
-	r := io.TeeReader(resp.Body, u.progressBar(stdoutWriter, resp.ContentLength, checksumsFilename))
-
-	data, err := ioutil.ReadAll(r)
-	if err != nil {
-		return "", err
-	}
-
-	return string(data), nil
-}
-
-func (u *Updater) progressBar(w io.Writer, contentLength int64, filename string) io.Writer {
-	width := progressbar.OptionSetWidth(0)
-	desc := progressbar.OptionSetDescription("Downloading " + filename)
-	speed := progressbar.OptionSetBytes64(contentLength)
-	theme := progressbar.OptionSetTheme(progressbar.Theme{})
-	writer := progressbar.OptionSetWriter(io.MultiWriter(w, u.status))
-	completion := progressbar.OptionOnCompletion(func() { fmt.Printf("\n") })
-
-	return progressbar.NewOptions64(contentLength, speed, completion, width, theme, desc, writer)
-}
-
-func (u *Updater) downloadFile(url, filename string) (path string, err error) {
-	resp, err := http.Get(url) // nolint:gosec
-	if err != nil {
-		return "", err
-	}
-
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
-			err = closeErr
-		}
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("bad HTTP response status code %d", resp.StatusCode)
-	}
-
-	tmpDir := os.TempDir()
-	path = filepath.Join(tmpDir, filename)
-
-	if _, err = os.Stat(path); err == nil {
-		// File exists
-		if err := os.Remove(path); err != nil {
-			return "", err
-		}
-	}
-
-	f, err := os.Create(path)
-	if err != nil {
-		return "", err
-	}
-
-	capturer := stdio.NewCapturer()
-	stdoutWriter, err := capturer.CaptureStdout()
-	if err != nil {
-		return "", err
-	}
-
-	defer func() {
-		if err := capturer.Release(); err != nil {
-			u.log.Errorf("Failed to release output: %w", err)
-		}
-	}()
-
-	out := io.MultiWriter(f, u.progressBar(stdoutWriter, resp.ContentLength, filename))
-
-	if _, err := io.Copy(out, resp.Body); err != nil {
-		return "", err
-	}
-
-	if err := f.Chmod(permRWX); err != nil {
-		return "", err
-	}
-
-	if err := f.Close(); err != nil {
-		return "", err
-	}
-
-	return path, nil
-}
-
-func fileURL(version, filename string) string {
-	return releaseURL + "/download/" + version + "/" + filename
-}
-
-func archiveFilename(file, version, os, arch string) string {
-	return file + "-" + version + "-" + os + "-" + arch + archiveFormat
 }
 
 func needUpdate(last *Version) bool {
@@ -583,14 +298,4 @@ func latestVersion(channel Channel) (*Version, error) {
 
 func currentVersion() (*Version, error) {
 	return VersionFromString(buildinfo.Version())
-}
-
-func apps() []string {
-	return []string{
-		skyenv.SkychatName,
-		skyenv.SkysocksName,
-		skyenv.SkysocksClientName,
-		skyenv.VPNServerName,
-		skyenv.VPNClientName,
-	}
 }
