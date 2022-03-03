@@ -36,13 +36,14 @@ type Retrier struct {
 
 // NewRetrier returns a retrier that is ready to call Do() method
 func NewRetrier(log logrus.FieldLogger, initBO, maxBO time.Duration, tries int64, factor float64) *Retrier {
+	logger := log.WithField("func", "retrier")
 	return &Retrier{
 		initBO: initBO,
 		maxBO:  maxBO,
 		tries:  tries,
 		factor: factor,
 		errWl:  make(map[error]struct{}),
-		log:    log,
+		log:    logger,
 	}
 }
 
@@ -77,11 +78,11 @@ func (r *Retrier) Do(ctx context.Context, f RetryFunc) error {
 			if newBO := time.Duration(float64(bo) * r.factor); r.maxBO == 0 || newBO <= r.maxBO {
 				bo = newBO
 			}
-			if r.log != nil {
-				r.log.WithError(err).WithField("current_backoff", bo).Debug("Retrying...")
-			}
 			select {
 			case <-t.C:
+				if r.log != nil {
+					r.log.WithError(err).WithField("current_backoff", bo).Warn("Retrying...")
+				}
 				t.Reset(bo)
 				continue
 			case <-ctx.Done():
