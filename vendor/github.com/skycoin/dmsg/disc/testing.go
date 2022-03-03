@@ -129,8 +129,21 @@ func (m *mockClient) PutEntry(ctx context.Context, sk cipher.SecKey, e *Entry) e
 	}
 }
 
-// AvailableServers returns all the servers that the APIClient mock has
+// AvailableServers returns available servers that the APIClient mock has
 func (m *mockClient) AvailableServers(_ context.Context) ([]*Entry, error) {
+	m.mx.RLock()
+	defer m.mx.RUnlock()
+	list := make([]*Entry, 0, len(m.entries))
+	for _, e := range m.entries {
+		if e := e; e.Server != nil {
+			list = append(list, &e)
+		}
+	}
+	return list, nil
+}
+
+// AllServers returns all servers that the APIClient mock has
+func (m *mockClient) AllServers(_ context.Context) ([]*Entry, error) {
 	m.mx.RLock()
 	defer m.mx.RUnlock()
 	list := make([]*Entry, 0, len(m.entries))
