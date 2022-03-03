@@ -4,11 +4,7 @@ package utclient
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"net/http"
 	"time"
 
@@ -20,11 +16,6 @@ import (
 )
 
 //go:generate mockery -name APIClient -case underscore -inpkg
-
-// Error is the object returned to the client when there's an error.
-type Error struct {
-	Error string `json:"error"`
-}
 
 // APIClient implements uptime tracker API client.
 type APIClient interface {
@@ -102,24 +93,8 @@ func (c *httpClient) UpdateVisorUptime(ctx context.Context) error {
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
+		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, httpauth.ExtractError(resp.Body))
 	}
 
 	return nil
-}
-
-// extractError returns the decoded error message from Body.
-func extractError(r io.Reader) error {
-	var apiError Error
-
-	body, err := ioutil.ReadAll(r)
-	if err != nil {
-		return err
-	}
-
-	if err := json.Unmarshal(body, &apiError); err != nil {
-		return errors.New(string(body))
-	}
-
-	return errors.New(apiError.Error)
 }
