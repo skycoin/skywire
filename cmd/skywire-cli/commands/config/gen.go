@@ -79,18 +79,15 @@ var genConfigCmd = &cobra.Command{
 			logger.Fatal("Failed to create config: use of mutually exclusive flags")
 		}
 
-		//check -o --output flag set manually or not, if yes override package and skybian config flag
-		if cmd.Flags().Changed("output") {
-			packageConfig = false
-		}
-
 		//set output for package and skybian configs
 		if packageConfig {
 			configName := "skywire-visor.json"
 			if hypervisor {
 				configName = "skywire.json"
 			}
-			output = filepath.Join(skyenv.PackageSkywirePath(), configName)
+			if !cmd.Flags().Changed("output") {
+				output = filepath.Join(skyenv.PackageSkywirePath(), configName)
+			}
 		}
 
 		// Read in old config (if any) and obtain old secret key.
@@ -152,7 +149,7 @@ var genConfigCmd = &cobra.Command{
 		// Use dmsg urls for services and add dmsg-servers
 		if dmsgHTTP {
 			var dmsgHTTPServersList visorconfig.DmsgHTTPServers
-			serversListJSON, err := ioutil.ReadFile("dmsghttp-config.json")
+			serversListJSON, err := ioutil.ReadFile(conf.DMSGHTTPPath)
 			if err != nil {
 				logger.WithError(err).Fatal("Failed to read servers.json file.")
 			}

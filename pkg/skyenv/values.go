@@ -138,6 +138,11 @@ const (
 	DefaultLocalPath = DefaultSkywirePath + "/local"
 )
 
+// Default dmsghttp config constants
+const (
+	DefaultDMSGHTTPPath = DefaultSkywirePath + "/dmsghttp-config.json"
+)
+
 // Default hypervisor constants
 const (
 	DefaultHypervisorDB      = ".skycoin/hypervisor/users.db"
@@ -181,6 +186,11 @@ func PackageAppLocalPath() string {
 // PackageAppBinPath gets apps path for installed Skywire.
 func PackageAppBinPath() string {
 	return filepath.Join(appBinPath(), "apps")
+}
+
+// PackageDMSGHTTPPath gets dmsghttp path for installed Skywire.
+func PackageDMSGHTTPPath() string {
+	return filepath.Join(appBinPath(), "dmsghttp-config.json")
 }
 
 // PackageTpLogStore gets transport logs path for installed Skywire.
