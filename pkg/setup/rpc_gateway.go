@@ -5,8 +5,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/setup/setupmetrics"

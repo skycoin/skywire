@@ -15,9 +15,9 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/buildinfo"
-	"github.com/skycoin/dmsg/cipher"
 	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/internal/httpauth"

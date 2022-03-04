@@ -186,6 +186,7 @@ github.com/skycoin/skycoin/src/cipher/secp256k1-go/secp256k1-go2
 github.com/skycoin/skycoin/src/util/logging
 # github.com/skycoin/skywire-utilities v0.0.0-20220304110203-2c19051374a2
 ## explicit; go 1.17
+github.com/skycoin/skywire-utilities/pkg/cipher
 github.com/skycoin/skywire-utilities/pkg/netutil
 # github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
 ## explicit; go 1.13

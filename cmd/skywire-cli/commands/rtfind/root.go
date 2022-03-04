@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/context"
 

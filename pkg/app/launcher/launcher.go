@@ -14,7 +14,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"

@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/stretchr/testify/assert"
 )
 
