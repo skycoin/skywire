@@ -416,7 +416,9 @@ func initStcpClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 
-	tpdC, err := connectToTpDisc(ctx, v)
+	managerLogger := v.MasterLogger().PackageLogger("transport_manager")
+
+	tpdC, err := connectToTpDisc(ctx, v, managerLogger)
 	if err != nil {
 		err := fmt.Errorf("failed to create transport discovery client: %w", err)
 		return err
@@ -437,7 +439,6 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		LogStore:                  logS,
 		PersistentTransportsCache: pTps,
 	}
-	managerLogger := v.MasterLogger().PackageLogger("transport_manager")
 
 	// todo: pass down configuration?
 	var table stcp.PKTable
@@ -1045,7 +1046,7 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func connectToTpDisc(ctx context.Context, v *Visor) (transport.DiscoveryClient, error) {
+func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transport.DiscoveryClient, error) {
 	const (
 		initBO = 1 * time.Second
 		maxBO  = 10 * time.Second
@@ -1067,7 +1068,6 @@ func connectToTpDisc(ctx context.Context, v *Visor) (transport.DiscoveryClient, 
 		return nil, err
 	}
 
-	log := v.MasterLogger().PackageLogger("tp_disc_retrier")
 	tpdCRetrier := dmsgnetutil.NewRetrier(log,
 		initBO, maxBO, tries, factor)
 
