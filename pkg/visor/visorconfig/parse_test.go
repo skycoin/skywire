@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/stretchr/testify/require"
 )
 

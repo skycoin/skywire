@@ -9,7 +9,7 @@ import (
 
 	"github.com/AudriusButkevicius/pfilter"
 	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/xtaci/kcp-go"
 
 	"github.com/skycoin/skywire/internal/packetfilter"

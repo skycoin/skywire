@@ -16,9 +16,9 @@ import (
 	"time"
 
 	"github.com/AudriusButkevicius/pfilter"
-	"github.com/skycoin/dmsg/cipher"
 	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/xtaci/kcp-go"
 
 	pkgnetutil "github.com/skycoin/skywire-utilities/pkg/netutil"
