@@ -12,7 +12,7 @@ import (
 
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 
 	"github.com/skycoin/skywire/internal/skysocks"
 	"github.com/skycoin/skywire/pkg/app"

@@ -14,7 +14,7 @@ import (
 
 	"github.com/ccding/go-stun/stun"
 	"github.com/google/uuid"
-	"github.com/skycoin/dmsg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
