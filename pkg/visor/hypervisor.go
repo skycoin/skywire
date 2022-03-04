@@ -19,10 +19,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/dmsgpty"
 	"github.com/skycoin/dmsg/httputil"
 	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"nhooyr.io/websocket"
 
