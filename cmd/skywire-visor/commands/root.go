@@ -17,9 +17,9 @@ import (
 
 	"github.com/pkg/profile"
 	"github.com/skycoin/dmsg/buildinfo"
-	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/cmdutil"
 	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/spf13/cobra"
 	"github.com/toqueteos/webbrowser"
 

@@ -7,7 +7,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/google/uuid"
-	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"

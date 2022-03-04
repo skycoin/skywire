@@ -6,7 +6,7 @@ import (
 	context "context"
 
 	pfilter "github.com/AudriusButkevicius/pfilter"
-	cipher "github.com/skycoin/dmsg/cipher"
+	cipher "github.com/skycoin/skywire-utilities/pkg/cipher"
 	mock "github.com/stretchr/testify/mock"
 )
 
