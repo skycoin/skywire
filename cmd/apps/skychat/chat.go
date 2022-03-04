@@ -18,9 +18,9 @@ import (
 	"time"
 
 	ipc "github.com/james-barrow/golang-ipc"
-	"github.com/skycoin/dmsg/buildinfo"
 	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 
 	"github.com/skycoin/skywire/pkg/app"
