@@ -149,7 +149,7 @@ var genConfigCmd = &cobra.Command{
 		// Use dmsg urls for services and add dmsg-servers
 		if dmsgHTTP {
 			var dmsgHTTPServersList visorconfig.DmsgHTTPServers
-			serversListJSON, err := ioutil.ReadFile("dmsghttp-config.json")
+			serversListJSON, err := ioutil.ReadFile(conf.DMSGHTTPPath)
 			if err != nil {
 				logger.WithError(err).Fatal("Failed to read servers.json file.")
 			}
