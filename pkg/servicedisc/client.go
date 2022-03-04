@@ -19,8 +19,8 @@ import (
 	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/internal/httpauth"
-	"github.com/skycoin/skywire/pkg/util/netutil"
 )
 
 // ErrVisorUnreachable is returned when visor is not reachable
