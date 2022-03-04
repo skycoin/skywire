@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -17,9 +18,11 @@ import (
 
 	"github.com/gen2brain/dlgs"
 	"github.com/getlantern/systray"
+	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/direct"
+	dmsgdisc "github.com/skycoin/dmsg/disc"
 	"github.com/skycoin/dmsg/dmsgget"
 	"github.com/skycoin/dmsg/dmsghttp"
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -27,6 +30,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -40,6 +44,8 @@ var log = logging.NewMasterLogger()
 var (
 	stopVisorFnMx sync.Mutex
 	stopVisorFn   func()
+	closeDmsgDC   func()
+	rpcC          visor.API
 	//vpnClientStatusMu sync.Mutex
 	//vpnClientStatus   bool
 )
@@ -52,6 +58,7 @@ var (
 	mAdvancedButton *systray.MenuItem
 	mOpenHypervisor *systray.MenuItem
 	mVPNClient      *systray.MenuItem
+	mVPNStatus      *systray.MenuItem
 	mVPNLink        *systray.MenuItem
 	mVPNButton      *systray.MenuItem
 	mUninstall      *systray.MenuItem
@@ -61,14 +68,19 @@ var (
 // GetOnGUIReady creates func to run on GUI startup.
 func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 	doneCh := make(chan bool, 1)
+	logger := logging.NewMasterLogger()
+	logger.SetLevel(logrus.InfoLevel)
+
+	httpC := getHTTPClient(conf, context.Background(), logger)
+	rpcC = rpcClient(conf, logger)
+
 	return func() {
 		systray.SetTemplateIcon(icon, icon)
-
 		systray.SetTooltip("Skywire")
 
 		initOpenVPNLinkBtn(conf)
 		initAdvancedButton(conf)
-		initVpnClientBtn(conf)
+		initVpnClientBtn(conf, httpC, rpcC)
 		initQuitBtn()
 
 		//go updateVPNConnectionStatus(conf, doneCh)
@@ -104,7 +116,6 @@ func Stop() {
 	if !atomic.CompareAndSwapInt32(&guiStopped, 0, 1) {
 		return
 	}
-
 	stopVisor()
 	systray.Quit()
 }
@@ -176,58 +187,45 @@ func initOpenVPNLinkBtn(vc *visorconfig.V1) {
 	}()
 }
 
-func initVpnClientBtn(conf *visorconfig.V1) {
+func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, rpcClient visor.API) {
 	mVPNClient := systray.AddMenuItem("VPN", "VPN Client Connection")
 	// VPN Status
-	mVPNStatus := mVPNClient.AddSubMenuItem("Disconnect", "VPN Client Status")
+	mVPNStatus = mVPNClient.AddSubMenuItem("Status: Disconnect", "VPN Client Status")
 	mVPNStatus.Disable()
-	go vpnStatusBtn(mVPNStatus)
+	go vpnStatusBtn(conf, rpcClient)
 	// VPN On/Off Button
 	mVPNButton = mVPNClient.AddSubMenuItem("On", "VPN Client Button")
+	if !isSetVPNClientPKExist(conf) {
+		mVPNButton.Disable()
+	}
 	// VPN Public Servers List
 	mVPNServersList := mVPNClient.AddSubMenuItem("Servers", "VPN Client Servers")
 	mVPNServers := []*systray.MenuItem{}
-	for _, server := range GetAvailPublicVPNServers(conf) {
+	for _, server := range getAvailPublicVPNServers(conf, httpClient) {
 		mVPNServers = append(mVPNServers, mVPNServersList.AddSubMenuItemCheckbox(server, "", false))
 	}
-	go serversBtn(mVPNServers)
+	go serversBtn(conf, mVPNServers, rpcClient)
 }
 
-func vpnStatusBtn(vpnStatus *systray.MenuItem) {
-	time.Sleep(5 * time.Second)
-	vpnStatus.SetTitle("Connecting...")
-	time.Sleep(5 * time.Second)
-	vpnStatus.SetTitle("Connected")
-}
-
-func getHTTPClient(conf *visorconfig.V1, ctx context.Context) *http.Client {
-	var serviceURL dmsgget.URL
-	serviceURL.Fill(conf.Launcher.ServiceDisc)
-	logger := logging.NewMasterLogger()
-	if serviceURL.Scheme == "dmsg" {
-		var keys cipher.PubKeys
-		servers := conf.Dmsg.Servers
-
-		if len(servers) == 0 {
-			return &http.Client{}
+func vpnStatusBtn(conf *visorconfig.V1, rpcClient visor.API) {
+	for {
+		stats, _ := rpcClient.GetAppConnectionsSummary(skyenv.VPNClientName)
+		if len(stats) == 1 {
+			if stats[0].IsAlive {
+				mVPNStatus.SetTitle("Status: Connected")
+				mVPNButton.SetTitle("Off")
+				mVPNButton.Enable()
+			}
+		} else {
+			mVPNStatus.SetTitle("Status: Disconnected")
+			mVPNButton.SetTitle("On")
+			mVPNButton.Enable()
 		}
-
-		pk, sk := conf.PK, conf.SK
-		keys = append(keys, pk)
-		entries := direct.GetAllEntries(keys, servers)
-		dClient := direct.NewClient(entries, logger.PackageLogger("dmsg_http_systray:direct_client"))
-		dmsgDC, _, err := direct.StartDmsg(ctx, logger.PackageLogger("dmsg_http_systray:dmsgDC"),
-			pk, sk, dClient, dmsg.DefaultConfig())
-		if err != nil {
-			return &http.Client{}
-		}
-		dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC)}
-		return &dmsgHTTP
+		time.Sleep(3 * time.Second)
 	}
-	return &http.Client{}
 }
 
-func serversBtn(servers []*systray.MenuItem) {
+func serversBtn(conf *visorconfig.V1, servers []*systray.MenuItem, rpcClient visor.API) {
 	btnChannel := make(chan int)
 	for index, server := range servers {
 		go func(chn chan int, server *systray.MenuItem, index int) {
@@ -247,12 +245,40 @@ func serversBtn(servers []*systray.MenuItem) {
 			server.Uncheck()
 		}
 		selectedServer.Check()
-		fmt.Println(serverPK)
+		pk := cipher.PubKey{}
+		if err := pk.UnmarshalText([]byte(serverPK)); err != nil {
+			continue
+		}
+
+		rpcClient.StopApp(skyenv.VPNClientName)
+		rpcClient.SetAppPK(skyenv.VPNClientName, pk)
+		rpcClient.StartApp(skyenv.VPNClientName)
 	}
 }
 
-func handleVPNButton(conf *visorconfig.V1) {
-	mVPNButton.SetTitle("Off")
+func handleVPNButton(conf *visorconfig.V1, rpcClient visor.API) {
+	stats, _ := rpcClient.GetAppConnectionsSummary(skyenv.VPNClientName)
+	if len(stats) == 1 {
+		if stats[0].IsAlive {
+			mVPNStatus.SetTitle("Status: Disconnecting...")
+			mVPNButton.Disable()
+			mVPNButton.SetTitle("On")
+			if err := rpcClient.StopApp(skyenv.VPNClientName); err != nil {
+				mVPNStatus.SetTitle("Status: Connected")
+				mVPNButton.Enable()
+				mVPNButton.SetTitle("Off")
+			}
+		}
+	} else {
+		mVPNStatus.SetTitle("Status: Connecting...")
+		mVPNButton.Disable()
+		mVPNButton.SetTitle("Off")
+		if err := rpcClient.StartApp(skyenv.VPNClientName); err != nil {
+			mVPNStatus.SetTitle("Status: Disconnected")
+			mVPNButton.Enable()
+			mVPNButton.SetTitle("On")
+		}
+	}
 }
 
 func handleVPNLinkButton(conf *visorconfig.V1) {
@@ -269,15 +295,14 @@ func handleVPNLinkButton(conf *visorconfig.V1) {
 	}
 }
 
-// GetAvailPublicVPNServers gets all available public VPN server from service discovery URL
-func GetAvailPublicVPNServers(conf *visorconfig.V1) []string {
+// getAvailPublicVPNServers gets all available public VPN server from service discovery URL
+func getAvailPublicVPNServers(conf *visorconfig.V1, httpC *http.Client) []string {
 	svrConfig := servicedisc.Config{
 		Type:     servicedisc.ServiceTypeVPN,
 		PK:       conf.PK,
 		SK:       conf.SK,
 		DiscAddr: conf.Launcher.ServiceDisc,
 	}
-	httpC := getHTTPClient(conf, context.Background())
 	sdClient := servicedisc.NewClient(log, log, svrConfig, httpC, "")
 	vpnServers, err := sdClient.Services(context.Background(), 0)
 	if err != nil {
@@ -288,8 +313,71 @@ func GetAvailPublicVPNServers(conf *visorconfig.V1) []string {
 	for idx, server := range vpnServers {
 		serverAddrs[idx] = server.Addr.PubKey().String() + ";" + server.Geo.Country
 	}
-	fmt.Println(serverAddrs)
 	return serverAddrs
+}
+
+func getHTTPClient(conf *visorconfig.V1, ctx context.Context, logger *logging.MasterLogger) *http.Client {
+	var serviceURL dmsgget.URL
+	serviceURL.Fill(conf.Launcher.ServiceDisc)
+	if serviceURL.Scheme == "dmsg" {
+		var keys cipher.PubKeys
+		servers := conf.Dmsg.Servers
+		var delegatedServers []cipher.PubKey
+
+		if len(servers) == 0 {
+			return &http.Client{}
+		}
+
+		pk, sk := cipher.GenerateKeyPair()
+		keys = append(keys, pk)
+		entries := direct.GetAllEntries(keys, servers)
+		dClient := direct.NewClient(entries, logger.PackageLogger("systray:dmsghttp_direct_client"))
+		dmsgDC, closeDmsg, err := direct.StartDmsg(ctx, logger.PackageLogger("systray:dsmghttp_dmsgDC"),
+			pk, sk, dClient, dmsg.DefaultConfig())
+		if err != nil {
+			return &http.Client{}
+		}
+		dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC)}
+
+		servers, err = dClient.AvailableServers(ctx)
+		if err != nil {
+			closeDmsg()
+			return &http.Client{}
+		}
+
+		for _, server := range servers {
+			delegatedServers = append(delegatedServers, server.Static)
+		}
+
+		clientEntry := &dmsgdisc.Entry{
+			Client: &dmsgdisc.Client{
+				DelegatedServers: delegatedServers,
+			},
+			Static: serviceURL.Addr.PK,
+		}
+
+		err = dClient.PostEntry(ctx, clientEntry)
+		if err != nil {
+			closeDmsg()
+			return &http.Client{}
+		}
+		closeDmsgDC = closeDmsg
+		return &dmsgHTTP
+	}
+	return &http.Client{}
+}
+
+func isSetVPNClientPKExist(conf *visorconfig.V1) bool {
+	for _, v := range conf.Launcher.Apps {
+		if v.Name == skyenv.VPNClientName {
+			for index := range v.Args {
+				if v.Args[index] == "-srv" {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func initUninstallBtn() {
@@ -308,7 +396,7 @@ func handleUserInteraction(conf *visorconfig.V1, doneCh chan<- bool) {
 		case <-mOpenHypervisor.ClickedCh:
 			handleOpenHypervisor(conf)
 		case <-mVPNButton.ClickedCh:
-			handleVPNButton(conf)
+			handleVPNButton(conf, rpcC)
 		case <-mVPNLink.ClickedCh:
 			handleVPNLinkButton(conf)
 		case <-mUninstall.ClickedCh:
@@ -350,6 +438,7 @@ func handleUninstall() {
 
 func stopVisor() {
 	stopVisorFnMx.Lock()
+	closeDmsgDC()
 	stop := stopVisorFn
 	stopVisorFnMx.Unlock()
 
@@ -426,4 +515,14 @@ func getVPNAddr(conf *visorconfig.V1) string {
 	}
 
 	return hvAddr + "/#/vpn/" + conf.PK.Hex() + "/status"
+}
+
+func rpcClient(conf *visorconfig.V1, logger *logging.MasterLogger) visor.API {
+	const rpcDialTimeout = time.Second * 5
+	logger.PackageLogger("systray:rpc_client")
+	conn, err := net.DialTimeout("tcp", conf.CLIAddr, rpcDialTimeout)
+	if err != nil {
+		logger.Fatal("RPC connection failed:", err)
+	}
+	return visor.NewRPCClient(logger, conn, visor.RPCPrefix, 0)
 }
