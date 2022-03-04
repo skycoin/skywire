@@ -54,8 +54,6 @@ github.com/getlantern/ops
 # github.com/getlantern/systray v1.2.0
 ## explicit; go 1.13
 github.com/getlantern/systray
-# github.com/ghodss/yaml v1.0.0
-## explicit
 # github.com/go-chi/chi v4.1.2+incompatible
 ## explicit
 github.com/go-chi/chi
@@ -92,8 +90,6 @@ github.com/inconshreveable/mousetrap
 # github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
 ## explicit; go 1.15
 github.com/james-barrow/golang-ipc
-# github.com/jaypipes/ghw v0.8.0
-## explicit; go 1.12
 # github.com/json-iterator/go v1.1.12
 ## explicit; go 1.12
 github.com/json-iterator/go
