@@ -6,7 +6,7 @@ import (
 	context "context"
 
 	dmsg "github.com/skycoin/dmsg"
-	cipher "github.com/skycoin/dmsg/cipher"
+	cipher "github.com/skycoin/skywire-utilities/pkg/cipher"
 	logging "github.com/skycoin/skycoin/src/util/logging"
 	mock "github.com/stretchr/testify/mock"
 

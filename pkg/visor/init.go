@@ -15,7 +15,6 @@ import (
 	"github.com/ccding/go-stun/stun"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/direct"
 	dmsgdisc "github.com/skycoin/dmsg/disc"
 	"github.com/skycoin/dmsg/dmsgctrl"
@@ -24,6 +23,7 @@ import (
 	"github.com/skycoin/dmsg/dmsgpty"
 	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/internal/utclient"

@@ -6,7 +6,7 @@ import (
 	"net"
 
 	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 // dmsgClientAdapter is a wrapper around dmsg.Client to conform to Client

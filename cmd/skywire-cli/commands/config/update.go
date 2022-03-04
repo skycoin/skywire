@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/cipher"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
