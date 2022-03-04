@@ -54,12 +54,8 @@ github.com/getlantern/ops
 # github.com/getlantern/systray v1.1.0
 ## explicit; go 1.13
 github.com/getlantern/systray
-# github.com/ghodss/yaml v1.0.0
-## explicit
 # github.com/go-chi/chi v4.1.2+incompatible
 ## explicit
-github.com/go-chi/chi
-github.com/go-chi/chi/middleware
 # github.com/go-chi/chi/v5 v5.0.8-0.20220103230436-7dbe9a0bd10f
 ## explicit; go 1.14
 github.com/go-chi/chi/v5
@@ -92,8 +88,6 @@ github.com/inconshreveable/mousetrap
 # github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
 ## explicit; go 1.15
 github.com/james-barrow/golang-ipc
-# github.com/jaypipes/ghw v0.8.0
-## explicit; go 1.12
 # github.com/json-iterator/go v1.1.12
 ## explicit; go 1.12
 github.com/json-iterator/go
@@ -164,7 +158,7 @@ github.com/shirou/gopsutil/v3/process
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v0.0.0-20220125173526-46bb07d7fd64
+# github.com/skycoin/dmsg v0.0.0-20220302151611-e4368629eed2
 ## explicit; go 1.16
 github.com/skycoin/dmsg
 github.com/skycoin/dmsg/buildinfo
