@@ -53,7 +53,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     });
 
     this.form = new FormGroup({
-      'password': new FormControl('', Validators.required),
+      password: new FormControl('', Validators.required),
     });
   }
 

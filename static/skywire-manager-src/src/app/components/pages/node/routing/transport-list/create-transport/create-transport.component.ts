@@ -58,14 +58,14 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.form = this.formBuilder.group({
-      'remoteKey': ['', Validators.compose([
+      remoteKey: ['', Validators.compose([
         Validators.required,
         Validators.minLength(66),
         Validators.maxLength(66),
         Validators.pattern('^[0-9a-fA-F]+$')])
       ],
-      'label': [''],
-      'type': ['', Validators.required],
+      label: [''],
+      type: ['', Validators.required],
     });
 
     // Load the list of available types.

@@ -40,7 +40,7 @@ export class EditSkysocksClientNoteComponent implements OnInit {
 
   ngOnInit() {
     this.form = this.formBuilder.group({
-      'note': [this.data],
+      note: [this.data],
     });
 
     setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());

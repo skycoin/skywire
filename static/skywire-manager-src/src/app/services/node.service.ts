@@ -7,8 +7,6 @@ import BigNumber from 'bignumber.js';
 import { StorageService } from './storage.service';
 import { Node, Transport } from '../app.datatypes';
 import { ApiService } from './api.service';
-import { TransportService } from './transport.service';
-import { RouteService } from './route.service';
 import { processServiceError } from '../utils/errors';
 import { OperationError } from '../utils/operation-error';
 import { AppConfig } from '../app.config';
@@ -98,26 +96,6 @@ export class NodeService {
   // Delay the service waits before requesting data.
   private dataRefreshDelay: number;
 
-  constructor(
-    private apiService: ApiService,
-    private storageService: StorageService,
-    private transportService: TransportService,
-    private routeService: RouteService,
-  ) {
-    // Get the data refresing time set by the user.
-    this.storageService.getRefreshTimeObservable().subscribe(val => {
-      this.dataRefreshDelay = val * 1000;
-
-      // If the service is currently automatically refreshing the data, restart the process.
-      if (this.nodeListRefreshSubscription) {
-        this.forceNodeListRefresh();
-      }
-      if (this.specificNodeRefreshSubscription) {
-        this.forceSpecificNodeRefresh();
-      }
-    });
-  }
-
   // Vars related to the node list.
   private nodeListSubject = new BehaviorSubject<BackendData>(null);
   private updatingNodeListSubject = new BehaviorSubject<boolean>(false);
@@ -161,24 +139,52 @@ export class NodeService {
   /**
    * Allows to get the node list. The list is periodically updated. It may emit null.
    */
-  get nodeList(): Observable<BackendData> { return this.nodeListSubject.asObservable(); }
+  get nodeList(): Observable<BackendData> {
+    return this.nodeListSubject.asObservable();
+  }
   /**
    * Allows to know if the service is currently updating the node list.
    */
-  get updatingNodeList(): Observable<boolean> { return this.updatingNodeListSubject.asObservable(); }
+  get updatingNodeList(): Observable<boolean> {
+    return this.updatingNodeListSubject.asObservable();
+  }
   /**
    * Allows to get the specific node. The info is periodically updated. It may emit null.
    */
-  get specificNode(): Observable<BackendData> { return this.specificNodeSubject.asObservable(); }
+  get specificNode(): Observable<BackendData> {
+    return this.specificNodeSubject.asObservable();
+  }
   /**
    * Allows to know if the service is currently updating the specific node.
    */
-  get updatingSpecificNode(): Observable<boolean> { return this.updatingSpecificNodeSubject.asObservable(); }
+  get updatingSpecificNode(): Observable<boolean> {
+    return this.updatingSpecificNodeSubject.asObservable();
+  }
   /**
    * Allows to get details about the data traffic of the specific node. The info is
    * periodically updated.
    */
-  get specificNodeTrafficData(): Observable<TrafficData> { return this.specificNodeTrafficDataSubject.asObservable(); }
+  get specificNodeTrafficData(): Observable<TrafficData> {
+    return this.specificNodeTrafficDataSubject.asObservable();
+  }
+
+  constructor(
+    private apiService: ApiService,
+    private storageService: StorageService,
+  ) {
+    // Get the data refresing time set by the user.
+    this.storageService.getRefreshTimeObservable().subscribe(val => {
+      this.dataRefreshDelay = val * 1000;
+
+      // If the service is currently automatically refreshing the data, restart the process.
+      if (this.nodeListRefreshSubscription) {
+        this.forceNodeListRefresh();
+      }
+      if (this.specificNodeRefreshSubscription) {
+        this.forceSpecificNodeRefresh();
+      }
+    });
+  }
 
   /**
    * Makes the service start updating the node list. You must call this function before
@@ -764,13 +770,21 @@ export class NodeService {
     const useCustomSettings = localStorage.getItem(UpdaterStorageKeys.UseCustomSettings);
     if (useCustomSettings) {
       const channel = localStorage.getItem(UpdaterStorageKeys.Channel);
-      if (channel) { body['channel'] = channel; }
+      if (channel) {
+        body['channel'] = channel;
+      }
       const version = localStorage.getItem(UpdaterStorageKeys.Version);
-      if (version) { body['version'] = version; }
+      if (version) {
+        body['version'] = version;
+      }
       const archiveURL = localStorage.getItem(UpdaterStorageKeys.ArchiveURL);
-      if (archiveURL) { body['archive_url'] = archiveURL; }
+      if (archiveURL) {
+        body['archive_url'] = archiveURL;
+      }
       const checksumsURL = localStorage.getItem(UpdaterStorageKeys.ChecksumsURL);
-      if (checksumsURL) { body['checksums_url'] = checksumsURL; }
+      if (checksumsURL) {
+        body['checksums_url'] = checksumsURL;
+      }
     }
 
     return this.apiService.ws(`visors/${nodeKey}/update/ws`, body);

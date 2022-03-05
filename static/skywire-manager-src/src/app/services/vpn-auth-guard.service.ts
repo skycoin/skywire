@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { ActivatedRouteSnapshot, CanActivate, Router, RouterStateSnapshot, CanActivateChild } from '@angular/router';
 import { Observable, of } from 'rxjs';
 
- /**
+/**
  * Redirects the user to the error page of the VPN client if the lastError property is set. It
  * must be used in the canActivate and canActivateChild properties of the routing module.
  */

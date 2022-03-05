@@ -180,13 +180,13 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
     }
 
     this.form = this.formBuilder.group({
-      'pk': [currentVal, Validators.compose([
+      pk: [currentVal, Validators.compose([
         Validators.required,
         Validators.minLength(66),
         Validators.maxLength(66),
         Validators.pattern('^[0-9a-fA-F]+$')])
       ],
-      'password': ['', Validators.maxLength(100)]
+      password: ['', Validators.maxLength(100)]
     });
 
     setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
@@ -391,7 +391,7 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   }
 
   // Removes an element from the history.
-  removeFromHistory(key: String) {
+  removeFromHistory(key: string) {
     // Ask for confirmation.
     const confirmationMsg = 'apps.vpn-socks-client-settings.remove-from-history-confirmation';
     const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, confirmationMsg);

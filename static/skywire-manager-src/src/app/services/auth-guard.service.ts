@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { ActivatedRouteSnapshot, CanActivate, Router, RouterStateSnapshot, CanActivateChild } from '@angular/router';
 import { Observable, of } from 'rxjs';
 
- /**
+/**
  * Redirects the user to the login page if the forceFail property is set to true. The api
  * service is in chage of redirecting the unauthorized users to the login page in other cases.
  * It must be used in the canActivate and canActivateChild properties of the routing module.

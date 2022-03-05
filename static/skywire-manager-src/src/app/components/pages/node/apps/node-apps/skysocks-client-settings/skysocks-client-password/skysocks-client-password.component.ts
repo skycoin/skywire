@@ -38,7 +38,7 @@ export class SkysocksClientPasswordComponent implements OnInit {
 
   ngOnInit() {
     this.form = this.formBuilder.group({
-      'password': [''],
+      password: [''],
     });
 
     setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());

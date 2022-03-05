@@ -43,9 +43,9 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
   ngOnInit() {
     // TODO: Password validation is not exactly the same as in the hypervisor code.
     this.form = new FormGroup({
-      'oldPassword': new FormControl('', !this.forInitialConfig ? Validators.required : null),
-      'newPassword': new FormControl('', Validators.compose([Validators.required, Validators.minLength(6), Validators.maxLength(64)])),
-      'newPasswordConfirmation': new FormControl('', [Validators.required, this.validatePasswords.bind(this)]),
+      oldPassword: new FormControl('', !this.forInitialConfig ? Validators.required : null),
+      newPassword: new FormControl('', Validators.compose([Validators.required, Validators.minLength(6), Validators.maxLength(64)])),
+      newPasswordConfirmation: new FormControl('', [Validators.required, this.validatePasswords.bind(this)]),
     });
 
     this.formSubscription = this.form.controls['newPassword'].valueChanges
