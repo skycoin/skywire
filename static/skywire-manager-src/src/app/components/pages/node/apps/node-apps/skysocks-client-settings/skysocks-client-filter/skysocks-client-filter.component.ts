@@ -61,7 +61,7 @@ export class SkysocksClientFilterComponent implements OnInit {
     // The '-' value is used when the country field is empty, to be able to show the "any" label,
     // due to the way in which Angular works.
     this.form = this.formBuilder.group({
-      'country': [this.data.currentFilters.country ? this.data.currentFilters.country : '-'],
+      country: [this.data.currentFilters.country ? this.data.currentFilters.country : '-'],
       'location-text': [this.data.currentFilters.location],
       'key-text': [this.data.currentFilters.key],
     });
