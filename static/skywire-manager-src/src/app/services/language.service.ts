@@ -87,6 +87,6 @@ export class LanguageService {
     let currentLang = localStorage.getItem(this.storageKey);
     currentLang = currentLang ? currentLang : AppConfig.defaultLanguage;
 
-    setTimeout(() => { this.translate.use(currentLang); }, 16);
+    setTimeout(() => this.translate.use(currentLang), 16);
   }
 }

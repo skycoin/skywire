@@ -98,6 +98,7 @@ export class ApiService {
     const ws = webSocket(wsUrl);
 
     ws.next(body);
+
     return ws;
   }
 

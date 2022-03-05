@@ -40,10 +40,18 @@ export class UpdaterConfigComponent implements OnInit, OnDestroy {
     this.initialVersion = localStorage.getItem(UpdaterStorageKeys.Version);
     this.initialArchiveURL = localStorage.getItem(UpdaterStorageKeys.ArchiveURL);
     this.initialChecksumsURL = localStorage.getItem(UpdaterStorageKeys.ChecksumsURL);
-    if (!this.initialChannel) { this.initialChannel = ''; }
-    if (!this.initialVersion) { this.initialVersion = ''; }
-    if (!this.initialArchiveURL) { this.initialArchiveURL = ''; }
-    if (!this.initialChecksumsURL) { this.initialChecksumsURL = ''; }
+    if (!this.initialChannel) {
+      this.initialChannel = '';
+    }
+    if (!this.initialVersion) {
+      this.initialVersion = '';
+    }
+    if (!this.initialArchiveURL) {
+      this.initialArchiveURL = '';
+    }
+    if (!this.initialChecksumsURL) {
+      this.initialChecksumsURL = '';
+    }
 
     this.hasCustomSettings =
       !!this.initialChannel ||
@@ -52,10 +60,10 @@ export class UpdaterConfigComponent implements OnInit, OnDestroy {
       !!this.initialChecksumsURL;
 
     this.form = new FormGroup({
-      'channel': new FormControl(this.initialChannel),
-      'version': new FormControl(this.initialVersion),
-      'archiveURL': new FormControl(this.initialArchiveURL),
-      'checksumsURL': new FormControl(this.initialChecksumsURL),
+      channel: new FormControl(this.initialChannel),
+      version: new FormControl(this.initialVersion),
+      archiveURL: new FormControl(this.initialArchiveURL),
+      checksumsURL: new FormControl(this.initialChecksumsURL),
     });
   }
 

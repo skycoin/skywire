@@ -1,3 +1,5 @@
+/* eslint-disable quote-props */
+
 /**
  * Contains the iso codes of the countries as properties, with their names as value.
  */
