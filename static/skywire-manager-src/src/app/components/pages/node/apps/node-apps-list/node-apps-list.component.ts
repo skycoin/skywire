@@ -206,7 +206,7 @@ export class NodeAppsListComponent implements OnDestroy {
    * Gets the link for openning the UI of an app. Currently only works for the Skychat app.
    */
   getLink(app: Application): string {
-    if (app.name.toLocaleLowerCase() === 'skychat' && this.nodeIp) {
+    if (app.name.toLocaleLowerCase() === 'skychat' && this.nodeIp && app.status === 1) {
       // Default port.
       let port = '8001';
 
@@ -224,6 +224,8 @@ export class NodeAppsListComponent implements OnDestroy {
       }
 
       return 'http://' + this.nodeIp + port;
+    } else if (app.name.toLocaleLowerCase() === 'vpn-client' && this.nodePK) {
+      return location.origin + '/#/vpn/' + this.nodePK + '/status';
     }
 
     return null;
