@@ -11,10 +11,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/httputil"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -338,7 +338,7 @@ func (mt *ManagedTransport) setTransport(newTransport network.Transport) error {
 }
 
 func (mt *ManagedTransport) deleteFromDiscovery() error {
-	retrier := dmsgnetutil.NewRetrier(mt.log, 1*time.Second, dmsgnetutil.DefaultMaxBackoff, 5, 2)
+	retrier := netutil.NewRetrier(mt.log, 1*time.Second, netutil.DefaultMaxBackoff, 5, 2)
 	return retrier.Do(context.Background(), func() error {
 		err := mt.dc.DeleteTransport(context.Background(), mt.Entry.ID)
 		mt.log.WithField("tp-id", mt.Entry.ID).WithError(err).Debug("Error deleting transport")

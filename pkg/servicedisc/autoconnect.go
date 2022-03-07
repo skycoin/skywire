@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -105,7 +105,7 @@ func (a *autoconnector) tryEstablishTransport(ctx context.Context, pk cipher.Pub
 }
 
 func (a *autoconnector) fetchPubAddresses(ctx context.Context) ([]cipher.PubKey, error) {
-	retrier := dmsgnetutil.NewRetrier(a.log, fetchServicesDelay, 0, 5, 3)
+	retrier := netutil.NewRetrier(a.log, fetchServicesDelay, 0, 5, 3)
 	var services []Service
 	fetch := func() (err error) {
 		// "return" services up from the closure
