@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 func TestProxy_MarshalBinary(t *testing.T) {

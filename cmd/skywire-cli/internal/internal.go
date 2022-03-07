@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/skycoin/skycoin/src/util/logging"
+
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 

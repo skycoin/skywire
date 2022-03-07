@@ -6,9 +6,9 @@ import (
 	context "context"
 	net "net"
 
-	cipher "github.com/skycoin/skywire-utilities/pkg/cipher"
 	mock "github.com/stretchr/testify/mock"
 
+	cipher "github.com/skycoin/skywire-utilities/pkg/cipher"
 	routing "github.com/skycoin/skywire/pkg/routing"
 )
 

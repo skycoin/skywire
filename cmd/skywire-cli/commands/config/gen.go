@@ -10,10 +10,10 @@ import (
 	"github.com/sirupsen/logrus"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"

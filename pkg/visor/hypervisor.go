@@ -21,11 +21,11 @@ import (
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/dmsgpty"
 	"github.com/skycoin/skycoin/src/util/logging"
+	"nhooyr.io/websocket"
+
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/httputil"
-	"nhooyr.io/websocket"
-
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"

@@ -5,9 +5,9 @@ package setup
 import (
 	context "context"
 
-	cipher "github.com/skycoin/skywire-utilities/pkg/cipher"
 	mock "github.com/stretchr/testify/mock"
 
+	cipher "github.com/skycoin/skywire-utilities/pkg/cipher"
 	routerclient "github.com/skycoin/skywire/pkg/router/routerclient"
 	routing "github.com/skycoin/skywire/pkg/routing"
 )

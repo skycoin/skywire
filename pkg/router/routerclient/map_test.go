@@ -11,12 +11,12 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skycoin/src/util/logging"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport/network"

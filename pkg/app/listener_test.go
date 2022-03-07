@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/skycoin/skycoin/src/util/logging"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/idmanager"
