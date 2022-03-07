@@ -16,14 +16,12 @@ import (
 	"time"
 
 	"github.com/AudriusButkevicius/pfilter"
-	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/xtaci/kcp-go"
 
-	pkgnetutil "github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/internal/httpauth"
-	"github.com/skycoin/skywire/internal/netutil"
 	"github.com/skycoin/skywire/internal/packetfilter"
 )
 
@@ -130,7 +128,7 @@ func (c *httpClient) initHTTPClient(httpC *http.Client) {
 		c.log.WithError(err).
 			Warnf("Failed to connect to address resolver. STCPR/SUDPH services are temporarily unavailable. Retrying...")
 
-		retry := dmsgnetutil.NewRetrier(c.log, 1*time.Second, 10*time.Second, 0, 1)
+		retry := netutil.NewRetrier(c.log, 1*time.Second, 10*time.Second, 0, 1)
 
 		err := retry.Do(context.Background(), func() error {
 			httpAuthClient, err = httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, httpC, c.clientPublicIP, c.mLog)
@@ -512,7 +510,7 @@ func (c *httpClient) Close() error {
 		}
 	}
 
-	hasPublic, err := pkgnetutil.HasPublicIP()
+	hasPublic, err := netutil.HasPublicIP()
 	if err != nil {
 		c.log.Errorf("Failed to check for public IP: %v", err)
 	}

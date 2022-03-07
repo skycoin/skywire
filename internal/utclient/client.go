@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"time"
 
-	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 
 	"github.com/skycoin/skywire/internal/httpauth"
 )
@@ -46,7 +46,7 @@ func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.Client
 
 	log := mLogger.PackageLogger("utclient")
 
-	retrier := dmsgnetutil.NewRetrier(log, createRetryDelay, 0, 10, 2)
+	retrier := netutil.NewRetrier(log, createRetryDelay, 0, 10, 2)
 	retrierFunc := func() error {
 		client, err = httpauth.NewClient(context.Background(), addr, pk, sk, httpC, clientPublicIP, mLogger)
 		if err != nil {
