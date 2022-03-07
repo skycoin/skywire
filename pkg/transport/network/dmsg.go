@@ -6,6 +6,7 @@ import (
 	"net"
 
 	"github.com/skycoin/dmsg"
+
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 

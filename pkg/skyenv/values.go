@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/skycoin/dmsg/dmsgpty"
+
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 

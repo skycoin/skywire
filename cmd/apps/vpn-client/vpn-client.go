@@ -10,8 +10,8 @@ import (
 	"syscall"
 
 	ipc "github.com/james-barrow/golang-ipc"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appevent"
