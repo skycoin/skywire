@@ -20,10 +20,10 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/spf13/cobra"
 	"github.com/toqueteos/webbrowser"
 
-	"github.com/skycoin/skywire/internal/netutil"
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/syslog"
 	"github.com/skycoin/skywire/pkg/visor"
