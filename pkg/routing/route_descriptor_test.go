@@ -3,8 +3,9 @@ package routing
 import (
 	"testing"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 func TestRouteDescriptor(t *testing.T) {

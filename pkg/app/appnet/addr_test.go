@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/skycoin/dmsg"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 

@@ -3,9 +3,10 @@ package visorconfig
 import (
 	"testing"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 // When 'ensureKeys' is triggered, a 'Common' struct with:
