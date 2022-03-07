@@ -89,7 +89,7 @@ require (
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'
-//replace github.com/skycoin/dmsg => ../dmsg
+// replace github.com/skycoin/dmsg => ../dmsg
 
 // Uncomment for tests with alternate branches of 'skywire-utilities'
 //replace github.com/skycoin/skywire-utilities => ../skywire-utilities
