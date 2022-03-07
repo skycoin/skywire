@@ -6,7 +6,6 @@ import (
 	"net"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 )
 

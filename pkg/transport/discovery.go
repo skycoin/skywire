@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 

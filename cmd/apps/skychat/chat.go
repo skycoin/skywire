@@ -19,10 +19,10 @@ import (
 
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/skycoin/skycoin/src/util/logging"
+
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
-
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/routing"

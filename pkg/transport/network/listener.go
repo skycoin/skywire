@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/skycoin/dmsg"
+
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 

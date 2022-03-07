@@ -22,8 +22,8 @@ import (
 	"github.com/skycoin/dmsg/dmsghttp"
 	"github.com/skycoin/dmsg/dmsgpty"
 	"github.com/skycoin/skycoin/src/util/logging"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/internal/utclient"
 	"github.com/skycoin/skywire/internal/vpn"

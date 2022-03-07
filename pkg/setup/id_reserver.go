@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-
 	"github.com/skycoin/skywire/pkg/router/routerclient"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport/network"
