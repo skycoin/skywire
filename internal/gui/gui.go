@@ -456,7 +456,7 @@ func stopVisor() {
 
 func isHypervisorRunning(addr string) bool {
 	// we check if it's up by querying `health` endpoint
-	resp, err := http.Get(addr + "/api/health")
+	resp, err := http.Get(addr)
 	if err != nil {
 		// hypervisor is not running in this case
 		return false
