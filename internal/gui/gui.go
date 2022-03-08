@@ -85,7 +85,7 @@ func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 
 		initOpenVPNLinkBtn(conf)
 		initAdvancedButton(conf)
-		initVpnClientBtn(conf, httpC, rpcC)
+		initVpnClientBtn(conf, httpC, rpcC, logger)
 		initQuitBtn()
 
 		go handleUserInteraction(conf, doneCh)
@@ -190,7 +190,7 @@ func initOpenVPNLinkBtn(vc *visorconfig.V1) {
 	}()
 }
 
-func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, rpcClient visor.API) {
+func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, rpcClient visor.API, logger *logging.MasterLogger) {
 	mVPNClient := systray.AddMenuItem("VPN", "VPN Client Submenu")
 	// VPN Status
 	mVPNStatus = mVPNClient.AddSubMenuItem("Status: Disconnect", "VPN Client Status")
@@ -201,7 +201,7 @@ func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, rpcClient v
 	// VPN Public Servers List
 	mVPNServersList := mVPNClient.AddSubMenuItem("Servers", "VPN Client Servers")
 	mVPNServers := []*systray.MenuItem{}
-	for _, server := range getAvailPublicVPNServers(conf, httpClient) {
+	for _, server := range getAvailPublicVPNServers(conf, httpClient, logger.PackageLogger("systray:servers")) {
 		mVPNServers = append(mVPNServers, mVPNServersList.AddSubMenuItemCheckbox(server, "", false))
 	}
 	go serversBtn(conf, mVPNServers, rpcClient)
@@ -298,7 +298,8 @@ func handleVPNLinkButton(conf *visorconfig.V1) {
 }
 
 // getAvailPublicVPNServers gets all available public VPN server from service discovery URL
-func getAvailPublicVPNServers(conf *visorconfig.V1, httpC *http.Client) []string {
+func getAvailPublicVPNServers(conf *visorconfig.V1, httpC *http.Client, logger *logging.Logger) []string {
+
 	svrConfig := servicedisc.Config{
 		Type:     servicedisc.ServiceTypeVPN,
 		PK:       conf.PK,
@@ -308,7 +309,7 @@ func getAvailPublicVPNServers(conf *visorconfig.V1, httpC *http.Client) []string
 	sdClient := servicedisc.NewClient(log, log, svrConfig, httpC, "")
 	vpnServers, err := sdClient.Services(context.Background(), 0)
 	if err != nil {
-		log.Error("Error getting public vpn servers: ", err)
+		logger.Error("Error getting vpn servers: ", err)
 		return nil
 	}
 	serverAddrs := make([]string, len(vpnServers))
