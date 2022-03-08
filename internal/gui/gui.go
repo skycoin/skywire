@@ -196,8 +196,8 @@ func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, rpcClient v
 	mVPNStatus = mVPNClient.AddSubMenuItem("Status: Disconnect", "VPN Client Status")
 	mVPNStatus.Disable()
 	go vpnStatusBtn(conf, rpcClient)
-	// VPN On/Off Button
-	mVPNButton = mVPNClient.AddSubMenuItem("On", "VPN Client Switch Button")
+	// VPN Connect/Disconnect Button
+	mVPNButton = mVPNClient.AddSubMenuItem("Connect", "VPN Client Switch Button")
 	// VPN Public Servers List
 	mVPNServersList := mVPNClient.AddSubMenuItem("Servers", "VPN Client Servers")
 	mVPNServers := []*systray.MenuItem{}
@@ -213,16 +213,16 @@ func vpnStatusBtn(conf *visorconfig.V1, rpcClient visor.API) {
 		if len(stats) == 1 {
 			if stats[0].IsAlive {
 				mVPNStatus.SetTitle("Status: Connected")
-				mVPNButton.SetTitle("Off")
+				mVPNButton.SetTitle("Disconnect")
 				mVPNButton.Enable()
 			} else {
 				mVPNStatus.SetTitle("Status: Connecting...")
-				mVPNButton.SetTitle("Off")
+				mVPNButton.SetTitle("Disconnect")
 				mVPNButton.Disable()
 			}
 		} else {
 			mVPNStatus.SetTitle("Status: Disconnected")
-			mVPNButton.SetTitle("On")
+			mVPNButton.SetTitle("Connect")
 			mVPNButton.Enable()
 		}
 		time.Sleep(3 * time.Second)
@@ -268,21 +268,21 @@ func handleVPNButton(conf *visorconfig.V1, rpcClient visor.API) {
 		if stats[0].IsAlive {
 			mVPNStatus.SetTitle("Status: Disconnecting...")
 			mVPNButton.Disable()
-			mVPNButton.SetTitle("On")
+			mVPNButton.SetTitle("Connect")
 			if err := rpcClient.StopApp(skyenv.VPNClientName); err != nil {
 				mVPNStatus.SetTitle("Status: Connected")
 				mVPNButton.Enable()
-				mVPNButton.SetTitle("Off")
+				mVPNButton.SetTitle("Disconnect")
 			}
 		}
 	} else {
 		mVPNStatus.SetTitle("Status: Connecting...")
 		mVPNButton.Disable()
-		mVPNButton.SetTitle("Off")
+		mVPNButton.SetTitle("Disconnect")
 		if err := rpcClient.StartApp(skyenv.VPNClientName); err != nil {
 			mVPNStatus.SetTitle("Status: Disconnected")
 			mVPNButton.Enable()
-			mVPNButton.SetTitle("On")
+			mVPNButton.SetTitle("Connect")
 		}
 	}
 }
