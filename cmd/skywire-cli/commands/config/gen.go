@@ -13,7 +13,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire/internal/netutil"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
