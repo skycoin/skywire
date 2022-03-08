@@ -17,7 +17,7 @@ func GetServers(ctx context.Context, dmsgDisc string, log *logging.Logger) (entr
 	ticker := time.NewTicker(time.Second * 10)
 	defer ticker.Stop()
 	for {
-		servers, err := dmsgclient.AvailableServers(ctx)
+		servers, err := dmsgclient.AllServers(ctx)
 		if err != nil {
 			log.WithError(err).Fatal("Error getting dmsg-servers.")
 		}
@@ -44,7 +44,7 @@ func UpdateServers(ctx context.Context, dClient disc.APIClient, dmsgDisc string,
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			servers, err := dmsgclient.AvailableServers(ctx)
+			servers, err := dmsgclient.AllServers(ctx)
 			if err != nil {
 				log.WithError(err).Error("Error getting dmsg-servers.")
 				break
