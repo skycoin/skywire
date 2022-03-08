@@ -371,6 +371,7 @@ func getHTTPClient(conf *visorconfig.V1, ctx context.Context, logger *logging.Ma
 		closeDmsgDC = closeDmsg
 		return &dmsgHTTP
 	}
+	closeDmsgDC = func() {}
 	return &http.Client{}
 }
 
