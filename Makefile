@@ -159,11 +159,11 @@ host-apps-systray: ## Build app
 
 host-apps-systray-windows:
 	powershell -Command new-item .\apps -itemtype directory -force
-	powershell 'go build ${BUILD_OPTS} -o .\apps\skychat .\cmd\apps\skychat'
-	powershell 'go build ${BUILD_OPTS} -o .\apps\skysocks .\cmd\apps\skysocks'
-	powershell 'go build ${BUILD_OPTS} -o .\apps\skysocks-client .\cmd\apps\skysocks-client'
-	powershell 'go build ${BUILD_OPTS} -tags systray -o .\apps\vpn-server .\cmd\apps\vpn-server'
-	powershell 'go build ${BUILD_OPTS} -tags systray -o .\apps\vpn-client .\cmd\apps\vpn-client'
+	powershell 'go build ${BUILD_OPTS} -o .\apps\skychat.exe .\cmd\apps\skychat.exe'
+	powershell 'go build ${BUILD_OPTS} -o .\apps\skysocks.exe .\cmd\apps\skysocks.exe'
+	powershell 'go build ${BUILD_OPTS} -o .\apps\skysocks-client.exe .\cmd\apps\skysocks-client.exe'
+	powershell 'go build ${BUILD_OPTS} -tags systray -o .\apps\vpn-server.exe .\cmd\apps\vpn-server.exe'
+	powershell 'go build ${BUILD_OPTS} -tags systray -o .\apps\vpn-client.exe .\cmd\apps\vpn-client.exe'
 
 # Static Apps
 host-apps-static: ## Build app
