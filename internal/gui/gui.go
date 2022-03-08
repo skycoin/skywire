@@ -46,8 +46,6 @@ var (
 	stopVisorFn   func()
 	closeDmsgDC   func()
 	rpcC          visor.API
-	//vpnClientStatusMu sync.Mutex
-	//vpnClientStatus   bool
 )
 
 var (
@@ -72,7 +70,14 @@ func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 	logger.SetLevel(logrus.InfoLevel)
 
 	httpC := getHTTPClient(conf, context.Background(), logger)
-	rpcC = rpcClient(conf, logger)
+
+	rpc_logger := logger.PackageLogger("systray:rpc_client")
+	hvAddr := getHVAddr(conf)
+	for !isHypervisorRunning(hvAddr) {
+		rpc_logger.Info("Waiting for RPC get ready...")
+		time.Sleep(2 * time.Second)
+	}
+	rpcC = rpcClient(conf, rpc_logger)
 
 	return func() {
 		systray.SetTemplateIcon(icon, icon)
@@ -82,8 +87,6 @@ func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 		initAdvancedButton(conf)
 		initVpnClientBtn(conf, httpC, rpcC)
 		initQuitBtn()
-
-		//go updateVPNConnectionStatus(conf, doneCh)
 
 		go handleUserInteraction(conf, doneCh)
 	}
@@ -188,16 +191,13 @@ func initOpenVPNLinkBtn(vc *visorconfig.V1) {
 }
 
 func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, rpcClient visor.API) {
-	mVPNClient := systray.AddMenuItem("VPN", "VPN Client Connection")
+	mVPNClient := systray.AddMenuItem("VPN", "VPN Client Submenu")
 	// VPN Status
 	mVPNStatus = mVPNClient.AddSubMenuItem("Status: Disconnect", "VPN Client Status")
 	mVPNStatus.Disable()
 	go vpnStatusBtn(conf, rpcClient)
 	// VPN On/Off Button
-	mVPNButton = mVPNClient.AddSubMenuItem("On", "VPN Client Button")
-	if !isSetVPNClientPKExist(conf) {
-		mVPNButton.Disable()
-	}
+	mVPNButton = mVPNClient.AddSubMenuItem("On", "VPN Client Switch Button")
 	// VPN Public Servers List
 	mVPNServersList := mVPNClient.AddSubMenuItem("Servers", "VPN Client Servers")
 	mVPNServers := []*systray.MenuItem{}
@@ -243,8 +243,10 @@ func serversBtn(conf *visorconfig.V1, servers []*systray.MenuItem, rpcClient vis
 		serverPK := serverTempValue[2 : len(serverTempValue)-5]
 		for _, server := range servers {
 			server.Uncheck()
+			server.Enable()
 		}
 		selectedServer.Check()
+		selectedServer.Disable()
 		pk := cipher.PubKey{}
 		if err := pk.UnmarshalText([]byte(serverPK)); err != nil {
 			continue
@@ -517,9 +519,8 @@ func getVPNAddr(conf *visorconfig.V1) string {
 	return hvAddr + "/#/vpn/" + conf.PK.Hex() + "/status"
 }
 
-func rpcClient(conf *visorconfig.V1, logger *logging.MasterLogger) visor.API {
+func rpcClient(conf *visorconfig.V1, logger *logging.Logger) visor.API {
 	const rpcDialTimeout = time.Second * 5
-	logger.PackageLogger("systray:rpc_client")
 	conn, err := net.DialTimeout("tcp", conf.CLIAddr, rpcDialTimeout)
 	if err != nil {
 		logger.Fatal("RPC connection failed:", err)

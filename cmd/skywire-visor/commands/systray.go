@@ -5,7 +5,6 @@ package commands
 
 import (
 	"context"
-	"time"
 
 	"github.com/getlantern/systray"
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -34,7 +33,6 @@ func runApp(args ...string) {
 	}()
 
 	conf := initConfig(l, args, confPath)
-	time.Sleep(3 * time.Second)
 	systray.Run(gui.GetOnGUIReady(sysTrayIcon, conf), gui.OnGUIQuit)
 
 }
