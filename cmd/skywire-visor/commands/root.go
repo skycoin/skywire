@@ -3,7 +3,6 @@ package commands
 import (
 	"context"
 	"embed"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -23,7 +22,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/toqueteos/webbrowser"
 
-	"github.com/skycoin/skywire/internal/netutil"
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/syslog"
 	"github.com/skycoin/skywire/pkg/visor"
@@ -110,28 +108,6 @@ func runVisor(args []string) {
 	defer stopPProf()
 
 	conf := initConfig(log, args, confPath)
-
-	if netutil.LocalProtocol() {
-		var dmsgHTTPServersList visorconfig.DmsgHTTPServers
-		serversListJSON, err := ioutil.ReadFile(conf.DMSGHTTPPath)
-		if err != nil {
-			log.WithError(err).Fatal("Failed to read servers.json file.")
-		}
-		err = json.Unmarshal(serversListJSON, &dmsgHTTPServersList)
-		if err != nil {
-			log.WithError(err).Fatal("Error during parsing servers list")
-		}
-
-		conf.Dmsg.Servers = dmsgHTTPServersList.Prod.DMSGServers
-		conf.Dmsg.Discovery = dmsgHTTPServersList.Prod.DMSGDiscovery
-		conf.Transport.AddressResolver = dmsgHTTPServersList.Prod.AddressResolver
-		conf.Transport.Discovery = dmsgHTTPServersList.Prod.TransportDiscovery
-		conf.UptimeTracker.Addr = dmsgHTTPServersList.Prod.UptimeTracker
-		conf.Routing.RouteFinder = dmsgHTTPServersList.Prod.RouteFinder
-		conf.Launcher.ServiceDisc = dmsgHTTPServersList.Prod.ServiceDiscovery
-
-		conf.Flush() //nolint
-	}
 
 	if disableHypervisorPKs {
 		conf.Hypervisors = []cipher.PubKey{}
