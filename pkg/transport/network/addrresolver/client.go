@@ -130,8 +130,7 @@ func (c *httpClient) initHTTPClient(httpC *http.Client) {
 		c.log.WithError(err).
 			Warnf("Failed to connect to address resolver. STCPR/SUDPH services are temporarily unavailable. Retrying...")
 
-		retryLog := c.mLog.PackageLogger("network.arclient.retrier")
-		retry := dmsgnetutil.NewRetrier(retryLog, 1*time.Second, 10*time.Second, 0, 1)
+		retry := dmsgnetutil.NewRetrier(c.log, 1*time.Second, 10*time.Second, 0, 1)
 
 		err := retry.Do(context.Background(), func() error {
 			httpAuthClient, err = httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, httpC, c.clientPublicIP, c.mLog)

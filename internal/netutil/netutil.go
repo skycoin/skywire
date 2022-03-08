@@ -1,9 +1,7 @@
 package netutil
 
 import (
-	"io"
 	"net"
-	"net/http"
 )
 
 // LocalAddresses returns a list of all local addresses
@@ -29,20 +27,4 @@ func LocalAddresses() ([]string, error) {
 	}
 
 	return result, nil
-}
-
-// LocalProtocol check a condition to use dmsghttp or direct url
-func LocalProtocol() bool {
-	resp, err := http.Get("https://ipinfo.io/country")
-	if err != nil {
-		return false
-	}
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return false
-	}
-	if string(respBody)[:2] == "CN" {
-		return true
-	}
-	return false
 }

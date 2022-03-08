@@ -25,6 +25,7 @@ type APIClient interface {
 	PutEntry(context.Context, cipher.SecKey, *Entry) error
 	DelEntry(context.Context, *Entry) error
 	AvailableServers(context.Context) ([]*Entry, error)
+	AllServers(context.Context) ([]*Entry, error)
 }
 
 // HTTPClient represents a client that communicates with a dmsg-discovery service through http, it
@@ -235,6 +236,48 @@ func (c *httpClient) PutEntry(ctx context.Context, sk cipher.SecKey, entry *Entr
 func (c *httpClient) AvailableServers(ctx context.Context) ([]*Entry, error) {
 	var entries []*Entry
 	endpoint := c.address + "/dmsg-discovery/available_servers"
+
+	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+
+	resp, err := c.client.Do(req)
+	if resp != nil {
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				c.log.WithError(err).Warn("Failed to close response body")
+			}
+		}()
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// if the response is an error it will be codified as an HTTPMessage
+	if resp.StatusCode != http.StatusOK {
+		var message HTTPMessage
+		err = json.NewDecoder(resp.Body).Decode(&message)
+		if err != nil {
+			return nil, err
+		}
+
+		return nil, errFromString(message.Message)
+	}
+
+	err = json.NewDecoder(resp.Body).Decode(&entries)
+	if err != nil {
+		return nil, err
+	}
+
+	return entries, nil
+}
+
+// AllServers returns list of all servers.
+func (c *httpClient) AllServers(ctx context.Context) ([]*Entry, error) {
+	var entries []*Entry
+	endpoint := c.address + "/dmsg-discovery/all_servers"
 
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
 	if err != nil {
