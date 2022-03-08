@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Changed
 - config updated to `v1.1.1`
+- remove dsmghttp migration to skywire-visor starting
 
 ### Added
 - added `add-rhv` and `disable-rhv` flags to `skywire-visor` for adding remote hypervisor PK and disable remote hypervisor PK(s) on config file

@@ -79,3 +79,15 @@ func (c *directClient) AvailableServers(ctx context.Context) (entries []*disc.En
 	}
 	return entries, nil
 }
+
+// AllServers return list of all servers from the entries field of directClient
+func (c *directClient) AllServers(ctx context.Context) (entries []*disc.Entry, err error) {
+	c.mx.RLock()
+	defer c.mx.RUnlock()
+	for _, entry := range c.entries {
+		if entry.Server != nil {
+			entries = append(entries, entry)
+		}
+	}
+	return entries, nil
+}

@@ -16,7 +16,7 @@ import (
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/dmsg/netutil"
+	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -25,7 +25,7 @@ import (
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	skynetutil "github.com/skycoin/skywire/pkg/util/netutil"
+	"github.com/skycoin/skywire/pkg/util/netutil"
 )
 
 const (
@@ -198,7 +198,7 @@ func (c *Client) Serve() error {
 		Err: rfclient.ErrTransportNotFound.Error(),
 	}
 
-	r := netutil.NewRetrier(c.log, netutil.DefaultInitBackoff, netutil.DefaultMaxBackoff, 3, netutil.DefaultFactor).
+	r := dmsgnetutil.NewRetrier(c.log, dmsgnetutil.DefaultInitBackoff, dmsgnetutil.DefaultMaxBackoff, 3, dmsgnetutil.DefaultFactor).
 		WithErrWhitelist(errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
 			errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound)
 
@@ -707,7 +707,7 @@ func stcpEntitiesFromEnv() ([]net.IP, error) {
 }
 
 func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error) {
-	unavailableIPs, err := skynetutil.LocalNetworkInterfaceIPs()
+	unavailableIPs, err := netutil.LocalNetworkInterfaceIPs()
 	if err != nil {
 		return nil, nil, fmt.Errorf("error getting unavailable private IPs: %w", err)
 	}

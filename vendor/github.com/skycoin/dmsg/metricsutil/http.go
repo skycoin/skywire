@@ -4,8 +4,8 @@ import (
 	"net/http"
 
 	"github.com/VictoriaMetrics/metrics"
-	"github.com/go-chi/chi"
-	"github.com/go-chi/chi/middleware"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
 )
 
