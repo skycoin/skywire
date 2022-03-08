@@ -215,6 +215,10 @@ func vpnStatusBtn(conf *visorconfig.V1, rpcClient visor.API) {
 				mVPNStatus.SetTitle("Status: Connected")
 				mVPNButton.SetTitle("Off")
 				mVPNButton.Enable()
+			} else {
+				mVPNStatus.SetTitle("Status: Connecting...")
+				mVPNButton.SetTitle("Off")
+				mVPNButton.Disable()
 			}
 		} else {
 			mVPNStatus.SetTitle("Status: Disconnected")
