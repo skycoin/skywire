@@ -7,8 +7,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/skycoin/dmsg/cipher"
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 func TestParse(t *testing.T) {

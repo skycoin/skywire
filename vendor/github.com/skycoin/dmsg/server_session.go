@@ -7,9 +7,10 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/yamux"
 
-	"github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/dmsg/noise"
 	"github.com/skycoin/dmsg/servermetrics"
+
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 )
 
 // ServerSession represents a session from the perspective of a dmsg server.

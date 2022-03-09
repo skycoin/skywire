@@ -4,8 +4,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/dmsgpty"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 // Constants for skywire root directories.
