@@ -356,7 +356,8 @@ export class DataSorter {
       sortingColumn.labelProperties : sortingColumn.properties;
 
     // Get the data from the property.
-    let aVal = a, bVal = b;
+    let aVal = a;
+    let bVal = b;
     propertiesList.forEach(property => {
       aVal = aVal[property];
       bVal = bVal[property];

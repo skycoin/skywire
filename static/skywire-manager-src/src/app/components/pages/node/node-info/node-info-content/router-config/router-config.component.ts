@@ -64,7 +64,7 @@ export class RouterConfigComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.form = this.formBuilder.group({
-      'min': [this.data.minHops, Validators.compose([
+      min: [this.data.minHops, Validators.compose([
         Validators.required,
         Validators.maxLength(3),
         Validators.pattern('^[0-9]+$'),

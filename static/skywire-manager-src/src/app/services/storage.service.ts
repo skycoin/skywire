@@ -74,6 +74,7 @@ export class LabelInfo {
  * List with the types of labeled elements.
  */
 export enum LabeledElementTypes {
+  /* eslint-disable @typescript-eslint/no-shadow */
   Node = 'nd',
   Transport = 'tp',
   DmsgServer = 'ds',
