@@ -71,21 +71,13 @@ func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 
 	httpC := getHTTPClient(conf, context.Background(), logger)
 
-	rpc_logger := logger.PackageLogger("systray:rpc_client")
-	hvAddr := getHVAddr(conf)
-	for !isHypervisorRunning(hvAddr) {
-		rpc_logger.Info("Waiting for RPC get ready...")
-		time.Sleep(2 * time.Second)
-	}
-	rpcC = rpcClient(conf, rpc_logger)
-
 	return func() {
 		systray.SetTemplateIcon(icon, icon)
 		systray.SetTooltip("Skywire")
 
 		initOpenVPNLinkBtn(conf)
 		initAdvancedButton(conf)
-		initVpnClientBtn(conf, httpC, rpcC, logger)
+		initVpnClientBtn(conf, httpC, logger)
 		initQuitBtn()
 
 		go handleUserInteraction(conf, doneCh)
@@ -190,12 +182,21 @@ func initOpenVPNLinkBtn(vc *visorconfig.V1) {
 	}()
 }
 
-func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, rpcClient visor.API, logger *logging.MasterLogger) {
+func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, logger *logging.MasterLogger) {
+
+	rpc_logger := logger.PackageLogger("systray:rpc_client")
+	hvAddr := getHVAddr(conf)
+	for !isHypervisorRunning(hvAddr) {
+		rpc_logger.Info("Waiting for RPC get ready...")
+		time.Sleep(2 * time.Second)
+	}
+	rpcC = rpcClient(conf, rpc_logger)
+
 	mVPNClient := systray.AddMenuItem("VPN", "VPN Client Submenu")
 	// VPN Status
 	mVPNStatus = mVPNClient.AddSubMenuItem("Status: Disconnect", "VPN Client Status")
 	mVPNStatus.Disable()
-	go vpnStatusBtn(conf, rpcClient)
+	go vpnStatusBtn(conf, rpcC)
 	// VPN Connect/Disconnect Button
 	mVPNButton = mVPNClient.AddSubMenuItem("Connect", "VPN Client Switch Button")
 	// VPN Public Servers List
@@ -204,7 +205,7 @@ func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, rpcClient v
 	for _, server := range getAvailPublicVPNServers(conf, httpClient, logger.PackageLogger("systray:servers")) {
 		mVPNServers = append(mVPNServers, mVPNServersList.AddSubMenuItemCheckbox(server, "", false))
 	}
-	go serversBtn(conf, mVPNServers, rpcClient)
+	go serversBtn(conf, mVPNServers, rpcC)
 }
 
 func vpnStatusBtn(conf *visorconfig.V1, rpcClient visor.API) {
