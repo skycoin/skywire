@@ -9,7 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 // PtyClient represents the client end of a dmsgpty session.
