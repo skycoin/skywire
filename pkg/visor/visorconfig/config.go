@@ -1,10 +1,10 @@
 package visorconfig
 
 import (
-	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/disc"
 	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/restart"

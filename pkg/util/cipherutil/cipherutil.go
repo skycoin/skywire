@@ -1,6 +1,6 @@
 package cipherutil
 
-import "github.com/skycoin/dmsg/cipher"
+import "github.com/skycoin/skywire-utilities/pkg/cipher"
 
 // KeyPair is a pair of public and secret keys
 type KeyPair struct {

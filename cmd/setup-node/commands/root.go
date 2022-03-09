@@ -9,12 +9,12 @@ import (
 	"os"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/buildinfo"
-	"github.com/skycoin/dmsg/cmdutil"
-	"github.com/skycoin/dmsg/metricsutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
+	"github.com/skycoin/skywire-utilities/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/setup"
 	"github.com/skycoin/skywire/pkg/setup/setupmetrics"
 	"github.com/skycoin/skywire/pkg/syslog"

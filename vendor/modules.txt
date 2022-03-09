@@ -154,12 +154,9 @@ github.com/shirou/gopsutil/v3/process
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v0.0.0-20220302151611-e4368629eed2
+# github.com/skycoin/dmsg v0.0.0-20220309150149-59567d358f03
 ## explicit; go 1.16
 github.com/skycoin/dmsg
-github.com/skycoin/dmsg/buildinfo
-github.com/skycoin/dmsg/cipher
-github.com/skycoin/dmsg/cmdutil
 github.com/skycoin/dmsg/direct
 github.com/skycoin/dmsg/disc
 github.com/skycoin/dmsg/dmsgctrl
@@ -167,10 +164,7 @@ github.com/skycoin/dmsg/dmsgget
 github.com/skycoin/dmsg/dmsghttp
 github.com/skycoin/dmsg/dmsgpty
 github.com/skycoin/dmsg/dmsgtest
-github.com/skycoin/dmsg/httputil
 github.com/skycoin/dmsg/ioutil
-github.com/skycoin/dmsg/metricsutil
-github.com/skycoin/dmsg/netutil
 github.com/skycoin/dmsg/noise
 github.com/skycoin/dmsg/servermetrics
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
@@ -184,8 +178,14 @@ github.com/skycoin/skycoin/src/cipher/ripemd160
 github.com/skycoin/skycoin/src/cipher/secp256k1-go
 github.com/skycoin/skycoin/src/cipher/secp256k1-go/secp256k1-go2
 github.com/skycoin/skycoin/src/util/logging
-# github.com/skycoin/skywire-utilities v0.0.0-20220304110203-2c19051374a2
+# github.com/skycoin/skywire-utilities v0.0.0-20220308074734-3ac20b7c3254
 ## explicit; go 1.17
+github.com/skycoin/skywire-utilities/pkg/buildinfo
+github.com/skycoin/skywire-utilities/pkg/cipher
+github.com/skycoin/skywire-utilities/pkg/cmdutil
+github.com/skycoin/skywire-utilities/pkg/geo
+github.com/skycoin/skywire-utilities/pkg/httputil
+github.com/skycoin/skywire-utilities/pkg/metricsutil
 github.com/skycoin/skywire-utilities/pkg/netutil
 # github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
 ## explicit; go 1.13
@@ -275,7 +275,7 @@ golang.org/x/net/ipv4
 golang.org/x/net/ipv6
 golang.org/x/net/nettest
 golang.org/x/net/proxy
-# golang.org/x/sys v0.0.0-20211205182925-97ca703d548d
+# golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e
 ## explicit; go 1.17
 golang.org/x/sys/cpu
 golang.org/x/sys/execabs
