@@ -1,7 +1,7 @@
 package dmsgpty
 
 import (
-	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 // WhitelistGateway is the configuration gateway.
