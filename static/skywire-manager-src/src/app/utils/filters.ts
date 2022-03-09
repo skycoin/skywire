@@ -1,3 +1,5 @@
+/* eslint-disable prefer-arrow/prefer-arrow-functions */
+
 /**
  * Contains the properties needed for showing the selected filters in the UI.
  * For the UI to work well, at least one of the value properties must have a value.
@@ -136,16 +138,14 @@ export interface CompleteFilterProperties extends FilterProperties {
  */
 export function filterList(allElements: any[], currentFilters: any, filterPropertiesList: CompleteFilterProperties[]): any[] {
   if (allElements) {
-    let response: any[];
-
     // Check which filters are valid and create an array including only the properties for
     // those filters.
     const cleanedFilterPropertiesList: CompleteFilterProperties[] = [];
     Object.keys(currentFilters).forEach(key => {
       if (currentFilters[key]) {
-        for (let i = 0; i < filterPropertiesList.length; i++) {
-          if (filterPropertiesList[i].keyNameInFiltersObject === key) {
-            cleanedFilterPropertiesList.push(filterPropertiesList[i]);
+        for (const property of filterPropertiesList) {
+          if (property.keyNameInFiltersObject === key) {
+            cleanedFilterPropertiesList.push(property);
             break;
           }
         }
@@ -153,7 +153,7 @@ export function filterList(allElements: any[], currentFilters: any, filterProper
     });
 
     // Filter the elements.
-    response = allElements.filter(element => {
+    const response: any[] = allElements.filter(element => {
       let valid = true;
 
       // Check if the element pass all the filters.
