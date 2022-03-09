@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/naming-convention */
+
 export const AppConfig = {
   /**
    * How many elements the short lists can have. If the list has more elements, a
