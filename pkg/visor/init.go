@@ -25,6 +25,7 @@ import (
 	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/internal/utclient"
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
@@ -43,7 +44,6 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 	ts "github.com/skycoin/skywire/pkg/transport/setup"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
-	"github.com/skycoin/skywire/pkg/util/netutil"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
