@@ -58,7 +58,7 @@ export class EditVpnServerValueComponent implements OnInit {
 
     // Init the form.
     this.form = this.formBuilder.group({
-      'value': [savedValue ? savedValue : '']
+      value: [savedValue ? savedValue : '']
     });
 
     setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
