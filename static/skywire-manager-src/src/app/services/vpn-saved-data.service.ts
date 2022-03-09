@@ -462,7 +462,7 @@ export class VpnSavedDataService {
   /**
    * Updates the history to make it have the currently selected server as the most recently
    * used one.
-  */
+   */
   updateHistory() {
     // Update the local data, if needed.
     this.checkIfDataWasChanged();

@@ -21,10 +21,10 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/xtaci/kcp-go"
 
+	pkgnetutil "github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/internal/httpauth"
 	"github.com/skycoin/skywire/internal/netutil"
 	"github.com/skycoin/skywire/internal/packetfilter"
-	pkgnetutil "github.com/skycoin/skywire/pkg/util/netutil"
 )
 
 const (

@@ -99,7 +99,14 @@ export class SnackbarService {
     color: SnackbarColors,
     duration: number
   ) {
-    const config: SnackbarConfig = { text, textTranslationParams, smallText, smallTextTranslationParams, icon, color };
+    const config: SnackbarConfig = {
+      text: text,
+      textTranslationParams: textTranslationParams,
+      smallText: smallText,
+      smallTextTranslationParams: smallTextTranslationParams,
+      icon: icon,
+      color: color
+    };
 
     this.snackBar.openFromComponent(SnackbarComponent, {
       duration: duration,
