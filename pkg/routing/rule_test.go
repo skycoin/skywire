@@ -5,8 +5,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/skycoin/dmsg/cipher"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 func TestConsumeRule(t *testing.T) {

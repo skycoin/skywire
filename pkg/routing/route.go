@@ -10,7 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/skycoin/dmsg/cipher"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 // Route is a succession of transport entries that denotes a path from source visor to destination visor

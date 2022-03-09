@@ -15,16 +15,15 @@ import (
 	"github.com/ccding/go-stun/stun"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/direct"
 	dmsgdisc "github.com/skycoin/dmsg/disc"
 	"github.com/skycoin/dmsg/dmsgctrl"
 	"github.com/skycoin/dmsg/dmsgget"
 	"github.com/skycoin/dmsg/dmsghttp"
 	"github.com/skycoin/dmsg/dmsgpty"
-	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/internal/utclient"
 	"github.com/skycoin/skywire/internal/vpn"
@@ -510,7 +509,7 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 }
 
 func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []router.RouteSetupHook {
-	retrier := dmsgnetutil.NewRetrier(log, time.Second, time.Second*20, 3, 1.3)
+	retrier := netutil.NewRetrier(log, time.Second, time.Second*20, 3, 1.3)
 	return []router.RouteSetupHook{
 		func(rPK cipher.PubKey, tm *transport.Manager) error {
 			dmsgFallback := func() error {
@@ -670,7 +669,7 @@ func vpnEnvMaker(conf *visorconfig.V1, dmsgC, dmsgDC *dmsg.Client, tpRemoteAddrs
 		if conf.Dmsg != nil {
 			envCfg.DmsgDiscovery = conf.Dmsg.Discovery
 
-			r := dmsgnetutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
+			r := netutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
 			err := r.Do(context.Background(), func() error {
 				for _, ses := range dmsgC.AllSessions() {
 					envCfg.DmsgServers = append(envCfg.DmsgServers, ses.RemoteTCPAddr().String())
@@ -1068,7 +1067,7 @@ func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transp
 		return nil, err
 	}
 
-	tpdCRetrier := dmsgnetutil.NewRetrier(log,
+	tpdCRetrier := netutil.NewRetrier(log,
 		initBO, maxBO, tries, factor)
 
 	var tpdC transport.DiscoveryClient
