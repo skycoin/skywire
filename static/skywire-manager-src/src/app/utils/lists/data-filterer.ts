@@ -20,10 +20,14 @@ export class DataFilterer {
   private currentFilters: object;
   // Properties needed for showing the selected filters in the UI.
   private currentFiltersTextsInternal: FilterTextElements[] = [];
-  get currentFiltersTexts(): FilterTextElements[] { return this.currentFiltersTextsInternal; }
+  get currentFiltersTexts(): FilterTextElements[] {
+    return this.currentFiltersTextsInternal;
+  }
   // Current params in the query string added to the url.
   private currentUrlQueryParamsInternal: object;
-  get currentUrlQueryParams(): object { return this.currentUrlQueryParamsInternal; }
+  get currentUrlQueryParams(): object {
+    return this.currentUrlQueryParamsInternal;
+  }
   // Data to filter.
   private data: any[];
 
