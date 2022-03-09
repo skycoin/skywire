@@ -1,5 +1,5 @@
-@use '~@angular/material' as mat;
-@import "~@angular/material/theming";
+@use '@angular/material' as mat;
+@import "@angular/material/theming";
 @import "assets/scss/variables";
 
 $general-typography: mat.define-typography-config(
@@ -34,9 +34,11 @@ $skywire-theme: mat.define-light-theme($skywire-primary, $skywire-accent);
 $mat-white-primary: (
   100: white,
   500: white,
+  700: white,
   contrast: (
     100: white,
     500: white,
+    700: white,
   )
 );
 

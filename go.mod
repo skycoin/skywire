@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/AudriusButkevicius/pfilter v0.0.0-20210515103320-4b4b86609d51
-	github.com/VictoriaMetrics/metrics v1.18.0
+	github.com/VictoriaMetrics/metrics v1.18.1
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/ccding/go-stun/stun v0.0.0-20200514191101-4dc67bcdb029
 	github.com/gen2brain/dlgs v0.0.0-20210911090025-cbd38e821b98
@@ -18,10 +18,9 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/reedsolomon v1.9.9 // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2
-	github.com/mattn/go-colorable v0.1.11 // indirect
+	github.com/mattn/go-colorable v0.1.12 // indirect
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
 	github.com/mmcloughlin/avo v0.0.0-20200523190732-4439b6b2c061 // indirect
-	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/pkg/profile v1.5.0
 	github.com/shirou/gopsutil/v3 v3.21.4
 	github.com/sirupsen/logrus v1.8.1
@@ -29,7 +28,7 @@ require (
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
-	github.com/spf13/cobra v1.2.1
+	github.com/spf13/cobra v1.3.0
 	github.com/stretchr/testify v1.7.0
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
 	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect
@@ -40,17 +39,17 @@ require (
 	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
 	go.etcd.io/bbolt v1.3.6
 	golang.org/x/net v0.0.0-20211020060615-d418f374d309
-	golang.org/x/sys v0.0.0-20211020174200-9d6173849985
+	golang.org/x/sys v0.0.0-20211205182925-97ca703d548d
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
-	golang.org/x/tools v0.1.2 // indirect
+	golang.org/x/tools v0.1.5 // indirect
 	golang.zx2c4.com/wireguard v0.0.0-20211012180210-dfd688b6aa7b
-	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	nhooyr.io/websocket v1.8.2
 )
 
 require (
 	github.com/go-chi/chi/v5 v5.0.8-0.20220103230436-7dbe9a0bd10f
 	github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
+	github.com/skycoin/skywire-utilities v0.0.0-20220304110203-2c19051374a2
 )
 
 require (
@@ -84,7 +83,7 @@ require (
 	github.com/valyala/fastrand v1.1.0 // indirect
 	github.com/valyala/histogram v1.2.0 // indirect
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519 // indirect
-	golang.org/x/mod v0.4.2 // indirect
+	golang.org/x/mod v0.5.0 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )

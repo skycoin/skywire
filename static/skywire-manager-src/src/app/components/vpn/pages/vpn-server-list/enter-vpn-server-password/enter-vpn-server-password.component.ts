@@ -39,7 +39,7 @@ export class EnterVpnServerPasswordComponent implements OnInit {
 
   ngOnInit() {
     this.form = this.formBuilder.group({
-      'password': ['', this.data ? undefined : Validators.required]
+      password: ['', this.data ? undefined : Validators.required]
     });
 
     setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());

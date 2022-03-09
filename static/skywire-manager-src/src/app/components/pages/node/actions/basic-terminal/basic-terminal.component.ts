@@ -62,6 +62,32 @@ export class BasicTerminalComponent implements AfterViewInit, OnDestroy {
     return dialog.open(BasicTerminalComponent, config);
   }
 
+  constructor(
+    @Inject(MAT_DIALOG_DATA) public data: BasicTerminalData,
+    private renderer: Renderer2,
+    private apiService: ApiService,
+    private translate: TranslateService,
+  ) { }
+
+  ngAfterViewInit() {
+    // Create the terminal.
+    this.terminal = new Terminal(null);
+    this.terminal.setWidth('100%');
+    this.terminal.setBackgroundColor('black');
+    this.terminal.setTextSize('15px');
+    this.terminal.blinkingCursor(true);
+    // Add it to the DOM.
+    this.renderer.appendChild(this.terminalElement.nativeElement, this.terminal.html);
+
+    this.waitForInput();
+  }
+
+  ngOnDestroy() {
+    if (this.subscription) {
+      this.subscription.unsubscribe();
+    }
+  }
+
   // Check the keyboard to be able to restore old commands by using the arrow keys.
   @HostListener('window:keyup', ['$event'])
   keyEvent(event: KeyboardEvent) {
@@ -88,32 +114,6 @@ export class BasicTerminalComponent implements AfterViewInit, OnDestroy {
           this.terminal.changeInputContent(this.currentInputText);
         }
       }
-    }
-  }
-
-  constructor(
-    @Inject(MAT_DIALOG_DATA) public data: BasicTerminalData,
-    private renderer: Renderer2,
-    private apiService: ApiService,
-    private translate: TranslateService,
-  ) { }
-
-  ngAfterViewInit() {
-    // Create the terminal.
-    this.terminal = new Terminal(null);
-    this.terminal.setWidth('100%');
-    this.terminal.setBackgroundColor('black');
-    this.terminal.setTextSize('15px');
-    this.terminal.blinkingCursor(true);
-    // Add it to the DOM.
-    this.renderer.appendChild(this.terminalElement.nativeElement, this.terminal.html);
-
-    this.waitForInput();
-  }
-
-  ngOnDestroy() {
-    if (this.subscription) {
-      this.subscription.unsubscribe();
     }
   }
 

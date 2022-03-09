@@ -29,9 +29,9 @@ export class TruncatedTextComponent {
 
   get shortText() {
     if (this.text.length > this.shortTextLength * 2) {
-      const lastTextIndex = this.text.length,
-        prefix = this.text.slice(0, this.shortTextLength),
-        sufix = this.text.slice((lastTextIndex - this.shortTextLength), lastTextIndex);
+      const lastTextIndex = this.text.length;
+      const prefix = this.text.slice(0, this.shortTextLength);
+      const sufix = this.text.slice((lastTextIndex - this.shortTextLength), lastTextIndex);
 
       return `${prefix}...${sufix}`;
     } else {
