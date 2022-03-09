@@ -10,8 +10,9 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/skycoin/dmsg/cipher"
 	"go.etcd.io/bbolt"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 const (

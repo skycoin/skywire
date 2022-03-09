@@ -3,7 +3,7 @@ package httpauth
 import (
 	"fmt"
 
-	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 // Nonce is used to sign requests in order to avoid replay attack

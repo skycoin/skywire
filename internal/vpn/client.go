@@ -15,9 +15,8 @@ import (
 
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/cipher"
-	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -198,7 +197,7 @@ func (c *Client) Serve() error {
 		Err: rfclient.ErrTransportNotFound.Error(),
 	}
 
-	r := dmsgnetutil.NewRetrier(c.log, dmsgnetutil.DefaultInitBackoff, dmsgnetutil.DefaultMaxBackoff, 3, dmsgnetutil.DefaultFactor).
+	r := netutil.NewRetrier(c.log, netutil.DefaultInitBackoff, netutil.DefaultMaxBackoff, 3, netutil.DefaultFactor).
 		WithErrWhitelist(errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
 			errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound)
 
