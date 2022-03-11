@@ -27,7 +27,7 @@ func init() {
 // RootCmd is the command that contains sub-commands which interacts with DMSG services.
 var RootCmd = &cobra.Command{
 	Use:   "mdisc",
-	Short: "Contains sub-commands that interact with a remote DMSG Discovery",
+	Short: "Query remote DMSG Discovery",
 }
 
 func init() {

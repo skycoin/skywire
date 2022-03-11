@@ -24,7 +24,7 @@ func init() {
 
 var pkCmd = &cobra.Command{
 	Use:   "pk",
-	Short: "Obtains the public key of the visor",
+	Short: "public key of the visor",
 	Run: func(_ *cobra.Command, _ []string) {
 		if addInput != "" {
 			conf := readConfig(addInput)
@@ -41,8 +41,8 @@ var pkCmd = &cobra.Command{
 }
 
 var hvpkCmd = &cobra.Command{
-	Use:   "hvpk",
-	Short: "Obtains the public key of the visor",
+	Use:   "hv",
+	Short: "show hypervisor(s)",
 	Run: func(_ *cobra.Command, _ []string) {
 		if addInput != "" {
 			conf := readConfig(addInput)
