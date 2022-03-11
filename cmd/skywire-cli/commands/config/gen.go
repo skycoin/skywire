@@ -20,6 +20,7 @@ import (
 )
 
 func init() {
+	genConfigCmd.Flags().SortFlags = false
 	RootCmd.AddCommand(genConfigCmd)
 }
 
@@ -43,27 +44,27 @@ var (
 )
 
 func init() {
-	genConfigCmd.Flags().Var(&sk, "sk", "if unspecified, a random key pair will be generated.\n")
+	genConfigCmd.Flags().BoolVarP(&bestProtocol, "best-proto", "b", false, "determine best protocol (dmsg / direct) based on location")
+	genConfigCmd.Flags().BoolVarP(&disableAUTH, "disable-auth", "c", false, "disable authentication on hypervisor UI.")
+	genConfigCmd.Flags().BoolVarP(&dmsgHTTP, "dmsghttp", "d", false, "connect to skywire services via dmsg")
+	genConfigCmd.Flags().BoolVarP(&enableAUTH, "enable-auth", "e", false, "enable auth on hypervisor UI.")
+	genConfigCmd.Flags().StringVarP(&disableApps, "disable-apps", "f", "", "comma separated list of apps to disable")
+	genConfigCmd.Flags().BoolVarP(&hypervisor, "is-hv", "i", false, "hypervisor configuration.")
+	genConfigCmd.Flags().StringVarP(&hypervisorPKs, "hvpks", "j", "", "comma separated list of public keys to use as hypervisor")
+	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", "linux", "use os-specific paths (linux / macos / windows)")
 	genConfigCmd.Flags().StringVarP(&output, "output", "o", "skywire-config.json", "path of output config file.")
-	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "rewrite existing config (retains keys).")
-	genConfigCmd.Flags().BoolVarP(&replaceHypervisors, "use-old-hypervisors", "x", false, "use old hypervisors keys.")
-	genConfigCmd.Flags().BoolVarP(&packageConfig, "package", "p", false, "use defaults for package-based installations in /opt/skywire")
+	genConfigCmd.Flags().BoolVarP(&packageConfig, "package", "p", false, "use paths for package (/opt/skywire)")
+	genConfigCmd.Flags().BoolVarP(&publicRPC, "public-rpc", "q", false, "allow rpc requests from LAN.")
+	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "rewrite existing config & retain keys.")
+	genConfigCmd.Flags().VarP(&sk, "sk", "s", "if unspecified, a random key pair will be generated.\n")
 	genConfigCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "use test deployment service.")
-	genConfigCmd.Flags().BoolVarP(&hypervisor, "is-hypervisor", "i", false, "generate a hypervisor configuration.")
-	genConfigCmd.Flags().StringVar(&hypervisorPKs, "hypervisor-pks", "", "public keys of hypervisors that should be added to this visor")
-	genConfigCmd.Flags().BoolVarP(&dmsgHTTP, "dmsghttp", "d", false, "connect to Skywire Services via dmsg")
-	genConfigCmd.Flags().BoolVar(&publicRPC, "public-rpc", false, "change rpc service to public.")
-	genConfigCmd.Flags().BoolVar(&vpnServerEnable, "vpn-server-enable", false, "enable vpn server in generated config.")
-	genConfigCmd.Flags().BoolVar(&disableAUTH, "disable-auth", false, "disable auth on hypervisor UI.")
-	genConfigCmd.Flags().BoolVar(&enableAUTH, "enable-auth", false, "enable auth on hypervisor UI.")
-	genConfigCmd.Flags().StringVar(&selectedOS, "os", "linux", "generate configuration with paths for 'macos' or 'windows'")
-	genConfigCmd.Flags().StringVar(&disableApps, "disable-apps", "", "set list of apps to disable, separated by ','")
-	genConfigCmd.Flags().BoolVarP(&bestProtocol, "best-protocol", "b", false, "choose best protocol (dmsg / direct) to connect based on location")
+	genConfigCmd.Flags().BoolVarP(&vpnServerEnable, "serve-vpn", "v", false, "enable vpn server.")
+	genConfigCmd.Flags().BoolVarP(&replaceHypervisors, "retain-hv", "x", false, "retain existing hypervisors with replace")
 }
 
 var genConfigCmd = &cobra.Command{
 	Use:   "gen",
-	Short: "Generates a config file",
+	Short: "Generate a config file",
 	PreRun: func(_ *cobra.Command, _ []string) {
 		var err error
 		if output, err = filepath.Abs(output); err != nil {
@@ -73,11 +74,6 @@ var genConfigCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
-
-		//Fail on -pt combination
-		if packageConfig && testEnv {
-			logger.Fatal("Failed to create config: use of mutually exclusive flags")
-		}
 
 		//set output for package and skybian configs
 		if packageConfig {
