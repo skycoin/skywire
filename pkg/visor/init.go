@@ -836,6 +836,9 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 // this service is not considered critical and always returns true
 func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	if !v.conf.IsPublic {
+		// call Stop() method to clean service discovery for the situation that
+		// visor was public, then stop (not normal shutdown), then start as non-public
+		v.serviceDisc.VisorUpdater(0).Stop()
 		return nil
 	}
 	logger := v.MasterLogger().PackageLogger("public_visor")
