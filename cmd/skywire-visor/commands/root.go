@@ -56,7 +56,7 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "skywire-visor",
-	Short: "Skywire visor",
+	Short: "Skywire Visor",
 	Run: func(_ *cobra.Command, args []string) {
 		runApp(args...)
 	},
@@ -64,17 +64,17 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
+	rootCmd.Flags().SortFlags = false
 	rootCmd.AddCommand(completionCmd)
-	rootCmd.Flags().StringVar(&tag, "tag", "skywire", "logging tag")
-	rootCmd.Flags().StringVar(&syslogAddr, "syslog", "", "syslog server address. E.g. localhost:514")
-	rootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "p", "", "pprof profiling mode. Valid values: cpu, mem, mutex, block, trace, http")
-	rootCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port if mode is 'http'")
-	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file location. If the value is 'STDIN', config file will be read from stdin.")
-	rootCmd.Flags().StringVar(&delay, "delay", "0ns", "start delay (deprecated)") // deprecated
-	rootCmd.Flags().BoolVarP(&hypervisorUI, "with-hypervisor-ui", "f", false, "run visor with hypervisor UI config.")
-	rootCmd.Flags().BoolVar(&launchBrowser, "launch-browser", false, "open hypervisor web ui (hypervisor only) with system browser")
-	rootCmd.Flags().StringVar(&remoteHypervisorPKs, "add-rhv", "", "add remote hypervisor PKs in runtime")
-	rootCmd.Flags().BoolVar(&disableHypervisorPKs, "disable-rhv", false, "disable remote hypervisor PKs on config file")
+	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use. 'STDIN' to read from stdin")
+	rootCmd.Flags().BoolVarP(&hypervisorUI, "-hvui", "i", false, "run as hypervisor")
+	rootCmd.Flags().BoolVarP(&launchBrowser, "launch-browser", "b", false, "open hypervisor ui in default web browser")
+	rootCmd.Flags().StringVarP(&remoteHypervisorPKs, "hv", "j", "", "add remote hypervisor PKs at runtime")
+	rootCmd.Flags().BoolVarP(&disableHypervisorPKs, "no-rhv", "k", false, "disable remote hypervisors set in config file")
+	rootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "p", "", "pprof mode: cpu, mem, mutex, block, trace, http")
+	rootCmd.Flags().StringVarP(&pprofAddr, "pprofaddr", "q", "localhost:6060", "pprof http port")
+	rootCmd.Flags().StringVarP(&tag, "tag", "t", "skywire", "logging tag")
+	rootCmd.Flags().StringVarP(&syslogAddr, "syslog", "y", "", "syslog server address. E.g. localhost:514")
 	extraFlags()
 }
 

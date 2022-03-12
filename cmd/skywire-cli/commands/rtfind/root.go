@@ -20,16 +20,16 @@ var frMinHops, frMaxHops uint16
 var timeout time.Duration
 
 func init() {
-	RootCmd.Flags().StringVarP(&frAddr, "addr", "a", skyenv.DefaultRouteFinderAddr, "address in which to contact route finder service")
-	RootCmd.Flags().Uint16VarP(&frMinHops, "min-hops", "n", 1, "min hops for the returning routeFinderRoutesCmd")
-	RootCmd.Flags().Uint16VarP(&frMaxHops, "max-hops", "x", 1000, "max hops for the returning routeFinderRoutesCmd")
-	RootCmd.Flags().DurationVarP(&timeout, "timeout", "t", 10*time.Second, "timeout for remote server requests")
+	RootCmd.Flags().StringVarP(&frAddr, "addr", "a", skyenv.DefaultRouteFinderAddr, "route finder service address")
+	RootCmd.Flags().Uint16VarP(&frMinHops, "min-hops", "n", 1, "minimum hops")
+	RootCmd.Flags().Uint16VarP(&frMaxHops, "max-hops", "x", 1000, "maximum hops")
+	RootCmd.Flags().DurationVarP(&timeout, "timeout", "t", 10*time.Second, "request timeout")
 }
 
 // RootCmd is the command that queries the route finder.
 var RootCmd = &cobra.Command{
 	Use:   "rtfind <public-key-visor-1> <public-key-visor-2>",
-	Short: "Queries the Route Finder for available routes between two visors",
+	Short: "Query the Route Finder",
 	Args:  cobra.MinimumNArgs(2),
 	Run: func(_ *cobra.Command, args []string) {
 		rfc := rfclient.NewHTTP(frAddr, timeout, &http.Client{}, nil)
