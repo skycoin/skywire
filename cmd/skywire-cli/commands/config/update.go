@@ -70,7 +70,7 @@ func init() {
 
 var updateConfigCmd = &cobra.Command{
 	Use:   "update",
-	Short: "Updates a config file",
+	Short: "update a config file",
 	PreRun: func(_ *cobra.Command, _ []string) {
 		var err error
 		if output, err = filepath.Abs(addOutput); err != nil {

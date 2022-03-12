@@ -18,7 +18,6 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
-
 func init() {
 	genConfigCmd.Flags().SortFlags = false
 	RootCmd.AddCommand(genConfigCmd)
@@ -45,8 +44,8 @@ var (
 
 func init() {
 	genConfigCmd.Flags().BoolVarP(&bestProtocol, "best-proto", "b", false, "determine best protocol (dmsg / direct) based on location")
-	genConfigCmd.Flags().BoolVarP(&disableAUTH, "disable-auth", "c", false, "disable authentication on hypervisor UI.")
-	genConfigCmd.Flags().BoolVarP(&dmsgHTTP, "dmsghttp", "d", false, "connect to skywire services via dmsg")
+	genConfigCmd.Flags().BoolVarP(&disableAUTH, "disable-auth", "c", false, "disable authentication for hypervisor UI.")
+	genConfigCmd.Flags().BoolVarP(&dmsgHTTP, "dmsghttp", "d", false, "use dmsg connection to skywire services")
 	genConfigCmd.Flags().BoolVarP(&enableAUTH, "enable-auth", "e", false, "enable auth on hypervisor UI.")
 	genConfigCmd.Flags().StringVarP(&disableApps, "disable-apps", "f", "", "comma separated list of apps to disable")
 	genConfigCmd.Flags().BoolVarP(&hypervisor, "is-hv", "i", false, "hypervisor configuration.")
@@ -64,7 +63,7 @@ func init() {
 
 var genConfigCmd = &cobra.Command{
 	Use:   "gen",
-	Short: "Generate a config file",
+	Short: "generate a config file",
 	PreRun: func(_ *cobra.Command, _ []string) {
 		var err error
 		if output, err = filepath.Abs(output); err != nil {

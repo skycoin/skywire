@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/visor"
+
 )
 
 var logger = logging.MustGetLogger("skywire-cli")
@@ -21,7 +22,7 @@ func init() {
 // RootCmd contains commands that interact with the skywire-visor
 var RootCmd = &cobra.Command{
 	Use:   "app",
-	Short: "Query the local Skywire Visor",
+	Short: "app settings",
 }
 
 func rpcClient() visor.API {

@@ -7,11 +7,11 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/cmd/skywire-cli/commands/visor/vapps"
 	"github.com/skycoin/skywire/cmd/skywire-cli/commands/visor/vroute"
 	"github.com/skycoin/skywire/cmd/skywire-cli/commands/visor/vtp"
 	"github.com/skycoin/skywire/cmd/skywire-cli/commands/visor/vvpn"
-	"github.com/skycoin/skywire/pkg/visor"
 )
 
 var logger = logging.MustGetLogger("skywire-cli")
@@ -29,7 +29,7 @@ func init() {
 // RootCmd contains commands that interact with the skywire-visor
 var RootCmd = &cobra.Command{
 	Use:   "visor",
-	Short: "Query the local Skywire Visor",
+	Short: "Query the Skywire Visor",
 }
 
 func rpcClient() visor.API {
