@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -14,20 +13,21 @@ import (
 	"github.com/skycoin/skywire/pkg/app/launcher"
 )
 
-func init() {
+
+	func init() {
+	cobra.EnableCommandSorting = false
 	RootCmd.AddCommand(
 		lsAppsCmd,
 		startAppCmd,
 		stopAppCmd,
 		setAppAutostartCmd,
 		appLogsSinceCmd,
-		execCmd,
 	)
 }
 
 var lsAppsCmd = &cobra.Command{
-	Use:   "ls-apps",
-	Short: "Lists apps running on the local visor",
+	Use:   "ls",
+	Short: "list apps",
 	Run: func(_ *cobra.Command, _ []string) {
 		states, err := rpcClient().Apps()
 		internal.Catch(err)
@@ -52,8 +52,8 @@ var lsAppsCmd = &cobra.Command{
 }
 
 var startAppCmd = &cobra.Command{
-	Use:   "start-app <name>",
-	Short: "Starts an app of given name",
+	Use:   "start <name>",
+	Short: "launch app",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		internal.Catch(rpcClient().StartApp(args[0]))
@@ -62,8 +62,8 @@ var startAppCmd = &cobra.Command{
 }
 
 var stopAppCmd = &cobra.Command{
-	Use:   "stop-app <name>",
-	Short: "Stops an app of given name",
+	Use:   "stop <name>",
+	Short: "halt app",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		internal.Catch(rpcClient().StopApp(args[0]))
@@ -72,8 +72,8 @@ var stopAppCmd = &cobra.Command{
 }
 
 var setAppAutostartCmd = &cobra.Command{
-	Use:   "set-app-autostart <name> (on|off)",
-	Short: "Sets the autostart flag for an app of given name",
+	Use:   "autostart <name> (on|off)",
+	Short: "set autostart flag for app",
 	Args:  cobra.MinimumNArgs(2),
 	Run: func(_ *cobra.Command, args []string) {
 		var autostart bool
@@ -91,8 +91,8 @@ var setAppAutostartCmd = &cobra.Command{
 }
 
 var appLogsSinceCmd = &cobra.Command{
-	Use:   "app-logs-since <name> <timestamp>",
-	Short: "Gets logs from given app since RFC3339Nano-formated timestamp.\n                    \"beginning\" is a special timestamp to fetch all the logs",
+	Use:   "log <name> <timestamp>",
+	Short: "logs from app since RFC3339Nano-formated timestamp.\n                    \"beginning\" is a special timestamp to fetch all the logs",
 	Args:  cobra.MinimumNArgs(2),
 	Run: func(_ *cobra.Command, args []string) {
 		var t time.Time
@@ -112,16 +112,5 @@ var appLogsSinceCmd = &cobra.Command{
 		} else {
 			fmt.Println("no logs")
 		}
-	},
-}
-
-var execCmd = &cobra.Command{
-	Use:   "exec <command>",
-	Short: "Executes the given command",
-	Args:  cobra.MinimumNArgs(1),
-	Run: func(_ *cobra.Command, args []string) {
-		out, err := rpcClient().Exec(strings.Join(args, " "))
-		internal.Catch(err)
-		fmt.Print(string(out))
 	},
 }
