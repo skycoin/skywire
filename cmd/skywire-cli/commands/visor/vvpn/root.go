@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/visor"
-
 )
 
 var logger = logging.MustGetLogger("skywire-cli")
