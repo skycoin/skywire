@@ -13,8 +13,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/launcher"
 )
 
-
-	func init() {
+func init() {
 	cobra.EnableCommandSorting = false
 	RootCmd.AddCommand(
 		lsAppsCmd,
