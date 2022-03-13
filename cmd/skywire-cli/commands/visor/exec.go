@@ -15,7 +15,6 @@ func init() {
 	)
 }
 
-
 var execCmd = &cobra.Command{
 	Use:   "exec <command>",
 	Short: "execute a command",

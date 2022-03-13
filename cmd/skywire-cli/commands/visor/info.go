@@ -2,8 +2,8 @@ package visor
 
 import (
 	"fmt"
-	"log"
 	"io/ioutil"
+	"log"
 	"os"
 
 	"github.com/sirupsen/logrus"
@@ -35,58 +35,57 @@ var pkCmd = &cobra.Command{
 		if addInput != "" {
 			conf := readConfig(addInput)
 			fmt.Println(conf.PK.Hex())
-			} else {
-				client := rpcClient()
-				overview, err := client.Overview()
-				if err != nil {
-					logger.Fatal("Failed to connect:", err)
-				}
-				fmt.Println(overview.PubKey)
+		} else {
+			client := rpcClient()
+			overview, err := client.Overview()
+			if err != nil {
+				logger.Fatal("Failed to connect:", err)
 			}
-		},
+			fmt.Println(overview.PubKey)
+		}
+	},
+}
+
+var hvpkCmd = &cobra.Command{
+	Use:   "hv",
+	Short: "show hypervisor(s)",
+	Run: func(_ *cobra.Command, _ []string) {
+		if addInput != "" {
+			conf := readConfig(addInput)
+			fmt.Println(conf.Hypervisors)
+		} else {
+			client := rpcClient()
+			overview, err := client.Overview()
+			if err != nil {
+				logger.Fatal("Failed to connect:", err)
+			}
+			fmt.Println(overview.Hypervisors)
+		}
+	},
+}
+
+func readConfig(path string) *visorconfig.V1 {
+	mLog := logging.NewMasterLogger()
+	mLog.SetLevel(logrus.InfoLevel)
+
+	f, err := os.Open(path) // nolint: gosec
+	if err != nil {
+		mLog.WithError(err).
+			WithField("filepath", addInput).
+			Fatal("Failed to read config file.")
 	}
 
-	var hvpkCmd = &cobra.Command{
-		Use:   "hv",
-		Short: "show hypervisor(s)",
-		Run: func(_ *cobra.Command, _ []string) {
-			if addInput != "" {
-				conf := readConfig(addInput)
-				fmt.Println(conf.Hypervisors)
-				} else {
-					client := rpcClient()
-					overview, err := client.Overview()
-					if err != nil {
-						logger.Fatal("Failed to connect:", err)
-					}
-					fmt.Println(overview.Hypervisors)
-				}
-			},
-		}
+	raw, err := ioutil.ReadAll(f)
+	if err != nil {
+		mLog.WithError(err).Fatal("Failed to read config.")
+	}
 
-		func readConfig(path string) *visorconfig.V1 {
-			mLog := logging.NewMasterLogger()
-			mLog.SetLevel(logrus.InfoLevel)
-
-			f, err := os.Open(path) // nolint: gosec
-			if err != nil {
-				mLog.WithError(err).
-				WithField("filepath", addInput).
-				Fatal("Failed to read config file.")
-			}
-
-			raw, err := ioutil.ReadAll(f)
-			if err != nil {
-				mLog.WithError(err).Fatal("Failed to read config.")
-			}
-
-			conf, ok := visorconfig.Parse(mLog, addInput, raw)
-			if ok != nil {
-				mLog.WithError(err).Fatal("Failed to parse config.")
-			}
-			return conf
-		}
-
+	conf, ok := visorconfig.Parse(mLog, addInput, raw)
+	if ok != nil {
+		mLog.WithError(err).Fatal("Failed to parse config.")
+	}
+	return conf
+}
 
 var summaryCmd = &cobra.Command{
 	Use:   "info",
