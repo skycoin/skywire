@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -67,34 +68,40 @@ var genConfigCmd = &cobra.Command{
 	Short: "generate a config file",
 	PreRun: func(_ *cobra.Command, _ []string) {
 		var err error
-		if output, err = filepath.Abs(output); err != nil {
-			logger.WithError(err).Fatal("Invalid output provided.")
+		if output != visorconfig.StdoutName {
+			if output, err = filepath.Abs(output); err != nil {
+				logger.WithError(err).Fatal("Invalid output provided.")
+			}
 		}
 	},
 	Run: func(cmd *cobra.Command, _ []string) {
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
-
-		//set output for package and skybian configs
-		if packageConfig {
-			configName := "skywire-visor.json"
-			if hypervisor {
-				configName = "skywire.json"
-			}
-			if !cmd.Flags().Changed("output") {
-				output = filepath.Join(skyenv.PackageSkywirePath(), configName)
+		if output != visorconfig.StdoutName {
+			//set output for package and skybian configs
+			if packageConfig {
+				configName := "skywire-visor.json"
+				if hypervisor {
+					configName = "skywire.json"
+				}
+				if !cmd.Flags().Changed("output") {
+					output = filepath.Join(skyenv.PackageSkywirePath(), configName)
+				}
 			}
 		}
 
 		// Read in old config (if any) and obtain old secret key.
 		// Otherwise, we generate a new random secret key.
 		var sk cipher.SecKey
-		if oldConf, ok := readOldConfig(mLog, output, replace); !ok {
-			_, sk = cipher.GenerateKeyPair()
+		if output != visorconfig.StdoutName {
+			if oldConf, ok := readOldConfig(mLog, output, replace); !ok {
+				_, sk = cipher.GenerateKeyPair()
+			} else {
+				sk = oldConf.SK
+			}
 		} else {
-			sk = oldConf.SK
+			_, sk = cipher.GenerateKeyPair()
 		}
-
 		// Determine config type to generate.
 		var genConf func(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool) (*visorconfig.V1, error)
 
@@ -230,17 +237,23 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 
-		// Save config to file.
-		if err := conf.Flush(); err != nil {
-			logger.WithError(err).Fatal("Failed to flush config to file.")
+		if output != visorconfig.StdoutName {
+			// Save config to file.
+			if err := conf.Flush(); err != nil {
+				logger.WithError(err).Fatal("Failed to flush config to file.")
+			}
 		}
-
 		// Print results.
 		j, err := json.MarshalIndent(conf, "", "\t")
 		if err != nil {
 			logger.WithError(err).Fatal("An unexpected error occurred. Please contact a developer.")
 		}
-		logger.Infof("Updated file '%s' to: %s", output, j)
+		if output != visorconfig.StdoutName {
+			logger.Infof("Updated file '%s' to: %s", output, j)
+		} else {
+			fmt.Printf("%s", j)
+		}
+
 	},
 }
 
