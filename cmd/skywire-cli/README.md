@@ -244,7 +244,7 @@ skywire-cli config gen -i
 </summary>
 
 ```
-$skywire-cli config gen -i
+$ skywire-cli config gen -i
 {
 	"version": "v1.1.1",
 	"sk": "18446280e0c2f52b31e74b9000357098cd6fabf5ab7db5ecc1aad59d6064daf9",
@@ -562,11 +562,8 @@ Flags:
 <details>
 
 <summary>
-```
-$ skywire-cli config update
-```
+skywire-cli config update
 </summary>
-
 
 
 ```
