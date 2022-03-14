@@ -27,7 +27,7 @@ func init() {
 
 var lsRulesCmd = &cobra.Command{
 	Use:   "ls-rules",
-	Short: "Lists the local visor's routing rules",
+	Short: "list routing rules",
 	Run: func(_ *cobra.Command, _ []string) {
 		rules, err := rpcClient().RoutingRules()
 		internal.Catch(err)
@@ -38,7 +38,7 @@ var lsRulesCmd = &cobra.Command{
 
 var ruleCmd = &cobra.Command{
 	Use:   "rule <route-id>",
-	Short: "Returns a routing rule via route ID key",
+	Short: "return routing rule by route ID key",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		id, err := strconv.ParseUint(args[0], 10, 32)
@@ -53,7 +53,7 @@ var ruleCmd = &cobra.Command{
 
 var rmRuleCmd = &cobra.Command{
 	Use:   "rm-rule <route-id>",
-	Short: "Removes a routing rule via route ID key",
+	Short: "remove routing rule",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		id, err := strconv.ParseUint(args[0], 10, 32)
@@ -71,7 +71,7 @@ func init() {
 
 var addRuleCmd = &cobra.Command{
 	Use:   "add-rule (app <route-id> <local-pk> <local-port> <remote-pk> <remote-port> | fwd <next-route-id> <next-transport-id>)",
-	Short: "Adds a new routing rule",
+	Short: "add routing rule",
 	Args: func(_ *cobra.Command, args []string) error {
 		if len(args) > 0 {
 			switch rt := args[0]; rt {

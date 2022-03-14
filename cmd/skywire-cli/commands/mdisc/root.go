@@ -21,7 +21,7 @@ var masterLogger = logging.NewMasterLogger()
 var packageLogger = masterLogger.PackageLogger("mdisc:disc")
 
 func init() {
-	RootCmd.PersistentFlags().StringVar(&mdAddr, "addr", skyenv.DefaultDmsgDiscAddr, "address of DMSG discovery server")
+	RootCmd.PersistentFlags().StringVar(&mdAddr, "addr", skyenv.DefaultDmsgDiscAddr, "address of DMSG discovery server\n")
 }
 
 // RootCmd is the command that contains sub-commands which interacts with DMSG services.
