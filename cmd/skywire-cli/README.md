@@ -131,11 +131,9 @@ Flags:
 The default visor config generation assumes the command is run from the root of the cloned repository
 
 <details>
+
 <summary>
-```
-$ cd $GOPATH/src/github.com/skycoin/skywire
-$ skywire-cli config gen
-```
+`$ cd $GOPATH/src/github.com/skycoin/skywire && skywire-cli config gen`
 </summary>
 
 ```
@@ -241,9 +239,7 @@ the `-i` or `--is-hypervisor` flag should be specified.
 <details>
 
 <summary>
-```
-$ skywire-cli config gen -i
-```
+`$ skywire-cli config gen -i`
 </summary>
 
 ```
@@ -371,9 +367,7 @@ This assumes the skywire installation is at `/opt/skywire` with binaries and app
 <details>
 
 <summary>
-```
-#$ sudo skywire-cli config gen -bipr --enable-auth
-```
+`$ sudo skywire-cli config gen -bipr --enable-auth`
 </summary>
 
 ```
