@@ -26,7 +26,6 @@ github.com/armon/go-socks5
 github.com/ccding/go-stun/stun
 # github.com/cpuguy83/go-md2man/v2 v2.0.1
 ## explicit; go 1.11
-github.com/cpuguy83/go-md2man/v2/md2man
 # github.com/creack/pty v1.1.15
 ## explicit; go 1.13
 github.com/creack/pty
@@ -148,7 +147,6 @@ github.com/pkg/profile
 github.com/pmezard/go-difflib/difflib
 # github.com/russross/blackfriday/v2 v2.1.0
 ## explicit
-github.com/russross/blackfriday/v2
 # github.com/shirou/gopsutil/v3 v3.21.4
 ## explicit; go 1.15
 github.com/shirou/gopsutil/v3/cpu
@@ -202,7 +200,6 @@ github.com/songgao/water
 # github.com/spf13/cobra v1.3.0
 ## explicit; go 1.15
 github.com/spf13/cobra
-github.com/spf13/cobra/doc
 # github.com/spf13/pflag v1.0.5
 ## explicit; go 1.12
 github.com/spf13/pflag
@@ -319,7 +316,6 @@ golang.zx2c4.com/wireguard/tun/wintun
 golang.zx2c4.com/wireguard/tun/wintun/memmod
 # gopkg.in/yaml.v2 v2.4.0
 ## explicit; go 1.15
-gopkg.in/yaml.v2
 # gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 ## explicit
 gopkg.in/yaml.v3
