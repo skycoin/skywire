@@ -38,8 +38,8 @@ skywire command line interface
         - [update](#visor-update)
     - [rtfind usage](#rtfind-usage)
     - [mdisc usage](#mdisc-usage)
-            - [servers](#servers)
-            - [entry](#entry)
+        - [servers](#servers)
+        - [entry](#entry)
     - [completion usage](#completion-usage)
 
 
