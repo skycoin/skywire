@@ -133,10 +133,11 @@ The default visor config generation assumes the command is run from the root of 
 <details>
 
 <summary>
-`$ cd $GOPATH/src/github.com/skycoin/skywire && skywire-cli config gen`
+cd $GOPATH/src/github.com/skycoin/skywire && skywire-cli config gen
 </summary>
 
 ```
+$ cd $GOPATH/src/github.com/skycoin/skywire && skywire-cli config gen
 [2022-03-13T22:20:56-05:00] INFO [visor:config]: Flushing config to file. config_version="v1.1.1" filepath="/home/user/go/src/github.com/skycoin/skywire/skywire-config.json"
 [2021-06-24T08:58:56-05:00] INFO [skywire-cli]: Updated file '/home/user/go/src/github.com/skycoin/skywire/skywire-config.json' to:  
 {
@@ -239,10 +240,11 @@ the `-i` or `--is-hypervisor` flag should be specified.
 <details>
 
 <summary>
-`$ skywire-cli config gen -i`
+skywire-cli config gen -i
 </summary>
 
 ```
+$skywire-cli config gen -i
 {
 	"version": "v1.1.1",
 	"sk": "18446280e0c2f52b31e74b9000357098cd6fabf5ab7db5ecc1aad59d6064daf9",
@@ -367,10 +369,11 @@ This assumes the skywire installation is at `/opt/skywire` with binaries and app
 <details>
 
 <summary>
-`$ sudo skywire-cli config gen -bipr --enable-auth`
+sudo skywire-cli config gen -bipr --enable-auth
 </summary>
 
 ```
+$ sudo skywire-cli config gen -bipr --enable-auth
 {
 	"version": "v1.1.1",
 	"sk": "25c0376a6701cccbe640533586664f1d5d5fbaf5bb28017801296b301a55195a",
