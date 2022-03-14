@@ -19,10 +19,10 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(
-		visor.RootCmd,
-		mdisc.RootCmd,
-		rtfind.RootCmd,
 		config.RootCmd,
+		visor.RootCmd,
+		rtfind.RootCmd,
+		mdisc.RootCmd,
 		completion.RootCmd,
 	)
 }
