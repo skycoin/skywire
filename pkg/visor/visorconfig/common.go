@@ -12,7 +12,8 @@ import (
 
 const (
 	// StdinName is the path name used to identify STDIN.
-	StdinName  = "STDIN"
+	StdinName = "STDIN"
+	// StdoutName is the path name used to identify STDOUT.
 	StdoutName = "STDOUT"
 )
 
