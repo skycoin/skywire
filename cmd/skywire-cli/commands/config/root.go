@@ -10,5 +10,5 @@ var logger = logging.MustGetLogger("skywire-cli")
 // RootCmd contains commands that interact with the config of local skywire-visor
 var RootCmd = &cobra.Command{
 	Use:   "config",
-	Short: "generate or update a skywire config",
+	Short: "Generate or update a skywire config",
 }
