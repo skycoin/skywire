@@ -5,74 +5,61 @@ import (
 	"log"
 	"os"
 
-
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+//	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
-var path string
-var pkg bool
+var addInput string
 
 func init() {
 	RootCmd.AddCommand(pkCmd)
-	pkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
-	pkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
+	pkCmd.Flags().StringVarP(&addInput, "input", "i", "", "read from specified config file")
+
 	RootCmd.AddCommand(hvpkCmd)
-	hvpkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
-	hvpkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
-	RootCmd.AddCommand(summaryCmd)
-	RootCmd.AddCommand(buildInfoCmd)
+	hvpkCmd.Flags().StringVarP(&addInput, "input", "i", "", "read from specified config file")
+
+	RootCmd.AddCommand(
+		summaryCmd,
+		buildInfoCmd,
+	)
 }
 
 var pkCmd = &cobra.Command{
 	Use:   "pk",
-	Short: "Obtains the public key of the visor",
+	Short: "public key of the visor",
 	Run: func(_ *cobra.Command, _ []string) {
-		if pkg == true {
-			path = visorconfig.Pkgpath
-		}
-		if path != "" {
-			conf, err := visorconfig.ReadConfig(path)
-			if err != nil {
-				logger.Fatal("Failed to read config:", err)
-			}
-			fmt.Println(conf.PK.Hex())
-		} else {
+//		if addInput != "" {
+//			conf := visorconfig.ReadConfig(addInput)
+//			fmt.Println(conf.PK.Hex())
+//		} else {
 			client := rpcClient()
 			overview, err := client.Overview()
 			if err != nil {
 				logger.Fatal("Failed to connect:", err)
-			}
+//			}
 			fmt.Println(overview.PubKey)
 		}
 	},
 }
 
 var hvpkCmd = &cobra.Command{
-	Use:   "hvpk",
-	Short: "Obtains the public key of the visor",
+	Use:   "hv",
+	Short: "show hypervisor(s)",
 	Run: func(_ *cobra.Command, _ []string) {
-		if pkg == true {
-			path = visorconfig.Pkgpath
-		}
-		if path != "" {
-			conf, err := visorconfig.ReadConfig(path)
-			if err != nil {
-				logger.Fatal("Failed to read config:", err)
-			}
-			fmt.Println(conf.Hypervisors)
-		} else {
+//		if addInput != "" {
+//			conf := visorconfig.ReadConfig(addInput)
+//			fmt.Println(conf.Hypervisors)
+//		} else {
 			client := rpcClient()
 			overview, err := client.Overview()
 			if err != nil {
 				logger.Fatal("Failed to connect:", err)
-			}
+//			}
 			fmt.Println(overview.Hypervisors)
 		}
 	},
 }
-
 
 
 var summaryCmd = &cobra.Command{
