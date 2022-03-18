@@ -30,6 +30,8 @@ func onExit() {
 
 See [full API](https://pkg.go.dev/github.com/getlantern/systray?tab=doc) as well as [CHANGELOG](https://github.com/getlantern/systray/tree/master/CHANGELOG.md).
 
+Note: this package requires cgo, so make sure you set `CGO_ENABLED=1` before building.
+
 ## Try the example app!
 
 Have go v1.12+ or higher installed? Here's an example to get started on macOS:
@@ -68,13 +70,20 @@ The code under `webview_example` is to demostrate how it can co-exist with other
 
 ### Linux
 
-* Building apps requires gcc as well as the `gtk3` and `libappindicator3` development headers to be installed. For Debian or Ubuntu, you may install these using:
+* Building apps requires gcc as well as the `gtk3` and `libayatana-appindicator3` development headers to be installed. For Debian or Ubuntu, you may install these using:
 
 ```sh
-sudo apt-get install gcc libgtk-3-dev libappindicator3-dev
+sudo apt-get install gcc libgtk-3-dev libayatana-appindicator3-dev
 ```
 
-On Linux Mint, `libxapp-dev` is also required .
+On Linux Mint, `libxapp-dev` is also required.
+
+If you need to support the older `libappindicator3` library instead, you can pass the build flag `legacy_appindicator`
+when building. For example:
+
+```
+go build -tags=legacy_appindicator`
+```
 
 To build `webview_example`, you also need to install `libwebkit2gtk-4.0-dev` and remove `webview_example/rsrc.syso` which is required on Windows.
 
