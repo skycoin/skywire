@@ -16,10 +16,10 @@ import (
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appnet"
-	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 var (
