@@ -298,6 +298,18 @@ func (r *RPC) GetAppStats(appName *string, out *appserver.AppStats) (err error) 
 	return err
 }
 
+// GetAppError gets app runtime error.
+func (r *RPC) GetAppError(appName *string, out *string) (err error) {
+	defer rpcutil.LogCall(r.log, "GetAppError", appName)(out, &err)
+
+	stats, err := r.visor.GetAppError(*appName)
+	if err != nil {
+		*out = stats
+	}
+
+	return err
+}
+
 // GetAppConnectionsSummary returns connections stats for the app.
 func (r *RPC) GetAppConnectionsSummary(appName *string, out *[]appserver.ConnectionSummary) (err error) {
 	defer rpcutil.LogCall(r.log, "GetAppConnectionsSummary", appName)(out, &err)
