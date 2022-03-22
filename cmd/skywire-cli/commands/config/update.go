@@ -99,7 +99,7 @@ var updateConfigCmd = &cobra.Command{
 		}
 
 		if res.Body != nil {
-			defer res.Body.Close()
+			defer res.Body.Close() //nolint
 		}
 
 		body, err := ioutil.ReadAll(res.Body)
