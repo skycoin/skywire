@@ -46,7 +46,6 @@ var (
 	pprofAddr            string
 	confPath             string
 	stdin                bool
-	delay                string
 	launchBrowser        bool
 	hypervisorUI         bool
 	remoteHypervisorPKs  string
