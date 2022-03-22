@@ -10,11 +10,14 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 const rpcName = "RPCGateway"
+
+// ErrSetupNode is used when the visor is unable to connect to a setup node
+var ErrSetupNode = errors.New("failed to dial to a setup node")
 
 // Client is an RPC client for setup node.
 type Client struct {
@@ -55,7 +58,7 @@ func (c *Client) dial(ctx context.Context, dmsgC *dmsg.Client) (net.Conn, error)
 		return conn, nil
 	}
 
-	return nil, errors.New("failed to dial to a setup node")
+	return nil, ErrSetupNode
 }
 
 // Close closes a Client.
