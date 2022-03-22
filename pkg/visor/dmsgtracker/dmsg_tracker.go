@@ -14,7 +14,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 )
 
 // Default values for DmsgTrackerManager
