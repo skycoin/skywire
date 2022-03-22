@@ -25,6 +25,7 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/internal/utclient"
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
@@ -36,7 +37,6 @@ import (
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/setup/setupclient"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
@@ -836,6 +836,9 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 // this service is not considered critical and always returns true
 func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	if !v.conf.IsPublic {
+		// call Stop() method to clean service discovery for the situation that
+		// visor was public, then stop (not normal shutdown), then start as non-public
+		v.serviceDisc.VisorUpdater(0).Stop()
 		return nil
 	}
 	logger := v.MasterLogger().PackageLogger("public_visor")

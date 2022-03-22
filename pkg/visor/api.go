@@ -18,10 +18,10 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/updater"
@@ -49,6 +49,7 @@ type API interface {
 	SetAppKillswitch(appName string, killswitch bool) error
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
 	GetAppStats(appName string) (appserver.AppStats, error)
+	GetAppError(appName string) (string, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
 
 	TransportTypes() ([]string, error)
@@ -506,6 +507,12 @@ func (v *Visor) GetAppStats(appName string) (appserver.AppStats, error) {
 	}
 
 	return stats, nil
+}
+
+// GetAppError implements API.
+func (v *Visor) GetAppError(appName string) (string, error) {
+	appErr, _ := v.procM.ErrorByName(appName)
+	return appErr, nil
 }
 
 // GetAppConnectionsSummary implements API.

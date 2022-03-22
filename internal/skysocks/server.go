@@ -12,7 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/yamux"
 
-	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 )
 
 // Server implements multiplexing proxy server using yamux.
