@@ -17,64 +17,40 @@ import (
 // MakeBaseConfig returns a visor config with 'enforced' fields only.
 // This is used as default values if no config is given, or for missing *required* fields.
 // This function always returns the latest config version.
-func MakeBaseConfig(common *Common) *V1 {
+func MakeBaseConfig(common *Common, hypervisor bool, services Services) *V1 {
 	conf := new(V1)
 	conf.Common = common
 	conf.Dmsg = &dmsgc.DmsgConfig{
-		Discovery:     skyenv.DefaultDmsgDiscAddr,
+		Discovery:     services.DmsgDiscovery, //skyenv.DefaultDmsgDiscAddr,
 		SessionsCount: 1,
 		Servers:       []*disc.Entry{},
 	}
 	conf.Transport = &V1Transport{
-		Discovery:         skyenv.DefaultTpDiscAddr,
-		AddressResolver:   skyenv.DefaultAddressResolverAddr,
+		Discovery:         services.TransportDiscovery, //skyenv.DefaultTpDiscAddr,
+		AddressResolver:   services.AddressResolver,    //skyenv.DefaultAddressResolverAddr,
 		PublicAutoconnect: true,
 	}
 	conf.Routing = &V1Routing{
-		SetupNodes:         []cipher.PubKey{skyenv.MustPK(skyenv.DefaultSetupPK)},
-		RouteFinder:        skyenv.DefaultRouteFinderAddr,
+		SetupNodes:         services.SetupNodes,  //[]cipher.PubKey{skyenv.MustPK(skyenv.DefaultSetupPK)},
+		RouteFinder:        services.RouteFinder, //skyenv.DefaultRouteFinderAddr,
 		RouteFinderTimeout: DefaultTimeout,
 	}
 	conf.Launcher = &V1Launcher{
-		ServiceDisc: skyenv.DefaultServiceDiscAddr,
+		ServiceDisc: services.ServiceDiscovery, //skyenv.DefaultServiceDiscAddr,
 		Apps:        nil,
 		ServerAddr:  skyenv.DefaultAppSrvAddr,
 		BinPath:     skyenv.DefaultAppBinPath,
 	}
 	conf.UptimeTracker = &V1UptimeTracker{
-		Addr: skyenv.DefaultUptimeTrackerAddr,
+		Addr: services.UptimeTracker, //skyenv.DefaultUptimeTrackerAddr,
 	}
 	conf.CLIAddr = skyenv.DefaultRPCAddr
 	conf.LogLevel = skyenv.DefaultLogLevel
 	conf.LocalPath = skyenv.DefaultLocalPath
-	conf.StunServers = skyenv.GetStunServers()
+	conf.StunServers = services.StunServers //skyenv.GetStunServers()
 	conf.ShutdownTimeout = DefaultTimeout
 	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
 	conf.DMSGHTTPPath = skyenv.DefaultDMSGHTTPPath
-	return conf
-}
-
-// MakeDefaultConfig returns the default visor config from a given secret key (if specified).
-// The config's 'sk' field will be nil if not specified.
-// Generated config will be saved to 'confPath'.
-// This function always returns the latest config version.
-func MakeDefaultConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool) (*V1, error) {
-	cc, err := NewCommon(log, confPath, V1Name, sk)
-	if err != nil {
-		return nil, err
-	}
-	return defaultConfigFromCommon(cc, hypervisor)
-}
-
-func defaultConfigFromCommon(cc *Common, hypervisor bool) (*V1, error) {
-	// Enforce version and keys in 'cc'.
-	cc.Version = V1Name
-	if err := cc.ensureKeys(); err != nil {
-		return nil, err
-	}
-
-	// Actual config generation.
-	conf := MakeBaseConfig(cc)
 
 	conf.Dmsgpty = &V1Dmsgpty{
 		DmsgPort: skyenv.DmsgPtyPort,
@@ -102,12 +78,32 @@ func defaultConfigFromCommon(cc *Common, hypervisor bool) (*V1, error) {
 		conf.Hypervisor = &config
 	}
 
+	return conf
+}
+
+// MakeDefaultConfig returns the default visor config from a given secret key (if specified).
+// The config's 'sk' field will be nil if not specified.
+// Generated config will be saved to 'confPath'.
+// This function always returns the latest config version.
+func MakeDefaultConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool, services Services) (*V1, error) {
+	cc, err := NewCommon(log, confPath, V1Name, sk)
+	if err != nil {
+		return nil, err
+	}
+	// Enforce version and keys in 'cc'.
+	cc.Version = V1Name
+	if err := cc.ensureKeys(); err != nil {
+		return nil, err
+	}
+	// Actual config generation.
+	conf := MakeBaseConfig(cc, hypervisor, services)
+
 	return conf, nil
 }
 
 // MakeTestConfig acts like MakeDefaultConfig, however, test deployment service addresses are used instead.
-func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool) (*V1, error) {
-	conf, err := MakeDefaultConfig(log, confPath, sk, hypervisor)
+func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool, services Services) (*V1, error) {
+	conf, err := MakeDefaultConfig(log, confPath, sk, hypervisor, services)
 	if err != nil {
 		return nil, err
 	}
@@ -115,13 +111,12 @@ func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKe
 	if conf.Hypervisor != nil {
 		conf.Hypervisor.DmsgDiscovery = conf.Transport.Discovery
 	}
-
 	return conf, nil
 }
 
 // MakePackageConfig acts like MakeDefaultConfig but use package config defaults
-func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool) (*V1, error) {
-	conf, err := MakeDefaultConfig(log, confPath, sk, hypervisor)
+func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool, services Services) (*V1, error) {
+	conf, err := MakeDefaultConfig(log, confPath, sk, hypervisor, services)
 	if err != nil {
 		return nil, err
 	}
