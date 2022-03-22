@@ -28,7 +28,7 @@ var vpnUICmd = &cobra.Command{
 	Short: "Open VPN UI in default browser",
 	Run: func(_ *cobra.Command, _ []string) {
 		var url string
-		if pkg == true {
+		if pkg {
 			path = visorconfig.Pkgpath
 		}
 		if path != "" {
@@ -38,13 +38,13 @@ var vpnUICmd = &cobra.Command{
 			}
 			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", conf.PK.Hex())
 		} else {
-		client := rpcClient()
-		overview, err := client.Overview()
-		if err != nil {
-			log.Fatal("Failed to connect:", err)
+			client := rpcClient()
+			overview, err := client.Overview()
+			if err != nil {
+				log.Fatal("Failed to connect:", err)
+			}
+			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", overview.PubKey.Hex())
 		}
-		url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", overview.PubKey.Hex())
-	}
 		if err := webbrowser.Open(url); err != nil {
 			log.Fatal("Failed to open VPN UI in browser:", err)
 		}
@@ -56,7 +56,7 @@ var vpnURLCmd = &cobra.Command{
 	Short: "Show VPN UI URL",
 	Run: func(_ *cobra.Command, _ []string) {
 		var url string
-		if pkg == true {
+		if pkg {
 			path = visorconfig.Pkgpath
 		}
 		if path != "" {
@@ -66,13 +66,13 @@ var vpnURLCmd = &cobra.Command{
 			}
 			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", conf.PK.Hex())
 		} else {
-		client := rpcClient()
-		overview, err := client.Overview()
-		if err != nil {
-			logger.Fatal("Failed to connect:", err)
+			client := rpcClient()
+			overview, err := client.Overview()
+			if err != nil {
+				logger.Fatal("Failed to connect:", err)
+			}
+			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", overview.PubKey.Hex())
 		}
-		url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", overview.PubKey.Hex())
-	}
 		fmt.Println(url)
 	},
 }

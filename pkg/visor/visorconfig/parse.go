@@ -8,8 +8,6 @@ import (
 
 	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/pkg/app/launcher"
-	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
@@ -23,7 +21,7 @@ var (
 
 // Parse parses the visor config from a given reader.
 // If the config file is not the most recent version, it is upgraded and written back to 'path'.
-func Parse(log *logging.MasterLogger, path string, raw []byte) (*V1, error) {
+func Parse(log *logging.MasterLogger, path string, raw []byte, hypervisor bool, services Services) (*V1, error) {
 	cc, err := NewCommon(log, path, "", nil)
 	if err != nil {
 		return nil, err
@@ -38,20 +36,20 @@ func Parse(log *logging.MasterLogger, path string, raw []byte) (*V1, error) {
 	case V111Name:
 		fallthrough
 	case V110Name:
-		return parseV1(cc, raw)
+		return parseV1(cc, raw, hypervisor, services)
 	case V101Name:
-		return parseV1(cc, raw)
+		return parseV1(cc, raw, hypervisor, services)
 	case V100Name:
-		return parseV1(cc, raw)
+		return parseV1(cc, raw, hypervisor, services)
 	case V0Name, V0NameOldFormat, "":
-		return parseV0(cc, raw)
+		fallthrough
 	default:
 		return nil, ErrUnsupportedConfigVersion
 	}
 }
 
-func parseV1(cc *Common, raw []byte) (*V1, error) {
-	conf := MakeBaseConfig(cc)
+func parseV1(cc *Common, raw []byte, hypervisor bool, services Services) (*V1, error) {
+	conf := MakeBaseConfig(cc, hypervisor, services)
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	if err := dec.Decode(&conf); err != nil {
 		return nil, err
@@ -61,104 +59,8 @@ func parseV1(cc *Common, raw []byte) (*V1, error) {
 		return nil, fmt.Errorf("%v: %w", ErrInvalidSK, err)
 	}
 	conf = ensureAppDisc(conf)
-	conf = updateUrls(conf)
+	conf = updateUrls(conf, services)
 	conf.Version = V1Name
-	return conf, conf.flush(conf)
-}
-
-func parseV0(cc *Common, raw []byte) (*V1, error) {
-	// Unmarshal old config.
-	var old V0
-	if err := json.Unmarshal(raw, &old); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal old config of version '%s': %w", cc.Version, err)
-	}
-
-	// Extract keys from old config and save it in Common.
-	sk := old.KeyPair.SecKey
-	if sk.Null() {
-		return nil, fmt.Errorf("old config of version '%s' has no secret key defined", cc.Version)
-	}
-
-	pk, err := sk.PubKey()
-	if err != nil {
-		return nil, fmt.Errorf("old config of version '%s' has invalid secret key: %w", cc.Version, err)
-	}
-
-	cc.SK = sk
-	cc.PK = pk
-
-	// Start with default config as template.
-	conf, err := defaultConfigFromCommon(cc, false)
-	if err != nil {
-		return nil, err
-	}
-
-	// Fill config with old values.
-	if old.Dmsg != nil {
-		conf.Dmsg = old.Dmsg
-	}
-
-	if old.DmsgPty != nil {
-		conf.Dmsgpty = old.DmsgPty
-	}
-
-	if old.STCP != nil {
-		conf.STCP = old.STCP
-	}
-
-	if old.Transport != nil {
-		conf.Transport.Discovery = old.Transport.Discovery
-	}
-
-	if old.Routing != nil {
-		conf.Routing = old.Routing
-	}
-
-	if old.UptimeTracker != nil {
-		conf.UptimeTracker = old.UptimeTracker
-	}
-
-	conf.Launcher.Apps = make([]launcher.AppConfig, len(old.Apps))
-	for i, oa := range old.Apps {
-		conf.Launcher.Apps[i] = launcher.AppConfig{
-			Name:      oa.App,
-			Args:      oa.Args,
-			AutoStart: oa.AutoStart,
-			Port:      oa.Port,
-		}
-	}
-
-	vpnApps := []launcher.AppConfig{
-		{
-			Name:      skyenv.VPNServerName,
-			AutoStart: false,
-			Port:      routing.Port(skyenv.VPNServerPort),
-		},
-		{
-			Name:      skyenv.VPNClientName,
-			AutoStart: false,
-			Port:      routing.Port(skyenv.VPNClientPort),
-		},
-	}
-
-	conf.Launcher.Apps = append(conf.Launcher.Apps, vpnApps...)
-
-	conf.LocalPath = old.LocalPath
-	conf.Launcher.BinPath = old.AppsPath
-	conf.Launcher.ServerAddr = old.AppServerAddr
-
-	for _, hv := range old.Hypervisors {
-		conf.Hypervisors = append(conf.Hypervisors, hv.PubKey)
-	}
-
-	if old.Interfaces != nil {
-		conf.CLIAddr = old.Interfaces.RPCAddress
-	}
-
-	conf.LogLevel = old.LogLevel
-	conf.ShutdownTimeout = old.ShutdownTimeout
-	conf.RestartCheckDelay = old.RestartCheckDelay
-
 	return conf, conf.flush(conf)
 }
 
@@ -169,24 +71,24 @@ func ensureAppDisc(conf *V1) *V1 {
 	return conf
 }
 
-func updateUrls(conf *V1) *V1 {
+func updateUrls(conf *V1, services Services) *V1 {
 	if conf.Dmsg.Discovery == skyenv.OldDefaultDmsgDiscAddr {
-		conf.Dmsg.Discovery = skyenv.DefaultDmsgDiscAddr
+		conf.Dmsg.Discovery = services.DmsgDiscovery
 	}
 	if conf.Transport.Discovery == skyenv.OldDefaultTpDiscAddr {
-		conf.Transport.Discovery = skyenv.DefaultTpDiscAddr
+		conf.Transport.Discovery = services.TransportDiscovery
 	}
 	if conf.Transport.AddressResolver == skyenv.OldDefaultAddressResolverAddr {
-		conf.Transport.AddressResolver = skyenv.DefaultAddressResolverAddr
+		conf.Transport.AddressResolver = services.AddressResolver
 	}
 	if conf.Routing.RouteFinder == skyenv.OldDefaultRouteFinderAddr {
-		conf.Routing.RouteFinder = skyenv.DefaultRouteFinderAddr
+		conf.Routing.RouteFinder = services.RouteFinder
 	}
 	if conf.UptimeTracker.Addr == skyenv.OldDefaultUptimeTrackerAddr {
-		conf.UptimeTracker.Addr = skyenv.DefaultUptimeTrackerAddr
+		conf.UptimeTracker.Addr = services.UptimeTracker
 	}
 	if conf.Launcher.ServiceDisc == skyenv.OldDefaultServiceDiscAddr {
-		conf.Launcher.ServiceDisc = skyenv.DefaultServiceDiscAddr
+		conf.Launcher.ServiceDisc = services.ServiceDiscovery
 	}
 	return conf
 }

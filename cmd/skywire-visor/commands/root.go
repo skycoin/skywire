@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"fmt"
@@ -31,7 +32,6 @@ import (
 )
 
 var uiAssets fs.FS
-
 var restartCtx = restart.CaptureContext()
 
 const (
@@ -45,6 +45,7 @@ var (
 	pprofMode            string
 	pprofAddr            string
 	confPath             string
+	stdin                bool
 	delay                string
 	launchBrowser        bool
 	hypervisorUI         bool
@@ -66,11 +67,12 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.Flags().SortFlags = false
 	rootCmd.AddCommand(completionCmd)
-	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use. 'STDIN' to read from stdin")
+	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use")
 	rootCmd.Flags().BoolVarP(&hypervisorUI, "-hvui", "i", false, "run as hypervisor")
 	rootCmd.Flags().BoolVarP(&launchBrowser, "launch-browser", "b", false, "open hypervisor ui in default web browser")
 	rootCmd.Flags().StringVarP(&remoteHypervisorPKs, "hv", "j", "", "add remote hypervisor PKs at runtime")
 	rootCmd.Flags().BoolVarP(&disableHypervisorPKs, "no-rhv", "k", false, "disable remote hypervisors set in config file")
+	rootCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
 	rootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "p", "", "pprof mode: cpu, mem, mutex, block, trace, http")
 	rootCmd.Flags().StringVarP(&pprofAddr, "pprofaddr", "q", "localhost:6060", "pprof http port")
 	rootCmd.Flags().StringVarP(&tag, "tag", "t", "skywire", "logging tag")
@@ -83,23 +85,9 @@ func runVisor(args []string) {
 	log := initLogger(tag, syslogAddr)
 	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
 	log.AddHook(hook)
-
-	delayDuration, err := time.ParseDuration(delay)
-	if err != nil {
-		log.WithError(err).Error("Failed to parse delay duration.")
-		delayDuration = time.Duration(0)
+	if stdin {
+		confPath = visorconfig.StdinName
 	}
-	log.WithField("delay", delayDuration).
-		WithField("systemd", restartCtx.Systemd()).
-		WithField("parent_systemd", restartCtx.ParentSystemd()).
-		WithField("skybian_build_version", os.Getenv("SKYBIAN_BUILD_VERSION")).
-		WithField("build_tag", visor.BuildTag).
-		Debugf("Process info")
-
-	detachProcess(delayDuration, log)
-
-	time.Sleep(delayDuration)
-
 	if _, err := buildinfo.Get().WriteTo(log.Out); err != nil {
 		log.WithError(err).Error("Failed to output build info.")
 	}
@@ -216,6 +204,7 @@ func initPProf(log *logging.MasterLogger, tag string, profMode string, profAddr 
 
 func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *visorconfig.V1 {
 	log := mLog.PackageLogger("visor:config")
+	var services visorconfig.Services
 
 	var r io.Reader
 
@@ -239,18 +228,18 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 		fallthrough
 	default:
 		log.WithField("filepath", confPath).Info("Reading config from file.")
-		f, err := os.Open(confPath) //nolint:gosec
+		f, err := os.ReadFile(confPath) //nolint:gosec
 		if err != nil {
 			log.WithError(err).
 				WithField("filepath", confPath).
 				Fatal("Failed to read config file.")
 		}
-		defer func() { //nolint
-			if err := f.Close(); err != nil {
-				log.WithError(err).Error("Closing config file resulted in error.")
-			}
-		}()
-		r = f
+		//		defer func() { //nolint
+		//			if err := f.Close(); err != nil {
+		//				log.WithError(err).Error("Closing config file resulted in error.")
+		//			}
+		//		}()
+		r = bytes.NewReader(f)
 	}
 
 	raw, err := ioutil.ReadAll(r)
@@ -258,7 +247,7 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 		log.WithError(err).Fatal("Failed to read in config.")
 	}
 
-	conf, err := visorconfig.Parse(mLog, confPath, raw)
+	conf, err := visorconfig.Parse(mLog, confPath, raw, true, services)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to parse config.")
 	}
@@ -275,9 +264,13 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 	return conf
 }
 
+// runBrowser is actually not recommended because browser shouldn't run as root
+// but the vpn Client and Server need root to function.
+// Visor also needs write permissions in /opt/skywire
+// Consider running the visor at the user level and elevate to run the vpn client and server?
 func runBrowser(conf *visorconfig.V1, log *logging.MasterLogger) {
 	if conf.Hypervisor == nil {
-		log.Errorln("Cannot start browser with a regular visor")
+		log.Errorln("Hypervisor not started - cannot start browser with a regular visor")
 		return
 	}
 	addr := conf.Hypervisor.HTTPAddr
