@@ -19,7 +19,7 @@ func ReadConfig(path string) (*V1, error) {
 	mLog := logging.NewMasterLogger()
 	mLog.SetLevel(logrus.InfoLevel)
 
-	f, err := os.ReadFile(path)
+	f, err := os.ReadFile(path) //nolint
 	if err != nil {
 		return nil, fmt.Errorf("%w", err)
 	}

@@ -493,8 +493,9 @@ github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6 h1:1Nc5EBY6pjfw1kwW0
 github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6/go.mod h1:UXghlricA7J3aRD/k7p/zBObQfmBawwCxIVPVjz2Q3o=
 github.com/skycoin/skycoin v0.27.1 h1:HatxsRwVSPaV4qxH6290xPBmkH/HgiuAoY2qC+e8C9I=
 github.com/skycoin/skycoin v0.27.1/go.mod h1:78nHjQzd8KG0jJJVL/j0xMmrihXi70ti63fh8vXScJw=
-github.com/skycoin/skywire-utilities v0.0.0-20220308074734-3ac20b7c3254 h1:0DGKXYfz4pMupdvyxDraibNsHAaS4rsuKTYnkQKyL/E=
 github.com/skycoin/skywire-utilities v0.0.0-20220308074734-3ac20b7c3254/go.mod h1:7l3pPv/3lGaa9mdni0wvXxSOLql36u3i2SDXhZOi78s=
+github.com/skycoin/skywire-utilities v0.0.0-20220321002722-7d4b15ff5211 h1:iEQL310u/j/cljfyI7m9WjBycPiRiTl5auLRWljlpyk=
+github.com/skycoin/skywire-utilities v0.0.0-20220321002722-7d4b15ff5211/go.mod h1:9fOsut+rqCBd33NPF3cuolXrw8uQESYshSvdYMaZNEo=
 github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f h1:A5dEM1OE9YhN3LciZU9qPjo7fJ46JeHNi3JCroDkK0Y=
 github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f/go.mod h1:48cleOxgkiLbgv322LOg2Vrxtu180Mb8GG1HbuhmFYM=
 github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8 h1:TG/diQgUe0pntT/2D9tmUCz4VNwm9MfrtPr0SU2qSX8=

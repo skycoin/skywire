@@ -18,12 +18,12 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/cipherutil"
@@ -221,6 +221,16 @@ func (rc *rpcClient) GetAppStats(appName string) (appserver.AppStats, error) {
 	}
 
 	return stats, nil
+}
+
+func (rc *rpcClient) GetAppError(appName string) (string, error) {
+	var appErr string
+
+	if err := rc.Call("GetAppError", &appName, &appErr); err != nil {
+		return appErr, err
+	}
+
+	return appErr, nil
 }
 
 // GetAppConnectionsSummary get connections stats for the app.
@@ -785,6 +795,10 @@ func (mc *mockRPCClient) LogsSince(timestamp time.Time, _ string) ([]string, err
 
 func (mc *mockRPCClient) GetAppStats(_ string) (appserver.AppStats, error) {
 	return appserver.AppStats{}, nil
+}
+
+func (mc *mockRPCClient) GetAppError(_ string) (string, error) {
+	return "", nil
 }
 
 // GetAppConnectionsSummary get connections stats for the app.
