@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 
-
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -29,7 +28,7 @@ var pkCmd = &cobra.Command{
 	Use:   "pk",
 	Short: "Obtains the public key of the visor",
 	Run: func(_ *cobra.Command, _ []string) {
-		if pkg == true {
+		if pkg {
 			path = visorconfig.Pkgpath
 		}
 		if path != "" {
@@ -53,7 +52,7 @@ var hvpkCmd = &cobra.Command{
 	Use:   "hvpk",
 	Short: "Obtains the public key of the visor",
 	Run: func(_ *cobra.Command, _ []string) {
-		if pkg == true {
+		if pkg {
 			path = visorconfig.Pkgpath
 		}
 		if path != "" {
@@ -72,8 +71,6 @@ var hvpkCmd = &cobra.Command{
 		}
 	},
 }
-
-
 
 var summaryCmd = &cobra.Command{
 	Use:   "info",

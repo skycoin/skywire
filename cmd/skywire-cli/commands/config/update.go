@@ -3,9 +3,11 @@ package config
 import (
 	"encoding/json"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
@@ -80,6 +82,35 @@ var updateConfigCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, _ []string) {
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
+
+		urlstr := []string{"http://", serviceConfURL, "/config"}
+		serviceConfURL = strings.Join(urlstr, "")
+		client := http.Client{
+			Timeout: time.Second * 2, // Timeout after 2 seconds
+		}
+		req, err := http.NewRequest(http.MethodGet, serviceConfURL, nil)
+		if err != nil {
+			mLog.Fatal(err)
+		}
+
+		res, err := client.Do(req)
+		if err != nil {
+			mLog.Fatal(err)
+		}
+
+		if res.Body != nil {
+			defer res.Body.Close()
+		}
+
+		body, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			mLog.Fatal(err)
+		}
+		var services visorconfig.Services
+		err = json.Unmarshal(body, &services)
+		if err != nil {
+			mLog.Fatal(err)
+		}
 		f, err := os.Open(addInput) // nolint: gosec
 		if err != nil {
 			mLog.WithError(err).
@@ -92,7 +123,7 @@ var updateConfigCmd = &cobra.Command{
 			mLog.WithError(err).Fatal("Failed to read config.")
 		}
 
-		conf, ok := visorconfig.Parse(mLog, addInput, raw)
+		conf, ok := visorconfig.Parse(mLog, addInput, raw, true, services)
 		if ok != nil {
 			mLog.WithError(err).Fatal("Failed to parse config.")
 		}
