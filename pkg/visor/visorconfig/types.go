@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 // LogStore types.
@@ -50,4 +52,89 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 	default:
 		return errors.New("invalid duration")
 	}
+}
+
+// Services are subdomains and IP addresses of the skywire services
+type Services struct {
+	DmsgDiscovery      string          `json:"dmsg_discovery"`
+	TransportDiscovery string          `json:"transport_discovery"`
+	AddressResolver    string          `json:"address_resolver"`
+	RouteFinder        string          `json:"route_finder"`
+	SetupNodes         []cipher.PubKey `json:"setup_nodes"`
+	UptimeTracker      string          `json:"uptime_tracker"`
+	ServiceDiscovery   string          `json:"service_discovery"`
+	StunServers        []string        `json:"stun_servers"`
+}
+
+// VisorConfig is the whole current config format
+type VisorConfig struct {
+	Version string `json:"version"`
+	Sk      string `json:"sk"`
+	Pk      string `json:"pk"`
+	Dmsg    struct {
+		Discovery     string        `json:"discovery"`
+		SessionsCount int           `json:"sessions_count"`
+		Servers       []interface{} `json:"servers"`
+	} `json:"dmsg"`
+	Dmsgpty struct {
+		DmsgPort   int    `json:"dmsg_port"`
+		CliNetwork string `json:"cli_network"`
+		CliAddress string `json:"cli_address"`
+	} `json:"dmsgpty"`
+	SkywireTCP struct {
+		PkTable          interface{} `json:"pk_table"`
+		ListeningAddress string      `json:"listening_address"`
+	} `json:"skywire-tcp"`
+	Transport struct {
+		Discovery           string      `json:"discovery"`
+		AddressResolver     string      `json:"address_resolver"`
+		PublicAutoconnect   bool        `json:"public_autoconnect"`
+		TransportSetupNodes interface{} `json:"transport_setup_nodes"`
+	} `json:"transport"`
+	Routing struct {
+		SetupNodes         []string `json:"setup_nodes"`
+		RouteFinder        string   `json:"route_finder"`
+		RouteFinderTimeout string   `json:"route_finder_timeout"`
+		MinHops            int      `json:"min_hops"`
+	} `json:"routing"`
+	UptimeTracker struct {
+		Addr string `json:"addr"`
+	} `json:"uptime_tracker"`
+	Launcher struct {
+		ServiceDiscovery string `json:"service_discovery"`
+		Apps             []struct {
+			Name      string   `json:"name"`
+			AutoStart bool     `json:"auto_start"`
+			Port      int      `json:"port"`
+			Args      []string `json:"args,omitempty"`
+		} `json:"apps"`
+		ServerAddr string `json:"server_addr"`
+		BinPath    string `json:"bin_path"`
+	} `json:"launcher"`
+	Hypervisors          []interface{} `json:"hypervisors"`
+	CliAddr              string        `json:"cli_addr"`
+	LogLevel             string        `json:"log_level"`
+	LocalPath            string        `json:"local_path"`
+	StunServers          []string      `json:"stun_servers"`
+	ShutdownTimeout      string        `json:"shutdown_timeout"`
+	RestartCheckDelay    string        `json:"restart_check_delay"`
+	IsPublic             bool          `json:"is_public"`
+	DmsghttpPath         string        `json:"dmsghttp_path"`
+	PersistentTransports interface{}   `json:"persistent_transports"`
+	Hypervisor           struct {
+		DbPath     string `json:"db_path"`
+		EnableAuth bool   `json:"enable_auth"`
+		Cookies    struct {
+			HashKey         string `json:"hash_key"`
+			BlockKey        string `json:"block_key"`
+			ExpiresDuration int64  `json:"expires_duration"`
+			Path            string `json:"path"`
+			Domain          string `json:"domain"`
+		} `json:"cookies"`
+		DmsgPort    int    `json:"dmsg_port"`
+		HTTPAddr    string `json:"http_addr"`
+		EnableTLS   bool   `json:"enable_tls"`
+		TLSCertFile string `json:"tls_cert_file"`
+		TLSKeyFile  string `json:"tls_key_file"`
+	} `json:"hypervisor"`
 }

@@ -6,8 +6,6 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-
-//	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var addInput string
@@ -29,15 +27,15 @@ var pkCmd = &cobra.Command{
 	Use:   "pk",
 	Short: "public key of the visor",
 	Run: func(_ *cobra.Command, _ []string) {
-//		if addInput != "" {
-//			conf := visorconfig.ReadConfig(addInput)
-//			fmt.Println(conf.PK.Hex())
-//		} else {
-			client := rpcClient()
-			overview, err := client.Overview()
-			if err != nil {
-				logger.Fatal("Failed to connect:", err)
-//			}
+		//		if addInput != "" {
+		//			conf := visorconfig.ReadConfig(addInput)
+		//			fmt.Println(conf.PK.Hex())
+		//		} else {
+		client := rpcClient()
+		overview, err := client.Overview()
+		if err != nil {
+			logger.Fatal("Failed to connect:", err)
+			//			}
 			fmt.Println(overview.PubKey)
 		}
 	},
@@ -47,20 +45,19 @@ var hvpkCmd = &cobra.Command{
 	Use:   "hv",
 	Short: "show hypervisor(s)",
 	Run: func(_ *cobra.Command, _ []string) {
-//		if addInput != "" {
-//			conf := visorconfig.ReadConfig(addInput)
-//			fmt.Println(conf.Hypervisors)
-//		} else {
-			client := rpcClient()
-			overview, err := client.Overview()
-			if err != nil {
-				logger.Fatal("Failed to connect:", err)
-//			}
+		//		if addInput != "" {
+		//			conf := visorconfig.ReadConfig(addInput)
+		//			fmt.Println(conf.Hypervisors)
+		//		} else {
+		client := rpcClient()
+		overview, err := client.Overview()
+		if err != nil {
+			logger.Fatal("Failed to connect:", err)
+			//			}
 			fmt.Println(overview.Hypervisors)
 		}
 	},
 }
-
 
 var summaryCmd = &cobra.Command{
 	Use:   "info",
