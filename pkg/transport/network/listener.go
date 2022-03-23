@@ -6,7 +6,8 @@ import (
 	"sync"
 
 	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/cipher"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 // Listener represents a skywire network listener. It wraps net.Listener

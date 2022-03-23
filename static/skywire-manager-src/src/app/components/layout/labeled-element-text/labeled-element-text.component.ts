@@ -57,7 +57,9 @@ export class LabeledElementTextComponent implements OnDestroy {
 
     this.labelComponents = LabeledElementTextComponent.getLabelComponents(this.storageService, this.id);
   }
-  get id(): string { return this.idInternal ? this.idInternal : ''; }
+  get id(): string {
+    return this.idInternal ? this.idInternal : '';
+  }
 
   /**
    * Indicates if the text with the id must be truncated if it is too long.

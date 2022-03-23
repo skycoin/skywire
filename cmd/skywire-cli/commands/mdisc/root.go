@@ -12,8 +12,8 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
-	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 var mdAddr string

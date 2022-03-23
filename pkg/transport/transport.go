@@ -7,8 +7,8 @@ import (
 	"math/big"
 
 	"github.com/google/uuid"
-	"github.com/skycoin/dmsg/cipher"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 

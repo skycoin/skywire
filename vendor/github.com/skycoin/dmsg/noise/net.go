@@ -9,7 +9,7 @@ import (
 
 	"github.com/skycoin/noise"
 
-	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 var (

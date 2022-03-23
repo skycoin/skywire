@@ -8,13 +8,13 @@ import (
 	"syscall"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/cipher"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 const (

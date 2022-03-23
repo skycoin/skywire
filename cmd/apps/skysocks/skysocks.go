@@ -12,13 +12,13 @@ import (
 
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/buildinfo"
 
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/internal/skysocks"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 const (

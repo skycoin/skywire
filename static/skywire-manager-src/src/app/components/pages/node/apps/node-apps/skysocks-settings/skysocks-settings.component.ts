@@ -61,9 +61,9 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
 
     // Get the current values saved on the visor, if returned by the API.
     if (this.data.args && this.data.args.length > 0) {
-      for (let i = 0; i < this.data.args.length; i++) {
-        if ((this.data.args[i] as string).toLowerCase().includes('-secure')) {
-          this.secureMode = (this.data.args[i] as string).toLowerCase().includes('true');
+      for (const arg of this.data.args) {
+        if ((arg as string).toLowerCase().includes('-secure')) {
+          this.secureMode = (arg as string).toLowerCase().includes('true');
         }
       }
     }
@@ -71,8 +71,8 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.form = this.formBuilder.group({
-      'password': [''],
-      'passwordConfirmation': ['', this.validatePasswords.bind(this)],
+      password: [''],
+      passwordConfirmation: ['', this.validatePasswords.bind(this)],
     });
 
     this.formSubscription = this.form.get('password').valueChanges.subscribe(() => {
