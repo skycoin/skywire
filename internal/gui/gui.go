@@ -20,7 +20,6 @@ import (
 	"github.com/getlantern/systray"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/direct"
 	dmsgdisc "github.com/skycoin/dmsg/disc"
 	"github.com/skycoin/dmsg/dmsgget"
@@ -28,8 +27,9 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/toqueteos/webbrowser"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/servicedisc"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )

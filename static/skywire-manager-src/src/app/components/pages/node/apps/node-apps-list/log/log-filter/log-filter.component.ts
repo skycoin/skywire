@@ -83,7 +83,7 @@ export class LogFilterComponent implements OnInit, OnDestroy {
 
 
     this.form = this.formBuilder.group({
-      'filter': [this.data.days],
+      filter: [this.data.days],
     });
 
     this.formSubscription = this.form.get('filter').valueChanges.subscribe(days => {

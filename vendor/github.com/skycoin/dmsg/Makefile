@@ -37,7 +37,8 @@ ifneq (,$(findstring 64,$(GOARCH)))
 endif
 
 DMSG_REPO := github.com/skycoin/dmsg
-BUILDINFO_PATH := $(DMSG_REPO)/buildinfo
+SKYWIRE_UTILITIES_BASE := github.com/skycoin/skywire-utilities
+BUILDINFO_PATH := $(SKYWIRE_UTILITIES_BASE)/pkg/buildinfo
 
 BUILDINFO_VERSION := -X $(BUILDINFO_PATH).version=$(VERSION)
 BUILDINFO_DATE := -X $(BUILDINFO_PATH).date=$(DATE)
@@ -94,7 +95,7 @@ format-windows: ## Formats the code. Must have goimports and goimports-reviser i
 	powershell -Command .\scripts\format-windows.ps1
 
 dep: ## Sorts dependencies
-	${OPTS} go mod download
+	${OPTS} go mod vendor -v
 	${OPTS} go mod tidy -v
 
 install: ## Install `dmsg-discovery`, `dmsg-server`, `dmsgget`,`dmsgpty-cli`, `dmsgpty-host`, `dmsgpty-ui`

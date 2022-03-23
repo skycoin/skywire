@@ -11,7 +11,7 @@ import (
 	"syscall"
 
 	"github.com/creack/pty"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/term"
 )
 
 // ptyResizeLoop informs the remote of changes to the local CLI terminal window size.
@@ -45,8 +45,8 @@ func getPtySize(t *os.File) (*pty.Winsize, error) {
 
 // prepareStdin sets stdin to raw mode and provides a function to restore the original state.
 func (cli *CLI) prepareStdin() (restore func(), err error) {
-	var oldState *terminal.State
-	if oldState, err = terminal.MakeRaw(int(os.Stdin.Fd())); err != nil {
+	var oldState *term.State
+	if oldState, err = term.MakeRaw(int(os.Stdin.Fd())); err != nil {
 		cli.Log.
 			WithError(err).
 			Warn("Failed to set stdin to raw mode.")
@@ -54,7 +54,7 @@ func (cli *CLI) prepareStdin() (restore func(), err error) {
 	}
 	restore = func() {
 		// Attempt to restore state.
-		if err = terminal.Restore(int(os.Stdin.Fd()), oldState); err != nil {
+		if err = term.Restore(int(os.Stdin.Fd()), oldState); err != nil {
 			cli.Log.
 				WithError(err).
 				Error("Failed to restore original stdin state.")

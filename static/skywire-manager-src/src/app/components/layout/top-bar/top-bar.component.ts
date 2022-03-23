@@ -70,7 +70,7 @@ interface VpnData {
   /**
    * Current download speed.
    */
-  downloadSpeed: Number;
+  downloadSpeed: number;
 }
 
 /**

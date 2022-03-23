@@ -11,7 +11,7 @@ RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 COMMIT := $(shell git rev-list -1 HEAD)
 
 PROJECT_BASE := github.com/skycoin/skywire
-DMSG_BASE := github.com/skycoin/dmsg
+SKYWIRE_UTILITIES_BASE := github.com/skycoin/skywire-utilities
 ifeq ($(OS),Windows_NT)
 	SHELL := pwsh
 	OPTS?=powershell -Command setx GO111MODULE on;
@@ -37,7 +37,7 @@ ifneq (,$(findstring 64,$(GOARCH)))
     TEST_OPTS:=$(TEST_OPTS) -race
 endif
 
-BUILDINFO_PATH := $(DMSG_BASE)/buildinfo
+BUILDINFO_PATH := $(SKYWIRE_UTILITIES_BASE)/pkg/buildinfo
 
 BUILDINFO_VERSION := -X $(BUILDINFO_PATH).version=$(VERSION)
 BUILDINFO_DATE := -X $(BUILDINFO_PATH).date=$(DATE)

@@ -14,7 +14,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"nhooyr.io/websocket"
 
-	"github.com/skycoin/dmsg/httputil"
+	"github.com/skycoin/skywire-utilities/pkg/httputil"
 )
 
 const (

@@ -10,9 +10,9 @@ import (
 	"sync/atomic"
 
 	"github.com/google/go-github/github"
-	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/restart"
 )
 

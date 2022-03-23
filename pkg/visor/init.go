@@ -15,16 +15,17 @@ import (
 	"github.com/ccding/go-stun/stun"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/direct"
 	dmsgdisc "github.com/skycoin/dmsg/disc"
 	"github.com/skycoin/dmsg/dmsgctrl"
 	"github.com/skycoin/dmsg/dmsgget"
 	"github.com/skycoin/dmsg/dmsghttp"
 	"github.com/skycoin/dmsg/dmsgpty"
-	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/internal/utclient"
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
@@ -36,14 +37,12 @@ import (
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/setup/setupclient"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 	ts "github.com/skycoin/skywire/pkg/transport/setup"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
-	"github.com/skycoin/skywire/pkg/util/netutil"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -510,7 +509,7 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 }
 
 func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []router.RouteSetupHook {
-	retrier := dmsgnetutil.NewRetrier(log, time.Second, time.Second*20, 3, 1.3)
+	retrier := netutil.NewRetrier(log, time.Second, time.Second*20, 3, 1.3)
 	return []router.RouteSetupHook{
 		func(rPK cipher.PubKey, tm *transport.Manager) error {
 			dmsgFallback := func() error {
@@ -670,7 +669,7 @@ func vpnEnvMaker(conf *visorconfig.V1, dmsgC, dmsgDC *dmsg.Client, tpRemoteAddrs
 		if conf.Dmsg != nil {
 			envCfg.DmsgDiscovery = conf.Dmsg.Discovery
 
-			r := dmsgnetutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
+			r := netutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
 			err := r.Do(context.Background(), func() error {
 				for _, ses := range dmsgC.AllSessions() {
 					envCfg.DmsgServers = append(envCfg.DmsgServers, ses.RemoteTCPAddr().String())
@@ -837,6 +836,9 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 // this service is not considered critical and always returns true
 func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	if !v.conf.IsPublic {
+		// call Stop() method to clean service discovery for the situation that
+		// visor was public, then stop (not normal shutdown), then start as non-public
+		v.serviceDisc.VisorUpdater(0).Stop()
 		return nil
 	}
 	logger := v.MasterLogger().PackageLogger("public_visor")
@@ -1068,7 +1070,7 @@ func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transp
 		return nil, err
 	}
 
-	tpdCRetrier := dmsgnetutil.NewRetrier(log,
+	tpdCRetrier := netutil.NewRetrier(log,
 		initBO, maxBO, tries, factor)
 
 	var tpdC transport.DiscoveryClient
