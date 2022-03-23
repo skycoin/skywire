@@ -8,8 +8,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/yamux"
 
-	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/noise"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 // Stream represents a dmsg connection between two dmsg clients.

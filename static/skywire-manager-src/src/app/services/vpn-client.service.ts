@@ -495,6 +495,7 @@ export class VpnClientService {
       this.vpnClientAppName,
       data,
     ).pipe(
+      /* eslint-disable arrow-body-style */
       catchError(err => {
         // If the response was an error, check the state of the backend, to know if the change
         // was made. There are some cases in which this may happen.
@@ -574,29 +575,28 @@ export class VpnClientService {
     this.continuousUpdateSubscription = of(0).pipe(
       delay(delayMs),
       mergeMap(() => this.getVpnClientState()),
-      retryWhen(err => {
-        return err.pipe(mergeMap((error: OperationError) => {
-          this.errorSubject.next(true);
+      retryWhen(err => err.pipe(mergeMap((error: OperationError) => {
+        this.errorSubject.next(true);
 
-          error = processServiceError(error);
-          // If the problem was because the user is not authorized, don't retry.
-          if (
-            error.originalError &&
-            (error.originalError as HttpErrorResponse).status &&
-            (error.originalError as HttpErrorResponse).status === 401
-          ) {
-            return throwError(error);
-          }
+        error = processServiceError(error);
+        // If the problem was because the user is not authorized, don't retry.
+        if (
+          error.originalError &&
+          (error.originalError as HttpErrorResponse).status &&
+          (error.originalError as HttpErrorResponse).status === 401
+        ) {
+          return throwError(error);
+        }
 
-          // Retry a few times if this is the first connection, or indefinitely if it is not.
-          if (this.lastServiceState !== VpnServiceStates.PerformingInitialCheck || retries < 4) {
-            retries += 1;
-            return of(error).pipe(delay(this.standardWaitTime));
-          } else {
-            return throwError(error);
-          }
-        }));
-      }),
+        // Retry a few times if this is the first connection, or indefinitely if it is not.
+        if (this.lastServiceState !== VpnServiceStates.PerformingInitialCheck || retries < 4) {
+          retries += 1;
+
+          return of(error).pipe(delay(this.standardWaitTime));
+        } else {
+          return throwError(error);
+        }
+      }))),
     ).subscribe(appData => {
       if (appData) {
         this.errorSubject.next(false);

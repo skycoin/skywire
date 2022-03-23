@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/cipher"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -291,6 +291,18 @@ func (r *RPC) GetAppStats(appName *string, out *appserver.AppStats) (err error) 
 	defer rpcutil.LogCall(r.log, "GetAppStats", appName)(out, &err)
 
 	stats, err := r.visor.GetAppStats(*appName)
+	if err != nil {
+		*out = stats
+	}
+
+	return err
+}
+
+// GetAppError gets app runtime error.
+func (r *RPC) GetAppError(appName *string, out *string) (err error) {
+	defer rpcutil.LogCall(r.log, "GetAppError", appName)(out, &err)
+
+	stats, err := r.visor.GetAppError(*appName)
 	if err != nil {
 		*out = stats
 	}

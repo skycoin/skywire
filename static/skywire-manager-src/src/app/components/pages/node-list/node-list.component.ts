@@ -480,6 +480,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
    * @param errors Errors found during the process. For internal use.
    */
   private recursivelyUpdateWallets(keys: string[], labels: string[], errors = 0): Observable<number> {
+    /* eslint-disable arrow-body-style */
     return this.nodeService.update(keys[keys.length - 1]).pipe(catchError(() => {
       // If there is a problem updating a visor, return null to be able to continue with
       // the process.

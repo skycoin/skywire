@@ -1,3 +1,5 @@
+/* eslint-disable prefer-arrow/prefer-arrow-functions */
+
 // NOTE: originally from the desktop wallet code, but with some minor changes to make it work
 // witht the manager.
 
@@ -8,7 +10,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 
 import { OperationError, OperationErrorTypes } from './operation-error';
 
-export let defaultErrorMsg = 'common.operation-error';
+export const defaultErrorMsg = 'common.operation-error';
 
 /**
  * Prepares an error msg to be displayed on the UI.
