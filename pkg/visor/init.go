@@ -232,46 +232,17 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 		return err
 	}
 
-	// initialize cache for available transports
-	m, err := arClient.Transports(ctx)
-	if err != nil {
-		log.Warn("failed to fetch transports from AR")
-		return err
-	}
-
 	v.initLock.Lock()
 	v.arClient = arClient
-	v.transportsCache = m
 	v.initLock.Unlock()
 
 	doneCh := make(chan struct{}, 1)
-	t := time.NewTicker(1 * time.Hour)
-	go fetchARTransports(ctx, v, log, doneCh, t)
 	v.pushCloseStack("address_resolver", func() error {
 		doneCh <- struct{}{}
 		return nil
 	})
 
 	return nil
-}
-
-func fetchARTransports(ctx context.Context, v *Visor, log *logging.Logger, doneCh <-chan struct{}, tick *time.Ticker) {
-	for {
-		select {
-		case <-tick.C:
-			log.Debug("Fetching PKs from AR")
-			m, err := v.arClient.Transports(ctx)
-			if err != nil {
-				log.WithError(err).Warn("failed to fetch AR transport")
-			}
-			v.transportCacheMu.Lock()
-			v.transportsCache = m
-			v.transportCacheMu.Unlock()
-		case <-doneCh:
-			tick.Stop()
-			return
-		}
-	}
 }
 
 func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
@@ -512,21 +483,26 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 	retrier := netutil.NewRetrier(log, time.Second, time.Second*20, 3, 1.3)
 	return []router.RouteSetupHook{
 		func(rPK cipher.PubKey, tm *transport.Manager) error {
+			allTransports, err := v.arClient.Transports(ctx)
+			if err != nil {
+				log.WithError(err).Warn("failed to fetch AR transport")
+			}
+
 			dmsgFallback := func() error {
 				return retrier.Do(ctx, func() error {
 					_, err := tm.SaveTransport(ctx, rPK, network.DMSG, transport.LabelAutomatic)
 					return err
 				})
 			}
-			// check visor's AR transport cache
-			if v.transportsCache == nil && !v.conf.Transport.PublicAutoconnect {
+			// check visor's AR transport
+			if allTransports == nil && !v.conf.Transport.PublicAutoconnect {
 				// skips if there's no AR transports
-				log.Warn("empty AR transports cache")
+				log.Warn("empty AR transports")
 				return dmsgFallback()
 			}
-			transports, ok := v.transportsCache[rPK]
+			transports, ok := allTransports[rPK]
 			if !ok {
-				log.WithField("pk", rPK.String()).Warn("pk not found in the transports cache")
+				log.WithField("pk", rPK.String()).Warn("pk not found in the transports")
 				// check if automatic transport is available, if it does,
 				// continue with route creation
 				if v.conf.Transport.PublicAutoconnect {
