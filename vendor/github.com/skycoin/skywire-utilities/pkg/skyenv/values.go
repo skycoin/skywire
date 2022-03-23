@@ -4,8 +4,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/dmsg/dmsgpty"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 // Constants for skywire root directories.
@@ -44,7 +43,7 @@ const (
 	TestUptimeTrackerAddr   = "http://ut.skywire.dev"
 	TestAddressResolverAddr = "http://ar.skywire.dev"
 	TestSetupPK             = "026c2a3e92d6253c5abd71a42628db6fca9dd9aa037ab6f4e3a31108558dfd87cf"
-	TestNetworkMonitorPKs   = ""
+	TestNetworkMonitorPKs   = "0218905f5d9079bab0b62985a05bd162623b193e948e17e7b719133f2c60b92093"
 )
 
 // Dmsg port constants.
@@ -75,7 +74,7 @@ const (
 
 // DefaultDmsgPtyCLIAddr determines default CLI address per each platform
 func DefaultDmsgPtyCLIAddr() string {
-	return dmsgpty.DefaultCLIAddr()
+	return DefaultCLIAddr()
 }
 
 // Default skywire app constants.
@@ -221,13 +220,13 @@ func MustPK(pk string) cipher.PubKey {
 // GetStunServers gives back deafault Stun Servers
 func GetStunServers() []string {
 	return []string{
-		"45.118.133.242:3478",
-		"192.53.173.68:3478",
-		"192.46.228.39:3478",
-		"192.53.113.106:3478",
-		"192.53.117.158:3478",
-		"192.53.114.142:3478",
-		"139.177.189.166:3478",
-		"192.46.227.227:3478",
+		"172.104.188.139:3478",
+		"172.104.59.235:3478",
+		"172.104.183.187:3478",
+		"139.162.54.63:3478",
+		"172.105.115.97:3478",
+		"172.104.188.39:3478",
+		"172.104.188.140:3478",
+		"172.104.40.88:3478",
 	}
 }

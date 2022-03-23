@@ -57,15 +57,15 @@ export class AddVpnServerComponent implements OnInit {
   ngOnInit() {
     // Init the form.
     this.form = this.formBuilder.group({
-      'pk': ['', Validators.compose([
+      pk: ['', Validators.compose([
         Validators.required,
         Validators.minLength(66),
         Validators.maxLength(66),
         Validators.pattern('^[0-9a-fA-F]+$')])
       ],
-      'password': [''],
-      'name': [''],
-      'note': [''],
+      password: [''],
+      name: [''],
+      note: [''],
     });
 
     setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
