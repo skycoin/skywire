@@ -3,9 +3,15 @@ package config
 import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
+
+	"github.com/skycoin/skywire/cmd/skywire-cli/commands/config/update"
 )
 
 var logger = logging.MustGetLogger("skywire-cli")
+
+func init() {
+	RootCmd.AddCommand(update.RootCmd)
+}
 
 // RootCmd contains commands that interact with the config of local skywire-visor
 var RootCmd = &cobra.Command{
