@@ -142,7 +142,7 @@ var genConfigCmd = &cobra.Command{
 					mLog.WithError(err).Error("Failed to fetch servers\n")
 					mLog.Warn("Falling back on hardcoded servers")
 					//fallback = true
-			}
+				}
 			}
 		} else {
 			// nil error client.Do(req)
@@ -186,19 +186,6 @@ var genConfigCmd = &cobra.Command{
 			//			_, sk = cipher.GenerateKeyPair()
 		}
 
-		/*
-			// fall back on server values from skywire-utilities/pkg/skyenv
-			if fallback {
-				services.DmsgDiscovery = skyenv.DefaultDmsgDiscAddr
-				services.TransportDiscovery = skyenv.DefaultTpDiscAddr
-				services.AddressResolver = skyenv.DefaultAddressResolverAddr
-				services.RouteFinder = skyenv.DefaultRouteFinderAddr
-				services.SetupNodes = append(services.SetupNodes, skyenv.MustPK(skyenv.DefaultSetupPK))
-				services.UptimeTracker = skyenv.DefaultUptimeTrackerAddr
-				services.ServiceDiscovery = skyenv.DefaultServiceDiscAddr
-				services.StunServers = skyenv.GetStunServers()
-			}
-		*/
 		// Determine config type to generate.
 		var genConf func(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, pkgEnv bool, testEnv bool, dmsgHTTP bool, hypervisor bool, services visorconfig.Services) (*visorconfig.V1, error)
 

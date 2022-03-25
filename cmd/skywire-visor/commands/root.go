@@ -55,15 +55,6 @@ var (
 	stopVisorWg          sync.WaitGroup
 )
 
-var rootCmd = &cobra.Command{
-	Use:   "skywire-visor",
-	Short: "Skywire Visor",
-	Run: func(_ *cobra.Command, args []string) {
-		runApp(args...)
-	},
-	Version: buildinfo.Version(),
-}
-
 func init() {
 	rootCmd.Flags().SortFlags = false
 	rootCmd.AddCommand(completionCmd)
@@ -78,6 +69,15 @@ func init() {
 	rootCmd.Flags().StringVarP(&tag, "tag", "t", "skywire", "logging tag")
 	rootCmd.Flags().StringVarP(&syslogAddr, "syslog", "y", "", "syslog server address. E.g. localhost:514")
 	extraFlags()
+}
+
+var rootCmd = &cobra.Command{
+	Use:   "skywire-visor",
+	Short: "Skywire Visor",
+	Run: func(_ *cobra.Command, args []string) {
+		runApp(args...)
+	},
+	Version: buildinfo.Version(),
 }
 
 func runVisor(args []string) {
@@ -205,13 +205,14 @@ func initPProf(log *logging.MasterLogger, tag string, profMode string, profAddr 
 func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *visorconfig.V1 {
 	log := mLog.PackageLogger("visor:config")
 	//var services visorconfig.Services
-//	/*
+	//	/*
 	var r io.Reader
 
 	switch confPath {
 	case visorconfig.StdinName:
 		log.Info("Reading config from STDIN.")
-		r = os.Stdin
+
+		//r = os.Stdin
 	case "":
 		// TODO: More robust solution.
 		for _, arg := range args {
@@ -220,7 +221,6 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 				break
 			}
 		}
-
 		if confPath == "" {
 			confPath = defaultConfigName
 		}
@@ -247,18 +247,35 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 		log.WithError(err).Fatal("Failed to read in config.")
 	}
 
-// 
-	conf := initConfig(mLog, args, confPath)
+	//
+	//var conf *visorconfig.V1 //<< nil pointer dereference, not all fields are actually in this config
+
+	//make a config which has the needed substructs and then unmarshal the json into it?
+	cc := new(visorconfig.Common)
+	if err := json.Unmarshal(raw, cc); err != nil {
+		log.WithError(err).Fatal("failed to obtain config version.")
+	}
+	sk := &cc.SK
+	//fmt.Println{}
+	var services visorconfig.Services
+	// Determine config type to generate.
+	var genConf func(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, pkgEnv bool, testEnv bool, dmsgHTTP bool, hypervisor bool, services visorconfig.Services) (*visorconfig.V1, error)
+	// Generate config.
+	genConf = visorconfig.MakeDefaultConfig
+	conf, err := genConf(mLog, confPath, sk, false, false, true, true, services)
+	if err != nil {
+		log.WithError(err).Fatal("Failed to create config.")
+	}
 
 	dec := json.NewDecoder(bytes.NewReader(raw))
-	if err := dec.Decode(conf); err != nil {
+	if err := dec.Decode(&conf); err != nil {
 		log.WithError(err).Fatal("Failed to decode config.")
 	}
 
-//	conf, err := visorconfig.Parse(mLog, confPath, raw)
-//	if err != nil {
-//		log.WithError(err).Fatal("Failed to parse config.")
-//	}
+	//	conf, err := visorconfig.Parse(mLog, confPath, raw)
+	//	if err != nil {
+	//		log.WithError(err).Fatal("Failed to parse config.")
+	//	}
 
 	if hypervisorUI {
 		config := hypervisorconfig.GenerateWorkDirConfig(false)
