@@ -22,7 +22,6 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
-
 var (
 	sk                 cipher.SecKey
 	output             string
@@ -43,10 +42,11 @@ var (
 	bestProtocol       bool
 	serviceConfURL     string
 	force              bool
-	svcconf	= strings.ReplaceAll(serviceconfaddr, "http://", "") //skyenv.DefaultServiceConfAddr
+	svcconf            = strings.ReplaceAll(serviceconfaddr, "http://", "") //skyenv.DefaultServiceConfAddr
 )
 
-const serviceconfaddr =  "http://skywire.skycoin.com"
+const serviceconfaddr = "http://skywire.skycoin.com"
+
 func init() {
 	genConfigCmd.Flags().SortFlags = false
 	RootCmd.AddCommand(genConfigCmd)
@@ -117,7 +117,7 @@ var genConfigCmd = &cobra.Command{
 			if serviceConfURL != svcconf {
 				//if serviceConfURL was changed this error should be fatal
 				mLog.WithError(err).Fatal("Failed to fetch servers\n")
-			} else {				//otherwise just error and continue
+			} else { //otherwise just error and continue
 				//silence errors for stdout
 				if !stdout {
 					mLog.WithError(err).Error("Failed to fetch servers\n")
@@ -156,19 +156,14 @@ var genConfigCmd = &cobra.Command{
 		// Read in old config and obtain old secret key or generate a new random secret key
 		var sk cipher.SecKey
 		if !stdout {
-			if oldConf, ok := readOldConfig(mLog, output, replace, hypervisor, services); !ok {
+			if oldConf, ok := readOldConfig(mLog, output, replace, services); !ok {
 				_, sk = cipher.GenerateKeyPair()
 			} else {
 				sk = oldConf.SK
 			}
-			}
+		}
 
-		// Determine config type to generate.
-    var genConf func(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, pkgEnv bool, testEnv bool, dmsgHTTP bool, hypervisor bool, services visorconfig.Services) (*visorconfig.V1, error)
-
-		// Generate config.
-		genConf = visorconfig.MakeDefaultConfig
-		conf, err := genConf(mLog, output, &sk, pkgEnv, testEnv, dmsgHTTP, hypervisor, services)
+		conf, err := visorconfig.MakeDefaultConfig(mLog, output, &sk, pkgEnv, testEnv, dmsgHTTP, hypervisor, services)
 		if err != nil {
 			logger.WithError(err).Fatal("Failed to create config.")
 		}
@@ -186,7 +181,7 @@ var genConfigCmd = &cobra.Command{
 				// Compare key value and visor PK, if same, then this visor should be hypervisor
 				if key == conf.PK.Hex() {
 					hypervisor = true
-					conf, err = genConf(mLog, output, &sk, pkgEnv, testEnv, dmsgHTTP, hypervisor, services)
+					conf, err = visorconfig.MakeDefaultConfig(mLog, output, &sk, pkgEnv, testEnv, dmsgHTTP, hypervisor, services)
 					if err != nil {
 						logger.WithError(err).Fatal("Failed to create config.")
 					}
@@ -203,7 +198,7 @@ var genConfigCmd = &cobra.Command{
 		}
 		// Read in old config (if any) and obtain old hypervisors.
 		if replaceHypervisors {
-			if oldConf, ok := readOldConfig(mLog, output, true, hypervisor, services); ok {
+			if oldConf, ok := readOldConfig(mLog, output, true, services); ok {
 				conf.Hypervisors = oldConf.Hypervisors
 			}
 		}
@@ -279,7 +274,7 @@ var genConfigCmd = &cobra.Command{
 	},
 }
 
-func readOldConfig(log *logging.MasterLogger, confPath string, replace bool, hypervisor bool, services visorconfig.Services) (*visorconfig.V1, bool) {
+func readOldConfig(log *logging.MasterLogger, confPath string, replace bool, services visorconfig.Services) (*visorconfig.V1, bool) {
 	raw, err := ioutil.ReadFile(confPath) //nolint:gosec
 	if err != nil {
 		if os.IsNotExist(err) {
