@@ -119,6 +119,19 @@ const (
 	DefaultTpLogStore = DefaultSkywirePath + "/transport_logs"
 )
 
+// Skybian defaults
+const (
+	SkybianAppBinPath       = "/usr/bin/apps"
+	SkybianDmsgPtyWhiteList = "/var/skywire-visor/dsmgpty/whitelist.json"
+	SkybianDmsgPtyCLIAddr   = "/run/skywire-visor/dmsgpty/cli.sock"
+	SkybianLocalPath        = "/var/skywire-visor/apps"
+	SkybianTpLogStore       = "/var/skywire-visor/transports"
+	SkybianEnableTLS        = false
+	SkybianDBPath           = "/var/skywire-visor/users.db"
+	SkybianTLSKey           = "/var/skywire-visor/ssl/key.pem"
+	SkybianTLSCert          = "/var/skywire-visor/ssl/cert.pem"
+)
+
 // Default local constants
 const (
 	DefaultLocalPath = DefaultSkywirePath + "/local"
