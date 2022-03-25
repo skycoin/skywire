@@ -102,15 +102,16 @@ var RootCmd = &cobra.Command{
 			mLog.WithError(ok).Fatal("Failed to parse config.")
 		}
 
-		switch environment {
-		case "production":
-			visorconfig.SetDefaultProductionValues(conf)
-		case "testing":
-			visorconfig.SetDefaultTestingValues(conf)
-		default:
-			logger.Fatal("Unrecognized environment value: ", environment)
-		}
-
+		/*
+			switch environment {
+			case "production":
+				visorconfig.SetDefaultProductionValues(conf)
+			case "testing":
+				visorconfig.SetDefaultTestingValues(conf)
+			default:
+				logger.Fatal("Unrecognized environment value: ", environment)
+			}
+		*/
 		switch setPublicAutoconnect {
 		case "true":
 			conf.Transport.PublicAutoconnect = true

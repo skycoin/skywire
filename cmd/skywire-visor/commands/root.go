@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -203,8 +204,8 @@ func initPProf(log *logging.MasterLogger, tag string, profMode string, profAddr 
 
 func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *visorconfig.V1 {
 	log := mLog.PackageLogger("visor:config")
-	var services visorconfig.Services
-
+	//var services visorconfig.Services
+//	/*
 	var r io.Reader
 
 	switch confPath {
@@ -227,18 +228,18 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 		fallthrough
 	default:
 		log.WithField("filepath", confPath).Info("Reading config from file.")
-		f, err := os.ReadFile(confPath) //nolint:gosec
+		f, err := os.Open(confPath) //nolint:gosec
 		if err != nil {
 			log.WithError(err).
 				WithField("filepath", confPath).
 				Fatal("Failed to read config file.")
 		}
-		//		defer func() { //nolint
-		//			if err := f.Close(); err != nil {
-		//				log.WithError(err).Error("Closing config file resulted in error.")
-		//			}
-		//		}()
-		r = bytes.NewReader(f)
+		defer func() { //nolint
+			if err := f.Close(); err != nil {
+				log.WithError(err).Error("Closing config file resulted in error.")
+			}
+		}()
+		r = f
 	}
 
 	raw, err := ioutil.ReadAll(r)
@@ -246,10 +247,18 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 		log.WithError(err).Fatal("Failed to read in config.")
 	}
 
-	conf, err := visorconfig.Parse(mLog, confPath, raw, true, services)
-	if err != nil {
-		log.WithError(err).Fatal("Failed to parse config.")
+// We
+	conf := initConfig(mLog, args, confPath)
+
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	if err := dec.Decode(conf); err != nil {
+		log.WithError(err).Fatal("Failed to decode config.")
 	}
+
+//	conf, err := visorconfig.Parse(mLog, confPath, raw)
+//	if err != nil {
+//		log.WithError(err).Fatal("Failed to parse config.")
+//	}
 
 	if hypervisorUI {
 		config := hypervisorconfig.GenerateWorkDirConfig(false)

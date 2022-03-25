@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
-
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 // LogStore types.
@@ -54,27 +52,24 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 	}
 }
 
-// Services are subdomains and IP addresses of the skywire services
-type Services struct {
-	DmsgDiscovery      string          `json:"dmsg_discovery"`
-	TransportDiscovery string          `json:"transport_discovery"`
-	AddressResolver    string          `json:"address_resolver"`
-	RouteFinder        string          `json:"route_finder"`
-	SetupNodes         []cipher.PubKey `json:"setup_nodes"`
-	UptimeTracker      string          `json:"uptime_tracker"`
-	ServiceDiscovery   string          `json:"service_discovery"`
-	StunServers        []string        `json:"stun_servers"`
-}
-
-// VisorConfig is the whole current config format
+// VisorConfig is every field of the config
 type VisorConfig struct {
 	Version string `json:"version"`
 	Sk      string `json:"sk"`
 	Pk      string `json:"pk"`
 	Dmsg    struct {
-		Discovery     string        `json:"discovery"`
-		SessionsCount int           `json:"sessions_count"`
-		Servers       []interface{} `json:"servers"`
+		Discovery     string `json:"discovery"`
+		SessionsCount int    `json:"sessions_count"`
+		Servers       []struct {
+			Version   string `json:"version"`
+			Sequence  int    `json:"sequence"`
+			Timestamp int    `json:"timestamp"`
+			Static    string `json:"static"`
+			Server    struct {
+				Address           string `json:"address"`
+				AvailableSessions int    `json:"availableSessions"`
+			} `json:"server"`
+		} `json:"servers"`
 	} `json:"dmsg"`
 	Dmsgpty struct {
 		DmsgPort   int    `json:"dmsg_port"`
@@ -119,7 +114,6 @@ type VisorConfig struct {
 	ShutdownTimeout      string        `json:"shutdown_timeout"`
 	RestartCheckDelay    string        `json:"restart_check_delay"`
 	IsPublic             bool          `json:"is_public"`
-	DmsghttpPath         string        `json:"dmsghttp_path"`
 	PersistentTransports interface{}   `json:"persistent_transports"`
 	Hypervisor           struct {
 		DbPath     string `json:"db_path"`
