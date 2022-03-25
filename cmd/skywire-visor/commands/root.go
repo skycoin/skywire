@@ -211,8 +211,7 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 	switch confPath {
 	case visorconfig.StdinName:
 		log.Info("Reading config from STDIN.")
-
-		//r = os.Stdin
+		r = os.Stdin
 	case "":
 		// TODO: More robust solution.
 		for _, arg := range args {
