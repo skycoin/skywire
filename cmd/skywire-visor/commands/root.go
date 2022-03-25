@@ -260,30 +260,14 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 	if confmap["hypervisor"] != nil {
 		hypervisor = true
 	}
-
-	//debug stuff
-	//fmt.Println(x)
-	//fmt.Println("")
-	//fmt.Println(x["hypervisor"])
-	//fmt.Println("")
-	//fmt.Println(dmsghttpconf["servers"])
-	//os.Exit(0)
-	//
-	//var conf *visorconfig.V1 //<< nil pointer dereference, not all fields are actually in this config
-
-	//make a config which has the needed substructs and then unmarshal the json into it?
+	//get secret key
 	cc := new(visorconfig.Common)
 	if err := json.Unmarshal(raw, cc); err != nil {
 		log.WithError(err).Fatal("failed to obtain config version.")
 	}
 	sk := &cc.SK
-	//fmt.Println{}
-	var services visorconfig.Services
-	// Determine config type to generate.
-	var genConf func(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, pkgEnv bool, testEnv bool, dmsgHTTP bool, hypervisor bool, services visorconfig.Services) (*visorconfig.V1, error)
 	// Generate config.
-	genConf = visorconfig.MakeDefaultConfig
-	conf, err := genConf(mLog, confPath, sk, false, false, dmsgHTTP, hypervisor, services)
+	conf, err := visorconfig.MakeDefaultConfig(mLog, confPath, sk, false, false, dmsgHTTP, hypervisor, visorconfig.Services{})
 	if err != nil {
 		log.WithError(err).Fatal("Failed to create config.")
 	}

@@ -2,9 +2,7 @@
 
 package dlgs
 
-import (
 //"github.com/gopherjs/gopherjs/js"
-)
 
 // List displays a list dialog, returning the selected value and a bool for success.
 func List(title, text string, items []string) (string, bool, error) {
