@@ -28,19 +28,19 @@ func ReadConfig(path string) (*V1, error) {
 		return nil, fmt.Errorf("%w", err)
 	}
 	/*
-		var conf map[string]interface{}
-		if err := json.Unmarshal([]byte(raw), &result); err != nil {
+			var conf map[string]interface{}
+			if err := json.Unmarshal([]byte(raw), &result); err != nil {
+				return nil, fmt.Errorf("failed to obtain config version: %w", err)
+			}
+			//fmt.Println(result["users"])
+
+		cc, err := NewCommon(mLog, path, "", nil)
+		if err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(raw, cc); err != nil {
 			return nil, fmt.Errorf("failed to obtain config version: %w", err)
 		}
-		//fmt.Println(result["users"])
-
-	cc, err := NewCommon(mLog, path, "", nil)
-	if err != nil {
-		return nil, err
-	}
-	if err := json.Unmarshal(raw, cc); err != nil {
-		return nil, fmt.Errorf("failed to obtain config version: %w", err)
-	}
 	*/
 	conf := &V1{}
 	dec := json.NewDecoder(bytes.NewReader(raw))
