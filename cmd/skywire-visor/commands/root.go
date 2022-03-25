@@ -247,6 +247,26 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 		log.WithError(err).Fatal("Failed to read in config.")
 	}
 
+	var confmap map[string]interface{}
+	//	var y map[string]interface{}
+	var dmsgHTTP bool
+	var hypervisor bool
+	json.Unmarshal(raw, &confmap)
+	dmsghttpconf := confmap["dmsg"].(map[string]interface{})
+	if dmsghttpconf["servers"] != nil {
+		dmsgHTTP = true
+	}
+	if confmap["hypervisor"] != nil {
+		hypervisor = true
+	}
+
+	//debug stuff
+	//fmt.Println(x)
+	//fmt.Println("")
+	//fmt.Println(x["hypervisor"])
+	//fmt.Println("")
+	//fmt.Println(dmsghttpconf["servers"])
+	//os.Exit(0)
 	//
 	//var conf *visorconfig.V1 //<< nil pointer dereference, not all fields are actually in this config
 
@@ -262,7 +282,7 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 	var genConf func(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, pkgEnv bool, testEnv bool, dmsgHTTP bool, hypervisor bool, services visorconfig.Services) (*visorconfig.V1, error)
 	// Generate config.
 	genConf = visorconfig.MakeDefaultConfig
-	conf, err := genConf(mLog, confPath, sk, false, false, true, true, services)
+	conf, err := genConf(mLog, confPath, sk, false, false, dmsgHTTP, hypervisor, services)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to create config.")
 	}
