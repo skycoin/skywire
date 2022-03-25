@@ -247,7 +247,7 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 		log.WithError(err).Fatal("Failed to read in config.")
 	}
 
-// We
+// 
 	conf := initConfig(mLog, args, confPath)
 
 	dec := json.NewDecoder(bytes.NewReader(raw))
