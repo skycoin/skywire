@@ -34,7 +34,7 @@ var (
 	replace            bool
 	replaceHypervisors bool
 	testEnv            bool
-	packageConfig      bool
+	pkgEnv             bool
 	hypervisor         bool
 	hypervisorPKs      string
 	dmsgHTTP           bool
@@ -47,6 +47,8 @@ var (
 	bestProtocol       bool
 	serviceConfURL     string
 	fallback           bool
+	empty              bool
+	force              bool
 )
 
 func init() {
@@ -55,13 +57,16 @@ func init() {
 	genConfigCmd.Flags().BoolVarP(&disableAUTH, "disable-auth", "c", false, "disable authentication for hypervisor UI.")
 	genConfigCmd.Flags().BoolVarP(&dmsgHTTP, "dmsghttp", "d", false, "use dmsg connection to skywire services")
 	genConfigCmd.Flags().BoolVarP(&enableAUTH, "enable-auth", "e", false, "enable auth on hypervisor UI.")
-	genConfigCmd.Flags().StringVarP(&disableApps, "disable-apps", "f", "", "comma separated list of apps to disable")
+	genConfigCmd.Flags().BoolVar(&empty, "empty", false, "write a blank config")
+	genConfigCmd.Flags().MarkHidden("empty")
+	genConfigCmd.Flags().BoolVarP(&force, "force", "f", false, "force overwrite any config")
+	genConfigCmd.Flags().StringVarP(&disableApps, "disable-apps", "g", "", "comma separated list of apps to disable")
 	genConfigCmd.Flags().BoolVarP(&hypervisor, "is-hv", "i", false, "hypervisor configuration.")
 	genConfigCmd.Flags().StringVarP(&hypervisorPKs, "hvpks", "j", "", "comma separated list of public keys to use as hypervisor")
 	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", "linux", "use os-specific paths (linux / macos / windows)")
 	genConfigCmd.Flags().BoolVarP(&stdout, "stdout", "n", false, "write config to stdout")
 	genConfigCmd.Flags().StringVarP(&output, "output", "o", "skywire-config.json", "path of output config file.")
-	genConfigCmd.Flags().BoolVarP(&packageConfig, "package", "p", false, "use paths for package (/opt/skywire)")
+	genConfigCmd.Flags().BoolVarP(&pkgEnv, "package", "p", false, "use paths for package (/opt/skywire)")
 	genConfigCmd.Flags().BoolVarP(&publicRPC, "public-rpc", "q", false, "allow rpc requests from LAN.")
 	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "rewrite existing config & retain keys.")
 	genConfigCmd.Flags().VarP(&sk, "sk", "s", "if unspecified, a random key pair will be generated.\n")
@@ -74,8 +79,14 @@ var genConfigCmd = &cobra.Command{
 	Use:   "gen",
 	Short: "generate a config file",
 	PreRun: func(_ *cobra.Command, _ []string) {
+		if (force) && (replace) {
+			logger.Fatal("Use of mutually exclusive flags -f --force and -r --replace.")
+		}
 		var err error
 		if output == visorconfig.StdoutName {
+			stdout = true
+		}
+		if empty {
 			stdout = true
 		}
 		if !stdout {
@@ -87,28 +98,54 @@ var genConfigCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
-		var services visorconfig.Services
 
+		if empty {
+			blank := &visorconfig.V1{}
+			j, err := json.MarshalIndent(blank, "", "\t")
+			if err != nil {
+				mLog.WithError(err).Fatal("An unexpected error occurred. Please contact a developer.")
+			}
+			fmt.Printf("%s", j)
+			os.Exit(0)
+		}
+
+		if force {
+			err := os.Remove(output)
+			if err != nil {
+				mLog.WithError(err).Fatal("Could not remove file")
+			}
+		}
+
+		var services visorconfig.Services
+		//var conf1 visorconfig.VisorConfig
+		//fetch service URLs from endpoint
 		urlstr := []string{"http://", serviceConfURL, "/config"}
 		serviceConfURL1 := strings.Join(urlstr, "")
 		client := http.Client{
 			Timeout: time.Second * 2, // Timeout after 2 seconds
 		}
+		//create the http request
 		req, err := http.NewRequest(http.MethodGet, serviceConfURL1, nil)
 		if err != nil {
 			mLog.Fatal(err)
 		}
-
+		//check for errors in the response
 		res, err := client.Do(req)
 		if err != nil {
 			if serviceConfURL != "skywire.skycoin.com" { // unhardcode this later
+				//if serviceConfURL was changed this error should be fatal
 				mLog.WithError(err).Fatal("Failed to fetch servers\n")
 			} else {
-				mLog.WithError(err).Error("Failed to fetch servers\n")
-				mLog.Info("Falling back on hardcoded servers")
-				fallback = true
+				//otherwise just error and continue
+				//silence errors for stdout
+				if !stdout {
+					mLog.WithError(err).Error("Failed to fetch servers\n")
+					mLog.Warn("Falling back on hardcoded servers")
+					//fallback = true
+			}
 			}
 		} else {
+			// nil error client.Do(req)
 			if res.Body != nil {
 				defer res.Body.Close() //nolint
 			}
@@ -116,16 +153,16 @@ var genConfigCmd = &cobra.Command{
 			if err != nil {
 				mLog.Fatal(err)
 			}
+			//fill in services struct with the response
 			err = json.Unmarshal(body, &services)
 			if err != nil {
 				mLog.Fatal(err)
 			}
 		}
 
-		//fmt.Println(services)
 		if !stdout {
 			//set output for package and skybian configs
-			if packageConfig {
+			if pkgEnv {
 				configName := "skywire-visor.json"
 				if hypervisor {
 					configName = "skywire.json"
@@ -148,32 +185,26 @@ var genConfigCmd = &cobra.Command{
 			//			if output == visorconfig.StdoutName {
 			//			_, sk = cipher.GenerateKeyPair()
 		}
+
+		/*
+			// fall back on server values from skywire-utilities/pkg/skyenv
+			if fallback {
+				services.DmsgDiscovery = skyenv.DefaultDmsgDiscAddr
+				services.TransportDiscovery = skyenv.DefaultTpDiscAddr
+				services.AddressResolver = skyenv.DefaultAddressResolverAddr
+				services.RouteFinder = skyenv.DefaultRouteFinderAddr
+				services.SetupNodes = append(services.SetupNodes, skyenv.MustPK(skyenv.DefaultSetupPK))
+				services.UptimeTracker = skyenv.DefaultUptimeTrackerAddr
+				services.ServiceDiscovery = skyenv.DefaultServiceDiscAddr
+				services.StunServers = skyenv.GetStunServers()
+			}
+		*/
 		// Determine config type to generate.
-		var genConf func(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool, services visorconfig.Services) (*visorconfig.V1, error)
-
-		//  default paths for different installations
-		if packageConfig {
-			genConf = visorconfig.MakePackageConfig
-		} else if testEnv {
-			genConf = visorconfig.MakeTestConfig
-		} else {
-			genConf = visorconfig.MakeDefaultConfig
-		}
-
-		// fall back on server values from skywire-utilities/pkg/skyenv
-		if fallback {
-			services.DmsgDiscovery = skyenv.DefaultDmsgDiscAddr
-			services.TransportDiscovery = skyenv.DefaultTpDiscAddr
-			services.AddressResolver = skyenv.DefaultAddressResolverAddr
-			services.RouteFinder = skyenv.DefaultRouteFinderAddr
-			services.SetupNodes = append(services.SetupNodes, skyenv.MustPK(skyenv.DefaultSetupPK))
-			services.UptimeTracker = skyenv.DefaultUptimeTrackerAddr
-			services.ServiceDiscovery = skyenv.DefaultServiceDiscAddr
-			services.StunServers = skyenv.GetStunServers()
-		}
+		var genConf func(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, pkgEnv bool, testEnv bool, dmsgHTTP bool, hypervisor bool, services visorconfig.Services) (*visorconfig.V1, error)
 
 		// Generate config.
-		conf, err := genConf(mLog, output, &sk, hypervisor, services)
+		genConf = visorconfig.MakeDefaultConfig
+		conf, err := genConf(mLog, output, &sk, pkgEnv, testEnv, dmsgHTTP, hypervisor, services)
 		if err != nil {
 			logger.WithError(err).Fatal("Failed to create config.")
 		}
@@ -191,7 +222,7 @@ var genConfigCmd = &cobra.Command{
 				// Compare key value and visor PK, if same, then this visor should be hypervisor
 				if key == conf.PK.Hex() {
 					hypervisor = true
-					conf, err = genConf(mLog, output, &sk, hypervisor, services)
+					conf, err = genConf(mLog, output, &sk, pkgEnv, testEnv, dmsgHTTP, hypervisor, services)
 					if err != nil {
 						logger.WithError(err).Fatal("Failed to create config.")
 					}
@@ -206,51 +237,6 @@ var genConfigCmd = &cobra.Command{
 				dmsgHTTP = true
 			}
 		}
-
-		// Use dmsg urls for services and add dmsg-servers
-		if dmsgHTTP {
-			var dmsgHTTPServersList visorconfig.DmsgHTTPServers
-			serversListJSON, err := ioutil.ReadFile(conf.DMSGHTTPPath)
-			if err != nil {
-				logger.WithError(err).Fatal("Failed to read servers.json file.")
-			}
-			err = json.Unmarshal(serversListJSON, &dmsgHTTPServersList)
-			if err != nil {
-				logger.WithError(err).Fatal("Error during parsing servers list")
-			}
-			if testEnv {
-				conf.Dmsg.Servers = dmsgHTTPServersList.Test.DMSGServers
-				conf.Dmsg.Discovery = dmsgHTTPServersList.Test.DMSGDiscovery
-				conf.Transport.AddressResolver = dmsgHTTPServersList.Test.AddressResolver
-				conf.Transport.Discovery = dmsgHTTPServersList.Test.TransportDiscovery
-				conf.UptimeTracker.Addr = dmsgHTTPServersList.Test.UptimeTracker
-				conf.Routing.RouteFinder = dmsgHTTPServersList.Test.RouteFinder
-				conf.Launcher.ServiceDisc = dmsgHTTPServersList.Test.ServiceDiscovery
-			} else {
-				conf.Dmsg.Servers = dmsgHTTPServersList.Prod.DMSGServers
-				conf.Dmsg.Discovery = dmsgHTTPServersList.Prod.DMSGDiscovery
-				conf.Transport.AddressResolver = dmsgHTTPServersList.Prod.AddressResolver
-				conf.Transport.Discovery = dmsgHTTPServersList.Prod.TransportDiscovery
-				conf.UptimeTracker.Addr = dmsgHTTPServersList.Prod.UptimeTracker
-				conf.Routing.RouteFinder = dmsgHTTPServersList.Prod.RouteFinder
-				conf.Launcher.ServiceDisc = dmsgHTTPServersList.Prod.ServiceDiscovery
-			}
-		}
-
-		/*
-				if fallback {
-					conf.Dmsg.Servers = dmsgHTTPServersList.Prod.DMSGServers
-					conf.Dmsg.Discovery = skyenv.DefaultDmsgDiscAddr
-					conf.Transport.AddressResolver = skyenv.DefaultAddressResolverAddr
-					conf.Transport.Discovery = skyenv.DefaultTpDiscAddr
-					conf.UptimeTracker.Addr = skyenv.DefaultUptimeTrackerAddr
-					conf.Routing.RouteFinder = skyenv.DefaultRouteFinderAddr
-					conf.Routing.SetupNodes = skyenv.DefaultSetupPK
-					conf.Launcher.ServiceDisc = skyenv.DefaultServiceDiscAddr
-					conf.StunServers = skyenv.GetStunServers()
-			}
-		*/
-
 		// Read in old config (if any) and obtain old hypervisors.
 		if replaceHypervisors {
 			if oldConf, ok := readOldConfig(mLog, output, true, hypervisor, services); ok {
@@ -342,7 +328,7 @@ func readOldConfig(log *logging.MasterLogger, confPath string, replace bool, hyp
 		logger.Fatal("Config file already exists. Specify the 'replace, r' flag to replace.")
 	}
 
-	conf, err := visorconfig.Parse(log, confPath, raw, hypervisor, services)
+	conf, err := visorconfig.Parse(log, confPath, raw, testEnv, dmsgHTTP, services)
 	if err != nil {
 		logger.WithError(err).Fatal("Failed to parse old config file.")
 	}
