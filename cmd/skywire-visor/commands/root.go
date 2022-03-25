@@ -250,7 +250,9 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 	//	var y map[string]interface{}
 	var dmsgHTTP bool
 	var hypervisor bool
-	json.Unmarshal(raw, &confmap)
+	if err := json.Unmarshal(raw, &confmap); err != nil {
+		log.WithError(err).Fatal("failed to unmarshal json config.")
+	}
 	dmsghttpconf := confmap["dmsg"].(map[string]interface{})
 	if dmsghttpconf["servers"] != nil {
 		dmsgHTTP = true

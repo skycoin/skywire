@@ -22,10 +22,6 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
-func init() {
-	genConfigCmd.Flags().SortFlags = false
-	RootCmd.AddCommand(genConfigCmd)
-}
 
 var (
 	sk                 cipher.SecKey
@@ -46,19 +42,19 @@ var (
 	disableApps        string
 	bestProtocol       bool
 	serviceConfURL     string
-	fallback           bool
-	empty              bool
 	force              bool
+	svcconf	= strings.ReplaceAll(serviceconfaddr, "http://", "") //skyenv.DefaultServiceConfAddr
 )
 
+const serviceconfaddr =  "http://skywire.skycoin.com"
 func init() {
-	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", "skywire.skycoin.com", "service configuration URL")
+	genConfigCmd.Flags().SortFlags = false
+	RootCmd.AddCommand(genConfigCmd)
+	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", svcconf, "service configuration URL")
 	genConfigCmd.Flags().BoolVarP(&bestProtocol, "best-proto", "b", false, "determine best protocol (dmsg / direct) based on location")
 	genConfigCmd.Flags().BoolVarP(&disableAUTH, "disable-auth", "c", false, "disable authentication for hypervisor UI.")
 	genConfigCmd.Flags().BoolVarP(&dmsgHTTP, "dmsghttp", "d", false, "use dmsg connection to skywire services")
 	genConfigCmd.Flags().BoolVarP(&enableAUTH, "enable-auth", "e", false, "enable auth on hypervisor UI.")
-	genConfigCmd.Flags().BoolVar(&empty, "empty", false, "write a blank config")
-	genConfigCmd.Flags().MarkHidden("empty")
 	genConfigCmd.Flags().BoolVarP(&force, "force", "f", false, "force overwrite any config")
 	genConfigCmd.Flags().StringVarP(&disableApps, "disable-apps", "g", "", "comma separated list of apps to disable")
 	genConfigCmd.Flags().BoolVarP(&hypervisor, "is-hv", "i", false, "hypervisor configuration.")
@@ -86,9 +82,6 @@ var genConfigCmd = &cobra.Command{
 		if output == visorconfig.StdoutName {
 			stdout = true
 		}
-		if empty {
-			stdout = true
-		}
 		if !stdout {
 			if output, err = filepath.Abs(output); err != nil {
 				logger.WithError(err).Fatal("Invalid output provided.")
@@ -99,16 +92,6 @@ var genConfigCmd = &cobra.Command{
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
 
-		if empty {
-			blank := &visorconfig.V1{}
-			j, err := json.MarshalIndent(blank, "", "\t")
-			if err != nil {
-				mLog.WithError(err).Fatal("An unexpected error occurred. Please contact a developer.")
-			}
-			fmt.Printf("%s", j)
-			os.Exit(0)
-		}
-
 		if force {
 			err := os.Remove(output)
 			if err != nil {
@@ -117,35 +100,32 @@ var genConfigCmd = &cobra.Command{
 		}
 
 		var services visorconfig.Services
-		//var conf1 visorconfig.VisorConfig
 		//fetch service URLs from endpoint
 		urlstr := []string{"http://", serviceConfURL, "/config"}
-		serviceConfURL1 := strings.Join(urlstr, "")
+		serviceConf := strings.Join(urlstr, "")
 		client := http.Client{
 			Timeout: time.Second * 2, // Timeout after 2 seconds
 		}
 		//create the http request
-		req, err := http.NewRequest(http.MethodGet, serviceConfURL1, nil)
+		req, err := http.NewRequest(http.MethodGet, serviceConf, nil)
 		if err != nil {
 			mLog.Fatal(err)
 		}
 		//check for errors in the response
 		res, err := client.Do(req)
 		if err != nil {
-			if serviceConfURL != "skywire.skycoin.com" { // unhardcode this later
+			if serviceConfURL != svcconf {
 				//if serviceConfURL was changed this error should be fatal
 				mLog.WithError(err).Fatal("Failed to fetch servers\n")
-			} else {
-				//otherwise just error and continue
+			} else {				//otherwise just error and continue
 				//silence errors for stdout
 				if !stdout {
 					mLog.WithError(err).Error("Failed to fetch servers\n")
 					mLog.Warn("Falling back on hardcoded servers")
-					//fallback = true
 				}
 			}
 		} else {
-			// nil error client.Do(req)
+			// nil error from client.Do(req)
 			if res.Body != nil {
 				defer res.Body.Close() //nolint
 			}
@@ -173,8 +153,7 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 
-		// Read in old config (if any) and obtain old secret key.
-		// Otherwise, we generate a new random secret key.
+		// Read in old config and obtain old secret key or generate a new random secret key
 		var sk cipher.SecKey
 		if !stdout {
 			if oldConf, ok := readOldConfig(mLog, output, replace, hypervisor, services); !ok {
@@ -182,12 +161,10 @@ var genConfigCmd = &cobra.Command{
 			} else {
 				sk = oldConf.SK
 			}
-			//			if output == visorconfig.StdoutName {
-			//			_, sk = cipher.GenerateKeyPair()
-		}
+			}
 
 		// Determine config type to generate.
-		var genConf func(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, pkgEnv bool, testEnv bool, dmsgHTTP bool, hypervisor bool, services visorconfig.Services) (*visorconfig.V1, error)
+    var genConf func(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, pkgEnv bool, testEnv bool, dmsgHTTP bool, hypervisor bool, services visorconfig.Services) (*visorconfig.V1, error)
 
 		// Generate config.
 		genConf = visorconfig.MakeDefaultConfig

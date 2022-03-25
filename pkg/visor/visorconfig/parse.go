@@ -19,6 +19,7 @@ var (
 	ErrInvalidSK = errors.New("config has invalid secret key")
 )
 
+
 // Parse parses the visor config from a given reader.
 // If the config file is not the most recent version, it is upgraded and written back to 'path'.
 func Parse(log *logging.MasterLogger, path string, raw []byte, testEnv bool, dmsgHTTP bool, services Services) (*V1, error) {
