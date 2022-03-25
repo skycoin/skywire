@@ -1,15 +1,19 @@
 package visorconfig
 
 import (
+	"encoding/json"
+	"io/ioutil"
+
 	"github.com/skycoin/dmsg/disc"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
+	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
@@ -17,37 +21,46 @@ import (
 // MakeBaseConfig returns a visor config with 'enforced' fields only.
 // This is used as default values if no config is given, or for missing *required* fields.
 // This function always returns the latest config version.
-func MakeBaseConfig(common *Common, hypervisor bool, services Services) *V1 {
+func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services Services) *V1 {
+	//check to see if there are values. Sometimes an empty struct is passed
+	if services.DmsgDiscovery == "" {
+		//fall back on skyev defaults
+		if !testEnv {
+			services = Services{utilenv.DefaultDmsgDiscAddr, utilenv.DefaultTpDiscAddr, utilenv.DefaultAddressResolverAddr, utilenv.DefaultRouteFinderAddr, []cipher.PubKey{utilenv.MustPK(utilenv.DefaultSetupPK)}, utilenv.DefaultServiceDiscAddr, utilenv.DefaultUptimeTrackerAddr, utilenv.GetStunServers()}
+		} else {
+			services = Services{utilenv.TestDmsgDiscAddr, utilenv.TestTpDiscAddr, utilenv.TestAddressResolverAddr, utilenv.TestRouteFinderAddr, []cipher.PubKey{utilenv.MustPK(utilenv.TestSetupPK)}, utilenv.TestServiceDiscAddr, utilenv.TestUptimeTrackerAddr, utilenv.GetStunServers()}
+		}
+	}
 	conf := new(V1)
 	conf.Common = common
 	conf.Dmsg = &dmsgc.DmsgConfig{
-		Discovery:     services.DmsgDiscovery, //skyenv.DefaultDmsgDiscAddr,
+		Discovery:     services.DmsgDiscovery, //utilenv.DefaultDmsgDiscAddr,
 		SessionsCount: 1,
 		Servers:       []*disc.Entry{},
 	}
 	conf.Transport = &V1Transport{
-		Discovery:         services.TransportDiscovery, //skyenv.DefaultTpDiscAddr,
-		AddressResolver:   services.AddressResolver,    //skyenv.DefaultAddressResolverAddr,
+		Discovery:         services.TransportDiscovery, //utilenv.DefaultTpDiscAddr,
+		AddressResolver:   services.AddressResolver,    //utilenv.DefaultAddressResolverAddr,
 		PublicAutoconnect: true,
 	}
 	conf.Routing = &V1Routing{
-		SetupNodes:         services.SetupNodes,  //[]cipher.PubKey{skyenv.MustPK(skyenv.DefaultSetupPK)},
-		RouteFinder:        services.RouteFinder, //skyenv.DefaultRouteFinderAddr,
+		RouteFinder:        services.RouteFinder, //utilenv.DefaultRouteFinderAddr,
+		SetupNodes:         services.SetupNodes,  //[]cipher.PubKey{utilenv.MustPK(utilenv.DefaultSetupPK)},
 		RouteFinderTimeout: DefaultTimeout,
 	}
 	conf.Launcher = &V1Launcher{
-		ServiceDisc: services.ServiceDiscovery, //skyenv.DefaultServiceDiscAddr,
+		ServiceDisc: services.ServiceDiscovery, //utilenv.DefaultServiceDiscAddr,
 		Apps:        nil,
 		ServerAddr:  skyenv.DefaultAppSrvAddr,
 		BinPath:     skyenv.DefaultAppBinPath,
 	}
 	conf.UptimeTracker = &V1UptimeTracker{
-		Addr: services.UptimeTracker, //skyenv.DefaultUptimeTrackerAddr,
+		Addr: services.UptimeTracker, //utilenv.DefaultUptimeTrackerAddr,
 	}
 	conf.CLIAddr = skyenv.DefaultRPCAddr
 	conf.LogLevel = skyenv.DefaultLogLevel
 	conf.LocalPath = skyenv.DefaultLocalPath
-	conf.StunServers = services.StunServers //skyenv.GetStunServers()
+	conf.StunServers = services.StunServers //utilenv.GetStunServers()
 	conf.ShutdownTimeout = DefaultTimeout
 	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
 	conf.DMSGHTTPPath = skyenv.DefaultDMSGHTTPPath
@@ -63,21 +76,6 @@ func MakeBaseConfig(common *Common, hypervisor bool, services Services) *V1 {
 		PKTable:          nil,
 	}
 
-	conf.UptimeTracker = &V1UptimeTracker{
-		Addr: skyenv.DefaultUptimeTrackerAddr,
-	}
-
-	conf.Launcher.ServiceDisc = skyenv.DefaultServiceDiscAddr
-
-	conf.Launcher.Apps = makeDefaultLauncherAppsConfig()
-
-	conf.Hypervisors = make([]cipher.PubKey, 0)
-
-	if hypervisor {
-		config := hypervisorconfig.GenerateWorkDirConfig(false)
-		conf.Hypervisor = &config
-	}
-
 	return conf
 }
 
@@ -85,7 +83,7 @@ func MakeBaseConfig(common *Common, hypervisor bool, services Services) *V1 {
 // The config's 'sk' field will be nil if not specified.
 // Generated config will be saved to 'confPath'.
 // This function always returns the latest config version.
-func MakeDefaultConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool, services Services) (*V1, error) {
+func MakeDefaultConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, pkgEnv bool, testEnv bool, dmsgHTTP bool, hypervisor bool, services Services) (*V1, error) {
 	cc, err := NewCommon(log, confPath, V1Name, sk)
 	if err != nil {
 		return nil, err
@@ -96,11 +94,63 @@ func MakeDefaultConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 		return nil, err
 	}
 	// Actual config generation.
-	conf := MakeBaseConfig(cc, hypervisor, services)
+	conf := MakeBaseConfig(cc, testEnv, dmsgHTTP, services)
+
+	conf.Launcher.Apps = makeDefaultLauncherAppsConfig()
+
+	conf.Hypervisors = make([]cipher.PubKey, 0)
+
+	if hypervisor {
+		config := hypervisorconfig.GenerateWorkDirConfig(false)
+		conf.Hypervisor = &config
+	}
+
+	if pkgEnv {
+		pkgconfig := skyenv.PackageConfig()
+		conf.LocalPath = pkgconfig.LocalPath
+		conf.Launcher.BinPath = pkgconfig.Launcher.BinPath
+		conf.DMSGHTTPPath = pkgconfig.DmsghttpPath
+		if conf.Hypervisor != nil {
+			conf.Hypervisor.EnableAuth = pkgconfig.Hypervisor.EnableAuth
+			conf.Hypervisor.DBPath = pkgconfig.Hypervisor.DbPath
+		}
+	}
+
+	// Use dmsg urls for services and add dmsg-servers
+	if dmsgHTTP {
+		var dmsgHTTPServersList DmsgHTTPServers
+		serversListJSON, err := ioutil.ReadFile(conf.DMSGHTTPPath)
+		if err != nil {
+			log.WithError(err).Fatal("Failed to read dmsghttp-config.json file.")
+		}
+		err = json.Unmarshal(serversListJSON, &dmsgHTTPServersList)
+		if err != nil {
+			log.WithError(err).Fatal("Error during parsing servers list")
+		}
+		if testEnv {
+			conf.Dmsg.Servers = dmsgHTTPServersList.Test.DMSGServers
+			conf.Dmsg.Discovery = dmsgHTTPServersList.Test.DMSGDiscovery
+			conf.Transport.AddressResolver = dmsgHTTPServersList.Test.AddressResolver
+			conf.Transport.Discovery = dmsgHTTPServersList.Test.TransportDiscovery
+			conf.UptimeTracker.Addr = dmsgHTTPServersList.Test.UptimeTracker
+			conf.Routing.RouteFinder = dmsgHTTPServersList.Test.RouteFinder
+			conf.Launcher.ServiceDisc = dmsgHTTPServersList.Test.ServiceDiscovery
+		} else {
+			conf.Dmsg.Servers = dmsgHTTPServersList.Prod.DMSGServers
+			conf.Dmsg.Discovery = dmsgHTTPServersList.Prod.DMSGDiscovery
+			conf.Transport.AddressResolver = dmsgHTTPServersList.Prod.AddressResolver
+			conf.Transport.Discovery = dmsgHTTPServersList.Prod.TransportDiscovery
+			conf.UptimeTracker.Addr = dmsgHTTPServersList.Prod.UptimeTracker
+			conf.Routing.RouteFinder = dmsgHTTPServersList.Prod.RouteFinder
+			conf.Launcher.ServiceDisc = dmsgHTTPServersList.Prod.ServiceDiscovery
+		}
+	}
 
 	return conf, nil
+
 }
 
+/*
 // MakeTestConfig acts like MakeDefaultConfig, however, test deployment service addresses are used instead.
 func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool, services Services) (*V1, error) {
 	conf, err := MakeDefaultConfig(log, confPath, sk, hypervisor, services)
@@ -113,58 +163,9 @@ func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKe
 	}
 	return conf, nil
 }
-
-// MakePackageConfig acts like MakeDefaultConfig but use package config defaults
-func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool, services Services) (*V1, error) {
-	conf, err := MakeDefaultConfig(log, confPath, sk, hypervisor, services)
-	if err != nil {
-		return nil, err
-	}
-
-	conf.Dmsgpty = &V1Dmsgpty{
-		DmsgPort: skyenv.DmsgPtyPort,
-		CLINet:   skyenv.DefaultDmsgPtyCLINet,
-		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr(),
-	}
-	conf.LocalPath = skyenv.PackageAppLocalPath()
-	conf.Launcher.BinPath = skyenv.PackageAppBinPath()
-	conf.DMSGHTTPPath = skyenv.PackageDMSGHTTPPath()
-
-	if conf.Hypervisor != nil {
-		conf.Hypervisor.EnableAuth = skyenv.DefaultPackageEnableAuth
-		conf.Hypervisor.TLSKeyFile = skyenv.PackageTLSKey()
-		conf.Hypervisor.TLSCertFile = skyenv.PackageTLSCert()
-		conf.Hypervisor.TLSKeyFile = skyenv.PackageTLSKey()
-		conf.Hypervisor.TLSCertFile = skyenv.PackageTLSCert()
-		conf.Hypervisor.DBPath = skyenv.PackageDBPath()
-	}
-	return conf, nil
-}
+*/
 
 // SetDefaultTestingValues mutates configuration to use testing values
-func SetDefaultTestingValues(conf *V1) {
-	conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
-	conf.Transport.Discovery = skyenv.TestTpDiscAddr
-	conf.Transport.AddressResolver = skyenv.TestAddressResolverAddr
-	conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
-	conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.TestSetupPK)}
-	conf.UptimeTracker.Addr = skyenv.TestUptimeTrackerAddr
-	conf.Launcher.ServiceDisc = skyenv.TestServiceDiscAddr
-}
-
-// SetDefaultProductionValues mutates configuration to use production values
-func SetDefaultProductionValues(conf *V1) {
-	conf.Dmsg.Discovery = skyenv.DefaultDmsgDiscAddr
-	conf.Transport.Discovery = skyenv.DefaultTpDiscAddr
-	conf.Transport.AddressResolver = skyenv.DefaultAddressResolverAddr
-	conf.Routing.RouteFinder = skyenv.DefaultRouteFinderAddr
-	conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.DefaultSetupPK)}
-	conf.UptimeTracker = &V1UptimeTracker{
-		Addr: skyenv.DefaultUptimeTrackerAddr,
-	}
-	conf.Launcher.ServiceDisc = skyenv.DefaultServiceDiscAddr
-}
-
 // makeDefaultLauncherAppsConfig creates default launcher config for apps,
 // for package based installation in other platform (Darwin, Windows) it only includes
 // the shipped apps for that platforms
@@ -215,4 +216,16 @@ type DmsgHTTPServersData struct {
 	RouteFinder        string        `json:"route_finder"`
 	UptimeTracker      string        `json:"uptime_tracker"`
 	ServiceDiscovery   string        `json:"service_discovery"`
+}
+
+// Services are subdomains and IP addresses of the skywire services
+type Services struct {
+	DmsgDiscovery      string          `json:"dmsg_discovery"`
+	TransportDiscovery string          `json:"transport_discovery"`
+	AddressResolver    string          `json:"address_resolver"`
+	RouteFinder        string          `json:"route_finder"`
+	SetupNodes         []cipher.PubKey `json:"setup_nodes"`
+	UptimeTracker      string          `json:"uptime_tracker"`
+	ServiceDiscovery   string          `json:"service_discovery"`
+	StunServers        []string        `json:"stun_servers"`
 }
