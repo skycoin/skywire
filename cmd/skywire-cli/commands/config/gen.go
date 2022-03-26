@@ -183,7 +183,6 @@ var genConfigCmd = &cobra.Command{
 
 		if !stdout {
 			//set output for package and skybian configs
-			fmt.Println(outunset)
 			if outunset {
 			if pkgEnv {
 				configName := "skywire-visor.json"
