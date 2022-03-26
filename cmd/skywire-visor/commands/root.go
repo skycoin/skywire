@@ -16,10 +16,10 @@ import (
 	"sync"
 	"time"
 
+	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/pkg/profile"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
-	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
@@ -54,7 +54,7 @@ var (
 	disableHypervisorPKs bool
 	stopVisorFn          func() // nolint:unused
 	stopVisorWg          sync.WaitGroup
-	completion	string
+	completion           string
 )
 
 func init() {
@@ -82,36 +82,36 @@ var rootCmd = &cobra.Command{
 	└─┐├┴┐└┬┘││││├┬┘├┤
 	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘`,
 	PreRun: func(cmd *cobra.Command, _ []string) {
-	switch completion {
-	case "bash":
-		err := cmd.Root().GenBashCompletion(os.Stdout)
-		if err != nil {
-			panic(err)
+		switch completion {
+		case "bash":
+			err := cmd.Root().GenBashCompletion(os.Stdout)
+			if err != nil {
+				panic(err)
+			}
+		case "zsh":
+			err := cmd.Root().GenZshCompletion(os.Stdout)
+			if err != nil {
+				panic(err)
+			}
+		case "fish":
+			err := cmd.Root().GenFishCompletion(os.Stdout, true)
+			if err != nil {
+				panic(err)
+			}
+		case "powershell":
+			err := cmd.Root().GenPowerShellCompletion(os.Stdout)
+			if err != nil {
+				panic(err)
+			}
 		}
-	case "zsh":
-		err := cmd.Root().GenZshCompletion(os.Stdout)
-		if err != nil {
-			panic(err)
+		if (completion != "bash") && (completion != "zsh") && (completion != "fish") && (completion != "bash") && (completion != "") {
+			fmt.Println("Invalid completion specified:", completion)
+			os.Exit(1)
 		}
-	case "fish":
-		err := cmd.Root().GenFishCompletion(os.Stdout, true)
-		if err != nil {
-			panic(err)
+		if completion != "" {
+			os.Exit(0)
 		}
-	case "powershell":
-		err := cmd.Root().GenPowerShellCompletion(os.Stdout)
-		if err != nil {
-			panic(err)
-		}
-	}
-	if (completion != "bash") && (completion != "zsh") && (completion != "fish") && (completion != "bash") && (completion != "") {
-		fmt.Println("Invalid completion specified:", completion)
-		os.Exit(1)
-	}
-	if completion != "" {
-		os.Exit(0)
-	}
-},
+	},
 
 	Run: func(_ *cobra.Command, args []string) {
 		runApp(args...)
@@ -178,17 +178,17 @@ func runVisor(args []string) {
 // Execute executes root CLI command.
 func Execute(ui embed.FS) {
 	cc.Init(&cc.Config{
-			RootCmd:       rootCmd,
-			Headings:      cc.HiBlue + cc.Bold, //+ cc.Underline,
-			Commands:      cc.HiBlue + cc.Bold,
-			CmdShortDescr: cc.HiBlue,
-			Example:       cc.HiBlue + cc.Italic,
-			ExecName:      cc.HiBlue + cc.Bold,
-			Flags:         cc.HiBlue + cc.Bold,
-			//FlagsDataType: cc.HiBlue,
-			FlagsDescr: cc.HiBlue,
-			NoExtraNewlines: true,
-			NoBottomNewline: true,
+		RootCmd:       rootCmd,
+		Headings:      cc.HiBlue + cc.Bold, //+ cc.Underline,
+		Commands:      cc.HiBlue + cc.Bold,
+		CmdShortDescr: cc.HiBlue,
+		Example:       cc.HiBlue + cc.Italic,
+		ExecName:      cc.HiBlue + cc.Bold,
+		Flags:         cc.HiBlue + cc.Bold,
+		//FlagsDataType: cc.HiBlue,
+		FlagsDescr:      cc.HiBlue,
+		NoExtraNewlines: true,
+		NoBottomNewline: true,
 	})
 	uiFS, err := fs.Sub(ui, "static")
 	if err != nil {
