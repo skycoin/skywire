@@ -46,6 +46,7 @@ var (
 	force              bool
 	print		string
 	hide	bool
+	outunset bool
 	svcconf            = strings.ReplaceAll(serviceconfaddr, "http://", "") //skyenv.DefaultServiceConfAddr
 )
 
@@ -65,7 +66,7 @@ func init() {
 	genConfigCmd.Flags().StringVarP(&hypervisorPKs, "hvpks", "j", "", "list of public keys to use as hypervisor")
 	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", "linux", "(linux / macos / windows) paths")
 	genConfigCmd.Flags().BoolVarP(&stdout, "stdout", "n", false, "write config to stdout")
-	genConfigCmd.Flags().StringVarP(&output, "out", "o", "skywire-config.json", "output config")
+	genConfigCmd.Flags().StringVarP(&output, "out", "o", "", "output config default: skywire-config.json")
 	genConfigCmd.Flags().BoolVarP(&pkgEnv, "package", "p", false, "use paths for package (/opt/skywire)")
 	genConfigCmd.Flags().BoolVarP(&publicRPC, "publicrpc", "q", false, "allow rpc requests from LAN")
 	genConfigCmd.Flags().BoolVarP(&regen, "regen", "r", false, "re-generate existing config & retain keys")
@@ -86,6 +87,10 @@ var genConfigCmd = &cobra.Command{
 //skywire-cli config gen -bipr --enable-auth`,
 	PreRun: func(_ *cobra.Command, _ []string) {
 		//
+		if output == "" {
+			output = "skywire-config.json"
+			outunset = true
+		}
 		if (force) && (regen) {
 			logger.Fatal("Use of mutually exclusive flags: -f --force cannot override -r --regen")
 		}
@@ -178,7 +183,9 @@ var genConfigCmd = &cobra.Command{
 
 		if !stdout {
 			//set output for package and skybian configs
-			if pkgEnv &&  !cmd.Flags().Changed("output") {
+			fmt.Println(outunset)
+			if outunset {
+			if pkgEnv {
 				configName := "skywire-visor.json"
 				if hypervisor {
 					configName = "skywire.json"
@@ -186,7 +193,7 @@ var genConfigCmd = &cobra.Command{
 					output = filepath.Join(skyenv.PackageSkywirePath(), configName)
 				}
 			}
-
+		}
 
 		// Read in old config and obtain old secret key or generate a new random secret key
 		var sk cipher.SecKey
