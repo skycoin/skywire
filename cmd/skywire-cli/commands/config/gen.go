@@ -13,7 +13,6 @@ import (
 	"github.com/sirupsen/logrus"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
-	//ccobra "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -27,7 +26,7 @@ var (
 	sk                 cipher.SecKey
 	output             string
 	stdout             bool
-	regen            bool
+	regen              bool
 	replaceHypervisors bool
 	testEnv            bool
 	pkgEnv             bool
@@ -42,11 +41,11 @@ var (
 	disableApps        string
 	bestProtocol       bool
 	serviceConfURL     string
-	services visorconfig.Services
+	services           visorconfig.Services
 	force              bool
-	print		string
-	hide	bool
-	outunset bool
+	print              string
+	hide               bool
+	outunset           bool
 	svcconf            = strings.ReplaceAll(serviceconfaddr, "http://", "") //skyenv.DefaultServiceConfAddr
 )
 
@@ -73,18 +72,18 @@ func init() {
 	genConfigCmd.Flags().VarP(&sk, "sk", "s", "if unspecified, a random key pair will be generated\n\r")
 	genConfigCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "use test deployment service")
 	genConfigCmd.Flags().BoolVarP(&vpnServerEnable, "servevpn", "v", false, "enable vpn server")
-	genConfigCmd.Flags().BoolVarP(&hide, "hide", "w",  false, "dont print the config to the terminal")
+	genConfigCmd.Flags().BoolVarP(&hide, "hide", "w", false, "dont print the config to the terminal")
 	genConfigCmd.Flags().BoolVarP(&replaceHypervisors, "retainhv", "x", false, "retain existing hypervisors with replace")
 	genConfigCmd.Flags().StringVar(&print, "print", "", "parse test ; read config from file & print")
-	genConfigCmd.Flags().MarkHidden("print")
+	genConfigCmd.Flags().MarkHidden("print")//nolint
 }
 
 var genConfigCmd = &cobra.Command{
 	Use:   "gen",
 	Short: "generate a config file",
-//	Long: `
-//#Hypervisor on linux:
-//skywire-cli config gen -bipr --enable-auth`,
+	//	Long: `
+	//#Hypervisor on linux:
+	//skywire-cli config gen -bipr --enable-auth`,
 	PreRun: func(_ *cobra.Command, _ []string) {
 		//
 		if output == "" {
@@ -107,7 +106,7 @@ var genConfigCmd = &cobra.Command{
 			}
 			if !regen {
 				//check if the config exists
-				if _, err:= os.Stat(output); err == nil {
+				if _, err := os.Stat(output); err == nil {
 					//error config exists !regen
 					logger.Fatal("Config file already exists. Specify the '-r --regen' flag to regenerate.")
 				}
@@ -184,11 +183,11 @@ var genConfigCmd = &cobra.Command{
 		if !stdout {
 			//set output for package and skybian configs
 			if outunset {
-			if pkgEnv {
-				configName := "skywire-visor.json"
-				if hypervisor {
-					configName = "skywire.json"
-				}
+				if pkgEnv {
+					configName := "skywire-visor.json"
+					if hypervisor {
+						configName = "skywire.json"
+					}
 					output = filepath.Join(skyenv.PackageSkywirePath(), configName)
 				}
 			}
@@ -309,7 +308,7 @@ var genConfigCmd = &cobra.Command{
 		if !stdout {
 			if hide {
 				logger.Infof("Updated file '%s'", output)
-				} else {
+			} else {
 				logger.Infof("Updated file '%s' to: %s", output, j)
 			}
 		} else {
