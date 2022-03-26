@@ -72,8 +72,6 @@ func init() {
 	rootCmd.Flags().StringVarP(&syslogAddr, "syslog", "y", "", "syslog server address. E.g. localhost:514")
 	rootCmd.Flags().StringVarP(&completion, "completion", "z", "", "[ bash | zsh | fish | powershell ]")
 	extraFlags()
-	//rootCmd.SetUsageFunc(f func(*Command) error)
-	//rootCmd.SetUsageTemplate("")
 }
 
 var rootCmd = &cobra.Command{
