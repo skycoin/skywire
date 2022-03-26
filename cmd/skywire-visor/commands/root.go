@@ -19,6 +19,7 @@ import (
 	"github.com/pkg/profile"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
+	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
@@ -60,9 +61,9 @@ func init() {
 	rootCmd.AddCommand(completionCmd)
 	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use")
 	rootCmd.Flags().BoolVarP(&hypervisorUI, "-hvui", "i", false, "run as hypervisor")
-	rootCmd.Flags().BoolVarP(&launchBrowser, "launch-browser", "b", false, "open hypervisor ui in default web browser")
+	rootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
 	rootCmd.Flags().StringVarP(&remoteHypervisorPKs, "hv", "j", "", "add remote hypervisor PKs at runtime")
-	rootCmd.Flags().BoolVarP(&disableHypervisorPKs, "no-rhv", "k", false, "disable remote hypervisors set in config file")
+	rootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors set in config file")
 	rootCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
 	rootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "p", "", "pprof mode: cpu, mem, mutex, block, trace, http")
 	rootCmd.Flags().StringVarP(&pprofAddr, "pprofaddr", "q", "localhost:6060", "pprof http port")
@@ -74,6 +75,10 @@ func init() {
 var rootCmd = &cobra.Command{
 	Use:   "skywire-visor",
 	Short: "Skywire Visor",
+	Long: `
+	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
+	└─┐├┴┐└┬┘││││├┬┘├┤
+	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘`,
 	Run: func(_ *cobra.Command, args []string) {
 		runApp(args...)
 	},
@@ -138,6 +143,19 @@ func runVisor(args []string) {
 
 // Execute executes root CLI command.
 func Execute(ui embed.FS) {
+	cc.Init(&cc.Config{
+			RootCmd:       rootCmd,
+			Headings:      cc.HiBlue + cc.Bold, //+ cc.Underline,
+			Commands:      cc.HiBlue + cc.Bold,
+			CmdShortDescr: cc.HiBlue,
+			Example:       cc.HiBlue + cc.Italic,
+			ExecName:      cc.HiBlue + cc.Bold,
+			Flags:         cc.HiBlue + cc.Bold,
+			//FlagsDataType: cc.HiBlue,
+			FlagsDescr: cc.HiBlue,
+			NoExtraNewlines: false,
+			NoBottomNewline: true,
+	})
 	uiFS, err := fs.Sub(ui, "static")
 	if err != nil {
 		fmt.Println(err)
@@ -261,11 +279,11 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 		hypervisor = true
 	}
 	//get secret key
-	cc := new(visorconfig.Common)
-	if err := json.Unmarshal(raw, cc); err != nil {
+	cC := new(visorconfig.Common)
+	if err := json.Unmarshal(raw, cC); err != nil {
 		log.WithError(err).Fatal("failed to obtain config version.")
 	}
-	sk := &cc.SK
+	sk := &cC.SK
 	// Generate config.
 	conf, err := visorconfig.MakeDefaultConfig(mLog, confPath, sk, false, false, dmsgHTTP, hypervisor, visorconfig.Services{})
 	if err != nil {
@@ -276,11 +294,6 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 	if err := dec.Decode(&conf); err != nil {
 		log.WithError(err).Fatal("Failed to decode config.")
 	}
-
-	//	conf, err := visorconfig.Parse(mLog, confPath, raw)
-	//	if err != nil {
-	//		log.WithError(err).Fatal("Failed to parse config.")
-	//	}
 
 	if hypervisorUI {
 		config := hypervisorconfig.GenerateWorkDirConfig(false)
