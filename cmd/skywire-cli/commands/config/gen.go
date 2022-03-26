@@ -45,6 +45,7 @@ var (
 	services visorconfig.Services
 	force              bool
 	print		string
+	hide	bool
 	svcconf            = strings.ReplaceAll(serviceconfaddr, "http://", "") //skyenv.DefaultServiceConfAddr
 )
 
@@ -53,65 +54,81 @@ const serviceconfaddr = "http://skywire.skycoin.com"
 func init() {
 	genConfigCmd.Flags().SortFlags = false
 	RootCmd.AddCommand(genConfigCmd)
-	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", svcconf, "service configuration URL")
-	genConfigCmd.Flags().BoolVarP(&bestProtocol, "bestproto", "b", false, "determine best protocol (dmsg / direct) based on location")
-	genConfigCmd.Flags().BoolVarP(&disableAUTH, "noauth", "c", false, "disable authentication for hypervisor UI.")
+	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", svcconf, "service conf URL")
+	genConfigCmd.Flags().BoolVarP(&bestProtocol, "bestproto", "b", false, "best protocol (dmsg | direct) based on location")
+	genConfigCmd.Flags().BoolVarP(&disableAUTH, "noauth", "c", false, "disable authentication for hypervisor UI")
 	genConfigCmd.Flags().BoolVarP(&dmsgHTTP, "dmsghttp", "d", false, "use dmsg connection to skywire services")
-	genConfigCmd.Flags().BoolVarP(&enableAUTH, "auth", "e", false, "enable auth on hypervisor UI.")
+	genConfigCmd.Flags().BoolVarP(&enableAUTH, "auth", "e", false, "enable auth on hypervisor UI")
 	genConfigCmd.Flags().BoolVarP(&force, "force", "f", false, "remove pre-existing config")
 	genConfigCmd.Flags().StringVarP(&disableApps, "disableapps", "g", "", "comma separated list of apps to disable")
-	genConfigCmd.Flags().BoolVarP(&hypervisor, "ishv", "i", false, "hypervisor configuration.")
-	genConfigCmd.Flags().StringVarP(&hypervisorPKs, "hvpks", "j", "", "comma separated list of public keys to use as hypervisor")
-	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", "linux", "use os-specific paths (linux / macos / windows)")
+	genConfigCmd.Flags().BoolVarP(&hypervisor, "ishv", "i", false, "hypervisor configuration")
+	genConfigCmd.Flags().StringVarP(&hypervisorPKs, "hvpks", "j", "", "list of public keys to use as hypervisor")
+	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", "linux", "(linux / macos / windows) paths")
 	genConfigCmd.Flags().BoolVarP(&stdout, "stdout", "n", false, "write config to stdout")
-	genConfigCmd.Flags().StringVarP(&output, "output", "o", "skywire-config.json", "path of output config file.")
+	genConfigCmd.Flags().StringVarP(&output, "out", "o", "skywire-config.json", "output config")
 	genConfigCmd.Flags().BoolVarP(&pkgEnv, "package", "p", false, "use paths for package (/opt/skywire)")
-	genConfigCmd.Flags().BoolVarP(&publicRPC, "publicrpc", "q", false, "allow rpc requests from LAN.")
-	genConfigCmd.Flags().BoolVarP(&regen, "regen", "r", false, "re-generate existing config & retain keys.")
-	genConfigCmd.Flags().VarP(&sk, "sk", "s", "if unspecified, a random key pair will be generated.\n")
-	genConfigCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "use test deployment service.")
-	genConfigCmd.Flags().BoolVarP(&vpnServerEnable, "servevpn", "v", false, "enable vpn server.")
+	genConfigCmd.Flags().BoolVarP(&publicRPC, "publicrpc", "q", false, "allow rpc requests from LAN")
+	genConfigCmd.Flags().BoolVarP(&regen, "regen", "r", false, "re-generate existing config & retain keys")
+	genConfigCmd.Flags().VarP(&sk, "sk", "s", "if unspecified, a random key pair will be generated\n\r")
+	genConfigCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "use test deployment service")
+	genConfigCmd.Flags().BoolVarP(&vpnServerEnable, "servevpn", "v", false, "enable vpn server")
+	genConfigCmd.Flags().BoolVarP(&hide, "hide", "w",  false, "dont print the config to the terminal")
 	genConfigCmd.Flags().BoolVarP(&replaceHypervisors, "retainhv", "x", false, "retain existing hypervisors with replace")
-	genConfigCmd.Flags().StringVar(&print, "print", output, "parse test")
+	genConfigCmd.Flags().StringVar(&print, "print", "", "parse test ; read config from file & print")
 	genConfigCmd.Flags().MarkHidden("print")
 }
 
 var genConfigCmd = &cobra.Command{
 	Use:   "gen",
 	Short: "generate a config file",
-	Long: `#Hypervisor on linux:
-skywire-cli config gen -bipr --enable-auth
-
-
-	`,
+//	Long: `
+//#Hypervisor on linux:
+//skywire-cli config gen -bipr --enable-auth`,
 	PreRun: func(_ *cobra.Command, _ []string) {
 		//
 		if (force) && (regen) {
-			logger.Fatal("Use of mutually exclusive flags: -f --force cannot override -r --regen.")
+			logger.Fatal("Use of mutually exclusive flags: -f --force cannot override -r --regen")
 		}
 		var err error
 		if output == visorconfig.StdoutName {
 			stdout = true
 		}
-		if !stdout {
+		if (stdout) && (hide) {
+			logger.Fatal("Use of mutually exclusive flags: -w --hide and -n --stdout")
+		}
+		if (print == "") && !stdout {
 			if output, err = filepath.Abs(output); err != nil {
 				logger.WithError(err).Fatal("Invalid output provided.")
 			}
-		if !regen {
-			//check if the config exists
-		if _, err:= os.Stat(output); err == nil {
-			//error config exists !regen
-				logger.Fatal("Config file already exists. Specify the '-r --regen' flag to regenerate.")
+			if !regen {
+				//check if the config exists
+				if _, err:= os.Stat(output); err == nil {
+					//error config exists !regen
+					logger.Fatal("Config file already exists. Specify the '-r --regen' flag to regenerate.")
+				}
 			}
-			}
-}
-
+		}
 	},
 	Run: func(cmd *cobra.Command, _ []string) {
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
 
-//		if print
+		if print != "" {
+			conf, err := visorconfig.ReadConfig(print)
+			if err != nil {
+				mLog.Fatal("Failed:", err)
+			}
+			j, err := json.MarshalIndent(conf, "", "\t")
+			if err != nil {
+				mLog.WithError(err).Fatal("An unexpected error occurred. Please contact a developer.")
+			}
+			if !stdout {
+				mLog.Infof("Updated file '%s' to: %s", output, j)
+			} else {
+				fmt.Printf("%s", j)
+			}
+			os.Exit(0)
+		}
 
 		if force {
 			err := os.Remove(output)
@@ -161,21 +178,20 @@ skywire-cli config gen -bipr --enable-auth
 
 		if !stdout {
 			//set output for package and skybian configs
-			if pkgEnv {
+			if pkgEnv &&  !cmd.Flags().Changed("output") {
 				configName := "skywire-visor.json"
 				if hypervisor {
 					configName = "skywire.json"
 				}
-				if !cmd.Flags().Changed("output") {
 					output = filepath.Join(skyenv.PackageSkywirePath(), configName)
 				}
 			}
-		}
+
 
 		// Read in old config and obtain old secret key or generate a new random secret key
 		var sk cipher.SecKey
 		if !stdout {
-			if oldConf, ok := readOldConfig(mLog); !ok {
+			if oldConf, err := visorconfig.ReadConfig(output); err != nil {
 				_, sk = cipher.GenerateKeyPair()
 			} else {
 				sk = oldConf.SK
@@ -217,7 +233,7 @@ skywire-cli config gen -bipr --enable-auth
 		}
 		// Read in old config (if any) and obtain old hypervisors.
 		if replaceHypervisors {
-			if oldConf, ok := readOldConfig(mLog); ok {
+			if oldConf, err := visorconfig.ReadConfig(output); err != nil {
 				conf.Hypervisors = oldConf.Hypervisors
 			}
 		}
@@ -285,27 +301,14 @@ skywire-cli config gen -bipr --enable-auth
 			logger.WithError(err).Fatal("An unexpected error occurred. Please contact a developer.")
 		}
 		if !stdout {
-			logger.Infof("Updated file '%s' to: %s", output, j)
+			if hide {
+				logger.Infof("Updated file '%s'", output)
+				} else {
+				logger.Infof("Updated file '%s' to: %s", output, j)
+			}
 		} else {
 			fmt.Printf("%s", j)
 		}
 
 	},
-}
-
-func readOldConfig(log *logging.MasterLogger) (*visorconfig.V1, bool) {
-	raw, err := ioutil.ReadFile(output) //nolint:gosec
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, false
-		}
-		logger.WithError(err).Fatal("Unexpected error occurred when attempting to read old config.")
-	}
-
-	conf, err := visorconfig.Parse(log, output, raw, testEnv, dmsgHTTP, services)
-	if err != nil {
-		logger.WithError(err).Fatal("Failed to parse old config file.")
-	}
-
-	return conf, true
 }
