@@ -54,13 +54,14 @@ var (
 	disableHypervisorPKs bool
 	stopVisorFn          func() // nolint:unused
 	stopVisorWg          sync.WaitGroup
+	completion	string
 )
 
 func init() {
 	rootCmd.Flags().SortFlags = false
-	rootCmd.AddCommand(completionCmd)
+	//rootCmd.AddCommand(completionCmd)
 	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use")
-	rootCmd.Flags().BoolVarP(&hypervisorUI, "-hvui", "i", false, "run as hypervisor")
+	rootCmd.Flags().BoolVarP(&hypervisorUI, "hvui", "i", false, "run as hypervisor")
 	rootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
 	rootCmd.Flags().StringVarP(&remoteHypervisorPKs, "hv", "j", "", "add remote hypervisor PKs at runtime")
 	rootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors set in config file")
@@ -69,7 +70,10 @@ func init() {
 	rootCmd.Flags().StringVarP(&pprofAddr, "pprofaddr", "q", "localhost:6060", "pprof http port")
 	rootCmd.Flags().StringVarP(&tag, "tag", "t", "skywire", "logging tag")
 	rootCmd.Flags().StringVarP(&syslogAddr, "syslog", "y", "", "syslog server address. E.g. localhost:514")
+	rootCmd.Flags().StringVarP(&completion, "completion", "z", "", "[ bash | zsh | fish | powershell ]")
 	extraFlags()
+	//rootCmd.SetUsageFunc(f func(*Command) error)
+	//rootCmd.SetUsageTemplate("")
 }
 
 var rootCmd = &cobra.Command{
@@ -79,6 +83,38 @@ var rootCmd = &cobra.Command{
 	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
 	└─┐├┴┐└┬┘││││├┬┘├┤
 	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘`,
+	PreRun: func(cmd *cobra.Command, _ []string) {
+	switch completion {
+	case "bash":
+		err := cmd.Root().GenBashCompletion(os.Stdout)
+		if err != nil {
+			panic(err)
+		}
+	case "zsh":
+		err := cmd.Root().GenZshCompletion(os.Stdout)
+		if err != nil {
+			panic(err)
+		}
+	case "fish":
+		err := cmd.Root().GenFishCompletion(os.Stdout, true)
+		if err != nil {
+			panic(err)
+		}
+	case "powershell":
+		err := cmd.Root().GenPowerShellCompletion(os.Stdout)
+		if err != nil {
+			panic(err)
+		}
+	}
+	if (completion != "bash") && (completion != "zsh") && (completion != "fish") && (completion != "bash") && (completion != "") {
+		fmt.Println("Invalid completion specified:", completion)
+		os.Exit(1)
+	}
+	if completion != "" {
+		os.Exit(0)
+	}
+},
+
 	Run: func(_ *cobra.Command, args []string) {
 		runApp(args...)
 	},
@@ -153,7 +189,7 @@ func Execute(ui embed.FS) {
 			Flags:         cc.HiBlue + cc.Bold,
 			//FlagsDataType: cc.HiBlue,
 			FlagsDescr: cc.HiBlue,
-			NoExtraNewlines: false,
+			NoExtraNewlines: true,
 			NoBottomNewline: true,
 	})
 	uiFS, err := fs.Sub(ui, "static")

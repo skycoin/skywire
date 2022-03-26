@@ -44,7 +44,7 @@ func Execute() {
 			Flags:         cc.HiBlue + cc.Bold,
 			//FlagsDataType: cc.HiBlue,
 			FlagsDescr: cc.HiBlue,
-			NoExtraNewlines: false,
+			NoExtraNewlines: true,
 			NoBottomNewline: true,
 	})
 
