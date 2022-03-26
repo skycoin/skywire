@@ -30,6 +30,9 @@ github.com/creack/pty
 # github.com/davecgh/go-spew v1.1.1
 ## explicit
 github.com/davecgh/go-spew/spew
+# github.com/fatih/color v1.13.0
+## explicit; go 1.13
+github.com/fatih/color
 # github.com/gen2brain/dlgs v0.0.0-20210911090025-cbd38e821b98
 ## explicit
 github.com/gen2brain/dlgs
@@ -83,6 +86,9 @@ github.com/gorilla/securecookie
 # github.com/inconshreveable/mousetrap v1.0.0
 ## explicit
 github.com/inconshreveable/mousetrap
+# github.com/ivanpirog/coloredcobra v1.0.0
+## explicit; go 1.15
+github.com/ivanpirog/coloredcobra
 # github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
 ## explicit; go 1.15
 github.com/james-barrow/golang-ipc
@@ -194,7 +200,7 @@ github.com/skycoin/yamux
 # github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 ## explicit
 github.com/songgao/water
-# github.com/spf13/cobra v1.3.0
+# github.com/spf13/cobra v1.4.0
 ## explicit; go 1.15
 github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.5
