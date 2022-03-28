@@ -9,7 +9,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/disc"
+	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
