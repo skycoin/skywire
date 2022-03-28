@@ -3,8 +3,10 @@ package visorconfig
 import (
 	"encoding/json"
 	"io/ioutil"
+	"strings"
 
 	"github.com/skycoin/dmsg/disc"
+	coinCipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -21,14 +23,14 @@ import (
 // MakeBaseConfig returns a visor config with 'enforced' fields only.
 // This is used as default values if no config is given, or for missing *required* fields.
 // This function always returns the latest config version.
-func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services Services) *V1 {
+func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Services) *V1 {
 	//check to see if there are values. Sometimes an empty struct is passed
-	if services.DmsgDiscovery == "" {
+	if services == nil {
 		//fall back on skyev defaults
 		if !testEnv {
-			services = Services{utilenv.DefaultDmsgDiscAddr, utilenv.DefaultTpDiscAddr, utilenv.DefaultAddressResolverAddr, utilenv.DefaultRouteFinderAddr, []cipher.PubKey{utilenv.MustPK(utilenv.DefaultSetupPK)}, utilenv.DefaultUptimeTrackerAddr, utilenv.DefaultServiceDiscAddr, utilenv.GetStunServers()}
+			services = &Services{utilenv.DefaultDmsgDiscAddr, utilenv.DefaultTpDiscAddr, utilenv.DefaultAddressResolverAddr, utilenv.DefaultRouteFinderAddr, []cipher.PubKey{utilenv.MustPK(utilenv.DefaultSetupPK)}, utilenv.DefaultUptimeTrackerAddr, utilenv.DefaultServiceDiscAddr, utilenv.GetStunServers()}
 		} else {
-			services = Services{utilenv.TestDmsgDiscAddr, utilenv.TestTpDiscAddr, utilenv.TestAddressResolverAddr, utilenv.TestRouteFinderAddr, []cipher.PubKey{utilenv.MustPK(utilenv.TestSetupPK)}, utilenv.TestUptimeTrackerAddr, utilenv.TestServiceDiscAddr, utilenv.GetStunServers()}
+			services = &Services{utilenv.TestDmsgDiscAddr, utilenv.TestTpDiscAddr, utilenv.TestAddressResolverAddr, utilenv.TestRouteFinderAddr, []cipher.PubKey{utilenv.MustPK(utilenv.TestSetupPK)}, utilenv.TestUptimeTrackerAddr, utilenv.TestServiceDiscAddr, utilenv.GetStunServers()}
 		}
 	}
 	conf := new(V1)
@@ -83,7 +85,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services Servic
 // The config's 'sk' field will be nil if not specified.
 // Generated config will be saved to 'confPath'.
 // This function always returns the latest config version.
-func MakeDefaultConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, pkgEnv bool, testEnv bool, dmsgHTTP bool, hypervisor bool, services Services) (*V1, error) {
+func MakeDefaultConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, pkgEnv bool, testEnv bool, dmsgHTTP bool, hypervisor bool, hypervisorPKs string, services *Services) (*V1, error) {
 	cc, err := NewCommon(log, confPath, V1Name, sk)
 	if err != nil {
 		return nil, err
@@ -99,6 +101,24 @@ func MakeDefaultConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 	conf.Launcher.Apps = makeDefaultLauncherAppsConfig()
 
 	conf.Hypervisors = make([]cipher.PubKey, 0)
+
+	// Manipulate Hypervisor PKs
+	if hypervisorPKs != "" {
+		keys := strings.Split(hypervisorPKs, ",")
+		for _, key := range keys {
+			keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(key))
+			if err != nil {
+				log.WithError(err).Fatalf("Failed to parse hypervisor private key: %s.", key)
+			}
+			conf.Hypervisors = append(conf.Hypervisors, cipher.PubKey(keyParsed))
+			// Compare key value and visor PK, if same, then this visor should be hypervisor
+			if key == conf.PK.Hex() {
+				hypervisor = true
+				conf.Hypervisors = []cipher.PubKey{}
+				break
+			}
+		}
+	}
 
 	if hypervisor {
 		config := hypervisorconfig.GenerateWorkDirConfig(false)

@@ -10,6 +10,7 @@ import (
 // Constants for skywire root directories.
 const (
 	DefaultSkywirePath = "."
+	ConfigName         = "skywire-config.json"
 )
 
 // Dmsg port constants.

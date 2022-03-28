@@ -124,14 +124,14 @@ func prepareMetrics(log logrus.FieldLogger) setupmetrics.Metrics {
 // Execute executes root CLI command.
 func Execute() {
 	cc.Init(&cc.Config{
-		RootCmd:       rootCmd,
-		Headings:      cc.HiBlue + cc.Bold, //+ cc.Underline,
-		Commands:      cc.HiBlue + cc.Bold,
-		CmdShortDescr: cc.HiBlue,
-		Example:       cc.HiBlue + cc.Italic,
-		ExecName:      cc.HiBlue + cc.Bold,
-		Flags:         cc.HiBlue + cc.Bold,
-		//FlagsDataType: cc.HiBlue,
+		RootCmd:         rootCmd,
+		Headings:        cc.HiBlue + cc.Bold,
+		Commands:        cc.HiBlue + cc.Bold,
+		CmdShortDescr:   cc.HiBlue,
+		Example:         cc.HiBlue + cc.Italic,
+		ExecName:        cc.HiBlue + cc.Bold,
+		Flags:           cc.HiBlue + cc.Bold,
+		FlagsDataType:   cc.HiBlue,
 		FlagsDescr:      cc.HiBlue,
 		NoExtraNewlines: true,
 		NoBottomNewline: true,
