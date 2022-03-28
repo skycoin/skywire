@@ -3,58 +3,60 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/sirupsen/logrus"
-	coinCipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
+	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var (
-	sk                 cipher.SecKey
-	output             string
-	stdout             bool
-	regen              bool
-	replaceHypervisors bool
-	testEnv            bool
-	pkgEnv             bool
-	hypervisor         bool
-	hypervisorPKs      string
-	dmsgHTTP           bool
-	publicRPC          bool
-	vpnServerEnable    bool
-	disableAUTH        bool
-	enableAUTH         bool
-	selectedOS         string
-	disableApps        string
-	bestProtocol       bool
-	serviceConfURL     string
-	services           visorconfig.Services
-	force              bool
-	print              string
-	hide               bool
-	outunset           bool
-	svcconf            = strings.ReplaceAll(serviceconfaddr, "http://", "") //skyenv.DefaultServiceConfAddr
+	sk                cipher.SecKey
+	output            string
+	stdout            bool
+	regen             bool
+	retainHypervisors bool
+	testEnv           bool
+	pkgEnv            bool
+	hypervisor        bool
+	hypervisorPKs     string
+	dmsgHTTP          bool
+	publicRPC         bool
+	vpnServerEnable   bool
+	disableAUTH       bool
+	enableAUTH        bool
+	selectedOS        string
+	disableApps       string
+	bestProtocol      bool
+	serviceConfURL    string
+	services          *visorconfig.Services
+	force             bool
+	print             string
+	hide              bool
+	all               bool
+	outunset          bool
+	svcconf           = strings.ReplaceAll(serviceconfaddr, "http://", "") //skyenv.DefaultServiceConfAddr
+	testconf          = strings.ReplaceAll(testconfaddr, "http://", "")    //skyenv.DefaultServiceConfAddr
+	hiddenflags       []string
 )
 
-const serviceconfaddr = "http://skywire.skycoin.com"
+const serviceconfaddr = "http://conf.skywire.skycoin.com"
+const testconfaddr = "http://conf.skywire.dev"
 
 func init() {
 	genConfigCmd.Flags().SortFlags = false
 	RootCmd.AddCommand(genConfigCmd)
-	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", svcconf, "service conf URL")
+
+	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", svcconf, "services conf")
 	genConfigCmd.Flags().BoolVarP(&bestProtocol, "bestproto", "b", false, "best protocol (dmsg | direct) based on location")
 	genConfigCmd.Flags().BoolVarP(&disableAUTH, "noauth", "c", false, "disable authentication for hypervisor UI")
 	genConfigCmd.Flags().BoolVarP(&dmsgHTTP, "dmsghttp", "d", false, "use dmsg connection to skywire services")
@@ -65,29 +67,44 @@ func init() {
 	genConfigCmd.Flags().StringVarP(&hypervisorPKs, "hvpks", "j", "", "list of public keys to use as hypervisor")
 	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", "linux", "(linux / macos / windows) paths")
 	genConfigCmd.Flags().BoolVarP(&stdout, "stdout", "n", false, "write config to stdout")
-	genConfigCmd.Flags().StringVarP(&output, "out", "o", "", "output config default: skywire-config.json")
+	genConfigCmd.Flags().StringVarP(&output, "out", "o", "", "output config default:"+skyenv.ConfigName)
 	genConfigCmd.Flags().BoolVarP(&pkgEnv, "package", "p", false, "use paths for package (/opt/skywire)")
 	genConfigCmd.Flags().BoolVarP(&publicRPC, "publicrpc", "q", false, "allow rpc requests from LAN")
 	genConfigCmd.Flags().BoolVarP(&regen, "regen", "r", false, "re-generate existing config & retain keys")
-	genConfigCmd.Flags().VarP(&sk, "sk", "s", "if unspecified, a random key pair will be generated\n\r")
-	genConfigCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "use test deployment service")
+	genConfigCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
+	genConfigCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "use test deployment "+testconf)
 	genConfigCmd.Flags().BoolVarP(&vpnServerEnable, "servevpn", "v", false, "enable vpn server")
 	genConfigCmd.Flags().BoolVarP(&hide, "hide", "w", false, "dont print the config to the terminal")
-	genConfigCmd.Flags().BoolVarP(&replaceHypervisors, "retainhv", "x", false, "retain existing hypervisors with replace")
+	genConfigCmd.Flags().BoolVarP(&retainHypervisors, "retainhv", "x", false, "retain existing hypervisors with regen")
+	genConfigCmd.Flags().BoolVar(&all, "all", false, "show all flags")
 	genConfigCmd.Flags().StringVar(&print, "print", "", "parse test ; read config from file & print")
-	genConfigCmd.Flags().MarkHidden("print")//nolint
+
+	hiddenflags = []string{"url", "print", "noauth", "dmsghttp", "auth", "force", "disableapps", "stdout", "publicrpc", "sk", "testenv", "servevpn", "hide", "retainhv", "print"}
+	for _, j := range hiddenflags {
+		genConfigCmd.Flags().MarkHidden(j) //nolint
+	}
 }
 
 var genConfigCmd = &cobra.Command{
-	Use:   "gen",
+	Use: "gen",
+	//Usage: "skywire-cli config gen -bir",
 	Short: "generate a config file",
 	//	Long: `
 	//#Hypervisor on linux:
 	//skywire-cli config gen -bipr --enable-auth`,
-	PreRun: func(_ *cobra.Command, _ []string) {
-		//
+	PreRun: func(cmd *cobra.Command, _ []string) {
+		//unhide flags and print help menu
+		if all {
+			for _, j := range hiddenflags {
+				f := cmd.Flags().Lookup(j) //nolint
+				f.Hidden = false
+			}
+			cmd.Help() //nolint
+			os.Exit(0)
+		}
+		//set default output filename
 		if output == "" {
-			output = "skywire-config.json"
+			output = skyenv.ConfigName
 			outunset = true
 		}
 		if (force) && (regen) {
@@ -104,6 +121,12 @@ var genConfigCmd = &cobra.Command{
 			if output, err = filepath.Abs(output); err != nil {
 				logger.WithError(err).Fatal("Invalid output provided.")
 			}
+			if force {
+				err := os.Remove(output)
+				if err != nil {
+					logger.WithError(err).Fatal("Could not remove file")
+				}
+			}
 			if !regen {
 				//check if the config exists
 				if _, err := os.Stat(output); err == nil {
@@ -113,82 +136,27 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 	},
-	Run: func(cmd *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, args []string) {
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
 
 		if print != "" {
-			conf, err := visorconfig.ReadConfig(print)
-			if err != nil {
-				mLog.Fatal("Failed:", err)
-			}
-			j, err := json.MarshalIndent(conf, "", "\t")
-			if err != nil {
-				mLog.WithError(err).Fatal("An unexpected error occurred. Please contact a developer.")
-			}
-			if !stdout {
-				mLog.Infof("Updated file '%s' to: %s", output, j)
-			} else {
-				fmt.Printf("%s", j)
-			}
-			os.Exit(0)
+			Print(mLog)
 		}
 
-		if force {
-			err := os.Remove(output)
-			if err != nil {
-				mLog.WithError(err).Fatal("Could not remove file")
-			}
-		}
-		//fetch service URLs from endpoint
-		urlstr := []string{"http://", serviceConfURL, "/config"}
-		serviceConf := strings.Join(urlstr, "")
-		client := http.Client{
-			Timeout: time.Second * 2, // Timeout after 2 seconds
-		}
-		//create the http request
-		req, err := http.NewRequest(http.MethodGet, serviceConf, nil)
-		if err != nil {
-			mLog.Fatal(err)
-		}
-		//check for errors in the response
-		res, err := client.Do(req)
-		if err != nil {
-			if serviceConfURL != svcconf {
-				//if serviceConfURL was changed this error should be fatal
-				mLog.WithError(err).Fatal("Failed to fetch servers\n")
-			} else { //otherwise just error and continue
-				//silence errors for stdout
-				if !stdout {
-					mLog.WithError(err).Error("Failed to fetch servers\n")
-					mLog.Warn("Falling back on hardcoded servers")
-				}
-			}
-		} else {
-			// nil error from client.Do(req)
-			if res.Body != nil {
-				defer res.Body.Close() //nolint
-			}
-			body, err := ioutil.ReadAll(res.Body)
-			if err != nil {
-				mLog.Fatal(err)
-			}
-			//fill in services struct with the response
-			err = json.Unmarshal(body, &services)
-			if err != nil {
-				mLog.Fatal(err)
-			}
-		}
+		services = Fetch(mLog)
 
 		if !stdout {
-			//set output for package and skybian configs
+			//set output package
 			if outunset {
+				//default config visor
 				if pkgEnv {
 					configName := "skywire-visor.json"
+					//default config hypervisor
 					if hypervisor {
 						configName = "skywire.json"
 					}
-					output = filepath.Join(skyenv.PackageSkywirePath(), configName)
+					output = filepath.Join(utilenv.PackageSkywirePath(), configName)
 				}
 			}
 		}
@@ -203,44 +171,24 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 
-		conf, err := visorconfig.MakeDefaultConfig(mLog, output, &sk, pkgEnv, testEnv, dmsgHTTP, hypervisor, services)
-		if err != nil {
-			logger.WithError(err).Fatal("Failed to create config.")
-		}
-
-		// Manipulate Hypervisor PKs
-		if hypervisorPKs != "" {
-			keys := strings.Split(hypervisorPKs, ",")
-			for _, key := range keys {
-				keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(key))
-				if err != nil {
-					logger.WithError(err).Fatalf("Failed to parse hypervisor private key: %s.", key)
-				}
-				conf.Hypervisors = append(conf.Hypervisors, cipher.PubKey(keyParsed))
-
-				// Compare key value and visor PK, if same, then this visor should be hypervisor
-				if key == conf.PK.Hex() {
-					hypervisor = true
-					conf, err = visorconfig.MakeDefaultConfig(mLog, output, &sk, pkgEnv, testEnv, dmsgHTTP, hypervisor, services)
-					if err != nil {
-						logger.WithError(err).Fatal("Failed to create config.")
-					}
-					conf.Hypervisors = []cipher.PubKey{}
-					break
-				}
-			}
-		}
-
+		//determine best protocol
 		if bestProtocol {
 			if netutil.LocalProtocol() {
 				dmsgHTTP = true
 			}
 		}
 		// Read in old config (if any) and obtain old hypervisors.
-		if replaceHypervisors {
+		if retainHypervisors {
 			if oldConf, err := visorconfig.ReadConfig(output); err != nil {
-				conf.Hypervisors = oldConf.Hypervisors
+				for _, j := range oldConf.Hypervisors {
+					hypervisorPKs = hypervisorPKs + "," + fmt.Sprintf("\t%s\n", j)
+				}
 			}
+		}
+
+		conf, err := visorconfig.MakeDefaultConfig(mLog, output, &sk, pkgEnv, testEnv, dmsgHTTP, hypervisor, hypervisorPKs, services)
+		if err != nil {
+			logger.WithError(err).Fatal("Failed to create config.")
 		}
 
 		// Change rpc address from local to public
@@ -248,7 +196,7 @@ var genConfigCmd = &cobra.Command{
 			conf.CLIAddr = ":3435"
 		}
 
-		// Set autostart enable for vpn-server
+		// Set autostart enable vpn-server
 		if vpnServerEnable {
 			for i, app := range conf.Launcher.Apps {
 				if app.Name == "vpn-server" {
@@ -257,7 +205,7 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 
-		// Disable apps that listed on --disable-apps flag
+		// Disable apps listed on --disable-apps flag
 		if disableApps != "" {
 			apps := strings.Split(disableApps, ",")
 			appsSlice := make(map[string]bool)
@@ -273,27 +221,29 @@ var genConfigCmd = &cobra.Command{
 			conf.Launcher.Apps = newConfLauncherApps
 		}
 
-		// Make false EnableAuth for hypervisor UI by --disable-auth flag
-		if disableAUTH {
-			if hypervisor {
-				conf.Hypervisor.EnableAuth = false
-			}
+		// Set EnableAuth true  hypervisor UI by --enable-auth flag
+		if pkgEnv && hypervisor {
+			conf.Hypervisor.EnableAuth = true
 		}
 
-		// Set EnableAuth true  for hypervisor UI by --enable-auth flag
-		if enableAUTH {
-			if hypervisor {
-				conf.Hypervisor.EnableAuth = true
-			}
+		// Make false EnableAuth hypervisor UI by --disable-auth flag
+		if disableAUTH && hypervisor {
+			conf.Hypervisor.EnableAuth = false
 		}
 
-		// Check OS and enable auth for windows or macos
+		// Set EnableAuth true  hypervisor UI by --enable-auth flag
+		if enableAUTH && hypervisor {
+			conf.Hypervisor.EnableAuth = true
+		}
+
+		// Check OS and enable auth windows or macos
 		if selectedOS == "windows" || selectedOS == "macos" {
 			if hypervisor {
 				conf.Hypervisor.EnableAuth = true
 			}
 		}
 
+		//don't write file with stdout
 		if !stdout {
 			// Save config to file.
 			if err := conf.Flush(); err != nil {
@@ -305,15 +255,18 @@ var genConfigCmd = &cobra.Command{
 		if err != nil {
 			logger.WithError(err).Fatal("An unexpected error occurred. Please contact a developer.")
 		}
+		//omit logging messages stdout
 		if !stdout {
+			//hide the printing of the config to the terminal
 			if hide {
 				logger.Infof("Updated file '%s'", output)
 			} else {
+				//default behavior
 				logger.Infof("Updated file '%s' to: %s", output, j)
 			}
 		} else {
+			//print config to stdout
 			fmt.Printf("%s", j)
 		}
-
 	},
 }
