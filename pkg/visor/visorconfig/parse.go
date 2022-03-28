@@ -21,7 +21,7 @@ var (
 
 // Parse parses the visor config from a given reader.
 // If the config file is not the most recent version, it is upgraded and written back to 'path'.
-func Parse(log *logging.MasterLogger, path string, raw []byte, testEnv bool, dmsgHTTP bool, services Services) (*V1, error) {
+func Parse(log *logging.MasterLogger, path string, raw []byte, testEnv bool, dmsgHTTP bool, services *Services) (*V1, error) {
 	cc, err := NewCommon(log, path, "", nil)
 	if err != nil {
 		return nil, err
@@ -48,7 +48,7 @@ func Parse(log *logging.MasterLogger, path string, raw []byte, testEnv bool, dms
 	}
 }
 
-func parseV1(cc *Common, raw []byte, testEnv bool, dmsgHTTP bool, services Services) (*V1, error) {
+func parseV1(cc *Common, raw []byte, testEnv bool, dmsgHTTP bool, services *Services) (*V1, error) {
 	conf := MakeBaseConfig(cc, testEnv, dmsgHTTP, services)
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	if err := dec.Decode(&conf); err != nil {
@@ -71,7 +71,7 @@ func ensureAppDisc(conf *V1) *V1 {
 	return conf
 }
 
-func updateUrls(conf *V1, services Services) *V1 {
+func updateUrls(conf *V1, services *Services) *V1 {
 	//	if conf.Dmsg.Discovery == skyenv.OldDefaultDmsgDiscAddr {
 	conf.Dmsg.Discovery = services.DmsgDiscovery
 	//	}

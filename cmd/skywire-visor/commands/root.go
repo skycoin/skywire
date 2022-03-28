@@ -26,6 +26,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/restart"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/syslog"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
@@ -37,7 +38,6 @@ var uiAssets fs.FS
 var restartCtx = restart.CaptureContext()
 
 const (
-	defaultConfigName    = "skywire-config.json"
 	runtimeLogMaxEntries = 300
 )
 
@@ -55,11 +55,13 @@ var (
 	stopVisorFn          func() // nolint:unused
 	stopVisorWg          sync.WaitGroup
 	completion           string
+	hiddenflags          []string
+	all                  bool
 )
 
 func init() {
 	rootCmd.Flags().SortFlags = false
-	//rootCmd.AddCommand(completionCmd)
+
 	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use")
 	rootCmd.Flags().BoolVarP(&hypervisorUI, "hvui", "i", false, "run as hypervisor")
 	rootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
@@ -71,6 +73,13 @@ func init() {
 	rootCmd.Flags().StringVarP(&tag, "tag", "t", "skywire", "logging tag")
 	rootCmd.Flags().StringVarP(&syslogAddr, "syslog", "y", "", "syslog server address. E.g. localhost:514")
 	rootCmd.Flags().StringVarP(&completion, "completion", "z", "", "[ bash | zsh | fish | powershell ]")
+	rootCmd.Flags().BoolVar(&all, "all", false, "show all flags")
+
+	hiddenflags = []string{"hv", "xhv", "stdin", "pprofmode", "pprofaddr", "tag", "syslog", "completion"}
+	for _, j := range hiddenflags {
+		rootCmd.Flags().MarkHidden(j) //nolint
+	}
+
 	extraFlags()
 }
 
@@ -82,6 +91,15 @@ var rootCmd = &cobra.Command{
 	└─┐├┴┐└┬┘││││├┬┘├┤
 	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘`,
 	PreRun: func(cmd *cobra.Command, _ []string) {
+		//unhide flags and print help menu
+		if all {
+			for _, j := range hiddenflags {
+				f := cmd.Flags().Lookup(j) //nolint
+				f.Hidden = false
+			}
+			cmd.Help() //nolint
+			os.Exit(0)
+		}
 		switch completion {
 		case "bash":
 			err := cmd.Root().GenBashCompletion(os.Stdout)
@@ -273,7 +291,7 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 			}
 		}
 		if confPath == "" {
-			confPath = defaultConfigName
+			confPath = skyenv.ConfigName
 		}
 
 		fallthrough
@@ -313,13 +331,13 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 		hypervisor = true
 	}
 	//get secret key
-	cC := new(visorconfig.Common)
-	if err := json.Unmarshal(raw, cC); err != nil {
+	cc := new(visorconfig.Common)
+	if err := json.Unmarshal(raw, cc); err != nil {
 		log.WithError(err).Fatal("failed to obtain config version.")
 	}
-	sk := &cC.SK
+	sk := &cc.SK
 	// Generate config.
-	conf, err := visorconfig.MakeDefaultConfig(mLog, confPath, sk, false, false, dmsgHTTP, hypervisor, visorconfig.Services{})
+	conf, err := visorconfig.MakeDefaultConfig(mLog, confPath, sk, false, false, dmsgHTTP, hypervisor, "", nil)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to create config.")
 	}
@@ -341,10 +359,7 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 	return conf
 }
 
-// runBrowser is actually not recommended because browser shouldn't run as root
-// but the vpn Client and Server need root to function.
-// Visor also needs write permissions in /opt/skywire
-// Consider running the visor at the user level and elevate to run the vpn client and server?
+// runBrowser opens the hypervisor interface in the browser
 func runBrowser(conf *visorconfig.V1, log *logging.MasterLogger) {
 	if conf.Hypervisor == nil {
 		log.Errorln("Hypervisor not started - cannot start browser with a regular visor")
