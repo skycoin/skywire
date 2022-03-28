@@ -126,7 +126,7 @@ type PkgConfig struct {
 	//		TLSKeyFile  string `json:"tls_key_file"`
 }
 
-// PackageLocalPath is the path to local directory
+// PackageConfig is the path to local directory
 func PackageConfig() PkgConfig {
 	var pkgconfig PkgConfig
 	pkgconfig.Launcher.BinPath = "/opt/skywire/apps"
