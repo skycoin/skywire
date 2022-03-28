@@ -97,7 +97,8 @@ var rootCmd = &cobra.Command{
 				f := cmd.Flags().Lookup(j) //nolint
 				f.Hidden = false
 			}
-			cmd.Help() //nolint
+			cmd.Flags().MarkHidden("all") //nolint
+			cmd.Help()                    //nolint
 			os.Exit(0)
 		}
 		switch completion {
