@@ -733,7 +733,10 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	v.pushCloseStack("cli.listener", cliL.Close)
+	// v.pushCloseStack("cli.listener", cliL.Close)
+	v.pushCloseStack("cli.listener", func() error {
+		return nil
+	})
 
 	rpcS, err := newRPCServer(v, "CLI")
 	if err != nil {
