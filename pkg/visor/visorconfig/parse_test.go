@@ -37,13 +37,14 @@ func TestParse(t *testing.T) {
 		require.NoError(t, f.Close())
 
 		// check: obtained config contains all base values.
-		conf, err := Parse(nil, filename, raw, false, false, Services{})
+		services := &Services{}
+		conf, err := Parse(nil, filename, raw, false, false, services)
 		require.NoError(t, err)
-		require.JSONEq(t, jsonString(MakeBaseConfig(conf.Common, false, false, Services{})), jsonString(conf))
+		require.JSONEq(t, jsonString(MakeBaseConfig(conf.Common, false, false, services)), jsonString(conf))
 
 		// check: saved config contains all base values.
 		raw2, err := ioutil.ReadFile(filename) //nolint:gosec
 		require.NoError(t, err)
-		require.JSONEq(t, jsonString(MakeBaseConfig(conf.Common, false, false, Services{})), string(raw2))
+		require.JSONEq(t, jsonString(MakeBaseConfig(conf.Common, false, false, services)), string(raw2))
 	})
 }
