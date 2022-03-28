@@ -102,16 +102,6 @@ var RootCmd = &cobra.Command{
 			mLog.WithError(ok).Fatal("Failed to parse config.")
 		}
 
-		/*
-			switch environment {
-			case "production":
-				visorconfig.SetDefaultProductionValues(conf)
-			case "testing":
-				visorconfig.SetDefaultTestingValues(conf)
-			default:
-				logger.Fatal("Unrecognized environment value: ", environment)
-			}
-		*/
 		switch setPublicAutoconnect {
 		case "true":
 			conf.Transport.PublicAutoconnect = true
@@ -168,7 +158,7 @@ func saveConfig(conf *visorconfig.V1) {
 	// Print results.
 	j, err := json.MarshalIndent(conf, "", "\t")
 	if err != nil {
-		logger.WithError(err).Fatal("An unexpected error occurred. Please contact a developer.")
+		logger.WithError(err).Fatal("Could not unmarshal json.")
 	}
 	logger.Infof("Updated file '%s' to: %s", output, j)
 }

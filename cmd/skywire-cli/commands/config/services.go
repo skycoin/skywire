@@ -12,8 +12,8 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
+//Fetch fetches the service URLs & ip:ports from the config service endpoint
 func Fetch(mLog *logging.MasterLogger) (services *visorconfig.Services) {
-	//fetch service URLs from endpoint
 	urlstr := []string{"http://", serviceConfURL, "/config"}
 	serviceConf := strings.Join(urlstr, "")
 	client := http.Client{
