@@ -32,8 +32,8 @@ var (
 	dmsgHTTP          bool
 	publicRPC         bool
 	vpnServerEnable   bool
-	disableAUTH       bool
-	enableAUTH        bool
+	disableauth       bool
+	enableauth        bool
 	selectedOS        string
 	disableApps       string
 	bestProtocol      bool
@@ -58,9 +58,9 @@ func init() {
 
 	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", svcconf, "services conf")
 	genConfigCmd.Flags().BoolVarP(&bestProtocol, "bestproto", "b", false, "best protocol (dmsg | direct) based on location")
-	genConfigCmd.Flags().BoolVarP(&disableAUTH, "noauth", "c", false, "disable authentication for hypervisor UI")
+	genConfigCmd.Flags().BoolVarP(&disableauth, "noauth", "c", false, "disable authentication for hypervisor UI")
 	genConfigCmd.Flags().BoolVarP(&dmsgHTTP, "dmsghttp", "d", false, "use dmsg connection to skywire services")
-	genConfigCmd.Flags().BoolVarP(&enableAUTH, "auth", "e", false, "enable auth on hypervisor UI")
+	genConfigCmd.Flags().BoolVarP(&enableauth, "auth", "e", false, "enable auth on hypervisor UI")
 	genConfigCmd.Flags().BoolVarP(&force, "force", "f", false, "remove pre-existing config")
 	genConfigCmd.Flags().StringVarP(&disableApps, "disableapps", "g", "", "comma separated list of apps to disable")
 	genConfigCmd.Flags().BoolVarP(&hypervisor, "ishv", "i", false, "hypervisor configuration")
@@ -86,12 +86,8 @@ func init() {
 }
 
 var genConfigCmd = &cobra.Command{
-	Use: "gen",
-	//Usage: "skywire-cli config gen -bir",
+	Use:   "gen",
 	Short: "generate a config file",
-	//	Long: `
-	//#Hypervisor on linux:
-	//skywire-cli config gen -bipr --enable-auth`,
 	PreRun: func(cmd *cobra.Command, _ []string) {
 		//unhide flags and print help menu
 		if all {
@@ -144,6 +140,9 @@ var genConfigCmd = &cobra.Command{
 			Print(mLog)
 		}
 
+		if testEnv {
+			serviceConfURL = testconf
+		}
 		services = Fetch(mLog)
 
 		if !stdout {
@@ -227,12 +226,12 @@ var genConfigCmd = &cobra.Command{
 		}
 
 		// Make false EnableAuth hypervisor UI by --disable-auth flag
-		if disableAUTH && hypervisor {
+		if disableauth && hypervisor {
 			conf.Hypervisor.EnableAuth = false
 		}
 
 		// Set EnableAuth true  hypervisor UI by --enable-auth flag
-		if enableAUTH && hypervisor {
+		if enableauth && hypervisor {
 			conf.Hypervisor.EnableAuth = true
 		}
 
@@ -253,7 +252,7 @@ var genConfigCmd = &cobra.Command{
 		// Print results.
 		j, err := json.MarshalIndent(conf, "", "\t")
 		if err != nil {
-			logger.WithError(err).Fatal("An unexpected error occurred. Please contact a developer.")
+			logger.WithError(err).Fatal("Could not unmarshal json.")
 		}
 		//omit logging messages stdout
 		if !stdout {
