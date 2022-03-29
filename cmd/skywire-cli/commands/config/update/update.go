@@ -50,14 +50,14 @@ var hyperVisorUpdateCmd = &cobra.Command{
 	Short: "update hypervisor config",
 	PreRun: func(_ *cobra.Command, _ []string) {
 		var err error
-		if output, err = filepath.Abs(addOutput); err != nil {
+		if output, err = filepath.Abs(output); err != nil {
 			logger.WithError(err).Fatal("Invalid config output.")
 		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
-		conf, ok := visorconfig.ReadConfig(addInput)
+		conf, ok := visorconfig.ReadConfig(input)
 		if ok != nil {
 			mLog.WithError(ok).Fatal("Failed to parse config.")
 		}
@@ -83,14 +83,14 @@ var skySocksClientUpdateCmd = &cobra.Command{
 	Short: "update skysocks-client config",
 	PreRun: func(_ *cobra.Command, _ []string) {
 		var err error
-		if output, err = filepath.Abs(addOutput); err != nil {
+		if output, err = filepath.Abs(output); err != nil {
 			logger.WithError(err).Fatal("Invalid config output.")
 		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
-		conf, ok := visorconfig.ReadConfig(addInput)
+		conf, ok := visorconfig.ReadConfig(input)
 		if ok != nil {
 			mLog.WithError(ok).Fatal("Failed to parse config.")
 		}
@@ -113,14 +113,14 @@ var skySocksServerUpdateCmd = &cobra.Command{
 	Short: "update skysocks-server config",
 	PreRun: func(_ *cobra.Command, _ []string) {
 		var err error
-		if output, err = filepath.Abs(addOutput); err != nil {
+		if output, err = filepath.Abs(output); err != nil {
 			logger.WithError(err).Fatal("Invalid config output.")
 		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
-		conf, ok := visorconfig.ReadConfig(addInput)
+		conf, ok := visorconfig.ReadConfig(input)
 		if ok != nil {
 			mLog.WithError(ok).Fatal("Failed to parse config.")
 		}
@@ -139,7 +139,7 @@ var vpnClientUpdateCmd = &cobra.Command{
 	Short: "update vpn-client config",
 	PreRun: func(_ *cobra.Command, _ []string) {
 		var err error
-		if output, err = filepath.Abs(addOutput); err != nil {
+		if output, err = filepath.Abs(output); err != nil {
 			logger.WithError(err).Fatal("Invalid config output.")
 		}
 	},
@@ -147,7 +147,7 @@ var vpnClientUpdateCmd = &cobra.Command{
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
 
-		conf, ok := visorconfig.ReadConfig(addInput)
+		conf, ok := visorconfig.ReadConfig(input)
 		if ok != nil {
 			mLog.WithError(ok).Fatal("Failed to parse config.")
 		}
@@ -184,7 +184,7 @@ var vpnServerUpdateCmd = &cobra.Command{
 	Short: "update vpn-server config",
 	PreRun: func(_ *cobra.Command, _ []string) {
 		var err error
-		if output, err = filepath.Abs(addOutput); err != nil {
+		if output, err = filepath.Abs(output); err != nil {
 			logger.WithError(err).Fatal("Invalid config output.")
 		}
 	},
@@ -192,7 +192,7 @@ var vpnServerUpdateCmd = &cobra.Command{
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
 
-		conf, ok := visorconfig.ReadConfig(addInput)
+		conf, ok := visorconfig.ReadConfig(input)
 		if ok != nil {
 			mLog.WithError(ok).Fatal("Failed to parse config.")
 		}
