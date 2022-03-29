@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/disc"
+	"github.com/skycoin/dmsg/pkg/disc"
+	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 

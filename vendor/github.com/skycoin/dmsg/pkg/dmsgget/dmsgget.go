@@ -15,9 +15,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/disc"
-	"github.com/skycoin/dmsg/dmsghttp"
+	"github.com/skycoin/dmsg/pkg/disc"
+	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsghttp"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
@@ -172,7 +172,7 @@ func parseOutputFile(name string, urlPath string) (*os.File, error) {
 	stat, statErr := os.Stat(name)
 	if statErr != nil {
 		if os.IsNotExist(statErr) {
-			f, err := os.Create(name)
+			f, err := os.Create(name) //nolint
 			if err != nil {
 				return nil, err
 			}
@@ -182,7 +182,7 @@ func parseOutputFile(name string, urlPath string) (*os.File, error) {
 	}
 
 	if stat.IsDir() {
-		f, err := os.Create(filepath.Join(name, urlPath))
+		f, err := os.Create(filepath.Join(name, urlPath)) //nolint
 		if err != nil {
 			return nil, err
 		}
