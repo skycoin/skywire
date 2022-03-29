@@ -4,7 +4,7 @@ import (
 	"context"
 	"net"
 
-	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsg"
 )
 
 // DmsgNetworker implements `Networker` for dmsg network.
