@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/skycoin/dmsg"
+	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
 )
 
 // Config struct is used to read the values from the config.json file

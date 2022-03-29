@@ -5,7 +5,7 @@ package setupclient
 import (
 	context "context"
 
-	dmsg "github.com/skycoin/dmsg"
+	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
 	logging "github.com/skycoin/skycoin/src/util/logging"
 	mock "github.com/stretchr/testify/mock"
 
