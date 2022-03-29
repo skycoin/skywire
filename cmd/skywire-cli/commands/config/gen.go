@@ -144,7 +144,7 @@ var genConfigCmd = &cobra.Command{
 		if testEnv {
 			serviceConfURL = testconf
 		}
-		services = Fetch(mLog)
+		services = visorconfig.Fetch(mLog, serviceConfURL, stdout)
 
 		if !stdout {
 			//set output package

@@ -1,4 +1,4 @@
-package config
+package visorconfig
 
 import (
 	"encoding/json"
@@ -8,12 +8,18 @@ import (
 	"time"
 
 	"github.com/skycoin/skycoin/src/util/logging"
-
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
+var (
+	services *Services
+	svcconf  = strings.ReplaceAll(serviceconfaddr, "http://", "") //skyenv.DefaultServiceConfAddr
+)
+
+const serviceconfaddr = "http://conf.skywire.skycoin.com"
+
 //Fetch fetches the service URLs & ip:ports from the config service endpoint
-func Fetch(mLog *logging.MasterLogger) (services *visorconfig.Services) {
+func Fetch(mLog *logging.MasterLogger, serviceConfURL string, stdout bool) *Services {
+
 	urlstr := []string{"http://", serviceConfURL, "/config"}
 	serviceConf := strings.Join(urlstr, "")
 	client := http.Client{
