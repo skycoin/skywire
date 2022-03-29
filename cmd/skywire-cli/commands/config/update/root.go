@@ -2,23 +2,23 @@ package update
 
 import (
 	"encoding/json"
-	"io/ioutil"
-	"net/http"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/pkg/dmsgc"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var (
-	addOutput              string
-	addInput               string
-	environment            string
+	output                 string
+	stdout                 bool
+	input                  string
+	testEnv                bool
 	updateEndpoints        bool
 	addHypervisorPKs       string
 	resetHypervisor        bool
@@ -36,20 +36,24 @@ var (
 	setPublicAutoconnect   string
 	serviceConfURL         string
 	minHops                int
-	output                 string
+	svcconf                = strings.ReplaceAll(serviceconfaddr, "http://", "") //skyenv.DefaultServiceConfAddr
+	testconf               = strings.ReplaceAll(testconfaddr, "http://", "")    //skyenv.DefaultServiceConfAddr
 )
+
+const serviceconfaddr = "http://conf.skywire.skycoin.com"
+const testconfaddr = "http://conf.skywire.dev"
 
 var logger = logging.MustGetLogger("skywire-cli")
 
 func init() {
 	RootCmd.Flags().SortFlags = false
 	RootCmd.Flags().BoolVarP(&updateEndpoints, "endpoints", "a", false, "update server endpoints")
-	RootCmd.Flags().StringVarP(&serviceConfURL, "url", "b", "skywire.skycoin.com", "service configuration URL")
-	RootCmd.Flags().StringVarP(&environment, "environment", "c", "production", "desired environment (values production or testing)")
+	RootCmd.Flags().StringVarP(&serviceConfURL, "url", "b", "", "service config URL: "+svcconf)
+	RootCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "use test deployment: "+testconf)
 	RootCmd.Flags().StringVar(&setPublicAutoconnect, "public-autoconn", "", "change public autoconnect configuration")
 	RootCmd.Flags().IntVar(&minHops, "set-minhop", -1, "change min hops value")
-	RootCmd.PersistentFlags().StringVarP(&addInput, "input", "i", "skywire-config.json", "path of input config file.")
-	RootCmd.PersistentFlags().StringVarP(&addOutput, "output", "o", "skywire-config.json", "path of output config file.")
+	RootCmd.PersistentFlags().StringVarP(&input, "input", "i", "", "path of input config file.")
+	RootCmd.PersistentFlags().StringVarP(&output, "output", "o", "", "config file to output")
 	RootCmd.PersistentFlags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
 }
 
@@ -58,8 +62,13 @@ var RootCmd = &cobra.Command{
 	Use:   "update",
 	Short: "update a config file",
 	PreRun: func(_ *cobra.Command, _ []string) {
+		//set default output filename
+		if output == "" {
+			output = skyenv.ConfigName
+			//outunset = true
+		}
 		var err error
-		if output, err = filepath.Abs(addOutput); err != nil {
+		if output, err = filepath.Abs(output); err != nil {
 			logger.WithError(err).Fatal("Invalid config output.")
 		}
 	},
@@ -69,37 +78,38 @@ var RootCmd = &cobra.Command{
 		if cmd.Flags().Changed("serviceConfURL") {
 			updateEndpoints = true
 		}
-		var services visorconfig.Services
-		if updateEndpoints {
-			urlstr := []string{"http://", serviceConfURL, "/config"}
-			serviceConfURL = strings.Join(urlstr, "")
-			client := http.Client{
-				Timeout: time.Second * 2, // Timeout after 2 seconds
-			}
-			req, err := http.NewRequest(http.MethodGet, serviceConfURL, nil)
-			if err != nil {
-				mLog.Fatal(err)
-			}
-			res, err := client.Do(req)
-			if err != nil {
-				mLog.Fatal(err)
-			}
-			if res.Body != nil {
-				defer res.Body.Close() //nolint
-			}
-			body, err := ioutil.ReadAll(res.Body)
-			if err != nil {
-				mLog.Fatal(err)
-			}
-			err = json.Unmarshal(body, &services)
-			if err != nil {
-				mLog.Fatal(err)
-			}
+		if input == "" {
+			input = output
 		}
-
-		conf, ok := visorconfig.ReadConfig(addInput)
+		conf, ok := visorconfig.ReadConfig(input)
 		if ok != nil {
 			mLog.WithError(ok).Fatal("Failed to parse config.")
+		}
+
+		if updateEndpoints {
+			if testEnv {
+				serviceConfURL = testconf
+			}
+			services := visorconfig.Fetch(mLog, serviceConfURL, stdout)
+			conf.Dmsg = &dmsgc.DmsgConfig{
+				Discovery: services.DmsgDiscovery, //utilenv.DefaultDmsgDiscAddr,
+			}
+			conf.Transport = &visorconfig.V1Transport{
+				Discovery:       services.TransportDiscovery, //utilenv.DefaultTpDiscAddr,
+				AddressResolver: services.AddressResolver,    //utilenv.DefaultAddressResolverAddr,
+			}
+			conf.Routing = &visorconfig.V1Routing{
+				RouteFinder: services.RouteFinder, //utilenv.DefaultRouteFinderAddr,
+				SetupNodes:  services.SetupNodes,  //[]cipher.PubKey{utilenv.MustPK(utilenv.DefaultSetupPK)},
+			}
+			conf.Launcher = &visorconfig.V1Launcher{
+				ServiceDisc: services.ServiceDiscovery, //utilenv.DefaultServiceDiscAddr,
+			}
+			conf.UptimeTracker = &visorconfig.V1UptimeTracker{
+				Addr: services.UptimeTracker, //utilenv.DefaultUptimeTrackerAddr,
+			}
+			conf.StunServers = services.StunServers //utilenv.GetStunServers()
+
 		}
 
 		switch setPublicAutoconnect {
@@ -116,7 +126,6 @@ var RootCmd = &cobra.Command{
 		if minHops >= 0 {
 			conf.Routing.MinHops = uint16(minHops)
 		}
-
 		saveConfig(conf)
 	},
 }

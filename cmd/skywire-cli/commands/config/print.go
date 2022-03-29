@@ -10,6 +10,7 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
+//Print prints the config
 func Print(mLog *logging.MasterLogger) {
 	conf, err := visorconfig.ReadConfig(print)
 	if err != nil {

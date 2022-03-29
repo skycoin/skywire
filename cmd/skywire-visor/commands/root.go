@@ -275,8 +275,7 @@ func initPProf(log *logging.MasterLogger, tag string, profMode string, profAddr 
 
 func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *visorconfig.V1 {
 	log := mLog.PackageLogger("visor:config")
-	//var services visorconfig.Services
-	//	/*
+
 	var r io.Reader
 
 	switch confPath {
