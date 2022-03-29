@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/dmsg"
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
+	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"

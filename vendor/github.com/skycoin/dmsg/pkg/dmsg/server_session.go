@@ -7,8 +7,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/yamux"
 
-	"github.com/skycoin/dmsg/noise"
-	"github.com/skycoin/dmsg/servermetrics"
+	"github.com/skycoin/dmsg/internal/servermetrics"
+	"github.com/skycoin/dmsg/pkg/noise"
 
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 )

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/url"
 
-	"github.com/skycoin/dmsg"
+	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
 )
 
 // Errors related to URLs.
