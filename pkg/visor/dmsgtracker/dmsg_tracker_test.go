@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsgctrl"
 	"github.com/skycoin/dmsg/pkg/dmsgtest"
 	"github.com/skycoin/skycoin/src/util/logging"

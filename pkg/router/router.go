@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/noise"
 	"github.com/skycoin/skycoin/src/util/logging"
 
