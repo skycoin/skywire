@@ -24,11 +24,12 @@ import (
 // This is used as default values if no config is given, or for missing *required* fields.
 // This function always returns the latest config version.
 func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Services) *V1 {
-	//check to see if there are values. Sometimes an empty struct is passed
+	//check if any services were passed
 	if services == nil {
 		//fall back on skyev defaults
 		if !testEnv {
 			services = &Services{utilenv.DefaultDmsgDiscAddr, utilenv.DefaultTpDiscAddr, utilenv.DefaultAddressResolverAddr, utilenv.DefaultRouteFinderAddr, []cipher.PubKey{skyenv.MustPK(utilenv.DefaultSetupPK)}, utilenv.DefaultUptimeTrackerAddr, utilenv.DefaultServiceDiscAddr, utilenv.GetStunServers()}
+			//services = &Services{utilenv.DmsgDiscAddr, utilenv.TpDiscAddr, utilenv.AddressResolverAddr, utilenv.RouteFinderAddr, []cipher.PubKey{skyenv.MustPK(utilenv.SetupPK)}, utilenv.UptimeTrackerAddr, utilenv.ServiceDiscAddr, utilenv.GetStunServers()}
 		} else {
 			services = &Services{utilenv.TestDmsgDiscAddr, utilenv.TestTpDiscAddr, utilenv.TestAddressResolverAddr, utilenv.TestRouteFinderAddr, []cipher.PubKey{skyenv.MustPK(utilenv.TestSetupPK)}, utilenv.TestUptimeTrackerAddr, utilenv.TestServiceDiscAddr, utilenv.GetStunServers()}
 		}
@@ -40,41 +41,41 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		SessionsCount: 1,
 		Servers:       []*disc.Entry{},
 	}
-	conf.Transport = &V1Transport{
-		Discovery:         services.TransportDiscovery, //utilenv.DefaultTpDiscAddr,
-		AddressResolver:   services.AddressResolver,    //utilenv.DefaultAddressResolverAddr,
+	conf.Transport = &Transport{
+		Discovery:         services.TransportDiscovery, //utilenv.TpDiscAddr,
+		AddressResolver:   services.AddressResolver,    //utilenv.AddressResolverAddr,
 		PublicAutoconnect: true,
 	}
-	conf.Routing = &V1Routing{
-		RouteFinder:        services.RouteFinder, //utilenv.DefaultRouteFinderAddr,
+	conf.Routing = &Routing{
+		RouteFinder:        services.RouteFinder, //utilenv.RouteFinderAddr,
 		SetupNodes:         services.SetupNodes,  //[]cipher.PubKey{utilenv.MustPK(utilenv.DefaultSetupPK)},
 		RouteFinderTimeout: DefaultTimeout,
 	}
-	conf.Launcher = &V1Launcher{
-		ServiceDisc: services.ServiceDiscovery, //utilenv.DefaultServiceDiscAddr,
+	conf.Launcher = &Launcher{
+		ServiceDisc: services.ServiceDiscovery, //utilenv.ServiceDiscAddr,
 		Apps:        nil,
-		ServerAddr:  skyenv.DefaultAppSrvAddr,
-		BinPath:     skyenv.DefaultAppBinPath,
+		ServerAddr:  skyenv.AppSrvAddr,
+		BinPath:     skyenv.AppBinPath,
 	}
-	conf.UptimeTracker = &V1UptimeTracker{
-		Addr: services.UptimeTracker, //utilenv.DefaultUptimeTrackerAddr,
+	conf.UptimeTracker = &UptimeTracker{
+		Addr: services.UptimeTracker, //utilenv.UptimeTrackerAddr,
 	}
-	conf.CLIAddr = skyenv.DefaultRPCAddr
-	conf.LogLevel = skyenv.DefaultLogLevel
-	conf.LocalPath = skyenv.DefaultLocalPath
+	conf.CLIAddr = skyenv.RPCAddr
+	conf.LogLevel = skyenv.LogLevel
+	conf.LocalPath = skyenv.LocalPath
 	conf.StunServers = services.StunServers //utilenv.GetStunServers()
 	conf.ShutdownTimeout = DefaultTimeout
 	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
-	conf.DMSGHTTPPath = skyenv.DefaultDMSGHTTPPath
+	conf.DMSGHTTPPath = skyenv.DMSGHTTPPath
 
-	conf.Dmsgpty = &V1Dmsgpty{
+	conf.Dmsgpty = &Dmsgpty{
 		DmsgPort: skyenv.DmsgPtyPort,
-		CLINet:   skyenv.DefaultDmsgPtyCLINet,
-		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr(),
+		CLINet:   skyenv.DmsgPtyCLINet,
+		CLIAddr:  skyenv.DmsgPtyCLIAddr(),
 	}
 
 	conf.STCP = &network.STCPConfig{
-		ListeningAddress: skyenv.DefaultSTCPAddr,
+		ListeningAddress: skyenv.STCPAddr,
 		PKTable:          nil,
 	}
 
@@ -86,12 +87,13 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 // Generated config will be saved to 'confPath'.
 // This function always returns the latest config version.
 func MakeDefaultConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, pkgEnv bool, testEnv bool, dmsgHTTP bool, hypervisor bool, hypervisorPKs string, services *Services) (*V1, error) {
-	cc, err := NewCommon(log, confPath, V1Name, sk)
+	version := Version()
+	cc, err := NewCommon(log, confPath, version, sk)
 	if err != nil {
 		return nil, err
 	}
 	// Enforce version and keys in 'cc'.
-	cc.Version = V1Name
+	cc.Version = version
 	if err := cc.ensureKeys(); err != nil {
 		return nil, err
 	}

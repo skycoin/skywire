@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 )
 
-// DefaultCLIAddr gets the default cli address (temp address)
-func DefaultCLIAddr() string {
+// CLIAddr gets the default cli address (temp address)
+func CLIAddr() string {
 	return filepath.Join(os.TempDir(), "dmsgpty.sock")
 }

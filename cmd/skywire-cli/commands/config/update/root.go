@@ -94,18 +94,18 @@ var RootCmd = &cobra.Command{
 			conf.Dmsg = &dmsgc.DmsgConfig{
 				Discovery: services.DmsgDiscovery, //utilenv.DefaultDmsgDiscAddr,
 			}
-			conf.Transport = &visorconfig.V1Transport{
+			conf.Transport = &visorconfig.Transport{
 				Discovery:       services.TransportDiscovery, //utilenv.DefaultTpDiscAddr,
 				AddressResolver: services.AddressResolver,    //utilenv.DefaultAddressResolverAddr,
 			}
-			conf.Routing = &visorconfig.V1Routing{
+			conf.Routing = &visorconfig.Routing{
 				RouteFinder: services.RouteFinder, //utilenv.DefaultRouteFinderAddr,
 				SetupNodes:  services.SetupNodes,  //[]cipher.PubKey{utilenv.MustPK(utilenv.DefaultSetupPK)},
 			}
-			conf.Launcher = &visorconfig.V1Launcher{
+			conf.Launcher = &visorconfig.Launcher{
 				ServiceDisc: services.ServiceDiscovery, //utilenv.DefaultServiceDiscAddr,
 			}
-			conf.UptimeTracker = &visorconfig.V1UptimeTracker{
+			conf.UptimeTracker = &visorconfig.UptimeTracker{
 				Addr: services.UptimeTracker, //utilenv.DefaultUptimeTrackerAddr,
 			}
 			conf.StunServers = services.StunServers //utilenv.GetStunServers()
