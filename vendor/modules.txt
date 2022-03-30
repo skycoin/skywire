@@ -160,19 +160,20 @@ github.com/shirou/gopsutil/v3/process
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v0.0.0-20220309150149-59567d358f03
+# github.com/skycoin/dmsg v0.0.0-20220329122357-2e8d4715d14f
 ## explicit; go 1.16
 github.com/skycoin/dmsg
-github.com/skycoin/dmsg/direct
-github.com/skycoin/dmsg/disc
-github.com/skycoin/dmsg/dmsgctrl
-github.com/skycoin/dmsg/dmsgget
-github.com/skycoin/dmsg/dmsghttp
-github.com/skycoin/dmsg/dmsgpty
-github.com/skycoin/dmsg/dmsgtest
-github.com/skycoin/dmsg/ioutil
-github.com/skycoin/dmsg/noise
-github.com/skycoin/dmsg/servermetrics
+github.com/skycoin/dmsg/internal/servermetrics
+github.com/skycoin/dmsg/pkg/direct
+github.com/skycoin/dmsg/pkg/disc
+github.com/skycoin/dmsg/pkg/dmsg
+github.com/skycoin/dmsg/pkg/dmsgctrl
+github.com/skycoin/dmsg/pkg/dmsgget
+github.com/skycoin/dmsg/pkg/dmsghttp
+github.com/skycoin/dmsg/pkg/dmsgpty
+github.com/skycoin/dmsg/pkg/dmsgtest
+github.com/skycoin/dmsg/pkg/ioutil
+github.com/skycoin/dmsg/pkg/noise
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 ## explicit
 github.com/skycoin/noise

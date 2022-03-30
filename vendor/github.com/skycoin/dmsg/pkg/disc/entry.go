@@ -50,6 +50,8 @@ var (
 	ErrValidationServerAddress = NewEntryValidationError("advertising localhost listening address is not allowed in production mode")
 	// ErrValidationEmptyServerAddress occurs when a server entry is submitted with an empty address.
 	ErrValidationEmptyServerAddress = NewEntryValidationError("server address cannot be empty")
+	// ErrUnauthorizedNetworkMonitor occurs in case of invalid network monitor key
+	ErrUnauthorizedNetworkMonitor = errors.New("invalid network monitor key")
 
 	errReverseMap = map[string]error{
 		ErrKeyNotFound.Error():                  ErrKeyNotFound,
