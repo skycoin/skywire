@@ -1,17 +1,16 @@
 package visorconfig
 
 import (
-
 	"encoding/json"
 	"io/ioutil"
 	"strings"
 
- 	"github.com/skycoin/dmsg/pkg/disc"
+	"github.com/skycoin/dmsg/pkg/disc"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
- 	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skycoin/src/util/logging"
+
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
-  
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/restart"
