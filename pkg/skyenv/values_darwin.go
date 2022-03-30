@@ -19,6 +19,6 @@ func PackageSkywirePath() string {
 }
 
 // PackageAppBinPath gets the Skywire application directory folder.
-func appBinPath() string {
-	return filepath.Join(skywireApplicationPath, "Contents", "MacOS")
-}
+//func appBinPath() string {
+//	return filepath.Join(skywireApplicationPath, "Contents", "MacOS")
+//}
