@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/dmsgctrl"
-	"github.com/skycoin/dmsg/dmsgtest"
+	"github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsgctrl"
+	"github.com/skycoin/dmsg/pkg/dmsgtest"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
