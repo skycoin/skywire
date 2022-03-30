@@ -8,19 +8,19 @@ import (
 	"time"
 
 	"github.com/skycoin/skycoin/src/util/logging"
+
+	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 )
 
 var (
 	services *Services
-	svcconf  = strings.ReplaceAll(serviceconfaddr, "http://", "") //skyenv.DefaultServiceConfAddr
+	svcconf  = strings.ReplaceAll(utilenv.DefaultServiceConfAddr, "http://", "") //skyenv.DefaultServiceConfAddr
 )
-
-const serviceconfaddr = "http://conf.skywire.skycoin.com"
 
 //Fetch fetches the service URLs & ip:ports from the config service endpoint
 func Fetch(mLog *logging.MasterLogger, serviceConfURL string, stdout bool) *Services {
 
-	urlstr := []string{"http://", serviceConfURL, "/config"}
+	urlstr := []string{"http://", serviceConfURL}
 	serviceConf := strings.Join(urlstr, "")
 	client := http.Client{
 		Timeout: time.Second * 2, // Timeout after 2 seconds

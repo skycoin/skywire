@@ -9,8 +9,7 @@ import (
 
 // Constants for skywire root directories.
 const (
-	DefaultSkywirePath = "."
-	ConfigName         = "skywire-config.json"
+	ConfigName = "skywire-config.json"
 )
 
 // Dmsg port constants.
@@ -28,20 +27,20 @@ const (
 	TransportPort uint16 = 45 // Listening port of a visor for incoming transports.
 )
 
-// Default dmsgpty constants.
+// Dmsgpty constants.
 const (
-	DmsgPtyPort          uint16 = 22
-	DefaultDmsgPtyCLINet        = "unix"
+	DmsgPtyPort   uint16 = 22
+	DmsgPtyCLINet        = "unix"
 )
 
-// Default Skywire-TCP constants.
+// Skywire-TCP constants.
 const (
-	DefaultSTCPAddr = ":7777"
+	STCPAddr = ":7777"
 )
 
-// DefaultDmsgPtyCLIAddr determines default CLI address per each platform
-func DefaultDmsgPtyCLIAddr() string {
-	return DefaultCLIAddr()
+// DmsgPtyCLIAddr determines CLI address per each platform
+func DmsgPtyCLIAddr() string {
+	return CLIAddr()
 }
 
 // Default skywire app constants.
@@ -67,43 +66,43 @@ const (
 
 // RPC constants.
 const (
-	DefaultRPCAddr      = "localhost:3435"
-	DefaultRPCTimeout   = 20 * time.Second
+	RPCAddr             = "localhost:3435"
+	RPCTimeout          = 20 * time.Second
 	TransportRPCTimeout = 1 * time.Minute
 	UpdateRPCTimeout    = 6 * time.Hour // update requires huge timeout
 )
 
 // Default skywire app server and discovery constants
 const (
-	DefaultAppSrvAddr         = "localhost:5505"
+	AppSrvAddr                = "localhost:5505"
 	ServiceDiscUpdateInterval = time.Minute
-	DefaultAppBinPath         = DefaultSkywirePath + "/apps"
-	DefaultLogLevel           = "info"
+	AppBinPath                = "./apps"
+	LogLevel                  = "info"
 )
 
-// Default routing constants
+// Routing constants
 const (
-	DefaultTpLogStore = DefaultSkywirePath + "/transport_logs"
+	TpLogStore = "./transport_logs"
 )
 
-// Default local constants
+// Local constants
 const (
-	DefaultLocalPath = DefaultSkywirePath + "/local"
+	LocalPath = "./local"
 )
 
-// Default dmsghttp config constants
+// Dmsghttp config constants
 const (
-	DefaultDMSGHTTPPath = DefaultSkywirePath + "/dmsghttp-config.json"
+	DMSGHTTPPath = "./dmsghttp-config.json"
 )
 
 // Default hypervisor constants
 const (
-	DefaultHypervisorDB      = ".skycoin/hypervisor/users.db"
-	DefaultEnableAuth        = false
-	DefaultPackageEnableAuth = true
-	DefaultEnableTLS         = false
-	DefaultTLSKey            = DefaultSkywirePath + "/ssl/key.pem"
-	DefaultTLSCert           = DefaultSkywirePath + "/ssl/cert.pem"
+	HypervisorDB      = ".skycoin/hypervisor/users.db"
+	EnableAuth        = false
+	PackageEnableAuth = true
+	EnableTLS         = false
+	TLSKey            = "./ssl/key.pem"
+	TLSCert           = "./ssl/cert.pem"
 )
 
 const (
@@ -126,20 +125,9 @@ type PkgConfig struct {
 	//		TLSKeyFile  string `json:"tls_key_file"`
 }
 
-// PackageConfig is the path to local directory
-func PackageConfig() PkgConfig {
-	var pkgconfig PkgConfig
-	pkgconfig.Launcher.BinPath = "/opt/skywire/apps"
-	pkgconfig.LocalPath = "/opt/skywire/local"
-	pkgconfig.DmsghttpPath = "/opt/skywire/dmsghttp-config.json"
-	pkgconfig.Hypervisor.DbPath = "/opt/skywire/users.db" //permissions errors if the process is not run as root.
-	pkgconfig.Hypervisor.EnableAuth = true
-	return pkgconfig
-}
-
-// PackageDmsgPtyWhiteList gets dmsgpty whitelist path for installed Skywire.
-func PackageDmsgPtyWhiteList() string {
-	return filepath.Join(PackageSkywirePath(), "dmsgpty", "whitelist.json")
+// DmsgPtyWhiteList gets dmsgpty whitelist path for installed Skywire.
+func DmsgPtyWhiteList() string {
+	return filepath.Join(SkywirePath(), "dmsgpty", "whitelist.json")
 }
 
 // MustPK unmarshals string PK to cipher.PubKey. It panics if unmarshaling fails.

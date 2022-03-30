@@ -9,16 +9,26 @@ import (
 )
 
 const (
-	packageSkywirePath = "/Library/Application Support/Skywire"
+	skywirePath = "/Library/Application Support/Skywire"
 	// skywireApplicationPath = "/Applications/Skywire.app"
+	OS = "mac" //nolint
 )
 
-// PackageSkywirePath gets Skywire installation folder.
-func PackageSkywirePath() string {
-	return filepath.Join(os.Getenv("HOME"), packageSkywirePath)
+// SkywirePath gets Skywire installation folder.
+func SkywirePath() string {
+	return filepath.Join(os.Getenv("HOME"), skywirePath)
 }
 
-// PackageAppBinPath gets the Skywire application directory folder.
-//func appBinPath() string {
-//	return filepath.Join(skywireApplicationPath, "Contents", "MacOS")
-//}
+/*
+//TODO implement this similarly for macOS
+// PackageConfig contains specific installation paths
+func PackageConfig() PkgConfig {
+	var pkgconfig PkgConfig
+	pkgconfig.Launcher.BinPath = "/opt/skywire/apps"
+	pkgconfig.LocalPath = "/opt/skywire/local"
+	pkgconfig.DmsghttpPath = "/opt/skywire/dmsghttp-config.json"
+	pkgconfig.Hypervisor.DbPath = "/opt/skywire/users.db" //permissions errors if the process is not run as root!
+	pkgconfig.Hypervisor.EnableAuth = true
+	return pkgconfig
+}
+*/

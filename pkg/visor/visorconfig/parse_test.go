@@ -30,7 +30,8 @@ func TestParse(t *testing.T) {
 		defer func() { require.NoError(t, os.Remove(filename)) }()
 
 		_, sk := cipher.GenerateKeyPair()
-		raw := []byte(fmt.Sprintf(`{"version":"%s","sk":"%s"}`, V1Name, sk.String()))
+		version := Version()
+		raw := []byte(fmt.Sprintf(`{"version":"%s","sk":"%s"}`, version, sk.String()))
 		n, err := f.Write(raw)
 		require.NoError(t, err)
 		require.Len(t, raw, n)
