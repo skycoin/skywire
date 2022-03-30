@@ -12,9 +12,6 @@ import (
 )
 
 var (
-	// ErrUnsupportedConfigVersion occurs when an unsupported config version is encountered.
-	ErrUnsupportedConfigVersion = errors.New("unsupported config version")
-
 	// ErrInvalidSK occurs when config file has an invalid secret key.
 	ErrInvalidSK = errors.New("config has invalid secret key")
 )
@@ -45,7 +42,7 @@ func parseV1(cc *Common, raw []byte, testEnv bool, dmsgHTTP bool, services *Serv
 	}
 	conf = ensureAppDisc(conf)
 	conf = updateUrls(conf, services)
-	conf.Version = V1Name
+	conf.Version = Version()
 	return conf, conf.flush(conf)
 }
 
@@ -57,23 +54,11 @@ func ensureAppDisc(conf *V1) *V1 {
 }
 
 func updateUrls(conf *V1, services *Services) *V1 {
-	//	if conf.Dmsg.Discovery == skyenv.OldDefaultDmsgDiscAddr {
 	conf.Dmsg.Discovery = services.DmsgDiscovery
-	//	}
-	//	if conf.Transport.Discovery == skyenv.OldDefaultTpDiscAddr {
 	conf.Transport.Discovery = services.TransportDiscovery
-	//	}
-	//	if conf.Transport.AddressResolver == skyenv.OldDefaultAddressResolverAddr {
 	conf.Transport.AddressResolver = services.AddressResolver
-	//	}
-	//	if conf.Routing.RouteFinder == skyenv.OldDefaultRouteFinderAddr {
 	conf.Routing.RouteFinder = services.RouteFinder
-	//	}
-	//	if conf.UptimeTracker.Addr == skyenv.OldDefaultUptimeTrackerAddr {
 	conf.UptimeTracker.Addr = services.UptimeTracker
-	//	}
-	//	if conf.Launcher.ServiceDisc == skyenv.OldDefaultServiceDiscAddr {
 	conf.Launcher.ServiceDisc = services.ServiceDiscovery
-	//	}
 	return conf
 }

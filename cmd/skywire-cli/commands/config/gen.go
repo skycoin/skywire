@@ -155,7 +155,7 @@ var genConfigCmd = &cobra.Command{
 					if hypervisor {
 						configName = "skywire.json"
 					}
-					output = filepath.Join(skyenv.PackageSkywirePath(), configName)
+					output = filepath.Join(skyenv.SkywirePath(), configName)
 				}
 			}
 		}

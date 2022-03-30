@@ -137,7 +137,7 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 		visorConn := &Conn{
 			Addr:  addr,
 			SrvPK: conn.ServerPK(),
-			API:   NewRPCClient(log, conn, RPCPrefix, skyenv.DefaultRPCTimeout),
+			API:   NewRPCClient(log, conn, RPCPrefix, skyenv.RPCTimeout),
 			PtyUI: setupDmsgPtyUI(hv.dmsgC, addr.PK),
 		}
 

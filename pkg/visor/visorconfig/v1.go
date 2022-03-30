@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/dmsgc"
@@ -13,38 +14,21 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
 
-// V100Name is the semantic version string for v1.0.0.
-const V100Name = "v1.0.0"
+//const V1Name = "0.6.1"
 
-// V101Name is the semantic version string for v1.0.1.
-const V101Name = "v1.0.1"
-
-// V110Name is the semantic version string for v1.1.0.
-// Added MinHops field to V1Routing section of config
-// Removed public_trusted_visor field from root section
-// Removed trusted_visors field from transport section
-// Added is_public field to root section
-// Added public_autoconnect field to transport section
-// Added transport_setup_nodes field to transport section
-// Removed authorization_file field from dmsgpty section
-// Default urls are changed to newer shortned ones
-// Added stun_servers field to the config
-// Added persistent_transports field to the config
-// Changed proxy_discovery_addr field to service_discovery
-// Changed V1AppDisc struct to V1ServiceDisc
-// Changed stcp field to skywire-tcp
-// Changed local_address field to listening_address
-// Changed port field in dmsgpty to dmsg_port
-// Added dmsghttp_path field to the config
-const V110Name = "v1.1.0"
-
-// V111Name is the semantic version string for v1.1.1.
-// Added support for dmsghttp
-// Added servers field in dmsg for dmsghttp
-const V111Name = "v1.1.1"
-
-// V1Name is the semantic version string for the most recent version of V1.
-const V1Name = V111Name
+//Version gets the version of the installation
+func Version() string {
+	u := buildinfo.Version()
+	v := u
+	if u == "unknown" {
+		//		u, err := script.Exec("git describe").String()
+		//		if err != nil {
+		//			panic(err)
+		//		}
+		v = "0.6.1"
+	}
+	return v
+}
 
 // V1 is visor config
 type V1 struct {
@@ -52,12 +36,12 @@ type V1 struct {
 	mu sync.RWMutex
 
 	Dmsg          *dmsgc.DmsgConfig   `json:"dmsg"`
-	Dmsgpty       *V1Dmsgpty          `json:"dmsgpty,omitempty"`
+	Dmsgpty       *Dmsgpty            `json:"dmsgpty,omitempty"`
 	STCP          *network.STCPConfig `json:"skywire-tcp,omitempty"`
-	Transport     *V1Transport        `json:"transport"`
-	Routing       *V1Routing          `json:"routing"`
-	UptimeTracker *V1UptimeTracker    `json:"uptime_tracker,omitempty"`
-	Launcher      *V1Launcher         `json:"launcher"`
+	Transport     *Transport          `json:"transport"`
+	Routing       *Routing            `json:"routing"`
+	UptimeTracker *UptimeTracker      `json:"uptime_tracker,omitempty"`
+	Launcher      *Launcher           `json:"launcher"`
 
 	Hypervisors []cipher.PubKey `json:"hypervisors"`
 	CLIAddr     string          `json:"cli_addr"`
@@ -75,43 +59,43 @@ type V1 struct {
 	Hypervisor *hypervisorconfig.Config `json:"hypervisor,omitempty"`
 }
 
-// V1Dmsgpty configures the dmsgpty-host.
-type V1Dmsgpty struct {
+// Dmsgpty configures the dmsgpty-host.
+type Dmsgpty struct {
 	DmsgPort uint16 `json:"dmsg_port"`
 	CLINet   string `json:"cli_network"`
 	CLIAddr  string `json:"cli_address"`
 }
 
-// V1Transport defines a transport config.
-type V1Transport struct {
+// Transport defines a transport config.
+type Transport struct {
 	Discovery         string          `json:"discovery"`
 	AddressResolver   string          `json:"address_resolver"`
 	PublicAutoconnect bool            `json:"public_autoconnect"`
 	TransportSetup    []cipher.PubKey `json:"transport_setup_nodes"`
 }
 
-// V1LogStore configures a LogStore.
-type V1LogStore struct {
+// LogStore configures a LogStore.
+type LogStore struct {
 	// Type defines the log store type. Valid values: file, memory.
 	Type     string `json:"type"`
 	Location string `json:"location"`
 }
 
-// V1Routing configures routing.
-type V1Routing struct {
+// Routing configures routing.
+type Routing struct {
 	SetupNodes         []cipher.PubKey `json:"setup_nodes,omitempty"`
 	RouteFinder        string          `json:"route_finder"`
 	RouteFinderTimeout Duration        `json:"route_finder_timeout,omitempty"`
 	MinHops            uint16          `json:"min_hops"`
 }
 
-// V1UptimeTracker configures uptime tracker.
-type V1UptimeTracker struct {
+// UptimeTracker configures uptime tracker.
+type UptimeTracker struct {
 	Addr string `json:"addr"`
 }
 
-// V1Launcher configures the app launcher.
-type V1Launcher struct {
+// Launcher configures the app launcher.
+type Launcher struct {
 	ServiceDisc string               `json:"service_discovery"`
 	Apps        []launcher.AppConfig `json:"apps"`
 	ServerAddr  string               `json:"server_addr"`
@@ -223,7 +207,7 @@ func (v1 *V1) UpdatePublicAutoconnect(pAc bool) error {
 // updateStringArg updates the cli non-boolean flag of the specified app config and also within the launcher.
 // It removes argName from app args if value is an empty string.
 // The updated config gets flushed to file if there are any changes.
-func updateStringArg(conf *V1Launcher, appName, argName, value string) bool {
+func updateStringArg(conf *Launcher, appName, argName, value string) bool {
 	configChanged := false
 
 	for i := range conf.Apps {
@@ -266,7 +250,7 @@ func updateStringArg(conf *V1Launcher, appName, argName, value string) bool {
 // All flag names and values are formatted as "-name=value" to allow arbitrary values with respect to different
 // possible default values.
 // The updated config gets flushed to file if there are any changes.
-func updateBoolArg(conf *V1Launcher, appName, argName string, value bool) bool {
+func updateBoolArg(conf *Launcher, appName, argName string, value bool) bool {
 	const argFmt = "%s=%v"
 
 	configChanged := false
@@ -332,3 +316,43 @@ func updateBoolArg(conf *V1Launcher, appName, argName string, value bool) bool {
 
 	return configChanged
 }
+
+/*
+// V100Name is the semantic version string for v1.0.0.
+const V100Name = "v1.0.0"
+
+// V101Name is the semantic version string for v1.0.1.
+const V101Name = "v1.0.1"
+
+// V110Name is the semantic version string for v1.1.0.
+// Added MinHops field to V1Routing section of config
+// Removed public_trusted_visor field from root section
+// Removed trusted_visors field from transport section
+// Added is_public field to root section
+// Added public_autoconnect field to transport section
+// Added transport_setup_nodes field to transport section
+// Removed authorization_file field from dmsgpty section
+// Default urls are changed to newer shortned ones
+// Added stun_servers field to the config
+// Added persistent_transports field to the config
+// Changed proxy_discovery_addr field to service_discovery
+// Changed V1AppDisc struct to V1ServiceDisc
+// Changed stcp field to skywire-tcp
+// Changed local_address field to listening_address
+// Changed port field in dmsgpty to dmsg_port
+// Added dmsghttp_path field to the config
+const V110Name = "v1.1.0"
+
+// V111Name is the semantic version string for v1.1.1.
+// Added support for dmsghttp
+// Added servers field in dmsg for dmsghttp
+const V111Name = "v1.1.1"
+
+// V1Name is the semantic version string for the most recent version of V1.
+const V1Name = V111Name
+
+//(0pcom)
+//Version the config using the version of the program.
+//Remove previous version parsing compatibility - visor no longer updates it's own config
+// Config will be updated on new version via script provided with the installation
+*/
