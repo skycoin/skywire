@@ -11,7 +11,8 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
+	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/util/pathutil"
 )
 
@@ -107,9 +108,9 @@ func (c *Config) FillDefaults(testEnv bool) {
 
 	if c.DmsgDiscovery == "" {
 		if testEnv {
-			c.DmsgDiscovery = skyenv.TestDmsgDiscAddr
+			c.DmsgDiscovery = utilenv.TestDmsgDiscAddr
 		} else {
-			c.DmsgDiscovery = skyenv.DefaultDmsgDiscAddr
+			c.DmsgDiscovery = utilenv.DefaultDmsgDiscAddr
 		}
 	}
 
