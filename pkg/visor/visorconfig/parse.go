@@ -30,22 +30,7 @@ func Parse(log *logging.MasterLogger, path string, raw []byte, testEnv bool, dms
 	if err := json.Unmarshal(raw, cc); err != nil {
 		return nil, fmt.Errorf("failed to obtain config version: %w", err)
 	}
-
-	switch cc.Version {
-	// parse any v1-compatible version with v1 parse procedure
-	case V111Name:
-		fallthrough
-	case V110Name:
-		return parseV1(cc, raw, testEnv, dmsgHTTP, services)
-	case V101Name:
-		return parseV1(cc, raw, testEnv, dmsgHTTP, services)
-	case V100Name:
-		return parseV1(cc, raw, testEnv, dmsgHTTP, services)
-	case V0Name, V0NameOldFormat, "":
-		fallthrough
-	default:
-		return nil, ErrUnsupportedConfigVersion
-	}
+	return parseV1(cc, raw, testEnv, dmsgHTTP, services)
 }
 
 func parseV1(cc *Common, raw []byte, testEnv bool, dmsgHTTP bool, services *Services) (*V1, error) {
