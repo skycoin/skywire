@@ -50,7 +50,7 @@ require (
 	github.com/go-chi/chi/v5 v5.0.8-0.20220103230436-7dbe9a0bd10f
 	github.com/ivanpirog/coloredcobra v1.0.0
 	github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
-	github.com/skycoin/skywire-utilities v0.0.0-20220321002722-7d4b15ff5211
+	github.com/skycoin/skywire-utilities v0.0.0-20220329124555-3ef2c62a3991
 )
 
 require (

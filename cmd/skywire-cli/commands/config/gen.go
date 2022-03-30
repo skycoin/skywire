@@ -13,7 +13,6 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
-	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -156,7 +155,7 @@ var genConfigCmd = &cobra.Command{
 					if hypervisor {
 						configName = "skywire.json"
 					}
-					output = filepath.Join(utilenv.PackageSkywirePath(), configName)
+					output = filepath.Join(skyenv.PackageSkywirePath(), configName)
 				}
 			}
 		}

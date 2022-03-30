@@ -28,9 +28,9 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	if services == nil {
 		//fall back on skyev defaults
 		if !testEnv {
-			services = &Services{utilenv.DefaultDmsgDiscAddr, utilenv.DefaultTpDiscAddr, utilenv.DefaultAddressResolverAddr, utilenv.DefaultRouteFinderAddr, []cipher.PubKey{utilenv.MustPK(utilenv.DefaultSetupPK)}, utilenv.DefaultUptimeTrackerAddr, utilenv.DefaultServiceDiscAddr, utilenv.GetStunServers()}
+			services = &Services{utilenv.DefaultDmsgDiscAddr, utilenv.DefaultTpDiscAddr, utilenv.DefaultAddressResolverAddr, utilenv.DefaultRouteFinderAddr, []cipher.PubKey{skyenv.MustPK(utilenv.DefaultSetupPK)}, utilenv.DefaultUptimeTrackerAddr, utilenv.DefaultServiceDiscAddr, utilenv.GetStunServers()}
 		} else {
-			services = &Services{utilenv.TestDmsgDiscAddr, utilenv.TestTpDiscAddr, utilenv.TestAddressResolverAddr, utilenv.TestRouteFinderAddr, []cipher.PubKey{utilenv.MustPK(utilenv.TestSetupPK)}, utilenv.TestUptimeTrackerAddr, utilenv.TestServiceDiscAddr, utilenv.GetStunServers()}
+			services = &Services{utilenv.TestDmsgDiscAddr, utilenv.TestTpDiscAddr, utilenv.TestAddressResolverAddr, utilenv.TestRouteFinderAddr, []cipher.PubKey{skyenv.MustPK(utilenv.TestSetupPK)}, utilenv.TestUptimeTrackerAddr, utilenv.TestServiceDiscAddr, utilenv.GetStunServers()}
 		}
 	}
 	conf := new(V1)
