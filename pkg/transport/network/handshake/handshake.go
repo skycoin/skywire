@@ -9,7 +9,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsg"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
