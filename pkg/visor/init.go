@@ -736,7 +736,7 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// v.pushCloseStack("cli.listener", cliL.Close)
 	v.pushCloseStack("cli.listener", func() error {
 		err := cliL.Close()
-		//wg.Wait()
+		err  = nil	//nil the error
 		return err
 	})
 
