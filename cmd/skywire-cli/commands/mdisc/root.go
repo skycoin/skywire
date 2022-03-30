@@ -8,7 +8,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/skycoin/dmsg/disc"
+	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 

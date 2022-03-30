@@ -166,8 +166,6 @@ github.com/getlantern/systray v1.1.0 h1:U0wCEqseLi2ok1fE6b88gJklzriavPJixZysZPkZ
 github.com/getlantern/systray v1.1.0/go.mod h1:AecygODWIsBquJCJFop8MEQcJbWFfw/1yWbVabNgpCM=
 github.com/ghodss/yaml v1.0.0/go.mod h1:4dBDuWmgqj2HViK6kFavaiC9ZROes6MMH2rRYeMEF04=
 github.com/gliderlabs/ssh v0.1.1/go.mod h1:U7qILu1NlMHj9FlMhZLlkCdDnU1DBEAqr0aevW3Awn0=
-github.com/go-chi/chi v1.5.4 h1:QHdzF2szwjqVV4wmByUnTcsbIg7UGaQ0tPF2t5GcAIs=
-github.com/go-chi/chi v1.5.4/go.mod h1:uaf8YgoFazUOkPBG7fxPftUylNumIev9awIWOENIuEg=
 github.com/go-chi/chi/v5 v5.0.7/go.mod h1:DslCQbL2OYiznFReuXYUmQ2hGd1aDpCnlMNITLSKoi8=
 github.com/go-chi/chi/v5 v5.0.8-0.20220103230436-7dbe9a0bd10f h1:6kLofhLkWj7lgCc+mvcVLnwhTzQYgL/yW/Y0e/JYwjg=
 github.com/go-chi/chi/v5 v5.0.8-0.20220103230436-7dbe9a0bd10f/go.mod h1:DslCQbL2OYiznFReuXYUmQ2hGd1aDpCnlMNITLSKoi8=
@@ -490,13 +488,13 @@ github.com/sirupsen/logrus v1.4.1/go.mod h1:ni0Sbl8bgC9z8RoU9G6nDWqqs/fq4eDPysMB
 github.com/sirupsen/logrus v1.4.2/go.mod h1:tLMulIdttU9McNUspp0xgXVQah82FyeX6MwdIuYE2rE=
 github.com/sirupsen/logrus v1.8.1 h1:dJKuHgqk1NNQlqoA6BTlM1Wf9DOH3NBjQyu0h9+AZZE=
 github.com/sirupsen/logrus v1.8.1/go.mod h1:yWOB1SBYBC5VeMP7gHvWumXLIWorT60ONWic61uBYv0=
-github.com/skycoin/dmsg v0.0.0-20220309150149-59567d358f03 h1:7nIQo/3Sd61jnyreu6uvMAFH3AFzf8rTMSz787Ve7R8=
-github.com/skycoin/dmsg v0.0.0-20220309150149-59567d358f03/go.mod h1:2VdIS6SfIBVDniDhDVfsFjCe8oz6B3lTfkItzdvxt78=
+github.com/skycoin/dmsg v0.0.0-20220329122357-2e8d4715d14f h1:wzQdtwmKSTgPPcOh/OQtOPiVeOFD25+jjLwKvb79LD0=
+github.com/skycoin/dmsg v0.0.0-20220329122357-2e8d4715d14f/go.mod h1:bUiu+qaWcuH4SJudhjBPqv0hecc0V73DnsHRTh5TuyU=
 github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6 h1:1Nc5EBY6pjfw1kwW0duwyG+7WliWz5u9kgk1h5MnLuA=
 github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6/go.mod h1:UXghlricA7J3aRD/k7p/zBObQfmBawwCxIVPVjz2Q3o=
 github.com/skycoin/skycoin v0.27.1 h1:HatxsRwVSPaV4qxH6290xPBmkH/HgiuAoY2qC+e8C9I=
 github.com/skycoin/skycoin v0.27.1/go.mod h1:78nHjQzd8KG0jJJVL/j0xMmrihXi70ti63fh8vXScJw=
-github.com/skycoin/skywire-utilities v0.0.0-20220308074734-3ac20b7c3254/go.mod h1:7l3pPv/3lGaa9mdni0wvXxSOLql36u3i2SDXhZOi78s=
+github.com/skycoin/skywire-utilities v0.0.0-20220315050606-172bb2cd90d9/go.mod h1:9fOsut+rqCBd33NPF3cuolXrw8uQESYshSvdYMaZNEo=
 github.com/skycoin/skywire-utilities v0.0.0-20220321002722-7d4b15ff5211 h1:iEQL310u/j/cljfyI7m9WjBycPiRiTl5auLRWljlpyk=
 github.com/skycoin/skywire-utilities v0.0.0-20220321002722-7d4b15ff5211/go.mod h1:9fOsut+rqCBd33NPF3cuolXrw8uQESYshSvdYMaZNEo=
 github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f h1:A5dEM1OE9YhN3LciZU9qPjo7fJ46JeHNi3JCroDkK0Y=

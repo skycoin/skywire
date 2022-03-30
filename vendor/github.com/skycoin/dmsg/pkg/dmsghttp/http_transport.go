@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/skycoin/dmsg"
+	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
 )
 
 const defaultHTTPPort = uint16(80)
