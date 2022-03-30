@@ -68,6 +68,8 @@ github.com/go-ole/go-ole/oleutil
 # github.com/go-stack/stack v1.8.0
 ## explicit
 github.com/go-stack/stack
+# github.com/google/go-cmp v0.5.7
+## explicit; go 1.11
 # github.com/google/go-github v17.0.0+incompatible
 ## explicit
 github.com/google/go-github/github

@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 )
 
-// DefaultCLIAddr gets the default cli address
-func DefaultCLIAddr() string {
+// CLIAddr gets the default cli address
+func CLIAddr() string {
 	homedir, err := os.UserHomeDir()
 	if err != nil {
 		homedir = os.TempDir()
