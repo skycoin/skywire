@@ -982,7 +982,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 	}
 	serviceDisc := v.conf.Launcher.ServiceDisc
 	if serviceDisc == "" {
-		serviceDisc = utilenv.DefaultServiceDiscAddr
+		serviceDisc = utilenv.ServiceDiscAddr
 	}
 
 	// todo: refactor updatedisc: split connecting to services in updatedisc and

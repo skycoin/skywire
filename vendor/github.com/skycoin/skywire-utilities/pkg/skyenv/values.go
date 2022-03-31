@@ -1,26 +1,16 @@
 package skyenv
 
-// Constants for old default services. (for which version?)
-const (
-	OldDefaultTpDiscAddr          = "http://transport.discovery.skywire.skycoin.com"
-	OldDefaultDmsgDiscAddr        = "http://dmsg.discovery.skywire.skycoin.com"
-	OldDefaultServiceDiscAddr     = "http://service.discovery.skycoin.com"
-	OldDefaultRouteFinderAddr     = "http://routefinder.skywire.skycoin.com"
-	OldDefaultUptimeTrackerAddr   = "http://uptime-tracker.skywire.skycoin.com"
-	OldDefaultAddressResolverAddr = "http://address.resolver.skywire.skycoin.com"
-)
-
 // Constants for new default services.
 const (
-	DefaultServiceConfAddr     = "http://conf.skywire.skycoin.com"
-	DefaultTpDiscAddr          = "http://tpd.skywire.skycoin.com"
-	DefaultDmsgDiscAddr        = "http://dmsgd.skywire.skycoin.com"
-	DefaultServiceDiscAddr     = "http://sd.skycoin.com"
-	DefaultRouteFinderAddr     = "http://rf.skywire.skycoin.com"
-	DefaultUptimeTrackerAddr   = "http://ut.skywire.skycoin.com"
-	DefaultAddressResolverAddr = "http://ar.skywire.skycoin.com"
-	DefaultSetupPK             = "0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557"
-	DefaultNetworkMonitorPKs   = ""
+	ServiceConfAddr     = "http://conf.skywire.skycoin.com"
+	TpDiscAddr          = "http://tpd.skywire.skycoin.com"
+	DmsgDiscAddr        = "http://dmsgd.skywire.skycoin.com"
+	ServiceDiscAddr     = "http://sd.skycoin.com"
+	RouteFinderAddr     = "http://rf.skywire.skycoin.com"
+	UptimeTrackerAddr   = "http://ut.skywire.skycoin.com"
+	AddressResolverAddr = "http://ar.skywire.skycoin.com"
+	SetupPK             = "0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557"
+	NetworkMonitorPKs   = ""
 )
 
 // Constants for testing deployment.

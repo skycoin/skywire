@@ -12,7 +12,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
+	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 )
 
@@ -21,7 +21,7 @@ var masterLogger = logging.NewMasterLogger()
 var packageLogger = masterLogger.PackageLogger("mdisc:disc")
 
 func init() {
-	RootCmd.PersistentFlags().StringVar(&mdAddr, "addr", skyenv.DefaultDmsgDiscAddr, "address of DMSG discovery server\n")
+	RootCmd.PersistentFlags().StringVar(&mdAddr, "addr", utilenv.DmsgDiscAddr, "address of DMSG discovery server\n")
 }
 
 // RootCmd is the command that contains sub-commands which interacts with DMSG services.

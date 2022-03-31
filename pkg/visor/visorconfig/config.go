@@ -28,7 +28,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	if services == nil {
 		//fall back on skyev defaults
 		if !testEnv {
-			services = &Services{utilenv.DefaultDmsgDiscAddr, utilenv.DefaultTpDiscAddr, utilenv.DefaultAddressResolverAddr, utilenv.DefaultRouteFinderAddr, []cipher.PubKey{skyenv.MustPK(utilenv.DefaultSetupPK)}, utilenv.DefaultUptimeTrackerAddr, utilenv.DefaultServiceDiscAddr, utilenv.GetStunServers()}
+			services = &Services{utilenv.DmsgDiscAddr, utilenv.TpDiscAddr, utilenv.AddressResolverAddr, utilenv.RouteFinderAddr, []cipher.PubKey{skyenv.MustPK(utilenv.SetupPK)}, utilenv.UptimeTrackerAddr, utilenv.ServiceDiscAddr, utilenv.GetStunServers()}
 			//services = &Services{utilenv.DmsgDiscAddr, utilenv.TpDiscAddr, utilenv.AddressResolverAddr, utilenv.RouteFinderAddr, []cipher.PubKey{skyenv.MustPK(utilenv.SetupPK)}, utilenv.UptimeTrackerAddr, utilenv.ServiceDiscAddr, utilenv.GetStunServers()}
 		} else {
 			services = &Services{utilenv.TestDmsgDiscAddr, utilenv.TestTpDiscAddr, utilenv.TestAddressResolverAddr, utilenv.TestRouteFinderAddr, []cipher.PubKey{skyenv.MustPK(utilenv.TestSetupPK)}, utilenv.TestUptimeTrackerAddr, utilenv.TestServiceDiscAddr, utilenv.GetStunServers()}
@@ -37,7 +37,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	conf := new(V1)
 	conf.Common = common
 	conf.Dmsg = &dmsgc.DmsgConfig{
-		Discovery:     services.DmsgDiscovery, //utilenv.DefaultDmsgDiscAddr,
+		Discovery:     services.DmsgDiscovery, //utilenv.DmsgDiscAddr,
 		SessionsCount: 1,
 		Servers:       []*disc.Entry{},
 	}
@@ -48,7 +48,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	}
 	conf.Routing = &Routing{
 		RouteFinder:        services.RouteFinder, //utilenv.RouteFinderAddr,
-		SetupNodes:         services.SetupNodes,  //[]cipher.PubKey{utilenv.MustPK(utilenv.DefaultSetupPK)},
+		SetupNodes:         services.SetupNodes,  //[]cipher.PubKey{utilenv.MustPK(utilenv.SetupPK)},
 		RouteFinderTimeout: DefaultTimeout,
 	}
 	conf.Launcher = &Launcher{

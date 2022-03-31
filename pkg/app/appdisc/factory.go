@@ -29,7 +29,7 @@ func (f *Factory) setDefaults() {
 		f.Log = logging.MustGetLogger("appdisc")
 	}
 	if f.ServiceDisc == "" {
-		f.ServiceDisc = utilenv.DefaultServiceDiscAddr
+		f.ServiceDisc = utilenv.ServiceDiscAddr
 	}
 }
 
