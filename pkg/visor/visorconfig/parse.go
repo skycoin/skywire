@@ -8,7 +8,7 @@ import (
 
 	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
+	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 )
 
 var (
@@ -48,7 +48,7 @@ func parseV1(cc *Common, raw []byte, testEnv bool, dmsgHTTP bool, services *Serv
 
 func ensureAppDisc(conf *V1) *V1 {
 	if conf.Launcher.ServiceDisc == "" {
-		conf.Launcher.ServiceDisc = skyenv.DefaultServiceDiscAddr
+		conf.Launcher.ServiceDisc = utilenv.ServiceDiscAddr
 	}
 	return conf
 }
