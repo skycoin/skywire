@@ -13,6 +13,7 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
+	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -21,6 +22,7 @@ import (
 var (
 	sk                cipher.SecKey
 	output            string
+	configName        string
 	stdout            bool
 	regen             bool
 	retainHypervisors bool
@@ -43,15 +45,13 @@ var (
 	hide              bool
 	all               bool
 	outunset          bool
-	svcconf           = strings.ReplaceAll(serviceconfaddr, "http://", "") //skyenv.DefaultServiceConfAddr
-	testconf          = strings.ReplaceAll(testconfaddr, "http://", "")    //skyenv.DefaultServiceConfAddr
+	svcconf           = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")     //skyenv.DefaultServiceConfAddr
+	testconf          = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "") //skyenv.DefaultServiceConfAddr
 	hiddenflags       []string
 )
 
-const serviceconfaddr = "http://conf.skywire.skycoin.com"
-const testconfaddr = "http://conf.skywire.dev"
-
 func init() {
+	//disable sorting, flags appear in the order shown here
 	genConfigCmd.Flags().SortFlags = false
 	RootCmd.AddCommand(genConfigCmd)
 
@@ -62,12 +62,12 @@ func init() {
 	genConfigCmd.Flags().BoolVarP(&enableauth, "auth", "e", false, "enable auth on hypervisor UI")
 	genConfigCmd.Flags().BoolVarP(&force, "force", "f", false, "remove pre-existing config")
 	genConfigCmd.Flags().StringVarP(&disableApps, "disableapps", "g", "", "comma separated list of apps to disable")
-	genConfigCmd.Flags().BoolVarP(&hypervisor, "ishv", "i", false, "hypervisor configuration")
+	genConfigCmd.Flags().BoolVarP(&hypervisor, "ishv", "i", false, "local hypervisor configuration")
 	genConfigCmd.Flags().StringVarP(&hypervisorPKs, "hvpks", "j", "", "list of public keys to use as hypervisor")
-	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", "linux", "(linux / macos / windows) paths")
+	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", skyenv.OS, "(linux / macos / windows) paths")
 	genConfigCmd.Flags().BoolVarP(&stdout, "stdout", "n", false, "write config to stdout")
 	genConfigCmd.Flags().StringVarP(&output, "out", "o", "", "output config default:"+skyenv.ConfigName)
-	genConfigCmd.Flags().BoolVarP(&pkgEnv, "package", "p", false, "use paths for package (/opt/skywire)")
+	genConfigCmd.Flags().BoolVarP(&pkgEnv, "package", "p", false, "use paths for package "+skyenv.SkywirePath())
 	genConfigCmd.Flags().BoolVarP(&publicRPC, "publicrpc", "q", false, "allow rpc requests from LAN")
 	genConfigCmd.Flags().BoolVarP(&regen, "regen", "r", false, "re-generate existing config & retain keys")
 	genConfigCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
@@ -78,7 +78,7 @@ func init() {
 	genConfigCmd.Flags().BoolVar(&all, "all", false, "show all flags")
 	genConfigCmd.Flags().StringVar(&print, "print", "", "parse test ; read config from file & print")
 
-	hiddenflags = []string{"url", "print", "noauth", "dmsghttp", "auth", "force", "disableapps", "stdout", "publicrpc", "sk", "testenv", "servevpn", "hide", "retainhv", "print"}
+	hiddenflags = []string{"url", "print", "noauth", "dmsghttp", "auth", "force", "disableapps", "os", "stdout", "publicrpc", "sk", "testenv", "servevpn", "hide", "retainhv", "print"}
 	for _, j := range hiddenflags {
 		genConfigCmd.Flags().MarkHidden(j) //nolint
 	}
@@ -88,7 +88,7 @@ var genConfigCmd = &cobra.Command{
 	Use:   "gen",
 	Short: "generate a config file",
 	PreRun: func(cmd *cobra.Command, _ []string) {
-		//unhide flags and print help menu
+		//--all unhides flags, prints help menu, and exits
 		if all {
 			for _, j := range hiddenflags {
 				f := cmd.Flags().Lookup(j) //nolint
@@ -103,13 +103,16 @@ var genConfigCmd = &cobra.Command{
 			output = skyenv.ConfigName
 			outunset = true
 		}
+		if output == visorconfig.StdoutName {
+			stdout = true
+			force = false
+			regen = false
+		}
+		//--force will delete a config, which excludes --regen
 		if (force) && (regen) {
 			logger.Fatal("Use of mutually exclusive flags: -f --force cannot override -r --regen")
 		}
 		var err error
-		if output == visorconfig.StdoutName {
-			stdout = true
-		}
 		if (stdout) && (hide) {
 			logger.Fatal("Use of mutually exclusive flags: -w --hide and -n --stdout")
 		}
@@ -135,29 +138,25 @@ var genConfigCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
-
+		//print reads in the config and then prints it
 		if print != "" {
 			Print(mLog)
 		}
-
+		//use test deployment
 		if testEnv {
 			serviceConfURL = testconf
 		}
+		//fetch the service endpoints
 		services = visorconfig.Fetch(mLog, serviceConfURL, stdout)
 
-		if !stdout {
-			//set output package
-			if outunset {
-				//default config visor
-				if pkgEnv {
-					configName := "skywire-visor.json"
-					//default config hypervisor
-					if hypervisor {
-						configName = "skywire.json"
-					}
-					output = filepath.Join(skyenv.SkywirePath(), configName)
-				}
+		if !stdout && outunset && pkgEnv && (selectedOS == "linux") {
+			if hypervisor {
+				//default config hypervisor
+				configName = "skywire.json"
+			} else {
+				configName = "skywire-visor.json"
 			}
+			output = filepath.Join(skyenv.SkywirePath(), configName)
 		}
 
 		// Read in old config and obtain old secret key or generate a new random secret key
@@ -169,12 +168,9 @@ var genConfigCmd = &cobra.Command{
 				sk = oldConf.SK
 			}
 		}
-
 		//determine best protocol
-		if bestProtocol {
-			if netutil.LocalProtocol() {
-				dmsgHTTP = true
-			}
+		if bestProtocol && netutil.LocalProtocol() {
+			dmsgHTTP = true
 		}
 		// Read in old config (if any) and obtain old hypervisors.
 		if retainHypervisors {
@@ -184,17 +180,16 @@ var genConfigCmd = &cobra.Command{
 				}
 			}
 		}
-
+		//create the conf
 		conf, err := visorconfig.MakeDefaultConfig(mLog, output, &sk, pkgEnv, testEnv, dmsgHTTP, hypervisor, hypervisorPKs, services)
 		if err != nil {
 			logger.WithError(err).Fatal("Failed to create config.")
 		}
-
+		//edit the conf
 		// Change rpc address from local to public
 		if publicRPC {
 			conf.CLIAddr = ":3435"
 		}
-
 		// Set autostart enable vpn-server
 		if vpnServerEnable {
 			for i, app := range conf.Launcher.Apps {
@@ -203,7 +198,6 @@ var genConfigCmd = &cobra.Command{
 				}
 			}
 		}
-
 		// Disable apps listed on --disable-apps flag
 		if disableApps != "" {
 			apps := strings.Split(disableApps, ",")
@@ -219,29 +213,26 @@ var genConfigCmd = &cobra.Command{
 			}
 			conf.Launcher.Apps = newConfLauncherApps
 		}
-
 		// Set EnableAuth true  hypervisor UI by --enable-auth flag
-		if pkgEnv && hypervisor {
-			conf.Hypervisor.EnableAuth = true
+		if hypervisor {
+			if pkgEnv {
+				conf.Hypervisor.EnableAuth = true
+			}
+			// Make false EnableAuth hypervisor UI by --disable-auth flag
+			if disableauth {
+				conf.Hypervisor.EnableAuth = false
+			}
+			// Set EnableAuth true  hypervisor UI by --enable-auth flag
+			if enableauth {
+				conf.Hypervisor.EnableAuth = true
+			}
 		}
-
-		// Make false EnableAuth hypervisor UI by --disable-auth flag
-		if disableauth && hypervisor {
-			conf.Hypervisor.EnableAuth = false
-		}
-
-		// Set EnableAuth true  hypervisor UI by --enable-auth flag
-		if enableauth && hypervisor {
-			conf.Hypervisor.EnableAuth = true
-		}
-
 		// Check OS and enable auth windows or macos
 		if selectedOS == "windows" || selectedOS == "macos" {
 			if hypervisor {
 				conf.Hypervisor.EnableAuth = true
 			}
 		}
-
 		//don't write file with stdout
 		if !stdout {
 			// Save config to file.
@@ -254,18 +245,18 @@ var genConfigCmd = &cobra.Command{
 		if err != nil {
 			logger.WithError(err).Fatal("Could not unmarshal json.")
 		}
-		//omit logging messages stdout
-		if !stdout {
-			//hide the printing of the config to the terminal
-			if hide {
-				logger.Infof("Updated file '%s'", output)
-			} else {
-				//default behavior
-				logger.Infof("Updated file '%s' to: %s", output, j)
-			}
-		} else {
-			//print config to stdout
+		//omit logging messages with stdout
+		//print config to stdout, omit logging messages, exit
+		if stdout {
 			fmt.Printf("%s", j)
+			os.Exit(0)
 		}
+		//hide the printing of the config to the terminal
+		if hide {
+			logger.Infof("Updated file '%s'", output)
+			os.Exit(0)
+		}
+		//default behavior
+		logger.Infof("Updated file '%s' to: %s", output, j)
 	},
 }

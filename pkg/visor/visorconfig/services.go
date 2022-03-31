@@ -14,7 +14,7 @@ import (
 
 var (
 	services *Services
-	svcconf  = strings.ReplaceAll(utilenv.DefaultServiceConfAddr, "http://", "") //skyenv.DefaultServiceConfAddr
+	svcconf  = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")
 )
 
 //Fetch fetches the service URLs & ip:ports from the config service endpoint

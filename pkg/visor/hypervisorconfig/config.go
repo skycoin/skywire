@@ -110,7 +110,7 @@ func (c *Config) FillDefaults(testEnv bool) {
 		if testEnv {
 			c.DmsgDiscovery = utilenv.TestDmsgDiscAddr
 		} else {
-			c.DmsgDiscovery = utilenv.DefaultDmsgDiscAddr
+			c.DmsgDiscovery = utilenv.DmsgDiscAddr
 		}
 	}
 	if c.DmsgPort == 0 {
