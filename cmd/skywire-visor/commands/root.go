@@ -1,12 +1,11 @@
 package commands
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"embed"
-	"encoding/json"
 	"fmt"
-	"io"
 	"io/fs"
 	"io/ioutil"
 	"net/http"
@@ -20,13 +19,13 @@ import (
 	"github.com/pkg/profile"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/restart"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/syslog"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
@@ -123,7 +122,7 @@ var rootCmd = &cobra.Command{
 				panic(err)
 			}
 		}
-		if (completion != "bash") && (completion != "zsh") && (completion != "fish") && (completion != "bash") && (completion != "") {
+		if (completion != "bash") && (completion != "zsh") && (completion != "fish") && (completion != "") {
 			fmt.Println("Invalid completion specified:", completion)
 			os.Exit(1)
 		}
@@ -133,12 +132,12 @@ var rootCmd = &cobra.Command{
 	},
 
 	Run: func(_ *cobra.Command, args []string) {
-		runApp(args...)
+		runApp()
 	},
 	Version: buildinfo.Version(),
 }
 
-func runVisor(args []string) {
+func runVisor() {
 	var ok bool
 	log := initLogger(tag, syslogAddr)
 	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
@@ -153,7 +152,7 @@ func runVisor(args []string) {
 	stopPProf := initPProf(log, tag, pprofMode, pprofAddr)
 	defer stopPProf()
 
-	conf := initConfig(log, args, confPath)
+	conf := initConfig(log, confPath)
 
 	if disableHypervisorPKs {
 		conf.Hypervisors = []cipher.PubKey{}
@@ -197,14 +196,13 @@ func runVisor(args []string) {
 // Execute executes root CLI command.
 func Execute(ui embed.FS) {
 	cc.Init(&cc.Config{
-		RootCmd:       rootCmd,
-		Headings:      cc.HiBlue + cc.Bold, //+ cc.Underline,
-		Commands:      cc.HiBlue + cc.Bold,
-		CmdShortDescr: cc.HiBlue,
-		Example:       cc.HiBlue + cc.Italic,
-		ExecName:      cc.HiBlue + cc.Bold,
-		Flags:         cc.HiBlue + cc.Bold,
-		//FlagsDataType: cc.HiBlue,
+		RootCmd:         rootCmd,
+		Headings:        cc.HiBlue + cc.Bold,
+		Commands:        cc.HiBlue + cc.Bold,
+		CmdShortDescr:   cc.HiBlue,
+		Example:         cc.HiBlue + cc.Italic,
+		ExecName:        cc.HiBlue + cc.Bold,
+		Flags:           cc.HiBlue + cc.Bold,
 		FlagsDescr:      cc.HiBlue,
 		NoExtraNewlines: true,
 		NoBottomNewline: true,
@@ -273,67 +271,44 @@ func initPProf(log *logging.MasterLogger, tag string, profMode string, profAddr 
 	return stop
 }
 
-func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *visorconfig.V1 {
+func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 { //nolint
 	log := mLog.PackageLogger("visor:config")
+	//var r io.Reader
+	v := viper.New()
+	v.SetConfigType("json")
 
-	var r io.Reader
-
-	switch confPath {
-	case visorconfig.StdinName:
+	if confPath == visorconfig.StdinName {
 		log.Info("Reading config from STDIN.")
-		r = os.Stdin
-	case "":
-		// TODO: More robust solution.
-		for _, arg := range args {
-			if strings.HasSuffix(arg, ".json") {
-				confPath = arg
-				break
+		scanner := bufio.NewScanner(os.Stdin)
+		if !scanner.Scan() {
+			log.WithError(scanner.Err()).Warn("Failed to read in config.")
+		}
+		if err := v.ReadConfig(bytes.NewBuffer(scanner.Bytes())); err != nil {
+			log.WithError(err).Fatal("Failed to read config from stdin.")
+		}
+	} else {
+		v.SetConfigName(confPath)
+		v.AddConfigPath(".")
+		if err := v.ReadInConfig(); err != nil {
+			if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+				log.WithError(err).Fatal("Failed to read in config.")
 			}
 		}
-		if confPath == "" {
-			confPath = skyenv.ConfigName
-		}
-
-		fallthrough
-	default:
-		log.WithField("filepath", confPath).Info("Reading config from file.")
-		f, err := os.Open(confPath) //nolint:gosec
-		if err != nil {
-			log.WithError(err).
-				WithField("filepath", confPath).
-				Fatal("Failed to read config file.")
-		}
-		defer func() { //nolint
-			if err := f.Close(); err != nil {
-				log.WithError(err).Error("Closing config file resulted in error.")
-			}
-		}()
-		r = f
 	}
 
-	raw, err := ioutil.ReadAll(r)
-	if err != nil {
-		log.WithError(err).Fatal("Failed to read in config.")
-	}
-
-	var confmap map[string]interface{}
-	//	var y map[string]interface{}
 	var dmsgHTTP bool
 	var hypervisor bool
-	if err := json.Unmarshal(raw, &confmap); err != nil {
-		log.WithError(err).Fatal("failed to unmarshal json config.")
-	}
-	dmsghttpconf := confmap["dmsg"].(map[string]interface{})
-	if dmsghttpconf["servers"] != nil {
+	if v.GetStringSlice("dmsg.servers") != nil {
 		dmsgHTTP = true
 	}
-	if confmap["hypervisor"] != nil {
+	if v.GetStringSlice("hypervisor") != nil {
 		hypervisor = true
 	}
 	//get secret key
 	cc := new(visorconfig.Common)
-	if err := json.Unmarshal(raw, cc); err != nil {
-		log.WithError(err).Fatal("failed to obtain config version.")
+	err := viper.UnmarshalKey("sk", &cc)
+	if err != nil {
+		log.WithError(err).Fatal("Failed to unmarshal secret key.")
 	}
 	sk := &cc.SK
 	// Generate config.
@@ -342,9 +317,9 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 		log.WithError(err).Fatal("Failed to create config.")
 	}
 
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	if err := dec.Decode(&conf); err != nil {
-		log.WithError(err).Fatal("Failed to decode config.")
+	err = viper.Unmarshal(&conf)
+	if err != nil {
+		log.WithError(err).Fatal("Failed to unmarshal config.")
 	}
 
 	if hypervisorUI {

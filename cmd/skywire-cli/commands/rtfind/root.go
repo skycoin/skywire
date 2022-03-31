@@ -9,7 +9,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
+	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -20,7 +20,7 @@ var frMinHops, frMaxHops uint16
 var timeout time.Duration
 
 func init() {
-	RootCmd.Flags().StringVarP(&frAddr, "addr", "a", skyenv.DefaultRouteFinderAddr, "route finder service address")
+	RootCmd.Flags().StringVarP(&frAddr, "addr", "a", utilenv.RouteFinderAddr, "route finder service address")
 	RootCmd.Flags().Uint16VarP(&frMinHops, "min-hops", "n", 1, "minimum hops")
 	RootCmd.Flags().Uint16VarP(&frMaxHops, "max-hops", "x", 1000, "maximum hops")
 	RootCmd.Flags().DurationVarP(&timeout, "timeout", "t", 10*time.Second, "request timeout")
