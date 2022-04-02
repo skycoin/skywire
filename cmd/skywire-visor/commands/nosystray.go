@@ -13,8 +13,8 @@ func extraFlags() {
 
 }
 
-func runApp() {
-	runVisor()
+func runApp(args []string) {
+	runVisor(args)
 }
 
 // setStopFunction sets the stop function

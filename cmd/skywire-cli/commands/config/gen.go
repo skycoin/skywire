@@ -67,7 +67,7 @@ func init() {
 	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", skyenv.OS, "(linux / macos / windows) paths")
 	genConfigCmd.Flags().BoolVarP(&stdout, "stdout", "n", false, "write config to stdout")
 	genConfigCmd.Flags().StringVarP(&output, "out", "o", "", "output config default:"+skyenv.ConfigName)
-	genConfigCmd.Flags().BoolVarP(&pkgEnv, "package", "p", false, "use paths for package "+skyenv.SkywirePath())
+	genConfigCmd.Flags().BoolVarP(&pkgEnv, "package", "p", false, "use paths for package "+skyenv.SkywirePath)
 	genConfigCmd.Flags().BoolVarP(&publicRPC, "publicrpc", "q", false, "allow rpc requests from LAN")
 	genConfigCmd.Flags().BoolVarP(&regen, "regen", "r", false, "re-generate existing config & retain keys")
 	genConfigCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
@@ -100,8 +100,9 @@ var genConfigCmd = &cobra.Command{
 		}
 		//set default output filename
 		if output == "" {
-			output = skyenv.ConfigName
 			outunset = true
+		} else {
+			skyenv.ConfigName = output
 		}
 		if output == visorconfig.StdoutName {
 			stdout = true
@@ -113,22 +114,39 @@ var genConfigCmd = &cobra.Command{
 			logger.Fatal("Use of mutually exclusive flags: -f --force cannot override -r --regen")
 		}
 		var err error
+		//hide defeats the purpose of stdout.
 		if (stdout) && (hide) {
 			logger.Fatal("Use of mutually exclusive flags: -w --hide and -n --stdout")
 		}
+		if dmsgHTTP {
+			if pkgEnv {
+				skyenv.DMSGHTTPPath = skyenv.DmsghttpPath
+			}
+			if _, err := os.Stat(skyenv.DMSGHTTPPath); err == nil {
+				if !stdout {
+					logger.Info("Found Dmsghttp config: ", skyenv.DMSGHTTPPath)
+				}
+			} else {
+				logger.Fatal("Dmsghttp config not found at: ", skyenv.DMSGHTTPPath)
+			}
+		}
 		if (print == "") && !stdout {
-			if output, err = filepath.Abs(output); err != nil {
+			if skyenv.ConfigName, err = filepath.Abs(skyenv.ConfigName); err != nil {
 				logger.WithError(err).Fatal("Invalid output provided.")
 			}
 			if force {
-				err := os.Remove(output)
-				if err != nil {
-					logger.WithError(err).Fatal("Could not remove file")
+				if _, err := os.Stat(skyenv.ConfigName); err == nil {
+					logger.Info("Ignoring -f --force flag, config not found.")
+				} else {
+					err := os.Remove(skyenv.ConfigName)
+					if err != nil {
+						logger.WithError(err).Warn("Could not remove file")
+					}
 				}
 			}
 			if !regen {
 				//check if the config exists
-				if _, err := os.Stat(output); err == nil {
+				if _, err := os.Stat(skyenv.ConfigName); err == nil {
 					//error config exists !regen
 					logger.Fatal("Config file already exists. Specify the '-r --regen' flag to regenerate.")
 				}
@@ -149,6 +167,7 @@ var genConfigCmd = &cobra.Command{
 		//fetch the service endpoints
 		services = visorconfig.Fetch(mLog, serviceConfURL, stdout)
 
+		// skywire-cli config gen -ip || skywire-cli config gen -p
 		if !stdout && outunset && pkgEnv && (selectedOS == "linux") {
 			if hypervisor {
 				//default config hypervisor
@@ -156,13 +175,14 @@ var genConfigCmd = &cobra.Command{
 			} else {
 				configName = "skywire-visor.json"
 			}
-			output = filepath.Join(skyenv.SkywirePath(), configName)
+			skyenv.ConfigName = configName
+			output = filepath.Join(skyenv.SkywirePath, skyenv.ConfigName)
 		}
 
 		// Read in old config and obtain old secret key or generate a new random secret key
 		var sk cipher.SecKey
 		if !stdout {
-			if oldConf, err := visorconfig.ReadConfig(output); err != nil {
+			if oldConf, err := visorconfig.ReadFile(skyenv.ConfigName); err != nil {
 				_, sk = cipher.GenerateKeyPair()
 			} else {
 				sk = oldConf.SK
@@ -172,16 +192,17 @@ var genConfigCmd = &cobra.Command{
 		if bestProtocol && netutil.LocalProtocol() {
 			dmsgHTTP = true
 		}
+
 		// Read in old config (if any) and obtain old hypervisors.
 		if retainHypervisors {
-			if oldConf, err := visorconfig.ReadConfig(output); err != nil {
+			if oldConf, err := visorconfig.ReadFile(skyenv.ConfigName); err != nil {
 				for _, j := range oldConf.Hypervisors {
 					hypervisorPKs = hypervisorPKs + "," + fmt.Sprintf("\t%s\n", j)
 				}
 			}
 		}
 		//create the conf
-		conf, err := visorconfig.MakeDefaultConfig(mLog, output, &sk, pkgEnv, testEnv, dmsgHTTP, hypervisor, hypervisorPKs, services)
+		conf, err := visorconfig.MakeDefaultConfig(mLog, &sk, pkgEnv, testEnv, dmsgHTTP, hypervisor, hypervisorPKs, services)
 		if err != nil {
 			logger.WithError(err).Fatal("Failed to create config.")
 		}
@@ -236,7 +257,7 @@ var genConfigCmd = &cobra.Command{
 		//don't write file with stdout
 		if !stdout {
 			// Save config to file.
-			if err := conf.Flush(); err != nil {
+			if err := conf.Flush( skyenv.ConfigName); err != nil {
 				logger.WithError(err).Fatal("Failed to flush config to file.")
 			}
 		}
@@ -253,10 +274,10 @@ var genConfigCmd = &cobra.Command{
 		}
 		//hide the printing of the config to the terminal
 		if hide {
-			logger.Infof("Updated file '%s'", output)
+			logger.Infof("Updated file '%s'\n", skyenv.ConfigName)
 			os.Exit(0)
 		}
 		//default behavior
-		logger.Infof("Updated file '%s' to: %s", output, j)
+		logger.Infof("Updated file '%s' to:\n'%s'\n", skyenv.ConfigName, j)
 	},
 }

@@ -32,7 +32,7 @@ var pkCmd = &cobra.Command{
 			path = visorconfig.Pkgpath
 		}
 		if path != "" {
-			conf, err := visorconfig.ReadConfig(path)
+			conf, err := visorconfig.ReadFile(path)
 			if err != nil {
 				logger.Fatal("Failed to read config:", err)
 			}
@@ -56,7 +56,7 @@ var hvpkCmd = &cobra.Command{
 			path = visorconfig.Pkgpath
 		}
 		if path != "" {
-			conf, err := visorconfig.ReadConfig(path)
+			conf, err := visorconfig.ReadFile(path)
 			if err != nil {
 				logger.Fatal("Failed to read config:", err)
 			}
