@@ -7,7 +7,6 @@ package skyenv
 const OS = "mac" //nolint
 
 // SkywirePath is the path to the installation folder.
-//TODO implement this similarly for macOS
 // skywireApplicationPath = "/Applications/Skywire.app"
 // SkywirePath is the path to the installation folder
 var SkywirePath = "/Library/Application Support/Skywire"
@@ -21,8 +20,9 @@ var Skywirejson = "skywire.json"
 // Skywirevisorjson is the visor config
 var Skywirevisorjson = "skywire-visor.json"
 
-/*
-// PackageConfig contains specific installation paths
+//TODO implement this similarly for macOS
+
+// PackageConfig contains installation paths (for mac)
 func PackageConfig() PkgConfig {
 	var pkgconfig PkgConfig
 	pkgconfig.Launcher.BinPath = "/opt/skywire/apps"
@@ -31,4 +31,3 @@ func PackageConfig() PkgConfig {
 	pkgconfig.Hypervisor.EnableAuth = true
 	return pkgconfig
 }
-*/
