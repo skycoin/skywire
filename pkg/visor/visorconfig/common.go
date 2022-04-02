@@ -26,7 +26,7 @@ var (
 // alongside logging and flushing fields.
 type Common struct {
 	//path string
-	log  *logging.MasterLogger
+	log *logging.MasterLogger
 
 	Version string        `json:"version"`
 	SK      cipher.SecKey `json:"sk,omitempty"`

@@ -19,6 +19,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
+
 var dmsgHTTPServersList *DmsgHTTPServers
 
 // MakeBaseConfig returns a visor config with 'enforced' fields only.
@@ -35,7 +36,9 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		}
 	}
 	conf := new(V1)
-	conf.Common = common
+	if common != nil {
+		conf.Common = common
+	}
 	conf.Dmsg = &dmsgc.DmsgConfig{
 		Discovery:     services.DmsgDiscovery, //utilenv.DmsgDiscAddr,
 		SessionsCount: 1,
@@ -89,18 +92,17 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 				conf.UptimeTracker.Addr = dmsgHTTPServersList.Test.UptimeTracker
 				conf.Routing.RouteFinder = dmsgHTTPServersList.Test.RouteFinder
 				conf.Launcher.ServiceDisc = dmsgHTTPServersList.Test.ServiceDiscovery
-				} else {
-					conf.Dmsg.Servers = dmsgHTTPServersList.Prod.DMSGServers
-					conf.Dmsg.Discovery = dmsgHTTPServersList.Prod.DMSGDiscovery
-					conf.Transport.AddressResolver = dmsgHTTPServersList.Prod.AddressResolver
-					conf.Transport.Discovery = dmsgHTTPServersList.Prod.TransportDiscovery
-					conf.UptimeTracker.Addr = dmsgHTTPServersList.Prod.UptimeTracker
-					conf.Routing.RouteFinder = dmsgHTTPServersList.Prod.RouteFinder
-					conf.Launcher.ServiceDisc = dmsgHTTPServersList.Prod.ServiceDiscovery
-				}
+			} else {
+				conf.Dmsg.Servers = dmsgHTTPServersList.Prod.DMSGServers
+				conf.Dmsg.Discovery = dmsgHTTPServersList.Prod.DMSGDiscovery
+				conf.Transport.AddressResolver = dmsgHTTPServersList.Prod.AddressResolver
+				conf.Transport.Discovery = dmsgHTTPServersList.Prod.TransportDiscovery
+				conf.UptimeTracker.Addr = dmsgHTTPServersList.Prod.UptimeTracker
+				conf.Routing.RouteFinder = dmsgHTTPServersList.Prod.RouteFinder
+				conf.Launcher.ServiceDisc = dmsgHTTPServersList.Prod.ServiceDiscovery
 			}
 		}
-
+	}
 
 	return conf
 }
@@ -114,7 +116,7 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, pkgEnv bool
 	if err != nil {
 		return nil, err
 	}
- 	if dmsgHTTP {
+	if dmsgHTTP {
 		serversListJSON, err := ioutil.ReadFile(skyenv.DMSGHTTPPath)
 		if err != nil {
 			log.WithError(err).Fatal("Failed to read dmsghttp-config.json file.")
@@ -124,7 +126,7 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, pkgEnv bool
 			log.WithError(err).Fatal("Error during parsing servers list")
 		}
 	}
-		// Actual config generation.
+	// Actual config generation.
 	conf := MakeBaseConfig(cc, testEnv, dmsgHTTP, services)
 
 	conf.Launcher.Apps = makeDefaultLauncherAppsConfig()
@@ -164,7 +166,6 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, pkgEnv bool
 			conf.Hypervisor.DBPath = pkgconfig.Hypervisor.DbPath
 		}
 	}
-
 
 	return conf, nil
 

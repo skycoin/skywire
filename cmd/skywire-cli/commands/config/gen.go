@@ -257,7 +257,7 @@ var genConfigCmd = &cobra.Command{
 		//don't write file with stdout
 		if !stdout {
 			// Save config to file.
-			if err := conf.Flush( skyenv.ConfigName); err != nil {
+			if err := conf.Flush(skyenv.ConfigName); err != nil {
 				logger.WithError(err).Fatal("Failed to flush config to file.")
 			}
 		}

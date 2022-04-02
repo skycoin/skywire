@@ -28,10 +28,10 @@ func Parse(log *logging.MasterLogger, raw []byte, options *ParseOptions) (*V1, e
 	if err := json.Unmarshal(raw, cc); err != nil {
 		return nil, fmt.Errorf("failed to obtain config version: %w", err)
 	}
-	return parseV1(log, cc, raw, options)
+	return parseV1(cc, raw, options)
 }
 
-func parseV1(log *logging.MasterLogger, cc *Common, raw []byte, options *ParseOptions) (*V1, error) {
+func parseV1(cc *Common, raw []byte, options *ParseOptions) (*V1, error) {
 	conf := MakeBaseConfig(cc, options.testEnv, options.dmsgHTTP, options.services)
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	if err := dec.Decode(&conf); err != nil {
@@ -53,10 +53,10 @@ func ensureAppDisc(conf *V1) *V1 {
 	return conf
 }
 
-// Options is passed to Parse
+// ParseOptions is passed to Parse
 type ParseOptions struct {
-	path string
-	testEnv bool
+	path     string
+	testEnv  bool
 	dmsgHTTP bool
 	services *Services
 }
