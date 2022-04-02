@@ -8,16 +8,17 @@ import (
 	"path/filepath"
 )
 
-const (
-	skywirePath = "/Library/Application Support/Skywire"
-	// skywireApplicationPath = "/Applications/Skywire.app"
-	OS = "mac" //nolint
-)
+const OS = "mac" //nolint
+
+// SkywirePath is the path to the installation folder.
+// skywireApplicationPath = "/Applications/Skywire.app"
+var SkywirePath = "/Library/Application Support/Skywire"
+
 
 // SkywirePath gets Skywire installation folder.
-func SkywirePath() string {
-	return filepath.Join(os.Getenv("HOME"), skywirePath)
-}
+//func SkywirePath() string {
+//	return filepath.Join(os.Getenv("HOME"), skywirePath)
+//}
 
 /*
 //TODO implement this similarly for macOS

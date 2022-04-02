@@ -1,16 +1,18 @@
 package commands
 
 import (
-	"bufio"
+//	"bufio"
 	"bytes"
 	"context"
 	"embed"
 	"fmt"
+	"io"
 	"io/fs"
 	"io/ioutil"
 	"net/http"
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
+	//"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -19,13 +21,13 @@ import (
 	"github.com/pkg/profile"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/restart"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/syslog"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
@@ -56,17 +58,21 @@ var (
 	completion           string
 	hiddenflags          []string
 	all                  bool
+	pkg	bool
+	pkg1	bool
 )
 
 func init() {
 	rootCmd.Flags().SortFlags = false
 
-	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use")
+	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use default: "+skyenv.ConfigName)
 	rootCmd.Flags().BoolVarP(&hypervisorUI, "hvui", "i", false, "run as hypervisor")
 	rootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
 	rootCmd.Flags().StringVarP(&remoteHypervisorPKs, "hv", "j", "", "add remote hypervisor PKs at runtime")
 	rootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors set in config file")
 	rootCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
+	rootCmd.Flags().BoolVar(&pkg, "ph", false, "use package config "+skyenv.SkywirePath+"/"+skyenv.Skywirejson)
+	rootCmd.Flags().BoolVar(&pkg1, "pv", false, "use package config "+skyenv.SkywirePath+"/"+skyenv.Skywirevisorjson)
 	rootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "p", "", "pprof mode: cpu, mem, mutex, block, trace, http")
 	rootCmd.Flags().StringVarP(&pprofAddr, "pprofaddr", "q", "localhost:6060", "pprof http port")
 	rootCmd.Flags().StringVarP(&tag, "tag", "t", "skywire", "logging tag")
@@ -74,7 +80,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&completion, "completion", "z", "", "[ bash | zsh | fish | powershell ]")
 	rootCmd.Flags().BoolVar(&all, "all", false, "show all flags")
 
-	hiddenflags = []string{"hv", "xhv", "stdin", "pprofmode", "pprofaddr", "tag", "syslog", "completion"}
+	hiddenflags = []string{"hv", "xhv", "stdin", "pprofmode", "pprofaddr", "tag", "syslog", "completion", "ph", "pv"}
 	for _, j := range hiddenflags {
 		rootCmd.Flags().MarkHidden(j) //nolint
 	}
@@ -90,7 +96,7 @@ var rootCmd = &cobra.Command{
 	└─┐├┴┐└┬┘││││├┬┘├┤
 	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘`,
 	PreRun: func(cmd *cobra.Command, _ []string) {
-		//unhide flags and print help menu
+		// --all unhide flags and print help menu
 		if all {
 			for _, j := range hiddenflags {
 				f := cmd.Flags().Lookup(j) //nolint
@@ -100,6 +106,7 @@ var rootCmd = &cobra.Command{
 			cmd.Help()                    //nolint
 			os.Exit(0)
 		}
+		// -z --completion
 		switch completion {
 		case "bash":
 			err := cmd.Root().GenBashCompletion(os.Stdout)
@@ -122,29 +129,64 @@ var rootCmd = &cobra.Command{
 				panic(err)
 			}
 		}
+		//error on unrecognized
 		if (completion != "bash") && (completion != "zsh") && (completion != "fish") && (completion != "") {
 			fmt.Println("Invalid completion specified:", completion)
 			os.Exit(1)
 		}
-		if completion != "" {
-			os.Exit(0)
+		if !stdin {
+		//multiple configs from flags
+		if (pkg && pkg1) || ((pkg || pkg1) && (confPath != "")) {
+			fmt.Println("Error: multiple configurations specified")
+			os.Exit(1)
 		}
+		//use package hypervisor config
+		if pkg {
+			confPath = skyenv.SkywirePath+"/"+skyenv.Skywirejson
+		}
+		//use package visor config
+		if pkg1 {
+			confPath = skyenv.SkywirePath+"/"+skyenv.Skywirevisorjson
+		}
+		//set skyenv.ConfigName to confPath
+		if confPath != "" {
+			skyenv.ConfigName = confPath
+		}
+		//set confPath if unset
+		if confPath == "" {
+			confPath = skyenv.ConfigName
+		}
+		//check for the config file
+		if strings.HasSuffix(skyenv.ConfigName, ".json") {
+			fmt.Println("specified config file:", skyenv.ConfigName)
+			} else {
+				fmt.Println("file does not have .json extension.")
+				fmt.Println("Checking for ", skyenv.ConfigName+".json")
+				skyenv.ConfigName = skyenv.ConfigName+".json"
+			}
+		if _, err := os.Stat(skyenv.ConfigName); err == nil {
+			fmt.Println("found config file:", skyenv.ConfigName)
+		} else {
+			fmt.Println("Invalid configuration specified:", skyenv.ConfigName)
+			os.Exit(1)
+		}
+	} else {
+		skyenv.ConfigName = visorconfig.StdinName
+	}
 	},
 
 	Run: func(_ *cobra.Command, args []string) {
-		runApp()
+		runApp(args)
 	},
 	Version: buildinfo.Version(),
 }
 
-func runVisor() {
+func runVisor(args []string) {
 	var ok bool
 	log := initLogger(tag, syslogAddr)
 	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
 	log.AddHook(hook)
-	if stdin {
-		confPath = visorconfig.StdinName
-	}
+
 	if _, err := buildinfo.Get().WriteTo(log.Out); err != nil {
 		log.WithError(err).Error("Failed to output build info.")
 	}
@@ -152,7 +194,7 @@ func runVisor() {
 	stopPProf := initPProf(log, tag, pprofMode, pprofAddr)
 	defer stopPProf()
 
-	conf := initConfig(log, confPath)
+	conf := initConfig(log, args)
 
 	if disableHypervisorPKs {
 		conf.Hypervisors = []cipher.PubKey{}
@@ -271,57 +313,36 @@ func initPProf(log *logging.MasterLogger, tag string, profMode string, profAddr 
 	return stop
 }
 
-func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 { //nolint
+func initConfig(mLog *logging.MasterLogger, args []string) *visorconfig.V1 { //nolint
 	log := mLog.PackageLogger("visor:config")
-	//var r io.Reader
-	v := viper.New()
-	v.SetConfigType("json")
 
-	if confPath == visorconfig.StdinName {
-		log.Info("Reading config from STDIN.")
-		scanner := bufio.NewScanner(os.Stdin)
-		if !scanner.Scan() {
-			log.WithError(scanner.Err()).Warn("Failed to read in config.")
-		}
-		if err := v.ReadConfig(bytes.NewBuffer(scanner.Bytes())); err != nil {
-			log.WithError(err).Fatal("Failed to read config from stdin.")
-		}
-	} else {
-		v.SetConfigName(confPath)
-		v.AddConfigPath(".")
-		if err := v.ReadInConfig(); err != nil {
-			if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-				log.WithError(err).Fatal("Failed to read in config.")
+		var r io.Reader
+
+		switch skyenv.ConfigName {
+		case visorconfig.StdinName:
+			log.Info("Reading config from STDIN.")
+			r = os.Stdin
+		case "":
+			fallthrough
+		default:
+			log.WithField("filepath", skyenv.ConfigName).Info("Reading config from file.")
+			    f, err := os.ReadFile(skyenv.ConfigName)
+			if err != nil {
+				log.WithError(err).
+					WithField("filepath", skyenv.ConfigName).
+					Fatal("Failed to read config file.")
 			}
+			r = bytes.NewReader(f)
 		}
-	}
 
-	var dmsgHTTP bool
-	var hypervisor bool
-	if v.GetStringSlice("dmsg.servers") != nil {
-		dmsgHTTP = true
+		conf, err := visorconfig.Reader(r)
+		if err != nil {
+			log.WithError(err).Fatal("Failed to read in config.")
+		}
+		fmt.Println(conf.Version)
+		if conf.Dmsg.Servers != nil {
+			fmt.Println("dmsg servers detected")
 	}
-	if v.GetStringSlice("hypervisor") != nil {
-		hypervisor = true
-	}
-	//get secret key
-	cc := new(visorconfig.Common)
-	err := viper.UnmarshalKey("sk", &cc)
-	if err != nil {
-		log.WithError(err).Fatal("Failed to unmarshal secret key.")
-	}
-	sk := &cc.SK
-	// Generate config.
-	conf, err := visorconfig.MakeDefaultConfig(mLog, confPath, sk, false, false, dmsgHTTP, hypervisor, "", nil)
-	if err != nil {
-		log.WithError(err).Fatal("Failed to create config.")
-	}
-
-	err = viper.Unmarshal(&conf)
-	if err != nil {
-		log.WithError(err).Fatal("Failed to unmarshal config.")
-	}
-
 	if hypervisorUI {
 		config := hypervisorconfig.GenerateWorkDirConfig(false)
 		conf.Hypervisor = &config
@@ -330,7 +351,6 @@ func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 { /
 	if conf.Hypervisor != nil {
 		conf.Hypervisor.UIAssets = uiAssets
 	}
-
 	return conf
 }
 

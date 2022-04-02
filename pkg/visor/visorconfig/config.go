@@ -19,6 +19,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
+var dmsgHTTPServersList *DmsgHTTPServers
 
 // MakeBaseConfig returns a visor config with 'enforced' fields only.
 // This is used as default values if no config is given, or for missing *required* fields.
@@ -29,7 +30,6 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		//fall back on skyev defaults
 		if !testEnv {
 			services = &Services{utilenv.DmsgDiscAddr, utilenv.TpDiscAddr, utilenv.AddressResolverAddr, utilenv.RouteFinderAddr, []cipher.PubKey{skyenv.MustPK(utilenv.SetupPK)}, utilenv.UptimeTrackerAddr, utilenv.ServiceDiscAddr, utilenv.GetStunServers()}
-			//services = &Services{utilenv.DmsgDiscAddr, utilenv.TpDiscAddr, utilenv.AddressResolverAddr, utilenv.RouteFinderAddr, []cipher.PubKey{skyenv.MustPK(utilenv.SetupPK)}, utilenv.UptimeTrackerAddr, utilenv.ServiceDiscAddr, utilenv.GetStunServers()}
 		} else {
 			services = &Services{utilenv.TestDmsgDiscAddr, utilenv.TestTpDiscAddr, utilenv.TestAddressResolverAddr, utilenv.TestRouteFinderAddr, []cipher.PubKey{skyenv.MustPK(utilenv.TestSetupPK)}, utilenv.TestUptimeTrackerAddr, utilenv.TestServiceDiscAddr, utilenv.GetStunServers()}
 		}
@@ -66,7 +66,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	conf.StunServers = services.StunServers //utilenv.GetStunServers()
 	conf.ShutdownTimeout = DefaultTimeout
 	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
-	conf.DMSGHTTPPath = skyenv.DMSGHTTPPath
+	//conf.DMSGHTTPPath = skyenv.DMSGHTTPPath
 
 	conf.Dmsgpty = &Dmsgpty{
 		DmsgPort: skyenv.DmsgPtyPort,
@@ -78,6 +78,29 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		ListeningAddress: skyenv.STCPAddr,
 		PKTable:          nil,
 	}
+	// Use dmsg urls for services and add dmsg-servers
+	if dmsgHTTP {
+		if dmsgHTTPServersList != nil {
+			if testEnv {
+				conf.Dmsg.Servers = dmsgHTTPServersList.Test.DMSGServers
+				conf.Dmsg.Discovery = dmsgHTTPServersList.Test.DMSGDiscovery
+				conf.Transport.AddressResolver = dmsgHTTPServersList.Test.AddressResolver
+				conf.Transport.Discovery = dmsgHTTPServersList.Test.TransportDiscovery
+				conf.UptimeTracker.Addr = dmsgHTTPServersList.Test.UptimeTracker
+				conf.Routing.RouteFinder = dmsgHTTPServersList.Test.RouteFinder
+				conf.Launcher.ServiceDisc = dmsgHTTPServersList.Test.ServiceDiscovery
+				} else {
+					conf.Dmsg.Servers = dmsgHTTPServersList.Prod.DMSGServers
+					conf.Dmsg.Discovery = dmsgHTTPServersList.Prod.DMSGDiscovery
+					conf.Transport.AddressResolver = dmsgHTTPServersList.Prod.AddressResolver
+					conf.Transport.Discovery = dmsgHTTPServersList.Prod.TransportDiscovery
+					conf.UptimeTracker.Addr = dmsgHTTPServersList.Prod.UptimeTracker
+					conf.Routing.RouteFinder = dmsgHTTPServersList.Prod.RouteFinder
+					conf.Launcher.ServiceDisc = dmsgHTTPServersList.Prod.ServiceDiscovery
+				}
+			}
+		}
+
 
 	return conf
 }
@@ -86,18 +109,22 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 // The config's 'sk' field will be nil if not specified.
 // Generated config will be saved to 'confPath'.
 // This function always returns the latest config version.
-func MakeDefaultConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, pkgEnv bool, testEnv bool, dmsgHTTP bool, hypervisor bool, hypervisorPKs string, services *Services) (*V1, error) {
-	version := Version()
-	cc, err := NewCommon(log, confPath, version, sk)
+func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, pkgEnv bool, testEnv bool, dmsgHTTP bool, hypervisor bool, hypervisorPKs string, services *Services) (*V1, error) {
+	cc, err := NewCommon(log, sk)
 	if err != nil {
 		return nil, err
 	}
-	// Enforce version and keys in 'cc'.
-	cc.Version = version
-	if err := cc.ensureKeys(); err != nil {
-		return nil, err
+ 	if dmsgHTTP {
+		serversListJSON, err := ioutil.ReadFile(skyenv.DMSGHTTPPath)
+		if err != nil {
+			log.WithError(err).Fatal("Failed to read dmsghttp-config.json file.")
+		}
+		err = json.Unmarshal(serversListJSON, &dmsgHTTPServersList)
+		if err != nil {
+			log.WithError(err).Fatal("Error during parsing servers list")
+		}
 	}
-	// Actual config generation.
+		// Actual config generation.
 	conf := MakeBaseConfig(cc, testEnv, dmsgHTTP, services)
 
 	conf.Launcher.Apps = makeDefaultLauncherAppsConfig()
@@ -131,42 +158,13 @@ func MakeDefaultConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 		pkgconfig := skyenv.PackageConfig()
 		conf.LocalPath = pkgconfig.LocalPath
 		conf.Launcher.BinPath = pkgconfig.Launcher.BinPath
-		conf.DMSGHTTPPath = pkgconfig.DmsghttpPath
+		//conf.DMSGHTTPPath = pkgconfig.DmsghttpPath
 		if conf.Hypervisor != nil {
 			conf.Hypervisor.EnableAuth = pkgconfig.Hypervisor.EnableAuth
 			conf.Hypervisor.DBPath = pkgconfig.Hypervisor.DbPath
 		}
 	}
 
-	// Use dmsg urls for services and add dmsg-servers
-	if dmsgHTTP {
-		var dmsgHTTPServersList DmsgHTTPServers
-		serversListJSON, err := ioutil.ReadFile(conf.DMSGHTTPPath)
-		if err != nil {
-			log.WithError(err).Fatal("Failed to read dmsghttp-config.json file.")
-		}
-		err = json.Unmarshal(serversListJSON, &dmsgHTTPServersList)
-		if err != nil {
-			log.WithError(err).Fatal("Error during parsing servers list")
-		}
-		if testEnv {
-			conf.Dmsg.Servers = dmsgHTTPServersList.Test.DMSGServers
-			conf.Dmsg.Discovery = dmsgHTTPServersList.Test.DMSGDiscovery
-			conf.Transport.AddressResolver = dmsgHTTPServersList.Test.AddressResolver
-			conf.Transport.Discovery = dmsgHTTPServersList.Test.TransportDiscovery
-			conf.UptimeTracker.Addr = dmsgHTTPServersList.Test.UptimeTracker
-			conf.Routing.RouteFinder = dmsgHTTPServersList.Test.RouteFinder
-			conf.Launcher.ServiceDisc = dmsgHTTPServersList.Test.ServiceDiscovery
-		} else {
-			conf.Dmsg.Servers = dmsgHTTPServersList.Prod.DMSGServers
-			conf.Dmsg.Discovery = dmsgHTTPServersList.Prod.DMSGDiscovery
-			conf.Transport.AddressResolver = dmsgHTTPServersList.Prod.AddressResolver
-			conf.Transport.Discovery = dmsgHTTPServersList.Prod.TransportDiscovery
-			conf.UptimeTracker.Addr = dmsgHTTPServersList.Prod.UptimeTracker
-			conf.Routing.RouteFinder = dmsgHTTPServersList.Prod.RouteFinder
-			conf.Launcher.ServiceDisc = dmsgHTTPServersList.Prod.ServiceDiscovery
-		}
-	}
 
 	return conf, nil
 
@@ -238,16 +236,4 @@ type DmsgHTTPServersData struct {
 	RouteFinder        string        `json:"route_finder"`
 	UptimeTracker      string        `json:"uptime_tracker"`
 	ServiceDiscovery   string        `json:"service_discovery"`
-}
-
-// Services are subdomains and IP addresses of the skywire services
-type Services struct {
-	DmsgDiscovery      string          `json:"dmsg_discovery"`
-	TransportDiscovery string          `json:"transport_discovery"`
-	AddressResolver    string          `json:"address_resolver"`
-	RouteFinder        string          `json:"route_finder"`
-	SetupNodes         []cipher.PubKey `json:"setup_nodes"`
-	UptimeTracker      string          `json:"uptime_tracker"`
-	ServiceDiscovery   string          `json:"service_discovery"`
-	StunServers        []string        `json:"stun_servers"`
 }

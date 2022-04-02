@@ -7,11 +7,10 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
+var	ConfigName = "skywire-config.json"
+// Dmsghttp config constants
+var DMSGHTTPPath = "dmsghttp-config.json"
 // Constants for skywire root directories.
-const (
-	ConfigName = "skywire-config.json"
-)
-
 // Dmsg port constants.
 // TODO(evanlinjin): Define these properly. These are currently random.
 const (
@@ -90,11 +89,6 @@ const (
 	LocalPath = "./local"
 )
 
-// Dmsghttp config constants
-const (
-	DMSGHTTPPath = "./dmsghttp-config.json"
-)
-
 // Default hypervisor constants
 const (
 	HypervisorDB      = ".skycoin/hypervisor/users.db"
@@ -116,7 +110,6 @@ type PkgConfig struct {
 		BinPath string `json:"bin_path"`
 	} `json:"launcher"`
 	LocalPath    string `json:"local_path"`
-	DmsghttpPath string `json:"dmsghttp_path"`
 	Hypervisor   struct {
 		DbPath     string `json:"db_path"`
 		EnableAuth bool   `json:"enable_auth"`
@@ -127,7 +120,7 @@ type PkgConfig struct {
 
 // DmsgPtyWhiteList gets dmsgpty whitelist path for installed Skywire.
 func DmsgPtyWhiteList() string {
-	return filepath.Join(SkywirePath(), "dmsgpty", "whitelist.json")
+	return filepath.Join(SkywirePath, "dmsgpty", "whitelist.json")
 }
 
 // MustPK unmarshals string PK to cipher.PubKey. It panics if unmarshaling fails.
