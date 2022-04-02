@@ -106,29 +106,50 @@ Usage:
   skywire-cli config gen [flags]
 
 Flags:
-  -b, --best-proto            determine best protocol (dmsg / direct) based on location
-  -c, --disable-auth          disable authentication for hypervisor UI.
-  -d, --dmsghttp              use dmsg connection to skywire services
-  -e, --enable-auth           enable auth on hypervisor UI.
-  -f, --disable-apps string   comma separated list of apps to disable
-  -i, --is-hv                 hypervisor configuration.
-  -j, --hvpks string          comma separated list of public keys to use as hypervisor
-  -k, --os string             use os-specific paths (linux / macos / windows) (default "linux")
-  -o, --output string         path of output config file. (default "skywire-config.json")
-  -p, --package               use paths for package (/opt/skywire)
-  -q, --public-rpc            allow rpc requests from LAN.
-  -r, --replace               rewrite existing config & retain keys.
-  -s, --sk cipher.SecKey      if unspecified, a random key pair will be generated.
-                               (default 0000000000000000000000000000000000000000000000000000000000000000)
-  -t, --testenv               use test deployment service.
-  -v, --serve-vpn             enable vpn server.
-  -x, --retain-hv             retain existing hypervisors with replace
-  -h, --help                  help for gen
+  -b, --bestproto      best protocol (dmsg | direct) based on location
+  -i, --ishv           local hypervisor configuration
+  -j, --hvpks string   list of public keys to use as hypervisor
+  -o, --out string     output config default:skywire-config.json
+  -p, --package        use paths for package /opt/skywire
+  -r, --regen          re-generate existing config & retain keys
+      --all            show all flags
+  -h, --help           help for gen
+
+$ skywire-cli config gen --all
+generate a config file
+
+Usage:
+  skywire-cli config gen [flags]
+
+Flags:
+  -a, --url string           services conf (default "conf.skywire.skycoin.com")
+  -b, --bestproto            best protocol (dmsg | direct) based on location
+  -c, --noauth               disable authentication for hypervisor UI
+  -d, --dmsghttp             use dmsg connection to skywire services
+  -e, --auth                 enable auth on hypervisor UI
+  -f, --force                remove pre-existing config
+  -g, --disableapps string   comma separated list of apps to disable
+  -i, --ishv                 local hypervisor configuration
+  -j, --hvpks string         list of public keys to use as hypervisor
+  -k, --os string            (linux / macos / windows) paths (default "linux")
+  -n, --stdout               write config to stdout
+  -o, --out string           output config default:skywire-config.json
+  -p, --package              use paths for package /opt/skywire
+  -q, --publicrpc            allow rpc requests from LAN
+  -r, --regen                re-generate existing config & retain keys
+  -s, --sk cipher.SecKey     a random key is generated if unspecified
+ (default 0000000000000000000000000000000000000000000000000000000000000000)
+  -t, --testenv              use test deployment conf.skywire.dev
+  -v, --servevpn             enable vpn server
+  -w, --hide                 dont print the config to the terminal
+  -x, --retainhv             retain existing hypervisors with regen
+      --print string         parse test ; read config from file & print
+  -h, --help                 help for gen
 ```
 
 ##### Example defaults
 
-The default visor config generation assumes the command is run from the root of the cloned repository
+The default visor config generation assumes the command is run from the root of the cloned repository.
 
 <details>
 
@@ -138,12 +159,13 @@ cd $GOPATH/src/github.com/skycoin/skywire && skywire-cli config gen
 
 ```
 $ cd $GOPATH/src/github.com/skycoin/skywire && skywire-cli config gen
-[2022-03-13T22:20:56-05:00] INFO [visor:config]: Flushing config to file. config_version="v1.1.1" filepath="/home/user/go/src/github.com/skycoin/skywire/skywire-config.json"
-[2021-06-24T08:58:56-05:00] INFO [skywire-cli]: Updated file '/home/user/go/src/github.com/skycoin/skywire/skywire-config.json' to:  
+[2022-04-02T18:19:57-05:00] INFO []: Fetched service endpoints from 'http://conf.skywire.skycoin.com'
+[2022-04-02T18:19:57-05:00] INFO [visor:config]: Flushing config to file. config_version="0.6.1" filepath="/home/user/go/src/github.com/skycoin/skywire/skywire-config.json"
+[2022-04-02T18:19:57-05:00] INFO [skywire-cli]: Updated file '/home/user/go/src/github.com/skycoin/skywire/skywire-config.json' to:
 {
-	"version": "v1.1.1",
-	"sk": "b8d0fa5298d4aa658e616f6411efad6fd1edf4246111c3f6181e550871aa9e4b",
-	"pk": "022acd91dba410f7b403af9b85ea5ecf20af3e69d307e065d0958a2bee5f969dc6",
+	"version": "0.6.1",
+	"sk": "1d9bdf39d1f0bafb0eef0c3c8189cfceb49f3819e4ec45b9018d6993856341f7",
+	"pk": "032268ff324790954145d3bdaa9eb936fa400bd7d12de78251d85d042f09e6aca7",
 	"dmsg": {
 		"discovery": "http://dmsgd.skywire.skycoin.com",
 		"sessions_count": 1,
@@ -216,23 +238,25 @@ $ cd $GOPATH/src/github.com/skycoin/skywire && skywire-cli config gen
 	"log_level": "info",
 	"local_path": "./local",
 	"stun_servers": [
-		"45.118.133.242:3478",
-		"192.53.173.68:3478",
-		"192.46.228.39:3478",
-		"192.53.113.106:3478",
-		"192.53.117.158:3478",
-		"192.53.114.142:3478",
-		"139.177.189.166:3478",
-		"192.46.227.227:3478"
+		"172.104.188.139:3478",
+		"172.104.59.235:3478",
+		"172.104.183.187:3478",
+		"139.162.54.63:3478",
+		"172.105.115.97:3478",
+		"172.104.188.39:3478",
+		"172.104.188.140:3478",
+		"172.104.40.88:3478"
 	],
 	"shutdown_timeout": "10s",
 	"restart_check_delay": "1s",
 	"is_public": false,
-	"dmsghttp_path": "./dmsghttp-config.json",
 	"persistent_transports": null
 }
+
 ```
 </details>
+
+##### Example hypervisor defaults
 
 The default configuration is for a visor only. To generate a configuration which provides the hypervisor web interface,
 the `-i` or `--is-hypervisor` flag should be specified.
@@ -245,10 +269,13 @@ skywire-cli config gen -i
 
 ```
 $ skywire-cli config gen -i
+[2022-04-02T18:21:40-05:00] INFO []: Fetched service endpoints from 'http://conf.skywire.skycoin.com'
+[2022-04-02T18:21:40-05:00] INFO [visor:config]: Flushing config to file. config_version="0.6.1" filepath="/home/user/go/src/github.com/skycoin/skywire/skywire-config.json"
+[2022-04-02T18:21:40-05:00] INFO [skywire-cli]: Updated file '/home/user/go/src/github.com/skycoin/skywire/skywire-config.json' to:
 {
-	"version": "v1.1.1",
-	"sk": "18446280e0c2f52b31e74b9000357098cd6fabf5ab7db5ecc1aad59d6064daf9",
-	"pk": "0381649f174fc04c5f28ea118a8e21f6baed84894aef8f590afc36e149c0178bf5",
+	"version": "0.6.1",
+	"sk": "83df03537d74760487bfd12e11e6af1dbd2617b95b0b0f6637ee46a3f30822d7",
+	"pk": "03761d143ec62d12e46802c111cbb59af276c05380453415720048fffaf1841971",
 	"dmsg": {
 		"discovery": "http://dmsgd.skywire.skycoin.com",
 		"sessions_count": 1,
@@ -321,26 +348,25 @@ $ skywire-cli config gen -i
 	"log_level": "info",
 	"local_path": "./local",
 	"stun_servers": [
-		"45.118.133.242:3478",
-		"192.53.173.68:3478",
-		"192.46.228.39:3478",
-		"192.53.113.106:3478",
-		"192.53.117.158:3478",
-		"192.53.114.142:3478",
-		"139.177.189.166:3478",
-		"192.46.227.227:3478"
+		"172.104.188.139:3478",
+		"172.104.59.235:3478",
+		"172.104.183.187:3478",
+		"139.162.54.63:3478",
+		"172.105.115.97:3478",
+		"172.104.188.39:3478",
+		"172.104.188.140:3478",
+		"172.104.40.88:3478"
 	],
 	"shutdown_timeout": "10s",
 	"restart_check_delay": "1s",
 	"is_public": false,
-	"dmsghttp_path": "./dmsghttp-config.json",
 	"persistent_transports": null,
 	"hypervisor": {
 		"db_path": "/home/user/go/src/github.com/skycoin/skywire/users.db",
 		"enable_auth": false,
 		"cookies": {
-			"hash_key": "825940e3d8b05d121fafce176787614065639f72d6a9b8bec7dec8e12891d8e044a607084aad53a07b1536e5503566fdd3c30f14612404f07e7972c63db9c53b",
-			"block_key": "f2c298106bf4f9841213bf74c5d7bf861f7b341c6e7769da0f6dc5ccc32a5780",
+			"hash_key": "07ce3017177de46cc7d80b91a328864e3bf67ffd9283da3f59960abd5aecce29edab80bc7b51576c81f03b23854997937744716132f575c4f18598e6f5e9b727",
+			"block_key": "614919a5c15de37f24fd6d01ad164b0fb724a052dd63cf469e116144ec2c1f0c",
 			"expires_duration": 43200000000000,
 			"path": "/",
 			"domain": ""
@@ -362,6 +388,186 @@ Note that it is possible to start the visor with the hypervisor interface explic
 skywire-visor -i
 ```
 
+##### Example dmsghttp defaults
+
+Using dmsghttp routes http traffic used for connecting to the skywire services through dmsg.
+
+The dmsghttp-config.json file must be present to generate a config with dmsghttp
+
+The `-b` or `--bestproto` flag will automatically determine if dmsghttp should be used based on region
+
+The `-d` or `--dmsghttp` flag creates the config with dmsghttp
+
+It is recommended to use the `-b` flag for config file generation.
+
+The example below uses `-d` to create a dmsghttp config
+
+<details>
+
+<summary>
+skywire-cli config gen -d
+</summary>
+
+```
+[2022-04-02T18:32:32-05:00] INFO [skywire-cli]: Found Dmsghttp config: dmsghttp-config.json
+[2022-04-02T18:32:32-05:00] INFO []: Fetched service endpoints from 'http://conf.skywire.skycoin.com'
+[2022-04-02T18:32:32-05:00] INFO [visor:config]: Flushing config to file. config_version="0.6.1" filepath="/home/d0mo/go/src/github.com/the-skycoin-project/skywire-1/skywire-config.json"
+[2022-04-02T18:32:32-05:00] INFO [skywire-cli]: Updated file '/home/d0mo/go/src/github.com/the-skycoin-project/skywire-1/skywire-config.json' to:
+{
+	"version": "0.6.1",
+	"sk": "85577beed6b46b67704c52d3acd7ceb14a8d758356dff23028def4e38b72822f",
+	"pk": "02f0cd75987be4c014d59c6aeb43095d8f68bde525e03eff63fa13e59721e397eb",
+	"dmsg": {
+		"discovery": "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80",
+		"sessions_count": 1,
+		"servers": [
+			{
+				"version": "",
+				"sequence": 0,
+				"timestamp": 0,
+				"static": "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd",
+				"server": {
+					"address": "dmsg.server02a2d4c3.skywire.skycoin.com:30081",
+					"availableSessions": 0
+				}
+			},
+			{
+				"version": "",
+				"sequence": 0,
+				"timestamp": 0,
+				"static": "03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4",
+				"server": {
+					"address": "dmsg.server03717576.skywire.skycoin.com:30082",
+					"availableSessions": 0
+				}
+			},
+			{
+				"version": "",
+				"sequence": 0,
+				"timestamp": 0,
+				"static": "0228af3fd99c8d86a882495c8e0202bdd4da78c69e013065d8634286dd4a0ac098",
+				"server": {
+					"address": "45.118.133.242:30084",
+					"availableSessions": 0
+				}
+			},
+			{
+				"version": "",
+				"sequence": 0,
+				"timestamp": 0,
+				"static": "03d5b55d1133b26485c664cf8b95cff6746d1e321c34e48c9fed293eff0d6d49e5",
+				"server": {
+					"address": "dmsg.server03d5b55d.skywire.skycoin.com:30083",
+					"availableSessions": 0
+				}
+			},
+			{
+				"version": "",
+				"sequence": 0,
+				"timestamp": 0,
+				"static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+				"server": {
+					"address": "192.53.114.142:30085",
+					"availableSessions": 0
+				}
+			},
+			{
+				"version": "",
+				"sequence": 0,
+				"timestamp": 0,
+				"static": "02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0",
+				"server": {
+					"address": "dmsg.server02a4.skywire.skycoin.com:30089",
+					"availableSessions": 0
+				}
+			}
+		]
+	},
+	"dmsgpty": {
+		"dmsg_port": 22,
+		"cli_network": "unix",
+		"cli_address": "/tmp/dmsgpty.sock"
+	},
+	"skywire-tcp": {
+		"pk_table": null,
+		"listening_address": ":7777"
+	},
+	"transport": {
+		"discovery": "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80",
+		"address_resolver": "dmsg://03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80",
+		"public_autoconnect": true,
+		"transport_setup_nodes": null
+	},
+	"routing": {
+		"setup_nodes": [
+			"0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557"
+		],
+		"route_finder": "dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80",
+		"route_finder_timeout": "10s",
+		"min_hops": 0
+	},
+	"uptime_tracker": {
+		"addr": "dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80"
+	},
+	"launcher": {
+		"service_discovery": "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80",
+		"apps": [
+			{
+				"name": "vpn-client",
+				"auto_start": false,
+				"port": 43
+			},
+			{
+				"name": "skychat",
+				"args": [
+					"-addr",
+					":8001"
+				],
+				"auto_start": true,
+				"port": 1
+			},
+			{
+				"name": "skysocks",
+				"auto_start": true,
+				"port": 3
+			},
+			{
+				"name": "skysocks-client",
+				"auto_start": false,
+				"port": 13
+			},
+			{
+				"name": "vpn-server",
+				"auto_start": false,
+				"port": 44
+			}
+		],
+		"server_addr": "localhost:5505",
+		"bin_path": "./apps"
+	},
+	"hypervisors": [],
+	"cli_addr": "localhost:3435",
+	"log_level": "info",
+	"local_path": "./local",
+	"stun_servers": [
+		"172.104.188.139:3478",
+		"172.104.59.235:3478",
+		"172.104.183.187:3478",
+		"139.162.54.63:3478",
+		"172.105.115.97:3478",
+		"172.104.188.39:3478",
+		"172.104.188.140:3478",
+		"172.104.40.88:3478"
+	],
+	"shutdown_timeout": "10s",
+	"restart_check_delay": "1s",
+	"is_public": false,
+	"persistent_transports": null
+}
+```
+</details>
+
+
 ##### Example package based installation defaults
 
 This assumes the skywire installation is at `/opt/skywire` with binaries and apps in their own subdirectories.
@@ -369,15 +575,19 @@ This assumes the skywire installation is at `/opt/skywire` with binaries and app
 <details>
 
 <summary>
-sudo skywire-cli config gen -bipr --enable-auth
+sudo skywire-cli config gen -bipr
 </summary>
 
 ```
-$ sudo skywire-cli config gen -bipr --enable-auth
+$ sudo skywire-cli config gen -bipr
+[sudo] password for user:
+[2022-04-02T18:39:43-05:00] INFO []: Fetched service endpoints from 'http://conf.skywire.skycoin.com'
+[2022-04-02T18:39:43-05:00] INFO [visor:config]: Flushing config to file. config_version="0.6.1" filepath="/opt/skywire/skywire.json"
+[2022-04-02T18:39:43-05:00] INFO [skywire-cli]: Updated file '/opt/skywire/skywire.json' to:
 {
-	"version": "v1.1.1",
-	"sk": "25c0376a6701cccbe640533586664f1d5d5fbaf5bb28017801296b301a55195a",
-	"pk": "03151a6d3c41832a4da0b8b59fe47c9adada4785091a0003012fd720ec9a4ec5c4",
+	"version": "0.6.1",
+	"sk": "077017551b6a993b06d684426436794d661347191570c7ea4ed1fe25bfac5269",
+	"pk": "02afbeaa4f02251091eccd7d66e300ca8e3a406020d969ea20089a49d4e6fe2fa3",
 	"dmsg": {
 		"discovery": "http://dmsgd.skywire.skycoin.com",
 		"sessions_count": 1,
@@ -450,26 +660,25 @@ $ sudo skywire-cli config gen -bipr --enable-auth
 	"log_level": "info",
 	"local_path": "/opt/skywire/local",
 	"stun_servers": [
-		"45.118.133.242:3478",
-		"192.53.173.68:3478",
-		"192.46.228.39:3478",
-		"192.53.113.106:3478",
-		"192.53.117.158:3478",
-		"192.53.114.142:3478",
-		"139.177.189.166:3478",
-		"192.46.227.227:3478"
+		"172.104.188.139:3478",
+		"172.104.59.235:3478",
+		"172.104.183.187:3478",
+		"139.162.54.63:3478",
+		"172.105.115.97:3478",
+		"172.104.188.39:3478",
+		"172.104.188.140:3478",
+		"172.104.40.88:3478"
 	],
 	"shutdown_timeout": "10s",
 	"restart_check_delay": "1s",
 	"is_public": false,
-	"dmsghttp_path": "/opt/skywire/dmsghttp-config.json",
 	"persistent_transports": null,
 	"hypervisor": {
 		"db_path": "/opt/skywire/users.db",
 		"enable_auth": true,
 		"cookies": {
-			"hash_key": "367232d15908204a81a69428cbba4b56af31ff977966f828b327efd5f01c61937db4893d3e1f5cda183524b576cf66274e796b02744863d0b13edabd0ebdace8",
-			"block_key": "6a6ef06af73306a2af38184dba9d75d8cb5c24ba97cf98b58543d7bbec5e21ed",
+			"hash_key": "8c180bfdeaaa39452858135d1abc2194d80af834bd2bed32d765e6190471e738f2fe0a44cdeffdf03b6414a58eae8ed3c2d3f8c97e2b00929dd50fa5b4f253f6",
+			"block_key": "f88973dc329d770701b9cee3e9fc3a45c76099e3f1f6c83642b0a0d1f8f170ff",
 			"expires_duration": 43200000000000,
 			"path": "/",
 			"domain": ""
@@ -477,9 +686,11 @@ $ sudo skywire-cli config gen -bipr --enable-auth
 		"dmsg_port": 46,
 		"http_addr": ":8000",
 		"enable_tls": false,
-		"tls_cert_file": "/opt/skywire/ssl/cert.pem",
-		"tls_key_file": "/opt/skywire/ssl/key.pem"
+		"tls_cert_file": "./ssl/cert.pem",
+		"tls_key_file": "./ssl/key.pem"
 	}
+}
+
 ```
 </details>
 
@@ -489,7 +700,7 @@ The configuration is written (or rewritten)
 
 The typical arrangement uses a remote hypervisor if a local instance is not started.
 
-The hypervisor public key can be determined by running the following command on the designated hypervisor
+The hypervisor public key can be determined by running the following command on the running hypervisor
 
 ```
 $ skywire-cli visor pk
@@ -507,7 +718,6 @@ the above command output into the following command
 ```
 
 The configuration is regenerated
-
 
 ##### Example running with systemd service integration
 
@@ -534,27 +744,27 @@ update a config file
 
 Usage:
   skywire-cli config update [flags]
+  skywire-cli config update [command]
+
+Available Commands:
+  hv           update hypervisor config
+  sc           update skysocks-client config
+  ss           update skysocks-server config
+  vpnc         update vpn-client config
+  vpns         update vpn-server config
 
 Flags:
-      --add-hypervisor-pks string           public keys of hypervisors that should be added to this visor
-      --add-skysocks-client-server string   add skysocks server address to skysock-client
-      --add-skysocks-passcode string        add passcode to skysocks server
-      --add-vpn-client-passcode string      add passcode of server if needed
-      --add-vpn-client-server string        add server address to vpn-client
-      --add-vpn-server-passcode string      add passcode to vpn-server
-  -e, --environment string                  desired environment (values production or testing) (default "production")
-  -h, --help                                help for update
-  -i, --input string                        path of input config file. (default "skywire-config.json")
-  -o, --output string                       path of output config file. (default "skywire-config.json")
-      --reset-hypervisor-pks                resets hypervisor configuration
-      --reset-skysocks                      reset skysocks configuration
-      --reset-skysocks-client               reset skysocks-client configuration
-      --reset-vpn-client                    reset vpn-client configurations
-      --reset-vpn-server                    reset vpn-server configurations
-      --set-minhop int                      change min hops value (default -1)
-      --set-public-autoconnect string       change public autoconnect configuration
-      --vpn-client-killswitch string        change killswitch status of vpn-client
-      --vpn-server-secure string            change secure mode status of vpn-server
+  -a, --endpoints                update server endpoints
+  -b, --url string               service config URL: conf.skywire.skycoin.com
+  -t, --testenv                  use test deployment: conf.skywire.dev
+      --public-autoconn string   change public autoconnect configuration
+      --set-minhop int           change min hops value (default -1)
+  -i, --input string             path of input config file.
+  -o, --output string            config file to output
+  -p, --pkg                      read from /opt/skywire/skywire.json
+  -h, --help                     help for update
+
+Use "skywire-cli config update [command] --help" for more information about a command.
 ```
 
 ##### Example
@@ -568,12 +778,11 @@ skywire-cli config update
 
 ```
 $ skywire-cli config update
-[2022-03-13T22:31:24-05:00] INFO [visor:config]: Flushing config to file. config_version="v1.1.1" filepath="skywire-config.json"
-[2022-03-13T22:31:24-05:00] INFO [visor:config]: Flushing config to file. config_version="v1.1.1" filepath="skywire-config.json"
-[2022-03-13T22:31:24-05:00] INFO [skywire-cli]: Updated file '/home/user/go/src/github.com/skycoin/skywire/skywire-config.json' to: {
-	"version": "v1.1.1",
-	"sk": "9642958732a9c21cbebeb65cced9689856cdacea84d0e72895bb9c76c2fca0b2",
-	"pk": "024c4b7c4f3d2f51128a08d7fbd526be9427b2cfbc486da0340b57e3b86e36bdf4",
+[2022-04-02T18:47:15-05:00] INFO [visor:config]: Flushing config to file. config_version="0.6.1" filepath="/home/user/go/src/github.com/skycoin/skywire/skywire-config.json"
+[2022-04-02T18:47:15-05:00] INFO [skywire-cli]: Updated file '/home/user/go/src/github.com/skycoin/skywire/skywire-config.json' to: {
+	"version": "0.6.1",
+	"sk": "745badae7d125b90e3fd840b1d03d8a73565a3e0e976db6169b2d9368af86029",
+	"pk": "037b000c6262694c0d2b5d64480c1d82a5a1597a80deab881443742359601bc6e6",
 	"dmsg": {
 		"discovery": "http://dmsgd.skywire.skycoin.com",
 		"sessions_count": 1,
@@ -646,28 +855,22 @@ $ skywire-cli config update
 	"log_level": "info",
 	"local_path": "./local",
 	"stun_servers": [
-		"45.118.133.242:3478",
-		"192.53.173.68:3478",
-		"192.46.228.39:3478",
-		"192.53.113.106:3478",
-		"192.53.117.158:3478",
-		"192.53.114.142:3478",
-		"139.177.189.166:3478",
-		"192.46.227.227:3478"
+		"172.104.188.139:3478",
+		"172.104.59.235:3478",
+		"172.104.183.187:3478",
+		"139.162.54.63:3478",
+		"172.105.115.97:3478",
+		"172.104.188.39:3478",
+		"172.104.188.140:3478",
+		"172.104.40.88:3478"
 	],
 	"shutdown_timeout": "10s",
 	"restart_check_delay": "1s",
 	"is_public": false,
-	"dmsghttp_path": "./dmsghttp-config.json",
 	"persistent_transports": null
 }
 ```
 </details>
-
-
-
-
-
 
 ### visor usage
 
@@ -679,16 +882,16 @@ Usage:
   skywire-cli visor [command]
 
 Available Commands:
-  exec        execute a command
-  pk          public key of the visor
-  hv          show hypervisor(s)
-  info        summary of visor info
-  version     version and build info
-  app         app settings
-  route       view and set rules
-  tp          view and set transports
-  vpn         vpn interface
-  update      update the local visor
+  exec         execute a command
+  pk           Public key of the visor
+  hvpk         Public key of hypervisor this visor is using
+  info         summary of visor info
+  version      version and build info
+  app          app settings
+  route        view and set rules
+  tp           view and set transports
+  vpn          vpn interface
+  update       update the local visor
 
 Flags:
   -h, --help         help for visor
@@ -773,7 +976,7 @@ $ skywire-cli visor pk
 show hypervisor(s)
 
 ```
-$ skywire-cli visor hv
+$ skywire-cli visor hvpk
 ```
 
 ```
@@ -784,7 +987,7 @@ Flags:
 ##### Example
 
 ```
-$ skywire-cli visor hv
+$ skywire-cli visor hvpk
 [0359f02198933550ad5b41a21470a0bbe0f73c0eb6e93d7d279133a0d5bffc645c]
 ```
 
