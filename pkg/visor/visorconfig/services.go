@@ -9,8 +9,8 @@ import (
 
 	"github.com/skycoin/skycoin/src/util/logging"
 
-	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 )
 
 var (
@@ -59,8 +59,8 @@ func Fetch(mLog *logging.MasterLogger, serviceConfURL string, stdout bool) *Serv
 			mLog.WithError(err).Fatal("Failed to unmarshal json response\n")
 		}
 		if !stdout {
-		mLog.Infof("Fetched service endpoints from '%s'", serviceConf)
-	}
+			mLog.Infof("Fetched service endpoints from '%s'", serviceConf)
+		}
 	}
 	return services
 }

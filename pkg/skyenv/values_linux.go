@@ -3,20 +3,23 @@
 
 package skyenv
 
+//OS detection at runtime
 const OS = "linux"
 
 // SkywirePath is the path to the installation folder for the linux packages.
-var	SkywirePath = "/opt/skywire"
-// Skywirejson is the Hypervisor config
-//created by the autoconfig script in the linux packages
-//also referenced in the skywire systemd service
-var Skywirejson = "skywire.json"
-// Skywirevisorjson is the visor config
-//created by the autoconfig script in the linux packages
-//also referenced in the skywire-visor systemd service
-var Skywirevisorjson = "skywire-visor.json"
+var SkywirePath = "/opt/skywire"
+
+// DmsghttpPath is the path to dmsghttp-config.json in the packages
 var DmsghttpPath = "/opt/skywire/dmsghttp-config.json"
 
+//The following files are created by the autoconfig script in the linux packages
+//also referenced in the skywire systemd service
+
+// Skywirejson is the Hypervisor config
+var Skywirejson = "skywire.json"
+
+// Skywirevisorjson is the visor config
+var Skywirevisorjson = "skywire-visor.json"
 
 // PackageConfig config defaults for the linux packages
 func PackageConfig() PkgConfig {
