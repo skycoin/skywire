@@ -26,7 +26,7 @@ func init() {
 
 var pkCmd = &cobra.Command{
 	Use:   "pk",
-	Short: "Obtains the public key of the visor",
+	Short: "Public key of the visor",
 	Run: func(_ *cobra.Command, _ []string) {
 		if pkg {
 			path = visorconfig.Pkgpath
@@ -50,7 +50,7 @@ var pkCmd = &cobra.Command{
 
 var hvpkCmd = &cobra.Command{
 	Use:   "hvpk",
-	Short: "Obtains the public key of the visor",
+	Short: "Public key of hypervisor this visor is using",
 	Run: func(_ *cobra.Command, _ []string) {
 		if pkg {
 			path = visorconfig.Pkgpath

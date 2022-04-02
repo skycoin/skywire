@@ -136,12 +136,12 @@ var genConfigCmd = &cobra.Command{
 			}
 			if force {
 				if _, err := os.Stat(skyenv.ConfigName); err == nil {
-					logger.Info("Ignoring -f --force flag, config not found.")
-				} else {
 					err := os.Remove(skyenv.ConfigName)
 					if err != nil {
 						logger.WithError(err).Warn("Could not remove file")
 					}
+				} else {
+					logger.Info("Ignoring -f --force flag, config not found.")
 				}
 			}
 			if !regen {
@@ -175,8 +175,7 @@ var genConfigCmd = &cobra.Command{
 			} else {
 				configName = "skywire-visor.json"
 			}
-			skyenv.ConfigName = configName
-			output = filepath.Join(skyenv.SkywirePath, skyenv.ConfigName)
+			skyenv.ConfigName = skyenv.SkywirePath+"/"+configName
 		}
 
 		// Read in old config and obtain old secret key or generate a new random secret key
@@ -278,6 +277,6 @@ var genConfigCmd = &cobra.Command{
 			os.Exit(0)
 		}
 		//default behavior
-		logger.Infof("Updated file '%s' to:\n'%s'\n", skyenv.ConfigName, j)
+		logger.Infof("Updated file '%s' to:\n%s\n", skyenv.ConfigName, j)
 	},
 }
