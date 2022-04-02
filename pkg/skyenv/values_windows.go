@@ -8,7 +8,6 @@ const OS = "win" // nolint
 
 // SkywirePath is the path to the installation folder.
 // TODO (darkrengarius): change path
-//TODO implement this similarly for windows
 
 // SkywirePath is the path to the installation folder
 var SkywirePath = ""
@@ -22,8 +21,9 @@ var Skywirejson = "skywire.json"
 // Skywirevisorjson is the visor config
 var Skywirevisorjson = "skywire-visor.json"
 
-/*
-// PackageConfig contains specific installation paths
+//TODO implement this similarly for windows
+
+// PackageConfig contains installation paths (for windows)
 func PackageConfig() PkgConfig {
 	var pkgconfig PkgConfig
 	pkgconfig.Launcher.BinPath = "/opt/skywire/apps"
@@ -32,4 +32,3 @@ func PackageConfig() PkgConfig {
 	pkgconfig.Hypervisor.EnableAuth = true
 	return pkgconfig
 }
-*/
