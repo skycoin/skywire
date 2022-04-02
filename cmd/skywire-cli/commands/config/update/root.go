@@ -81,7 +81,7 @@ var RootCmd = &cobra.Command{
 		if input == "" {
 			input = output
 		}
-		conf, ok := visorconfig.ReadConfig(input)
+		conf, ok := visorconfig.ReadFile(input)
 		if ok != nil {
 			mLog.WithError(ok).Fatal("Failed to parse config.")
 		}
@@ -160,7 +160,7 @@ func resetAppsConfig(conf *visorconfig.V1, appName string) {
 
 func saveConfig(conf *visorconfig.V1) {
 	// Save config to file.
-	if err := conf.Flush(); err != nil {
+	if err := conf.Flush(output); err != nil {
 		logger.WithError(err).Fatal("Failed to flush config to file.")
 	}
 

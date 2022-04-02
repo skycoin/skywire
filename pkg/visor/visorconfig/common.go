@@ -25,7 +25,7 @@ var (
 // Common represents the common fields that are shared across all config versions,
 // alongside logging and flushing fields.
 type Common struct {
-	path string
+	//path string
 	log  *logging.MasterLogger
 
 	Version string        `json:"version"`
@@ -34,14 +34,15 @@ type Common struct {
 }
 
 // NewCommon returns a new Common.
-func NewCommon(log *logging.MasterLogger, confPath, version string, sk *cipher.SecKey) (*Common, error) {
+func NewCommon(log *logging.MasterLogger, sk *cipher.SecKey) (*Common, error) {
 	if log == nil {
 		log = logging.NewMasterLogger()
 	}
+	version := Version()
 
 	c := new(Common)
 	c.log = log
-	c.path = confPath
+	//c.path = confPath
 	c.Version = version
 	if sk != nil {
 		c.SK = *sk
@@ -77,8 +78,8 @@ func (c *Common) ensureKeys() error {
 	return nil
 }
 
-func (c *Common) flush(v interface{}) (err error) {
-	switch c.path {
+func (c *Common) flush(v interface{}, path string) (err error) {
+	switch path {
 	case "":
 		return ErrNoConfigPath
 	case StdinName:
@@ -87,7 +88,7 @@ func (c *Common) flush(v interface{}) (err error) {
 
 	log := c.log.
 		PackageLogger("visor:config").
-		WithField("filepath", c.path).
+		WithField("filepath", path).
 		WithField("config_version", c.Version)
 	log.Info("Flushing config to file.")
 	defer func() {
@@ -101,5 +102,5 @@ func (c *Common) flush(v interface{}) (err error) {
 		return err
 	}
 	const filePerm = 0644
-	return ioutil.WriteFile(c.path, raw, filePerm)
+	return ioutil.WriteFile(path, raw, filePerm)
 }

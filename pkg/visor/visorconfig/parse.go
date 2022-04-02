@@ -18,8 +18,9 @@ var (
 
 // Parse parses the visor config from a given reader.
 // If the config file is not the most recent version, it is upgraded and written back to 'path'.
-func Parse(log *logging.MasterLogger, path string, raw []byte, testEnv bool, dmsgHTTP bool, services *Services) (*V1, error) {
-	cc, err := NewCommon(log, path, "", nil)
+func Parse(log *logging.MasterLogger, raw []byte, options *ParseOptions) (*V1, error) {
+
+	cc, err := NewCommon(log, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -27,11 +28,11 @@ func Parse(log *logging.MasterLogger, path string, raw []byte, testEnv bool, dms
 	if err := json.Unmarshal(raw, cc); err != nil {
 		return nil, fmt.Errorf("failed to obtain config version: %w", err)
 	}
-	return parseV1(cc, raw, testEnv, dmsgHTTP, services)
+	return parseV1(log, cc, raw, options)
 }
 
-func parseV1(cc *Common, raw []byte, testEnv bool, dmsgHTTP bool, services *Services) (*V1, error) {
-	conf := MakeBaseConfig(cc, testEnv, dmsgHTTP, services)
+func parseV1(log *logging.MasterLogger, cc *Common, raw []byte, options *ParseOptions) (*V1, error) {
+	conf := MakeBaseConfig(cc, options.testEnv, options.dmsgHTTP, options.services)
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	if err := dec.Decode(&conf); err != nil {
 		return nil, err
@@ -41,9 +42,8 @@ func parseV1(cc *Common, raw []byte, testEnv bool, dmsgHTTP bool, services *Serv
 		return nil, fmt.Errorf("%v: %w", ErrInvalidSK, err)
 	}
 	conf = ensureAppDisc(conf)
-	conf = updateUrls(conf, services)
 	conf.Version = Version()
-	return conf, conf.flush(conf)
+	return conf, conf.flush(conf, options.path)
 }
 
 func ensureAppDisc(conf *V1) *V1 {
@@ -53,12 +53,10 @@ func ensureAppDisc(conf *V1) *V1 {
 	return conf
 }
 
-func updateUrls(conf *V1, services *Services) *V1 {
-	conf.Dmsg.Discovery = services.DmsgDiscovery
-	conf.Transport.Discovery = services.TransportDiscovery
-	conf.Transport.AddressResolver = services.AddressResolver
-	conf.Routing.RouteFinder = services.RouteFinder
-	conf.UptimeTracker.Addr = services.UptimeTracker
-	conf.Launcher.ServiceDisc = services.ServiceDiscovery
-	return conf
+// Options is passed to Parse
+type ParseOptions struct {
+	path string
+	testEnv bool
+	dmsgHTTP bool
+	services *Services
 }

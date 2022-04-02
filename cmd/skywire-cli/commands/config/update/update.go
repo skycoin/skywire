@@ -57,7 +57,7 @@ var hyperVisorUpdateCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, _ []string) {
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
-		conf, ok := visorconfig.ReadConfig(input)
+		conf, ok := visorconfig.ReadFile(input)
 		if ok != nil {
 			mLog.WithError(ok).Fatal("Failed to parse config.")
 		}
@@ -90,7 +90,7 @@ var skySocksClientUpdateCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, _ []string) {
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
-		conf, ok := visorconfig.ReadConfig(input)
+		conf, ok := visorconfig.ReadFile(input)
 		if ok != nil {
 			mLog.WithError(ok).Fatal("Failed to parse config.")
 		}
@@ -120,7 +120,7 @@ var skySocksServerUpdateCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, _ []string) {
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
-		conf, ok := visorconfig.ReadConfig(input)
+		conf, ok := visorconfig.ReadFile(input)
 		if ok != nil {
 			mLog.WithError(ok).Fatal("Failed to parse config.")
 		}
@@ -147,7 +147,7 @@ var vpnClientUpdateCmd = &cobra.Command{
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
 
-		conf, ok := visorconfig.ReadConfig(input)
+		conf, ok := visorconfig.ReadFile(input)
 		if ok != nil {
 			mLog.WithError(ok).Fatal("Failed to parse config.")
 		}
@@ -192,7 +192,7 @@ var vpnServerUpdateCmd = &cobra.Command{
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
 
-		conf, ok := visorconfig.ReadConfig(input)
+		conf, ok := visorconfig.ReadFile(input)
 		if ok != nil {
 			mLog.WithError(ok).Fatal("Failed to parse config.")
 		}
