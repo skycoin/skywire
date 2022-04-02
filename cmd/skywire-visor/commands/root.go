@@ -1,7 +1,6 @@
 package commands
 
 import (
-//	"bufio"
 	"bytes"
 	"context"
 	"embed"
@@ -12,7 +11,6 @@ import (
 	"net/http"
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
-	//"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -58,8 +56,8 @@ var (
 	completion           string
 	hiddenflags          []string
 	all                  bool
-	pkg	bool
-	pkg1	bool
+	pkg                  bool
+	pkg1                 bool
 )
 
 func init() {
@@ -135,44 +133,44 @@ var rootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 		if !stdin {
-		//multiple configs from flags
-		if (pkg && pkg1) || ((pkg || pkg1) && (confPath != "")) {
-			fmt.Println("Error: multiple configurations specified")
-			os.Exit(1)
-		}
-		//use package hypervisor config
-		if pkg {
-			confPath = skyenv.SkywirePath+"/"+skyenv.Skywirejson
-		}
-		//use package visor config
-		if pkg1 {
-			confPath = skyenv.SkywirePath+"/"+skyenv.Skywirevisorjson
-		}
-		//set skyenv.ConfigName to confPath
-		if confPath != "" {
-			skyenv.ConfigName = confPath
-		}
-		//set confPath if unset
-		if confPath == "" {
-			confPath = skyenv.ConfigName
-		}
-		//check for the config file
-		if strings.HasSuffix(skyenv.ConfigName, ".json") {
-			fmt.Println("specified config file:", skyenv.ConfigName)
+			//multiple configs from flags
+			if (pkg && pkg1) || ((pkg || pkg1) && (confPath != "")) {
+				fmt.Println("Error: multiple configurations specified")
+				os.Exit(1)
+			}
+			//use package hypervisor config
+			if pkg {
+				confPath = skyenv.SkywirePath + "/" + skyenv.Skywirejson
+			}
+			//use package visor config
+			if pkg1 {
+				confPath = skyenv.SkywirePath + "/" + skyenv.Skywirevisorjson
+			}
+			//set skyenv.ConfigName to confPath
+			if confPath != "" {
+				skyenv.ConfigName = confPath
+			}
+			//set confPath if unset
+			if confPath == "" {
+				confPath = skyenv.ConfigName
+			}
+			//check for the config file
+			if strings.HasSuffix(skyenv.ConfigName, ".json") {
+				fmt.Println("specified config file:", skyenv.ConfigName)
 			} else {
 				fmt.Println("file does not have .json extension.")
 				fmt.Println("Checking for ", skyenv.ConfigName+".json")
-				skyenv.ConfigName = skyenv.ConfigName+".json"
+				skyenv.ConfigName = skyenv.ConfigName + ".json"
 			}
-		if _, err := os.Stat(skyenv.ConfigName); err == nil {
-			fmt.Println("found config file:", skyenv.ConfigName)
+			if _, err := os.Stat(skyenv.ConfigName); err == nil {
+				fmt.Println("found config file:", skyenv.ConfigName)
+			} else {
+				fmt.Println("Invalid configuration specified:", skyenv.ConfigName)
+				os.Exit(1)
+			}
 		} else {
-			fmt.Println("Invalid configuration specified:", skyenv.ConfigName)
-			os.Exit(1)
+			skyenv.ConfigName = visorconfig.StdinName
 		}
-	} else {
-		skyenv.ConfigName = visorconfig.StdinName
-	}
 	},
 
 	Run: func(_ *cobra.Command, args []string) {
@@ -316,32 +314,32 @@ func initPProf(log *logging.MasterLogger, tag string, profMode string, profAddr 
 func initConfig(mLog *logging.MasterLogger, args []string) *visorconfig.V1 { //nolint
 	log := mLog.PackageLogger("visor:config")
 
-		var r io.Reader
+	var r io.Reader
 
-		switch skyenv.ConfigName {
-		case visorconfig.StdinName:
-			log.Info("Reading config from STDIN.")
-			r = os.Stdin
-		case "":
-			fallthrough
-		default:
-			log.WithField("filepath", skyenv.ConfigName).Info("Reading config from file.")
-			    f, err := os.ReadFile(skyenv.ConfigName)
-			if err != nil {
-				log.WithError(err).
-					WithField("filepath", skyenv.ConfigName).
-					Fatal("Failed to read config file.")
-			}
-			r = bytes.NewReader(f)
-		}
-
-		conf, err := visorconfig.Reader(r)
+	switch skyenv.ConfigName {
+	case visorconfig.StdinName:
+		log.Info("Reading config from STDIN.")
+		r = os.Stdin
+	case "":
+		fallthrough
+	default:
+		log.WithField("filepath", skyenv.ConfigName).Info("Reading config from file.")
+		f, err := os.ReadFile(skyenv.ConfigName)
 		if err != nil {
-			log.WithError(err).Fatal("Failed to read in config.")
+			log.WithError(err).
+				WithField("filepath", skyenv.ConfigName).
+				Fatal("Failed to read config file.")
 		}
-		fmt.Println(conf.Version)
-		if conf.Dmsg.Servers != nil {
-			fmt.Println("dmsg servers detected")
+		r = bytes.NewReader(f)
+	}
+
+	conf, err := visorconfig.Reader(r)
+	if err != nil {
+		log.WithError(err).Fatal("Failed to read in config.")
+	}
+	fmt.Println(conf.Version)
+	if conf.Dmsg.Servers != nil {
+		fmt.Println("dmsg servers detected")
 	}
 	if hypervisorUI {
 		config := hypervisorconfig.GenerateWorkDirConfig(false)

@@ -7,9 +7,12 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
-var	ConfigName = "skywire-config.json"
-// Dmsghttp config constants
+// ConfigName is the default config name. Updated by setting config file path.
+var ConfigName = "skywire-config.json"
+
+// DMSGHTTPPath path to dmsghttp-config.json
 var DMSGHTTPPath = "dmsghttp-config.json"
+
 // Constants for skywire root directories.
 // Dmsg port constants.
 // TODO(evanlinjin): Define these properly. These are currently random.
@@ -109,8 +112,8 @@ type PkgConfig struct {
 	Launcher struct {
 		BinPath string `json:"bin_path"`
 	} `json:"launcher"`
-	LocalPath    string `json:"local_path"`
-	Hypervisor   struct {
+	LocalPath  string `json:"local_path"`
+	Hypervisor struct {
 		DbPath     string `json:"db_path"`
 		EnableAuth bool   `json:"enable_auth"`
 	} `json:"hypervisor"`
