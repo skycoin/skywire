@@ -111,7 +111,6 @@ func (v *Visor) MasterLogger() *logging.MasterLogger {
 // NewVisor constructs new Visor.
 func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) {
 
-
 	fmt.Println("tracer")
 	v := &Visor{
 		log:               conf.MasterLogger().PackageLogger("visor"),

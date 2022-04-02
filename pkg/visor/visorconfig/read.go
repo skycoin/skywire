@@ -2,20 +2,15 @@ package visorconfig
 
 import (
 	"bytes"
-	//"regexp"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
-	//"github.com/skycoin/dmsg/pkg/disc"
 	"os"
-
 )
 
 // Pkgpath is the path to the default skywire hypervisor config file
 const Pkgpath = "/opt/skywire/skywire.json"
-var r io.Reader
-
 
 // Reader accepts io.Reader
 func Reader(r io.Reader) (*V1, error) {
@@ -48,7 +43,7 @@ func ReadRaw(raw []byte) (*V1, error) {
 	}
 	conf := MakeBaseConfig(cc, false, true, nil)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to create config template.")
+		return nil, fmt.Errorf("failed to create config template")
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	if err := dec.Decode(&conf); err != nil {
