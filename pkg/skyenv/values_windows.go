@@ -3,12 +3,12 @@
 
 package skyenv
 
-const (
-	// TODO (darkrengarius): change path
-	skywirePath = "/opt/skywire"
-	OS          = "win" // nolint
+const OS = "win" // nolint
 
-)
+	// TODO (darkrengarius): change path
+	// SkywirePath is the path to the installation folder.
+	var SkywirePath = "/opt/skywire"
+
 
 // SkywirePath gets Skywire installation folder.
 func SkywirePath() string {

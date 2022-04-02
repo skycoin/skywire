@@ -32,7 +32,7 @@ var vpnUICmd = &cobra.Command{
 			path = visorconfig.Pkgpath
 		}
 		if path != "" {
-			conf, err := visorconfig.ReadConfig(path)
+			conf, err := visorconfig.ReadFile(path)
 			if err != nil {
 				log.Fatal("Failed:", err)
 			}
@@ -60,7 +60,7 @@ var vpnURLCmd = &cobra.Command{
 			path = visorconfig.Pkgpath
 		}
 		if path != "" {
-			conf, err := visorconfig.ReadConfig(path)
+			conf, err := visorconfig.ReadFile(path)
 			if err != nil {
 				log.Fatal("Failed:", err)
 			}

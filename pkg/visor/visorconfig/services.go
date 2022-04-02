@@ -10,6 +10,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 var (
@@ -57,6 +58,21 @@ func Fetch(mLog *logging.MasterLogger, serviceConfURL string, stdout bool) *Serv
 		if err != nil {
 			mLog.WithError(err).Fatal("Failed to unmarshal json response\n")
 		}
+		if !stdout {
+		mLog.Infof("Fetched service endpoints from '%s'", serviceConf)
+	}
 	}
 	return services
+}
+
+// Services are subdomains and IP addresses of the skywire services
+type Services struct {
+	DmsgDiscovery      string          `json:"dmsg_discovery"`
+	TransportDiscovery string          `json:"transport_discovery"`
+	AddressResolver    string          `json:"address_resolver"`
+	RouteFinder        string          `json:"route_finder"`
+	SetupNodes         []cipher.PubKey `json:"setup_nodes"`
+	UptimeTracker      string          `json:"uptime_tracker"`
+	ServiceDiscovery   string          `json:"service_discovery"`
+	StunServers        []string        `json:"stun_servers"`
 }

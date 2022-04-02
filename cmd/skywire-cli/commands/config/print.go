@@ -12,7 +12,7 @@ import (
 
 //Print prints the config
 func Print(mLog *logging.MasterLogger) {
-	conf, err := visorconfig.ReadConfig(print)
+	conf, err := visorconfig.ReadFile(print)
 	if err != nil {
 		mLog.Fatal("Failed:", err)
 	}
@@ -21,7 +21,7 @@ func Print(mLog *logging.MasterLogger) {
 		mLog.WithError(err).Fatal("An unexpected error occurred. Please contact a developer.")
 	}
 	if !stdout {
-		mLog.Infof("Updated file '%s' to: %s", output, j)
+		mLog.Infof("Config file: '%s' config: %s", output, j)
 	} else {
 		fmt.Printf("%s", j)
 	}
