@@ -21,7 +21,7 @@ var Skywirejson = "skywire.json"
 // Skywirevisorjson is the visor config
 var Skywirevisorjson = "skywire-visor.json"
 
-// PackageConfig config defaults for the linux packages
+// PackageConfig contains installation paths (for linux)
 func PackageConfig() PkgConfig {
 	var pkgconfig PkgConfig
 	pkgconfig.Launcher.BinPath = "/opt/skywire/apps"
