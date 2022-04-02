@@ -15,6 +15,13 @@ var SkywirePath = ""
 
 // DmsghttpPath is the path to dmsghttp-config.json in the packages
 var DmsghttpPath = "dmsghttp-config.json"
+
+// Skywirejson is the Hypervisor config
+var Skywirejson = "skywire.json"
+
+// Skywirevisorjson is the visor config
+var Skywirevisorjson = "skywire-visor.json"
+
 /*
 // PackageConfig contains specific installation paths
 func PackageConfig() PkgConfig {
