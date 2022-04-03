@@ -414,8 +414,8 @@ skywire-cli config gen -d
 ```
 [2022-04-02T18:32:32-05:00] INFO [skywire-cli]: Found Dmsghttp config: dmsghttp-config.json
 [2022-04-02T18:32:32-05:00] INFO []: Fetched service endpoints from 'http://conf.skywire.skycoin.com'
-[2022-04-02T18:32:32-05:00] INFO [visor:config]: Flushing config to file. config_version="0.6.1" filepath="/home/d0mo/go/src/github.com/the-skycoin-project/skywire-1/skywire-config.json"
-[2022-04-02T18:32:32-05:00] INFO [skywire-cli]: Updated file '/home/d0mo/go/src/github.com/the-skycoin-project/skywire-1/skywire-config.json' to:
+[2022-04-02T18:32:32-05:00] INFO [visor:config]: Flushing config to file. config_version="0.6.1" filepath="/home/user/go/src/github.com/skycoin/skywire/skywire-config.json"
+[2022-04-02T18:32:32-05:00] INFO [skywire-cli]: Updated file '/home/user/go/src/github.com/skycoin/skywire/skywire-config.json' to:
 {
 	"version": "0.6.1",
 	"sk": "85577beed6b46b67704c52d3acd7ceb14a8d758356dff23028def4e38b72822f",
@@ -699,7 +699,7 @@ $ sudo skywire-cli config gen -bipr
 
 The configuration is written (or rewritten)
 
-##### Example remote hypervisor configuration for package based installation
+##### Example visor configuration for package based installation
 
 The typical arrangement uses a remote hypervisor if a local instance is not started.
 
@@ -717,7 +717,7 @@ the above command output into the following command
 
 ```
 # cp /opt/skywire/skywire.json /opt/skywire/skywire-visor.json
-# skywire-cli config gen -j <hypervisor-public-key> -bpr
+# skywire-cli config gen -j <hypervisor-public-key> -bpr -o /opt/skywire/skywire-visor.json
 ```
 
 The configuration is regenerated
