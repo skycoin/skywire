@@ -58,18 +58,21 @@ After the installation, you can run `skywire-cli` to see the usage:
 
 ```
 $ skywire-cli
-Command Line Interface for skywire
+
+	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐  ┌─┐┬  ┬
+	└─┐├┴┐└┬┘││││├┬┘├┤───│  │  │
+	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘  └─┘┴─┘┴
 
 Usage:
   skywire-cli [command]
 
 Available Commands:
-  config      Generate or update a skywire config
-  visor       Query the Skywire Visor
-  rtfind      Query the Route Finder
-  mdisc       Query remote DMSG Discovery
-  completion  Generate completion script
-  help        Help about any command
+  config       Generate or update a skywire config
+  visor        Query the Skywire Visor
+  rtfind       Query the Route Finder
+  mdisc        Query remote DMSG Discovery
+  completion   Generate completion script
+  help         Help about any command
 
 Flags:
   -h, --help   help for skywire-cli
