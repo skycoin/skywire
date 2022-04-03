@@ -175,7 +175,7 @@ var genConfigCmd = &cobra.Command{
 			} else {
 				configName = "skywire-visor.json"
 			}
-			skyenv.ConfigName = skyenv.SkywirePath+"/"+configName
+			skyenv.ConfigName = skyenv.SkywirePath + "/" + configName
 		}
 
 		// Read in old config and obtain old secret key or generate a new random secret key
