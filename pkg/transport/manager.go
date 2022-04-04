@@ -460,9 +460,11 @@ func (tm *Manager) STCPRRemoteAddrs() []string {
 	defer tm.mx.RUnlock()
 
 	for _, tp := range tm.tps {
-		remoteRaw := tp.transport.RemoteRawAddr().String()
-		if tp.Entry.Type == network.STCPR && remoteRaw != "" {
-			addrs = append(addrs, remoteRaw)
+		if tp.transport != nil {
+			remoteRaw := tp.transport.RemoteRawAddr().String()
+			if tp.Entry.Type == network.STCPR && remoteRaw != "" {
+				addrs = append(addrs, remoteRaw)
+			}
 		}
 	}
 
