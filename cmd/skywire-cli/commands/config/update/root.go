@@ -190,13 +190,13 @@ func downloadDMSGHTTPConfig() error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint
 
 	out, err := os.Create("dmsghttp-config.json")
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer out.Close() //nolint
 
 	_, err = io.Copy(out, resp.Body)
 	return err
