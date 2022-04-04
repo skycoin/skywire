@@ -13,6 +13,9 @@ var ConfigName = "skywire-config.json"
 // DMSGHTTPPath path to dmsghttp-config.json
 var DMSGHTTPPath = "dmsghttp-config.json"
 
+// DMSGHTTPURL is URL of dmsghttp-config.json on github
+var DMSGHTTPURL = "https://raw.githubusercontent.com/skycoin/skywire/develop/dmsghttp-config.json"
+
 // Constants for skywire root directories.
 // Dmsg port constants.
 // TODO(evanlinjin): Define these properly. These are currently random.
