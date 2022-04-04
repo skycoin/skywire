@@ -28,6 +28,7 @@ var (
 	resetVPNclient         bool
 	addVPNServerPasscode   string
 	setVPNServerSecure     string
+	setVPNServerAutostart  string
 	resetVPNServer         bool
 	addSkysocksClientSrv   string
 	resetSkysocksClient    bool

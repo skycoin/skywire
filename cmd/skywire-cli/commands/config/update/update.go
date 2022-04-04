@@ -42,6 +42,7 @@ func init() {
 	vpnServerUpdateCmd.Flags().SortFlags = false
 	vpnServerUpdateCmd.Flags().StringVarP(&addVPNServerPasscode, "passwd", "s", "", "add passcode to vpn-server")
 	vpnServerUpdateCmd.Flags().StringVar(&setVPNServerSecure, "secure", "", "change secure mode status of vpn-server")
+	vpnServerUpdateCmd.Flags().StringVar(&setVPNServerAutostart, "autostart", "", "change autostart of vpn-server")
 	vpnServerUpdateCmd.Flags().BoolVarP(&resetVPNServer, "reset", "r", false, "reset vpn-server configurations")
 }
 
@@ -208,6 +209,24 @@ var vpnServerUpdateCmd = &cobra.Command{
 			break
 		default:
 			logger.Fatal("Unrecognized vpn server secure value: ", setVPNServerSecure)
+		}
+		switch setVPNServerAutostart {
+		case "true":
+			for i, app := range conf.Launcher.Apps {
+				if app.Name == "vpn-server" {
+					conf.Launcher.Apps[i].AutoStart = true
+				}
+			}
+		case "false":
+			for i, app := range conf.Launcher.Apps {
+				if app.Name == "vpn-server" {
+					conf.Launcher.Apps[i].AutoStart = false
+				}
+			}
+		case "":
+			break
+		default:
+			logger.Fatal("Unrecognized vpn server autostart value: ", setVPNServerSecure)
 		}
 		if resetVPNServer {
 			resetAppsConfig(conf, "vpn-server")
