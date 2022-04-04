@@ -188,7 +188,7 @@ func (c *Client) Serve() error {
 
 	r := netutil.NewRetrier(c.log, netutil.DefaultInitBackoff, netutil.DefaultMaxBackoff, 3, netutil.DefaultFactor).
 		WithErrWhitelist(errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
-			errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound, errErrSetupNode)
+			errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound, errErrSetupNode, errNotPermited)
 
 	err := r.Do(context.Background(), func() error {
 		if c.isClosed() {
@@ -198,7 +198,7 @@ func (c *Client) Serve() error {
 		if err := c.dialServeConn(); err != nil {
 			switch err {
 			case errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
-				errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound, errErrSetupNode:
+				errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound, errErrSetupNode, errNotPermited:
 				c.setAppError(err)
 				c.resetConnDuration()
 				return err
