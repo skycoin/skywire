@@ -45,6 +45,7 @@ var (
 	hide              bool
 	all               bool
 	outunset          bool
+	ver               string
 	svcconf           = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")     //skyenv.DefaultServiceConfAddr
 	testconf          = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "") //skyenv.DefaultServiceConfAddr
 	hiddenflags       []string
@@ -75,10 +76,11 @@ func init() {
 	genConfigCmd.Flags().BoolVarP(&vpnServerEnable, "servevpn", "v", false, "enable vpn server")
 	genConfigCmd.Flags().BoolVarP(&hide, "hide", "w", false, "dont print the config to the terminal")
 	genConfigCmd.Flags().BoolVarP(&retainHypervisors, "retainhv", "x", false, "retain existing hypervisors with regen")
+	genConfigCmd.Flags().StringVar(&ver, "version", "", "custom version testing override")
 	genConfigCmd.Flags().BoolVar(&all, "all", false, "show all flags")
 	genConfigCmd.Flags().StringVar(&print, "print", "", "parse test ; read config from file & print")
 
-	hiddenflags = []string{"url", "print", "noauth", "dmsghttp", "auth", "force", "disableapps", "os", "stdout", "publicrpc", "sk", "testenv", "servevpn", "hide", "retainhv", "print"}
+	hiddenflags = []string{"url", "print", "noauth", "dmsghttp", "auth", "force", "disableapps", "os", "stdout", "publicrpc", "sk", "testenv", "servevpn", "hide", "retainhv", "print", "version"}
 	for _, j := range hiddenflags {
 		genConfigCmd.Flags().MarkHidden(j) //nolint
 	}
@@ -252,6 +254,9 @@ var genConfigCmd = &cobra.Command{
 			if hypervisor {
 				conf.Hypervisor.EnableAuth = true
 			}
+		}
+		if ver != "" {
+			conf.Common.Version = ver
 		}
 		//don't write file with stdout
 		if !stdout {

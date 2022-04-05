@@ -9,6 +9,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 var (
@@ -42,7 +43,7 @@ func parseV1(cc *Common, raw []byte, options *ParseOptions) (*V1, error) {
 		return nil, fmt.Errorf("%v: %w", ErrInvalidSK, err)
 	}
 	conf = ensureAppDisc(conf)
-	conf.Version = Version()
+	conf.Version = skyenv.Version()
 	return conf, conf.flush(conf, options.path)
 }
 

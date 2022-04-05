@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 func TestParse(t *testing.T) {
@@ -30,7 +31,7 @@ func TestParse(t *testing.T) {
 		defer func() { require.NoError(t, os.Remove(filename)) }()
 
 		_, sk := cipher.GenerateKeyPair()
-		version := Version()
+		version := skyenv.Version()
 		raw := []byte(fmt.Sprintf(`{"version":"%s","sk":"%s"}`, version, sk.String()))
 		n, err := f.Write(raw)
 		require.NoError(t, err)
