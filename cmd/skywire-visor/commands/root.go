@@ -11,10 +11,14 @@ import (
 	"net/http"
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
+	"os/exec"
+	"os/user"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/bitfield/script"
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/pkg/profile"
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -134,6 +138,10 @@ var rootCmd = &cobra.Command{
 			fmt.Println("Invalid completion specified:", completion)
 			os.Exit(1)
 		}
+		//log for initial checks
+		log := initLogger(tag, syslogAddr)
+		_, hook := logstore.MakeStore(runtimeLogMaxEntries)
+		log.AddHook(hook)
 		if !stdin {
 			//multiple configs from flags
 			if (pkg && pkg1) || ((pkg || pkg1) && (confPath != "")) {
@@ -156,23 +164,93 @@ var rootCmd = &cobra.Command{
 			if confPath == "" {
 				confPath = skyenv.ConfigName
 			}
-			//check for the config file
-			if strings.HasSuffix(skyenv.ConfigName, ".json") {
-				fmt.Println("specified config file:", skyenv.ConfigName)
-			} else {
-				fmt.Println("file does not have .json extension.")
-				fmt.Println("Checking for ", skyenv.ConfigName+".json")
+			//enforce .json extension
+			if !strings.HasSuffix(skyenv.ConfigName, ".json") {
+				//append .json
 				skyenv.ConfigName = skyenv.ConfigName + ".json"
 			}
-			if _, err := os.Stat(skyenv.ConfigName); err == nil {
-				fmt.Println("found config file:", skyenv.ConfigName)
-			} else {
-				fmt.Println("Invalid configuration specified:", skyenv.ConfigName)
+			//check for the config file
+			if _, err := os.Stat(skyenv.ConfigName); err != nil {
+				//fail here on no config
+				log.WithError(err).Fatal("config file not found")
 				os.Exit(1)
 			}
 		} else {
+			//stdin == true
 			skyenv.ConfigName = visorconfig.StdinName
 		}
+		var fork string
+		var branch string
+		//indicates how skywire was started
+		skyenv.Skywire = os.Args[0]
+		//indicates where skywire was started
+		path, err := os.Getwd()
+		if err != nil {
+			log.WithError(err).Fatal()
+		}
+		skyenv.Wd = path
+		//determine if process has root permissions
+		thisUser, err := user.Current()
+		if err != nil {
+			log.Error("Unable to get current user: %s", err)
+		}
+		if (skyenv.OS == "linux") || (skyenv.OS == "mac") {
+			if thisUser.Username == "root" {
+				skyenv.Root = true
+			}
+		}
+		//retrieve build info
+		skyenv.BuildInfo = buildinfo.Get()
+		if skyenv.BuildInfo.Version == "unknown" {
+			if match, err := regexp.MatchString("/tmp/", skyenv.Skywire); err == nil {
+				if match {
+					log.Info("executed with go run")
+					log.WithField("binary: ", skyenv.Skywire).Info()
+				}
+			}
+			//check for .git folder for versioning
+			if _, err := os.Stat(".git"); err == nil {
+				//attempt to version from git sources
+				if _, err = exec.LookPath("git"); err == nil {
+					if version, err := script.Exec(`git describe`).String(); err == nil {
+						skyenv.BuildInfo.Version = strings.ReplaceAll(version, "\n", "")
+						if skyenv.BuildInfo.Commit == "unknown" {
+							if commit, err := script.Exec(`git rev-list -1 HEAD`).String(); err == nil {
+								skyenv.BuildInfo.Commit = strings.ReplaceAll(commit, "\n", "")
+							}
+						}
+						if fork, err = script.Exec(`git config --get remote.origin.url`).String(); err == nil {
+							fork = strings.ReplaceAll(fork, "ssh://", "")
+							fork = strings.ReplaceAll(fork, "https://", "")
+							fork = strings.ReplaceAll(fork, "http://", "")
+							fork = strings.ReplaceAll(fork, "github.com/", "")
+							fork = strings.ReplaceAll(fork, "\n", "")
+							if fork == "skycoin/skywire" {
+								fork = ""
+							}
+						}
+						if branch, err = script.Exec(`git branch`).String(); err == nil {
+							branch = strings.ReplaceAll(branch, "*", "")
+							branch = strings.ReplaceAll(branch, "\n", "")
+						}
+						if _, err = exec.LookPath("date"); err == nil {
+							if skyenv.BuildInfo.Date == "unknown" {
+								if date, err := script.Exec(`date -u +%Y-%m-%dT%H:%M:%SZ`).String(); err == nil {
+									skyenv.BuildInfo.Date = strings.ReplaceAll(date, "\n", "")
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		log.WithField("version: ", skyenv.BuildInfo.Version).Info()
+		log.WithField("built on: ", skyenv.BuildInfo.Date).Info()
+		log.WithField("against commit: ", skyenv.BuildInfo.Commit).Info()
+		if fork != "" {
+			log.WithField("fork: ", fork).Info()
+		}
+		log.WithField("branch: ", branch).Info()
 	},
 
 	Run: func(_ *cobra.Command, args []string) {
@@ -186,10 +264,6 @@ func runVisor(args []string) {
 	log := initLogger(tag, syslogAddr)
 	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
 	log.AddHook(hook)
-
-	if _, err := buildinfo.Get().WriteTo(log.Out); err != nil {
-		log.WithError(err).Error("Failed to output build info.")
-	}
 
 	stopPProf := initPProf(log, tag, pprofMode, pprofAddr)
 	defer stopPProf()
@@ -325,7 +399,8 @@ func initConfig(mLog *logging.MasterLogger, args []string) *visorconfig.V1 { //n
 	case "":
 		fallthrough
 	default:
-		log.WithField("filepath", skyenv.ConfigName).Info("Reading config from file.")
+		log.Info("Reading config from file.")
+		log.WithField("filepath", skyenv.ConfigName).Info()
 		f, err := os.ReadFile(skyenv.ConfigName)
 		if err != nil {
 			log.WithError(err).
@@ -339,15 +414,52 @@ func initConfig(mLog *logging.MasterLogger, args []string) *visorconfig.V1 { //n
 	if err != nil {
 		log.WithError(err).Fatal("Failed to read in config.")
 	}
-	fmt.Println(conf.Version)
-	if conf.Dmsg.Servers != nil {
-		fmt.Println("dmsg servers detected")
+	log.WithField("config version: ", conf.Version).Info()
+
+	if (conf.Version != "unknown") && (skyenv.BuildInfo.Version != "unknown") {
+		if compat, err := regexp.MatchString(strings.Split(skyenv.BuildInfo.Version, "-")[0], conf.Version); err == nil {
+			log.Info(compat)
+			log.Info(skyenv.BuildInfo.Version)
+			log.Info(conf.Version)
+			if !compat {
+				log.Error("config version does not match visor version")
+				log.WithField("skywire version: ", skyenv.BuildInfo.Version).Error()
+				updstr := "skywire-cli config gen -b"
+				if conf.Hypervisor != nil {
+					updstr = updstr + "i"
+				}
+				for _, j := range conf.Hypervisors {
+					if fmt.Sprintf("\t%s\n", j) != "" {
+						updstr = updstr + "x"
+						break
+					}
+				}
+				//there is no config *file* with stdin
+				if skyenv.ConfigName != visorconfig.StdinName {
+					var pkgenv bool
+					var home bool
+					if pkgenv, err = regexp.MatchString(conf.Launcher.BinPath, "/opt/skywire/apps"); err == nil {
+						if pkgenv {
+							updstr = updstr + "p"
+						}
+					}
+					if home, err = regexp.MatchString(skyenv.ConfigName, "/home/"); err == nil {
+						if !home || pkgenv {
+							updstr = "sudo " + updstr
+						}
+					}
+					updstr = updstr + "ro " + skyenv.ConfigName + "\n"
+				}
+				updstr = "\n		" + updstr
+				log.Info("please update your config with the following command:\n", updstr)
+				log.Fatal("failed to start skywire")
+			}
+		}
 	}
 	if hypervisorUI {
 		config := hypervisorconfig.GenerateWorkDirConfig(false)
 		conf.Hypervisor = &config
 	}
-
 	if conf.Hypervisor != nil {
 		conf.Hypervisor.UIAssets = uiAssets
 	}

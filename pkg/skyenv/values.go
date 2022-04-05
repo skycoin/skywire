@@ -1,14 +1,29 @@
 package skyenv
 
 import (
+	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/bitfield/script"
+
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 // ConfigName is the default config name. Updated by setting config file path.
 var ConfigName = "skywire-config.json"
+
+// Skywire is the path to the running visor binary
+var Skywire = ""
+
+// Wd is the working directory where skywire-visor was executed
+var Wd = ""
+
+// Root indicates process is run with root permissions
+var Root bool
 
 // DMSGHTTPPath path to dmsghttp-config.json
 var DMSGHTTPPath = "dmsghttp-config.json"
@@ -137,4 +152,26 @@ func MustPK(pk string) cipher.PubKey {
 	}
 
 	return sPK
+}
+
+// BuildInfo holds information about the build
+var BuildInfo *buildinfo.Info
+
+//Version gets the version of the installation for the config
+func Version() string {
+	u := buildinfo.Version()
+	v := u
+	if u == "unknown" {
+		//check for .git folder for versioning
+		if _, err := os.Stat(".git"); err == nil {
+			//attempt to version from git sources
+			if _, err = exec.LookPath("git"); err == nil {
+				if v, err = script.Exec(`git describe`).String(); err == nil {
+					v = strings.ReplaceAll(v, "\n", "")
+					v = strings.Split(v, "-")[0]
+				}
+			}
+		}
+	}
+	return v
 }
