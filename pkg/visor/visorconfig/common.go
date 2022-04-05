@@ -8,6 +8,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 const (
@@ -38,12 +39,10 @@ func NewCommon(log *logging.MasterLogger, sk *cipher.SecKey) (*Common, error) {
 	if log == nil {
 		log = logging.NewMasterLogger()
 	}
-	version := Version()
-
 	c := new(Common)
 	c.log = log
 	//c.path = confPath
-	c.Version = version
+	c.Version = skyenv.Version()
 	if sk != nil {
 		c.SK = *sk
 		if err := c.ensureKeys(); err != nil {

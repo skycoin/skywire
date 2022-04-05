@@ -5,7 +5,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/dmsgc"
@@ -13,22 +12,6 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
-
-//const V1Name = "0.6.1"
-
-//Version gets the version of the installation
-func Version() string {
-	u := buildinfo.Version()
-	v := u
-	if u == "unknown" {
-		//		u, err := script.Exec("git describe").String()
-		//		if err != nil {
-		//			panic(err)
-		//		}
-		v = "0.6.1"
-	}
-	return v
-}
 
 // V1 is visor config
 type V1 struct {
