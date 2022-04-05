@@ -235,10 +235,11 @@ var rootCmd = &cobra.Command{
 						}
 						if branch, err = script.Exec(`git rev-parse --abbrev-ref HEAD`).String(); err == nil {
 							branch = strings.ReplaceAll(branch, "\n", "")
-						if _, err = exec.LookPath("date"); err == nil {
-							if skyenv.BuildInfo.Date == "unknown" {
-								if date, err := script.Exec(`date -u +%Y-%m-%dT%H:%M:%SZ`).String(); err == nil {
-									skyenv.BuildInfo.Date = strings.ReplaceAll(date, "\n", "")
+							if _, err = exec.LookPath("date"); err == nil {
+								if skyenv.BuildInfo.Date == "unknown" {
+									if date, err := script.Exec(`date -u +%Y-%m-%dT%H:%M:%SZ`).String(); err == nil {
+										skyenv.BuildInfo.Date = strings.ReplaceAll(date, "\n", "")
+									}
 								}
 							}
 						}
@@ -246,7 +247,6 @@ var rootCmd = &cobra.Command{
 				}
 			}
 		}
-	}
 		log.WithField("version: ", skyenv.BuildInfo.Version).Info()
 		if skyenv.BuildInfo.Date != "unknown" && skyenv.BuildInfo.Date != "" {
 			log.WithField("built on: ", skyenv.BuildInfo.Date).Info()
@@ -432,11 +432,11 @@ func initConfig(mLog *logging.MasterLogger, args []string) *visorconfig.V1 { //n
 					log.Info("match:", match)
 					if match {
 						if _, err := os.Stat("cmd/skywire-cli/skywire-cli.go"); err == nil {
-						updstr = "go run cmd/skywire-cli/skywire-cli.go config gen -b"
-					}
-					log.Info("updstr:", updstr)
+							updstr = "go run cmd/skywire-cli/skywire-cli.go config gen -b"
+						}
+						log.Info("updstr:", updstr)
 
-				}
+					}
 				}
 				if updstr == "" {
 					updstr = "skywire-cli config gen -b"
@@ -465,20 +465,20 @@ func initConfig(mLog *logging.MasterLogger, args []string) *visorconfig.V1 { //n
 							}
 						}
 					}
-				updstr = "\n		" +  updstr + "ro " + skyenv.ConfigName + "\n"
-			} else {
-				updstr = "\n		" + updstr + "n"  + " | go run cmd/skywire-visor/skywire-visor.go -n"
-				if launchBrowser {
-					updstr = updstr + "b"
-				}
+					updstr = "\n		" + updstr + "ro " + skyenv.ConfigName + "\n"
+				} else {
+					updstr = "\n		" + updstr + "n" + " | go run cmd/skywire-visor/skywire-visor.go -n"
+					if launchBrowser {
+						updstr = updstr + "b"
+					}
 					updstr = updstr + "\n"
+				}
+				updstr = "\n		" + updstr + "\n"
+				log.Info("please update your config with the following command:\n", updstr)
+				log.Fatal("failed to start skywire")
 			}
-			updstr = "\n		" + updstr + "\n"
-			log.Info("please update your config with the following command:\n", updstr)
-			log.Fatal("failed to start skywire")
 		}
 	}
-}
 	if hypervisorUI {
 		config := hypervisorconfig.GenerateWorkDirConfig(false)
 		conf.Hypervisor = &config
