@@ -2,9 +2,6 @@ package update
 
 import (
 	"encoding/json"
-	"io"
-	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -23,7 +20,6 @@ var (
 	input                  string
 	testEnv                bool
 	updateEndpoints        bool
-	updateDMSGhttpConfig   bool
 	addHypervisorPKs       string
 	resetHypervisor        bool
 	setVPNClientKillswitch string
@@ -53,7 +49,6 @@ var logger = logging.MustGetLogger("skywire-cli")
 func init() {
 	RootCmd.Flags().SortFlags = false
 	RootCmd.Flags().BoolVarP(&updateEndpoints, "endpoints", "a", false, "update server endpoints")
-	RootCmd.Flags().BoolVar(&updateDMSGhttpConfig, "dmsghttp", false, "update dmsghttp config file")
 	RootCmd.Flags().StringVarP(&serviceConfURL, "url", "b", "", "service config URL: "+svcconf)
 	RootCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "use test deployment: "+testconf)
 	RootCmd.Flags().StringVar(&setPublicAutoconnect, "public-autoconn", "", "change public autoconnect configuration")
@@ -90,12 +85,6 @@ var RootCmd = &cobra.Command{
 		conf, ok := visorconfig.ReadFile(input)
 		if ok != nil {
 			mLog.WithError(ok).Fatal("Failed to parse config.")
-		}
-
-		if updateDMSGhttpConfig {
-			if err := downloadDMSGHTTPConfig(); err != nil {
-				mLog.WithError(err).Warn("Failed to download dmsghttp config.")
-			}
 		}
 
 		if updateEndpoints {
@@ -182,22 +171,4 @@ func saveConfig(conf *visorconfig.V1) {
 		logger.WithError(err).Fatal("Could not unmarshal json.")
 	}
 	logger.Infof("Updated file '%s' to: %s", output, j)
-}
-
-func downloadDMSGHTTPConfig() error {
-	url := skyenv.DMSGHTTPURL
-	resp, err := http.Get(url) //nolint:gosec
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close() //nolint
-
-	out, err := os.Create("dmsghttp-config.json")
-	if err != nil {
-		return err
-	}
-	defer out.Close() //nolint
-
-	_, err = io.Copy(out, resp.Body)
-	return err
 }
