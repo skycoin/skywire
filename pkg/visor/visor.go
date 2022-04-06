@@ -13,7 +13,6 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/internal/utclient"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
@@ -84,8 +83,6 @@ type Visor struct {
 	runtimeErrors chan error
 
 	isServicesHealthy *internalHealthInfo
-	transportCacheMu  *sync.Mutex
-	transportsCache   map[cipher.PubKey][]string
 }
 
 // todo: consider moving module closing to the module system
@@ -119,7 +116,6 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 		isServicesHealthy: newInternalHealthInfo(),
 		wgTrackers:        new(sync.WaitGroup),
 		wgStunClient:      new(sync.WaitGroup),
-		transportCacheMu:  new(sync.Mutex),
 	}
 	v.wgStunClient.Add(1)
 	v.isServicesHealthy.init()

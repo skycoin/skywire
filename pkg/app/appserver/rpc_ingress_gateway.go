@@ -400,7 +400,7 @@ func ioErrToRPCIOErr(err error) *RPCIOErr {
 	if netErr, ok := err.(net.Error); ok {
 		rpcIOErr.IsNetErr = true
 		rpcIOErr.IsTimeoutErr = netErr.Timeout()
-		rpcIOErr.IsTemporaryErr = netErr.Timeout()
+		rpcIOErr.IsTemporaryErr = netErr.Temporary() // nolint
 	}
 
 	return rpcIOErr
