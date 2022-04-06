@@ -100,7 +100,7 @@ func TestContext_SetCheckDelay(t *testing.T) {
 	cc := CaptureContext()
 	require.Equal(t, DefaultCheckDelay, cc.checkDelay)
 
-	const oneSecond = 1 * time.Second
+	const oneSecond = 1 * time.Second // nolint
 
 	cc.SetCheckDelay(oneSecond)
 	require.Equal(t, oneSecond, cc.checkDelay)
