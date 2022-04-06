@@ -342,7 +342,7 @@ func (mt *ManagedTransport) deleteFromDiscovery() error {
 	return retrier.Do(context.Background(), func() error {
 		err := mt.dc.DeleteTransport(context.Background(), mt.Entry.ID)
 		mt.log.WithField("tp-id", mt.Entry.ID).WithError(err).Debug("Error deleting transport")
-		if netErr, ok := err.(net.Error); ok && netErr.Temporary() {
+		if netErr, ok := err.(net.Error); ok && netErr.Temporary() { // nolint
 			mt.log.
 				WithError(err).
 				WithField("temporary", true).
