@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - remove all instance of the visor writing to the config file except via api
 - remove path to dmsghttp-config.json from config
 - revise versioning - move to skyenv
-
+- remove transports cache from visor initialization and check them before make route
 
 ### Added
 - added `add-rhv` and `disable-rhv` flags to `skywire-visor` for adding remote hypervisor PK and disable remote hypervisor PK(s) on config file
