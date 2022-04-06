@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -18,10 +19,10 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/updater"
@@ -376,7 +377,7 @@ func (v *Visor) SetAutoStart(appName string, autoStart bool) error {
 	}
 
 	v.log.Infof("Saving auto start = %v for app %v to config", autoStart, appName)
-	return v.conf.UpdateAppAutostart(v.appL, appName, autoStart)
+	return v.conf.UpdateAppAutostart(v.appL, appName, autoStart, filepath.Join(skyenv.SkywirePath, skyenv.ConfigName))
 }
 
 // SetAppPassword implements API.
@@ -402,7 +403,7 @@ func (v *Visor) SetAppPassword(appName, password string) error {
 		passcodeArgName = "-passcode"
 	)
 
-	if err := v.conf.UpdateAppArg(v.appL, appName, passcodeArgName, password); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, passcodeArgName, password, filepath.Join(skyenv.SkywirePath, skyenv.ConfigName)); err != nil {
 		return err
 	}
 
@@ -423,7 +424,7 @@ func (v *Visor) SetAppKillswitch(appName string, killswitch bool) error {
 		killSwitchArg = "--killswitch"
 	)
 
-	if err := v.conf.UpdateAppArg(v.appL, appName, killSwitchArg, killswitch); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, killSwitchArg, killswitch, filepath.Join(skyenv.SkywirePath, skyenv.ConfigName)); err != nil {
 		return err
 	}
 
@@ -444,7 +445,7 @@ func (v *Visor) SetAppSecure(appName string, isSecure bool) error {
 		secureArgName = "--secure"
 	)
 
-	if err := v.conf.UpdateAppArg(v.appL, appName, secureArgName, isSecure); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, secureArgName, isSecure, filepath.Join(skyenv.SkywirePath, skyenv.ConfigName)); err != nil {
 		return err
 	}
 
@@ -475,7 +476,7 @@ func (v *Visor) SetAppPK(appName string, pk cipher.PubKey) error {
 		pkArgName = "-srv"
 	)
 
-	if err := v.conf.UpdateAppArg(v.appL, appName, pkArgName, pk.String()); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, pkArgName, pk.String(), filepath.Join(skyenv.SkywirePath, skyenv.ConfigName)); err != nil {
 		return err
 	}
 
@@ -801,13 +802,13 @@ func (v *Visor) RuntimeLogs() (string, error) {
 
 // SetMinHops sets min_hops routing config of visor
 func (v *Visor) SetMinHops(in uint16) error {
-	return v.conf.UpdateMinHops(in)
+	return v.conf.UpdateMinHops(in, filepath.Join(skyenv.SkywirePath, skyenv.ConfigName))
 }
 
 // SetPersistentTransports sets min_hops routing config of visor
 func (v *Visor) SetPersistentTransports(pTps []transport.PersistentTransports) error {
 	v.tpM.SetPTpsCache(pTps)
-	return v.conf.UpdatePersistentTransports(pTps)
+	return v.conf.UpdatePersistentTransports(pTps, filepath.Join(skyenv.SkywirePath, skyenv.ConfigName))
 }
 
 // GetPersistentTransports sets min_hops routing config of visor
@@ -817,7 +818,7 @@ func (v *Visor) GetPersistentTransports() ([]transport.PersistentTransports, err
 
 // SetPublicAutoconnect sets public_autoconnect config of visor
 func (v *Visor) SetPublicAutoconnect(pAc bool) error {
-	return v.conf.UpdatePublicAutoconnect(pAc)
+	return v.conf.UpdatePublicAutoconnect(pAc, filepath.Join(skyenv.SkywirePath, skyenv.ConfigName))
 }
 
 // GetVPNClientAddress get PK address of server set on vpn-client
