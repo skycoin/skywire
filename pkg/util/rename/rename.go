@@ -55,7 +55,7 @@ func move(oldPath string, newPath string) error {
 		}
 	}()
 
-	outputFile, err := os.Create(newPath)
+	outputFile, err := os.Create(newPath) // nolint:gosec
 	if err != nil {
 		return fmt.Errorf("create: %w", err)
 	}
