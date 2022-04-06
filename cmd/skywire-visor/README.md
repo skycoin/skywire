@@ -30,31 +30,48 @@ After the installation, you can run `skywire-visor -h` to see the usage:
 
 ```
 $ skywire-visor --help
-$ go run ./cmd/skywire-visor/skywire-visor.go --help
-Skywire visor
+
+	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
+	└─┐├┴┐└┬┘││││├┬┘├┤
+	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘
 
 Usage:
   skywire-visor [flags]
-  skywire-visor [command]
-
-Available Commands:
-  completion  Generate completion script
-  help        Help about any command
 
 Flags:
-  -c, --config string        config file location. If the value is 'STDIN', config file will be read from stdin.
-      --delay string         start delay (deprecated) (default "0ns")
-  -h, --help                 help for skywire-visor
-      --launch-browser       open hypervisor web ui (hypervisor only) with system browser
-      --pprofaddr string     pprof http port if mode is 'http' (default "localhost:6060")
-  -p, --pprofmode string     pprof profiling mode. Valid values: cpu, mem, mutex, block, trace, http
-      --syslog string        syslog server address. E.g. localhost:514
-      --tag string           logging tag (default "skywire")
-  -v, --version              version for skywire-visor
-  -f, --with-hypervisor-ui   run visor with hypervisor UI config.
+  -c, --config string   config file to use default: skywire-config.json
+  -i, --hvui            run as hypervisor
+  -b, --browser         open hypervisor ui in default web browser
+      --all             show all flags
+  -h, --help            help for skywire-visor
+  -v, --version         version for skywire-visor
 
-Use "skywire-visor [command] --help" for more information about a command.
+  $ skywire-visor --all
 
+
+	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
+	└─┐├┴┐└┬┘││││├┬┘├┤
+	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘
+
+Usage:
+  skywire-visor [flags]
+
+Flags:
+  -c, --config string       config file to use default: skywire-config.json
+  -i, --hvui                run as hypervisor
+  -b, --browser             open hypervisor ui in default web browser
+  -j, --hv string           add remote hypervisor PKs at runtime
+  -k, --xhv                 disable remote hypervisors set in config file
+  -n, --stdin               read config from stdin
+      --ph                  use package config /opt/skywire/skywire.json
+      --pv                  use package config /opt/skywire/skywire-visor.json
+  -p, --pprofmode string    pprof mode: cpu, mem, mutex, block, trace, http
+  -q, --pprofaddr string    pprof http port (default "localhost:6060")
+  -t, --tag string          logging tag (default "skywire")
+  -y, --syslog string       syslog server address. E.g. localhost:514
+  -z, --completion string   [ bash | zsh | fish | powershell ]
+  -h, --help                help for skywire-visor
+  -v, --version             version for skywire-visor
 ```
 
 ## Config file generation
@@ -80,20 +97,31 @@ An example of the script
 go run ../../cmd/apps/skychat/chat.go
 ```
 
-the following runs skywire from source without compiling:
+The following runs skywire from source without compiling:
 
 ```
-$ ln -s scripts/_apps apps
+$ ln -sf scripts/_apps apps
 $ chmod +x apps/*
-$ go run ./cmd/skywire-cli/skywire-cli.go config gen -ibro ./skywire-config.json
-$ go run ./cmd/skywire-visor/skywire-visor.go -c ./skywire-config.json
+$ go run cmd/skywire-cli/skywire-cli.go config gen -ibr skywire-config.json
+$ go run cmd/skywire-visor/skywire-visor.go -c skywire-config.json
 ```
 
-Or, shorthand:
+Or, with make:
 
 ```
 make run-source
 ```
+
+## Run from source without compiling or writing config
+
+Its possible to output the config from skywire-cli to stdout and pipe the config to skywire-visor as stdin
+
+```
+go run cmd/skywire-cli/skywire-cli.go config gen -ibn | go run cmd/skywire-visor/skywire-visor.go -nb
+```
+
+Useful for testing both skywire-cli and skywire-visor providing a single line to the shell.
+The config is not written to file in the above example
 
 
 ##### Example running from source dir
@@ -188,14 +216,14 @@ The configuration file is generated in the following way
 for a visor with local hypervisor:
 
 ```
-$   skywire-cli config gen -bipr --enable-auth -o /opt/skywire/skywire.json
+$   skywire-cli config gen -bipr -o /opt/skywire/skywire.json
 ```
 
 for visor with remote hypervisor; first copy the existing configuration file to keep the same keys.
 
 ```
 # cp /opt/skywire/skywire.json /opt/skywire/skywire-visor.json
-# skywire-cli config gen --hypervisor-pks <remote-hypervisor-public-key> -bpo /opt/skywire/skywire-visor.json
+# skywire-cli config gen -bpj <remote-hypervisor-public-key> -o /opt/skywire/skywire-visor.json
 ```
 
 These two configuration files are referenced in systemd service files to start skywire with either a local or remote hypervisor.

@@ -12,8 +12,8 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/yamux"
 
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 // Log is skysocks package level logger, it can be replaced with a different one from outside the package
