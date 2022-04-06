@@ -16,18 +16,19 @@ import (
 )
 
 func baseConfig(t *testing.T) *visorconfig.V1 {
-	cc, err := visorconfig.NewCommon(nil, visorconfig.StdinName, visorconfig.V1Name, nil)
+	cc, err := visorconfig.NewCommon(nil, nil)
+	var services *visorconfig.Services
 	require.NoError(t, err)
-	return visorconfig.MakeBaseConfig(cc)
+	return visorconfig.MakeBaseConfig(cc, false, true, services)
 }
 
 func TestHealth(t *testing.T) {
 	t.Run("Report all the services as available", func(t *testing.T) {
 		c := baseConfig(t)
-		c.Transport = &visorconfig.V1Transport{
+		c.Transport = &visorconfig.Transport{
 			Discovery: "foo",
 		}
-		c.Routing = &visorconfig.V1Routing{
+		c.Routing = &visorconfig.Routing{
 			RouteFinder: "foo",
 			SetupNodes:  []cipher.PubKey{c.PK},
 		}
@@ -60,7 +61,7 @@ func TestHealth(t *testing.T) {
 
 	t.Run("Report as connecting", func(t *testing.T) {
 		c := baseConfig(t)
-		c.Routing = &visorconfig.V1Routing{}
+		c.Routing = &visorconfig.Routing{}
 
 		v := &Visor{
 			conf: c,

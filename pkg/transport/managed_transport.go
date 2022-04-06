@@ -16,9 +16,9 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
@@ -345,7 +345,7 @@ func (mt *ManagedTransport) deleteFromDiscovery() error {
 		if netErr, ok := err.(net.Error); ok && netErr.Temporary() { // nolint
 			mt.log.
 				WithError(err).
-				WithField("temporary", true).
+				WithField("timeout", true).
 				Warn("Failed to update transport status.")
 			return err
 		}
