@@ -8,11 +8,14 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 const (
 	// StdinName is the path name used to identify STDIN.
 	StdinName = "STDIN"
+	// StdoutName is the path name used to identify STDOUT.
+	StdoutName = "STDOUT"
 )
 
 var (
@@ -23,8 +26,8 @@ var (
 // Common represents the common fields that are shared across all config versions,
 // alongside logging and flushing fields.
 type Common struct {
-	path string
-	log  *logging.MasterLogger
+	//path string
+	log *logging.MasterLogger
 
 	Version string        `json:"version"`
 	SK      cipher.SecKey `json:"sk,omitempty"`
@@ -32,15 +35,14 @@ type Common struct {
 }
 
 // NewCommon returns a new Common.
-func NewCommon(log *logging.MasterLogger, confPath, version string, sk *cipher.SecKey) (*Common, error) {
+func NewCommon(log *logging.MasterLogger, sk *cipher.SecKey) (*Common, error) {
 	if log == nil {
 		log = logging.NewMasterLogger()
 	}
-
 	c := new(Common)
 	c.log = log
-	c.path = confPath
-	c.Version = version
+	//c.path = confPath
+	c.Version = skyenv.Version()
 	if sk != nil {
 		c.SK = *sk
 		if err := c.ensureKeys(); err != nil {
@@ -75,8 +77,8 @@ func (c *Common) ensureKeys() error {
 	return nil
 }
 
-func (c *Common) flush(v interface{}) (err error) {
-	switch c.path {
+func (c *Common) flush(v interface{}, path string) (err error) {
+	switch path {
 	case "":
 		return ErrNoConfigPath
 	case StdinName:
@@ -85,7 +87,7 @@ func (c *Common) flush(v interface{}) (err error) {
 
 	log := c.log.
 		PackageLogger("visor:config").
-		WithField("filepath", c.path).
+		WithField("filepath", path).
 		WithField("config_version", c.Version)
 	log.Info("Flushing config to file.")
 	defer func() {
@@ -99,5 +101,5 @@ func (c *Common) flush(v interface{}) (err error) {
 		return err
 	}
 	const filePerm = 0644
-	return ioutil.WriteFile(c.path, raw, filePerm)
+	return ioutil.WriteFile(path, raw, filePerm)
 }

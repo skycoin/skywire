@@ -7,9 +7,10 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
+	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 // Factory creates appdisc.Updater instances based on the app name.
@@ -28,7 +29,7 @@ func (f *Factory) setDefaults() {
 		f.Log = logging.MustGetLogger("appdisc")
 	}
 	if f.ServiceDisc == "" {
-		f.ServiceDisc = skyenv.DefaultServiceDiscAddr
+		f.ServiceDisc = utilenv.ServiceDiscAddr
 	}
 }
 
