@@ -1,14 +1,12 @@
 package visorconfig
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
-	"fmt"
+	"io"
+	"strings"
 
 	"github.com/skycoin/skycoin/src/util/logging"
 
-	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
@@ -18,46 +16,19 @@ var (
 )
 
 // Parse parses the visor config from a given reader.
-// If the config file is not the most recent version, it is upgraded and written back to 'path'.
-func Parse(log *logging.MasterLogger, raw []byte, options *ParseOptions) (*V1, error) {
+// The config version is checked against the visor's version and if not the same we send back the
+// error as well as compat(compatibility) as false.
+func Parse(log *logging.Logger, r io.Reader) (conf *V1, compat bool, err error) {
 
-	cc, err := NewCommon(log, nil)
+	conf, err = Reader(r)
 	if err != nil {
-		return nil, err
+		return nil, compat, err
 	}
+	log.WithField("config version: ", conf.Version).Info()
 
-	if err := json.Unmarshal(raw, cc); err != nil {
-		return nil, fmt.Errorf("failed to obtain config version: %w", err)
+	// we check if the version of the visor and config are the same
+	if (conf.Version != "unknown") && (skyenv.BuildInfo.Version != "unknown") {
+		compat = strings.Contains(strings.Split(skyenv.BuildInfo.Version, "-")[0], strings.Split(conf.Version, "-")[0])
 	}
-	return parseV1(cc, raw, options)
-}
-
-func parseV1(cc *Common, raw []byte, options *ParseOptions) (*V1, error) {
-	conf := MakeBaseConfig(cc, options.testEnv, options.dmsgHTTP, options.services)
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	if err := dec.Decode(&conf); err != nil {
-		return nil, err
-	}
-
-	if err := conf.ensureKeys(); err != nil {
-		return nil, fmt.Errorf("%v: %w", ErrInvalidSK, err)
-	}
-	conf = ensureAppDisc(conf)
-	conf.Version = skyenv.Version()
-	return conf, conf.flush(conf, options.path)
-}
-
-func ensureAppDisc(conf *V1) *V1 {
-	if conf.Launcher.ServiceDisc == "" {
-		conf.Launcher.ServiceDisc = utilenv.ServiceDiscAddr
-	}
-	return conf
-}
-
-// ParseOptions is passed to Parse
-type ParseOptions struct {
-	path     string
-	testEnv  bool
-	dmsgHTTP bool
-	services *Services
+	return conf, compat, nil
 }
