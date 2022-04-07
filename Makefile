@@ -45,9 +45,22 @@ BUILDINFO_COMMIT := -X $(BUILDINFO_PATH).commit=$(COMMIT)
 BUILDTAGINFO := -X $(PROJECT_BASE)/pkg/visor.BuildTag=$(BUILDTAG)
 
 BUILDINFO?=$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT) $(BUILDTAGINFO)
+INFO?=$(VERSION) $(DATE) $(COMMIT) $(BUILDTAG)
 
 BUILD_OPTS?="-ldflags=$(BUILDINFO)" -mod=vendor $(RACE_FLAG)
 BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
+
+buildinfo:
+	@echo $(INFO)
+
+version:
+	@echo $(VERSION)
+
+date:
+	@echo $(DATE)
+
+commit:
+	@echo $(COMMIT)
 
 check: lint test ## Run linters and tests
 

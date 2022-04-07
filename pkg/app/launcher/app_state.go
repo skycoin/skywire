@@ -12,6 +12,9 @@ const (
 
 	// AppStatusErrored represents status of an errored App.
 	AppStatusErrored
+
+	// AppVPNClientConnecting represents status of VPN client connecting.
+	AppVPNClientConnecting
 )
 
 // AppState defines state parameters for a registered App.
