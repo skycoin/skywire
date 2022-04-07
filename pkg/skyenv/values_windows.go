@@ -4,22 +4,20 @@
 package skyenv
 
 //OS detection at runtime
-const OS = "win" // nolint
+const (
+	OS = "win"
+	// SkywirePath is the path to the installation folder
+	SkywirePath = ""
 
-// SkywirePath is the path to the installation folder.
-// TODO (darkrengarius): change path
+	// DmsghttpPath is the path to dmsghttp-config.json in the packages
+	DmsghttpPath = "dmsghttp-config.json"
 
-// SkywirePath is the path to the installation folder
-var SkywirePath = ""
+	// Skywirejson is the Hypervisor config
+	Skywirejson = "skywire.json"
 
-// DmsghttpPath is the path to dmsghttp-config.json in the packages
-var DmsghttpPath = "dmsghttp-config.json"
-
-// Skywirejson is the Hypervisor config
-var Skywirejson = "skywire.json"
-
-// Skywirevisorjson is the visor config
-var Skywirevisorjson = "skywire-visor.json"
+	// Skywirevisorjson is the visor config
+	kywirevisorjson = "skywire-visor.json"
+)
 
 //TODO implement this similarly for windows
 
