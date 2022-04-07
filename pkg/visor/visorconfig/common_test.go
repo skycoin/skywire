@@ -17,7 +17,7 @@ func TestCommon_ensureKeys(t *testing.T) {
 
 	t.Run("no_keys", func(t *testing.T) {
 		// init
-		cc, err := NewCommon(nil, nil)
+		cc, err := NewCommon(nil, "", nil)
 		require.NoError(t, err)
 
 		// test
@@ -33,7 +33,7 @@ func TestCommon_ensureKeys(t *testing.T) {
 
 	t.Run("both_keys", func(t *testing.T) {
 		// init
-		cc, err := NewCommon(nil, nil)
+		cc, err := NewCommon(nil, "", nil)
 		require.NoError(t, err)
 
 		// init: expected key pair (this should not change)
@@ -51,7 +51,7 @@ func TestCommon_ensureKeys(t *testing.T) {
 
 	t.Run("only_secret_key", func(t *testing.T) {
 		// init
-		cc, err := NewCommon(nil, nil)
+		cc, err := NewCommon(nil, "", nil)
 		require.NoError(t, err)
 
 		// init: expected key pair
