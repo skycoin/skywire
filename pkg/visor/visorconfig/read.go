@@ -41,7 +41,7 @@ func ReadRaw(raw []byte, confPath string) (*V1, error) {
 	if err != nil {
 		return nil, err
 	}
-	conf := MakeBaseConfig(cc, false, true, nil)
+	conf := MakeBaseConfig(cc, false, true, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create config template")
 	}
