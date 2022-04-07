@@ -261,13 +261,13 @@ var rootCmd = &cobra.Command{
 			log.WithField("branch: ", branch).Info()
 		}
 	},
-	Run: func(_ *cobra.Command, args []string) {
-		runApp(args)
+	Run: func(_ *cobra.Command, _ []string) {
+		runApp()
 	},
 	Version: buildinfo.Version(),
 }
 
-func runVisor(args []string) {
+func runVisor() {
 	var ok bool
 	log := initLogger(tag, syslogAddr)
 	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
@@ -276,7 +276,7 @@ func runVisor(args []string) {
 	stopPProf := initPProf(log, tag, pprofMode, pprofAddr)
 	defer stopPProf()
 
-	conf := initConfig(log, args)
+	conf := initConfig(log)
 
 	if disableHypervisorPKs {
 		conf.Hypervisors = []cipher.PubKey{}
@@ -395,7 +395,7 @@ func initPProf(log *logging.MasterLogger, tag string, profMode string, profAddr 
 	return stop
 }
 
-func initConfig(mLog *logging.MasterLogger, args []string) *visorconfig.V1 { //nolint
+func initConfig(mLog *logging.MasterLogger) *visorconfig.V1 { //nolint
 	log := mLog.PackageLogger("visor:config")
 
 	var r io.Reader
@@ -420,7 +420,6 @@ func initConfig(mLog *logging.MasterLogger, args []string) *visorconfig.V1 { //n
 	if err != nil {
 		log.WithError(err).Fatal("Failed to read in config.")
 	}
-	log.WithField("config version: ", conf.Version).Info()
 
 	if !compat {
 		log.Error("config version does not match visor version")
