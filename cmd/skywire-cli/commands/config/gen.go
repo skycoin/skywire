@@ -22,6 +22,7 @@ import (
 var (
 	sk                cipher.SecKey
 	output            string
+	confPath          string
 	configName        string
 	stdout            bool
 	regen             bool
@@ -67,7 +68,7 @@ func init() {
 	genConfigCmd.Flags().StringVarP(&hypervisorPKs, "hvpks", "j", "", "list of public keys to use as hypervisor")
 	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", skyenv.OS, "(linux / macos / windows) paths")
 	genConfigCmd.Flags().BoolVarP(&stdout, "stdout", "n", false, "write config to stdout")
-	genConfigCmd.Flags().StringVarP(&output, "out", "o", "", "output config default:"+skyenv.ConfigName)
+	genConfigCmd.Flags().StringVarP(&output, "out", "o", skyenv.ConfigName, "output config default:"+skyenv.ConfigName)
 	genConfigCmd.Flags().BoolVarP(&pkgEnv, "package", "p", false, "use paths for package "+skyenv.SkywirePath)
 	genConfigCmd.Flags().BoolVarP(&publicRPC, "publicrpc", "q", false, "allow rpc requests from LAN")
 	genConfigCmd.Flags().BoolVarP(&regen, "regen", "r", false, "re-generate existing config & retain keys")
@@ -103,6 +104,8 @@ var genConfigCmd = &cobra.Command{
 		//set default output filename
 		if output == "" {
 			outunset = true
+		} else {
+			confPath = output
 		}
 
 		if output == visorconfig.StdoutName {
@@ -133,12 +136,12 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 		if (print == "") && !stdout {
-			if output, err = filepath.Abs(output); err != nil {
+			if confPath, err = filepath.Abs(confPath); err != nil {
 				logger.WithError(err).Fatal("Invalid output provided.")
 			}
 			if force {
-				if _, err := os.Stat(output); err == nil {
-					err := os.Remove(output)
+				if _, err := os.Stat(confPath); err == nil {
+					err := os.Remove(confPath)
 					if err != nil {
 						logger.WithError(err).Warn("Could not remove file")
 					}
@@ -148,7 +151,7 @@ var genConfigCmd = &cobra.Command{
 			}
 			if !regen {
 				//check if the config exists
-				if _, err := os.Stat(output); err == nil {
+				if _, err := os.Stat(confPath); err == nil {
 					//error config exists !regen
 					logger.Fatal("Config file already exists. Specify the '-r --regen' flag to regenerate.")
 				}
@@ -168,7 +171,6 @@ var genConfigCmd = &cobra.Command{
 		}
 		//fetch the service endpoints
 		services = visorconfig.Fetch(mLog, serviceConfURL, stdout)
-
 		// skywire-cli config gen -ip || skywire-cli config gen -p
 		if !stdout && outunset && pkgEnv && (selectedOS == "linux") {
 			if hypervisor {
@@ -177,23 +179,23 @@ var genConfigCmd = &cobra.Command{
 			} else {
 				configName = "skywire-visor.json"
 			}
-			output = skyenv.SkywirePath + "/" + configName
+			confPath = skyenv.SkywirePath + "/" + configName
 		}
 
 		// Read in old config and obtain old secret key or generate a new random secret key
 		// and obtain old hypervisors (if any)
 		var sk cipher.SecKey
-		if oldConf, err := visorconfig.ReadFile(output); err != nil {
+		if oldConf, err := visorconfig.ReadFile(confPath); err != nil {
 			if !stdout {
-
-				sk = oldConf.SK
-
+				_, sk = cipher.GenerateKeyPair()
+			}
+		} else {
+			sk = oldConf.SK
+			if retainHypervisors {
 				for _, j := range oldConf.Hypervisors {
 					hypervisorPKs = hypervisorPKs + "," + fmt.Sprintf("\t%s\n", j)
 				}
 			}
-		} else {
-			_, sk = cipher.GenerateKeyPair()
 		}
 
 		//determine best protocol
