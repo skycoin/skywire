@@ -3,6 +3,7 @@ package visorconfig
 import (
 	"encoding/json"
 	"io/ioutil"
+	"path/filepath"
 	"strings"
 
 	"github.com/skycoin/dmsg/pkg/disc"
@@ -20,12 +21,10 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
 
-var dmsgHTTPServersList *DmsgHTTPServers
-
 // MakeBaseConfig returns a visor config with 'enforced' fields only.
 // This is used as default values if no config is given, or for missing *required* fields.
 // This function always returns the latest config version.
-func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Services) *V1 {
+func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Services, dmsgHTTPServersList *DmsgHTTPServers) *V1 {
 	//check if any services were passed
 	if services == nil {
 		//fall back on skyev defaults
@@ -116,8 +115,15 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, pkgEnv bool
 	if err != nil {
 		return nil, err
 	}
+
+	var dmsgHTTPServersList *DmsgHTTPServers
+
 	if dmsgHTTP {
-		serversListJSON, err := ioutil.ReadFile(skyenv.DMSGHTTPPath)
+		dmsgHTTPPath := skyenv.DMSGHTTPPath
+		if pkgEnv {
+			dmsgHTTPPath = skyenv.DmsghttpPath
+		}
+		serversListJSON, err := ioutil.ReadFile(filepath.Clean(dmsgHTTPPath))
 		if err != nil {
 			log.WithError(err).Fatal("Failed to read dmsghttp-config.json file.")
 		}
@@ -127,7 +133,7 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, pkgEnv bool
 		}
 	}
 	// Actual config generation.
-	conf := MakeBaseConfig(cc, testEnv, dmsgHTTP, services)
+	conf := MakeBaseConfig(cc, testEnv, dmsgHTTP, services, dmsgHTTPServersList)
 
 	conf.Launcher.Apps = makeDefaultLauncherAppsConfig()
 
@@ -160,7 +166,6 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, pkgEnv bool
 		pkgconfig := skyenv.PackageConfig()
 		conf.LocalPath = pkgconfig.LocalPath
 		conf.Launcher.BinPath = pkgconfig.Launcher.BinPath
-		//conf.DMSGHTTPPath = pkgconfig.DmsghttpPath
 		if conf.Hypervisor != nil {
 			conf.Hypervisor.EnableAuth = pkgconfig.Hypervisor.EnableAuth
 			conf.Hypervisor.DBPath = pkgconfig.Hypervisor.DbPath
@@ -170,21 +175,6 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, pkgEnv bool
 	return conf, nil
 
 }
-
-/*
-// MakeTestConfig acts like MakeDefaultConfig, however, test deployment service addresses are used instead.
-func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool, services Services) (*V1, error) {
-	conf, err := MakeDefaultConfig(log, confPath, sk, hypervisor, services)
-	if err != nil {
-		return nil, err
-	}
-	SetDefaultTestingValues(conf)
-	if conf.Hypervisor != nil {
-		conf.Hypervisor.DmsgDiscovery = conf.Transport.Discovery
-	}
-	return conf, nil
-}
-*/
 
 // SetDefaultTestingValues mutates configuration to use testing values
 // makeDefaultLauncherAppsConfig creates default launcher config for apps,
