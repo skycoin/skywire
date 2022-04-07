@@ -13,7 +13,7 @@
 /skywire.json
 /apps/
 /skywire/
-/local*
+/local/*
 /transport_logs
 /dmsgpty
 

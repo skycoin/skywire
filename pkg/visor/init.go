@@ -14,18 +14,18 @@ import (
 
 	"github.com/ccding/go-stun/stun"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/direct"
-	dmsgdisc "github.com/skycoin/dmsg/disc"
-	"github.com/skycoin/dmsg/dmsgctrl"
-	"github.com/skycoin/dmsg/dmsgget"
-	"github.com/skycoin/dmsg/dmsghttp"
-	"github.com/skycoin/dmsg/dmsgpty"
+	"github.com/skycoin/dmsg/pkg/direct"
+	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
+	"github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsgctrl"
+	"github.com/skycoin/dmsg/pkg/dmsgget"
+	"github.com/skycoin/dmsg/pkg/dmsghttp"
+	"github.com/skycoin/dmsg/pkg/dmsgpty"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
+	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/internal/utclient"
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
@@ -37,6 +37,7 @@ import (
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/setup/setupclient"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
@@ -957,7 +958,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 	}
 	serviceDisc := v.conf.Launcher.ServiceDisc
 	if serviceDisc == "" {
-		serviceDisc = skyenv.DefaultServiceDiscAddr
+		serviceDisc = utilenv.ServiceDiscAddr
 	}
 
 	// todo: refactor updatedisc: split connecting to services in updatedisc and

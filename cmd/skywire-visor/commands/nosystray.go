@@ -13,7 +13,7 @@ func extraFlags() {
 
 }
 
-func runApp(args ...string) {
+func runApp(args []string) {
 	runVisor(args)
 }
 

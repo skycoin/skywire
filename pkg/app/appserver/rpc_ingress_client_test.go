@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
