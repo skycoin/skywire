@@ -3,7 +3,6 @@ package visorconfig
 import (
 	"errors"
 	"io"
-	"regexp"
 	"strings"
 
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -29,10 +28,7 @@ func Parse(log *logging.Logger, r io.Reader) (conf *V1, compat bool, err error) 
 
 	// we check if the version of the visor and config are the same
 	if (conf.Version != "unknown") && (skyenv.BuildInfo.Version != "unknown") {
-		compat, err = regexp.MatchString(strings.Split(skyenv.BuildInfo.Version, "-")[0], conf.Version)
-		if err != nil {
-			return nil, compat, err
-		}
+		compat = strings.Contains(strings.Split(skyenv.BuildInfo.Version, "-")[0], strings.Split(conf.Version, "-")[0])
 	}
 	return conf, compat, nil
 }
