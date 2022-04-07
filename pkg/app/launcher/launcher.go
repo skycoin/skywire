@@ -239,7 +239,6 @@ func (l *Launcher) startApp(cmd string, args, envs []string) error {
 	if err != nil {
 		return err
 	}
-
 	// Start proc and persist pid.
 	pid, err := l.procM.Start(procConf)
 	if err != nil {
