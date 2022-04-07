@@ -103,9 +103,8 @@ var genConfigCmd = &cobra.Command{
 		//set default output filename
 		if output == "" {
 			outunset = true
-		} else {
-			skyenv.ConfigName = output
 		}
+
 		if output == visorconfig.StdoutName {
 			stdout = true
 			force = false
@@ -121,24 +120,25 @@ var genConfigCmd = &cobra.Command{
 			logger.Fatal("Use of mutually exclusive flags: -w --hide and -n --stdout")
 		}
 		if dmsgHTTP {
+			dmsgHTTPPath := skyenv.DMSGHTTPPath
 			if pkgEnv {
-				skyenv.DMSGHTTPPath = skyenv.DmsghttpPath
+				dmsgHTTPPath = skyenv.DmsghttpPath
 			}
-			if _, err := os.Stat(skyenv.DMSGHTTPPath); err == nil {
+			if _, err := os.Stat(dmsgHTTPPath); err == nil {
 				if !stdout {
-					logger.Info("Found Dmsghttp config: ", skyenv.DMSGHTTPPath)
+					logger.Info("Found Dmsghttp config: ", dmsgHTTPPath)
 				}
 			} else {
-				logger.Fatal("Dmsghttp config not found at: ", skyenv.DMSGHTTPPath)
+				logger.Fatal("Dmsghttp config not found at: ", dmsgHTTPPath)
 			}
 		}
 		if (print == "") && !stdout {
-			if skyenv.ConfigName, err = filepath.Abs(skyenv.ConfigName); err != nil {
+			if output, err = filepath.Abs(output); err != nil {
 				logger.WithError(err).Fatal("Invalid output provided.")
 			}
 			if force {
-				if _, err := os.Stat(skyenv.ConfigName); err == nil {
-					err := os.Remove(skyenv.ConfigName)
+				if _, err := os.Stat(output); err == nil {
+					err := os.Remove(output)
 					if err != nil {
 						logger.WithError(err).Warn("Could not remove file")
 					}
@@ -148,7 +148,7 @@ var genConfigCmd = &cobra.Command{
 			}
 			if !regen {
 				//check if the config exists
-				if _, err := os.Stat(skyenv.ConfigName); err == nil {
+				if _, err := os.Stat(output); err == nil {
 					//error config exists !regen
 					logger.Fatal("Config file already exists. Specify the '-r --regen' flag to regenerate.")
 				}
@@ -177,33 +177,32 @@ var genConfigCmd = &cobra.Command{
 			} else {
 				configName = "skywire-visor.json"
 			}
-			skyenv.ConfigName = skyenv.SkywirePath + "/" + configName
+			output = skyenv.SkywirePath + "/" + configName
 		}
 
 		// Read in old config and obtain old secret key or generate a new random secret key
+		// and obtain old hypervisors (if any)
 		var sk cipher.SecKey
-		if !stdout {
-			if oldConf, err := visorconfig.ReadFile(skyenv.ConfigName); err != nil {
-				_, sk = cipher.GenerateKeyPair()
-			} else {
+		if oldConf, err := visorconfig.ReadFile(output); err != nil {
+			if !stdout {
+
 				sk = oldConf.SK
+
+				for _, j := range oldConf.Hypervisors {
+					hypervisorPKs = hypervisorPKs + "," + fmt.Sprintf("\t%s\n", j)
+				}
 			}
+		} else {
+			_, sk = cipher.GenerateKeyPair()
 		}
+
 		//determine best protocol
 		if bestProtocol && netutil.LocalProtocol() {
 			dmsgHTTP = true
 		}
 
-		// Read in old config (if any) and obtain old hypervisors.
-		if retainHypervisors {
-			if oldConf, err := visorconfig.ReadFile(skyenv.ConfigName); err != nil {
-				for _, j := range oldConf.Hypervisors {
-					hypervisorPKs = hypervisorPKs + "," + fmt.Sprintf("\t%s\n", j)
-				}
-			}
-		}
 		//create the conf
-		conf, err := visorconfig.MakeDefaultConfig(mLog, &sk, pkgEnv, testEnv, dmsgHTTP, hypervisor, hypervisorPKs, services)
+		conf, err := visorconfig.MakeDefaultConfig(mLog, &sk, pkgEnv, testEnv, dmsgHTTP, hypervisor, output, hypervisorPKs, services)
 		if err != nil {
 			logger.WithError(err).Fatal("Failed to create config.")
 		}
@@ -261,7 +260,7 @@ var genConfigCmd = &cobra.Command{
 		//don't write file with stdout
 		if !stdout {
 			// Save config to file.
-			if err := conf.Flush(skyenv.ConfigName); err != nil {
+			if err := conf.Flush(); err != nil {
 				logger.WithError(err).Fatal("Failed to flush config to file.")
 			}
 		}
@@ -278,10 +277,10 @@ var genConfigCmd = &cobra.Command{
 		}
 		//hide the printing of the config to the terminal
 		if hide {
-			logger.Infof("Updated file '%s'\n", skyenv.ConfigName)
+			logger.Infof("Updated file '%s'\n", output)
 			os.Exit(0)
 		}
 		//default behavior
-		logger.Infof("Updated file '%s' to:\n%s\n", skyenv.ConfigName, j)
+		logger.Infof("Updated file '%s' to:\n%s\n", output, j)
 	},
 }
