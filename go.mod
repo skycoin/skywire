@@ -24,11 +24,11 @@ require (
 	github.com/pkg/profile v1.5.0
 	github.com/shirou/gopsutil/v3 v3.21.4
 	github.com/sirupsen/logrus v1.8.1
-	github.com/skycoin/dmsg v0.0.0-20220309150149-59567d358f03
+	github.com/skycoin/dmsg v0.0.0-20220401080257-ba4de44b7666
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
-	github.com/spf13/cobra v1.3.0
+	github.com/spf13/cobra v1.4.0
 	github.com/stretchr/testify v1.7.0
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
 	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect
@@ -47,18 +47,22 @@ require (
 )
 
 require (
+	github.com/bitfield/script v0.19.0
 	github.com/go-chi/chi/v5 v5.0.8-0.20220103230436-7dbe9a0bd10f
+	github.com/ivanpirog/coloredcobra v1.0.0
 	github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
-	github.com/skycoin/skywire-utilities v0.0.0-20220321002722-7d4b15ff5211
+	github.com/skycoin/skywire-utilities v0.0.0-20220331141811-c29ff9ab891e
 )
 
 require (
+	bitbucket.org/creachadair/shell v0.0.7 // indirect
 	github.com/ActiveState/termtest/conpty v0.5.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20170929234023-d6e3b3328b78 // indirect
 	github.com/Microsoft/go-winio v0.4.16 // indirect
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
 	github.com/creack/pty v1.1.15 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/fatih/color v1.13.0 // indirect
 	github.com/getlantern/context v0.0.0-20190109183933-c447772a6520 // indirect
 	github.com/getlantern/errors v1.0.1 // indirect
 	github.com/getlantern/hex v0.0.0-20190417191902-c6586a6fe0b7 // indirect

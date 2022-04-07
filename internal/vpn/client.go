@@ -18,10 +18,10 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 const (
@@ -188,7 +188,7 @@ func (c *Client) Serve() error {
 
 	r := netutil.NewRetrier(c.log, netutil.DefaultInitBackoff, netutil.DefaultMaxBackoff, 3, netutil.DefaultFactor).
 		WithErrWhitelist(errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
-			errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound, errErrSetupNode)
+			errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound, errErrSetupNode, errNotPermited)
 
 	err := r.Do(context.Background(), func() error {
 		if c.isClosed() {
@@ -198,7 +198,7 @@ func (c *Client) Serve() error {
 		if err := c.dialServeConn(); err != nil {
 			switch err {
 			case errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
-				errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound, errErrSetupNode:
+				errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound, errErrSetupNode, errNotPermited:
 				c.setAppError(err)
 				c.resetConnDuration()
 				return err
