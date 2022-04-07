@@ -55,13 +55,20 @@ var (
 	hypervisorUI         bool
 	remoteHypervisorPKs  string
 	disableHypervisorPKs bool
-	stopVisorFn          func() // nolint:unused
+	stopVisorFn          func()
 	stopVisorWg          sync.WaitGroup
 	completion           string
 	hiddenflags          []string
 	all                  bool
 	pkg                  bool
 	pkg1                 bool
+
+	// skywire is the path to the running visor binary
+	skywire string
+	// workDir is the working directory where skywire-visor was executed
+	workDir string // nolint:unused
+	// root indicates process is run with root permissions
+	root bool // nolint:unused
 )
 
 func init() {
@@ -174,13 +181,13 @@ var rootCmd = &cobra.Command{
 		var fork string
 		var branch string
 		//indicates how skywire was started
-		skyenv.Skywire = os.Args[0]
+		skywire = os.Args[0]
 		//indicates where skywire was started
 		path, err := os.Getwd()
 		if err != nil {
 			log.WithError(err).Fatal()
 		}
-		skyenv.Wd = path
+		workDir = path
 		//determine if process has root permissions
 		thisUser, err := user.Current()
 		if err != nil {
@@ -188,16 +195,16 @@ var rootCmd = &cobra.Command{
 		}
 		if (skyenv.OS == "linux") || (skyenv.OS == "mac") {
 			if thisUser.Username == "root" {
-				skyenv.Root = true
+				root = true
 			}
 		}
 		//retrieve build info
 		skyenv.BuildInfo = buildinfo.Get()
 		if skyenv.BuildInfo.Version == "unknown" {
-			if match := strings.Contains("/tmp/", skyenv.Skywire); err == nil {
+			if match := strings.Contains("/tmp/", skywire); err == nil {
 				if match {
 					log.Info("executed with go run")
-					log.WithField("binary: ", skyenv.Skywire).Info()
+					log.WithField("binary: ", skywire).Info()
 				}
 			}
 			//check for .git folder for versioning
@@ -417,7 +424,7 @@ func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 { /
 		log.Error("config version does not match visor version")
 		log.WithField("skywire version: ", skyenv.BuildInfo.Version).Error()
 		var updstr string
-		if match := strings.Contains("/tmp/", skyenv.Skywire); err == nil {
+		if match := strings.Contains("/tmp/", skywire); err == nil {
 			log.Info("match:", match)
 			if match {
 				if _, err := os.Stat("cmd/skywire-cli/skywire-cli.go"); err == nil {
@@ -446,15 +453,15 @@ func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 { /
 			}
 		}
 		//there is no config *file* with stdin
-		if skyenv.ConfigName != visorconfig.StdinName {
+		if confPath != visorconfig.StdinName {
 			if _, err = exec.LookPath("stat"); err == nil {
-				if owner, err := script.Exec(`stat -c '%U' ` + skyenv.ConfigName).String(); err == nil {
+				if owner, err := script.Exec(`stat -c '%U' ` + confPath).String(); err == nil {
 					if (owner == "root") || (owner == "root\n") {
 						updstr = "sudo " + updstr
 					}
 				}
 			}
-			updstr = "\n		" + updstr + "ro " + skyenv.ConfigName + "\n"
+			updstr = "\n		" + updstr + "ro " + confPath + "\n"
 		} else {
 			updstr = "\n		" + updstr + "n" + " | go run cmd/skywire-visor/skywire-visor.go -n"
 			if launchBrowser {

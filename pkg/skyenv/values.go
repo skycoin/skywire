@@ -20,15 +20,6 @@ const (
 	DMSGHTTPPath = "dmsghttp-config.json"
 )
 
-var (
-	// Skywire is the path to the running visor binary
-	Skywire = ""
-	// Wd is the working directory where skywire-visor was executed
-	Wd = ""
-	// Root indicates process is run with root permissions
-	Root bool
-)
-
 // Constants for skywire root directories.
 // Dmsg port constants.
 // TODO(evanlinjin): Define these properly. These are currently random.
