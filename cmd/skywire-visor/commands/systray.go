@@ -28,11 +28,11 @@ func runApp(args ...string) {
 	}
 
 	go func() {
-		runVisor(args)
+		runVisor()
 		systray.Quit()
 	}()
 
-	conf := initConfig(l, args, confPath)
+	conf := initConfig(l)
 	systray.Run(gui.GetOnGUIReady(sysTrayIcon, conf), gui.OnGUIQuit)
 
 }
