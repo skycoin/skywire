@@ -238,42 +238,42 @@ run-source:
 	test -d apps && rm -r apps || true
 	ln -s scripts/_apps apps
 	chmod +x apps/*
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -bin | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -in | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
 
 ## Run skywire from source, without compiling binaries - requires skywire cloned
 run-vpnsrv:
 	test -d apps && rm -r apps || true
 	ln -s scripts/_apps apps
 	chmod +x apps/*
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -bin --servevpn | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -in --servevpn | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
 
 ## Run skywire from source with test endpoints
 run-source-test:
 	test -d apps && rm -r apps || true
 	ln -s scripts/_apps apps
 	chmod +x apps/*
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -nbit | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -nit | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
 
 ## Run skywire from source, with vpn server enabled
 run-vpnsrv-test:
 	test -d apps && rm -r apps || true
 	ln -s scripts/_apps apps
 	chmod +x apps/*
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -nbit --servevpn | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -nit --servevpn | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
 
 ## Run skywire from source with dmsghttp config
 run-source-dmsghttp:
 	test -d apps && rm -r apps || true
 	ln -s scripts/_apps apps
 	chmod +x apps/*
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -nid | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -din | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
 
 ## Run skywire from source with dmsghttp config and vpn server
 run-vpnsrv-dmsghttp:
 	test -d apps && rm -r apps || true
 	ln -s scripts/_apps apps
 	chmod +x apps/*
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -nid --servevpn | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -din --servevpn | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
 
 ## Run skywire from source with dmsghttp config and test endpoints
 run-source-dmsghttp-test:
