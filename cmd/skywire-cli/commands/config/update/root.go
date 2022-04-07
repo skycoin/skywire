@@ -6,9 +6,10 @@ import (
 	"strings"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skycoin/src/util/logging"
+	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -37,12 +38,9 @@ var (
 	setPublicAutoconnect   string
 	serviceConfURL         string
 	minHops                int
-	svcconf                = strings.ReplaceAll(serviceconfaddr, "http://", "") //skyenv.DefaultServiceConfAddr
-	testconf               = strings.ReplaceAll(testconfaddr, "http://", "")    //skyenv.DefaultServiceConfAddr
+	svcconf                = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")     //skyenv.DefaultServiceConfAddr
+	testconf               = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "") //skyenv.DefaultServiceConfAddr
 )
-
-const serviceconfaddr = "http://conf.skywire.skycoin.com"
-const testconfaddr = "http://conf.skywire.dev"
 
 var logger = logging.MustGetLogger("skywire-cli")
 
@@ -66,7 +64,6 @@ var RootCmd = &cobra.Command{
 		//set default output filename
 		if output == "" {
 			output = skyenv.ConfigName
-			//outunset = true
 		}
 		var err error
 		if output, err = filepath.Abs(output); err != nil {
