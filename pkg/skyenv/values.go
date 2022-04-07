@@ -13,20 +13,21 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
-// ConfigName is the default config name. Updated by setting config file path.
-var ConfigName = "skywire-config.json"
+const (
+	// ConfigName is the default config name. Updated by setting config file path.
+	ConfigName = "skywire-config.json"
+	// DMSGHTTPPath path to dmsghttp-config.json
+	DMSGHTTPPath = "dmsghttp-config.json"
+)
 
-// Skywire is the path to the running visor binary
-var Skywire = ""
-
-// Wd is the working directory where skywire-visor was executed
-var Wd = ""
-
-// Root indicates process is run with root permissions
-var Root bool
-
-// DMSGHTTPPath path to dmsghttp-config.json
-var DMSGHTTPPath = "dmsghttp-config.json"
+var (
+	// Skywire is the path to the running visor binary
+	Skywire = ""
+	// Wd is the working directory where skywire-visor was executed
+	Wd = ""
+	// Root indicates process is run with root permissions
+	Root bool
+)
 
 // Constants for skywire root directories.
 // Dmsg port constants.
