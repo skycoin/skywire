@@ -19,7 +19,7 @@ func baseConfig(t *testing.T) *visorconfig.V1 {
 	cc, err := visorconfig.NewCommon(nil, visorconfig.StdinName, nil)
 	var services *visorconfig.Services
 	require.NoError(t, err)
-	return visorconfig.MakeBaseConfig(cc, false, true, services)
+	return visorconfig.MakeBaseConfig(cc, false, true, services, nil)
 }
 
 func TestHealth(t *testing.T) {
