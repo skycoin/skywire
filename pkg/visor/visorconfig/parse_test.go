@@ -41,10 +41,10 @@ func TestParse(t *testing.T) {
 		// check: obtained config contains all base values.
 
 		options := &ParseOptions{
-			path:     filename,
-			testEnv:  false,
-			dmsgHTTP: true,
-			services: nil,
+			Path:     filename,
+			TestEnv:  false,
+			DmsgHTTP: true,
+			Services: nil,
 		}
 		conf, err := Parse(nil, raw, options)
 		require.NoError(t, err)

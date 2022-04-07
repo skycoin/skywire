@@ -33,7 +33,7 @@ func Parse(log *logging.MasterLogger, raw []byte, options *ParseOptions) (*V1, e
 }
 
 func parseV1(cc *Common, raw []byte, options *ParseOptions) (*V1, error) {
-	conf := MakeBaseConfig(cc, options.testEnv, options.dmsgHTTP, options.services)
+	conf := MakeBaseConfig(cc, options.TestEnv, options.DmsgHTTP, options.Services)
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	if err := dec.Decode(&conf); err != nil {
 		return nil, err
@@ -44,7 +44,7 @@ func parseV1(cc *Common, raw []byte, options *ParseOptions) (*V1, error) {
 	}
 	conf = ensureAppDisc(conf)
 	conf.Version = skyenv.Version()
-	return conf, conf.flush(conf, options.path)
+	return conf, conf.flush(conf, options.Path)
 }
 
 func ensureAppDisc(conf *V1) *V1 {
@@ -56,8 +56,8 @@ func ensureAppDisc(conf *V1) *V1 {
 
 // ParseOptions is passed to Parse
 type ParseOptions struct {
-	path     string
-	testEnv  bool
-	dmsgHTTP bool
-	services *Services
+	Path     string
+	TestEnv  bool
+	DmsgHTTP bool
+	Services *Services
 }
