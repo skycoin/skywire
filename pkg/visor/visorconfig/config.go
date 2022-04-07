@@ -111,8 +111,8 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 // The config's 'sk' field will be nil if not specified.
 // Generated config will be saved to 'confPath'.
 // This function always returns the latest config version.
-func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, pkgEnv bool, testEnv bool, dmsgHTTP bool, hypervisor bool, hypervisorPKs string, services *Services) (*V1, error) {
-	cc, err := NewCommon(log, sk)
+func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, pkgEnv bool, testEnv bool, dmsgHTTP bool, hypervisor bool, confPath, hypervisorPKs string, services *Services) (*V1, error) {
+	cc, err := NewCommon(log, confPath, sk)
 	if err != nil {
 		return nil, err
 	}
