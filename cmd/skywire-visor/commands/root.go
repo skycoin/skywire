@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -202,7 +201,7 @@ var rootCmd = &cobra.Command{
 		//retrieve build info
 		skyenv.BuildInfo = buildinfo.Get()
 		if skyenv.BuildInfo.Version == "unknown" {
-			if match, err := regexp.MatchString("/tmp/", skyenv.Skywire); err == nil {
+			if match := strings.Contains("/tmp/", skyenv.Skywire); err == nil {
 				if match {
 					log.Info("executed with go run")
 					log.WithField("binary: ", skyenv.Skywire).Info()
@@ -227,7 +226,7 @@ var rootCmd = &cobra.Command{
 							fork = strings.ReplaceAll(fork, "github.com/", "")
 							fork = strings.ReplaceAll(fork, ":/", "")
 							fork = strings.ReplaceAll(fork, "\n", "")
-							if nofork, err := regexp.MatchString(fork, "skycoin/skywire"); err == nil {
+							if nofork := strings.Contains(fork, "skycoin/skywire"); err == nil {
 								if !nofork {
 									fork = ""
 								}
@@ -425,7 +424,7 @@ func initConfig(mLog *logging.MasterLogger) *visorconfig.V1 { //nolint
 		log.Error("config version does not match visor version")
 		log.WithField("skywire version: ", skyenv.BuildInfo.Version).Error()
 		var updstr string
-		if match, err := regexp.MatchString("/tmp/", skyenv.Skywire); err == nil {
+		if match := strings.Contains("/tmp/", skyenv.Skywire); err == nil {
 			log.Info("match:", match)
 			if match {
 				if _, err := os.Stat("cmd/skywire-cli/skywire-cli.go"); err == nil {
@@ -447,8 +446,8 @@ func initConfig(mLog *logging.MasterLogger) *visorconfig.V1 { //nolint
 				break
 			}
 		}
-		var pkgenv bool
-		if pkgenv, err = regexp.MatchString("/opt/skywire/apps", conf.Launcher.BinPath); err == nil {
+
+		if pkgenv := strings.Contains("/opt/skywire/apps", conf.Launcher.BinPath); err == nil {
 			if pkgenv {
 				updstr = updstr + "p"
 			}
