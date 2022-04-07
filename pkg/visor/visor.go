@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/dmsg"
-	dmsgdisc "github.com/skycoin/dmsg/disc"
+	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
+	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/utclient"
@@ -107,6 +107,7 @@ func (v *Visor) MasterLogger() *logging.MasterLogger {
 
 // NewVisor constructs new Visor.
 func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) {
+
 	v := &Visor{
 		log:               conf.MasterLogger().PackageLogger("visor"),
 		conf:              conf,

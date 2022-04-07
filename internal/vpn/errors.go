@@ -16,6 +16,7 @@ var (
 	errHandshakeNoFreeIPs             = errors.New("No free IPs left to serve")
 	errHandshakeStatusBadRequest      = errors.New("Request was malformed")
 	errTimeout                        = errors.New("Internal error: Timeout")
+	errNotPermited                    = errors.New("ioctl: operation not permitted")
 
 	errNoTransportFound = appserver.RPCErr{
 		Err: router.ErrNoTransportFound.Error(),

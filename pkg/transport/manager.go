@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 )
@@ -460,9 +460,11 @@ func (tm *Manager) STCPRRemoteAddrs() []string {
 	defer tm.mx.RUnlock()
 
 	for _, tp := range tm.tps {
-		remoteRaw := tp.transport.RemoteRawAddr().String()
-		if tp.Entry.Type == network.STCPR && remoteRaw != "" {
-			addrs = append(addrs, remoteRaw)
+		if tp.transport != nil {
+			remoteRaw := tp.transport.RemoteRawAddr().String()
+			if tp.Entry.Type == network.STCPR && remoteRaw != "" {
+				addrs = append(addrs, remoteRaw)
+			}
 		}
 	}
 

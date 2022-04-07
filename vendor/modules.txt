@@ -1,3 +1,6 @@
+# bitbucket.org/creachadair/shell v0.0.7
+## explicit; go 1.16
+bitbucket.org/creachadair/shell
 # github.com/ActiveState/termtest/conpty v0.5.0
 ## explicit; go 1.12
 github.com/ActiveState/termtest/conpty
@@ -21,6 +24,9 @@ github.com/VictoriaMetrics/metrics
 # github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 ## explicit
 github.com/armon/go-socks5
+# github.com/bitfield/script v0.19.0
+## explicit; go 1.12
+github.com/bitfield/script
 # github.com/ccding/go-stun/stun v0.0.0-20200514191101-4dc67bcdb029
 ## explicit; go 1.14
 github.com/ccding/go-stun/stun
@@ -30,6 +36,9 @@ github.com/creack/pty
 # github.com/davecgh/go-spew v1.1.1
 ## explicit
 github.com/davecgh/go-spew/spew
+# github.com/fatih/color v1.13.0
+## explicit; go 1.13
+github.com/fatih/color
 # github.com/gen2brain/dlgs v0.0.0-20210911090025-cbd38e821b98
 ## explicit
 github.com/gen2brain/dlgs
@@ -65,6 +74,8 @@ github.com/go-ole/go-ole/oleutil
 # github.com/go-stack/stack v1.8.0
 ## explicit
 github.com/go-stack/stack
+# github.com/google/go-cmp v0.5.7
+## explicit; go 1.11
 # github.com/google/go-github v17.0.0+incompatible
 ## explicit
 github.com/google/go-github/github
@@ -83,6 +94,9 @@ github.com/gorilla/securecookie
 # github.com/inconshreveable/mousetrap v1.0.0
 ## explicit
 github.com/inconshreveable/mousetrap
+# github.com/ivanpirog/coloredcobra v1.0.0
+## explicit; go 1.15
+github.com/ivanpirog/coloredcobra
 # github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
 ## explicit; go 1.15
 github.com/james-barrow/golang-ipc
@@ -154,19 +168,19 @@ github.com/shirou/gopsutil/v3/process
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v0.0.0-20220309150149-59567d358f03
+# github.com/skycoin/dmsg v0.0.0-20220401080257-ba4de44b7666
 ## explicit; go 1.16
-github.com/skycoin/dmsg
-github.com/skycoin/dmsg/direct
-github.com/skycoin/dmsg/disc
-github.com/skycoin/dmsg/dmsgctrl
-github.com/skycoin/dmsg/dmsgget
-github.com/skycoin/dmsg/dmsghttp
-github.com/skycoin/dmsg/dmsgpty
-github.com/skycoin/dmsg/dmsgtest
-github.com/skycoin/dmsg/ioutil
-github.com/skycoin/dmsg/noise
-github.com/skycoin/dmsg/servermetrics
+github.com/skycoin/dmsg/internal/servermetrics
+github.com/skycoin/dmsg/pkg/direct
+github.com/skycoin/dmsg/pkg/disc
+github.com/skycoin/dmsg/pkg/dmsg
+github.com/skycoin/dmsg/pkg/dmsgctrl
+github.com/skycoin/dmsg/pkg/dmsgget
+github.com/skycoin/dmsg/pkg/dmsghttp
+github.com/skycoin/dmsg/pkg/dmsgpty
+github.com/skycoin/dmsg/pkg/dmsgtest
+github.com/skycoin/dmsg/pkg/ioutil
+github.com/skycoin/dmsg/pkg/noise
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 ## explicit
 github.com/skycoin/noise
@@ -178,7 +192,7 @@ github.com/skycoin/skycoin/src/cipher/ripemd160
 github.com/skycoin/skycoin/src/cipher/secp256k1-go
 github.com/skycoin/skycoin/src/cipher/secp256k1-go/secp256k1-go2
 github.com/skycoin/skycoin/src/util/logging
-# github.com/skycoin/skywire-utilities v0.0.0-20220321002722-7d4b15ff5211
+# github.com/skycoin/skywire-utilities v0.0.0-20220331141811-c29ff9ab891e
 ## explicit; go 1.17
 github.com/skycoin/skywire-utilities/pkg/buildinfo
 github.com/skycoin/skywire-utilities/pkg/cipher
@@ -194,7 +208,7 @@ github.com/skycoin/yamux
 # github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 ## explicit
 github.com/songgao/water
-# github.com/spf13/cobra v1.3.0
+# github.com/spf13/cobra v1.4.0
 ## explicit; go 1.15
 github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.5
