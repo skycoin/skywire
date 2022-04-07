@@ -161,7 +161,7 @@ func resetAppsConfig(conf *visorconfig.V1, appName string) {
 
 func saveConfig(conf *visorconfig.V1) {
 	// Save config to file.
-	if err := conf.Flush(output); err != nil {
+	if err := conf.Flush(); err != nil {
 		logger.WithError(err).Fatal("Failed to flush config to file.")
 	}
 

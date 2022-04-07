@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -66,7 +67,7 @@ var (
 func init() {
 	rootCmd.Flags().SortFlags = false
 
-	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use default: "+skyenv.ConfigName)
+	rootCmd.Flags().StringVarP(&confPath, "config", "c", skyenv.ConfigName, "config file to use default: "+skyenv.ConfigName)
 	rootCmd.Flags().BoolVarP(&hypervisorUI, "hvui", "i", false, "run as hypervisor")
 	rootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
 	rootCmd.Flags().StringVarP(&remoteHypervisorPKs, "hv", "j", "", "add remote hypervisor PKs at runtime")
@@ -155,28 +156,20 @@ var rootCmd = &cobra.Command{
 			if pkg1 {
 				confPath = skyenv.SkywirePath + "/" + skyenv.Skywirevisorjson
 			}
-			//set skyenv.ConfigName to confPath
-			if confPath != "" {
-				skyenv.ConfigName = confPath
-			}
-			//set confPath if unset
-			if confPath == "" {
-				confPath = skyenv.ConfigName
-			}
+
 			//enforce .json extension
-			if !strings.HasSuffix(skyenv.ConfigName, ".json") {
+			if !strings.HasSuffix(confPath, ".json") {
 				//append .json
-				skyenv.ConfigName = skyenv.ConfigName + ".json"
+				confPath = confPath + ".json"
 			}
 			//check for the config file
-			if _, err := os.Stat(skyenv.ConfigName); err != nil {
+			if _, err := os.Stat(confPath); err != nil {
 				//fail here on no config
 				log.WithError(err).Fatal("config file not found")
 				os.Exit(1)
 			}
 		} else {
-			//stdin == true
-			skyenv.ConfigName = visorconfig.StdinName
+			confPath = visorconfig.StdinName
 		}
 		var fork string
 		var branch string
@@ -275,7 +268,7 @@ func runVisor() {
 	stopPProf := initPProf(log, tag, pprofMode, pprofAddr)
 	defer stopPProf()
 
-	conf := initConfig(log)
+	conf := initConfig(log, confPath)
 
 	if disableHypervisorPKs {
 		conf.Hypervisors = []cipher.PubKey{}
@@ -394,12 +387,12 @@ func initPProf(log *logging.MasterLogger, tag string, profMode string, profAddr 
 	return stop
 }
 
-func initConfig(mLog *logging.MasterLogger) *visorconfig.V1 { //nolint
+func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 { //nolint
 	log := mLog.PackageLogger("visor:config")
 
 	var r io.Reader
 
-	switch skyenv.ConfigName {
+	switch confPath {
 	case visorconfig.StdinName:
 		log.Info("Reading config from STDIN.")
 		r = os.Stdin
@@ -407,15 +400,15 @@ func initConfig(mLog *logging.MasterLogger) *visorconfig.V1 { //nolint
 		fallthrough
 	default:
 		log.Info("Reading config from file.")
-		log.WithField("filepath", skyenv.ConfigName).Info()
-		f, err := os.ReadFile(skyenv.ConfigName)
+		log.WithField("filepath", confPath).Info()
+		f, err := os.ReadFile(filepath.Clean(confPath))
 		if err != nil {
 			log.WithError(err).Fatal("Failed to read config file.")
 		}
 		r = bytes.NewReader(f)
 	}
 
-	conf, compat, err := visorconfig.Parse(log, r)
+	conf, compat, err := visorconfig.Parse(log, r, confPath)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to read in config.")
 	}
