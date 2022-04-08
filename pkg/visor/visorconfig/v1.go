@@ -35,7 +35,6 @@ type V1 struct {
 	ShutdownTimeout   Duration `json:"shutdown_timeout,omitempty"`    // time value, examples: 10s, 1m, etc
 	RestartCheckDelay Duration `json:"restart_check_delay,omitempty"` // time value, examples: 10s, 1m, etc
 	IsPublic          bool     `json:"is_public"`
-	//DMSGHTTPPath      string   `json:"dmsghttp_path"`
 
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 
