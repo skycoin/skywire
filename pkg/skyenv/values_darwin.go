@@ -16,9 +16,9 @@ const (
 // PackageConfig contains installation paths (for mac)
 func PackageConfig() PkgConfig {
 	var pkgconfig PkgConfig
-	pkgconfig.Launcher.BinPath = "/opt/skywire/apps"
-	pkgconfig.LocalPath = "/opt/skywire/local"
-	pkgconfig.Hypervisor.DbPath = "/opt/skywire/users.db" //permissions errors if the process is not run as root!
+	pkgconfig.Launcher.BinPath = "/Library/Application Support/Skywire/apps"
+	pkgconfig.LocalPath = "/Library/Application Support/Skywire/local"
+	pkgconfig.Hypervisor.DbPath = "/Library/Application Support/Skywire/users.db"
 	pkgconfig.Hypervisor.EnableAuth = true
 	return pkgconfig
 }
