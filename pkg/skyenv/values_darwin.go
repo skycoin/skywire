@@ -3,31 +3,22 @@
 
 package skyenv
 
-//OS detection at runtime
-const OS = "mac" //nolint
+const (
+	//OS detection at runtime
+	OS = "mac"
 
-// SkywirePath is the path to the installation folder.
-// skywireApplicationPath = "/Applications/Skywire.app"
-// SkywirePath is the path to the installation folder
-var SkywirePath = "/Library/Application Support/Skywire"
-
-// DmsghttpPath is the path to dmsghttp-config.json
-var DmsghttpPath = "dmsghttp-config.json"
-
-// Skywirejson is the Hypervisor config
-var Skywirejson = "skywire.json"
-
-// Skywirevisorjson is the visor config
-var Skywirevisorjson = "skywire-visor.json"
+	// SkywirePath is the path to the installation folder.
+	SkywirePath = "/Library/Application Support/Skywire"
+)
 
 //TODO implement this similarly for macOS
 
 // PackageConfig contains installation paths (for mac)
 func PackageConfig() PkgConfig {
 	var pkgconfig PkgConfig
-	pkgconfig.Launcher.BinPath = "/opt/skywire/apps"
-	pkgconfig.LocalPath = "/opt/skywire/local"
-	pkgconfig.Hypervisor.DbPath = "/opt/skywire/users.db" //permissions errors if the process is not run as root!
+	pkgconfig.Launcher.BinPath = "/Library/Application Support/Skywire/apps"
+	pkgconfig.LocalPath = "/Library/Application Support/Skywire/local"
+	pkgconfig.Hypervisor.DbPath = "/Library/Application Support/Skywire/users.db"
 	pkgconfig.Hypervisor.EnableAuth = true
 	return pkgconfig
 }
