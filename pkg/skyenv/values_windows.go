@@ -8,15 +8,6 @@ const (
 	OS = "win"
 	// SkywirePath is the path to the installation folder
 	SkywirePath = ""
-
-	// DmsghttpPath is the path to dmsghttp-config.json in the packages
-	DmsghttpPath = "dmsghttp-config.json"
-
-	// Skywirejson is the Hypervisor config
-	Skywirejson = "skywire.json"
-
-	// Skywirevisorjson is the visor config
-	kywirevisorjson = "skywire-visor.json"
 )
 
 //TODO implement this similarly for windows
