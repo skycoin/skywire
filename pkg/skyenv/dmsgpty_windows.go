@@ -10,9 +10,5 @@ import (
 
 // CLIAddr gets the default cli address
 func CLIAddr() string {
-	homedir, err := os.UserHomeDir()
-	if err != nil {
-		homedir = os.TempDir()
-	}
-	return filepath.Join(homedir, "dmsgpty.sock")
+	return filepath.Join(os.TempDir(), "dmsgpty.sock")
 }
