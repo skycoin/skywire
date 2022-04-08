@@ -74,7 +74,7 @@ var (
 func init() {
 	rootCmd.Flags().SortFlags = false
 
-	rootCmd.Flags().StringVarP(&confPath, "config", "c", skyenv.ConfigName, "config file to use default: "+skyenv.ConfigName)
+	rootCmd.Flags().StringVarP(&confPath, "config", "c", skyenv.ConfigName, "config file to use")
 	rootCmd.Flags().BoolVarP(&hypervisorUI, "hvui", "i", false, "run as hypervisor")
 	rootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
 	rootCmd.Flags().StringVarP(&remoteHypervisorPKs, "hv", "j", "", "add remote hypervisor PKs at runtime")

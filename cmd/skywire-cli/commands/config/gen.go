@@ -68,7 +68,7 @@ func init() {
 	genConfigCmd.Flags().StringVarP(&hypervisorPKs, "hvpks", "j", "", "list of public keys to use as hypervisor")
 	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", skyenv.OS, "(linux / macos / windows) paths")
 	genConfigCmd.Flags().BoolVarP(&stdout, "stdout", "n", false, "write config to stdout")
-	genConfigCmd.Flags().StringVarP(&output, "out", "o", skyenv.ConfigName, "output config default:"+skyenv.ConfigName)
+	genConfigCmd.Flags().StringVarP(&output, "out", "o", skyenv.ConfigName, "output config")
 	genConfigCmd.Flags().BoolVarP(&pkgEnv, "package", "p", false, "use paths for package "+skyenv.SkywirePath)
 	genConfigCmd.Flags().BoolVarP(&publicRPC, "publicrpc", "q", false, "allow rpc requests from LAN")
 	genConfigCmd.Flags().BoolVarP(&regen, "regen", "r", false, "re-generate existing config & retain keys")
