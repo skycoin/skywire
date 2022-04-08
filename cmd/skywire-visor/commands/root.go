@@ -69,6 +69,8 @@ var (
 	workDir string // nolint:unused
 	// root indicates process is run with root permissions
 	root bool // nolint:unused
+	// visorBuildInfo holds information about the build
+	visorBuildInfo *buildinfo.Info
 )
 
 func init() {
@@ -199,8 +201,8 @@ var rootCmd = &cobra.Command{
 			}
 		}
 		//retrieve build info
-		skyenv.BuildInfo = buildinfo.Get()
-		if skyenv.BuildInfo.Version == "unknown" {
+		visorBuildInfo = buildinfo.Get()
+		if visorBuildInfo.Version == "unknown" {
 			if match := strings.Contains("/tmp/", skywire); err == nil {
 				if match {
 					log.Info("executed with go run")
@@ -212,10 +214,10 @@ var rootCmd = &cobra.Command{
 				//attempt to version from git sources
 				if _, err = exec.LookPath("git"); err == nil {
 					if version, err := script.Exec(`git describe`).String(); err == nil {
-						skyenv.BuildInfo.Version = strings.ReplaceAll(version, "\n", "")
-						if skyenv.BuildInfo.Commit == "unknown" {
+						visorBuildInfo.Version = strings.ReplaceAll(version, "\n", "")
+						if visorBuildInfo.Commit == "unknown" {
 							if commit, err := script.Exec(`git rev-list -1 HEAD`).String(); err == nil {
-								skyenv.BuildInfo.Commit = strings.ReplaceAll(commit, "\n", "")
+								visorBuildInfo.Commit = strings.ReplaceAll(commit, "\n", "")
 							}
 						}
 						if fork, err = script.Exec(`git config --get remote.origin.url`).String(); err == nil {
@@ -235,9 +237,9 @@ var rootCmd = &cobra.Command{
 						if branch, err = script.Exec(`git rev-parse --abbrev-ref HEAD`).String(); err == nil {
 							branch = strings.ReplaceAll(branch, "\n", "")
 							if _, err = exec.LookPath("date"); err == nil {
-								if skyenv.BuildInfo.Date == "unknown" {
+								if visorBuildInfo.Date == "unknown" {
 									if date, err := script.Exec(`date -u +%Y-%m-%dT%H:%M:%SZ`).String(); err == nil {
-										skyenv.BuildInfo.Date = strings.ReplaceAll(date, "\n", "")
+										visorBuildInfo.Date = strings.ReplaceAll(date, "\n", "")
 									}
 								}
 							}
@@ -246,12 +248,12 @@ var rootCmd = &cobra.Command{
 				}
 			}
 		}
-		log.WithField("version: ", skyenv.BuildInfo.Version).Info()
-		if skyenv.BuildInfo.Date != "unknown" && skyenv.BuildInfo.Date != "" {
-			log.WithField("built on: ", skyenv.BuildInfo.Date).Info()
+		log.WithField("version: ", visorBuildInfo.Version).Info()
+		if visorBuildInfo.Date != "unknown" && visorBuildInfo.Date != "" {
+			log.WithField("built on: ", visorBuildInfo.Date).Info()
 		}
-		if skyenv.BuildInfo.Commit != "unknown" && skyenv.BuildInfo.Commit != "" {
-			log.WithField("against commit: ", skyenv.BuildInfo.Commit).Info()
+		if visorBuildInfo.Commit != "unknown" && visorBuildInfo.Commit != "" {
+			log.WithField("against commit: ", visorBuildInfo.Commit).Info()
 			if fork != "" {
 				log.WithField("fork: ", fork).Info()
 			}
@@ -415,14 +417,14 @@ func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 { /
 		r = bytes.NewReader(f)
 	}
 
-	conf, compat, err := visorconfig.Parse(log, r, confPath)
+	conf, compat, err := visorconfig.Parse(log, r, confPath, visorBuildInfo)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to read in config.")
 	}
 
 	if !compat {
 		log.Error("config version does not match visor version")
-		log.WithField("skywire version: ", skyenv.BuildInfo.Version).Error()
+		log.WithField("skywire version: ", visorBuildInfo.Version).Error()
 		var updstr string
 		if match := strings.Contains("/tmp/", skywire); err == nil {
 			log.Info("match:", match)
