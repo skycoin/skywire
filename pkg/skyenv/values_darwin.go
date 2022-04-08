@@ -8,17 +8,7 @@ const (
 	OS = "mac"
 
 	// SkywirePath is the path to the installation folder.
-	// skywireApplicationPath = "/Applications/Skywire.app"
 	SkywirePath = "/Library/Application Support/Skywire"
-
-	// DmsghttpPath is the path to dmsghttp-config.json
-	DmsghttpPath = "dmsghttp-config.json"
-
-	// Skywirejson is the Hypervisor config
-	Skywirejson = "skywire.json"
-
-	// Skywirevisorjson is the visor config
-	Skywirevisorjson = "skywire-visor.json"
 )
 
 //TODO implement this similarly for macOS

@@ -16,8 +16,15 @@ import (
 const (
 	// ConfigName is the default config name. Updated by setting config file path.
 	ConfigName = "skywire-config.json"
-	// DMSGHTTPPath path to dmsghttp-config.json
-	DMSGHTTPPath = "dmsghttp-config.json"
+
+	// DMSGHTTPName is the default dmsghttp config name
+	DMSGHTTPName = "dmsghttp-config.json"
+
+	// Skywirejson is the Hypervisor config
+	Skywirejson = "skywire.json"
+
+	// Skywirevisorjson is the visor config
+	Skywirevisorjson = "skywire-visor.json"
 )
 
 // Constants for skywire root directories.
