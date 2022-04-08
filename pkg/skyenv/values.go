@@ -9,6 +9,8 @@ import (
 
 	"github.com/bitfield/script"
 
+	"github.com/skycoin/dmsg/pkg/dmsgpty"
+
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
@@ -56,7 +58,7 @@ const (
 
 // DmsgPtyCLIAddr determines CLI address per each platform
 func DmsgPtyCLIAddr() string {
-	return CLIAddr()
+	return dmsgpty.DefaultCLIAddr()
 }
 
 // Default skywire app constants.
