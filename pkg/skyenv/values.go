@@ -150,9 +150,6 @@ func MustPK(pk string) cipher.PubKey {
 	return sPK
 }
 
-// BuildInfo holds information about the build
-var BuildInfo *buildinfo.Info
-
 //Version gets the version of the installation for the config
 func Version() string {
 	u := buildinfo.Version()
