@@ -123,9 +123,9 @@ var genConfigCmd = &cobra.Command{
 			logger.Fatal("Use of mutually exclusive flags: -w --hide and -n --stdout")
 		}
 		if dmsgHTTP {
-			dmsgHTTPPath := skyenv.DMSGHTTPPath
+			dmsgHTTPPath := skyenv.DMSGHTTPName
 			if pkgEnv {
-				dmsgHTTPPath = skyenv.DmsghttpPath
+				dmsgHTTPPath = skyenv.SkywirePath + "/" + skyenv.DMSGHTTPName
 			}
 			if _, err := os.Stat(dmsgHTTPPath); err == nil {
 				if !stdout {

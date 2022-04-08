@@ -68,7 +68,6 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	conf.StunServers = services.StunServers //utilenv.GetStunServers()
 	conf.ShutdownTimeout = DefaultTimeout
 	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
-	//conf.DMSGHTTPPath = skyenv.DMSGHTTPPath
 
 	conf.Dmsgpty = &Dmsgpty{
 		DmsgPort: skyenv.DmsgPtyPort,
@@ -119,9 +118,9 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, pkgEnv bool
 	var dmsgHTTPServersList *DmsgHTTPServers
 
 	if dmsgHTTP {
-		dmsgHTTPPath := skyenv.DMSGHTTPPath
+		dmsgHTTPPath := skyenv.DMSGHTTPName
 		if pkgEnv {
-			dmsgHTTPPath = skyenv.DmsghttpPath
+			dmsgHTTPPath = skyenv.SkywirePath + "/" + skyenv.DMSGHTTPName
 		}
 		serversListJSON, err := ioutil.ReadFile(filepath.Clean(dmsgHTTPPath))
 		if err != nil {
