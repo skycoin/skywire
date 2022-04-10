@@ -13,17 +13,17 @@ import (
 const Pkgpath = "/opt/skywire/skywire.json"
 
 // Reader accepts io.Reader
-func Reader(r io.Reader) (*V1, error) {
+func Reader(r io.Reader, confPath string) (*V1, error) {
 	raw, err := ioutil.ReadAll(r)
 	if err != nil {
 		return nil, fmt.Errorf("%w", err)
 	}
-	return ReadRaw(raw)
+	return ReadRaw(raw, confPath)
 }
 
 // ReadFile reads the config file without opening or writing to it
-func ReadFile(path string) (*V1, error) {
-	f, err := os.ReadFile(path) //nolint
+func ReadFile(confPath string) (*V1, error) {
+	f, err := os.ReadFile(confPath) //nolint
 	if err != nil {
 		return nil, fmt.Errorf("%w", err)
 	}
@@ -31,17 +31,17 @@ func ReadFile(path string) (*V1, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w", err)
 	}
-	return ReadRaw(raw)
+	return ReadRaw(raw, confPath)
 }
 
 // ReadRaw returns config from raw
-func ReadRaw(raw []byte) (*V1, error) {
+func ReadRaw(raw []byte, confPath string) (*V1, error) {
 
-	cc, err := NewCommon(nil, nil)
+	cc, err := NewCommon(nil, confPath, nil)
 	if err != nil {
 		return nil, err
 	}
-	conf := MakeBaseConfig(cc, false, true, nil)
+	conf := MakeBaseConfig(cc, false, true, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create config template")
 	}
