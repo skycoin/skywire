@@ -231,15 +231,71 @@ install-deps-ui:  ## Install the UI dependencies
 	cd $(MANAGER_UI_DIR) && npm ci
 
 run: ## Run skywire visor with skywire-config.json, and start a browser if running a hypervisor
-	./skywire-visor -c ./skywire-config.json
+	./skywire-visor -bc ./skywire-config.json
 
 ## Run skywire from source, without compiling binaries - requires skywire cloned
 run-source:
 	test -d apps && rm -r apps || true
 	ln -s scripts/_apps apps
 	chmod +x apps/*
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -ibro ./skywire-config.json
-	go run ./cmd/skywire-visor/skywire-visor.go -c ./skywire-config.json || true
+	sudo echo "sudo cache"
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -in | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+
+## Run skywire from source, without compiling binaries - requires skywire cloned
+run-vpnsrv:
+	test -d apps && rm -r apps || true
+	ln -s scripts/_apps apps
+	chmod +x apps/*
+	sudo echo "sudo cache"
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -in --servevpn | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+
+## Run skywire from source with test endpoints
+run-source-test:
+	test -d apps && rm -r apps || true
+	ln -s scripts/_apps apps
+	chmod +x apps/*
+	sudo echo "sudo cache"
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -nit | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+
+## Run skywire from source, with vpn server enabled
+run-vpnsrv-test:
+	test -d apps && rm -r apps || true
+	ln -s scripts/_apps apps
+	chmod +x apps/*
+	sudo echo "sudo cache"
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -nit --servevpn | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+
+## Run skywire from source with dmsghttp config
+run-source-dmsghttp:
+	test -d apps && rm -r apps || true
+	ln -s scripts/_apps apps
+	chmod +x apps/*
+	sudo echo "sudo cache"
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -din | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+
+## Run skywire from source with dmsghttp config and vpn server
+run-vpnsrv-dmsghttp:
+	test -d apps && rm -r apps || true
+	ln -s scripts/_apps apps
+	chmod +x apps/*
+	sudo echo "sudo cache"
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -din --servevpn | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+
+## Run skywire from source with dmsghttp config and test endpoints
+run-source-dmsghttp-test:
+	test -d apps && rm -r apps || true
+	ln -s scripts/_apps apps
+	chmod +x apps/*
+	sudo echo "sudo cache"
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -dint | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+
+## Run skywire from source with dmsghttp config, vpn server, and test endpoints
+run-vpnsrv-dmsghttp-test:
+	test -d apps && rm -r apps || true
+	ln -s scripts/_apps apps
+	chmod +x apps/*
+	sudo echo "sudo cache"
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -dint --servevpn | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
 
 lint-ui:  ## Lint the UI code
 	cd $(MANAGER_UI_DIR) && npm run lint

@@ -8,25 +8,25 @@ import (
 	"time"
 
 	"github.com/bitfield/script"
+	"github.com/skycoin/dmsg/pkg/dmsgpty"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
-// ConfigName is the default config name. Updated by setting config file path.
-var ConfigName = "skywire-config.json"
+const (
+	// ConfigName is the default config name. Updated by setting config file path.
+	ConfigName = "skywire-config.json"
 
-// Skywire is the path to the running visor binary
-var Skywire = ""
+	// DMSGHTTPName is the default dmsghttp config name
+	DMSGHTTPName = "dmsghttp-config.json"
 
-// Wd is the working directory where skywire-visor was executed
-var Wd = ""
+	// Skywirejson is the Hypervisor config
+	Skywirejson = "skywire.json"
 
-// Root indicates process is run with root permissions
-var Root bool
-
-// DMSGHTTPPath path to dmsghttp-config.json
-var DMSGHTTPPath = "dmsghttp-config.json"
+	// Skywirevisorjson is the visor config
+	Skywirevisorjson = "skywire-visor.json"
+)
 
 // Constants for skywire root directories.
 // Dmsg port constants.
@@ -57,7 +57,7 @@ const (
 
 // DmsgPtyCLIAddr determines CLI address per each platform
 func DmsgPtyCLIAddr() string {
-	return CLIAddr()
+	return dmsgpty.DefaultCLIAddr()
 }
 
 // Default skywire app constants.
@@ -150,9 +150,6 @@ func MustPK(pk string) cipher.PubKey {
 
 	return sPK
 }
-
-// BuildInfo holds information about the build
-var BuildInfo *buildinfo.Info
 
 //Version gets the version of the installation for the config
 func Version() string {
