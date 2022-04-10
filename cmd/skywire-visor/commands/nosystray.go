@@ -9,10 +9,6 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 )
 
-func extraFlags() {
-
-}
-
 func runApp() {
 	runVisor()
 }
