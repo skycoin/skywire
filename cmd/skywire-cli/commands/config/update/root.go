@@ -9,6 +9,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
+	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -37,12 +38,9 @@ var (
 	setPublicAutoconnect   string
 	serviceConfURL         string
 	minHops                int
-	svcconf                = strings.ReplaceAll(serviceconfaddr, "http://", "") //skyenv.DefaultServiceConfAddr
-	testconf               = strings.ReplaceAll(testconfaddr, "http://", "")    //skyenv.DefaultServiceConfAddr
+	svcconf                = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")     //skyenv.DefaultServiceConfAddr
+	testconf               = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "") //skyenv.DefaultServiceConfAddr
 )
-
-const serviceconfaddr = "http://conf.skywire.skycoin.com"
-const testconfaddr = "http://conf.skywire.dev"
 
 var logger = logging.MustGetLogger("skywire-cli")
 
@@ -66,7 +64,6 @@ var RootCmd = &cobra.Command{
 		//set default output filename
 		if output == "" {
 			output = skyenv.ConfigName
-			//outunset = true
 		}
 		var err error
 		if output, err = filepath.Abs(output); err != nil {
@@ -161,7 +158,7 @@ func resetAppsConfig(conf *visorconfig.V1, appName string) {
 
 func saveConfig(conf *visorconfig.V1) {
 	// Save config to file.
-	if err := conf.Flush(output); err != nil {
+	if err := conf.Flush(); err != nil {
 		logger.WithError(err).Fatal("Failed to flush config to file.")
 	}
 

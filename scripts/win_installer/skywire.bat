@@ -10,8 +10,11 @@ if exist vpn-client.exe (
 if exist "wintun.dll" (
     move /Y wintun.dll "C:\Windows\System32"
 )
-if not exist "%HOMEPATH%\skywire-config.json" (
-skywire-cli config gen -biro "%HOMEPATH%\skywire-config.json" --os windows --disable-apps skychat,skysocks,skysocks-client,vpn-server
+if exist "%HOMEPATH%\skywire-config.json" (
+	move /Y "%HOMEPATH%\skywire-config.json" .
+)
+if not exist "skywire-config.json" (
+skywire-cli config gen -birp --os windows --disableapps skychat,skysocks,skysocks-client,vpn-server
 )
 start "" http://127.0.0.1:8000
-skywire-visor.exe -c "%HOMEPATH%\skywire-config.json"
+skywire-visor.exe -c "skywire-config.json"

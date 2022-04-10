@@ -32,7 +32,7 @@ func runApp(args ...string) {
 		systray.Quit()
 	}()
 
-	conf := initConfig(l)
+	conf := initConfig(l, confPath)
 	systray.Run(gui.GetOnGUIReady(sysTrayIcon, conf), gui.OnGUIQuit)
 
 }
