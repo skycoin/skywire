@@ -146,8 +146,10 @@ Flags:
   -v, --servevpn             enable vpn server
   -w, --hide                 dont print the config to the terminal
   -x, --retainhv             retain existing hypervisors with regen
+      --version string       custom version testing override
       --print string         parse test ; read config from file & print
   -h, --help                 help for gen
+
 ```
 
 ##### Example defaults
@@ -163,10 +165,10 @@ cd $GOPATH/src/github.com/skycoin/skywire && skywire-cli config gen
 ```
 $ cd $GOPATH/src/github.com/skycoin/skywire && skywire-cli config gen
 [2022-04-02T18:19:57-05:00] INFO []: Fetched service endpoints from 'http://conf.skywire.skycoin.com'
-[2022-04-02T18:19:57-05:00] INFO [visor:config]: Flushing config to file. config_version="0.6.1" filepath="/home/user/go/src/github.com/skycoin/skywire/skywire-config.json"
+[2022-04-02T18:19:57-05:00] INFO [visor:config]: Flushing config to file. config_version="0.6.0" filepath="/home/user/go/src/github.com/skycoin/skywire/skywire-config.json"
 [2022-04-02T18:19:57-05:00] INFO [skywire-cli]: Updated file '/home/user/go/src/github.com/skycoin/skywire/skywire-config.json' to:
 {
-	"version": "0.6.1",
+	"version": "0.6.0",
 	"sk": "1d9bdf39d1f0bafb0eef0c3c8189cfceb49f3819e4ec45b9018d6993856341f7",
 	"pk": "032268ff324790954145d3bdaa9eb936fa400bd7d12de78251d85d042f09e6aca7",
 	"dmsg": {
@@ -273,10 +275,10 @@ skywire-cli config gen -i
 ```
 $ skywire-cli config gen -i
 [2022-04-02T18:21:40-05:00] INFO []: Fetched service endpoints from 'http://conf.skywire.skycoin.com'
-[2022-04-02T18:21:40-05:00] INFO [visor:config]: Flushing config to file. config_version="0.6.1" filepath="/home/user/go/src/github.com/skycoin/skywire/skywire-config.json"
+[2022-04-02T18:21:40-05:00] INFO [visor:config]: Flushing config to file. config_version="0.6.0" filepath="/home/user/go/src/github.com/skycoin/skywire/skywire-config.json"
 [2022-04-02T18:21:40-05:00] INFO [skywire-cli]: Updated file '/home/user/go/src/github.com/skycoin/skywire/skywire-config.json' to:
 {
-	"version": "0.6.1",
+	"version": "0.6.0",
 	"sk": "83df03537d74760487bfd12e11e6af1dbd2617b95b0b0f6637ee46a3f30822d7",
 	"pk": "03761d143ec62d12e46802c111cbb59af276c05380453415720048fffaf1841971",
 	"dmsg": {
@@ -414,10 +416,10 @@ skywire-cli config gen -d
 ```
 [2022-04-02T18:32:32-05:00] INFO [skywire-cli]: Found Dmsghttp config: dmsghttp-config.json
 [2022-04-02T18:32:32-05:00] INFO []: Fetched service endpoints from 'http://conf.skywire.skycoin.com'
-[2022-04-02T18:32:32-05:00] INFO [visor:config]: Flushing config to file. config_version="0.6.1" filepath="/home/user/go/src/github.com/skycoin/skywire/skywire-config.json"
+[2022-04-02T18:32:32-05:00] INFO [visor:config]: Flushing config to file. config_version="0.6.0" filepath="/home/user/go/src/github.com/skycoin/skywire/skywire-config.json"
 [2022-04-02T18:32:32-05:00] INFO [skywire-cli]: Updated file '/home/user/go/src/github.com/skycoin/skywire/skywire-config.json' to:
 {
-	"version": "0.6.1",
+	"version": "0.6.0",
 	"sk": "85577beed6b46b67704c52d3acd7ceb14a8d758356dff23028def4e38b72822f",
 	"pk": "02f0cd75987be4c014d59c6aeb43095d8f68bde525e03eff63fa13e59721e397eb",
 	"dmsg": {
@@ -585,10 +587,10 @@ sudo skywire-cli config gen -bipr
 $ sudo skywire-cli config gen -bipr
 [sudo] password for user:
 [2022-04-02T18:39:43-05:00] INFO []: Fetched service endpoints from 'http://conf.skywire.skycoin.com'
-[2022-04-02T18:39:43-05:00] INFO [visor:config]: Flushing config to file. config_version="0.6.1" filepath="/opt/skywire/skywire.json"
+[2022-04-02T18:39:43-05:00] INFO [visor:config]: Flushing config to file. config_version="0.6.0" filepath="/opt/skywire/skywire.json"
 [2022-04-02T18:39:43-05:00] INFO [skywire-cli]: Updated file '/opt/skywire/skywire.json' to:
 {
-	"version": "0.6.1",
+	"version": "0.6.0",
 	"sk": "077017551b6a993b06d684426436794d661347191570c7ea4ed1fe25bfac5269",
 	"pk": "02afbeaa4f02251091eccd7d66e300ca8e3a406020d969ea20089a49d4e6fe2fa3",
 	"dmsg": {
@@ -781,9 +783,9 @@ skywire-cli config update
 
 ```
 $ skywire-cli config update
-[2022-04-02T18:47:15-05:00] INFO [visor:config]: Flushing config to file. config_version="0.6.1" filepath="/home/user/go/src/github.com/skycoin/skywire/skywire-config.json"
+[2022-04-02T18:47:15-05:00] INFO [visor:config]: Flushing config to file. config_version="0.6.0" filepath="/home/user/go/src/github.com/skycoin/skywire/skywire-config.json"
 [2022-04-02T18:47:15-05:00] INFO [skywire-cli]: Updated file '/home/user/go/src/github.com/skycoin/skywire/skywire-config.json' to: {
-	"version": "0.6.1",
+	"version": "0.6.0",
 	"sk": "745badae7d125b90e3fd840b1d03d8a73565a3e0e976db6169b2d9368af86029",
 	"pk": "037b000c6262694c0d2b5d64480c1d82a5a1597a80deab881443742359601bc6e6",
 	"dmsg": {

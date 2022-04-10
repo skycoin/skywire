@@ -35,7 +35,6 @@ type V1 struct {
 	ShutdownTimeout   Duration `json:"shutdown_timeout,omitempty"`    // time value, examples: 10s, 1m, etc
 	RestartCheckDelay Duration `json:"restart_check_delay,omitempty"` // time value, examples: 10s, 1m, etc
 	IsPublic          bool     `json:"is_public"`
-	//DMSGHTTPPath      string   `json:"dmsghttp_path"`
 
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 
@@ -86,16 +85,16 @@ type Launcher struct {
 }
 
 // Flush flushes the config to file (if specified).
-func (v1 *V1) Flush(path string) error {
+func (v1 *V1) Flush() error {
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
 
-	return v1.Common.flush(v1, path)
+	return v1.Common.flush(v1)
 }
 
 // UpdateAppAutostart modifies a single app's autostart value within the config and also the given launcher.
 // The updated config gets flushed to file if there are any changes.
-func (v1 *V1) UpdateAppAutostart(launch *launcher.Launcher, appName string, autoStart bool, path string) error {
+func (v1 *V1) UpdateAppAutostart(launch *launcher.Launcher, appName string, autoStart bool) error {
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
 
@@ -119,12 +118,12 @@ func (v1 *V1) UpdateAppAutostart(launch *launcher.Launcher, appName string, auto
 		Apps:       conf.Apps,
 		ServerAddr: conf.ServerAddr,
 	})
-	return v1.flush(v1, path)
+	return v1.flush(v1)
 }
 
 // UpdateAppArg updates the cli flag of the specified app config and also within the launcher.
 // The updated config gets flushed to file if there are any changes.
-func (v1 *V1) UpdateAppArg(launch *launcher.Launcher, appName, argName string, value interface{}, path string) error {
+func (v1 *V1) UpdateAppArg(launch *launcher.Launcher, appName, argName string, value interface{}) error {
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
 
@@ -150,25 +149,25 @@ func (v1 *V1) UpdateAppArg(launch *launcher.Launcher, appName, argName string, v
 		ServerAddr: conf.ServerAddr,
 	})
 
-	return v1.flush(v1, path)
+	return v1.flush(v1)
 }
 
 // UpdateMinHops updates min_hops config
-func (v1 *V1) UpdateMinHops(hops uint16, path string) error {
+func (v1 *V1) UpdateMinHops(hops uint16) error {
 	v1.mu.Lock()
 	v1.Routing.MinHops = hops
 	v1.mu.Unlock()
 
-	return v1.flush(v1, path)
+	return v1.flush(v1)
 }
 
 // UpdatePersistentTransports updates persistent_transports in config
-func (v1 *V1) UpdatePersistentTransports(pTps []transport.PersistentTransports, path string) error {
+func (v1 *V1) UpdatePersistentTransports(pTps []transport.PersistentTransports) error {
 	v1.mu.Lock()
 	v1.PersistentTransports = pTps
 	v1.mu.Unlock()
 
-	return v1.flush(v1, path)
+	return v1.flush(v1)
 }
 
 // GetPersistentTransports gets persistent_transports from config
@@ -179,12 +178,12 @@ func (v1 *V1) GetPersistentTransports() ([]transport.PersistentTransports, error
 }
 
 // UpdatePublicAutoconnect updates public_autoconnect in config
-func (v1 *V1) UpdatePublicAutoconnect(pAc bool, path string) error {
+func (v1 *V1) UpdatePublicAutoconnect(pAc bool) error {
 	v1.mu.Lock()
 	v1.Transport.PublicAutoconnect = pAc
 	v1.mu.Unlock()
 
-	return v1.flush(v1, path)
+	return v1.flush(v1)
 }
 
 // updateStringArg updates the cli non-boolean flag of the specified app config and also within the launcher.
