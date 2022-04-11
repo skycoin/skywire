@@ -74,11 +74,21 @@ var (
 )
 
 func init() {
+	thisUser, err := user.Current()
+	if err != nil {
+		panic(err)
+	}
+	if thisUser.Username == "root" {
+		root = true
+	}
+
 	rootCmd.Flags().SortFlags = false
 
 	rootCmd.Flags().StringVarP(&confPath, "config", "c", skyenv.ConfigName, "config file to use")
 	rootCmd.Flags().BoolVarP(&hypervisorUI, "hvui", "i", false, "run as hypervisor")
-	rootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
+	if ((skyenv.OS == "linux") && !root) || ((skyenv.OS == "mac") && !root) || (skyenv.OS == "win") {
+		rootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
+	}
 	rootCmd.Flags().StringVarP(&remoteHypervisorPKs, "hv", "j", "", "add remote hypervisor PKs at runtime")
 	hiddenflags = append(hiddenflags, "hv")
 	rootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors set in config file")
@@ -197,16 +207,6 @@ var rootCmd = &cobra.Command{
 			log.WithError(err).Fatal()
 		}
 		workDir = path
-		//determine if process has root permissions
-		thisUser, err := user.Current()
-		if err != nil {
-			log.Error("Unable to get current user: %s", err)
-		}
-		if (skyenv.OS == "linux") || (skyenv.OS == "mac") {
-			if thisUser.Username == "root" {
-				root = true
-			}
-		}
 		//retrieve build info
 		visorBuildInfo = buildinfo.Get()
 		if visorBuildInfo.Version == "unknown" {
