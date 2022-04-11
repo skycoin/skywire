@@ -164,19 +164,19 @@ host-apps-windows:
 	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build ${BUILD_OPTS} -o ./apps $$_.FullName }'
 
 host-apps-systray: ## Build app
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat ./cmd/apps/skychat
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
-	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps/vpn-server ./cmd/apps/vpn-server
-	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps/vpn-client ./cmd/apps/vpn-client
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skychat
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skysocks
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/  ./cmd/apps/skysocks-client
+	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps/ ./cmd/apps/vpn-server
+	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps/ ./cmd/apps/vpn-client
 
 host-apps-systray-windows:
 	powershell -Command new-item .\apps -itemtype directory -force
-	powershell 'go build ${BUILD_OPTS} -o .\apps\skychat .\cmd\apps\skychat'
-	powershell 'go build ${BUILD_OPTS} -o .\apps\skysocks .\cmd\apps\skysocks'
-	powershell 'go build ${BUILD_OPTS} -o .\apps\skysocks-client .\cmd\apps\skysocks-client'
-	powershell 'go build ${BUILD_OPTS} -tags systray -o .\apps\vpn-server .\cmd\apps\vpn-server'
-	powershell 'go build ${BUILD_OPTS} -tags systray -o .\apps\vpn-client .\cmd\apps\vpn-client'
+	powershell 'go build ${BUILD_OPTS} -o .\apps\skychat.exe .\cmd\apps\skychat'
+	powershell 'go build ${BUILD_OPTS} -o .\apps\skysocks.exe .\cmd\apps\skysocks'
+	powershell 'go build ${BUILD_OPTS} -o .\apps\skysocks-client.exe .\cmd\apps\skysocks-client'
+	powershell 'go build ${BUILD_OPTS} -tags systray -o .\apps\vpn-server.exe .\cmd\apps\vpn-server'
+	powershell 'go build ${BUILD_OPTS} -tags systray -o .\apps\vpn-client.exe .\cmd\apps\vpn-client'
 
 # Static Apps
 host-apps-static: ## Build app
@@ -200,9 +200,9 @@ bin-systray-windows: ## Build `skywire-visor` and `skywire-cli` with systray sup
 	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ $$_.FullName }'
 
 bin-systray: ## Build `skywire-visor`, `skywire-cli`
-	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./skywire-visor ./cmd/skywire-visor
-	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./skywire-cli ./cmd/skywire-cli
-	${OPTS} go build ${BUILD_OPTS} -o ./setup-node ./cmd/setup-node
+	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ ./cmd/skywire-visor
+	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ ./cmd/skywire-cli
+	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/setup-node
 
 # Static Bin
 bin-static: ## Build `skywire-visor`, `skywire-cli`

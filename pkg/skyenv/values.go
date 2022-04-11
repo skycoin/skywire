@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/bitfield/script"
-
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
