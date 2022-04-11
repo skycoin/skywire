@@ -12,14 +12,6 @@ import (
 	"github.com/skycoin/skywire/internal/gui"
 )
 
-var (
-	runSysTrayApp bool
-)
-
-func extraFlags() {
-	rootCmd.Flags().BoolVar(&runSysTrayApp, "systray", false, "Run system tray app")
-}
-
 func runApp(args ...string) {
 	l := logging.NewMasterLogger()
 	sysTrayIcon, err := gui.ReadSysTrayIcon()
@@ -33,7 +25,6 @@ func runApp(args ...string) {
 	}()
 
 	conf := initConfig(l, confPath)
-
 	systray.Run(gui.GetOnGUIReady(sysTrayIcon, conf), gui.OnGUIQuit)
 
 }
