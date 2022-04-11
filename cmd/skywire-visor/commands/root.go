@@ -97,8 +97,6 @@ func init() {
 	for _, j := range hiddenflags {
 		rootCmd.Flags().MarkHidden(j) //nolint
 	}
-
-	extraFlags()
 }
 
 var rootCmd = &cobra.Command{
