@@ -60,7 +60,7 @@ github.com/getlantern/hidden
 # github.com/getlantern/ops v0.0.0-20200403153110-8476b16edcd6
 ## explicit
 github.com/getlantern/ops
-# github.com/getlantern/systray v1.1.0
+# github.com/getlantern/systray v1.2.1
 ## explicit; go 1.13
 github.com/getlantern/systray
 # github.com/go-chi/chi/v5 v5.0.8-0.20220103230436-7dbe9a0bd10f
@@ -74,8 +74,6 @@ github.com/go-ole/go-ole/oleutil
 # github.com/go-stack/stack v1.8.0
 ## explicit
 github.com/go-stack/stack
-# github.com/google/go-cmp v0.5.7
-## explicit; go 1.11
 # github.com/google/go-github v17.0.0+incompatible
 ## explicit
 github.com/google/go-github/github
