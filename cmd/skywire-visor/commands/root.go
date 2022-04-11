@@ -80,20 +80,29 @@ func init() {
 	rootCmd.Flags().BoolVarP(&hypervisorUI, "hvui", "i", false, "run as hypervisor")
 	rootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
 	rootCmd.Flags().StringVarP(&remoteHypervisorPKs, "hv", "j", "", "add remote hypervisor PKs at runtime")
+	hiddenflags = append(hiddenflags, "hv")
 	rootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors set in config file")
+	hiddenflags = append(hiddenflags, "xhv")
 	rootCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
+	hiddenflags = append(hiddenflags, "stdin")
 	if skyenv.OS == "linux" {
 		rootCmd.Flags().BoolVar(&pkg, "ph", false, "use package config "+skyenv.SkywirePath+"/"+skyenv.Skywirejson)
+		hiddenflags = append(hiddenflags, "ph")
 		rootCmd.Flags().BoolVar(&pkg1, "pv", false, "use package config "+skyenv.SkywirePath+"/"+skyenv.Skywirevisorjson)
+		hiddenflags = append(hiddenflags, "pv")
 	}
 	rootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "p", "", "pprof mode: cpu, mem, mutex, block, trace, http")
+	hiddenflags = append(hiddenflags, "pprofmode")
 	rootCmd.Flags().StringVarP(&pprofAddr, "pprofaddr", "q", "localhost:6060", "pprof http port")
+	hiddenflags = append(hiddenflags, "pprofaddr")
 	rootCmd.Flags().StringVarP(&tag, "tag", "t", "skywire", "logging tag")
+	hiddenflags = append(hiddenflags, "tag")
 	rootCmd.Flags().StringVarP(&syslogAddr, "syslog", "y", "", "syslog server address. E.g. localhost:514")
+	hiddenflags = append(hiddenflags, "syslog")
 	rootCmd.Flags().StringVarP(&completion, "completion", "z", "", "[ bash | zsh | fish | powershell ]")
+	hiddenflags = append(hiddenflags, "completion")
 	rootCmd.Flags().BoolVar(&all, "all", false, "show all flags")
 
-	hiddenflags = []string{"hv", "xhv", "stdin", "pprofmode", "pprofaddr", "tag", "syslog", "completion", "ph", "pv"}
 	for _, j := range hiddenflags {
 		rootCmd.Flags().MarkHidden(j) //nolint
 	}
@@ -266,7 +275,7 @@ var rootCmd = &cobra.Command{
 	Version: buildinfo.Version(),
 }
 
-func runVisor() {
+func runVisor(conf *visorconfig.V1) {
 	var ok bool
 	log := initLogger(tag, syslogAddr)
 	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
@@ -275,7 +284,9 @@ func runVisor() {
 	stopPProf := initPProf(log, tag, pprofMode, pprofAddr)
 	defer stopPProf()
 
-	conf := initConfig(log, confPath)
+	if conf == nil {
+		conf = initConfig(log, confPath)
+	}
 
 	if disableHypervisorPKs {
 		conf.Hypervisors = []cipher.PubKey{}
