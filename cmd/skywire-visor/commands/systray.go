@@ -1,5 +1,5 @@
-//go:build systray
-// +build systray
+//go:build systray && !linux
+// +build systray,!linux
 
 package commands
 
