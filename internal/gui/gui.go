@@ -187,7 +187,7 @@ func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, logger *log
 	rpc_logger := logger.PackageLogger("systray:rpc_client")
 	hvAddr := getHVAddr(conf)
 	for !isHypervisorRunning(hvAddr) {
-		rpc_logger.Info("Waiting for RPC get to ready...")
+		rpc_logger.Info("Waiting for RPC to get ready...")
 		time.Sleep(2 * time.Second)
 	}
 	rpcC = rpcClient(conf, rpc_logger)
