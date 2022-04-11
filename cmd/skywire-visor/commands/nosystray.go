@@ -10,7 +10,7 @@ import (
 )
 
 func runApp() {
-	runVisor()
+	runVisor(nil)
 }
 
 // setStopFunction sets the stop function
