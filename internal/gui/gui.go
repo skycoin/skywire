@@ -441,12 +441,12 @@ func handleUserInteraction(conf *visorconfig.V1, doneCh chan<- bool) {
 func handleRootInteraction(conf *visorconfig.V1, doneCh chan<- bool) {
 	for {
 		select {
-//		case <-mOpenHypervisor.ClickedCh:
-//			handleOpenHypervisor(conf)
+		//		case <-mOpenHypervisor.ClickedCh:
+		//			handleOpenHypervisor(conf)
 		case <-mVPNButton.ClickedCh:
 			handleVPNButton(conf, rpcC)
-//		case <-mVPNLink.ClickedCh:
-//			handleVPNLinkButton(conf)
+			//		case <-mVPNLink.ClickedCh:
+			//			handleVPNLinkButton(conf)
 		case <-mUninstall.ClickedCh:
 			handleUninstall()
 		case <-mQuit.ClickedCh:
