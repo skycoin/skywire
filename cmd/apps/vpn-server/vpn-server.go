@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"os/user"
 	"runtime"
 	"syscall"
 
@@ -37,19 +36,6 @@ var (
 )
 
 func init() {
-	if runtime.GOOS == "windows" {
-		fmt.Println("OS is not supported")
-		os.Exit(1)
-	}
-	thisUser, err := user.Current()
-	if err != nil {
-		panic(err)
-	}
-	if (thisUser.Username != "root") && ((skyenv.OS == "linux") || (skyenv.OS == "mac")) {
-		fmt.Println("vpn server must be run as root")
-		os.Exit(1)
-	}
-
 	rootCmd.Flags().SortFlags = false
 
 	rootCmd.Flags().StringVarP(&localPKStr, "pk", "p", "", "Local PubKey")
