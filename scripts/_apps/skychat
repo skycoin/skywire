@@ -1,2 +1,2 @@
 #!/bin/bash
-go run ../../cmd/apps/skychat/chat.go
+go run ../../cmd/apps/skychat/skychat.go

@@ -54,8 +54,8 @@ func init() {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "skysocks",
-	Short: "Skywire SOCKS5 Proxy Server",
+	Use:   "skychat",
+	Short: "Skywire P2P Message Application",
 	Long: `
 	┌─┐┬┌─┬ ┬┌─┐┬ ┬┌─┐┌┬┐
 	└─┐├┴┐└┬┘│  ├─┤├─┤ │
