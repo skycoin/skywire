@@ -240,35 +240,35 @@ var genConfigCmd = &cobra.Command{
 		match := strings.Contains("/tmp/", skywire)
 		if (!stdout) || (!match) {
 			// Disable apps not found at bin_path with above exceptions for go run and stdout
-			if _, err := os.Stat(conf.Launcher.BinPath + "skychat"); err != nil {
+			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "skychat"); err != nil {
 				if disableApps == "" {
 					disableApps = "skychat"
 				} else {
 					disableApps = disableApps + ",skychat"
 				}
 			}
-			if _, err := os.Stat(conf.Launcher.BinPath + "skysocks"); err != nil {
+			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "skysocks"); err != nil {
 				if disableApps == "" {
 					disableApps = "skysocks"
 				} else {
 					disableApps = disableApps + ",skysocks"
 				}
 			}
-			if _, err := os.Stat(conf.Launcher.BinPath + "skysocks-client"); err != nil {
+			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "skysocks-client"); err != nil {
 				if disableApps == "" {
 					disableApps = "skysocks-client"
 				} else {
 					disableApps = disableApps + ",skysocks-client"
 				}
 			}
-			if _, err := os.Stat(conf.Launcher.BinPath + "vpn-client"); err != nil {
+			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "vpn-client"); err != nil {
 				if disableApps == "" {
 					disableApps = "vpn-client"
 				} else {
 					disableApps = disableApps + ",vpn-client"
 				}
 			}
-			if _, err := os.Stat(conf.Launcher.BinPath + "vpn-server"); err != nil {
+			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "vpn-server"); err != nil {
 				if disableApps == "" {
 					disableApps = "vpn-server"
 				} else {
