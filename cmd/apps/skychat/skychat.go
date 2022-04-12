@@ -7,7 +7,6 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io/fs"
 	"net"
@@ -17,8 +16,10 @@ import (
 	"sync"
 	"time"
 
+	cc "github.com/ivanpirog/coloredcobra"
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -34,60 +35,93 @@ const (
 	port    = routing.Port(1)
 )
 
-var log = logging.MustGetLogger("chat")
-var addr = flag.String("addr", ":8001", "address to bind")
-var r = netutil.NewRetrier(log, 50*time.Millisecond, netutil.DefaultMaxBackoff, 5, 2)
-
 var (
-	appC     *app.Client
-	clientCh chan string
-	conns    map[cipher.PubKey]net.Conn // Chat connections
-	connsMu  sync.Mutex
+	// the go embed static points to skywire/cmd/apps/skychat/static
+	//go:embed static
+	embededFiles embed.FS
+	log          = logging.MustGetLogger("chat")
+	r            = netutil.NewRetrier(log, 50*time.Millisecond, netutil.DefaultMaxBackoff, 5, 2)
+	addr         string
+	appC         *app.Client
+	clientCh     chan string
+	conns        map[cipher.PubKey]net.Conn // Chat connections
+	connsMu      sync.Mutex
 )
 
-// the go embed static points to skywire/cmd/apps/skychat/static
+func init() {
+	rootCmd.Flags().SortFlags = false
+	rootCmd.Flags().StringVarP(&addr, "addr", "a", ":8001", "address to bind")
+}
 
-//go:embed static
-var embededFiles embed.FS
+var rootCmd = &cobra.Command{
+	Use:   "skysocks",
+	Short: "Skywire SOCKS5 Proxy Server",
+	Long: `
+	┌─┐┬┌─┬ ┬┌─┐┬ ┬┌─┐┌┬┐
+	└─┐├┴┐└┬┘│  ├─┤├─┤ │
+	└─┘┴ ┴ ┴ └─┘┴ ┴┴ ┴ ┴  `,
+	Run: func(_ *cobra.Command, _ []string) {
+		appC = app.NewClient(nil)
+		defer appC.Close()
 
-func main() {
-	appC = app.NewClient(nil)
-	defer appC.Close()
+		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
+			fmt.Printf("Failed to output build info: %v", err)
+		}
 
-	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
-		fmt.Printf("Failed to output build info: %v", err)
-	}
+		fmt.Print("Successfully started skychat.")
 
-	flag.Parse()
-	fmt.Print("Successfully started skychat.")
+		clientCh = make(chan string)
+		defer close(clientCh)
 
-	clientCh = make(chan string)
-	defer close(clientCh)
+		conns = make(map[cipher.PubKey]net.Conn)
+		go listenLoop()
 
-	conns = make(map[cipher.PubKey]net.Conn)
-	go listenLoop()
+		if runtime.GOOS == "windows" {
+			ipcClient, err := ipc.StartClient(skyenv.SkychatName, nil)
+			if err != nil {
+				fmt.Printf("Error creating ipc server for skychat client: %v\n", err)
+				os.Exit(1)
+			}
+			go handleIPCSignal(ipcClient)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	if runtime.GOOS == "windows" {
-		ipcClient, err := ipc.StartClient(skyenv.SkychatName, nil)
+		http.Handle("/", http.FileServer(getFileSystem()))
+		http.HandleFunc("/message", messageHandler(ctx))
+		http.HandleFunc("/sse", sseHandler)
+
+		fmt.Print("Serving HTTP on", addr)
+		err := http.ListenAndServe(addr, nil)
 		if err != nil {
-			fmt.Printf("Error creating ipc server for skychat client: %v\n", err)
+			fmt.Println(err)
 			os.Exit(1)
 		}
-		go handleIPCSignal(ipcClient)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	},
+}
 
-	http.Handle("/", http.FileServer(getFileSystem()))
-	http.HandleFunc("/message", messageHandler(ctx))
-	http.HandleFunc("/sse", sseHandler)
+// Execute executes root CLI command.
+func Execute() {
+	cc.Init(&cc.Config{
+		RootCmd:         rootCmd,
+		Headings:        cc.HiBlue + cc.Bold,
+		Commands:        cc.HiBlue + cc.Bold,
+		CmdShortDescr:   cc.HiBlue,
+		Example:         cc.HiBlue + cc.Italic,
+		ExecName:        cc.HiBlue + cc.Bold,
+		Flags:           cc.HiBlue + cc.Bold,
+		FlagsDescr:      cc.HiBlue,
+		NoExtraNewlines: true,
+		NoBottomNewline: true,
+	})
 
-	fmt.Print("Serving HTTP on", *addr)
-	err := http.ListenAndServe(*addr, nil)
-	if err != nil {
+	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
-		os.Exit(1)
 	}
+}
+
+func main() {
+	Execute()
 }
 
 func listenLoop() {
