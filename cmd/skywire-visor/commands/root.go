@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -235,7 +236,11 @@ var rootCmd = &cobra.Command{
 							fork = strings.ReplaceAll(fork, "github.com/", "")
 							fork = strings.ReplaceAll(fork, ":/", "")
 							fork = strings.ReplaceAll(fork, "\n", "")
-							if nofork := strings.Contains(fork, "skycoin/skywire"); err == nil {
+							nofork, err := regexp.MatchString("skycoin/skywire", fork)
+							if err != nil {
+								log.Error(err)
+							} else {
+								log.Info(nofork)
 								if !nofork {
 									fork = ""
 								}

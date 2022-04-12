@@ -5,7 +5,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"os/user"
 	"runtime"
 	"syscall"
 
@@ -29,15 +28,6 @@ var (
 )
 
 func init() {
-	thisUser, err := user.Current()
-	if err != nil {
-		panic(err)
-	}
-	if (thisUser.Username != "root") && ((skyenv.OS == "linux") || (skyenv.OS == "mac")) {
-		fmt.Println("vpn client must be run as root")
-		os.Exit(1)
-	}
-
 	rootCmd.Flags().SortFlags = false
 
 	rootCmd.Flags().StringVarP(&serverPKStr, "srv", "q", "", "PubKey of the server to connect to")
@@ -45,7 +35,6 @@ func init() {
 	rootCmd.Flags().StringVarP(&localSKStr, "sk", "s", "", "Local SecKey")
 	rootCmd.Flags().StringVarP(&passcode, "passcode", "r", "", "Passcode to authenticate connection")
 	rootCmd.Flags().BoolVarP(&killswitch, "killswitch", "k", false, "If set, the Internet won't be restored during reconnection attempts")
-
 }
 
 var rootCmd = &cobra.Command{

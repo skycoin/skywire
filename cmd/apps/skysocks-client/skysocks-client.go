@@ -45,8 +45,8 @@ func init() {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "skysocks",
-	Short: "Skywire SOCKS5 Proxy Server",
+	Use:   "skysocks-client",
+	Short: "Skywire SOCKS5 Proxy Client",
 	Long: `
 	┌─┐┬┌─┬ ┬┌─┐┌─┐┌─┐┬┌─┌─┐   ┌─┐┬  ┬┌─┐┌┐┌┌┬┐
 	└─┐├┴┐└┬┘└─┐│ ││  ├┴┐└─┐───│  │  │├┤ │││ │
