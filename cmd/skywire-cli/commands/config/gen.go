@@ -134,19 +134,23 @@ var genConfigCmd = &cobra.Command{
 			force = false
 			regen = false
 		}
-		//--force will delete a config, which excludes --regen
-		if (force) && (regen) {
-			logger.Fatal("Use of mutually exclusive flags: -f --force cannot override -r --regen")
-		}
-		//--force will delete a config, which excludes --regen
-		if (usrEnv) && (pkgEnv) {
-			logger.Fatal("Use of mutually exclusive flags: -u --user and -p --pkg")
-		}
-		var err error
 		//hide defeats the purpose of stdout.
 		if (stdout) && (hide) {
 			logger.Fatal("Use of mutually exclusive flags: -w --hide and -n --stdout")
 		}
+		//--force will delete a config, which excludes --regen
+		if (force) && (regen) {
+			logger.Fatal("Use of mutually exclusive flags: -f --force cannot override -r --regen")
+		}
+		// these flags overwrite each other
+		if (usrEnv) && (pkgEnv) {
+			logger.Fatal("Use of mutually exclusive flags: -u --user and -p --pkg")
+		}
+		//enable local hypervisor by default for user
+		if usrEnv {
+			hypervisor = true
+			}
+		var err error
 		if dmsgHTTP {
 			dmsgHTTPPath := skyenv.DMSGHTTPName
 			if pkgEnv {
@@ -201,9 +205,9 @@ var genConfigCmd = &cobra.Command{
 			if pkgEnv {
 				if hypervisor {
 					//default config hypervisor
-					configName = "skywire.json"
+					configName = skyenv.Skywirejson
 				} else {
-					configName = "skywire-visor.json"
+					configName = skyenv.Skywirevisorjson
 				}
 				confPath = skyenv.SkywirePath + "/" + configName
 			}

@@ -190,6 +190,9 @@ var rootCmd = &cobra.Command{
 			if pkg1 {
 				confPath = skyenv.SkywirePath + "/" + skyenv.Skywirevisorjson
 			}
+			if usr {
+				confPath = skyenv.HomePath() + "/" + skyenv.ConfigName
+			}
 			//enforce .json extension
 			if !strings.HasSuffix(confPath, ".json") {
 				//append .json
