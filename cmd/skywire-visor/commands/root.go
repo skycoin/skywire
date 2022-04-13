@@ -63,7 +63,7 @@ var (
 	all                  bool
 	pkg                  bool
 	pkg1                 bool
-
+	usr                  bool
 	// skywire is the path to the running visor binary
 	skywire string
 	// workDir is the working directory where skywire-visor was executed
@@ -97,10 +97,17 @@ func init() {
 	rootCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
 	hiddenflags = append(hiddenflags, "stdin")
 	if skyenv.OS == "linux" {
-		rootCmd.Flags().BoolVar(&pkg, "ph", false, "use package config "+skyenv.SkywirePath+"/"+skyenv.Skywirejson)
-		hiddenflags = append(hiddenflags, "ph")
-		rootCmd.Flags().BoolVar(&pkg1, "pv", false, "use package config "+skyenv.SkywirePath+"/"+skyenv.Skywirevisorjson)
-		hiddenflags = append(hiddenflags, "pv")
+		if _, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.Skywirejson); err == nil {
+			rootCmd.Flags().BoolVar(&pkg, "ph", false, "use package config "+skyenv.SkywirePath+"/"+skyenv.Skywirejson)
+			hiddenflags = append(hiddenflags, "ph")
+		}
+		if _, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.Skywirevisorjson); err == nil {
+			rootCmd.Flags().BoolVar(&pkg1, "pv", false, "use package config "+skyenv.SkywirePath+"/"+skyenv.Skywirevisorjson)
+			hiddenflags = append(hiddenflags, "pv")
+		}
+	}
+	if _, err := os.Stat(skyenv.HomePath() + "/" + skyenv.ConfigName); err == nil {
+		rootCmd.Flags().BoolVarP(&usr, "user", "u", false, "use config at: "+skyenv.HomePath()+"/"+skyenv.ConfigName)
 	}
 	rootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "p", "", "pprof mode: cpu, mem, mutex, block, trace, http")
 	hiddenflags = append(hiddenflags, "pprofmode")
@@ -170,8 +177,8 @@ var rootCmd = &cobra.Command{
 		_, hook := logstore.MakeStore(runtimeLogMaxEntries)
 		log.AddHook(hook)
 		if !stdin {
-			//multiple configs from flags
-			if (pkg && pkg1) || ((pkg || pkg1) && (confPath != "")) {
+			//error on multiple configs from flags
+			if (pkg && pkg1) || (pkg && usr) || (pkg1 && usr) || ((pkg || pkg1) && (confPath != "")) {
 				fmt.Println("Error: multiple configs specified")
 				os.Exit(1)
 			}
@@ -183,7 +190,6 @@ var rootCmd = &cobra.Command{
 			if pkg1 {
 				confPath = skyenv.SkywirePath + "/" + skyenv.Skywirevisorjson
 			}
-
 			//enforce .json extension
 			if !strings.HasSuffix(confPath, ".json") {
 				//append .json
