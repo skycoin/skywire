@@ -293,6 +293,21 @@ func runVisor(conf *visorconfig.V1) {
 		conf = initConfig(log, confPath)
 	}
 
+	//dont create files & directories as root in non root-owned dir
+	if _, err := exec.LookPath("stat"); err == nil {
+		if owner, err := script.Exec(`stat -c '%U' ` + conf.LocalPath + "/..").String(); err == nil {
+			if (((owner != "root") || (owner != "root\n")) && root) {
+				log.WithField("local path: ", conf.LocalPath).Error()
+				log.Fatal("not writing as root to local path not owned by root")
+			}
+			//similarly, anticipate and fail on the reverse instance
+			if (((owner == "root") || (owner == "root\n")) && !root) {
+				log.WithField("local path: ", conf.LocalPath).Error()
+				log.Fatal("Insufficient permissions to write to the local path")
+			}
+		}
+	}
+
 	if disableHypervisorPKs {
 		conf.Hypervisors = []cipher.PubKey{}
 	}
