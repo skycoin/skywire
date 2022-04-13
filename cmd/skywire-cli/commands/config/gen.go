@@ -50,7 +50,7 @@ var (
 	all               bool
 	outunset          bool
 	ver               string
-	root               bool
+	root              bool
 	svcconf           = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")     //skyenv.DefaultServiceConfAddr
 	testconf          = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "") //skyenv.DefaultServiceConfAddr
 	hiddenflags       []string
@@ -330,22 +330,22 @@ var genConfigCmd = &cobra.Command{
 			if _, err = exec.LookPath("stat"); err == nil {
 
 				confPath1, _ := filepath.Split(confPath)
-					if confPath1 == "" {
-						confPath1 = "./"
-					}
-					owner, err := script.Exec(`stat -c '%U' `+confPath1).String()
-						if err != nil {
-							logger.Error("cannot stat: "+confPath1)
-						}
-						if ((owner != "root") || (owner != "root\n")) && root {
-							logger.Fatal("declined writing config as root to directory not owned by root")
-						}
-						if !root && ((owner == "root") || (owner == "root\n")) {
-							logger.Fatal("Insufficient permissions to write to the specified path")
-						}
-					}
+				if confPath1 == "" {
+					confPath1 = "./"
+				}
+				owner, err := script.Exec(`stat -c '%U' ` + confPath1).String()
+				if err != nil {
+					logger.Error("cannot stat: " + confPath1)
+				}
+				if ((owner != "root") || (owner != "root\n")) && root {
+					logger.Fatal("declined writing config as root to directory not owned by root")
+				}
+				if !root && ((owner == "root") || (owner == "root\n")) {
+					logger.Fatal("Insufficient permissions to write to the specified path")
+				}
+			}
 
-				// Save config to file.
+			// Save config to file.
 			if err := conf.Flush(); err != nil {
 				logger.WithError(err).Fatal("Failed to flush config to file.")
 			}
