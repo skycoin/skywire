@@ -125,6 +125,7 @@ var genConfigCmd = &cobra.Command{
 		//set default output filename
 		if output == "" {
 			outunset = true
+			confPath = skyenv.ConfigName
 		} else {
 			confPath = output
 		}
@@ -149,7 +150,7 @@ var genConfigCmd = &cobra.Command{
 		//enable local hypervisor by default for user
 		if usrEnv {
 			hypervisor = true
-			}
+		}
 		var err error
 		if dmsgHTTP {
 			dmsgHTTPPath := skyenv.DMSGHTTPName
