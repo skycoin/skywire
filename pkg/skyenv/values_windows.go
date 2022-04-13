@@ -3,14 +3,12 @@
 
 package skyenv
 
-//OS detection at runtime
 const (
+	//OS detection at runtime
 	OS = "win"
-	// SkywirePath is the path to the installation folder
+	// SkywirePath is the path to the installation folder for the .msi
 	SkywirePath = "C:/Program Files/Skywire"
 )
-
-//TODO implement this similarly for windows
 
 // PackageConfig contains installation paths (for windows)
 func PackageConfig() PkgConfig {
@@ -20,4 +18,14 @@ func PackageConfig() PkgConfig {
 	pkgconfig.Hypervisor.DbPath = "C:/Program Files/Skywire/users.db"
 	pkgconfig.Hypervisor.EnableAuth = true
 	return pkgconfig
+}
+
+// UserConfig contains installation paths (for windows)
+func UserConfig() PkgConfig {
+	var usrconfig PkgConfig
+	usrconfig.Launcher.BinPath = "C:/Program Files/Skywire/apps"
+	usrconfig.LocalPath = HomePath() + "/.skywire/local"
+	usrconfig.Hypervisor.DbPath = HomePath() + "/.skywire/users.db" //permissions errors if the process is not run as root.
+	usrconfig.Hypervisor.EnableAuth = true
+	return usrconfig
 }

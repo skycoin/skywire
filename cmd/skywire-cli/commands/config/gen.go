@@ -32,6 +32,7 @@ var (
 	retainHypervisors bool
 	testEnv           bool
 	pkgEnv            bool
+	usrEnv            bool
 	hypervisor        bool
 	hypervisorPKs     string
 	dmsgHTTP          bool
@@ -81,7 +82,8 @@ func init() {
 	genConfigCmd.Flags().BoolVarP(&stdout, "stdout", "n", false, "write config to stdout")
 	hiddenflags = append(hiddenflags, "stdout")
 	genConfigCmd.Flags().StringVarP(&output, "out", "o", "", "output config: "+skyenv.ConfigName)
-	genConfigCmd.Flags().BoolVarP(&pkgEnv, "package", "p", false, "use paths for package "+skyenv.SkywirePath)
+	genConfigCmd.Flags().BoolVarP(&pkgEnv, "pkg", "p", false, "use paths for package: "+skyenv.SkywirePath)
+	genConfigCmd.Flags().BoolVarP(&usrEnv, "user", "u", false, "use paths for user space: "+skyenv.HomePath())
 	genConfigCmd.Flags().BoolVarP(&publicRPC, "publicrpc", "q", false, "allow rpc requests from LAN")
 	hiddenflags = append(hiddenflags, "publicrpc")
 	genConfigCmd.Flags().BoolVarP(&regen, "regen", "r", false, "re-generate existing config & retain keys")
@@ -135,6 +137,10 @@ var genConfigCmd = &cobra.Command{
 		//--force will delete a config, which excludes --regen
 		if (force) && (regen) {
 			logger.Fatal("Use of mutually exclusive flags: -f --force cannot override -r --regen")
+		}
+		//--force will delete a config, which excludes --regen
+		if (usrEnv) && (pkgEnv) {
+			logger.Fatal("Use of mutually exclusive flags: -u --user and -p --pkg")
 		}
 		var err error
 		//hide defeats the purpose of stdout.
@@ -191,14 +197,19 @@ var genConfigCmd = &cobra.Command{
 		//fetch the service endpoints
 		services = visorconfig.Fetch(mLog, serviceConfURL, stdout)
 		// skywire-cli config gen -ip || skywire-cli config gen -p
-		if !stdout && outunset && pkgEnv && (selectedOS == "linux") {
-			if hypervisor {
-				//default config hypervisor
-				configName = "skywire.json"
-			} else {
-				configName = "skywire-visor.json"
+		if !stdout && outunset && (selectedOS == "linux") {
+			if pkgEnv {
+				if hypervisor {
+					//default config hypervisor
+					configName = "skywire.json"
+				} else {
+					configName = "skywire-visor.json"
+				}
+				confPath = skyenv.SkywirePath + "/" + configName
 			}
-			confPath = skyenv.SkywirePath + "/" + configName
+			if usrEnv {
+				confPath = skyenv.HomePath() + "/" + skyenv.ConfigName
+			}
 		}
 		// Read in old config and obtain old secret key or generate a new random secret key
 		// and obtain old hypervisors (if any)
@@ -222,7 +233,7 @@ var genConfigCmd = &cobra.Command{
 		}
 
 		//create the conf
-		conf, err := visorconfig.MakeDefaultConfig(mLog, &sk, pkgEnv, testEnv, dmsgHTTP, hypervisor, output, hypervisorPKs, services)
+		conf, err := visorconfig.MakeDefaultConfig(mLog, &sk, usrEnv, pkgEnv, testEnv, dmsgHTTP, hypervisor, confPath, hypervisorPKs, services)
 		if err != nil {
 			logger.WithError(err).Fatal("Failed to create config.")
 		}
