@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strings"
 
+	"github.com/bitfield/script"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
@@ -47,6 +50,7 @@ var (
 	all               bool
 	outunset          bool
 	ver               string
+	root               bool
 	svcconf           = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")     //skyenv.DefaultServiceConfAddr
 	testconf          = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "") //skyenv.DefaultServiceConfAddr
 	hiddenflags       []string
@@ -76,7 +80,7 @@ func init() {
 	hiddenflags = append(hiddenflags, "os")
 	genConfigCmd.Flags().BoolVarP(&stdout, "stdout", "n", false, "write config to stdout")
 	hiddenflags = append(hiddenflags, "stdout")
-	genConfigCmd.Flags().StringVarP(&output, "out", "o", skyenv.ConfigName, "output config")
+	genConfigCmd.Flags().StringVarP(&output, "out", "o", "", "output config: "+skyenv.ConfigName)
 	genConfigCmd.Flags().BoolVarP(&pkgEnv, "package", "p", false, "use paths for package "+skyenv.SkywirePath)
 	genConfigCmd.Flags().BoolVarP(&publicRPC, "publicrpc", "q", false, "allow rpc requests from LAN")
 	hiddenflags = append(hiddenflags, "publicrpc")
@@ -196,7 +200,6 @@ var genConfigCmd = &cobra.Command{
 			}
 			confPath = skyenv.SkywirePath + "/" + configName
 		}
-
 		// Read in old config and obtain old secret key or generate a new random secret key
 		// and obtain old hypervisors (if any)
 		var sk cipher.SecKey
@@ -306,7 +309,7 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 		// Check OS and enable auth windows or macos
-		if selectedOS == "windows" || selectedOS == "macos" {
+		if (selectedOS == "windows") || (selectedOS == "macos") {
 			if hypervisor {
 				conf.Hypervisor.EnableAuth = true
 			}
@@ -316,7 +319,33 @@ var genConfigCmd = &cobra.Command{
 		}
 		//don't write file with stdout
 		if !stdout {
-			// Save config to file.
+			thisUser, err := user.Current()
+			if err != nil {
+				panic(err)
+			}
+			if thisUser.Username == "root" {
+				root = true
+			}
+			//dont write config as root to non root owned dir & vice versa
+			if _, err = exec.LookPath("stat"); err == nil {
+
+				confPath1, _ := filepath.Split(confPath)
+					if confPath1 == "" {
+						confPath1 = "./"
+					}
+					owner, err := script.Exec(`stat -c '%U' `+confPath1).String()
+						if err != nil {
+							logger.Error("cannot stat: "+confPath1)
+						}
+						if ((owner != "root") || (owner != "root\n")) && root {
+							logger.Fatal("declined writing config as root to directory not owned by root")
+						}
+						if !root && ((owner == "root") || (owner == "root\n")) {
+							logger.Fatal("Insufficient permissions to write to the specified path")
+						}
+					}
+
+				// Save config to file.
 			if err := conf.Flush(); err != nil {
 				logger.WithError(err).Fatal("Failed to flush config to file.")
 			}
