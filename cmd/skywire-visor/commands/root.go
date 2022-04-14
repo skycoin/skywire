@@ -107,7 +107,7 @@ func init() {
 		}
 	}
 	if _, err := os.Stat(skyenv.HomePath() + "/" + skyenv.ConfigName); err == nil {
-		rootCmd.Flags().BoolVarP(&usr, "user", "u", false, "use config at: "+skyenv.HomePath()+"/"+skyenv.ConfigName)
+		rootCmd.Flags().BoolVarP(&usr, "user", "u", false, "use config at: $HOME/"+skyenv.ConfigName)
 	}
 	rootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "p", "", "pprof mode: cpu, mem, mutex, block, trace, http")
 	hiddenflags = append(hiddenflags, "pprofmode")
@@ -209,6 +209,7 @@ var rootCmd = &cobra.Command{
 		}
 		var fork string
 		var branch string
+		var nocommit string
 		//indicates how skywire was started
 		skywire = os.Args[0]
 		//indicates where skywire was started
@@ -233,8 +234,10 @@ var rootCmd = &cobra.Command{
 					if version, err := script.Exec(`git describe`).String(); err == nil {
 						visorBuildInfo.Version = strings.ReplaceAll(version, "\n", "")
 						if visorBuildInfo.Commit == "unknown" {
-							if commit, err := script.Exec(`git rev-list -1 HEAD`).String(); err == nil {
-								visorBuildInfo.Commit = strings.ReplaceAll(commit, "\n", "")
+							if nocommit, err = script.Exec(`git diff-index HEAD --`).String(); err == nil {
+								if commit, err := script.Exec(`git rev-list -1 HEAD`).String(); err == nil {
+									visorBuildInfo.Commit = strings.ReplaceAll(commit, "\n", "")
+								}
 							}
 						}
 						if fork, err = script.Exec(`git config --get remote.origin.url`).String(); err == nil {
@@ -269,18 +272,23 @@ var rootCmd = &cobra.Command{
 				}
 			}
 		}
-		log.WithField("version: ", visorBuildInfo.Version).Info()
+		log.WithField("version", visorBuildInfo.Version).Info()
 		if visorBuildInfo.Date != "unknown" && visorBuildInfo.Date != "" {
-			log.WithField("built on: ", visorBuildInfo.Date).Info()
+			log.WithField("built on", visorBuildInfo.Date).Info()
 		}
 		if visorBuildInfo.Commit != "unknown" && visorBuildInfo.Commit != "" {
-			log.WithField("against commit: ", visorBuildInfo.Commit).Info()
+			if (nocommit != "") && (nocommit != "\n") {
+				log.Info("with changes since commit")
+				log.WithField("commit", visorBuildInfo.Commit).Info()
+			} else {
+				log.WithField("against commit", visorBuildInfo.Commit).Info()
+			}
 			if fork != "" {
-				log.WithField("fork: ", fork).Info()
+				log.WithField("fork", fork).Info()
 			}
 		}
 		if branch != "unknown" && branch != "" {
-			log.WithField("branch: ", branch).Info()
+			log.WithField("branch", branch).Info()
 		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
@@ -302,17 +310,21 @@ func runVisor(conf *visorconfig.V1) {
 		conf = initConfig(log, confPath)
 	}
 
-	//dont create files & directories as root in non root-owned dir
+	//warn about creating files & directories as root in non root-owned dir
 	if _, err := exec.LookPath("stat"); err == nil {
-		if owner, err := script.Exec(`stat -c '%U' ` + conf.LocalPath + "/..").String(); err == nil {
+		pathtolocalpath := strings.ReplaceAll(conf.LocalPath, "local", "")
+		if owner, err := script.Exec(`stat -c '%U' ` + pathtolocalpath).String(); err == nil {
 			if ((owner != "root") || (owner != "root\n")) && root {
-				log.WithField("local path: ", conf.LocalPath).Error()
-				log.Fatal("not writing as root to local path not owned by root")
+				log.WithField("local path", conf.LocalPath).Warn()
+				log.Warn("writing as root to directory not owned by root!")
 			}
-			//similarly, anticipate and fail on the reverse instance
+		}
+		// fail on the reverse instance
+		if owner, err := script.Exec(`stat -c '%U' ` + conf.LocalPath).String(); err == nil {
 			if ((owner == "root") || (owner == "root\n")) && !root {
-				log.WithField("local path: ", conf.LocalPath).Error()
-				log.Fatal("Insufficient permissions to write to the local path")
+				log.WithField("local path", conf.LocalPath).WithField("owner", "root").Error("folder belongs to root")
+				log.WithField("visor is root", root).Error("visor not started as root")
+				log.Fatal("Insufficient permissions to write to the local path: " + conf.LocalPath)
 			}
 		}
 	}
