@@ -25,7 +25,7 @@ func UserConfig() PkgConfig {
 	var usrconfig PkgConfig
 	usrconfig.Launcher.BinPath = "C:/Program Files/Skywire/apps"
 	usrconfig.LocalPath = HomePath() + "/.skywire/local"
-	usrconfig.Hypervisor.DbPath = HomePath() + "/.skywire/users.db" //permissions errors if the process is not run as root.
+	usrconfig.Hypervisor.DbPath = HomePath() + "/.skywire/users.db"
 	usrconfig.Hypervisor.EnableAuth = true
 	return usrconfig
 }
