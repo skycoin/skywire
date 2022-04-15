@@ -83,7 +83,10 @@ func init() {
 	hiddenflags = append(hiddenflags, "stdout")
 	genConfigCmd.Flags().StringVarP(&output, "out", "o", "", "output config: "+skyenv.ConfigName)
 	genConfigCmd.Flags().BoolVarP(&pkgEnv, "pkg", "p", false, "use paths for package: "+skyenv.SkywirePath)
-	genConfigCmd.Flags().BoolVarP(&usrEnv, "user", "u", false, "use paths for user space: "+skyenv.HomePath())
+	homepath := skyenv.HomePath()
+	if homepath != "" {
+		genConfigCmd.Flags().BoolVarP(&usrEnv, "user", "u", false, "use paths for user space: "+homepath)
+	}
 	genConfigCmd.Flags().BoolVarP(&publicRPC, "publicrpc", "q", false, "allow rpc requests from LAN")
 	hiddenflags = append(hiddenflags, "publicrpc")
 	genConfigCmd.Flags().BoolVarP(&regen, "regen", "r", false, "re-generate existing config & retain keys")
@@ -335,13 +338,14 @@ var genConfigCmd = &cobra.Command{
 		}
 		//don't write file with stdout
 		if !stdout {
-			thisUser, err := user.Current()
+			userLvl, err := user.Current()
 			if err != nil {
-				panic(err)
-			}
-			if thisUser.Username == "root" {
+				logger.WithError(err).Error("Failed to detect user.")
+			} else {
+				if userLvl.Username == "root" {
 				root = true
 			}
+		}
 			//dont write config as root to non root owned dir & vice versa
 			if _, err = exec.LookPath("stat"); err == nil {
 
