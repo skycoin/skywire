@@ -343,9 +343,9 @@ var genConfigCmd = &cobra.Command{
 				logger.WithError(err).Error("Failed to detect user.")
 			} else {
 				if userLvl.Username == "root" {
-				root = true
+					root = true
+				}
 			}
-		}
 			//dont write config as root to non root owned dir & vice versa
 			if _, err = exec.LookPath("stat"); err == nil {
 
