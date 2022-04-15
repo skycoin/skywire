@@ -71,7 +71,7 @@ func GetOnGUIReady(icon []byte, conf *visorconfig.V1) (ret func()) {
 
 	httpC := getHTTPClient(conf, context.Background(), logger)
 
-	if checkRoot() {
+	if isRoot() {
 		ret = func() {
 			systray.SetTemplateIcon(icon, icon)
 			systray.SetTooltip("Skywire")
@@ -82,7 +82,7 @@ func GetOnGUIReady(icon []byte, conf *visorconfig.V1) (ret func()) {
 			go handleRootInteraction(conf, doneCh)
 		}
 	}
-	if !checkRoot() {
+	if !isRoot() {
 		ret = func() {
 			systray.SetTemplateIcon(icon, icon)
 			systray.SetTooltip("Skywire")

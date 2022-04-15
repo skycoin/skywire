@@ -13,13 +13,12 @@ func platformExecUninstall() error {
 	return osutil.Run("/bin/bash", "-c", deinstallerPath)
 }
 
-func checkRoot() bool {
-	thisUser, err := user.Current()
-	if err != nil {
-		panic(err)
-	}
-	if thisUser.Username == "root" {
+func isRoot() bool {
+	userLvl, err := user.Current()
+	if err == nil {
+	if userLvl.Username == "root" {
 		return true
 	}
+}
 	return false
 }
