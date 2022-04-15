@@ -16,9 +16,9 @@ func platformExecUninstall() error {
 func isRoot() bool {
 	userLvl, err := user.Current()
 	if err == nil {
-	if userLvl.Username == "root" {
-		return true
+		if userLvl.Username == "root" {
+			return true
+		}
 	}
-}
 	return false
 }
