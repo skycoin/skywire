@@ -82,7 +82,7 @@ func init() {
 	genConfigCmd.Flags().BoolVarP(&stdout, "stdout", "n", false, "write config to stdout")
 	hiddenflags = append(hiddenflags, "stdout")
 	genConfigCmd.Flags().StringVarP(&output, "out", "o", "", "output config: "+skyenv.ConfigName)
-	genConfigCmd.Flags().BoolVarP(&pkgEnv, "pkg", "p", false, "use paths for package: "+skyenv.SkywirePath)
+	genConfigCmd.Flags().BoolVarP(&pkgEnv, "pkg", "p", false, skyenv.Ptext)
 	homepath := skyenv.HomePath()
 	if homepath != "" {
 		genConfigCmd.Flags().BoolVarP(&usrEnv, "user", "u", false, "use paths for user space: "+homepath)
@@ -204,15 +204,10 @@ var genConfigCmd = &cobra.Command{
 		}
 		//fetch the service endpoints
 		services = visorconfig.Fetch(mLog, serviceConfURL, stdout)
-		// skywire-cli config gen -ip || skywire-cli config gen -p
-		if !stdout && outunset && (selectedOS == "linux") {
-			if pkgEnv {
-				if hypervisor {
-					//default config hypervisor
-					configName = skyenv.Skywirejson
-				} else {
-					configName = skyenv.Skywirevisorjson
-				}
+		// skywire-cli config gen -p
+		if !stdout && outunset {
+			if pkgEnv && (selectedOS == "linux") {
+				configName = skyenv.Configjson
 				confPath = skyenv.SkywirePath + "/" + configName
 			}
 			if usrEnv {
