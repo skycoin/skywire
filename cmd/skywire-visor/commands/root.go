@@ -62,7 +62,6 @@ var (
 	hiddenflags          []string
 	all                  bool
 	pkg                  bool
-	pkg1                 bool
 	usr                  bool
 	// skywire is the path to the running visor binary
 	skywire string
@@ -75,43 +74,41 @@ var (
 )
 
 func init() {
-	thisUser, err := user.Current()
+	usrLvl, err := user.Current()
 	if err != nil {
 		panic(err)
 	}
-	if thisUser.Username == "root" {
+	if usrLvl.Username == "root" {
 		root = true
 	}
 
 	rootCmd.Flags().SortFlags = false
 
 	rootCmd.Flags().StringVarP(&confPath, "config", "c", skyenv.ConfigName, "config file to use")
-	rootCmd.Flags().BoolVarP(&hypervisorUI, "hvui", "i", false, "run as hypervisor")
 	if ((skyenv.OS == "linux") && !root) || ((skyenv.OS == "mac") && !root) || (skyenv.OS == "win") {
 		rootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
 	}
+	rootCmd.Flags().BoolVarP(&hypervisorUI, "hvui", "i", false, "run as hypervisor")
 	rootCmd.Flags().StringVarP(&remoteHypervisorPKs, "hv", "j", "", "add remote hypervisor PKs at runtime")
 	hiddenflags = append(hiddenflags, "hv")
 	rootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors set in config file")
 	hiddenflags = append(hiddenflags, "xhv")
 	rootCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
 	hiddenflags = append(hiddenflags, "stdin")
-	if skyenv.OS == "linux" {
-		if _, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.Skywirejson); err == nil {
-			rootCmd.Flags().BoolVar(&pkg, "ph", false, "use package config "+skyenv.SkywirePath+"/"+skyenv.Skywirejson)
-			hiddenflags = append(hiddenflags, "ph")
-		}
-		if _, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.Skywirevisorjson); err == nil {
-			rootCmd.Flags().BoolVar(&pkg1, "pv", false, "use package config "+skyenv.SkywirePath+"/"+skyenv.Skywirevisorjson)
-			hiddenflags = append(hiddenflags, "pv")
+	if root {
+		if _, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.Configjson); err == nil {
+			rootCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "use package config "+skyenv.SkywirePath+"/"+skyenv.Configjson)
+			hiddenflags = append(hiddenflags, "pkg")
 		}
 	}
-	if _, err := os.Stat(skyenv.HomePath() + "/" + skyenv.ConfigName); err == nil {
-		rootCmd.Flags().BoolVarP(&usr, "user", "u", false, "use config at: $HOME/"+skyenv.ConfigName)
+	if !root {
+		if _, err := os.Stat(skyenv.HomePath() + "/" + skyenv.ConfigName); err == nil {
+			rootCmd.Flags().BoolVarP(&usr, "user", "u", false, "use config at: $HOME/"+skyenv.ConfigName)
+		}
 	}
-	rootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "p", "", "pprof mode: cpu, mem, mutex, block, trace, http")
+	rootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "q", "", "pprof mode: cpu, mem, mutex, block, trace, http")
 	hiddenflags = append(hiddenflags, "pprofmode")
-	rootCmd.Flags().StringVarP(&pprofAddr, "pprofaddr", "q", "localhost:6060", "pprof http port")
+	rootCmd.Flags().StringVarP(&pprofAddr, "pprofaddr", "r", "localhost:6060", "pprof http port")
 	hiddenflags = append(hiddenflags, "pprofaddr")
 	rootCmd.Flags().StringVarP(&tag, "tag", "t", "skywire", "logging tag")
 	hiddenflags = append(hiddenflags, "tag")
@@ -173,22 +170,20 @@ var rootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 		//log for initial checks
-		log := initLogger(tag, syslogAddr)
-		_, hook := logstore.MakeStore(runtimeLogMaxEntries)
-		log.AddHook(hook)
+		mLog := initLogger(tag, syslogAddr)
+		log := mLog.PackageLogger("pre-run")
+
+		//_, hook := logstore.MakeStore(runtimeLogMaxEntries)
+		//log.AddHook(hook)
 		if !stdin {
 			//error on multiple configs from flags
-			if (pkg && pkg1) || (pkg && usr) || (pkg1 && usr) || ((pkg || pkg1) && (confPath != "")) {
+			if (pkg && usr) || ((pkg || usr) && (confPath != "")) {
 				fmt.Println("Error: multiple configs specified")
 				os.Exit(1)
 			}
-			//use package hypervisor config
+			//use package config
 			if pkg {
-				confPath = skyenv.SkywirePath + "/" + skyenv.Skywirejson
-			}
-			//use package visor config
-			if pkg1 {
-				confPath = skyenv.SkywirePath + "/" + skyenv.Skywirevisorjson
+				confPath = skyenv.SkywirePath + "/" + skyenv.Configjson
 			}
 			if usr {
 				confPath = skyenv.HomePath() + "/" + skyenv.ConfigName
@@ -207,88 +202,9 @@ var rootCmd = &cobra.Command{
 		} else {
 			confPath = visorconfig.StdinName
 		}
-		var fork string
-		var branch string
-		var nocommit string
-		//indicates how skywire was started
-		skywire = os.Args[0]
-		//indicates where skywire was started
-		path, err := os.Getwd()
-		if err != nil {
-			log.WithError(err).Fatal()
-		}
-		workDir = path
-		//retrieve build info
-		visorBuildInfo = buildinfo.Get()
-		if visorBuildInfo.Version == "unknown" {
-			if match := strings.Contains("/tmp/", skywire); err == nil {
-				if match {
-					log.Info("executed with go run")
-					log.WithField("binary: ", skywire).Info()
-				}
-			}
-			//check for .git folder for versioning
-			if _, err := os.Stat(".git"); err == nil {
-				//attempt to version from git sources
-				if _, err = exec.LookPath("git"); err == nil {
-					if version, err := script.Exec(`git describe`).String(); err == nil {
-						visorBuildInfo.Version = strings.ReplaceAll(version, "\n", "")
-						if visorBuildInfo.Commit == "unknown" {
-							if nocommit, err = script.Exec(`git diff-index HEAD --`).String(); err == nil {
-								if commit, err := script.Exec(`git rev-list -1 HEAD`).String(); err == nil {
-									visorBuildInfo.Commit = strings.ReplaceAll(commit, "\n", "")
-								}
-							}
-						}
-						if fork, err = script.Exec(`git config --get remote.origin.url`).String(); err == nil {
-							fork = strings.ReplaceAll(fork, "ssh://", "")
-							fork = strings.ReplaceAll(fork, "git@", "")
-							fork = strings.ReplaceAll(fork, "https://", "")
-							fork = strings.ReplaceAll(fork, "http://", "")
-							fork = strings.ReplaceAll(fork, "github.com/", "")
-							fork = strings.ReplaceAll(fork, ":/", "")
-							fork = strings.ReplaceAll(fork, "\n", "")
-							nofork, err := regexp.MatchString("skycoin/skywire", fork)
-							if err != nil {
-								log.Error(err)
-							} else {
-								log.Info(nofork)
-								if !nofork {
-									fork = ""
-								}
-							}
-						}
-						if branch, err = script.Exec(`git rev-parse --abbrev-ref HEAD`).String(); err == nil {
-							branch = strings.ReplaceAll(branch, "\n", "")
-							if _, err = exec.LookPath("date"); err == nil {
-								if visorBuildInfo.Date == "unknown" {
-									if date, err := script.Exec(`date -u +%Y-%m-%dT%H:%M:%SZ`).String(); err == nil {
-										visorBuildInfo.Date = strings.ReplaceAll(date, "\n", "")
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-		log.WithField("version", visorBuildInfo.Version).Info()
-		if visorBuildInfo.Date != "unknown" && visorBuildInfo.Date != "" {
-			log.WithField("built on", visorBuildInfo.Date).Info()
-		}
-		if visorBuildInfo.Commit != "unknown" && visorBuildInfo.Commit != "" {
-			if (nocommit != "") && (nocommit != "\n") {
-				log.Info("with changes since commit")
-				log.WithField("commit", visorBuildInfo.Commit).Info()
-			} else {
-				log.WithField("against commit", visorBuildInfo.Commit).Info()
-			}
-			if fork != "" {
-				log.WithField("fork", fork).Info()
-			}
-		}
-		if branch != "unknown" && branch != "" {
-			log.WithField("branch", branch).Info()
+		logBuildInfo(mLog)
+		if launchBrowser {
+			hypervisorUI = true
 		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
@@ -299,7 +215,8 @@ var rootCmd = &cobra.Command{
 
 func runVisor(conf *visorconfig.V1) {
 	var ok bool
-	log := initLogger(tag, syslogAddr)
+	mLog := initLogger(tag, syslogAddr)
+	log := mLog
 	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
 	log.AddHook(hook)
 
@@ -309,7 +226,6 @@ func runVisor(conf *visorconfig.V1) {
 	if conf == nil {
 		conf = initConfig(log, confPath)
 	}
-
 	//warn about creating files & directories as root in non root-owned dir
 	if _, err := exec.LookPath("stat"); err == nil {
 		pathtolocalpath := strings.ReplaceAll(conf.LocalPath, "local", "")
@@ -355,7 +271,7 @@ func runVisor(conf *visorconfig.V1) {
 	vis.SetLogstore(store)
 
 	if launchBrowser {
-		runBrowser(conf, log)
+		runBrowser(log, conf)
 	}
 
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
@@ -396,19 +312,17 @@ func Execute(ui embed.FS) {
 }
 
 func initLogger(tag string, syslogAddr string) *logging.MasterLogger {
-	log := logging.NewMasterLogger()
-
+	mLog := logging.NewMasterLogger()
 	if syslogAddr != "" {
 		hook, err := syslog.SetupHook(syslogAddr, tag)
 		if err != nil {
-			log.WithError(err).Error("Failed to connect to the syslog daemon.")
+			mLog.WithError(err).Error("Failed to connect to the syslog daemon.")
 		} else {
-			log.AddHook(hook)
-			log.Out = ioutil.Discard
+			mLog.AddHook(hook)
+			mLog.Out = ioutil.Discard
 		}
 	}
-
-	return log
+	return mLog
 }
 
 func initPProf(log *logging.MasterLogger, tag string, profMode string, profAddr string) (stop func()) {
@@ -473,57 +387,7 @@ func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 { /
 	}
 
 	if !compat {
-		log.Error("config version does not match visor version")
-		log.WithField("skywire version: ", visorBuildInfo.Version).Error()
-		var updstr string
-		if match := strings.Contains("/tmp/", skywire); err == nil {
-			log.Info("match:", match)
-			if match {
-				if _, err := os.Stat("cmd/skywire-cli/skywire-cli.go"); err == nil {
-					updstr = "go run cmd/skywire-cli/skywire-cli.go config gen -b"
-				}
-				log.Info("updstr:", updstr)
-
-			}
-		}
-		if updstr == "" {
-			updstr = "skywire-cli config gen -b"
-		}
-		if conf.Hypervisor != nil {
-			updstr = updstr + "i"
-		}
-		for _, j := range conf.Hypervisors {
-			if fmt.Sprintf("\t%s\n", j) != "" {
-				updstr = updstr + "x"
-				break
-			}
-		}
-
-		if pkgenv := strings.Contains("/opt/skywire/apps", conf.Launcher.BinPath); err == nil {
-			if pkgenv {
-				updstr = updstr + "p"
-			}
-		}
-		//there is no config *file* with stdin
-		if confPath != visorconfig.StdinName {
-			if _, err = exec.LookPath("stat"); err == nil {
-				if owner, err := script.Exec(`stat -c '%U' ` + confPath).String(); err == nil {
-					if (owner == "root") || (owner == "root\n") {
-						updstr = "sudo " + updstr
-					}
-				}
-			}
-			updstr = "\n		" + updstr + "ro " + confPath + "\n"
-		} else {
-			updstr = "\n		" + updstr + "n" + " | go run cmd/skywire-visor/skywire-visor.go -n"
-			if launchBrowser {
-				updstr = updstr + "b"
-			}
-			updstr = updstr + "\n"
-		}
-		updstr = "\n		" + updstr + "\n"
-		log.Info("please update your config with the following command:\n", updstr)
-		log.Fatal("failed to start skywire")
+		updateConfig(mLog, conf)
 	}
 	if hypervisorUI {
 		config := hypervisorconfig.GenerateWorkDirConfig(false)
@@ -536,7 +400,9 @@ func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 { /
 }
 
 // runBrowser opens the hypervisor interface in the browser
-func runBrowser(conf *visorconfig.V1, log *logging.MasterLogger) {
+func runBrowser(mLog *logging.MasterLogger, conf *visorconfig.V1) {
+	log := mLog.PackageLogger("visor:launch-browser")
+
 	if conf.Hypervisor == nil {
 		log.Errorln("Hypervisor not started - cannot start browser with a regular visor")
 		return
@@ -580,4 +446,145 @@ func checkHvIsRunning(addr string, retries int) bool {
 		}
 	}
 	return false
+}
+
+func updateConfig(mLog *logging.MasterLogger, conf *visorconfig.V1) {
+	log := mLog.PackageLogger("visor:update-config")
+
+	log.Error("config version does not match visor version")
+	log.WithField("skywire version: ", visorBuildInfo.Version).Error()
+	var updstr string
+	match := strings.Contains("/tmp/", skywire)
+	log.Info("match:", match)
+	if match {
+		if _, err := os.Stat("cmd/skywire-cli/skywire-cli.go"); err == nil {
+			updstr = "go run cmd/skywire-cli/skywire-cli.go config gen -b"
+		}
+		log.Info("updstr:", updstr)
+	}
+	if updstr == "" {
+		updstr = "skywire-cli config gen -b"
+	}
+	if conf.Hypervisor != nil {
+		updstr = updstr + "i"
+	}
+	for _, j := range conf.Hypervisors {
+		if fmt.Sprintf("\t%s\n", j) != "" {
+			updstr = updstr + "x"
+			break
+		}
+	}
+	pkgenv := strings.Contains("/opt/skywire/apps", conf.Launcher.BinPath)
+	if pkgenv {
+		updstr = updstr + "p"
+	}
+	//there is no config *file* with stdin
+	if confPath != visorconfig.StdinName {
+		if _, err := exec.LookPath("stat"); err == nil {
+			if owner, err := script.Exec(`stat -c '%U' ` + confPath).String(); err == nil {
+				if (owner == "root") || (owner == "root\n") {
+					updstr = "sudo " + updstr
+				}
+			}
+		}
+		updstr = "\n		" + updstr + "ro " + confPath + "\n"
+	} else {
+		updstr = "\n		" + updstr + "n" + " | go run cmd/skywire-visor/skywire-visor.go -n"
+		if launchBrowser {
+			updstr = updstr + "b"
+		}
+		updstr = updstr + "\n"
+	}
+	updstr = "\n		" + updstr + "\n"
+	log.Info("please update your config with the following command:\n", updstr)
+	log.Fatal("failed to start skywire")
+
+}
+
+func logBuildInfo(mLog *logging.MasterLogger) {
+	log := mLog.PackageLogger("buildinfo")
+	var fork string
+	var branch string
+	var nocommit string
+	//indicates how skywire was started
+	skywire = os.Args[0]
+	//indicates where skywire was started
+	path, err := os.Getwd()
+	if err != nil {
+		log.WithError(err).Fatal()
+	}
+	workDir = path
+	//retrieve build info
+	visorBuildInfo = buildinfo.Get()
+	if visorBuildInfo.Version == "unknown" {
+		if match := strings.Contains("/tmp/", skywire); err == nil {
+			if match {
+				log.Info("executed with go run")
+				log.WithField("binary: ", skywire).Info()
+			}
+		}
+		//check for .git folder for versioning
+		if _, err := os.Stat(".git"); err == nil {
+			//attempt to version from git sources
+			if _, err = exec.LookPath("git"); err == nil {
+				if version, err := script.Exec(`git describe`).String(); err == nil {
+					visorBuildInfo.Version = strings.ReplaceAll(version, "\n", "")
+				}
+				if visorBuildInfo.Commit == "unknown" {
+					if nocommit, err = script.Exec(`git diff-index HEAD --`).String(); err == nil {
+						if commit, err := script.Exec(`git rev-list -1 HEAD`).String(); err == nil {
+							visorBuildInfo.Commit = strings.ReplaceAll(commit, "\n", "")
+						}
+					}
+				}
+				if fork, err = script.Exec(`git config --get remote.origin.url`).String(); err == nil {
+					fork = strings.ReplaceAll(fork, "ssh://", "")
+					fork = strings.ReplaceAll(fork, "git@", "")
+					fork = strings.ReplaceAll(fork, "https://", "")
+					fork = strings.ReplaceAll(fork, "http://", "")
+					fork = strings.ReplaceAll(fork, "github.com/", "")
+					fork = strings.ReplaceAll(fork, ":/", "")
+					fork = strings.ReplaceAll(fork, "\n", "")
+					nofork, err := regexp.MatchString("skycoin/skywire", fork)
+					if err != nil {
+						log.Error(err)
+					} else {
+						log.Info(nofork)
+						if !nofork {
+							fork = ""
+						}
+					}
+				}
+				if branch, err = script.Exec(`git rev-parse --abbrev-ref HEAD`).String(); err == nil {
+					branch = strings.ReplaceAll(branch, "\n", "")
+					if _, err = exec.LookPath("date"); err == nil {
+						if visorBuildInfo.Date == "unknown" {
+							if date, err := script.Exec(`date -u +%Y-%m-%dT%H:%M:%SZ`).String(); err == nil {
+								visorBuildInfo.Date = strings.ReplaceAll(date, "\n", "")
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	log.WithField("version", visorBuildInfo.Version).Info()
+	if visorBuildInfo.Date != "unknown" && visorBuildInfo.Date != "" {
+		log.WithField("built on", visorBuildInfo.Date).Info()
+	}
+	if visorBuildInfo.Commit != "unknown" && visorBuildInfo.Commit != "" {
+		if (nocommit != "") && (nocommit != "\n") {
+			log.Info("with changes since commit")
+			log.WithField("commit", visorBuildInfo.Commit).Info()
+		} else {
+			log.WithField("against commit", visorBuildInfo.Commit).Info()
+		}
+		if fork != "" {
+			log.WithField("fork", fork).Info()
+		}
+	}
+	if branch != "unknown" && branch != "" {
+		log.WithField("branch", branch).Info()
+	}
 }
