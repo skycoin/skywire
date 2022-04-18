@@ -64,24 +64,36 @@ var (
 )
 
 // GetOnGUIReady creates func to run on GUI startup.
-func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
+func GetOnGUIReady(icon []byte, conf *visorconfig.V1) (ret func()) {
 	doneCh := make(chan bool, 1)
 	logger := logging.NewMasterLogger()
 	logger.SetLevel(logrus.InfoLevel)
 
 	httpC := getHTTPClient(conf, context.Background(), logger)
 
-	return func() {
-		systray.SetTemplateIcon(icon, icon)
-		systray.SetTooltip("Skywire")
-
-		initOpenVPNLinkBtn(conf)
-		initAdvancedButton(conf)
-		initVpnClientBtn(conf, httpC, logger)
-		initQuitBtn()
-
-		go handleUserInteraction(conf, doneCh)
+	if isRoot() {
+		ret = func() {
+			systray.SetTemplateIcon(icon, icon)
+			systray.SetTooltip("Skywire")
+			initOpenVPNLinkBtn(conf)
+			initAdvancedButton(conf)
+			initVpnClientBtn(conf, httpC, logger)
+			initQuitBtn()
+			go handleRootInteraction(conf, doneCh)
+		}
 	}
+	if !isRoot() {
+		ret = func() {
+			systray.SetTemplateIcon(icon, icon)
+			systray.SetTooltip("Skywire")
+			initOpenVPNLinkBtn(conf)
+			initAdvancedButton(conf)
+			initVpnClientBtn(conf, httpC, logger)
+			initQuitBtn()
+			go handleUserInteraction(conf, doneCh)
+		}
+	}
+	return ret
 }
 
 // OnGUIQuit is executed on GUI exit.
@@ -116,6 +128,7 @@ func Stop() {
 }
 
 func initAdvancedButton(conf *visorconfig.V1) {
+
 	hvAddr := getHVAddr(conf)
 
 	mAdvancedButton = systray.AddMenuItem("Advanced", "Advanced Menu")
@@ -124,7 +137,12 @@ func initAdvancedButton(conf *visorconfig.V1) {
 
 	// if it's not installed via package, hide the uninstall button
 	initUninstallBtn()
-
+	//hide the buttons which could launch the browser if the process is run as root
+	if checkRoot() {
+		mAdvancedButton.Hide()
+		mOpenHypervisor.Hide()
+		return
+	}
 	// if visor's not running or hypervisor config is absent,
 	// there won't be any way to open the hypervisor, so disable button
 	if hvAddr == "" {
@@ -160,7 +178,10 @@ func initAdvancedButton(conf *visorconfig.V1) {
 
 func initOpenVPNLinkBtn(vc *visorconfig.V1) {
 	mVPNLink = systray.AddMenuItem("Open VPN UI", "Open VPN UI in browser")
-
+	if checkRoot() {
+		mVPNLink.Hide()
+		return
+	}
 	mVPNLink.Disable()
 
 	// wait for the vpn client to start in the background
@@ -408,6 +429,24 @@ func handleUserInteraction(conf *visorconfig.V1, doneCh chan<- bool) {
 			handleVPNButton(conf, rpcC)
 		case <-mVPNLink.ClickedCh:
 			handleVPNLinkButton(conf)
+		case <-mUninstall.ClickedCh:
+			handleUninstall()
+		case <-mQuit.ClickedCh:
+			doneCh <- true
+			Stop()
+		}
+	}
+}
+
+func handleRootInteraction(conf *visorconfig.V1, doneCh chan<- bool) {
+	for {
+		select {
+		//		case <-mOpenHypervisor.ClickedCh:
+		//			handleOpenHypervisor(conf)
+		case <-mVPNButton.ClickedCh:
+			handleVPNButton(conf, rpcC)
+			//		case <-mVPNLink.ClickedCh:
+			//			handleVPNLinkButton(conf)
 		case <-mUninstall.ClickedCh:
 			handleUninstall()
 		case <-mQuit.ClickedCh:

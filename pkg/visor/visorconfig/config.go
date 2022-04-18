@@ -109,12 +109,14 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 // The config's 'sk' field will be nil if not specified.
 // Generated config will be saved to 'confPath'.
 // This function always returns the latest config version.
-func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, pkgEnv bool, testEnv bool, dmsgHTTP bool, hypervisor bool, confPath, hypervisorPKs string, services *Services) (*V1, error) {
+func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool, pkgEnv bool, testEnv bool, dmsgHTTP bool, hypervisor bool, confPath, hypervisorPKs string, services *Services) (*V1, error) {
+	if usrEnv && pkgEnv {
+		log.Fatal("usrEnv and pkgEnv are mutually exclusive")
+	}
 	cc, err := NewCommon(log, confPath, sk)
 	if err != nil {
 		return nil, err
 	}
-
 	var dmsgHTTPServersList *DmsgHTTPServers
 
 	if dmsgHTTP {
@@ -155,12 +157,10 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, pkgEnv bool
 			}
 		}
 	}
-
 	if hypervisor {
 		config := hypervisorconfig.GenerateWorkDirConfig(false)
 		conf.Hypervisor = &config
 	}
-
 	if pkgEnv {
 		pkgconfig := skyenv.PackageConfig()
 		conf.LocalPath = pkgconfig.LocalPath
@@ -170,9 +170,16 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, pkgEnv bool
 			conf.Hypervisor.DBPath = pkgconfig.Hypervisor.DbPath
 		}
 	}
-
+	if usrEnv {
+		usrconfig := skyenv.UserConfig()
+		conf.LocalPath = usrconfig.LocalPath
+		conf.Launcher.BinPath = usrconfig.Launcher.BinPath
+		if conf.Hypervisor != nil {
+			conf.Hypervisor.EnableAuth = usrconfig.Hypervisor.EnableAuth
+			conf.Hypervisor.DBPath = usrconfig.Hypervisor.DbPath
+		}
+	}
 	return conf, nil
-
 }
 
 // SetDefaultTestingValues mutates configuration to use testing values
