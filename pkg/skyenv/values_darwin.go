@@ -6,12 +6,9 @@ package skyenv
 const (
 	//OS detection at runtime
 	OS = "mac"
-
 	// SkywirePath is the path to the installation folder.
 	SkywirePath = "/Library/Application Support/Skywire"
 )
-
-//TODO implement this similarly for macOS
 
 // PackageConfig contains installation paths (for mac)
 func PackageConfig() PkgConfig {
@@ -21,4 +18,14 @@ func PackageConfig() PkgConfig {
 	pkgconfig.Hypervisor.DbPath = "/Library/Application Support/Skywire/users.db"
 	pkgconfig.Hypervisor.EnableAuth = true
 	return pkgconfig
+}
+
+// UserConfig contains installation paths (for mac)
+func UserConfig() PkgConfig {
+	var usrconfig PkgConfig
+	usrconfig.Launcher.BinPath = "/Library/Application Support/Skywire/apps"
+	usrconfig.LocalPath = HomePath() + "/.skywire/local"
+	usrconfig.Hypervisor.DbPath = HomePath() + "/.skywire/users.db"
+	usrconfig.Hypervisor.EnableAuth = true
+	return usrconfig
 }

@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -62,7 +63,7 @@ var (
 	all                  bool
 	pkg                  bool
 	pkg1                 bool
-
+	usr                  bool
 	// skywire is the path to the running visor binary
 	skywire string
 	// workDir is the working directory where skywire-visor was executed
@@ -74,26 +75,52 @@ var (
 )
 
 func init() {
+	thisUser, err := user.Current()
+	if err != nil {
+		panic(err)
+	}
+	if thisUser.Username == "root" {
+		root = true
+	}
+
 	rootCmd.Flags().SortFlags = false
 
 	rootCmd.Flags().StringVarP(&confPath, "config", "c", skyenv.ConfigName, "config file to use")
 	rootCmd.Flags().BoolVarP(&hypervisorUI, "hvui", "i", false, "run as hypervisor")
-	rootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
+	if ((skyenv.OS == "linux") && !root) || ((skyenv.OS == "mac") && !root) || (skyenv.OS == "win") {
+		rootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
+	}
 	rootCmd.Flags().StringVarP(&remoteHypervisorPKs, "hv", "j", "", "add remote hypervisor PKs at runtime")
+	hiddenflags = append(hiddenflags, "hv")
 	rootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors set in config file")
+	hiddenflags = append(hiddenflags, "xhv")
 	rootCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
+	hiddenflags = append(hiddenflags, "stdin")
 	if skyenv.OS == "linux" {
-		rootCmd.Flags().BoolVar(&pkg, "ph", false, "use package config "+skyenv.SkywirePath+"/"+skyenv.Skywirejson)
-		rootCmd.Flags().BoolVar(&pkg1, "pv", false, "use package config "+skyenv.SkywirePath+"/"+skyenv.Skywirevisorjson)
+		if _, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.Skywirejson); err == nil {
+			rootCmd.Flags().BoolVar(&pkg, "ph", false, "use package config "+skyenv.SkywirePath+"/"+skyenv.Skywirejson)
+			hiddenflags = append(hiddenflags, "ph")
+		}
+		if _, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.Skywirevisorjson); err == nil {
+			rootCmd.Flags().BoolVar(&pkg1, "pv", false, "use package config "+skyenv.SkywirePath+"/"+skyenv.Skywirevisorjson)
+			hiddenflags = append(hiddenflags, "pv")
+		}
+	}
+	if _, err := os.Stat(skyenv.HomePath() + "/" + skyenv.ConfigName); err == nil {
+		rootCmd.Flags().BoolVarP(&usr, "user", "u", false, "use config at: $HOME/"+skyenv.ConfigName)
 	}
 	rootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "p", "", "pprof mode: cpu, mem, mutex, block, trace, http")
+	hiddenflags = append(hiddenflags, "pprofmode")
 	rootCmd.Flags().StringVarP(&pprofAddr, "pprofaddr", "q", "localhost:6060", "pprof http port")
+	hiddenflags = append(hiddenflags, "pprofaddr")
 	rootCmd.Flags().StringVarP(&tag, "tag", "t", "skywire", "logging tag")
+	hiddenflags = append(hiddenflags, "tag")
 	rootCmd.Flags().StringVarP(&syslogAddr, "syslog", "y", "", "syslog server address. E.g. localhost:514")
+	hiddenflags = append(hiddenflags, "syslog")
 	rootCmd.Flags().StringVarP(&completion, "completion", "z", "", "[ bash | zsh | fish | powershell ]")
+	hiddenflags = append(hiddenflags, "completion")
 	rootCmd.Flags().BoolVar(&all, "all", false, "show all flags")
 
-	hiddenflags = []string{"hv", "xhv", "stdin", "pprofmode", "pprofaddr", "tag", "syslog", "completion", "ph", "pv"}
 	for _, j := range hiddenflags {
 		rootCmd.Flags().MarkHidden(j) //nolint
 	}
@@ -150,8 +177,8 @@ var rootCmd = &cobra.Command{
 		_, hook := logstore.MakeStore(runtimeLogMaxEntries)
 		log.AddHook(hook)
 		if !stdin {
-			//multiple configs from flags
-			if (pkg && pkg1) || ((pkg || pkg1) && (confPath != "")) {
+			//error on multiple configs from flags
+			if (pkg && pkg1) || (pkg && usr) || (pkg1 && usr) || ((pkg || pkg1) && (confPath != "")) {
 				fmt.Println("Error: multiple configs specified")
 				os.Exit(1)
 			}
@@ -163,7 +190,9 @@ var rootCmd = &cobra.Command{
 			if pkg1 {
 				confPath = skyenv.SkywirePath + "/" + skyenv.Skywirevisorjson
 			}
-
+			if usr {
+				confPath = skyenv.HomePath() + "/" + skyenv.ConfigName
+			}
 			//enforce .json extension
 			if !strings.HasSuffix(confPath, ".json") {
 				//append .json
@@ -180,6 +209,7 @@ var rootCmd = &cobra.Command{
 		}
 		var fork string
 		var branch string
+		var nocommit string
 		//indicates how skywire was started
 		skywire = os.Args[0]
 		//indicates where skywire was started
@@ -188,16 +218,6 @@ var rootCmd = &cobra.Command{
 			log.WithError(err).Fatal()
 		}
 		workDir = path
-		//determine if process has root permissions
-		thisUser, err := user.Current()
-		if err != nil {
-			log.Error("Unable to get current user: %s", err)
-		}
-		if (skyenv.OS == "linux") || (skyenv.OS == "mac") {
-			if thisUser.Username == "root" {
-				root = true
-			}
-		}
 		//retrieve build info
 		visorBuildInfo = buildinfo.Get()
 		if visorBuildInfo.Version == "unknown" {
@@ -214,8 +234,10 @@ var rootCmd = &cobra.Command{
 					if version, err := script.Exec(`git describe`).String(); err == nil {
 						visorBuildInfo.Version = strings.ReplaceAll(version, "\n", "")
 						if visorBuildInfo.Commit == "unknown" {
-							if commit, err := script.Exec(`git rev-list -1 HEAD`).String(); err == nil {
-								visorBuildInfo.Commit = strings.ReplaceAll(commit, "\n", "")
+							if nocommit, err = script.Exec(`git diff-index HEAD --`).String(); err == nil {
+								if commit, err := script.Exec(`git rev-list -1 HEAD`).String(); err == nil {
+									visorBuildInfo.Commit = strings.ReplaceAll(commit, "\n", "")
+								}
 							}
 						}
 						if fork, err = script.Exec(`git config --get remote.origin.url`).String(); err == nil {
@@ -226,7 +248,11 @@ var rootCmd = &cobra.Command{
 							fork = strings.ReplaceAll(fork, "github.com/", "")
 							fork = strings.ReplaceAll(fork, ":/", "")
 							fork = strings.ReplaceAll(fork, "\n", "")
-							if nofork := strings.Contains(fork, "skycoin/skywire"); err == nil {
+							nofork, err := regexp.MatchString("skycoin/skywire", fork)
+							if err != nil {
+								log.Error(err)
+							} else {
+								log.Info(nofork)
 								if !nofork {
 									fork = ""
 								}
@@ -246,18 +272,23 @@ var rootCmd = &cobra.Command{
 				}
 			}
 		}
-		log.WithField("version: ", visorBuildInfo.Version).Info()
+		log.WithField("version", visorBuildInfo.Version).Info()
 		if visorBuildInfo.Date != "unknown" && visorBuildInfo.Date != "" {
-			log.WithField("built on: ", visorBuildInfo.Date).Info()
+			log.WithField("built on", visorBuildInfo.Date).Info()
 		}
 		if visorBuildInfo.Commit != "unknown" && visorBuildInfo.Commit != "" {
-			log.WithField("against commit: ", visorBuildInfo.Commit).Info()
+			if (nocommit != "") && (nocommit != "\n") {
+				log.Info("with changes since commit")
+				log.WithField("commit", visorBuildInfo.Commit).Info()
+			} else {
+				log.WithField("against commit", visorBuildInfo.Commit).Info()
+			}
 			if fork != "" {
-				log.WithField("fork: ", fork).Info()
+				log.WithField("fork", fork).Info()
 			}
 		}
 		if branch != "unknown" && branch != "" {
-			log.WithField("branch: ", branch).Info()
+			log.WithField("branch", branch).Info()
 		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
@@ -266,7 +297,7 @@ var rootCmd = &cobra.Command{
 	Version: buildinfo.Version(),
 }
 
-func runVisor() {
+func runVisor(conf *visorconfig.V1) {
 	var ok bool
 	log := initLogger(tag, syslogAddr)
 	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
@@ -275,7 +306,28 @@ func runVisor() {
 	stopPProf := initPProf(log, tag, pprofMode, pprofAddr)
 	defer stopPProf()
 
-	conf := initConfig(log, confPath)
+	if conf == nil {
+		conf = initConfig(log, confPath)
+	}
+
+	//warn about creating files & directories as root in non root-owned dir
+	if _, err := exec.LookPath("stat"); err == nil {
+		pathtolocalpath := strings.ReplaceAll(conf.LocalPath, "local", "")
+		if owner, err := script.Exec(`stat -c '%U' ` + pathtolocalpath).String(); err == nil {
+			if ((owner != "root") || (owner != "root\n")) && root {
+				log.WithField("local path", conf.LocalPath).Warn()
+				log.Warn("writing as root to directory not owned by root!")
+			}
+		}
+		// fail on the reverse instance
+		if owner, err := script.Exec(`stat -c '%U' ` + conf.LocalPath).String(); err == nil {
+			if ((owner == "root") || (owner == "root\n")) && !root {
+				log.WithField("local path", conf.LocalPath).WithField("owner", "root").Error("folder belongs to root")
+				log.WithField("visor is root", root).Error("visor not started as root")
+				log.Fatal("Insufficient permissions to write to the local path: " + conf.LocalPath)
+			}
+		}
+	}
 
 	if disableHypervisorPKs {
 		conf.Hypervisors = []cipher.PubKey{}

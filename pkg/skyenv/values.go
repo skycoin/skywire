@@ -169,3 +169,9 @@ func Version() string {
 	}
 	return v
 }
+
+// HomePath gets the current user's home folder
+func HomePath() string {
+	dir, _ := os.UserHomeDir() //nolint
+	return dir
+}

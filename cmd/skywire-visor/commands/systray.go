@@ -19,12 +19,13 @@ func runApp(args ...string) {
 		l.WithError(err).Fatalln("Failed to read system tray icon")
 	}
 
+	conf := initConfig(l, confPath)
+
 	go func() {
-		runVisor()
+		runVisor(conf)
 		systray.Quit()
 	}()
 
-	conf := initConfig(l, confPath)
 	systray.Run(gui.GetOnGUIReady(sysTrayIcon, conf), gui.OnGUIQuit)
 
 }
