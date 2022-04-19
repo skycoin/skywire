@@ -42,9 +42,9 @@ var (
 	minHops                int
 	svcconf                = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")
 	testconf               = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "")
-	root bool
-	usr bool
-	hiddenflags          []string
+	root                   bool
+	usr                    bool
+	hiddenflags            []string
 )
 
 var logger = logging.MustGetLogger("skywire-cli")
