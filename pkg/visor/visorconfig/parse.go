@@ -28,7 +28,16 @@ func Parse(log *logging.Logger, r io.Reader, confPath string, visorBuildInfo *bu
 
 	// we check if the version of the visor and config are the same
 	if (conf.Version != "unknown") && (visorBuildInfo.Version != "unknown") {
-		compat = strings.Contains(strings.Split(visorBuildInfo.Version, "-")[0], strings.Split(conf.Version, "-")[0])
+		cver := strings.Split(visorBuildInfo.Version, "-")[0] //v0.6.0
+		cver0 := strings.Split(cver, ".")[0]                  //v0
+		cver1 := strings.Split(cver, ".")[1]                  //6
+		vver := strings.Split(conf.Version, "-")[0]           //v0.6.0
+		vver0 := strings.Split(vver, ".")[0]                  //v0
+		vver1 := strings.Split(vver, ".")[1]                  //6
+		compat = strings.Contains(vver0, cver0)
+		if compat {
+			compat = strings.Contains(vver1, cver1)
+		}
 	}
 	return conf, compat, nil
 }
