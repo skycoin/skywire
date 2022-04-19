@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync"
 
 	"github.com/sirupsen/logrus"
@@ -29,15 +30,24 @@ type Server struct {
 
 // NewServer creates VPN server instance.
 func NewServer(cfg ServerConfig, l logrus.FieldLogger) (*Server, error) {
+	var defaultNetworkIfc string
 	s := &Server{
 		cfg:   cfg,
 		log:   l,
 		ipGen: NewIPGenerator(),
 	}
+	if cfg.NetworkInteface == "" {
+		defaultNetworkIfc, err := netutil.DefaultNetworkInterface()
+		if err != nil {
+			return nil, fmt.Errorf("error getting default network interface: %w", err)
+		}
 
-	defaultNetworkIfc, err := netutil.DefaultNetworkInterface()
-	if err != nil {
-		return nil, fmt.Errorf("error getting default network interface: %w", err)
+		netIfcs, isMultiple := s.checkingNetworkInterface(defaultNetworkIfc)
+		if isMultiple {
+			return nil, fmt.Errorf("multiple default network interface detected, please set once in setting or be single: %v", netIfcs)
+		}
+	} else {
+		defaultNetworkIfc = cfg.NetworkInteface
 	}
 
 	l.Infof("Got default network interface: %s", defaultNetworkIfc)
@@ -315,4 +325,12 @@ func (s *Server) sendServerErrHello(conn net.Conn, status HandshakeStatus) {
 	if err := WriteJSON(conn, &sHello); err != nil {
 		s.log.WithError(err).Errorln("Error sending server hello")
 	}
+}
+
+func (s *Server) checkingNetworkInterface(defaultNetworkInterface string) ([]string, bool) {
+	networkInterfaces := strings.Split(defaultNetworkInterface, "\n")
+	if len(networkInterfaces) > 1 {
+		return networkInterfaces, true
+	}
+	return []string{}, false
 }
