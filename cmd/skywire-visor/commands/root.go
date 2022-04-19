@@ -385,7 +385,6 @@ func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 { /
 	if err != nil {
 		log.WithError(err).Fatal("Failed to read in config.")
 	}
-
 	if !compat {
 		updateConfig(mLog, conf)
 	}
