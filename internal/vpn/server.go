@@ -36,16 +36,17 @@ func NewServer(cfg ServerConfig, l logrus.FieldLogger) (*Server, error) {
 		log:   l,
 		ipGen: NewIPGenerator(),
 	}
+
 	if cfg.NetworkInteface == "" {
-		defaultNetworkIfc, err := netutil.DefaultNetworkInterface()
+		defaultNetworkIfcs, err := netutil.DefaultNetworkInterface()
 		if err != nil {
 			return nil, fmt.Errorf("error getting default network interface: %w", err)
 		}
-
-		netIfcs, isMultiple := s.checkingNetworkInterface(defaultNetworkIfc)
+		netIfcs, isMultiple := s.checkingNetworkInterface(defaultNetworkIfcs)
 		if isMultiple {
 			return nil, fmt.Errorf("multiple default network interface detected, please set once in setting or be single: %v", netIfcs)
 		}
+		defaultNetworkIfc = defaultNetworkIfcs
 	} else {
 		defaultNetworkIfc = cfg.NetworkInteface
 	}
