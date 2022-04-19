@@ -2,6 +2,8 @@ package update
 
 import (
 	"encoding/json"
+	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 
@@ -38,13 +40,23 @@ var (
 	setPublicAutoconnect   string
 	serviceConfURL         string
 	minHops                int
-	svcconf                = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")     //skyenv.DefaultServiceConfAddr
-	testconf               = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "") //skyenv.DefaultServiceConfAddr
+	svcconf                = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")
+	testconf               = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "")
+	root bool
+	usr bool
+	hiddenflags          []string
 )
 
 var logger = logging.MustGetLogger("skywire-cli")
 
 func init() {
+	usrLvl, err := user.Current()
+	if err != nil {
+		panic(err)
+	}
+	if usrLvl.Username == "root" {
+		root = true
+	}
 	RootCmd.Flags().SortFlags = false
 	RootCmd.Flags().BoolVarP(&updateEndpoints, "endpoints", "a", false, "update server endpoints")
 	RootCmd.Flags().StringVarP(&serviceConfURL, "url", "b", "", "service config URL: "+svcconf)
@@ -53,7 +65,21 @@ func init() {
 	RootCmd.Flags().IntVar(&minHops, "set-minhop", -1, "change min hops value")
 	RootCmd.PersistentFlags().StringVarP(&input, "input", "i", "", "path of input config file.")
 	RootCmd.PersistentFlags().StringVarP(&output, "output", "o", "", "config file to output")
-	RootCmd.PersistentFlags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
+	if root {
+		if _, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.Configjson); err == nil {
+			RootCmd.PersistentFlags().BoolVarP(&pkg, "pkg", "p", false, "update package config "+skyenv.SkywirePath+"/"+skyenv.Configjson)
+			hiddenflags = append(hiddenflags, "pkg")
+		}
+	}
+	if !root {
+		if _, err := os.Stat(skyenv.HomePath() + "/" + skyenv.ConfigName); err == nil {
+			RootCmd.PersistentFlags().BoolVarP(&usr, "user", "u", false, "update config at: $HOME/"+skyenv.ConfigName)
+		}
+	}
+
+	for _, j := range hiddenflags {
+		RootCmd.Flags().MarkHidden(j) //nolint
+	}
 }
 
 // RootCmd contains commands that update the config
@@ -64,6 +90,13 @@ var RootCmd = &cobra.Command{
 		//set default output filename
 		if output == "" {
 			output = skyenv.ConfigName
+		}
+		if updateEndpoints && (serviceConfURL == "") {
+			if !testEnv {
+				serviceConfURL = svcconf
+			} else {
+				serviceConfURL = testconf
+			}
 		}
 		var err error
 		if output, err = filepath.Abs(output); err != nil {
@@ -83,7 +116,11 @@ var RootCmd = &cobra.Command{
 		if ok != nil {
 			mLog.WithError(ok).Fatal("Failed to parse config.")
 		}
-
+		cc, err := visorconfig.NewCommon(mLog, output, &conf.SK)
+		if err != nil {
+			mLog.WithError(ok).Fatal("Failed to regenerate config.")
+		}
+		conf.Common = cc
 		if updateEndpoints {
 			if testEnv {
 				serviceConfURL = testconf
@@ -107,7 +144,6 @@ var RootCmd = &cobra.Command{
 				Addr: services.UptimeTracker, //utilenv.DefaultUptimeTrackerAddr,
 			}
 			conf.StunServers = services.StunServers //utilenv.GetStunServers()
-
 		}
 
 		switch setPublicAutoconnect {
@@ -120,7 +156,6 @@ var RootCmd = &cobra.Command{
 		default:
 			logger.Fatal("Unrecognized public autoconnect value: ", setPublicAutoconnect)
 		}
-
 		if minHops >= 0 {
 			conf.Routing.MinHops = uint16(minHops)
 		}

@@ -62,6 +62,11 @@ var hyperVisorUpdateCmd = &cobra.Command{
 		if ok != nil {
 			mLog.WithError(ok).Fatal("Failed to parse config.")
 		}
+		cc, err := visorconfig.NewCommon(mLog, output, &conf.SK)
+		if err != nil {
+			mLog.WithError(ok).Fatal("Failed to regenerate config.")
+		}
+		conf.Common = cc
 		if addHypervisorPKs != "" {
 			keys := strings.Split(addHypervisorPKs, ",")
 			for _, key := range keys {
@@ -95,6 +100,11 @@ var skySocksClientUpdateCmd = &cobra.Command{
 		if ok != nil {
 			mLog.WithError(ok).Fatal("Failed to parse config.")
 		}
+		cc, err := visorconfig.NewCommon(mLog, output, &conf.SK)
+		if err != nil {
+			mLog.WithError(ok).Fatal("Failed to regenerate config.")
+		}
+		conf.Common = cc
 		if addSkysocksClientSrv != "" {
 			keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(addSkysocksClientSrv))
 			if err != nil {
@@ -125,6 +135,12 @@ var skySocksServerUpdateCmd = &cobra.Command{
 		if ok != nil {
 			mLog.WithError(ok).Fatal("Failed to parse config.")
 		}
+		cc, err := visorconfig.NewCommon(mLog, output, &conf.SK)
+		if err != nil {
+			mLog.WithError(ok).Fatal("Failed to regenerate config.")
+		}
+		conf.Common = cc
+
 		if skysocksPasscode != "" {
 			changeAppsConfig(conf, "skysocks", "--passcode", skysocksPasscode)
 		}
@@ -152,6 +168,11 @@ var vpnClientUpdateCmd = &cobra.Command{
 		if ok != nil {
 			mLog.WithError(ok).Fatal("Failed to parse config.")
 		}
+		cc, err := visorconfig.NewCommon(mLog, output, &conf.SK)
+		if err != nil {
+			mLog.WithError(ok).Fatal("Failed to regenerate config.")
+		}
+		conf.Common = cc
 		switch setVPNClientKillswitch {
 		case "true":
 			changeAppsConfig(conf, "vpn-client", "--killswitch", setVPNClientKillswitch)
@@ -197,6 +218,12 @@ var vpnServerUpdateCmd = &cobra.Command{
 		if ok != nil {
 			mLog.WithError(ok).Fatal("Failed to parse config.")
 		}
+		cc, err := visorconfig.NewCommon(mLog, output, &conf.SK)
+		if err != nil {
+			mLog.WithError(ok).Fatal("Failed to regenerate config.")
+		}
+		conf.Common = cc
+
 		if addVPNServerPasscode != "" {
 			changeAppsConfig(conf, "vpn-server", "--passcode", addVPNServerPasscode)
 		}
