@@ -39,5 +39,6 @@ func Parse(log *logging.Logger, r io.Reader, confPath string, visorBuildInfo *bu
 			compat = strings.Contains(vver1, cver1)
 		}
 	}
+	conf.path = confPath
 	return conf, compat, nil
 }
