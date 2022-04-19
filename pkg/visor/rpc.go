@@ -253,6 +253,19 @@ func (r *RPC) SetAppPassword(in *SetAppPasswordIn, _ *struct{}) (err error) {
 	return r.visor.SetAppPassword(in.AppName, in.Password)
 }
 
+// SetAppNetworkInterfaceIn is input for SetAppNetworkInterface.
+type SetAppNetworkInterfaceIn struct {
+	AppName string
+	NetIfc  string
+}
+
+// SetAppNetworkInterface sets network interface for the app.
+func (r *RPC) SetAppNetworkInterface(in *SetAppNetworkInterfaceIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppNetworkInterface", in)(nil, &err)
+
+	return r.visor.SetAppNetworkInterface(in.AppName, in.NetIfc)
+}
+
 // SetAppPKIn is input for SetAppPK.
 type SetAppPKIn struct {
 	AppName string
