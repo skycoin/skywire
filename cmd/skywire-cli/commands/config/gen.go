@@ -260,7 +260,7 @@ var genConfigCmd = &cobra.Command{
 		}
 		skywire := os.Args[0]
 		match := strings.Contains("/tmp/", skywire)
-		if (!stdout) || (!match) {
+		if ((!stdout) || (!match)) && selectedOS != "windows" {
 			// Disable apps not found at bin_path with above exceptions for go run and stdout
 			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "skychat"); err != nil {
 				if disableApps == "" {

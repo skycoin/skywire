@@ -138,11 +138,11 @@ func initAdvancedButton(conf *visorconfig.V1) {
 	// if it's not installed via package, hide the uninstall button
 	initUninstallBtn()
 	//hide the buttons which could launch the browser if the process is run as root
-	if checkRoot() {
-		mAdvancedButton.Hide()
-		mOpenHypervisor.Hide()
-		return
-	}
+	// if checkRoot() {
+	// 	mAdvancedButton.Hide()
+	// 	mOpenHypervisor.Hide()
+	// 	return
+	// }
 	// if visor's not running or hypervisor config is absent,
 	// there won't be any way to open the hypervisor, so disable button
 	if hvAddr == "" {
@@ -178,10 +178,10 @@ func initAdvancedButton(conf *visorconfig.V1) {
 
 func initOpenVPNLinkBtn(vc *visorconfig.V1) {
 	mVPNLink = systray.AddMenuItem("Open VPN UI", "Open VPN UI in browser")
-	if checkRoot() {
-		mVPNLink.Hide()
-		return
-	}
+	// if checkRoot() {
+	// 	mVPNLink.Hide()
+	// 	return
+	// }
 	mVPNLink.Disable()
 
 	// wait for the vpn client to start in the background
@@ -223,7 +223,7 @@ func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, logger *log
 	// VPN Public Servers List
 	mVPNServersList := mVPNClient.AddSubMenuItem("Servers", "VPN Client Servers")
 	mVPNServers := []*systray.MenuItem{}
-	for _, server := range getAvailPublicVPNServers(conf, httpClient, logger.PackageLogger("systray:servers")) {
+	for _, server := range getAvailablePublicVPNServers(conf, httpClient, logger.PackageLogger("systray:servers")) {
 		mVPNServers = append(mVPNServers, mVPNServersList.AddSubMenuItemCheckbox(server, "", false))
 	}
 	go serversBtn(conf, mVPNServers, rpcC)
@@ -323,8 +323,8 @@ func handleVPNLinkButton(conf *visorconfig.V1) {
 	}
 }
 
-// getAvailPublicVPNServers gets all available public VPN server from service discovery URL
-func getAvailPublicVPNServers(conf *visorconfig.V1, httpC *http.Client, logger *logging.Logger) []string {
+// getAvailablePublicVPNServers gets all available public VPN server from service discovery URL
+func getAvailablePublicVPNServers(conf *visorconfig.V1, httpC *http.Client, logger *logging.Logger) []string {
 
 	svrConfig := servicedisc.Config{
 		Type:     servicedisc.ServiceTypeVPN,

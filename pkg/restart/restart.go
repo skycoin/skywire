@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -54,8 +55,14 @@ func CaptureContext() *Context {
 	// TODO: Instead of sleeping, wait until process ID exists.
 	shellCmd := fmt.Sprintf("%s %d; %s", sleepCommand, delaySeconds, args)
 	shellArgs := []string{commandFlag, shellCmd}
-
 	cmd := exec.Command(shellCommand, shellArgs...) // nolint:gosec
+
+	if runtime.GOOS == "windows" {
+		binaryPath := strings.ReplaceAll(os.Args[0], " ", "` ")
+		configPath := strings.ReplaceAll(os.Args[2], " ", "` ")
+		args := fmt.Sprintf("%s \"-c %s\"", binaryPath, configPath)
+		cmd = exec.Command("powershell", "Start-Process", args, "-Verb RunAs")
+	}
 
 	cmd.Stdout = os.Stdout
 	cmd.Stdin = os.Stdin
