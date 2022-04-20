@@ -1,16 +1,12 @@
 package update
 
 import (
-	"path/filepath"
 	"strings"
 
-	"github.com/sirupsen/logrus"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
-	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var pkg bool
@@ -50,23 +46,11 @@ var hyperVisorUpdateCmd = &cobra.Command{
 	Use:   "hv",
 	Short: "update hypervisor config",
 	PreRun: func(_ *cobra.Command, _ []string) {
-		var err error
-		if output, err = filepath.Abs(output); err != nil {
-			logger.WithError(err).Fatal("Invalid config output.")
-		}
+		setDefaults()
+		checkConfig()
 	},
 	Run: func(_ *cobra.Command, _ []string) {
-		mLog := logging.NewMasterLogger()
-		mLog.SetLevel(logrus.InfoLevel)
-		conf, ok := visorconfig.ReadFile(input)
-		if ok != nil {
-			mLog.WithError(ok).Fatal("Failed to parse config.")
-		}
-		cc, err := visorconfig.NewCommon(mLog, output, &conf.SK)
-		if err != nil {
-			mLog.WithError(ok).Fatal("Failed to regenerate config.")
-		}
-		conf.Common = cc
+		conf = initUpdate()
 		if addHypervisorPKs != "" {
 			keys := strings.Split(addHypervisorPKs, ",")
 			for _, key := range keys {
@@ -88,23 +72,11 @@ var skySocksClientUpdateCmd = &cobra.Command{
 	Use:   "sc",
 	Short: "update skysocks-client config",
 	PreRun: func(_ *cobra.Command, _ []string) {
-		var err error
-		if output, err = filepath.Abs(output); err != nil {
-			logger.WithError(err).Fatal("Invalid config output.")
-		}
+		setDefaults()
+		checkConfig()
 	},
 	Run: func(_ *cobra.Command, _ []string) {
-		mLog := logging.NewMasterLogger()
-		mLog.SetLevel(logrus.InfoLevel)
-		conf, ok := visorconfig.ReadFile(input)
-		if ok != nil {
-			mLog.WithError(ok).Fatal("Failed to parse config.")
-		}
-		cc, err := visorconfig.NewCommon(mLog, output, &conf.SK)
-		if err != nil {
-			mLog.WithError(ok).Fatal("Failed to regenerate config.")
-		}
-		conf.Common = cc
+		conf = initUpdate()
 		if addSkysocksClientSrv != "" {
 			keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(addSkysocksClientSrv))
 			if err != nil {
@@ -123,24 +95,12 @@ var skySocksServerUpdateCmd = &cobra.Command{
 	Use:   "ss",
 	Short: "update skysocks-server config",
 	PreRun: func(_ *cobra.Command, _ []string) {
-		var err error
-		if output, err = filepath.Abs(output); err != nil {
-			logger.WithError(err).Fatal("Invalid config output.")
-		}
+		setDefaults()
+		checkConfig()
 	},
 	Run: func(_ *cobra.Command, _ []string) {
-		mLog := logging.NewMasterLogger()
-		mLog.SetLevel(logrus.InfoLevel)
-		conf, ok := visorconfig.ReadFile(input)
-		if ok != nil {
-			mLog.WithError(ok).Fatal("Failed to parse config.")
-		}
-		cc, err := visorconfig.NewCommon(mLog, output, &conf.SK)
-		if err != nil {
-			mLog.WithError(ok).Fatal("Failed to regenerate config.")
-		}
-		conf.Common = cc
 
+		conf = initUpdate()
 		if skysocksPasscode != "" {
 			changeAppsConfig(conf, "skysocks", "--passcode", skysocksPasscode)
 		}
@@ -155,24 +115,11 @@ var vpnClientUpdateCmd = &cobra.Command{
 	Use:   "vpnc",
 	Short: "update vpn-client config",
 	PreRun: func(_ *cobra.Command, _ []string) {
-		var err error
-		if output, err = filepath.Abs(output); err != nil {
-			logger.WithError(err).Fatal("Invalid config output.")
-		}
+		setDefaults()
+		checkConfig()
 	},
 	Run: func(_ *cobra.Command, _ []string) {
-		mLog := logging.NewMasterLogger()
-		mLog.SetLevel(logrus.InfoLevel)
-
-		conf, ok := visorconfig.ReadFile(input)
-		if ok != nil {
-			mLog.WithError(ok).Fatal("Failed to parse config.")
-		}
-		cc, err := visorconfig.NewCommon(mLog, output, &conf.SK)
-		if err != nil {
-			mLog.WithError(ok).Fatal("Failed to regenerate config.")
-		}
-		conf.Common = cc
+		conf = initUpdate()
 		switch setVPNClientKillswitch {
 		case "true":
 			changeAppsConfig(conf, "vpn-client", "--killswitch", setVPNClientKillswitch)
@@ -205,25 +152,11 @@ var vpnServerUpdateCmd = &cobra.Command{
 	Use:   "vpns",
 	Short: "update vpn-server config",
 	PreRun: func(_ *cobra.Command, _ []string) {
-		var err error
-		if output, err = filepath.Abs(output); err != nil {
-			logger.WithError(err).Fatal("Invalid config output.")
-		}
+		setDefaults()
+		checkConfig()
 	},
 	Run: func(_ *cobra.Command, _ []string) {
-		mLog := logging.NewMasterLogger()
-		mLog.SetLevel(logrus.InfoLevel)
-
-		conf, ok := visorconfig.ReadFile(input)
-		if ok != nil {
-			mLog.WithError(ok).Fatal("Failed to parse config.")
-		}
-		cc, err := visorconfig.NewCommon(mLog, output, &conf.SK)
-		if err != nil {
-			mLog.WithError(ok).Fatal("Failed to regenerate config.")
-		}
-		conf.Common = cc
-
+		conf = initUpdate()
 		if addVPNServerPasscode != "" {
 			changeAppsConfig(conf, "vpn-server", "--passcode", addVPNServerPasscode)
 		}
