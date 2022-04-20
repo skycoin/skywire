@@ -91,17 +91,21 @@ func New(config hypervisorconfig.Config, visor *Visor, dmsgC *dmsg.Client) (*Hyp
 	}
 
 	hv := &Hypervisor{
-		c:            config,
-		visor:        visor,
-		dmsgC:        dmsgC,
-		visors:       make(map[cipher.PubKey]Conn),
-		trackers:     dmsgtracker.NewDmsgTrackerManager(mLogger, dmsgC, 0, 0),
+		c:      config,
+		visor:  visor,
+		dmsgC:  dmsgC,
+		visors: make(map[cipher.PubKey]Conn),
+		// trackers:     dmsgtracker.NewDmsgTrackerManager(mLogger, dmsgC, 0, 0),
 		users:        usermanager.NewUserManager(mLogger, singleUserDB, config.Cookies),
 		mu:           new(sync.RWMutex),
 		visorChanMux: make(map[cipher.PubKey]*chanMux),
 		selfConn:     selfConn,
 		logger:       mLogger.PackageLogger("hypervisor"),
 	}
+
+	go func() {
+		hv.trackers = dmsgtracker.NewDmsgTrackerManager(mLogger, dmsgC, 0, 0)
+	}()
 
 	return hv, nil
 }
@@ -115,8 +119,10 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 
 	if hv.visor != nil {
 		// Track hypervisor node.
-		if _, err := hv.trackers.MustGet(ctx, hv.visor.conf.PK); err != nil {
-			hv.logger.WithField("addr", hv.c.DmsgDiscovery).WithError(err).Warn("Failed to dial tracker stream.")
+		if hv.trackers != nil {
+			if _, err := hv.trackers.MustGet(ctx, hv.visor.conf.PK); err != nil {
+				hv.logger.WithField("addr", hv.c.DmsgDiscovery).WithError(err).Warn("Failed to dial tracker stream.")
+			}
 		}
 	}
 
@@ -140,9 +146,10 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 			API:   NewRPCClient(log, conn, RPCPrefix, skyenv.RPCTimeout),
 			PtyUI: setupDmsgPtyUI(hv.dmsgC, addr.PK),
 		}
-
-		if _, err := hv.trackers.MustGet(ctx, addr.PK); err != nil {
-			log.WithField("addr", hv.c.DmsgDiscovery).WithError(err).Warn("Failed to dial tracker stream.")
+		if hv.trackers != nil {
+			if _, err := hv.trackers.MustGet(ctx, addr.PK); err != nil {
+				log.WithField("addr", hv.c.DmsgDiscovery).WithError(err).Warn("Failed to dial tracker stream.")
+			}
 		}
 
 		log.Info("Accepted.")
@@ -332,8 +339,10 @@ func (hv *Hypervisor) getDmsgSummary() []dmsgtracker.DmsgClientSummary {
 	for pk := range hv.visors {
 		pks = append(pks, pk)
 	}
-
-	return hv.trackers.GetBulk(pks)
+	if hv.trackers != nil {
+		return hv.trackers.GetBulk(pks)
+	}
+	return []dmsgtracker.DmsgClientSummary{}
 }
 
 // Health represents a visor's health report attached to hypervisor to visor request status
