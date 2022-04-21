@@ -61,7 +61,7 @@ func CaptureContext() *Context {
 		binaryPath := strings.ReplaceAll(os.Args[0], " ", "` ")
 		configPath := strings.ReplaceAll(os.Args[2], " ", "` ")
 		args := fmt.Sprintf("%s \"-c %s\"", binaryPath, configPath)
-		cmd = exec.Command("powershell", "Start-Process", args, "-Verb RunAs")
+		cmd = exec.Command("powershell", "Start-Process", args, "-Verb RunAs") //nolint:gosec
 	}
 
 	cmd.Stdout = os.Stdout
