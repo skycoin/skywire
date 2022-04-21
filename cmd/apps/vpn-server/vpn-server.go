@@ -74,9 +74,9 @@ func main() {
 	log.Infof("Got app listener, bound to %d", vpnPort)
 
 	srvCfg := vpn.ServerConfig{
-		Passcode:        *passcode,
-		Secure:          *secure,
-		NetworkInteface: *networkIfc,
+		Passcode:         *passcode,
+		Secure:           *secure,
+		NetworkInterface: *networkIfc,
 	}
 	srv, err := vpn.NewServer(srvCfg, log)
 	if err != nil {
