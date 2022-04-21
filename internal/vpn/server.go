@@ -37,18 +37,18 @@ func NewServer(cfg ServerConfig, l logrus.FieldLogger) (*Server, error) {
 		ipGen: NewIPGenerator(),
 	}
 
-	if cfg.NetworkInteface == "" {
+	if cfg.NetworkInterface == "" {
 		defaultNetworkIfcs, err := netutil.DefaultNetworkInterface()
 		if err != nil {
 			return nil, fmt.Errorf("error getting default network interface: %w", err)
 		}
-		netIfcs, isMultiple := s.checkingNetworkInterface(defaultNetworkIfcs)
-		if isMultiple {
-			return nil, fmt.Errorf("multiple default network interface detected, please set once in setting or be single: %v", netIfcs)
+		ifcs, hasMultiple := s.hasMutipleNetworkInterfaces(defaultNetworkIfcs)
+		if hasMultiple {
+			return nil, fmt.Errorf("multiple default network interfaces detected...set a default one for VPN server or remove one: %v", ifcs)
 		}
 		defaultNetworkIfc = defaultNetworkIfcs
 	} else {
-		defaultNetworkIfc = cfg.NetworkInteface
+		defaultNetworkIfc = cfg.NetworkInterface
 	}
 
 	l.Infof("Got default network interface: %s", defaultNetworkIfc)
@@ -328,7 +328,7 @@ func (s *Server) sendServerErrHello(conn net.Conn, status HandshakeStatus) {
 	}
 }
 
-func (s *Server) checkingNetworkInterface(defaultNetworkInterface string) ([]string, bool) {
+func (s *Server) hasMutipleNetworkInterfaces(defaultNetworkInterface string) ([]string, bool) {
 	networkInterfaces := strings.Split(defaultNetworkInterface, "\n")
 	if len(networkInterfaces) > 1 {
 		return networkInterfaces, true
