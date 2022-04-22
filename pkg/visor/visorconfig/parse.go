@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/blang/semver/v4"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
@@ -24,10 +25,26 @@ func Parse(log *logging.Logger, r io.Reader, confPath string, visorBuildInfo *bu
 	if err != nil {
 		return nil, compat, err
 	}
-	log.WithField("config version: ", conf.Version).Info()
-
+		if (conf.Version != "unknown") {
+			log.WithField("config version: ", conf.Version).Info()
+		}
 	// we check if the version of the visor and config are the same
 	if (conf.Version != "unknown") && (visorBuildInfo.Version != "unknown") {
+		v1, err := semver.Make(strings.TrimPrefix(conf.Version, "v"))
+		if err != nil {
+			return conf, compat, err
+		}
+		v2, err := semver.Make(strings.TrimPrefix(visorBuildInfo.Version, "v"))
+		if err != nil {
+			return conf, compat, err
+		}
+		if v1.Major == v2.Major {
+			compat = true
+		}
+	} else {
+		compat = true
+	}
+/*
 		cver := strings.Split(visorBuildInfo.Version, "-")[0] //v0.6.0
 		cver0 := strings.Split(cver, ".")[0]                  //v0
 		cver1 := strings.Split(cver, ".")[1]                  //6
@@ -39,5 +56,6 @@ func Parse(log *logging.Logger, r io.Reader, confPath string, visorBuildInfo *bu
 			compat = strings.Contains(vver1, cver1)
 		}
 	}
+*/
 	return conf, compat, nil
 }
