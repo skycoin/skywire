@@ -91,11 +91,10 @@ func New(config hypervisorconfig.Config, visor *Visor, dmsgC *dmsg.Client) (*Hyp
 	}
 
 	hv := &Hypervisor{
-		c:      config,
-		visor:  visor,
-		dmsgC:  dmsgC,
-		visors: make(map[cipher.PubKey]Conn),
-		// trackers:     dmsgtracker.NewDmsgTrackerManager(mLogger, dmsgC, 0, 0),
+		c:            config,
+		visor:        visor,
+		dmsgC:        dmsgC,
+		visors:       make(map[cipher.PubKey]Conn),
 		users:        usermanager.NewUserManager(mLogger, singleUserDB, config.Cookies),
 		mu:           new(sync.RWMutex),
 		visorChanMux: make(map[cipher.PubKey]*chanMux),
