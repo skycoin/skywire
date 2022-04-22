@@ -421,7 +421,7 @@ func (v *Visor) SetAppNetworkInterface(appName, netifc string) error {
 	v.log.Infof("Changing %s network interface to %q", appName, netifc)
 
 	const (
-		netifcArgName = "-netifc"
+		netifcArgName = "--netifc"
 	)
 
 	if err := v.conf.UpdateAppArg(v.appL, appName, netifcArgName, netifc); err != nil {
