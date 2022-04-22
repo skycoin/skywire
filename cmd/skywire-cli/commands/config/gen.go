@@ -343,19 +343,23 @@ var genConfigCmd = &cobra.Command{
 			}
 			//dont write config as root to non root owned dir & vice versa
 			if _, err = exec.LookPath("stat"); err == nil {
-
 				confPath1, _ := filepath.Split(confPath)
 				if confPath1 == "" {
 					confPath1 = "./"
 				}
+				logger.Info("confPath: " + confPath)
 				owner, err := script.Exec(`stat -c '%U' ` + confPath1).String()
 				if err != nil {
 					logger.Error("cannot stat: " + confPath1)
 				}
-				if ((owner != "root") || (owner != "root\n")) && root {
-					logger.Fatal("declined writing config as root to directory not owned by root")
+				rootOwner, err := script.Exec(`stat -c '%U' /root`).String()
+				if err != nil {
+					logger.Error("cannot stat: /root")
 				}
-				if !root && ((owner == "root") || (owner == "root\n")) {
+				if (owner != rootOwner) && root {
+					logger.Warn("writing config as root to directory not owned by root")
+				}
+				if !root && (owner == rootOwner)  {
 					logger.Fatal("Insufficient permissions to write to the specified path")
 				}
 			}
