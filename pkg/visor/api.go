@@ -218,7 +218,6 @@ func (v *Visor) Summary() (*Summary, error) {
 	}
 
 	dmsgStatValue := &dmsgtracker.DmsgClientSummary{}
-	v.wgTrackers.Wait()
 	if v.trackers != nil {
 		if dmsgTracker := v.trackers.GetBulk([]cipher.PubKey{v.conf.PK}); len(dmsgTracker) > 0 {
 			dmsgStatValue = &dmsgTracker[0]
