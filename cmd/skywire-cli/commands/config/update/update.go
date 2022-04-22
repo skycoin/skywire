@@ -202,7 +202,7 @@ var vpnServerUpdateCmd = &cobra.Command{
 			changeAppsConfig(conf, "vpn-server", "--passcode", addVPNServerPasscode)
 		}
 		if setVPNServerNetIfc != "" {
-			changeAppsConfig(conf, "vpn-server", "-netifc", setVPNServerNetIfc)
+			changeAppsConfig(conf, "vpn-server", "--netifc", setVPNServerNetIfc)
 		}
 		switch setVPNServerSecure {
 		case "true":
