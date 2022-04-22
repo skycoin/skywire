@@ -359,7 +359,7 @@ var genConfigCmd = &cobra.Command{
 				if (owner != rootOwner) && root {
 					logger.Warn("writing config as root to directory not owned by root")
 				}
-				if !root && (owner == rootOwner)  {
+				if !root && (owner == rootOwner) {
 					logger.Fatal("Insufficient permissions to write to the specified path")
 				}
 			}
