@@ -64,8 +64,6 @@ var (
 	usr                  bool
 	// skywire is the path to the running visor binary
 	skywire string
-	// workDir is the working directory where skywire-visor was executed
-	workDir string // nolint:unused
 	// root indicates process is run with root permissions
 	root bool // nolint:unused
 	// visorBuildInfo holds information about the build
