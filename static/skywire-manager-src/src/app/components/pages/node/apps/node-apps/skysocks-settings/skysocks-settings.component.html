@@ -27,6 +27,15 @@
         {{ 'apps.vpn-socks-server-settings.passwords-not-match' | translate }}
       </mat-error>
     </mat-form-field>
+    <mat-form-field *ngIf="configuringVpn">
+      <input
+        id="netifc"
+        type="text"
+        formControlName="netifc"
+        [placeholder]="'apps.vpn-socks-server-settings.netifc' | translate"
+        matInput
+      >
+    </mat-form-field>
     <div class="main-theme settings-option" *ngIf="configuringVpn">
       <mat-checkbox
         color="primary"
