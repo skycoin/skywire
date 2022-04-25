@@ -612,13 +612,14 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 			Secure     *bool          `json:"secure,omitempty"`
 			Status     *int           `json:"status,omitempty"`
 			Passcode   *string        `json:"passcode,omitempty"`
+			NetIfc     *string        `json:"netifc,omitempty"`
 			PK         *cipher.PubKey `json:"pk,omitempty"`
 		}
 
 		shouldRestartApp := func(r req) bool {
 			// we restart the app if one of these fields was changed
 			return r.Killswitch != nil || r.Secure != nil || r.Passcode != nil ||
-				r.PK != nil
+				r.PK != nil || r.NetIfc != nil
 		}
 
 		var reqBody req
@@ -664,6 +665,13 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 
 		if reqBody.Secure != nil {
 			if err := ctx.API.SetAppSecure(ctx.App.Name, *reqBody.Secure); err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		if reqBody.NetIfc != nil {
+			if err := ctx.API.SetAppNetworkInterface(ctx.App.Name, *reqBody.NetIfc); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
 			}
