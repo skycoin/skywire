@@ -2,6 +2,8 @@ package update
 
 import (
 	"encoding/json"
+	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 
@@ -38,13 +40,24 @@ var (
 	setPublicAutoconnect   string
 	serviceConfURL         string
 	minHops                int
-	svcconf                = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")     //skyenv.DefaultServiceConfAddr
-	testconf               = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "") //skyenv.DefaultServiceConfAddr
+	conf                   *visorconfig.V1
+	svcconf                = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")
+	testconf               = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "")
+	root                   bool
+	usr                    bool
+	hiddenflags            []string
 )
 
 var logger = logging.MustGetLogger("skywire-cli")
 
 func init() {
+	usrLvl, err := user.Current()
+	if err != nil {
+		panic(err)
+	}
+	if usrLvl.Username == "root" {
+		root = true
+	}
 	RootCmd.Flags().SortFlags = false
 	RootCmd.Flags().BoolVarP(&updateEndpoints, "endpoints", "a", false, "update server endpoints")
 	RootCmd.Flags().StringVarP(&serviceConfURL, "url", "b", "", "service config URL: "+svcconf)
@@ -52,8 +65,23 @@ func init() {
 	RootCmd.Flags().StringVar(&setPublicAutoconnect, "public-autoconn", "", "change public autoconnect configuration")
 	RootCmd.Flags().IntVar(&minHops, "set-minhop", -1, "change min hops value")
 	RootCmd.PersistentFlags().StringVarP(&input, "input", "i", "", "path of input config file.")
+	hiddenflags = append(hiddenflags, "input")
 	RootCmd.PersistentFlags().StringVarP(&output, "output", "o", "", "config file to output")
-	RootCmd.PersistentFlags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
+	if root {
+		if _, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.Configjson); err == nil {
+			RootCmd.PersistentFlags().BoolVarP(&pkg, "pkg", "p", false, "update package config "+skyenv.SkywirePath+"/"+skyenv.Configjson)
+			hiddenflags = append(hiddenflags, "pkg")
+		}
+	}
+	if !root {
+		if _, err := os.Stat(skyenv.HomePath() + "/" + skyenv.ConfigName); err == nil {
+			RootCmd.PersistentFlags().BoolVarP(&usr, "user", "u", false, "update config at: $HOME/"+skyenv.ConfigName)
+		}
+	}
+
+	for _, j := range hiddenflags {
+		RootCmd.Flags().MarkHidden(j) //nolint
+	}
 }
 
 // RootCmd contains commands that update the config
@@ -61,33 +89,27 @@ var RootCmd = &cobra.Command{
 	Use:   "update",
 	Short: "update a config file",
 	PreRun: func(_ *cobra.Command, _ []string) {
-		//set default output filename
-		if output == "" {
-			output = skyenv.ConfigName
+		if updateEndpoints && (serviceConfURL == "") {
+			if !testEnv {
+				serviceConfURL = svcconf
+			} else {
+				serviceConfURL = testconf
+			}
 		}
-		var err error
-		if output, err = filepath.Abs(output); err != nil {
-			logger.WithError(err).Fatal("Invalid config output.")
-		}
+		setDefaults()
+		checkConfig()
 	},
 	Run: func(cmd *cobra.Command, _ []string) {
-		mLog := logging.NewMasterLogger()
-		mLog.SetLevel(logrus.InfoLevel)
 		if cmd.Flags().Changed("serviceConfURL") {
 			updateEndpoints = true
 		}
-		if input == "" {
-			input = output
-		}
-		conf, ok := visorconfig.ReadFile(input)
-		if ok != nil {
-			mLog.WithError(ok).Fatal("Failed to parse config.")
-		}
-
+		conf = initUpdate()
 		if updateEndpoints {
 			if testEnv {
 				serviceConfURL = testconf
 			}
+			mLog := logging.NewMasterLogger()
+			mLog.SetLevel(logrus.InfoLevel)
 			services := visorconfig.Fetch(mLog, serviceConfURL, stdout)
 			conf.Dmsg = &dmsgc.DmsgConfig{
 				Discovery: services.DmsgDiscovery, //utilenv.DefaultDmsgDiscAddr,
@@ -107,7 +129,6 @@ var RootCmd = &cobra.Command{
 				Addr: services.UptimeTracker, //utilenv.DefaultUptimeTrackerAddr,
 			}
 			conf.StunServers = services.StunServers //utilenv.GetStunServers()
-
 		}
 
 		switch setPublicAutoconnect {
@@ -120,7 +141,6 @@ var RootCmd = &cobra.Command{
 		default:
 			logger.Fatal("Unrecognized public autoconnect value: ", setPublicAutoconnect)
 		}
-
 		if minHops >= 0 {
 			conf.Routing.MinHops = uint16(minHops)
 		}
@@ -168,4 +188,59 @@ func saveConfig(conf *visorconfig.V1) {
 		logger.WithError(err).Fatal("Could not unmarshal json.")
 	}
 	logger.Infof("Updated file '%s' to: %s", output, j)
+}
+
+func initUpdate() (conf *visorconfig.V1) {
+	mLog := logging.NewMasterLogger()
+	mLog.SetLevel(logrus.InfoLevel)
+	if input == "" {
+		input = output
+	}
+	conf, ok := visorconfig.ReadFile(input)
+	if ok != nil {
+		mLog.WithError(ok).Fatal("Failed to parse config.")
+	}
+	cc, err := visorconfig.NewCommon(mLog, output, &conf.SK)
+	if err != nil {
+		mLog.WithError(ok).Fatal("Failed to regenerate config.")
+	}
+	conf.Common = cc
+	return conf
+}
+
+func checkConfig() {
+	//set default output filename
+	if output == "" {
+		output = skyenv.ConfigName
+	}
+	var err error
+	if output, err = filepath.Abs(output); err != nil {
+		logger.WithError(err).Fatal("Invalid config output.")
+	}
+	if _, err := os.Stat(output); err != nil {
+		logger.WithError(err).Fatal("Invalid config output.")
+	}
+	if (input != output) && (input != "") {
+		if input, err = filepath.Abs(input); err != nil {
+			logger.WithError(err).Fatal("Invalid config input.")
+		}
+		if _, err := os.Stat(input); err != nil {
+			logger.WithError(err).Fatal("Invalid config input.")
+		}
+	}
+}
+
+func setDefaults() {
+	if (input != "") && (output == "") {
+		output = input
+	}
+	if pkg {
+		output = skyenv.SkywirePath + "/" + skyenv.Configjson
+		input = skyenv.SkywirePath + "/" + skyenv.Configjson
+	}
+	if usr {
+		output = skyenv.HomePath() + "/" + skyenv.ConfigName
+		input = skyenv.HomePath() + "/" + skyenv.ConfigName
+	}
+
 }
