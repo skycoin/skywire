@@ -41,12 +41,30 @@ environment:
     appveyor_build_worker_image: ubuntu2004
   
 for:
-  - # Linux and MacOS
+  - # Linux
     skip_tags: true
     matrix:
       only:
         - job_name: Linux
-        - job_name: MacOS
+
+    install:
+      - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.44.2
+      - sudo apt-get install gcc libgtk-3-dev libayatana-appindicator3-dev
+      - make dep
+      - sh: ci_scripts/create-ip-aliases.sh
+    
+    before_build:
+      - make check
+   
+    build_script:
+      - make build
+      - make build-systray
+
+  - # MacOS
+    skip_tags: true
+    matrix:
+      only:
+        - job_name: Linux
 
     install:
       - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.44.2
