@@ -20,12 +20,6 @@ const (
 
 	// DMSGHTTPName is the default dmsghttp config name
 	DMSGHTTPName = "dmsghttp-config.json"
-
-	// Skywirejson is the Hypervisor config
-	Skywirejson = "skywire.json"
-
-	// Skywirevisorjson is the visor config
-	Skywirevisorjson = "skywire-visor.json"
 )
 
 // Constants for skywire root directories.
