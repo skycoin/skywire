@@ -138,7 +138,7 @@ func initAdvancedButton(conf *visorconfig.V1) {
 	// if it's not installed via package, hide the uninstall button
 	initUninstallBtn()
 	//hide the buttons which could launch the browser if the process is run as root
-	if checkRoot() {
+	if isRoot() {
 		mAdvancedButton.Hide()
 		mOpenHypervisor.Hide()
 		return
@@ -178,7 +178,7 @@ func initAdvancedButton(conf *visorconfig.V1) {
 
 func initOpenVPNLinkBtn(vc *visorconfig.V1) {
 	mVPNLink = systray.AddMenuItem("Open VPN UI", "Open VPN UI in browser")
-	if checkRoot() {
+	if isRoot() {
 		mVPNLink.Hide()
 		return
 	}
