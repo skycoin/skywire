@@ -32,6 +32,7 @@ var (
 	addVPNServerPasscode   string
 	setVPNServerSecure     string
 	setVPNServerAutostart  string
+	setVPNServerNetIfc     string
 	resetVPNServer         bool
 	addSkysocksClientSrv   string
 	resetSkysocksClient    bool
