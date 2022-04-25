@@ -2,6 +2,7 @@ package vpn
 
 // ServerConfig is a configuration for VPN server.
 type ServerConfig struct {
-	Passcode string
-	Secure   bool
+	Passcode         string
+	Secure           bool
+	NetworkInterface string
 }

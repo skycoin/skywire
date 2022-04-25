@@ -47,6 +47,7 @@ type API interface {
 	SetAppPK(appName string, pk cipher.PubKey) error
 	SetAppSecure(appName string, isSecure bool) error
 	SetAppKillswitch(appName string, killswitch bool) error
+	SetAppNetworkInterface(appName string, netifc string) error
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)
@@ -406,6 +407,27 @@ func (v *Visor) SetAppPassword(appName, password string) error {
 	}
 
 	v.log.Infof("Updated %v password", appName)
+
+	return nil
+}
+
+// SetAppNetworkInterface implements API.
+func (v *Visor) SetAppNetworkInterface(appName, netifc string) error {
+	if skyenv.VPNServerName != appName {
+		return fmt.Errorf("app %s is not allowed to set network interface", appName)
+	}
+
+	v.log.Infof("Changing %s network interface to %q", appName, netifc)
+
+	const (
+		netifcArgName = "--netifc"
+	)
+
+	if err := v.conf.UpdateAppArg(v.appL, appName, netifcArgName, netifc); err != nil {
+		return err
+	}
+
+	v.log.Infof("Updated %v network interface", appName)
 
 	return nil
 }

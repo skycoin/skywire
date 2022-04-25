@@ -39,6 +39,7 @@ func init() {
 	vpnServerUpdateCmd.Flags().StringVarP(&addVPNServerPasscode, "passwd", "s", "", "add passcode to vpn-server")
 	vpnServerUpdateCmd.Flags().StringVar(&setVPNServerSecure, "secure", "", "change secure mode status of vpn-server")
 	vpnServerUpdateCmd.Flags().StringVar(&setVPNServerAutostart, "autostart", "", "change autostart of vpn-server")
+	vpnServerUpdateCmd.Flags().StringVar(&setVPNServerNetIfc, "netifc", "", "set default network interface")
 	vpnServerUpdateCmd.Flags().BoolVarP(&resetVPNServer, "reset", "r", false, "reset vpn-server configurations")
 }
 
@@ -159,6 +160,9 @@ var vpnServerUpdateCmd = &cobra.Command{
 		conf = initUpdate()
 		if addVPNServerPasscode != "" {
 			changeAppsConfig(conf, "vpn-server", "--passcode", addVPNServerPasscode)
+		}
+		if setVPNServerNetIfc != "" {
+			changeAppsConfig(conf, "vpn-server", "--netifc", setVPNServerNetIfc)
 		}
 		switch setVPNServerSecure {
 		case "true":
