@@ -450,6 +450,6 @@ func logBuildInfo(mLog *logging.MasterLogger) {
 	log := mLog.PackageLogger("buildinfo")
 	visorBuildInfo = buildinfo.Get()
 	if visorBuildInfo.Version != "unknown" {
-		log.WithField("version", visorBuildInfo.Version).WithField("built on", visorBuildInfo.Date).WithField("against commit", visorBuildInfo.Commit).Info()
+		log.WithField(" version", visorBuildInfo.Version).WithField("built on", visorBuildInfo.Date).WithField("commit", visorBuildInfo.Commit).Info()
 	}
 }
