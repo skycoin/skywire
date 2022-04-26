@@ -62,8 +62,6 @@ var (
 	all                  bool
 	pkg                  bool
 	usr                  bool
-	// skywire is the path to the running visor binary
-	skywire string
 	// root indicates process is run with root permissions
 	root bool // nolint:unused
 	// visorBuildInfo holds information about the build
@@ -380,7 +378,7 @@ func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 { /
 		log.WithError(err).Fatal("Failed to read in config.")
 	}
 	if !compat {
-		updateConfig(mLog, conf)
+		updateConfig(mLog)
 	}
 	if hypervisorUI {
 		config := hypervisorconfig.GenerateWorkDirConfig(false)
@@ -441,55 +439,9 @@ func isHvRunning(addr string, retries int) bool {
 	return false
 }
 
-func updateConfig(mLog *logging.MasterLogger, conf *visorconfig.V1) {
+func updateConfig(mLog *logging.MasterLogger) {
 	log := mLog.PackageLogger("visor:update-config")
-
-	log.Error("config version does not match visor version")
-	log.WithField("skywire version: ", visorBuildInfo.Version).Error()
-	var updstr string
-	match := strings.Contains("/tmp/", skywire)
-	log.Info("match:", match)
-	if match {
-		if _, err := os.Stat("cmd/skywire-cli/skywire-cli.go"); err == nil {
-			updstr = "go run cmd/skywire-cli/skywire-cli.go config gen -b"
-		}
-		log.Info("updstr:", updstr)
-	}
-	if updstr == "" {
-		updstr = "skywire-cli config gen -b"
-	}
-	if conf.Hypervisor != nil {
-		updstr = updstr + "i"
-	}
-	for _, j := range conf.Hypervisors {
-		if fmt.Sprintf("\t%s\n", j) != "" {
-			updstr = updstr + "x"
-			break
-		}
-	}
-	pkgenv := strings.Contains("/opt/skywire/apps", conf.Launcher.BinPath)
-	if pkgenv {
-		updstr = updstr + "p"
-	}
-	//there is no config *file* with stdin
-	if confPath != visorconfig.StdinName {
-		if _, err := exec.LookPath("stat"); err == nil {
-			if owner, err := script.Exec(`stat -c '%U' ` + confPath).String(); err == nil {
-				if (owner == "root") || (owner == "root\n") {
-					updstr = "sudo " + updstr
-				}
-			}
-		}
-		updstr = "\n		" + updstr + "ro " + confPath + "\n"
-	} else {
-		updstr = "\n		" + updstr + "n" + " | go run cmd/skywire-visor/skywire-visor.go -n"
-		if launchBrowser {
-			updstr = updstr + "b"
-		}
-		updstr = updstr + "\n"
-	}
-	updstr = "\n		" + updstr + "\n"
-	log.Info("please update your config with the following command:\n", updstr)
+	log.Error("config version incompatible - please update your config")
 	log.Fatal("failed to start skywire")
 
 }
@@ -498,12 +450,6 @@ func logBuildInfo(mLog *logging.MasterLogger) {
 	log := mLog.PackageLogger("buildinfo")
 	visorBuildInfo = buildinfo.Get()
 	if visorBuildInfo.Version != "unknown" {
-		log.WithField("version", visorBuildInfo.Version).Info()
-	}
-	if visorBuildInfo.Date != "unknown" && visorBuildInfo.Date != "" {
-		log.WithField("built on", visorBuildInfo.Date).Info()
-	}
-	if visorBuildInfo.Commit != "unknown" && visorBuildInfo.Commit != "" {
-		log.WithField("against commit", visorBuildInfo.Commit).Info()
+		log.WithField("version", visorBuildInfo.Version).WithField("built on", visorBuildInfo.Date).WithField("against commit", visorBuildInfo.Commit).Info()
 	}
 }
