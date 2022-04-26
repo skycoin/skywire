@@ -76,7 +76,7 @@ func init() {
 	hiddenflags = append(hiddenflags, "disableapps")
 	genConfigCmd.Flags().BoolVarP(&hypervisor, "ishv", "i", false, "local hypervisor configuration")
 	genConfigCmd.Flags().StringVarP(&hypervisorPKs, "hvpks", "j", "", "list of public keys to use as hypervisor")
-	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", skyenv.OS, "(linux / macos / windows) paths")
+	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", skyenv.OS, "(linux / mac / win) paths")
 	hiddenflags = append(hiddenflags, "os")
 	genConfigCmd.Flags().BoolVarP(&stdout, "stdout", "n", false, "write config to stdout")
 	hiddenflags = append(hiddenflags, "stdout")
