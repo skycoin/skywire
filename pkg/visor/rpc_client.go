@@ -190,6 +190,14 @@ func (rc *rpcClient) SetAppKillswitch(appName string, killswitch bool) error {
 	}, &struct{}{})
 }
 
+// SetAppKillswitch implements API.
+func (rc *rpcClient) SetAppNetworkInterface(appName, netifc string) error {
+	return rc.Call("SetAppNetworkInterface", &SetAppNetworkInterfaceIn{
+		AppName: appName,
+		NetIfc:  netifc,
+	}, &struct{}{})
+}
+
 // SetAppSecure implements API.
 func (rc *rpcClient) SetAppSecure(appName string, isSecure bool) error {
 	return rc.Call("SetAppSecure", &SetAppBoolIn{
@@ -740,6 +748,21 @@ func (mc *mockRPCClient) SetAppPassword(string, string) error {
 		}
 
 		return fmt.Errorf("app of name '%s' does not exist", socksName)
+	})
+}
+
+// SetAppPassword implements API.
+func (mc *mockRPCClient) SetAppNetworkInterface(string, string) error {
+	return mc.do(true, func() error {
+		const vpnServerName = "vpn-server"
+
+		for i := range mc.o.Apps {
+			if mc.o.Apps[i].Name == vpnServerName {
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", vpnServerName)
 	})
 }
 

@@ -95,13 +95,16 @@ func New(config hypervisorconfig.Config, visor *Visor, dmsgC *dmsg.Client) (*Hyp
 		visor:        visor,
 		dmsgC:        dmsgC,
 		visors:       make(map[cipher.PubKey]Conn),
-		trackers:     dmsgtracker.NewDmsgTrackerManager(mLogger, dmsgC, 0, 0),
 		users:        usermanager.NewUserManager(mLogger, singleUserDB, config.Cookies),
 		mu:           new(sync.RWMutex),
 		visorChanMux: make(map[cipher.PubKey]*chanMux),
 		selfConn:     selfConn,
 		logger:       mLogger.PackageLogger("hypervisor"),
 	}
+
+	go func() {
+		hv.trackers = dmsgtracker.NewDmsgTrackerManager(mLogger, dmsgC, 0, 0)
+	}()
 
 	return hv, nil
 }
@@ -115,8 +118,10 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 
 	if hv.visor != nil {
 		// Track hypervisor node.
-		if _, err := hv.trackers.MustGet(ctx, hv.visor.conf.PK); err != nil {
-			hv.logger.WithField("addr", hv.c.DmsgDiscovery).WithError(err).Warn("Failed to dial tracker stream.")
+		if hv.trackers != nil {
+			if _, err := hv.trackers.MustGet(ctx, hv.visor.conf.PK); err != nil {
+				hv.logger.WithField("addr", hv.c.DmsgDiscovery).WithError(err).Warn("Failed to dial tracker stream.")
+			}
 		}
 	}
 
@@ -140,9 +145,10 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 			API:   NewRPCClient(log, conn, RPCPrefix, skyenv.RPCTimeout),
 			PtyUI: setupDmsgPtyUI(hv.dmsgC, addr.PK),
 		}
-
-		if _, err := hv.trackers.MustGet(ctx, addr.PK); err != nil {
-			log.WithField("addr", hv.c.DmsgDiscovery).WithError(err).Warn("Failed to dial tracker stream.")
+		if hv.trackers != nil {
+			if _, err := hv.trackers.MustGet(ctx, addr.PK); err != nil {
+				log.WithField("addr", hv.c.DmsgDiscovery).WithError(err).Warn("Failed to dial tracker stream.")
+			}
 		}
 
 		log.Info("Accepted.")
@@ -332,8 +338,10 @@ func (hv *Hypervisor) getDmsgSummary() []dmsgtracker.DmsgClientSummary {
 	for pk := range hv.visors {
 		pks = append(pks, pk)
 	}
-
-	return hv.trackers.GetBulk(pks)
+	if hv.trackers != nil {
+		return hv.trackers.GetBulk(pks)
+	}
+	return []dmsgtracker.DmsgClientSummary{}
 }
 
 // Health represents a visor's health report attached to hypervisor to visor request status
@@ -604,13 +612,14 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 			Secure     *bool          `json:"secure,omitempty"`
 			Status     *int           `json:"status,omitempty"`
 			Passcode   *string        `json:"passcode,omitempty"`
+			NetIfc     *string        `json:"netifc,omitempty"`
 			PK         *cipher.PubKey `json:"pk,omitempty"`
 		}
 
 		shouldRestartApp := func(r req) bool {
 			// we restart the app if one of these fields was changed
 			return r.Killswitch != nil || r.Secure != nil || r.Passcode != nil ||
-				r.PK != nil
+				r.PK != nil || r.NetIfc != nil
 		}
 
 		var reqBody req
@@ -656,6 +665,13 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 
 		if reqBody.Secure != nil {
 			if err := ctx.API.SetAppSecure(ctx.App.Name, *reqBody.Secure); err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		if reqBody.NetIfc != nil {
+			if err := ctx.API.SetAppNetworkInterface(ctx.App.Name, *reqBody.NetIfc); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
 			}

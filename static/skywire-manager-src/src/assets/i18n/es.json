@@ -379,6 +379,7 @@
       "vpn-title": "Configuración de VPN-Server",
       "new-password": "Nueva contraseña (dejar en blanco para eliminar la contraseña)",
       "repeat-password": "Repita la contraseña",
+      "netifc": "Interfaz de red predeterminada (opcional)",
       "passwords-not-match": "Las contraseñas no coinciden.",
       "secure-mode-check": "Usar modo seguro",
       "secure-mode-info": "Cuando está activo, el servidor no permite SSH con los clientes y no permite ningún tráfico de clientes VPN a la red local del servidor.",

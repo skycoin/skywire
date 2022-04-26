@@ -138,11 +138,13 @@ func initAdvancedButton(conf *visorconfig.V1) {
 	// if it's not installed via package, hide the uninstall button
 	initUninstallBtn()
 	//hide the buttons which could launch the browser if the process is run as root
-	// if checkRoot() {
-	// 	mAdvancedButton.Hide()
-	// 	mOpenHypervisor.Hide()
-	// 	return
-	// }
+  
+	if isRoot() {
+		mAdvancedButton.Hide()
+		mOpenHypervisor.Hide()
+		return
+	}
+
 	// if visor's not running or hypervisor config is absent,
 	// there won't be any way to open the hypervisor, so disable button
 	if hvAddr == "" {
@@ -178,10 +180,12 @@ func initAdvancedButton(conf *visorconfig.V1) {
 
 func initOpenVPNLinkBtn(vc *visorconfig.V1) {
 	mVPNLink = systray.AddMenuItem("Open VPN UI", "Open VPN UI in browser")
-	// if checkRoot() {
-	// 	mVPNLink.Hide()
-	// 	return
-	// }
+
+	if isRoot() {
+		mVPNLink.Hide()
+		return
+	}
+  
 	mVPNLink.Disable()
 
 	// wait for the vpn client to start in the background
