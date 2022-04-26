@@ -203,37 +203,38 @@ var genConfigCmd = &cobra.Command{
 		}
 		//don't write file with stdout
 		if !stdout {
-			userLvl, err := user.Current()
-			if err != nil {
-				logger.WithError(err).Error("Failed to detect user.")
-			} else {
-				if userLvl.Username == "root" {
-					root = true
-				}
-			}
-			//dont write config as root to non root owned dir & vice versa
-			if _, err = exec.LookPath("stat"); err == nil {
-				confPath1, _ := filepath.Split(confPath)
-				if confPath1 == "" {
-					confPath1 = "./"
-				}
-				owner, err := script.Exec(`stat -c '%U' ` + confPath1).String()
+			if skyenv.OS == "linux" {
+				userLvl, err := user.Current()
 				if err != nil {
-					logger.Error("cannot stat: " + confPath1)
+					logger.WithError(err).Error("Failed to detect user.")
+				} else {
+					if userLvl.Username == "root" {
+						root = true
+					}
 				}
-				rootOwner, err := script.Exec(`stat -c '%U' /root`).String()
-				if err != nil {
-					logger.Error("cannot stat: /root")
-				}
-				if (owner != rootOwner) && root {
-					logger.Warn("writing config as root to directory not owned by root")
-				}
-				if !root && (owner == rootOwner) {
-					logger.Fatal("Insufficient permissions to write to the specified path")
+				//warn when writing config as root to non root owned dir & fail on the reverse instance
+				if _, err = exec.LookPath("stat"); err == nil {
+					confPath1, _ := filepath.Split(confPath)
+					if confPath1 == "" {
+						confPath1 = "./"
+					}
+					owner, err := script.Exec(`stat -c '%U' ` + confPath1).String()
+					if err != nil {
+						logger.Error("cannot stat: " + confPath1)
+					}
+					rootOwner, err := script.Exec(`stat -c '%U' /root`).String()
+					if err != nil {
+						logger.Error("cannot stat: /root")
+					}
+					if (owner != rootOwner) && root {
+						logger.Warn("writing config as root to directory not owned by root")
+					}
+					if !root && (owner == rootOwner) {
+						logger.Fatal("Insufficient permissions to write to the specified path")
+					}
 				}
 			}
 		}
-
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		mLog := logging.NewMasterLogger()

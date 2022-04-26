@@ -173,8 +173,6 @@ var rootCmd = &cobra.Command{
 		mLog := initLogger(tag, syslogAddr)
 		log := mLog.PackageLogger("pre-run")
 
-		//_, hook := logstore.MakeStore(runtimeLogMaxEntries)
-		//log.AddHook(hook)
 		if !stdin {
 			//error on multiple configs from flags
 			if (pkg && usr) || ((pkg || usr) && (confPath != "")) {
