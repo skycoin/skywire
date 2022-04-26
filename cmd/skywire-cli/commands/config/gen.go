@@ -31,6 +31,7 @@ var (
 	regen             bool
 	retainHypervisors bool
 	testEnv           bool
+	ptext             string
 	pkgEnv            bool
 	usrEnv            bool
 	hypervisor        bool
@@ -82,7 +83,16 @@ func init() {
 	genConfigCmd.Flags().BoolVarP(&stdout, "stdout", "n", false, "write config to stdout")
 	hiddenflags = append(hiddenflags, "stdout")
 	genConfigCmd.Flags().StringVarP(&output, "out", "o", "", "output config: "+skyenv.ConfigName)
-	genConfigCmd.Flags().BoolVarP(&pkgEnv, "pkg", "p", false, skyenv.Ptext)
+	if skyenv.OS == "win" {
+		ptext = "use .msi installation path: "
+	}
+	if skyenv.OS == "linux" {
+		ptext = "use path for package: "
+	}
+	if skyenv.OS == "mac" {
+		ptext = "use mac installation path: "
+	}
+	genConfigCmd.Flags().BoolVarP(&pkgEnv, "pkg", "p", false, ptext+skyenv.SkywirePath)
 	homepath := skyenv.HomePath()
 	if homepath != "" {
 		genConfigCmd.Flags().BoolVarP(&usrEnv, "user", "u", false, "use paths for user space: "+homepath)
