@@ -133,8 +133,6 @@ var genConfigCmd = &cobra.Command{
 		if output == visorconfig.StdoutName {
 			stdout = true
 			force = false
-		}
-		if stdout {
 			regen = false
 		}
 		//hide defeats the purpose of stdout.
@@ -181,57 +179,11 @@ var genConfigCmd = &cobra.Command{
 					logger.Info("Ignoring -f --force flag, config not found.")
 				}
 			}
-		}
-		// skywire-cli config gen -p
-		if !stdout && outunset {
-			if pkgEnv && (selectedOS == "linux") {
-				configName = skyenv.Configjson
-				confPath = skyenv.SkywirePath + "/" + configName
-				output = confPath
-			}
-			if usrEnv {
-				confPath = skyenv.HomePath() + "/" + skyenv.ConfigName
-				output = confPath
-			}
-		}
-		if !regen && !stdout {
-			//check if the config exists
-			if _, err := os.Stat(confPath); err == nil {
-				//error config exists !regen
-				logger.Fatal("Config file already exists. Specify the '-r --regen' flag to regenerate.")
-			}
-		}
-		//don't write file with stdout
-		if !stdout {
-			if skyenv.OS == "linux" {
-				userLvl, err := user.Current()
-				if err != nil {
-					logger.WithError(err).Error("Failed to detect user.")
-				} else {
-					if userLvl.Username == "root" {
-						root = true
-					}
-				}
-				//warn when writing config as root to non root owned dir & fail on the reverse instance
-				if _, err = exec.LookPath("stat"); err == nil {
-					confPath1, _ := filepath.Split(confPath)
-					if confPath1 == "" {
-						confPath1 = "./"
-					}
-					owner, err := script.Exec(`stat -c '%U' ` + confPath1).String()
-					if err != nil {
-						logger.Error("cannot stat: " + confPath1)
-					}
-					rootOwner, err := script.Exec(`stat -c '%U' /root`).String()
-					if err != nil {
-						logger.Error("cannot stat: /root")
-					}
-					if (owner != rootOwner) && root {
-						logger.Warn("writing config as root to directory not owned by root")
-					}
-					if !root && (owner == rootOwner) {
-						logger.Fatal("Insufficient permissions to write to the specified path")
-					}
+			if !regen {
+				//check if the config exists
+				if _, err := os.Stat(confPath); err == nil {
+					//error config exists !regen
+					logger.Fatal("Config file already exists. Specify the '-r --regen' flag to regenerate.")
 				}
 			}
 		}
@@ -239,13 +191,22 @@ var genConfigCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
-
 		//use test deployment
 		if testEnv {
 			serviceConfURL = testconf
 		}
 		//fetch the service endpoints
 		services = visorconfig.Fetch(mLog, serviceConfURL, stdout)
+		// skywire-cli config gen -p
+		if !stdout && outunset {
+			if pkgEnv && (selectedOS == "linux") {
+				configName = skyenv.Configjson
+				confPath = skyenv.SkywirePath + "/" + configName
+			}
+			if usrEnv {
+				confPath = skyenv.HomePath() + "/" + skyenv.ConfigName
+			}
+		}
 		// Read in old config and obtain old secret key or generate a new random secret key
 		// and obtain old hypervisors (if any)
 		var sk cipher.SecKey
@@ -288,36 +249,41 @@ var genConfigCmd = &cobra.Command{
 		skywire := os.Args[0]
 		match := strings.Contains("/tmp/", skywire)
 		if (!stdout) || (!match) {
+			//binaries have .exe extension on windows
+			var exe string
+			if skyenv.OS == "windows" {
+				exe = ".exe"
+			}
 			// Disable apps not found at bin_path with above exceptions for go run and stdout
-			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "skychat"); err != nil {
+			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "skychat" + exe); err != nil {
 				if disableApps == "" {
 					disableApps = "skychat"
 				} else {
 					disableApps = disableApps + ",skychat"
 				}
 			}
-			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "skysocks"); err != nil {
+			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "skysocks" + exe); err != nil {
 				if disableApps == "" {
 					disableApps = "skysocks"
 				} else {
 					disableApps = disableApps + ",skysocks"
 				}
 			}
-			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "skysocks-client"); err != nil {
+			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "skysocks-client" + exe); err != nil {
 				if disableApps == "" {
 					disableApps = "skysocks-client"
 				} else {
 					disableApps = disableApps + ",skysocks-client"
 				}
 			}
-			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "vpn-client"); err != nil {
+			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "vpn-client" + exe); err != nil {
 				if disableApps == "" {
 					disableApps = "vpn-client"
 				} else {
 					disableApps = disableApps + ",vpn-client"
 				}
 			}
-			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "vpn-server"); err != nil {
+			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "vpn-server" + exe); err != nil {
 				if disableApps == "" {
 					disableApps = "vpn-server"
 				} else {
@@ -342,6 +308,9 @@ var genConfigCmd = &cobra.Command{
 		}
 		// Set EnableAuth true  hypervisor UI by --enable-auth flag
 		if hypervisor {
+			if pkgEnv {
+				conf.Hypervisor.EnableAuth = true
+			}
 			// Make false EnableAuth hypervisor UI by --disable-auth flag
 			if disableauth {
 				conf.Hypervisor.EnableAuth = false
@@ -360,9 +329,35 @@ var genConfigCmd = &cobra.Command{
 		if ver != "" {
 			conf.Common.Version = ver
 		}
-
 		//don't write file with stdout
 		if !stdout {
+			userLvl, err := user.Current()
+			if err != nil {
+				logger.WithError(err).Error("Failed to detect user.")
+			} else {
+				if userLvl.Username == "root" {
+					root = true
+				}
+			}
+			//dont write config as root to non root owned dir & vice versa
+			if _, err = exec.LookPath("stat"); err == nil {
+
+				confPath1, _ := filepath.Split(confPath)
+				if confPath1 == "" {
+					confPath1 = "./"
+				}
+				owner, err := script.Exec(`stat -c '%U' ` + confPath1).String()
+				if err != nil {
+					logger.Error("cannot stat: " + confPath1)
+				}
+				if ((owner != "root") || (owner != "root\n")) && root {
+					logger.Fatal("declined writing config as root to directory not owned by root")
+				}
+				if !root && ((owner == "root") || (owner == "root\n")) {
+					logger.Fatal("Insufficient permissions to write to the specified path")
+				}
+			}
+
 			// Save config to file.
 			if err := conf.Flush(); err != nil {
 				logger.WithError(err).Fatal("Failed to flush config to file.")
