@@ -251,7 +251,7 @@ var genConfigCmd = &cobra.Command{
 		if (!stdout) || (!match) {
 			//binaries have .exe extension on windows
 			var exe string
-			if skyenv.OS == "windows" {
+			if skyenv.OS == "win" {
 				exe = ".exe"
 			}
 			// Disable apps not found at bin_path with above exceptions for go run and stdout
@@ -321,7 +321,7 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 		// Check OS and enable auth windows or macos
-		if (selectedOS == "windows") || (selectedOS == "macos") {
+		if (selectedOS == "win") || (selectedOS == "mac") {
 			if hypervisor {
 				conf.Hypervisor.EnableAuth = true
 			}
