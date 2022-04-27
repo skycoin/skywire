@@ -70,9 +70,8 @@ func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 	logger.SetLevel(logrus.InfoLevel)
 
 	httpC := getHTTPClient(conf, context.Background(), logger)
-	var ret func()
 	if isRoot() {
-		ret = func() {
+		return func() {
 			systray.SetTemplateIcon(icon, icon)
 			systray.SetTooltip("Skywire")
 			initOpenVPNLinkBtn(conf)
@@ -81,9 +80,8 @@ func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 			initQuitBtn()
 			go handleRootInteraction(conf, doneCh)
 		}
-	}
-	if !isRoot() {
-		ret = func() {
+	} else {
+		return func() {
 			systray.SetTemplateIcon(icon, icon)
 			systray.SetTooltip("Skywire")
 			initOpenVPNLinkBtn(conf)
@@ -93,7 +91,6 @@ func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 			go handleUserInteraction(conf, doneCh)
 		}
 	}
-	return ret
 }
 
 // OnGUIQuit is executed on GUI exit.
