@@ -378,7 +378,7 @@ func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 { /
 		log.WithError(err).Fatal("Failed to read in config.")
 	}
 	if !compat {
-		updateConfig(mLog)
+		log.Fatalf("failed to start skywire - config version is incompatible")
 	}
 	if hypervisorUI {
 		config := hypervisorconfig.GenerateWorkDirConfig(false)
@@ -437,13 +437,6 @@ func isHvRunning(addr string, retries int) bool {
 		}
 	}
 	return false
-}
-
-func updateConfig(mLog *logging.MasterLogger) {
-	log := mLog.PackageLogger("visor:update-config")
-	log.Error("config version incompatible - please update your config")
-	log.Fatal("failed to start skywire")
-
 }
 
 func logBuildInfo(mLog *logging.MasterLogger) {
