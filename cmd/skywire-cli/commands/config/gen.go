@@ -46,7 +46,6 @@ var (
 	serviceConfURL    string
 	services          *visorconfig.Services
 	force             bool
-	print             string
 	hide              bool
 	all               bool
 	outunset          bool
@@ -77,7 +76,7 @@ func init() {
 	hiddenflags = append(hiddenflags, "disableapps")
 	genConfigCmd.Flags().BoolVarP(&hypervisor, "ishv", "i", false, "local hypervisor configuration")
 	genConfigCmd.Flags().StringVarP(&hypervisorPKs, "hvpks", "j", "", "list of public keys to use as hypervisor")
-	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", skyenv.OS, "(linux / macos / windows) paths")
+	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", skyenv.OS, "(linux / mac / win) paths")
 	hiddenflags = append(hiddenflags, "os")
 	genConfigCmd.Flags().BoolVarP(&stdout, "stdout", "n", false, "write config to stdout")
 	hiddenflags = append(hiddenflags, "stdout")
@@ -103,8 +102,6 @@ func init() {
 	genConfigCmd.Flags().StringVar(&ver, "version", "", "custom version testing override")
 	hiddenflags = append(hiddenflags, "version")
 	genConfigCmd.Flags().BoolVar(&all, "all", false, "show all flags")
-	genConfigCmd.Flags().StringVar(&print, "print", "", "parse test ; read config from file & print")
-	hiddenflags = append(hiddenflags, "print")
 
 	for _, j := range hiddenflags {
 		genConfigCmd.Flags().MarkHidden(j) //nolint
@@ -168,7 +165,7 @@ var genConfigCmd = &cobra.Command{
 				logger.Fatal("Dmsghttp config not found at: ", dmsgHTTPPath)
 			}
 		}
-		if (print == "") && !stdout {
+		if !stdout {
 			if confPath, err = filepath.Abs(confPath); err != nil {
 				logger.WithError(err).Fatal("Invalid output provided.")
 			}
@@ -194,10 +191,6 @@ var genConfigCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
-		//print reads in the config and then prints it
-		if print != "" {
-			Print(mLog)
-		}
 		//use test deployment
 		if testEnv {
 			serviceConfURL = testconf
@@ -256,36 +249,41 @@ var genConfigCmd = &cobra.Command{
 		skywire := os.Args[0]
 		match := strings.Contains("/tmp/", skywire)
 		if (!stdout) || (!match) {
+			//binaries have .exe extension on windows
+			var exe string
+			if skyenv.OS == "win" {
+				exe = ".exe"
+			}
 			// Disable apps not found at bin_path with above exceptions for go run and stdout
-			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "skychat"); err != nil {
+			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "skychat" + exe); err != nil {
 				if disableApps == "" {
 					disableApps = "skychat"
 				} else {
 					disableApps = disableApps + ",skychat"
 				}
 			}
-			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "skysocks"); err != nil {
+			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "skysocks" + exe); err != nil {
 				if disableApps == "" {
 					disableApps = "skysocks"
 				} else {
 					disableApps = disableApps + ",skysocks"
 				}
 			}
-			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "skysocks-client"); err != nil {
+			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "skysocks-client" + exe); err != nil {
 				if disableApps == "" {
 					disableApps = "skysocks-client"
 				} else {
 					disableApps = disableApps + ",skysocks-client"
 				}
 			}
-			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "vpn-client"); err != nil {
+			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "vpn-client" + exe); err != nil {
 				if disableApps == "" {
 					disableApps = "vpn-client"
 				} else {
 					disableApps = disableApps + ",vpn-client"
 				}
 			}
-			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "vpn-server"); err != nil {
+			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "vpn-server" + exe); err != nil {
 				if disableApps == "" {
 					disableApps = "vpn-server"
 				} else {
@@ -323,7 +321,7 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 		// Check OS and enable auth windows or macos
-		if (selectedOS == "windows") || (selectedOS == "macos") {
+		if (selectedOS == "win") || (selectedOS == "mac") {
 			if hypervisor {
 				conf.Hypervisor.EnableAuth = true
 			}

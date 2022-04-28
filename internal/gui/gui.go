@@ -64,15 +64,14 @@ var (
 )
 
 // GetOnGUIReady creates func to run on GUI startup.
-func GetOnGUIReady(icon []byte, conf *visorconfig.V1) (ret func()) {
+func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 	doneCh := make(chan bool, 1)
 	logger := logging.NewMasterLogger()
 	logger.SetLevel(logrus.InfoLevel)
 
 	httpC := getHTTPClient(conf, context.Background(), logger)
-
 	if isRoot() {
-		ret = func() {
+		return func() {
 			systray.SetTemplateIcon(icon, icon)
 			systray.SetTooltip("Skywire")
 			initOpenVPNLinkBtn(conf)
@@ -81,9 +80,8 @@ func GetOnGUIReady(icon []byte, conf *visorconfig.V1) (ret func()) {
 			initQuitBtn()
 			go handleRootInteraction(conf, doneCh)
 		}
-	}
-	if !isRoot() {
-		ret = func() {
+	} else {
+		return func() {
 			systray.SetTemplateIcon(icon, icon)
 			systray.SetTooltip("Skywire")
 			initOpenVPNLinkBtn(conf)
@@ -93,7 +91,6 @@ func GetOnGUIReady(icon []byte, conf *visorconfig.V1) (ret func()) {
 			go handleUserInteraction(conf, doneCh)
 		}
 	}
-	return ret
 }
 
 // OnGUIQuit is executed on GUI exit.
@@ -441,12 +438,8 @@ func handleUserInteraction(conf *visorconfig.V1, doneCh chan<- bool) {
 func handleRootInteraction(conf *visorconfig.V1, doneCh chan<- bool) {
 	for {
 		select {
-		//		case <-mOpenHypervisor.ClickedCh:
-		//			handleOpenHypervisor(conf)
 		case <-mVPNButton.ClickedCh:
 			handleVPNButton(conf, rpcC)
-			//		case <-mVPNLink.ClickedCh:
-			//			handleVPNLinkButton(conf)
 		case <-mUninstall.ClickedCh:
 			handleUninstall()
 		case <-mQuit.ClickedCh:
