@@ -84,7 +84,7 @@ func init() {
 
 	rootCmd.Flags().SortFlags = false
 
-	rootCmd.Flags().StringVarP(&confPath, "config", "c", skyenv.ConfigName, "config file to use")
+	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use (default): "+skyenv.ConfigName)
 	if ((skyenv.OS == "linux") && !root) || ((skyenv.OS == "mac") && !root) || (skyenv.OS == "win") {
 		rootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
 	}
@@ -173,8 +173,6 @@ var rootCmd = &cobra.Command{
 		mLog := initLogger(tag, syslogAddr)
 		log := mLog.PackageLogger("pre-run")
 
-		//_, hook := logstore.MakeStore(runtimeLogMaxEntries)
-		//log.AddHook(hook)
 		if !stdin {
 			//error on multiple configs from flags
 			if (pkg && usr) || ((pkg || usr) && (confPath != "")) {
@@ -227,21 +225,28 @@ func runVisor(conf *visorconfig.V1) {
 		conf = initConfig(log, confPath)
 	}
 	//warn about creating files & directories as root in non root-owned dir
+	//dont write config as root to non root owned dir & vice versa
 	if _, err := exec.LookPath("stat"); err == nil {
-		pathtolocalpath := strings.ReplaceAll(conf.LocalPath, "local", "")
-		if owner, err := script.Exec(`stat -c '%U' ` + pathtolocalpath).String(); err == nil {
-			if ((owner != "root") || (owner != "root\n")) && root {
-				log.WithField("local path", conf.LocalPath).Warn()
-				log.Warn("writing as root to directory not owned by root!")
-			}
+		confPath1, _ := filepath.Split(conf.LocalPath)
+		if confPath1 == "" {
+			confPath1 = "./"
 		}
-		// fail on the reverse instance
-		if owner, err := script.Exec(`stat -c '%U' ` + conf.LocalPath).String(); err == nil {
-			if ((owner == "root") || (owner == "root\n")) && !root {
-				log.WithField("local path", conf.LocalPath).WithField("owner", "root").Error("folder belongs to root")
-				log.WithField("visor is root", root).Error("visor not started as root")
-				log.Fatal("Insufficient permissions to write to the local path: " + conf.LocalPath)
-			}
+		owner, err := script.Exec(`stat -c '%U' ` + confPath1).String()
+		if err != nil {
+			log.Error("cannot stat: " + confPath1)
+		}
+		rootOwner, err := script.Exec(`stat -c '%U' /root`).String()
+		if err != nil {
+			log.Error("cannot stat: /root")
+		}
+		if (owner != rootOwner) && root {
+			log.WithField("local path", conf.LocalPath).Warn()
+			log.Warn("writing as root to local path not owned by root")
+		}
+		if !root && (owner == rootOwner) {
+			log.WithField("local path", conf.LocalPath).WithField("owner", "root").Error("folder belongs to root")
+			log.WithField("visor is root", root).Error("visor not started as root")
+			log.Fatal("Insufficient permissions to write to the specified path")
 		}
 	}
 
