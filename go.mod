@@ -43,12 +43,12 @@ require (
 )
 
 require (
-	fyne.io/systray v0.0.0-00010101000000-000000000000
 	github.com/bitfield/script v0.19.0
 	github.com/blang/semver/v4 v4.0.0
 	github.com/go-chi/chi/v5 v5.0.8-0.20220103230436-7dbe9a0bd10f
 	github.com/ivanpirog/coloredcobra v1.0.0
 	github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
+	github.com/mrpalide/systray v1.10.0
 	github.com/skycoin/skywire-utilities v0.0.0-20220331141811-c29ff9ab891e
 )
 
@@ -91,5 +91,3 @@ require (
 
 // Uncomment for tests with alternate branches of 'skywire-utilities'
 // replace github.com/skycoin/skywire-utilities => ../skywire-utilities
-
-replace fyne.io/systray => github.com/fyne-io/systray v1.9.0
