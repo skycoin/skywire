@@ -99,6 +99,7 @@ for:
   
     build_script:
       - make build-windows
+      - make build-systray-windows
 
   - # Linux and MacOS (Release)
     skip_non_tags: true
