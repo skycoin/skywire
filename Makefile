@@ -70,9 +70,13 @@ build: host-apps bin ## Install dependencies, build apps and binaries. `go build
 
 build-windows: host-apps-windows bin-windows ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
+build-windows-appveyor: host-apps-windows-appveyor bin-windows-appveyor ## Install dependencies, build apps and binaries. `go build` with ${OPTS} for AppVeyor image
+
 build-systray: host-apps-systray bin-systray ## Install dependencies, build apps and binaries `go build` with ${OPTS}, with CGO and systray
 
 build-systray-windows: host-apps-systray-windows bin-systray-windows ## Builds systray binary in windows
+
+build-systray-windows-appveyor: host-apps-systray-windows-appveyor bin-systray-windows-appveyor ## Builds systray binary in windows for AppVeyor image
 
 build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
@@ -162,7 +166,11 @@ host-apps: ## Build app
 
 host-apps-windows:
 	powershell -Command new-item .\apps -itemtype directory -force
-	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps $$_.FullName }'
+	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build ${BUILD_OPTS} -o ./apps $$_.FullName }'
+
+host-apps-windows-appveyor:
+	powershell -Command new-item .\apps -itemtype directory -force
+	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build -o ./apps $$_.FullName }'
 
 host-apps-systray: ## Build app
 	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skychat
@@ -174,6 +182,10 @@ host-apps-systray: ## Build app
 host-apps-systray-windows:
 	powershell -Command new-item .\apps -itemtype directory -force
 	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps $$_.FullName }'
+
+host-apps-systray-windows-appveyor:
+	powershell -Command new-item .\apps -itemtype directory -force
+	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build -tags systray -o ./apps $$_.FullName }'
 
 # Static Apps
 host-apps-static: ## Build app
@@ -194,8 +206,14 @@ bin: ## Build `skywire-visor`, `skywire-cli`
 bin-windows: ## Build `skywire-visor`, `skywire-cli`
 	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go build ${BUILD_OPTS} -o ./ $$_.FullName }'
 
+bin-windows-appveyor: ## Build `skywire-visor`, `skywire-cli`
+	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go build -o ./ $$_.FullName }'
+
 bin-systray-windows: ## Build `skywire-visor` and `skywire-cli` with systray support
 	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ $$_.FullName }'
+
+bin-systray-windows-appveyor: ## Build `skywire-visor` and `skywire-cli` with systray support
+	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go build -tags systray -o ./ $$_.FullName }'
 
 bin-systray: ## Build `skywire-visor`, `skywire-cli`
 	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ ./cmd/skywire-visor
