@@ -98,8 +98,8 @@ for:
       - make check-windows
   
     build_script:
-      - make build-windows
-      - make build-systray-windows
+      - make build-windows-appveyor
+      - make build-systray-windows-appveyor
 
   - # Linux and MacOS (Release)
     skip_non_tags: true
