@@ -16,7 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"fyne.io/systray"
+	"github.com/mrpalide/systray"
 
 	"github.com/gen2brain/dlgs"
 	"github.com/sirupsen/logrus"
