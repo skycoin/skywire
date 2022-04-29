@@ -6,7 +6,7 @@ package commands
 import (
 	"context"
 
-	"fyne-io/systray"
+	"fyne.io/systray"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/gui"
