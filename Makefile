@@ -162,7 +162,7 @@ host-apps: ## Build app
 
 host-apps-windows:
 	powershell -Command new-item .\apps -itemtype directory -force
-	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build ${BUILD_OPTS} -o ./apps $$_.FullName }'
+	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps $$_.FullName }'
 
 host-apps-systray: ## Build app
 	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skychat
@@ -173,11 +173,7 @@ host-apps-systray: ## Build app
 
 host-apps-systray-windows:
 	powershell -Command new-item .\apps -itemtype directory -force
-	powershell 'go build ${BUILD_OPTS} -o .\apps\skychat.exe .\cmd\apps\skychat'
-	powershell 'go build ${BUILD_OPTS} -o .\apps\skysocks.exe .\cmd\apps\skysocks'
-	powershell 'go build ${BUILD_OPTS} -o .\apps\skysocks-client.exe .\cmd\apps\skysocks-client'
-	powershell 'go build ${BUILD_OPTS} -tags systray -o .\apps\vpn-server.exe .\cmd\apps\vpn-server'
-	powershell 'go build ${BUILD_OPTS} -tags systray -o .\apps\vpn-client.exe .\cmd\apps\vpn-client'
+	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps $$_.FullName }'
 
 # Static Apps
 host-apps-static: ## Build app
