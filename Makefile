@@ -165,11 +165,11 @@ host-apps-windows:
 	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build ${BUILD_OPTS} -o ./apps $$_.FullName }'
 
 host-apps-systray: ## Build app
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skychat
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skysocks
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/  ./cmd/apps/skysocks-client
-	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps/ ./cmd/apps/vpn-server
-	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps/ ./cmd/apps/vpn-client
+	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skychat
+	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skysocks
+	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -o ./apps/  ./cmd/apps/skysocks-client
+	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps/ ./cmd/apps/vpn-server
+	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps/ ./cmd/apps/vpn-client
 
 host-apps-systray-windows:
 	powershell -Command new-item .\apps -itemtype directory -force
@@ -202,9 +202,9 @@ bin-systray-windows: ## Build `skywire-visor` and `skywire-cli` with systray sup
 	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ $$_.FullName }'
 
 bin-systray: ## Build `skywire-visor`, `skywire-cli`
-	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ ./cmd/skywire-visor
-	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ ./cmd/skywire-cli
-	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/setup-node
+	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ ./cmd/skywire-visor
+	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ ./cmd/skywire-cli
+	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/setup-node
 
 # Static Bin
 bin-static: ## Build `skywire-visor`, `skywire-cli`
