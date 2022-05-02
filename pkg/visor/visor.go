@@ -58,12 +58,13 @@ type Visor struct {
 	updater       *updater.Updater
 	uptimeTracker utclient.APIClient
 
-	ebc      *appevent.Broadcaster // event broadcaster
-	dmsgC    *dmsg.Client
-	dmsgDC   *dmsg.Client       // dmsg direct client
-	dClient  dmsgdisc.APIClient // dmsg direct api client
-	dmsgHTTP *http.Client       // dmsghttp client
-	trackers *dmsgtracker.Manager
+	ebc           *appevent.Broadcaster // event broadcaster
+	dmsgC         *dmsg.Client
+	dmsgDC        *dmsg.Client       // dmsg direct client
+	dClient       dmsgdisc.APIClient // dmsg direct api client
+	dmsgHTTP      *http.Client       // dmsghttp client
+	trackers      *dmsgtracker.Manager
+	trackersReady bool
 
 	stunClient   *network.StunDetails
 	wgStunClient *sync.WaitGroup
@@ -75,7 +76,7 @@ type Visor struct {
 	procM       appserver.ProcManager // proc manager
 	appL        *launcher.Launcher    // app launcher
 	serviceDisc appdisc.Factory
-	initLock    *sync.Mutex
+	initLock    *sync.RWMutex
 	// when module is failed it pushes its error to this channel
 	// used by init and shutdown to show/check for any residual errors
 	// produced by concurrent parts of modules
@@ -111,9 +112,10 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 		log:               conf.MasterLogger().PackageLogger("visor"),
 		conf:              conf,
 		restartCtx:        restartCtx,
-		initLock:          new(sync.Mutex),
+		initLock:          new(sync.RWMutex),
 		isServicesHealthy: newInternalHealthInfo(),
 		wgStunClient:      new(sync.WaitGroup),
+		trackersReady:     false,
 	}
 	v.wgStunClient.Add(1)
 	v.isServicesHealthy.init()
@@ -152,7 +154,10 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 		return nil, false
 	}
 	go func() {
+		v.initLock.RLock()
 		v.trackers = dmsgtracker.NewDmsgTrackerManager(v.MasterLogger(), v.dmsgC, 0, 0)
+		v.trackersReady = true
+		v.initLock.RUnlock()
 	}()
 	return v, true
 }
