@@ -218,29 +218,28 @@ func runVisor(conf *visorconfig.V1) {
 	if conf == nil {
 		conf = initConfig(log, confPath)
 	}
-	//warn about creating files & directories as root in non root-owned dir
-	//dont write config as root to non root owned dir & vice versa
-	if _, err := exec.LookPath("stat"); err == nil {
-		confPath1, _ := filepath.Split(conf.LocalPath)
-		if confPath1 == "" {
-			confPath1 = "./"
-		}
-		owner, err := script.Exec(`stat -c '%U' ` + confPath1).String()
-		if err != nil {
-			log.Error("cannot stat: " + confPath1)
-		}
-		rootOwner, err := script.Exec(`stat -c '%U' /root`).String()
-		if err != nil {
-			log.Error("cannot stat: /root")
-		}
-		if (owner != rootOwner) && root {
-			log.WithField("local path", conf.LocalPath).Warn()
-			log.Warn("writing as root to local path not owned by root")
-		}
-		if !root && (owner == rootOwner) {
-			log.WithField("local path", conf.LocalPath).WithField("owner", "root").Error("folder belongs to root")
-			log.WithField("visor is root", root).Error("visor not started as root")
-			log.Fatal("Insufficient permissions to write to the specified path")
+
+	if skyenv.OS == "linux" {
+		//warn about creating files & directories as root in non root-owned dir
+		if _, err := exec.LookPath("stat"); err == nil {
+			confPath1, _ := filepath.Split(confPath)
+			if confPath1 == "" {
+				confPath1 = "./"
+			}
+			owner, err := script.Exec(`stat -c '%U' ` + confPath1).String()
+			if err != nil {
+				log.Error("cannot stat: " + confPath1)
+			}
+			rootOwner, err := script.Exec(`stat -c '%U' /root`).String()
+			if err != nil {
+				log.Error("cannot stat: /root")
+			}
+			if (owner != rootOwner) && root {
+				log.Warn("writing config as root to directory not owned by root")
+			}
+			if !root && (owner == rootOwner) {
+				log.Fatal("Insufficient permissions to write to the specified path")
+			}
 		}
 	}
 
