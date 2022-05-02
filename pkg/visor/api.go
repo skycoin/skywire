@@ -219,11 +219,13 @@ func (v *Visor) Summary() (*Summary, error) {
 	}
 
 	dmsgStatValue := &dmsgtracker.DmsgClientSummary{}
-	if v.trackers != nil {
-		if dmsgTracker := v.trackers.GetBulk([]cipher.PubKey{v.conf.PK}); len(dmsgTracker) > 0 {
-			dmsgStatValue = &dmsgTracker[0]
-		}
+	v.initLock.Lock()
+	if v.trackersReady {
+		ctx := context.TODO()
+		dmsgTracker, _ := v.trackers.MustGet(ctx, v.conf.PK) //nolint
+		dmsgStatValue = &dmsgTracker
 	}
+	v.initLock.Unlock()
 
 	summary := &Summary{
 		Overview:             overview,

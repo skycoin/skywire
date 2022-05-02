@@ -56,17 +56,18 @@ type Conn struct {
 
 // Hypervisor manages visors.
 type Hypervisor struct {
-	c            hypervisorconfig.Config
-	visor        *Visor
-	dmsgC        *dmsg.Client
-	visors       map[cipher.PubKey]Conn // connected remote visors
-	trackers     *dmsgtracker.Manager   // dmsg trackers
-	users        *usermanager.UserManager
-	mu           *sync.RWMutex
-	visorMu      sync.Mutex
-	visorChanMux map[cipher.PubKey]*chanMux
-	selfConn     Conn
-	logger       *logging.Logger
+	c             hypervisorconfig.Config
+	visor         *Visor
+	dmsgC         *dmsg.Client
+	visors        map[cipher.PubKey]Conn // connected remote visors
+	trackers      *dmsgtracker.Manager   // dmsg trackers
+	trackersReady bool
+	users         *usermanager.UserManager
+	mu            *sync.RWMutex
+	visorMu       sync.Mutex
+	visorChanMux  map[cipher.PubKey]*chanMux
+	selfConn      Conn
+	logger        *logging.Logger
 }
 
 // New creates a new Hypervisor.
@@ -91,19 +92,23 @@ func New(config hypervisorconfig.Config, visor *Visor, dmsgC *dmsg.Client) (*Hyp
 	}
 
 	hv := &Hypervisor{
-		c:            config,
-		visor:        visor,
-		dmsgC:        dmsgC,
-		visors:       make(map[cipher.PubKey]Conn),
-		users:        usermanager.NewUserManager(mLogger, singleUserDB, config.Cookies),
-		mu:           new(sync.RWMutex),
-		visorChanMux: make(map[cipher.PubKey]*chanMux),
-		selfConn:     selfConn,
-		logger:       mLogger.PackageLogger("hypervisor"),
+		c:             config,
+		visor:         visor,
+		dmsgC:         dmsgC,
+		visors:        make(map[cipher.PubKey]Conn),
+		users:         usermanager.NewUserManager(mLogger, singleUserDB, config.Cookies),
+		mu:            new(sync.RWMutex),
+		visorChanMux:  make(map[cipher.PubKey]*chanMux),
+		selfConn:      selfConn,
+		logger:        mLogger.PackageLogger("hypervisor"),
+		trackersReady: false,
 	}
 
 	go func() {
+		hv.mu.Lock()
 		hv.trackers = dmsgtracker.NewDmsgTrackerManager(mLogger, dmsgC, 0, 0)
+		hv.trackersReady = true
+		hv.mu.Unlock()
 	}()
 
 	return hv, nil
@@ -118,11 +123,13 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 
 	if hv.visor != nil {
 		// Track hypervisor node.
-		if hv.trackers != nil {
+		hv.mu.Lock()
+		if hv.trackersReady {
 			if _, err := hv.trackers.MustGet(ctx, hv.visor.conf.PK); err != nil {
 				hv.logger.WithField("addr", hv.c.DmsgDiscovery).WithError(err).Warn("Failed to dial tracker stream.")
 			}
 		}
+		hv.mu.Unlock()
 	}
 
 	// setup
