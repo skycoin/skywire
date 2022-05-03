@@ -28,7 +28,7 @@ const (
 	socksPort = routing.Port(3)
 )
 
-var log = logging.MustGetLogger("chat")
+var log = logging.MustGetLogger("skysocks-client")
 
 var r = netutil.NewRetrier(log, time.Second, netutil.DefaultMaxBackoff, 0, 1)
 
