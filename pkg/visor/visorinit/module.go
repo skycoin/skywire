@@ -137,8 +137,9 @@ func (m *Module) InitConcurrent(ctx context.Context) {
 	startSelf := time.Now()
 	// init the module itself
 	err := m.init(ctx, m.log)
-	m.log.Infof("Initialized in %s (%s with dependencies)", time.Since(startSelf), time.Since(start))
 	if err != nil {
 		m.err = fmt.Errorf("initializing module %s returning error: %v", m.Name, err)
+		return
 	}
+	m.log.Infof("Initialized in %s (%s with dependencies)", time.Since(startSelf), time.Since(start))
 }
