@@ -578,9 +578,6 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 	switch packet.Type() {
 	case routing.ClosePacket:
-		rg.mu.Lock()
-		defer rg.mu.Unlock()
-
 		return rg.handleClosePacket(routing.CloseCode(packet.Payload()[0]))
 	case routing.DataPacket:
 		rg.handshakeProcessedOnce.Do(func() {
