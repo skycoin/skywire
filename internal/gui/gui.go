@@ -16,7 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/mrpalide/systray"
+	"github.com/skycoin/systray"
 
 	"github.com/gen2brain/dlgs"
 	"github.com/sirupsen/logrus"

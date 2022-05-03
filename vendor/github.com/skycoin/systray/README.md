@@ -15,7 +15,7 @@ removing the GTK dependency and support for legacy linux system tray.
 ```go
 package main
 
-import "github.com/mrpalide/systray"
+import "github.com/skycoin/systray"
 
 func main() {
 	systray.Run(onReady, onExit)
@@ -43,14 +43,14 @@ For this reason there is another entry point `RunWithExternalLoop`.
 This function of the library returns a start and end function that should be called
 when the application has started and will end, to loop in appropriate features.
 
-See [full API](https://pkg.go.dev/mrpalide/systray?tab=doc) as well as [CHANGELOG](https://github.com/mrpalide/systray/tree/master/CHANGELOG.md).
+See [full API](https://pkg.go.dev/fyne.io/systray?tab=doc) as well as [CHANGELOG](https://github.com/fyne-io/systray/tree/master/CHANGELOG.md).
 
 ## Try the example app!
 
 Have go v1.12+ or higher installed? Here's an example to get started on macOS:
 
 ```sh
-git clone https://github.com/mrpalide/systray
+git clone https://github.com/fyne-io/systray
 cd systray/example
 env GO111MODULE=on go build
 ./example
@@ -66,7 +66,7 @@ The following text will then appear on the console:
 
 
 ```sh
-go: finding github.com/mrpalide/systray latest
+go: finding github.com/fyne-io/systray latest
 ```
 
 Now look for *Awesome App* in your menu bar!
