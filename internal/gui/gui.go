@@ -348,7 +348,11 @@ func getAvailPublicVPNServers(conf *visorconfig.V1, httpC *http.Client, logger *
 	}
 	serverAddrs := make([]string, len(vpnServers))
 	for idx, server := range vpnServers {
-		serverAddrs[idx] = server.Addr.PubKey().String() + ";" + server.Geo.Country
+		if server.Geo != nil {
+			serverAddrs[idx] = server.Addr.PubKey().String() + " | " + server.Geo.Country
+		} else {
+			serverAddrs[idx] = server.Addr.PubKey().String() + " | N/A"
+		}
 	}
 	return serverAddrs
 }
