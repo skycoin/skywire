@@ -11,7 +11,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -28,7 +28,7 @@ const (
 	socksPort = routing.Port(3)
 )
 
-var log = logrus.New()
+var log = logging.MustGetLogger("chat")
 
 var r = netutil.NewRetrier(log, time.Second, netutil.DefaultMaxBackoff, 0, 1)
 
