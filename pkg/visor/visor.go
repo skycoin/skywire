@@ -142,7 +142,14 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Con
 	go tm.InitConcurrent(ctx)
 	mainModule.InitConcurrent(ctx)
 	if err := mainModule.Wait(ctx); err != nil {
-		log.Error(err)
+		select {
+		case <-ctx.Done():
+			if err := v.Close(); err != nil {
+				log.WithError(err).Error("Visor closed with error.")
+			}
+		default:
+			log.Error(err)
+		}
 		return nil, false
 	}
 	if err := tm.Wait(ctx); err != nil {
