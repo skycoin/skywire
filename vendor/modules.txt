@@ -53,7 +53,7 @@ github.com/go-chi/chi/v5/middleware
 ## explicit; go 1.12
 github.com/go-ole/go-ole
 github.com/go-ole/go-ole/oleutil
-# github.com/godbus/dbus/v5 v5.0.4
+# github.com/godbus/dbus/v5 v5.1.0
 ## explicit; go 1.12
 github.com/godbus/dbus/v5
 github.com/godbus/dbus/v5/introspect
@@ -127,11 +127,6 @@ github.com/modern-go/concurrent
 # github.com/modern-go/reflect2 v1.0.2
 ## explicit; go 1.12
 github.com/modern-go/reflect2
-# github.com/mrpalide/systray v1.10.0
-## explicit; go 1.17
-github.com/mrpalide/systray
-github.com/mrpalide/systray/internal/generated/menu
-github.com/mrpalide/systray/internal/generated/notifier
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
@@ -186,6 +181,11 @@ github.com/skycoin/skywire-utilities/pkg/httputil
 github.com/skycoin/skywire-utilities/pkg/metricsutil
 github.com/skycoin/skywire-utilities/pkg/netutil
 github.com/skycoin/skywire-utilities/pkg/skyenv
+# github.com/skycoin/systray v1.10.0
+## explicit; go 1.17
+github.com/skycoin/systray
+github.com/skycoin/systray/internal/generated/menu
+github.com/skycoin/systray/internal/generated/notifier
 # github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
 ## explicit; go 1.13
 github.com/skycoin/yamux
