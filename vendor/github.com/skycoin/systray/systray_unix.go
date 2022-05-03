@@ -19,8 +19,8 @@ import (
 	"github.com/godbus/dbus/v5/introspect"
 	"github.com/godbus/dbus/v5/prop"
 
-	"github.com/mrpalide/systray/internal/generated/menu"
-	"github.com/mrpalide/systray/internal/generated/notifier"
+	"github.com/skycoin/systray/internal/generated/menu"
+	"github.com/skycoin/systray/internal/generated/notifier"
 )
 
 const (
