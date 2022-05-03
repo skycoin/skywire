@@ -141,6 +141,17 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Con
 	// run Transport module in a non blocking mode
 	go tm.InitConcurrent(ctx)
 	mainModule.InitConcurrent(ctx)
+	if err := mainModule.Wait(ctx); err != nil {
+		select {
+		case <-ctx.Done():
+			if err := v.Close(); err != nil {
+				log.WithError(err).Error("Visor closed with error.")
+			}
+		default:
+			log.Error(err)
+		}
+		return nil, false
+	}
 	if err := tm.Wait(ctx); err != nil {
 		select {
 		case <-ctx.Done():
