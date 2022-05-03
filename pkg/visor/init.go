@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/ccding/go-stun/stun"
-	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/direct"
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
@@ -646,7 +645,8 @@ func vpnEnvMaker(conf *visorconfig.V1, dmsgC, dmsgDC *dmsg.Client, tpRemoteAddrs
 		if conf.Dmsg != nil {
 			envCfg.DmsgDiscovery = conf.Dmsg.Discovery
 
-			r := netutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
+			log := conf.MasterLogger().PackageLogger("vpn_env_maker")
+			r := netutil.NewRetrier(log, 1*time.Second, 10*time.Second, 0, 1)
 			err := r.Do(context.Background(), func() error {
 				for _, ses := range dmsgC.AllSessions() {
 					envCfg.DmsgServers = append(envCfg.DmsgServers, ses.RemoteTCPAddr().String())
