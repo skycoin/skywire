@@ -105,7 +105,7 @@ func (v *Visor) MasterLogger() *logging.MasterLogger {
 }
 
 // NewVisor constructs new Visor.
-func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) {
+func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) {
 
 	v := &Visor{
 		log:               conf.MasterLogger().PackageLogger("visor"),
@@ -128,7 +128,6 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 	log.WithField("public_key", conf.PK).
 		Info("Begin startup.")
 	v.startedAt = time.Now()
-	ctx := context.Background()
 	ctx = context.WithValue(ctx, visorKey, v)
 	v.runtimeErrors = make(chan error)
 	ctx = context.WithValue(ctx, runtimeErrsKey, v.runtimeErrors)
@@ -143,7 +142,14 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 	go tm.InitConcurrent(ctx)
 	mainModule.InitConcurrent(ctx)
 	if err := tm.Wait(ctx); err != nil {
-		log.Error(err)
+		select {
+		case <-ctx.Done():
+			if err := v.Close(); err != nil {
+				log.WithError(err).Error("Visor closed with error.")
+			}
+		default:
+			log.Error(err)
+		}
 		return nil, false
 	}
 	// todo: rewrite to be infinite concurrent loop that will watch for
