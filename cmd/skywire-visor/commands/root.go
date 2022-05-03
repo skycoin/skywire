@@ -260,21 +260,26 @@ func runVisor(conf *visorconfig.V1) {
 		}
 	}
 
-	vis, ok := visor.NewVisor(conf, restartCtx)
+	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
+	vis, ok := visor.NewVisor(ctx, conf, restartCtx)
 	if !ok {
-		log.Errorln("Failed to start visor.")
+		select {
+		case <-ctx.Done():
+			log.Info("Visor closed early.")
+		default:
+			log.Errorln("Failed to start visor.")
+		}
 		quitSystray()
 		return
 	}
+
+	setStopFunction(log, cancel, vis.Close)
+
 	vis.SetLogstore(store)
 
 	if launchBrowser {
 		runBrowser(log, conf)
 	}
-
-	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
-
-	setStopFunction(log, cancel, vis.Close)
 
 	// Wait.
 	<-ctx.Done()
