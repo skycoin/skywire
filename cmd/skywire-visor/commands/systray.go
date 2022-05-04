@@ -6,8 +6,8 @@ package commands
 import (
 	"context"
 
-	"github.com/getlantern/systray"
 	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/systray"
 
 	"github.com/skycoin/skywire/internal/gui"
 )
