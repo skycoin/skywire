@@ -64,7 +64,7 @@ for:
     skip_tags: true
     matrix:
       only:
-        - job_name: Linux
+        - job_name: MacOS
 
     install:
       - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.44.2
@@ -98,7 +98,8 @@ for:
       - make check-windows
   
     build_script:
-      - make build-windows
+      - make build-windows-appveyor
+      - make build-systray-windows-appveyor
 
   - # Linux and MacOS (Release)
     skip_non_tags: true
