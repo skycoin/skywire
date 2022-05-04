@@ -16,8 +16,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/skycoin/systray"
+
 	"github.com/gen2brain/dlgs"
-	"github.com/getlantern/systray"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/direct"
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
@@ -227,22 +228,32 @@ func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, logger *log
 }
 
 func vpnStatusBtn(conf *visorconfig.V1, rpcClient visor.API) {
+	lastStatus := 0
 	for {
 		stats, _ := rpcClient.GetAppConnectionsSummary(skyenv.VPNClientName)
 		if len(stats) == 1 {
 			if stats[0].IsAlive {
-				mVPNStatus.SetTitle("Status: Connected")
-				mVPNButton.SetTitle("Disconnect")
-				mVPNButton.Enable()
+				if lastStatus != 1 {
+					mVPNStatus.SetTitle("Status: Connected")
+					mVPNButton.SetTitle("Disconnect")
+					mVPNButton.Enable()
+					lastStatus = 1
+				}
 			} else {
-				mVPNStatus.SetTitle("Status: Connecting...")
-				mVPNButton.SetTitle("Disconnect")
-				mVPNButton.Disable()
+				if lastStatus != 2 {
+					mVPNStatus.SetTitle("Status: Connecting...")
+					mVPNButton.SetTitle("Disconnect")
+					mVPNButton.Disable()
+					lastStatus = 2
+				}
 			}
 		} else {
-			mVPNStatus.SetTitle("Status: Disconnected")
-			mVPNButton.SetTitle("Connect")
-			mVPNButton.Enable()
+			if lastStatus != 0 {
+				mVPNStatus.SetTitle("Status: Disconnected")
+				mVPNButton.SetTitle("Connect")
+				mVPNButton.Enable()
+				lastStatus = 0
+			}
 		}
 		time.Sleep(3 * time.Second)
 	}
@@ -337,7 +348,11 @@ func getAvailPublicVPNServers(conf *visorconfig.V1, httpC *http.Client, logger *
 	}
 	serverAddrs := make([]string, len(vpnServers))
 	for idx, server := range vpnServers {
-		serverAddrs[idx] = server.Addr.PubKey().String() + ";" + server.Geo.Country
+		if server.Geo != nil {
+			serverAddrs[idx] = server.Addr.PubKey().String() + " | " + server.Geo.Country
+		} else {
+			serverAddrs[idx] = server.Addr.PubKey().String() + " | N/A"
+		}
 	}
 	return serverAddrs
 }
