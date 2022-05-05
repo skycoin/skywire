@@ -1,9 +1,20 @@
 language: go, node_js
 
-os:
-  - linux
-  - osx
-  - windows
+go:
+  - 1.17
+
+node_js:
+  - 14.19.1
+
+jobs:
+  include:
+    - 
+      os: linux
+      dist: focal
+    - 
+      os: osx
+    -
+      os: windows
 
 compiler:
   - gcc
