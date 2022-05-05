@@ -23,10 +23,10 @@ before_install:
   - if [ "$TRAVIS_OS_NAME" = "linux" ]; then curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.44.2 ; fi
   - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get install gcc libgtk-3-dev libayatana-appindicator3-dev -y ; fi
   - if [ "$TRAVIS_OS_NAME" = "linux" ]; then make dep ; fi
-  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sh ci_scripts/create-ip-aliases.sh ; fi
+  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then /bin/sh ci_scripts/create-ip-aliases.sh ; fi
   - if [ "$TRAVIS_OS_NAME" = "osx" ]; then curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.44.2; fi
   - if [ "$TRAVIS_OS_NAME" = "osx" ]; then make dep; fi
-  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then sh ci_scripts/create-ip-aliases.sh; fi
+  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then /bin/sh ci_scripts/create-ip-aliases.sh; fi
   - if [ "$TRAVIS_OS_NAME" = "windows"]; then choco install make; fi
   - if [ "$TRAVIS_OS_NAME" = "windows"]; then go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.44.2; fi
   - if [ "$TRAVIS_OS_NAME" = "windows"]; then make dep; fi
