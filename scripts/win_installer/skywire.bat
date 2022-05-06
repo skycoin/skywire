@@ -14,7 +14,11 @@ if exist "%HOMEPATH%\skywire-config.json" (
 	move /Y "%HOMEPATH%\skywire-config.json" .
 )
 if not exist "skywire-config.json" (
-skywire-cli config gen -birp --os windows --disableapps skychat,skysocks,skysocks-client,vpn-server
+    skywire-cli config gen -birp --os windows --disableapps skychat,skysocks,skysocks-client,vpn-server
+)
+if exist "new.update" (
+    skywire-cli config gen -birpx --os windows --disableapps skychat,skysocks,skysocks-client,vpn-server
+    del new.update
 )
 start "" http://127.0.0.1:8000
 skywire-visor.exe -c "skywire-config.json"
