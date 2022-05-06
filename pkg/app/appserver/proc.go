@@ -63,6 +63,8 @@ type Proc struct {
 
 	errMx sync.RWMutex
 	err   string
+
+	startWg sync.WaitGroup
 }
 
 // NewProc constructs `Proc`.
@@ -93,6 +95,7 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 		connCh:  make(chan struct{}, 1),
 		m:       m,
 		appName: appName,
+		startWg: sync.WaitGroup{},
 	}
 	return p
 }
@@ -216,9 +219,13 @@ func (p *Proc) Start() error {
 			return
 		}
 
-		// App discovery start/stop.
-		p.disc.Start()
-		defer p.disc.Stop()
+		p.startWg.Add(1)
+		go func() {
+			// App discovery start/stop.
+			p.startWg.Wait()
+			p.disc.Start()
+			defer p.disc.Stop()
+		}()
 
 		if runtime.GOOS == "windows" {
 			ipcServer, err := ipc.StartServer(p.appName, nil)
@@ -304,6 +311,9 @@ func (p *Proc) IsRunning() bool {
 func (p *Proc) SetDetailedStatus(status string) {
 	p.statusMx.Lock()
 	defer p.statusMx.Unlock()
+	if status == "Running" {
+		p.startWg.Done()
+	}
 
 	p.status = status
 }
