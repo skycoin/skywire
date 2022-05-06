@@ -53,6 +53,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - `run-source-dmsghttp-test` makefile directive
 - `run-vpnsrv-dmsghttp` makefile directive
 - `run-vpnsrv -dmsghttp-test` makefile directive
+- `install-system-linux` and `install-system-linux-systray` makefile directives
 
 ## 0.6.0
 
