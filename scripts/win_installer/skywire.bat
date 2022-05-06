@@ -23,36 +23,36 @@ echo:
 
 :: Creating logs folder if not exist [Run just in first time after installing]
 if not exist "local\logs\" (
-	mkdir "local\logs"
+	mkdir "local\logs"  >nul 2>&1
 )
 
 :: Moving vpn-client.exe to its path
 if exist vpn-client.exe (
     if not exist "apps\" (
-        mkdir apps
+        mkdir apps  >nul 2>&1
     )
-    move /Y vpn-client.exe apps
+    move /Y vpn-client.exe apps >nul 2>&1
 )
 
 :: Moving wintun.dll to system32 path
 if exist "wintun.dll" (
-    move /Y wintun.dll "C:\Windows\System32"
+    move /Y wintun.dll "C:\Windows\System32"  >nul 2>&1
 )
 
 :: Moving existed config file in user home to installation path
 if exist "%HOMEPATH%\skywire-config.json" (
-	move /Y "%HOMEPATH%\skywire-config.json" .
+	move /Y "%HOMEPATH%\skywire-config.json" .  >nul 2>&1
 )
 
 :: Generating new config file if not exist
 if not exist "skywire-config.json" (
-    skywire-cli config gen -birp --os windows --disableapps skychat,skysocks,skysocks-client,vpn-server
+    skywire-cli config gen -birpw --os windows --disableapps skychat,skysocks,skysocks-client,vpn-server  >nul 2>&1
 )
 
 :: Regenerating config file after update and install new version of Skywire
 if exist "new.update" (
-    skywire-cli config gen -birpx --os windows --disableapps skychat,skysocks,skysocks-client,vpn-server
-    del new.update
+    skywire-cli config gen -birpwx --os windows --disableapps skychat,skysocks,skysocks-client,vpn-server >nul 2>&1
+    del new.update >nul 2>&1
 )
 
 :: Opening UI
