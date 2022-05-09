@@ -181,7 +181,7 @@ github.com/skycoin/skywire-utilities/pkg/httputil
 github.com/skycoin/skywire-utilities/pkg/metricsutil
 github.com/skycoin/skywire-utilities/pkg/netutil
 github.com/skycoin/skywire-utilities/pkg/skyenv
-# github.com/skycoin/systray v1.10.0
+# github.com/skycoin/systray v1.10.1-0.20220509091536-c90eecafd3fd
 ## explicit; go 1.17
 github.com/skycoin/systray
 github.com/skycoin/systray/internal/generated/menu
