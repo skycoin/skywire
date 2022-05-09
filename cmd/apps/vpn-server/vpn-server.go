@@ -78,7 +78,7 @@ func main() {
 		Secure:           *secure,
 		NetworkInterface: *networkIfc,
 	}
-	srv, err := vpn.NewServer(srvCfg, log)
+	srv, err := vpn.NewServer(srvCfg, log, appClient)
 	if err != nil {
 		log.WithError(err).Fatalln("Error creating VPN server")
 	}
