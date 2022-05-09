@@ -185,7 +185,7 @@ func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, logger *log
 
 	mVPNClient = systray.AddMenuItem("VPN", "VPN Client Submenu")
 	// VPN Status
-	mVPNStatus = mVPNClient.AddSubMenuItem("Status: Disconnect", "VPN Client Status")
+	mVPNStatus = mVPNClient.AddSubMenuItem("Status: Disconnected", "VPN Client Status")
 	mVPNStatus.Disable()
 	go vpnStatusBtn(conf, rpcC)
 	// VPN Connect/Disconnect Button
@@ -208,14 +208,12 @@ func vpnStatusBtn(conf *visorconfig.V1, rpcClient visor.API) {
 				if lastStatus != 1 {
 					mVPNStatus.SetTitle("Status: Connected")
 					mVPNButton.SetTitle("Disconnect")
-					mVPNButton.Enable()
 					lastStatus = 1
 				}
 			} else {
 				if lastStatus != 2 {
-					mVPNStatus.SetTitle("Status: Connecting...")
+					mVPNStatus.SetTitle("Status: Connecting.")
 					mVPNButton.SetTitle("Disconnect")
-					mVPNButton.Disable()
 					lastStatus = 2
 				}
 			}
@@ -223,11 +221,10 @@ func vpnStatusBtn(conf *visorconfig.V1, rpcClient visor.API) {
 			if lastStatus != 0 {
 				mVPNStatus.SetTitle("Status: Disconnected")
 				mVPNButton.SetTitle("Connect")
-				mVPNButton.Enable()
 				lastStatus = 0
 			}
 		}
-		time.Sleep(3 * time.Second)
+		time.Sleep(2 * time.Second)
 	}
 }
 
@@ -266,25 +263,9 @@ func serversBtn(conf *visorconfig.V1, servers []*systray.MenuItem, rpcClient vis
 func handleVPNButton(conf *visorconfig.V1, rpcClient visor.API) {
 	stats, _ := rpcClient.GetAppConnectionsSummary(skyenv.VPNClientName)
 	if len(stats) == 1 {
-		if stats[0].IsAlive {
-			mVPNStatus.SetTitle("Status: Disconnecting...")
-			mVPNButton.Disable()
-			mVPNButton.SetTitle("Connect")
-			if err := rpcClient.StopApp(skyenv.VPNClientName); err != nil {
-				mVPNStatus.SetTitle("Status: Connected")
-				mVPNButton.Enable()
-				mVPNButton.SetTitle("Disconnect")
-			}
-		}
+		rpcClient.StopApp(skyenv.VPNClientName)
 	} else {
-		mVPNStatus.SetTitle("Status: Connecting...")
-		mVPNButton.Disable()
-		mVPNButton.SetTitle("Disconnect")
-		if err := rpcClient.StartApp(skyenv.VPNClientName); err != nil {
-			mVPNStatus.SetTitle("Status: Disconnected")
-			mVPNButton.Enable()
-			mVPNButton.SetTitle("Connect")
-		}
+		rpcClient.StartApp(skyenv.VPNClientName)
 	}
 }
 
