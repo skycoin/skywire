@@ -9,12 +9,8 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 )
 
-func extraFlags() {
-
-}
-
-func runApp(args ...string) {
-	runVisor(args)
+func runApp() {
+	runVisor(nil)
 }
 
 // setStopFunction sets the stop function

@@ -45,7 +45,7 @@ export class AutoScalePipe implements PipeTransform {
     /**
      * Load the requested unit labels.
      */
-    let measurements: String[];
+    let measurements: string[];
     if (!params) {
       measurements = AutoScalePipe.accumulatedMeasurements;
     } else {

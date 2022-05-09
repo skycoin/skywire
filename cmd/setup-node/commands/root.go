@@ -8,13 +8,14 @@ import (
 	"io/ioutil"
 	"os"
 
+	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/buildinfo"
-	"github.com/skycoin/dmsg/cmdutil"
-	"github.com/skycoin/dmsg/metricsutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
+	"github.com/skycoin/skywire-utilities/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/setup"
 	"github.com/skycoin/skywire/pkg/setup/setupmetrics"
 	"github.com/skycoin/skywire/pkg/syslog"
@@ -37,6 +38,11 @@ func init() {
 var rootCmd = &cobra.Command{
 	Use:   "setup-node [config.json]",
 	Short: "Route Setup Node for skywire",
+	Long: `
+	┌─┐┌─┐┌┬┐┬ ┬┌─┐   ┌┐┌┌─┐┌┬┐┌─┐
+	└─┐├┤  │ │ │├─┘───││││ │ ││├┤
+	└─┘└─┘ ┴ └─┘┴     ┘└┘└─┘─┴┘└─┘`,
+
 	Run: func(_ *cobra.Command, args []string) {
 		mLog := logging.NewMasterLogger()
 		log := logging.MustGetLogger(tag)
@@ -117,6 +123,19 @@ func prepareMetrics(log logrus.FieldLogger) setupmetrics.Metrics {
 
 // Execute executes root CLI command.
 func Execute() {
+	cc.Init(&cc.Config{
+		RootCmd:         rootCmd,
+		Headings:        cc.HiBlue + cc.Bold,
+		Commands:        cc.HiBlue + cc.Bold,
+		CmdShortDescr:   cc.HiBlue,
+		Example:         cc.HiBlue + cc.Italic,
+		ExecName:        cc.HiBlue + cc.Bold,
+		Flags:           cc.HiBlue + cc.Bold,
+		FlagsDataType:   cc.HiBlue,
+		FlagsDescr:      cc.HiBlue,
+		NoExtraNewlines: true,
+		NoBottomNewline: true,
+	})
 	if err := rootCmd.Execute(); err != nil {
 		panic(err)
 	}

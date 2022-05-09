@@ -41,15 +41,33 @@ environment:
     appveyor_build_worker_image: ubuntu2004
   
 for:
-  - # Linux and MacOS
+  - # Linux
     skip_tags: true
     matrix:
       only:
         - job_name: Linux
+
+    install:
+      - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.44.2
+      - sudo apt-get install gcc libgtk-3-dev libayatana-appindicator3-dev -y
+      - make dep
+      - sh: ci_scripts/create-ip-aliases.sh
+    
+    before_build:
+      - make check
+   
+    build_script:
+      - make build
+      - make build-systray
+
+  - # MacOS
+    skip_tags: true
+    matrix:
+      only:
         - job_name: MacOS
 
     install:
-      - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.42.1
+      - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.44.2
       - make dep
       - sh: ci_scripts/create-ip-aliases.sh
     
@@ -71,7 +89,7 @@ for:
 
     install:
       - choco install make
-      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.42.0
+      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.44.2
       - make dep
       - set PATH=C:\Users\appveyor\go\bin;C:\msys64\mingw64\bin;C:\msys64\usr\bin;%PATH%
 
@@ -80,7 +98,8 @@ for:
       - make check-windows
   
     build_script:
-      - make build-windows
+      - make build-windows-appveyor
+      - make build-systray-windows-appveyor
 
   - # Linux and MacOS (Release)
     skip_non_tags: true
@@ -100,23 +119,6 @@ for:
     build_script:
       - make build
 
-    after_build:
-      - tar -cvzf skywire-$APPVEYOR_REPO_TAG_NAME-$APPVEYOR_JOB_NAME.tar.gz ./apps/* ./skywire-visor ./skywire-cli ./setup-node
-
-    artifacts:
-      - path: skywire-$(APPVEYOR_REPO_TAG_NAME)-$(APPVEYOR_JOB_NAME).tar.gz
-        name: deploy
-
-    deploy:
-      - provider: GitHub
-        release: $(APPVEYOR_REPO_TAG_NAME)
-        auth_token:
-          secure: ZrbNBE2wSfGvHzEq5GqEAUmNy7myDIl7KK05CKlZdQfieV7XdIAPXpkdHNEyZbvT
-        draft: true
-        artifact: deploy
-        on:
-          APPVEYOR_REPO_TAG: true
-          
   - # Windows (Release)
     skip_non_tags: true
     matrix:

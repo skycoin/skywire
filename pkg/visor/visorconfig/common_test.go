@@ -3,9 +3,10 @@ package visorconfig
 import (
 	"testing"
 
-	"github.com/skycoin/dmsg/cipher"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 // When 'ensureKeys' is triggered, a 'Common' struct with:
@@ -16,7 +17,7 @@ func TestCommon_ensureKeys(t *testing.T) {
 
 	t.Run("no_keys", func(t *testing.T) {
 		// init
-		cc, err := NewCommon(nil, "", "", nil)
+		cc, err := NewCommon(nil, "", nil)
 		require.NoError(t, err)
 
 		// test
@@ -32,7 +33,7 @@ func TestCommon_ensureKeys(t *testing.T) {
 
 	t.Run("both_keys", func(t *testing.T) {
 		// init
-		cc, err := NewCommon(nil, "", "", nil)
+		cc, err := NewCommon(nil, "", nil)
 		require.NoError(t, err)
 
 		// init: expected key pair (this should not change)
@@ -50,7 +51,7 @@ func TestCommon_ensureKeys(t *testing.T) {
 
 	t.Run("only_secret_key", func(t *testing.T) {
 		// init
-		cc, err := NewCommon(nil, "", "", nil)
+		cc, err := NewCommon(nil, "", nil)
 		require.NoError(t, err)
 
 		// init: expected key pair

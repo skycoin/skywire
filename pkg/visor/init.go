@@ -13,19 +13,18 @@ import (
 	"time"
 
 	"github.com/ccding/go-stun/stun"
-	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/dmsg/direct"
-	dmsgdisc "github.com/skycoin/dmsg/disc"
-	"github.com/skycoin/dmsg/dmsgctrl"
-	"github.com/skycoin/dmsg/dmsgget"
-	"github.com/skycoin/dmsg/dmsghttp"
-	"github.com/skycoin/dmsg/dmsgpty"
-	dmsgnetutil "github.com/skycoin/dmsg/netutil"
+	"github.com/skycoin/dmsg/pkg/direct"
+	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
+	"github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsgctrl"
+	"github.com/skycoin/dmsg/pkg/dmsgget"
+	"github.com/skycoin/dmsg/pkg/dmsghttp"
+	"github.com/skycoin/dmsg/pkg/dmsgpty"
 	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/internal/utclient"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
+	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
@@ -43,7 +42,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 	ts "github.com/skycoin/skywire/pkg/transport/setup"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
-	"github.com/skycoin/skywire/pkg/util/netutil"
+	"github.com/skycoin/skywire/pkg/utclient"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -233,46 +232,17 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 		return err
 	}
 
-	// initialize cache for available transports
-	m, err := arClient.Transports(ctx)
-	if err != nil {
-		log.Warn("failed to fetch transports from AR")
-		return err
-	}
-
 	v.initLock.Lock()
 	v.arClient = arClient
-	v.transportsCache = m
 	v.initLock.Unlock()
 
 	doneCh := make(chan struct{}, 1)
-	t := time.NewTicker(1 * time.Hour)
-	go fetchARTransports(ctx, v, log, doneCh, t)
 	v.pushCloseStack("address_resolver", func() error {
 		doneCh <- struct{}{}
 		return nil
 	})
 
 	return nil
-}
-
-func fetchARTransports(ctx context.Context, v *Visor, log *logging.Logger, doneCh <-chan struct{}, tick *time.Ticker) {
-	for {
-		select {
-		case <-tick.C:
-			log.Debug("Fetching PKs from AR")
-			m, err := v.arClient.Transports(ctx)
-			if err != nil {
-				log.WithError(err).Warn("failed to fetch AR transport")
-			}
-			v.transportCacheMu.Lock()
-			v.transportsCache = m
-			v.transportCacheMu.Unlock()
-		case <-doneCh:
-			tick.Stop()
-			return
-		}
-	}
 }
 
 func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
@@ -416,7 +386,9 @@ func initStcpClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 
-	tpdC, err := connectToTpDisc(ctx, v)
+	managerLogger := v.MasterLogger().PackageLogger("transport_manager")
+
+	tpdC, err := connectToTpDisc(ctx, v, managerLogger)
 	if err != nil {
 		err := fmt.Errorf("failed to create transport discovery client: %w", err)
 		return err
@@ -437,7 +409,6 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		LogStore:                  logS,
 		PersistentTransportsCache: pTps,
 	}
-	managerLogger := v.MasterLogger().PackageLogger("transport_manager")
 
 	// todo: pass down configuration?
 	var table stcp.PKTable
@@ -509,24 +480,29 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 }
 
 func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []router.RouteSetupHook {
-	retrier := dmsgnetutil.NewRetrier(log, time.Second, time.Second*20, 3, 1.3)
+	retrier := netutil.NewRetrier(log, time.Second, time.Second*20, 3, 1.3)
 	return []router.RouteSetupHook{
 		func(rPK cipher.PubKey, tm *transport.Manager) error {
+			allTransports, err := v.arClient.Transports(ctx)
+			if err != nil {
+				log.WithError(err).Warn("failed to fetch AR transport")
+			}
+
 			dmsgFallback := func() error {
 				return retrier.Do(ctx, func() error {
 					_, err := tm.SaveTransport(ctx, rPK, network.DMSG, transport.LabelAutomatic)
 					return err
 				})
 			}
-			// check visor's AR transport cache
-			if v.transportsCache == nil && !v.conf.Transport.PublicAutoconnect {
+			// check visor's AR transport
+			if allTransports == nil && !v.conf.Transport.PublicAutoconnect {
 				// skips if there's no AR transports
-				log.Warn("empty AR transports cache")
+				log.Warn("empty AR transports")
 				return dmsgFallback()
 			}
-			transports, ok := v.transportsCache[rPK]
+			transports, ok := allTransports[rPK]
 			if !ok {
-				log.WithField("pk", rPK.String()).Warn("pk not found in the transports cache")
+				log.WithField("pk", rPK.String()).Warn("pk not found in the transports")
 				// check if automatic transport is available, if it does,
 				// continue with route creation
 				if v.conf.Transport.PublicAutoconnect {
@@ -669,7 +645,8 @@ func vpnEnvMaker(conf *visorconfig.V1, dmsgC, dmsgDC *dmsg.Client, tpRemoteAddrs
 		if conf.Dmsg != nil {
 			envCfg.DmsgDiscovery = conf.Dmsg.Discovery
 
-			r := dmsgnetutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
+			log := conf.MasterLogger().PackageLogger("vpn_env_maker")
+			r := netutil.NewRetrier(log, 1*time.Second, 10*time.Second, 0, 1)
 			err := r.Do(context.Background(), func() error {
 				for _, ses := range dmsgC.AllSessions() {
 					envCfg.DmsgServers = append(envCfg.DmsgServers, ses.RemoteTCPAddr().String())
@@ -836,6 +813,9 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 // this service is not considered critical and always returns true
 func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	if !v.conf.IsPublic {
+		// call Stop() method to clean service discovery for the situation that
+		// visor was public, then stop (not normal shutdown), then start as non-public
+		v.serviceDisc.VisorUpdater(0).Stop()
 		return nil
 	}
 	logger := v.MasterLogger().PackageLogger("public_visor")
@@ -978,7 +958,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 	}
 	serviceDisc := v.conf.Launcher.ServiceDisc
 	if serviceDisc == "" {
-		serviceDisc = skyenv.DefaultServiceDiscAddr
+		serviceDisc = utilenv.ServiceDiscAddr
 	}
 
 	// todo: refactor updatedisc: split connecting to services in updatedisc and
@@ -1045,7 +1025,7 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func connectToTpDisc(ctx context.Context, v *Visor) (transport.DiscoveryClient, error) {
+func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transport.DiscoveryClient, error) {
 	const (
 		initBO = 1 * time.Second
 		maxBO  = 10 * time.Second
@@ -1067,8 +1047,7 @@ func connectToTpDisc(ctx context.Context, v *Visor) (transport.DiscoveryClient, 
 		return nil, err
 	}
 
-	log := v.MasterLogger().PackageLogger("tp_disc_retrier")
-	tpdCRetrier := dmsgnetutil.NewRetrier(log,
+	tpdCRetrier := netutil.NewRetrier(log,
 		initBO, maxBO, tries, factor)
 
 	var tpdC transport.DiscoveryClient

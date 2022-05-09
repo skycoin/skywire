@@ -6,19 +6,11 @@ package commands
 import (
 	"context"
 
-	"github.com/getlantern/systray"
 	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/systray"
 
 	"github.com/skycoin/skywire/internal/gui"
 )
-
-var (
-	runSysTrayApp bool
-)
-
-func extraFlags() {
-	rootCmd.Flags().BoolVar(&runSysTrayApp, "systray", false, "Run system tray app")
-}
 
 func runApp(args ...string) {
 	l := logging.NewMasterLogger()
@@ -27,12 +19,12 @@ func runApp(args ...string) {
 		l.WithError(err).Fatalln("Failed to read system tray icon")
 	}
 
+	conf := initConfig(l, confPath)
+
 	go func() {
-		runVisor(args)
+		runVisor(conf)
 		systray.Quit()
 	}()
-
-	conf := initConfig(l, args, confPath)
 
 	systray.Run(gui.GetOnGUIReady(sysTrayIcon, conf), gui.OnGUIQuit)
 

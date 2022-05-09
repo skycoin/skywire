@@ -155,6 +155,8 @@ archives:
   - format: tar.gz
     wrap_in_directory: false
     name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
+    files:
+      - dmsghttp-config.json
 checksum:
   name_template: 'checksums.txt'
 snapshot:

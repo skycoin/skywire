@@ -3,6 +3,7 @@ package visor
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,16 +14,16 @@ import (
 
 	"github.com/ccding/go-stun/stun"
 	"github.com/google/uuid"
-	"github.com/skycoin/dmsg/buildinfo"
-	"github.com/skycoin/dmsg/cipher"
 
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
-	"github.com/skycoin/skywire/pkg/util/netutil"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 )
@@ -46,8 +47,10 @@ type API interface {
 	SetAppPK(appName string, pk cipher.PubKey) error
 	SetAppSecure(appName string, isSecure bool) error
 	SetAppKillswitch(appName string, killswitch bool) error
+	SetAppNetworkInterface(appName string, netifc string) error
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
 	GetAppStats(appName string) (appserver.AppStats, error)
+	GetAppError(appName string) (string, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
 
 	TransportTypes() ([]string, error)
@@ -216,12 +219,13 @@ func (v *Visor) Summary() (*Summary, error) {
 	}
 
 	dmsgStatValue := &dmsgtracker.DmsgClientSummary{}
-	v.wgTrackers.Wait()
-	if v.trackers != nil {
-		if dmsgTracker := v.trackers.GetBulk([]cipher.PubKey{v.conf.PK}); len(dmsgTracker) > 0 {
-			dmsgStatValue = &dmsgTracker[0]
-		}
+	v.initLock.Lock()
+	if v.trackersReady {
+		ctx := context.TODO()
+		dmsgTracker, _ := v.trackers.MustGet(ctx, v.conf.PK) //nolint
+		dmsgStatValue = &dmsgTracker
 	}
+	v.initLock.Unlock()
 
 	summary := &Summary{
 		Overview:             overview,
@@ -316,6 +320,10 @@ func (v *Visor) StartApp(appName string) error {
 		if err != nil {
 			return err
 		}
+
+		if v.GetVPNClientAddress() == "" {
+			return errors.New("VPN server pub key is missing")
+		}
 	}
 
 	return v.appL.StartApp(appName, nil, envs)
@@ -401,6 +409,27 @@ func (v *Visor) SetAppPassword(appName, password string) error {
 	}
 
 	v.log.Infof("Updated %v password", appName)
+
+	return nil
+}
+
+// SetAppNetworkInterface implements API.
+func (v *Visor) SetAppNetworkInterface(appName, netifc string) error {
+	if skyenv.VPNServerName != appName {
+		return fmt.Errorf("app %s is not allowed to set network interface", appName)
+	}
+
+	v.log.Infof("Changing %s network interface to %q", appName, netifc)
+
+	const (
+		netifcArgName = "--netifc"
+	)
+
+	if err := v.conf.UpdateAppArg(v.appL, appName, netifcArgName, netifc); err != nil {
+		return err
+	}
+
+	v.log.Infof("Updated %v network interface", appName)
 
 	return nil
 }
@@ -501,6 +530,12 @@ func (v *Visor) GetAppStats(appName string) (appserver.AppStats, error) {
 	}
 
 	return stats, nil
+}
+
+// GetAppError implements API.
+func (v *Visor) GetAppError(appName string) (string, error) {
+	appErr, _ := v.procM.ErrorByName(appName)
+	return appErr, nil
 }
 
 // GetAppConnectionsSummary implements API.
@@ -806,4 +841,18 @@ func (v *Visor) GetPersistentTransports() ([]transport.PersistentTransports, err
 // SetPublicAutoconnect sets public_autoconnect config of visor
 func (v *Visor) SetPublicAutoconnect(pAc bool) error {
 	return v.conf.UpdatePublicAutoconnect(pAc)
+}
+
+// GetVPNClientAddress get PK address of server set on vpn-client
+func (v *Visor) GetVPNClientAddress() string {
+	for _, v := range v.conf.Launcher.Apps {
+		if v.Name == skyenv.VPNClientName {
+			for index := range v.Args {
+				if v.Args[index] == "-srv" {
+					return v.Args[index+1]
+				}
+			}
+		}
+	}
+	return ""
 }

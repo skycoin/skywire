@@ -58,26 +58,31 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
     if (data.name.toLocaleLowerCase().indexOf('vpn') !== -1) {
       this.configuringVpn = true;
     }
-
-    // Get the current values saved on the visor, if returned by the API.
-    if (this.data.args && this.data.args.length > 0) {
-      for (let i = 0; i < this.data.args.length; i++) {
-        if ((this.data.args[i] as string).toLowerCase().includes('-secure')) {
-          this.secureMode = (this.data.args[i] as string).toLowerCase().includes('true');
-        }
-      }
-    }
   }
 
   ngOnInit() {
     this.form = this.formBuilder.group({
-      'password': [''],
-      'passwordConfirmation': ['', this.validatePasswords.bind(this)],
+      password: [''],
+      passwordConfirmation: ['', this.validatePasswords.bind(this)],
+      netifc: [''],
     });
 
     this.formSubscription = this.form.get('password').valueChanges.subscribe(() => {
       this.form.get('passwordConfirmation').updateValueAndValidity();
     });
+
+    // Get the current values saved on the visor, if returned by the API.
+    if (this.data.args && this.data.args.length > 0) {
+      for (let i = 0; i < this.data.args.length; i++) {
+        const arg = this.data.args[i];
+        if ((arg as string).toLowerCase().includes('-secure')) {
+          this.secureMode = (arg as string).toLowerCase().includes('true');
+        }
+        if ((arg as string).toLowerCase().includes('-netifc') && i < this.data.args.length - 1) {
+          this.form.get('netifc').setValue(this.data.args[i + 1]);
+        }
+      }
+    }
 
     setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
   }
@@ -123,6 +128,7 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
     // The "secure" value is only for the VPN app.
     if (this.configuringVpn) {
       data['secure'] = this.secureMode;
+      data['netifc'] = this.form.get('netifc').value;
     }
 
     this.operationSubscription = this.appsService.changeAppSettings(

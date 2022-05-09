@@ -83,7 +83,7 @@ export class TransportListComponent implements OnDestroy {
     this.allTransports = val.transports;
     this.nodePK = val.localPk;
 
-    const persistentTransportsMap: Map<String, PersistentTransport> = new Map<String, PersistentTransport>();
+    const persistentTransportsMap: Map<string, PersistentTransport> = new Map<string, PersistentTransport>();
     val.persistentTransports.forEach(pt => persistentTransportsMap.set(this.getPersistentTransportID(pt.pk, pt.type), pt));
 
     this.allTransports.forEach(transport => {
@@ -379,7 +379,7 @@ export class TransportListComponent implements OnDestroy {
         const dataToUse = list ? list : [];
         let nothingToDo = false;
 
-        const transportsMap: Map<String, Transport> = new Map<String, Transport>();
+        const transportsMap: Map<string, Transport> = new Map<string, Transport>();
         transports.forEach(t => transportsMap.set(this.getPersistentTransportID(t.remotePk, t.type), t));
 
         if (makePersistent) {
