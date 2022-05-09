@@ -7,6 +7,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -97,6 +98,7 @@ func NewServer(cfg ServerConfig, l logrus.FieldLogger, appCl *app.Client) (*Serv
 func (s *Server) Serve(l net.Listener) error {
 	serveErr := errors.New("already serving")
 	s.serveOnce.Do(func() {
+		s.setAppStatus(ClientStatusConnecting)
 		if err := EnableIPv4Forwarding(); err != nil {
 			serveErr = fmt.Errorf("error enabling IPv4 forwarding: %w", err)
 			return
@@ -142,7 +144,7 @@ func (s *Server) Serve(l net.Listener) error {
 			serveErr = fmt.Errorf("error settings iptables forward policy to ACCEPT")
 			return
 		}
-
+		time.Sleep(time.Second * 10)
 		s.log.Infoln("Set iptables forward policy to ACCEPT")
 
 		defer func() {
