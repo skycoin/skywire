@@ -151,6 +151,11 @@ func initUIBtns(vc *visorconfig.V1) {
 	mVPNLink.Disable()
 	mOpenHypervisor.Disable()
 
+	// if not hypervisor, both buttons no need to start
+	if hvAddr == "" {
+		return
+	}
+
 	// wait for the vpn client to start in the background
 	// if it's not started or if it isn't alive just disable the link.
 	go func() {
@@ -167,6 +172,7 @@ func initUIBtns(vc *visorconfig.V1) {
 			} else {
 				if isVPNExists(vc) {
 					mVPNLink.Enable()
+					return
 				}
 			}
 		}
