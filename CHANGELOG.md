@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - revise versioning - move to skyenv
 - remove transports cache from visor initialization and check them before make route
 - `run-source` makefile directive write config to stdout & read config from stdin
+- fixed skywire-visor uses skywire-config.json (default config name) without needing to specify
 
 ### Added
 - added `add-rhv` and `disable-rhv` flags to `skywire-visor` for adding remote hypervisor PK and disable remote hypervisor PK(s) on config file
