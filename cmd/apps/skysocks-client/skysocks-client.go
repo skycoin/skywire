@@ -4,17 +4,18 @@ proxy client app for skywire visor
 package main
 
 import (
+	"context"
 	"flag"
 	"io"
 	"net"
 	"os"
 	"time"
 
-	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/buildinfo"
-	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/internal/netutil"
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/internal/skysocks"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -27,13 +28,13 @@ const (
 	socksPort = routing.Port(3)
 )
 
-var log = logrus.New()
+var log = logging.MustGetLogger("skysocks-client")
 
-var r = netutil.NewRetrier(time.Second, 0, 1, log)
+var r = netutil.NewRetrier(log, time.Second, netutil.DefaultMaxBackoff, 0, 1)
 
-func dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
+func dialServer(ctx context.Context, appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
 	var conn net.Conn
-	err := r.Do(func() error {
+	err := r.Do(ctx, func() error {
 		var err error
 		conn, err = appCl.Dial(appnet.Addr{
 			Net:    netType,
@@ -55,6 +56,9 @@ func main() {
 
 	skysocks.Log = log
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 		log.Printf("Failed to output build info: %v", err)
 	}
@@ -74,7 +78,7 @@ func main() {
 	}
 
 	for {
-		conn, err := dialServer(appC, pk)
+		conn, err := dialServer(ctx, appC, pk)
 		if err != nil {
 			log.Fatalf("Failed to dial to a server: %v", err)
 		}

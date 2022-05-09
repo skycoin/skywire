@@ -30,23 +30,47 @@
   "prod": {
     "dmsg_servers": [
       {
-        "static":"03832194c823a39c7b78ff08bddacbd6d6541def182a3f195973ebe7da16fe1b53",
+        "static":"02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd",
         "server":{
-          "address":"139.162.45.141:8081"
+          "address":"dmsg.server02a2d4c3.skywire.skycoin.com:30081"
         }
       },
       {
-        "static":"02e4660279c83bc6ca0122d3a78c0cb3f3564e03e04876ae7fa30b4e0a63217425",
+        "static":"03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4",
         "server":{
-          "address":"192.53.115.181:8081"
+          "address":"dmsg.server03717576.skywire.skycoin.com:30082"
+        }
+      },
+      {
+        "static":"0228af3fd99c8d86a882495c8e0202bdd4da78c69e013065d8634286dd4a0ac098",
+        "server":{
+          "address":"45.118.133.242:30084"
+        }
+      },
+      {
+        "static":"03d5b55d1133b26485c664cf8b95cff6746d1e321c34e48c9fed293eff0d6d49e5",
+        "server":{
+          "address":"dmsg.server03d5b55d.skywire.skycoin.com:30083"
+        }
+      },
+      {
+        "static":"0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+        "server":{
+          "address":"192.53.114.142:30085"
+        }
+      },
+      {
+        "static":"02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0",
+        "server":{
+          "address":"dmsg.server02a4.skywire.skycoin.com:30089"
         }
       }
     ],
-    "dmsg_discovery": "dmsg://pk:port",
-    "transport_discovery": "dmsg://pk:port",
-    "address_resolver": "dmsg://pk:port",
-    "route_finder": "dmsg://pk:port",
-    "uptime_tracker": "dmsg://pk:port",
-    "service_discovery": "dmsg://pk:port"
+    "dmsg_discovery": "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80",
+    "transport_discovery": "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80",
+    "address_resolver": "dmsg://03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80",
+    "route_finder": "dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80",
+    "uptime_tracker": "dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80",
+    "service_discovery": "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80"
   }
 }

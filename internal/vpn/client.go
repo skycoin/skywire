@@ -15,17 +15,13 @@ import (
 
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/dmsg/netutil"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
-	"github.com/skycoin/skywire/pkg/app/appserver"
-	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
-	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	skynetutil "github.com/skycoin/skywire/pkg/util/netutil"
 )
 
 const (
@@ -190,17 +186,9 @@ func (c *Client) Serve() error {
 
 	c.setAppStatus(ClientStatusConnecting)
 
-	errNoTransportFound := appserver.RPCErr{
-		Err: router.ErrNoTransportFound.Error(),
-	}
-
-	errTransportNotFound := appserver.RPCErr{
-		Err: rfclient.ErrTransportNotFound.Error(),
-	}
-
 	r := netutil.NewRetrier(c.log, netutil.DefaultInitBackoff, netutil.DefaultMaxBackoff, 3, netutil.DefaultFactor).
 		WithErrWhitelist(errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
-			errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound)
+			errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound, errErrSetupNode, errNotPermited)
 
 	err := r.Do(context.Background(), func() error {
 		if c.isClosed() {
@@ -210,7 +198,7 @@ func (c *Client) Serve() error {
 		if err := c.dialServeConn(); err != nil {
 			switch err {
 			case errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
-				errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound:
+				errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound, errErrSetupNode, errNotPermited:
 				c.setAppError(err)
 				c.resetConnDuration()
 				return err
@@ -707,7 +695,7 @@ func stcpEntitiesFromEnv() ([]net.IP, error) {
 }
 
 func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error) {
-	unavailableIPs, err := skynetutil.LocalNetworkInterfaceIPs()
+	unavailableIPs, err := netutil.LocalNetworkInterfaceIPs()
 	if err != nil {
 		return nil, nil, fmt.Errorf("error getting unavailable private IPs: %w", err)
 	}

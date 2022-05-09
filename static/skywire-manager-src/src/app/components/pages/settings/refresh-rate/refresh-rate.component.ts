@@ -29,7 +29,7 @@ export class RefreshRateComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.form = this.formBuilder.group({
-      'refreshRate': [this.storageService.getRefreshTime().toString()],
+      refreshRate: [this.storageService.getRefreshTime().toString()],
     });
 
     this.subscription = this.form.get('refreshRate').valueChanges.subscribe(refreshRate => {
