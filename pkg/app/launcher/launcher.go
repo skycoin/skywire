@@ -13,9 +13,10 @@ import (
 	"syscall"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/pkg/dmsg"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -202,6 +203,9 @@ func (l *Launcher) AppStates() []*AppState {
 			if connSummary != nil {
 				state.Status = AppStatusRunning
 			}
+			if state.DetailedStatus == vpn.ClientStatusConnecting {
+				state.Status = AppVPNClientConnecting
+			}
 		}
 		states = append(states, state)
 	}
@@ -235,7 +239,6 @@ func (l *Launcher) startApp(cmd string, args, envs []string) error {
 	if err != nil {
 		return err
 	}
-
 	// Start proc and persist pid.
 	pid, err := l.procM.Start(procConf)
 	if err != nil {

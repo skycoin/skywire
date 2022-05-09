@@ -13,7 +13,7 @@
 /skywire.json
 /apps/
 /skywire/
-/local*
+/local/*
 /transport_logs
 /dmsgpty
 
@@ -55,3 +55,4 @@ Char
 *.dmg
 /scripts/mac_installer/icon.iconset/
 releaseChangelog.md
+skywire.msi

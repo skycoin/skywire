@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/dmsg/dmsgctrl"
+	"github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsgctrl"
 	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
@@ -94,7 +94,6 @@ type Manager struct {
 
 // NewDmsgTrackerManager creates a new dmsg tracker manager.
 func NewDmsgTrackerManager(mLog *logging.MasterLogger, dc *dmsg.Client, updateInterval, updateTimeout time.Duration) *Manager {
-
 	log := mLog.PackageLogger("dmsg_trackers")
 	if updateInterval == 0 {
 		updateInterval = DefaultDTMUpdateInterval

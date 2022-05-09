@@ -14,10 +14,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/buildinfo"
-	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
@@ -190,6 +190,14 @@ func (rc *rpcClient) SetAppKillswitch(appName string, killswitch bool) error {
 	}, &struct{}{})
 }
 
+// SetAppKillswitch implements API.
+func (rc *rpcClient) SetAppNetworkInterface(appName, netifc string) error {
+	return rc.Call("SetAppNetworkInterface", &SetAppNetworkInterfaceIn{
+		AppName: appName,
+		NetIfc:  netifc,
+	}, &struct{}{})
+}
+
 // SetAppSecure implements API.
 func (rc *rpcClient) SetAppSecure(appName string, isSecure bool) error {
 	return rc.Call("SetAppSecure", &SetAppBoolIn{
@@ -221,6 +229,16 @@ func (rc *rpcClient) GetAppStats(appName string) (appserver.AppStats, error) {
 	}
 
 	return stats, nil
+}
+
+func (rc *rpcClient) GetAppError(appName string) (string, error) {
+	var appErr string
+
+	if err := rc.Call("GetAppError", &appName, &appErr); err != nil {
+		return appErr, err
+	}
+
+	return appErr, nil
 }
 
 // GetAppConnectionsSummary get connections stats for the app.
@@ -733,6 +751,21 @@ func (mc *mockRPCClient) SetAppPassword(string, string) error {
 	})
 }
 
+// SetAppPassword implements API.
+func (mc *mockRPCClient) SetAppNetworkInterface(string, string) error {
+	return mc.do(true, func() error {
+		const vpnServerName = "vpn-server"
+
+		for i := range mc.o.Apps {
+			if mc.o.Apps[i].Name == vpnServerName {
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", vpnServerName)
+	})
+}
+
 // SetAppPK implements API.
 func (mc *mockRPCClient) SetAppPK(string, cipher.PubKey) error {
 	return mc.do(true, func() error {
@@ -785,6 +818,10 @@ func (mc *mockRPCClient) LogsSince(timestamp time.Time, _ string) ([]string, err
 
 func (mc *mockRPCClient) GetAppStats(_ string) (appserver.AppStats, error) {
 	return appserver.AppStats{}, nil
+}
+
+func (mc *mockRPCClient) GetAppError(_ string) (string, error) {
+	return "", nil
 }
 
 // GetAppConnectionsSummary get connections stats for the app.

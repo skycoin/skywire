@@ -5,9 +5,8 @@ import (
 	"io"
 	"net"
 
-	"github.com/skycoin/dmsg/cipher"
-
-	"github.com/skycoin/skywire/pkg/util/netutil"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 )
 
 type stcprClient struct {

@@ -11,7 +11,7 @@ RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 COMMIT := $(shell git rev-list -1 HEAD)
 
 PROJECT_BASE := github.com/skycoin/skywire
-DMSG_BASE := github.com/skycoin/dmsg
+SKYWIRE_UTILITIES_BASE := github.com/skycoin/skywire-utilities
 ifeq ($(OS),Windows_NT)
 	SHELL := pwsh
 	OPTS?=powershell -Command setx GO111MODULE on;
@@ -37,7 +37,7 @@ ifneq (,$(findstring 64,$(GOARCH)))
     TEST_OPTS:=$(TEST_OPTS) -race
 endif
 
-BUILDINFO_PATH := $(DMSG_BASE)/buildinfo
+BUILDINFO_PATH := $(SKYWIRE_UTILITIES_BASE)/pkg/buildinfo
 
 BUILDINFO_VERSION := -X $(BUILDINFO_PATH).version=$(VERSION)
 BUILDINFO_DATE := -X $(BUILDINFO_PATH).date=$(DATE)
@@ -45,9 +45,22 @@ BUILDINFO_COMMIT := -X $(BUILDINFO_PATH).commit=$(COMMIT)
 BUILDTAGINFO := -X $(PROJECT_BASE)/pkg/visor.BuildTag=$(BUILDTAG)
 
 BUILDINFO?=$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT) $(BUILDTAGINFO)
+INFO?=$(VERSION) $(DATE) $(COMMIT) $(BUILDTAG)
 
 BUILD_OPTS?="-ldflags=$(BUILDINFO)" -mod=vendor $(RACE_FLAG)
 BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
+
+buildinfo:
+	@echo $(INFO)
+
+version:
+	@echo $(VERSION)
+
+date:
+	@echo $(DATE)
+
+commit:
+	@echo $(COMMIT)
 
 check: lint test ## Run linters and tests
 
@@ -57,9 +70,13 @@ build: host-apps bin ## Install dependencies, build apps and binaries. `go build
 
 build-windows: host-apps-windows bin-windows ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
+build-windows-appveyor: host-apps-windows-appveyor bin-windows-appveyor ## Install dependencies, build apps and binaries. `go build` with ${OPTS} for AppVeyor image
+
 build-systray: host-apps-systray bin-systray ## Install dependencies, build apps and binaries `go build` with ${OPTS}, with CGO and systray
 
 build-systray-windows: host-apps-systray-windows bin-systray-windows ## Builds systray binary in windows
+
+build-systray-windows-appveyor: host-apps-systray-windows-appveyor bin-systray-windows-appveyor ## Builds systray binary in windows for AppVeyor image
 
 build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
@@ -139,6 +156,7 @@ snapshot-clean: ## Cleans snapshot / release
 	rm -rf ./dist
 
 host-apps: ## Build app
+	test -d apps && rm -r apps || true
 	mkdir -p ./apps
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skychat
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skysocks
@@ -150,23 +168,28 @@ host-apps-windows:
 	powershell -Command new-item .\apps -itemtype directory -force
 	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build ${BUILD_OPTS} -o ./apps $$_.FullName }'
 
+host-apps-windows-appveyor:
+	powershell -Command new-item .\apps -itemtype directory -force
+	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build -o ./apps $$_.FullName }'
+
 host-apps-systray: ## Build app
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat ./cmd/apps/skychat
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
-	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps/vpn-server ./cmd/apps/vpn-server
-	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps/vpn-client ./cmd/apps/vpn-client
+	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skychat
+	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skysocks
+	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -o ./apps/  ./cmd/apps/skysocks-client
+	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps/ ./cmd/apps/vpn-server
+	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps/ ./cmd/apps/vpn-client
 
 host-apps-systray-windows:
 	powershell -Command new-item .\apps -itemtype directory -force
-	powershell 'go build ${BUILD_OPTS} -o .\apps\skychat .\cmd\apps\skychat'
-	powershell 'go build ${BUILD_OPTS} -o .\apps\skysocks .\cmd\apps\skysocks'
-	powershell 'go build ${BUILD_OPTS} -o .\apps\skysocks-client .\cmd\apps\skysocks-client'
-	powershell 'go build ${BUILD_OPTS} -tags systray -o .\apps\vpn-server .\cmd\apps\vpn-server'
-	powershell 'go build ${BUILD_OPTS} -tags systray -o .\apps\vpn-client .\cmd\apps\vpn-client'
+	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps $$_.FullName }'
+
+host-apps-systray-windows-appveyor:
+	powershell -Command new-item .\apps -itemtype directory -force
+	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build -tags systray -o ./apps $$_.FullName }'
 
 # Static Apps
 host-apps-static: ## Build app
+	test -d apps && rm -r apps || true
 	mkdir -p ./apps
 	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/ ./cmd/apps/skychat
 	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/ ./cmd/apps/skysocks
@@ -183,13 +206,19 @@ bin: ## Build `skywire-visor`, `skywire-cli`
 bin-windows: ## Build `skywire-visor`, `skywire-cli`
 	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go build ${BUILD_OPTS} -o ./ $$_.FullName }'
 
+bin-windows-appveyor: ## Build `skywire-visor`, `skywire-cli`
+	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go build -o ./ $$_.FullName }'
+
 bin-systray-windows: ## Build `skywire-visor` and `skywire-cli` with systray support
 	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ $$_.FullName }'
 
+bin-systray-windows-appveyor: ## Build `skywire-visor` and `skywire-cli` with systray support
+	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go build -tags systray -o ./ $$_.FullName }'
+
 bin-systray: ## Build `skywire-visor`, `skywire-cli`
-	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./skywire-visor ./cmd/skywire-visor
-	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./skywire-cli ./cmd/skywire-cli
-	${OPTS} go build ${BUILD_OPTS} -o ./setup-node ./cmd/setup-node
+	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ ./cmd/skywire-visor
+	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ ./cmd/skywire-cli
+	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/setup-node
 
 # Static Bin
 bin-static: ## Build `skywire-visor`, `skywire-cli`
@@ -218,15 +247,64 @@ install-deps-ui:  ## Install the UI dependencies
 	cd $(MANAGER_UI_DIR) && npm ci
 
 run: ## Run skywire visor with skywire-config.json, and start a browser if running a hypervisor
-	./skywire-visor -c ./skywire-config.json
+	./skywire-visor -bc ./skywire-config.json
+
+## Prepare to run skywire from source, without compiling binaries
+prepare:
+	test -d apps && rm -r apps || true
+	mkdir -p apps
+	ln ./scripts/_apps/skychat ./apps/
+	ln ./scripts/_apps/skysocks ./apps/
+	ln ./scripts/_apps/skysocks-client ./apps/
+	ln ./scripts/_apps/vpn-server ./apps/
+	ln ./scripts/_apps/vpn-client ./apps/
+	chmod +x ./apps/*
+	sudo echo "sudo cache"
+
+prepare-systray: prepare
+	rm apps/vpn*
+	ln -f ./scripts/_apps/vpn-server-systray ./apps/vpn-server
+	ln -f ./scripts/_apps/vpn-client-systray ./apps/vpn-client
 
 ## Run skywire from source, without compiling binaries - requires skywire cloned
-run-source: #to standard gopath $HOME/go/src/github.com/skycoin/skywire
-	test -d apps && rm -r apps || true
-	ln -s _apps apps
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -iro ./skywire-config.json
-	go run ./cmd/skywire-visor/skywire-visor.go -c ./skywire-config.json || true
+run-source: prepare
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -in | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
 
+## Run skywire from source, with vpn server enabled
+run-systray: prepare-systray
+	go run -tags systray ./cmd/skywire-cli/skywire-cli.go config gen -ni | go run -tags systray ./cmd/skywire-visor/skywire-visor.go -nb || true
+
+## Run skywire from source, without compiling binaries - requires skywire cloned
+run-vpnsrv: prepare
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -in --servevpn | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+
+## Run skywire from source with test endpoints
+run-source-test: prepare
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -nit | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+
+## Run skywire from source, with vpn server enabled
+run-vpnsrv-test: prepare
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -nit --servevpn | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+
+## Run skywire from source, with vpn server enabled
+run-systray-test: prepare-systray
+	go run -tags systray ./cmd/skywire-cli/skywire-cli.go config gen -nit | go run -tags systray ./cmd/skywire-visor/skywire-visor.go -nb || true
+
+## Run skywire from source with dmsghttp config
+run-source-dmsghttp: prepare
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -din | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+
+## Run skywire from source with dmsghttp config and vpn server
+run-vpnsrv-dmsghttp: prepare
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -din --servevpn | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+
+## Run skywire from source with dmsghttp config and test endpoints
+run-source-dmsghttp-test: prepare
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -dint | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+
+## Run skywire from source with dmsghttp config, vpn server, and test endpoints
+run-vpnsrv-dmsghttp-test: prepare
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -dint --servevpn | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
 
 lint-ui:  ## Lint the UI code
 	cd $(MANAGER_UI_DIR) && npm run lint
@@ -259,6 +337,9 @@ mac-installer: ## Create signed and notarized application, run make mac-installe
 
 mac-installer-help: ## Show installer creation help
 	./scripts/mac_installer/create_installer.sh -h
+
+win-installer:
+	@powershell '.\scripts\win_installer\script.ps1'
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'

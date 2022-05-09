@@ -11,12 +11,12 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/go-chi/chi"
-	"github.com/skycoin/dmsg/cipher"
+	"github.com/go-chi/chi/v5"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/internal/httpauth"
 	"github.com/skycoin/skywire/pkg/transport"
 )

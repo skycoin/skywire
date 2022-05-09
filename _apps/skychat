@@ -1,2 +1,0 @@
-#!/usr/bin/bash
-go run $HOME/go/src/github.com/skycoin/skywire/cmd/apps/skychat/chat.go

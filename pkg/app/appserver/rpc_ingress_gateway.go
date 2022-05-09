@@ -300,7 +300,7 @@ func (r *RPCIngressGateway) CloseConn(connID *uint16, _ *struct{}) (err error) {
 
 // CloseListener closes listener specified by `lisID`.
 func (r *RPCIngressGateway) CloseListener(lisID *uint16, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "CloseConn", lisID)(nil, &err)
+	defer rpcutil.LogCall(r.log, "CloseListener", lisID)(nil, &err)
 
 	lis, err := r.popListener(*lisID)
 	if err != nil {
@@ -400,7 +400,7 @@ func ioErrToRPCIOErr(err error) *RPCIOErr {
 	if netErr, ok := err.(net.Error); ok {
 		rpcIOErr.IsNetErr = true
 		rpcIOErr.IsTimeoutErr = netErr.Timeout()
-		rpcIOErr.IsTemporaryErr = netErr.Temporary()
+		rpcIOErr.IsTemporaryErr = netErr.Temporary() // nolint
 	}
 
 	return rpcIOErr

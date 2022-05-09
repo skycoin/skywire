@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync"
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/skycoin/skywire/pkg/util/netutil"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 )
 
 // Server is a VPN server.
@@ -29,15 +30,27 @@ type Server struct {
 
 // NewServer creates VPN server instance.
 func NewServer(cfg ServerConfig, l logrus.FieldLogger) (*Server, error) {
+	var defaultNetworkIfc string
 	s := &Server{
 		cfg:   cfg,
 		log:   l,
 		ipGen: NewIPGenerator(),
 	}
 
-	defaultNetworkIfc, err := netutil.DefaultNetworkInterface()
+	defaultNetworkIfcs, err := netutil.DefaultNetworkInterface()
 	if err != nil {
 		return nil, fmt.Errorf("error getting default network interface: %w", err)
+	}
+	ifcs, hasMultiple := s.hasMutipleNetworkInterfaces(defaultNetworkIfcs)
+	if hasMultiple {
+		if cfg.NetworkInterface == "" {
+			return nil, fmt.Errorf("multiple default network interfaces detected...set a default one for VPN server or remove one: %v", ifcs)
+		} else if !s.validateInterface(ifcs, cfg.NetworkInterface) {
+			return nil, fmt.Errorf("network interface value in config is not in default network interfaces detected: %v", ifcs)
+		}
+		defaultNetworkIfc = cfg.NetworkInterface
+	} else {
+		defaultNetworkIfc = defaultNetworkIfcs
 	}
 
 	l.Infof("Got default network interface: %s", defaultNetworkIfc)
@@ -315,4 +328,21 @@ func (s *Server) sendServerErrHello(conn net.Conn, status HandshakeStatus) {
 	if err := WriteJSON(conn, &sHello); err != nil {
 		s.log.WithError(err).Errorln("Error sending server hello")
 	}
+}
+
+func (s *Server) hasMutipleNetworkInterfaces(defaultNetworkInterface string) ([]string, bool) {
+	networkInterfaces := strings.Split(defaultNetworkInterface, "\n")
+	if len(networkInterfaces) > 1 {
+		return networkInterfaces, true
+	}
+	return []string{}, false
+}
+
+func (s *Server) validateInterface(ifcs []string, selectedIfc string) bool {
+	for _, ifc := range ifcs {
+		if ifc == selectedIfc {
+			return true
+		}
+	}
+	return false
 }

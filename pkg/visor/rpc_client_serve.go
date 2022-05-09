@@ -7,8 +7,9 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/netutil"
+	"github.com/skycoin/dmsg/pkg/dmsg"
+
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 )
 
 func isDone(ctx context.Context) bool {

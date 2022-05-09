@@ -15,13 +15,19 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 const (
 	invalidNonceErrorMessage = "SW-Nonce does not match"
 )
+
+// Error is the object returned to the client when there's an error.
+type Error struct {
+	Error string `json:"error"`
+}
 
 // NextNonceResponse represents a ServeHTTP response for json encoding
 type NextNonceResponse struct {
@@ -42,14 +48,12 @@ type HTTPError struct {
 }
 
 // Client implements Client for auth services.
-// As Client needs to dial both with reusing address and without it, it uses two http clients: reuseClient and client.
 type Client struct {
 	// atomic requires 64-bit alignment for struct field access
 	nonce          uint64
 	mu             sync.Mutex
 	reqMu          sync.Mutex
 	client         *http.Client
-	reuseClient    *http.Client
 	key            cipher.PubKey
 	sec            cipher.SecKey
 	addr           string // sanitized address of the client, which may differ from addr used in NewClient
@@ -67,7 +71,6 @@ func NewClient(ctx context.Context, addr string, key cipher.PubKey, sec cipher.S
 	mLog *logging.MasterLogger) (*Client, error) {
 	c := &Client{
 		client:         client,
-		reuseClient:    client,
 		key:            key,
 		sec:            sec,
 		addr:           sanitizedAddr(addr),
@@ -83,28 +86,6 @@ func NewClient(ctx context.Context, addr string, key cipher.PubKey, sec cipher.S
 	c.nonce = uint64(nonce)
 
 	return c, nil
-}
-
-// Header returns headers for httpauth.
-func (c *Client) Header() (http.Header, error) {
-	nonce := c.getCurrentNonce()
-	body := make([]byte, 0)
-	sign, err := Sign(body, nonce, c.sec)
-	if err != nil {
-		return nil, err
-	}
-
-	header := make(http.Header)
-
-	// use nonce, later, if no err from req update such nonce
-	header.Set("SW-Nonce", strconv.FormatUint(uint64(nonce), 10))
-	header.Set("SW-Sig", sign.Hex())
-	header.Set("SW-Public", c.key.Hex())
-	if c.clientPublicIP != "" {
-		header.Set("SW-PublicIP", c.clientPublicIP)
-	}
-
-	return header, nil
 }
 
 // Do performs a new authenticated Request and returns the response. Internally, if the request was
@@ -189,7 +170,7 @@ func (c *Client) Nonce(ctx context.Context, key cipher.PubKey) (Nonce, error) {
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("error getting current nonce: status: %d <- %v", resp.StatusCode, extractError(resp.Body))
+		return 0, fmt.Errorf("error getting current nonce: status: %d <- %v", resp.StatusCode, extractHTTPError(resp.Body))
 	}
 
 	var nr NextNonceResponse
@@ -198,22 +179,6 @@ func (c *Client) Nonce(ctx context.Context, key cipher.PubKey) (Nonce, error) {
 	}
 
 	return nr.NextNonce, nil
-}
-
-// ReuseClient returns HTTP client that reuses port for dialing.
-func (c *Client) ReuseClient() *http.Client {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	return c.reuseClient
-}
-
-// SetTransport sets transport for HTTP client that reuses port for dialing.
-func (c *Client) SetTransport(transport http.RoundTripper) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.reuseClient.Transport = transport
 }
 
 // SetNonce sets client current nonce to given nonce
@@ -301,8 +266,8 @@ func sanitizedAddr(addr string) string {
 	return u.String()
 }
 
-// extractError returns the decoded error message from Body.
-func extractError(r io.Reader) error {
+// extractHTTPError returns the decoded error message from Body.
+func extractHTTPError(r io.Reader) error {
 	var serverError HTTPResponse
 
 	body, err := ioutil.ReadAll(r)
@@ -315,4 +280,20 @@ func extractError(r io.Reader) error {
 	}
 
 	return errors.New(serverError.Error.Message)
+}
+
+// ExtractError returns the decoded error message from Body.
+func ExtractError(r io.Reader) error {
+	var apiError Error
+
+	body, err := ioutil.ReadAll(r)
+	if err != nil {
+		return err
+	}
+
+	if err := json.Unmarshal(body, &apiError); err != nil {
+		return errors.New(string(body))
+	}
+
+	return errors.New(apiError.Error)
 }
