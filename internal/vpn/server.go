@@ -11,6 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/app"
 )
 
 // Server is a VPN server.
@@ -26,15 +27,17 @@ type Server struct {
 	ipv4ForwardingVal          string
 	ipv6ForwardingVal          string
 	iptablesForwardPolicy      string
+	appCl                      *app.Client
 }
 
 // NewServer creates VPN server instance.
-func NewServer(cfg ServerConfig, l logrus.FieldLogger) (*Server, error) {
+func NewServer(cfg ServerConfig, l logrus.FieldLogger, appCl *app.Client) (*Server, error) {
 	var defaultNetworkIfc string
 	s := &Server{
 		cfg:   cfg,
 		log:   l,
 		ipGen: NewIPGenerator(),
+		appCl: appCl,
 	}
 
 	defaultNetworkIfcs, err := netutil.DefaultNetworkInterface()
@@ -153,7 +156,7 @@ func (s *Server) Serve(l net.Listener) error {
 		s.lisMx.Lock()
 		s.lis = l
 		s.lisMx.Unlock()
-
+		s.setAppStatus(ClientStatusRunning)
 		for {
 			conn, err := s.lis.Accept()
 			if err != nil {
@@ -165,6 +168,7 @@ func (s *Server) Serve(l net.Listener) error {
 		}
 	})
 
+	s.setAppError(serveErr)
 	return serveErr
 }
 
@@ -318,6 +322,18 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, unsecureVP
 	}
 
 	return sTUNIP, sTUNGateway, unsecureVPN, nil
+}
+
+func (s *Server) setAppStatus(status ClientStatus) {
+	if err := s.appCl.SetDetailedStatus(string(status)); err != nil {
+		fmt.Printf("Failed to set status %v: %v\n", status, err)
+	}
+}
+
+func (s *Server) setAppError(appErr error) {
+	if err := s.appCl.SetError(appErr.Error()); err != nil {
+		fmt.Printf("Failed to set error %v: %v\n", appErr, err)
+	}
 }
 
 func (s *Server) sendServerErrHello(conn net.Conn, status HandshakeStatus) {
