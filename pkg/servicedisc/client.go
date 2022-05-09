@@ -14,13 +14,12 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/buildinfo"
-	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/internal/httpauth"
-	nu "github.com/skycoin/skywire/internal/netutil"
-	"github.com/skycoin/skywire/pkg/util/netutil"
 )
 
 // ErrVisorUnreachable is returned when visor is not reachable
@@ -282,7 +281,7 @@ func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
 // it performs exponential backoff in case of errors during register, unless
 // the error is unrecoverable from
 func (c *HTTPClient) Register(ctx context.Context) error {
-	retrier := nu.NewRetrier(updateRetryDelay, 0, 2, c.log).WithErrWhitelist(ErrVisorUnreachable)
+	retrier := netutil.NewRetrier(c.log, updateRetryDelay, 0, 0, 2).WithErrWhitelist(ErrVisorUnreachable)
 	run := func() error {
 		err := c.RegisterEntry(ctx)
 
@@ -292,10 +291,9 @@ func (c *HTTPClient) Register(ctx context.Context) error {
 		}
 
 		if err != nil {
-			c.log.WithError(err).Warn("Failed to register service entry in discovery. Retrying...")
 			return err
 		}
 		return nil
 	}
-	return retrier.Do(run)
+	return retrier.Do(ctx, run)
 }

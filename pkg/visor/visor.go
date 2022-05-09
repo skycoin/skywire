@@ -9,12 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/cipher"
-	dmsgdisc "github.com/skycoin/dmsg/disc"
+	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
+	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/internal/utclient"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -25,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
+	"github.com/skycoin/skywire/pkg/utclient"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
@@ -59,12 +58,13 @@ type Visor struct {
 	updater       *updater.Updater
 	uptimeTracker utclient.APIClient
 
-	ebc      *appevent.Broadcaster // event broadcaster
-	dmsgC    *dmsg.Client
-	dmsgDC   *dmsg.Client       // dmsg direct client
-	dClient  dmsgdisc.APIClient // dmsg direct api client
-	dmsgHTTP *http.Client       // dmsghttp client
-	trackers *dmsgtracker.Manager
+	ebc           *appevent.Broadcaster // event broadcaster
+	dmsgC         *dmsg.Client
+	dmsgDC        *dmsg.Client       // dmsg direct client
+	dClient       dmsgdisc.APIClient // dmsg direct api client
+	dmsgHTTP      *http.Client       // dmsghttp client
+	trackers      *dmsgtracker.Manager
+	trackersReady bool
 
 	stunClient   *network.StunDetails
 	wgStunClient *sync.WaitGroup
@@ -76,16 +76,13 @@ type Visor struct {
 	procM       appserver.ProcManager // proc manager
 	appL        *launcher.Launcher    // app launcher
 	serviceDisc appdisc.Factory
-	initLock    *sync.Mutex
-	wgTrackers  *sync.WaitGroup
+	initLock    *sync.RWMutex
 	// when module is failed it pushes its error to this channel
 	// used by init and shutdown to show/check for any residual errors
 	// produced by concurrent parts of modules
 	runtimeErrors chan error
 
 	isServicesHealthy *internalHealthInfo
-	transportCacheMu  *sync.Mutex
-	transportsCache   map[cipher.PubKey][]string
 }
 
 // todo: consider moving module closing to the module system
@@ -109,16 +106,16 @@ func (v *Visor) MasterLogger() *logging.MasterLogger {
 }
 
 // NewVisor constructs new Visor.
-func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) {
+func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) {
+
 	v := &Visor{
 		log:               conf.MasterLogger().PackageLogger("visor"),
 		conf:              conf,
 		restartCtx:        restartCtx,
-		initLock:          new(sync.Mutex),
+		initLock:          new(sync.RWMutex),
 		isServicesHealthy: newInternalHealthInfo(),
-		wgTrackers:        new(sync.WaitGroup),
 		wgStunClient:      new(sync.WaitGroup),
-		transportCacheMu:  new(sync.Mutex),
+		trackersReady:     false,
 	}
 	v.wgStunClient.Add(1)
 	v.isServicesHealthy.init()
@@ -133,7 +130,6 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 	log.WithField("public_key", conf.PK).
 		Info("Begin startup.")
 	v.startedAt = time.Now()
-	ctx := context.Background()
 	ctx = context.WithValue(ctx, visorKey, v)
 	v.runtimeErrors = make(chan error)
 	ctx = context.WithValue(ctx, runtimeErrsKey, v.runtimeErrors)
@@ -147,8 +143,26 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 	// run Transport module in a non blocking mode
 	go tm.InitConcurrent(ctx)
 	mainModule.InitConcurrent(ctx)
+	if err := mainModule.Wait(ctx); err != nil {
+		select {
+		case <-ctx.Done():
+			if err := v.Close(); err != nil {
+				log.WithError(err).Error("Visor closed with error.")
+			}
+		default:
+			log.Error(err)
+		}
+		return nil, false
+	}
 	if err := tm.Wait(ctx); err != nil {
-		log.Error(err)
+		select {
+		case <-ctx.Done():
+			if err := v.Close(); err != nil {
+				log.WithError(err).Error("Visor closed with error.")
+			}
+		default:
+			log.Error(err)
+		}
 		return nil, false
 	}
 	// todo: rewrite to be infinite concurrent loop that will watch for
@@ -156,9 +170,12 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 	if !v.processRuntimeErrs() {
 		return nil, false
 	}
-	v.wgTrackers.Add(1)
-	defer v.wgTrackers.Done()
-	v.trackers = dmsgtracker.NewDmsgTrackerManager(v.MasterLogger(), v.dmsgC, 0, 0)
+	go func() {
+		v.initLock.RLock()
+		v.trackers = dmsgtracker.NewDmsgTrackerManager(v.MasterLogger(), v.dmsgC, 0, 0)
+		v.trackersReady = true
+		v.initLock.RUnlock()
+	}()
 	return v, true
 }
 

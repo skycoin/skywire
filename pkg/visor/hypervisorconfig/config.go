@@ -10,17 +10,17 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/skycoin/dmsg/cipher"
-
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/util/pathutil"
 )
 
 const (
-	defaultHTTPAddr         = ":8000"
-	defaultCookieExpiration = 12 * time.Hour
-	hashKeyLen              = 64
-	blockKeyLen             = 32
+	httpAddr         = ":8000"
+	cookieExpiration = 12 * time.Hour
+	hashKeyLen       = 64
+	blockKeyLen      = 32
 )
 
 // Key allows a byte slice to be marshaled or unmarshaled from a hex string.
@@ -81,7 +81,7 @@ func GenerateWorkDirConfig(testenv bool) Config {
 // GenerateHomeConfig generates a config with default values and uses db from user's home folder.
 func GenerateHomeConfig(testenv bool) Config {
 	c := MakeConfig(testenv)
-	c.DBPath = filepath.Join(pathutil.HomeDir(), skyenv.DefaultHypervisorDB)
+	c.DBPath = filepath.Join(pathutil.HomeDir(), skyenv.HypervisorDB)
 	return c
 }
 
@@ -108,28 +108,22 @@ func (c *Config) FillDefaults(testEnv bool) {
 
 	if c.DmsgDiscovery == "" {
 		if testEnv {
-			c.DmsgDiscovery = skyenv.TestDmsgDiscAddr
+			c.DmsgDiscovery = utilenv.TestDmsgDiscAddr
 		} else {
-			c.DmsgDiscovery = skyenv.DefaultDmsgDiscAddr
+			c.DmsgDiscovery = utilenv.DmsgDiscAddr
 		}
 	}
-
 	if c.DmsgPort == 0 {
 		c.DmsgPort = skyenv.DmsgHypervisorPort
 	}
-
 	if c.HTTPAddr == "" {
-		c.HTTPAddr = defaultHTTPAddr
+		c.HTTPAddr = httpAddr
 	}
-
 	c.Cookies.FillDefaults()
-
-	c.EnableAuth = skyenv.DefaultEnableAuth
-
-	c.EnableTLS = skyenv.DefaultEnableTLS
-
-	c.TLSCertFile = skyenv.DefaultTLSCert
-	c.TLSKeyFile = skyenv.DefaultTLSKey
+	c.EnableAuth = skyenv.EnableAuth
+	c.EnableTLS = skyenv.EnableTLS
+	c.TLSCertFile = skyenv.TLSCert
+	c.TLSKeyFile = skyenv.TLSKey
 
 }
 
@@ -145,7 +139,7 @@ func (c *Config) Parse(path string) error {
 		return err
 	}
 
-	defer func() {
+	defer func() { //nolint
 		if err := f.Close(); err != nil {
 			log.Fatalf("Failed to close file %s: %v", f.Name(), err)
 		}
@@ -169,7 +163,7 @@ type CookieConfig struct {
 
 // FillDefaults fills config with default values.
 func (c *CookieConfig) FillDefaults() {
-	c.ExpiresDuration = defaultCookieExpiration
+	c.ExpiresDuration = cookieExpiration
 	c.Path = "/"
 
 	c.TLS = false

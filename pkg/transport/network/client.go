@@ -9,10 +9,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/transport/network/handshake"

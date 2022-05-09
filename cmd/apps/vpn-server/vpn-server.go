@@ -8,8 +8,8 @@ import (
 	"syscall"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/cipher"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -30,6 +30,7 @@ var (
 	localPKStr = flag.String("pk", "", "Local PubKey")
 	localSKStr = flag.String("sk", "", "Local SecKey")
 	passcode   = flag.String("passcode", "", "Passcode to authenticate connecting users")
+	networkIfc = flag.String("netifc", "", "Default network interface for multiple available interfaces")
 	secure     = flag.Bool("secure", true, "Forbid connections from clients to server local network")
 )
 
@@ -73,8 +74,9 @@ func main() {
 	log.Infof("Got app listener, bound to %d", vpnPort)
 
 	srvCfg := vpn.ServerConfig{
-		Passcode: *passcode,
-		Secure:   *secure,
+		Passcode:         *passcode,
+		Secure:           *secure,
+		NetworkInterface: *networkIfc,
 	}
 	srv, err := vpn.NewServer(srvCfg, log)
 	if err != nil {

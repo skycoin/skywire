@@ -42,7 +42,7 @@ export class EditLabelComponent implements OnInit, AfterViewInit {
 
   ngOnInit() {
     this.form = this.formBuilder.group({
-      'label': [this.data.label],
+      label: [this.data.label],
     });
   }
 
