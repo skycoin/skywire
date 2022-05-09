@@ -46,6 +46,7 @@ var (
 	stopVisorFn   func()
 	closeDmsgDC   func()
 	rpcC          visor.API
+	vpnLastStatus int
 )
 
 var (
@@ -200,28 +201,31 @@ func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, logger *log
 }
 
 func vpnStatusBtn(conf *visorconfig.V1, rpcClient visor.API) {
-	lastStatus := 0
 	for {
 		stats, _ := rpcClient.GetAppConnectionsSummary(skyenv.VPNClientName)
 		if len(stats) == 1 {
 			if stats[0].IsAlive {
-				if lastStatus != 1 {
+				if vpnLastStatus != 1 {
 					mVPNStatus.SetTitle("Status: Connected")
 					mVPNButton.SetTitle("Disconnect")
-					lastStatus = 1
+					vpnLastStatus = 1
 				}
 			} else {
-				if lastStatus != 2 {
-					mVPNStatus.SetTitle("Status: Connecting.")
+				if vpnLastStatus != 2 {
+					mVPNStatus.SetTitle("Status: Connecting")
 					mVPNButton.SetTitle("Disconnect")
-					lastStatus = 2
+					vpnLastStatus = 2
 				}
 			}
 		} else {
-			if lastStatus != 0 {
-				mVPNStatus.SetTitle("Status: Disconnected")
+			if vpnLastStatus != 0 {
+				if vpnLastStatus == 2 || vpnLastStatus == 3 {
+					mVPNStatus.SetTitle("Status: Errored")
+				} else {
+					mVPNStatus.SetTitle("Status: Disconnected")
+				}
 				mVPNButton.SetTitle("Connect")
-				lastStatus = 0
+				vpnLastStatus = 0
 			}
 		}
 		time.Sleep(2 * time.Second)
@@ -256,6 +260,7 @@ func serversBtn(conf *visorconfig.V1, servers []*systray.MenuItem, rpcClient vis
 
 		rpcClient.StopApp(skyenv.VPNClientName)
 		rpcClient.SetAppPK(skyenv.VPNClientName, pk)
+		vpnLastStatus = 3
 		rpcClient.StartApp(skyenv.VPNClientName)
 	}
 }
@@ -265,6 +270,7 @@ func handleVPNButton(conf *visorconfig.V1, rpcClient visor.API) {
 	if len(stats) == 1 {
 		rpcClient.StopApp(skyenv.VPNClientName)
 	} else {
+		vpnLastStatus = 3
 		rpcClient.StartApp(skyenv.VPNClientName)
 	}
 }
