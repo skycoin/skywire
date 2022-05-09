@@ -273,7 +273,7 @@ func serversBtn(conf *visorconfig.V1, servers []*systray.MenuItem, rpcClient vis
 	for {
 		selectedServer := servers[<-btnChannel]
 		serverTempValue := strings.Split(selectedServer.String(), ",")[2]
-		serverPK := serverTempValue[2 : len(serverTempValue)-5]
+		serverPK := serverTempValue[2 : len(serverTempValue)-7]
 		for _, server := range servers {
 			server.Uncheck()
 			server.Enable()
@@ -350,7 +350,7 @@ func getAvailPublicVPNServers(conf *visorconfig.V1, httpC *http.Client, logger *
 		if server.Geo != nil {
 			serverAddrs[idx] = server.Addr.PubKey().String() + " | " + server.Geo.Country
 		} else {
-			serverAddrs[idx] = server.Addr.PubKey().String() + " | N/A"
+			serverAddrs[idx] = server.Addr.PubKey().String() + " | NA"
 		}
 	}
 	return serverAddrs
