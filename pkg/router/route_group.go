@@ -599,10 +599,6 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 		})
 	}
 
-	if packet.Type() != routing.ClosePacket || packet.Type() != routing.HandshakePacket {
-		rg.networkStats.AddBandwidthReceived(uint64(packet.Size()))
-	}
-
 	return nil
 }
 
@@ -631,6 +627,7 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
 	if rg.isRemoteClosed() {
 		return nil
 	}
+	rg.networkStats.AddBandwidthReceived(uint64(packet.Size()))
 
 	select {
 	case <-rg.closed:
