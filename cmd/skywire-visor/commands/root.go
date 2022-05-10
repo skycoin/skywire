@@ -181,6 +181,9 @@ var rootCmd = &cobra.Command{
 			if usr {
 				confPath = skyenv.HomePath() + "/" + skyenv.ConfigName
 			}
+			if confPath == "" {
+				confPath = skyenv.ConfigName
+			}
 			//enforce .json extension
 			if !strings.HasSuffix(confPath, ".json") {
 				//append .json
