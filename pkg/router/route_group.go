@@ -362,7 +362,7 @@ func (rg *RouteGroup) writePacket(ctx context.Context, tp *transport.ManagedTran
 	err := tp.WritePacket(ctx, packet)
 	// note equality here. update activity only if there was NO error
 	if err == nil {
-		if packet.Type() == routing.DataPacket {
+		if packet.Type() != routing.ClosePacket || packet.Type() != routing.HandshakePacket {
 			rg.networkStats.AddBandwidthSent(uint64(packet.Size()))
 		}
 
@@ -425,8 +425,7 @@ func (rg *RouteGroup) sendNetworkProbe() error {
 	}
 
 	throughput := rg.networkStats.RemoteThroughput()
-	timestamp := time.Now().UnixNano() / int64(time.Millisecond)
-
+	timestamp := time.Now().UTC().UnixNano() / int64(time.Millisecond)
 	rg.networkStats.SetDownloadSpeed(uint32(throughput))
 
 	packet := routing.MakeNetworkProbePacket(rule.NextRouteID(), timestamp, throughput)
@@ -610,9 +609,12 @@ func (rg *RouteGroup) handleNetworkProbePacket(packet routing.Packet) error {
 	throughput := binary.BigEndian.Uint64(payload[8:])
 
 	ms := sentAtMs % 1000
-	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond))
+	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond)).UTC()
 
-	rg.networkStats.SetLatency(time.Since(sentAt))
+	latency := time.Now().UTC().Sub(sentAt).Milliseconds()
+	rg.logger.Debugf("Latency is around %d ms", latency)
+
+	rg.networkStats.SetLatency(uint32(latency))
 	rg.networkStats.SetUploadSpeed(uint32(throughput))
 
 	return nil
