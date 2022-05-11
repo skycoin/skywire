@@ -22,4 +22,4 @@ before_script:
 
 script:
   - make build-windows
-  - build-systray-windows
+  - make build-systray-windows
