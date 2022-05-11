@@ -15,6 +15,7 @@ before_install:
   - choco install make
   - go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.46.0
   - make dep
+  - make format-windows
 
 before_script:
   - set GO1111MODULE=on
