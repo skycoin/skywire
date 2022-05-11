@@ -136,7 +136,6 @@ func initAdvancedButton(conf *visorconfig.V1) {
 	// if it's not installed via package, hide the uninstall button
 	if !checkIsPackage() {
 		mAdvancedButton.Hide()
-		mUninstall.Hide()
 	}
 }
 
