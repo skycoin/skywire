@@ -609,11 +609,12 @@ func (rg *RouteGroup) handleNetworkProbePacket(packet routing.Packet) error {
 	throughput := binary.BigEndian.Uint64(payload[8:])
 
 	ms := sentAtMs % 1000
-	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond))
+	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond)).UTC()
 
-	rg.logger.Debugf("Latency is around %d ms", time.Since(sentAt).Milliseconds())
+	latency := time.Now().UTC().Sub(sentAt).Milliseconds()
+	rg.logger.Debugf("Latency is around %d ms", latency)
 
-	rg.networkStats.SetLatency(time.Since(sentAt))
+	rg.networkStats.SetLatency(uint32(latency))
 	rg.networkStats.SetUploadSpeed(uint32(throughput))
 
 	return nil
