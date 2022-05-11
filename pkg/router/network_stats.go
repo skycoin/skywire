@@ -24,8 +24,8 @@ func newNetworkStats() *networkStats {
 	}
 }
 
-func (s *networkStats) SetLatency(latency time.Duration) {
-	atomic.StoreUint32(&s.latency, uint32(latency.Milliseconds()))
+func (s *networkStats) SetLatency(latency uint32) {
+	atomic.StoreUint32(&s.latency, latency)
 }
 
 func (s *networkStats) Latency() time.Duration {
