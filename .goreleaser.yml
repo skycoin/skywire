@@ -39,7 +39,6 @@ builds:
     binary: skywire-visor
     goos:
       - linux
-      - darwin
     goarch:
       - amd64
       - 386
@@ -47,9 +46,6 @@ builds:
       - arm
     goarm:
       - 6
-    ignore:
-      - goos: darwin
-        goarch: 386
     tags:
       - systray
     env:
