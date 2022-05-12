@@ -540,12 +540,15 @@ func (v *Visor) GetAppError(appName string) (string, error) {
 
 // GetAppConnectionsSummary implements API.
 func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error) {
-	cSummary, err := v.procM.ConnectionsSummary(appName)
-	if err != nil {
-		return nil, err
-	}
+	if v.procM != nil {
+		cSummary, err := v.procM.ConnectionsSummary(appName)
+		if err != nil {
+			return nil, err
+		}
 
-	return cSummary, nil
+		return cSummary, nil
+	}
+	return nil, nil
 }
 
 // TransportTypes implements API.
