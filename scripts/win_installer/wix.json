@@ -11,7 +11,8 @@
       "build/amd64/skywire.bat",
       "ico.ico",
       "build/amd64/wintun.dll",
-      "build/amd64/dmsghttp-config.json"
+      "build/amd64/dmsghttp-config.json",
+      "build/amd64/new.update"
     ]
   },
   "env": {
