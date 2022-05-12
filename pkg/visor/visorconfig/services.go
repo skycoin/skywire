@@ -10,16 +10,10 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 )
 
-var (
-	services *Services
-	svcconf  = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")
-)
-
-//Fetch fetches the service URLs & ip:ports from the config service endpoint
-func Fetch(mLog *logging.MasterLogger, serviceConfURL string, stdout bool) *Services {
+// Fetch fetches the service URLs & ip:ports from the config service endpoint
+func Fetch(mLog *logging.MasterLogger, serviceConfURL string, stdout bool) (services *Services) {
 
 	urlstr := []string{"http://", serviceConfURL}
 	serviceConf := strings.Join(urlstr, "")
@@ -34,15 +28,10 @@ func Fetch(mLog *logging.MasterLogger, serviceConfURL string, stdout bool) *Serv
 	//check for errors in the response
 	res, err := client.Do(req)
 	if err != nil {
-		if serviceConfURL != svcconf {
-			//if serviceConfURL was changed this error should be fatal
-			mLog.WithError(err).Fatal("Failed to fetch servers\n")
-		} else { //otherwise just error and continue
-			//silence errors for stdout
-			if !stdout {
-				mLog.WithError(err).Error("Failed to fetch servers\n")
-				mLog.Warn("Falling back on hardcoded servers")
-			}
+		//silence errors for stdout
+		if !stdout {
+			mLog.WithError(err).Error("Failed to fetch servers\n")
+			mLog.Warn("Falling back on hardcoded servers")
 		}
 	} else {
 		// nil error from client.Do(req)
