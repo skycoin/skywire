@@ -8,7 +8,6 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 const (
@@ -21,6 +20,9 @@ const (
 var (
 	// ErrNoConfigPath is returned on attempt to read/write config when visor contains no config path.
 	ErrNoConfigPath = errors.New("no config path")
+
+	// ErrUnsupportedConfigVersion occurs when an unsupported config version is encountered.
+	ErrUnsupportedConfigVersion = errors.New("unsupported config version")
 )
 
 // Common represents the common fields that are shared across all config versions,
@@ -42,7 +44,7 @@ func NewCommon(log *logging.MasterLogger, confPath string, sk *cipher.SecKey) (*
 	c := new(Common)
 	c.log = log
 	c.path = confPath
-	c.Version = skyenv.Version()
+	c.Version = V111Name
 	if sk != nil {
 		c.SK = *sk
 		if err := c.ensureKeys(); err != nil {

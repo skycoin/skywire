@@ -13,6 +13,32 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
 
+// V110Name is the semantic version string for v1.1.0.
+// Added MinHops field to V1Routing section of config
+// Removed public_trusted_visor field from root section
+// Removed trusted_visors field from transport section
+// Added is_public field to root section
+// Added public_autoconnect field to transport section
+// Added transport_setup_nodes field to transport section
+// Removed authorization_file field from dmsgpty section
+// Default urls are changed to newer shortned ones
+// Added stun_servers field to the config
+// Added persistent_transports field to the config
+// Changed proxy_discovery_addr field to service_discovery
+// Changed V1AppDisc struct to V1ServiceDisc
+// Changed stcp field to skywire-tcp
+// Changed local_address field to listening_address
+// Changed port field in dmsgpty to dmsg_port
+const V110Name = "v1.1.0"
+
+// V111Name is the semantic version string for v1.1.1.
+// Added support for dmsghttp
+// Added servers field in dmsg for dmsghttp
+const V111Name = "v1.1.1"
+
+// V1Name is the semantic version string for the most recent version of V1.
+const V1Name = V111Name
+
 // V1 is visor config
 type V1 struct {
 	*Common
