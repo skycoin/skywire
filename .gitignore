@@ -56,3 +56,4 @@ Char
 /scripts/mac_installer/icon.iconset/
 releaseChangelog.md
 skywire.msi
+/scripts/win_installer/build/
