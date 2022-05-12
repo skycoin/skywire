@@ -69,11 +69,8 @@ func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 	logger := logging.NewMasterLogger()
 	logger.SetLevel(logrus.InfoLevel)
 
-	go func() {
-
-	}()
-
 	httpC := getHTTPClient(conf, context.Background(), logger)
+
 	if isRoot() {
 		return func() {
 			systray.SetTemplateIcon(icon, icon)
@@ -136,7 +133,6 @@ func initAdvancedButton(conf *visorconfig.V1) {
 	// if it's not installed via package, hide the uninstall button
 	if !checkIsPackage() {
 		mAdvancedButton.Hide()
-		mUninstall.Hide()
 	}
 }
 
