@@ -14,6 +14,8 @@ cp ..\..\dmsghttp-config.json .\build\amd64\dmsghttp-config.json
 rm ..\..\setup-node.exe
 rm -r -fo ..\..\apps
 cp skywire.bat .\build\amd64\skywire.bat
+ni new.update
+mv new.update .\build\amd64\new.update
 curl "https://www.wintun.net/builds/wintun-0.14.1.zip" -o wintun.zip
 tar -xf wintun.zip
 cp .\wintun\bin\amd64\wintun.dll .\build\amd64\wintun.dll
