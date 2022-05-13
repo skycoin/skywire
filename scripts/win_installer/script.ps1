@@ -23,7 +23,7 @@ rm -r -fo wintun
 rm wintun.zip
 echo "Configuration complete!"
 echo "Building msi..."
-go-msi make --msi skywire.msi --version 0.7.0 --arch amd64
+go-msi make --msi skywire.msi --version 1.0.0 --arch amd64
 mv skywire.msi ../../skywire.msi
 Remove-Item ".\build" -Recurse -Force
 cd ../../
