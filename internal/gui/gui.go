@@ -232,9 +232,11 @@ func serversBtn(conf *visorconfig.V1, servers []*systray.MenuItem, rpcClient vis
 	btnChannel := make(chan int)
 	for index, server := range servers {
 		go func(chn chan int, server *systray.MenuItem, index int) {
-			select {
-			case <-server.ClickedCh:
-				chn <- index
+			for {
+				select {
+				case <-server.ClickedCh:
+					chn <- index
+				}
 			}
 		}(btnChannel, server, index)
 	}
