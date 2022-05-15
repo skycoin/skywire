@@ -142,18 +142,23 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 
 	// Manipulate Hypervisor PKs
 	if hypervisorPKs != "" {
+		log.Info("hypervisorPKs: ", hypervisorPKs)
 		keys := strings.Split(hypervisorPKs, ",")
+		log.Info("keys: ", keys)
 		for _, key := range keys {
-			keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(key))
-			if err != nil {
-				log.WithError(err).Fatalf("Failed to parse hypervisor private key: %s.", key)
-			}
-			conf.Hypervisors = append(conf.Hypervisors, cipher.PubKey(keyParsed))
-			// Compare key value and visor PK, if same, then this visor should be hypervisor
-			if key == conf.PK.Hex() {
-				hypervisor = true
-				conf.Hypervisors = []cipher.PubKey{}
-				break
+			if key != "" {
+				keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(key))
+				if err != nil {
+					log.WithError(err).Fatalf("Failed to parse hypervisor public key: %s.", key)
+				}
+				conf.Hypervisors = append(conf.Hypervisors, cipher.PubKey(keyParsed))
+
+				// Compare key value and visor PK, if same, then this visor should be hypervisor
+				if key == conf.PK.Hex() {
+					hypervisor = true
+					conf.Hypervisors = []cipher.PubKey{}
+					break
+				}
 			}
 		}
 	}
