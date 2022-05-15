@@ -142,9 +142,7 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 
 	// Manipulate Hypervisor PKs
 	if hypervisorPKs != "" {
-		log.Info("hypervisorPKs: ", hypervisorPKs)
 		keys := strings.Split(hypervisorPKs, ",")
-		log.Info("keys: ", keys)
 		for _, key := range keys {
 			if key != "" {
 				keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(key))
