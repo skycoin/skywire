@@ -680,7 +680,7 @@ export class VpnClientService {
       // Get the required data from the app properties.
       if (appData) {
         vpnClientData = new VpnClientAppData();
-        vpnClientData.running = appData.status === 1;
+        vpnClientData.running = appData.status === 1 || appData.status === 3;
         vpnClientData.connectionDuration = appData.connection_duration;
 
         vpnClientData.appState = AppState.Stopped;
