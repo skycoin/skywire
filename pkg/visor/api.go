@@ -315,6 +315,11 @@ func (v *Visor) StartApp(appName string) error {
 	if appName == skyenv.VPNClientName {
 		// todo: can we use some kind of app start hook that will be used for both autostart
 		// and start? Reason: this is also called in init for autostart
+
+		// check transport manager availability
+		if v.tpM == nil {
+			return ErrTrpMangerNotAvailable
+		}
 		maker := vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.STCPRRemoteAddrs())
 		envs, err = maker()
 		if err != nil {
@@ -325,14 +330,21 @@ func (v *Visor) StartApp(appName string) error {
 			return errors.New("VPN server pub key is missing")
 		}
 	}
-
-	return v.appL.StartApp(appName, nil, envs)
+	// check process manager availability
+	if v.procM != nil {
+		return v.appL.StartApp(appName, nil, envs)
+	}
+	return ErrProcNotAvailable
 }
 
 // StopApp implements API.
 func (v *Visor) StopApp(appName string) error {
-	_, err := v.appL.StopApp(appName) //nolint:errcheck
-	return err
+	// check process manager availability
+	if v.procM != nil {
+		_, err := v.appL.StopApp(appName) //nolint:errcheck
+		return err
+	}
+	return ErrProcNotAvailable
 }
 
 // SetAppDetailedStatus implements API.
@@ -540,6 +552,7 @@ func (v *Visor) GetAppError(appName string) (string, error) {
 
 // GetAppConnectionsSummary implements API.
 func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error) {
+	// check process manager availability
 	if v.procM != nil {
 		cSummary, err := v.procM.ConnectionsSummary(appName)
 		if err != nil {
@@ -548,7 +561,7 @@ func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.Connection
 
 		return cSummary, nil
 	}
-	return nil, nil
+	return nil, ErrProcNotAvailable
 }
 
 // TransportTypes implements API.
