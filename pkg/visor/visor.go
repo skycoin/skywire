@@ -34,6 +34,10 @@ import (
 var (
 	// ErrAppProcNotRunning represents lookup error for App related calls.
 	ErrAppProcNotRunning = errors.New("no process of given app is running")
+	// ErrProcNotAvailable represents error for unavailable process manager
+	ErrProcNotAvailable = errors.New("no process manager available")
+	// ErrTrpMangerNotAvailable represents error for unavailable transport manager
+	ErrTrpMangerNotAvailable = errors.New("no transport manager available")
 )
 
 const (

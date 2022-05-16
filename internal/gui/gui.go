@@ -61,6 +61,7 @@ var (
 	mVPNButton      *systray.MenuItem
 	mUninstall      *systray.MenuItem
 	mQuit           *systray.MenuItem
+	vpnStatusMx     sync.Mutex
 )
 
 // GetOnGUIReady creates func to run on GUI startup.
@@ -198,6 +199,7 @@ func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, logger *log
 
 func vpnStatusBtn(conf *visorconfig.V1, rpcClient visor.API) {
 	for {
+		vpnStatusMx.Lock()
 		stats, _ := rpcClient.GetAppConnectionsSummary(skyenv.VPNClientName)
 		if len(stats) == 1 {
 			if stats[0].IsAlive {
@@ -224,6 +226,7 @@ func vpnStatusBtn(conf *visorconfig.V1, rpcClient visor.API) {
 				vpnLastStatus = 0
 			}
 		}
+		vpnStatusMx.Unlock()
 		time.Sleep(2 * time.Second)
 	}
 }
@@ -258,7 +261,9 @@ func serversBtn(conf *visorconfig.V1, servers []*systray.MenuItem, rpcClient vis
 
 		rpcClient.StopApp(skyenv.VPNClientName)
 		rpcClient.SetAppPK(skyenv.VPNClientName, pk)
+		vpnStatusMx.Lock()
 		vpnLastStatus = 3
+		vpnStatusMx.Unlock()
 		rpcClient.StartApp(skyenv.VPNClientName)
 	}
 }
@@ -268,7 +273,9 @@ func handleVPNButton(conf *visorconfig.V1, rpcClient visor.API) {
 	if len(stats) == 1 {
 		rpcClient.StopApp(skyenv.VPNClientName)
 	} else {
+		vpnStatusMx.Lock()
 		vpnLastStatus = 3
+		vpnStatusMx.Unlock()
 		rpcClient.StartApp(skyenv.VPNClientName)
 	}
 }
