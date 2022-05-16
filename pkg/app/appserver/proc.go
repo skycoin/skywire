@@ -31,10 +31,11 @@ var (
 // communication.
 // TODO(evanlinjin): In the future, we will implement the ability to run multiple instances (procs) of a single app.
 type Proc struct {
-	ipcServer *ipc.Server
-	disc      appdisc.Updater // app discovery client
-	conf      appcommon.ProcConfig
-	log       *logging.Logger
+	ipcServer   *ipc.Server
+	ipcServerWg sync.WaitGroup
+	disc        appdisc.Updater // app discovery client
+	conf        appcommon.ProcConfig
+	log         *logging.Logger
 
 	logDB appcommon.LogStore
 
@@ -93,6 +94,10 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 		connCh:  make(chan struct{}, 1),
 		m:       m,
 		appName: appName,
+	}
+
+	if runtime.GOOS == "windows" {
+		p.ipcServerWg.Add(1)
 	}
 	return p
 }
@@ -225,9 +230,11 @@ func (p *Proc) Start() error {
 			if err != nil {
 				_ = p.cmd.Process.Kill() //nolint:errcheck
 				p.waitMx.Unlock()
+				p.ipcServerWg.Done()
 				return
 			}
 			p.ipcServer = ipcServer
+			p.ipcServerWg.Done()
 		}
 
 		// Wait for proc to exit.
@@ -260,8 +267,11 @@ func (p *Proc) Stop() error {
 				return err
 			}
 		} else {
-			if err := p.ipcServer.Write(skyenv.IPCShutdownMessageType, []byte("")); err != nil {
-				return err
+			p.ipcServerWg.Wait()
+			if p.ipcServer != nil {
+				if err := p.ipcServer.Write(skyenv.IPCShutdownMessageType, []byte("")); err != nil {
+					return err
+				}
 			}
 		}
 	}
