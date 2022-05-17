@@ -127,6 +127,13 @@ func (rc *rpcClient) Apps() ([]*launcher.AppState, error) {
 	return states, err
 }
 
+// App calls App.
+func (rc *rpcClient) App(appName string) (*launcher.AppState, error) {
+	var state *launcher.AppState
+	err := rc.Call("App", appName, &state)
+	return state, err
+}
+
 // StartApp calls StartApp.
 func (rc *rpcClient) StartApp(appName string) error {
 	return rc.Call("StartApp", &appName, &struct{}{})
@@ -678,6 +685,21 @@ func (mc *mockRPCClient) Apps() ([]*launcher.AppState, error) {
 		return nil
 	})
 	return apps, err
+}
+
+// App implements API.
+func (mc *mockRPCClient) App(appName string) (*launcher.AppState, error) {
+	var app *launcher.AppState
+	err := mc.do(false, func() error {
+		for _, a := range mc.o.Apps {
+			if a.Name == appName {
+				app = a
+				break
+			}
+		}
+		return nil
+	})
+	return app, err
 }
 
 // StartApp implements API.
