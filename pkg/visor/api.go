@@ -36,6 +36,7 @@ type API interface {
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
 
+	App(appName string) (*launcher.AppState, error)
 	Apps() ([]*launcher.AppState, error)
 	StartApp(appName string) error
 	StopApp(appName string) error
@@ -301,6 +302,15 @@ func (v *Visor) Uptime() (float64, error) {
 // Apps implements API.
 func (v *Visor) Apps() ([]*launcher.AppState, error) {
 	return v.appL.AppStates(), nil
+}
+
+// App implements API.
+func (v *Visor) App(appName string) (*launcher.AppState, error) {
+	appState, ok := v.appL.AppState(appName)
+	if !ok {
+		return &launcher.AppState{}, ErrAppProcNotRunning
+	}
+	return appState, nil
 }
 
 // SkybianBuildVersion implements API.
