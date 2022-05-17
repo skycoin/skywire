@@ -174,39 +174,30 @@ func (l *Launcher) AppState(name string) (*AppState, bool) {
 		return nil, false
 	}
 	state := &AppState{AppConfig: ac, Status: AppStatusStopped}
-	if _, ok := l.procM.ErrorByName(ac.Name); ok { //nolint:errcheck
-		state.Status = AppStatusErrored
+	if err, ok := l.procM.ErrorByName(ac.Name); ok { //nolint:errcheck
+		if err != "" {
+			state.DetailedStatus = err
+			state.Status = AppStatusErrored
+		}
 	}
-	if _, ok := l.procM.ProcByName(ac.Name); ok { //nolint:errcheck
-		state.Status = AppStatusRunning
+	if proc, ok := l.procM.ProcByName(ac.Name); ok { //nolint:errcheck
+		state.DetailedStatus = proc.DetailedStatus()
+		connSummary := proc.ConnectionsSummary()
+		if connSummary != nil {
+			state.Status = AppStatusRunning
+		}
+		if state.DetailedStatus == vpn.ClientStatusConnecting {
+			state.Status = AppVPNClientConnecting
+		}
 	}
 	return state, true
 }
 
 // AppStates returns list of AppStates for all registered apps.
 func (l *Launcher) AppStates() []*AppState {
-	l.mx.Lock()
-	defer l.mx.Unlock()
-
 	var states []*AppState
 	for _, app := range l.apps {
-		state := &AppState{AppConfig: app, Status: AppStatusStopped}
-		if err, ok := l.procM.ErrorByName(app.Name); ok {
-			if err != "" {
-				state.DetailedStatus = err
-				state.Status = AppStatusErrored
-			}
-		}
-		if proc, ok := l.procM.ProcByName(app.Name); ok {
-			state.DetailedStatus = proc.DetailedStatus()
-			connSummary := proc.ConnectionsSummary()
-			if connSummary != nil {
-				state.Status = AppStatusRunning
-			}
-			if state.DetailedStatus == vpn.ClientStatusConnecting {
-				state.Status = AppVPNClientConnecting
-			}
-		}
+		state, _ := l.AppState(app.Name)
 		states = append(states, state)
 	}
 	return states
