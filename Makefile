@@ -82,6 +82,24 @@ build-static: host-apps-static bin-static ## Build apps and binaries. `go build`
 
 installer: mac-installer ## Builds MacOS installer for skywire-visor
 
+install-system-linux: build # Workaround for debugging linux package installation
+	sudo install -Dm755 skywire-cli /opt/skywire/bin/
+	sudo install -Dm755 skywire-visor /opt/skywire/bin/
+	sudo install -Dm755 apps/vpn-server /opt/skywire/apps/
+	sudo install -Dm755 apps/vpn-client /opt/skywire/apps/
+	sudo install -Dm755 apps/skysocks-client /opt/skywire/apps/
+	sudo install -Dm755 apps/skysocks /opt/skywire/apps/
+	sudo install -Dm755 apps/skychat /opt/skywire/apps/
+
+install-system-linux-systray: build-systray # Workaround for debugging linux package installation
+	sudo install -Dm755 skywire-cli /opt/skywire/bin/
+	sudo install -Dm755 skywire-visor /opt/skywire/bin/
+	sudo install -Dm755 apps/vpn-server /opt/skywire/apps/
+	sudo install -Dm755 apps/vpn-client /opt/skywire/apps/
+	sudo install -Dm755 apps/skysocks-client /opt/skywire/apps/
+	sudo install -Dm755 apps/skysocks /opt/skywire/apps/
+	sudo install -Dm755 apps/skychat /opt/skywire/apps/
+
 install-generate: ## Installs required execs for go generate.
 	${OPTS} go install github.com/mjibson/esc
 	${OPTS} go install github.com/vektra/mockery/cmd/mockery
@@ -234,7 +252,7 @@ build-deploy: ## Build for deployment Docker images
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
 github-release:
-	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags | cut -c 2-))
+	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags | cut -c 2-6))
 	sed '/^## ${GITHUB_TAG}$$/,/^## .*/!d;//d;/^$$/d' ./CHANGELOG.md > releaseChangelog.md
 	goreleaser --rm-dist --release-notes releaseChangelog.md
 
@@ -340,6 +358,12 @@ mac-installer-help: ## Show installer creation help
 
 win-installer:
 	@powershell '.\scripts\win_installer\script.ps1'
+
+set-cap-vpn-client:
+	sudo setcap 'cap_net_admin+p' ./apps/vpn-client
+
+set-cap-vpn-server:
+	sudo setcap 'cap_net_admin+p' ./apps/vpn-server
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
