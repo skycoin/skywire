@@ -15,8 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 	"golang.org/x/net/proxy"
-
-	"github.com/skycoin/skywire/pkg/app"
 )
 
 func TestMain(m *testing.M) {
@@ -36,9 +34,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestProxy(t *testing.T) {
-	appCS := app.NewClient(nil)
-	defer appCS.Close()
-	srv, err := NewServer("", appCS, logging.NewMasterLogger())
+	srv, err := NewServer("", nil, logging.NewMasterLogger())
 	require.NoError(t, err)
 
 	l, err := nettest.NewLocalListener("tcp")
@@ -57,10 +53,7 @@ func TestProxy(t *testing.T) {
 	conn, err := net.Dial("tcp", l.Addr().String())
 	require.NoError(t, err)
 
-	appCC := app.NewClient(nil)
-	defer appCC.Close()
-
-	client, err := NewClient(conn, appCC)
+	client, err := NewClient(conn, nil)
 	require.NoError(t, err)
 
 	errChan2 := make(chan error)

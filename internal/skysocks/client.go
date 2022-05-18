@@ -56,15 +56,18 @@ func NewClient(conn net.Conn, appCl *app.Client) (*Client, error) {
 func (c *Client) ListenAndServe(addr string) error {
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
-		c.setAppError(err)
+		if c.appCl != nil {
+			c.setAppError(err)
+		}
 		return fmt.Errorf("listen: %w", err)
 	}
 
 	Log.Printf("Listening skysocks client on %s", addr)
 
 	c.listener = l
-
-	c.setAppStatus(vpn.ClientStatusRunning)
+	if c.appCl != nil {
+		c.setAppStatus(vpn.ClientStatusRunning)
+	}
 
 	for {
 		select {
