@@ -102,6 +102,7 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	if runtime.GOOS == "windows" {
 		p.ipcServerWg.Add(1)
 	}
+	p.startWg.Add(1)
 	return p
 }
 
@@ -224,7 +225,6 @@ func (p *Proc) Start() error {
 			return
 		}
 
-		p.startWg.Add(1)
 		go func() {
 			// App discovery start/stop.
 			p.startWg.Wait()
