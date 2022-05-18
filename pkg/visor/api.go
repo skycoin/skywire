@@ -36,6 +36,7 @@ type API interface {
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
 
+	App(appName string) (*launcher.AppState, error)
 	Apps() ([]*launcher.AppState, error)
 	StartApp(appName string) error
 	StopApp(appName string) error
@@ -303,6 +304,15 @@ func (v *Visor) Apps() ([]*launcher.AppState, error) {
 	return v.appL.AppStates(), nil
 }
 
+// App implements API.
+func (v *Visor) App(appName string) (*launcher.AppState, error) {
+	appState, ok := v.appL.AppState(appName)
+	if !ok {
+		return &launcher.AppState{}, ErrAppProcNotRunning
+	}
+	return appState, nil
+}
+
 // SkybianBuildVersion implements API.
 func (v *Visor) SkybianBuildVersion() string {
 	return os.Getenv("SKYBIAN_BUILD_VERSION")
@@ -315,6 +325,11 @@ func (v *Visor) StartApp(appName string) error {
 	if appName == skyenv.VPNClientName {
 		// todo: can we use some kind of app start hook that will be used for both autostart
 		// and start? Reason: this is also called in init for autostart
+
+		// check transport manager availability
+		if v.tpM == nil {
+			return ErrTrpMangerNotAvailable
+		}
 		maker := vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.STCPRRemoteAddrs())
 		envs, err = maker()
 		if err != nil {
@@ -325,14 +340,21 @@ func (v *Visor) StartApp(appName string) error {
 			return errors.New("VPN server pub key is missing")
 		}
 	}
-
-	return v.appL.StartApp(appName, nil, envs)
+	// check process manager availability
+	if v.procM != nil {
+		return v.appL.StartApp(appName, nil, envs)
+	}
+	return ErrProcNotAvailable
 }
 
 // StopApp implements API.
 func (v *Visor) StopApp(appName string) error {
-	_, err := v.appL.StopApp(appName) //nolint:errcheck
-	return err
+	// check process manager availability
+	if v.procM != nil {
+		_, err := v.appL.StopApp(appName) //nolint:errcheck
+		return err
+	}
+	return ErrProcNotAvailable
 }
 
 // SetAppDetailedStatus implements API.
@@ -540,12 +562,16 @@ func (v *Visor) GetAppError(appName string) (string, error) {
 
 // GetAppConnectionsSummary implements API.
 func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error) {
-	cSummary, err := v.procM.ConnectionsSummary(appName)
-	if err != nil {
-		return nil, err
-	}
+	// check process manager availability
+	if v.procM != nil {
+		cSummary, err := v.procM.ConnectionsSummary(appName)
+		if err != nil {
+			return nil, err
+		}
 
-	return cSummary, nil
+		return cSummary, nil
+	}
+	return nil, ErrProcNotAvailable
 }
 
 // TransportTypes implements API.

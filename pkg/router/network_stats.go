@@ -20,12 +20,12 @@ type networkStats struct {
 
 func newNetworkStats() *networkStats {
 	return &networkStats{
-		bandwidthReceivedRecStart: time.Now(),
+		bandwidthReceivedRecStart: time.Now().UTC(),
 	}
 }
 
-func (s *networkStats) SetLatency(latency time.Duration) {
-	atomic.StoreUint32(&s.latency, uint32(latency.Milliseconds()))
+func (s *networkStats) SetLatency(latency uint32) {
+	atomic.StoreUint32(&s.latency, latency)
 }
 
 func (s *networkStats) Latency() time.Duration {
@@ -69,8 +69,8 @@ func (s *networkStats) AddBandwidthReceived(amount uint64) {
 
 func (s *networkStats) RemoteThroughput() int64 {
 	s.bandwidthReceivedRecStartMu.Lock()
-	timePassed := time.Since(s.bandwidthReceivedRecStart)
-	s.bandwidthReceivedRecStart = time.Now()
+	timePassed := time.Now().UTC().Sub(s.bandwidthReceivedRecStart) //nolint:gosimple
+	s.bandwidthReceivedRecStart = time.Now().UTC()
 	s.bandwidthReceivedRecStartMu.Unlock()
 
 	bandwidth := atomic.SwapUint64(&s.bandwidthReceived, 0)
