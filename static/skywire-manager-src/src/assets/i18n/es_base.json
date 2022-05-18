@@ -469,6 +469,7 @@
     "status-stopped": "Stopped",
     "status-failed": "Failed",
     "status-running-tooltip": "App is currently running",
+    "status-connecting-tooltip": "App is currently connecting",
     "status-stopped-tooltip": "App is currently stopped",
     "status-failed-tooltip": "Something went wrong. Check the app's messages for more information"
   },

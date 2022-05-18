@@ -96,10 +96,7 @@
         </mat-checkbox>
       </td>
       <td>
-        <i
-          [class]="app.status === 1 ? 'dot-green' : 'dot-red'"
-          [matTooltip]="(app.status === 1 ? 'apps.status-running-tooltip' : 'apps.status-stopped-tooltip') | translate"
-        ></i>
+        <i [class]="getStateClass(app)" [matTooltip]="getStateTooltip(app) | translate"></i>
       </td>
       <td>
         {{ app.name }}
