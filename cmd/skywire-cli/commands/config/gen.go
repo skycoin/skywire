@@ -136,6 +136,7 @@ var genConfigCmd = &cobra.Command{
 		if output == "" {
 			outunset = true
 			confPath = skyenv.ConfigName
+			output = confPath
 		} else {
 			confPath = output
 		}

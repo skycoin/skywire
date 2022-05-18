@@ -26,6 +26,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/httputil"
+	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -593,7 +594,12 @@ func (hv *Hypervisor) getApps() http.HandlerFunc {
 // returns an app summary of a given visor's pk and app name
 func (hv *Hypervisor) getApp() http.HandlerFunc {
 	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		httputil.WriteJSON(w, r, http.StatusOK, ctx.App)
+		app, err := ctx.API.App(ctx.App.Name)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, app)
 	})
 }
 
@@ -710,7 +716,18 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 			}
 		}
 
-		httputil.WriteJSON(w, r, http.StatusOK, ctx.App)
+		if err := ctx.API.SetAppDetailedStatus(ctx.App.Name, vpn.ClientStatusConnecting); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		app, err := ctx.API.App(ctx.App.Name)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		httputil.WriteJSON(w, r, http.StatusOK, app)
 	})
 }
 
