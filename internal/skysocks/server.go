@@ -55,7 +55,9 @@ func (s *Server) Serve(l net.Listener) error {
 	s.listener = l
 	s.sMu.Unlock()
 
-	s.setAppStatus(vpn.ClientStatusRunning)
+	if s.appCl != nil {
+		s.setAppStatus(vpn.ClientStatusRunning)
+	}
 
 	for {
 		if s.isClosed() {
