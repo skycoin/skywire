@@ -41,7 +41,7 @@ func main() {
 	var passcode = flag.String("passcode", "", "Authorize user against this passcode")
 	flag.Parse()
 
-	srv, err := skysocks.NewServer(*passcode, log)
+	srv, err := skysocks.NewServer(*passcode, appC, log)
 	if err != nil {
 		log.Fatal("Failed to create a new server: ", err)
 	}
