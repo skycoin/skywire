@@ -23,6 +23,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -71,6 +72,7 @@ func main() {
 		ipcClient, err := ipc.StartClient(skyenv.SkychatName, nil)
 		if err != nil {
 			fmt.Printf("Error creating ipc server for skychat client: %v\n", err)
+			setAppError(appC, err)
 			os.Exit(1)
 		}
 		go handleIPCSignal(ipcClient)
@@ -83,6 +85,9 @@ func main() {
 	http.HandleFunc("/sse", sseHandler)
 
 	fmt.Print("Serving HTTP on", *addr)
+
+	setAppStatus(appC, vpn.ClientStatusRunning)
+
 	err := http.ListenAndServe(*addr, nil)
 	if err != nil {
 		fmt.Println(err)
@@ -246,4 +251,16 @@ func handleIPCSignal(client *ipc.Client) {
 		}
 	}
 	os.Exit(0)
+}
+
+func setAppStatus(appCl *app.Client, status vpn.ClientStatus) {
+	if err := appCl.SetDetailedStatus(string(status)); err != nil {
+		fmt.Printf("Failed to set status %v: %v\n", status, err)
+	}
+}
+
+func setAppError(appCl *app.Client, appErr error) {
+	if err := appCl.SetError(appErr.Error()); err != nil {
+		fmt.Printf("Failed to set error %v: %v\n", appErr, err)
+	}
 }
