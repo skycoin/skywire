@@ -594,12 +594,7 @@ func (hv *Hypervisor) getApps() http.HandlerFunc {
 // returns an app summary of a given visor's pk and app name
 func (hv *Hypervisor) getApp() http.HandlerFunc {
 	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		app, err := ctx.API.App(ctx.App.Name)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, app)
+		httputil.WriteJSON(w, r, http.StatusOK, ctx.App)
 	})
 }
 
@@ -1494,23 +1489,16 @@ func (hv *Hypervisor) appCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, 
 
 	appName := chi.URLParam(r, "app")
 
-	apps, err := ctx.API.Apps()
+	app, err := ctx.API.App(appName)
 	if err != nil {
-		httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+		errMsg := fmt.Errorf("can not find app of name %s from visor %s", appName, ctx.Addr.PK)
+		httputil.WriteJSON(w, r, http.StatusNotFound, errMsg)
 		return nil, false
 	}
 
-	for _, a := range apps {
-		if a.Name == appName {
-			ctx.App = a
-			return ctx, true
-		}
-	}
+	ctx.App = app
 
-	errMsg := fmt.Errorf("can not find app of name %s from visor %s", appName, ctx.Addr.PK)
-	httputil.WriteJSON(w, r, http.StatusNotFound, errMsg)
-
-	return nil, false
+	return ctx, true
 }
 
 func (hv *Hypervisor) tpCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, bool) {
