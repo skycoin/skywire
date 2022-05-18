@@ -704,6 +704,10 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 					return
 				}
+				if err := ctx.API.SetAppDetailedStatus(ctx.App.Name, vpn.ClientStatusConnecting); err != nil {
+					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+					return
+				}
 			default:
 				errMsg := fmt.Errorf("value of 'status' field is %d when expecting 0 or 1", *reqBody.Status)
 				httputil.WriteJSON(w, r, http.StatusBadRequest, errMsg)
@@ -711,11 +715,7 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 			}
 		}
 
-		if err := ctx.API.SetAppDetailedStatus(ctx.App.Name, vpn.ClientStatusConnecting); err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-
+		// get the latest AppState of the app after changes
 		app, err := ctx.API.App(ctx.App.Name)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
