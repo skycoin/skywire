@@ -7,7 +7,6 @@ import (
 	"net"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -144,7 +143,6 @@ func (s *Server) Serve(l net.Listener) error {
 			serveErr = fmt.Errorf("error settings iptables forward policy to ACCEPT")
 			return
 		}
-		time.Sleep(time.Second * 10)
 		s.log.Infoln("Set iptables forward policy to ACCEPT")
 
 		defer func() {
