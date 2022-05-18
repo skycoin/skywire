@@ -85,7 +85,7 @@ func main() {
 
 		log.Printf("Connected to %v\n", pk)
 
-		client, err := skysocks.NewClient(conn)
+		client, err := skysocks.NewClient(conn, appC)
 		if err != nil {
 			log.Fatal("Failed to create a new client: ", err)
 		}

@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/app"
+
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,7 +36,9 @@ func TestMain(m *testing.M) {
 }
 
 func TestProxy(t *testing.T) {
-	srv, err := NewServer("", logging.NewMasterLogger())
+	appCS := app.NewClient(nil)
+	defer appCS.Close()
+	srv, err := NewServer("", appCS, logging.NewMasterLogger())
 	require.NoError(t, err)
 
 	l, err := nettest.NewLocalListener("tcp")
@@ -53,7 +57,10 @@ func TestProxy(t *testing.T) {
 	conn, err := net.Dial("tcp", l.Addr().String())
 	require.NoError(t, err)
 
-	client, err := NewClient(conn)
+	appCC := app.NewClient(nil)
+	defer appCC.Close()
+
+	client, err := NewClient(conn, appCC)
 	require.NoError(t, err)
 
 	errChan2 := make(chan error)
