@@ -10,13 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/app"
-
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 	"golang.org/x/net/proxy"
+
+	"github.com/skycoin/skywire/pkg/app"
 )
 
 func TestMain(m *testing.M) {
