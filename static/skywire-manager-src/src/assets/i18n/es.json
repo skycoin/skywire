@@ -469,6 +469,7 @@
     "status-stopped": "Detenida",
     "status-failed": "Fallida",
     "status-running-tooltip": "La aplicación está actualmente corriendo",
+    "status-connecting-tooltip": "La aplicación está actualmente conectando",
     "status-stopped-tooltip": "La aplicación está actualmente detenida",
     "status-failed-tooltip": "Algo salió mal. Revise los mensajes de la aplicación para más información"
   },

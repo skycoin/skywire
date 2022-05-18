@@ -232,6 +232,32 @@ export class NodeAppsListComponent implements OnDestroy {
   }
 
   /**
+   * Gets the class for the app status dot.
+   */
+  getStateClass(app: Application): string {
+    if (app.status === 1) {
+      return 'dot-green';
+    } else if (app.name === 'vpn-client' && app.status === 3) {
+      return 'dot-yellow';
+    }
+
+    return 'dot-red';
+  }
+
+  /**
+   * Gets the tooltip text for the app status dot.
+   */
+  getStateTooltip(app: Application): string {
+    if (app.status === 1) {
+      return 'apps.status-running-tooltip';
+    } else if (app.name === 'vpn-client' && app.status === 3) {
+      return 'apps.status-connecting-tooltip';
+    }
+
+    return 'apps.status-stopped-tooltip';
+  }
+
+  /**
    * Changes the selection state of an entry (modifies the state of its checkbox).
    */
   changeSelection(app: Application) {
