@@ -90,8 +90,8 @@ func main() {
 		}
 	})
 
-	appClient := app.NewClient(eventSub)
-	defer appClient.Close()
+	appCl := app.NewClient(eventSub)
+	defer appCl.Close()
 
 	fmt.Printf("Connecting to VPN server %s\n", serverPK.String())
 
@@ -101,7 +101,7 @@ func main() {
 		ServerPK:   serverPK,
 	}
 
-	vpnClient, err := vpn.NewClient(vpnClientCfg, appClient)
+	vpnClient, err := vpn.NewClient(vpnClientCfg, appCl)
 	if err != nil {
 		fmt.Printf("Error creating VPN client: %v\n", err)
 	}
