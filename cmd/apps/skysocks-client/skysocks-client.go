@@ -51,8 +51,8 @@ func dialServer(ctx context.Context, appCl *app.Client, pk cipher.PubKey) (net.C
 }
 
 func main() {
-	appC := app.NewClient(nil)
-	defer appC.Close()
+	appCl := app.NewClient(nil)
+	defer appCl.Close()
 
 	skysocks.Log = log
 
@@ -78,14 +78,14 @@ func main() {
 	}
 
 	for {
-		conn, err := dialServer(ctx, appC, pk)
+		conn, err := dialServer(ctx, appCl, pk)
 		if err != nil {
 			log.Fatalf("Failed to dial to a server: %v", err)
 		}
 
 		log.Printf("Connected to %v\n", pk)
 
-		client, err := skysocks.NewClient(conn, appC)
+		client, err := skysocks.NewClient(conn, appCl)
 		if err != nil {
 			log.Fatal("Failed to create a new client: ", err)
 		}
