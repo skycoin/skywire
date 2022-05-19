@@ -229,8 +229,8 @@ func (p *Proc) Start() error {
 			// App discovery start/stop.
 			p.startWg.Wait()
 			p.disc.Start()
-			defer p.disc.Stop()
 		}()
+		defer p.disc.Stop()
 
 		if runtime.GOOS == "windows" {
 			ipcServer, err := ipc.StartServer(p.appName, nil)
