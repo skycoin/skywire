@@ -100,11 +100,7 @@ func (s *Server) Serve(l net.Listener) error {
 		}
 		s.log.Infoln("Set IPv4 forwarding = 1")
 		defer func() {
-			if err := SetIPv4ForwardingValue(s.ipv4ForwardingVal); err != nil {
-				s.log.WithError(err).Errorln("Error reverting IPv4 forwarding")
-			} else {
-				s.log.Infof("Set IPv4 forwarding = %s", s.ipv4ForwardingVal)
-			}
+			s.revertIPv4ForwardingValue()
 		}()
 
 		if err := EnableIPv6Forwarding(); err != nil {
@@ -113,11 +109,7 @@ func (s *Server) Serve(l net.Listener) error {
 		}
 		s.log.Infoln("Set IPv6 forwarding = 1")
 		defer func() {
-			if err := SetIPv6ForwardingValue(s.ipv6ForwardingVal); err != nil {
-				s.log.WithError(err).Errorln("Error reverting IPv6 forwarding")
-			} else {
-				s.log.Infof("Set IPv6 forwarding = %s", s.ipv6ForwardingVal)
-			}
+			s.revertIPv6ForwardingValue()
 		}()
 
 		if err := EnableIPMasquerading(s.defaultNetworkInterface); err != nil {
@@ -128,11 +120,7 @@ func (s *Server) Serve(l net.Listener) error {
 		s.log.Infoln("Enabled IP masquerading")
 
 		defer func() {
-			if err := DisableIPMasquerading(s.defaultNetworkInterface); err != nil {
-				s.log.WithError(err).Errorf("Error disabling IP masquerading for %s", s.defaultNetworkInterface)
-			} else {
-				s.log.Infof("Disabled IP masquerading for %s", s.defaultNetworkInterface)
-			}
+			s.disableIPMasquerading()
 		}()
 
 		if err := SetIPTablesForwardAcceptPolicy(); err != nil {
@@ -143,11 +131,7 @@ func (s *Server) Serve(l net.Listener) error {
 		s.log.Infoln("Set iptables forward policy to ACCEPT")
 
 		defer func() {
-			if err := SetIPTablesForwardPolicy(s.iptablesForwardPolicy); err != nil {
-				s.log.WithError(err).Errorf("Error setting iptables forward policy to %s", s.iptablesForwardPolicy)
-			} else {
-				s.log.Infof("Restored iptables forward policy to %s", s.iptablesForwardPolicy)
-			}
+			s.restoreIPTablesForwardPolicy()
 		}()
 
 		s.lisMx.Lock()
@@ -173,6 +157,11 @@ func (s *Server) Close() error {
 	s.lisMx.Lock()
 	defer s.lisMx.Unlock()
 
+	s.revertIPv4ForwardingValue()
+	s.revertIPv6ForwardingValue()
+	s.disableIPMasquerading()
+	s.restoreIPTablesForwardPolicy()
+
 	if s.lis == nil {
 		return nil
 	}
@@ -181,6 +170,38 @@ func (s *Server) Close() error {
 	s.lis = nil
 
 	return err
+}
+
+func (s *Server) revertIPv4ForwardingValue() {
+	if err := SetIPv4ForwardingValue(s.ipv4ForwardingVal); err != nil {
+		s.log.WithError(err).Errorln("Error reverting IPv4 forwarding")
+	} else {
+		s.log.Infof("Set IPv4 forwarding = %s", s.ipv4ForwardingVal)
+	}
+}
+
+func (s *Server) revertIPv6ForwardingValue() {
+	if err := SetIPv6ForwardingValue(s.ipv6ForwardingVal); err != nil {
+		s.log.WithError(err).Errorln("Error reverting IPv6 forwarding")
+	} else {
+		s.log.Infof("Set IPv6 forwarding = %s", s.ipv6ForwardingVal)
+	}
+}
+
+func (s *Server) disableIPMasquerading() {
+	if err := DisableIPMasquerading(s.defaultNetworkInterface); err != nil {
+		s.log.WithError(err).Errorf("Error disabling IP masquerading for %s", s.defaultNetworkInterface)
+	} else {
+		s.log.Infof("Disabled IP masquerading for %s", s.defaultNetworkInterface)
+	}
+}
+
+func (s *Server) restoreIPTablesForwardPolicy() {
+	if err := SetIPTablesForwardPolicy(s.iptablesForwardPolicy); err != nil {
+		s.log.WithError(err).Errorf("Error restoring iptables forward policy to %s", s.iptablesForwardPolicy)
+	} else {
+		s.log.Infof("Restored iptables forward policy to %s", s.iptablesForwardPolicy)
+	}
 }
 
 func (s *Server) closeConn(conn net.Conn) {
