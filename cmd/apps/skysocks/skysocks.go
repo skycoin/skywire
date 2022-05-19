@@ -29,8 +29,8 @@ const (
 var log = logrus.New()
 
 func main() {
-	appC := app.NewClient(nil)
-	defer appC.Close()
+	appCl := app.NewClient(nil)
+	defer appCl.Close()
 
 	skysocks.Log = log
 
@@ -41,12 +41,12 @@ func main() {
 	var passcode = flag.String("passcode", "", "Authorize user against this passcode")
 	flag.Parse()
 
-	srv, err := skysocks.NewServer(*passcode, appC, log)
+	srv, err := skysocks.NewServer(*passcode, appCl, log)
 	if err != nil {
 		log.Fatal("Failed to create a new server: ", err)
 	}
 
-	l, err := appC.Listen(netType, port)
+	l, err := appCl.Listen(netType, port)
 	if err != nil {
 		log.Fatalf("Error listening network %v on port %d: %v\n", netType, port, err)
 	}
