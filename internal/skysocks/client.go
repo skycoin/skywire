@@ -12,6 +12,8 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/yamux"
 
+	"github.com/skycoin/skywire/internal/vpn"
+	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
@@ -21,6 +23,7 @@ var Log logrus.FieldLogger = logging.MustGetLogger("skysocks") // nolint: gochec
 
 // Client implement multiplexing proxy client using yamux.
 type Client struct {
+	appCl    *app.Client
 	session  *yamux.Session
 	listener net.Listener
 	once     sync.Once
@@ -28,8 +31,9 @@ type Client struct {
 }
 
 // NewClient constructs a new Client.
-func NewClient(conn net.Conn) (*Client, error) {
+func NewClient(conn net.Conn, appCl *app.Client) (*Client, error) {
 	c := &Client{
+		appCl:  appCl,
 		closeC: make(chan struct{}),
 	}
 
@@ -52,12 +56,18 @@ func NewClient(conn net.Conn) (*Client, error) {
 func (c *Client) ListenAndServe(addr string) error {
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
+		if c.appCl != nil {
+			c.setAppError(err)
+		}
 		return fmt.Errorf("listen: %w", err)
 	}
 
 	Log.Printf("Listening skysocks client on %s", addr)
 
 	c.listener = l
+	if c.appCl != nil {
+		c.setAppStatus(vpn.ClientStatusRunning)
+	}
 
 	for {
 		select {
@@ -166,6 +176,18 @@ func (c *Client) ListenIPC(client *ipc.Client, log *logrus.Logger) {
 			log.Errorf("Error closing skysocks-client: %v", err)
 		}
 	})
+}
+
+func (c *Client) setAppStatus(status vpn.ClientStatus) {
+	if err := c.appCl.SetDetailedStatus(string(status)); err != nil {
+		fmt.Printf("Failed to set status %v: %v\n", status, err)
+	}
+}
+
+func (c *Client) setAppError(appErr error) {
+	if err := c.appCl.SetError(appErr.Error()); err != nil {
+		fmt.Printf("Failed to set error %v: %v\n", appErr, err)
+	}
 }
 
 // Close implement io.Closer.
