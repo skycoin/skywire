@@ -12,11 +12,14 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/yamux"
 
+	"github.com/skycoin/skywire/internal/vpn"
+	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 // Server implements multiplexing proxy server using yamux.
 type Server struct {
+	appCl    *app.Client
 	sMu      sync.Mutex
 	socks    *socks5.Server
 	listener net.Listener
@@ -25,7 +28,7 @@ type Server struct {
 }
 
 // NewServer constructs a new Server.
-func NewServer(passcode string, l logrus.FieldLogger) (*Server, error) {
+func NewServer(passcode string, appCl *app.Client, l logrus.FieldLogger) (*Server, error) {
 	var credentials socks5.CredentialStore
 	if passcode != "" {
 		credentials = passcodeCredentials(passcode)
@@ -36,7 +39,13 @@ func NewServer(passcode string, l logrus.FieldLogger) (*Server, error) {
 		return nil, fmt.Errorf("socks5: %w", err)
 	}
 
-	return &Server{socks: s, log: l}, nil
+	server := &Server{
+		appCl: appCl,
+		socks: s,
+		log:   l,
+	}
+
+	return server, nil
 }
 
 // Serve accept connections from listener and serves socks5 proxy for
@@ -45,6 +54,10 @@ func (s *Server) Serve(l net.Listener) error {
 	s.sMu.Lock()
 	s.listener = l
 	s.sMu.Unlock()
+
+	if s.appCl != nil {
+		s.setAppStatus(vpn.ClientStatusRunning)
+	}
 
 	for {
 		if s.isClosed() {
@@ -89,6 +102,12 @@ func (s *Server) ListenIPC(client *ipc.Client) {
 			os.Exit(1)
 		}
 	})
+}
+
+func (s *Server) setAppStatus(status vpn.ClientStatus) {
+	if err := s.appCl.SetDetailedStatus(string(status)); err != nil {
+		fmt.Printf("Failed to set status %v: %v\n", status, err)
+	}
 }
 
 // Close implement io.Closer.
