@@ -55,8 +55,8 @@ func main() {
 		}
 	}
 
-	appClient := app.NewClient(nil)
-	defer appClient.Close()
+	appCl := app.NewClient(nil)
+	defer appCl.Close()
 
 	osSigs := make(chan os.Signal, 2)
 
@@ -65,7 +65,7 @@ func main() {
 		signal.Notify(osSigs, sig)
 	}
 
-	l, err := appClient.Listen(netType, vpnPort)
+	l, err := appCl.Listen(netType, vpnPort)
 	if err != nil {
 		log.WithError(err).Errorf("Error listening network %v on port %d", netType, vpnPort)
 		return
@@ -78,7 +78,7 @@ func main() {
 		Secure:           *secure,
 		NetworkInterface: *networkIfc,
 	}
-	srv, err := vpn.NewServer(srvCfg, log, appClient)
+	srv, err := vpn.NewServer(srvCfg, log, appCl)
 	if err != nil {
 		log.WithError(err).Fatalln("Error creating VPN server")
 	}

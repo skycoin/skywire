@@ -40,7 +40,7 @@ var addr = flag.String("addr", ":8001", "address to bind")
 var r = netutil.NewRetrier(log, 50*time.Millisecond, netutil.DefaultMaxBackoff, 5, 2)
 
 var (
-	appC     *app.Client
+	appCl    *app.Client
 	clientCh chan string
 	conns    map[cipher.PubKey]net.Conn // Chat connections
 	connsMu  sync.Mutex
@@ -52,8 +52,8 @@ var (
 var embededFiles embed.FS
 
 func main() {
-	appC = app.NewClient(nil)
-	defer appC.Close()
+	appCl = app.NewClient(nil)
+	defer appCl.Close()
 
 	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 		fmt.Printf("Failed to output build info: %v", err)
@@ -72,7 +72,7 @@ func main() {
 		ipcClient, err := ipc.StartClient(skyenv.SkychatName, nil)
 		if err != nil {
 			fmt.Printf("Error creating ipc server for skychat client: %v\n", err)
-			setAppError(appC, err)
+			setAppError(appCl, err)
 			os.Exit(1)
 		}
 		go handleIPCSignal(ipcClient)
@@ -86,7 +86,7 @@ func main() {
 
 	fmt.Print("Serving HTTP on", *addr)
 
-	setAppStatus(appC, vpn.ClientStatusRunning)
+	setAppStatus(appCl, vpn.ClientStatusRunning)
 
 	err := http.ListenAndServe(*addr, nil)
 	if err != nil {
@@ -96,7 +96,7 @@ func main() {
 }
 
 func listenLoop() {
-	l, err := appC.Listen(netType, port)
+	l, err := appCl.Listen(netType, port)
 	if err != nil {
 		fmt.Printf("Error listening network %v on port %d: %v\n", netType, port, err)
 		return
@@ -175,7 +175,7 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 		if !ok {
 			var err error
 			err = r.Do(ctx, func() error {
-				conn, err = appC.Dial(addr)
+				conn, err = appCl.Dial(addr)
 				return err
 			})
 			if err != nil {
