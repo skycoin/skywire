@@ -9,6 +9,7 @@
 *.pem
 
 .idea/
+.vscode/
 
 /skywire.json
 /apps/
