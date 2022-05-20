@@ -466,12 +466,13 @@
     "operation-completed": "Operación completada.",
     "operation-unnecessary": "La selección ya tiene la configuración solicitada.",
     "status-running": "Corriendo",
+    "status-connecting": "Conectando",
     "status-stopped": "Detenida",
-    "status-failed": "Fallida",
+    "status-failed": "Finalizó con el siguiente error: {{ error }}",
     "status-running-tooltip": "La aplicación está actualmente corriendo",
     "status-connecting-tooltip": "La aplicación está actualmente conectando",
     "status-stopped-tooltip": "La aplicación está actualmente detenida",
-    "status-failed-tooltip": "Algo salió mal. Revise los mensajes de la aplicación para más información"
+    "status-failed-tooltip": "La app finalizó con el siguiente error: {{ error }}"
   },
 
   "transports": {

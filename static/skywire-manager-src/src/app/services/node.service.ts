@@ -707,6 +707,7 @@ export class NodeService {
               status: app.status,
               port: app.port,
               autostart: app.auto_start,
+              detailedStatus: app.detailed_status,
               args: app.args,
             });
           });
