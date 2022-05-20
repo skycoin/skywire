@@ -26,7 +26,6 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/httputil"
-	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -704,7 +703,7 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 					return
 				}
-				if err := ctx.API.SetAppDetailedStatus(ctx.App.Name, vpn.ClientStatusConnecting); err != nil {
+				if err := ctx.API.SetAppDetailedStatus(ctx.App.Name, launcher.AppDetailedStatusStarting); err != nil {
 					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 					return
 				}
