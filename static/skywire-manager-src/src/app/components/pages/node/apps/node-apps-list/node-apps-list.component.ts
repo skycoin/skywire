@@ -20,6 +20,7 @@ import { SkysocksClientSettingsComponent } from '../node-apps/skysocks-client-se
 import { FilterProperties, FilterFieldTypes } from 'src/app/utils/filters';
 import { SortingColumn, SortingModes, DataSorter } from 'src/app/utils/lists/data-sorter';
 import { DataFilterer } from 'src/app/utils/lists/data-filterer';
+import { map } from 'rxjs/operators';
 
 /**
  * Shows the list of applications of a node. I can be used to show a short preview, with just some
@@ -588,7 +589,18 @@ export class NodeAppsListComponent implements OnDestroy {
    * subscribe to the response.
    */
   private startChangingAppState(appName: string, startApp: boolean): Observable<any> {
-    return this.appsService.changeAppState(NodeComponent.getCurrentNodeKey(), appName, startApp);
+    return this.appsService.changeAppState(NodeComponent.getCurrentNodeKey(), appName, startApp).pipe(map(response => {
+      if (response.status !== null && response.status !== undefined) {
+        this.dataSource.forEach(app => {
+          if (app.name === appName) {
+            app.status = response.status;
+            app.detailedStatus = response.detailed_status;
+          }
+        });
+      }
+
+      return response;
+    }));
   }
 
   /**
