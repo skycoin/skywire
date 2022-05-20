@@ -85,7 +85,6 @@ export class NodeAppsListComponent implements OnDestroy {
   currentPageInUrl = 1;
   @Input() set apps(val: Application[]) {
     this.allApps = val ? val : [];
-
     this.dataFilterer.setData(this.allApps);
   }
 
@@ -206,7 +205,7 @@ export class NodeAppsListComponent implements OnDestroy {
    * Gets the link for openning the UI of an app. Currently only works for the Skychat app.
    */
   getLink(app: Application): string {
-    if (app.name.toLocaleLowerCase() === 'skychat' && this.nodeIp && app.status === 1) {
+    if (app.name.toLocaleLowerCase() === 'skychat' && this.nodeIp && app.status !== 0 && app.status !== 2) {
       // Default port.
       let port = '8001';
 
@@ -237,11 +236,24 @@ export class NodeAppsListComponent implements OnDestroy {
   getStateClass(app: Application): string {
     if (app.status === 1) {
       return 'dot-green';
-    } else if (app.name === 'vpn-client' && app.status === 3) {
+    } else if (app.status === 3) {
       return 'dot-yellow';
     }
 
     return 'dot-red';
+  }
+
+  /**
+   * Gets the class for the app status text in small screens.
+   */
+   getSmallScreenStateClass(app: Application): string {
+    if (app.status === 1) {
+      return 'green-clear-text';
+    } else if (app.status === 3) {
+      return 'yellow-clear-text';
+    }
+
+    return 'red-clear-text';
   }
 
   /**
@@ -250,11 +262,26 @@ export class NodeAppsListComponent implements OnDestroy {
   getStateTooltip(app: Application): string {
     if (app.status === 1) {
       return 'apps.status-running-tooltip';
-    } else if (app.name === 'vpn-client' && app.status === 3) {
+    } else if (app.status === 3) {
       return 'apps.status-connecting-tooltip';
     }
 
     return 'apps.status-stopped-tooltip';
+  }
+
+  /**
+   * Gets the text for status shown in small screens.
+   */
+   getSmallScreenStateTextVar(app: Application): string {
+    if (app.status === 1) {
+      return 'apps.status-running';
+    } else if (app.status === 2) {
+      return 'apps.status-failed';
+    } else if (app.status === 3) {
+      return 'apps.status-connecting';
+    }
+
+    return 'apps.status-stopped';
   }
 
   /**
@@ -269,7 +296,7 @@ export class NodeAppsListComponent implements OnDestroy {
   }
 
   /**
-   * Check if at lest one entry has been selected via its checkbox.
+   * Check if at least one entry has been selected via its checkbox.
    */
   hasSelectedElements(): boolean {
     if (!this.selections) {
@@ -303,7 +330,10 @@ export class NodeAppsListComponent implements OnDestroy {
     // Ignore all elements which already have the desired settings applied.
     this.selections.forEach((val, key) => {
       if (val) {
-        if ((startApps && this.appsMap.get(key).status !== 1) || (!startApps && this.appsMap.get(key).status === 1)) {
+        if (
+          (startApps && (this.appsMap.get(key).status === 0 || this.appsMap.get(key).status === 2)) ||
+          (!startApps && (this.appsMap.get(key).status !== 0 && this.appsMap.get(key).status !== 2))
+        ) {
           elementsToChange.push(key);
         }
       }
@@ -359,8 +389,8 @@ export class NodeAppsListComponent implements OnDestroy {
         label: 'apps.view-logs',
       },
       {
-        icon: app.status === 1 ? 'stop' : 'play_arrow',
-        label: 'apps.' + (app.status === 1 ? 'stop-app' : 'start-app'),
+        icon: app.status === 0 || app.status === 2 ? 'play_arrow' : 'stop',
+        label: 'apps.' + (app.status === 0 || app.status === 2 ? 'start-app' : 'stop-app'),
       },
       {
         icon: app.autostart ? 'close' : 'done',
@@ -392,9 +422,9 @@ export class NodeAppsListComponent implements OnDestroy {
    * Starts or stops a specific app.
    */
   changeAppState(app: Application): void {
-    if (app.status !== 1) {
+    if (app.status === 0 || app.status === 2) {
       this.changeSingleAppVal(
-        this.startChangingAppState(app.name, app.status !== 1)
+        this.startChangingAppState(app.name, true)
       );
     } else {
       // Ask for confirmation if the app is going to be stopped.
@@ -404,7 +434,7 @@ export class NodeAppsListComponent implements OnDestroy {
         confirmationDialog.componentInstance.showProcessing();
 
         this.changeSingleAppVal(
-          this.startChangingAppState(app.name, app.status !== 1),
+          this.startChangingAppState(app.name, false),
           confirmationDialog
         );
       });
@@ -476,7 +506,7 @@ export class NodeAppsListComponent implements OnDestroy {
    * Shows a modal window with the logs of an app.
    */
   viewLogs(app: Application): void {
-    if (app.status === 1) {
+    if (app.status !== 0 && app.status !== 2) {
       LogComponent.openDialog(this.dialog, app);
     } else {
       this.snackbarService.showError('apps.apps-list.unavailable-logs-error');
