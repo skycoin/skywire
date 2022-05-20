@@ -12,6 +12,7 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/app"
+	"github.com/skycoin/skywire/pkg/app/launcher"
 )
 
 // Server is a VPN server.
@@ -97,7 +98,7 @@ func NewServer(cfg ServerConfig, l logrus.FieldLogger, appCl *app.Client) (*Serv
 func (s *Server) Serve(l net.Listener) error {
 	serveErr := errors.New("already serving")
 	s.serveOnce.Do(func() {
-		s.setAppStatus(ClientStatusConnecting)
+		s.setAppStatus(launcher.AppDetailedStatusStarting)
 		if err := EnableIPv4Forwarding(); err != nil {
 			serveErr = fmt.Errorf("error enabling IPv4 forwarding: %w", err)
 			return
@@ -140,7 +141,7 @@ func (s *Server) Serve(l net.Listener) error {
 		s.lisMx.Lock()
 		s.lis = l
 		s.lisMx.Unlock()
-		s.setAppStatus(ClientStatusRunning)
+		s.setAppStatus(launcher.AppDetailedStatusRunning)
 		for {
 			conn, err := s.lis.Accept()
 			if err != nil {
@@ -345,7 +346,7 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, unsecureVP
 	return sTUNIP, sTUNGateway, unsecureVPN, nil
 }
 
-func (s *Server) setAppStatus(status ClientStatus) {
+func (s *Server) setAppStatus(status launcher.AppDetailedStatus) {
 	if err := s.appCl.SetDetailedStatus(string(status)); err != nil {
 		fmt.Printf("Failed to set status %v: %v\n", status, err)
 	}
