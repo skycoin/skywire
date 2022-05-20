@@ -16,7 +16,6 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -186,8 +185,8 @@ func (l *Launcher) AppState(name string) (*AppState, bool) {
 		if connSummary != nil {
 			state.Status = AppStatusRunning
 		}
-		if state.DetailedStatus == vpn.ClientStatusConnecting {
-			state.Status = AppVPNClientConnecting
+		if state.DetailedStatus == AppDetailedStatusVPNConnecting || state.DetailedStatus == AppDetailedStatusStarting {
+			state.Status = AppStatusStarting
 		}
 	}
 	return state, true
