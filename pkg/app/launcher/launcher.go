@@ -185,6 +185,11 @@ func (l *Launcher) AppState(name string) (*AppState, bool) {
 		if connSummary != nil {
 			state.Status = AppStatusRunning
 		}
+		// for a edge case where app has given the start status but we are unable to retrieve the conn info
+		if connSummary == nil && state.DetailedStatus == AppDetailedStatusRunning {
+			state.DetailedStatus = AppDetailedStatusStarting
+			state.Status = AppStatusStarting
+		}
 		if state.DetailedStatus == AppDetailedStatusVPNConnecting || state.DetailedStatus == AppDetailedStatusStarting {
 			state.Status = AppStatusStarting
 		}
