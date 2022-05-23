@@ -12,8 +12,8 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/yamux"
 
-	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app"
+	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
@@ -66,7 +66,7 @@ func (c *Client) ListenAndServe(addr string) error {
 
 	c.listener = l
 	if c.appCl != nil {
-		c.setAppStatus(vpn.ClientStatusRunning)
+		c.setAppStatus(launcher.AppDetailedStatusRunning)
 	}
 
 	for {
@@ -178,7 +178,7 @@ func (c *Client) ListenIPC(client *ipc.Client, log *logrus.Logger) {
 	})
 }
 
-func (c *Client) setAppStatus(status vpn.ClientStatus) {
+func (c *Client) setAppStatus(status launcher.AppDetailedStatus) {
 	if err := c.appCl.SetDetailedStatus(string(status)); err != nil {
 		fmt.Printf("Failed to set status %v: %v\n", status, err)
 	}
