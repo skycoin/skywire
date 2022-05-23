@@ -23,9 +23,9 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
-	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
@@ -86,7 +86,7 @@ func main() {
 
 	fmt.Print("Serving HTTP on", *addr)
 
-	setAppStatus(appCl, vpn.ClientStatusRunning)
+	setAppStatus(appCl, launcher.AppDetailedStatusRunning)
 
 	err := http.ListenAndServe(*addr, nil)
 	if err != nil {
@@ -253,7 +253,7 @@ func handleIPCSignal(client *ipc.Client) {
 	os.Exit(0)
 }
 
-func setAppStatus(appCl *app.Client, status vpn.ClientStatus) {
+func setAppStatus(appCl *app.Client, status launcher.AppDetailedStatus) {
 	if err := appCl.SetDetailedStatus(string(status)); err != nil {
 		fmt.Printf("Failed to set status %v: %v\n", status, err)
 	}
