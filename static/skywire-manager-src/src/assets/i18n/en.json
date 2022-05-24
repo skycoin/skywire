@@ -462,12 +462,13 @@
     "operation-completed": "Operation completed.",
     "operation-unnecessary": "The selection already has the requested setting.",
     "status-running": "Running",
+    "status-connecting": "Connecting",
     "status-stopped": "Stopped",
-    "status-failed": "Failed",
+    "status-failed": "Ended with the following error: {{ error }}",
     "status-running-tooltip": "App is currently running",
     "status-connecting-tooltip": "App is currently connecting",
     "status-stopped-tooltip": "App is currently stopped",
-    "status-failed-tooltip": "Something went wrong. Check the app's messages for more information"
+    "status-failed-tooltip": "The app finished with the following error: {{ error }}"
   },
 
   "transports": {

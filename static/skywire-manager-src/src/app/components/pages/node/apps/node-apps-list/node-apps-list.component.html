@@ -96,7 +96,13 @@
         </mat-checkbox>
       </td>
       <td>
-        <i [class]="getStateClass(app)" [matTooltip]="getStateTooltip(app) | translate"></i>
+        <i *ngIf="app.status !== 2" [class]="getStateClass(app)" [matTooltip]="getStateTooltip(app) | translate"></i>
+        <mat-icon
+          *ngIf="app.status === 2"
+          class="red-text"
+          [inline]="true"
+          [matTooltip]="'apps.status-failed-tooltip' | translate:{error: app.detailedStatus ? app.detailedStatus : ''}"
+        >warning</mat-icon>
       </td>
       <td>
         {{ app.name }}
@@ -144,10 +150,10 @@
         <button
           (click)="changeAppState(app)"
           mat-icon-button
-          [matTooltip]="('apps.' + (app.status === 1 ? 'stop-app' : 'start-app')) | translate"
+          [matTooltip]="('apps.' + (app.status === 0 || app.status === 2 ? 'start-app' : 'stop-app')) | translate"
           class="big-action-button transparent-button"
         >
-          <mat-icon [inline]="true">{{ app.status === 1 ? 'stop' : 'play_arrow' }}</mat-icon>
+          <mat-icon [inline]="true">{{ app.status === 0 || app.status === 2 ? 'play_arrow' : 'stop' }}</mat-icon>
         </button>
       </td>
     </tr>
@@ -194,8 +200,8 @@
           </div>
           <div class="list-row">
             <span class="title">{{ 'apps.apps-list.state' | translate }}</span>:
-            <span [class]="(app.status === 1 ? 'green-clear-text' : 'red-clear-text') + ' title'">
-              {{ (app.status === 1 ? 'apps.status-running' : 'apps.status-stopped') | translate }}
+            <span [class]="getSmallScreenStateClass(app) + ' title'">
+              {{ getSmallScreenStateTextVar(app) | translate:{error: app.detailedStatus ? app.detailedStatus : ''} }}
             </span>
           </div>
           <div class="list-row">
