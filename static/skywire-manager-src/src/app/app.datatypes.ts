@@ -27,6 +27,7 @@ export interface Application {
   autostart: boolean;
   port: number;
   status: number;
+  detailedStatus: string;
   args: any[];
 }
 
