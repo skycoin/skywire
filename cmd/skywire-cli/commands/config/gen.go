@@ -55,6 +55,7 @@ var (
 	svcconf           = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")     //skyenv.DefaultServiceConfAddr
 	testconf          = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "") //skyenv.DefaultServiceConfAddr
 	hiddenflags       []string
+	binPath           string
 )
 
 func init() {
@@ -112,6 +113,8 @@ func init() {
 	genConfigCmd.Flags().StringVar(&ver, "version", "", "custom version testing override")
 	hiddenflags = append(hiddenflags, "version")
 	genConfigCmd.Flags().BoolVar(&all, "all", false, "show all flags")
+	genConfigCmd.Flags().StringVar(&binPath, "binpath", "", "set bin_path")
+	hiddenflags = append(hiddenflags, "binpath")
 
 	for _, j := range hiddenflags {
 		genConfigCmd.Flags().MarkHidden(j) //nolint
@@ -372,6 +375,11 @@ var genConfigCmd = &cobra.Command{
 				conf.Hypervisor.EnableAuth = true
 			}
 		}
+		// check binpath argument and use if set
+		if binPath != "" {
+			conf.Launcher.BinPath = binPath
+		}
+
 		if ver != "" {
 			conf.Common.Version = ver
 		}
