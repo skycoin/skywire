@@ -190,7 +190,8 @@ func (l *Launcher) AppState(name string) (*AppState, bool) {
 			state.DetailedStatus = AppDetailedStatusStarting
 			state.Status = AppStatusStarting
 		}
-		if state.DetailedStatus == AppDetailedStatusVPNConnecting || state.DetailedStatus == AppDetailedStatusStarting {
+		switch state.DetailedStatus {
+		case AppDetailedStatusVPNConnecting, AppDetailedStatusStarting, AppDetailedStatusVPNReconnecting:
 			state.Status = AppStatusStarting
 		}
 	}
