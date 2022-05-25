@@ -15,9 +15,6 @@ const (
 
 	// AppStatusStarting represents status of an app starting.
 	AppStatusStarting
-
-	// AppStatusReconnecting represents status of VPN client re-connecting.
-	AppStatusReconnecting
 )
 
 // AppState defines state parameters for a registered App.
@@ -34,15 +31,15 @@ const (
 	// AppDetailedStatusStarting is set during app initilization process.
 	AppDetailedStatusStarting = "Starting"
 
+	// AppDetailedStatusRunning is set when the app is running.
+	AppDetailedStatusRunning = "Running"
+
 	// AppDetailedStatusVPNConnecting is set during VPN-client session establishment (including handshake).
 	AppDetailedStatusVPNConnecting = "Connecting"
 
-	// AppDetailedStatusRunning is set when all establishment is done and / or app is running.
-	AppDetailedStatusRunning = "Running"
+	// AppDetailedStatusVPNReconnecting is set after connection failure in VPN-client, during reconnection.
+	AppDetailedStatusVPNReconnecting = "Connection failed, reconnecting"
 
 	// AppDetailedStatusShuttingDown is set during shutdown.
 	AppDetailedStatusShuttingDown = "Shutting down"
-
-	// AppDetailedStatusVPNReconnecting is set after connection failure in VPN-client, during reconnection.
-	AppDetailedStatusVPNReconnecting = "Connection failed, reconnecting"
 )
