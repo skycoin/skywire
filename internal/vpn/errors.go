@@ -17,6 +17,7 @@ var (
 	errHandshakeStatusBadRequest      = errors.New("Request was malformed")
 	errTimeout                        = errors.New("Internal error: Timeout")
 	errNotPermited                    = errors.New("ioctl: operation not permitted")
+	errVPNServerClosed                = errors.New("Vpn-server closed")
 
 	errNoTransportFound = appserver.RPCErr{
 		Err: router.ErrNoTransportFound.Error(),

@@ -452,6 +452,10 @@ func (c *Client) serveConn(conn net.Conn) error {
 
 		if _, err := io.Copy(tun, conn); err != nil {
 			fmt.Printf("Error resending traffic from TUN %s to VPN server: %v\n", tun.Name(), err)
+			// when the vpn-server is closed we get the error EOF
+			if err.Error() == io.EOF.Error() {
+				c.setAppError(errVPNServerClosed)
+			}
 		}
 	}()
 	go func() {
