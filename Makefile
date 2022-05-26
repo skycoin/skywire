@@ -253,6 +253,9 @@ github-release-static:
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-linux-amd64.tar.gz
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-linux-arm64.tar.gz
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-linux-arm.tar.gz
+	gh release download ${GITHUB_TAG} --repo mrpalide/skywire --pattern 'checksums*'
+	cat ./dist/checksums.txt >> ./checksums.txt
+	gh release upload --repo skycoin/skywire ${GITHUB_TAG} --clobber ./checksums.txt
 
 build-docker: ## Build docker image
 	./ci_scripts/docker-push.sh -t latest -b
