@@ -186,7 +186,7 @@ archives:
   - id: systray
     format: tar.gz
     wrap_in_directory: false
-    name_template: 'skywire-systray-{{ .Version }}-{{ .Os }}-{{ .Arch }}'
+    name_template: 'skywire-systray-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
     files:
       - dmsghttp-config.json
     builds:
@@ -203,7 +203,7 @@ archives:
   - id: systray-windows
     format: zip
     wrap_in_directory: false
-    name_template: 'skywire-systray-{{ .Version }}-{{ .Os }}-{{ .Arch }}'
+    name_template: 'skywire-systray-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
     files:
       - dmsghttp-config.json
     builds:
