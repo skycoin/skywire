@@ -703,7 +703,11 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 					return
 				}
-				if err := ctx.API.SetAppDetailedStatus(ctx.App.Name, launcher.AppDetailedStatusStarting); err != nil {
+				appStatus := launcher.AppDetailedStatusStarting
+				if ctx.App.Name == skyenv.VPNClientName {
+					appStatus = launcher.AppDetailedStatusVPNConnecting
+				}
+				if err := ctx.API.SetAppDetailedStatus(ctx.App.Name, appStatus); err != nil {
 					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 					return
 				}
