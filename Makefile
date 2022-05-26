@@ -239,15 +239,20 @@ build-deploy: ## Build for deployment Docker images
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
-github-release-static:
-	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags | cut -c 2-6))
-	sed '/^## ${GITHUB_TAG}$$/,/^## .*/!d;//d;/^$$/d' ./CHANGELOG.md > releaseChangelog.md
-	goreleaser --rm-dist --config .goreleaser-static.yml --release-notes releaseChangelog.md
-
 github-release:
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags | cut -c 2-6))
 	sed '/^## ${GITHUB_TAG}$$/,/^## .*/!d;//d;/^$$/d' ./CHANGELOG.md > releaseChangelog.md
 	goreleaser --rm-dist --release-notes releaseChangelog.md
+
+github-release-static:
+	goreleaser --rm-dist --config .goreleaser-static.yml --skip-publish
+	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags))
+	$(eval $(shell echo ${GITHUB_TOKEN} > ../token))
+	$(eval export GITHUB_TOKEN=)
+	gh auth login --with-token < ../token
+	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-linux-amd64.tar.gz
+	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-linux-arm64.tar.gz
+	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-linux-arm.tar.gz
 
 build-docker: ## Build docker image
 	./ci_scripts/docker-push.sh -t latest -b
