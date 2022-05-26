@@ -72,11 +72,11 @@ build-windows: host-apps-windows bin-windows ## Install dependencies, build apps
 
 build-windows-appveyor: host-apps-windows-appveyor bin-windows-appveyor ## Install dependencies, build apps and binaries. `go build` with ${OPTS} for AppVeyor image
 
-build-systray: host-apps-systray bin-systray ## Install dependencies, build apps and binaries `go build` with ${OPTS}, with CGO and systray
+build-systray: host-apps bin-systray ## Install dependencies, build apps and binaries `go build` with ${OPTS}, with CGO and systray
 
-build-systray-windows: host-apps-systray-windows bin-systray-windows ## Builds systray binary in windows
+build-systray-windows: host-apps-windows bin-systray-windows ## Builds systray binary in windows
 
-build-systray-windows-appveyor: host-apps-systray-windows-appveyor bin-systray-windows-appveyor ## Builds systray binary in windows for AppVeyor image
+build-systray-windows-appveyor: host-apps-windows-appveyor bin-systray-windows-appveyor ## Builds systray binary in windows for AppVeyor image
 
 build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
@@ -190,21 +190,6 @@ host-apps-windows-appveyor:
 	powershell -Command new-item .\apps -itemtype directory -force
 	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build -o ./apps $$_.FullName }'
 
-host-apps-systray: ## Build app
-	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skychat
-	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skysocks
-	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -o ./apps/  ./cmd/apps/skysocks-client
-	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps/ ./cmd/apps/vpn-server
-	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps/ ./cmd/apps/vpn-client
-
-host-apps-systray-windows:
-	powershell -Command new-item .\apps -itemtype directory -force
-	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps $$_.FullName }'
-
-host-apps-systray-windows-appveyor:
-	powershell -Command new-item .\apps -itemtype directory -force
-	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build -tags systray -o ./apps $$_.FullName }'
-
 # Static Apps
 host-apps-static: ## Build app
 	test -d apps && rm -r apps || true
@@ -234,9 +219,9 @@ bin-systray-windows-appveyor: ## Build `skywire-visor` and `skywire-cli` with sy
 	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go build -tags systray -o ./ $$_.FullName }'
 
 bin-systray: ## Build `skywire-visor`, `skywire-cli`
-	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ ./cmd/skywire-visor
-	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ ./cmd/skywire-cli
-	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/setup-node
+	CGO_ENABLED = 0 ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ ./cmd/skywire-visor
+	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/skywire-cli
+	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/setup-node
 
 # Static Bin
 bin-static: ## Build `skywire-visor`, `skywire-cli`
