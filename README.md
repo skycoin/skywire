@@ -127,8 +127,8 @@ in [the docs](docs/windows-setup.md).
 
 If you are interested in running the Skywire VPN as either a client or a server, please refer to the following guides:
 
-- [Setup the Skywire VPN](https://github.com/skycoin/skywire/wiki/Setting-up-Skywire-VPN)
-- [Setup the Skywire VPN server](https://github.com/skycoin/skywire/wiki/Setting-up-Skywire-VPN-server)
+- [Setup the Skywire VPN](https://github.com/skycoin/skywire/wiki/Skywire-VPN-Client)
+- [Setup the Skywire VPN server](https://github.com/skycoin/skywire/wiki/Skywire-VPN-Server)
 
 ## Creating a GitHub release
 
