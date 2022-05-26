@@ -170,6 +170,9 @@ dep: tidy ## Sorts dependencies
 snapshot:
 	goreleaser --snapshot --skip-publish --rm-dist
 
+snapshot-static:
+	goreleaser --snapshot --config .goreleaser-static.yml --skip-publish --rm-dist
+
 snapshot-clean: ## Cleans snapshot / release
 	rm -rf ./dist
 
@@ -218,8 +221,8 @@ bin-systray-windows: ## Build `skywire-visor` and `skywire-cli` with systray sup
 bin-systray-windows-appveyor: ## Build `skywire-visor` and `skywire-cli` with systray support
 	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go build -tags systray -o ./ $$_.FullName }'
 
-bin-systray: ## Build `skywire-visor`, `skywire-cli`
-	CGO_ENABLED = 0 ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ ./cmd/skywire-visor
+bin-systray: ## Build `skywire-visor`, `skywire-cli` | In MacOS (darwin) should set CGO_ENABLED=1 for skywire-visor
+	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ ./cmd/skywire-visor
 	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/setup-node
 
@@ -236,11 +239,15 @@ build-deploy: ## Build for deployment Docker images
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
+github-release-static:
+	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags | cut -c 2-6))
+	sed '/^## ${GITHUB_TAG}$$/,/^## .*/!d;//d;/^$$/d' ./CHANGELOG.md > releaseChangelog.md
+	goreleaser --rm-dist --config .goreleaser-static.yml --release-notes releaseChangelog.md
+
 github-release:
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags | cut -c 2-6))
 	sed '/^## ${GITHUB_TAG}$$/,/^## .*/!d;//d;/^$$/d' ./CHANGELOG.md > releaseChangelog.md
 	goreleaser --rm-dist --release-notes releaseChangelog.md
-
 
 build-docker: ## Build docker image
 	./ci_scripts/docker-push.sh -t latest -b
