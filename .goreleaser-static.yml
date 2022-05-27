@@ -58,9 +58,9 @@ builds:
     goos:
       - linux
     goarch:
-      - armhf
+      - arm
     goarm:
-      - 6
+      - 7
     env:
       - CGO_ENABLED=0
       - CC=arm-linux-gnueabihf-gcc
@@ -110,9 +110,9 @@ builds:
     goos:
       - linux
     goarch:
-      - armhf
+      - arm
     goarm:
-      - 6
+      - 7
     env:
       - CGO_ENABLED=0
       - CC=arm-linux-gnueabihf-gcc
@@ -162,9 +162,9 @@ builds:
     goos:
       - linux
     goarch:
-      - armhf
+      - arm
     goarm:
-      - 6
+      - 7
     env:
       - CGO_ENABLED=0
       - CC=arm-linux-gnueabihf-gcc
@@ -214,9 +214,9 @@ builds:
     goos:
       - linux
     goarch:
-      - armhf
+      - arm
     goarm:
-      - 6
+      - 7
     env:
       - CGO_ENABLED=0
       - CC=arm-linux-gnueabihf-gcc
@@ -266,9 +266,9 @@ builds:
     goos:
       - linux
     goarch:
-      - armhf
+      - arm
     goarm:
-      - 6
+      - 7
     env:
       - CGO_ENABLED=0
       - CC=arm-linux-gnueabihf-gcc
@@ -318,9 +318,9 @@ builds:
     goos:
       - linux
     goarch:
-      - armhf
+      - arm
     goarm:
-      - 6
+      - 7
     env:
       - CGO_ENABLED=0
       - CC=arm-linux-gnueabihf-gcc
@@ -370,9 +370,9 @@ builds:
     goos:
       - linux
     goarch:
-      - armhf
+      - arm
     goarm:
-      - 6
+      - 7
     env:
       - CGO_ENABLED=0
       - CC=arm-linux-gnueabihf-gcc
