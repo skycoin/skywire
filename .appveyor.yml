@@ -93,6 +93,9 @@ for:
     matrix:
       only:
         - job_name: make-release
+    branches:
+      only:
+        - develop
     install:
       - brew install goreleaser
     build_script:
@@ -103,6 +106,9 @@ for:
     matrix:
       only:
         - job_name: make-release-static
+    branches:
+      only:
+        - develop
     install:
       - sudo apt update
       - sudo snap install goreleaser --classic
