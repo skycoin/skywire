@@ -428,7 +428,7 @@ archives:
   - id: static-armhf
     format: tar.gz
     wrap_in_directory: false
-    name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
+    name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}hf'
     files:
       - dmsghttp-config.json
     builds:
