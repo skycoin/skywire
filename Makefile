@@ -359,12 +359,6 @@ mac-installer-help: ## Show installer creation help
 win-installer:
 	@powershell '.\scripts\win_installer\script.ps1'
 
-set-cap-vpn-client:
-	sudo setcap 'cap_net_admin+p' ./apps/vpn-client
-
-set-cap-vpn-server:
-	sudo setcap 'cap_net_admin+p' ./apps/vpn-server
-
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
