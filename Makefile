@@ -24,6 +24,18 @@ else
 	.DEFAULT_GOAL := help
 endif
 
+ifeq ($(OS),Windows_NT)
+    SYSTRAY_CGO_ENABLED := 0
+else
+    UNAME_S := $(shell uname -s)
+    ifeq ($(UNAME_S),Linux)
+        SYSTRAY_CGO_ENABLED := 0
+    endif
+    ifeq ($(UNAME_S),Darwin)
+        SYSTRAY_CGO_ENABLED := 1
+    endif
+endif
+
 STATIC_OPTS?= $(OPTS) CC=musl-gcc
 MANAGER_UI_DIR = static/skywire-manager-src
 GO_BUILDER_VERSION=v1.17
@@ -221,8 +233,8 @@ bin-systray-windows: ## Build `skywire-visor` and `skywire-cli` with systray sup
 bin-systray-windows-appveyor: ## Build `skywire-visor` and `skywire-cli` with systray support
 	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go build -tags systray -o ./ $$_.FullName }'
 
-bin-systray: ## Build `skywire-visor`, `skywire-cli` | In MacOS (darwin) should set CGO_ENABLED=1 for skywire-visor
-	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ ./cmd/skywire-visor
+bin-systray: ## Build `skywire-visor`, `skywire-cli`
+	CGO_ENABLED=${SYSTRAY_CGO_ENABLED} ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ ./cmd/skywire-visor
 	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/setup-node
 
