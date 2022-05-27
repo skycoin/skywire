@@ -93,7 +93,8 @@ for:
     matrix:
       only:
         - job_name: make-release
-    
+    install:
+      - brew install goreleaser
     build_script:
       - make github-release
 
@@ -103,7 +104,10 @@ for:
       only:
         - job_name: make-release-static
     install:
+      - sudo apt update
+      - sudo snap install goreleaser --classic
       - sudo apt install -y crossbuild-essential-armel crossbuild-essential-arm64 gcc make musl musl-dev musl-tools
+      - sudo snap install gh
     build_script:
       - make github-release-static
     
