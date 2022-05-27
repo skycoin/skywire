@@ -71,13 +71,7 @@ Then you can run it with
 
 ```bash
 
-# Linux
-$ sudo setcap 'cap_net_admin+p' ./apps/vpn-client
-$ ./skywire-visor -c <YOUR_CONFIG_PATH> --systray
-
-# MacOS
-
+# Linux and MacOS
 $ sudo chown root ./apps/vpn-client
 $ sudo chmod 4755 ./apps/vpn-client
 $ ./skywire-visor -c <YOUR_CONFIG_PATH> --systray
-```
