@@ -96,6 +96,7 @@ for:
     branches:
       only:
         - develop
+        - master
     install:
       - brew install goreleaser
     build_script:
@@ -109,6 +110,7 @@ for:
     branches:
       only:
         - develop
+        - master
     install:
       - sudo apt update
       - sudo snap install goreleaser --classic
