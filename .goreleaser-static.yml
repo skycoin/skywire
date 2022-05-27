@@ -6,7 +6,7 @@ release:
   # Default is extracted from the origin remote URL or empty if its private hosted.
   # Note: it can only be one: either github or gitlab or gitea
   github:
-    owner: skywire
+    owner: skycoin
     name: skywire
 
   draft: true
@@ -285,7 +285,7 @@ archives:
   - id: static-amd64
     format: tar.gz
     wrap_in_directory: false
-    name_template: 'skywire-{{ .Version }}-{{ .Os }}-{{ .Arch }}'
+    name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
     files:
       - dmsghttp-config.json
     builds:
@@ -300,7 +300,7 @@ archives:
   - id: static-arm64
     format: tar.gz
     wrap_in_directory: false
-    name_template: 'skywire-{{ .Version }}-{{ .Os }}-{{ .Arch }}'
+    name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
     files:
       - dmsghttp-config.json
     builds:
@@ -315,7 +315,7 @@ archives:
   - id: static-arm
     format: tar.gz
     wrap_in_directory: false
-    name_template: 'skywire-{{ .Version }}-{{ .Os }}-{{ .Arch }}'
+    name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
     files:
       - dmsghttp-config.json
     builds:
