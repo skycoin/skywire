@@ -360,14 +360,14 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 func initDmsgTrackers(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	dmsgC := v.dmsgC
 
-	trackers := dmsgtracker.NewDmsgTrackerManager(v.MasterLogger(), dmsgC, 0, 0)
-	v.pushCloseStack("dmsg_trackers", func() error {
-		return trackers.Close()
+	dtm := dmsgtracker.NewDmsgTrackerManager(v.MasterLogger(), dmsgC, 0, 0)
+	v.pushCloseStack("dmsg_tracker_manager", func() error {
+		return dtm.Close()
 	})
 	v.initLock.Lock()
-	v.trackers = trackers
+	v.dtm = dtm
 	v.initLock.Unlock()
-	v.trackersReadyOnce.Do(func() { close(v.trackersReady) })
+	v.dtmReadyOnce.Do(func() { close(v.dtmReady) })
 	return nil
 }
 

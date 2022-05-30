@@ -94,7 +94,7 @@ type Manager struct {
 
 // NewDmsgTrackerManager creates a new dmsg tracker manager.
 func NewDmsgTrackerManager(mLog *logging.MasterLogger, dc *dmsg.Client, updateInterval, updateTimeout time.Duration) *Manager {
-	log := mLog.PackageLogger("dmsg_trackers")
+	log := mLog.PackageLogger("dmsg_tracker_manager")
 	if updateInterval == 0 {
 		updateInterval = DefaultDTMUpdateInterval
 	}
