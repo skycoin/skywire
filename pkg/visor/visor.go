@@ -62,12 +62,14 @@ type Visor struct {
 	updater       *updater.Updater
 	uptimeTracker utclient.APIClient
 
-	ebc      *appevent.Broadcaster // event broadcaster
-	dmsgC    *dmsg.Client
-	dmsgDC   *dmsg.Client       // dmsg direct client
-	dClient  dmsgdisc.APIClient // dmsg direct api client
-	dmsgHTTP *http.Client       // dmsghttp client
-	trackers *dmsgtracker.Manager
+	ebc               *appevent.Broadcaster // event broadcaster
+	dmsgC             *dmsg.Client
+	dmsgDC            *dmsg.Client       // dmsg direct client
+	dClient           dmsgdisc.APIClient // dmsg direct api client
+	dmsgHTTP          *http.Client       // dmsghttp client
+	trackers          *dmsgtracker.Manager
+	trackersReady     chan struct{}
+	trackersReadyOnce sync.Once
 
 	stunClient   *network.StunDetails
 	wgStunClient *sync.WaitGroup
@@ -118,6 +120,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Con
 		initLock:          new(sync.RWMutex),
 		isServicesHealthy: newInternalHealthInfo(),
 		wgStunClient:      new(sync.WaitGroup),
+		trackersReady:     make(chan struct{}),
 	}
 	v.wgStunClient.Add(1)
 	v.isServicesHealthy.init()
@@ -235,6 +238,15 @@ func (v *Visor) Close() error {
 	v.processRuntimeErrs()
 	log.Info("Shutdown complete. Goodbye!")
 	return nil
+}
+
+func (v *Visor) isTrackersReady() bool {
+	select {
+	case <-v.trackersReady:
+		return true
+	default:
+		return false
+	}
 }
 
 // SetLogstore sets visor runtime logstore
