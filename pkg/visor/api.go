@@ -122,7 +122,8 @@ func (v *Visor) Overview() (*Overview, error) {
 			newTransportSummary(v.tpM, tp, true, v.router.SetupIsTrusted(tp.Remote())))
 		return true
 	})
-	if v.stunClient != nil {
+
+	if v.isStunReady() {
 		switch v.stunClient.NATType {
 		case stun.NATNone, stun.NATFull, stun.NATRestricted, stun.NATPortRestricted:
 			publicIP = v.stunClient.PublicIP.IP()
