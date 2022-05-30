@@ -1,7 +1,6 @@
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
-import { TranslateService } from '@ngx-translate/core';
 import { Injector } from '@angular/core';
 
 import { BasicTerminalComponent } from './basic-terminal/basic-terminal.component';
@@ -27,8 +26,9 @@ export class NodeActionsHelper {
   private showingFullList: boolean;
   private currentNode: Node;
   private currentNodeKey: string;
+  private canBeUpdated = false;
+  private canBeRestarted = false;
 
-  options: MenuOptionData[] = [];
   returnButtonText: string;
 
   private rebootSubscription: Subscription;
@@ -39,7 +39,6 @@ export class NodeActionsHelper {
   private router: Router;
   private snackbarService: SnackbarService;
   private nodeService: NodeService;
-  private translateService: TranslateService;
   private storageService: StorageService;
 
   constructor(injector: Injector, showingFullList: boolean) {
@@ -48,25 +47,21 @@ export class NodeActionsHelper {
     this.router = injector.get(Router);
     this.snackbarService = injector.get(SnackbarService);
     this.nodeService = injector.get(NodeService);
-    this.translateService = injector.get(TranslateService);
     this.storageService = injector.get(StorageService);
 
-    // Options for the menu shown in the top bar.
-    this.options = [
+    this.showingFullList = showingFullList;
+    this.returnButtonText = !showingFullList ? 'nodes.title' : 'node.title';
+  }
+
+  /**
+   * Options for the menu shown in the top bar.
+   */
+  get options(): MenuOptionData[] {
+    const response = [
       {
         name: 'actions.menu.terminal',
         actionName: 'terminal',
         icon: 'laptop'
-      },
-      {
-        name: 'actions.menu.reboot',
-        actionName: 'reboot',
-        icon: 'rotate_right'
-      },
-      {
-        name: 'actions.menu.update',
-        actionName: 'update',
-        icon: 'get_app',
       },
       {
         name: 'actions.menu.logs',
@@ -75,8 +70,23 @@ export class NodeActionsHelper {
       }
     ];
 
-    this.showingFullList = showingFullList;
-    this.returnButtonText = !showingFullList ? 'nodes.title' : 'node.title';
+    if (this.canBeRestarted) {
+      response.push({
+        name: 'actions.menu.reboot',
+        actionName: 'reboot',
+        icon: 'rotate_right'
+      });
+    }
+
+    if (this.canBeUpdated) {
+      response.push({
+        name: 'actions.menu.update',
+        actionName: 'update',
+        icon: 'get_app',
+      });
+    }
+
+    return response;
   }
 
   /**
@@ -84,6 +94,14 @@ export class NodeActionsHelper {
    */
   setCurrentNode(currentNode: Node) {
     this.currentNode = currentNode;
+
+    if (GeneralUtils.checkIfTagIsUpdatable(currentNode.buildTag)) {
+      this.canBeUpdated = true;
+      this.canBeRestarted = true;
+    } else {
+      this.canBeUpdated = false;
+      this.canBeRestarted = false;
+    }
   }
 
   /**
