@@ -220,30 +220,6 @@ func (dtm *Manager) GetBulk(pks []cipher.PubKey) []DmsgClientSummary {
 	dtm.mx.Lock()
 	defer dtm.mx.Unlock()
 
-	out := make([]DmsgClientSummary, 0, len(pks))
-
-	for _, pk := range pks {
-		dt, ok := dtm.dts[pk]
-		if ok {
-			out = append(out, dt.sum)
-		}
-	}
-
-	sort.Slice(out, func(i, j int) bool {
-		outI := out[i].PK.Big()
-		outJ := out[j].PK.Big()
-		return outI.Cmp(outJ) < 0
-	})
-
-	return out
-}
-
-// MustGetBulk obtains bulk dmsg client summaries.
-// If they are not found internally, new tracker streams are to be established, returning error on failure.
-func (dtm *Manager) MustGetBulk(pks []cipher.PubKey) []DmsgClientSummary {
-	dtm.mx.Lock()
-	defer dtm.mx.Unlock()
-
 	var err error
 	out := make([]DmsgClientSummary, 0, len(pks))
 
