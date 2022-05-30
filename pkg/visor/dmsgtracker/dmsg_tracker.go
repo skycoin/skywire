@@ -80,6 +80,9 @@ func (dt *DmsgTracker) Update(ctx context.Context) error {
 
 // Manager tracks round trip durations for dmsg client connections.
 type Manager struct {
+	ready     chan struct{}
+	readyOnce sync.Once
+
 	updateInterval time.Duration
 	updateTimeout  time.Duration
 
@@ -103,6 +106,7 @@ func NewDmsgTrackerManager(mLog *logging.MasterLogger, dc *dmsg.Client, updateIn
 	}
 
 	dtm := &Manager{
+		ready:          make(chan struct{}),
 		updateInterval: updateInterval,
 		updateTimeout:  updateTimeout,
 		log:            log,
@@ -129,21 +133,25 @@ func (dtm *Manager) serve() {
 	t := time.NewTicker(dtm.updateInterval)
 	defer t.Stop()
 
+	// dCtx, dCancel := context.WithDeadline(ctx, time.Now().Add(dtm.updateTimeout))
+	// defer dCancel()
+	// dtm.updateAllTrackers(dCtx, dtm.dm)
 	for {
 		select {
 		case <-dtm.done:
 			return
 		case <-t.C:
-			ctx, cancel := context.WithDeadline(ctx, time.Now().Add(dtm.updateTimeout))
-			dtm.mx.Lock()
-			dtm.updateAllTrackers(ctx, dtm.dm)
-			dtm.mx.Unlock()
-			cancel()
+			dCtx, dCancel := context.WithDeadline(ctx, time.Now().Add(dtm.updateTimeout))
+			defer dCancel()
+			dtm.updateAllTrackers(dCtx, dtm.dm)
 		}
 	}
 }
 
 func (dtm *Manager) updateAllTrackers(ctx context.Context, dts map[cipher.PubKey]*DmsgTracker) {
+	dtm.mx.Lock()
+	defer dtm.mx.Unlock()
+
 	log := dtm.log.WithField("func", funcName())
 
 	type errReport struct {
@@ -172,6 +180,10 @@ func (dtm *Manager) updateAllTrackers(ctx context.Context, dts map[cipher.PubKey
 			delete(dts, r.pk)
 		}
 	}
+
+	// Manager is 'ready' once we have successfully updated the tracker
+	// with at least one client.
+	dtm.readyOnce.Do(func() { close(dtm.ready) })
 }
 
 // MustGet obtains a DmsgClientSummary of the client of given pk.
@@ -243,6 +255,11 @@ func (dtm *Manager) GetBulk(pks []cipher.PubKey) []DmsgClientSummary {
 	})
 
 	return out
+}
+
+// Ready returns a chan which blocks until the manager has at least one client tracker.
+func (dtm *Manager) Ready() <-chan struct{} {
+	return dtm.ready
 }
 
 func (dtm *Manager) get(pk cipher.PubKey) (DmsgClientSummary, bool) {
