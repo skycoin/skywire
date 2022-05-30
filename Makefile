@@ -25,7 +25,7 @@ else
 endif
 
 ifeq ($(OS),Windows_NT)
-    SYSTRAY_CGO_ENABLED := 0
+    SYSTRAY_CGO_ENABLED := 1
 else
     UNAME_S := $(shell uname -s)
     ifeq ($(UNAME_S),Linux)
@@ -182,8 +182,8 @@ dep: tidy ## Sorts dependencies
 snapshot:
 	goreleaser --snapshot --skip-publish --rm-dist
 
-snapshot-static:
-	goreleaser --snapshot --config .goreleaser-static.yml --skip-publish --rm-dist
+snapshot-linux:
+	goreleaser --snapshot --config .goreleaser-linux.yml --skip-publish --rm-dist
 
 snapshot-clean: ## Cleans snapshot / release
 	rm -rf ./dist
@@ -254,21 +254,31 @@ build-deploy: ## Build for deployment Docker images
 github-release:
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags | cut -c 2-6))
 	sed '/^## ${GITHUB_TAG}$$/,/^## .*/!d;//d;/^$$/d' ./CHANGELOG.md > releaseChangelog.md
-	goreleaser --rm-dist --release-notes releaseChangelog.md
+	goreleaser --rm-dist --config .goreleaser-linux.yml --release-notes releaseChangelog.md
 
-github-release-static:
-	goreleaser --rm-dist --config .goreleaser-static.yml --skip-publish
+github-release-non-linux:
+	goreleaser --rm-dist --skip-publish
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags))
 	$(eval $(shell echo ${GITHUB_TOKEN} > ../token))
 	$(eval export GITHUB_TOKEN=)
 	gh auth login --with-token < ../token
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-linux-amd64.tar.gz
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-linux-arm64.tar.gz
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-linux-arm.tar.gz
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-linux-armhf.tar.gz
+	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-systray-${GITHUB_TAG}-darwin-amd64.tar.gz
+	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-systray-${GITHUB_TAG}-darwin-arm64.tar.gz
+	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-systray-${GITHUB_TAG}-windows-amd64.zip
+	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-systray-${GITHUB_TAG}-windows-386.zip
 	gh release download ${GITHUB_TAG} --repo skycoin/skywire --pattern 'checksums*'
 	cat ./dist/checksums.txt >> ./checksums.txt
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} --clobber ./checksums.txt
+
+dep-github-release:
+	wget -c https://more.musl.cc/10/x86_64-linux-musl/aarch64-linux-musl-cross.tgz -O ../aarch64-linux-musl-cross.tgz
+	tar -xzf ../aarch64-linux-musl-cross.tgz -C ../
+	wget -c https://more.musl.cc/10/x86_64-linux-musl/arm-linux-musleabi-cross.tgz -O ../arm-linux-musleabi-cross.tgz
+	tar -xzf ../arm-linux-musleabi-cross.tgz -C ../
+	wget -c https://more.musl.cc/10/x86_64-linux-musl/arm-linux-musleabihf-cross.tgz -O ../arm-linux-musleabihf-cross.tgz
+	tar -xzf ../arm-linux-musleabihf-cross.tgz -C ../
+	wget -c https://more.musl.cc/10/x86_64-linux-musl/x86_64-linux-musl-cross.tgz -O ../x86_64-linux-musl-cross.tgz
+	tar -xzf ../x86_64-linux-musl-cross.tgz -C ../
 
 build-docker: ## Build docker image
 	./ci_scripts/docker-push.sh -t latest -b
