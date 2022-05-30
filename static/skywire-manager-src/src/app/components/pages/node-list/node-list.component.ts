@@ -54,6 +54,8 @@ export class NodeListComponent implements OnInit, OnDestroy {
   tabsData: TabButtonData[] = [];
   options: MenuOptionData[] = [];
   showDmsgInfo = false;
+  canLogOut = true;
+  hasUpdatableNodes = false;
 
   // Vars for the pagination functionality.
   allNodes: Node[];
@@ -138,13 +140,12 @@ export class NodeListComponent implements OnInit, OnDestroy {
     route: ActivatedRoute,
   ) {
     // Configure the options menu shown in the top bar.
-    this.updateOptionsMenu(true);
+    this.updateOptionsMenu();
 
     // Check if logout button must be removed.
     this.authVerificationSubscription = this.authService.checkLogin().subscribe(response => {
-      if (response === AuthStates.AuthDisabled) {
-        this.updateOptionsMenu(false);
-      }
+      this.canLogOut = response !== AuthStates.AuthDisabled;
+      this.updateOptionsMenu();
     });
 
     // Show the dmsg info if the dmsg url was used.
@@ -233,18 +234,19 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
   /**
    * Configures the options menu shown in the top bar.
-   * @param showLogoutOption If the logout option must be included.
    */
-  private updateOptionsMenu(showLogoutOption: boolean) {
-    this.options = [
-      {
+  private updateOptionsMenu() {
+    this.options = [];
+
+    if (this.hasUpdatableNodes) {
+      this.options.push({
         name: 'nodes.update-all',
         actionName: 'updateAll',
         icon: 'get_app'
-      }
-    ];
+      });
+    }
 
-    if (showLogoutOption) {
+    if (this.canLogOut) {
       this.options.push({
         name: 'common.logout',
         actionName: 'logout',
@@ -366,6 +368,15 @@ export class NodeListComponent implements OnInit, OnDestroy {
             // If the data was obtained.
             if (result.data && !result.error) {
               this.allNodes = result.data as Node[];
+
+              this.hasUpdatableNodes = false;
+              this.allNodes.forEach(node => {
+                if (GeneralUtils.checkIfTagIsUpdatable(node.buildTag)) {
+                  this.hasUpdatableNodes = true;
+                }
+              });
+              this.updateOptionsMenu();
+
               if (this.showDmsgInfo) {
                 // Add the label data to the array, to be able to use it for filtering and sorting.
                 this.allNodes.forEach(node => {
@@ -461,7 +472,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
     const nodesData: NodeData[] = [];
     this.dataSource.forEach(node => {
-      if (node.online) {
+      if (node.online && GeneralUtils.checkIfTagIsUpdatable(node.buildTag)) {
         nodesData.push({
           key: node.localPk,
           label: node.label,
