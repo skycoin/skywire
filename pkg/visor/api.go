@@ -220,7 +220,7 @@ func (v *Visor) Summary() (*Summary, error) {
 	}
 
 	dmsgStatValue := &dmsgtracker.DmsgClientSummary{}
-	if v.trackers != nil {
+	if v.isTrackersReady() {
 		ctx := context.TODO()
 		dmsgTracker, _ := v.trackers.MustGet(ctx, v.conf.PK) //nolint
 		dmsgStatValue = &dmsgTracker

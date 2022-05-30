@@ -110,7 +110,7 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 		return err
 	}
 
-	if hv.visor.trackers != nil {
+	if hv.visor.isTrackersReady() {
 		// Track hypervisor node.
 		if _, err := hv.visor.trackers.MustGet(ctx, hv.visor.conf.PK); err != nil {
 			hv.logger.WithField("addr", hv.c.DmsgDiscovery).WithError(err).Warn("Failed to dial tracker stream.")
@@ -137,7 +137,7 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 			API:   NewRPCClient(log, conn, RPCPrefix, skyenv.RPCTimeout),
 			PtyUI: setupDmsgPtyUI(hv.dmsgC, addr.PK),
 		}
-		if hv.visor.trackers != nil {
+		if hv.visor.isTrackersReady() {
 			if _, err := hv.visor.trackers.MustGet(ctx, addr.PK); err != nil {
 				log.WithField("addr", hv.c.DmsgDiscovery).WithError(err).Warn("Failed to dial tracker stream.")
 			}
@@ -330,7 +330,7 @@ func (hv *Hypervisor) getDmsgSummary() []dmsgtracker.DmsgClientSummary {
 	for pk := range hv.visors {
 		pks = append(pks, pk)
 	}
-	if hv.visor.trackers != nil {
+	if hv.visor.isTrackersReady() {
 		return hv.visor.trackers.GetBulk(pks)
 	}
 	return []dmsgtracker.DmsgClientSummary{}
