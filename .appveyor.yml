@@ -17,10 +17,10 @@ environment:
 
   # For release, by pushing tag
   - job_name: make-release
-    appveyor_build_worker_image: macos-bigsur
-    GOARCH: amd64
-  - job_name: make-release-static
     appveyor_build_worker_image: ubuntu2004
+    GOARCH: amd64
+  - job_name: make-release-non-linux
+    appveyor_build_worker_image: macos-bigsur
     GOARCH: amd64
 
   - job_name: DockerDeployMaster
@@ -88,36 +88,29 @@ for:
       - make build-windows-appveyor
       - make build-systray-windows-appveyor
 
-  - # Release
+
+  - # Release (Linux)
     skip_non_tags: true
     matrix:
       only:
         - job_name: make-release
-    branches:
-      only:
-        - develop
-        - master
-    install:
-      - brew install goreleaser
-    build_script:
-      - make github-release
-
-  - # Release (Static)
-    skip_non_tags: true
-    matrix:
-      only:
-        - job_name: make-release-static
-    branches:
-      only:
-        - develop
-        - master
     install:
       - sudo apt update
       - sudo snap install goreleaser --classic
-      - sudo apt install -y crossbuild-essential-armel crossbuild-essential-armhf crossbuild-essential-arm64 gcc make musl musl-dev musl-tools
-      - sudo snap install gh
+      - make dep-github-release
     build_script:
-      - make github-release-static
+      - make github-release
+
+  - # Release (Darwin / Windows)
+    skip_non_tags: true
+    matrix:
+      only:
+        - job_name: make-release-non-linux
+    install:
+      - brew install goreleaser
+      - brew install gh
+    build_script:
+      - make github-release-non-linux
     
   - # Docker Deploy (Master)
     skip_tags: true
