@@ -283,7 +283,6 @@ func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 	sc := network.GetStunDetails(v.conf.StunServers, log)
 	v.initLock.Lock()
 	v.stunClient = sc
-	time.Sleep(time.Second * 5)
 	v.initLock.Unlock()
 	v.stunReadyOnce.Do(func() { close(v.stunReady) })
 	return nil
