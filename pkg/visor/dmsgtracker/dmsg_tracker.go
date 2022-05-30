@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsgctrl"
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -82,9 +81,9 @@ type Manager struct {
 	updateInterval time.Duration
 	updateTimeout  time.Duration
 
-	log logrus.FieldLogger
+	log *logging.Logger
 	dc  *dmsg.Client
-	dm  map[cipher.PubKey]*DmsgTracker
+	dts map[cipher.PubKey]*DmsgTracker
 	mx  sync.Mutex
 
 	done     chan struct{}
@@ -106,7 +105,7 @@ func NewDmsgTrackerManager(mLog *logging.MasterLogger, dc *dmsg.Client, updateIn
 		updateTimeout:  updateTimeout,
 		log:            log,
 		dc:             dc,
-		dm:             make(map[cipher.PubKey]*DmsgTracker),
+		dts:            make(map[cipher.PubKey]*DmsgTracker),
 		done:           make(chan struct{}),
 	}
 
@@ -128,42 +127,39 @@ func (dtm *Manager) serve() {
 	t := time.NewTicker(dtm.updateInterval)
 	defer t.Stop()
 
-	// dCtx, dCancel := context.WithDeadline(ctx, time.Now().Add(dtm.updateTimeout))
-	// defer dCancel()
-	// dtm.updateAllTrackers(dCtx, dtm.dm)
 	for {
 		select {
 		case <-dtm.done:
 			return
 		case <-t.C:
-			dCtx, dCancel := context.WithDeadline(ctx, time.Now().Add(dtm.updateTimeout))
-			defer dCancel()
-			dtm.updateAllTrackers(dCtx, dtm.dm)
+			dtm.updateAllTrackers(ctx)
 		}
 	}
 }
 
-func (dtm *Manager) updateAllTrackers(ctx context.Context, dts map[cipher.PubKey]*DmsgTracker) {
+func (dtm *Manager) updateAllTrackers(ctx context.Context) {
 	dtm.mx.Lock()
 	defer dtm.mx.Unlock()
 
-	log := dtm.log.WithField("func", "dtm.Close")
+	cancelCtx, cancel := context.WithDeadline(ctx, time.Now().Add(dtm.updateTimeout))
+	defer cancel()
+
+	log := dtm.log.WithField("func", "dtm.updateAllTrackers")
 
 	type errReport struct {
 		pk  cipher.PubKey
 		err error
 	}
 
-	dtsLen := len(dts)
+	dtsLen := len(dtm.dts)
 	errCh := make(chan errReport, dtsLen)
 	defer close(errCh)
 
-	for _, te := range dts {
-		te := te
-
+	for _, dt := range dtm.dts {
+		dt := dt
 		go func() {
-			err := te.Update(ctx)
-			errCh <- errReport{pk: te.sum.PK, err: err}
+			err := dt.Update(cancelCtx)
+			errCh <- errReport{pk: dt.sum.PK, err: err}
 		}()
 	}
 
@@ -172,7 +168,7 @@ func (dtm *Manager) updateAllTrackers(ctx context.Context, dts map[cipher.PubKey
 			log.WithError(r.err).
 				WithField("client_pk", r.pk).
 				Warn("Removing dmsg client tracker.")
-			delete(dts, r.pk)
+			delete(dtm.dts, r.pk)
 		}
 	}
 }
@@ -187,7 +183,7 @@ func (dtm *Manager) MustGet(ctx context.Context, pk cipher.PubKey) (DmsgClientSu
 		return DmsgClientSummary{}, io.ErrClosedPipe
 	}
 
-	if e, ok := dtm.dm[pk]; ok && !isDone(e.ctrl.Done()) {
+	if e, ok := dtm.dts[pk]; ok && !isDone(e.ctrl.Done()) {
 		return e.sum, nil
 	}
 
@@ -196,7 +192,7 @@ func (dtm *Manager) MustGet(ctx context.Context, pk cipher.PubKey) (DmsgClientSu
 		return DmsgClientSummary{}, err
 	}
 
-	dtm.dm[pk] = dt
+	dtm.dts[pk] = dt
 	return dt.sum, nil
 }
 
@@ -224,11 +220,35 @@ func (dtm *Manager) GetBulk(pks []cipher.PubKey) []DmsgClientSummary {
 	dtm.mx.Lock()
 	defer dtm.mx.Unlock()
 
+	out := make([]DmsgClientSummary, 0, len(pks))
+
+	for _, pk := range pks {
+		dt, ok := dtm.dts[pk]
+		if ok {
+			out = append(out, dt.sum)
+		}
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		outI := out[i].PK.Big()
+		outJ := out[j].PK.Big()
+		return outI.Cmp(outJ) < 0
+	})
+
+	return out
+}
+
+// MustGetBulk obtains bulk dmsg client summaries.
+// If they are not found internally, new tracker streams are to be established, returning error on failure.
+func (dtm *Manager) MustGetBulk(pks []cipher.PubKey) []DmsgClientSummary {
+	dtm.mx.Lock()
+	defer dtm.mx.Unlock()
+
 	var err error
 	out := make([]DmsgClientSummary, 0, len(pks))
 
 	for _, pk := range pks {
-		dt, ok := dtm.dm[pk]
+		dt, ok := dtm.dts[pk]
 		if !ok {
 			dt, err = dtm.mustEstablishTracker(pk)
 			if err != nil {
@@ -249,7 +269,7 @@ func (dtm *Manager) GetBulk(pks []cipher.PubKey) []DmsgClientSummary {
 }
 
 func (dtm *Manager) get(pk cipher.PubKey) (DmsgClientSummary, bool) {
-	dt, ok := dtm.dm[pk]
+	dt, ok := dtm.dts[pk]
 	if !ok {
 		return DmsgClientSummary{}, false
 	}
@@ -270,7 +290,7 @@ func (dtm *Manager) Close() error {
 		closed = true
 		close(dtm.done)
 
-		for pk, dt := range dtm.dm {
+		for pk, dt := range dtm.dts {
 			if err := dt.ctrl.Close(); err != nil {
 				log.WithError(err).
 					WithField("client_pk", pk).

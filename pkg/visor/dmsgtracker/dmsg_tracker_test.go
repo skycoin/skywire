@@ -109,14 +109,14 @@ func TestDmsgTrackerManager_MustGet(t *testing.T) {
 				// act
 				sum, err := tm.MustGet(ctx, pk)
 				require.NoError(t, err)
-				tm.updateAllTrackers(ctx, tm.dm)
+				tm.updateAllTrackers(ctx)
 
 				// assert
 				assert.Equal(t, pk, sum.PK)
 
 				if !(runtime.GOOS == "windows") {
 					// TODO: fix non-deterministic windows roundtrip failure
-					assert.NotZero(t, tm.dm[pk].sum.RoundTrip)
+					assert.NotZero(t, tm.dts[pk].sum.RoundTrip)
 				}
 			})
 
@@ -128,7 +128,7 @@ func TestDmsgTrackerManager_MustGet(t *testing.T) {
 
 				// act
 				assert.NoError(t, c.Close())
-				tm.updateAllTrackers(ctx, tm.dm)
+				tm.updateAllTrackers(ctx)
 
 				// assert
 				_, ok = tm.Get(pk)
