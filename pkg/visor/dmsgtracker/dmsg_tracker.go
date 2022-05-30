@@ -80,8 +80,8 @@ func (dt *DmsgTracker) Update(ctx context.Context) error {
 
 // Manager tracks round trip durations for dmsg client connections.
 type Manager struct {
-	ready     chan struct{}
-	readyOnce sync.Once
+	// ready     chan struct{}
+	// readyOnce sync.Once
 
 	updateInterval time.Duration
 	updateTimeout  time.Duration
@@ -106,7 +106,7 @@ func NewDmsgTrackerManager(mLog *logging.MasterLogger, dc *dmsg.Client, updateIn
 	}
 
 	dtm := &Manager{
-		ready:          make(chan struct{}),
+		// ready:          make(chan struct{}),
 		updateInterval: updateInterval,
 		updateTimeout:  updateTimeout,
 		log:            log,
@@ -181,9 +181,9 @@ func (dtm *Manager) updateAllTrackers(ctx context.Context, dts map[cipher.PubKey
 		}
 	}
 
-	// Manager is 'ready' once we have successfully updated the tracker
-	// with at least one client.
-	dtm.readyOnce.Do(func() { close(dtm.ready) })
+	// // Manager is 'ready' once we have successfully updated the tracker
+	// // with at least one client.
+	// dtm.readyOnce.Do(func() { close(dtm.ready) })
 }
 
 // MustGet obtains a DmsgClientSummary of the client of given pk.
@@ -257,10 +257,10 @@ func (dtm *Manager) GetBulk(pks []cipher.PubKey) []DmsgClientSummary {
 	return out
 }
 
-// Ready returns a chan which blocks until the manager has at least one client tracker.
-func (dtm *Manager) Ready() <-chan struct{} {
-	return dtm.ready
-}
+// // Ready returns a chan which blocks until the manager has at least one client tracker.
+// func (dtm *Manager) Ready() <-chan struct{} {
+// 	return dtm.ready
+// }
 
 func (dtm *Manager) get(pk cipher.PubKey) (DmsgClientSummary, bool) {
 	dt, ok := dtm.dm[pk]
