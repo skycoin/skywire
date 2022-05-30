@@ -3,7 +3,6 @@ package dmsgtracker
 import (
 	"context"
 	"io"
-	"runtime"
 	"sort"
 	"sync"
 	"time"
@@ -148,7 +147,7 @@ func (dtm *Manager) updateAllTrackers(ctx context.Context, dts map[cipher.PubKey
 	dtm.mx.Lock()
 	defer dtm.mx.Unlock()
 
-	log := dtm.log.WithField("func", funcName())
+	log := dtm.log.WithField("func", "dtm.Close")
 
 	type errReport struct {
 		pk  cipher.PubKey
@@ -260,7 +259,7 @@ func (dtm *Manager) get(pk cipher.PubKey) (DmsgClientSummary, bool) {
 
 // Close implements io.Closer
 func (dtm *Manager) Close() error {
-	log := dtm.log.WithField("func", funcName())
+	log := dtm.log.WithField("func", "dtm.Close")
 
 	dtm.mx.Lock()
 	defer dtm.mx.Unlock()
@@ -294,9 +293,4 @@ func isDone(done <-chan struct{}) bool {
 	default:
 		return false
 	}
-}
-
-func funcName() string {
-	pc, _, _, _ := runtime.Caller(1)
-	return runtime.FuncForPC(pc).Name()
 }
