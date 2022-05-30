@@ -94,6 +94,10 @@ for:
     matrix:
       only:
         - job_name: make-release
+    branches:
+      only:
+        - develop
+        - master
     install:
       - sudo apt update
       - sudo snap install goreleaser --classic
@@ -106,6 +110,10 @@ for:
     matrix:
       only:
         - job_name: make-release-non-linux
+    branches:
+      only:
+        - develop
+        - master
     install:
       - brew install goreleaser
       - brew install gh
