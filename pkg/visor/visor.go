@@ -62,13 +62,12 @@ type Visor struct {
 	updater       *updater.Updater
 	uptimeTracker utclient.APIClient
 
-	ebc           *appevent.Broadcaster // event broadcaster
-	dmsgC         *dmsg.Client
-	dmsgDC        *dmsg.Client       // dmsg direct client
-	dClient       dmsgdisc.APIClient // dmsg direct api client
-	dmsgHTTP      *http.Client       // dmsghttp client
-	trackers      *dmsgtracker.Manager
-	trackersReady bool
+	ebc      *appevent.Broadcaster // event broadcaster
+	dmsgC    *dmsg.Client
+	dmsgDC   *dmsg.Client       // dmsg direct client
+	dClient  dmsgdisc.APIClient // dmsg direct api client
+	dmsgHTTP *http.Client       // dmsghttp client
+	trackers *dmsgtracker.Manager
 
 	stunClient   *network.StunDetails
 	wgStunClient *sync.WaitGroup
@@ -119,7 +118,6 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Con
 		initLock:          new(sync.RWMutex),
 		isServicesHealthy: newInternalHealthInfo(),
 		wgStunClient:      new(sync.WaitGroup),
-		trackersReady:     false,
 	}
 	v.wgStunClient.Add(1)
 	v.isServicesHealthy.init()
@@ -174,12 +172,6 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Con
 	if !v.processRuntimeErrs() {
 		return nil, false
 	}
-	go func() {
-		v.initLock.RLock()
-		v.trackers = dmsgtracker.NewDmsgTrackerManager(v.MasterLogger(), v.dmsgC, 0, 0)
-		v.trackersReady = true
-		v.initLock.RUnlock()
-	}()
 	return v, true
 }
 
