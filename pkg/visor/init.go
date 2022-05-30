@@ -367,6 +367,7 @@ func initDmsgTrackers(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	v.initLock.Lock()
 	v.trackers = trackers
 	v.initLock.Unlock()
+	v.trackersReadyOnce.Do(func() { close(v.trackersReady) })
 	return nil
 }
 
