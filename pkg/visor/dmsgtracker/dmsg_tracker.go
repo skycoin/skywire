@@ -13,6 +13,7 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 // Default values for DmsgTrackerManager
@@ -187,13 +188,8 @@ func (dtm *Manager) MustGet(ctx context.Context, pk cipher.PubKey) (DmsgClientSu
 		return e.sum, nil
 	}
 
-	dt, err := dtm.mustEstablishTracker(pk)
-	if err != nil {
-		return DmsgClientSummary{}, err
-	}
-
-	dtm.dts[pk] = dt
-	return dt.sum, nil
+	dtm.mustEstablishTracker(pk)
+	return DmsgClientSummary{}, nil
 }
 
 // Get obtains a DmsgClientSummary of the client with given public key.
@@ -209,28 +205,54 @@ func (dtm *Manager) Get(pk cipher.PubKey) (DmsgClientSummary, bool) {
 }
 
 // mustEstablishTracker creates / re-creates tracker when dmsgTrackerMap entry got deleted, and reconnected.
-func (dtm *Manager) mustEstablishTracker(pk cipher.PubKey) (*DmsgTracker, error) {
+func (dtm *Manager) mustEstablishTracker(pk cipher.PubKey) {
+
+	log := dtm.log.WithField("func", "dtm.mustEstablishTracker")
+
+	type errReport struct {
+		pk  cipher.PubKey
+		err error
+	}
+
+	errCh := make(chan errReport)
+	defer close(errCh)
+
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(dtm.updateTimeout))
 	defer cancel()
-	return newDmsgTracker(ctx, dtm.dc, pk)
+	go func() {
+		dt, err := newDmsgTracker(ctx, dtm.dc, pk)
+		if err != nil {
+			errCh <- errReport{pk: pk, err: err}
+			return
+		}
+		dtm.mx.Lock()
+		dtm.dts[pk] = dt
+		dtm.mx.Unlock()
+	}()
+
+	t := time.NewTicker(dtm.updateTimeout)
+	defer t.Stop()
+
+	select {
+	case <-t.C:
+		log.WithError(network.ErrTimeout).WithField("client_pk", pk).Warn("Failed to re-create dmsgtracker client.")
+	case r := <-errCh:
+		if r.err != nil {
+			log.WithError(r.err).WithField("client_pk", r.pk).Warn("Failed to re-create dmsgtracker client.")
+		}
+	}
 }
 
 // GetBulk obtains bulk dmsg client summaries.
 func (dtm *Manager) GetBulk(pks []cipher.PubKey) []DmsgClientSummary {
-	dtm.mx.Lock()
-	defer dtm.mx.Unlock()
-
-	var err error
 	out := make([]DmsgClientSummary, 0, len(pks))
 
 	for _, pk := range pks {
+		dtm.mx.Lock()
 		dt, ok := dtm.dts[pk]
+		dtm.mx.Unlock()
 		if !ok {
-			dt, err = dtm.mustEstablishTracker(pk)
-			if err != nil {
-				dtm.log.WithError(err).Infoln("failed to re-create dmsgtracker client")
-				continue
-			}
+			dtm.mustEstablishTracker(pk)
 		}
 		out = append(out, dt.sum)
 	}
