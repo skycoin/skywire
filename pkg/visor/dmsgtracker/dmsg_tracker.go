@@ -13,7 +13,6 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 // Default values for DmsgTrackerManager
@@ -237,16 +236,15 @@ func (dtm *Manager) mustEstablishTracker(ctx context.Context, pk cipher.PubKey) 
 		close(doneCh)
 	}()
 
-	t := time.NewTicker(dtm.updateTimeout)
-	defer t.Stop()
-
 	select {
-	case <-t.C:
-		log.WithError(network.ErrTimeout).WithField("client_pk", pk).Warn("Failed to re-create dmsgtracker client.")
 	case r := <-errCh:
 		if r.err != nil {
 			log.WithError(r.err).WithField("client_pk", r.pk).Warn("Failed to re-create dmsgtracker client.")
 		}
+	case <-ctx.Done():
+		log.WithError(ctx.Err()).WithField("client_pk", pk).Warn("Failed to re-create dmsgtracker client.")
+	case <-doneCh:
+		log.WithField("client_pk", pk).Debug("Dmsgtracker client Established.")
 	}
 }
 
