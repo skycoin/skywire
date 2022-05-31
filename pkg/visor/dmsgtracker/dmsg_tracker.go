@@ -188,7 +188,7 @@ func (dtm *Manager) MustGet(ctx context.Context, pk cipher.PubKey) (DmsgClientSu
 		return e.sum, nil
 	}
 
-	dtm.mustEstablishTracker(pk)
+	go dtm.mustEstablishTracker(ctx, pk)
 	return DmsgClientSummary{}, nil
 }
 
@@ -205,7 +205,7 @@ func (dtm *Manager) Get(pk cipher.PubKey) (DmsgClientSummary, bool) {
 }
 
 // mustEstablishTracker creates / re-creates tracker when dmsgTrackerMap entry got deleted, and reconnected.
-func (dtm *Manager) mustEstablishTracker(pk cipher.PubKey) {
+func (dtm *Manager) mustEstablishTracker(ctx context.Context, pk cipher.PubKey) {
 
 	log := dtm.log.WithField("func", "dtm.mustEstablishTracker")
 
@@ -217,10 +217,10 @@ func (dtm *Manager) mustEstablishTracker(pk cipher.PubKey) {
 	errCh := make(chan errReport)
 	defer close(errCh)
 
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(dtm.updateTimeout))
+	dCtx, cancel := context.WithDeadline(ctx, time.Now().Add(dtm.updateTimeout))
 	defer cancel()
 	go func() {
-		dt, err := newDmsgTracker(ctx, dtm.dc, pk)
+		dt, err := newDmsgTracker(dCtx, dtm.dc, pk)
 		if err != nil {
 			errCh <- errReport{pk: pk, err: err}
 			return
@@ -244,17 +244,15 @@ func (dtm *Manager) mustEstablishTracker(pk cipher.PubKey) {
 }
 
 // GetBulk obtains bulk dmsg client summaries.
-func (dtm *Manager) GetBulk(pks []cipher.PubKey) []DmsgClientSummary {
-	out := make([]DmsgClientSummary, 0, len(pks))
+func (dtm *Manager) GetBulk(ctx context.Context, pks []cipher.PubKey) ([]DmsgClientSummary, error) {
+	out := make([]DmsgClientSummary, 0)
 
 	for _, pk := range pks {
-		dtm.mx.Lock()
-		dt, ok := dtm.dts[pk]
-		dtm.mx.Unlock()
-		if !ok {
-			dtm.mustEstablishTracker(pk)
+		ds, err := dtm.MustGet(ctx, pk)
+		if err != nil {
+			return out, err
 		}
-		out = append(out, dt.sum)
+		out = append(out, ds)
 	}
 
 	sort.Slice(out, func(i, j int) bool {
@@ -263,7 +261,7 @@ func (dtm *Manager) GetBulk(pks []cipher.PubKey) []DmsgClientSummary {
 		return outI.Cmp(outJ) < 0
 	})
 
-	return out
+	return out, nil
 }
 
 func (dtm *Manager) get(pk cipher.PubKey) (DmsgClientSummary, bool) {
