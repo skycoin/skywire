@@ -71,12 +71,14 @@ type Visor struct {
 	dtmReady     chan struct{}
 	dtmReadyOnce sync.Once
 
-	stunClient   *network.StunDetails
-	wgStunClient *sync.WaitGroup
-	tpM          *transport.Manager
-	arClient     addrresolver.APIClient
-	router       router.Router
-	rfClient     rfclient.Client
+	stunClient    *network.StunDetails
+	stunReady     chan struct{}
+	stunReadyOnce sync.Once
+
+	tpM      *transport.Manager
+	arClient addrresolver.APIClient
+	router   router.Router
+	rfClient rfclient.Client
 
 	procM       appserver.ProcManager // proc manager
 	appL        *launcher.Launcher    // app launcher
@@ -119,10 +121,9 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Con
 		restartCtx:        restartCtx,
 		initLock:          new(sync.RWMutex),
 		isServicesHealthy: newInternalHealthInfo(),
-		wgStunClient:      new(sync.WaitGroup),
 		dtmReady:          make(chan struct{}),
+		stunReady:         make(chan struct{}),
 	}
-	v.wgStunClient.Add(1)
 	v.isServicesHealthy.init()
 
 	if logLvl, err := logging.LevelFromString(conf.LogLevel); err != nil {
@@ -188,6 +189,15 @@ func (v *Visor) processRuntimeErrs() bool {
 		default:
 			return ok
 		}
+	}
+}
+
+func (v *Visor) isStunReady() bool {
+	select {
+	case <-v.stunReady:
+		return true
+	default:
+		return false
 	}
 }
 

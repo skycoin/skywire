@@ -283,12 +283,12 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error {
-	defer v.wgStunClient.Done()
 
 	sc := network.GetStunDetails(v.conf.StunServers, log)
 	v.initLock.Lock()
 	v.stunClient = sc
 	v.initLock.Unlock()
+	v.stunReadyOnce.Do(func() { close(v.stunReady) })
 	return nil
 }
 
@@ -535,7 +535,7 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 				ntype := network.Type(trans)
 
 				// Wait until stun client is ready
-				v.wgStunClient.Wait()
+				<-v.stunReady
 
 				// skip if SUDPH is under symmetric NAT / under UDP firewall.
 				if ntype == network.SUDPH && (v.stunClient.NATType == stun.NATSymmetric ||
@@ -1175,7 +1175,7 @@ func getPublicIP(v *Visor, service string) (pIP string, err error) {
 	}
 
 	// Wait until stun client is ready
-	v.wgStunClient.Wait()
+	<-v.stunReady
 
 	pIP = v.stunClient.PublicIP.IP()
 	return pIP, nil
