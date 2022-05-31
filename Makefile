@@ -24,6 +24,18 @@ else
 	.DEFAULT_GOAL := help
 endif
 
+ifeq ($(OS),Windows_NT)
+    SYSTRAY_CGO_ENABLED := 1
+else
+    UNAME_S := $(shell uname -s)
+    ifeq ($(UNAME_S),Linux)
+        SYSTRAY_CGO_ENABLED := 0
+    endif
+    ifeq ($(UNAME_S),Darwin)
+        SYSTRAY_CGO_ENABLED := 1
+    endif
+endif
+
 STATIC_OPTS?= $(OPTS) CC=musl-gcc
 MANAGER_UI_DIR = static/skywire-manager-src
 GO_BUILDER_VERSION=v1.17
@@ -72,11 +84,11 @@ build-windows: host-apps-windows bin-windows ## Install dependencies, build apps
 
 build-windows-appveyor: host-apps-windows-appveyor bin-windows-appveyor ## Install dependencies, build apps and binaries. `go build` with ${OPTS} for AppVeyor image
 
-build-systray: host-apps-systray bin-systray ## Install dependencies, build apps and binaries `go build` with ${OPTS}, with CGO and systray
+build-systray: host-apps bin-systray ## Install dependencies, build apps and binaries `go build` with ${OPTS}, with CGO and systray
 
-build-systray-windows: host-apps-systray-windows bin-systray-windows ## Builds systray binary in windows
+build-systray-windows: host-apps-windows bin-systray-windows ## Builds systray binary in windows
 
-build-systray-windows-appveyor: host-apps-systray-windows-appveyor bin-systray-windows-appveyor ## Builds systray binary in windows for AppVeyor image
+build-systray-windows-appveyor: host-apps-windows-appveyor bin-systray-windows-appveyor ## Builds systray binary in windows for AppVeyor image
 
 build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
@@ -170,6 +182,9 @@ dep: tidy ## Sorts dependencies
 snapshot:
 	goreleaser --snapshot --skip-publish --rm-dist
 
+snapshot-linux:
+	goreleaser --snapshot --config .goreleaser-linux.yml --skip-publish --rm-dist
+
 snapshot-clean: ## Cleans snapshot / release
 	rm -rf ./dist
 
@@ -189,21 +204,6 @@ host-apps-windows:
 host-apps-windows-appveyor:
 	powershell -Command new-item .\apps -itemtype directory -force
 	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build -o ./apps $$_.FullName }'
-
-host-apps-systray: ## Build app
-	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skychat
-	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skysocks
-	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -o ./apps/  ./cmd/apps/skysocks-client
-	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps/ ./cmd/apps/vpn-server
-	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps/ ./cmd/apps/vpn-client
-
-host-apps-systray-windows:
-	powershell -Command new-item .\apps -itemtype directory -force
-	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps $$_.FullName }'
-
-host-apps-systray-windows-appveyor:
-	powershell -Command new-item .\apps -itemtype directory -force
-	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build -tags systray -o ./apps $$_.FullName }'
 
 # Static Apps
 host-apps-static: ## Build app
@@ -234,9 +234,9 @@ bin-systray-windows-appveyor: ## Build `skywire-visor` and `skywire-cli` with sy
 	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go build -tags systray -o ./ $$_.FullName }'
 
 bin-systray: ## Build `skywire-visor`, `skywire-cli`
-	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ ./cmd/skywire-visor
-	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ ./cmd/skywire-cli
-	CGO_ENABLED=0 ${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/setup-node
+	CGO_ENABLED=${SYSTRAY_CGO_ENABLED} ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ ./cmd/skywire-visor
+	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/skywire-cli
+	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/setup-node
 
 # Static Bin
 bin-static: ## Build `skywire-visor`, `skywire-cli`
@@ -254,8 +254,31 @@ build-deploy: ## Build for deployment Docker images
 github-release:
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags | cut -c 2-6))
 	sed '/^## ${GITHUB_TAG}$$/,/^## .*/!d;//d;/^$$/d' ./CHANGELOG.md > releaseChangelog.md
-	goreleaser --rm-dist --release-notes releaseChangelog.md
+	goreleaser --rm-dist --config .goreleaser-linux.yml --release-notes releaseChangelog.md
 
+github-release-non-linux:
+	goreleaser --rm-dist --skip-publish
+	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags))
+	$(eval $(shell echo ${GITHUB_TOKEN} > ../token))
+	$(eval export GITHUB_TOKEN=)
+	gh auth login --with-token < ../token
+	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-systray-${GITHUB_TAG}-darwin-amd64.tar.gz
+	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-systray-${GITHUB_TAG}-darwin-arm64.tar.gz
+	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-systray-${GITHUB_TAG}-windows-amd64.zip
+	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-systray-${GITHUB_TAG}-windows-386.zip
+	gh release download ${GITHUB_TAG} --repo skycoin/skywire --pattern 'checksums*'
+	cat ./dist/checksums.txt >> ./checksums.txt
+	gh release upload --repo skycoin/skywire ${GITHUB_TAG} --clobber ./checksums.txt
+
+dep-github-release:
+	wget -c https://more.musl.cc/10/x86_64-linux-musl/aarch64-linux-musl-cross.tgz -O ../aarch64-linux-musl-cross.tgz
+	tar -xzf ../aarch64-linux-musl-cross.tgz -C ../
+	wget -c https://more.musl.cc/10/x86_64-linux-musl/arm-linux-musleabi-cross.tgz -O ../arm-linux-musleabi-cross.tgz
+	tar -xzf ../arm-linux-musleabi-cross.tgz -C ../
+	wget -c https://more.musl.cc/10/x86_64-linux-musl/arm-linux-musleabihf-cross.tgz -O ../arm-linux-musleabihf-cross.tgz
+	tar -xzf ../arm-linux-musleabihf-cross.tgz -C ../
+	wget -c https://more.musl.cc/10/x86_64-linux-musl/x86_64-linux-musl-cross.tgz -O ../x86_64-linux-musl-cross.tgz
+	tar -xzf ../x86_64-linux-musl-cross.tgz -C ../
 
 build-docker: ## Build docker image
 	./ci_scripts/docker-push.sh -t latest -b
