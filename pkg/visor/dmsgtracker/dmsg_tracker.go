@@ -206,7 +206,6 @@ func (dtm *Manager) Get(pk cipher.PubKey) (DmsgClientSummary, bool) {
 
 // mustEstablishTracker creates / re-creates tracker when dmsgTrackerMap entry got deleted, and reconnected.
 func (dtm *Manager) mustEstablishTracker(ctx context.Context, pk cipher.PubKey) {
-
 	log := dtm.log.WithField("func", "dtm.mustEstablishTracker")
 
 	type errReport struct {
@@ -216,18 +215,26 @@ func (dtm *Manager) mustEstablishTracker(ctx context.Context, pk cipher.PubKey) 
 
 	errCh := make(chan errReport)
 	defer close(errCh)
+	doneCh := make(chan struct{})
 
 	dCtx, cancel := context.WithDeadline(ctx, time.Now().Add(dtm.updateTimeout))
 	defer cancel()
 	go func() {
 		dt, err := newDmsgTracker(dCtx, dtm.dc, pk)
 		if err != nil {
-			errCh <- errReport{pk: pk, err: err}
-			return
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				errCh <- errReport{pk: pk, err: err}
+			}
 		}
 		dtm.mx.Lock()
-		dtm.dts[pk] = dt
+		if dt != nil {
+			dtm.dts[pk] = dt
+		}
 		dtm.mx.Unlock()
+		close(doneCh)
 	}()
 
 	t := time.NewTicker(dtm.updateTimeout)
