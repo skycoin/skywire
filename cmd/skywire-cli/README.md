@@ -138,7 +138,7 @@ Flags:
   -n, --stdout               write config to stdout
   -o, --out string           output config: skywire-config.json
   -p, --pkg                  use path for package: /opt/skywire
-  -u, --user                 use paths for user space: /home/d0mo
+  -u, --user                 use paths for user space: /home/user
   -q, --publicrpc            allow rpc requests from LAN
   -r, --regen                re-generate existing config & retain keys
   -s, --sk cipher.SecKey     a random key is generated if unspecified
@@ -765,8 +765,8 @@ skywire-cli config update
 
 ```
 $ skywire-cli config update
-[2022-05-26T17:58:16-05:00] INFO [visor:config]: Flushing config to file. config_version="v1.0.0" filepath="/home/user/go/src/github.com/the-skycoin-project/skywire/skywire-config.json"
-[2022-05-26T17:58:16-05:00] INFO [skywire-cli]: Updated file '/home/d0mo/go/src/github.com/the-skycoin-project/skywire/skywire-config.json' to: {
+[2022-05-26T17:58:16-05:00] INFO [visor:config]: Flushing config to file. config_version="v1.0.0" filepath="/home/user/go/src/github.com/skycoin/skywire/skywire-config.json"
+[2022-05-26T17:58:16-05:00] INFO [skywire-cli]: Updated file '/home/user/go/src/github.com/skycoin/skywire/skywire-config.json' to: {
 	"version": "v1.0.0",
 	"sk": "754ee10a20f8bc824c8c2ac9c6b26ab10112e0a339681bc759ccf87d714195a0",
 	"pk": "02bc601c45633f98da260946936b409ee098609f1192ff2b88986308f100edb721",
