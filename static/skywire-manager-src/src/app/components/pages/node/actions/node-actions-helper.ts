@@ -29,6 +29,8 @@ export class NodeActionsHelper {
   private canBeUpdated = false;
   private canBeRestarted = false;
 
+  options: MenuOptionData[] = [];
+
   returnButtonText: string;
 
   private rebootSubscription: Subscription;
@@ -51,13 +53,15 @@ export class NodeActionsHelper {
 
     this.showingFullList = showingFullList;
     this.returnButtonText = !showingFullList ? 'nodes.title' : 'node.title';
+
+    this.updateOptions();
   }
 
   /**
    * Options for the menu shown in the top bar.
    */
-  get options(): MenuOptionData[] {
-    const response = [
+  private updateOptions() {
+    this.options = [
       {
         name: 'actions.menu.terminal',
         actionName: 'terminal',
@@ -71,7 +75,7 @@ export class NodeActionsHelper {
     ];
 
     if (this.canBeRestarted) {
-      response.push({
+      this.options.push({
         name: 'actions.menu.reboot',
         actionName: 'reboot',
         icon: 'rotate_right'
@@ -79,14 +83,12 @@ export class NodeActionsHelper {
     }
 
     if (this.canBeUpdated) {
-      response.push({
+      this.options.push({
         name: 'actions.menu.update',
         actionName: 'update',
         icon: 'get_app',
       });
     }
-
-    return response;
   }
 
   /**
@@ -102,6 +104,8 @@ export class NodeActionsHelper {
       this.canBeUpdated = false;
       this.canBeRestarted = false;
     }
+
+    this.updateOptions();
   }
 
   /**
