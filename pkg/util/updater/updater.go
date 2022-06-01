@@ -6,17 +6,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync/atomic"
 	"os/user"
-	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	"github.com/google/go-github/github"
+	"sync/atomic"
+
 	"github.com/bitfield/script"
+	"github.com/google/go-github/github"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/zcalusic/sysinfo"
 
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/restart"
 )
-
 
 const (
 	owner          = "skycoin"
@@ -111,7 +111,7 @@ func (u *Updater) Update(updateConfig UpdateConfig) (updated bool, err error) {
 		return false, errors.New("operating system not supported")
 	}
 
-	if (si.OS.Vendor == "debian") {
+	if si.OS.Vendor == "debian" {
 		u.status.Set("Checking for available package")
 		available, err := script.Exec(`apt-cache search skywire-bin`).String()
 		if err != nil {
@@ -140,7 +140,7 @@ func (u *Updater) Update(updateConfig UpdateConfig) (updated bool, err error) {
 		//this may not return before the process is restarted
 		return true, nil
 	}
-	if (si.OS.Vendor == "arch") {
+	if si.OS.Vendor == "arch" {
 		u.status.Set("not yet implemented")
 		u.log.Error("not yet implemented")
 		return false, errors.New("not yet implemented")
@@ -174,28 +174,6 @@ func (u *Updater) UpdateAvailable(channel Channel) (*Version, error) {
 
 	return latestVersion, nil
 }
-
-func (u *Updater) getVersion(updateConfig UpdateConfig) (string, error) {
-	version := updateConfig.Version
-	if version == "" {
-		latestVersion, err := u.UpdateAvailable(updateConfig.Channel)
-		if err != nil {
-			return "", fmt.Errorf("failed to get last Skywire version: %w", err)
-		}
-
-		// No update is available.
-		if latestVersion == nil {
-			return "", nil
-		}
-
-		version = latestVersion.String()
-	}
-
-	u.log.Infof("Update found, version: %q", version)
-
-	return version, nil
-}
-
 
 func needUpdate(last *Version) bool {
 	current, err := currentVersion()

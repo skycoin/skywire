@@ -50,6 +50,7 @@ require (
 	github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
 	github.com/skycoin/skywire-utilities v0.0.0-20220331141811-c29ff9ab891e
 	github.com/skycoin/systray v1.10.1-0.20220509091536-c90eecafd3fd
+	github.com/zcalusic/sysinfo v0.9.5
 )
 
 require (
