@@ -65,7 +65,7 @@ Flags:
     -q, --pprofmode string    pprof mode: cpu, mem, mutex, block, trace, http
     -r, --pprofaddr string    pprof http port (default "localhost:6060")
     -t, --tag string          logging tag (default "skywire")
-	-u, --user                use config at: $HOME/skywire-config.json
+    -u, --user                use config at: $HOME/skywire-config.json
     -y, --syslog string       syslog server address. E.g. localhost:514
     -z, --completion string   [ bash | zsh | fish | powershell ]
     -h, --help                help for skywire-visor
