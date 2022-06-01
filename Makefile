@@ -311,6 +311,10 @@ prepare-systray: prepare
 run-source: prepare
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -in | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
 
+run-source-sudo: prepare
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -in | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
+
+
 ## Run skywire from source, with vpn server enabled
 run-systray: prepare-systray
 	go run -tags systray ./cmd/skywire-cli/skywire-cli.go config gen -ni | go run -tags systray ./cmd/skywire-visor/skywire-visor.go -nb || true

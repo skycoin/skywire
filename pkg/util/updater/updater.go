@@ -6,15 +6,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 	"sync/atomic"
-
-	"github.com/google/go-github/github"
-	"github.com/skycoin/skycoin/src/util/logging"
-
+	"os/user"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/google/go-github/github"
+	"github.com/bitfield/script"
+	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/zcalusic/sysinfo"
+
 	"github.com/skycoin/skywire/pkg/restart"
 )
+
 
 const (
 	owner          = "skycoin"
@@ -86,60 +88,64 @@ const (
 // NOTE: Update may call os.Exit.
 func (u *Updater) Update(updateConfig UpdateConfig) (updated bool, err error) {
 	if !atomic.CompareAndSwapInt32(&u.updating, 0, 1) {
-		return false, ErrAlreadyStarted
+		return false, errors.New("updating already started")
 	}
 	defer atomic.StoreInt32(&u.updating, 0)
 
-	u.status.Set("Started, checking update")
-
-	version, err := u.getVersion(updateConfig)
+	current, err := user.Current()
 	if err != nil {
-		return false, err
+		u.status.Set("failed checking permissions")
+		u.log.Error("failed checking permissions")
+		return false, errors.New("failed checking permissions")
+	}
+	if current.Uid != "0" {
+		u.status.Set("insufficient permissions")
+		u.log.Error("insufficient permissions")
+		return false, errors.New("insufficient permissions")
 	}
 
-	// No update is available.
-	if version == "" {
-		return false, nil
+	var si sysinfo.SysInfo
+	si.GetSysInfo()
+	if (si.OS.Vendor != "debian") && (si.OS.Vendor != "arch") {
+		u.status.Set(fmt.Sprintf("updates not supported on this operating system: %s", si.OS.Vendor))
+		return false, errors.New("operating system not supported")
 	}
 
-	u.status.Set(fmt.Sprintf("Found version %q", version))
-
-	u.status.Set(fmt.Sprintf("Checking/Adding repo %s", "https://deb.skywire.skycoin.com/")) // add if not exist
-	if err := u.addRepo(); err != nil {
-		return false, err
-	}
-
-	u.status.Set("Update repositories")
-	if err := u.aptUpdate(); err != nil {
-		return false, err
-	}
-	u.log.Info("Updating repositories by 'apt update' compeleted.")
-
-	// uninstall current installed skywire if its version is equal or lower that 0.4.2
-	currentVersion, err := currentVersion()
-	if err != nil {
-		return false, err
-	}
-	if currentVersion.Minor == 4 && currentVersion.Patch <= 2 {
-		u.status.Set("Uninstall current skywire version") // if needed
-		if err := u.aptRemove(); err != nil {
+	if (si.OS.Vendor == "debian") {
+		u.status.Set("Checking for available package")
+		available, err := script.Exec(`apt-cache search skywire-bin`).String()
+		if err != nil {
 			return false, err
 		}
-		u.log.Info("Uninstalling old version compeleted.")
+		if (available == "") || (available == "\n") {
+			return false, errors.New("Repository not configured or skywire not available")
+		}
+		u.status.Set("syncing package database")
+		if _, err := script.Exec(`sudo apt update`).String(); err != nil {
+			u.log.Error("error syncing package database")
+			return false, err
+		}
+		u.log.Info("synced package database")
+		u.log.Info("installing skywire-bin")
+		if _, err := script.Exec(`sudo NOAUTOCONFIG=true apt install skywire-bin -y`).String(); err != nil {
+			u.log.Error("error installing skywire-bin")
+			return false, err
+		}
+		u.log.Info("installed skywire-bin")
+		u.log.Info("updating config and restarting visor")
+		if _, err := script.Exec(`DMSGPTYTERM=true skywire-autoconfig`).String(); err != nil {
+			u.log.Error("error running skywire-autoconfig")
+			return false, err
+		}
+		//this may not return before the process is restarted
+		return true, nil
 	}
-
-	u.status.Set(fmt.Sprintf("Installing Skywire %q", version))
-	if err := u.aptInstall(); err != nil {
-		return false, err
+	if (si.OS.Vendor == "arch") {
+		u.status.Set("not yet implemented")
+		u.log.Error("not yet implemented")
+		return false, errors.New("not yet implemented")
 	}
-	u.log.Info("Installing new version compeleted.")
-
-	u.status.Set("Updating completed. Running autoconfig script and restart services.")
-	u.log.Info("Updating completed. Running autoconfig script and restart services.")
-
-	go u.runningAutoconfig()
-
-	return true, nil
+	return false, nil
 }
 
 // Status returns status of the current update operation.
@@ -190,54 +196,6 @@ func (u *Updater) getVersion(updateConfig UpdateConfig) (string, error) {
 	return version, nil
 }
 
-func (u *Updater) addRepo() error {
-	output, _ := exec.Command("bash", "-c", "cat /etc/apt/sources.list | grep https://deb.skywire.skycoin.com").Output() //nolint
-
-	if len(output) == 0 {
-		if err := exec.Command("bash", "-c", "echo 'deb https://deb.skywire.skycoin.com sid main' | sudo tee -a /etc/apt/sources.list").Run(); err != nil {
-			u.log.Error("Get error during add repository")
-			return err
-		}
-		if err := exec.Command("bash", "-c", "curl -L https://deb.skywire.skycoin.com/KEY.asc | sudo apt-key add -").Run(); err != nil {
-			u.log.Error("Get error during add key")
-			return err
-		}
-		u.log.Info("Repository added")
-	} else {
-		u.log.Info("Repository exist")
-	}
-	return nil
-}
-
-func (u *Updater) aptUpdate() error {
-	if err := exec.Command("bash", "-c", "sudo apt update").Run(); err != nil {
-		u.log.Error("Get error during update apt repositories")
-		return err
-	}
-	return nil
-}
-
-func (u *Updater) aptRemove() error {
-	if err := exec.Command("bash", "-c", "sudo apt remove skywire-bin -y").Run(); err != nil {
-		u.log.Error("Get error during remove skywire-bin package")
-		return err
-	}
-	return nil
-}
-
-func (u *Updater) aptInstall() error {
-	if err := exec.Command("bash", "-c", "sudo NOAUTOCONFIG=true apt install skywire-bin -y").Run(); err != nil {
-		u.log.Error("Get error during installing skywire-bin package")
-		return err
-	}
-	return nil
-}
-
-func (u *Updater) runningAutoconfig() {
-	if err := exec.Command("bash", "-c", "sleep 5s ; sudo skywire-autoconfig").Process.Release(); err != nil {
-		u.log.Error("Get error during installing skywire-bin package")
-	}
-}
 
 func needUpdate(last *Version) bool {
 	current, err := currentVersion()
