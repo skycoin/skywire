@@ -480,6 +480,7 @@ export class NodeService {
           node.online = response.online;
           node.localPk = response.overview.local_pk;
           node.autoconnectTransports = response.public_autoconnect;
+          node.buildTag = response.build_tag ? response.build_tag : '';
 
           // Ip.
           if (response.overview && response.overview.local_ip && (response.overview.local_ip as string).trim()) {
