@@ -222,7 +222,8 @@ func (v *Visor) Summary() (*Summary, error) {
 
 	dmsgStatValue := &dmsgtracker.DmsgClientSummary{}
 	if v.isDTMReady() {
-		dmsgTracker, _ := v.dtm.Get(v.conf.PK) //nolint
+		ctx := context.TODO()
+		dmsgTracker, _ := v.dtm.Get(ctx, v.conf.PK) //nolint
 		dmsgStatValue = &dmsgTracker
 	}
 
