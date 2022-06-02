@@ -117,8 +117,10 @@ for:
     install:
       - brew install goreleaser
       - brew install gh
+      - brew install jq
     build_script:
       - make github-release-non-linux
+      - make mac-installer-release
     
   - # Docker Deploy (Master)
     skip_tags: true
