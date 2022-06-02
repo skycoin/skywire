@@ -131,7 +131,8 @@ func TestDmsgTrackerManager_MustGet(t *testing.T) {
 				tm.updateAllTrackers(ctx)
 
 				// assert
-				_, ok = tm.Get(pk)
+				ctx := context.TODO()
+				_, ok = tm.Get(ctx, pk)
 				assert.False(t, ok)
 			})
 		}

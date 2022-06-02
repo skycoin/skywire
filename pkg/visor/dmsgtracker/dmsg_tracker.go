@@ -187,12 +187,18 @@ func (dtm *Manager) MustGet(ctx context.Context, pk cipher.PubKey) (DmsgClientSu
 		return e.sum, nil
 	}
 
-	go dtm.mustEstablishTracker(ctx, pk)
-	return DmsgClientSummary{}, nil
+	dt, err := dtm.mustEstablishTracker(ctx, pk)
+	if err != nil {
+		return DmsgClientSummary{}, err
+	}
+
+	dtm.dts[pk] = dt
+	return dt.sum, nil
 }
 
 // Get obtains a DmsgClientSummary of the client with given public key.
-func (dtm *Manager) Get(pk cipher.PubKey) (DmsgClientSummary, bool) {
+// If one is not found internally, a new goroutine of tracker stream is to be established.
+func (dtm *Manager) Get(ctx context.Context, pk cipher.PubKey) (DmsgClientSummary, bool) {
 	dtm.mx.Lock()
 	defer dtm.mx.Unlock()
 
@@ -200,12 +206,60 @@ func (dtm *Manager) Get(pk cipher.PubKey) (DmsgClientSummary, bool) {
 		return DmsgClientSummary{}, false
 	}
 
-	return dtm.get(pk)
+	return dtm.get(ctx, pk)
 }
 
 // mustEstablishTracker creates / re-creates tracker when dmsgTrackerMap entry got deleted, and reconnected.
-func (dtm *Manager) mustEstablishTracker(ctx context.Context, pk cipher.PubKey) {
+// It returns *DmsgTracker on success or an error on failure.
+func (dtm *Manager) mustEstablishTracker(ctx context.Context, pk cipher.PubKey) (*DmsgTracker, error) {
 	log := dtm.log.WithField("func", "dtm.mustEstablishTracker")
+
+	type errReport struct {
+		pk  cipher.PubKey
+		err error
+	}
+
+	errCh := make(chan errReport)
+	defer close(errCh)
+	doneCh := make(chan struct{})
+
+	var dt *DmsgTracker
+	var err error
+
+	dCtx, cancel := context.WithDeadline(ctx, time.Now().Add(dtm.updateTimeout))
+	defer cancel()
+	go func() {
+		dt, err = newDmsgTracker(dCtx, dtm.dc, pk)
+		if err != nil {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				errCh <- errReport{pk: pk, err: err}
+			}
+		}
+		close(doneCh)
+	}()
+
+	select {
+	case r := <-errCh:
+		if r.err != nil {
+			log.WithError(r.err).WithField("client_pk", r.pk).Warn("Failed to re-create dmsgtracker client.")
+		}
+		return nil, r.err
+	case <-ctx.Done():
+		log.WithError(ctx.Err()).WithField("client_pk", pk).Warn("Failed to re-create dmsgtracker client.")
+		return nil, ctx.Err()
+	case <-doneCh:
+		log.WithField("client_pk", pk).Debug("Dmsgtracker client Established.")
+		return dt, nil
+	}
+}
+
+// mustEstablishTracker creates / re-creates tracker when dmsgTrackerMap entry got deleted, and reconnected.
+// It is ment to be used as a goroutine and saves the new DmsgTracker to dtm.dts.
+func (dtm *Manager) establishTracker(ctx context.Context, pk cipher.PubKey) {
+	log := dtm.log.WithField("func", "dtm.establishTracker")
 
 	type errReport struct {
 		pk  cipher.PubKey
@@ -249,15 +303,14 @@ func (dtm *Manager) mustEstablishTracker(ctx context.Context, pk cipher.PubKey) 
 }
 
 // GetBulk obtains bulk dmsg client summaries.
-func (dtm *Manager) GetBulk(ctx context.Context, pks []cipher.PubKey) ([]DmsgClientSummary, error) {
+func (dtm *Manager) GetBulk(ctx context.Context, pks []cipher.PubKey) []DmsgClientSummary {
 	out := make([]DmsgClientSummary, 0)
 
 	for _, pk := range pks {
-		ds, err := dtm.MustGet(ctx, pk)
-		if err != nil {
-			return out, err
+		ds, ok := dtm.Get(ctx, pk)
+		if ok {
+			out = append(out, ds)
 		}
-		out = append(out, ds)
 	}
 
 	sort.Slice(out, func(i, j int) bool {
@@ -266,15 +319,15 @@ func (dtm *Manager) GetBulk(ctx context.Context, pks []cipher.PubKey) ([]DmsgCli
 		return outI.Cmp(outJ) < 0
 	})
 
-	return out, nil
+	return out
 }
 
-func (dtm *Manager) get(pk cipher.PubKey) (DmsgClientSummary, bool) {
+func (dtm *Manager) get(ctx context.Context, pk cipher.PubKey) (DmsgClientSummary, bool) {
 	dt, ok := dtm.dts[pk]
 	if !ok {
 		return DmsgClientSummary{}, false
 	}
-
+	go dtm.establishTracker(ctx, pk)
 	return dt.sum, true
 }
 
