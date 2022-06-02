@@ -197,8 +197,7 @@ func (dtm *Manager) MustGet(ctx context.Context, pk cipher.PubKey) (DmsgClientSu
 }
 
 // Get obtains a DmsgClientSummary of the client with given public key.
-// If one is not found internally, a new goroutine of tracker stream is to be established.
-func (dtm *Manager) Get(ctx context.Context, pk cipher.PubKey) (DmsgClientSummary, bool) {
+func (dtm *Manager) Get(pk cipher.PubKey) (DmsgClientSummary, bool) {
 	dtm.mx.Lock()
 	defer dtm.mx.Unlock()
 
@@ -206,7 +205,7 @@ func (dtm *Manager) Get(ctx context.Context, pk cipher.PubKey) (DmsgClientSummar
 		return DmsgClientSummary{}, false
 	}
 
-	return dtm.get(ctx, pk)
+	return dtm.get(pk)
 }
 
 // mustEstablishTracker creates / re-creates tracker when dmsgTrackerMap entry got deleted, and reconnected.
@@ -303,14 +302,17 @@ func (dtm *Manager) establishTracker(ctx context.Context, pk cipher.PubKey) {
 }
 
 // GetBulk obtains bulk dmsg client summaries.
+// If one are not found internally, a new goroutine of tracker stream is to be established.
 func (dtm *Manager) GetBulk(ctx context.Context, pks []cipher.PubKey) []DmsgClientSummary {
 	out := make([]DmsgClientSummary, 0)
 
 	for _, pk := range pks {
-		ds, ok := dtm.Get(ctx, pk)
-		if ok {
-			out = append(out, ds)
+		ds, ok := dtm.Get(pk)
+		if !ok {
+			// we establish tracker if there is none
+			go dtm.establishTracker(ctx, pk)
 		}
+		out = append(out, ds)
 	}
 
 	sort.Slice(out, func(i, j int) bool {
@@ -322,12 +324,11 @@ func (dtm *Manager) GetBulk(ctx context.Context, pks []cipher.PubKey) []DmsgClie
 	return out
 }
 
-func (dtm *Manager) get(ctx context.Context, pk cipher.PubKey) (DmsgClientSummary, bool) {
+func (dtm *Manager) get(pk cipher.PubKey) (DmsgClientSummary, bool) {
 	dt, ok := dtm.dts[pk]
 	if !ok {
 		return DmsgClientSummary{}, false
 	}
-	go dtm.establishTracker(ctx, pk)
 	return dt.sum, true
 }
 
