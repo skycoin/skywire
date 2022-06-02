@@ -48,6 +48,7 @@ EOF
 
 echo "loading logcleaner as service"
 chown "${USER}" "${LOG_CLEANER_PLIST_PATH}"
+sudo -u "$USER" launchctl load -w "${LOG_CLEANER_PLIST_PATH}"
 
 echo "moving applications to /Applications"
 if [[ ! -L /usr/local/bin/skywire-cli ]]; then
