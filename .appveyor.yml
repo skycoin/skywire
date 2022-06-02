@@ -118,6 +118,7 @@ for:
       - brew install goreleaser
       - brew install gh
       - brew install jq
+      - brew install wget
     build_script:
       - make github-release-non-linux
       - make mac-installer-release
