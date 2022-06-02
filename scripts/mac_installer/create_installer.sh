@@ -89,7 +89,7 @@ function build_installer() {
   cat <<EOF >${installer_package_dir}/Contents/MacOS/Skywire
 #!/bin/bash
 
-osascript -e "do shell script \"/Applications/Skywire.app/Contents/MacOS/skywire-visor -c '/Users/${USER}/Library/Application Support/Skywire/skywire-config.json' > /Users/${USER}/Library/Logs/skywire/visor.log\" with administrator privileges"
+osascript -e "do shell script \"/Applications/Skywire.app/Contents/MacOS/skywire-visor -c '/Users/\${USER}/Library/Application Support/Skywire/skywire-config.json' > /Users/\${USER}/Library/Logs/skywire/visor.log\" with administrator privileges"
 
 EOF
 
@@ -118,7 +118,7 @@ EOF
   pkgbuild --root ${installer_build_dir}/binaries --identifier com.skycoin.skywire.updater --install-location /Applications/ --scripts ${installer_build_dir}/update_scripts ${installer_build_dir}/updater.pkg
   pkgbuild --nopayload --identifier com.skycoin.skywire.remover --scripts ${installer_build_dir}/remove_scripts ${installer_build_dir}/remover.pkg
 
-  package_name=SkywireInstaller-${git_tag}-${date_format}-${go_arch}.pkg
+  package_name=skywire-installer-${git_tag}-darwin-${go_arch}.pkg
 
   cp ${mac_script_dir}/Distribution_customized.xml ${installer_build_dir}/Distribution.xml
 
