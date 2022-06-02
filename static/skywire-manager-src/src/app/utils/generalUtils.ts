@@ -27,4 +27,24 @@ export default class GeneralUtils {
 
     return dialog.open(ConfirmationComponent, config);
   }
+
+  /**
+   * Checks the tag of a node, to know if the node is updatable via API calls.
+   */
+  static checkIfTagIsUpdatable(tag: string) {
+    if (
+      tag === undefined ||
+      tag === null ||
+      tag.toUpperCase() === 'Windows'.toUpperCase() ||
+      tag.toUpperCase() === 'Win'.toUpperCase() ||
+      tag.toUpperCase() === 'Mac'.toUpperCase() ||
+      tag.toUpperCase() === 'Macos'.toUpperCase() ||
+      tag.toUpperCase() === 'Mac OS'.toUpperCase() ||
+      tag.toUpperCase() === 'Darwin'.toUpperCase()
+    ) {
+      return false;
+    }
+
+    return true;
+  }
 }
