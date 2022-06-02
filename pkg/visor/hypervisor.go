@@ -332,7 +332,7 @@ func (hv *Hypervisor) getDmsgSummary() []dmsgtracker.DmsgClientSummary {
 	}
 	if hv.visor.isDTMReady() {
 		ctx := context.TODO()
-		hv.visor.dtm.GetBulk(ctx, pks)
+		return hv.visor.dtm.GetBulk(ctx, pks)
 	}
 	return []dmsgtracker.DmsgClientSummary{}
 }
