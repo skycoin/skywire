@@ -312,16 +312,12 @@ func (hv *Hypervisor) getAbout() http.HandlerFunc {
 
 func (hv *Hypervisor) getDmsg() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		out, err := hv.getDmsgSummary()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
+		out := hv.getDmsgSummary()
 		httputil.WriteJSON(w, r, http.StatusOK, out)
 	}
 }
 
-func (hv *Hypervisor) getDmsgSummary() ([]dmsgtracker.DmsgClientSummary, error) {
+func (hv *Hypervisor) getDmsgSummary() []dmsgtracker.DmsgClientSummary {
 	hv.mu.RLock()
 	defer hv.mu.RUnlock()
 
@@ -336,9 +332,9 @@ func (hv *Hypervisor) getDmsgSummary() ([]dmsgtracker.DmsgClientSummary, error) 
 	}
 	if hv.visor.isDTMReady() {
 		ctx := context.TODO()
-		return hv.visor.dtm.GetBulk(ctx, pks)
+		hv.visor.dtm.GetBulk(ctx, pks)
 	}
-	return []dmsgtracker.DmsgClientSummary{}, nil
+	return []dmsgtracker.DmsgClientSummary{}
 }
 
 // Health represents a visor's health report attached to hypervisor to visor request status
@@ -470,11 +466,7 @@ func (hv *Hypervisor) getVisorSummary() http.HandlerFunc {
 		}
 
 		dmsgStats := make(map[string]dmsgtracker.DmsgClientSummary)
-		dSummary, err := hv.getDmsgSummary()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
+		dSummary := hv.getDmsgSummary()
 		for _, stat := range dSummary {
 			dmsgStats[stat.PK.String()] = stat
 		}
@@ -505,11 +497,7 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 		dmsgStats := make(map[string]dmsgtracker.DmsgClientSummary)
 		wg.Add(1)
 		go func() {
-			summary, err := hv.getDmsgSummary()
-			if err != nil {
-				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-				return
-			}
+			summary := hv.getDmsgSummary()
 			for _, stat := range summary {
 				dmsgStats[stat.PK.String()] = stat
 			}
