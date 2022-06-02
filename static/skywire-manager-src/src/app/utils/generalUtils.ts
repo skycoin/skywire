@@ -47,4 +47,20 @@ export default class GeneralUtils {
 
     return true;
   }
+
+  /**
+   * Checks the tag of a node, to know if the terminal window can be openned for it.
+   */
+   static checkIfTagCanOpenterminal(tag: string) {
+    if (
+      tag === undefined ||
+      tag === null ||
+      tag.toUpperCase() === 'Windows'.toUpperCase() ||
+      tag.toUpperCase() === 'Win'.toUpperCase()
+    ) {
+      return false;
+    }
+
+    return true;
+  }
 }
