@@ -24,6 +24,9 @@ LOG_CLEANER_PLIST_PATH=/Users/${USER}/Library/LaunchAgents/com.skycoin.skywire.l
 LOG_PATH=${log_dir}/visor.log
 
 ## Log cleaner to truncate logs every hour
+if [[ ! -d /Users/${USER}/Library/LaunchAgents ]]; then
+  mkdir /Users/${USER}/Library/LaunchAgents
+fi
 cat <<EOF >"${LOG_CLEANER_PLIST_PATH}"
 <?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
