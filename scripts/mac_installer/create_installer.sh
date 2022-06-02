@@ -57,9 +57,10 @@ function build_installer() {
     echo "Storing installer to ${output}"
   fi
 
-  # build skywire binariea
-  make CGO_ENABLED=1 GOOS=darwin GOARCH="${go_arch}" build-systray BUILDTAG=$BUILDTAG
-
+  # fetch skywire binaries from last release
+  download_url=$(eval curl https://api.github.com/repos/skycoin/skywire/releases | jq '.[0].assets[] | select(.name|match("darwin-'${go_arch}'.tar.gz")) | .browser_download_url')
+  wget ${download_url:1:$((${#download_url} - 2))} -O - | tar -xz
+  
   if [ -d ${installer_build_dir}/binaries/Skywire.app ]; then
     rm -rf ${installer_build_dir}/binaries/Skywire.app
   fi
@@ -69,7 +70,7 @@ function build_installer() {
   mkdir -p ${installer_package_dir}/Contents/{Resources,MacOS/apps}
 
   # build deinstaller
-  go build -o ${installer_package_dir}/Contents/MacOS/deinstaller ${mac_script_dir}/desktop-deinstaller
+  go build -o ${installer_package_dir}/Contents/MacOS/deinstaller ${mac_script_dir}/desktop-deinstaller/deinstaller.go
 
   # prepare Distribution.xml
   cp ${mac_script_dir}/Distribution.xml ${installer_build_dir}/
@@ -88,7 +89,7 @@ function build_installer() {
   cat <<EOF >${installer_package_dir}/Contents/MacOS/Skywire
 #!/bin/bash
 
-osascript -e "do shell script \"/Applications/Skywire.app/Contents/MacOS/skywire-visor --systray > /Users/\${USER}/Library/Logs/skywire/visor.log\" with administrator privileges"
+osascript -e "do shell script \"/Applications/Skywire.app/Contents/MacOS/skywire-visor -c '/Users/${USER}/Library/Application Support/Skywire/skywire-config.json' > /Users/${USER}/Library/Logs/skywire/visor.log\" with administrator privileges"
 
 EOF
 
@@ -137,6 +138,8 @@ EOF
       echo -e "${greent}check your email for notarization status${nct}"
     }
   fi
+
+  rm -rf ${installer_build_dir}
 }
 
 while :; do
@@ -195,10 +198,10 @@ if [ "$staple_notarization" == false ]; then
     go_arch=arm64
     build_installer
     ;;
-    # arm64)
-    #   go_arch=amd64
-    #   build_installer
-    #   ;;
+  arm64)
+    go_arch=amd64
+    build_installer
+    ;;
   esac
 else
   staple_installer
