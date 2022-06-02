@@ -13,7 +13,6 @@ staple_notarization=false
 package_path=
 developer_id=
 output=
-BUILDTAG=MacOS
 
 greent='\033[0;32m'
 yellowt='\033[0;33m'

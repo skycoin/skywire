@@ -379,9 +379,8 @@ mac-installer: ## Create signed and notarized application, run make mac-installe
 mac-installer-help: ## Show installer creation help
 	./scripts/mac_installer/create_installer.sh -h
 
-mac-installer-release: mac-installer
+mac-installer-release: mac-installer ## Upload created signed and notarized applciation to github
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags))
-	gh auth login --with-token < ../token
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-darwin-amd64.pkg
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-darwin-arm64.pkg
 
