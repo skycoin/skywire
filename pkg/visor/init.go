@@ -512,9 +512,16 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 				return dmsgFallback()
 			}
 			// try to establish direct connection to rPK (single hop) using SUDPH or STCPR
+			trySTCPR := false
+			trySUDPH := false
 			errSlice := make([]error, 0, 2)
+
 			for _, trans := range transports {
 				ntype := network.Type(trans)
+				if ntype == network.STCPR {
+					trySTCPR = true
+					continue
+				}
 
 				// Wait until stun client is ready
 				<-v.stunReady
@@ -524,17 +531,38 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 					v.stunClient.NATType == stun.NATSymmetricUDPFirewall) {
 					continue
 				}
+				trySUDPH = true
+			}
+
+			// trying to establish direct connection to rPK using STCPR
+			if trySTCPR {
 				err := retrier.Do(ctx, func() error {
-					_, err := tm.SaveTransport(ctx, rPK, ntype, transport.LabelAutomatic)
+					_, err := tm.SaveTransport(ctx, rPK, network.STCPR, transport.LabelAutomatic)
 					return err
 				})
 				if err != nil {
 					errSlice = append(errSlice, err)
+				} else {
+					return nil
 				}
 			}
-			if len(errSlice) != 2 {
-				return nil
+			// trying to establish direct connection to rPK using SUDPH
+			if trySUDPH {
+				err := retrier.Do(ctx, func() error {
+					_, err := tm.SaveTransport(ctx, rPK, network.SUDPH, transport.LabelAutomatic)
+					return err
+				})
+				if err != nil {
+					errSlice = append(errSlice, err)
+				} else {
+					return nil
+				}
 			}
+
+			if len(errSlice) == 2 {
+				return dmsgFallback()
+			}
+
 			return errors.New(errSlice[0].Error())
 		},
 	}
