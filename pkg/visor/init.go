@@ -514,7 +514,6 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 			// try to establish direct connection to rPK (single hop) using SUDPH or STCPR
 			trySTCPR := false
 			trySUDPH := false
-			errSlice := make([]error, 0, 2)
 
 			for _, trans := range transports {
 				ntype := network.Type(trans)
@@ -540,11 +539,7 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 					_, err := tm.SaveTransport(ctx, rPK, network.STCPR, transport.LabelAutomatic)
 					return err
 				})
-				if err != nil {
-					errSlice = append(errSlice, err)
-				} else {
-					return nil
-				}
+				return err
 			}
 			// trying to establish direct connection to rPK using SUDPH
 			if trySUDPH {
@@ -552,18 +547,10 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 					_, err := tm.SaveTransport(ctx, rPK, network.SUDPH, transport.LabelAutomatic)
 					return err
 				})
-				if err != nil {
-					errSlice = append(errSlice, err)
-				} else {
-					return nil
-				}
+				return err
 			}
 
-			if len(errSlice) == 2 {
-				return dmsgFallback()
-			}
-
-			return errors.New(errSlice[0].Error())
+			return dmsgFallback()
 		},
 	}
 }
