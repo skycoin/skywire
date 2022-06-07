@@ -13,6 +13,11 @@ type HTTPError struct {
 	Body   string
 }
 
+// Error is the object returned to the client when there's an error.
+type Error struct {
+	Error string `json:"error"`
+}
+
 // ErrorFromResp creates an HTTPError from a given server response.
 func ErrorFromResp(resp *http.Response) error {
 	status := resp.StatusCode
