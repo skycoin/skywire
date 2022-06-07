@@ -45,6 +45,7 @@ import (
 	"github.com/skycoin/skywire/pkg/utclient"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/util/updater"
+	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	vinit "github.com/skycoin/skywire/pkg/visor/visorinit"
 )
@@ -111,6 +112,8 @@ var (
 	dmsgCtrl vinit.Module
 	// Dmsg http module
 	dmsgHTTP vinit.Module
+	// Dmsg trackers module
+	dmsgTrackers vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 )
@@ -136,6 +139,7 @@ func registerModules(logger *logging.MasterLogger) {
 	stcpC = maker("stcp", initStcpClient, &tr)
 	dmsgC = maker("dmsg", initDmsg, &ebc, &dmsgHTTP)
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &dmsgC, &tr)
+	dmsgTrackers = maker("dmsg_trackers", initDmsgTrackers, &dmsgC)
 
 	pty = maker("dmsg_pty", initDmsgpty, &dmsgC)
 	rt = maker("router", initRouter, &tr, &dmsgC, &dmsgHTTP)
@@ -145,7 +149,7 @@ func registerModules(logger *logging.MasterLogger) {
 	ut = maker("uptime_tracker", initUptimeTracker, &dmsgHTTP)
 	pv = maker("public_autoconnect", initPublicAutoconnect, &tr, &disc)
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
-	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl)
+	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl, &dmsgTrackers)
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &pty,
 		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC)
@@ -350,6 +354,20 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	v.pushCloseStack("dmsgctrl", cl.Close)
 
 	dmsgctrl.ServeListener(cl, 0)
+	return nil
+}
+
+func initDmsgTrackers(ctx context.Context, v *Visor, _ *logging.Logger) error {
+	dmsgC := v.dmsgC
+
+	dtm := dmsgtracker.NewDmsgTrackerManager(v.MasterLogger(), dmsgC, 0, 0)
+	v.pushCloseStack("dmsg_tracker_manager", func() error {
+		return dtm.Close()
+	})
+	v.initLock.Lock()
+	v.dtm = dtm
+	v.initLock.Unlock()
+	v.dtmReadyOnce.Do(func() { close(v.dtmReady) })
 	return nil
 }
 

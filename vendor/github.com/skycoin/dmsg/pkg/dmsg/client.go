@@ -16,9 +16,6 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 )
 
-// TODO(evanlinjin): We should implement exponential backoff at some point.
-const serveWait = time.Second
-
 // SessionDialCallback is triggered BEFORE a session is dialed to.
 // If a non-nil error is returned, the session dial is instantly terminated.
 type SessionDialCallback func(network, addr string) (err error)
@@ -74,6 +71,10 @@ type Client struct {
 	conf   *Config
 	porter *netutil.Porter
 
+	bo     time.Duration // initial backoff duration
+	maxBO  time.Duration // maximum backoff duration
+	factor float64       // multiplier for the backoff duration that is applied on every retry
+
 	errCh chan error
 	done  chan struct{}
 	once  sync.Once
@@ -82,12 +83,6 @@ type Client struct {
 
 // NewClient creates a dmsg client entity.
 func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Config) *Client {
-	c := new(Client)
-	c.ready = make(chan struct{})
-	c.porter = netutil.NewPorter(netutil.PorterMinEphemeral)
-	c.errCh = make(chan error, 10)
-	c.done = make(chan struct{})
-
 	log := logging.MustGetLogger("dmsg_client")
 
 	// Init config.
@@ -95,7 +90,17 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 		conf = DefaultConfig()
 	}
 	conf.Ensure()
-	c.conf = conf
+
+	c := &Client{
+		ready:  make(chan struct{}),
+		porter: netutil.NewPorter(netutil.PorterMinEphemeral),
+		errCh:  make(chan error, 10),
+		done:   make(chan struct{}),
+		conf:   conf,
+		bo:     time.Second * 5,
+		maxBO:  time.Minute,
+		factor: netutil.DefaultFactor,
+	}
 
 	// Init common fields.
 	c.EntityCommon.init(pk, sk, dc, log, conf.UpdateInterval)
@@ -156,15 +161,15 @@ func (ce *Client) Serve(ctx context.Context) {
 			if err == context.Canceled || err == context.DeadlineExceeded {
 				return
 			}
-			time.Sleep(time.Second) // TODO(evanlinjin): Implement exponential back off.
+			ce.serveWait()
 			continue
 		}
 		if len(entries) == 0 {
-			ce.log.Warnf("No entries found. Retrying after %s...", serveWait.String())
-			time.Sleep(serveWait)
+			ce.log.Warnf("No entries found. Retrying after %s...", ce.bo.String())
+			ce.serveWait()
 		}
 
-		for _, entry := range entries {
+		for n, entry := range entries {
 			if isClosed(ce.done) {
 				return
 			}
@@ -183,11 +188,21 @@ func (ce *Client) Serve(ctx context.Context) {
 			}
 
 			if err := ce.EnsureSession(cancellabelCtx, entry); err != nil {
-				ce.log.WithField("remote_pk", entry.Static).WithError(err).Warn("Failed to establish session.")
 				if err == context.Canceled || err == context.DeadlineExceeded {
+					ce.log.WithField("remote_pk", entry.Static).WithError(err).Warn("Failed to establish session.")
 					return
 				}
-				time.Sleep(serveWait)
+				// we send an error if this is the last server
+				if n == (len(entries) - 1) {
+					if !isClosed(ce.done) {
+						ce.sesMx.Lock()
+						ce.errCh <- err
+						ce.sesMx.Unlock()
+					}
+				}
+				ce.log.WithField("remote_pk", entry.Static).WithError(err).WithField("current_backoff", ce.bo.String()).
+					Warn("Failed to establish session.")
+				ce.serveWait()
 			}
 		}
 		// We dial all servers and wait for error or done signal.
@@ -441,6 +456,21 @@ func (ce *Client) ConnectionsSummary() ConnectionsSummary {
 	}
 
 	return out
+}
+
+func (ce *Client) serveWait() {
+	bo := ce.bo
+
+	t := time.NewTimer(bo)
+	defer t.Stop()
+
+	if newBO := time.Duration(float64(bo) * ce.factor); ce.maxBO == 0 || newBO <= ce.maxBO {
+		ce.bo = newBO
+		if newBO > ce.maxBO {
+			ce.bo = ce.maxBO
+		}
+	}
+	<-t.C
 }
 
 func hasPK(pks []cipher.PubKey, pk cipher.PubKey) bool {
