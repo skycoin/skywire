@@ -221,13 +221,10 @@ func (v *Visor) Summary() (*Summary, error) {
 	}
 
 	dmsgStatValue := &dmsgtracker.DmsgClientSummary{}
-	v.initLock.Lock()
-	if v.trackersReady {
-		ctx := context.TODO()
-		dmsgTracker, _ := v.trackers.MustGet(ctx, v.conf.PK) //nolint
+	if v.isDTMReady() {
+		dmsgTracker, _ := v.dtm.Get(v.conf.PK) //nolint
 		dmsgStatValue = &dmsgTracker
 	}
-	v.initLock.Unlock()
 
 	summary := &Summary{
 		Overview:             overview,
