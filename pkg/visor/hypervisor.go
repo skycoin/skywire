@@ -62,8 +62,6 @@ type Hypervisor struct {
 	trackersReady bool
 	users         *usermanager.UserManager
 	mu            *sync.RWMutex
-	visorMu       sync.Mutex
-	visorChanMux  map[cipher.PubKey]*chanMux
 	selfConn      Conn
 	logger        *logging.Logger
 }
@@ -96,7 +94,6 @@ func New(config hypervisorconfig.Config, visor *Visor, dmsgC *dmsg.Client) (*Hyp
 		visors:        make(map[cipher.PubKey]Conn),
 		users:         usermanager.NewUserManager(mLogger, singleUserDB, config.Cookies),
 		mu:            new(sync.RWMutex),
-		visorChanMux:  make(map[cipher.PubKey]*chanMux),
 		selfConn:      selfConn,
 		logger:        mLogger.PackageLogger("hypervisor"),
 		trackersReady: false,
