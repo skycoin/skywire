@@ -59,8 +59,7 @@ type Hypervisor struct {
 	c             hypervisorconfig.Config
 	visor         *Visor
 	dmsgC         *dmsg.Client
-	visors        map[cipher.PubKey]Conn // connected remote visors
-	trackers      *dmsgtracker.Manager   // dmsg trackers
+	trackers      *dmsgtracker.Manager // dmsg trackers
 	trackersReady bool
 	users         *usermanager.UserManager
 	mu            *sync.RWMutex
@@ -91,11 +90,12 @@ func New(config hypervisorconfig.Config, visor *Visor, dmsgC *dmsg.Client) (*Hyp
 		mLogger = visor.MasterLogger()
 	}
 
+	visor.remoteVisors = make(map[cipher.PubKey]Conn)
+
 	hv := &Hypervisor{
 		c:             config,
 		visor:         visor,
 		dmsgC:         dmsgC,
-		visors:        make(map[cipher.PubKey]Conn),
 		users:         usermanager.NewUserManager(mLogger, singleUserDB, config.Cookies),
 		mu:            new(sync.RWMutex),
 		visorChanMux:  make(map[cipher.PubKey]*chanMux),
@@ -161,7 +161,7 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 		log.Info("Accepted.")
 
 		hv.mu.Lock()
-		hv.visors[addr.PK] = *visorConn
+		hv.visor.remoteVisors[addr.PK] = *visorConn
 		hv.mu.Unlock()
 	}
 }
@@ -190,7 +190,7 @@ func (hv *Hypervisor) AddMockData(config MockConfig) error {
 		}
 
 		hv.mu.Lock()
-		hv.visors[pk] = Conn{
+		hv.visor.remoteVisors[pk] = Conn{
 			Addr: dmsg.Addr{
 				PK:   pk,
 				Port: uint16(i),
@@ -336,13 +336,13 @@ func (hv *Hypervisor) getDmsgSummary() []dmsgtracker.DmsgClientSummary {
 	hv.mu.RLock()
 	defer hv.mu.RUnlock()
 
-	pks := make([]cipher.PubKey, 0, len(hv.visors)+1)
+	pks := make([]cipher.PubKey, 0, len(hv.visor.remoteVisors)+1)
 	if hv.visor != nil {
 		// Add hypervisor node.
 		pks = append(pks, hv.visor.conf.PK)
 	}
 
-	for pk := range hv.visors {
+	for pk := range hv.visor.remoteVisors {
 		pks = append(pks, pk)
 	}
 	if hv.trackers != nil {
@@ -409,14 +409,14 @@ func (hv *Hypervisor) getVisors() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		hv.mu.RLock()
 		wg := new(sync.WaitGroup)
-		wg.Add(len(hv.visors))
+		wg.Add(len(hv.visor.remoteVisors))
 
 		i := 0
 		if hv.visor != nil {
 			i++
 		}
 
-		overviews := make([]Overview, len(hv.visors)+i)
+		overviews := make([]Overview, len(hv.visor.remoteVisors)+i)
 
 		if hv.visor != nil {
 			overview, err := hv.visor.Overview()
@@ -428,7 +428,7 @@ func (hv *Hypervisor) getVisors() http.HandlerFunc {
 			overviews[0] = *overview
 		}
 
-		for pk, c := range hv.visors {
+		for pk, c := range hv.visor.remoteVisors {
 			go func(pk cipher.PubKey, c Conn, i int) {
 				log := hv.log(r).
 					WithField("visor_addr", c.Addr).
@@ -504,7 +504,7 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		hv.mu.RLock()
 		wg := new(sync.WaitGroup)
-		wg.Add(len(hv.visors))
+		wg.Add(len(hv.visor.remoteVisors))
 
 		i := 1
 
@@ -518,7 +518,7 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 			wg.Done()
 		}()
 
-		summaries := make([]Summary, len(hv.visors)+i)
+		summaries := make([]Summary, len(hv.visor.remoteVisors)+i)
 
 		summary, err := hv.visor.Summary()
 		if err != nil {
@@ -533,7 +533,7 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 
 		summaries[0] = makeSummaryResp(err == nil, true, summary)
 
-		for pk, c := range hv.visors {
+		for pk, c := range hv.visor.remoteVisors {
 			go func(pk cipher.PubKey, c Conn, i int) {
 				log := hv.log(r).
 					WithField("visor_addr", c.Addr).
@@ -1423,7 +1423,7 @@ func (hv *Hypervisor) getPersistentTransports() http.HandlerFunc {
 
 func (hv *Hypervisor) visorConn(pk cipher.PubKey) (Conn, bool) {
 	hv.mu.RLock()
-	conn, ok := hv.visors[pk]
+	conn, ok := hv.visor.remoteVisors[pk]
 	hv.mu.RUnlock()
 
 	return conn, ok
