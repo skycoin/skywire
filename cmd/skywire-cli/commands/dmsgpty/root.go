@@ -6,25 +6,25 @@ import (
 	"net"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
 	"github.com/skycoin/skycoin/src/util/logging"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
 var rpcAddr string
+var ptyPort string
 var masterLogger = logging.NewMasterLogger()
 var packageLogger = masterLogger.PackageLogger("dmsgpty")
 
 func init() {
 	RootCmd.PersistentFlags().StringVarP(&rpcAddr, "rpc", "", "localhost:3435", "RPC server address")
+	RootCmd.PersistentFlags().StringVarP(&ptyPort, "port", "p", "22", "port of remote visor dmsgpty")
 }
 
 // RootCmd is the command that contains sub-commands which interacts with dmsgpty.
@@ -56,16 +56,16 @@ var listOfVisors = &cobra.Command{
 }
 
 var executeCommand = &cobra.Command{
-	Use:   "start <addr>",
+	Use:   "start <pk>",
 	Short: "start dmsgpty for specific visor by its dmsg address pk:port",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(_ *cobra.Command, args []string) error {
-		PK, Port := parseAddr(args[0])
 		cli := dmsgpty.DefaultCLI()
-
+		addr := internal.ParsePK("pk", args[0])
+		port, _ := strconv.ParseUint(ptyPort, 10, 16) //nolint
 		ctx, cancel := cmdutil.SignalContext(context.Background(), nil)
 		defer cancel()
-		return cli.StartRemotePty(ctx, PK, Port, dmsgpty.DefaultCmd)
+		return cli.StartRemotePty(ctx, addr, uint16(port), dmsgpty.DefaultCmd)
 	},
 }
 
@@ -76,11 +76,4 @@ func rpcClient() visor.API {
 		packageLogger.Fatal("RPC connection failed:", err)
 	}
 	return visor.NewRPCClient(packageLogger, conn, visor.RPCPrefix, 0)
-}
-
-func parseAddr(addr string) (cipher.PubKey, uint16) {
-	addrPort := strings.Split(addr, ":")
-	address := internal.ParsePK("addr", addrPort[0])
-	port, _ := strconv.ParseUint(addrPort[1], 10, 16) //nolint
-	return address, uint16(port)
 }
