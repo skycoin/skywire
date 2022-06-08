@@ -58,7 +58,7 @@ func (h *Host) ServeCLI(ctx context.Context, lis net.Listener) error {
 	for {
 		conn, err := lis.Accept()
 		if err != nil {
-			if err, ok := err.(net.Error); ok && err.Temporary() {
+			if err, ok := err.(net.Error); ok && err.Temporary() { //nolint
 				log.Warn("Failed to accept CLI connection with temporary error, continuing...")
 				continue
 			}
@@ -108,7 +108,7 @@ func (h *Host) ListenAndServe(ctx context.Context, port uint16) error {
 		stream, err := lis.AcceptStream()
 		if err != nil {
 			log := log.WithError(err)
-			if err, ok := err.(net.Error); ok && err.Temporary() {
+			if err, ok := err.(net.Error); ok && err.Temporary() { //nolint
 				log.Warn("Failed to accept dmsg.Stream with temporary error, continuing...")
 				continue
 			}

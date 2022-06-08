@@ -97,7 +97,6 @@ for:
     branches:
       only:
         - develop
-        - master
     install:
       - sudo apt update
       - sudo snap install goreleaser --classic
@@ -113,7 +112,6 @@ for:
     branches:
       only:
         - develop
-        - master
     install:
       - brew install goreleaser
       - brew install gh
