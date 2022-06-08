@@ -1,12 +1,18 @@
 package dmsgpty
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/skycoin/dmsg/pkg/dmsgpty"
 	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
@@ -41,7 +47,7 @@ var listOfVisors = &cobra.Command{
 		remoteVisors := rpcClient().RemoteVisors()
 		var msg string
 		for idx, pk := range remoteVisors {
-			msg += fmt.Sprintf("%d. %s\n", idx+1, pk.String())
+			msg += fmt.Sprintf("%d. %s\n", idx+1, pk)
 		}
 		if _, err := os.Stdout.Write([]byte(msg)); err != nil {
 			packageLogger.Fatal("Failed to output build info:", err)
@@ -50,19 +56,16 @@ var listOfVisors = &cobra.Command{
 }
 
 var executeCommand = &cobra.Command{
-	Use:   "exec <visor-public-key> <command>",
-	Short: "fetch available servers",
-	Args:  cobra.MinimumNArgs(2),
-	Run: func(_ *cobra.Command, args []string) {
-		var msg []byte
-		pk := internal.ParsePK("visor-public-key", args[0])
-		msg, err := rpcClient().DmsgPtyExec(pk, args[1])
-		if err != nil {
-			msg = []byte(fmt.Sprintf("%s\n", err.Error()))
-		}
-		if _, err := os.Stdout.Write(msg); err != nil {
-			packageLogger.Fatal("Failed to output build info:", err)
-		}
+	Use:   "start <addr>",
+	Short: "start dmsgpty for specific visor by its dmsg address pk:port",
+	Args:  cobra.MinimumNArgs(1),
+	RunE: func(_ *cobra.Command, args []string) error {
+		PK, Port := parseAddr(args[0])
+		cli := dmsgpty.DefaultCLI()
+
+		ctx, cancel := cmdutil.SignalContext(context.Background(), nil)
+		defer cancel()
+		return cli.StartRemotePty(ctx, PK, Port, dmsgpty.DefaultCmd)
 	},
 }
 
@@ -73,4 +76,11 @@ func rpcClient() visor.API {
 		packageLogger.Fatal("RPC connection failed:", err)
 	}
 	return visor.NewRPCClient(packageLogger, conn, visor.RPCPrefix, 0)
+}
+
+func parseAddr(addr string) (cipher.PubKey, uint16) {
+	addrPort := strings.Split(addr, ":")
+	address := internal.ParsePK("addr", addrPort[0])
+	port, _ := strconv.ParseUint(addrPort[1], 10, 16) //nolint
+	return address, uint16(port)
 }

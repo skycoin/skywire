@@ -493,21 +493,10 @@ func (rc *rpcClient) UpdateStatus() (string, error) {
 }
 
 // RemoteVisors calls RemoteVisors.
-func (rc *rpcClient) RemoteVisors() []cipher.PubKey {
-	output := []cipher.PubKey{}
+func (rc *rpcClient) RemoteVisors() []string {
+	output := []string{}
 	rc.Call("RemoteVisors", &struct{}{}, &output) // nolint
 	return output
-}
-
-// DmsgPtyExec execute a shell command, from skywire-cli dmsgpty <pk> "<command>" request
-func (rc *rpcClient) DmsgPtyExec(pk cipher.PubKey, command string) ([]byte, error) {
-	output := make([]byte, 0)
-	err := rc.Call("DmsgPtyExec", &DmsgPtyExecIn{
-		PK:      pk,
-		Command: command,
-	}, &output)
-
-	return output, err
 }
 
 // MockRPCClient mocks API.
@@ -1068,11 +1057,6 @@ func (mc *mockRPCClient) GetPersistentTransports() ([]transport.PersistentTransp
 }
 
 // RemoteVisors implements API
-func (mc *mockRPCClient) RemoteVisors() []cipher.PubKey {
-	return []cipher.PubKey{}
-}
-
-// DmsgPtyExec implements API.
-func (mc *mockRPCClient) DmsgPtyExec(cipher.PubKey, string) ([]byte, error) {
-	return []byte("mock"), nil
+func (mc *mockRPCClient) RemoteVisors() []string {
+	return []string{}
 }
