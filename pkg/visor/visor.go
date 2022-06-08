@@ -92,7 +92,7 @@ type Visor struct {
 
 	isServicesHealthy *internalHealthInfo
 
-	remoteVisors map[cipher.PubKey]Conn // connected remote visors to hypervisor
+	remoteVisors map[cipher.PubKey]Conn // copy of connected remote visors to hypervisor
 }
 
 // todo: consider moving module closing to the module system
