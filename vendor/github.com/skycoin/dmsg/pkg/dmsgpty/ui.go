@@ -178,6 +178,9 @@ func (ui *UI) Handler() http.HandlerFunc {
 			}
 		}()
 
+		// set DMSGPTYTERM=1 env on starting dmsgpty-ui
+		ptyC.Write([]byte("export DMSGPTYTERM=1\n")) //nolint
+
 		// io
 		done, once := make(chan struct{}), new(sync.Once)
 		closeDone := func() { once.Do(func() { close(done) }) }

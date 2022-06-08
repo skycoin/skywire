@@ -105,7 +105,7 @@ func (rw *ReadWriter) Read(p []byte) (int, error) {
 // * If error is non-temporary, save error in state so further reads will fail.
 func (rw *ReadWriter) processReadError(err error) error {
 	if nErr, ok := err.(net.Error); ok {
-		if !nErr.Temporary() {
+		if !nErr.Temporary() { //nolint
 			rw.rErr = err
 		}
 		return err
@@ -187,6 +187,11 @@ func (rw *ReadWriter) Handshake(hsTimeout time.Duration) error {
 	case <-time.After(hsTimeout):
 		return timeoutError{}
 	}
+}
+
+// Buffered returns the number of bytes that can be read from the buffer rawInput.
+func (rw *ReadWriter) Buffered() int {
+	return rw.rawInput.Buffered()
 }
 
 // LocalStatic returns the local static public key.
@@ -294,7 +299,7 @@ func ReadRawFrame(r *bufio.Reader) (p []byte, err error) {
 }
 
 func isTemp(err error) bool {
-	if netErr, ok := err.(net.Error); ok && netErr.Temporary() {
+	if netErr, ok := err.(net.Error); ok && netErr.Temporary() { //nolint
 		return true
 	}
 	return false
