@@ -577,7 +577,7 @@ func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.Connection
 func (v *Visor) RemoteVisors() []string {
 	var visors []string
 	for _, conn := range v.remoteVisors {
-		visors = append(visors, conn.Addr.String())
+		visors = append(visors, conn.Addr.PK.String())
 	}
 	return visors
 }
