@@ -58,9 +58,9 @@ var executeCommand = &cobra.Command{
 		pk := internal.ParsePK("visor-public-key", args[0])
 		msg, err := rpcClient().DmsgPtyExec(pk, args[1])
 		if err != nil {
-			msg = []byte(err.Error())
+			msg = []byte(fmt.Sprintf("%s\n", err.Error()))
 		}
-		if _, err := os.Stdout.Write([]byte(msg)); err != nil {
+		if _, err := os.Stdout.Write(msg); err != nil {
 			packageLogger.Fatal("Failed to output build info:", err)
 		}
 	},
