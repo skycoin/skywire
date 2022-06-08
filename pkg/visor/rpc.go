@@ -581,3 +581,28 @@ func (r *RPC) SetPublicAutoconnect(pAc *bool, _ *struct{}) (err error) {
 	err = r.visor.SetPublicAutoconnect(*pAc)
 	return err
 }
+
+// RemoteVisors return connected remote visors
+func (r *RPC) RemoteVisors(_ *struct{}, out *[]cipher.PubKey) (err error) {
+	defer rpcutil.LogCall(r.log, "RemoteVisor", nil)(out, &err)
+
+	remoteVisors := r.visor.RemoteVisors()
+	if remoteVisors != nil {
+		*out = remoteVisors
+	}
+
+	return err
+}
+
+// DmsgPtyExecIn is input for DmsgPtyExec.
+type DmsgPtyExecIn struct {
+	PK      cipher.PubKey
+	Command string
+}
+
+// DmsgPtyExec execute a shell command, from skywire-cli dmsgpty <pk> "<command>" request.
+func (r *RPC) DmsgPtyExec(in *DmsgPtyExecIn, out *[]byte) (err error) {
+	defer rpcutil.LogCall(r.log, "Transports", in)(out, &err)
+	*out, err = r.visor.DmsgPtyExec(in.PK, in.Command)
+	return err
+}
