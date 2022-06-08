@@ -13,6 +13,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -89,6 +90,8 @@ type Visor struct {
 	runtimeErrors chan error
 
 	isServicesHealthy *internalHealthInfo
+
+	remoteVisors map[cipher.PubKey]Conn // connected remote visors to hypervisor
 }
 
 // todo: consider moving module closing to the module system
