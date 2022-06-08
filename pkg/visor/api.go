@@ -53,7 +53,7 @@ type API interface {
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
-	RemoteVisors() []cipher.PubKey
+	RemoteVisors() []string
 
 	TransportTypes() ([]string, error)
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
@@ -74,7 +74,6 @@ type API interface {
 
 	Restart() error
 	Exec(command string) ([]byte, error)
-	DmsgPtyExec(pk cipher.PubKey, command string) ([]byte, error)
 	Update(config updater.UpdateConfig) (bool, error)
 	UpdateWithStatus(config updater.UpdateConfig) <-chan StatusMessage
 	UpdateAvailable(channel updater.Channel) (*updater.Version, error)
@@ -575,10 +574,10 @@ func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.Connection
 }
 
 // RemoteVisors return list of connected remote visors
-func (v *Visor) RemoteVisors() []cipher.PubKey {
-	var visors []cipher.PubKey
-	for pk := range v.remoteVisors {
-		visors = append(visors, pk)
+func (v *Visor) RemoteVisors() []string {
+	var visors []string
+	for _, conn := range v.remoteVisors {
+		visors = append(visors, conn.SrvPK.String())
 	}
 	return visors
 }
@@ -751,15 +750,6 @@ func (v *Visor) Exec(command string) ([]byte, error) {
 	args := strings.Split(command, " ")
 	cmd := exec.Command(args[0], args[1:]...) // nolint: gosec
 	return cmd.CombinedOutput()
-}
-
-// DmsgPtyExec execute a shell command, from skywire-cli dmsgpty <pk> "<command>" request
-func (v *Visor) DmsgPtyExec(pk cipher.PubKey, command string) ([]byte, error) {
-	conn, ok := v.remoteVisors[pk]
-	if !ok {
-		return nil, errors.New("visor not reachable")
-	}
-	return conn.API.Exec(command)
 }
 
 // Update implements API.
