@@ -47,6 +47,7 @@ type rpcClient struct {
 	conn    io.ReadWriteCloser
 	client  *rpc.Client
 	prefix  string
+	FixGob  bool
 }
 
 // NewRPCClient creates a new API.
@@ -489,6 +490,13 @@ func (rc *rpcClient) UpdateStatus() (string, error) {
 	}
 
 	return result, err
+}
+
+// RemoteVisors calls RemoteVisors.
+func (rc *rpcClient) RemoteVisors() []string {
+	output := []string{}
+	rc.Call("RemoteVisors", &struct{}{}, &output) // nolint
+	return output
 }
 
 // MockRPCClient mocks API.
@@ -1046,4 +1054,9 @@ func (mc *mockRPCClient) SetPersistentTransports(_ []transport.PersistentTranspo
 // GetPersistentTransports implements API
 func (mc *mockRPCClient) GetPersistentTransports() ([]transport.PersistentTransports, error) {
 	return []transport.PersistentTransports{}, nil
+}
+
+// RemoteVisors implements API
+func (mc *mockRPCClient) RemoteVisors() []string {
+	return []string{}
 }
