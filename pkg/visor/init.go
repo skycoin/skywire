@@ -44,7 +44,6 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	"github.com/skycoin/skywire/pkg/utclient"
 	"github.com/skycoin/skywire/pkg/util/osutil"
-	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	vinit "github.com/skycoin/skywire/pkg/visor/visorinit"
@@ -68,8 +67,6 @@ const ownerRWX = 0700
 var (
 	// Event broadcasting system
 	ebc vinit.Module
-	// visor updater
-	up vinit.Module
 	// Address resolver
 	ar vinit.Module
 	// App discovery
@@ -126,7 +123,6 @@ func registerModules(logger *logging.MasterLogger) {
 	maker := func(name string, f initFn, deps ...*vinit.Module) vinit.Module {
 		return vinit.MakeModule(name, withInitCtx(f), logger, deps...)
 	}
-	up = maker("updater", initUpdater)
 	dmsgHTTP = maker("dmsg_http", initDmsgHTTP)
 	ebc = maker("event_broadcaster", initEventBroadcaster)
 	ar = maker("address_resolver", initAddressResolver, &dmsgHTTP)
@@ -151,24 +147,13 @@ func registerModules(logger *logging.MasterLogger) {
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
 	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl, &dmsgTrackers)
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
-	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &pty,
+	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
 		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
 
 type initFn func(context.Context, *Visor, *logging.Logger) error
-
-func initUpdater(ctx context.Context, v *Visor, log *logging.Logger) error {
-	updater := updater.New(v.log, v.restartCtx, v.conf.Launcher.BinPath)
-
-	v.initLock.Lock()
-	defer v.initLock.Unlock()
-	v.restartCtx.SetCheckDelay(time.Duration(v.conf.RestartCheckDelay))
-	v.restartCtx.RegisterLogger(v.log)
-	v.updater = updater
-	return nil
-}
 
 func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error {
 	var keys cipher.PubKeys
