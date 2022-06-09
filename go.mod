@@ -8,7 +8,6 @@ require (
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/ccding/go-stun/stun v0.0.0-20200514191101-4dc67bcdb029
 	github.com/gen2brain/dlgs v0.0.0-20210911090025-cbd38e821b98
-	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/uuid v1.1.2
 	github.com/gorilla/securecookie v1.1.1
 	github.com/json-iterator/go v1.1.12 // indirect
@@ -39,7 +38,7 @@ require (
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	golang.org/x/tools v0.1.5 // indirect
 	golang.zx2c4.com/wireguard v0.0.0-20211012180210-dfd688b6aa7b
-	nhooyr.io/websocket v1.8.2
+	nhooyr.io/websocket v1.8.2 // indirect
 )
 
 require (
@@ -63,7 +62,6 @@ require (
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
-	github.com/google/go-querystring v1.0.0 // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/klauspost/compress v1.11.0 // indirect
