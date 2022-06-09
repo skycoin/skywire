@@ -21,7 +21,6 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
 	"github.com/skycoin/skycoin/src/util/logging"
-	"nhooyr.io/websocket"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -31,7 +30,6 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 	"github.com/skycoin/skywire/pkg/visor/usermanager"
@@ -56,16 +54,14 @@ type Conn struct {
 
 // Hypervisor manages visors.
 type Hypervisor struct {
-	c            hypervisorconfig.Config
-	visor        *Visor
-	dmsgC        *dmsg.Client
-	visors       map[cipher.PubKey]Conn // connected remote visors
-	users        *usermanager.UserManager
-	mu           *sync.RWMutex
-	visorMu      sync.Mutex
-	visorChanMux map[cipher.PubKey]*chanMux
-	selfConn     Conn
-	logger       *logging.Logger
+	c        hypervisorconfig.Config
+	visor    *Visor
+	dmsgC    *dmsg.Client
+	visors   map[cipher.PubKey]Conn // connected remote visors
+	users    *usermanager.UserManager
+	mu       *sync.RWMutex
+	selfConn Conn
+	logger   *logging.Logger
 }
 
 // New creates a new Hypervisor.
@@ -90,15 +86,14 @@ func New(config hypervisorconfig.Config, visor *Visor, dmsgC *dmsg.Client) (*Hyp
 	}
 
 	hv := &Hypervisor{
-		c:            config,
-		visor:        visor,
-		dmsgC:        dmsgC,
-		visors:       make(map[cipher.PubKey]Conn),
-		users:        usermanager.NewUserManager(mLogger, singleUserDB, config.Cookies),
-		mu:           new(sync.RWMutex),
-		visorChanMux: make(map[cipher.PubKey]*chanMux),
-		selfConn:     selfConn,
-		logger:       mLogger.PackageLogger("hypervisor"),
+		c:        config,
+		visor:    visor,
+		dmsgC:    dmsgC,
+		visors:   make(map[cipher.PubKey]Conn),
+		users:    usermanager.NewUserManager(mLogger, singleUserDB, config.Cookies),
+		mu:       new(sync.RWMutex),
+		selfConn: selfConn,
+		logger:   mLogger.PackageLogger("hypervisor"),
 	}
 	return hv, nil
 }
@@ -256,11 +251,6 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/routegroups", hv.getRouteGroups())
 				r.Post("/visors/{pk}/restart", hv.restart())
 				r.Post("/visors/{pk}/exec", hv.exec())
-				r.Post("/visors/{pk}/update", hv.updateVisor())
-				r.Get("/visors/{pk}/update/ws", hv.updateVisorWS())
-				r.Get("/visors/{pk}/update/ws/running", hv.isVisorWSUpdateRunning())
-				r.Get("/visors/{pk}/update/available", hv.visorUpdateAvailable())
-				r.Get("/visors/{pk}/update/available/{channel}", hv.visorUpdateAvailable())
 				r.Get("/visors/{pk}/runtime-logs", hv.getRuntimeLogs())
 				r.Post("/visors/{pk}/min-hops", hv.postMinHops())
 				r.Get("/visors/{pk}/persistent-transports", hv.getPersistentTransports())
@@ -1165,170 +1155,6 @@ func (hv *Hypervisor) exec() http.HandlerFunc {
 		output := struct {
 			Output string `json:"output"`
 		}{strings.TrimSpace(string(out))}
-
-		httputil.WriteJSON(w, r, http.StatusOK, output)
-	})
-}
-
-func (hv *Hypervisor) updateVisor() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var updateConfig updater.UpdateConfig
-
-		if err := httputil.ReadJSON(r, &updateConfig); err != nil {
-			hv.log(r).Warnf("update visor request: %v", err)
-			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
-
-			return
-		}
-
-		if updateConfig.Channel == "" {
-			updateConfig.Channel = updater.ChannelStable
-		}
-
-		updated, err := ctx.API.Update(updateConfig)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-
-		output := struct {
-			Updated bool `json:"updated"`
-		}{updated}
-
-		httputil.WriteJSON(w, r, http.StatusOK, output)
-	})
-}
-
-func (hv *Hypervisor) updateVisorWS() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		ws, err := websocket.Accept(w, r, nil)
-		if err != nil {
-			hv.log(r).WithError(err).Warnf("Failed to upgrade to websocket.")
-			w.WriteHeader(http.StatusInternalServerError)
-
-			return
-		}
-
-		defer func() {
-			if err := ws.Close(websocket.StatusNormalClosure, "response sent"); err != nil {
-				hv.log(r).WithError(err).Warnf("Failed to close WebSocket connection")
-			}
-		}()
-
-		_, raw, err := ws.Read(context.Background())
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-
-			return
-		}
-
-		var updateConfig updater.UpdateConfig
-		if err := json.Unmarshal(raw, &updateConfig); err != nil {
-			hv.log(r).Warnf("update visor request %v: %v", string(raw), err)
-			w.WriteHeader(http.StatusBadRequest)
-
-			return
-		}
-
-		if updateConfig.Channel == "" {
-			updateConfig.Channel = updater.ChannelStable
-		}
-
-		consumer := make(chan StatusMessage, 512)
-		hv.visorMu.Lock()
-		if mux := hv.visorChanMux[ctx.Addr.PK]; mux == nil {
-			ch := ctx.API.UpdateWithStatus(updateConfig)
-			hv.visorChanMux[ctx.Addr.PK] = newChanMux(ch, []chan<- StatusMessage{consumer})
-		} else {
-			hv.visorChanMux[ctx.Addr.PK].addConsumer(consumer)
-		}
-		hv.visorMu.Unlock()
-
-		defer func() {
-			hv.visorMu.Lock()
-			delete(hv.visorChanMux, ctx.Addr.PK)
-			hv.visorMu.Unlock()
-		}()
-
-		for status := range consumer {
-			if status.IsError {
-				if err := ws.Close(websocket.StatusAbnormalClosure, status.Text); err != nil {
-					hv.log(r).WithError(err).Warnf("failed to close WebSocket (abnormal)")
-					return
-				}
-			}
-
-			output := struct {
-				Status string `json:"status"`
-			}{status.Text}
-
-			rawOutput, err := json.Marshal(output)
-			if err != nil {
-				hv.log(r).WithError(err).Errorf("Failed to marshal JSON: %#v", output)
-				return
-			}
-
-			if err := ws.Write(context.Background(), websocket.MessageText, rawOutput); err != nil {
-				hv.log(r).WithError(err).Warnf("Failed to write WebSocket response")
-			}
-		}
-
-		if err := ws.Close(websocket.StatusNormalClosure, "finished"); err != nil {
-			hv.log(r).WithError(err).Warnf("failed to close WebSocket (normal)")
-		}
-	})
-}
-
-func (hv *Hypervisor) isVisorWSUpdateRunning() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		running := false
-		hv.visorMu.Lock()
-		running = hv.visorChanMux != nil && hv.visorChanMux[ctx.Addr.PK] != nil
-		hv.visorMu.Unlock()
-
-		resp := struct {
-			Running bool `json:"running"`
-		}{
-			running,
-		}
-
-		httputil.WriteJSON(w, r, http.StatusOK, resp)
-	})
-}
-
-func (hv *Hypervisor) visorUpdateAvailable() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		channel := updater.Channel(chi.URLParam(r, "channel"))
-		if channel == "" {
-			channel = updater.ChannelStable
-		}
-
-		version, err := ctx.API.UpdateAvailable(channel)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-
-		overview, err := ctx.API.Overview()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-
-		output := struct {
-			Available        bool   `json:"available"`
-			CurrentVersion   string `json:"current_version"`
-			AvailableVersion string `json:"available_version,omitempty"`
-			ReleaseURL       string `json:"release_url,omitempty"`
-		}{
-			Available:      version != nil,
-			CurrentVersion: overview.BuildInfo.Version,
-		}
-
-		if version != nil {
-			output.AvailableVersion = version.String()
-			output.ReleaseURL = version.ReleaseURL()
-		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, output)
 	})
