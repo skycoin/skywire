@@ -888,6 +888,7 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 		}
 
 		if err := osutil.UnlinkSocketFiles(v.conf.Dmsgpty.CLIAddr); err != nil {
+			log.Error("another instance of skywire may be running")
 			return err
 		}
 	}
