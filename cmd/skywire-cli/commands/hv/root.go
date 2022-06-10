@@ -1,7 +1,6 @@
 package hv
 
 import (
-	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/cmd/skywire-cli/commands/hv/hvdmsg"
@@ -9,7 +8,6 @@ import (
 	"github.com/skycoin/skywire/cmd/skywire-cli/commands/hv/hvui"
 	"github.com/skycoin/skywire/cmd/skywire-cli/commands/hv/hvvpn"
 )
-
 
 func init() {
 	RootCmd.AddCommand(hvui.RootCmd)
