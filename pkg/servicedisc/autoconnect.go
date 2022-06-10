@@ -71,7 +71,9 @@ func (a *autoconnector) Run(ctx context.Context) (err error) {
 		a.log.Debugln("Fetching public visors")
 		addrs, err := a.fetchPubAddresses(ctx)
 		if err != nil {
-			a.log.Errorf("Cannot fetch public services: %s", err)
+			if !errors.Is(context.Canceled, err) {
+				a.log.Errorf("Cannot fetch public services: %s", err)
+			}
 		}
 
 		// filter out any established transports
