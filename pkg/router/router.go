@@ -369,7 +369,7 @@ func (r *router) serveTransportManager(ctx context.Context) {
 		packet, err := r.tm.ReadPacket()
 		if err != nil {
 			if err == transport.ErrNotServing {
-				r.logger.WithError(err).Info("Stopped reading packets")
+				r.logger.WithError(err).Debug("Stopped reading packets")
 				return
 			}
 
@@ -394,7 +394,7 @@ func (r *router) serveSetup() {
 		if err != nil {
 			log := r.logger.WithError(err)
 			if errors.Is(err, dmsg.ErrEntityClosed) {
-				log.Info("Setup client stopped serving.")
+				log.Debug("Setup client stopped serving.")
 				return
 			}
 			log.Error("Setup client stopped serving due to unexpected error.")
