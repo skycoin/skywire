@@ -1,19 +1,9 @@
-//go:build linux && systray
-// +build linux,systray
+//go:build linux
+// +build linux
 
 package gui
 
-import (
-	"os"
-)
-
-// TODO (darkrengarius): change path
 const (
-	iconName        = "icons/icon.png"
-	deinstallerPath = "/opt/skywire/deinstaller"
+	//IconName is the relative path to the icon
+	IconName = "icons/icon.png"
 )
-
-func checkIsPackage() bool {
-	_, err := os.Stat(deinstallerPath)
-	return err == nil
-}
