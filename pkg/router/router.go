@@ -1026,8 +1026,10 @@ func (r *router) rulesGC() {
 	log := r.logger.WithField("func", "router.rulesGC")
 
 	removedRules := r.rt.CollectGarbage()
-	log.WithField("rules_count", len(removedRules)).
-		Debug("Removed rules.")
+	if len(removedRules) > 0 {
+		log.WithField("rules_count", len(removedRules)).
+			Debug("Removed rules.")
+	}
 
 	for _, rule := range removedRules {
 		r.removeRouteGroupOfRule(rule)
