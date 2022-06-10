@@ -157,7 +157,7 @@ func (p *Proc) awaitConn() bool {
 
 	go rpcS.ServeConn(p.conn)
 
-	p.log.Info("Associated and serving proc conn.")
+	p.log.Debug("Associated and serving proc conn.")
 	return true
 }
 
