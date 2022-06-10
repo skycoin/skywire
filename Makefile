@@ -379,8 +379,11 @@ mac-installer: ## Create signed and notarized application, run make mac-installe
 mac-installer-help: ## Show installer creation help
 	./scripts/mac_installer/create_installer.sh -h
 
+win-installer-latest:
+	@powershell '.\scripts\win_installer\script.ps1 latest'
+
 win-installer:
-	@powershell '.\scripts\win_installer\script.ps1'
+	@powershell '.\scripts\win_installer\script.ps1 $(CUSTOM_VERSION)'
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
