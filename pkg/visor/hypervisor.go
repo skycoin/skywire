@@ -158,7 +158,7 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 			}
 		}
 
-		log.Info("Accepted.")
+		log.Debug("Accepted.")
 
 		hv.mu.Lock()
 		hv.visors[addr.PK] = *visorConn
@@ -1607,7 +1607,7 @@ func (hv *Hypervisor) serveDmsg(ctx context.Context, log *logging.Logger) {
 		if err := hv.ServeRPC(ctx, hv.c.DmsgPort); err != nil {
 			log := log.WithError(err)
 			if errors.Is(err, dmsg.ErrEntityClosed) {
-				log.Info("Dmsg client stopped serving.")
+				log.Debug("Dmsg client stopped serving.")
 				return
 			}
 			log.Error("Failed to serve RPC client over dmsg.")
@@ -1615,7 +1615,7 @@ func (hv *Hypervisor) serveDmsg(ctx context.Context, log *logging.Logger) {
 		}
 	}()
 	log.WithField("addr", dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}).
-		Info("Serving RPC client over dmsg.")
+		Debug("Serving RPC client over dmsg.")
 }
 
 // dmsgPtyUI servers as a wrapper for `*dmsgpty.UI`. this way source file with
