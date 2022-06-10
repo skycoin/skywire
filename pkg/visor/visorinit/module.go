@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/skycoin/skycoin/src/util/logging"
 )
@@ -110,8 +109,7 @@ func (m *Module) InitConcurrent(ctx context.Context) {
 		return
 	}
 	defer m.stop()
-	m.log.Info("Starting")
-	start := time.Now()
+	m.log.Debug("Starting")
 	// start init in every dependency
 	for _, dep := range m.deps {
 		go dep.InitConcurrent(ctx)
@@ -134,12 +132,11 @@ func (m *Module) InitConcurrent(ctx context.Context) {
 		m.err = fmt.Errorf("unable to initialize module %s error: %w", m.Name, ErrNoInit)
 		return
 	}
-	startSelf := time.Now()
 	// init the module itself
 	err := m.init(ctx, m.log)
 	if err != nil {
 		m.err = fmt.Errorf("initializing module %s returning error: %v", m.Name, err)
 		return
 	}
-	m.log.Infof("Initialized in %s (%s with dependencies)", time.Since(startSelf), time.Since(start))
+	m.log.Debug("Initialized.")
 }
