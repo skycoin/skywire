@@ -1,38 +1,26 @@
 package commands
 
 import (
-	"bytes"
 	"context"
 	"embed"
 	"fmt"
-	"io"
 	"io/fs"
-	"io/ioutil"
-	"net/http"
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
-	"os/exec"
 	"os/user"
-	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
-	"github.com/bitfield/script"
 	cc "github.com/ivanpirog/coloredcobra"
-	"github.com/pkg/profile"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
-	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/syslog"
 	"github.com/skycoin/skywire/pkg/visor"
-	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -51,7 +39,6 @@ var (
 	pprofAddr            string
 	confPath             string
 	stdin                bool
-	launchBrowser        bool
 	hypervisorUI         bool
 	remoteHypervisorPKs  string
 	disableHypervisorPKs bool
@@ -80,9 +67,6 @@ func init() {
 	rootCmd.Flags().SortFlags = false
 
 	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use (default): "+skyenv.ConfigName)
-	if ((skyenv.OS == "linux") && !root) || ((skyenv.OS == "mac") && !root) || (skyenv.OS == "win") {
-		rootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
-	}
 	rootCmd.Flags().BoolVarP(&hypervisorUI, "hvui", "i", false, "run as hypervisor")
 	rootCmd.Flags().StringVarP(&remoteHypervisorPKs, "hv", "j", "", "add remote hypervisor PKs at runtime")
 	hiddenflags = append(hiddenflags, "hv")
@@ -199,14 +183,29 @@ var rootCmd = &cobra.Command{
 			confPath = visorconfig.StdinName
 		}
 		logBuildInfo(mLog)
-		if launchBrowser {
-			hypervisorUI = true
-		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
 		runApp()
 	},
 	Version: buildinfo.Version(),
+}
+
+func runApp() {
+	runVisor(nil)
+}
+
+// setStopFunction sets the stop function
+func setStopFunction(log *logging.MasterLogger, cancel context.CancelFunc, fn func() error) {
+	stopVisorWg.Add(1)
+	defer stopVisorWg.Done()
+
+	stopVisorFn = func() {
+		if err := fn(); err != nil {
+			log.WithError(err).Error("Visor closed with error.")
+		}
+		cancel()
+		stopVisorWg.Wait()
+	}
 }
 
 func runVisor(conf *visorconfig.V1) {
@@ -220,30 +219,6 @@ func runVisor(conf *visorconfig.V1) {
 
 	if conf == nil {
 		conf = initConfig(log, confPath)
-	}
-
-	if skyenv.OS == "linux" {
-		//warn about creating files & directories as root in non root-owned dir
-		if _, err := exec.LookPath("stat"); err == nil {
-			confPath1, _ := filepath.Split(confPath)
-			if confPath1 == "" {
-				confPath1 = "./"
-			}
-			owner, err := script.Exec(`stat -c '%U' ` + confPath1).String()
-			if err != nil {
-				log.Error("cannot stat: " + confPath1)
-			}
-			rootOwner, err := script.Exec(`stat -c '%U' /root`).String()
-			if err != nil {
-				log.Error("cannot stat: /root")
-			}
-			if (owner != rootOwner) && root {
-				log.Warn("writing config as root to directory not owned by root")
-			}
-			if !root && (owner == rootOwner) {
-				log.Fatal("Insufficient permissions to write to the specified path")
-			}
-		}
 	}
 
 	if disableHypervisorPKs {
@@ -272,17 +247,12 @@ func runVisor(conf *visorconfig.V1) {
 		default:
 			log.Errorln("Failed to start visor.")
 		}
-		quitSystray()
 		return
 	}
 
 	setStopFunction(log, cancel, vis.Close)
 
 	vis.SetLogstore(store)
-
-	if launchBrowser {
-		runBrowser(log, conf)
-	}
 
 	// Wait.
 	<-ctx.Done()
@@ -315,142 +285,6 @@ func Execute(ui embed.FS) {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 	}
-}
-
-func initLogger(tag string, syslogAddr string) *logging.MasterLogger {
-	mLog := logging.NewMasterLogger()
-	if syslogAddr != "" {
-		hook, err := syslog.SetupHook(syslogAddr, tag)
-		if err != nil {
-			mLog.WithError(err).Error("Failed to connect to the syslog daemon.")
-		} else {
-			mLog.AddHook(hook)
-			mLog.Out = ioutil.Discard
-		}
-	}
-	return mLog
-}
-
-func initPProf(log *logging.MasterLogger, tag string, profMode string, profAddr string) (stop func()) {
-	var optFunc func(*profile.Profile)
-
-	switch profMode {
-	case "none", "":
-	case "http":
-		go func() {
-			err := http.ListenAndServe(profAddr, nil)
-			log.WithError(err).
-				WithField("mode", profMode).
-				WithField("addr", profAddr).
-				Info("Stopped serving pprof on http.")
-		}()
-	case "cpu":
-		optFunc = profile.CPUProfile
-	case "mem":
-		optFunc = profile.MemProfile
-	case "mutex":
-		optFunc = profile.MutexProfile
-	case "block":
-		optFunc = profile.BlockProfile
-	case "trace":
-		optFunc = profile.TraceProfile
-	}
-
-	if optFunc != nil {
-		stop = profile.Start(profile.ProfilePath("./logs/"+tag), optFunc).Stop
-	}
-
-	if stop == nil {
-		stop = func() {}
-	}
-	return stop
-}
-
-func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 { //nolint
-	log := mLog.PackageLogger("visor:config")
-
-	var r io.Reader
-
-	switch confPath {
-	case visorconfig.StdinName:
-		log.Info("Reading config from STDIN.")
-		r = os.Stdin
-	case "":
-		fallthrough
-	default:
-		log.Info("Reading config from file.")
-		log.WithField("filepath", confPath).Info()
-		f, err := os.ReadFile(filepath.Clean(confPath))
-		if err != nil {
-			log.WithError(err).Fatal("Failed to read config file.")
-		}
-		r = bytes.NewReader(f)
-	}
-
-	conf, compat, err := visorconfig.Parse(log, r, confPath, visorBuildInfo)
-	if err != nil {
-		log.WithError(err).Fatal("Failed to read in config.")
-	}
-	if !compat {
-		log.Fatalf("failed to start skywire - config version is incompatible")
-	}
-	if hypervisorUI {
-		config := hypervisorconfig.GenerateWorkDirConfig(false)
-		conf.Hypervisor = &config
-	}
-	if conf.Hypervisor != nil {
-		conf.Hypervisor.UIAssets = uiAssets
-	}
-	return conf
-}
-
-// runBrowser opens the hypervisor interface in the browser
-func runBrowser(mLog *logging.MasterLogger, conf *visorconfig.V1) {
-	log := mLog.PackageLogger("visor:launch-browser")
-
-	if conf.Hypervisor == nil {
-		log.Errorln("Hypervisor not started - cannot start browser with a regular visor")
-		return
-	}
-	addr := conf.Hypervisor.HTTPAddr
-	if addr[0] == ':' {
-		addr = "localhost" + addr
-	}
-	if addr[:4] != "http" {
-		if conf.Hypervisor.EnableTLS {
-			addr = "https://" + addr
-		} else {
-			addr = "http://" + addr
-		}
-	}
-	go func() {
-		if !isHvRunning(addr, 5) {
-			log.Error("Cannot open hypervisor in browser: status check failed")
-			return
-		}
-		if err := webbrowser.Open(addr); err != nil {
-			log.WithError(err).Error("webbrowser.Open failed")
-		}
-	}()
-}
-
-func isHvRunning(addr string, retries int) bool {
-	url := addr + "/api/ping"
-	for i := 0; i < retries; i++ {
-		time.Sleep(500 * time.Millisecond)
-		resp, err := http.Get(url) // nolint: gosec
-		if err != nil {
-			continue
-		}
-		err = resp.Body.Close()
-		if err != nil {
-			continue
-		}
-		if resp.StatusCode < 400 {
-			return true
-		}
-	}
-	return false
 }
 
 func logBuildInfo(mLog *logging.MasterLogger) {
