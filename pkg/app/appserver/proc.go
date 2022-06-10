@@ -14,6 +14,7 @@ import (
 	"time"
 
 	ipc "github.com/james-barrow/golang-ipc"
+	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
@@ -84,8 +85,8 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	cmd.Dir = conf.ProcWorkDir
 
 	appLog, appLogDB := appcommon.NewProcLogger(conf, mLog)
-	cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").Writer()
-	cmd.Stderr = appLog.WithField("_module", moduleName).WithField("func", "(STDERR)").Writer()
+	cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").WriterLevel(logrus.DebugLevel)
+	cmd.Stderr = appLog.WithField("_module", moduleName).WithField("func", "(STDERR)").WriterLevel(logrus.ErrorLevel)
 
 	p := &Proc{
 		disc:    disc,
