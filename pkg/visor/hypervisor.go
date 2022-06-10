@@ -539,8 +539,6 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 					WithField("visor_addr", c.Addr).
 					WithField("func", "getVisors")
 
-				log.Debug("Requesting summary via RPC.")
-
 				summary, err := c.API.Summary()
 				if err != nil {
 					log.WithError(err).
@@ -552,8 +550,6 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 						},
 						Health: &HealthInfo{},
 					}
-				} else {
-					log.Debug("Obtained summary via RPC.")
 				}
 				resp := makeSummaryResp(err == nil, false, summary)
 				summaries[i] = resp
