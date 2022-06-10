@@ -68,7 +68,7 @@ func (a *autoconnector) Run(ctx context.Context) (err error) {
 			return err
 		}
 
-		a.log.Infoln("Fetching public visors")
+		a.log.Debugln("Fetching public visors")
 		addrs, err := a.fetchPubAddresses(ctx)
 		if err != nil {
 			a.log.Errorf("Cannot fetch public services: %s", err)
