@@ -56,11 +56,11 @@ func main() {
 	defer appCl.Close()
 
 	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
-		fmt.Printf("Failed to output build info: %v", err)
+		fmt.Printf("Failed to output build info: %v\n", err)
 	}
 
 	flag.Parse()
-	fmt.Print("Successfully started skychat.")
+	fmt.Println("Successfully started skychat.")
 
 	clientCh = make(chan string)
 	defer close(clientCh)
@@ -84,7 +84,7 @@ func main() {
 	http.HandleFunc("/message", messageHandler(ctx))
 	http.HandleFunc("/sse", sseHandler)
 
-	fmt.Print("Serving HTTP on", *addr)
+	fmt.Println("Serving HTTP on", *addr)
 
 	setAppStatus(appCl, launcher.AppDetailedStatusRunning)
 
@@ -103,13 +103,13 @@ func listenLoop() {
 	}
 
 	for {
-		fmt.Print("Accepting skychat conn...")
+		fmt.Println("Accepting skychat conn...")
 		conn, err := l.Accept()
 		if err != nil {
-			fmt.Print("Failed to accept conn:", err)
+			fmt.Println("Failed to accept conn:", err)
 			return
 		}
-		fmt.Print("Accepted skychat conn")
+		fmt.Println("Accepted skychat conn")
 
 		raddr := conn.RemoteAddr().(appnet.Addr)
 		connsMu.Lock()
@@ -127,7 +127,7 @@ func handleConn(conn net.Conn) {
 		buf := make([]byte, 32*1024)
 		n, err := conn.Read(buf)
 		if err != nil {
-			fmt.Print("Failed to read packet:", err)
+			fmt.Println("Failed to read packet:", err)
 			raddr := conn.RemoteAddr().(appnet.Addr)
 			connsMu.Lock()
 			delete(conns, raddr.PubKey)
@@ -137,7 +137,7 @@ func handleConn(conn net.Conn) {
 
 		clientMsg, err := json.Marshal(map[string]string{"sender": raddr.PubKey.Hex(), "message": string(buf[:n])})
 		if err != nil {
-			fmt.Printf("Failed to marshal json: %v", err)
+			fmt.Printf("Failed to marshal json: %v\n", err)
 		}
 		select {
 		case clientCh <- string(clientMsg):
