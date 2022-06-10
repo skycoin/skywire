@@ -329,17 +329,17 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 
 	const dmsgTimeout = time.Second * 20
 	logger := dmsgC.Logger().WithField("timeout", dmsgTimeout)
-	logger.Info("Connecting to the dmsg network...")
+	logger.Debug("Connecting to the dmsg network...")
 	select {
 	case <-time.After(dmsgTimeout):
 		logger.Warn("Failed to connect to the dmsg network, will try again later.")
 		go func() {
 			<-v.dmsgC.Ready()
-			logger.Info("Connected to the dmsg network.")
+			logger.Debug("Connected to the dmsg network.")
 			v.tpM.InitDmsgClient(ctx, dmsgC)
 		}()
 	case <-v.dmsgC.Ready():
-		logger.Info("Connected to the dmsg network.")
+		logger.Debug("Connected to the dmsg network.")
 		v.tpM.InitDmsgClient(ctx, dmsgC)
 	}
 	// dmsgctrl setup
@@ -716,7 +716,7 @@ func vpnEnvMaker(conf *visorconfig.V1, dmsgC, dmsgDC *dmsg.Client, tpRemoteAddrs
 
 func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if v.conf.CLIAddr == "" {
-		v.log.Info("'cli_addr' is not configured, skipping.")
+		v.log.Debug("'cli_addr' is not configured, skipping.")
 		return nil
 	}
 
@@ -778,7 +778,7 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 	conf := v.conf.UptimeTracker
 
 	if conf == nil {
-		v.log.Info("'uptime_tracker' is not configured, skipping.")
+		v.log.Debug("'uptime_tracker' is not configured, skipping.")
 		return nil
 	}
 
@@ -862,7 +862,7 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	visorUpdater := v.serviceDisc.VisorUpdater(port)
 	visorUpdater.Start()
 
-	v.log.Infof("Sent request to register visor as public")
+	v.log.Debugf("Sent request to register visor as public")
 	v.pushCloseStack("public visor updater", func() error {
 		visorUpdater.Stop()
 		return nil
@@ -874,7 +874,7 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Dmsgpty
 
 	if conf == nil {
-		log.Info("'dmsgpty' is not configured, skipping.")
+		log.Debug("'dmsgpty' is not configured, skipping.")
 		return nil
 	}
 
@@ -999,7 +999,6 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 }
 
 func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
-	v.log.Infof("Initializing hypervisor")
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -1034,8 +1033,6 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 
 		cancel()
 	}()
-
-	v.log.Infof("Hypervisor initialized")
 
 	return nil
 }
