@@ -225,7 +225,6 @@ func (tm *Manager) cleanupTransports(ctx context.Context) {
 		select {
 		case <-ticker.C:
 			tm.mx.Lock()
-			tm.Logger.Debugf("Locked in cleanup")
 			var toDelete []*ManagedTransport
 			for _, tp := range tm.tps {
 				if tp.IsClosed() {
@@ -236,7 +235,6 @@ func (tm *Manager) cleanupTransports(ctx context.Context) {
 				delete(tm.tps, tp.Entry.ID)
 			}
 			tm.mx.Unlock()
-			tm.Logger.Debugf("Unlocked in cleanup")
 			if len(toDelete) > 0 {
 				tm.Logger.Debugf("Deleted %d unused transport entries", len(toDelete))
 			}
