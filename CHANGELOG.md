@@ -53,6 +53,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - `run-vpnsrv-dmsghttp` makefile directive
 - `run-vpnsrv -dmsghttp-test` makefile directive
 - `install-system-linux` and `install-system-linux-systray` makefile directives
+- `skywire-cli dmsgpty list` to view of connected remote visor to hypervisor
+- `skywire-cli dmsgpty start <pk>` to connect through dmsgpty to remote visor
 
 ## 0.6.0
 
