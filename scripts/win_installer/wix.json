@@ -5,14 +5,14 @@
   "files": {
     "guid": "",
     "items": [
-      "build/amd64/skywire-cli.exe",
-      "build/amd64/skywire-visor.exe",
-      "build/amd64/apps/vpn-client.exe",
-      "build/amd64/skywire.bat",
+      "build/skywire-cli.exe",
+      "build/skywire-visor.exe",
+      "build/apps/vpn-client.exe",
+      "build/skywire.bat",
       "ico.ico",
-      "build/amd64/wintun.dll",
-      "build/amd64/dmsghttp-config.json",
-      "build/amd64/new.update"
+      "build/wintun.dll",
+      "build/dmsghttp-config.json",
+      "build/new.update"
     ]
   },
   "env": {
