@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - remove transports cache from visor initialization and check them before make route
 - `run-source` makefile directive write config to stdout & read config from stdin
 - fixed skywire-visor uses skywire-config.json (default config name) without needing to specify
+- `make win-installer` need new argument `CUSTOM_VERSION` to get make installer for this version, use for pre-releases
 
 ### Added
 - added `add-rhv` and `disable-rhv` flags to `skywire-visor` for adding remote hypervisor PK and disable remote hypervisor PK(s) on config file
@@ -55,6 +56,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - `install-system-linux` and `install-system-linux-systray` makefile directives
 - `skywire-cli dmsgpty list` to view of connected remote visor to hypervisor
 - `skywire-cli dmsgpty start <pk>` to connect through dmsgpty to remote visor
+- `make win-installer-latest` to create installer for latest version of released, not pre-release.
 
 ## 0.6.0
 
