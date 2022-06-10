@@ -132,7 +132,7 @@ func (c *genericClient) initTransport(ctx context.Context, conn net.Conn, rPK ci
 	}
 	lAddr, rAddr := dmsg.Addr{PK: c.lPK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort}
 	remoteAddr := conn.RemoteAddr()
-	c.log.Infof("Performing handshake with %v", remoteAddr)
+	c.log.Debugf("Performing handshake with %v", remoteAddr)
 	hs := handshake.InitiatorHandshake(c.lSK, lAddr, rAddr)
 	return c.wrapTransport(conn, hs, true, freePort)
 }
@@ -145,7 +145,7 @@ func (c *genericClient) acceptTransports(lis net.Listener) {
 	c.connListener = lis
 	close(c.listenStarted)
 	c.mu.Unlock()
-	c.log.Infof("listening on addr: %v", c.connListener.Addr())
+	c.log.Debugf("listening on addr: %v", c.connListener.Addr())
 	for {
 		if err := c.acceptTransport(); err != nil {
 			if errors.Is(err, io.EOF) {
@@ -153,7 +153,7 @@ func (c *genericClient) acceptTransports(lis net.Listener) {
 			}
 
 			if c.isClosed() && (errors.Is(err, io.ErrClosedPipe) || strings.Contains(err.Error(), "use of closed network connection")) {
-				c.log.Info("Cleanly stopped serving.")
+				c.log.Debug("Cleanly stopped serving.")
 				return
 			}
 
@@ -175,7 +175,7 @@ func (c *genericClient) wrapTransport(rawConn net.Conn, hs handshake.Handshake, 
 		return nil, err
 	}
 	transport.freePort = onClose
-	c.log.Infof("Sent handshake to %v, local addr %v, remote addr %v", rawConn.RemoteAddr(), transport.lAddr, transport.rAddr)
+	c.log.Debugf("Sent handshake to %v, local addr %v, remote addr %v", rawConn.RemoteAddr(), transport.lAddr, transport.rAddr)
 	if err := transport.encrypt(c.lPK, c.lSK, initiator); err != nil {
 		return nil, err
 	}
@@ -195,7 +195,7 @@ func (c *genericClient) acceptTransport() error {
 		return err
 	}
 	remoteAddr := conn.RemoteAddr()
-	c.log.Infof("Accepted connection from %v", remoteAddr)
+	c.log.Debugf("Accepted connection from %v", remoteAddr)
 
 	onClose := func() {}
 	hs := handshake.ResponderHandshake(handshake.MakeF2PortChecker(c.checkListener))
@@ -326,7 +326,7 @@ func (c *resolvedClient) dialVisor(ctx context.Context, rPK cipher.PubKey, dial 
 	if err != nil {
 		return nil, fmt.Errorf("resolve PK: %w", err)
 	}
-	c.log.Infof("Resolved PK %v to visor data %v", rPK, visorData)
+	c.log.Debugf("Resolved PK %v to visor data %v", rPK, visorData)
 
 	if visorData.IsLocal {
 		for _, host := range visorData.Addresses {
