@@ -26,11 +26,11 @@ type TransportListener struct {
 // NewTransportListener makes a TransportListener from configuration
 func NewTransportListener(ctx context.Context, conf *visorconfig.V1, dmsgC *dmsg.Client, tm *transport.Manager, masterLogger *logging.MasterLogger) (*TransportListener, error) {
 	log := masterLogger.PackageLogger("transport_setup")
-	log.WithField("local_pk", conf.PK).Info("Connecting to the dmsg network.")
+	log.WithField("local_pk", conf.PK).Debug("Connecting to the dmsg network.")
 
 	select {
 	case <-dmsgC.Ready():
-		log.WithField("local_pk", conf.PK).Info("Connected!")
+		log.WithField("local_pk", conf.PK).Debug("Connected!")
 		tl := &TransportListener{
 			dmsgC:   dmsgC,
 			log:     log,
@@ -45,7 +45,7 @@ func NewTransportListener(ctx context.Context, conf *visorconfig.V1, dmsgC *dmsg
 
 // Serve transport setup rpc to trusted nodes over dmsg
 func (ts *TransportListener) Serve(ctx context.Context) {
-	ts.log.WithField("dmsg_port", skyenv.DmsgTransportSetupPort).Info("starting listener")
+	ts.log.WithField("dmsg_port", skyenv.DmsgTransportSetupPort).Debug("starting listener")
 	lis, err := ts.dmsgC.Listen(skyenv.DmsgTransportSetupPort)
 	if err != nil {
 		ts.log.WithError(err).Error("failed to listen")
@@ -57,13 +57,13 @@ func (ts *TransportListener) Serve(ctx context.Context) {
 		}
 	}()
 
-	ts.log.WithField("dmsg_port", skyenv.DmsgTransportSetupPort).Info("Accepting dmsg streams.")
+	ts.log.WithField("dmsg_port", skyenv.DmsgTransportSetupPort).Debug("Accepting dmsg streams.")
 	for {
 		conn, err := lis.AcceptStream()
 		if err != nil {
 			log := ts.log.WithError(err)
 			if errors.Is(err, dmsg.ErrEntityClosed) {
-				log.Info("Dmsg client stopped serving.")
+				log.Debug("Dmsg client stopped serving.")
 				break
 			}
 			log.Error("Failed to accept")
@@ -78,7 +78,7 @@ func (ts *TransportListener) Serve(ctx context.Context) {
 			}
 		}
 		if !found {
-			ts.log.WithField("remote_conn", remotePK).WithField("trusted", ts.tsNodes).Info("Closing connection")
+			ts.log.WithField("remote_conn", remotePK).WithField("trusted", ts.tsNodes).Debug("Closing connection")
 			if err := conn.Close(); err != nil {
 				ts.log.WithError(err).Error("Failed to close stream")
 			}
@@ -88,7 +88,7 @@ func (ts *TransportListener) Serve(ctx context.Context) {
 		if err := rpcS.Register(gw); err != nil {
 			ts.log.WithError(err).Error("failed to register rpc")
 		}
-		ts.log.WithField("remote_conn", remotePK).Info("Serving rpc")
+		ts.log.WithField("remote_conn", remotePK).Debug("Serving rpc")
 		go rpcS.ServeConn(conn)
 	}
 }
