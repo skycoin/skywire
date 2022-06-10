@@ -180,7 +180,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Con
 		v.trackers = dmsgtracker.NewDmsgTrackerManager(v.MasterLogger(), v.dmsgC, 0, 0)
 		v.trackersReady = true
 		v.initLock.RUnlock()
-		log.Info("Startup finished.")
+		log.Info("Startup complete.")
 	}()
 	return v, true
 }
