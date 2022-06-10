@@ -105,12 +105,12 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 		WithField("remote_pk", mt.rPK).
 		WithField("tp_index", atomic.AddInt32(&mTpCount, 1))
 
-	log.Info("Serving.")
+	log.Debug("Serving.")
 
 	defer func() {
 		mt.close()
 		log.WithField("remaining_tps", atomic.AddInt32(&mTpCount, -1)).
-			Info("Stopped serving.")
+			Debug("Stopped serving.")
 	}()
 
 	go mt.readLoop(readCh)
@@ -174,7 +174,6 @@ func (mt *ManagedTransport) isServing() bool {
 // It only returns an error if transport status update fails.
 func (mt *ManagedTransport) Close() (err error) {
 	mt.close()
-	mt.log.Debug("Waiting for the waitgroup")
 	mt.wg.Wait()
 	return nil
 }
@@ -196,14 +195,12 @@ func (mt *ManagedTransport) IsClosed() bool {
 // regular transport close operations should probably call it concurrently
 // need to find a way to handle this properly (done channel in return?)
 func (mt *ManagedTransport) close() {
-	mt.log.Debug("Closing...")
 	select {
 	case <-mt.done:
 		return
 	default:
 		close(mt.done)
 	}
-	mt.log.Debug("Locking transportMx")
 	mt.transportMx.Lock()
 	close(mt.transportCh)
 	if mt.transport != nil {
@@ -213,7 +210,6 @@ func (mt *ManagedTransport) close() {
 		mt.transport = nil
 	}
 	mt.transportMx.Unlock()
-	mt.log.Debug("Unlocking transportMx")
 	_ = mt.deleteFromDiscovery() //nolint:errcheck
 }
 
@@ -396,20 +392,16 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 		}
 	}
 
-	log.Debug("Awaiting packet...")
-
 	h := make(routing.Packet, routing.PacketHeaderSize)
 	if _, err = io.ReadFull(transport, h); err != nil {
 		log.WithError(err).Debugf("Failed to read packet header.")
 		return nil, err
 	}
-	log.WithField("header_len", len(h)).WithField("header_raw", h).Debug("Read packet header.")
 	p := make([]byte, h.Size())
 	if _, err = io.ReadFull(transport, p); err != nil {
 		log.WithError(err).Debugf("Failed to read packet payload.")
 		return nil, err
 	}
-	log.WithField("payload_len", len(p)).Debug("Read packet payload.")
 
 	packet = append(h, p...)
 	if n := len(packet); n > routing.PacketHeaderSize {
@@ -441,7 +433,6 @@ func (mt *ManagedTransport) logRecv(b uint64) {
 // and returns true if it was bigger than 0
 func (mt *ManagedTransport) logMod() bool {
 	if ops := atomic.SwapUint32(&mt.logUpdates, 0); ops > 0 {
-		mt.log.Infof("entry log: recording %d operations", ops)
 		return true
 	}
 	return false
