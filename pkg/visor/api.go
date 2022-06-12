@@ -51,6 +51,7 @@ type API interface {
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
+	RemoteVisors() []string
 
 	TransportTypes() ([]string, error)
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
@@ -564,6 +565,15 @@ func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.Connection
 		return cSummary, nil
 	}
 	return nil, ErrProcNotAvailable
+}
+
+// RemoteVisors return list of connected remote visors
+func (v *Visor) RemoteVisors() []string {
+	var visors []string
+	for _, conn := range v.remoteVisors {
+		visors = append(visors, conn.Addr.PK.String())
+	}
+	return visors
 }
 
 // TransportTypes implements API.
