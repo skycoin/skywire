@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -248,6 +249,8 @@ func (v *Visor) Close() error {
 	}
 	v.processRuntimeErrs()
 	log.Info("Shutdown complete. Goodbye!")
+	//the shutdown is completed by exiting the process here
+	os.Exit(0)
 	return nil
 }
 
