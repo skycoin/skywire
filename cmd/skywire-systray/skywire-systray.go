@@ -1,3 +1,6 @@
+/*
+skywire systray
+*/
 package main
 
 import (
