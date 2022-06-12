@@ -54,27 +54,14 @@ type Conn struct {
 
 // Hypervisor manages visors.
 type Hypervisor struct {
-<<<<<<< HEAD
-	c        hypervisorconfig.Config
-	visor    *Visor
-	dmsgC    *dmsg.Client
-	visors   map[cipher.PubKey]Conn // connected remote visors
-	users    *usermanager.UserManager
-	mu       *sync.RWMutex
-	selfConn Conn
-	logger   *logging.Logger
-=======
 	c            hypervisorconfig.Config
 	visor        *Visor
 	remoteVisors map[cipher.PubKey]Conn // connected remote visors to hypervisor
 	dmsgC        *dmsg.Client
 	users        *usermanager.UserManager
 	mu           *sync.RWMutex
-	visorMu      sync.Mutex
-	visorChanMux map[cipher.PubKey]*chanMux
 	selfConn     Conn
 	logger       *logging.Logger
->>>>>>> the-skycoin-project-remove-updater-1
 }
 
 // New creates a new Hypervisor.
@@ -100,26 +87,14 @@ func New(config hypervisorconfig.Config, visor *Visor, dmsgC *dmsg.Client) (*Hyp
 	}
 
 	hv := &Hypervisor{
-<<<<<<< HEAD
-		c:        config,
-		visor:    visor,
-		dmsgC:    dmsgC,
-		visors:   make(map[cipher.PubKey]Conn),
-		users:    usermanager.NewUserManager(mLogger, singleUserDB, config.Cookies),
-		mu:       new(sync.RWMutex),
-		selfConn: selfConn,
-		logger:   mLogger.PackageLogger("hypervisor"),
-=======
 		c:            config,
 		visor:        visor,
 		remoteVisors: make(map[cipher.PubKey]Conn),
 		dmsgC:        dmsgC,
 		users:        usermanager.NewUserManager(mLogger, singleUserDB, config.Cookies),
 		mu:           new(sync.RWMutex),
-		visorChanMux: make(map[cipher.PubKey]*chanMux),
 		selfConn:     selfConn,
 		logger:       mLogger.PackageLogger("hypervisor"),
->>>>>>> the-skycoin-project-remove-updater-1
 	}
 	return hv, nil
 }
