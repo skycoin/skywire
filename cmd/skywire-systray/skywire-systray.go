@@ -53,6 +53,7 @@ func onReady() {
 		mHV := systray.AddMenuItem("Hypervisor", "Hypervisor")
 		mVPN := systray.AddMenuItem("VPN UI", "VPN UI")
 		mPTY := systray.AddMenuItem("DMSGPTY UI", "DMSGPTY UI")
+		mShutdown := systray.AddMenuItem("Shutdown", "Shutdown")
 		systray.AddSeparator()
 		systray.AddMenuItem("", "")
 		for {
@@ -71,6 +72,11 @@ func onReady() {
 				_, err := script.Exec(`skywire-cli hv dmsg ui`).Stdout()
 				if err != nil {
 					l.WithError(err).Fatalln("Failed to open dmsgpty UI")
+				}
+			case <-mShutdown.ClickedCh:
+				_, err := script.Exec(`skywire-cli visor halt`).Stdout()
+				if err != nil {
+					l.WithError(err).Fatalln("Failed to stop skywire")
 				}
 			case <-mQuit.ClickedCh:
 				systray.Quit()
