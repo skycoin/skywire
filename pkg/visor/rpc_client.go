@@ -393,99 +393,6 @@ type StatusMessage struct {
 	IsError bool
 }
 
-<<<<<<< HEAD
-=======
-// UpdateWithStatus combines results of Update and UpdateStatus.
-func (rc *rpcClient) UpdateWithStatus(config updater.UpdateConfig) <-chan StatusMessage {
-	ch := make(chan StatusMessage, 512)
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				var status string
-
-				err := rc.Call("UpdateStatus", &struct{}{}, &status)
-				if err != nil {
-					rc.log.WithError(err).Errorf("Failed to check update status")
-					status = ""
-				}
-
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					switch status {
-					case "", io.EOF.Error():
-
-					default:
-						ch <- StatusMessage{
-							Text: status,
-						}
-					}
-					time.Sleep(100 * time.Millisecond)
-				}
-			}
-		}
-	}()
-
-	go func() {
-		defer func() {
-			cancel()
-			close(ch)
-		}()
-
-		var updated bool
-
-		if err := rc.Call("Update", &config, &updated); err != nil {
-			ch <- StatusMessage{
-				Text:    err.Error(),
-				IsError: true,
-			}
-		} else if updated {
-			ch <- StatusMessage{
-				Text: "Finished",
-			}
-		} else {
-			ch <- StatusMessage{
-				Text: "No update found",
-			}
-		}
-	}()
-
-	return ch
-}
-
-// UpdateAvailable calls UpdateAvailable.
-func (rc *rpcClient) UpdateAvailable(channel updater.Channel) (*updater.Version, error) {
-	var version, empty updater.Version
-	err := rc.Call("UpdateAvailable", &channel, &version)
-	if err != nil {
-		return nil, err
-	}
-
-	if version == empty {
-		return nil, nil
-	}
-
-	return &version, err
-}
-
-// UpdateStatus calls UpdateStatus
-func (rc *rpcClient) UpdateStatus() (string, error) {
-	var result string
-	err := rc.Call("UpdateStatus", &struct{}{}, &result)
-	if err != nil {
-		return "", err
-	}
-
-	return result, err
-}
-
 // RemoteVisors calls RemoteVisors.
 func (rc *rpcClient) RemoteVisors() []string {
 	output := []string{}
@@ -493,7 +400,6 @@ func (rc *rpcClient) RemoteVisors() []string {
 	return output
 }
 
->>>>>>> the-skycoin-project-remove-updater-1
 // MockRPCClient mocks API.
 type mockRPCClient struct {
 	startedAt time.Time
