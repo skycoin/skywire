@@ -25,7 +25,6 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/utclient"
-	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -60,7 +59,6 @@ type Visor struct {
 
 	startedAt     time.Time
 	restartCtx    *restart.Context
-	updater       *updater.Updater
 	uptimeTracker utclient.APIClient
 
 	ebc          *appevent.Broadcaster // event broadcaster
