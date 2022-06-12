@@ -533,3 +533,15 @@ func (r *RPC) SetPublicAutoconnect(pAc *bool, _ *struct{}) (err error) {
 	err = r.visor.SetPublicAutoconnect(*pAc)
 	return err
 }
+
+// RemoteVisors return connected remote visors
+func (r *RPC) RemoteVisors(_ *struct{}, out *[]string) (err error) {
+	defer rpcutil.LogCall(r.log, "RemoteVisor", nil)(out, &err)
+
+	remoteVisors := r.visor.RemoteVisors()
+	if remoteVisors != nil {
+		*out = remoteVisors
+	}
+
+	return err
+}
