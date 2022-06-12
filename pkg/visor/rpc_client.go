@@ -354,6 +354,11 @@ func (rc *rpcClient) Restart() error {
 	return rc.Call("Restart", &struct{}{}, &struct{}{})
 }
 
+// Shutdown calls Shutdown.
+func (rc *rpcClient) Shutdown() error {
+	return rc.Call("Shutdown", &struct{}{}, &struct{}{})
+}
+
 // Exec calls Exec.
 func (rc *rpcClient) Exec(command string) ([]byte, error) {
 	output := make([]byte, 0)
@@ -909,6 +914,11 @@ func (mc *mockRPCClient) RouteGroups() ([]RouteGroupInfo, error) {
 
 // Restart implements API.
 func (mc *mockRPCClient) Restart() error {
+	return nil
+}
+
+// Shutdown implements API.
+func (mc *mockRPCClient) Shutdown() error {
 	return nil
 }
 

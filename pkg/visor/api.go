@@ -71,6 +71,7 @@ type API interface {
 	RouteGroups() ([]RouteGroupInfo, error)
 
 	Restart() error
+	Shutdown() error
 	Exec(command string) ([]byte, error)
 	RuntimeLogs() (string, error)
 
@@ -736,6 +737,15 @@ func (v *Visor) Restart() error {
 	}
 
 	return v.restartCtx.Restart()
+}
+
+// Shutdown implements API.
+func (v *Visor) Shutdown() error {
+	if v.restartCtx == nil {
+		return ErrMalformedRestartContext
+	}
+
+	return v.Close()
 }
 
 // Exec implements API.
