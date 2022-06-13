@@ -99,7 +99,6 @@ func (s *Server) Serve(l net.Listener) error {
 			serveErr = fmt.Errorf("error enabling IPv4 forwarding: %w", err)
 			return
 		}
-		fmt.Println("Set IPv4 forwarding = 1")
 		defer func() {
 			s.revertIPv4ForwardingValue()
 		}()
@@ -348,6 +347,7 @@ func (s *Server) setAppStatus(status launcher.AppDetailedStatus) {
 }
 
 func (s *Server) setAppError(appErr error) {
+	print(appErr)
 	if err := s.appCl.SetError(appErr.Error()); err != nil {
 		fmt.Printf("Failed to set error %v: %v\n", appErr, err)
 	}
