@@ -79,7 +79,7 @@ func (cs *ClientSession) serve() error {
 	}()
 	for {
 		if _, err := cs.acceptStream(); err != nil {
-			if netErr, ok := err.(net.Error); ok && netErr.Temporary() {
+			if netErr, ok := err.(net.Error); ok && netErr.Temporary() { //nolint
 				cs.log.
 					WithError(err).
 					Info("Failed to accept stream.")

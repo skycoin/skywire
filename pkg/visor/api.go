@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -24,7 +23,6 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
-	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 )
 
@@ -53,6 +51,7 @@ type API interface {
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
+	RemoteVisors() []string
 
 	TransportTypes() ([]string, error)
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
@@ -73,10 +72,6 @@ type API interface {
 
 	Restart() error
 	Exec(command string) ([]byte, error)
-	Update(config updater.UpdateConfig) (bool, error)
-	UpdateWithStatus(config updater.UpdateConfig) <-chan StatusMessage
-	UpdateAvailable(channel updater.Channel) (*updater.Version, error)
-	UpdateStatus() (string, error)
 	RuntimeLogs() (string, error)
 
 	SetMinHops(uint16) error
@@ -221,13 +216,10 @@ func (v *Visor) Summary() (*Summary, error) {
 	}
 
 	dmsgStatValue := &dmsgtracker.DmsgClientSummary{}
-	v.initLock.Lock()
-	if v.trackersReady {
-		ctx := context.TODO()
-		dmsgTracker, _ := v.trackers.MustGet(ctx, v.conf.PK) //nolint
+	if v.isDTMReady() {
+		dmsgTracker, _ := v.dtm.Get(v.conf.PK) //nolint
 		dmsgStatValue = &dmsgTracker
 	}
-	v.initLock.Unlock()
 
 	summary := &Summary{
 		Overview:             overview,
@@ -575,6 +567,15 @@ func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.Connection
 	return nil, ErrProcNotAvailable
 }
 
+// RemoteVisors return list of connected remote visors
+func (v *Visor) RemoteVisors() []string {
+	var visors []string
+	for _, conn := range v.remoteVisors {
+		visors = append(visors, conn.Addr.PK.String())
+	}
+	return visors
+}
+
 // TransportTypes implements API.
 func (v *Visor) TransportTypes() ([]string, error) {
 	var types []string
@@ -743,100 +744,6 @@ func (v *Visor) Exec(command string) ([]byte, error) {
 	args := strings.Split(command, " ")
 	cmd := exec.Command(args[0], args[1:]...) // nolint: gosec
 	return cmd.CombinedOutput()
-}
-
-// Update implements API.
-// Update updates visor.
-// It checks if visor update is available.
-// If it is, the method downloads a new visor versions, starts it and kills the current process.
-func (v *Visor) Update(updateConfig updater.UpdateConfig) (bool, error) {
-	updated, err := v.updater.Update(updateConfig)
-	if err != nil {
-		v.log.Errorf("Failed to update visor: %v", err)
-		return false, err
-	}
-
-	return updated, nil
-}
-
-// UpdateWithStatus implements API.
-// UpdateWithStatus combines results of Update and UpdateStatus.
-func (v *Visor) UpdateWithStatus(config updater.UpdateConfig) <-chan StatusMessage {
-	ch := make(chan StatusMessage, 512)
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				status, err := v.UpdateStatus()
-				if err != nil {
-					v.log.WithError(err).Errorf("Failed to check update status")
-					status = ""
-				}
-
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					switch status {
-					case "", io.EOF.Error():
-
-					default:
-						ch <- StatusMessage{
-							Text: status,
-						}
-					}
-					time.Sleep(100 * time.Millisecond)
-				}
-			}
-		}
-	}()
-
-	go func() {
-		defer func() {
-			cancel()
-			close(ch)
-		}()
-
-		updated, err := v.Update(config)
-		if err != nil {
-			ch <- StatusMessage{
-				Text:    err.Error(),
-				IsError: true,
-			}
-		} else if updated {
-			ch <- StatusMessage{
-				Text: "Finished",
-			}
-		} else {
-			ch <- StatusMessage{
-				Text: "No update found",
-			}
-		}
-	}()
-
-	return ch
-}
-
-// UpdateAvailable implements API.
-// UpdateAvailable checks if visor update is available.
-func (v *Visor) UpdateAvailable(channel updater.Channel) (*updater.Version, error) {
-	version, err := v.updater.UpdateAvailable(channel)
-	if err != nil {
-		v.log.Errorf("Failed to check if visor update is available: %v", err)
-		return nil, err
-	}
-
-	return version, nil
-}
-
-// UpdateStatus returns status of the current updating operation.
-func (v *Visor) UpdateStatus() (string, error) {
-	return v.updater.Status(), nil
 }
 
 // RuntimeLogs returns visor runtime logs

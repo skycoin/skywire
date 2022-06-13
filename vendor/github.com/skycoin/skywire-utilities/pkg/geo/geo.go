@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 
@@ -75,8 +76,8 @@ func MakeIPDetails(log logrus.FieldLogger, apiKey string) LocationDetails {
 
 		// Prepare output.
 		out := LocationData{
-			Lat:     j.Lat,
-			Lon:     j.Lon,
+			Lat:     roundTwoDigits(j.Lat),
+			Lon:     roundTwoDigits(j.Lon),
 			Country: j.CountryCode,
 			Region:  j.Region,
 		}
@@ -84,4 +85,8 @@ func MakeIPDetails(log logrus.FieldLogger, apiKey string) LocationDetails {
 
 		return &out, nil
 	}
+}
+
+func roundTwoDigits(value float64) float64 {
+	return math.Round(value*100) / 100
 }
