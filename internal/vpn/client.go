@@ -203,7 +203,7 @@ func (c *Client) Serve() error {
 				return err
 			default:
 				c.resetConnDuration()
-				c.setAppStatus(launcher.AppDetailedStatusVPNReconnecting)
+				c.setAppStatus(launcher.AppDetailedStatusReconnecting)
 				c.setAppError(errTimeout)
 				fmt.Println("\nConnection broke, reconnecting...")
 				return fmt.Errorf("dialServeConn: %w", err)
