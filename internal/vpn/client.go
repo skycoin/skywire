@@ -130,12 +130,14 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 func (c *Client) Serve() error {
 	c.setAppStatus(launcher.AppDetailedStatusStarting)
 	if err := c.setSysPrivileges(); err != nil {
+		c.setAppError(err)
 		return fmt.Errorf("failed to setup system privileges: %w", err)
 	}
 	// we setup direct routes to skywire services once for all the client lifetime since routes don't change.
 	// but if they change, new routes get delivered to the app via callbacks.
 	if err := c.setupDirectRoutes(); err != nil {
 		c.releaseSysPrivileges()
+		c.setAppError(err)
 		return fmt.Errorf("error setting up direct routes: %w", err)
 	}
 	c.releaseSysPrivileges()
