@@ -166,7 +166,6 @@ func main() {
 
 	if err := vpnClient.Serve(); err != nil {
 		print(fmt.Sprintf("Failed to serve VPN: %v\n", err))
-		setAppErr(appCl, err)
 	}
 }
 
@@ -174,5 +173,4 @@ func setAppErr(appCl *app.Client, err error) {
 	if appErr := appCl.SetError(err.Error()); appErr != nil {
 		fmt.Printf("Failed to set error %v: %v\n", err, appErr)
 	}
-
 }
