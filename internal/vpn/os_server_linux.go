@@ -31,7 +31,9 @@ func GetIPTablesForwardPolicy() (string, error) {
 	if err != nil {
 		return "", err
 	}
-
+	if len(outputBytes) == 0 {
+		return "", errPermissionDenied
+	}
 	return strings.TrimRight(string(outputBytes), "\n"), nil
 }
 
@@ -74,13 +76,27 @@ func GetIPv6ForwardingValue() (string, error) {
 // SetIPv4ForwardingValue sets `val` value of IPv4 forwarding.
 func SetIPv4ForwardingValue(val string) error {
 	cmd := fmt.Sprintf(setIPv4ForwardingCMDFmt, val)
-	return osutil.Run("sh", "-c", cmd)
+	outBytes, err := osutil.RunWithResult("sh", "-c", cmd)
+	if err != nil {
+		return err
+	}
+	if len(outBytes) == 0 {
+		return errPermissionDenied
+	}
+	return nil
 }
 
 // SetIPv6ForwardingValue sets `val` value of IPv6 forwarding.
 func SetIPv6ForwardingValue(val string) error {
 	cmd := fmt.Sprintf(setIPv6ForwardingCMDFmt, val)
-	return osutil.Run("sh", "-c", cmd)
+	outBytes, err := osutil.RunWithResult("sh", "-c", cmd)
+	if err != nil {
+		return err
+	}
+	if len(outBytes) == 0 {
+		return errPermissionDenied
+	}
+	return nil
 }
 
 // EnableIPv4Forwarding enables IPv4 forwarding.
@@ -96,7 +112,14 @@ func EnableIPv6Forwarding() error {
 // EnableIPMasquerading enables IP masquerading for the interface with name `ifcName`.
 func EnableIPMasquerading(ifcName string) error {
 	cmd := fmt.Sprintf(enableIPMasqueradingCMDFmt, ifcName)
-	return osutil.Run("sh", "-c", cmd)
+	outBytes, err := osutil.RunWithResult("sh", "-c", cmd)
+	if err != nil {
+		return err
+	}
+	if len(outBytes) == 0 {
+		return errPermissionDenied
+	}
+	return nil
 }
 
 // DisableIPMasquerading disables IP masquerading for the interface with name `ifcName`.
@@ -116,7 +139,7 @@ func getIPForwardingValue(cmd string) (string, error) {
 		return "", fmt.Errorf("error parsing output of command %s: %w", cmd, err)
 	}
 
-	return val, nil
+	return val, err
 }
 
 func parseIPForwardingOutput(output []byte) (string, error) {
