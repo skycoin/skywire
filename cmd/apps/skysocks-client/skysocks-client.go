@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -18,6 +19,7 @@ import (
 	"github.com/skycoin/skywire/internal/skysocks"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
@@ -63,13 +65,16 @@ func main() {
 	flag.Parse()
 
 	if *serverPK == "" {
-		print("Empty server PubKey. Exiting")
+		err := errors.New("Empty server PubKey. Exiting")
+		print(err)
+		setAppErr(appCl, err)
 		return
 	}
 
 	pk := cipher.PubKey{}
 	if err := pk.UnmarshalText([]byte(*serverPK)); err != nil {
 		print(fmt.Sprintf("Invalid server PubKey: %v\n", err))
+		setAppErr(appCl, err)
 		os.Exit(1)
 	}
 
@@ -77,6 +82,7 @@ func main() {
 		conn, err := dialServer(ctx, appCl, pk)
 		if err != nil {
 			print(fmt.Sprintf("Failed to dial to a server: %v\n", err))
+			setAppErr(appCl, err)
 			os.Exit(1)
 		}
 
@@ -85,6 +91,7 @@ func main() {
 		client, err := skysocks.NewClient(conn, appCl)
 		if err != nil {
 			print(fmt.Sprintf("Failed to create a new client: %v\n", err))
+			setAppErr(appCl, err)
 			os.Exit(1)
 		}
 
@@ -100,5 +107,18 @@ func main() {
 		}
 
 		fmt.Println("Reconnecting to skysocks server")
+		setAppStatus(appCl, launcher.AppDetailedStatusReconnecting)
+	}
+}
+
+func setAppErr(appCl *app.Client, err error) {
+	if appErr := appCl.SetError(err.Error()); appErr != nil {
+		fmt.Printf("Failed to set error %v: %v\n", err, appErr)
+	}
+}
+
+func setAppStatus(appCl *app.Client, status launcher.AppDetailedStatus) {
+	if err := appCl.SetDetailedStatus(string(status)); err != nil {
+		fmt.Printf("Failed to set status %v: %v\n", status, err)
 	}
 }
