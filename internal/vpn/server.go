@@ -8,8 +8,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/launcher"
@@ -20,7 +18,6 @@ type Server struct {
 	cfg                        ServerConfig
 	lisMx                      sync.Mutex
 	lis                        net.Listener
-	log                        logrus.FieldLogger
 	serveOnce                  sync.Once
 	ipGen                      *IPGenerator
 	defaultNetworkInterface    string
@@ -32,11 +29,10 @@ type Server struct {
 }
 
 // NewServer creates VPN server instance.
-func NewServer(cfg ServerConfig, l logrus.FieldLogger, appCl *app.Client) (*Server, error) {
+func NewServer(cfg ServerConfig, appCl *app.Client) (*Server, error) {
 	var defaultNetworkIfc string
 	s := &Server{
 		cfg:   cfg,
-		log:   l,
 		ipGen: NewIPGenerator(),
 		appCl: appCl,
 	}
@@ -57,14 +53,14 @@ func NewServer(cfg ServerConfig, l logrus.FieldLogger, appCl *app.Client) (*Serv
 		defaultNetworkIfc = defaultNetworkIfcs
 	}
 
-	l.Infof("Got default network interface: %s", defaultNetworkIfc)
+	fmt.Printf("Got default network interface: %s\n", defaultNetworkIfc)
 
 	defaultNetworkIfcIPs, err := netutil.NetworkInterfaceIPs(defaultNetworkIfc)
 	if err != nil {
 		return nil, fmt.Errorf("error getting IPs of interface %s: %w", defaultNetworkIfc, err)
 	}
 
-	l.Infof("Got IPs of interface %s: %v", defaultNetworkIfc, defaultNetworkIfcIPs)
+	fmt.Printf("Got IPs of interface %s: %v\n", defaultNetworkIfc, defaultNetworkIfcIPs)
 
 	ipv4ForwardingVal, err := GetIPv4ForwardingValue()
 	if err != nil {
@@ -75,15 +71,15 @@ func NewServer(cfg ServerConfig, l logrus.FieldLogger, appCl *app.Client) (*Serv
 		return nil, fmt.Errorf("error getting IPv6 forwarding value")
 	}
 
-	l.Infoln("Old IP forwarding values:")
-	l.Infof("IPv4: %s, IPv6: %s", ipv4ForwardingVal, ipv6ForwardingVal)
+	fmt.Println("Old IP forwarding values:")
+	fmt.Printf("IPv4: %s, IPv6: %s\n", ipv4ForwardingVal, ipv6ForwardingVal)
 
 	iptablesForwarPolicy, err := GetIPTablesForwardPolicy()
 	if err != nil {
 		return nil, fmt.Errorf("error getting iptables forward policy: %w", err)
 	}
 
-	l.Infof("Old iptables forward policy: %s", iptablesForwarPolicy)
+	fmt.Printf("Old iptables forward policy: %s\n", iptablesForwarPolicy)
 
 	s.defaultNetworkInterface = defaultNetworkIfc
 	s.defaultNetworkInterfaceIPs = defaultNetworkIfcIPs
@@ -103,7 +99,7 @@ func (s *Server) Serve(l net.Listener) error {
 			serveErr = fmt.Errorf("error enabling IPv4 forwarding: %w", err)
 			return
 		}
-		s.log.Infoln("Set IPv4 forwarding = 1")
+		fmt.Println("Set IPv4 forwarding = 1")
 		defer func() {
 			s.revertIPv4ForwardingValue()
 		}()
@@ -112,7 +108,7 @@ func (s *Server) Serve(l net.Listener) error {
 			serveErr = fmt.Errorf("error enabling IPv6 forwarding: %w", err)
 			return
 		}
-		s.log.Infoln("Set IPv6 forwarding = 1")
+		fmt.Println("Set IPv6 forwarding = 1")
 		defer func() {
 			s.revertIPv6ForwardingValue()
 		}()
@@ -122,7 +118,7 @@ func (s *Server) Serve(l net.Listener) error {
 			return
 		}
 
-		s.log.Infoln("Enabled IP masquerading")
+		fmt.Println("Enabled IP masquerading")
 
 		defer func() {
 			s.disableIPMasquerading()
@@ -132,7 +128,7 @@ func (s *Server) Serve(l net.Listener) error {
 			serveErr = fmt.Errorf("error settings iptables forward policy to ACCEPT")
 			return
 		}
-		s.log.Infoln("Set iptables forward policy to ACCEPT")
+		fmt.Println("Set iptables forward policy to ACCEPT")
 
 		defer func() {
 			s.restoreIPTablesForwardPolicy()
@@ -179,39 +175,39 @@ func (s *Server) Close() error {
 
 func (s *Server) revertIPv4ForwardingValue() {
 	if err := SetIPv4ForwardingValue(s.ipv4ForwardingVal); err != nil {
-		s.log.WithError(err).Errorln("Error reverting IPv4 forwarding")
+		print(fmt.Sprintf("Error reverting IPv4 forwarding: %v", err))
 	} else {
-		s.log.Infof("Set IPv4 forwarding = %s", s.ipv4ForwardingVal)
+		fmt.Printf("Set IPv4 forwarding = %s\n", s.ipv4ForwardingVal)
 	}
 }
 
 func (s *Server) revertIPv6ForwardingValue() {
 	if err := SetIPv6ForwardingValue(s.ipv6ForwardingVal); err != nil {
-		s.log.WithError(err).Errorln("Error reverting IPv6 forwarding")
+		print(fmt.Sprintf("Error reverting IPv6 forwarding: %v", err))
 	} else {
-		s.log.Infof("Set IPv6 forwarding = %s", s.ipv6ForwardingVal)
+		fmt.Printf("Set IPv6 forwarding = %s\n", s.ipv6ForwardingVal)
 	}
 }
 
 func (s *Server) disableIPMasquerading() {
 	if err := DisableIPMasquerading(s.defaultNetworkInterface); err != nil {
-		s.log.WithError(err).Errorf("Error disabling IP masquerading for %s", s.defaultNetworkInterface)
+		print(fmt.Sprintf("Error disabling IP masquerading for %s: %v", s.defaultNetworkInterface, err))
 	} else {
-		s.log.Infof("Disabled IP masquerading for %s", s.defaultNetworkInterface)
+		fmt.Printf("Disabled IP masquerading for %s\n", s.defaultNetworkInterface)
 	}
 }
 
 func (s *Server) restoreIPTablesForwardPolicy() {
 	if err := SetIPTablesForwardPolicy(s.iptablesForwardPolicy); err != nil {
-		s.log.WithError(err).Errorf("Error restoring iptables forward policy to %s", s.iptablesForwardPolicy)
+		print(fmt.Sprintf("Error restoring iptables forward policy to %s: %v", s.iptablesForwardPolicy, err))
 	} else {
-		s.log.Infof("Restored iptables forward policy to %s", s.iptablesForwardPolicy)
+		fmt.Printf("Restored iptables forward policy to %s\n", s.iptablesForwardPolicy)
 	}
 }
 
 func (s *Server) closeConn(conn net.Conn) {
 	if err := conn.Close(); err != nil {
-		s.log.WithError(err).Errorf("Error closing client %s connection", conn.RemoteAddr())
+		print(fmt.Sprintf("Error closing client %s connection: %v", conn.RemoteAddr(), err))
 	}
 }
 
@@ -220,27 +216,26 @@ func (s *Server) serveConn(conn net.Conn) {
 
 	tunIP, tunGateway, allowTrafficToLocalNet, err := s.shakeHands(conn)
 	if err != nil {
-		s.log.WithError(err).Errorf("Error negotiating with client %s", conn.RemoteAddr())
+		print(fmt.Sprintf("Error negotiating with client %s: %v", conn.RemoteAddr(), err))
 		return
 	}
 	defer allowTrafficToLocalNet()
 
 	tun, err := newTUNDevice()
 	if err != nil {
-		s.log.WithError(err).Errorln("Error allocating TUN interface")
+		print(fmt.Sprintf("Error allocating TUN interface: %v", err))
 		return
 	}
 	defer func() {
-		tunName := tun.Name()
 		if err := tun.Close(); err != nil {
-			s.log.WithError(err).Errorf("Error closing TUN %s", tunName)
+			print(fmt.Sprintf("Error closing TUN %s: %v", tun.Name(), err))
 		}
 	}()
 
-	s.log.Infof("Allocated TUN %s", tun.Name())
+	fmt.Printf("Allocated TUN %s", tun.Name())
 
 	if err := SetupTUN(tun.Name(), tunIP.String()+TUNNetmaskCIDR, tunGateway.String(), TUNMTU); err != nil {
-		s.log.WithError(err).Errorf("Error setting up TUN %s", tun.Name())
+		print(fmt.Sprintf("Error setting up TUN %s: %v", tun.Name(), err))
 		return
 	}
 
@@ -250,14 +245,14 @@ func (s *Server) serveConn(conn net.Conn) {
 		defer close(connToTunDoneCh)
 
 		if _, err := io.Copy(tun, conn); err != nil {
-			s.log.WithError(err).Errorf("Error resending traffic from VPN client to TUN %s", tun.Name())
+			print(fmt.Sprintf("Error resending traffic from VPN client to TUN %s: %v", tun.Name(), err))
 		}
 	}()
 	go func() {
 		defer close(tunToConnCh)
 
 		if _, err := io.Copy(conn, tun); err != nil {
-			s.log.WithError(err).Errorf("Error resending traffic from TUN %s to VPN client", tun.Name())
+			print(fmt.Sprintf("Error resending traffic from TUN %s to VPN client: %v", tun.Name(), err))
 		}
 	}()
 
@@ -277,7 +272,7 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, unsecureVP
 	// default value
 	unsecureVPN = func() {}
 
-	s.log.Debugf("Got client hello: %v", cHello)
+	fmt.Printf("Got client hello: %v", cHello)
 
 	if s.cfg.Passcode != "" && cHello.Passcode != s.cfg.Passcode {
 		s.sendServerErrHello(conn, HandshakeStatusForbidden)
@@ -327,7 +322,7 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, unsecureVP
 
 		unsecureVPN = func() {
 			if err := AllowIPToLocalNetwork(cTUNIP, sTUNIP); err != nil {
-				s.log.WithError(err).Errorln("Error allowing traffic to local network")
+				print(fmt.Sprintf("Error allowing traffic to local network: %v", err))
 			}
 		}
 	}
@@ -364,7 +359,7 @@ func (s *Server) sendServerErrHello(conn net.Conn, status HandshakeStatus) {
 	}
 
 	if err := WriteJSON(conn, &sHello); err != nil {
-		s.log.WithError(err).Errorln("Error sending server hello")
+		print(fmt.Sprintf("Error sending server hello: %v", err))
 	}
 }
 
