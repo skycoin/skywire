@@ -16,7 +16,6 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
-	"github.com/skycoin/skywire/pkg/util/updater"
 )
 
 const (
@@ -505,53 +504,6 @@ func (r *RPC) Exec(cmd *string, out *[]byte) (err error) {
 	return err
 }
 
-// Update updates visor.
-func (r *RPC) Update(updateConfig *updater.UpdateConfig, updated *bool) (err error) {
-	defer rpcutil.LogCall(r.log, "Update", updateConfig)(updated, &err)
-
-	config := updater.UpdateConfig{}
-
-	if updateConfig != nil {
-		config = *updateConfig
-	}
-
-	*updated, err = r.visor.Update(config)
-	return
-}
-
-// UpdateAvailable checks if visor update is available.
-func (r *RPC) UpdateAvailable(channel *updater.Channel, version *updater.Version) (err error) {
-	defer rpcutil.LogCall(r.log, "UpdateAvailable", channel)(version, &err)
-
-	if channel == nil {
-		return updater.ErrUnknownChannel
-	}
-
-	v, err := r.visor.UpdateAvailable(*channel)
-	if err != nil {
-		return err
-	}
-
-	if v == nil {
-		return nil
-	}
-
-	*version = *v
-	return nil
-}
-
-// UpdateStatus returns visor update status.
-func (r *RPC) UpdateStatus(_ *struct{}, status *string) (err error) {
-	*status, err = r.visor.UpdateStatus()
-	return
-}
-
-// RuntimeLogs returns visor runtime logs
-func (r *RPC) RuntimeLogs(_ *struct{}, logs *string) (err error) {
-	*logs, err = r.visor.RuntimeLogs()
-	return
-}
-
 // SetMinHops sets min_hops in visor's routing config
 func (r *RPC) SetMinHops(n *uint16, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetMinHops", *n)
@@ -579,5 +531,17 @@ func (r *RPC) SetPersistentTransports(pTs *[]transport.PersistentTransports, _ *
 func (r *RPC) SetPublicAutoconnect(pAc *bool, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetPublicAutoconnect", *pAc)
 	err = r.visor.SetPublicAutoconnect(*pAc)
+	return err
+}
+
+// RemoteVisors return connected remote visors
+func (r *RPC) RemoteVisors(_ *struct{}, out *[]string) (err error) {
+	defer rpcutil.LogCall(r.log, "RemoteVisor", nil)(out, &err)
+
+	remoteVisors := r.visor.RemoteVisors()
+	if remoteVisors != nil {
+		*out = remoteVisors
+	}
+
 	return err
 }

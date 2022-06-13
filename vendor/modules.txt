@@ -58,12 +58,6 @@ github.com/go-ole/go-ole/oleutil
 github.com/godbus/dbus/v5
 github.com/godbus/dbus/v5/introspect
 github.com/godbus/dbus/v5/prop
-# github.com/google/go-github v17.0.0+incompatible
-## explicit
-github.com/google/go-github/github
-# github.com/google/go-querystring v1.0.0
-## explicit
-github.com/google/go-querystring/query
 # github.com/google/uuid v1.1.2
 ## explicit
 github.com/google/uuid
@@ -147,7 +141,7 @@ github.com/shirou/gopsutil/v3/process
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v0.0.0-20220401080257-ba4de44b7666
+# github.com/skycoin/dmsg v0.0.0-20220607114207-d4a85dc351ce
 ## explicit; go 1.16
 github.com/skycoin/dmsg/internal/servermetrics
 github.com/skycoin/dmsg/pkg/direct
@@ -171,7 +165,7 @@ github.com/skycoin/skycoin/src/cipher/ripemd160
 github.com/skycoin/skycoin/src/cipher/secp256k1-go
 github.com/skycoin/skycoin/src/cipher/secp256k1-go/secp256k1-go2
 github.com/skycoin/skycoin/src/util/logging
-# github.com/skycoin/skywire-utilities v0.0.0-20220331141811-c29ff9ab891e
+# github.com/skycoin/skywire-utilities v0.0.0-20220511053113-3d492e0048c4
 ## explicit; go 1.17
 github.com/skycoin/skywire-utilities/pkg/buildinfo
 github.com/skycoin/skywire-utilities/pkg/cipher

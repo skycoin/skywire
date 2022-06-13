@@ -13,6 +13,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -24,7 +25,6 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/utclient"
-	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -59,16 +59,16 @@ type Visor struct {
 
 	startedAt     time.Time
 	restartCtx    *restart.Context
-	updater       *updater.Updater
 	uptimeTracker utclient.APIClient
 
-	ebc           *appevent.Broadcaster // event broadcaster
-	dmsgC         *dmsg.Client
-	dmsgDC        *dmsg.Client       // dmsg direct client
-	dClient       dmsgdisc.APIClient // dmsg direct api client
-	dmsgHTTP      *http.Client       // dmsghttp client
-	trackers      *dmsgtracker.Manager
-	trackersReady bool
+	ebc          *appevent.Broadcaster // event broadcaster
+	dmsgC        *dmsg.Client
+	dmsgDC       *dmsg.Client       // dmsg direct client
+	dClient      dmsgdisc.APIClient // dmsg direct api client
+	dmsgHTTP     *http.Client       // dmsghttp client
+	dtm          *dmsgtracker.Manager
+	dtmReady     chan struct{}
+	dtmReadyOnce sync.Once
 
 	stunClient    *network.StunDetails
 	stunReady     chan struct{}
@@ -89,6 +89,8 @@ type Visor struct {
 	runtimeErrors chan error
 
 	isServicesHealthy *internalHealthInfo
+
+	remoteVisors map[cipher.PubKey]Conn // copy of connected remote visors to hypervisor
 }
 
 // todo: consider moving module closing to the module system
@@ -120,8 +122,8 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Con
 		restartCtx:        restartCtx,
 		initLock:          new(sync.RWMutex),
 		isServicesHealthy: newInternalHealthInfo(),
+		dtmReady:          make(chan struct{}),
 		stunReady:         make(chan struct{}),
-		trackersReady:     false,
 	}
 	v.isServicesHealthy.init()
 
@@ -175,13 +177,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Con
 	if !v.processRuntimeErrs() {
 		return nil, false
 	}
-	go func() {
-		v.initLock.RLock()
-		v.trackers = dmsgtracker.NewDmsgTrackerManager(v.MasterLogger(), v.dmsgC, 0, 0)
-		v.trackersReady = true
-		v.initLock.RUnlock()
-		log.Info("Startup complete.")
-	}()
+	log.Info("Startup complete.")
 	return v, true
 }
 
@@ -254,6 +250,15 @@ func (v *Visor) Close() error {
 	v.processRuntimeErrs()
 	log.Info("Shutdown complete. Goodbye!")
 	return nil
+}
+
+func (v *Visor) isDTMReady() bool {
+	select {
+	case <-v.dtmReady:
+		return true
+	default:
+		return false
+	}
 }
 
 // SetLogstore sets visor runtime logstore
