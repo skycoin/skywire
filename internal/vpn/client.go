@@ -363,7 +363,7 @@ func (c *Client) setupTUN(tunIP, tunGateway net.IP) error {
 func (c *Client) serveConn(conn net.Conn) error {
 	tunIP, tunGateway, err := c.shakeHands(conn)
 	if err != nil {
-		fmt.Printf("error during client/server handshake: %s", err)
+		fmt.Printf("error during client/server handshake: %s\n", err)
 		return err
 	}
 
@@ -446,10 +446,12 @@ func (c *Client) serveConn(conn net.Conn) error {
 		defer close(connToTunDoneCh)
 
 		if _, err := io.Copy(tun, conn); err != nil {
-			print(fmt.Sprintf("Error resending traffic from TUN %s to VPN server: %v\n", tun.Name(), err))
-			// when the vpn-server is closed we get the error EOF
-			if err.Error() == io.EOF.Error() {
-				c.setAppError(errVPNServerClosed)
+			if !c.isClosed() {
+				print(fmt.Sprintf("Error resending traffic from TUN %s to VPN server: %v\n", tun.Name(), err))
+				// when the vpn-server is closed we get the error EOF
+				if err.Error() == io.EOF.Error() {
+					c.setAppError(errVPNServerClosed)
+				}
 			}
 		}
 	}()
@@ -457,7 +459,9 @@ func (c *Client) serveConn(conn net.Conn) error {
 		defer close(tunToConnCh)
 
 		if _, err := io.Copy(conn, tun); err != nil {
-			print(fmt.Sprintf("Error resending traffic from VPN server to TUN %s: %v\n", tun.Name(), err))
+			if !c.isClosed() {
+				print(fmt.Sprintf("Error resending traffic from VPN server to TUN %s: %v\n", tun.Name(), err))
+			}
 		}
 	}()
 
