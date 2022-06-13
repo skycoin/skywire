@@ -155,6 +155,6 @@ func main() {
 	}
 
 	if err := vpnClient.Serve(); err != nil {
-		print(fmt.Sprintf("Failed to serve VPN: %v", err))
+		print(fmt.Sprintf("Failed to serve VPN: %v\n", err))
 	}
 }
