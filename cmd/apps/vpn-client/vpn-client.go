@@ -12,6 +12,7 @@ import (
 
 	ipc "github.com/james-barrow/golang-ipc"
 
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app"
@@ -33,6 +34,10 @@ func main() {
 	eventSub := appevent.NewSubscriber()
 	appCl := app.NewClient(eventSub)
 	defer appCl.Close()
+
+	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
+		print(fmt.Sprintf("Failed to output build info: %v\n", err))
+	}
 
 	if *serverPKStr == "" {
 		// TODO(darkrengarius): fix args passage for Windows
