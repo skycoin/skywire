@@ -7,9 +7,9 @@ import (
 
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/noise"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport/network/handshake"
 )
 

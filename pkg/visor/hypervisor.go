@@ -20,11 +20,11 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/httputil"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -517,6 +517,8 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 					WithField("visor_addr", c.Addr).
 					WithField("func", "getVisors")
 
+				log.Trace("Requesting summary via RPC.")
+
 				summary, err := c.API.Summary()
 				if err != nil {
 					log.WithError(err).
@@ -528,6 +530,8 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 						},
 						Health: &HealthInfo{},
 					}
+				} else {
+					log.Trace("Obtained summary via RPC.")
 				}
 				resp := makeSummaryResp(err == nil, false, summary)
 				summaries[i] = resp

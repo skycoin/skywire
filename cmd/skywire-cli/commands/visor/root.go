@@ -4,9 +4,9 @@ import (
 	"net"
 	"time"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/cmd/skywire-cli/commands/visor/vapps"
 	"github.com/skycoin/skywire/cmd/skywire-cli/commands/visor/vroute"
 	"github.com/skycoin/skywire/cmd/skywire-cli/commands/visor/vtp"

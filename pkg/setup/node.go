@@ -10,9 +10,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router/routerclient"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/setup/setupmetrics"

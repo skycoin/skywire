@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/skycoin/dmsg/pkg/disc"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 )

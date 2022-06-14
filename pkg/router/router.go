@@ -14,9 +14,9 @@ import (
 
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/noise"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/setup/setupclient"
@@ -407,6 +407,8 @@ func (r *router) serveSetup() {
 			continue
 		}
 
+		r.logger.Debugf("handling setup request: setupPK(%s)", remotePK)
+
 		go r.rpcSrv.ServeConn(conn)
 	}
 }
@@ -540,19 +542,19 @@ func (r *router) handleDataHandshakePacket(ctx context.Context, packet routing.P
 	if err != nil {
 		return err
 	}
-
+	log := r.logger.WithField("func", "router.handleDataHandshakePacket")
 	if rt := rule.Type(); rt == routing.RuleForward || rt == routing.RuleIntermediary {
-		r.logger.Debugf("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
+		log.Tracef("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
 			packet.RouteID(), rule.NextRouteID())
 		return r.forwardPacket(ctx, packet, rule)
 	}
 
-	r.logger.Debugf("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
+	log.Tracef("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
 
 	desc := rule.RouteDescriptor()
 	nrg, ok := r.noiseRouteGroup(desc)
 
-	r.logger.Debugf("Handling packet with descriptor %s", &desc)
+	log.Tracef("Handling packet with descriptor %s", &desc)
 
 	if ok {
 		if nrg == nil {
@@ -560,7 +562,7 @@ func (r *router) handleDataHandshakePacket(ctx context.Context, packet routing.P
 		}
 
 		// in this case we have already initialized nrg and may use it straightforward
-		r.logger.Debugf("Got new remote packet with size %d and route ID %d. Using rule: %s",
+		log.Tracef("Got new remote packet with size %d and route ID %d. Using rule: %s",
 			len(packet.Payload()), packet.RouteID(), rule)
 
 		return nrg.handlePacket(packet)
@@ -572,7 +574,7 @@ func (r *router) handleDataHandshakePacket(ctx context.Context, packet routing.P
 	rg, ok := r.initializingRouteGroup(desc)
 	if !ok {
 		// no route, just return error
-		r.logger.Debugf("Descriptor not found for rule with type %s, descriptor: %s", rule.Type(), &desc)
+		log.Tracef("Descriptor not found for rule with type %s, descriptor: %s", rule.Type(), &desc)
 		return errors.New("route descriptor does not exist")
 	}
 
@@ -581,7 +583,7 @@ func (r *router) handleDataHandshakePacket(ctx context.Context, packet routing.P
 	}
 
 	// handshake packet, handling with the raw rg
-	r.logger.Debugf("Got new remote packet with size %d and route ID %d. Using rule: %s",
+	log.Tracef("Got new remote packet with size %d and route ID %d. Using rule: %s",
 		len(packet.Payload()), packet.RouteID(), rule)
 
 	return rg.handlePacket(packet)
