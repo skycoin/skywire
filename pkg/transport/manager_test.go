@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"

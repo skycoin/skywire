@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/securecookie"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
