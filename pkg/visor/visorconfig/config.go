@@ -8,9 +8,9 @@ import (
 
 	"github.com/skycoin/dmsg/pkg/disc"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/dmsgc"

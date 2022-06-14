@@ -7,8 +7,8 @@ import (
 	"net/rpc"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 )
 
