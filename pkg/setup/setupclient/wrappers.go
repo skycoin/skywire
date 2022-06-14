@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/skycoin/dmsg/pkg/dmsg"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"

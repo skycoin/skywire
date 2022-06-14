@@ -21,7 +21,7 @@ import (
 	"github.com/bitfield/script"
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/pkg/profile"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/spf13/cobra"
 	"github.com/toqueteos/webbrowser"
 
