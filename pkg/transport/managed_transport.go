@@ -392,16 +392,20 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 		}
 	}
 
+	log.Trace("Awaiting packet...")
+
 	h := make(routing.Packet, routing.PacketHeaderSize)
 	if _, err = io.ReadFull(transport, h); err != nil {
 		log.WithError(err).Debugf("Failed to read packet header.")
 		return nil, err
 	}
+	log.WithField("header_len", len(h)).WithField("header_raw", h).Trace("Read packet header.")
 	p := make([]byte, h.Size())
 	if _, err = io.ReadFull(transport, p); err != nil {
 		log.WithError(err).Debugf("Failed to read packet payload.")
 		return nil, err
 	}
+	log.WithField("payload_len", len(p)).Trace("Read packet payload.")
 
 	packet = append(h, p...)
 	if n := len(packet); n > routing.PacketHeaderSize {
@@ -433,6 +437,7 @@ func (mt *ManagedTransport) logRecv(b uint64) {
 // and returns true if it was bigger than 0
 func (mt *ManagedTransport) logMod() bool {
 	if ops := atomic.SwapUint32(&mt.logUpdates, 0); ops > 0 {
+		mt.log.Debugf("entry log: recording %d operations", ops)
 		return true
 	}
 	return false

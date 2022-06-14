@@ -2,6 +2,7 @@ package network
 
 import (
 	"github.com/ccding/go-stun/stun"
+
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
