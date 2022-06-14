@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 
 	"github.com/google/uuid"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
 // LogEntry represents a logging entry for a given Transport.
