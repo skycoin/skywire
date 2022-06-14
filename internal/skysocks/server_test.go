@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire-utilities/pkg/logging"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"

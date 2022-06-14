@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/blang/semver/v4"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
 var (

@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 
 	"github.com/skycoin/skywire-utilities/pkg/logging"
+
 	"github.com/xtaci/kcp-go"
 )
 
