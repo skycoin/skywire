@@ -1,9 +1,9 @@
-//go:build windows && systray
-// +build windows,systray
+//go:build windows
+// +build windows
 
 package gui
 
-const iconName = "icons/icon.ico"
+const IconName = "icons/icon.ico"
 
 func isRoot() bool {
 	return false
