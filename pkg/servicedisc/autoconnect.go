@@ -55,41 +55,45 @@ func MakeConnector(conf Config, maxConns int, tm *transport.Manager, httpC *http
 func (a *autoconnector) Run(ctx context.Context) (err error) {
 	// failed addresses will be populated everytime any failed attempt at establishing transport occurs.
 	failedAddresses := map[cipher.PubKey]int{}
+	publicServiceTicket := time.NewTicker(PublicServiceDelay)
 
 	for {
-		time.Sleep(PublicServiceDelay)
+		select {
+		case <-publicServiceTicket.C:
+			// successfully established transports
+			tps := a.tm.GetTransportsByLabel(transport.LabelAutomatic)
 
-		// successfully established transports
-		tps := a.tm.GetTransportsByLabel(transport.LabelAutomatic)
+			// don't fetch public addresses if there are more or equal to the number of maximum transport defined.
+			if len(tps) >= a.maxConns {
+				a.log.Debugln("autoconnect: maximum number of established transports reached: ", a.maxConns)
+				return err
+			}
 
-		// don't fetch public addresses if there are more or equal to the number of maximum transport defined.
-		if len(tps) >= a.maxConns {
-			a.log.Debugln("autoconnect: maximum number of established transports reached: ", a.maxConns)
-			return err
-		}
+			a.log.Infoln("Fetching public visors")
+			addrs, err := a.fetchPubAddresses(ctx)
+			if err != nil {
+				a.log.Errorf("Cannot fetch public services: %s", err)
+			}
 
-		a.log.Infoln("Fetching public visors")
-		addrs, err := a.fetchPubAddresses(ctx)
-		if err != nil {
-			a.log.Errorf("Cannot fetch public services: %s", err)
-		}
+			// filter out any established transports
+			absent := a.filterDuplicates(addrs, tps)
 
-		// filter out any established transports
-		absent := a.filterDuplicates(addrs, tps)
-
-		for _, pk := range absent {
-			val, ok := failedAddresses[pk]
-			if !ok || val < maxFailedAddressRetryAttempt {
-				a.log.WithField("pk", pk).WithField("attempt", val).Debugln("Trying to add transport to public visor")
-				logger := a.log.WithField("pk", pk).WithField("type", string(network.STCPR))
-				if err = a.tryEstablishTransport(ctx, pk, logger); err != nil {
-					if !errors.Is(err, io.ErrClosedPipe) {
-						logger.WithError(err).Warnln("Failed to add transport to public visor")
+			for _, pk := range absent {
+				val, ok := failedAddresses[pk]
+				if !ok || val < maxFailedAddressRetryAttempt {
+					a.log.WithField("pk", pk).WithField("attempt", val).Debugln("Trying to add transport to public visor")
+					logger := a.log.WithField("pk", pk).WithField("type", string(network.STCPR))
+					if err = a.tryEstablishTransport(ctx, pk, logger); err != nil {
+						if !errors.Is(err, io.ErrClosedPipe) {
+							logger.WithError(err).Warnln("Failed to add transport to public visor")
+						}
+						failedAddresses[pk]++
+						continue
 					}
-					failedAddresses[pk]++
-					continue
 				}
 			}
+		case <-ctx.Done():
+			return context.Canceled
 		}
 	}
 }

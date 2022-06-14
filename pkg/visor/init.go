@@ -979,7 +979,6 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 	if serviceDisc == "" {
 		serviceDisc = utilenv.ServiceDiscAddr
 	}
-
 	// todo: refactor updatedisc: split connecting to services in updatedisc and
 	// advertising oneself as a service. Currently, config is tailored to
 	// advertising oneself and requires things like port that are not used
@@ -997,7 +996,14 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 		return err
 	}
 	connector := servicedisc.MakeConnector(conf, 3, v.tpM, v.serviceDisc.Client, pIP, log, v.MasterLogger())
-	go connector.Run(ctx) //nolint:errcheck
+
+	cctx, cancel := context.WithCancel(ctx)
+	v.pushCloseStack("public.autoconnect", func() error {
+		cancel()
+		return err
+	})
+
+	go connector.Run(cctx)
 
 	return nil
 }
