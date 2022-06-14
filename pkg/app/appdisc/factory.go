@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"

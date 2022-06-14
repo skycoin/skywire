@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/AudriusButkevicius/pfilter"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/xtaci/kcp-go"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
