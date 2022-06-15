@@ -25,9 +25,6 @@ func Parse(log *logging.Logger, r io.Reader, confPath string, visorBuildInfo *bu
 	if err != nil {
 		return nil, compat, err
 	}
-	if conf.Version != "unknown" {
-		log.WithField("config version: ", conf.Version).Info()
-	}
 	// we check if the version of the visor and config are the same
 	if (conf.Version != "unknown") && (visorBuildInfo.Version != "unknown") {
 		cVer, err := semver.Make(strings.TrimPrefix(conf.Version, "v"))
