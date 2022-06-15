@@ -19,7 +19,9 @@ var shutdownCmd = &cobra.Command{
 	Short: "stop a running visor",
 	Run: func(_ *cobra.Command, args []string) {
 		err := rpcClient().Shutdown()
-		internal.Catch(err)
+		if err.Error() != "unexpected EOF" {
+			internal.Catch(err)
+		}
 		fmt.Print("visor was shut down")
 	},
 }

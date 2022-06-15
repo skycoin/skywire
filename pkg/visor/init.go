@@ -1003,7 +1003,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 		return err
 	})
 
-	go connector.Run(cctx)
+	go connector.Run(cctx) //nolint
 
 	return nil
 }
