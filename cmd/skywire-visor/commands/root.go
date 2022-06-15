@@ -378,7 +378,6 @@ func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 { /
 	case "":
 		fallthrough
 	default:
-		log.Info("Reading config from file.")
 		log.WithField("filepath", confPath).Info()
 		f, err := os.ReadFile(filepath.Clean(confPath))
 		if err != nil {
