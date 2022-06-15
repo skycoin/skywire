@@ -368,7 +368,7 @@ func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	switch v.stunClient.NATType {
 	case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
-		log.Infof("SUDPH transport wont be available as visor is under %v", v.stunClient.NATType.String())
+		log.Warnf("SUDPH transport wont be available as visor is under %v", v.stunClient.NATType.String())
 	default:
 		v.tpM.InitClient(ctx, network.SUDPH)
 	}
