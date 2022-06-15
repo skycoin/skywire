@@ -397,7 +397,7 @@ func (c *Client) serveConn(conn net.Conn) error {
 
 	fmt.Printf("Allocated TUN %s: %v\n", tun.Name(), err)
 
-	fmt.Printf("Setting up TUN device with: %s and Gateway %s", tunIP, tunGateway)
+	fmt.Printf("Setting up TUN device with: %s and Gateway %s\n", tunIP, tunGateway)
 	if err := c.setupTUN(tunIP, tunGateway); err != nil {
 		return fmt.Errorf("error setting up TUN %s: %w", tun.Name(), err)
 	}
@@ -410,7 +410,7 @@ func (c *Client) serveConn(conn net.Conn) error {
 		time.Sleep(13 * time.Second)
 	}
 
-	fmt.Printf("TUN %s all sets", tunIP)
+	fmt.Printf("TUN %s all sets\n", tunIP)
 
 	isNewRoute := true
 	if c.cfg.Killswitch {
