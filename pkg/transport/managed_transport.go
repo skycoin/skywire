@@ -415,7 +415,7 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 	log.WithField("type", packet.Type().String()).
 		WithField("rt_id", packet.RouteID()).
 		WithField("size", packet.Size()).
-		Debug("Received packet.")
+		Trace("Received packet.")
 	return packet, nil
 }
 
@@ -437,7 +437,7 @@ func (mt *ManagedTransport) logRecv(b uint64) {
 // and returns true if it was bigger than 0
 func (mt *ManagedTransport) logMod() bool {
 	if ops := atomic.SwapUint32(&mt.logUpdates, 0); ops > 0 {
-		mt.log.Debugf("entry log: recording %d operations", ops)
+		mt.log.WithField("func", "ManagedTransport.logMod").Tracef("entry log: recording %d operations", ops)
 		return true
 	}
 	return false
