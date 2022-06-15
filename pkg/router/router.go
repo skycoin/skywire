@@ -592,7 +592,8 @@ func (r *router) handleDataHandshakePacket(ctx context.Context, packet routing.P
 func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) error {
 	routeID := packet.RouteID()
 
-	r.logger.Debugf("Received close packet for route ID %v", routeID)
+	log := r.logger.WithField("func", "router.handleClosePacket")
+	log.Tracef("Received close packet for route ID %v", routeID)
 
 	rule, err := r.GetRule(routeID)
 	if err != nil {
@@ -600,9 +601,9 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 	}
 
 	if rule.Type() == routing.RuleReverse {
-		r.logger.Debugf("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
+		log.Tracef("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
 	} else {
-		r.logger.Debugf("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
+		log.Tracef("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
 			packet.RouteID(), rule.NextRouteID())
 	}
 
@@ -612,17 +613,17 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 	}()
 
 	if t := rule.Type(); t == routing.RuleIntermediary {
-		r.logger.Debugln("Handling intermediary close packet")
+		log.Traceln("Handling intermediary close packet")
 		return r.forwardPacket(ctx, packet, rule)
 	}
 
 	desc := rule.RouteDescriptor()
 	nrg, ok := r.noiseRouteGroup(desc)
 
-	r.logger.Debugf("Handling close packet with descriptor %s", &desc)
+	log.Tracef("Handling close packet with descriptor %s", &desc)
 
 	if !ok {
-		r.logger.Debugf("Descriptor not found for rule with type %s, descriptor: %s", rule.Type(), &desc)
+		log.Tracef("Descriptor not found for rule with type %s, descriptor: %s", rule.Type(), &desc)
 		return errors.New("route descriptor does not exist")
 	}
 
@@ -632,7 +633,7 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 		return errors.New("noiseRouteGroup is nil")
 	}
 
-	r.logger.Debugf("Got new remote close packet with size %d and route ID %d. Using rule: %s",
+	log.Tracef("Got new remote close packet with size %d and route ID %d. Using rule: %s",
 		len(packet.Payload()), packet.RouteID(), rule)
 
 	closeCode := routing.CloseCode(packet.Payload()[0])
@@ -654,19 +655,20 @@ func (r *router) handleNetworkProbePacket(ctx context.Context, packet routing.Pa
 	if err != nil {
 		return err
 	}
+	log := r.logger.WithField("func", "router.handleNetworkProbePacket")
 
 	if rt := rule.Type(); rt == routing.RuleForward || rt == routing.RuleIntermediary {
-		r.logger.Debugf("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
+		log.Tracef("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
 			packet.RouteID(), rule.NextRouteID())
 		return r.forwardPacket(ctx, packet, rule)
 	}
 
-	r.logger.Debugf("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
+	log.Tracef("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
 
 	desc := rule.RouteDescriptor()
 	nrg, ok := r.noiseRouteGroup(desc)
 
-	r.logger.Debugf("Handling packet with descriptor %s", &desc)
+	log.Tracef("Handling packet with descriptor %s", &desc)
 
 	if ok {
 		if nrg == nil {
@@ -674,7 +676,7 @@ func (r *router) handleNetworkProbePacket(ctx context.Context, packet routing.Pa
 		}
 
 		// in this case we have already initialized nrg and may use it straightforward
-		r.logger.Debugf("Got new remote packet with size %d and route ID %d. Using rule: %s",
+		log.Tracef("Got new remote packet with size %d and route ID %d. Using rule: %s",
 			len(packet.Payload()), packet.RouteID(), rule)
 
 		return nrg.handlePacket(packet)
@@ -686,7 +688,7 @@ func (r *router) handleNetworkProbePacket(ctx context.Context, packet routing.Pa
 	rg, ok := r.initializingRouteGroup(desc)
 	if !ok {
 		// no route, just return error
-		r.logger.Debugf("Descriptor not found for rule with type %s, descriptor: %s", rule.Type(), &desc)
+		log.Tracef("Descriptor not found for rule with type %s, descriptor: %s", rule.Type(), &desc)
 		return errors.New("route descriptor does not exist")
 	}
 
@@ -695,7 +697,7 @@ func (r *router) handleNetworkProbePacket(ctx context.Context, packet routing.Pa
 	}
 
 	// handshake packet, handling with the raw rg
-	r.logger.Debugf("Got new remote packet with size %d and route ID %d. Using rule: %s",
+	log.Tracef("Got new remote packet with size %d and route ID %d. Using rule: %s",
 		len(packet.Payload()), packet.RouteID(), rule)
 
 	return rg.handlePacket(packet)
@@ -704,7 +706,8 @@ func (r *router) handleNetworkProbePacket(ctx context.Context, packet routing.Pa
 func (r *router) handleKeepAlivePacket(ctx context.Context, packet routing.Packet) error {
 	routeID := packet.RouteID()
 
-	r.logger.Debugf("Received keepalive packet for route ID %v", routeID)
+	log := r.logger.WithField("func", "router.handleKeepAlivePacket")
+	log.Tracef("Received keepalive packet for route ID %v", routeID)
 
 	rule, err := r.GetRule(routeID)
 	if err != nil {
@@ -712,20 +715,20 @@ func (r *router) handleKeepAlivePacket(ctx context.Context, packet routing.Packe
 	}
 
 	if rule.Type() == routing.RuleReverse {
-		r.logger.Debugf("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
+		log.Tracef("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
 	} else {
-		r.logger.Debugf("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
+		log.Tracef("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
 			packet.RouteID(), rule.NextRouteID())
 	}
 
 	// propagate packet only for intermediary rule. forward rule workflow doesn't get here,
 	// consume rules should be omitted, activity is already updated
 	if t := rule.Type(); t == routing.RuleIntermediary {
-		r.logger.Debugln("Handling intermediary keep-alive packet")
+		log.Traceln("Handling intermediary keep-alive packet")
 		return r.forwardPacket(ctx, packet, rule)
 	}
 
-	r.logger.Debugf("Route ID %v found, updated activity", routeID)
+	log.Tracef("Route ID %v found, updated activity", routeID)
 
 	return nil
 }
