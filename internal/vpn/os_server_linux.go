@@ -112,12 +112,9 @@ func EnableIPv6Forwarding() error {
 // EnableIPMasquerading enables IP masquerading for the interface with name `ifcName`.
 func EnableIPMasquerading(ifcName string) error {
 	cmd := fmt.Sprintf(enableIPMasqueradingCMDFmt, ifcName)
-	outBytes, err := osutil.RunWithResult("sh", "-c", cmd)
+	err := osutil.Run("sh", "-c", cmd)
 	if err != nil {
 		return err
-	}
-	if len(outBytes) == 0 {
-		return errPermissionDenied
 	}
 	return nil
 }
