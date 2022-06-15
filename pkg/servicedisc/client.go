@@ -175,7 +175,7 @@ func (c *HTTPClient) RegisterEntry(ctx context.Context) error {
 		return err
 	}
 	c.entry = entry
-	c.log.WithField("entry", c.entry).Debug("Entry registered successfully")
+	c.log.WithField("entry", c.entry.String()).Debug("Entry registered successfully")
 	return nil
 }
 
