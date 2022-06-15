@@ -136,7 +136,7 @@ func getIPForwardingValue(cmd string) (string, error) {
 		return "", fmt.Errorf("error parsing output of command %s: %w", cmd, err)
 	}
 
-	return val, err
+	return val, nil
 }
 
 func parseIPForwardingOutput(output []byte) (string, error) {
