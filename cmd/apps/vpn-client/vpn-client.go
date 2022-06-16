@@ -31,7 +31,38 @@ var (
 func main() {
 	flag.Parse()
 
+	var directIPsCh, nonDirectIPsCh = make(chan net.IP, 100), make(chan net.IP, 100)
+	defer close(directIPsCh)
+	defer close(nonDirectIPsCh)
+
 	eventSub := appevent.NewSubscriber()
+
+	parseIP := func(addr string) net.IP {
+		ip, ok, err := vpn.ParseIP(addr)
+		if err != nil {
+			print(fmt.Sprintf("Failed to parse IP %s: %v\n", addr, err))
+			return nil
+		}
+		if !ok {
+			print(fmt.Sprintf("Failed to parse IP %s\n", addr))
+			return nil
+		}
+
+		return ip
+	}
+
+	eventSub.OnTCPDial(func(data appevent.TCPDialData) {
+		if ip := parseIP(data.RemoteAddr); ip != nil {
+			directIPsCh <- ip
+		}
+	})
+
+	eventSub.OnTCPClose(func(data appevent.TCPCloseData) {
+		if ip := parseIP(data.RemoteAddr); ip != nil {
+			nonDirectIPsCh <- ip
+		}
+	})
+
 	appCl := app.NewClient(eventSub)
 	defer appCl.Close()
 
@@ -72,36 +103,6 @@ func main() {
 			os.Exit(1)
 		}
 	}
-
-	var directIPsCh, nonDirectIPsCh = make(chan net.IP, 100), make(chan net.IP, 100)
-	defer close(directIPsCh)
-	defer close(nonDirectIPsCh)
-
-	parseIP := func(addr string) net.IP {
-		ip, ok, err := vpn.ParseIP(addr)
-		if err != nil {
-			print(fmt.Sprintf("Failed to parse IP %s: %v\n", addr, err))
-			return nil
-		}
-		if !ok {
-			print(fmt.Sprintf("Failed to parse IP %s\n", addr))
-			return nil
-		}
-
-		return ip
-	}
-
-	eventSub.OnTCPDial(func(data appevent.TCPDialData) {
-		if ip := parseIP(data.RemoteAddr); ip != nil {
-			directIPsCh <- ip
-		}
-	})
-
-	eventSub.OnTCPClose(func(data appevent.TCPCloseData) {
-		if ip := parseIP(data.RemoteAddr); ip != nil {
-			nonDirectIPsCh <- ip
-		}
-	})
 
 	fmt.Printf("Connecting to VPN server %s\n", serverPK.String())
 
