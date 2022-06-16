@@ -2,12 +2,9 @@ package skyenv
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"time"
 
-	"github.com/bitfield/script"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
@@ -147,21 +144,7 @@ func MustPK(pk string) cipher.PubKey {
 
 //Version gets the version of the installation for the config
 func Version() string {
-	u := buildinfo.Version()
-	v := u
-	if u == "unknown" {
-		//check for .git folder for versioning
-		if _, err := os.Stat(".git"); err == nil {
-			//attempt to version from git sources
-			if _, err = exec.LookPath("git"); err == nil {
-				if v, err = script.Exec(`git describe`).String(); err == nil {
-					v = strings.ReplaceAll(v, "\n", "")
-					v = strings.Split(v, "-")[0]
-				}
-			}
-		}
-	}
-	return v
+	return buildinfo.Version()
 }
 
 // HomePath gets the current user's home folder

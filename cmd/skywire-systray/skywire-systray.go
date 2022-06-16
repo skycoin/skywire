@@ -18,12 +18,12 @@ import (
 	"github.com/skycoin/skywire/internal/gui"
 )
 
-var testing bool
+var sourcerun bool
 
 func init() {
 	//disable sorting, flags appear in the order shown here
 	rootCmd.Flags().SortFlags = false
-	rootCmd.Flags().BoolVarP(&testing, "test", "t", false, "'go run' external commands from the skywire sources")
+	rootCmd.Flags().BoolVarP(&sourcerun, "src", "s", false, "'go run' external commands from the skywire sources")
 }
 
 var rootCmd = &cobra.Command{
@@ -92,20 +92,57 @@ func onReady() {
 
 	// We can manipulate the systray in other goroutines
 	go func() {
+		var err error
+		var visor string
+		//		var v string
+		//		var visors string
+		if !sourcerun {
+			visor, err = script.Exec(`bash -c 'skywire-cli visor pk | grep FATAL'`).String()
+		} else {
+			visor, err = script.Exec(`bash -c 'go run cmd/skywire-cli/skywire-cli.go visor pk | grep FATAL'`).String()
+		}
+		if err != nil {
+			l.WithError(err).Warn("Failed to get visor public key")
+			visor = ""
+		}
+
+		//		if !sourcerun {
+		//			visors, err = script.Exec(`skywire-cli dmsgpty list`).String()
+		//		} else {
+		//			visors, err = script.Exec(`go run cmd/skywire-cli/skywire-cli.go dmsgpty list`).String()
+		//		}
+		//		if err != nil {
+		//			l.WithError(err).Fatalln("Failed to fetch connected visors " +visors)
+		//		}
+
 		systray.SetTemplateIcon(sysTrayIcon, sysTrayIcon)
 		systray.SetTitle("Skywire")
-		systray.SetTooltip("skywire")
+		//systray.SetTooltip("skywire")
+
 		mHV := systray.AddMenuItem("Hypervisor", "Hypervisor")
 		mVPN := systray.AddMenuItem("VPN UI", "VPN UI")
+		mVPNmenu := systray.AddMenuItemCheckbox("Show VPN Menu", "Check Me", false)
 		mPTY := systray.AddMenuItem("DMSGPTY UI", "DMSGPTY UI")
+		mStart := systray.AddMenuItem("Start", "Start")
+		mAutoconfig := systray.AddMenuItem("Autoconfig", "Autoconfig")
 		mShutdown := systray.AddMenuItem("Shutdown", "Shutdown")
+		l.Info("Visor:" + visor + "|")
+		if visor != "" {
+			mHV.Hide()
+			mVPN.Hide()
+			mVPNmenu.Hide()
+			mPTY.Hide()
+			mShutdown.Hide()
+		} else {
+			mStart.Hide()
+			mAutoconfig.Hide()
+		}
 		systray.AddSeparator()
 		systray.AddMenuItem("", "")
-		var err error
 		for {
 			select {
 			case <-mHV.ClickedCh:
-				if !testing {
+				if !sourcerun {
 					_, err = script.Exec(`skywire-cli hv ui`).Stdout()
 				} else {
 					_, err = script.Exec(`go run cmd/skywire-cli/skywire-cli.go hv ui`).Stdout()
@@ -114,7 +151,7 @@ func onReady() {
 					l.WithError(err).Fatalln("Failed to open hypervisor UI")
 				}
 			case <-mVPN.ClickedCh:
-				if !testing {
+				if !sourcerun {
 					_, err = script.Exec(`skywire-cli hv vpn ui`).Stdout()
 				} else {
 					_, err = script.Exec(`go run cmd/skywire-cli/skywire-cli.go hv vpn ui`).Stdout()
@@ -122,8 +159,16 @@ func onReady() {
 				if err != nil {
 					l.WithError(err).Fatalln("Failed to open VPN UI")
 				}
+			case <-mVPNmenu.ClickedCh:
+				if mVPNmenu.Checked() {
+					mVPNmenu.Uncheck()
+					mVPNmenu.SetTitle("Show VPN menu")
+				} else {
+					mVPNmenu.Check()
+					mVPNmenu.SetTitle("Hide VPN menu")
+				}
 			case <-mPTY.ClickedCh:
-				if !testing {
+				if !sourcerun {
 					_, err = script.Exec(`skywire-cli hv dmsg ui`).Stdout()
 				} else {
 					_, err = script.Exec(`go run cmd/skywire-cli/skywire-cli.go hv dmsg ui`).Stdout()
@@ -131,15 +176,52 @@ func onReady() {
 				if err != nil {
 					l.WithError(err).Fatalln("Failed to open dmsgpty UI")
 				}
-			case <-mShutdown.ClickedCh:
-				if !testing {
-					_, err = script.Exec(`skywire-cli visor halt`).Stdout()
+			case <-mStart.ClickedCh:
+				if !sourcerun {
+					_, err = script.Exec(`exo-open --launch TerminalEmulator bash -c 'sudo systemctl enable --now skywire'`).Stdout()
 				} else {
-					_, err = script.Exec(`go run cmd/skywire-cli/skywire-cli.go visor halt`).Stdout()
+					_, err = script.Exec(`exo-open --launch TerminalEmulator bash -c 'sudo go run cmd/skywire-visor/skywire-visor.go -p'`).Stdout()
 				}
 				if err != nil {
-					l.WithError(err).Fatalln("Failed to stop skywire")
+					l.WithError(err).Fatalln("Failed to start skywire")
 				}
+				mHV.Show()
+				mVPN.Show()
+				mVPNmenu.Show()
+				mPTY.Show()
+				mShutdown.Show()
+				mStart.Hide()
+				mAutoconfig.Hide()
+			case <-mAutoconfig.ClickedCh:
+				//execute the skywire-autoconfig script includedwith the skywire package
+				_, err = script.Exec(`exo-open --launch TerminalEmulator bash -c 'sudo skywire-autoconfig'`).Stdout()
+				if err != nil {
+					l.WithError(err).Fatalln("Failed to generate skywire configuration")
+				}
+				mHV.Show()
+				mVPN.Show()
+				mVPNmenu.Show()
+				mPTY.Show()
+				mShutdown.Show()
+				mStart.Hide()
+				mAutoconfig.Hide()
+			case <-mShutdown.ClickedCh:
+				_, _ = script.Exec(`exo-open --launch TerminalEmulator bash -c 'sudo systemctl disable --now skywire skywire-visor'`).Stdout() //nolint:errcheck
+				if !sourcerun {
+					_, err = script.Exec(`skywire-cli visor halt 2> /dev/null`).Stdout()
+				} else {
+					_, err = script.Exec(`go run cmd/skywire-cli/skywire-cli.go visor halt 2> /dev/null`).Stdout()
+				}
+				if err != nil {
+					l.WithError(err).Warn("Failed to stop skywire")
+				}
+				mHV.Hide()
+				mVPN.Hide()
+				mVPNmenu.Hide()
+				mPTY.Hide()
+				mShutdown.Hide()
+				mStart.Show()
+				mAutoconfig.Show()
 			case <-mQuit.ClickedCh:
 				systray.Quit()
 				fmt.Println("Quit2 now...")
