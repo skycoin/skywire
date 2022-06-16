@@ -542,14 +542,22 @@ func (r *RPC) SetPublicAutoconnect(pAc *bool, _ *struct{}) (err error) {
 	return err
 }
 
+// VPNServers gets available public VPN server from service discovery URL
+func (r *RPC) VPNServers(_ *struct{}, out *[]string) (err error) {
+	defer rpcutil.LogCall(r.log, "RemoteVisor", nil)(out, &err)
+	vpnServers := r.visor.VPNServers()
+	if vpnServers != nil {
+		*out = vpnServers
+	}
+	return err
+}
+
 // RemoteVisors return connected remote visors
 func (r *RPC) RemoteVisors(_ *struct{}, out *[]string) (err error) {
 	defer rpcutil.LogCall(r.log, "RemoteVisor", nil)(out, &err)
-
 	remoteVisors := r.visor.RemoteVisors()
 	if remoteVisors != nil {
 		*out = remoteVisors
 	}
-
 	return err
 }

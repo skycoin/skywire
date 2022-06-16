@@ -398,6 +398,13 @@ type StatusMessage struct {
 	IsError bool
 }
 
+// VPNServers calls VPNServers.
+func (rc *rpcClient) VPNServers() []string {
+	output := []string{}
+	rc.Call("VPNServers", &struct{}{}, &output) // nolint
+	return output
+}
+
 // RemoteVisors calls RemoteVisors.
 func (rc *rpcClient) RemoteVisors() []string {
 	output := []string{}
@@ -945,6 +952,11 @@ func (mc *mockRPCClient) SetPersistentTransports(_ []transport.PersistentTranspo
 // GetPersistentTransports implements API
 func (mc *mockRPCClient) GetPersistentTransports() ([]transport.PersistentTransports, error) {
 	return []transport.PersistentTransports{}, nil
+}
+
+// VPNServers implements API
+func (mc *mockRPCClient) VPNServers() []string {
+	return []string{}
 }
 
 // RemoteVisors implements API

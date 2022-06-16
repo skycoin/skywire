@@ -6,25 +6,70 @@ package main
 import (
 	"embed"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/bitfield/script"
+	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/systray"
+	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/internal/gui"
 )
+
+var testing bool
+
+func init() {
+	//disable sorting, flags appear in the order shown here
+	rootCmd.Flags().SortFlags = false
+	rootCmd.Flags().BoolVarP(&testing, "test", "t", false, "'go run' external commands from the skywire sources")
+}
+
+var rootCmd = &cobra.Command{
+	Use:                "skywire-systray",
+	Short:              "skywire systray",
+	SilenceErrors:      true,
+	SilenceUsage:       true,
+	DisableSuggestions: true,
+	//	PreRun: func(cmd *cobra.Command, _ []string) {
+	//	},
+	Run: func(cmd *cobra.Command, args []string) {
+		onExit := func() {
+			now := time.Now()
+			fmt.Println("Exit at", now.String())
+		}
+		systray.Run(onReady, onExit)
+	},
+}
+
+// Execute executes root command.
+func Execute() {
+	cc.Init(&cc.Config{
+		RootCmd:       rootCmd,
+		Headings:      cc.HiBlue + cc.Bold, //+ cc.Underline,
+		Commands:      cc.HiBlue + cc.Bold,
+		CmdShortDescr: cc.HiBlue,
+		Example:       cc.HiBlue + cc.Italic,
+		ExecName:      cc.HiBlue + cc.Bold,
+		Flags:         cc.HiBlue + cc.Bold,
+		//FlagsDataType: cc.HiBlue,
+		FlagsDescr:      cc.HiBlue,
+		NoExtraNewlines: true,
+		NoBottomNewline: true,
+	})
+
+	if err := rootCmd.Execute(); err != nil {
+		log.Fatal("Failed to execute command: ", err)
+	}
+}
 
 //go:embed icons/*
 var iconFS embed.FS
 
 func main() {
-	onExit := func() {
-		now := time.Now()
-		fmt.Println("Exit at", now.String())
-	}
+	Execute()
 
-	systray.Run(onReady, onExit)
 }
 
 func onReady() {
@@ -56,25 +101,42 @@ func onReady() {
 		mShutdown := systray.AddMenuItem("Shutdown", "Shutdown")
 		systray.AddSeparator()
 		systray.AddMenuItem("", "")
+		var err error
 		for {
 			select {
 			case <-mHV.ClickedCh:
-				_, err := script.Exec(`skywire-cli hv ui`).Stdout()
+				if !testing {
+					_, err = script.Exec(`skywire-cli hv ui`).Stdout()
+				} else {
+					_, err = script.Exec(`go run cmd/skywire-cli/skywire-cli.go hv ui`).Stdout()
+				}
 				if err != nil {
 					l.WithError(err).Fatalln("Failed to open hypervisor UI")
 				}
 			case <-mVPN.ClickedCh:
-				_, err := script.Exec(`skywire-cli hv vpn ui`).Stdout()
+				if !testing {
+					_, err = script.Exec(`skywire-cli hv vpn ui`).Stdout()
+				} else {
+					_, err = script.Exec(`go run cmd/skywire-cli/skywire-cli.go hv vpn ui`).Stdout()
+				}
 				if err != nil {
 					l.WithError(err).Fatalln("Failed to open VPN UI")
 				}
 			case <-mPTY.ClickedCh:
-				_, err := script.Exec(`skywire-cli hv dmsg ui`).Stdout()
+				if !testing {
+					_, err = script.Exec(`skywire-cli hv dmsg ui`).Stdout()
+				} else {
+					_, err = script.Exec(`go run cmd/skywire-cli/skywire-cli.go hv dmsg ui`).Stdout()
+				}
 				if err != nil {
 					l.WithError(err).Fatalln("Failed to open dmsgpty UI")
 				}
 			case <-mShutdown.ClickedCh:
-				_, err := script.Exec(`skywire-cli visor halt`).Stdout()
+				if !testing {
+					_, err = script.Exec(`skywire-cli visor halt`).Stdout()
+				} else {
+					_, err = script.Exec(`go run cmd/skywire-cli/skywire-cli.go visor halt`).Stdout()
+				}
 				if err != nil {
 					l.WithError(err).Fatalln("Failed to stop skywire")
 				}

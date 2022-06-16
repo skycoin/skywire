@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -13,6 +14,8 @@ import (
 
 	"github.com/ccding/go-stun/stun"
 	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -20,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -51,6 +55,7 @@ type API interface {
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
+	VPNServers() []string
 	RemoteVisors() []string
 
 	TransportTypes() ([]string, error)
@@ -566,6 +571,31 @@ func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.Connection
 		return cSummary, nil
 	}
 	return nil, ErrProcNotAvailable
+}
+
+// VPNServers gets available public VPN server from service discovery URL
+func (v *Visor) VPNServers() []string {
+	log := logging.MustGetLogger("vpnservers")
+	vlog := logging.NewMasterLogger()
+	vlog.SetLevel(logrus.InfoLevel)
+
+	sdClient := servicedisc.NewClient(log, vlog, servicedisc.Config{
+		Type:     servicedisc.ServiceTypeVPN,
+		PK:       v.conf.PK,
+		SK:       v.conf.SK,
+		DiscAddr: v.conf.Launcher.ServiceDisc,
+	}, &http.Client{Timeout: time.Duration(1) * time.Second}, "")
+	//ctx, _ := context.WithTimeout(context.Background(), 7*time.Second)
+	vpnServers, err := sdClient.Services(context.Background(), 0)
+	if err != nil {
+		v.log.Error("Error getting public vpn servers: ", err)
+		return nil
+	}
+	serverAddrs := make([]string, len(vpnServers))
+	for idx, server := range vpnServers {
+		serverAddrs[idx] = server.Addr.PubKey().String()
+	}
+	return serverAddrs
 }
 
 // RemoteVisors return list of connected remote visors

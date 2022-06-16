@@ -17,7 +17,6 @@ func init() {
 	RootCmd.AddCommand(vpnUICmd)
 	vpnUICmd.Flags().StringVarP(&path, "input", "i", "", "read from specified config file")
 	vpnUICmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
-
 	RootCmd.AddCommand(vpnURLCmd)
 	vpnURLCmd.Flags().StringVarP(&path, "input", "i", "", "read from specified config file")
 	vpnURLCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")

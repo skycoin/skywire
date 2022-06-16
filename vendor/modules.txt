@@ -39,6 +39,8 @@ github.com/creack/pty
 # github.com/davecgh/go-spew v1.1.1
 ## explicit
 github.com/davecgh/go-spew/spew
+# github.com/drgarcia1986/sif v0.0.0-20170313163013-bdc4aa6c4ff9
+## explicit
 # github.com/fatih/color v1.13.0
 ## explicit; go 1.13
 github.com/fatih/color
@@ -268,7 +270,7 @@ golang.org/x/net/ipv4
 golang.org/x/net/ipv6
 golang.org/x/net/nettest
 golang.org/x/net/proxy
-# golang.org/x/sys v0.0.0-20220222200937-f2425489ef4c
+# golang.org/x/sys v0.0.0-20220614162138-6c1b26c55098
 ## explicit; go 1.17
 golang.org/x/sys/cpu
 golang.org/x/sys/execabs
