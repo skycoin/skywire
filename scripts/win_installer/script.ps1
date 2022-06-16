@@ -17,8 +17,8 @@ function BuildInstaller($arch)
         $wintun_arch="x86"
         $arch_title="386  "
     } else {
-        $wintun_arch=$arch
-        $arch_title=$arch
+        $wintun_arch="amd64"
+        $arch_title="amd64"
     }
 
     Write-Output "#                                                        #"
@@ -77,6 +77,5 @@ Write-Output "#                                                        #"
 Write-Output "#        .:::: Create MSI Installer Package ::::.        #"
 BuildInstaller("amd64")
 BuildInstaller("386")
-BuildInstaller("arm64")
 Write-Output "#                                                        #"
 Write-Output "##########################################################`n"
