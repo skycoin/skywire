@@ -758,7 +758,7 @@ export class VpnClientService {
 
     vpnClientData.appState = AppState.Stopped;
     if (vpnClientData.running) {
-      if (appData.detailed_status === AppState.Connecting || appData.status === 2) {
+      if (appData.detailed_status === AppState.Connecting || appData.status === 3) {
         vpnClientData.appState = AppState.Connecting;
       } else if (appData.detailed_status === AppState.Running) {
         vpnClientData.appState = AppState.Running;
