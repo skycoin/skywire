@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
 
@@ -63,7 +63,7 @@ func (h *Host) ServeCLI(ctx context.Context, lis net.Listener) error {
 				continue
 			}
 			if err == io.ErrClosedPipe || strings.Contains(err.Error(), "use of closed network connection") {
-				log.Info("Cleanly stopped serving.")
+				log.Debug("Cleanly stopped serving.")
 				return nil
 			}
 			log.Error("Failed to accept CLI connection with permanent error.")
@@ -71,7 +71,7 @@ func (h *Host) ServeCLI(ctx context.Context, lis net.Listener) error {
 		}
 
 		log := log.WithField("cli_id", atomic.AddInt32(&h.cliN, 1))
-		log.Info("CLI connection accepted.")
+		log.Debug("CLI connection accepted.")
 		go func() {
 			h.serveConn(ctx, log, &mux, conn)
 			atomic.AddInt32(&h.cliN, -1)
@@ -101,7 +101,7 @@ func (h *Host) ListenAndServe(ctx context.Context, port uint16) error {
 		<-ctx.Done()
 		log.
 			WithError(lis.Close()).
-			Info("Serve() ended.")
+			Debug("Serve() ended.")
 	}()
 
 	for {
@@ -114,7 +114,7 @@ func (h *Host) ListenAndServe(ctx context.Context, port uint16) error {
 			}
 			if err == io.ErrClosedPipe || err == dmsg.ErrEntityClosed ||
 				strings.Contains(err.Error(), "use of closed network connection") {
-				log.Info("Cleanly stopped serving.")
+				log.Debug("Cleanly stopped serving.")
 				return nil
 			}
 			log.Error("Failed to accept dmsg.Stream with permanent error.")
@@ -123,7 +123,7 @@ func (h *Host) ListenAndServe(ctx context.Context, port uint16) error {
 
 		rPK := stream.RawRemoteAddr().PK
 		log := log.WithField("remote_pk", rPK.String())
-		log.Info("Processing dmsg.Stream...")
+		log.Debug("Processing dmsg.Stream...")
 
 		if !h.authorize(log, rPK) {
 			err := writeResponse(stream,
@@ -137,7 +137,7 @@ func (h *Host) ListenAndServe(ctx context.Context, port uint16) error {
 		}
 
 		log = log.WithField("conn_id", atomic.AddInt32(&h.connN, 1))
-		log.Info("dmsg.Stream accepted.")
+		log.Debug("dmsg.Stream accepted.")
 		log = stream.Logger().WithField("dmsgpty", "stream")
 		go func() {
 			h.serveConn(ctx, log, &mux, stream)
@@ -161,7 +161,7 @@ func (h *Host) serveConn(ctx context.Context, log logrus.FieldLogger, mux *hostM
 	log.WithError(mux.ServeConn(ctx, conn)).
 		WithField("error_close", <-closeErr).
 		WithField("remote_addr", conn.RemoteAddr()).
-		Info("Stopped serving connection.")
+		Debug("Stopped serving connection.")
 }
 
 // authorize returns true if the provided public key is whitelisted.

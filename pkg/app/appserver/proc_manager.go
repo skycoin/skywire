@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
@@ -122,7 +122,7 @@ func (m *procManager) serve() {
 		if err != nil {
 			if !isDone(m.done) {
 				m.log.WithError(err).WithField("remote_addr", conn.RemoteAddr()).
-					Info("Unexpected error occurred when accepting app conn.")
+					Debug("Unexpected error occurred when accepting app conn.")
 			}
 			return
 		}
@@ -167,7 +167,7 @@ func (m *procManager) handleConn(conn net.Conn) bool {
 		log.Error("Failed to associate conn with proc.")
 		return false
 	}
-	log.Info("Accepted proc conn.")
+	log.Debug("Accepted proc conn.")
 	return true
 }
 
@@ -350,7 +350,7 @@ func (m *procManager) stopAll() {
 			log.WithError(err).Error("App stopped with unexpected error.")
 			continue
 		}
-		log.Infof("App stopped successfully.")
+		log.Debug("App stopped successfully.")
 	}
 
 	m.procs = make(map[string]*Proc)

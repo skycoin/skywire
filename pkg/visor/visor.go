@@ -11,9 +11,9 @@ import (
 
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
-	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -177,6 +177,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Con
 	if !v.processRuntimeErrs() {
 		return nil, false
 	}
+	log.Info("Startup complete.")
 	return v, true
 }
 
@@ -226,7 +227,7 @@ func (v *Visor) Close() error {
 
 		log := v.MasterLogger().PackageLogger(fmt.Sprintf("visor:shutdown:%s", cl.src)).
 			WithField("func", fmt.Sprintf("[%d/%d]", i+1, len(v.closeStack)))
-		log.Info("Shutting down module...")
+		log.Debug("Shutting down module...")
 
 		go func(cl closer) {
 			errCh <- cl.fn()
@@ -240,7 +241,7 @@ func (v *Visor) Close() error {
 				log.WithError(err).WithField("elapsed", time.Since(start)).Warn("Module stopped with unexpected result.")
 				continue
 			}
-			log.WithField("elapsed", time.Since(start)).Info("Module stopped cleanly.")
+			log.WithField("elapsed", time.Since(start)).Debug("Module stopped cleanly.")
 
 		case <-t.C:
 			log.WithField("elapsed", time.Since(start)).Error("Module timed out.")

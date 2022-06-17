@@ -6,7 +6,7 @@ package commands
 import (
 	"context"
 
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
 func runApp() {
