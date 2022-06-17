@@ -21,10 +21,8 @@ if [[ -L /usr/local/bin/skywire-cli ]]; then
   unlink /usr/local/bin/skywire-cli
 fi
 
-if [[ ! -f "${skywire_dir}"/skywire-config.json ]]; then
-  /Applications/Skywireapp/Contents/MacOS/skywire-cli config gen -p -o "${skywire_dir}"/skywire-config.json --is-hypervisor
-  chown "${USER}" "${skywire_dir}"/skywire-config.json
-fi
+/Applications/Skywire.app/Contents/MacOS/skywire-cli config gen -bprio "${skywire_dir}"/skywire-config.json --disableapps skychat,skysocks,skysocks-client,vpn-server
+chown "${USER}" "${skywire_dir}"/skywire-config.json
 
 echo "updating skywire"
 if [[ ! -L /usr/local/bin/skywire-cli ]]; then
