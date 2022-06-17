@@ -10,11 +10,11 @@ import (
 
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/setup"
 	"github.com/skycoin/skywire/pkg/setup/setupmetrics"

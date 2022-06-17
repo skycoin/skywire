@@ -8,7 +8,7 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
 // directClient represents a client that doesnot communicates with a dmsg-discovery,

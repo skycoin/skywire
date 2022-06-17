@@ -37,8 +37,8 @@ const (
 	// AppDetailedStatusVPNConnecting is set during VPN-client session establishment (including handshake).
 	AppDetailedStatusVPNConnecting = "Connecting"
 
-	// AppDetailedStatusVPNReconnecting is set after connection failure in VPN-client, during reconnection.
-	AppDetailedStatusVPNReconnecting = "Connection failed, reconnecting"
+	// AppDetailedStatusReconnecting is set after connection failure, during reconnection.
+	AppDetailedStatusReconnecting = "Connection failed, reconnecting"
 
 	// AppDetailedStatusShuttingDown is set during shutdown.
 	AppDetailedStatusShuttingDown = "Shutting down"

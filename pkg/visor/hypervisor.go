@@ -20,11 +20,11 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
-	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/httputil"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -139,7 +139,7 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 			}
 		}
 
-		log.Info("Accepted.")
+		log.Debug("Accepted.")
 
 		hv.mu.Lock()
 		hv.visor.remoteVisors[addr.PK] = *visorConn
@@ -197,8 +197,14 @@ func (hv *Hypervisor) makeMux() chi.Router {
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
+
+	if hv.visor != nil {
+		if hv.visor.MasterLogger().GetLevel() == logrus.DebugLevel || hv.visor.MasterLogger().GetLevel() == logrus.TraceLevel {
+			r.Use(middleware.Logger)
+			r.Use(middleware.Recoverer)
+		}
+	}
+
 	r.Use(httputil.SetLoggerMiddleware(hv.logger))
 
 	r.Route("/", func(r chi.Router) {
@@ -517,7 +523,7 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 					WithField("visor_addr", c.Addr).
 					WithField("func", "getVisors")
 
-				log.Debug("Requesting summary via RPC.")
+				log.Trace("Requesting summary via RPC.")
 
 				summary, err := c.API.Summary()
 				if err != nil {
@@ -531,7 +537,7 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 						Health: &HealthInfo{},
 					}
 				} else {
-					log.Debug("Obtained summary via RPC.")
+					log.Trace("Obtained summary via RPC.")
 				}
 				resp := makeSummaryResp(err == nil, false, summary)
 				summaries[i] = resp
@@ -1421,7 +1427,7 @@ func (hv *Hypervisor) serveDmsg(ctx context.Context, log *logging.Logger) {
 		if err := hv.ServeRPC(ctx, hv.c.DmsgPort); err != nil {
 			log := log.WithError(err)
 			if errors.Is(err, dmsg.ErrEntityClosed) {
-				log.Info("Dmsg client stopped serving.")
+				log.Debug("Dmsg client stopped serving.")
 				return
 			}
 			log.Error("Failed to serve RPC client over dmsg.")
@@ -1429,7 +1435,7 @@ func (hv *Hypervisor) serveDmsg(ctx context.Context, log *logging.Logger) {
 		}
 	}()
 	log.WithField("addr", dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}).
-		Info("Serving RPC client over dmsg.")
+		Debug("Serving RPC client over dmsg.")
 }
 
 // dmsgPtyUI servers as a wrapper for `*dmsgpty.UI`. this way source file with

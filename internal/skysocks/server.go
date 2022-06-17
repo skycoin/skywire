@@ -9,7 +9,6 @@ import (
 
 	"github.com/armon/go-socks5"
 	ipc "github.com/james-barrow/golang-ipc"
-	"github.com/sirupsen/logrus"
 	"github.com/skycoin/yamux"
 
 	"github.com/skycoin/skywire/pkg/app"
@@ -23,12 +22,11 @@ type Server struct {
 	sMu      sync.Mutex
 	socks    *socks5.Server
 	listener net.Listener
-	log      logrus.FieldLogger
 	closed   uint32
 }
 
 // NewServer constructs a new Server.
-func NewServer(passcode string, appCl *app.Client, l logrus.FieldLogger) (*Server, error) {
+func NewServer(passcode string, appCl *app.Client) (*Server, error) {
 	var credentials socks5.CredentialStore
 	if passcode != "" {
 		credentials = passcodeCredentials(passcode)
@@ -42,7 +40,6 @@ func NewServer(passcode string, appCl *app.Client, l logrus.FieldLogger) (*Serve
 	server := &Server{
 		appCl: appCl,
 		socks: s,
-		log:   l,
 	}
 
 	return server, nil
@@ -67,16 +64,16 @@ func (s *Server) Serve(l net.Listener) error {
 		conn, err := l.Accept()
 		if err != nil {
 			if s.isClosed() {
-				s.log.WithError(err).Debugln("Failed to accept skysocks connection, but server is closed")
+				fmt.Printf("Failed to accept skysocks connection, but server is closed: %v\n", err)
 				return nil
 			}
 
-			s.log.WithError(err).Debugln("Failed to accept skysocks connection")
+			fmt.Printf("Failed to accept skysocks connection: %v\n", err)
 
 			return fmt.Errorf("accept: %w", err)
 		}
 
-		s.log.Infoln("Accepted new skysocks connection")
+		fmt.Println("Accepted new skysocks connection")
 
 		sessionCfg := yamux.DefaultConfig()
 		sessionCfg.EnableKeepAlive = false
@@ -87,7 +84,7 @@ func (s *Server) Serve(l net.Listener) error {
 
 		go func() {
 			if err := s.socks.Serve(session); err != nil {
-				s.log.Error("Failed to start SOCKS5 server:", err)
+				print(fmt.Sprintf("Failed to start SOCKS5 server: %v", err))
 			}
 		}()
 	}
@@ -106,7 +103,7 @@ func (s *Server) ListenIPC(client *ipc.Client) {
 
 func (s *Server) setAppStatus(status launcher.AppDetailedStatus) {
 	if err := s.appCl.SetDetailedStatus(string(status)); err != nil {
-		fmt.Printf("Failed to set status %v: %v\n", status, err)
+		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
 	}
 }
 

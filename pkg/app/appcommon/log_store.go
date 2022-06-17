@@ -10,8 +10,9 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/skycoin/skycoin/src/util/logging"
 	"go.etcd.io/bbolt"
+
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
 const (

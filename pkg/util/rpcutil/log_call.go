@@ -30,6 +30,6 @@ func LogCall(log logrus.FieldLogger, method string, in interface{}) func(out int
 		if err != nil && *err != nil {
 			log = log.WithError(*err)
 		}
-		log.Info("Request processed.")
+		log.Trace("Request processed.")
 	}
 }

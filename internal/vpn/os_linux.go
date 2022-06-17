@@ -55,6 +55,12 @@ func AddRoute(ip, gateway string) error {
 		}
 	}
 
+	if errors.As(err, &e) {
+		if strings.Contains(string(e.Stderr), "Operation not permitted") {
+			return errPermissionDenied
+		}
+	}
+
 	return err
 }
 
