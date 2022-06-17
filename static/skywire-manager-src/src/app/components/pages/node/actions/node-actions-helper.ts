@@ -28,6 +28,7 @@ export class NodeActionsHelper {
   private currentNodeKey: string;
   private canBeUpdated = false;
   private canBeRestarted = false;
+  private canOpenTerminal = false;
 
   options: MenuOptionData[] = [];
 
@@ -61,18 +62,21 @@ export class NodeActionsHelper {
    * Options for the menu shown in the top bar.
    */
   private updateOptions() {
-    this.options = [
-      {
+    this.options = [];
+
+    if (this.canOpenTerminal) {
+      this.options.push({
         name: 'actions.menu.terminal',
         actionName: 'terminal',
         icon: 'laptop'
-      },
-      {
-        name: 'actions.menu.logs',
-        actionName: 'logs',
-        icon: 'subject',
-      }
-    ];
+      });
+    }
+
+    this.options.push({
+      name: 'actions.menu.logs',
+      actionName: 'logs',
+      icon: 'subject',
+    });
 
     if (this.canBeRestarted) {
       this.options.push({
@@ -104,6 +108,8 @@ export class NodeActionsHelper {
       this.canBeUpdated = false;
       this.canBeRestarted = false;
     }
+
+    this.canOpenTerminal = GeneralUtils.checkIfTagCanOpenterminal(currentNode.buildTag);
 
     this.updateOptions();
   }
