@@ -18,7 +18,7 @@ var (
 	errTimeout                        = errors.New("Internal error: Timeout")
 	errNotPermited                    = errors.New("ioctl: operation not permitted")
 	errVPNServerClosed                = errors.New("Vpn-server closed")
-	errPermissionDenied               = errors.New("Permission denied")
+	errPermissionDenied               = errors.New("Permission denied") //nolint
 
 	errNoTransportFound = appserver.RPCErr{
 		Err: router.ErrNoTransportFound.Error(),
