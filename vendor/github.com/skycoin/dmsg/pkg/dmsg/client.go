@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 
 	"github.com/skycoin/dmsg/pkg/disc"
 
@@ -135,7 +135,7 @@ func (*Client) Type() string {
 // It blocks until the client is closed.
 func (ce *Client) Serve(ctx context.Context) {
 	defer func() {
-		ce.log.Info("Stopped serving client!")
+		ce.log.Debug("Stopped serving client!")
 	}()
 
 	cancellabelCtx, cancel := context.WithCancel(ctx)
@@ -154,7 +154,7 @@ func (ce *Client) Serve(ctx context.Context) {
 			return
 		}
 
-		ce.log.Info("Discovering dmsg servers...")
+		ce.log.Debug("Discovering dmsg servers...")
 		entries, err := ce.discoverServers(cancellabelCtx)
 		if err != nil {
 			ce.log.WithError(err).Warn("Failed to discover dmsg servers.")
@@ -180,7 +180,7 @@ func (ce *Client) Serve(ctx context.Context) {
 				case <-ce.done:
 					return
 				case err := <-ce.errCh:
-					ce.log.WithError(err).Info("Session stopped.")
+					ce.log.WithError(err).Debug("Session stopped.")
 					if isClosed(ce.done) {
 						return
 					}
@@ -210,7 +210,7 @@ func (ce *Client) Serve(ctx context.Context) {
 		case <-ce.done:
 			return
 		case err := <-ce.errCh:
-			ce.log.WithError(err).Info("Session stopped.")
+			ce.log.WithError(err).Debug("Session stopped.")
 			if isClosed(ce.done) {
 				return
 			}
@@ -250,10 +250,10 @@ func (ce *Client) Close() error {
 		for _, dSes := range ce.sessions {
 			ce.log.
 				WithError(dSes.Close()).
-				Info("Session closed.")
+				Debug("Session closed.")
 		}
 		ce.sessions = make(map[cipher.PubKey]*SessionCommon)
-		ce.log.Info("All sessions closed.")
+		ce.log.Debug("All sessions closed.")
 		ce.sessionsMx.Unlock()
 		ce.porter.CloseAll(ce.log)
 		err = ce.EntityCommon.delEntry(context.Background())
@@ -355,7 +355,7 @@ func (ce *Client) EnsureSession(ctx context.Context, entry *disc.Entry) error {
 
 	// If session with server of pk already exists, skip.
 	if _, ok := ce.clientSession(ce.porter, entry.Static); ok {
-		ce.log.WithField("remote_pk", entry.Static).Info("Session already exists...")
+		ce.log.WithField("remote_pk", entry.Static).Debug("Session already exists...")
 		return nil
 	}
 
@@ -368,7 +368,7 @@ func (ce *Client) EnsureSession(ctx context.Context, entry *disc.Entry) error {
 // NOTE: This should not be called directly as it may lead to session duplicates.
 // Only `ensureSession` or `EnsureAndObtainSession` should call this function.
 func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs ClientSession, err error) {
-	ce.log.WithField("remote_pk", entry.Static).Info("Dialing session...")
+	ce.log.WithField("remote_pk", entry.Static).Debug("Dialing session...")
 
 	const network = "tcp"
 
@@ -399,7 +399,7 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 	}
 
 	go func() {
-		ce.log.WithField("remote_pk", dSes.RemotePK()).Info("Serving session.")
+		ce.log.WithField("remote_pk", dSes.RemotePK()).Debug("Serving session.")
 		err := dSes.serve()
 		if !isClosed(ce.done) {
 			// We should only report an error when client is not closed.
