@@ -9,8 +9,6 @@ date_format=$(date -u "+%Y-%m-%d")
 go_arch=
 sign_binary=false
 notarize_binary=false
-staple_notarization=false
-package_path=
 developer_id=
 output=
 
@@ -26,19 +24,12 @@ if [[ "$current_os" != "Darwin" ]]; then
 fi
 
 function print_usage() {
-  echo "Usage: sh create_installer.sh [-o|--output output_skywire_dir] [-s | --sign signs the binary] [-n | --notarize notarize the binary ] [-t <PACKAGE_PATH> | --staple <PACKAGE_PATH> ]"
+  echo "Usage: sh create_installer.sh [-o|--output output_skywire_dir] [-s | --sign signs the binary] [-n | --notarize notarize the binary ]"
   echo "You need to provide the following environment variables if you want to sign and notarize the binary:"
   echo -e "${greent}MAC_HASH_APPLICATION_ID${nct}: Hash of Developer ID Application"
   echo -e "${greent}MAC_HASH_INSTALLER_ID${nct}  : Hash of Developer ID Installer"
   echo -e "${greent}MAC_DEVELOPER_USERNAME${nct} : Developer Account Email"
   echo -e "${greent}MAC_DEVELOPER_PASSWORD${nct} : Application specific / Apple ID password ${yellowt}https://support.apple.com/en-us/HT204397${nct}"
-}
-
-function staple_installer() {
-  if [ -z "$package_path" ]; then
-    echo "package_path of option -t cannot be empty"
-  fi
-  xcrun stapler staple "${package_path}"
 }
 
 function build_installer() {
@@ -171,11 +162,6 @@ while :; do
     notarize_binary=true
     shift
     ;;
-  -t | --staple)
-    staple_notarization=true
-    package_path="${2}"
-    shift
-    ;;
   -?*)
     printf 'WARN: Unknown option (ignored): %s\n' "$1" >&2
     ;;
@@ -186,22 +172,10 @@ while :; do
   shift
 done
 
-# call build_installer twice, once for the original host architecture
-# and one for the other one (x86_64 and arm64 or vice versa)
+# call build_installer twice, once for amd64 and once for arm64
 
-if [ "$staple_notarization" == false ]; then
-  build_installer
+go_arch=arm64
+build_installer
 
-  case ${go_arch} in
-  amd64)
-    go_arch=arm64
-    build_installer
-    ;;
-  arm64)
-    go_arch=amd64
-    build_installer
-    ;;
-  esac
-else
-  staple_installer
-fi
+go_arch=amd64
+build_installer
