@@ -197,10 +197,14 @@ func (hv *Hypervisor) makeMux() chi.Router {
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
-	if hv.visor.MasterLogger().GetLevel() == logrus.DebugLevel || hv.visor.MasterLogger().GetLevel() == logrus.TraceLevel {
-		r.Use(middleware.Logger)
-		r.Use(middleware.Recoverer)
+
+	if hv.visor != nil {
+		if hv.visor.MasterLogger().GetLevel() == logrus.DebugLevel || hv.visor.MasterLogger().GetLevel() == logrus.TraceLevel {
+			r.Use(middleware.Logger)
+			r.Use(middleware.Recoverer)
+		}
 	}
+
 	r.Use(httputil.SetLoggerMiddleware(hv.logger))
 
 	r.Route("/", func(r chi.Router) {
