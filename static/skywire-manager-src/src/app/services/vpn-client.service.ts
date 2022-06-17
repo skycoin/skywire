@@ -514,19 +514,17 @@ export class VpnClientService {
       retryWhen(errors =>
         concat(errors.pipe(delay(this.standardWaitTime), take(3)), errors.pipe(mergeMap(err => throwError(err))))
       ),
-    ).subscribe(() => {
+    ).subscribe(appData => {
       this.working = false;
 
-      // Update the local values.
-      if (startApp) {
-        this.currentEventData.vpnClientAppData.running = true;
+      const vpnClientData = this.processAppData(appData);
+      if (vpnClientData.running) {
         this.lastServiceState = VpnServiceStates.Running;
-
-        this.vpnSavedDataService.updateHistory();
       } else {
-        this.currentEventData.vpnClientAppData.running = false;
         this.lastServiceState = VpnServiceStates.Off;
       }
+      this.currentEventData.vpnClientAppData = vpnClientData;
+      this.currentEventData.updateDate = Date.now();
 
       // Make the service work normally again.
       this.sendUpdate();
@@ -679,42 +677,7 @@ export class VpnClientService {
 
       // Get the required data from the app properties.
       if (appData) {
-        vpnClientData = new VpnClientAppData();
-        vpnClientData.running = appData.status !== 0 && appData.status !== 2;
-        vpnClientData.connectionDuration = appData.connection_duration;
-
-        vpnClientData.appState = AppState.Stopped;
-        if (vpnClientData.running) {
-          if (appData.detailed_status === AppState.Connecting) {
-            vpnClientData.appState = AppState.Connecting;
-          } else if (appData.detailed_status === AppState.Running) {
-            vpnClientData.appState = AppState.Running;
-          } else if (appData.detailed_status === AppState.ShuttingDown) {
-            vpnClientData.appState = AppState.ShuttingDown;
-          } else if (appData.detailed_status === AppState.Reconnecting) {
-            vpnClientData.appState = AppState.Reconnecting;
-          }
-        } else if (appData.status === 2) {
-          vpnClientData.lastErrorMsg = appData.detailed_status;
-
-          if (!vpnClientData.lastErrorMsg) {
-            vpnClientData.lastErrorMsg = this.translateService.instant('vpn.status-page.unknown-error');
-          }
-        }
-
-        vpnClientData.killswitch = false;
-
-        if (appData.args && appData.args.length > 0) {
-          for (let i = 0; i < appData.args.length; i++) {
-            if (appData.args[i] === '-srv' && i + 1 < appData.args.length) {
-              vpnClientData.serverPk = appData.args[i + 1];
-            }
-
-            if (appData.args[i].toLowerCase().includes('-killswitch')) {
-              vpnClientData.killswitch = (appData.args[i] as string).toLowerCase().includes('true');
-            }
-          }
-        }
+        vpnClientData = this.processAppData(appData);
       }
 
       // Get the min hops value.
@@ -783,6 +746,50 @@ export class VpnClientService {
 
       return vpnClientData;
     }));
+  }
+
+  /**
+   * Gets the required data from the app properties.
+   */
+  private processAppData(appData: any): VpnClientAppData {
+    const vpnClientData = new VpnClientAppData();
+    vpnClientData.running = appData.status !== 0 && appData.status !== 2;
+    vpnClientData.connectionDuration = appData.connection_duration;
+
+    vpnClientData.appState = AppState.Stopped;
+    if (vpnClientData.running) {
+      if (appData.detailed_status === AppState.Connecting || appData.status === 3) {
+        vpnClientData.appState = AppState.Connecting;
+      } else if (appData.detailed_status === AppState.Running) {
+        vpnClientData.appState = AppState.Running;
+      } else if (appData.detailed_status === AppState.ShuttingDown) {
+        vpnClientData.appState = AppState.ShuttingDown;
+      } else if (appData.detailed_status === AppState.Reconnecting) {
+        vpnClientData.appState = AppState.Reconnecting;
+      }
+    } else if (appData.status === 2) {
+      vpnClientData.lastErrorMsg = appData.detailed_status;
+
+      if (!vpnClientData.lastErrorMsg) {
+        vpnClientData.lastErrorMsg = this.translateService.instant('vpn.status-page.unknown-error');
+      }
+    }
+
+    vpnClientData.killswitch = false;
+
+    if (appData.args && appData.args.length > 0) {
+      for (let i = 0; i < appData.args.length; i++) {
+        if (appData.args[i] === '-srv' && i + 1 < appData.args.length) {
+          vpnClientData.serverPk = appData.args[i + 1];
+        }
+
+        if (appData.args[i].toLowerCase().includes('-killswitch')) {
+          vpnClientData.killswitch = (appData.args[i] as string).toLowerCase().includes('true');
+        }
+      }
+    }
+
+    return vpnClientData;
   }
 
   /**
