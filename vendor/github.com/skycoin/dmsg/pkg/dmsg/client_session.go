@@ -82,12 +82,12 @@ func (cs *ClientSession) serve() error {
 			if netErr, ok := err.(net.Error); ok && netErr.Temporary() { //nolint
 				cs.log.
 					WithError(err).
-					Info("Failed to accept stream.")
+					Debug("Failed to accept stream.")
 				continue
 			}
 
 			if errors.Is(err, yamux.ErrSessionShutdown) {
-				cs.log.WithError(err).Info("Stopped accepting streams.")
+				cs.log.WithError(err).Debug("Stopped accepting streams.")
 				return err
 			}
 			cs.log.WithError(err).Warn("Stopped accepting streams.")

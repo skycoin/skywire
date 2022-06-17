@@ -6,12 +6,12 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"runtime"
 
 	ipc "github.com/james-barrow/golang-ipc"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/internal/skysocks"
@@ -26,13 +26,9 @@ const (
 	port    routing.Port = 3
 )
 
-var log = logrus.New()
-
 func main() {
 	appCl := app.NewClient(nil)
 	defer appCl.Close()
-
-	skysocks.Log = log
 
 	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 		fmt.Printf("Failed to output build info: %v", err)
@@ -41,7 +37,7 @@ func main() {
 	var passcode = flag.String("passcode", "", "Authorize user against this passcode")
 	flag.Parse()
 
-	srv, err := skysocks.NewServer(*passcode, appCl, log)
+	srv, err := skysocks.NewServer(*passcode, appCl)
 	if err != nil {
 		log.Fatal("Failed to create a new server: ", err)
 	}

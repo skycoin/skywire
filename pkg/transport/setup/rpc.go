@@ -5,9 +5,9 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
-	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
@@ -63,7 +63,7 @@ var ErrIncorrectType = errors.New("transport was not created by skycoin")
 
 // RemoveTransport removes all transports that match given request
 func (gw *TransportGateway) RemoveTransport(req UUIDRequest, res *BoolResponse) error {
-	gw.log.WithField("ID", req.ID).Info("Removing transport")
+	gw.log.WithField("ID", req.ID).Debug("Removing transport")
 	tr, err := gw.tm.GetTransportByID(req.ID)
 	if err != nil {
 		return err

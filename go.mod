@@ -19,7 +19,7 @@ require (
 	github.com/pkg/profile v1.5.0
 	github.com/shirou/gopsutil/v3 v3.21.4
 	github.com/sirupsen/logrus v1.8.1
-	github.com/skycoin/dmsg v0.0.0-20220607114207-d4a85dc351ce
+	github.com/skycoin/dmsg v0.0.0-20220617100223-c17f98a92a47
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
@@ -47,7 +47,7 @@ require (
 	github.com/go-chi/chi/v5 v5.0.8-0.20220103230436-7dbe9a0bd10f
 	github.com/ivanpirog/coloredcobra v1.0.0
 	github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
-	github.com/skycoin/skywire-utilities v0.0.0-20220511053113-3d492e0048c4
+	github.com/skycoin/skywire-utilities v0.0.0-20220617085111-5c8c8d3ced14
 	github.com/skycoin/systray v1.10.1-0.20220509091536-c90eecafd3fd
 )
 
