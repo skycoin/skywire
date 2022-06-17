@@ -141,7 +141,7 @@ github.com/shirou/gopsutil/v3/process
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v0.0.0-20220607114207-d4a85dc351ce
+# github.com/skycoin/dmsg v0.0.0-20220617100223-c17f98a92a47
 ## explicit; go 1.16
 github.com/skycoin/dmsg/internal/servermetrics
 github.com/skycoin/dmsg/pkg/direct
@@ -164,7 +164,6 @@ github.com/skycoin/skycoin/src/cipher/base58
 github.com/skycoin/skycoin/src/cipher/ripemd160
 github.com/skycoin/skycoin/src/cipher/secp256k1-go
 github.com/skycoin/skycoin/src/cipher/secp256k1-go/secp256k1-go2
-github.com/skycoin/skycoin/src/util/logging
 # github.com/skycoin/skywire-utilities v0.0.0-20220617085111-5c8c8d3ced14
 ## explicit; go 1.17
 github.com/skycoin/skywire-utilities/pkg/buildinfo
@@ -251,7 +250,6 @@ golang.org/x/crypto/internal/subtle
 golang.org/x/crypto/pbkdf2
 golang.org/x/crypto/salsa20
 golang.org/x/crypto/salsa20/salsa
-golang.org/x/crypto/ssh/terminal
 golang.org/x/crypto/tea
 golang.org/x/crypto/twofish
 golang.org/x/crypto/xtea
