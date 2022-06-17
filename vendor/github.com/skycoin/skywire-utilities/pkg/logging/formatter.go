@@ -12,7 +12,7 @@ import (
 
 	"github.com/mgutz/ansi"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/term"
 )
 
 const defaultTimestampFormat = time.RFC3339
@@ -26,6 +26,7 @@ var (
 		FatalLevelStyle:  "red",
 		PanicLevelStyle:  "red",
 		DebugLevelStyle:  "blue",
+		TraceLevelStyle:  "black",
 		PrefixStyle:      "cyan",
 		TimestampStyle:   "black+h",
 		CallContextStyle: "black+h",
@@ -38,6 +39,7 @@ var (
 		FatalLevelColor:  ansi.ColorFunc(""),
 		PanicLevelColor:  ansi.ColorFunc(""),
 		DebugLevelColor:  ansi.ColorFunc(""),
+		TraceLevelColor:  ansi.ColorFunc(""),
 		PrefixColor:      ansi.ColorFunc(""),
 		TimestampColor:   ansi.ColorFunc(""),
 		CallContextColor: ansi.ColorFunc(""),
@@ -58,6 +60,7 @@ type ColorScheme struct {
 	FatalLevelStyle  string
 	PanicLevelStyle  string
 	DebugLevelStyle  string
+	TraceLevelStyle  string
 	PrefixStyle      string
 	TimestampStyle   string
 	CallContextStyle string
@@ -71,6 +74,7 @@ type compiledColorScheme struct {
 	FatalLevelColor  func(string) string
 	PanicLevelColor  func(string) string
 	DebugLevelColor  func(string) string
+	TraceLevelColor  func(string) string
 	PrefixColor      func(string) string
 	TimestampColor   func(string) string
 	CallContextColor func(string) string
@@ -149,6 +153,7 @@ func compileColorScheme(s *ColorScheme) *compiledColorScheme {
 		FatalLevelColor:  getCompiledColor(s.FatalLevelStyle, defaultColorScheme.FatalLevelStyle),
 		PanicLevelColor:  getCompiledColor(s.PanicLevelStyle, defaultColorScheme.PanicLevelStyle),
 		DebugLevelColor:  getCompiledColor(s.DebugLevelStyle, defaultColorScheme.DebugLevelStyle),
+		TraceLevelColor:  getCompiledColor(s.TraceLevelStyle, defaultColorScheme.TraceLevelStyle),
 		PrefixColor:      getCompiledColor(s.PrefixStyle, defaultColorScheme.PrefixStyle),
 		TimestampColor:   getCompiledColor(s.TimestampStyle, defaultColorScheme.TimestampStyle),
 		CallContextColor: getCompiledColor(s.CallContextStyle, defaultColorScheme.CallContextStyle),
@@ -168,7 +173,7 @@ func (f *TextFormatter) init(entry *logrus.Entry) {
 func (f *TextFormatter) checkIfTerminal(w io.Writer) bool {
 	switch v := w.(type) {
 	case *os.File:
-		return terminal.IsTerminal(int(v.Fd()))
+		return term.IsTerminal(int(v.Fd()))
 	default:
 		return false
 	}
@@ -249,6 +254,8 @@ func (f *TextFormatter) printColored(b *bytes.Buffer, entry *logrus.Entry, keys 
 		levelColor = colorScheme.FatalLevelColor
 	case logrus.PanicLevel:
 		levelColor = colorScheme.PanicLevelColor
+	case logrus.TraceLevel:
+		levelColor = colorScheme.TraceLevelColor
 	default:
 		levelColor = colorScheme.DebugLevelColor
 	}

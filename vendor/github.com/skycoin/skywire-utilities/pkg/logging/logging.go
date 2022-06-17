@@ -38,6 +38,8 @@ func LevelFromString(s string) (logrus.Level, error) {
 		return logrus.FatalLevel, nil
 	case "panic":
 		return logrus.PanicLevel, nil
+	case "trace":
+		return logrus.TraceLevel, nil
 	default:
 		return logrus.DebugLevel, errors.New("could not convert string to log level")
 	}
@@ -66,6 +68,11 @@ func DisableColors() {
 // SetLevel sets the logger's minimum log level
 func SetLevel(level logrus.Level) {
 	log.SetLevel(level)
+}
+
+// GetLevel returns the logger level
+func GetLevel() logrus.Level {
+	return log.GetLevel()
 }
 
 // SetOutputTo sets the logger's output to an io.Writer

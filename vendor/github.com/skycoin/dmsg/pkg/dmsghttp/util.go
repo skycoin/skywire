@@ -8,7 +8,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
 // GetServers is used to get all the available servers from the dmsg-discovery.
@@ -49,7 +49,7 @@ func UpdateServers(ctx context.Context, dClient disc.APIClient, dmsgDisc string,
 				log.WithError(err).Error("Error getting dmsg-servers.")
 				break
 			}
-			log.Infof("Servers found : %v.", len(servers))
+			log.Debugf("Servers found : %v.", len(servers))
 			for _, server := range servers {
 				dClient.PostEntry(ctx, server) //nolint
 				err := dmsgC.EnsureSession(ctx, server)

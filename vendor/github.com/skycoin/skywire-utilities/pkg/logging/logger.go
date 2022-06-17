@@ -56,16 +56,6 @@ func (logger *MasterLogger) PackageLogger(moduleName string) *Logger {
 	}
 }
 
-// AddHook adds a logrus.Hook to the logger and its module loggers
-func (logger *MasterLogger) AddHook(hook logrus.Hook) {
-	logger.Hooks.Add(hook)
-}
-
-// SetLevel sets the log level for the logger and its module loggers
-func (logger *MasterLogger) SetLevel(level logrus.Level) {
-	logger.Level = level
-}
-
 // EnableColors enables colored logging
 func (logger *MasterLogger) EnableColors() {
 	logger.Formatter.(*TextFormatter).DisableColors = false
