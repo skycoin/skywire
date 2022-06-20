@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
