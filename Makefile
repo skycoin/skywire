@@ -45,7 +45,7 @@ ifeq ($(BUILDTAG),)
         	BUILDTAG = "Linux"
     	endif
     	ifeq ($(UNAME_S),Darwin)
-	        BUILDTAG = "Drawin"
+	        BUILDTAG = "Darwin"
 		endif
 	endif
 endif
