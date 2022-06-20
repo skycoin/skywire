@@ -37,14 +37,7 @@ func GetIPTablesForwardPolicy() (string, error) {
 // SetIPTablesForwardPolicy sets `policy` for iptables `forward` chain.
 func SetIPTablesForwardPolicy(policy string) error {
 	cmd := fmt.Sprintf(setIPTablesForwardPolicyCMDFmt, policy)
-	outBytes, err := osutil.RunWithResult("sh", "-c", cmd)
-	if err != nil {
-		return err
-	}
-	if len(outBytes) == 0 {
-		return errPermissionDenied
-	}
-	return nil
+	return osutil.Run("sh", "-c", cmd)
 }
 
 // SetIPTablesForwardAcceptPolicy sets ACCEPT policy for iptables `forward` chain.
