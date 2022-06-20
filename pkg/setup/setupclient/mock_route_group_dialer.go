@@ -6,10 +6,10 @@ import (
 	context "context"
 
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
-	logging "github.com/skycoin/skywire-utilities/pkg/logging"
 	mock "github.com/stretchr/testify/mock"
 
 	cipher "github.com/skycoin/skywire-utilities/pkg/cipher"
+	logging "github.com/skycoin/skywire-utilities/pkg/logging"
 	routing "github.com/skycoin/skywire/pkg/routing"
 )
 
