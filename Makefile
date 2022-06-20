@@ -387,8 +387,8 @@ deb-package: deb-install-prequisites ## Create unsigned application
 deb-package-help: ## Show installer creation help
 	./scripts/deb_installer/package_deb.sh -h
 
-mac-installer: ## Create signed and notarized application, run make mac-installer-help for more
-	./scripts/mac_installer/create_installer.sh -s -n
+mac-installer: ## Create unsigned and not-notarized application, run make mac-installer-help for more
+	./scripts/mac_installer/create_installer.sh
 
 mac-installer-help: ## Show installer creation help
 	./scripts/mac_installer/create_installer.sh -h
