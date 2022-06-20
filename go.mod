@@ -8,7 +8,6 @@ require (
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/ccding/go-stun/stun v0.0.0-20200514191101-4dc67bcdb029
 	github.com/gen2brain/dlgs v0.0.0-20210911090025-cbd38e821b98
-	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/uuid v1.1.2
 	github.com/gorilla/securecookie v1.1.1
 	github.com/json-iterator/go v1.1.12 // indirect
@@ -20,7 +19,7 @@ require (
 	github.com/pkg/profile v1.5.0
 	github.com/shirou/gopsutil/v3 v3.21.4
 	github.com/sirupsen/logrus v1.8.1
-	github.com/skycoin/dmsg v0.0.0-20220607114207-d4a85dc351ce
+	github.com/skycoin/dmsg v0.0.0-20220617100223-c17f98a92a47
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
@@ -39,7 +38,7 @@ require (
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	golang.org/x/tools v0.1.5 // indirect
 	golang.zx2c4.com/wireguard v0.0.0-20211012180210-dfd688b6aa7b
-	nhooyr.io/websocket v1.8.2
+	nhooyr.io/websocket v1.8.2 // indirect
 )
 
 require (
@@ -48,7 +47,7 @@ require (
 	github.com/go-chi/chi/v5 v5.0.8-0.20220103230436-7dbe9a0bd10f
 	github.com/ivanpirog/coloredcobra v1.0.0
 	github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
-	github.com/skycoin/skywire-utilities v0.0.0-20220511053113-3d492e0048c4
+	github.com/skycoin/skywire-utilities v0.0.0-20220617085111-5c8c8d3ced14
 	github.com/skycoin/systray v1.10.1-0.20220509091536-c90eecafd3fd
 )
 
@@ -63,7 +62,6 @@ require (
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
-	github.com/google/go-querystring v1.0.0 // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/klauspost/compress v1.11.0 // indirect

@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -47,6 +47,7 @@ var (
 	root                   bool
 	usr                    bool
 	hiddenflags            []string
+	logLevel               string
 )
 
 var logger = logging.MustGetLogger("skywire-cli")
@@ -61,6 +62,7 @@ func init() {
 	}
 	RootCmd.Flags().SortFlags = false
 	RootCmd.Flags().BoolVarP(&updateEndpoints, "endpoints", "a", false, "update server endpoints")
+	RootCmd.Flags().StringVar(&logLevel, "log-level", "", "level of logging in config")
 	RootCmd.Flags().StringVarP(&serviceConfURL, "url", "b", "", "service config URL: "+svcconf)
 	RootCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "use test deployment: "+testconf)
 	RootCmd.Flags().StringVar(&setPublicAutoconnect, "public-autoconn", "", "change public autoconnect configuration")
@@ -130,6 +132,12 @@ var RootCmd = &cobra.Command{
 				Addr: services.UptimeTracker, //utilenv.DefaultUptimeTrackerAddr,
 			}
 			conf.StunServers = services.StunServers //utilenv.GetStunServers()
+		}
+
+		if conf.LogLevel != logLevel {
+			if logLevel == "trace" || logLevel == "debug" || logLevel == "info" {
+				conf.LogLevel = logLevel
+			}
 		}
 
 		switch setPublicAutoconnect {

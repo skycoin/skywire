@@ -9,7 +9,7 @@ release:
     owner: skycoin
     name: skywire
 
-  draft: true
+  prerelease: true
 
 before:
   hooks:

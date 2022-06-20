@@ -64,7 +64,7 @@ func (c *sudphClient) listen() (net.Listener, error) {
 	c.filter = pfilter.NewPacketFilter(packetListener)
 	sudphVisorsConn := c.filter.NewConn(visorsConnPriority, nil)
 	c.filter.Start()
-	c.log.Infof("Binding")
+	c.log.Debug("Binding")
 	addrCh, err := c.ar.BindSUDPH(c.filter, c.makeBindHandshake())
 	if err != nil {
 		return nil, err
@@ -75,7 +75,7 @@ func (c *sudphClient) listen() (net.Listener, error) {
 		return nil, err
 	}
 
-	c.log.Infof("Successfully bound sudph to port %s", localPort)
+	c.log.Debugf("Successfully bound sudph to port %s", localPort)
 
 	go c.acceptAddresses(sudphVisorsConn, addrCh)
 	return kcp.ServeConn(nil, 0, 0, sudphVisorsConn)
@@ -103,13 +103,12 @@ func (c *sudphClient) acceptAddresses(conn net.PacketConn, addrCh <-chan addrres
 			continue
 		}
 
-		c.log.Infof("Sending hole punch packet to %v", addr)
-
+		c.log.Debugf("Sending hole punch packet to %v", addr)
 		if _, err := conn.WriteTo([]byte(holePunchMessage), udpAddr); err != nil {
 			c.log.WithError(err).Errorf("Failed to send hole punch packet to %v", udpAddr)
 			continue
 		}
-		c.log.Infof("Sent hole punch packet to %v", addr)
+		c.log.Debugf("Sent hole punch packet to %v", addr)
 	}
 }
 
@@ -130,7 +129,7 @@ func (c *sudphClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16)
 func (c *sudphClient) dialWithTimeout(ctx context.Context, addr string) (net.Conn, error) {
 	timedCtx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
-	c.log.Infof("Dialing %v", addr)
+	c.log.Debugf("Dialing %v", addr)
 
 	for {
 		select {
@@ -139,7 +138,7 @@ func (c *sudphClient) dialWithTimeout(ctx context.Context, addr string) (net.Con
 		default:
 			conn, err := c.dial(addr)
 			if err == nil {
-				c.log.Infof("Dialed %v", addr)
+				c.log.Debugf("Dialed %v", addr)
 				return conn, nil
 			}
 			c.log.WithError(err).

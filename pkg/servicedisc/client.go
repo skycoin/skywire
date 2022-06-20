@@ -14,10 +14,10 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/internal/httpauth"
 )
@@ -175,7 +175,7 @@ func (c *HTTPClient) RegisterEntry(ctx context.Context) error {
 		return err
 	}
 	c.entry = entry
-	c.log.WithField("entry", c.entry).Debug("Entry registered successfully")
+	c.log.WithField("entry", c.entry.String()).Debug("Entry registered successfully")
 	return nil
 }
 
