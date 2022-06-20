@@ -148,6 +148,60 @@ builds:
     main: ./cmd/skywire-cli/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
+
+  - id: setup-node-amd64
+    binary: setup-node
+    goos:
+      - linux
+    goarch:
+      - amd64
+    env:
+      - CGO_ENABLED=1
+      - CC=/home/appveyor/projects/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
+    main: ./cmd/setup-node/
+    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
+
+  - id: setup-node-arm64
+    binary: setup-node
+    goos:
+      - linux
+    goarch:
+      - arm64
+    env:
+      - CGO_ENABLED=1
+      - CC=/home/appveyor/projects/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
+    main: ./cmd/setup-node/
+    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
+
+  - id: setup-node-arm
+    binary: setup-node
+    goos:
+      - linux
+    goarch:
+      - arm
+    goarm:
+      - 6
+    env:
+      - CGO_ENABLED=1
+      - CC=/home/appveyor/projects/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
+    main: ./cmd/setup-node/
+    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
+
+  - id: setup-node-armhf
+    binary: setup-node
+    goos:
+      - linux
+    goarch:
+      - arm
+    goarm:
+      - 7
+    env:
+      - CGO_ENABLED=1
+      - CC=/home/appveyor/projects/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
+    main: ./cmd/setup-node/
+    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
+
+
   - id: skychat-amd64
     binary: apps/skychat
     goos:
@@ -418,6 +472,7 @@ archives:
     builds:
       - skywire-visor-amd64
       - skywire-cli-amd64
+      - setup-node-amd64
       - skysocks-amd64
       - skysocks-client-amd64
       - skychat-amd64
@@ -433,6 +488,7 @@ archives:
     builds:
       - skywire-visor-arm64
       - skywire-cli-arm64
+      - setup-node-arm64
       - skysocks-arm64
       - skysocks-client-arm64
       - skychat-arm64
@@ -448,6 +504,7 @@ archives:
     builds:
       - skywire-visor-arm
       - skywire-cli-arm
+      - setup-node-arm
       - skysocks-arm
       - skysocks-client-arm
       - skychat-arm
@@ -463,6 +520,7 @@ archives:
     builds:
       - skywire-visor-armhf
       - skywire-cli-armhf
+      - setup-node-armhf
       - skysocks-armhf
       - skysocks-client-armhf
       - skychat-armhf
