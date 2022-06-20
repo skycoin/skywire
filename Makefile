@@ -36,6 +36,20 @@ else
     endif
 endif
 
+ifeq ($(BUILDTAG),)
+	ifeq ($(OS),Windows_NT)
+    	BUILDTAG = "Windows"
+	else
+	    UNAME_S := $(shell uname -s)
+	    ifeq ($(UNAME_S),Linux)
+        	BUILDTAG = "Linux"
+    	endif
+    	ifeq ($(UNAME_S),Darwin)
+	        BUILDTAG = "Drawin"
+		endif
+	endif
+endif
+
 STATIC_OPTS?= $(OPTS) CC=musl-gcc
 MANAGER_UI_DIR = static/skywire-manager-src
 GO_BUILDER_VERSION=v1.17
