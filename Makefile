@@ -38,14 +38,14 @@ endif
 
 ifeq ($(BUILDTAG),)
 	ifeq ($(OS),Windows_NT)
-    	BUILDTAG = "Windows"
+		BUILDTAG = "Windows"
 	else
-	    UNAME_S := $(shell uname -s)
-	    ifeq ($(UNAME_S),Linux)
-        	BUILDTAG = "Linux"
-    	endif
-    	ifeq ($(UNAME_S),Darwin)
-	        BUILDTAG = "Darwin"
+		UNAME_S := $(shell uname -s)
+		ifeq ($(UNAME_S),Linux)
+			BUILDTAG = "Linux"
+		endif
+	 	ifeq ($(UNAME_S),Darwin)
+			BUILDTAG = "Darwin"
 		endif
 	endif
 endif
