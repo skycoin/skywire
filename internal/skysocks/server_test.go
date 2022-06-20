@@ -10,11 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 	"golang.org/x/net/proxy"
+
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
 func TestMain(m *testing.M) {
@@ -22,7 +23,8 @@ func TestMain(m *testing.M) {
 	if ok {
 		lvl, err := logging.LevelFromString(loggingLevel)
 		if err != nil {
-			Log.Fatal(err)
+			print(err)
+			os.Exit(1)
 		}
 
 		logging.SetLevel(lvl)
@@ -34,7 +36,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestProxy(t *testing.T) {
-	srv, err := NewServer("", nil, logging.NewMasterLogger())
+	srv, err := NewServer("", nil)
 	require.NoError(t, err)
 
 	l, err := nettest.NewLocalListener("tcp")

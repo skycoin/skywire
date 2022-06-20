@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"nhooyr.io/websocket"
 
 	"github.com/skycoin/skywire-utilities/pkg/httputil"
@@ -117,15 +117,15 @@ func (ui *UI) Handler() http.HandlerFunc {
 			n, err := writeTermHTML(w)
 			logrus.WithError(err).
 				WithField("bytes", n).
-				Info("Served web page.")
+				Debug("Served web page.")
 			return
 		}
 
 		// serve terminal
 		sID := atomic.AddInt32(&sc, 1)
 		log = log.WithField("ui_sid", sID)
-		log.Info("Serving terminal websocket...")
-		defer func() { log.Infof("Terminal closed: %d terminals left open.", atomic.AddInt32(&sc, -1)+1) }()
+		log.Debug("Serving terminal websocket...")
+		defer func() { log.Debugf("Terminal closed: %d terminals left open.", atomic.AddInt32(&sc, -1)+1) }()
 
 		// open websocket
 		ws, err := websocket.Accept(w, r, nil)

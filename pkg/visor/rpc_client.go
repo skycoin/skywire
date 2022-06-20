@@ -14,10 +14,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
@@ -27,7 +27,6 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/cipherutil"
-	"github.com/skycoin/skywire/pkg/util/updater"
 )
 
 var (
@@ -362,13 +361,6 @@ func (rc *rpcClient) Exec(command string) ([]byte, error) {
 	return output, err
 }
 
-// Update calls Update.
-func (rc *rpcClient) Update(config updater.UpdateConfig) (bool, error) {
-	var updated bool
-	err := rc.Call("Update", &config, &updated)
-	return updated, err
-}
-
 // RuntimeLogs calls RuntimeLogs.
 func (rc *rpcClient) RuntimeLogs() (string, error) {
 	var logs string
@@ -399,97 +391,6 @@ func (rc *rpcClient) GetPersistentTransports() ([]transport.PersistentTransports
 type StatusMessage struct {
 	Text    string
 	IsError bool
-}
-
-// UpdateWithStatus combines results of Update and UpdateStatus.
-func (rc *rpcClient) UpdateWithStatus(config updater.UpdateConfig) <-chan StatusMessage {
-	ch := make(chan StatusMessage, 512)
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				var status string
-
-				err := rc.Call("UpdateStatus", &struct{}{}, &status)
-				if err != nil {
-					rc.log.WithError(err).Errorf("Failed to check update status")
-					status = ""
-				}
-
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					switch status {
-					case "", io.EOF.Error():
-
-					default:
-						ch <- StatusMessage{
-							Text: status,
-						}
-					}
-					time.Sleep(100 * time.Millisecond)
-				}
-			}
-		}
-	}()
-
-	go func() {
-		defer func() {
-			cancel()
-			close(ch)
-		}()
-
-		var updated bool
-
-		if err := rc.Call("Update", &config, &updated); err != nil {
-			ch <- StatusMessage{
-				Text:    err.Error(),
-				IsError: true,
-			}
-		} else if updated {
-			ch <- StatusMessage{
-				Text: "Finished",
-			}
-		} else {
-			ch <- StatusMessage{
-				Text: "No update found",
-			}
-		}
-	}()
-
-	return ch
-}
-
-// UpdateAvailable calls UpdateAvailable.
-func (rc *rpcClient) UpdateAvailable(channel updater.Channel) (*updater.Version, error) {
-	var version, empty updater.Version
-	err := rc.Call("UpdateAvailable", &channel, &version)
-	if err != nil {
-		return nil, err
-	}
-
-	if version == empty {
-		return nil, nil
-	}
-
-	return &version, err
-}
-
-// UpdateStatus calls UpdateStatus
-func (rc *rpcClient) UpdateStatus() (string, error) {
-	var result string
-	err := rc.Call("UpdateStatus", &struct{}{}, &result)
-	if err != nil {
-		return "", err
-	}
-
-	return result, err
 }
 
 // RemoteVisors calls RemoteVisors.
@@ -1014,26 +915,6 @@ func (mc *mockRPCClient) Restart() error {
 // Exec implements API.
 func (mc *mockRPCClient) Exec(string) ([]byte, error) {
 	return []byte("mock"), nil
-}
-
-// Update implements API.
-func (mc *mockRPCClient) Update(_ updater.UpdateConfig) (bool, error) {
-	return false, nil
-}
-
-// UpdateWithStatus implements API.
-func (mc *mockRPCClient) UpdateWithStatus(_ updater.UpdateConfig) <-chan StatusMessage {
-	return make(chan StatusMessage)
-}
-
-// UpdateAvailable implements API.
-func (mc *mockRPCClient) UpdateAvailable(_ updater.Channel) (*updater.Version, error) {
-	return nil, nil
-}
-
-// UpdateStatus implements API.
-func (mc *mockRPCClient) UpdateStatus() (string, error) {
-	return "", nil
 }
 
 // RuntimeLogs implements API.

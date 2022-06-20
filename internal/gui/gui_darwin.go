@@ -17,3 +17,7 @@ func checkIsPackage() bool {
 	_, err := os.Stat(deinstallerPath)
 	return err == nil
 }
+
+func isRoot() bool {
+	return false
+}

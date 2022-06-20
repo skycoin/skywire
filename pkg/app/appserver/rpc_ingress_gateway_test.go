@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/skycoin/dmsg/pkg/dmsg"
-	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/internal/testhelpers"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"

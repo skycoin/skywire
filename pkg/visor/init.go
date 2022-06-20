@@ -20,9 +20,9 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsgget"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
-	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/internal/vpn"
@@ -44,7 +44,6 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	"github.com/skycoin/skywire/pkg/utclient"
 	"github.com/skycoin/skywire/pkg/util/osutil"
-	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	vinit "github.com/skycoin/skywire/pkg/visor/visorinit"
@@ -68,8 +67,6 @@ const ownerRWX = 0700
 var (
 	// Event broadcasting system
 	ebc vinit.Module
-	// visor updater
-	up vinit.Module
 	// Address resolver
 	ar vinit.Module
 	// App discovery
@@ -126,7 +123,6 @@ func registerModules(logger *logging.MasterLogger) {
 	maker := func(name string, f initFn, deps ...*vinit.Module) vinit.Module {
 		return vinit.MakeModule(name, withInitCtx(f), logger, deps...)
 	}
-	up = maker("updater", initUpdater)
 	dmsgHTTP = maker("dmsg_http", initDmsgHTTP)
 	ebc = maker("event_broadcaster", initEventBroadcaster)
 	ar = maker("address_resolver", initAddressResolver, &dmsgHTTP)
@@ -151,24 +147,13 @@ func registerModules(logger *logging.MasterLogger) {
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
 	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl, &dmsgTrackers)
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
-	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &pty,
+	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
 		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
 
 type initFn func(context.Context, *Visor, *logging.Logger) error
-
-func initUpdater(ctx context.Context, v *Visor, log *logging.Logger) error {
-	updater := updater.New(v.log, v.restartCtx, v.conf.Launcher.BinPath)
-
-	v.initLock.Lock()
-	defer v.initLock.Unlock()
-	v.restartCtx.SetCheckDelay(time.Duration(v.conf.RestartCheckDelay))
-	v.restartCtx.RegisterLogger(v.log)
-	v.updater = updater
-	return nil
-}
 
 func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error {
 	var keys cipher.PubKeys
@@ -333,17 +318,17 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 
 	const dmsgTimeout = time.Second * 20
 	logger := dmsgC.Logger().WithField("timeout", dmsgTimeout)
-	logger.Info("Connecting to the dmsg network...")
+	logger.Debug("Connecting to the dmsg network...")
 	select {
 	case <-time.After(dmsgTimeout):
 		logger.Warn("Failed to connect to the dmsg network, will try again later.")
 		go func() {
 			<-v.dmsgC.Ready()
-			logger.Info("Connected to the dmsg network.")
+			logger.Debug("Connected to the dmsg network.")
 			v.tpM.InitDmsgClient(ctx, dmsgC)
 		}()
 	case <-v.dmsgC.Ready():
-		logger.Info("Connected to the dmsg network.")
+		logger.Debug("Connected to the dmsg network.")
 		v.tpM.InitDmsgClient(ctx, dmsgC)
 	}
 	// dmsgctrl setup
@@ -383,7 +368,7 @@ func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	switch v.stunClient.NATType {
 	case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
-		log.Infof("SUDPH transport wont be available as visor is under %v", v.stunClient.NATType.String())
+		log.Warnf("SUDPH transport wont be available as visor is under %v", v.stunClient.NATType.String())
 	default:
 		v.tpM.InitClient(ctx, network.SUDPH)
 	}
@@ -734,7 +719,7 @@ func vpnEnvMaker(conf *visorconfig.V1, dmsgC, dmsgDC *dmsg.Client, tpRemoteAddrs
 
 func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if v.conf.CLIAddr == "" {
-		v.log.Info("'cli_addr' is not configured, skipping.")
+		v.log.Debug("'cli_addr' is not configured, skipping.")
 		return nil
 	}
 
@@ -796,7 +781,7 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 	conf := v.conf.UptimeTracker
 
 	if conf == nil {
-		v.log.Info("'uptime_tracker' is not configured, skipping.")
+		v.log.Debug("'uptime_tracker' is not configured, skipping.")
 		return nil
 	}
 
@@ -880,7 +865,7 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	visorUpdater := v.serviceDisc.VisorUpdater(port)
 	visorUpdater.Start()
 
-	v.log.Infof("Sent request to register visor as public")
+	v.log.Debugf("Sent request to register visor as public")
 	v.pushCloseStack("public visor updater", func() error {
 		visorUpdater.Stop()
 		return nil
@@ -892,7 +877,7 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Dmsgpty
 
 	if conf == nil {
-		log.Info("'dmsgpty' is not configured, skipping.")
+		log.Debug("'dmsgpty' is not configured, skipping.")
 		return nil
 	}
 
@@ -903,6 +888,7 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 		}
 
 		if err := osutil.UnlinkSocketFiles(v.conf.Dmsgpty.CLIAddr); err != nil {
+			log.Error("insufficient permissions")
 			return err
 		}
 	}
@@ -1017,7 +1003,6 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 }
 
 func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
-	v.log.Infof("Initializing hypervisor")
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -1052,8 +1037,6 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 
 		cancel()
 	}()
-
-	v.log.Infof("Hypervisor initialized")
 
 	return nil
 }

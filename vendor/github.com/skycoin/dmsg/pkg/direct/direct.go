@@ -9,7 +9,7 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
 // StartDmsg starts dmsg directly without the discovery
@@ -28,11 +28,11 @@ func StartDmsg(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk ci
 
 	stop = func() {
 		err := dmsgDC.Close()
-		log.WithError(err).Info("Disconnected from dmsg network.")
+		log.WithError(err).Debug("Disconnected from dmsg network.")
 	}
 
 	log.WithField("public_key", pk.String()).
-		Info("Connecting to dmsg network...")
+		Debug("Connecting to dmsg network...")
 
 	select {
 	case <-ctx.Done():
@@ -40,7 +40,7 @@ func StartDmsg(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk ci
 		return nil, nil, ctx.Err()
 
 	case <-dmsgDC.Ready():
-		log.Info("Dmsg network ready.")
+		log.Debug("Dmsg network ready.")
 		return dmsgDC, stop, nil
 	}
 }

@@ -8,8 +8,6 @@ import (
 	"time"
 
 	ipc "github.com/james-barrow/golang-ipc"
-	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/yamux"
 
 	"github.com/skycoin/skywire/pkg/app"
@@ -17,9 +15,6 @@ import (
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
-
-// Log is skysocks package level logger, it can be replaced with a different one from outside the package
-var Log logrus.FieldLogger = logging.MustGetLogger("skysocks") // nolint: gochecknoglobals
 
 // Client implement multiplexing proxy client using yamux.
 type Client struct {
@@ -62,7 +57,7 @@ func (c *Client) ListenAndServe(addr string) error {
 		return fmt.Errorf("listen: %w", err)
 	}
 
-	Log.Printf("Listening skysocks client on %s", addr)
+	fmt.Printf("Listening skysocks client on %s", addr)
 
 	c.listener = l
 	if c.appCl != nil {
@@ -78,11 +73,11 @@ func (c *Client) ListenAndServe(addr string) error {
 
 		conn, err := l.Accept()
 		if err != nil {
-			Log.Printf("Error accepting: %v\n", err)
+			fmt.Printf("Error accepting: %v\n", err)
 			return fmt.Errorf("accept: %w", err)
 		}
 
-		Log.Println("Accepted skysocks client")
+		fmt.Println("Accepted skysocks client")
 
 		stream, err := c.session.Open()
 		if err != nil {
@@ -91,7 +86,7 @@ func (c *Client) ListenAndServe(addr string) error {
 			return fmt.Errorf("error opening yamux stream: %w", err)
 		}
 
-		Log.Println("Opened session skysocks client")
+		fmt.Println("Opened session skysocks client")
 
 		go c.handleStream(conn, stream)
 	}
@@ -135,7 +130,7 @@ func (c *Client) handleStream(conn, stream net.Conn) {
 	for err := range errCh {
 		if !connClosed {
 			if err := conn.Close(); err != nil {
-				Log.WithError(err).Warn("Failed to close connection")
+				fmt.Printf("Failed to close connection: %v\n", err)
 			}
 
 			connClosed = true
@@ -143,14 +138,14 @@ func (c *Client) handleStream(conn, stream net.Conn) {
 
 		if !streamClosed {
 			if err := stream.Close(); err != nil {
-				Log.WithError(err).Warn("Failed to close stream")
+				fmt.Printf("Failed to close stream: %v\n", err)
 			}
 
 			streamClosed = true
 		}
 
 		if err != nil {
-			Log.Error("Copy error:", err)
+			print(fmt.Sprintf("Copy error: %v", err))
 		}
 	}
 
@@ -162,31 +157,31 @@ func (c *Client) handleStream(conn, stream net.Conn) {
 }
 
 func (c *Client) close() {
-	Log.Error("Session failed, closing skysocks client")
+	print("Session failed, closing skysocks client")
 	if err := c.Close(); err != nil {
-		Log.WithError(err).Error("Error closing skysocks client")
+		print(fmt.Sprintf("Error closing skysocks client: %v", err))
 	}
 }
 
 // ListenIPC starts named-pipe based connection server for windows or unix socket for other OSes
-func (c *Client) ListenIPC(client *ipc.Client, log *logrus.Logger) {
+func (c *Client) ListenIPC(client *ipc.Client) {
 	listenIPC(client, skyenv.SkychatName+"-client", func() {
 		client.Close()
 		if err := c.Close(); err != nil {
-			log.Errorf("Error closing skysocks-client: %v", err)
+			print(fmt.Sprintf("Error closing skysocks-client: %v", err))
 		}
 	})
 }
 
 func (c *Client) setAppStatus(status launcher.AppDetailedStatus) {
 	if err := c.appCl.SetDetailedStatus(string(status)); err != nil {
-		fmt.Printf("Failed to set status %v: %v\n", status, err)
+		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
 	}
 }
 
 func (c *Client) setAppError(appErr error) {
 	if err := c.appCl.SetError(appErr.Error()); err != nil {
-		fmt.Printf("Failed to set error %v: %v\n", appErr, err)
+		print(fmt.Sprintf("Failed to set error %v: %v\n", appErr, err))
 	}
 }
 
@@ -198,7 +193,7 @@ func (c *Client) Close() error {
 
 	var err error
 	c.once.Do(func() {
-		Log.Infoln("Closing proxy client")
+		fmt.Println("Closing proxy client")
 
 		close(c.closeC)
 

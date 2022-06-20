@@ -191,7 +191,7 @@ func (l *Launcher) AppState(name string) (*AppState, bool) {
 			state.Status = AppStatusStarting
 		}
 		switch state.DetailedStatus {
-		case AppDetailedStatusVPNConnecting, AppDetailedStatusStarting, AppDetailedStatusVPNReconnecting:
+		case AppDetailedStatusVPNConnecting, AppDetailedStatusStarting, AppDetailedStatusReconnecting:
 			state.Status = AppStatusStarting
 		}
 	}
