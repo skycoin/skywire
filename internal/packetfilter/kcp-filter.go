@@ -5,8 +5,9 @@ import (
 	"net"
 	"sync/atomic"
 
-	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/xtaci/kcp-go"
+
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
 const (

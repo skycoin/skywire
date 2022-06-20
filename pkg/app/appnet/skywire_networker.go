@@ -113,14 +113,14 @@ func (r *SkywireNetworker) serveRouteGroup(ctx context.Context) error {
 
 		conn, err := r.r.AcceptRoutes(ctx)
 		if err != nil {
-			log.WithError(err).Info("Stopped accepting routes.")
+			log.WithError(err).Debug("Stopped accepting routes.")
 			return err
 		}
 
 		log.
 			WithField("local", conn.LocalAddr()).
 			WithField("remote", conn.RemoteAddr()).
-			Info("Accepted route group.")
+			Debug("Accepted route group.")
 
 		go r.serve(conn)
 	}
