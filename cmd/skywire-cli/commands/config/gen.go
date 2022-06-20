@@ -56,6 +56,7 @@ var (
 	testconf          = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "") //skyenv.DefaultServiceConfAddr
 	hiddenflags       []string
 	binPath           string
+	logLevel          string
 )
 
 func init() {
@@ -65,6 +66,8 @@ func init() {
 
 	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", svcconf, "services conf")
 	hiddenflags = append(hiddenflags, "url")
+	genConfigCmd.Flags().StringVar(&logLevel, "log-level", "info", "level of logging in config")
+	hiddenflags = append(hiddenflags, "log-level")
 	genConfigCmd.Flags().BoolVarP(&bestProtocol, "bestproto", "b", false, "best protocol (dmsg | direct) based on location")
 	genConfigCmd.Flags().BoolVarP(&disableauth, "noauth", "c", false, "disable authentication for hypervisor UI")
 	hiddenflags = append(hiddenflags, "noauth")
@@ -373,6 +376,12 @@ var genConfigCmd = &cobra.Command{
 		if (selectedOS == "win") || (selectedOS == "mac") {
 			if hypervisor {
 				conf.Hypervisor.EnableAuth = true
+			}
+		}
+		// Set log level
+		if logLevel != "" {
+			if logLevel == "trace" || logLevel == "debug" {
+				conf.LogLevel = logLevel
 			}
 		}
 		// check binpath argument and use if set
