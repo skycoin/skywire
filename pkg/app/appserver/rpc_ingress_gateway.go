@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/idmanager"
 	"github.com/skycoin/skywire/pkg/routing"
