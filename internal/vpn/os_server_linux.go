@@ -31,6 +31,9 @@ func GetIPTablesForwardPolicy() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if len(outputBytes) == 0 {
+		return "", errPermissionDenied
+	}
 	return strings.TrimRight(string(outputBytes), "\n"), nil
 }
 
