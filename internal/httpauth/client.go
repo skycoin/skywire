@@ -15,9 +15,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
-
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
 const (
