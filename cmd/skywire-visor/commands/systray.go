@@ -6,9 +6,9 @@ package commands
 import (
 	"context"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/systray"
 
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/internal/gui"
 )
 
