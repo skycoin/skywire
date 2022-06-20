@@ -27,10 +27,10 @@ func init() {
 	RootCmd.PersistentFlags().StringVarP(&ptyPort, "port", "p", "22", "port of remote visor dmsgpty")
 }
 
-// RootCmd is the command that contains sub-commands which interacts with dmsgpty.
+// RootCmd contains sub-commands which interacts with dmsgpty.
 var RootCmd = &cobra.Command{
 	Use:   "dmsgpty",
-	Short: "Some simple commands of dmsgpty to remote visor",
+	Short: "Interact with remote visors over dmsgpty",
 }
 
 func init() {
@@ -42,12 +42,12 @@ func init() {
 
 var listOfVisors = &cobra.Command{
 	Use:   "list",
-	Short: "fetch list of connected visor's PKs",
+	Short: "list connected visor public keys",
 	Run: func(_ *cobra.Command, _ []string) {
 		remoteVisors := rpcClient().RemoteVisors()
 		var msg string
-		for idx, pk := range remoteVisors {
-			msg += fmt.Sprintf("%d. %s\n", idx+1, pk)
+		for _, pk := range remoteVisors {
+			msg += fmt.Sprintf("%s\n", pk)
 		}
 		if _, err := os.Stdout.Write([]byte(msg)); err != nil {
 			packageLogger.Fatal("Failed to output build info:", err)
@@ -57,9 +57,17 @@ var listOfVisors = &cobra.Command{
 
 var executeCommand = &cobra.Command{
 	Use:   "start <pk>",
-	Short: "start dmsgpty for specific visor by its dmsg address pk:port",
-	Args:  cobra.MinimumNArgs(1),
+	Short: "start dmsgpty-cli",
+	Args:  cobra.MinimumNArgs(0),
 	RunE: func(_ *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			client := rpcClient()
+			overview, err := client.Overview()
+			if err != nil {
+				packageLogger.Fatal("no public key specified - failed to connect to local visor: ", err)
+			}
+			args = append(args, overview.PubKey.String())
+		}
 		cli := dmsgpty.DefaultCLI()
 		addr := internal.ParsePK("pk", args[0])
 		port, _ := strconv.ParseUint(ptyPort, 10, 16) //nolint

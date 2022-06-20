@@ -7,6 +7,7 @@ import (
 	"embed"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/bitfield/script"
@@ -15,28 +16,35 @@ import (
 	"github.com/skycoin/systray"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/internal/gui"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 var (
-	sourcerun    bool
-	remotevisors bool
-	mHV          *systray.MenuItem
-	mVisors      *systray.MenuItem
-	mVPN         *systray.MenuItem
-	mVPNmenu     *systray.MenuItem
-	mPTY         *systray.MenuItem
-	mShutdown    *systray.MenuItem
-	mStart       *systray.MenuItem
-	mAutoconfig  *systray.MenuItem
-	mQuit        *systray.MenuItem
+	sourcerun     bool
+	remotevisors  []string
+	skywirecli    string
+	mHV           *systray.MenuItem
+	mVisors       *systray.MenuItem
+	mVPN          *systray.MenuItem
+	mPTY          *systray.MenuItem
+	mShutdown     *systray.MenuItem
+	mStart        *systray.MenuItem
+	mAutoconfig   *systray.MenuItem
+	mQuit         *systray.MenuItem
+	mRemoteVisors []*systray.MenuItem
+	servers       []*systray.MenuItem //nolint:unused
+	l             *logging.MasterLogger
+	err           error
 )
 
 func init() {
+	l = logging.NewMasterLogger()
 	//disable sorting, flags appear in the order shown here
 	rootCmd.Flags().SortFlags = false
 	rootCmd.Flags().BoolVarP(&sourcerun, "src", "s", false, "'go run' external commands from the skywire sources")
+
 }
 
 var rootCmd = &cobra.Command{
@@ -48,6 +56,12 @@ var rootCmd = &cobra.Command{
 	//	PreRun: func(cmd *cobra.Command, _ []string) {
 	//	},
 	Run: func(cmd *cobra.Command, args []string) {
+		//skywire-cli command to use
+		if !sourcerun {
+			skywirecli = "skywire-cli"
+		} else {
+			skywirecli = "go run cmd/skywire-cli/skywire-cli.go"
+		}
 		onExit := func() {
 			now := time.Now()
 			fmt.Println("Exit at", now.String())
@@ -71,7 +85,7 @@ func Execute() {
 		NoExtraNewlines: true,
 		NoBottomNewline: true,
 	})
-	if err := rootCmd.Execute(); err != nil {
+	if err = rootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
 	}
 }
@@ -100,14 +114,6 @@ func onReady() {
 		fmt.Println("Finished quitting")
 	}()
 	go func() {
-		var err error
-		var skywirecli string
-		//skywire-cli command to use
-		if !sourcerun {
-			skywirecli = "skywire-cli"
-		} else {
-			skywirecli = "go run cmd/skywire-cli/skywire-cli.go"
-		}
 		//check that the visor is running and responds over RPC
 		visor, err := script.Exec(skywirecli + ` visor pk`).Match("FATAL").String()
 		if err != nil {
@@ -115,22 +121,29 @@ func onReady() {
 			//visor should be empty string if the visor is running
 			visor = " "
 		}
+		systray.SetTemplateIcon(sysTrayIcon, sysTrayIcon)
+		systray.SetTitle("Skywire")
+
+		mHV = systray.AddMenuItem("Hypervisor", "Hypervisor")
+		mVisors = systray.AddMenuItem("Visors", "Visors")
+
 		//check for connected visors
 		visors, err := script.Exec(skywirecli + ` dmsgpty list`).String()
 		if err != nil {
 			l.WithError(err).Warn("Failed to fetch connected visors " + visors)
 		}
-		if (visors == "") || (visors == "\n") {
-			remotevisors = true
+		remotevisors = strings.Split(visors, "\n")
+
+		for i := range remotevisors {
+			l.Info("visors: " + remotevisors[i])
 		}
+		mRemoteVisors = []*systray.MenuItem{}
+		for _, v := range remotevisors {
+			mRemoteVisors = append(mRemoteVisors, mVisors.AddSubMenuItem(v, ""))
+		}
+		go visorsBtn(mRemoteVisors)
 
-		systray.SetTemplateIcon(sysTrayIcon, sysTrayIcon)
-		systray.SetTitle("Skywire")
-
-		mHV = systray.AddMenuItem("Hypervisor", "Hypervisor")
-		mVisors = systray.AddMenuItemCheckbox("Show Visors", "Show Visors", false)
 		mVPN = systray.AddMenuItem("VPN UI", "VPN UI")
-		mVPNmenu = systray.AddMenuItemCheckbox("Show VPN Menu", "Show VPN Menu", false)
 		mPTY = systray.AddMenuItem("DMSGPTY UI", "DMSGPTY UI")
 		mStart = systray.AddMenuItem("Start", "Start")
 		mAutoconfig = systray.AddMenuItem("Autoconfig", "Autoconfig")
@@ -151,28 +164,10 @@ func onReady() {
 				if err != nil {
 					l.WithError(err).Warn("Failed to open hypervisor UI")
 				}
-			case <-mVisors.ClickedCh:
-				if mVisors.Checked() {
-					mVisors.Uncheck()
-					ToggleOn()
-				} else {
-					mVisors.Check()
-					AllOff()
-					mVisors.Show()
-				}
 			case <-mVPN.ClickedCh:
 				_, err = script.Exec(skywirecli + ` hv vpn ui`).Stdout()
 				if err != nil {
 					l.WithError(err).Warn("Failed to open VPN UI")
-				}
-			case <-mVPNmenu.ClickedCh:
-				if mVPNmenu.Checked() {
-					mVPNmenu.Uncheck()
-					ToggleOn()
-				} else {
-					mVPNmenu.Check()
-					AllOff()
-					mVPNmenu.Show()
 				}
 			case <-mPTY.ClickedCh:
 				_, err = script.Exec(skywirecli + ` hv dmsg ui`).Stdout()
@@ -196,9 +191,8 @@ func onReady() {
 				}
 			case <-mShutdown.ClickedCh:
 				if skyenv.OS == "linux" {
-					_, _ = script.Exec(`exo-open --launch TerminalEmulator bash -c 'sudo systemctl disable --now skywire skywire-visor'`).Stdout() //nolint:errcheck
+					_, _ = script.Exec(`sudo systemctl disable --now skywire skywire-visor`).Stdout() //nolint:errcheck
 					ToggleOff()
-					break
 				} else {
 					l.Warn("shutdown of services not yet implemented on windows / mac")
 				}
@@ -226,14 +220,98 @@ func ReadSysTrayIcon() (contents []byte, err error) {
 	return contents, err
 }
 
+func visorsBtn(mRemoteVisors []*systray.MenuItem) {
+	btnChannel := make(chan int)
+	for index, remotevisor := range mRemoteVisors {
+		go func(chn chan int, remotevisor *systray.MenuItem, index int) {
+			for { //nolint
+				select {
+				case <-remotevisor.ClickedCh:
+					chn <- index
+					l.Info("clicked")
+				}
+			}
+		}(btnChannel, remotevisor, index)
+	}
+	//TODO
+	/*
+		_, err = script.Exec(skywirecli + ` hv dmsg ui -v ` + pk).Stdout()
+		if err != nil {
+			l.WithError(err).Warn("Failed to open dmsgpty UI")
+		}
+	*/
+}
+
+func serversBtn() { //nolint
+	btnChannel := make(chan int)
+	for index, server := range servers { //nolint
+		go func(chn chan int, server *systray.MenuItem, index int) {
+			for { //nolint
+				select {
+				case <-server.ClickedCh:
+					chn <- index
+				}
+			}
+		}(btnChannel, server, index)
+	}
+
+	for {
+		selectedServer := servers[<-btnChannel]
+		serverTempValue := strings.Split(selectedServer.String(), ",")[2]
+		serverPK := serverTempValue[2 : len(serverTempValue)-7]
+		for _, server := range servers { //nolint
+			server.Uncheck()
+			server.Enable()
+		}
+		selectedServer.Check()
+		selectedServer.Disable()
+		pk := cipher.PubKey{}
+		if err := pk.UnmarshalText([]byte(serverPK)); err != nil {
+			continue
+		}
+		_, err = script.Exec(skywirecli + ` visor app stop` + skyenv.VPNClientName).Stdout()
+		if err != nil {
+			l.WithError(err).Warn("Failed to stop vpn-client")
+		}
+		_, err = script.Exec(skywirecli + ` visor app start` + skyenv.VPNClientName + ` ` + pk.String()).Stdout()
+		if err != nil {
+			l.WithError(err).Warn("Failed to start vpn-client")
+		}
+	}
+}
+
+func handleVPNButton() { //nolint
+	appstate, err := script.Exec(skywirecli + ` visor app ls`).Match(skyenv.VPNClientName).Match("stopped").String()
+	if err != nil {
+		l.WithError(err).Warn("Failed to get vpn-client status")
+	}
+	if appstate == "" {
+		_, err = script.Exec(skywirecli + ` visor app stop` + skyenv.VPNClientName).Stdout()
+		if err != nil {
+			l.WithError(err).Warn("Failed to stop vpn-client")
+		}
+	} else {
+		_, err = script.Exec(skywirecli + ` visor app start` + skyenv.VPNClientName).Stdout()
+		if err != nil {
+			l.WithError(err).Warn("Failed to start vpn-client")
+		}
+	}
+}
+
 // ToggleOn when skywire visor is running to show the main menu
 func ToggleOn() {
+	//check for connected visors
+	visors, err := script.Exec(skywirecli + ` dmsgpty list`).String()
+	if err != nil {
+		l.WithError(err).Warn("Failed to fetch connected visors " + visors)
+	}
 	mHV.Show()
-	if remotevisors {
+	if (visors != "") && (visors != "\n") {
 		mVisors.Show()
+	} else {
+		mVisors.Hide()
 	}
 	mVPN.Show()
-	mVPNmenu.Show()
 	mPTY.Show()
 	mShutdown.Show()
 	mStart.Hide()
@@ -246,7 +324,6 @@ func ToggleOff() {
 	mHV.Hide()
 	mVisors.Hide()
 	mVPN.Hide()
-	mVPNmenu.Hide()
 	mPTY.Hide()
 	mShutdown.Hide()
 	mStart.Show()
@@ -254,23 +331,4 @@ func ToggleOff() {
 		mAutoconfig.Show()
 	}
 	mQuit.Show()
-}
-
-/*
-// AllOn Show all menu items ; then selectively disable the desired ones
-func AllOn() {
-	ToggleOn()
-	mStart.Show()
-	if skyenv.OS == "linux" {
-		mAutoconfig.Show()
-	}
-}
-*/
-
-// AllOff Hide all menu items ; then selectively enable the desired ones
-func AllOff() {
-	ToggleOff()
-	mStart.Hide()
-	mAutoconfig.Hide()
-	mQuit.Hide()
 }

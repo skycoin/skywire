@@ -11,6 +11,7 @@ import (
 )
 
 var path string
+var pk string
 var pkg bool
 
 func init() {
@@ -21,6 +22,7 @@ func init() {
 	hvpkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
 	hvpkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
 	RootCmd.AddCommand(summaryCmd)
+	summaryCmd.Flags().StringVarP(&pk, "check", "c", "", "check online status by public key")
 	RootCmd.AddCommand(buildInfoCmd)
 }
 
@@ -76,6 +78,7 @@ var summaryCmd = &cobra.Command{
 	Use:   "info",
 	Short: "summary of visor info",
 	Run: func(_ *cobra.Command, _ []string) {
+		//if pk == "" {
 		summary, err := rpcClient().Summary()
 		if err != nil {
 			log.Fatal("Failed to connect:", err)
@@ -84,9 +87,20 @@ var summaryCmd = &cobra.Command{
 		if _, err := os.Stdout.Write([]byte(msg)); err != nil {
 			log.Fatal("Failed to output build info:", err)
 		}
+		/*
+			} else {
+				online, err := visorconfig.Online(pk)
+				if err != nil {
+					log.Fatal("Failed to check visor online status:", err)
+				}
+				msg := fmt.Sprintf("%b\n", online)
+				if _, err := os.Stdout.Write([]byte(msg)); err != nil {
+					log.Fatal("Failed to output build info:", err)
+				}
+			}
+		*/
 	},
 }
-
 var buildInfoCmd = &cobra.Command{
 	Use:   "version",
 	Short: "version and build info",
