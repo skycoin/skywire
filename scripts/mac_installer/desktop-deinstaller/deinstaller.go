@@ -10,7 +10,6 @@ import (
 	"syscall"
 
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-
 	"github.com/skycoin/skywire/pkg/util/osutil"
 )
 
