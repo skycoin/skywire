@@ -55,6 +55,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - `run-vpnsrv -dmsghttp-test` makefile directive
 - `install-system-linux` and `install-system-linux-systray` makefile directives
 - `trace` log level is added
+- `--log-lever` flag to generate and update config by `skywire-cli`
 
 ## 0.6.0
 
