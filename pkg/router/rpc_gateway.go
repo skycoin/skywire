@@ -2,7 +2,6 @@ package router
 
 import (
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
