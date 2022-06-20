@@ -119,3 +119,15 @@ func (p Service) Check() error {
 	}
 	return nil
 }
+
+func (p Service) String() string {
+	var serviceMap map[string]interface{}
+
+	data, _ := json.Marshal(p)            // nolint:errcheck
+	_ = json.Unmarshal(data, &serviceMap) // nolint:errcheck
+
+	serviceMap["address"] = p.Addr.String()
+
+	sString, _ := json.Marshal(serviceMap) // nolint:errcheck
+	return string(sString)
+}

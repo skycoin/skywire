@@ -24,7 +24,7 @@ func (c *stcprClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16)
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
 	}
-	c.log.Infof("Dialing PK %v", rPK)
+	c.log.Debugf("Dialing PK %v", rPK)
 	conn, err := c.dialVisor(ctx, rPK, c.dial)
 	if err != nil {
 		return nil, err
@@ -66,14 +66,14 @@ func (c *stcprClient) serve() {
 		c.log.Errorf("Failed to check for public IP: %v", err)
 	}
 	if !hasPublic {
-		c.log.Infof("Not binding STCPR: no public IP address found")
+		c.log.Debug("Not binding STCPR: no public IP address found")
 		return
 	}
-	c.log.Infof("Binding")
+	c.log.Debug("Binding")
 	if err := c.ar.BindSTCPR(context.Background(), port); err != nil {
 		c.log.Errorf("Failed to bind STCPR: %v", err)
 		return
 	}
-	c.log.Infof("Successfully bound stcpr to port %s", port)
+	c.log.Debugf("Successfully bound stcpr to port %s", port)
 	c.acceptTransports(lis)
 }

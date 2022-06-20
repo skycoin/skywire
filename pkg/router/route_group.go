@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/skycoin/dmsg/pkg/ioutil"
-	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/util/deadline"
@@ -124,6 +124,7 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 	if mLoggger != nil {
 		logger = mLoggger.PackageLogger(fmt.Sprintf("RouteGroup %s", desc.String()))
 	}
+
 	rg := &RouteGroup{
 		cfg:                cfg,
 		logger:             logger,
@@ -318,7 +319,7 @@ func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule ro
 		return 0, err
 	}
 
-	rg.logger.Debugf("Writing packet of type %s, route ID %d and next ID %d", packet.Type(),
+	rg.logger.WithField("func", "RouteGroup.write").Tracef("Writing packet of type %s, route ID %d and next ID %d", packet.Type(),
 		rule.KeyRouteID(), rule.NextRouteID())
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -367,7 +368,9 @@ func (rg *RouteGroup) writePacket(ctx context.Context, tp *transport.ManagedTran
 		}
 
 		if err := rg.rt.UpdateActivity(ruleID); err != nil {
-			rg.logger.WithError(err).Errorf("error updating activity of rule %d", ruleID)
+			if !rg.isClosed() {
+				rg.logger.WithError(err).Errorf("error updating activity of rule %d", ruleID)
+			}
 		}
 	}
 
@@ -446,7 +449,7 @@ func (rg *RouteGroup) servicePacketLoop(name string, interval time.Duration, f s
 	for {
 		select {
 		case <-rg.remoteClosed:
-			rg.logger.Infof("Remote got closed, stopping %s loop", name)
+			rg.logger.Debugf("Remote got closed, stopping %s loop", name)
 			return
 		case <-ticker.C:
 			f(interval)
@@ -514,11 +517,11 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 
 		err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
 		if err == nil {
-			rg.logger.Infof("Sent handshake via transport %v", tp.Entry.ID)
+			rg.logger.Debugf("Sent handshake via transport %v", tp.Entry.ID)
 			return nil
 		}
 
-		rg.logger.Infof("Failed to send handshake via transport %v: %v [%v/%v]",
+		rg.logger.Debugf("Failed to send handshake via transport %v: %v [%v/%v]",
 			tp.Entry.ID, err, i+1, len(rg.tps))
 	}
 
@@ -640,7 +643,7 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
 }
 
 func (rg *RouteGroup) handleClosePacket(code routing.CloseCode) error {
-	rg.logger.Infof("Got close packet with code %d", code)
+	rg.logger.Debugf("Got close packet with code %d", code)
 
 	if rg.isCloseInitiator() {
 		// this route group initiated close loop and got response

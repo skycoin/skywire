@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/blang/semver/v4"
-	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
 var (
@@ -24,9 +24,6 @@ func Parse(log *logging.Logger, r io.Reader, confPath string, visorBuildInfo *bu
 	conf, err = Reader(r, confPath)
 	if err != nil {
 		return nil, compat, err
-	}
-	if conf.Version != "unknown" {
-		log.WithField("config version: ", conf.Version).Info()
 	}
 	// we check if the version of the visor and config are the same
 	if (conf.Version != "unknown") && (visorBuildInfo.Version != "unknown") {

@@ -18,7 +18,6 @@ import (
 	"time"
 
 	ipc "github.com/james-barrow/golang-ipc"
-	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -35,9 +34,8 @@ const (
 	port    = routing.Port(1)
 )
 
-var log = logging.MustGetLogger("chat")
 var addr = flag.String("addr", ":8001", "address to bind")
-var r = netutil.NewRetrier(log, 50*time.Millisecond, netutil.DefaultMaxBackoff, 5, 2)
+var r = netutil.NewRetrier(nil, 50*time.Millisecond, netutil.DefaultMaxBackoff, 5, 2)
 
 var (
 	appCl    *app.Client
@@ -56,11 +54,11 @@ func main() {
 	defer appCl.Close()
 
 	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
-		fmt.Printf("Failed to output build info: %v", err)
+		print(fmt.Sprintf("Failed to output build info: %v\n", err))
 	}
 
 	flag.Parse()
-	fmt.Print("Successfully started skychat.")
+	fmt.Println("Successfully started skychat.")
 
 	clientCh = make(chan string)
 	defer close(clientCh)
@@ -71,7 +69,7 @@ func main() {
 	if runtime.GOOS == "windows" {
 		ipcClient, err := ipc.StartClient(skyenv.SkychatName, nil)
 		if err != nil {
-			fmt.Printf("Error creating ipc server for skychat client: %v\n", err)
+			print(fmt.Sprintf("Error creating ipc server for skychat client: %v\n", err))
 			setAppError(appCl, err)
 			os.Exit(1)
 		}
@@ -84,13 +82,14 @@ func main() {
 	http.HandleFunc("/message", messageHandler(ctx))
 	http.HandleFunc("/sse", sseHandler)
 
-	fmt.Print("Serving HTTP on", *addr)
+	fmt.Println("Serving HTTP on", *addr)
 
 	setAppStatus(appCl, launcher.AppDetailedStatusRunning)
 
 	err := http.ListenAndServe(*addr, nil)
 	if err != nil {
-		fmt.Println(err)
+		print(err)
+		setAppError(appCl, err)
 		os.Exit(1)
 	}
 }
@@ -98,18 +97,19 @@ func main() {
 func listenLoop() {
 	l, err := appCl.Listen(netType, port)
 	if err != nil {
-		fmt.Printf("Error listening network %v on port %d: %v\n", netType, port, err)
+		print(fmt.Sprintf("Error listening network %v on port %d: %v\n", netType, port, err))
+		setAppError(appCl, err)
 		return
 	}
 
 	for {
-		fmt.Print("Accepting skychat conn...")
+		fmt.Println("Accepting skychat conn...")
 		conn, err := l.Accept()
 		if err != nil {
-			fmt.Print("Failed to accept conn:", err)
+			print(fmt.Sprintf("Failed to accept conn: %v", err))
 			return
 		}
-		fmt.Print("Accepted skychat conn")
+		fmt.Println("Accepted skychat conn")
 
 		raddr := conn.RemoteAddr().(appnet.Addr)
 		connsMu.Lock()
@@ -127,7 +127,7 @@ func handleConn(conn net.Conn) {
 		buf := make([]byte, 32*1024)
 		n, err := conn.Read(buf)
 		if err != nil {
-			fmt.Print("Failed to read packet:", err)
+			fmt.Println("Failed to read packet:", err)
 			raddr := conn.RemoteAddr().(appnet.Addr)
 			connsMu.Lock()
 			delete(conns, raddr.PubKey)
@@ -137,7 +137,7 @@ func handleConn(conn net.Conn) {
 
 		clientMsg, err := json.Marshal(map[string]string{"sender": raddr.PubKey.Hex(), "message": string(buf[:n])})
 		if err != nil {
-			fmt.Printf("Failed to marshal json: %v", err)
+			print(fmt.Sprintf("Failed to marshal json: %v\n", err))
 		}
 		select {
 		case clientCh <- string(clientMsg):
@@ -255,12 +255,12 @@ func handleIPCSignal(client *ipc.Client) {
 
 func setAppStatus(appCl *app.Client, status launcher.AppDetailedStatus) {
 	if err := appCl.SetDetailedStatus(string(status)); err != nil {
-		fmt.Printf("Failed to set status %v: %v\n", status, err)
+		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
 	}
 }
 
 func setAppError(appCl *app.Client, appErr error) {
 	if err := appCl.SetError(appErr.Error()); err != nil {
-		fmt.Printf("Failed to set error %v: %v\n", appErr, err)
+		print(fmt.Sprintf("Failed to set error %v: %v\n", appErr, err))
 	}
 }

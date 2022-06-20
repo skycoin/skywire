@@ -36,6 +36,20 @@ else
     endif
 endif
 
+ifeq ($(BUILDTAG),)
+	ifeq ($(OS),Windows_NT)
+		BUILDTAG = "Windows"
+	else
+		UNAME_S := $(shell uname -s)
+		ifeq ($(UNAME_S),Linux)
+			BUILDTAG = "Linux"
+		endif
+	 	ifeq ($(UNAME_S),Darwin)
+			BUILDTAG = "Darwin"
+		endif
+	endif
+endif
+
 STATIC_OPTS?= $(OPTS) CC=musl-gcc
 MANAGER_UI_DIR = static/skywire-manager-src
 GO_BUILDER_VERSION=v1.17
@@ -373,11 +387,16 @@ deb-package: deb-install-prequisites ## Create unsigned application
 deb-package-help: ## Show installer creation help
 	./scripts/deb_installer/package_deb.sh -h
 
-mac-installer: ## Create signed and notarized application, run make mac-installer-help for more
-	./scripts/mac_installer/create_installer.sh -s -n
+mac-installer: ## Create unsigned and not-notarized application, run make mac-installer-help for more
+	./scripts/mac_installer/create_installer.sh
 
 mac-installer-help: ## Show installer creation help
 	./scripts/mac_installer/create_installer.sh -h
+
+mac-installer-release: mac-installer ## Upload created signed and notarized applciation to github
+	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags))
+	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-darwin-amd64.pkg
+	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-darwin-arm64.pkg
 
 win-installer-latest:
 	@powershell '.\scripts\win_installer\script.ps1 latest'
