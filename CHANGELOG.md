@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - remove transports cache from visor initialization and check them before make route
 - `run-source` makefile directive write config to stdout & read config from stdin
 - fixed skywire-visor uses skywire-config.json (default config name) without needing to specify
+- `make win-installer` need new argument `CUSTOM_VERSION` to get make installer for this version, use for pre-releases
 - changed the log levels of most of the logs making info level clutter free
 
 ### Added
@@ -54,6 +55,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - `run-vpnsrv-dmsghttp` makefile directive
 - `run-vpnsrv -dmsghttp-test` makefile directive
 - `install-system-linux` and `install-system-linux-systray` makefile directives
+- `skywire-cli dmsgpty list` to view of connected remote visor to hypervisor
+- `skywire-cli dmsgpty start <pk>` to connect through dmsgpty to remote visor
+- `make win-installer-latest` to create installer for latest version of released, not pre-release.
 - `trace` log level is added
 - `--log-lever` flag to generate and update config by `skywire-cli`
 

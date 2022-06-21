@@ -398,8 +398,11 @@ mac-installer-release: mac-installer ## Upload created signed and notarized appl
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-darwin-amd64.pkg
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-darwin-arm64.pkg
 
+win-installer-latest:
+	@powershell '.\scripts\win_installer\script.ps1 latest'
+
 win-installer:
-	@powershell '.\scripts\win_installer\script.ps1'
+	@powershell '.\scripts\win_installer\script.ps1 $(CUSTOM_VERSION)'
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
