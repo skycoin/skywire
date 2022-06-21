@@ -205,7 +205,7 @@ func onReady() {
 				if err != nil {
 					l.WithError(err).Warn("Failed to open hypervisor UI")
 				}
-			case <-mVPN.ClickedCh:
+			case <-mVPNUI.ClickedCh:
 				_, err = script.Exec(skywirecli + ` hv vpn ui`).Stdout()
 				if err != nil {
 					l.WithError(err).Warn("Failed to open VPN UI")
