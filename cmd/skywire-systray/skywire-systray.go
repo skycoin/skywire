@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bitfield/script"
@@ -22,20 +23,29 @@ import (
 )
 
 var (
-	sourcerun     bool
+	sourcerun bool
+	//	vpnLastStatus int
 	remotevisors  []string
+	vpnserverpks  []string
+	vpnstatus     []string
 	skywirecli    string
 	mHV           *systray.MenuItem
 	mVisors       *systray.MenuItem
 	mVPN          *systray.MenuItem
+	mVPNButton    *systray.MenuItem
+	mVPNClient    *systray.MenuItem
+	mVPNStatus    *systray.MenuItem
+	mVPNUI        *systray.MenuItem //nolint:unused
 	mPTY          *systray.MenuItem
 	mShutdown     *systray.MenuItem
 	mStart        *systray.MenuItem
 	mAutoconfig   *systray.MenuItem
 	mQuit         *systray.MenuItem
 	mRemoteVisors []*systray.MenuItem
+	mVPNServers   []*systray.MenuItem
 	servers       []*systray.MenuItem //nolint:unused
 	l             *logging.MasterLogger
+	vpnStatusMx   sync.Mutex
 	err           error
 )
 
@@ -126,6 +136,7 @@ func onReady() {
 
 		mHV = systray.AddMenuItem("Hypervisor", "Hypervisor")
 		mPTY = systray.AddMenuItem("DMSGPTY UI", "DMSGPTY UI")
+		mVPNUI = systray.AddMenuItem("VPN UI", "VPN UI")
 		mVisors = systray.AddMenuItem("Visors", "Visors")
 
 		//check for connected visors
@@ -147,8 +158,34 @@ func onReady() {
 			}
 		}
 		go visorsBtn(mRemoteVisors)
+		//VPN client submenu
+		mVPNClient = systray.AddMenuItem("VPN", "VPN Client Submenu")
+		// VPN Status
+		mVPNStatus = mVPNClient.AddSubMenuItem("Status: Disconnected", "VPN Client Status")
+		mVPNStatus.Disable()
+		go vpnStatusBtn()
 
-		mVPN = systray.AddMenuItem("VPN UI", "VPN UI")
+		//VPN Connect & Disconnect button
+		mVPNButton = mVPNClient.AddSubMenuItem("Connect", "VPN Client Switch Button")
+		//VPN servers list
+		mVPN = mVPNClient.AddSubMenuItem("VPN Servers", "VPN Servers")
+
+		//check for available vpn servers
+		vpnlistpks, err := script.Exec(skywirecli + ` hv vpn list`).String()
+		if err != nil {
+			l.WithError(err).Warn("Failed to fetch connected visors " + visors)
+		}
+		vpnlistpks = strings.Trim(vpnlistpks, "[")
+		vpnlistpks = strings.Trim(vpnlistpks, "]")
+		vpnserverpks = strings.Split(vpnlistpks, " ")
+		mVPNServers = []*systray.MenuItem{}
+		for _, v := range vpnserverpks {
+			if v != "" {
+				mVPNServers = append(mVPNServers, mVPN.AddSubMenuItemCheckbox(v, "", false))
+			}
+		}
+		go serversBtn(mVPNServers)
+
 		mStart = systray.AddMenuItem("Start", "Start")
 		mAutoconfig = systray.AddMenuItem("Autoconfig", "Autoconfig")
 		mShutdown = systray.AddMenuItem("Shutdown", "Shutdown")
@@ -173,6 +210,8 @@ func onReady() {
 				if err != nil {
 					l.WithError(err).Warn("Failed to open VPN UI")
 				}
+			case <-mVPNButton.ClickedCh:
+				handleVPNButton()
 			case <-mPTY.ClickedCh:
 				_, err = script.Exec(skywirecli + ` hv dmsg ui`).Stdout()
 				if err != nil {
@@ -241,12 +280,9 @@ func visorsBtn(mRemoteVisors []*systray.MenuItem) {
 			}
 		}(btnChannel, remotevisor, index)
 	}
-	//TODO
-	/*
-	 */
 }
 
-func serversBtn() { //nolint
+func serversBtn(mRemoteVisors []*systray.MenuItem) { //nolint
 	btnChannel := make(chan int)
 	for index, server := range servers { //nolint
 		go func(chn chan int, server *systray.MenuItem, index int) {
@@ -273,14 +309,41 @@ func serversBtn() { //nolint
 		if err := pk.UnmarshalText([]byte(serverPK)); err != nil {
 			continue
 		}
-		_, err = script.Exec(skywirecli + ` visor app stop` + skyenv.VPNClientName).Stdout()
+		_, err = script.Exec(skywirecli + ` visor app stop ` + skyenv.VPNClientName).Stdout()
 		if err != nil {
 			l.WithError(err).Warn("Failed to stop vpn-client")
 		}
-		_, err = script.Exec(skywirecli + ` visor app start` + skyenv.VPNClientName + ` ` + pk.String()).Stdout()
+		_, err = script.Exec(skywirecli + ` visor app start ` + skyenv.VPNClientName + ` ` + pk.String()).Stdout()
 		if err != nil {
 			l.WithError(err).Warn("Failed to start vpn-client")
 		}
+	}
+}
+
+func vpnStatusBtn() {
+	for {
+		vpnStatusMx.Lock()
+		stats, err := script.Exec(skywirecli + ` visor app info ` + skyenv.VPNClientName).String()
+		if err != nil {
+			l.WithError(err).Info("Vpn Client Stopped")
+			mVPNStatus.SetTitle("Status: Disconnected")
+			mVPNButton.SetTitle("Connect")
+			break
+		}
+		stats = strings.Trim(stats, "[")
+		stats = strings.Trim(stats, "]")
+		vpnstatus = strings.Split(stats, " ")
+		if vpnstatus[1] != "false" {
+			mVPNStatus.SetTitle("Status: Connected")
+			mVPNButton.SetTitle("Disconnect")
+			//	vpnLastStatus = 1
+		} else {
+			mVPNStatus.SetTitle("Status: Disconnected")
+			mVPNButton.SetTitle("Connect")
+			//			vpnLastStatus = 0
+		}
+		vpnStatusMx.Unlock()
+		time.Sleep(2 * time.Second)
 	}
 }
 
@@ -290,12 +353,12 @@ func handleVPNButton() { //nolint
 		l.WithError(err).Warn("Failed to get vpn-client status")
 	}
 	if appstate == "" {
-		_, err = script.Exec(skywirecli + ` visor app stop` + skyenv.VPNClientName).Stdout()
+		_, err = script.Exec(skywirecli + ` visor app stop ` + skyenv.VPNClientName).Stdout()
 		if err != nil {
 			l.WithError(err).Warn("Failed to stop vpn-client")
 		}
 	} else {
-		_, err = script.Exec(skywirecli + ` visor app start` + skyenv.VPNClientName).Stdout()
+		_, err = script.Exec(skywirecli + ` visor app start ` + skyenv.VPNClientName).Stdout()
 		if err != nil {
 			l.WithError(err).Warn("Failed to start vpn-client")
 		}

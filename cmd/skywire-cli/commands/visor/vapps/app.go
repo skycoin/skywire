@@ -17,6 +17,7 @@ func init() {
 	cobra.EnableCommandSorting = false
 	RootCmd.AddCommand(
 		lsAppsCmd,
+		summaryAppCmd,
 		startAppCmd,
 		stopAppCmd,
 		setAppAutostartCmd,
@@ -47,6 +48,17 @@ var lsAppsCmd = &cobra.Command{
 			internal.Catch(err)
 		}
 		internal.Catch(w.Flush())
+	},
+}
+
+var summaryAppCmd = &cobra.Command{
+	Use:   "info",
+	Short: "app summary",
+	//Args:  cobra.MinimumNArgs(1),
+	Run: func(_ *cobra.Command, args []string) {
+		stats, err := rpcClient().GetAppConnectionsSummary(args[0])
+		internal.Catch(err)
+		fmt.Println(stats)
 	},
 }
 
