@@ -125,6 +125,7 @@ func onReady() {
 		systray.SetTitle("Skywire")
 
 		mHV = systray.AddMenuItem("Hypervisor", "Hypervisor")
+		mPTY = systray.AddMenuItem("DMSGPTY UI", "DMSGPTY UI")
 		mVisors = systray.AddMenuItem("Visors", "Visors")
 
 		//check for connected visors
@@ -135,16 +136,19 @@ func onReady() {
 		remotevisors = strings.Split(visors, "\n")
 
 		for i := range remotevisors {
-			l.Info("visors: " + remotevisors[i])
+			if remotevisors[i] != "" {
+				l.Info("remote visors: " + remotevisors[i])
+			}
 		}
 		mRemoteVisors = []*systray.MenuItem{}
 		for _, v := range remotevisors {
-			mRemoteVisors = append(mRemoteVisors, mVisors.AddSubMenuItem(v, ""))
+			if v != "" {
+				mRemoteVisors = append(mRemoteVisors, mVisors.AddSubMenuItem(v, ""))
+			}
 		}
 		go visorsBtn(mRemoteVisors)
 
 		mVPN = systray.AddMenuItem("VPN UI", "VPN UI")
-		mPTY = systray.AddMenuItem("DMSGPTY UI", "DMSGPTY UI")
 		mStart = systray.AddMenuItem("Start", "Start")
 		mAutoconfig = systray.AddMenuItem("Autoconfig", "Autoconfig")
 		mShutdown = systray.AddMenuItem("Shutdown", "Shutdown")
@@ -227,19 +231,19 @@ func visorsBtn(mRemoteVisors []*systray.MenuItem) {
 			for { //nolint
 				select {
 				case <-remotevisor.ClickedCh:
+					l.Info("opening dmsgpty ui to visor: " + remotevisors[index])
+					_, err = script.Exec(skywirecli + ` hv dmsg ui -v ` + remotevisors[index]).Stdout()
+					if err != nil {
+						l.WithError(err).Warn("Failed to open dmsgpty UI")
+					}
 					chn <- index
-					l.Info("clicked")
 				}
 			}
 		}(btnChannel, remotevisor, index)
 	}
 	//TODO
 	/*
-		_, err = script.Exec(skywirecli + ` hv dmsg ui -v ` + pk).Stdout()
-		if err != nil {
-			l.WithError(err).Warn("Failed to open dmsgpty UI")
-		}
-	*/
+	 */
 }
 
 func serversBtn() { //nolint
