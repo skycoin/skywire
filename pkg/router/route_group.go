@@ -622,7 +622,7 @@ func (rg *RouteGroup) handleNetworkProbePacket(packet routing.Packet) error {
 		latency = int64(rg.networkStats.Latency())
 	}
 
-	rg.logger.Debugf("Latency is around %d ms", latency)
+	rg.logger.WithField("func", "RouteGroup.handleNetworkProbePacket").Tracef("Latency is around %d ms", latency)
 
 	rg.networkStats.SetLatency(uint32(latency))
 	rg.networkStats.SetUploadSpeed(uint32(throughput))
