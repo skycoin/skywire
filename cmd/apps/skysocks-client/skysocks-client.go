@@ -66,9 +66,9 @@ func main() {
 
 	if *serverPK == "" {
 		err := errors.New("Empty server PubKey. Exiting")
-		print(err)
+		print(fmt.Sprintf("%v\n", err))
 		setAppErr(appCl, err)
-		return
+		os.Exit(1)
 	}
 
 	pk := cipher.PubKey{}
@@ -113,12 +113,12 @@ func main() {
 
 func setAppErr(appCl *app.Client, err error) {
 	if appErr := appCl.SetError(err.Error()); appErr != nil {
-		fmt.Printf("Failed to set error %v: %v\n", err, appErr)
+		print(fmt.Sprintf("Failed to set error %v: %v\n", err, appErr))
 	}
 }
 
 func setAppStatus(appCl *app.Client, status launcher.AppDetailedStatus) {
 	if err := appCl.SetDetailedStatus(string(status)); err != nil {
-		fmt.Printf("Failed to set status %v: %v\n", status, err)
+		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
 	}
 }
