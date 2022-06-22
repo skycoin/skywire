@@ -10,15 +10,22 @@ import (
 
 func printStdErr(stderr io.ReadCloser, errorLog *logrus.Entry) {
 	cmdStderr := bufio.NewScanner(stderr)
-	ignoreErrs := getIgnoreErrs()
+	iErrs := getIgnoreErrs()
 	go func() {
 		for cmdStderr.Scan() {
 			err := cmdStderr.Text()
-			if _, ok := ignoreErrs[err]; !ok {
-				if !strings.Contains(err, "rpc.Serve: accept:accept") {
-					errorLog.Error(cmdStderr.Text())
-				}
+			if !contains(iErrs, err) {
+				errorLog.Error(cmdStderr.Text())
 			}
 		}
 	}()
+}
+
+func contains(iErrs []string, err string) bool {
+	for _, iErr := range iErrs {
+		if strings.Contains(err, iErr) {
+			return true
+		}
+	}
+	return false
 }
