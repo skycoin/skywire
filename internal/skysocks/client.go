@@ -145,7 +145,7 @@ func (c *Client) handleStream(conn, stream net.Conn) {
 		}
 
 		if err != nil {
-			print(fmt.Sprintf("Copy error: %v", err))
+			print(fmt.Sprintf("Copy error: %v\n", err))
 		}
 	}
 
@@ -159,7 +159,7 @@ func (c *Client) handleStream(conn, stream net.Conn) {
 func (c *Client) close() {
 	print("Session failed, closing skysocks client")
 	if err := c.Close(); err != nil {
-		print(fmt.Sprintf("Error closing skysocks client: %v", err))
+		print(fmt.Sprintf("Error closing skysocks client: %v\n", err))
 	}
 }
 
@@ -168,7 +168,7 @@ func (c *Client) ListenIPC(client *ipc.Client) {
 	listenIPC(client, skyenv.SkychatName+"-client", func() {
 		client.Close()
 		if err := c.Close(); err != nil {
-			print(fmt.Sprintf("Error closing skysocks-client: %v", err))
+			print(fmt.Sprintf("Error closing skysocks-client: %v\n", err))
 		}
 	})
 }

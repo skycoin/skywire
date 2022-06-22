@@ -175,7 +175,7 @@ func (s *Server) Close() error {
 
 func (s *Server) revertIPv4ForwardingValue() {
 	if err := SetIPv4ForwardingValue(s.ipv4ForwardingVal); err != nil {
-		print(fmt.Sprintf("Error reverting IPv4 forwarding: %v", err))
+		print(fmt.Sprintf("Error reverting IPv4 forwarding: %v\n", err))
 	} else {
 		fmt.Printf("Set IPv4 forwarding = %s\n", s.ipv4ForwardingVal)
 	}
@@ -183,7 +183,7 @@ func (s *Server) revertIPv4ForwardingValue() {
 
 func (s *Server) revertIPv6ForwardingValue() {
 	if err := SetIPv6ForwardingValue(s.ipv6ForwardingVal); err != nil {
-		print(fmt.Sprintf("Error reverting IPv6 forwarding: %v", err))
+		print(fmt.Sprintf("Error reverting IPv6 forwarding: %v\n", err))
 	} else {
 		fmt.Printf("Set IPv6 forwarding = %s\n", s.ipv6ForwardingVal)
 	}
@@ -191,7 +191,7 @@ func (s *Server) revertIPv6ForwardingValue() {
 
 func (s *Server) disableIPMasquerading() {
 	if err := DisableIPMasquerading(s.defaultNetworkInterface); err != nil {
-		print(fmt.Sprintf("Error disabling IP masquerading for %s: %v", s.defaultNetworkInterface, err))
+		print(fmt.Sprintf("Error disabling IP masquerading for %s: %v\n", s.defaultNetworkInterface, err))
 	} else {
 		fmt.Printf("Disabled IP masquerading for %s\n", s.defaultNetworkInterface)
 	}
@@ -199,7 +199,7 @@ func (s *Server) disableIPMasquerading() {
 
 func (s *Server) restoreIPTablesForwardPolicy() {
 	if err := SetIPTablesForwardPolicy(s.iptablesForwardPolicy); err != nil {
-		print(fmt.Sprintf("Error restoring iptables forward policy to %s: %v", s.iptablesForwardPolicy, err))
+		print(fmt.Sprintf("Error restoring iptables forward policy to %s: %v\n", s.iptablesForwardPolicy, err))
 	} else {
 		fmt.Printf("Restored iptables forward policy to %s\n", s.iptablesForwardPolicy)
 	}
@@ -207,7 +207,7 @@ func (s *Server) restoreIPTablesForwardPolicy() {
 
 func (s *Server) closeConn(conn net.Conn) {
 	if err := conn.Close(); err != nil {
-		print(fmt.Sprintf("Error closing client %s connection: %v", conn.RemoteAddr(), err))
+		print(fmt.Sprintf("Error closing client %s connection: %v\n", conn.RemoteAddr(), err))
 	}
 }
 
@@ -216,26 +216,26 @@ func (s *Server) serveConn(conn net.Conn) {
 
 	tunIP, tunGateway, allowTrafficToLocalNet, err := s.shakeHands(conn)
 	if err != nil {
-		print(fmt.Sprintf("Error negotiating with client %s: %v", conn.RemoteAddr(), err))
+		print(fmt.Sprintf("Error negotiating with client %s: %v\n", conn.RemoteAddr(), err))
 		return
 	}
 	defer allowTrafficToLocalNet()
 
 	tun, err := newTUNDevice()
 	if err != nil {
-		print(fmt.Sprintf("Error allocating TUN interface: %v", err))
+		print(fmt.Sprintf("Error allocating TUN interface: %v\n", err))
 		return
 	}
 	defer func() {
 		if err := tun.Close(); err != nil {
-			print(fmt.Sprintf("Error closing TUN %s: %v", tun.Name(), err))
+			print(fmt.Sprintf("Error closing TUN %s: %v\n", tun.Name(), err))
 		}
 	}()
 
 	fmt.Printf("Allocated TUN %s", tun.Name())
 
 	if err := SetupTUN(tun.Name(), tunIP.String()+TUNNetmaskCIDR, tunGateway.String(), TUNMTU); err != nil {
-		print(fmt.Sprintf("Error setting up TUN %s: %v", tun.Name(), err))
+		print(fmt.Sprintf("Error setting up TUN %s: %v\n", tun.Name(), err))
 		return
 	}
 
@@ -245,14 +245,14 @@ func (s *Server) serveConn(conn net.Conn) {
 		defer close(connToTunDoneCh)
 
 		if _, err := io.Copy(tun, conn); err != nil {
-			print(fmt.Sprintf("Error resending traffic from VPN client to TUN %s: %v", tun.Name(), err))
+			print(fmt.Sprintf("Error resending traffic from VPN client to TUN %s: %v\n", tun.Name(), err))
 		}
 	}()
 	go func() {
 		defer close(tunToConnCh)
 
 		if _, err := io.Copy(conn, tun); err != nil {
-			print(fmt.Sprintf("Error resending traffic from TUN %s to VPN client: %v", tun.Name(), err))
+			print(fmt.Sprintf("Error resending traffic from TUN %s to VPN client: %v\n", tun.Name(), err))
 		}
 	}()
 
@@ -322,7 +322,7 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, unsecureVP
 
 		unsecureVPN = func() {
 			if err := AllowIPToLocalNetwork(cTUNIP, sTUNIP); err != nil {
-				print(fmt.Sprintf("Error allowing traffic to local network: %v", err))
+				print(fmt.Sprintf("Error allowing traffic to local network: %v\n", err))
 			}
 		}
 	}
@@ -359,7 +359,7 @@ func (s *Server) sendServerErrHello(conn net.Conn, status HandshakeStatus) {
 	}
 
 	if err := WriteJSON(conn, &sHello); err != nil {
-		print(fmt.Sprintf("Error sending server hello: %v", err))
+		print(fmt.Sprintf("Error sending server hello: %v\n", err))
 	}
 }
 

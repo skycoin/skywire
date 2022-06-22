@@ -84,7 +84,7 @@ func (s *Server) Serve(l net.Listener) error {
 
 		go func() {
 			if err := s.socks.Serve(session); err != nil {
-				print(fmt.Sprintf("Failed to start SOCKS5 server: %v", err))
+				print(fmt.Sprintf("Failed to start SOCKS5 server: %v\n", err))
 			}
 		}()
 	}
