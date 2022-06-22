@@ -3,11 +3,12 @@
 
 package appserver
 
-func getIgnoreErrs() map[string]struct{} {
-	ignoreErrs := map[string]struct{}{
-		"RTNETLINK answers: File exists":                                   {},
-		"RTNETLINK answers: Operation not permitted":                       {},
-		"Fatal: can't open lock file /run/xtables.lock: Permission denied": {},
+func getIgnoreErrs() []string {
+	ignoreErrs := []string{
+		"Creating adapter",
+		"Using existing driver 0.14",
+		"rpc.Serve: accept:accept",
+		"The route addition failed: The object already exists.",
 	}
 	return ignoreErrs
 }
