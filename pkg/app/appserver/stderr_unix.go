@@ -1,0 +1,10 @@
+package appserver
+
+func getIgnoreErrs() map[string]struct{} {
+	ignoreErrs := map[string]struct{}{
+		"RTNETLINK answers: File exists":                                   {},
+		"RTNETLINK answers: Operation not permitted":                       {},
+		"Fatal: can't open lock file /run/xtables.lock: Permission denied": {},
+	}
+	return ignoreErrs
+}
