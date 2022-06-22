@@ -248,6 +248,7 @@ bin-systray-windows-appveyor: ## Build `skywire-visor` and `skywire-cli` with sy
 	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go build -tags systray -o ./ $$_.FullName }'
 
 bin-systray: ## Build `skywire-visor`, `skywire-cli`
+	sed -i '/go conn.handleCall(msg)/c\conn.handleCall(msg)' ./vendor/github.com/godbus/dbus/v5/conn.go
 	CGO_ENABLED=${SYSTRAY_CGO_ENABLED} ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ ./cmd/skywire-visor
 	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/setup-node
