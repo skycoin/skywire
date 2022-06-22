@@ -233,7 +233,7 @@ func (c *Client) ListenIPC(client *ipc.Client) {
 
 		if m != nil {
 			if m.MsgType == skyenv.IPCShutdownMessageType {
-				print(fmt.Sprintln("Stopping " + skyenv.VPNClientName + " via IPC"))
+				fmt.Println("Stopping " + skyenv.VPNClientName + " via IPC")
 				break
 			}
 		}
