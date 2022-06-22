@@ -106,7 +106,7 @@ func listenLoop() {
 		fmt.Println("Accepting skychat conn...")
 		conn, err := l.Accept()
 		if err != nil {
-			print(fmt.Sprintf("Failed to accept conn: %v", err))
+			print(fmt.Sprintf("Failed to accept conn: %v\n", err))
 			return
 		}
 		fmt.Println("Accepted skychat conn")
