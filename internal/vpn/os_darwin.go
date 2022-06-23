@@ -55,5 +55,10 @@ func modifyRoutingTable(action, ipCIDR, gateway string) error {
 		return fmt.Errorf("error parsing IP CIDR: %w", err)
 	}
 
-	return osutil.Run("route", action, "-net", ip, gateway, netmask)
+	err = osutil.Run("route", action, "-net", ip, gateway, netmask)
+	if err != nil {
+		print(fmt.Sprintf("%v\n", err))
+		return errPermissionDenied
+	}
+	return nil
 }
