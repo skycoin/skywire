@@ -8,6 +8,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// TODO(ersonp): check if we can get rid of the errors altogether instead of ignoring/suppressing them.
+
 func printStdErr(stderr io.ReadCloser, errorLog *logrus.Entry) {
 	cmdStderr := bufio.NewScanner(stderr)
 	iErrs := getIgnoreErrs()
