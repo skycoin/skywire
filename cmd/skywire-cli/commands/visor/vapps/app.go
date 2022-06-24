@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 )
 
@@ -56,9 +57,32 @@ var summaryAppCmd = &cobra.Command{
 	Short: "app summary",
 	//Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
-		stats, err := rpcClient().GetAppConnectionsSummary(args[0])
-		internal.Catch(err)
-		fmt.Println(stats)
+		if len(args) == 0 {
+			stats, err := rpcClient().GetAppConnectionsSummary(skyenv.SkychatName)
+			internal.CatchNonFatal(err)
+			fmt.Println(skyenv.SkychatName)
+			fmt.Println(stats)
+			stats, err = rpcClient().GetAppConnectionsSummary(skyenv.SkysocksName)
+			internal.CatchNonFatal(err)
+			fmt.Println(skyenv.SkysocksName)
+			fmt.Println(stats)
+			stats, err = rpcClient().GetAppConnectionsSummary(skyenv.SkysocksClientName)
+			internal.CatchNonFatal(err)
+			fmt.Println(skyenv.SkysocksClientName)
+			fmt.Println(stats)
+			stats, err = rpcClient().GetAppConnectionsSummary(skyenv.VPNServerName)
+			internal.CatchNonFatal(err)
+			fmt.Println(skyenv.VPNServerName)
+			fmt.Println(stats)
+			stats, err = rpcClient().GetAppConnectionsSummary(skyenv.VPNClientName)
+			internal.CatchNonFatal(err)
+			fmt.Println(skyenv.VPNClientName)
+			fmt.Println(stats)
+		} else {
+			stats, err := rpcClient().GetAppConnectionsSummary(args[0])
+			internal.Catch(err)
+			fmt.Println(stats)
+		}
 	},
 }
 

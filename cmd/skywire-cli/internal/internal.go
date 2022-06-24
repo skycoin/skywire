@@ -22,6 +22,17 @@ func Catch(err error, msgs ...string) {
 	}
 }
 
+// CatchNonFatal handles non fatal errors for skywire-cli commands packages
+func CatchNonFatal(err error, msgs ...string) {
+	if err != nil {
+		if len(msgs) > 0 {
+			log.Errorln(append(msgs, err.Error()))
+		} else {
+			log.Errorln(err)
+		}
+	}
+}
+
 // ParsePK parses a public key
 func ParsePK(name, v string) cipher.PubKey {
 	var pk cipher.PubKey

@@ -24,6 +24,7 @@ import (
 
 var (
 	sourcerun bool
+	devrun bool
 	//	vpnLastStatus int
 	remotevisors  []string
 	vpnserverpks  []string
@@ -53,7 +54,8 @@ func init() {
 	l = logging.NewMasterLogger()
 	//disable sorting, flags appear in the order shown here
 	rootCmd.Flags().SortFlags = false
-	rootCmd.Flags().BoolVarP(&sourcerun, "src", "s", false, "'go run' external commands from the skywire sources")
+	rootCmd.Flags().BoolVarP(&sourcerun, "src", "s", false, "'go run' using the skywire sources")
+	rootCmd.Flags().BoolVarP(&devrun, "dev", "d", false, "show remote visors & dmsghttp ui")
 
 }
 
@@ -117,63 +119,81 @@ func onReady() {
 	systray.SetTitle("Skywire")
 	systray.SetTooltip("Skywire")
 	mQuit = systray.AddMenuItem("Quit", "Quit the whole app")
-	go func() {
-		<-mQuit.ClickedCh
-		fmt.Println("Requesting quit")
-		systray.Quit()
-		fmt.Println("Finished quitting")
-	}()
-	go func() {
-		//check that the visor is running and responds over RPC
-		visor, err := script.Exec(skywirecli + ` visor pk`).Match("FATAL").String()
-		if err != nil {
-			l.WithError(err).Warn("Failed to get visor public key")
-			//visor should be empty string if the visor is running
-			visor = " "
-		}
-		systray.SetTemplateIcon(sysTrayIcon, sysTrayIcon)
-		systray.SetTitle("Skywire")
 
-		mHV = systray.AddMenuItem("Hypervisor", "Hypervisor")
-		mPTY = systray.AddMenuItem("DMSGPTY UI", "DMSGPTY UI")
-		mVPNUI = systray.AddMenuItem("VPN UI", "VPN UI")
-		mVisors = systray.AddMenuItem("Visors", "Visors")
+	//check that the visor is running and responds over RPC
+	visor, err := script.Exec(skywirecli + ` visor pk`).Match("FATAL").String()
+	if err != nil {
+		l.WithError(err).Warn("Failed to get visor public key")
+		//visor should be empty string if the visor is running
+		visor = " "
+	}
+	systray.SetTemplateIcon(sysTrayIcon, sysTrayIcon)
+	systray.SetTitle("Skywire")
 
-		//check for connected visors
-		visors, err := script.Exec(skywirecli + ` dmsgpty list`).String()
-		if err != nil {
-			l.WithError(err).Warn("Failed to fetch connected visors " + visors)
-		}
-		remotevisors = strings.Split(visors, "\n")
+	//Top level menu
+	//mHV launches the hypervisor with `skywire-cli hv ui`
+	mHV = systray.AddMenuItem("Hypervisor", "Hypervisor")
+	mHV.Hide()
+	//mPTY launches the dmsgpty ui with `skywire-cli hv dmsg ui`
+	mPTY = systray.AddMenuItem("DMSGPTY UI", "DMSGPTY UI")
+	mPTY.Hide()
+	//mVPNUI launches the VPN ui with `skywire-cli hv dmsg ui`
+	mVPNUI = systray.AddMenuItem("VPN UI", "VPN UI")
+	mVPNUI.Hide()
+	//mVisors menu to access dmsgpty ui for connected remote visors
+	mVisors = systray.AddMenuItem("Visors", "Visors")
+	mVisors.Hide()
+	//mVPNClient contains the vpn menu and server list submenu
+	mVPNClient = systray.AddMenuItem("VPN", "VPN Client Submenu")
+	mVPNClient.Hide()
+	//mStart start a stopped the visor
+	mStart = systray.AddMenuItem("Start", "Start")
+	mStart.Hide()
+	//mAutoconfig run the autoconfig script provided by the package or installer
+	mAutoconfig = systray.AddMenuItem("Autoconfig", "Autoconfig")
+	mAutoconfig.Hide()
+	//mShutdown shut down a running visor
+	mShutdown = systray.AddMenuItem("Shutdown", "Shutdown")
+	mShutdown.Hide()
 
-		for i := range remotevisors {
-			if remotevisors[i] != "" {
-				l.Info("remote visors: " + remotevisors[i])
+	//Sub menus
+	//mVPNStatus shows current VPN connection status derived from `skywire-cli visor app info`
+	mVPNStatus = mVPNClient.AddSubMenuItem("Status: Disconnected", "VPN Client Status")
+	mVPNStatus.Disable()
+	//mVPNButton VPN on / off button
+	mVPNButton = mVPNClient.AddSubMenuItem("Connect", "VPN Client Switch Button")
+	//mVPN is the list of VPN server public keys returned by `skywire-cli hv vpn list`
+	mVPN = mVPNClient.AddSubMenuItem("VPN Servers", "VPN Servers")
+
+
+	if visor != "" {
+		ToggleOff()
+	} else {
+		if devrun {
+			//check for connected visors
+			visors, err := script.Exec(skywirecli + ` dmsgpty list`).String()
+			if err != nil {
+				l.WithError(err).Warn("Failed to fetch connected visors " + visors)
 			}
-		}
-		mRemoteVisors = []*systray.MenuItem{}
-		for _, v := range remotevisors {
-			if v != "" {
-				mRemoteVisors = append(mRemoteVisors, mVisors.AddSubMenuItem(v, ""))
+			remotevisors = strings.Split(visors, "\n")
+			for i := range remotevisors {
+				if remotevisors[i] != "" {
+					l.Info("remote visors: " + remotevisors[i])
+				}
 			}
+			mRemoteVisors = []*systray.MenuItem{}
+			for _, v := range remotevisors {
+				if v != "" {
+					mRemoteVisors = append(mRemoteVisors, mVisors.AddSubMenuItem(v, ""))
+				}
+			}
+			go visorsBtn(mRemoteVisors)
 		}
-		go visorsBtn(mRemoteVisors)
-		//VPN client submenu
-		mVPNClient = systray.AddMenuItem("VPN", "VPN Client Submenu")
-		// VPN Status
-		mVPNStatus = mVPNClient.AddSubMenuItem("Status: Disconnected", "VPN Client Status")
-		mVPNStatus.Disable()
 		go vpnStatusBtn()
-
-		//VPN Connect & Disconnect button
-		mVPNButton = mVPNClient.AddSubMenuItem("Connect", "VPN Client Switch Button")
-		//VPN servers list
-		mVPN = mVPNClient.AddSubMenuItem("VPN Servers", "VPN Servers")
-
 		//check for available vpn servers
 		vpnlistpks, err := script.Exec(skywirecli + ` hv vpn list`).String()
 		if err != nil {
-			l.WithError(err).Warn("Failed to fetch connected visors " + visors)
+			l.WithError(err).Warn("Failed to fetch vpn servers")
 		}
 		vpnlistpks = strings.Trim(vpnlistpks, "[")
 		vpnlistpks = strings.Trim(vpnlistpks, "]")
@@ -185,19 +205,19 @@ func onReady() {
 			}
 		}
 		go serversBtn(mVPNServers)
+		ToggleOn()
+	}
+	systray.AddSeparator()
+	//this blank item retains minimum text displacement
+	systray.AddMenuItem("                              ", "")
 
-		mStart = systray.AddMenuItem("Start", "Start")
-		mAutoconfig = systray.AddMenuItem("Autoconfig", "Autoconfig")
-		mShutdown = systray.AddMenuItem("Shutdown", "Shutdown")
-
-		if visor != "" {
-			ToggleOff()
-		} else {
-			ToggleOn()
-		}
-		systray.AddSeparator()
-		//this blank item retains minimum text displacement
-		systray.AddMenuItem("                              ", "")
+	go func() {
+		<-mQuit.ClickedCh
+		fmt.Println("Requesting quit")
+		systray.Quit()
+		fmt.Println("Finished quitting")
+	}()
+	go func() {
 		for {
 			select {
 			case <-mHV.ClickedCh:
@@ -325,7 +345,6 @@ func vpnStatusBtn() {
 		vpnStatusMx.Lock()
 		stats, err := script.Exec(skywirecli + ` visor app info ` + skyenv.VPNClientName).String()
 		if err != nil {
-			l.WithError(err).Info("Vpn Client Stopped")
 			mVPNStatus.SetTitle("Status: Disconnected")
 			mVPNButton.SetTitle("Connect")
 			break
@@ -365,34 +384,43 @@ func handleVPNButton() { //nolint
 	}
 }
 
-// ToggleOn when skywire visor is running to show the main menu
+// ToggleOn menu when skywire visor is running
 func ToggleOn() {
 	//check for connected visors
 	visors, err := script.Exec(skywirecli + ` dmsgpty list`).String()
 	if err != nil {
 		l.WithError(err).Warn("Failed to fetch connected visors " + visors)
 	}
-	mHV.Show()
-	if (visors != "") && (visors != "\n") {
-		mVisors.Show()
+	if devrun {
+		mPTY.Show()
+		if (visors != "") && (visors != "\n") {
+			mVisors.Show()
+		} else {
+			mVisors.Hide()
+		}
 	} else {
 		mVisors.Hide()
+		mPTY.Hide()
 	}
+	mHV.Show()
+	mVPNUI.Show()
 	mVPN.Show()
-	mPTY.Show()
-	mShutdown.Show()
+	mVPNClient.Show()
 	mStart.Hide()
 	mAutoconfig.Hide()
+	mShutdown.Show()
 	mQuit.Show()
 }
 
-// ToggleOff when skywire visor is NOT running to show the start menu
+// ToggleOff menu when skywire visor is NOT running
 func ToggleOff() {
 	mHV.Hide()
-	mVisors.Hide()
-	mVPN.Hide()
 	mPTY.Hide()
+	mVPNUI.Hide()
+	mVPNClient.Hide()
+	mVisors.Hide()
 	mShutdown.Hide()
+
 	mStart.Show()
 	if skyenv.OS == "linux" {
 		mAutoconfig.Show()
