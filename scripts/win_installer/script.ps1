@@ -8,7 +8,19 @@ function CleanStage
     if (Test-Path ".\scripts\win_installer\build") { Remove-Item ".\scripts\win_installer\build" -Recurse -Force}
     if (Test-Path ".\scripts\win_installer\wintun.zip") { Remove-Item ".\scripts\win_installer\wintun.zip" -Recurse -Force}
     if (Test-Path ".\scripts\win_installer\wintun") { Remove-Item ".\scripts\win_installer\wintun" -Recurse -Force}
+    if (Test-Path ".\wix.zip") { Remove-Item ".\wix.zip" -Recurse -Force}
+    if (Test-Path ".\wix") { Remove-Item ".\wix" -Recurse -Force}
+    if (Test-Path ".\scripts\win_installer\UI.wixobj") { Remove-Item ".\scripts\win_installer\UI.wixobj" -Recurse -Force}
+    if (Test-Path ".\scripts\win_installer\Product.wixobj") { Remove-Item ".\scripts\win_installer\Product.wixobj" -Recurse -Force}
     if (Test-Path ".\scripts\win_installer\skywire.msi") { Remove-Item ".\scripts\win_installer\skywire.msi" -Recurse -Force}
+}
+
+function InstallWix
+{
+    Set-Location .\scripts\win_installer
+    Invoke-WebRequest "https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311-binaries.zip" -o wix.zip
+    Expand-Archive wix.zip
+    Set-Location ../../
 }
 
 function BuildInstaller($arch)
@@ -16,9 +28,11 @@ function BuildInstaller($arch)
     if ($arch -eq "386") {
         $wintun_arch="x86"
         $arch_title="386  "
+        $wix_arch="x86"
     } else {
         $wintun_arch="amd64"
         $arch_title="amd64"
+        $wix_arch="x64"
     }
 
     Write-Output "#                                                        #"
@@ -34,10 +48,12 @@ function BuildInstaller($arch)
         $realTagUrl = $response.ResponseUri.OriginalString
         $version = $realTagUrl.split('/')[-1].Trim('v')
         $fileName = "skywire-systray-v$version-windows-$arch"
+        $msiName = "skywire-installer-v$version-windows-$arch"
         $downloadURL = "https://github.com/skycoin/skywire/releases/download/v$version/$filename.zip"
         Invoke-WebRequest $downloadURL -o archive.zip -ErrorAction Stop
     } else {
         $fileName = "skywire-systray-$version-windows-$arch"
+        $msiName = "skywire-installer-$version-windows-$arch"
         $downloadURL = "https://github.com/skycoin/skywire/releases/download/$version/$filename.zip"
         Invoke-WebRequest $downloadURL -o archive.zip
     }
@@ -45,7 +61,7 @@ function BuildInstaller($arch)
     Write-Output "#       3. Extracing Downloaded Archive File...          #"
     Expand-Archive -Path archive.zip
 
-    Write-Output "#       4. Preparing Environment for Go-MSI...           #"
+    Write-Output "#       4. Preparing Environment for Wix...              #"
     Set-Location .\scripts\win_installer
     mkdir -p ".\build\apps" > $null
     Move-Item ..\..\archive\skywire-visor.exe .\build\skywire-visor.exe
@@ -60,8 +76,9 @@ function BuildInstaller($arch)
     Copy-Item .\wintun\wintun\bin\$wintun_arch\wintun.dll .\build\wintun.dll
 
     Write-Output "#       5. Building MSI Installer...                     #"
-    go-msi make --msi skywire.msi --version 1.0.0 --arch $arch  > $null
-    Move-Item skywire.msi ../../$fileName.msi -Force
+    .\wix\candle.exe UI.wxs Product.wxs -arch $wix_arch > $null
+    .\wix\light.exe -ext WixUIExtension -ext WixUtilExtension -sacl -spdb -out skywire.msi UI.wixobj Product.wixobj  > $null
+    Move-Item skywire.msi ../../$msiName.msi -Force
 
     Write-Output "#          ==> Build Completed for $arch_title!                #"
     
@@ -72,6 +89,7 @@ function BuildInstaller($arch)
     Write-Output "#       7. Done!                                         #"
 } 
 
+InstallWix
 Write-Output "`n##########################################################"
 Write-Output "#                                                        #"
 Write-Output "#        .:::: Create MSI Installer Package ::::.        #"
