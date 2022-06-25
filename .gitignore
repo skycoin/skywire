@@ -58,3 +58,5 @@ Char
 releaseChangelog.md
 skywire.msi
 /scripts/win_installer/build/
+goreleaser*
+gh*
