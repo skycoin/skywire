@@ -18,15 +18,10 @@ builds:
   - id: skywire-visor
     binary: skywire-visor
     goos:
-      - darwin
       - windows
     goarch:
       - arm64
       - amd64
-      - 386
-    ignore:
-      - goos: windows
-        goarch: arm64
     tags:
       - systray
     env:
@@ -38,16 +33,9 @@ builds:
     binary: skywire-cli
     goos:
       - darwin
-      - windows
     goarch:
       - arm64
       - amd64
-      - 386
-    ignore:
-      - goos: darwin
-        goarch: 386
-      - goos: windows
-        goarch: arm64
     env:
       - CGO_ENABLED=0
     main: ./cmd/skywire-cli/
@@ -57,16 +45,9 @@ builds:
     binary: apps/skychat
     goos:
       - darwin
-      - windows
     goarch:
       - arm64
       - amd64
-      - 386
-    ignore:
-      - goos: darwin
-        goarch: 386
-      - goos: windows
-        goarch: arm64
     env:
       - CGO_ENABLED=0
     main: ./cmd/apps/skychat/
@@ -76,16 +57,9 @@ builds:
     binary: apps/skysocks
     goos:
       - darwin
-      - windows
     goarch:
       - arm64
       - amd64
-      - 386
-    ignore:
-      - goos: darwin
-        goarch: 386
-      - goos: windows
-        goarch: arm64
     env:
       - CGO_ENABLED=0
     main: ./cmd/apps/skysocks/
@@ -95,66 +69,30 @@ builds:
     binary: apps/skysocks-client
     goos:
       - darwin
-      - windows
     goarch:
       - arm64
       - amd64
-      - 386
-    ignore:
-      - goos: darwin
-        goarch: 386
-      - goos: windows
-        goarch: arm64
     env:
       - CGO_ENABLED=0
     main: ./cmd/apps/skysocks-client/
-    ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: vpn-server
-    binary: apps/vpn-server
-    goos:
-      - darwin
-      - windows
-    goarch:
-      - arm64
-      - amd64
-      - 386
-    ignore:
-      - goos: darwin
-        goarch: 386
-      - goos: windows
-        goarch: arm64
-    env:
-      - CGO_ENABLED=0
-    main: ./cmd/apps/vpn-server/
     ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
   - id: vpn-client
     binary: apps/vpn-client
     goos:
       - darwin
-      - windows
     goarch:
       - arm64
       - amd64
-      - 386
-    ignore:
-      - goos: darwin
-        goarch: 386
-      - goos: windows
-        goarch: arm64
     env:
       - CGO_ENABLED=0
     main: ./cmd/apps/vpn-client/
     ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
 archives:
-  - id: darwin-windows
+  - id: archive
     format: tar.gz
     wrap_in_directory: false
-    format_overrides:
-      - goos: windows
-        format: zip
     name_template: 'skywire-systray-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
     files:
       - dmsghttp-config.json
@@ -164,7 +102,6 @@ archives:
       - skysocks
       - skysocks-client
       - skychat
-      - vpn-server
       - vpn-client
     allow_different_binary_count: true
 
