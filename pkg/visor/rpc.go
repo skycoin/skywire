@@ -496,6 +496,14 @@ func (r *RPC) Restart(_ *struct{}, _ *struct{}) (err error) {
 	return r.visor.Restart()
 }
 
+// Shutdown shuts down visor.
+func (r *RPC) Shutdown(_ *struct{}, _ *struct{}) (err error) {
+	// @evanlinjin: do not defer this log statement, as the underlying visor.Logger will get closed.
+	rpcutil.LogCall(r.log, "Shutdown", nil)(nil, nil)
+
+	return r.visor.Shutdown()
+}
+
 // Exec executes a given command in cmd and writes its output to out.
 func (r *RPC) Exec(cmd *string, out *[]byte) (err error) {
 	defer rpcutil.LogCall(r.log, "Exec", cmd)(out, &err)
@@ -534,14 +542,22 @@ func (r *RPC) SetPublicAutoconnect(pAc *bool, _ *struct{}) (err error) {
 	return err
 }
 
+// VPNServers gets available public VPN server from service discovery URL
+func (r *RPC) VPNServers(_ *struct{}, out *[]string) (err error) {
+	defer rpcutil.LogCall(r.log, "RemoteVisor", nil)(out, &err)
+	vpnServers := r.visor.VPNServers()
+	if vpnServers != nil {
+		*out = vpnServers
+	}
+	return err
+}
+
 // RemoteVisors return connected remote visors
 func (r *RPC) RemoteVisors(_ *struct{}, out *[]string) (err error) {
 	defer rpcutil.LogCall(r.log, "RemoteVisor", nil)(out, &err)
-
 	remoteVisors := r.visor.RemoteVisors()
 	if remoteVisors != nil {
 		*out = remoteVisors
 	}
-
 	return err
 }
