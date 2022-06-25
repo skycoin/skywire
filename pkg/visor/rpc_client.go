@@ -14,10 +14,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
@@ -354,6 +354,11 @@ func (rc *rpcClient) Restart() error {
 	return rc.Call("Restart", &struct{}{}, &struct{}{})
 }
 
+// Shutdown calls Shutdown.
+func (rc *rpcClient) Shutdown() error {
+	return rc.Call("Shutdown", &struct{}{}, &struct{}{})
+}
+
 // Exec calls Exec.
 func (rc *rpcClient) Exec(command string) ([]byte, error) {
 	output := make([]byte, 0)
@@ -391,6 +396,13 @@ func (rc *rpcClient) GetPersistentTransports() ([]transport.PersistentTransports
 type StatusMessage struct {
 	Text    string
 	IsError bool
+}
+
+// VPNServers calls VPNServers.
+func (rc *rpcClient) VPNServers() []string {
+	output := []string{}
+	rc.Call("VPNServers", &struct{}{}, &output) // nolint
+	return output
 }
 
 // RemoteVisors calls RemoteVisors.
@@ -912,6 +924,11 @@ func (mc *mockRPCClient) Restart() error {
 	return nil
 }
 
+// Shutdown implements API.
+func (mc *mockRPCClient) Shutdown() error {
+	return nil
+}
+
 // Exec implements API.
 func (mc *mockRPCClient) Exec(string) ([]byte, error) {
 	return []byte("mock"), nil
@@ -935,6 +952,11 @@ func (mc *mockRPCClient) SetPersistentTransports(_ []transport.PersistentTranspo
 // GetPersistentTransports implements API
 func (mc *mockRPCClient) GetPersistentTransports() ([]transport.PersistentTransports, error) {
 	return []transport.PersistentTransports{}, nil
+}
+
+// VPNServers implements API
+func (mc *mockRPCClient) VPNServers() []string {
+	return []string{}
 }
 
 // RemoteVisors implements API

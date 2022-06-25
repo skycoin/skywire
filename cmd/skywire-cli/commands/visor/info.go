@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"unicode/utf8"
 
 	"github.com/spf13/cobra"
 
@@ -12,14 +13,17 @@ import (
 
 var path string
 var pkg bool
+var web bool
 
 func init() {
 	RootCmd.AddCommand(pkCmd)
 	pkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
 	pkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
+	pkCmd.Flags().BoolVarP(&web, "http", "w", false, "format as http response")
 	RootCmd.AddCommand(hvpkCmd)
 	hvpkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
 	hvpkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
+	hvpkCmd.Flags().BoolVarP(&web, "http", "w", false, "format as http response")
 	RootCmd.AddCommand(summaryCmd)
 	RootCmd.AddCommand(buildInfoCmd)
 }
@@ -42,6 +46,11 @@ var pkCmd = &cobra.Command{
 			overview, err := client.Overview()
 			if err != nil {
 				logger.Fatal("Failed to connect:", err)
+			}
+			if web {
+				rc := utf8.RuneCountInString(overview.PubKey.String())
+				header := fmt.Sprintf("HTTP/1.0 200 OK\r\nContent-Length: %d\r\n", rc)
+				fmt.Println(header)
 			}
 			fmt.Println(overview.PubKey)
 		}
