@@ -1,25 +1,36 @@
 package hv
 
 import (
-	"log"
-	"github.com/spf13/cobra"
 	"github.com/bitfield/script"
+	"github.com/spf13/cobra"
 )
+
+var sourcerun bool
+var skywirecli string
+var port string
 
 func init() {
 	RootCmd.AddCommand(srvpkCmd)
+	srvpkCmd.Flags().BoolVarP(&sourcerun, "src", "s", false, "'go run' using the skywire sources")
+	srvpkCmd.Flags().StringVarP(&port, "port", "p", "7998", "port to serve")
 }
 
 // RootCmd contains commands that interact with the skywire-visor
 var srvpkCmd = &cobra.Command{
 	Use:   "srvpk",
-	Short: "serve hypervisor public key",
+	Short: "http endpoint for `skywire-cli visor pk`",
 	Run: func(_ *cobra.Command, _ []string) {
-		//TODO: get the actual port from config instead of using default value here
-		_, err := script.Exec(`while true; do { echo -ne "HTTP/1.0 200 OK\r\nContent-Length: 1\r\n\r\n"; skywire-cli visor pk ; } | nc -l -p 7998 ; done`).Stdout()
-		if err != nil {
-			log.Printf("error occured")
-			os.Exit(1)
+		if !sourcerun {
+			skywirecli = "skywire-cli"
+		} else {
+			skywirecli = "go run cmd/skywire-cli/skywire-cli.go"
+		}
+		for {
+			_, err := script.Exec(`nc -l -p ` + port + ` -e '` + skywirecli + ` visor pk -w'`).Stdout()
+			if err != nil {
+				err.Error()
+				//os.Exit(1)
+			}
 		}
 	},
 }
