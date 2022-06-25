@@ -9,7 +9,7 @@ release:
     owner: skycoin
     name: skywire
 
-  draft: true
+  prerelease: true
 
 before:
   hooks:
@@ -18,7 +18,7 @@ builds:
   - id: skywire-visor
     binary: skywire-visor
     goos:
-      - windows
+      - darwin
     goarch:
       - arm64
       - amd64
