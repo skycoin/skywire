@@ -282,6 +282,9 @@
       "confirmation": "Are you sure you want to reboot the visor?",
       "done": "The visor is restarting."
     },
+    "update": {
+      "confirmation": "A terminal will be opened in a new tab, so you can start the update process. Do you want to continue?"
+    },
     "terminal-options": {
       "full": "Full terminal",
       "simple": "Simple terminal"
@@ -317,6 +320,13 @@
     "starting": "Preparing to update",
     "finished": "Status connection finished",
     "install": "Install updates"
+  },
+
+  "update-all": {
+    "title": "Update",
+    "updatable-list-text": "Please press the buttons of the visors you want to update. A terminal will be opened in a new tab for each visor, so you can start the update procedure.",
+    "non-updatable-list-text": "The following visors can not be updated via the terminal:",
+    "update-button": "Update"
   },
 
   "apps": {
