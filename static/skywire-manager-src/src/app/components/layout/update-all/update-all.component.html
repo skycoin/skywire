@@ -1,0 +1,37 @@
+<app-dialog [headline]="'update-all.title' | translate">
+  <ng-container *ngIf="updatableNodes && updatableNodes.length > 0">
+    <div class="text-container">
+      {{ 'update-all.updatable-list-text' | translate }}
+    </div>
+
+    <div class="list-container">
+      <div class="list-element" *ngFor="let node of updatableNodes">
+        <div class="left-part">
+          <div class="name">{{node.label}}</div>
+          <div class="version">{{node.version}}</div>
+        </div>
+        <div class="right-part">
+          <app-button color="primary" (click)="openTerminal(node.key)">
+            {{ 'update-all.update-button' | translate }}
+          </app-button>
+        </div>
+      </div>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="nonUpdatableNodes && nonUpdatableNodes.length > 0">
+    <div class="text-container">
+      {{ 'update-all.non-updatable-list-text' | translate }}
+    </div>
+
+    <div class="list-container">
+      <div class="list-element" *ngFor="let node of nonUpdatableNodes">
+        <div class="left-part">
+          <div class="name">{{node.label}}</div>
+          <div class="version">{{node.version}}</div>
+          <div class="version" *ngIf="node.tag">{{node.tag}}</div>
+        </div>
+      </div>
+    </div>
+  </ng-container>
+</app-dialog>
