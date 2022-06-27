@@ -12,7 +12,6 @@ import { OperationError } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
 import { MenuOptionData } from 'src/app/components/layout/top-bar/top-bar.component';
-import { UpdateComponent } from 'src/app/components/layout/update/update.component';
 import { StorageService } from 'src/app/services/storage.service';
 
 /**
@@ -171,9 +170,13 @@ export class NodeActionsHelper {
   }
 
   update() {
-    const labelInfo = this.storageService.getLabelInfo(this.currentNodeKey);
-    const label = labelInfo ? labelInfo.label : '';
-    UpdateComponent.openDialog(this.dialog, [{key: this.currentNodeKey, label: label}]);
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'actions.update.confirmation');
+
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      const protocol = window.location.protocol;
+      const hostname = window.location.host.replace('localhost:4200', '127.0.0.1:8000');
+      window.open(protocol + '//' + hostname + '/pty/' + this.currentNodeKey, '_blank', 'noopener noreferrer');
+    });
   }
 
   terminal() {
