@@ -193,7 +193,7 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 		logger:          config.Logger,
 		mLogger:         config.MasterLogger,
 		tm:              config.TransportManager,
-		rt:              routing.NewTable(),
+		rt:              routing.NewTable(config.Logger),
 		sl:              sl,
 		dmsgC:           dmsgC,
 		rgsNs:           make(map[routing.RouteDescriptor]*NoiseRouteGroup),
