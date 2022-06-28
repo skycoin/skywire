@@ -17,7 +17,9 @@ func printStdErr(stderr io.ReadCloser, errorLog *logrus.Entry) {
 		for cmdStderr.Scan() {
 			err := cmdStderr.Text()
 			if !contains(iErrs, err) {
-				errorLog.Error(cmdStderr.Text())
+				if err != "" {
+					errorLog.Error(err)
+				}
 			}
 		}
 	}()
