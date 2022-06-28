@@ -20,7 +20,6 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/router"
-	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/util/pathutil"
 )
 
@@ -34,18 +33,10 @@ var (
 	ErrAppNotRunning = errors.New("app not running")
 )
 
-// AppConfig defines app startup parameters.
-type AppConfig struct {
-	Name      string       `json:"name"`
-	Args      []string     `json:"args,omitempty"`
-	AutoStart bool         `json:"auto_start"`
-	Port      routing.Port `json:"port"`
-}
-
 // Config configures the launcher.
 type Config struct {
 	VisorPK    cipher.PubKey
-	Apps       []AppConfig
+	Apps       []appserver.AppConfig
 	ServerAddr string
 	BinPath    string
 	LocalPath  string
@@ -57,7 +48,7 @@ type Launcher struct {
 	log   logrus.FieldLogger
 	r     router.Router
 	procM appserver.ProcManager
-	apps  map[string]AppConfig
+	apps  map[string]appserver.AppConfig
 	mx    sync.Mutex
 }
 
@@ -94,7 +85,7 @@ func NewLauncher(log logrus.FieldLogger, conf Config, dmsgC *dmsg.Client, r rout
 	}
 
 	// Prepare apps (autostart if necessary).
-	apps := make(map[string]AppConfig, len(conf.Apps))
+	apps := make(map[string]appserver.AppConfig, len(conf.Apps))
 	for _, ac := range conf.Apps {
 		apps[ac.Name] = ac
 	}
@@ -108,7 +99,7 @@ func (l *Launcher) ResetConfig(conf Config) {
 	l.mx.Lock()
 	defer l.mx.Unlock()
 
-	apps := make(map[string]AppConfig, len(conf.Apps))
+	apps := make(map[string]appserver.AppConfig, len(conf.Apps))
 	for _, ac := range conf.Apps {
 		apps[ac.Name] = ac
 	}
@@ -164,7 +155,7 @@ func (l *Launcher) AutoStart(envMap EnvMap) error {
 }
 
 // AppState returns a single app state of given name.
-func (l *Launcher) AppState(name string) (*AppState, bool) {
+func (l *Launcher) AppState(name string) (*appserver.AppState, bool) {
 	l.mx.Lock()
 	defer l.mx.Unlock()
 
@@ -172,35 +163,35 @@ func (l *Launcher) AppState(name string) (*AppState, bool) {
 	if !ok {
 		return nil, false
 	}
-	state := &AppState{AppConfig: ac, Status: AppStatusStopped}
+	state := &appserver.AppState{AppConfig: ac, Status: appserver.AppStatusStopped}
 	if err, ok := l.procM.ErrorByName(ac.Name); ok { //nolint:errcheck
 		if err != "" {
 			state.DetailedStatus = err
-			state.Status = AppStatusErrored
+			state.Status = appserver.AppStatusErrored
 		}
 	}
 	if proc, ok := l.procM.ProcByName(ac.Name); ok { //nolint:errcheck
 		state.DetailedStatus = proc.DetailedStatus()
 		connSummary := proc.ConnectionsSummary()
 		if connSummary != nil {
-			state.Status = AppStatusRunning
+			state.Status = appserver.AppStatusRunning
 		}
 		// for a edge case where app has given the start status but we are unable to retrieve the conn info
-		if connSummary == nil && state.DetailedStatus == AppDetailedStatusRunning {
-			state.DetailedStatus = AppDetailedStatusStarting
-			state.Status = AppStatusStarting
+		if connSummary == nil && state.DetailedStatus == appserver.AppDetailedStatusRunning {
+			state.DetailedStatus = appserver.AppDetailedStatusStarting
+			state.Status = appserver.AppStatusStarting
 		}
 		switch state.DetailedStatus {
-		case AppDetailedStatusVPNConnecting, AppDetailedStatusStarting, AppDetailedStatusReconnecting:
-			state.Status = AppStatusStarting
+		case appserver.AppDetailedStatusVPNConnecting, appserver.AppDetailedStatusStarting, appserver.AppDetailedStatusReconnecting:
+			state.Status = appserver.AppStatusStarting
 		}
 	}
 	return state, true
 }
 
 // AppStates returns list of AppStates for all registered apps.
-func (l *Launcher) AppStates() []*AppState {
-	var states []*AppState
+func (l *Launcher) AppStates() []*appserver.AppState {
+	var states []*appserver.AppState
 	for _, app := range l.apps {
 		state, _ := l.AppState(app.Name)
 		states = append(states, state)
@@ -256,8 +247,6 @@ func (l *Launcher) StopApp(name string) (*appserver.Proc, error) {
 		return nil, ErrAppNotRunning
 	}
 
-	l.log.Info("Stopping app...")
-
 	if err := l.procM.Stop(name); err != nil {
 		log.WithError(err).Warn("Failed to stop app.")
 		return proc, err
@@ -284,7 +273,7 @@ func (l *Launcher) RestartApp(name string) error {
 	return nil
 }
 
-func makeProcConfig(lc Config, ac AppConfig, envs []string) (appcommon.ProcConfig, error) {
+func makeProcConfig(lc Config, ac appserver.AppConfig, envs []string) (appcommon.ProcConfig, error) {
 	procConf := appcommon.ProcConfig{
 		AppName:     ac.Name,
 		AppSrvAddr:  lc.ServerAddr,

@@ -17,6 +17,7 @@ import (
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appevent"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
@@ -170,6 +171,8 @@ func main() {
 		go vpnClient.ListenIPC(ipcClient)
 	}
 
+	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+
 	if err := vpnClient.Serve(); err != nil {
 		print(fmt.Sprintf("Failed to serve VPN: %v\n", err))
 	}
@@ -178,5 +181,11 @@ func main() {
 func setAppErr(appCl *app.Client, err error) {
 	if appErr := appCl.SetError(err.Error()); appErr != nil {
 		print(fmt.Sprintf("Failed to set error %v: %v\n", err, appErr))
+	}
+}
+
+func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
+	if err := appCl.SetDetailedStatus(string(status)); err != nil {
+		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
 	}
 }

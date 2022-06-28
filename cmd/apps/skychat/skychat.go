@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"runtime"
 	"sync"
 	"time"
@@ -24,7 +25,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
-	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
@@ -83,8 +84,17 @@ func main() {
 	http.HandleFunc("/sse", sseHandler)
 
 	fmt.Println("Serving HTTP on", *addr)
+	if runtime.GOOS != "windows" {
+		termCh := make(chan os.Signal, 1)
+		signal.Notify(termCh, os.Interrupt)
 
-	setAppStatus(appCl, launcher.AppDetailedStatusRunning)
+		go func() {
+			<-termCh
+			setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+			os.Exit(1)
+		}()
+	}
+	setAppStatus(appCl, appserver.AppDetailedStatusRunning)
 
 	err := http.ListenAndServe(*addr, nil)
 	if err != nil {
@@ -92,6 +102,7 @@ func main() {
 		setAppError(appCl, err)
 		os.Exit(1)
 	}
+
 }
 
 func listenLoop() {
@@ -253,7 +264,7 @@ func handleIPCSignal(client *ipc.Client) {
 	os.Exit(0)
 }
 
-func setAppStatus(appCl *app.Client, status launcher.AppDetailedStatus) {
+func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
 	if err := appCl.SetDetailedStatus(string(status)); err != nil {
 		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
 	}

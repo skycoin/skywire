@@ -11,7 +11,7 @@ import (
 	"github.com/skycoin/yamux"
 
 	"github.com/skycoin/skywire/pkg/app"
-	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
@@ -61,7 +61,7 @@ func (c *Client) ListenAndServe(addr string) error {
 
 	c.listener = l
 	if c.appCl != nil {
-		c.setAppStatus(launcher.AppDetailedStatusRunning)
+		c.setAppStatus(appserver.AppDetailedStatusRunning)
 	}
 
 	for {
@@ -173,7 +173,7 @@ func (c *Client) ListenIPC(client *ipc.Client) {
 	})
 }
 
-func (c *Client) setAppStatus(status launcher.AppDetailedStatus) {
+func (c *Client) setAppStatus(status appserver.AppDetailedStatus) {
 	if err := c.appCl.SetDetailedStatus(string(status)); err != nil {
 		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
 	}
