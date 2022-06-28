@@ -14,6 +14,7 @@ import (
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
@@ -109,6 +110,8 @@ func main() {
 		close(errCh)
 	}()
 
+	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+
 	select {
 	case <-osSigs:
 	case err := <-errCh:
@@ -119,5 +122,11 @@ func main() {
 func setAppErr(appCl *app.Client, err error) {
 	if appErr := appCl.SetError(err.Error()); appErr != nil {
 		print(fmt.Sprintf("Failed to set error %v: %v\n", err, appErr))
+	}
+}
+
+func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
+	if err := appCl.SetDetailedStatus(string(status)); err != nil {
+		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
 	}
 }

@@ -26,7 +26,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
-	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -687,9 +687,9 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 					return
 				}
-				appStatus := launcher.AppDetailedStatusStarting
+				appStatus := appserver.AppDetailedStatusStarting
 				if ctx.App.Name == skyenv.VPNClientName {
-					appStatus = launcher.AppDetailedStatusVPNConnecting
+					appStatus = appserver.AppDetailedStatusVPNConnecting
 				}
 				if err := ctx.API.SetAppDetailedStatus(ctx.App.Name, appStatus); err != nil {
 					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
@@ -1254,7 +1254,7 @@ type httpCtx struct {
 	Conn
 
 	// App
-	App *launcher.AppState
+	App *appserver.AppState
 
 	// Transport
 	Tp *TransportSummary

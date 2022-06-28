@@ -11,7 +11,6 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/app/appserver"
-	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -196,7 +195,7 @@ func (r *RPC) SetAppError(in *SetAppErrorIn, _ *struct{}) (err error) {
 }
 
 // Apps returns list of Apps registered on the Visor.
-func (r *RPC) Apps(_ *struct{}, reply *[]*launcher.AppState) (err error) {
+func (r *RPC) Apps(_ *struct{}, reply *[]*appserver.AppState) (err error) {
 	defer rpcutil.LogCall(r.log, "Apps", nil)(reply, &err)
 
 	apps, err := r.visor.Apps()

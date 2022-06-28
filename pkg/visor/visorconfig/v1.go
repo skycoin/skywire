@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -76,12 +77,12 @@ type UptimeTracker struct {
 	Addr string `json:"addr"`
 }
 
-// Launcher configures the app launcher.
+// Launcher configures the app appserver.
 type Launcher struct {
-	ServiceDisc string               `json:"service_discovery"`
-	Apps        []launcher.AppConfig `json:"apps"`
-	ServerAddr  string               `json:"server_addr"`
-	BinPath     string               `json:"bin_path"`
+	ServiceDisc string                `json:"service_discovery"`
+	Apps        []appserver.AppConfig `json:"apps"`
+	ServerAddr  string                `json:"server_addr"`
+	BinPath     string                `json:"bin_path"`
 }
 
 // Flush flushes the config to file (if specified).
@@ -92,7 +93,7 @@ func (v1 *V1) Flush() error {
 	return v1.Common.flush(v1)
 }
 
-// UpdateAppAutostart modifies a single app's autostart value within the config and also the given launcher.
+// UpdateAppAutostart modifies a single app's autostart value within the config and also the given appserver.
 // The updated config gets flushed to file if there are any changes.
 func (v1 *V1) UpdateAppAutostart(launch *launcher.Launcher, appName string, autoStart bool) error {
 	v1.mu.Lock()
@@ -121,7 +122,7 @@ func (v1 *V1) UpdateAppAutostart(launch *launcher.Launcher, appName string, auto
 	return v1.flush(v1)
 }
 
-// UpdateAppArg updates the cli flag of the specified app config and also within the launcher.
+// UpdateAppArg updates the cli flag of the specified app config and also within the appserver.
 // The updated config gets flushed to file if there are any changes.
 func (v1 *V1) UpdateAppArg(launch *launcher.Launcher, appName, argName string, value interface{}) error {
 	v1.mu.Lock()
@@ -186,7 +187,7 @@ func (v1 *V1) UpdatePublicAutoconnect(pAc bool) error {
 	return v1.flush(v1)
 }
 
-// updateStringArg updates the cli non-boolean flag of the specified app config and also within the launcher.
+// updateStringArg updates the cli non-boolean flag of the specified app config and also within the appserver.
 // It removes argName from app args if value is an empty string.
 // The updated config gets flushed to file if there are any changes.
 func updateStringArg(conf *Launcher, appName, argName, value string) bool {
@@ -228,7 +229,7 @@ func updateStringArg(conf *Launcher, appName, argName, value string) bool {
 	return configChanged
 }
 
-// updateBoolArg updates the cli boolean flag of the specified app config and also within the launcher.
+// updateBoolArg updates the cli boolean flag of the specified app config and also within the appserver.
 // All flag names and values are formatted as "-name=value" to allow arbitrary values with respect to different
 // possible default values.
 // The updated config gets flushed to file if there are any changes.
