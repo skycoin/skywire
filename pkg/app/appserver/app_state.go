@@ -1,4 +1,6 @@
-package launcher
+package appserver
+
+import "github.com/skycoin/skywire/pkg/routing"
 
 // AppStatus defines running status of an App.
 type AppStatus int
@@ -16,6 +18,14 @@ const (
 	// AppStatusStarting represents status of an app starting.
 	AppStatusStarting
 )
+
+// AppConfig defines app startup parameters.
+type AppConfig struct {
+	Name      string       `json:"name"`
+	Args      []string     `json:"args,omitempty"`
+	AutoStart bool         `json:"auto_start"`
+	Port      routing.Port `json:"port"`
+}
 
 // AppState defines state parameters for a registered App.
 type AppState struct {
@@ -42,4 +52,7 @@ const (
 
 	// AppDetailedStatusShuttingDown is set during shutdown.
 	AppDetailedStatusShuttingDown = "Shutting down"
+
+	// AppDetailedStatusStopped is set after shutdown.
+	AppDetailedStatusStopped = "Stopped"
 )

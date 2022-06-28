@@ -19,7 +19,7 @@ import (
 	"github.com/skycoin/skywire/internal/skysocks"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
-	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
@@ -77,7 +77,7 @@ func main() {
 		setAppErr(appCl, err)
 		os.Exit(1)
 	}
-
+	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
 	for {
 		conn, err := dialServer(ctx, appCl, pk)
 		if err != nil {
@@ -107,7 +107,7 @@ func main() {
 		}
 
 		fmt.Println("Reconnecting to skysocks server")
-		setAppStatus(appCl, launcher.AppDetailedStatusReconnecting)
+		setAppStatus(appCl, appserver.AppDetailedStatusReconnecting)
 	}
 }
 
@@ -117,7 +117,7 @@ func setAppErr(appCl *app.Client, err error) {
 	}
 }
 
-func setAppStatus(appCl *app.Client, status launcher.AppDetailedStatus) {
+func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
 	if err := appCl.SetDetailedStatus(string(status)); err != nil {
 		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
 	}
