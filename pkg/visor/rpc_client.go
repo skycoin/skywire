@@ -432,7 +432,7 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, AP
 		log.Infof("tp[%2d]: %v", i, tps[i])
 	}
 
-	rt := routing.NewTable()
+	rt := routing.NewTable(log)
 	ruleKeepAlive := router.DefaultRouteKeepAlive
 
 	for i := 0; i < r.Intn(maxRules+1); i++ {
