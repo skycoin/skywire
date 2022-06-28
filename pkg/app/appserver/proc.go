@@ -333,8 +333,12 @@ func (p *Proc) IsRunning() bool {
 func (p *Proc) SetDetailedStatus(status string) {
 	p.statusMx.Lock()
 	defer p.statusMx.Unlock()
-	if status == "Running" {
+	if status == AppDetailedStatusRunning {
 		p.startWg.Done()
+	}
+
+	if status == AppDetailedStatusRunning || status == AppDetailedStatusStopped {
+		p.log.Infof("App %v is %v", p.appName, status)
 	}
 
 	p.status = status
