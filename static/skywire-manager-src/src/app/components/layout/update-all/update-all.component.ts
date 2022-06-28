@@ -50,6 +50,6 @@ export class UpdateAllComponent {
   openTerminal(key: string) {
     const protocol = window.location.protocol;
     const hostname = window.location.host.replace('localhost:4200', '127.0.0.1:8000');
-    window.open(protocol + '//' + hostname + '/pty/' + key, '_blank', 'noopener noreferrer');
+    window.open(protocol + '//' + hostname + '/pty/' + key + '?commands=update', '_blank', 'noopener noreferrer');
   }
 }

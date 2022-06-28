@@ -287,7 +287,7 @@
       "done": "El visor se está reiniciando."
     },
     "update": {
-      "confirmation": "Una terminal será abierta en una nueva pestaña, para que pueda iniciar el proceso de actualización. ¿Desea continuar?"
+      "confirmation": "Una terminal será abierta en una nueva pestaña y el proceso de actualización iniciará automáticamente. ¿Desea continuar?"
     },
     "terminal-options": {
       "full": "Terminal completa",
@@ -328,7 +328,7 @@
 
   "update-all": {
     "title": "Actualizar",
-    "updatable-list-text": "Por favor, presione los botones de los visores que desea actualizar. Una terminal será abierta en una nueva pestaña por cada visor, para que pueda iniciar el proceso de actualización.",
+    "updatable-list-text": "Por favor, presione los botones de los visores que desea actualizar. Una terminal será abierta en una nueva pestaña por cada visor y el proceso de actualización iniciará automáticamente.",
     "non-updatable-list-text": "Los siguientes visores no pueden ser actualizados vía la terminal:",
     "update-button": "Actualizar"
   },
