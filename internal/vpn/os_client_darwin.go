@@ -39,7 +39,11 @@ func DefaultNetworkGateway() (net.IP, error) {
 }
 
 func setupClientSysPrivileges() (int, error) {
-	return osutil.GainRoot()
+	err := osutil.GainRoot()
+	if strings.Contains(err.Error(), "operation not permitted") {
+		return errPermissionDenied
+	}
+	return
 }
 
 func releaseClientSysPrivileges(oldUID int) error {
