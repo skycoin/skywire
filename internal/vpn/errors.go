@@ -10,15 +10,15 @@ import (
 )
 
 var (
-	errCouldFindDefaultNetworkGateway = errors.New("Could not find default network gateway")
-	errHandshakeStatusForbidden       = errors.New("Password didn't match")
-	errHandshakeStatusInternalError   = errors.New("Internal server error")
-	errHandshakeNoFreeIPs             = errors.New("No free IPs left to serve")
-	errHandshakeStatusBadRequest      = errors.New("Request was malformed")
-	errTimeout                        = errors.New("Internal error: Timeout")
-	errNotPermited                    = errors.New("ioctl: operation not permitted")
-	errVPNServerClosed                = errors.New("Vpn-server closed")
-	errPermissionDenied               = errors.New("Permission denied") //nolint
+	errCouldFindDefaultNetworkGateway = errors.New("could not find default network gateway")
+	errHandshakeStatusForbidden       = errors.New("password didn't match")
+	errHandshakeStatusInternalError   = errors.New("internal server error")
+	errHandshakeNoFreeIPs             = errors.New("no free IPs left to serve")
+	errHandshakeStatusBadRequest      = errors.New("request was malformed")
+	errTimeout                        = errors.New("internal error: Timeout")
+	errNotPermitted                   = errors.New("ioctl: operation not permitted")
+	errVPNServerClosed                = errors.New("vpn-server closed")
+	errPermissionDenied               = errors.New("permission denied")
 
 	errNoTransportFound = appserver.RPCErr{
 		Err: router.ErrNoTransportFound.Error(),
