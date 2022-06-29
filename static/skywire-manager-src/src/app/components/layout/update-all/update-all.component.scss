@@ -1,0 +1,58 @@
+@import 'variables';
+@import "bootstrap_overrides";
+
+.text-container {
+  word-break: break-word;
+}
+
+.list-container {
+  font-size: 14px;
+  margin: 10px;
+  word-break: break-word;
+
+  .list-element {
+    display: flex;
+    margin-bottom: 10px;
+
+    .left-part {
+      flex-grow: 1;
+      flex-shrink: 1;
+      align-self: center;
+      margin-right: 10px;
+      min-width: 0;
+
+      .name {
+        font-size: $font-size-base;
+        line-height: 1.5;
+        display: block;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+
+        @media (max-width: (map-get($grid-breakpoints, sm) - 1)) {
+          & {
+            font-size: $font-size-mini;
+          }
+        }
+      }
+
+      .version {
+        font-size: $font-size-mini;
+        line-height: 1.5;
+        color: $blue-medium;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    }
+
+    .right-part {
+      flex-basis: 0;
+      flex-shrink: 0;
+    }
+  }
+
+  .details {
+    color: $light-gray;
+  }
+}
