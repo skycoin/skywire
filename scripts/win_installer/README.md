@@ -15,7 +15,7 @@ or
 ```
 make win-installer latest
 ```
-__Note:__ _Make sure cloned this repo in `C:\` (or other partition that Windows installed)._
+__Note:__ _Make sure cloned this repo in `C:\`(or other partition that Windows installed) and run in a terminal without administrator privileges._
 
 ### Install
 Double click the created installer to install skywire.
