@@ -1,4 +1,4 @@
-package hv
+package clihv
 
 import (
 	"fmt"
@@ -27,7 +27,7 @@ func init() {
 
 var dmsgCmd = &cobra.Command{
 	Use:   "dmsg",
-	Short: "dmsgpty UI",
+	Short: "DMSGPTY UI",
 }
 
 var dmsgUICmd = &cobra.Command{
@@ -41,14 +41,14 @@ var dmsgUICmd = &cobra.Command{
 			if path != "" {
 				conf, err := visorconfig.ReadFile(path)
 				if err != nil {
-					log.Fatal("Failed:", err)
+					log.Fatal("Failed to read in config file:", err)
 				}
 				url = fmt.Sprintf("http://127.0.0.1:8000/pty/%s", conf.PK.Hex())
 			} else {
 				client := rpcClient()
 				overview, err := client.Overview()
 				if err != nil {
-					log.Fatal("Failed to connect:", err)
+					log.Fatal("Failed to connect; is skywire running?\n", err)
 				}
 				url = fmt.Sprintf("http://127.0.0.1:8000/pty/%s", overview.PubKey.Hex())
 			}
@@ -72,14 +72,14 @@ var dmsgURLCmd = &cobra.Command{
 			if path != "" {
 				conf, err := visorconfig.ReadFile(path)
 				if err != nil {
-					log.Fatal("Failed:", err)
+					log.Fatal("Failed to read in config file:", err)
 				}
 				url = fmt.Sprintf("http://127.0.0.1:8000/pty/%s", conf.PK.Hex())
 			} else {
 				client := rpcClient()
 				overview, err := client.Overview()
 				if err != nil {
-					logger.Fatal("Failed to connect:", err)
+					logger.Fatal("Failed to connect; is skywire running?\n", err)
 				}
 				url = fmt.Sprintf("http://127.0.0.1:8000/pty/%s", overview.PubKey.Hex())
 			}

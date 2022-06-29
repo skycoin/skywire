@@ -22,7 +22,6 @@ func init() {
 	startCmd.Flags().BoolVarP(&sourcerun, "src", "s", false, "'go run' external commands from the skywire sources")
 }
 
-
 var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start a visor",

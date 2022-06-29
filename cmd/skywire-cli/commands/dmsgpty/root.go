@@ -1,4 +1,4 @@
-package dmsgpty
+package clidmsgpty
 
 import (
 	"context"
@@ -44,7 +44,11 @@ var visorsCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List connected visors",
 	Run: func(_ *cobra.Command, _ []string) {
-		remoteVisors := rpcClient().RemoteVisors()
+		remoteVisors, err := rpcClient().RemoteVisors()
+		if err != nil {
+			packageLogger.Fatal("RPC connection failed; is skywire running?\n", err)
+		}
+
 		var msg string
 		for idx, pk := range remoteVisors {
 			msg += fmt.Sprintf("%d. %s\n", idx+1, pk)
@@ -73,7 +77,7 @@ func rpcClient() visor.API {
 	const rpcDialTimeout = time.Second * 5
 	conn, err := net.DialTimeout("tcp", rpcAddr, rpcDialTimeout)
 	if err != nil {
-		packageLogger.Fatal("RPC connection failed:", err)
+		packageLogger.Fatal("RPC connection failed; is skywire running?\n", err)
 	}
 	return visor.NewRPCClient(packageLogger, conn, visor.RPCPrefix, 0)
 }

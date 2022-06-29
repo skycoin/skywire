@@ -2,7 +2,6 @@ package clivisor
 
 import (
 	"errors"
-
 	"fmt"
 	"os"
 	"sort"
@@ -14,9 +13,8 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
-	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport"
-
+	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
@@ -24,8 +22,8 @@ var (
 	filterTypes   []string
 	filterPubKeys cipher.PubKeys
 	showLogs      bool
-	tpID transportID
-	tpPK cipher.PubKey
+	tpID          transportID
+	tpPK          cipher.PubKey
 )
 
 func init() {
@@ -60,7 +58,6 @@ var lsTypesCmd = &cobra.Command{
 		}
 	},
 }
-
 
 func init() {
 	lsTpCmd.Flags().StringSliceVarP(&filterTypes, "types", "t", filterTypes, "show transport(s) type(s) comma-separated")
@@ -220,11 +217,15 @@ func printTransportEntries(entries ...*transport.Entry) {
 	}
 	internal.Catch(w.Flush())
 }
+
 type transportID uuid.UUID
+
 // String implements pflag.Value
 func (t transportID) String() string { return uuid.UUID(t).String() }
+
 // Type implements pflag.Value
 func (transportID) Type() string { return "transportID" }
+
 // Set implements pflag.Value
 func (t *transportID) Set(s string) error {
 	tID, err := uuid.Parse(s)
