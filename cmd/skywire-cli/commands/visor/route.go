@@ -16,13 +16,10 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
-
-
 var routeCmd = &cobra.Command{
 	Use:   "route",
 	Short: "View and set rules",
 }
-
 
 func init() {
 	RootCmd.AddCommand(routeCmd)

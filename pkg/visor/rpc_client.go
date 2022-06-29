@@ -14,10 +14,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/router"
@@ -398,17 +398,17 @@ type StatusMessage struct {
 }
 
 // VPNServers calls VPNServers.
-func (rc *rpcClient) VPNServers() []string {
+func (rc *rpcClient) VPNServers() ([]string, error) {
 	output := []string{}
 	rc.Call("VPNServers", &struct{}{}, &output) // nolint
-	return output
+	return output, nil
 }
 
 // RemoteVisors calls RemoteVisors.
-func (rc *rpcClient) RemoteVisors() []string {
+func (rc *rpcClient) RemoteVisors() ([]string, error) {
 	output := []string{}
 	rc.Call("RemoteVisors", &struct{}{}, &output) // nolint
-	return output
+	return output, nil
 }
 
 // MockRPCClient mocks API.
@@ -954,11 +954,11 @@ func (mc *mockRPCClient) GetPersistentTransports() ([]transport.PersistentTransp
 }
 
 // VPNServers implements API
-func (mc *mockRPCClient) VPNServers() []string {
-	return []string{}
+func (mc *mockRPCClient) VPNServers() ([]string, error) {
+	return []string{}, nil
 }
 
 // RemoteVisors implements API
-func (mc *mockRPCClient) RemoteVisors() []string {
-	return []string{}
+func (mc *mockRPCClient) RemoteVisors() ([]string, error) {
+	return []string{}, nil
 }

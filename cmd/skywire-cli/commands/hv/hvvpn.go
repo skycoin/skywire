@@ -1,4 +1,4 @@
-package hv
+package clihv
 
 import (
 	"fmt"
@@ -26,7 +26,7 @@ func init() {
 
 var vpnCmd = &cobra.Command{
 	Use:   "vpn",
-	Short: "vpn interface",
+	Short: "VPN UI",
 }
 
 var vpnUICmd = &cobra.Command{
@@ -40,14 +40,14 @@ var vpnUICmd = &cobra.Command{
 		if path != "" {
 			conf, err := visorconfig.ReadFile(path)
 			if err != nil {
-				log.Fatal("Failed:", err)
+				log.Fatal("Failed to read in config:", err)
 			}
 			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", conf.PK.Hex())
 		} else {
 			client := rpcClient()
 			overview, err := client.Overview()
 			if err != nil {
-				log.Fatal("Failed to connect:", err)
+				log.Fatal("Failed to connect; is skywire running?\n", err)
 			}
 			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", overview.PubKey.Hex())
 		}
@@ -68,14 +68,14 @@ var vpnURLCmd = &cobra.Command{
 		if path != "" {
 			conf, err := visorconfig.ReadFile(path)
 			if err != nil {
-				log.Fatal("Failed:", err)
+				log.Fatal("Failed to read in config:", err)
 			}
 			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", conf.PK.Hex())
 		} else {
 			client := rpcClient()
 			overview, err := client.Overview()
 			if err != nil {
-				logger.Fatal("Failed to connect:", err)
+				logger.Fatal("Failed to connect; is skywire running?\n", err)
 			}
 			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", overview.PubKey.Hex())
 		}
@@ -83,13 +83,15 @@ var vpnURLCmd = &cobra.Command{
 	},
 }
 
-
 var vpnListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List public VPN servers",
 	Run: func(_ *cobra.Command, _ []string) {
 		client := rpcClient()
-		servers := client.VPNServers()
+		servers, err := client.VPNServers()
+		if err != nil {
+			logger.Fatal("Failed to connect; is skywire running?\n", err)
+		}
 		fmt.Println(servers)
 	},
 }

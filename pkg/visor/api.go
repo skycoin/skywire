@@ -54,8 +54,8 @@ type API interface {
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
-	VPNServers() []string
-	RemoteVisors() []string
+	VPNServers() ([]string, error)
+	RemoteVisors() ([]string, error)
 
 	TransportTypes() ([]string, error)
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
@@ -572,7 +572,7 @@ func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.Connection
 }
 
 // VPNServers gets available public VPN server from service discovery URL
-func (v *Visor) VPNServers() []string {
+func (v *Visor) VPNServers() ([]string, error) {
 	log := logging.MustGetLogger("vpnservers")
 	vlog := logging.NewMasterLogger()
 	vlog.SetLevel(logrus.InfoLevel)
@@ -583,26 +583,25 @@ func (v *Visor) VPNServers() []string {
 		SK:       v.conf.SK,
 		DiscAddr: v.conf.Launcher.ServiceDisc,
 	}, &http.Client{Timeout: time.Duration(1) * time.Second}, "")
-	//ctx, _ := context.WithTimeout(context.Background(), 7*time.Second)
 	vpnServers, err := sdClient.Services(context.Background(), 0)
 	if err != nil {
 		v.log.Error("Error getting public vpn servers: ", err)
-		return nil
+		return nil, err
 	}
 	serverAddrs := make([]string, len(vpnServers))
 	for idx, server := range vpnServers {
 		serverAddrs[idx] = server.Addr.PubKey().String()
 	}
-	return serverAddrs
+	return serverAddrs, nil
 }
 
 // RemoteVisors return list of connected remote visors
-func (v *Visor) RemoteVisors() []string {
+func (v *Visor) RemoteVisors() ([]string, error) {
 	var visors []string
 	for _, conn := range v.remoteVisors {
 		visors = append(visors, conn.Addr.PK.String())
 	}
-	return visors
+	return visors, nil
 }
 
 // TransportTypes implements API.

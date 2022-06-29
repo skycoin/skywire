@@ -1,4 +1,4 @@
-package rtfind
+package clirtfind
 
 import (
 	"fmt"
