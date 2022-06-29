@@ -19,7 +19,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
-	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
@@ -128,7 +128,7 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 
 // Serve dials VPN server, sets up TUN and establishes VPN session.
 func (c *Client) Serve() error {
-	c.setAppStatus(launcher.AppDetailedStatusStarting)
+	c.setAppStatus(appserver.AppDetailedStatusStarting)
 	if err := c.setSysPrivileges(); err != nil {
 		c.setAppError(err)
 		return fmt.Errorf("failed to setup system privileges: %w", err)
@@ -179,15 +179,15 @@ func (c *Client) Serve() error {
 	}()
 
 	defer func() {
-		c.setAppStatus(launcher.AppDetailedStatusShuttingDown)
+		c.setAppStatus(appserver.AppDetailedStatusShuttingDown)
 		c.resetConnDuration()
 	}()
 
-	c.setAppStatus(launcher.AppDetailedStatusVPNConnecting)
+	c.setAppStatus(appserver.AppDetailedStatusVPNConnecting)
 
 	r := netutil.NewRetrier(nil, netutil.DefaultInitBackoff, netutil.DefaultMaxBackoff, 3, netutil.DefaultFactor).
 		WithErrWhitelist(errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
-			errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound, errErrSetupNode, errNotPermited)
+			errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound, errErrSetupNode, errNotPermitted)
 
 	err := r.Do(context.Background(), func() error {
 		if c.isClosed() {
@@ -197,19 +197,18 @@ func (c *Client) Serve() error {
 		if err := c.dialServeConn(); err != nil {
 			switch err {
 			case errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
-				errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound, errErrSetupNode, errNotPermited:
+				errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound, errErrSetupNode, errNotPermitted:
 				c.setAppError(err)
 				c.resetConnDuration()
 				return err
 			default:
 				c.resetConnDuration()
-				c.setAppStatus(launcher.AppDetailedStatusReconnecting)
+				c.setAppStatus(appserver.AppDetailedStatusReconnecting)
 				c.setAppError(errTimeout)
 				fmt.Println("\nConnection broke, reconnecting...")
 				return fmt.Errorf("dialServeConn: %w", err)
 			}
 		}
-
 		return nil
 	})
 	if err != nil {
@@ -233,7 +232,7 @@ func (c *Client) ListenIPC(client *ipc.Client) {
 
 		if m != nil {
 			if m.MsgType == skyenv.IPCShutdownMessageType {
-				print(fmt.Sprintln("Stopping " + skyenv.VPNClientName + " via IPC"))
+				fmt.Println("Stopping " + skyenv.VPNClientName + " via IPC")
 				break
 			}
 		}
@@ -427,7 +426,7 @@ func (c *Client) serveConn(conn net.Conn) error {
 		return fmt.Errorf("error routing traffic through TUN %s: %w", tun.Name(), err)
 	}
 
-	c.setAppStatus(launcher.AppDetailedStatusRunning)
+	c.setAppStatus(appserver.AppDetailedStatusRunning)
 	c.resetConnDuration()
 	t := time.NewTicker(time.Second)
 
@@ -763,7 +762,7 @@ func (c *Client) dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, erro
 	return conn, nil
 }
 
-func (c *Client) setAppStatus(status launcher.AppDetailedStatus) {
+func (c *Client) setAppStatus(status appserver.AppDetailedStatus) {
 	if err := c.appCl.SetDetailedStatus(string(status)); err != nil {
 		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
 	}
