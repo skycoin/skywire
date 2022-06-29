@@ -17,7 +17,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -353,7 +353,7 @@ var genConfigCmd = &cobra.Command{
 			for _, app := range apps {
 				appsSlice[app] = true
 			}
-			var newConfLauncherApps []launcher.AppConfig
+			var newConfLauncherApps []appserver.AppConfig
 			for _, app := range conf.Launcher.Apps {
 				if _, ok := appsSlice[app.Name]; !ok {
 					newConfLauncherApps = append(newConfLauncherApps, app)

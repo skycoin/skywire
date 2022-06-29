@@ -37,10 +37,8 @@ func AddRoute(ipCIDR, gateway string) error {
 				return nil
 			}
 		}
-
 		return err
 	}
-
 	return nil
 }
 
@@ -54,6 +52,5 @@ func modifyRoutingTable(action, ipCIDR, gateway string) error {
 	if err != nil {
 		return fmt.Errorf("error parsing IP CIDR: %w", err)
 	}
-
 	return osutil.Run("route", action, "-net", ip, gateway, netmask)
 }

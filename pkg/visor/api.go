@@ -21,7 +21,6 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/app/appserver"
-	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -38,8 +37,8 @@ type API interface {
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
 
-	App(appName string) (*launcher.AppState, error)
-	Apps() ([]*launcher.AppState, error)
+	App(appName string) (*appserver.AppState, error)
+	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
 	StopApp(appName string) error
 	SetAppDetailedStatus(appName, state string) error
@@ -95,16 +94,16 @@ type HealthCheckable interface {
 
 // Overview provides a range of basic information about a Visor.
 type Overview struct {
-	PubKey          cipher.PubKey        `json:"local_pk"`
-	BuildInfo       *buildinfo.Info      `json:"build_info"`
-	AppProtoVersion string               `json:"app_protocol_version"`
-	Apps            []*launcher.AppState `json:"apps"`
-	Transports      []*TransportSummary  `json:"transports"`
-	RoutesCount     int                  `json:"routes_count"`
-	LocalIP         string               `json:"local_ip"`
-	PublicIP        string               `json:"public_ip"`
-	IsSymmetricNAT  bool                 `json:"is_symmetic_nat"`
-	Hypervisors     []cipher.PubKey      `json:"hypervisors"`
+	PubKey          cipher.PubKey         `json:"local_pk"`
+	BuildInfo       *buildinfo.Info       `json:"build_info"`
+	AppProtoVersion string                `json:"app_protocol_version"`
+	Apps            []*appserver.AppState `json:"apps"`
+	Transports      []*TransportSummary   `json:"transports"`
+	RoutesCount     int                   `json:"routes_count"`
+	LocalIP         string                `json:"local_ip"`
+	PublicIP        string                `json:"public_ip"`
+	IsSymmetricNAT  bool                  `json:"is_symmetic_nat"`
+	Hypervisors     []cipher.PubKey       `json:"hypervisors"`
 }
 
 // Overview implements API.
@@ -299,15 +298,15 @@ func (v *Visor) Uptime() (float64, error) {
 }
 
 // Apps implements API.
-func (v *Visor) Apps() ([]*launcher.AppState, error) {
+func (v *Visor) Apps() ([]*appserver.AppState, error) {
 	return v.appL.AppStates(), nil
 }
 
 // App implements API.
-func (v *Visor) App(appName string) (*launcher.AppState, error) {
+func (v *Visor) App(appName string) (*appserver.AppState, error) {
 	appState, ok := v.appL.AppState(appName)
 	if !ok {
-		return &launcher.AppState{}, ErrAppProcNotRunning
+		return &appserver.AppState{}, ErrAppProcNotRunning
 	}
 	return appState, nil
 }
@@ -363,7 +362,6 @@ func (v *Visor) SetAppDetailedStatus(appName, status string) error {
 		return ErrAppProcNotRunning
 	}
 
-	v.log.Infof("Setting app detailed status %v for app %v", status, appName)
 	proc.SetDetailedStatus(status)
 
 	return nil
