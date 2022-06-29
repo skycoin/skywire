@@ -616,8 +616,8 @@ func (rg *RouteGroup) handleNetworkProbePacket(packet routing.Packet) error {
 	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond)).UTC()
 
 	latency := time.Now().UTC().Sub(sentAt).Milliseconds()
-	// todo (ersonp): this is a dirty fix, we nned to implement new packets Ping and Pong to calculate the RTT.
-	// if larency is negative we set it to be the previous one
+	// todo (ersonp): this is a dirty fix, we need to implement new packets Ping and Pong to calculate the RTT.
+	// if latency is negative we set it to be the previous one
 	if math.Signbit(float64(latency)) {
 		latency = int64(rg.networkStats.Latency())
 	}
