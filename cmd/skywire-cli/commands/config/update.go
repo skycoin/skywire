@@ -1,4 +1,4 @@
-package config
+package cliconfig
 
 import (
 	"encoding/json"
@@ -8,11 +8,11 @@ import (
 	"strings"
 
 	"github.com/sirupsen/logrus"
-	"github.com/spf13/cobra"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
+	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -250,7 +250,6 @@ func setDefaults() {
 	}
 
 }
-
 
 var hyperVisorUpdateCmd = &cobra.Command{
 	Use:   "hv",

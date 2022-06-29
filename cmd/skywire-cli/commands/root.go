@@ -6,13 +6,13 @@ import (
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire/cmd/skywire-cli/commands/completion"
-	"github.com/skycoin/skywire/cmd/skywire-cli/commands/config"
-	"github.com/skycoin/skywire/cmd/skywire-cli/commands/dmsgpty"
-	"github.com/skycoin/skywire/cmd/skywire-cli/commands/hv"
-	"github.com/skycoin/skywire/cmd/skywire-cli/commands/mdisc"
-	"github.com/skycoin/skywire/cmd/skywire-cli/commands/rtfind"
-	"github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
+	clicompletion "github.com/skycoin/skywire/cmd/skywire-cli/commands/completion"
+	cliconfig "github.com/skycoin/skywire/cmd/skywire-cli/commands/config"
+	clidmsgpty "github.com/skycoin/skywire/cmd/skywire-cli/commands/dmsgpty"
+	clihv "github.com/skycoin/skywire/cmd/skywire-cli/commands/hv"
+	climdisc "github.com/skycoin/skywire/cmd/skywire-cli/commands/mdisc"
+	clirtfind "github.com/skycoin/skywire/cmd/skywire-cli/commands/rtfind"
+	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 )
 
 var rootCmd = &cobra.Command{
@@ -29,13 +29,13 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(
-		config.RootCmd,
-		dmsgpty.RootCmd,
+		cliconfig.RootCmd,
+		clidmsgpty.RootCmd,
 		clivisor.RootCmd,
-		hv.RootCmd,
-		rtfind.RootCmd,
-		mdisc.RootCmd,
-		completion.RootCmd,
+		clihv.RootCmd,
+		clirtfind.RootCmd,
+		climdisc.RootCmd,
+		clicompletion.RootCmd,
 	)
 }
 

@@ -1,4 +1,4 @@
-package hv
+package clihv
 
 import (
 	"github.com/spf13/cobra"
@@ -8,10 +8,10 @@ import (
 func init() {
 	RootCmd.AddCommand(hvuiCmd)
 }
-// RootCmd contains commands that interact with the skywire-visor
+
 var hvuiCmd = &cobra.Command{
 	Use:   "ui",
-	Short: "hypervisor UI",
+	Short: "Hypervisor UI",
 	Run: func(_ *cobra.Command, _ []string) {
 		//TODO: get the actual port from config instead of using default value here
 		if err := webbrowser.Open("http://127.0.0.1:8000/"); err != nil {
