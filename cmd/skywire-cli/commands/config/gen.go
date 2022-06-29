@@ -1,4 +1,4 @@
-package config
+package cliconfig
 
 import (
 	"encoding/json"
@@ -20,7 +20,6 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
-
 
 func init() {
 	//disable sorting, flags appear in the order shown here

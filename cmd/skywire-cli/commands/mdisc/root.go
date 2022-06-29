@@ -1,4 +1,4 @@
-package mdisc
+package climdisc
 
 import (
 	"context"
