@@ -32,7 +32,7 @@ func TestRouteGroup_RemoteAddr(t *testing.T) {
 
 func createRouteGroup(cfg *RouteGroupConfig) *RouteGroup {
 	l := logging.NewMasterLogger()
-	rt := routing.NewTable()
+	rt := routing.NewTable(l.PackageLogger("rgt"))
 
 	pk1, _ := cipher.GenerateKeyPair()
 	pk2, _ := cipher.GenerateKeyPair()
