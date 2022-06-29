@@ -8,8 +8,8 @@ function CleanStage
     if (Test-Path ".\scripts\win_installer\build") { Remove-Item ".\scripts\win_installer\build" -Recurse -Force}
     if (Test-Path ".\scripts\win_installer\wintun.zip") { Remove-Item ".\scripts\win_installer\wintun.zip" -Recurse -Force}
     if (Test-Path ".\scripts\win_installer\wintun") { Remove-Item ".\scripts\win_installer\wintun" -Recurse -Force}
-    if (Test-Path ".\wix.zip") { Remove-Item ".\wix.zip" -Recurse -Force}
-    if (Test-Path ".\wix") { Remove-Item ".\wix" -Recurse -Force}
+    if (Test-Path ".\scripts\win_installer\wix.zip") { Remove-Item ".\scripts\win_installet\wix.zip" -Recurse -Force}
+    if (Test-Path ".\scripts\win_installer\wix") { Remove-Item ".\scripts\win_installerwix" -Recurse -Force}
     if (Test-Path ".\scripts\win_installer\UI.wixobj") { Remove-Item ".\scripts\win_installer\UI.wixobj" -Recurse -Force}
     if (Test-Path ".\scripts\win_installer\Product.wixobj") { Remove-Item ".\scripts\win_installer\Product.wixobj" -Recurse -Force}
     if (Test-Path ".\scripts\win_installer\skywire.msi") { Remove-Item ".\scripts\win_installer\skywire.msi" -Recurse -Force}
