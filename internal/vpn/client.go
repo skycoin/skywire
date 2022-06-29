@@ -129,46 +129,27 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 // Serve dials VPN server, sets up TUN and establishes VPN session.
 func (c *Client) Serve() error {
 	c.setAppStatus(launcher.AppDetailedStatusStarting)
-	if err := c.setSysPrivileges(); err != nil {
-		c.setAppError(err)
-		return fmt.Errorf("failed to setup system privileges: %w", err)
-	}
 	// we setup direct routes to skywire services once for all the client lifetime since routes don't change.
 	// but if they change, new routes get delivered to the app via callbacks.
 	if err := c.setupDirectRoutes(); err != nil {
-		c.releaseSysPrivileges()
 		c.setAppError(err)
 		return fmt.Errorf("error setting up direct routes: %w", err)
 	}
-	c.releaseSysPrivileges()
 
 	defer func() {
-		if err := c.setSysPrivileges(); err != nil {
-			fmt.Printf("failed to setup system privileges: %v\n", err)
-			return
-		}
-		defer c.releaseSysPrivileges()
-
 		c.removeDirectRoutes()
 	}()
 
 	// we call this preliminary, so it will be called on app stop
 	defer func() {
 		if c.cfg.Killswitch {
-			err := c.setSysPrivileges()
-			if err != nil {
-				print(fmt.Sprintf("Error setting up system privileges: %v\n", err))
-			} else {
-				c.prevTUNGatewayMu.Lock()
-				if len(c.prevTUNGateway) > 0 {
-					fmt.Printf("Routing traffic directly, previous TUN gateway: %s\n", c.prevTUNGateway.String())
-					c.routeTrafficDirectly(c.prevTUNGateway)
-				}
-				c.prevTUNGateway = nil
-				c.prevTUNGatewayMu.Unlock()
-
-				c.releaseSysPrivileges()
+			c.prevTUNGatewayMu.Lock()
+			if len(c.prevTUNGateway) > 0 {
+				fmt.Printf("Routing traffic directly, previous TUN gateway: %s\n", c.prevTUNGateway.String())
+				c.routeTrafficDirectly(c.prevTUNGateway)
 			}
+			c.prevTUNGateway = nil
+			c.prevTUNGatewayMu.Unlock()
 		}
 
 		if err := c.closeTUN(); err != nil {
@@ -264,21 +245,11 @@ func (c *Client) AddDirectRoute(ip net.IP) error {
 
 	c.directIPs = append(c.directIPs, ip)
 
-	if err := c.setSysPrivileges(); err != nil {
-		return fmt.Errorf("failed to setup system privileges: %w", err)
-	}
-	defer c.releaseSysPrivileges()
-
 	return c.setupDirectRoute(ip)
 }
 
 func (c *Client) removeDirectRouteFn(ip net.IP, i int) error {
 	c.directIPs = append(c.directIPs[:i], c.directIPs[i+1:]...)
-
-	if err := c.setSysPrivileges(); err != nil {
-		return fmt.Errorf("failed to setup system privileges: %w", err)
-	}
-	defer c.releaseSysPrivileges()
 
 	return c.removeDirectRoute(ip)
 }
@@ -296,24 +267,6 @@ func (c *Client) RemoveDirectRoute(ip net.IP) error {
 			}
 			break
 		}
-	}
-
-	return nil
-}
-
-func (c *Client) setSysPrivileges() error {
-	if runtime.GOOS != "windows" {
-		c.suidMu.Lock()
-
-		// we don't release the lock here to avoid races,
-		// lock will be released after reverting system privileges
-
-		suid, err := setupClientSysPrivileges()
-		if err != nil {
-			return err
-		}
-
-		c.suid = suid
 	}
 
 	return nil
@@ -359,7 +312,7 @@ func (c *Client) setupTUN(tunIP, tunGateway net.IP) error {
 		return errors.New("TUN is not created")
 	}
 
-	return SetupTUN(c.tun.Name(), tunIP.String()+TUNNetmaskCIDR, tunGateway.String(), TUNMTU)
+	return c.SetupTUN(c.tun.Name(), tunIP.String()+TUNNetmaskCIDR, tunGateway.String(), TUNMTU)
 }
 
 func (c *Client) serveConn(conn net.Conn) error {
@@ -372,17 +325,6 @@ func (c *Client) serveConn(conn net.Conn) error {
 	fmt.Printf("Performed handshake with %s\n", conn.RemoteAddr())
 	fmt.Printf("Local TUN IP: %s\n", tunIP.String())
 	fmt.Printf("Local TUN gateway: %s\n", tunGateway.String())
-
-	if err := c.setSysPrivileges(); err != nil {
-		return fmt.Errorf("failed to setup system privileges: %w", err)
-	}
-
-	// this call is important. it will either run on an error down the line,
-	// or, in case VPN sessions finishes, it will be the last call in deferred stack,
-	// releasing system privileges after cleanup
-	defer func() {
-		c.releaseSysPrivileges()
-	}()
 
 	fmt.Println("CREATING TUN INTERFACE")
 	tun, err := c.createTUN()
@@ -439,7 +381,6 @@ func (c *Client) serveConn(conn net.Conn) error {
 	}()
 
 	// we release privileges here (user is not root for Mac OS systems from here on)
-	c.releaseSysPrivileges()
 
 	connToTunDoneCh := make(chan struct{})
 	tunToConnCh := make(chan struct{})
@@ -483,11 +424,6 @@ serveLoop:
 		}
 	}
 
-	// here we setup system privileges again, so deferred calls may be done safely
-	if err := c.setSysPrivileges(); err != nil {
-		print(fmt.Sprintf("Failed to setup system privileges for cleanup: %v\n", err))
-	}
-
 	return nil
 }
 
@@ -521,17 +457,17 @@ func (c *Client) dialServeConn() error {
 func (c *Client) routeTrafficThroughTUN(tunGateway net.IP, isNewRoute bool) error {
 	// route all traffic through TUN gateway
 	if isNewRoute {
-		if err := AddRoute(ipv4FirstHalfAddr, tunGateway.String()); err != nil {
+		if err := c.AddRoute(ipv4FirstHalfAddr, tunGateway.String()); err != nil {
 			return err
 		}
-		if err := AddRoute(ipv4SecondHalfAddr, tunGateway.String()); err != nil {
+		if err := c.AddRoute(ipv4SecondHalfAddr, tunGateway.String()); err != nil {
 			return err
 		}
 	} else {
-		if err := ChangeRoute(ipv4FirstHalfAddr, tunGateway.String()); err != nil {
+		if err := c.ChangeRoute(ipv4FirstHalfAddr, tunGateway.String()); err != nil {
 			return err
 		}
-		if err := ChangeRoute(ipv4SecondHalfAddr, tunGateway.String()); err != nil {
+		if err := c.ChangeRoute(ipv4SecondHalfAddr, tunGateway.String()); err != nil {
 			return err
 		}
 	}
@@ -543,10 +479,10 @@ func (c *Client) routeTrafficDirectly(tunGateway net.IP) {
 	fmt.Println("Routing all traffic through default network gateway")
 
 	// remove main route
-	if err := DeleteRoute(ipv4FirstHalfAddr, tunGateway.String()); err != nil {
+	if err := c.DeleteRoute(ipv4FirstHalfAddr, tunGateway.String()); err != nil {
 		print(fmt.Sprintf("Error routing traffic through default network gateway: %v\n", err))
 	}
-	if err := DeleteRoute(ipv4SecondHalfAddr, tunGateway.String()); err != nil {
+	if err := c.DeleteRoute(ipv4SecondHalfAddr, tunGateway.String()); err != nil {
 		print(fmt.Sprintf("Error routing traffic through default network gateway: %v\n", err))
 	}
 }
@@ -567,7 +503,7 @@ func (c *Client) setupDirectRoutes() error {
 func (c *Client) setupDirectRoute(ip net.IP) error {
 	if !ip.IsLoopback() {
 		fmt.Printf("Adding direct route to %s, via %s\n", ip.String(), c.defaultGateway.String())
-		if err := AddRoute(ip.String()+directRouteNetmaskCIDR, c.defaultGateway.String()); err != nil {
+		if err := c.AddRoute(ip.String()+directRouteNetmaskCIDR, c.defaultGateway.String()); err != nil {
 			return fmt.Errorf("error adding direct route to %s: %w", ip.String(), err)
 		}
 	}
@@ -578,7 +514,7 @@ func (c *Client) setupDirectRoute(ip net.IP) error {
 func (c *Client) removeDirectRoute(ip net.IP) error {
 	if !ip.IsLoopback() {
 		fmt.Printf("Removing direct route to %s\n", ip.String())
-		if err := DeleteRoute(ip.String()+directRouteNetmaskCIDR, c.defaultGateway.String()); err != nil {
+		if err := c.DeleteRoute(ip.String()+directRouteNetmaskCIDR, c.defaultGateway.String()); err != nil {
 			return err
 		}
 	}
