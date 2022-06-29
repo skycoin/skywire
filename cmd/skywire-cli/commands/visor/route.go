@@ -1,4 +1,4 @@
-package vroute
+package clivisor
 
 import (
 	"errors"
@@ -16,8 +16,17 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
+
+
+var routeCmd = &cobra.Command{
+	Use:   "route",
+	Short: "View and set rules",
+}
+
+
 func init() {
-	RootCmd.AddCommand(
+	RootCmd.AddCommand(routeCmd)
+	routeCmd.AddCommand(
 		lsRulesCmd,
 		ruleCmd,
 		rmRuleCmd,
@@ -27,7 +36,7 @@ func init() {
 
 var lsRulesCmd = &cobra.Command{
 	Use:   "ls-rules",
-	Short: "list routing rules",
+	Short: "List routing rules",
 	Run: func(_ *cobra.Command, _ []string) {
 		rules, err := rpcClient().RoutingRules()
 		internal.Catch(err)
@@ -38,7 +47,7 @@ var lsRulesCmd = &cobra.Command{
 
 var ruleCmd = &cobra.Command{
 	Use:   "rule <route-id>",
-	Short: "return routing rule by route ID key",
+	Short: "Return routing rule by route ID key",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		id, err := strconv.ParseUint(args[0], 10, 32)
@@ -53,7 +62,7 @@ var ruleCmd = &cobra.Command{
 
 var rmRuleCmd = &cobra.Command{
 	Use:   "rm-rule <route-id>",
-	Short: "remove routing rule",
+	Short: "Remove routing rule",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		id, err := strconv.ParseUint(args[0], 10, 32)
@@ -71,7 +80,7 @@ func init() {
 
 var addRuleCmd = &cobra.Command{
 	Use:   "add-rule (app <route-id> <local-pk> <local-port> <remote-pk> <remote-port> | fwd <next-route-id> <next-transport-id>)",
-	Short: "add routing rule",
+	Short: "Add routing rule",
 	Args: func(_ *cobra.Command, args []string) error {
 		if len(args) > 0 {
 			switch rt := args[0]; rt {

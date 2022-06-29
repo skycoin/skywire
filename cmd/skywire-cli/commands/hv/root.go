@@ -1,23 +1,32 @@
 package hv
 
 import (
+	"net"
+	"time"
 	"github.com/spf13/cobra"
-
-	"github.com/skycoin/skywire/cmd/skywire-cli/commands/hv/hvdmsg"
-	"github.com/skycoin/skywire/cmd/skywire-cli/commands/hv/hvskychat"
-	"github.com/skycoin/skywire/cmd/skywire-cli/commands/hv/hvui"
-	"github.com/skycoin/skywire/cmd/skywire-cli/commands/hv/hvvpn"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/visor"
 )
 
-func init() {
-	RootCmd.AddCommand(hvui.RootCmd)
-	RootCmd.AddCommand(hvvpn.RootCmd)
-	RootCmd.AddCommand(hvdmsg.RootCmd)
-	RootCmd.AddCommand(hvskychat.RootCmd)
-}
-
+var (
+	logger = logging.MustGetLogger("skywire-cli")
+	rpcAddr string
+	path string
+	pk   string
+	url  string
+	pkg  bool
+)
 // RootCmd contains commands that interact with the skywire-visor
 var RootCmd = &cobra.Command{
 	Use:   "hv",
-	Short: "open HVUI in browser",
+	Short: "Open HVUI in browser",
+}
+
+func rpcClient() visor.API {
+	const rpcDialTimeout = time.Second * 5
+	conn, err := net.DialTimeout("tcp", rpcAddr, rpcDialTimeout)
+	if err != nil {
+		logger.Fatal("RPC connection failed:", err)
+	}
+	return visor.NewRPCClient(logger, conn, visor.RPCPrefix, 0)
 }

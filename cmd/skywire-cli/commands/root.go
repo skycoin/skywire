@@ -31,7 +31,7 @@ func init() {
 	rootCmd.AddCommand(
 		config.RootCmd,
 		dmsgpty.RootCmd,
-		visor.RootCmd,
+		clivisor.RootCmd,
 		hv.RootCmd,
 		rtfind.RootCmd,
 		mdisc.RootCmd,
