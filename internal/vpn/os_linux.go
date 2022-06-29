@@ -6,7 +6,6 @@ package vpn
 import (
 	"errors"
 	"fmt"
-	"runtime"
 	"strconv"
 	"strings"
 
@@ -100,24 +99,6 @@ func (c *Client) DeleteRoute(ip, gateway string) error {
 	}
 	defer c.releaseSysPrivileges()
 	return osutil.Run("ip", "r", "del", ip, "via", gateway)
-}
-
-func (c *Client) setSysPrivileges() error {
-	if runtime.GOOS != "windows" {
-		c.suidMu.Lock()
-
-		// we don't release the lock here to avoid races,
-		// lock will be released after reverting system privileges
-
-		suid, err := setupClientSysPrivileges()
-		if err != nil {
-			return err
-		}
-
-		c.suid = suid
-	}
-
-	return nil
 }
 
 // Server
