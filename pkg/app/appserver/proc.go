@@ -3,6 +3,7 @@ package appserver
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/rpc"
 	"os"
@@ -66,6 +67,8 @@ type Proc struct {
 	errMx sync.RWMutex
 	err   string
 
+	cmdStderr io.ReadCloser
+
 	startWg sync.WaitGroup
 }
 
@@ -86,18 +89,23 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 
 	appLog, appLogDB := appcommon.NewProcLogger(conf, mLog)
 	cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").WriterLevel(logrus.DebugLevel)
-	cmd.Stderr = appLog.WithField("_module", moduleName).WithField("func", "(STDERR)").WriterLevel(logrus.ErrorLevel)
+
+	// we read the Stderr pipe in order to filter some false positive app errors
+	errorLog := appLog.WithField("_module", moduleName).WithField("func", "(STDERR)")
+	stderr, _ := cmd.StderrPipe() //nolint:errcheck
+	printStdErr(stderr, errorLog)
 
 	p := &Proc{
-		disc:    disc,
-		conf:    conf,
-		log:     mLog.PackageLogger(moduleName),
-		logDB:   appLogDB,
-		cmd:     cmd,
-		connCh:  make(chan struct{}, 1),
-		m:       m,
-		appName: appName,
-		startWg: sync.WaitGroup{},
+		disc:      disc,
+		conf:      conf,
+		log:       mLog.PackageLogger(moduleName),
+		logDB:     appLogDB,
+		cmd:       cmd,
+		connCh:    make(chan struct{}, 1),
+		m:         m,
+		appName:   appName,
+		startWg:   sync.WaitGroup{},
+		cmdStderr: stderr,
 	}
 
 	if runtime.GOOS == "windows" {
@@ -293,6 +301,9 @@ func (p *Proc) Stop() error {
 		if p.ipcServer != nil {
 			p.ipcServer.Close()
 		}
+		if p.cmdStderr != nil {
+			_ = p.cmdStderr.Close() //nolint:errcheck
+		}
 		p.waitMx.Unlock()
 		p.connOnce.Do(func() { close(p.connCh) })
 	}()
@@ -322,8 +333,12 @@ func (p *Proc) IsRunning() bool {
 func (p *Proc) SetDetailedStatus(status string) {
 	p.statusMx.Lock()
 	defer p.statusMx.Unlock()
-	if status == "Running" {
+	if status == AppDetailedStatusRunning {
 		p.startWg.Done()
+	}
+
+	if status == AppDetailedStatusRunning || status == AppDetailedStatusStopped {
+		p.log.Infof("App %v is %v", p.appName, status)
 	}
 
 	p.status = status

@@ -6,7 +6,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"runtime"
@@ -17,6 +16,7 @@ import (
 	"github.com/skycoin/skywire/internal/skysocks"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
@@ -31,7 +31,7 @@ func main() {
 	defer appCl.Close()
 
 	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
-		fmt.Printf("Failed to output build info: %v", err)
+		print(fmt.Sprintf("Failed to output build info: %v", err))
 	}
 
 	var passcode = flag.String("passcode", "", "Authorize user against this passcode")
@@ -39,12 +39,16 @@ func main() {
 
 	srv, err := skysocks.NewServer(*passcode, appCl)
 	if err != nil {
-		log.Fatal("Failed to create a new server: ", err)
+		setAppError(appCl, err)
+		print(fmt.Sprintf("Failed to create a new server: %v\n", err))
+		os.Exit(1)
 	}
 
 	l, err := appCl.Listen(netType, port)
 	if err != nil {
-		log.Fatalf("Error listening network %v on port %d: %v\n", netType, port, err)
+		setAppError(appCl, err)
+		print(fmt.Sprintf("Error listening network %v on port %d: %v\n", netType, port, err))
+		os.Exit(1)
 	}
 
 	fmt.Println("Starting serving proxy server")
@@ -52,7 +56,8 @@ func main() {
 	if runtime.GOOS == "windows" {
 		ipcClient, err := ipc.StartClient(skyenv.VPNClientName, nil)
 		if err != nil {
-			fmt.Printf("Error creating ipc server for VPN client: %v\n", err)
+			setAppError(appCl, err)
+			print(fmt.Sprintf("Error creating ipc server for VPN client: %v\n", err))
 			os.Exit(1)
 		}
 		go srv.ListenIPC(ipcClient)
@@ -64,15 +69,27 @@ func main() {
 			<-termCh
 
 			if err := srv.Close(); err != nil {
-				fmt.Println(err)
+				print(fmt.Sprintf("%v\n", err))
 				os.Exit(1)
 			}
 		}()
-
 	}
+	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
 
 	if err := srv.Serve(l); err != nil {
-		fmt.Println(err)
+		print(fmt.Sprintf("%v\n", err))
 		os.Exit(1)
+	}
+}
+
+func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
+	if err := appCl.SetDetailedStatus(string(status)); err != nil {
+		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
+	}
+}
+
+func setAppError(appCl *app.Client, appErr error) {
+	if err := appCl.SetError(appErr.Error()); err != nil {
+		print(fmt.Sprintf("Failed to set error %v: %v\n", appErr, err))
 	}
 }

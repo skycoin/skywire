@@ -1,3 +1,9 @@
+/**
+ * TODO: remove.
+ *
+ * Not used anymore, still here just as a precaution.
+ */
+
 import { Component, Inject, OnDestroy, AfterViewInit, ChangeDetectorRef } from '@angular/core';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialog, MatDialogConfig } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
