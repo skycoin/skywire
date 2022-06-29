@@ -1,34 +1,57 @@
-package vtp
+package clivisor
 
 import (
+	"errors"
+
 	"fmt"
 	"os"
 	"sort"
 	"text/tabwriter"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport"
+
 	"github.com/skycoin/skywire/pkg/visor"
+)
+
+var (
+	filterTypes   []string
+	filterPubKeys cipher.PubKeys
+	showLogs      bool
+	tpID transportID
+	tpPK cipher.PubKey
 )
 
 func init() {
 	lsTpCmd.Flags().SortFlags = false
-	RootCmd.AddCommand(
+	RootCmd.AddCommand(tpCmd)
+	tpCmd.AddCommand(
 		lsTypesCmd,
 		lsTpCmd,
-		tpCmd,
+		idCmd,
 		addTpCmd,
 		rmTpCmd,
+		discTpCmd,
 	)
+	discTpCmd.Flags().Var(&tpID, "id", "if specified, obtains a single transport of given ID")
+	discTpCmd.Flags().Var(&tpPK, "pk", "if specified, obtains transports associated with given public key")
+}
+
+// RootCmd contains commands that interact with the skywire-visor
+var tpCmd = &cobra.Command{
+	Use:   "tp",
+	Short: "View and set transports",
 }
 
 var lsTypesCmd = &cobra.Command{
 	Use:   "type",
-	Short: "transport types used by the local visor",
+	Short: "Transport types used by the local visor",
 	Run: func(_ *cobra.Command, _ []string) {
 		types, err := rpcClient().TransportTypes()
 		internal.Catch(err)
@@ -38,11 +61,6 @@ var lsTypesCmd = &cobra.Command{
 	},
 }
 
-var (
-	filterTypes   []string
-	filterPubKeys cipher.PubKeys
-	showLogs      bool
-)
 
 func init() {
 	lsTpCmd.Flags().StringSliceVarP(&filterTypes, "types", "t", filterTypes, "show transport(s) type(s) comma-separated")
@@ -52,7 +70,7 @@ func init() {
 
 var lsTpCmd = &cobra.Command{
 	Use:   "ls",
-	Short: "available transports",
+	Short: "Available transports",
 	Run: func(_ *cobra.Command, _ []string) {
 		transports, err := rpcClient().Transports(filterTypes, filterPubKeys, showLogs)
 		internal.Catch(err)
@@ -60,9 +78,9 @@ var lsTpCmd = &cobra.Command{
 	},
 }
 
-var tpCmd = &cobra.Command{
+var idCmd = &cobra.Command{
 	Use:   "id <transport-id>",
-	Short: "transport summary by id",
+	Short: "Transport summary by id",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		tpID := internal.ParseUUID("transport-id", args[0])
@@ -93,7 +111,7 @@ func init() {
 
 var addTpCmd = &cobra.Command{
 	Use:   "add <remote-public-key>",
-	Short: "add a transport",
+	Short: "Add a transport",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		pk := internal.ParsePK("remote-public-key", args[0])
@@ -115,25 +133,22 @@ var addTpCmd = &cobra.Command{
 				network.SUDPH,
 				network.DMSG,
 			}
-
 			for _, transportType := range transportTypes {
 				tp, err = rpcClient().AddTransport(pk, string(transportType), timeout)
 				if err == nil {
 					logger.Infof("Established %v transport to %v", transportType, pk)
 					break
 				}
-
 				logger.WithError(err).Warnf("Failed to establish %v transport", transportType)
 			}
 		}
-
 		printTransports(tp)
 	},
 }
 
 var rmTpCmd = &cobra.Command{
 	Use:   "rm <transport-id>",
-	Short: "remove transport(s) by id",
+	Short: "Remove transport(s) by id",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		tID := internal.ParseUUID("transport-id", args[0])
@@ -162,4 +177,60 @@ func sortTransports(tps ...*visor.TransportSummary) {
 	sort.Slice(tps, func(i, j int) bool {
 		return tps[i].ID.String() < tps[j].ID.String()
 	})
+}
+
+var discTpCmd = &cobra.Command{
+	Use:   "disc (--id=<transport-id> | --pk=<edge-public-key>)",
+	Short: "Discover transport(s) by ID or public key",
+	Args: func(_ *cobra.Command, _ []string) error {
+		var (
+			nilID = uuid.UUID(tpID) == (uuid.UUID{})
+			nilPK = tpPK.Null()
+		)
+		if nilID && nilPK {
+			return errors.New("must specify --id flag or --pk flag")
+		}
+		if !nilID && !nilPK {
+			return errors.New("cannot specify --id and --pk flag")
+		}
+		return nil
+	},
+	Run: func(_ *cobra.Command, _ []string) {
+
+		if rc := rpcClient(); tpPK.Null() {
+			entry, err := rc.DiscoverTransportByID(uuid.UUID(tpID))
+			internal.Catch(err)
+			printTransportEntries(entry)
+		} else {
+			entries, err := rc.DiscoverTransportsByPK(tpPK)
+			internal.Catch(err)
+			printTransportEntries(entries...)
+		}
+	},
+}
+
+func printTransportEntries(entries ...*transport.Entry) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
+	_, err := fmt.Fprintln(w, "id\ttype\tedge1\tedge2")
+	internal.Catch(err)
+	for _, e := range entries {
+		_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+			e.ID, e.Type, e.Edges[0], e.Edges[1])
+		internal.Catch(err)
+	}
+	internal.Catch(w.Flush())
+}
+type transportID uuid.UUID
+// String implements pflag.Value
+func (t transportID) String() string { return uuid.UUID(t).String() }
+// Type implements pflag.Value
+func (transportID) Type() string { return "transportID" }
+// Set implements pflag.Value
+func (t *transportID) Set(s string) error {
+	tID, err := uuid.Parse(s)
+	if err != nil {
+		return err
+	}
+	*t = transportID(tID)
+	return nil
 }

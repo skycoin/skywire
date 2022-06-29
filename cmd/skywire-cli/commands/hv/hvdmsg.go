@@ -1,4 +1,4 @@
-package hvdmsg
+package hv
 
 import (
 	"fmt"
@@ -10,23 +10,24 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
-var (
-	path string
-	pkg  bool
-	pk   string
-	url  string
-)
-
 func init() {
-	RootCmd.AddCommand(dmsgUICmd)
+	RootCmd.AddCommand(dmsgCmd)
+	dmsgCmd.PersistentFlags().StringVarP(&rpcAddr, "rpc", "", "localhost:3435", "RPC server address")
+	dmsgCmd.AddCommand(
+		dmsgUICmd,
+		dmsgURLCmd,
+	)
 	dmsgUICmd.Flags().StringVarP(&path, "input", "i", "", "read from specified config file")
 	dmsgUICmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from "+visorconfig.Pkgpath)
 	dmsgUICmd.Flags().StringVarP(&pk, "visor", "v", "", "public key of visor to connect to")
-
-	RootCmd.AddCommand(dmsgURLCmd)
 	dmsgURLCmd.Flags().StringVarP(&path, "input", "i", "", "read from specified config file")
 	dmsgURLCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from "+visorconfig.Pkgpath)
 	dmsgURLCmd.Flags().StringVarP(&pk, "visor", "v", "", "public key of visor to connect to")
+}
+
+var dmsgCmd = &cobra.Command{
+	Use:   "dmsg",
+	Short: "dmsgpty UI",
 }
 
 var dmsgUICmd = &cobra.Command{
