@@ -5,7 +5,7 @@ import (
 	"net"
 )
 
-func parseCIDR(ipCIDR string) (ipStr, netmask string, err error) {
+func parseCIDR(ipCIDR string) (ipStr, netmask string, err error) { //nolint : actually used in os_windows.go
 	ip, net, err := net.ParseCIDR(ipCIDR)
 	if err != nil {
 		return "", "", err

@@ -17,13 +17,19 @@ import (
 
 // SetupTUN sets the allocated TUN interface up, setting its IP, gateway, netmask and MTU.
 func (c *Client) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
-	c.setSysPrivileges()
+	if err := c.setSysPrivileges(); err != nil {
+		print(fmt.Sprintf("Failed to setup system privileges for SetupTUN: %v\n", err))
+		return err
+	}
 	if err := osutil.Run("ip", "a", "add", ipCIDR, "dev", ifcName); err != nil {
 		return fmt.Errorf("error assigning IP: %w", err)
 	}
 	c.releaseSysPrivileges()
 
-	c.setSysPrivileges()
+	if err := c.setSysPrivileges(); err != nil {
+		print(fmt.Sprintf("Failed to setup system privileges for SetupTUN: %v\n", err))
+		return err
+	}
 	if err := osutil.Run("ip", "link", "set", "dev", ifcName, "mtu", strconv.Itoa(mtu)); err != nil {
 		return fmt.Errorf("error setting MTU: %w", err)
 	}
@@ -34,7 +40,10 @@ func (c *Client) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 		return fmt.Errorf("error parsing IP CIDR: %w", err)
 	}
 
-	c.setSysPrivileges()
+	if err := c.setSysPrivileges(); err != nil {
+		print(fmt.Sprintf("Failed to setup system privileges for SetupTUN: %v\n", err))
+		return err
+	}
 	if err := osutil.Run("ip", "link", "set", ifcName, "up"); err != nil {
 		return fmt.Errorf("error setting interface up: %w", err)
 	}
@@ -50,14 +59,20 @@ func (c *Client) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 // ChangeRoute changes current route to `ip` to go through the `gateway`
 // in the OS routing table.
 func (c *Client) ChangeRoute(ip, gateway string) error {
-	c.setSysPrivileges()
+	if err := c.setSysPrivileges(); err != nil {
+		print(fmt.Sprintf("Failed to setup system privileges for ChangeRoute: %v\n", err))
+		return err
+	}
 	defer c.releaseSysPrivileges()
 	return osutil.Run("ip", "r", "change", ip, "via", gateway)
 }
 
 // AddRoute adds route to `ip` with `netmask` through the `gateway` to the OS routing table.
 func (c *Client) AddRoute(ip, gateway string) error {
-	c.setSysPrivileges()
+	if err := c.setSysPrivileges(); err != nil {
+		print(fmt.Sprintf("Failed to setup system privileges for AddRoute: %v\n", err))
+		return err
+	}
 	defer c.releaseSysPrivileges()
 	err := osutil.Run("ip", "r", "add", ip, "via", gateway)
 
@@ -79,7 +94,10 @@ func (c *Client) AddRoute(ip, gateway string) error {
 
 // DeleteRoute removes route to `ip` with `netmask` through the `gateway` from the OS routing table.
 func (c *Client) DeleteRoute(ip, gateway string) error {
-	c.setSysPrivileges()
+	if err := c.setSysPrivileges(); err != nil {
+		print(fmt.Sprintf("Failed to setup system privileges for DeleteRoute: %v\n", err))
+		return err
+	}
 	defer c.releaseSysPrivileges()
 	return osutil.Run("ip", "r", "del", ip, "via", gateway)
 }
