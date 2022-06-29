@@ -89,7 +89,7 @@ var (
 	trs vinit.Module
 	// Routing system
 	rt vinit.Module
-	// Application launcer
+	// Application launcher
 	launch vinit.Module
 	// CLI
 	cli vinit.Module
@@ -458,7 +458,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) error {
 	ctx, cancel := context.WithCancel(ctx)
-	// To remove the block set by NewTransportListener if dmsg is not initilized
+	// To remove the block set by NewTransportListener if dmsg is not initialized
 	go func() {
 		ts, err := ts.NewTransportListener(ctx, v.conf, v.dmsgC, v.tpM, v.MasterLogger())
 		if err != nil {
@@ -472,7 +472,7 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 		}
 	}()
 
-	// waiting for atleast one transport to initilize
+	// waiting for at least one transport to initialize
 	<-v.tpM.Ready()
 
 	v.pushCloseStack("transport_setup.rpc", func() error {
