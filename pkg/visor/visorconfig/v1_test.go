@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
@@ -26,7 +26,7 @@ func Test_updateStringArg(t *testing.T) {
 			name: "Case 1",
 			args: args{
 				conf: &Launcher{
-					Apps: []launcher.AppConfig{
+					Apps: []appserver.AppConfig{
 						{
 							Name: "skysocks-client",
 							Args: []string{"-passcode", "1234"},
@@ -39,7 +39,7 @@ func Test_updateStringArg(t *testing.T) {
 			},
 			wantResult: true,
 			wantConf: &Launcher{
-				Apps: []launcher.AppConfig{
+				Apps: []appserver.AppConfig{
 					{
 						Name: "skysocks-client",
 						Args: []string{"-passcode", "4321"},
@@ -51,7 +51,7 @@ func Test_updateStringArg(t *testing.T) {
 			name: "Case 2",
 			args: args{
 				conf: &Launcher{
-					Apps: []launcher.AppConfig{
+					Apps: []appserver.AppConfig{
 						{
 							Name: "skysocks-client",
 							Args: []string{"-passcode", "1234"},
@@ -64,7 +64,7 @@ func Test_updateStringArg(t *testing.T) {
 			},
 			wantResult: true,
 			wantConf: &Launcher{
-				Apps: []launcher.AppConfig{
+				Apps: []appserver.AppConfig{
 					{
 						Name: "skysocks-client",
 						Args: []string{},
@@ -76,7 +76,7 @@ func Test_updateStringArg(t *testing.T) {
 			name: "Case 3",
 			args: args{
 				conf: &Launcher{
-					Apps: []launcher.AppConfig{
+					Apps: []appserver.AppConfig{
 						{
 							Name: "skysocks-client",
 							Args: []string{"-t", "-passcode", "1234", "-test", "abc"},
@@ -89,7 +89,7 @@ func Test_updateStringArg(t *testing.T) {
 			},
 			wantResult: true,
 			wantConf: &Launcher{
-				Apps: []launcher.AppConfig{
+				Apps: []appserver.AppConfig{
 					{
 						Name: "skysocks-client",
 						Args: []string{"-t", "-test", "abc"},
@@ -101,7 +101,7 @@ func Test_updateStringArg(t *testing.T) {
 			name: "Case 4",
 			args: args{
 				conf: &Launcher{
-					Apps: []launcher.AppConfig{
+					Apps: []appserver.AppConfig{
 						{
 							Name: "skysocks-client",
 							Args: []string{"-t", "-passcode", "1234", "-test", "abc"},
@@ -114,7 +114,7 @@ func Test_updateStringArg(t *testing.T) {
 			},
 			wantResult: true,
 			wantConf: &Launcher{
-				Apps: []launcher.AppConfig{
+				Apps: []appserver.AppConfig{
 					{
 						Name: "skysocks-client",
 						Args: []string{"-t", "-passcode", "1234", "-test", "abc", "-arg1", "678"},
@@ -126,7 +126,7 @@ func Test_updateStringArg(t *testing.T) {
 			name: "Case 5",
 			args: args{
 				conf: &Launcher{
-					Apps: []launcher.AppConfig{
+					Apps: []appserver.AppConfig{
 						{
 							Name: "skysocks-client",
 							Args: []string{"-t", "-passcode", "1234", "-test", "abc"},
@@ -139,7 +139,7 @@ func Test_updateStringArg(t *testing.T) {
 			},
 			wantResult: false,
 			wantConf: &Launcher{
-				Apps: []launcher.AppConfig{
+				Apps: []appserver.AppConfig{
 					{
 						Name: "skysocks-client",
 						Args: []string{"-t", "-passcode", "1234", "-test", "abc"},
@@ -151,7 +151,7 @@ func Test_updateStringArg(t *testing.T) {
 			name: "Case 6",
 			args: args{
 				conf: &Launcher{
-					Apps: []launcher.AppConfig{
+					Apps: []appserver.AppConfig{
 						{
 							Name: "skysocks-client",
 						},
@@ -163,7 +163,7 @@ func Test_updateStringArg(t *testing.T) {
 			},
 			wantResult: true,
 			wantConf: &Launcher{
-				Apps: []launcher.AppConfig{
+				Apps: []appserver.AppConfig{
 					{
 						Name: "skysocks-client",
 					},
@@ -198,7 +198,7 @@ func Test_updateBoolArg(t *testing.T) {
 			name: "Single dash flag, absent value",
 			args: args{
 				conf: &Launcher{
-					Apps: []launcher.AppConfig{
+					Apps: []appserver.AppConfig{
 						{
 							Name: skyenv.VPNClientName,
 							Args: []string{"-passcode", "1234"},
@@ -211,7 +211,7 @@ func Test_updateBoolArg(t *testing.T) {
 			},
 			wantResult: true,
 			wantConf: &Launcher{
-				Apps: []launcher.AppConfig{
+				Apps: []appserver.AppConfig{
 					{
 						Name: skyenv.VPNClientName,
 						Args: []string{"-passcode", "1234", "-killswitch=true"},
@@ -223,7 +223,7 @@ func Test_updateBoolArg(t *testing.T) {
 			name: "Double dash flag, absent value",
 			args: args{
 				conf: &Launcher{
-					Apps: []launcher.AppConfig{
+					Apps: []appserver.AppConfig{
 						{
 							Name: skyenv.VPNClientName,
 							Args: []string{"-passcode", "1234"},
@@ -236,7 +236,7 @@ func Test_updateBoolArg(t *testing.T) {
 			},
 			wantResult: true,
 			wantConf: &Launcher{
-				Apps: []launcher.AppConfig{
+				Apps: []appserver.AppConfig{
 					{
 						Name: skyenv.VPNClientName,
 						Args: []string{"-passcode", "1234", "-killswitch=false"},
@@ -248,7 +248,7 @@ func Test_updateBoolArg(t *testing.T) {
 			name: "Present valid double-dash-named value",
 			args: args{
 				conf: &Launcher{
-					Apps: []launcher.AppConfig{
+					Apps: []appserver.AppConfig{
 						{
 							Name: skyenv.VPNClientName,
 							Args: []string{"-passcode", "1234", "--killswitch=true"},
@@ -261,7 +261,7 @@ func Test_updateBoolArg(t *testing.T) {
 			},
 			wantResult: true,
 			wantConf: &Launcher{
-				Apps: []launcher.AppConfig{
+				Apps: []appserver.AppConfig{
 					{
 						Name: skyenv.VPNClientName,
 						Args: []string{"-passcode", "1234", "-killswitch=false"},
@@ -273,7 +273,7 @@ func Test_updateBoolArg(t *testing.T) {
 			name: "Present valid single-dash-named value",
 			args: args{
 				conf: &Launcher{
-					Apps: []launcher.AppConfig{
+					Apps: []appserver.AppConfig{
 						{
 							Name: skyenv.VPNClientName,
 							Args: []string{"-passcode", "1234", "-killswitch=false"},
@@ -286,7 +286,7 @@ func Test_updateBoolArg(t *testing.T) {
 			},
 			wantResult: true,
 			wantConf: &Launcher{
-				Apps: []launcher.AppConfig{
+				Apps: []appserver.AppConfig{
 					{
 						Name: skyenv.VPNClientName,
 						Args: []string{"-passcode", "1234", "-killswitch=true"},
@@ -298,7 +298,7 @@ func Test_updateBoolArg(t *testing.T) {
 			name: "Present invalid single-dash-named value",
 			args: args{
 				conf: &Launcher{
-					Apps: []launcher.AppConfig{
+					Apps: []appserver.AppConfig{
 						{
 							Name: skyenv.VPNClientName,
 							Args: []string{"-passcode", "1234", "-killswitch", "false"},
@@ -311,7 +311,7 @@ func Test_updateBoolArg(t *testing.T) {
 			},
 			wantResult: true,
 			wantConf: &Launcher{
-				Apps: []launcher.AppConfig{
+				Apps: []appserver.AppConfig{
 					{
 						Name: skyenv.VPNClientName,
 						Args: []string{"-passcode", "1234", "-killswitch=true"},
@@ -323,7 +323,7 @@ func Test_updateBoolArg(t *testing.T) {
 			name: "Present invalid double-dash-named value",
 			args: args{
 				conf: &Launcher{
-					Apps: []launcher.AppConfig{
+					Apps: []appserver.AppConfig{
 						{
 							Name: skyenv.VPNClientName,
 							Args: []string{"--killswitch", "true"},
@@ -336,7 +336,7 @@ func Test_updateBoolArg(t *testing.T) {
 			},
 			wantResult: true,
 			wantConf: &Launcher{
-				Apps: []launcher.AppConfig{
+				Apps: []appserver.AppConfig{
 					{
 						Name: skyenv.VPNClientName,
 						Args: []string{"-killswitch=false"},
@@ -348,7 +348,7 @@ func Test_updateBoolArg(t *testing.T) {
 			name: "Empty args list",
 			args: args{
 				conf: &Launcher{
-					Apps: []launcher.AppConfig{
+					Apps: []appserver.AppConfig{
 						{
 							Name: skyenv.VPNClientName,
 						},
@@ -360,7 +360,7 @@ func Test_updateBoolArg(t *testing.T) {
 			},
 			wantResult: true,
 			wantConf: &Launcher{
-				Apps: []launcher.AppConfig{
+				Apps: []appserver.AppConfig{
 					{
 						Name: skyenv.VPNClientName,
 						Args: []string{"-killswitch=false"},
@@ -372,7 +372,7 @@ func Test_updateBoolArg(t *testing.T) {
 			name: "List with a single arg and empty value",
 			args: args{
 				conf: &Launcher{
-					Apps: []launcher.AppConfig{
+					Apps: []appserver.AppConfig{
 						{
 							Name: skyenv.VPNClientName,
 							Args: []string{"-passcode", ""},
@@ -385,7 +385,7 @@ func Test_updateBoolArg(t *testing.T) {
 			},
 			wantResult: true,
 			wantConf: &Launcher{
-				Apps: []launcher.AppConfig{
+				Apps: []appserver.AppConfig{
 					{
 						Name: skyenv.VPNClientName,
 						Args: []string{"-passcode", "", "-killswitch=false"},
