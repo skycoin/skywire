@@ -5,7 +5,7 @@ package vpn
 
 import "fmt"
 
-func (c *Client) releaseSysPrivileges() { // nolint: just use on os_linux.go
+func (c *Client) releaseSysPrivileges() { // nolint
 	defer c.suidMu.Unlock()
 
 	if err := releaseClientSysPrivileges(c.suid); err != nil {
