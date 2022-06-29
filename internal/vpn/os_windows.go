@@ -16,7 +16,7 @@ const (
 )
 
 // SetupTUN sets the allocated TUN interface up, setting its IP, gateway, netmask and MTU.
-func SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
+func (c *Client) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 	ip, netmask, err := parseCIDR(ipCIDR)
 	if err != nil {
 		return fmt.Errorf("error parsing IP CIDR: %w", err)
@@ -37,17 +37,17 @@ func SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 
 // ChangeRoute changes current route to `ipCIDR` to go through the `gateway`
 // in the OS routing table.
-func ChangeRoute(ipCIDR, gateway string) error {
+func (c *Client) ChangeRoute(ipCIDR, gateway string) error {
 	return modifyRoutingTable("change", ipCIDR, gateway)
 }
 
 // AddRoute adds route to `ipCIDR` through the `gateway` to the OS routing table.
-func AddRoute(ipCIDR, gateway string) error {
+func (c *Client) AddRoute(ipCIDR, gateway string) error {
 	return modifyRoutingTable("add", ipCIDR, gateway)
 }
 
 // DeleteRoute removes route to `ipCIDR` through the `gateway` from the OS routing table.
-func DeleteRoute(ipCIDR, gateway string) error {
+func (c *Client) DeleteRoute(ipCIDR, gateway string) error {
 	return modifyRoutingTable("delete", ipCIDR, gateway)
 }
 
