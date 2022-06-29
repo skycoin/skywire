@@ -272,6 +272,24 @@ func (c *Client) RemoveDirectRoute(ip net.IP) error {
 	return nil
 }
 
+func (c *Client) setSysPrivileges() error { // nolint: just use on
+	if runtime.GOOS != "windows" {
+		c.suidMu.Lock()
+
+		// we don't release the lock here to avoid races,
+		// lock will be released after reverting system privileges
+
+		suid, err := setupClientSysPrivileges()
+		if err != nil {
+			return err
+		}
+
+		c.suid = suid
+	}
+
+	return nil
+}
+
 func (c *Client) createTUN() (TUNDevice, error) {
 	c.tunMu.Lock()
 	defer c.tunMu.Unlock()
