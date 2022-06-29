@@ -6,6 +6,7 @@ package vpn
 import (
 	"bytes"
 	"net"
+	"strings"
 
 	"github.com/skycoin/skywire/pkg/util/osutil"
 )
