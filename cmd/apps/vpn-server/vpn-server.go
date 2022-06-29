@@ -14,6 +14,7 @@ import (
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
@@ -52,7 +53,7 @@ func main() {
 	localPK := cipher.PubKey{}
 	if *localPKStr != "" {
 		if err := localPK.UnmarshalText([]byte(*localPKStr)); err != nil {
-			print(fmt.Sprintf("Invalid local PK: %v", err))
+			print(fmt.Sprintf("Invalid local PK: %v\n", err))
 			setAppErr(appCl, err)
 			os.Exit(1)
 		}
@@ -61,7 +62,7 @@ func main() {
 	localSK := cipher.SecKey{}
 	if *localSKStr != "" {
 		if err := localSK.UnmarshalText([]byte(*localSKStr)); err != nil {
-			print(fmt.Sprintf("Invalid local SK: %v", err))
+			print(fmt.Sprintf("Invalid local SK: %v\n", err))
 			setAppErr(appCl, err)
 			os.Exit(1)
 		}
@@ -76,7 +77,7 @@ func main() {
 
 	l, err := appCl.Listen(netType, vpnPort)
 	if err != nil {
-		print(fmt.Sprintf("Error listening network %v on port %d: %v", netType, vpnPort, err))
+		print(fmt.Sprintf("Error listening network %v on port %d: %v\n", netType, vpnPort, err))
 		setAppErr(appCl, err)
 		os.Exit(1)
 	}
@@ -90,13 +91,13 @@ func main() {
 	}
 	srv, err := vpn.NewServer(srvCfg, appCl)
 	if err != nil {
-		print(fmt.Sprintf("Error creating VPN server: %v", err))
+		print(fmt.Sprintf("Error creating VPN server: %v\n", err))
 		setAppErr(appCl, err)
 		os.Exit(1)
 	}
 	defer func() {
 		if err := srv.Close(); err != nil {
-			print(fmt.Sprintf("Error closing server: %v", err))
+			print(fmt.Sprintf("Error closing server: %v\n", err))
 		}
 	}()
 
@@ -109,15 +110,23 @@ func main() {
 		close(errCh)
 	}()
 
+	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+
 	select {
 	case <-osSigs:
 	case err := <-errCh:
-		print(fmt.Sprintf("Error serving: %v", err))
+		print(fmt.Sprintf("Error serving: %v\n", err))
 	}
 }
 
 func setAppErr(appCl *app.Client, err error) {
 	if appErr := appCl.SetError(err.Error()); appErr != nil {
-		fmt.Printf("Failed to set error %v: %v\n", err, appErr)
+		print(fmt.Sprintf("Failed to set error %v: %v\n", err, appErr))
+	}
+}
+
+func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
+	if err := appCl.SetDetailedStatus(string(status)); err != nil {
+		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
 	}
 }
