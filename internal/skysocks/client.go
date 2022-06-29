@@ -11,7 +11,7 @@ import (
 	"github.com/skycoin/yamux"
 
 	"github.com/skycoin/skywire/pkg/app"
-	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
@@ -61,7 +61,7 @@ func (c *Client) ListenAndServe(addr string) error {
 
 	c.listener = l
 	if c.appCl != nil {
-		c.setAppStatus(launcher.AppDetailedStatusRunning)
+		c.setAppStatus(appserver.AppDetailedStatusRunning)
 	}
 
 	for {
@@ -145,7 +145,7 @@ func (c *Client) handleStream(conn, stream net.Conn) {
 		}
 
 		if err != nil {
-			print(fmt.Sprintf("Copy error: %v", err))
+			print(fmt.Sprintf("Copy error: %v\n", err))
 		}
 	}
 
@@ -159,7 +159,7 @@ func (c *Client) handleStream(conn, stream net.Conn) {
 func (c *Client) close() {
 	print("Session failed, closing skysocks client")
 	if err := c.Close(); err != nil {
-		print(fmt.Sprintf("Error closing skysocks client: %v", err))
+		print(fmt.Sprintf("Error closing skysocks client: %v\n", err))
 	}
 }
 
@@ -168,12 +168,12 @@ func (c *Client) ListenIPC(client *ipc.Client) {
 	listenIPC(client, skyenv.SkychatName+"-client", func() {
 		client.Close()
 		if err := c.Close(); err != nil {
-			print(fmt.Sprintf("Error closing skysocks-client: %v", err))
+			print(fmt.Sprintf("Error closing skysocks-client: %v\n", err))
 		}
 	})
 }
 
-func (c *Client) setAppStatus(status launcher.AppDetailedStatus) {
+func (c *Client) setAppStatus(status appserver.AppDetailedStatus) {
 	if err := c.appCl.SetDetailedStatus(string(status)); err != nil {
 		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
 	}

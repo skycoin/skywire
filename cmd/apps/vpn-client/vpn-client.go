@@ -17,6 +17,7 @@ import (
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appevent"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
@@ -74,7 +75,7 @@ func main() {
 		// TODO(darkrengarius): fix args passage for Windows
 		//*serverPKStr = "03e9019b3caa021dbee1c23e6295c6034ab4623aec50802fcfdd19764568e2958d"
 		err := errors.New("VPN server pub key is missing")
-		print(err)
+		print(fmt.Sprintf("%v\n", err))
 		setAppErr(appCl, err)
 		os.Exit(1)
 	}
@@ -170,13 +171,21 @@ func main() {
 		go vpnClient.ListenIPC(ipcClient)
 	}
 
+	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+
 	if err := vpnClient.Serve(); err != nil {
-		print(fmt.Sprintf("Failed to serve VPN: %v", err))
+		print(fmt.Sprintf("Failed to serve VPN: %v\n", err))
 	}
 }
 
 func setAppErr(appCl *app.Client, err error) {
 	if appErr := appCl.SetError(err.Error()); appErr != nil {
-		fmt.Printf("Failed to set error %v: %v\n", err, appErr)
+		print(fmt.Sprintf("Failed to set error %v: %v\n", err, appErr))
+	}
+}
+
+func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
+	if err := appCl.SetDetailedStatus(string(status)); err != nil {
+		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
 	}
 }

@@ -42,10 +42,8 @@ func (c *Client) AddRoute(ipCIDR, gateway string) error {
 				return nil
 			}
 		}
-
 		return err
 	}
-
 	return nil
 }
 
