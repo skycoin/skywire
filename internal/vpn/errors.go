@@ -16,7 +16,7 @@ var (
 	errHandshakeNoFreeIPs             = errors.New("no free IPs left to serve")
 	errHandshakeStatusBadRequest      = errors.New("request was malformed")
 	errTimeout                        = errors.New("internal error: Timeout")
-	errNotPermited                    = errors.New("ioctl: operation not permitted")
+	errNotPermitted                   = errors.New("ioctl: operation not permitted")
 	errVPNServerClosed                = errors.New("vpn-server closed")
 	errPermissionDenied               = errors.New("permission denied")
 
