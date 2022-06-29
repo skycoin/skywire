@@ -58,7 +58,11 @@ func modifyRoutingTable(action, ipCIDR, gateway string) error {
 	}
 
 	cmd := fmt.Sprintf(modifyRouteCMDFmt, action, ip, netmask, gateway)
-	return osutil.Run("cmd", "/C", cmd)
+	err = osutil.Run("cmd", "/C", cmd)
+	if err != nil {
+		return errPermissionDenied
+	}
+	return nil
 }
 
 // SetupTUN sets the allocated TUN interface up, setting its IP, gateway, netmask and MTU.

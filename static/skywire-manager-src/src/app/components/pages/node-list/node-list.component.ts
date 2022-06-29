@@ -20,7 +20,7 @@ import { FilterProperties, FilterFieldTypes } from 'src/app/utils/filters';
 import { LabeledElementTextComponent } from '../../layout/labeled-element-text/labeled-element-text.component';
 import { SortingModes, SortingColumn, DataSorter } from 'src/app/utils/lists/data-sorter';
 import { DataFilterer } from 'src/app/utils/lists/data-filterer';
-import { UpdateComponent, NodeData } from '../../layout/update/update.component';
+import { NodeData, UpdateAllComponent } from '../../layout/update-all/update-all.component';
 
 /**
  * Page for showing the node list.
@@ -55,7 +55,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
   options: MenuOptionData[] = [];
   showDmsgInfo = false;
   canLogOut = true;
-  hasUpdatableNodes = false;
 
   // Vars for the pagination functionality.
   allNodes: Node[];
@@ -238,13 +237,11 @@ export class NodeListComponent implements OnInit, OnDestroy {
   private updateOptionsMenu() {
     this.options = [];
 
-    if (this.hasUpdatableNodes) {
-      this.options.push({
-        name: 'nodes.update-all',
-        actionName: 'updateAll',
-        icon: 'get_app'
-      });
-    }
+    this.options.push({
+      name: 'nodes.update-all',
+      actionName: 'updateAll',
+      icon: 'get_app'
+    });
 
     if (this.canLogOut) {
       this.options.push({
@@ -369,14 +366,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
             if (result.data && !result.error) {
               this.allNodes = result.data as Node[];
 
-              this.hasUpdatableNodes = false;
-              this.allNodes.forEach(node => {
-                if (GeneralUtils.checkIfTagIsUpdatable(node.buildTag)) {
-                  this.hasUpdatableNodes = true;
-                }
-              });
-              this.updateOptionsMenu();
-
               if (this.showDmsgInfo) {
                 // Add the label data to the array, to be able to use it for filtering and sorting.
                 this.allNodes.forEach(node => {
@@ -470,17 +459,26 @@ export class NodeListComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const nodesData: NodeData[] = [];
+    const updatableNodes: NodeData[] = [];
+    const nonUpdatableNodes: NodeData[] = [];
     this.dataSource.forEach(node => {
-      if (node.online && GeneralUtils.checkIfTagIsUpdatable(node.buildTag)) {
-        nodesData.push({
+      if (node.online) {
+        const nodeData: NodeData = {
           key: node.localPk,
           label: node.label,
-        });
+          version: node.version,
+          tag: node.buildTag,
+        };
+
+        if (GeneralUtils.checkIfTagIsUpdatable(node.buildTag)) {
+          updatableNodes.push(nodeData);
+        } else {
+          nonUpdatableNodes.push(nodeData);
+        }
       }
     });
 
-    UpdateComponent.openDialog(this.dialog, nodesData);
+    UpdateAllComponent.openDialog(this.dialog, updatableNodes, nonUpdatableNodes);
   }
 
   /**
