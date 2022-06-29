@@ -1,4 +1,4 @@
-package visor
+package clivisor
 
 import (
 	"fmt"
@@ -17,7 +17,7 @@ func init() {
 
 var execCmd = &cobra.Command{
 	Use:   "exec <command>",
-	Short: "execute a command",
+	Short: "Execute a command",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		out, err := rpcClient().Exec(strings.Join(args, " "))

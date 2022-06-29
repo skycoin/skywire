@@ -30,19 +30,19 @@ func init() {
 // RootCmd is the command that contains sub-commands which interacts with dmsgpty.
 var RootCmd = &cobra.Command{
 	Use:   "dmsgpty",
-	Short: "Some simple commands of dmsgpty to remote visor",
+	Short: "Interact with remote visors",
 }
 
 func init() {
 	RootCmd.AddCommand(
-		listOfVisors,
-		executeCommand,
+		visorsCmd,
+		shellCmd,
 	)
 }
 
-var listOfVisors = &cobra.Command{
+var visorsCmd = &cobra.Command{
 	Use:   "list",
-	Short: "fetch list of connected visor's PKs",
+	Short: "List connected visors",
 	Run: func(_ *cobra.Command, _ []string) {
 		remoteVisors := rpcClient().RemoteVisors()
 		var msg string
@@ -55,9 +55,9 @@ var listOfVisors = &cobra.Command{
 	},
 }
 
-var executeCommand = &cobra.Command{
+var shellCmd = &cobra.Command{
 	Use:   "start <pk>",
-	Short: "start dmsgpty for specific visor by its dmsg address pk:port",
+	Short: "Start dmsgpty for specific visor by its dmsg address pk:port",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(_ *cobra.Command, args []string) error {
 		cli := dmsgpty.DefaultCLI()

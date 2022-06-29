@@ -1,4 +1,4 @@
-package visor
+package clivisor
 
 import (
 	"fmt"
@@ -59,7 +59,7 @@ var pkCmd = &cobra.Command{
 
 var hvpkCmd = &cobra.Command{
 	Use:   "hvpk",
-	Short: "Public key of hypervisor this visor is using",
+	Short: "Public key of remote hypervisor",
 	Run: func(_ *cobra.Command, _ []string) {
 		if pkg {
 			path = visorconfig.Pkgpath
@@ -83,7 +83,7 @@ var hvpkCmd = &cobra.Command{
 
 var summaryCmd = &cobra.Command{
 	Use:   "info",
-	Short: "summary of visor info",
+	Short: "Summary of visor info",
 	Run: func(_ *cobra.Command, _ []string) {
 		summary, err := rpcClient().Summary()
 		if err != nil {
@@ -98,14 +98,13 @@ var summaryCmd = &cobra.Command{
 
 var buildInfoCmd = &cobra.Command{
 	Use:   "version",
-	Short: "version and build info",
+	Short: "Version and build info",
 	Run: func(_ *cobra.Command, _ []string) {
 		client := rpcClient()
 		overview, err := client.Overview()
 		if err != nil {
 			log.Fatal("Failed to connect:", err)
 		}
-
 		if _, err := overview.BuildInfo.WriteTo(os.Stdout); err != nil {
 			log.Fatal("Failed to output build info:", err)
 		}

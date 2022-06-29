@@ -1,0 +1,10 @@
+HTTP/1.1 200 OK
+Server: netcat!
+Content-Type: text/html; charset=UTF-8
+
+<!doctype html>
+<html>
+<body>
+<h1>A webpage served with netcat</h1>
+</body>
+</html>
