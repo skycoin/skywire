@@ -37,9 +37,10 @@ function BuildInstaller($arch)
 
     Write-Output "#                                                        #"
     Write-Output "#    => Create Installer for $arch_title                       #"
-    Write-Output "#       1. Preparing Stage...                            #"
+    Write-Output "#       0. Preparing Stage...                            #"
     CleanStage
-
+    Write-Output "#       0. Installing Wix...                             #"
+    InstallWix
     Write-Output "#       2. Fetching Archive from GitHub...               #"
     if ($version -eq "latest") {
         $url = 'https://github.com/skycoin/skywire/releases/latest'
@@ -89,7 +90,6 @@ function BuildInstaller($arch)
     Write-Output "#       7. Done!                                         #"
 } 
 
-InstallWix
 Write-Output "`n##########################################################"
 Write-Output "#                                                        #"
 Write-Output "#        .:::: Create MSI Installer Package ::::.        #"
