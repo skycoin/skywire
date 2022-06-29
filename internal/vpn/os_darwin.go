@@ -57,3 +57,12 @@ func modifyRoutingTable(action, ipCIDR, gateway string) error {
 
 	return osutil.Run("route", action, "-net", ip, gateway, netmask)
 }
+
+func (s *Server) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
+	ip, netmask, err := parseCIDR(ipCIDR)
+	if err != nil {
+		return fmt.Errorf("error parsing IP CIDR: %w", err)
+	}
+
+	return osutil.Run("ifconfig", ifcName, ip, gateway, "mtu", strconv.Itoa(mtu), "netmask", netmask, "up")
+}
