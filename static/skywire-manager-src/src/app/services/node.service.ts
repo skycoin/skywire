@@ -479,6 +479,7 @@ export class NodeService {
           // Basic data.
           node.online = response.online;
           node.localPk = response.overview.local_pk;
+          node.version = response.overview.build_info.version;
           node.autoconnectTransports = response.public_autoconnect;
           node.buildTag = response.build_tag ? response.build_tag : '';
 

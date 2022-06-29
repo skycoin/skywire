@@ -71,5 +71,5 @@ func RoutingTableSuite(t *testing.T, tbl Table) {
 }
 
 func TestRoutingTable(t *testing.T) {
-	RoutingTableSuite(t, NewTable())
+	RoutingTableSuite(t, NewTable(logging.MustGetLogger("tt")))
 }
