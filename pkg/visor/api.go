@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -13,12 +14,15 @@ import (
 
 	"github.com/ccding/go-stun/stun"
 	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -50,7 +54,8 @@ type API interface {
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
-	RemoteVisors() []string
+	VPNServers() ([]string, error)
+	RemoteVisors() ([]string, error)
 
 	TransportTypes() ([]string, error)
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
@@ -70,6 +75,7 @@ type API interface {
 	RouteGroups() ([]RouteGroupInfo, error)
 
 	Restart() error
+	Shutdown() error
 	Exec(command string) ([]byte, error)
 	RuntimeLogs() (string, error)
 
@@ -565,13 +571,37 @@ func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.Connection
 	return nil, ErrProcNotAvailable
 }
 
+// VPNServers gets available public VPN server from service discovery URL
+func (v *Visor) VPNServers() ([]string, error) {
+	log := logging.MustGetLogger("vpnservers")
+	vlog := logging.NewMasterLogger()
+	vlog.SetLevel(logrus.InfoLevel)
+
+	sdClient := servicedisc.NewClient(log, vlog, servicedisc.Config{
+		Type:     servicedisc.ServiceTypeVPN,
+		PK:       v.conf.PK,
+		SK:       v.conf.SK,
+		DiscAddr: v.conf.Launcher.ServiceDisc,
+	}, &http.Client{Timeout: time.Duration(1) * time.Second}, "")
+	vpnServers, err := sdClient.Services(context.Background(), 0)
+	if err != nil {
+		v.log.Error("Error getting public vpn servers: ", err)
+		return nil, err
+	}
+	serverAddrs := make([]string, len(vpnServers))
+	for idx, server := range vpnServers {
+		serverAddrs[idx] = server.Addr.PubKey().String()
+	}
+	return serverAddrs, nil
+}
+
 // RemoteVisors return list of connected remote visors
-func (v *Visor) RemoteVisors() []string {
+func (v *Visor) RemoteVisors() ([]string, error) {
 	var visors []string
 	for _, conn := range v.remoteVisors {
 		visors = append(visors, conn.Addr.PK.String())
 	}
-	return visors
+	return visors, nil
 }
 
 // TransportTypes implements API.
@@ -734,6 +764,14 @@ func (v *Visor) Restart() error {
 	}
 
 	return v.restartCtx.Restart()
+}
+
+// Shutdown implements API.
+func (v *Visor) Shutdown() error {
+	if v.restartCtx == nil {
+		return ErrMalformedRestartContext
+	}
+	return v.Close()
 }
 
 // Exec implements API.
