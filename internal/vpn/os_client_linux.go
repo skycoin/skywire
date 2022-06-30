@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"fmt"
 	"net"
-	"sync"
 
 	"github.com/syndtr/gocapability/capability"
 	"golang.org/x/sys/unix"
@@ -45,42 +44,38 @@ func DefaultNetworkGateway() (net.IP, error) {
 	return nil, errCouldFindDefaultNetworkGateway
 }
 
-var setupClientOnce sync.Once
-
 func setupClientSysPrivileges() (int, error) {
 	var err error
-	setupClientOnce.Do(func() {
-		var caps capability.Capabilities
 
-		caps, err = capability.NewPid2(0)
-		if err != nil {
-			err = fmt.Errorf("failed to init capabilities: %w", err)
-			return
-		}
+	var caps capability.Capabilities
 
-		err = caps.Load()
-		if err != nil {
-			err = fmt.Errorf("failed to load capabilities: %w", err)
-			return
-		}
+	caps, err = capability.NewPid2(0)
+	if err != nil {
+		err = fmt.Errorf("failed to init capabilities: %w", err)
+		return 0, err
+	}
 
-		// set `CAP_NET_ADMIN` capability to needed caps sets.
-		caps.Set(capability.CAPS|capability.BOUNDS|capability.AMBIENT, capability.CAP_NET_ADMIN)
-		err = caps.Apply(capability.CAPS | capability.BOUNDS | capability.AMBIENT)
-		if err != nil {
-			err = fmt.Errorf("failed to apply capabilities: %w", err)
+	err = caps.Load()
+	if err != nil {
+		err = fmt.Errorf("failed to load capabilities: %w", err)
+		return 0, err
+	}
 
-			return
-		}
+	// set `CAP_NET_ADMIN` capability to needed caps sets.
+	caps.Set(capability.CAPS|capability.BOUNDS|capability.AMBIENT, capability.CAP_NET_ADMIN)
+	err = caps.Apply(capability.CAPS | capability.BOUNDS | capability.AMBIENT)
+	if err != nil {
+		err = fmt.Errorf("failed to apply capabilties: %w", err)
+		return 0, err
+	}
 
-		// let child process keep caps sets from the parent, so we may do calls to
-		// system utilities with these caps.
-		err = unix.Prctl(unix.PR_SET_KEEPCAPS, 1, 0, 0, 0)
-		if err != nil {
-			err = fmt.Errorf("failed to set PR_SET_KEEPCAPS: %w", err)
-			return
-		}
-	})
+	// let child process keep caps sets from the parent, so we may do calls to
+	// system utilities with these caps.
+	err = unix.Prctl(unix.PR_SET_KEEPCAPS, 1, 0, 0, 0)
+	if err != nil {
+		err = fmt.Errorf("failed to set PR_SET_KEEPCAPS: %w", err)
+		return 0, err
+	}
 
 	return 0, nil
 }
