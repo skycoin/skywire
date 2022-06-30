@@ -34,7 +34,7 @@ require (
 	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
 	go.etcd.io/bbolt v1.3.6
 	golang.org/x/net v0.0.0-20211020060615-d418f374d309
-	golang.org/x/sys v0.0.0-20220222200937-f2425489ef4c
+	golang.org/x/sys v0.0.0-20220627191245-f75cf1eec38b
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	golang.org/x/tools v0.1.5 // indirect
 	golang.zx2c4.com/wireguard v0.0.0-20211012180210-dfd688b6aa7b
@@ -48,7 +48,7 @@ require (
 	github.com/ivanpirog/coloredcobra v1.0.0
 	github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
 	github.com/skycoin/skywire-utilities v0.0.0-20220617085111-5c8c8d3ced14
-	github.com/skycoin/systray v1.10.1-0.20220509091536-c90eecafd3fd
+	github.com/skycoin/systray v1.10.1-0.20220630135132-48d2a1fb85d8
 )
 
 require (
@@ -74,6 +74,7 @@ require (
 	github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stretchr/objx v0.1.1 // indirect
+	github.com/tevino/abool v1.2.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.4 // indirect
 	github.com/tklauser/numcpus v0.2.1 // indirect
 	github.com/valyala/fastrand v1.1.0 // indirect
