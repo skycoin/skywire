@@ -1,9 +1,10 @@
-package visor
+package clivisor
 
 import (
 	"fmt"
 	"log"
 	"os"
+	"unicode/utf8"
 
 	"github.com/spf13/cobra"
 
@@ -12,14 +13,17 @@ import (
 
 var path string
 var pkg bool
+var web bool
 
 func init() {
 	RootCmd.AddCommand(pkCmd)
 	pkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
 	pkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
+	pkCmd.Flags().BoolVarP(&web, "http", "w", false, "format as http response")
 	RootCmd.AddCommand(hvpkCmd)
 	hvpkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
 	hvpkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
+	hvpkCmd.Flags().BoolVarP(&web, "http", "w", false, "format as http response")
 	RootCmd.AddCommand(summaryCmd)
 	RootCmd.AddCommand(buildInfoCmd)
 }
@@ -43,6 +47,11 @@ var pkCmd = &cobra.Command{
 			if err != nil {
 				logger.Fatal("Failed to connect:", err)
 			}
+			if web {
+				rc := utf8.RuneCountInString(overview.PubKey.String())
+				header := fmt.Sprintf("HTTP/1.0 200 OK\r\nContent-Length: %d\r\n", rc)
+				fmt.Println(header)
+			}
 			fmt.Println(overview.PubKey)
 		}
 	},
@@ -50,7 +59,7 @@ var pkCmd = &cobra.Command{
 
 var hvpkCmd = &cobra.Command{
 	Use:   "hvpk",
-	Short: "Public key of hypervisor this visor is using",
+	Short: "Public key of remote hypervisor",
 	Run: func(_ *cobra.Command, _ []string) {
 		if pkg {
 			path = visorconfig.Pkgpath
@@ -74,7 +83,7 @@ var hvpkCmd = &cobra.Command{
 
 var summaryCmd = &cobra.Command{
 	Use:   "info",
-	Short: "summary of visor info",
+	Short: "Summary of visor info",
 	Run: func(_ *cobra.Command, _ []string) {
 		summary, err := rpcClient().Summary()
 		if err != nil {
@@ -89,14 +98,13 @@ var summaryCmd = &cobra.Command{
 
 var buildInfoCmd = &cobra.Command{
 	Use:   "version",
-	Short: "version and build info",
+	Short: "Version and build info",
 	Run: func(_ *cobra.Command, _ []string) {
 		client := rpcClient()
 		overview, err := client.Overview()
 		if err != nil {
 			log.Fatal("Failed to connect:", err)
 		}
-
 		if _, err := overview.BuildInfo.WriteTo(os.Stdout); err != nil {
 			log.Fatal("Failed to output build info:", err)
 		}
