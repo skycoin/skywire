@@ -1,4 +1,4 @@
-package mdisc
+package climdisc
 
 import (
 	"context"
@@ -39,7 +39,7 @@ func init() {
 
 var entryCmd = &cobra.Command{
 	Use:   "entry <visor-public-key>",
-	Short: "fetch an entry",
+	Short: "Fetch an entry",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -53,7 +53,7 @@ var entryCmd = &cobra.Command{
 
 var availableServersCmd = &cobra.Command{
 	Use:   "servers",
-	Short: "fetch available servers",
+	Short: "Fetch available servers",
 	Run: func(_ *cobra.Command, _ []string) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()

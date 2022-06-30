@@ -353,6 +353,11 @@ func (rc *rpcClient) Restart() error {
 	return rc.Call("Restart", &struct{}{}, &struct{}{})
 }
 
+// Shutdown calls Shutdown.
+func (rc *rpcClient) Shutdown() error {
+	return rc.Call("Shutdown", &struct{}{}, &struct{}{})
+}
+
 // Exec calls Exec.
 func (rc *rpcClient) Exec(command string) ([]byte, error) {
 	output := make([]byte, 0)
@@ -392,11 +397,18 @@ type StatusMessage struct {
 	IsError bool
 }
 
+// VPNServers calls VPNServers.
+func (rc *rpcClient) VPNServers() ([]string, error) {
+	output := []string{}
+	rc.Call("VPNServers", &struct{}{}, &output) // nolint
+	return output, nil
+}
+
 // RemoteVisors calls RemoteVisors.
-func (rc *rpcClient) RemoteVisors() []string {
+func (rc *rpcClient) RemoteVisors() ([]string, error) {
 	output := []string{}
 	rc.Call("RemoteVisors", &struct{}{}, &output) // nolint
-	return output
+	return output, nil
 }
 
 // MockRPCClient mocks API.
@@ -911,6 +923,11 @@ func (mc *mockRPCClient) Restart() error {
 	return nil
 }
 
+// Shutdown implements API.
+func (mc *mockRPCClient) Shutdown() error {
+	return nil
+}
+
 // Exec implements API.
 func (mc *mockRPCClient) Exec(string) ([]byte, error) {
 	return []byte("mock"), nil
@@ -936,7 +953,12 @@ func (mc *mockRPCClient) GetPersistentTransports() ([]transport.PersistentTransp
 	return []transport.PersistentTransports{}, nil
 }
 
+// VPNServers implements API
+func (mc *mockRPCClient) VPNServers() ([]string, error) {
+	return []string{}, nil
+}
+
 // RemoteVisors implements API
-func (mc *mockRPCClient) RemoteVisors() []string {
-	return []string{}
+func (mc *mockRPCClient) RemoteVisors() ([]string, error) {
+	return []string{}, nil
 }
