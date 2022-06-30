@@ -175,8 +175,8 @@ github.com/skycoin/skywire-utilities/pkg/logging
 github.com/skycoin/skywire-utilities/pkg/metricsutil
 github.com/skycoin/skywire-utilities/pkg/netutil
 github.com/skycoin/skywire-utilities/pkg/skyenv
-# github.com/skycoin/systray v1.10.1-0.20220509091536-c90eecafd3fd
-## explicit; go 1.17
+# github.com/skycoin/systray v1.10.1-0.20220630135132-48d2a1fb85d8
+## explicit; go 1.13
 github.com/skycoin/systray
 github.com/skycoin/systray/internal/generated/menu
 github.com/skycoin/systray/internal/generated/notifier
@@ -209,6 +209,9 @@ github.com/templexxx/cpufeat
 # github.com/templexxx/xor v0.0.0-20191217153810-f85b25db303b
 ## explicit
 github.com/templexxx/xor
+# github.com/tevino/abool v1.2.0
+## explicit; go 1.14
+github.com/tevino/abool
 # github.com/tjfoc/gmsm v1.4.0
 ## explicit; go 1.14
 github.com/tjfoc/gmsm/sm4
@@ -267,7 +270,7 @@ golang.org/x/net/ipv4
 golang.org/x/net/ipv6
 golang.org/x/net/nettest
 golang.org/x/net/proxy
-# golang.org/x/sys v0.0.0-20220222200937-f2425489ef4c
+# golang.org/x/sys v0.0.0-20220627191245-f75cf1eec38b
 ## explicit; go 1.17
 golang.org/x/sys/cpu
 golang.org/x/sys/execabs
