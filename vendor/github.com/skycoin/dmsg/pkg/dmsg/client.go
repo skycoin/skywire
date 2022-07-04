@@ -141,6 +141,8 @@ func (ce *Client) Serve(ctx context.Context) {
 	cancellabelCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	setupNodeTicker := time.NewTicker(1 * time.Minute)
+
 	go func(ctx context.Context) {
 		select {
 		case <-ctx.Done():
@@ -214,6 +216,8 @@ func (ce *Client) Serve(ctx context.Context) {
 			if isClosed(ce.done) {
 				return
 			}
+		case <-setupNodeTicker.C:
+			continue
 		}
 	}
 }
