@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -101,7 +102,6 @@ func (ui *UI) writeBanner(w io.Writer, uiAddr string, sID int32) error {
 // Handler returns a http handler that serves the dmsgpty-ui.
 func (ui *UI) Handler() http.HandlerFunc {
 	var sc int32 // session counter
-
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := ui.log.WithField("remote_addr", r.RemoteAddr)
 
@@ -178,8 +178,8 @@ func (ui *UI) Handler() http.HandlerFunc {
 			}
 		}()
 
-		// set DMSGPTYTERM=1 env on starting dmsgpty-ui
-		ptyC.Write([]byte("export DMSGPTYTERM=1\n")) //nolint
+		// urlCommands from URL | set DMSGPTYTERM=1 all times
+		ptyC.Write([]byte(urlCommands(r))) //nolint
 
 		// io
 		done, once := make(chan struct{}), new(sync.Once)
@@ -236,4 +236,22 @@ func writeError(log logrus.FieldLogger, w http.ResponseWriter, r *http.Request, 
 		ErrorCode: code,
 		ErrorMsg:  err.Error(),
 	})
+}
+
+func urlCommands(r *http.Request) string {
+	commands := []string{"export DMSGPTYTERM=1"}
+	if commandsQuery, ok := r.URL.Query()["commands"]; ok {
+		if len(commandsQuery[0]) > 0 {
+			commands = append(commands, strings.Split(commandsQuery[0], ",")...)
+		}
+	}
+	// var commandQuery string
+	for i, command := range commands {
+		if command == "update" {
+			commands[i] = "sudo apt update && sudo apt install skywire-bin -y"
+		}
+	}
+	stringCommands := strings.Join(commands, " && ")
+	stringCommands += "\n"
+	return stringCommands
 }
