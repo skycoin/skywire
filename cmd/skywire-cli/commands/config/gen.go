@@ -27,26 +27,26 @@ func init() {
 	RootCmd.AddCommand(genConfigCmd)
 
 	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", svcconf, "services conf")
-	hiddenflags = append(hiddenflags, "url")
+	ghiddenflags = append(ghiddenflags, "url")
 	genConfigCmd.Flags().StringVar(&logLevel, "log-level", "info", "level of logging in config")
-	hiddenflags = append(hiddenflags, "log-level")
+	ghiddenflags = append(ghiddenflags, "log-level")
 	genConfigCmd.Flags().BoolVarP(&bestProtocol, "bestproto", "b", false, "best protocol (dmsg | direct) based on location")
 	genConfigCmd.Flags().BoolVarP(&disableauth, "noauth", "c", false, "disable authentication for hypervisor UI")
-	hiddenflags = append(hiddenflags, "noauth")
+	ghiddenflags = append(ghiddenflags, "noauth")
 	genConfigCmd.Flags().BoolVarP(&dmsgHTTP, "dmsghttp", "d", false, "use dmsg connection to skywire services")
-	hiddenflags = append(hiddenflags, "dmsghttp")
+	ghiddenflags = append(ghiddenflags, "dmsghttp")
 	genConfigCmd.Flags().BoolVarP(&enableauth, "auth", "e", false, "enable auth on hypervisor UI")
-	hiddenflags = append(hiddenflags, "auth")
+	ghiddenflags = append(ghiddenflags, "auth")
 	genConfigCmd.Flags().BoolVarP(&force, "force", "f", false, "remove pre-existing config")
-	hiddenflags = append(hiddenflags, "force")
+	ghiddenflags = append(ghiddenflags, "force")
 	genConfigCmd.Flags().StringVarP(&disableApps, "disableapps", "g", "", "comma separated list of apps to disable")
-	hiddenflags = append(hiddenflags, "disableapps")
+	ghiddenflags = append(ghiddenflags, "disableapps")
 	genConfigCmd.Flags().BoolVarP(&hypervisor, "ishv", "i", false, "local hypervisor configuration")
 	genConfigCmd.Flags().StringVarP(&hypervisorPKs, "hvpks", "j", "", "list of public keys to use as hypervisor")
 	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", skyenv.OS, "(linux / mac / win) paths")
-	hiddenflags = append(hiddenflags, "os")
+	ghiddenflags = append(ghiddenflags, "os")
 	genConfigCmd.Flags().BoolVarP(&stdout, "stdout", "n", false, "write config to stdout")
-	hiddenflags = append(hiddenflags, "stdout")
+	ghiddenflags = append(ghiddenflags, "stdout")
 	genConfigCmd.Flags().StringVarP(&output, "out", "o", "", "output config: "+skyenv.ConfigName)
 	if skyenv.OS == "win" {
 		ptext = "use .msi installation path: "
@@ -63,25 +63,24 @@ func init() {
 		genConfigCmd.Flags().BoolVarP(&usrEnv, "user", "u", false, "use paths for user space: "+homepath)
 	}
 	genConfigCmd.Flags().BoolVarP(&publicRPC, "publicrpc", "q", false, "allow rpc requests from LAN")
-	hiddenflags = append(hiddenflags, "publicrpc")
+	ghiddenflags = append(ghiddenflags, "publicrpc")
 	genConfigCmd.Flags().BoolVarP(&regen, "regen", "r", false, "re-generate existing config & retain keys")
 	genConfigCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
-	hiddenflags = append(hiddenflags, "sk")
+	ghiddenflags = append(ghiddenflags, "sk")
 	genConfigCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "use test deployment "+testconf)
-	hiddenflags = append(hiddenflags, "testenv")
+	ghiddenflags = append(ghiddenflags, "testenv")
 	genConfigCmd.Flags().BoolVarP(&vpnServerEnable, "servevpn", "v", false, "enable vpn server")
-	hiddenflags = append(hiddenflags, "servevpn")
+	ghiddenflags = append(ghiddenflags, "servevpn")
 	genConfigCmd.Flags().BoolVarP(&hide, "hide", "w", false, "dont print the config to the terminal")
-	hiddenflags = append(hiddenflags, "hide")
+	ghiddenflags = append(ghiddenflags, "hide")
 	genConfigCmd.Flags().BoolVarP(&retainHypervisors, "retainhv", "x", false, "retain existing hypervisors with regen")
-	hiddenflags = append(hiddenflags, "retainhv")
+	ghiddenflags = append(ghiddenflags, "retainhv")
 	genConfigCmd.Flags().StringVar(&ver, "version", "", "custom version testing override")
-	hiddenflags = append(hiddenflags, "version")
+	ghiddenflags = append(ghiddenflags, "version")
 	genConfigCmd.Flags().BoolVar(&all, "all", false, "show all flags")
 	genConfigCmd.Flags().StringVar(&binPath, "binpath", "", "set bin_path")
-	hiddenflags = append(hiddenflags, "binpath")
-
-	for _, j := range hiddenflags {
+	ghiddenflags = append(ghiddenflags, "binpath")
+	for _, j := range ghiddenflags {
 		genConfigCmd.Flags().MarkHidden(j) //nolint
 	}
 }
@@ -92,10 +91,10 @@ var genConfigCmd = &cobra.Command{
 	PreRun: func(cmd *cobra.Command, _ []string) {
 		//--all unhides flags, prints help menu, and exits
 		if all {
-			for _, j := range hiddenflags {
-				f := cmd.Flags().Lookup(j) //nolint
-				f.Hidden = false
-			}
+			for _, j := range ghiddenflags {
+					f := cmd.Flags().Lookup(j) //nolint
+					f.Hidden = false
+				}
 			cmd.Flags().MarkHidden("all") //nolint
 			cmd.Help()                    //nolint
 			os.Exit(0)
