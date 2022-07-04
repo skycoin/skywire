@@ -92,9 +92,9 @@ var genConfigCmd = &cobra.Command{
 		//--all unhides flags, prints help menu, and exits
 		if all {
 			for _, j := range ghiddenflags {
-					f := cmd.Flags().Lookup(j) //nolint
-					f.Hidden = false
-				}
+				f := cmd.Flags().Lookup(j) //nolint
+				f.Hidden = false
+			}
 			cmd.Flags().MarkHidden("all") //nolint
 			cmd.Help()                    //nolint
 			os.Exit(0)
