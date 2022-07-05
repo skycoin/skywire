@@ -191,12 +191,7 @@ func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, logger *log
 	// VPN Connect/Disconnect Button
 	mVPNButton = mVPNClient.AddSubMenuItem("Connect", "VPN Client Switch Button")
 	// VPN Public Servers List
-	mVPNServersList := mVPNClient.AddSubMenuItem("Servers", "VPN Client Servers")
-	mVPNServers := []*systray.MenuItem{}
-	for _, server := range getAvailPublicVPNServers(conf, httpClient, logger.PackageLogger("systray:servers")) {
-		mVPNServers = append(mVPNServers, mVPNServersList.AddSubMenuItemCheckbox(server, "", false))
-	}
-	go serversBtn(conf, mVPNServers, rpcC)
+	go serversBtn(conf, rpcC, httpClient, logger.PackageLogger("systray:vpn-servers"))
 }
 
 func mVPNClientEnable(rpcC visor.API, logger *logging.Logger) {
@@ -247,9 +242,28 @@ func vpnStatusBtn(conf *visorconfig.V1, rpcClient visor.API) {
 	}
 }
 
-func serversBtn(conf *visorconfig.V1, servers []*systray.MenuItem, rpcClient visor.API) {
+func serversBtn(conf *visorconfig.V1, rpcClient visor.API, httpC *http.Client, logger *logging.Logger) {
+	// fetching and create vpn-servers lists
+	mVPNServersList := mVPNClient.AddSubMenuItem("Servers", "VPN Client Servers")
+	mVPNServers := []*systray.MenuItem{}
+	for {
+		servers, err := getAvailPublicVPNServers(conf, httpC, logger)
+		if err != nil {
+			logger.Warnf("cannot fetch vpn-servers due to: %s", err.Error())
+		}
+		if len(servers) > 0 {
+			mVPNServers = append(mVPNServers, mVPNServersList.AddSubMenuItemCheckbox("OLD", "", false))
+			for _, server := range servers {
+				mVPNServers = append(mVPNServers, mVPNServersList.AddSubMenuItemCheckbox(server, "", false))
+			}
+			break
+		}
+		time.Sleep(10 * time.Second)
+	}
+
+	// add btnChannel for each vpn server button
 	btnChannel := make(chan int)
-	for index, server := range servers {
+	for index, server := range mVPNServers {
 		go func(chn chan int, server *systray.MenuItem, index int) {
 			for {
 				select {
@@ -260,11 +274,12 @@ func serversBtn(conf *visorconfig.V1, servers []*systray.MenuItem, rpcClient vis
 		}(btnChannel, server, index)
 	}
 
+	// logic of choosing server from list
 	for {
-		selectedServer := servers[<-btnChannel]
+		selectedServer := mVPNServers[<-btnChannel]
 		serverTempValue := strings.Split(selectedServer.String(), ",")[2]
 		serverPK := serverTempValue[2 : len(serverTempValue)-7]
-		for _, server := range servers {
+		for _, server := range mVPNServers {
 			server.Uncheck()
 			server.Enable()
 		}
@@ -311,7 +326,7 @@ func handleVPNLinkButton(conf *visorconfig.V1) {
 }
 
 // getAvailPublicVPNServers gets all available public VPN server from service discovery URL
-func getAvailPublicVPNServers(conf *visorconfig.V1, httpC *http.Client, logger *logging.Logger) []string {
+func getAvailPublicVPNServers(conf *visorconfig.V1, httpC *http.Client, logger *logging.Logger) ([]string, error) {
 	svrConfig := servicedisc.Config{
 		Type:     servicedisc.ServiceTypeVPN,
 		PK:       conf.PK,
@@ -322,7 +337,7 @@ func getAvailPublicVPNServers(conf *visorconfig.V1, httpC *http.Client, logger *
 	vpnServers, err := sdClient.Services(context.Background(), 0)
 	if err != nil {
 		logger.Error("Error getting vpn servers: ", err)
-		return nil
+		return nil, err
 	}
 	serverAddrs := make([]string, len(vpnServers))
 	for idx, server := range vpnServers {
@@ -332,7 +347,7 @@ func getAvailPublicVPNServers(conf *visorconfig.V1, httpC *http.Client, logger *
 			serverAddrs[idx] = server.Addr.PubKey().String() + " | NA"
 		}
 	}
-	return serverAddrs
+	return serverAddrs, nil
 }
 
 func getHTTPClient(conf *visorconfig.V1, ctx context.Context, logger *logging.MasterLogger) *http.Client {
