@@ -252,7 +252,6 @@ func serversBtn(conf *visorconfig.V1, rpcClient visor.API, httpC *http.Client, l
 			logger.Warnf("cannot fetch vpn-servers due to: %s", err.Error())
 		}
 		if len(servers) > 0 {
-			mVPNServers = append(mVPNServers, mVPNServersList.AddSubMenuItemCheckbox("OLD", "", false))
 			for _, server := range servers {
 				mVPNServers = append(mVPNServers, mVPNServersList.AddSubMenuItemCheckbox(server, "", false))
 			}
