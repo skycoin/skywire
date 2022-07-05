@@ -736,6 +736,7 @@ func (r *router) handleKeepAlivePacket(ctx context.Context, packet routing.Packe
 }
 
 func (r *router) handleErrorPacket(ctx context.Context, packet routing.Packet) error {
+	r.logger.Warn("router.handleErrorPacket")
 	rule, err := r.GetRule(packet.RouteID())
 	if err != nil {
 		return err
