@@ -1,4 +1,4 @@
-package dmsgpty
+package clidmsgpty
 
 import (
 	"context"
@@ -30,21 +30,25 @@ func init() {
 // RootCmd is the command that contains sub-commands which interacts with dmsgpty.
 var RootCmd = &cobra.Command{
 	Use:   "dmsgpty",
-	Short: "Some simple commands of dmsgpty to remote visor",
+	Short: "Interact with remote visors",
 }
 
 func init() {
 	RootCmd.AddCommand(
-		listOfVisors,
-		executeCommand,
+		visorsCmd,
+		shellCmd,
 	)
 }
 
-var listOfVisors = &cobra.Command{
+var visorsCmd = &cobra.Command{
 	Use:   "list",
-	Short: "fetch list of connected visor's PKs",
+	Short: "List connected visors",
 	Run: func(_ *cobra.Command, _ []string) {
-		remoteVisors := rpcClient().RemoteVisors()
+		remoteVisors, err := rpcClient().RemoteVisors()
+		if err != nil {
+			packageLogger.Fatal("RPC connection failed; is skywire running?\n", err)
+		}
+
 		var msg string
 		for idx, pk := range remoteVisors {
 			msg += fmt.Sprintf("%d. %s\n", idx+1, pk)
@@ -55,9 +59,9 @@ var listOfVisors = &cobra.Command{
 	},
 }
 
-var executeCommand = &cobra.Command{
+var shellCmd = &cobra.Command{
 	Use:   "start <pk>",
-	Short: "start dmsgpty for specific visor by its dmsg address pk:port",
+	Short: "Start dmsgpty for specific visor by its dmsg address pk:port",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(_ *cobra.Command, args []string) error {
 		cli := dmsgpty.DefaultCLI()
@@ -73,7 +77,7 @@ func rpcClient() visor.API {
 	const rpcDialTimeout = time.Second * 5
 	conn, err := net.DialTimeout("tcp", rpcAddr, rpcDialTimeout)
 	if err != nil {
-		packageLogger.Fatal("RPC connection failed:", err)
+		packageLogger.Fatal("RPC connection failed; is skywire running?\n", err)
 	}
 	return visor.NewRPCClient(packageLogger, conn, visor.RPCPrefix, 0)
 }

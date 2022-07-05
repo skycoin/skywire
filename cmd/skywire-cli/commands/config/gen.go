@@ -1,4 +1,4 @@
-package config
+package cliconfig
 
 import (
 	"encoding/json"
@@ -16,47 +16,9 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
-	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
-)
-
-var (
-	sk                cipher.SecKey
-	output            string
-	confPath          string
-	configName        string
-	stdout            bool
-	regen             bool
-	retainHypervisors bool
-	testEnv           bool
-	ptext             string
-	pkgEnv            bool
-	usrEnv            bool
-	hypervisor        bool
-	hypervisorPKs     string
-	dmsgHTTP          bool
-	publicRPC         bool
-	vpnServerEnable   bool
-	disableauth       bool
-	enableauth        bool
-	selectedOS        string
-	disableApps       string
-	bestProtocol      bool
-	serviceConfURL    string
-	services          *visorconfig.Services
-	force             bool
-	hide              bool
-	all               bool
-	outunset          bool
-	ver               string
-	root              bool
-	svcconf           = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")     //skyenv.DefaultServiceConfAddr
-	testconf          = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "") //skyenv.DefaultServiceConfAddr
-	hiddenflags       []string
-	binPath           string
-	logLevel          string
 )
 
 func init() {
@@ -126,7 +88,7 @@ func init() {
 
 var genConfigCmd = &cobra.Command{
 	Use:   "gen",
-	Short: "generate a config file",
+	Short: "Generate a config file",
 	PreRun: func(cmd *cobra.Command, _ []string) {
 		//--all unhides flags, prints help menu, and exits
 		if all {
@@ -353,7 +315,7 @@ var genConfigCmd = &cobra.Command{
 			for _, app := range apps {
 				appsSlice[app] = true
 			}
-			var newConfLauncherApps []launcher.AppConfig
+			var newConfLauncherApps []appserver.AppConfig
 			for _, app := range conf.Launcher.Apps {
 				if _, ok := appsSlice[app.Name]; !ok {
 					newConfLauncherApps = append(newConfLauncherApps, app)
