@@ -45,7 +45,8 @@ var (
 	root                   bool
 	svcconf                = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")     //skyenv.DefaultServiceConfAddr
 	testconf               = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "") //skyenv.DefaultServiceConfAddr
-	hiddenflags            []string
+	ghiddenflags           []string
+	uhiddenflags           []string
 	binPath                string
 	logLevel               string
 	pkg                    bool
