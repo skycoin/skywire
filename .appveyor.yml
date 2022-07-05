@@ -16,11 +16,14 @@ environment:
     GOARCH: amd64
 
   # For release, by pushing tag
-  - job_name: make-release
+  - job_name: make-release-linux
     appveyor_build_worker_image: ubuntu2004
     GOARCH: amd64
-  - job_name: make-release-non-linux
+  - job_name: make-release-darwin
     appveyor_build_worker_image: macos-bigsur
+    GOARCH: amd64
+  - job_name: make-release-windows
+    appveyor_build_worker_image: Visual Studio 2019
     GOARCH: amd64
 
   - job_name: DockerDeployMaster
@@ -93,7 +96,7 @@ for:
     skip_non_tags: true
     matrix:
       only:
-        - job_name: make-release
+        - job_name: make-release-linux
     install:
       - sudo apt update
       - sudo snap install goreleaser --classic
@@ -101,19 +104,34 @@ for:
     build_script:
       - make github-release
 
-  - # Release (Darwin / Windows)
+  - # Release (Darwin)
     skip_non_tags: true
     matrix:
       only:
-        - job_name: make-release-non-linux
+        - job_name: make-release-darwin
     install:
       - brew install goreleaser
       - brew install gh
       - brew install jq
       - brew install wget
     build_script:
-      - make github-release-non-linux
+      - make github-release-darwin
       - make mac-installer-release
+    
+  - # Release (Windows)
+    skip_non_tags: true
+    matrix:
+      only:
+        - job_name: make-release-windows
+    install:
+      - ps: Invoke-WebRequest "https://github.com/goreleaser/goreleaser/releases/download/v1.8.3/goreleaser_Windows_x86_64.zip" -o goreleaser.zip
+      - ps: Expand-Archive goreleaser.zip
+      - ps: Invoke-WebRequest "https://github.com/cli/cli/releases/download/v2.13.0/gh_2.13.0_windows_amd64.zip" -o gh.zip
+      - ps: Expand-Archive gh.zip
+      - ps: choco install make
+    build_script:
+      - make github-release-windows
+      - make windows-installer-release
     
   - # Docker Deploy (Master)
     skip_tags: true

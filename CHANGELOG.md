@@ -59,7 +59,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - `skywire-cli dmsgpty start <pk>` to connect through dmsgpty to remote visor
 - `make win-installer-latest` to create installer for latest version of released, not pre-release.
 - `trace` log level is added
-- `--log-lever` flag to generate and update config by `skywire-cli`
+- `--log-level` flag to generate and update config by `skywire-cli`
 
 ## 0.6.0
 

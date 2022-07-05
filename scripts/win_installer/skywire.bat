@@ -26,14 +26,6 @@ if not exist "local\logs\" (
 	mkdir "local\logs" >nul 2>&1
 )
 
-:: Moving vpn-client.exe to its path
-if exist vpn-client.exe (
-    if not exist "apps\" (
-        mkdir apps >nul 2>&1
-    )
-    move /Y vpn-client.exe apps >nul 2>&1
-)
-
 :: Moving wintun.dll to system32 path
 if exist "wintun.dll" (
     move /Y wintun.dll "C:\Windows\System32" >nul 2>&1

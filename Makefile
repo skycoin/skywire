@@ -248,6 +248,7 @@ bin-systray-windows-appveyor: ## Build `skywire-visor` and `skywire-cli` with sy
 	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go build -tags systray -o ./ $$_.FullName }'
 
 bin-systray: ## Build `skywire-visor`, `skywire-cli`
+	sed -i '/go conn.handleCall(msg)/c\conn.handleCall(msg)' ./vendor/github.com/godbus/dbus/v5/conn.go
 	CGO_ENABLED=${SYSTRAY_CGO_ENABLED} ${OPTS} go build ${BUILD_OPTS} -tags systray -o ./ ./cmd/skywire-visor
 	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/setup-node
@@ -270,19 +271,29 @@ github-release:
 	sed '/^## ${GITHUB_TAG}$$/,/^## .*/!d;//d;/^$$/d' ./CHANGELOG.md > releaseChangelog.md
 	goreleaser --rm-dist --config .goreleaser-linux.yml --release-notes releaseChangelog.md
 
-github-release-non-linux:
-	goreleaser --rm-dist --skip-publish
+github-release-darwin:
+	goreleaser --rm-dist  --config .goreleaser-darwin.yml --skip-publish
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags))
 	$(eval $(shell echo ${GITHUB_TOKEN} > ../token))
 	$(eval export GITHUB_TOKEN=)
 	gh auth login --with-token < ../token
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-systray-${GITHUB_TAG}-darwin-amd64.tar.gz
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-systray-${GITHUB_TAG}-darwin-arm64.tar.gz
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-systray-${GITHUB_TAG}-windows-amd64.zip
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-systray-${GITHUB_TAG}-windows-386.zip
 	gh release download ${GITHUB_TAG} --repo skycoin/skywire --pattern 'checksums*'
 	cat ./dist/checksums.txt >> ./checksums.txt
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} --clobber ./checksums.txt
+
+github-release-windows:
+	.\goreleaser\goreleaser.exe --rm-dist  --config .goreleaser-windows.yml --skip-publish
+	$(eval GITHUB_TAG=$(shell powershell git describe --abbrev=0 --tags))
+	$(eval $(shell echo $(GITHUB_TOKEN) > ../token))
+	$(eval export GITHUB_TOKEN=)
+	cat ../token | ./gh/bin/gh.exe auth login --with-token
+	./gh/bin/gh.exe release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-systray-${GITHUB_TAG}-windows-amd64.zip
+	./gh/bin/gh.exe release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-systray-${GITHUB_TAG}-windows-386.zip
+	./gh/bin/gh.exe release download ${GITHUB_TAG} --repo skycoin/skywire --pattern 'checksums*'
+	cat ./dist/checksums.txt >> ./checksums.txt
+	./gh/bin/gh.exe release upload --repo skycoin/skywire ${GITHUB_TAG} --clobber ./checksums.txt
 
 dep-github-release:
 	wget -c https://more.musl.cc/10/x86_64-linux-musl/aarch64-linux-musl-cross.tgz -O ../aarch64-linux-musl-cross.tgz
@@ -403,6 +414,12 @@ win-installer-latest:
 
 win-installer:
 	@powershell '.\scripts\win_installer\script.ps1 $(CUSTOM_VERSION)'
+
+windows-installer-release:
+	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags))
+	make win-installer CUSTOM_VERSION=$(GITHUB_TAG)
+	./gh/bin/gh.exe release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-windows-amd64.msi
+	./gh/bin/gh.exe release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-windows-386.msi
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
