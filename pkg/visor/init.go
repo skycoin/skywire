@@ -583,7 +583,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	routeSetupHooks := getRouteSetupHooks(ctx, v, log)
 
-	r, err := router.New(v.dmsgC, &rConf, routeSetupHooks)
+	r, err := router.New(v.dmsgC, &rConf, routeSetupHooks, logger)
 	if err != nil {
 		err := fmt.Errorf("failed to create router: %w", err)
 		return err
