@@ -50,6 +50,7 @@ type API interface {
 	SetAppSecure(appName string, isSecure bool) error
 	SetAppKillswitch(appName string, killswitch bool) error
 	SetAppNetworkInterface(appName string, netifc string) error
+	SetAppDNS(appName string, dnsaddr string) error
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)
@@ -522,6 +523,36 @@ func (v *Visor) SetAppPK(appName string, pk cipher.PubKey) error {
 	}
 
 	v.log.Infof("Updated %v PK", appName)
+
+	return nil
+}
+
+// SetAppDNS implements API.
+func (v *Visor) SetAppDNS(appName string, dnsAddr string) error {
+	allowedToChangePK := func(appName string) bool {
+		allowedApps := map[string]struct{}{
+			skyenv.VPNClientName: {},
+		}
+
+		_, ok := allowedApps[appName]
+		return ok
+	}
+
+	if !allowedToChangePK(appName) {
+		return fmt.Errorf("app %s is not allowed to change DNS Address", appName)
+	}
+
+	v.log.Infof("Changing %s DNS Address to %q", appName, dnsAddr)
+
+	const (
+		pkArgName = "-dns"
+	)
+
+	if err := v.conf.UpdateAppArg(v.appL, appName, pkArgName, dnsAddr); err != nil {
+		return err
+	}
+
+	v.log.Infof("Updated %v DNS Address", appName)
 
 	return nil
 }
