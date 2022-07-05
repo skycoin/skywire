@@ -257,7 +257,7 @@ func (r *router) DialRoutes(
 	}
 
 	// check if transports are available
-	ok := r.checkIfTransportAvalailable()
+	ok := r.checkIfTransportAvailable()
 	if !ok {
 		return nil, ErrNoTransportFound
 	}
@@ -1136,7 +1136,7 @@ func (r *router) removeRouteGroupOfRule(rule routing.Rule) {
 	log.Debug("Noise route group closed.")
 }
 
-func (r *router) checkIfTransportAvalailable() (ok bool) {
+func (r *router) checkIfTransportAvailable() (ok bool) {
 	r.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
 		ok = true
 		return ok
