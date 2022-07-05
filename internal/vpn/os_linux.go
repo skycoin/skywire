@@ -47,7 +47,11 @@ func (c *Client) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 		return fmt.Errorf("error setting interface up: %w", err)
 	}
 	c.releaseSysPrivileges()
-
+	if c.cfg.DNSAddr != "" {
+		if err := c.AddDNS(c.cfg.DNSAddr, c.tun.Name()); err != nil {
+			fmt.Printf("error setting dns for interface: %s", err)
+		}
+	}
 	if err := c.AddRoute(ip, gateway); err != nil {
 		return fmt.Errorf("error setting gateway for interface: %w", err)
 	}
@@ -99,6 +103,19 @@ func (c *Client) DeleteRoute(ip, gateway string) error {
 	}
 	defer c.releaseSysPrivileges()
 	return osutil.Run("ip", "r", "del", ip, "via", gateway)
+}
+
+// AddDNS set dns address for TUN device on tun0
+func (c *Client) AddDNS(dnsAddr, tunName string) error {
+	fmt.Printf("Set DNS on TUN %s\n", tunName)
+	if err := c.setSysPrivileges(); err != nil {
+		print(fmt.Sprintf("Failed to setup system privileges for AddDNS: %v\n", err))
+		return err
+	}
+	err := osutil.Run("nmcli", "dev", "mod", tunName, "+ipv4.dns", dnsAddr)
+	c.releaseSysPrivileges()
+
+	return err
 }
 
 // Server
