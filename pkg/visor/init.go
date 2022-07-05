@@ -212,7 +212,7 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 	}
 
 	// only needed for dmsghttp
-	pIP, err := getPublicIP(conf.AddressResolver)
+	pIP, err := getPublicIP(v, conf.AddressResolver)
 	if err != nil {
 		return err
 	}
@@ -256,7 +256,7 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 		factory.ServiceDisc = conf.ServiceDisc
 		factory.Client = httpC
 		// only needed for dmsghttp
-		pIP, err := getPublicIP(conf.ServiceDisc)
+		pIP, err := getPublicIP(v, conf.ServiceDisc)
 		if err != nil {
 			return err
 		}
@@ -792,7 +792,7 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 		return err
 	}
 
-	pIP, err := getPublicIP(conf.Addr)
+	pIP, err := getPublicIP(v, conf.Addr)
 	if err != nil {
 		return err
 	}
@@ -994,7 +994,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 		DiscAddr: serviceDisc,
 	}
 	// only needed for dmsghttp
-	pIP, err := getPublicIP(serviceDisc)
+	pIP, err := getPublicIP(v, serviceDisc)
 	if err != nil {
 		return err
 	}
@@ -1067,7 +1067,7 @@ func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transp
 	}
 
 	// only needed for dmsghttp
-	pIP, err := getPublicIP(conf.AddressResolver)
+	pIP, err := getPublicIP(v, conf.AddressResolver)
 	if err != nil {
 		return nil, err
 	}
@@ -1169,7 +1169,7 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 	return &http.Client{}, nil
 }
 
-func getPublicIP(service string) (string, error) {
+func getPublicIP(v *Visor, service string) (string, error) {
 	var serviceURL dmsgget.URL
 	var pIP string
 	err := serviceURL.Fill(service)
@@ -1182,20 +1182,28 @@ func getPublicIP(service string) (string, error) {
 		return pIP, fmt.Errorf("provided URL is invalid: %w", err)
 	}
 
-	pIP, err = getip2()
+	pIP, err = getIP()
 	if err != nil {
-		return pIP, fmt.Errorf("cannot fetch public ip")
+		<-v.stunReady
+		if v.stunClient.PublicIP != nil {
+			pIP = v.stunClient.PublicIP.IP()
+			return pIP, nil
+		}
+		err = fmt.Errorf("cannot fetch public ip")
+	}
+	if err != nil {
+		return pIP, err
 	}
 
 	return pIP, nil
 }
 
 type ipAPI struct {
-	Query string
+	PublicIP string `json:"public_ip"`
 }
 
-func getip2() (string, error) {
-	req, err := http.Get("http://ip-api.com/json/")
+func getIP() (string, error) {
+	req, err := http.Get("http://ip.skycoin.com")
 	if err != nil {
 		return "", err
 	}
@@ -1212,5 +1220,5 @@ func getip2() (string, error) {
 		return "", err
 	}
 
-	return ip.Query, nil
+	return ip.PublicIP, nil
 }
