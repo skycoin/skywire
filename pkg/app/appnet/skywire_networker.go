@@ -3,6 +3,7 @@ package appnet
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -27,6 +28,7 @@ type SkywireNetworker struct {
 	r         router.Router
 	porter    *netutil.Porter
 	isServing int32
+	err       error
 }
 
 // NewSkywireNetworker constructs skywire networker.
@@ -138,9 +140,10 @@ func (r *SkywireNetworker) serve(conn net.Conn) {
 
 	lisIfc, ok := r.porter.PortValue(uint16(localAddr.Port))
 	if !ok {
+		err := errors.New(fmt.Sprintf("no listener on port %d", localAddr.Port))
+		r.setErr(err)
 		r.close(conn)
-		r.log.Errorf("no listener on port %d", localAddr.Port)
-
+		r.log.Error(err)
 		return
 	}
 
@@ -153,6 +156,14 @@ func (r *SkywireNetworker) serve(conn net.Conn) {
 	}
 
 	lis.putConn(conn)
+}
+
+func (r *SkywireNetworker) setErr(err error) {
+	r.err = err
+}
+
+func (r *SkywireNetworker) Err() error {
+	return r.err
 }
 
 // closeRG closes router group and logs error if any.
