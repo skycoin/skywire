@@ -2,8 +2,10 @@ package visor
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -210,7 +212,7 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 	}
 
 	// only needed for dmsghttp
-	pIP, err := getPublicIP(v, conf.AddressResolver)
+	pIP, err := getPublicIP(conf.AddressResolver)
 	if err != nil {
 		return err
 	}
@@ -254,7 +256,7 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 		factory.ServiceDisc = conf.ServiceDisc
 		factory.Client = httpC
 		// only needed for dmsghttp
-		pIP, err := getPublicIP(v, conf.ServiceDisc)
+		pIP, err := getPublicIP(conf.ServiceDisc)
 		if err != nil {
 			return err
 		}
@@ -790,7 +792,7 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 		return err
 	}
 
-	pIP, err := getPublicIP(v, conf.Addr)
+	pIP, err := getPublicIP(conf.Addr)
 	if err != nil {
 		return err
 	}
@@ -992,7 +994,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 		DiscAddr: serviceDisc,
 	}
 	// only needed for dmsghttp
-	pIP, err := getPublicIP(v, serviceDisc)
+	pIP, err := getPublicIP(serviceDisc)
 	if err != nil {
 		return err
 	}
@@ -1065,7 +1067,7 @@ func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transp
 	}
 
 	// only needed for dmsghttp
-	pIP, err := getPublicIP(v, conf.AddressResolver)
+	pIP, err := getPublicIP(conf.AddressResolver)
 	if err != nil {
 		return nil, err
 	}
@@ -1167,9 +1169,10 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 	return &http.Client{}, nil
 }
 
-func getPublicIP(v *Visor, service string) (pIP string, err error) {
+func getPublicIP(service string) (string, error) {
 	var serviceURL dmsgget.URL
-	err = serviceURL.Fill(service)
+	var pIP string
+	err := serviceURL.Fill(service)
 	// only get the IP from the stun client if the url is of dmsg
 	// else just send empty string as ip
 	if serviceURL.Scheme != "dmsg" {
@@ -1179,11 +1182,28 @@ func getPublicIP(v *Visor, service string) (pIP string, err error) {
 		return pIP, fmt.Errorf("provided URL is invalid: %w", err)
 	}
 
-	// Wait until stun client is ready
-	<-v.stunReady
-	if v.stunClient.PublicIP == nil {
-		return "", fmt.Errorf("all STUN servers are offline, use direct URL config instead dmsghttp")
-	}
-	pIP = v.stunClient.PublicIP.IP()
+	pIP = getip2()
 	return pIP, nil
+}
+
+type ipAPI struct {
+	Query string
+}
+
+func getip2() string {
+	req, err := http.Get("http://ip-api.com/json/")
+	if err != nil {
+		return err.Error()
+	}
+	defer req.Body.Close()
+
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		return err.Error()
+	}
+
+	var ip ipAPI
+	json.Unmarshal(body, &ip)
+
+	return ip.Query
 }
