@@ -182,6 +182,8 @@ func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, logger *log
 	rpcC = rpcClient(conf, rpc_logger)
 
 	mVPNClient = systray.AddMenuItem("VPN", "VPN Client Submenu")
+	mVPNClient.Disable()
+	go mVPNClientEnable(rpcC, logger.PackageLogger("systray:vpn_button"))
 	// VPN Status
 	mVPNStatus = mVPNClient.AddSubMenuItem("Status: Disconnected", "VPN Client Status")
 	mVPNStatus.Disable()
@@ -195,6 +197,20 @@ func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, logger *log
 		mVPNServers = append(mVPNServers, mVPNServersList.AddSubMenuItemCheckbox(server, "", false))
 	}
 	go serversBtn(conf, mVPNServers, rpcC)
+}
+
+func mVPNClientEnable(rpcC visor.API, logger *logging.Logger) {
+	logger.Warn("Initializing...")
+	for {
+		isReady, _ := rpcC.IsDMSGClientReady()
+		if isReady {
+			mVPNClient.Enable()
+			logger.Info("Initialized.")
+			return
+		}
+		logger.Warn("DSMG-Client not ready yet, will check in next 10 seconds.")
+		time.Sleep(10 * time.Second)
+	}
 }
 
 func vpnStatusBtn(conf *visorconfig.V1, rpcClient visor.API) {
@@ -335,7 +351,7 @@ func getHTTPClient(conf *visorconfig.V1, ctx context.Context, logger *logging.Ma
 		keys = append(keys, pk)
 		entries := direct.GetAllEntries(keys, servers)
 		dClient := direct.NewClient(entries, logger.PackageLogger("systray:dmsghttp_direct_client"))
-		dmsgDC, closeDmsg, err := direct.StartDmsg(ctx, logger.PackageLogger("systray:dsmghttp_dmsgDC"),
+		dmsgDC, closeDmsg, err := direct.StartDmsg(ctx, logger.PackageLogger("systray:dmsghttp_dmsgDC"),
 			pk, sk, dClient, dmsg.DefaultConfig())
 		if err != nil {
 			return &http.Client{}

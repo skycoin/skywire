@@ -411,6 +411,13 @@ func (rc *rpcClient) RemoteVisors() ([]string, error) {
 	return output, nil
 }
 
+// IsDMSGClientReady return availability of dsmg client
+func (rc *rpcClient) IsDMSGClientReady() (bool, error) {
+	var out bool
+	err := rc.Call("IsDMSGClientReady", &struct{}{}, &out)
+	return out, err
+}
+
 // MockRPCClient mocks API.
 type mockRPCClient struct {
 	startedAt time.Time
@@ -936,6 +943,11 @@ func (mc *mockRPCClient) Exec(string) ([]byte, error) {
 // RuntimeLogs implements API.
 func (mc *mockRPCClient) RuntimeLogs() (string, error) {
 	return "", nil
+}
+
+// IsDMSGClientReady implements API.
+func (mc *mockRPCClient) IsDMSGClientReady() (bool, error) {
+	return false, nil
 }
 
 // SetMinHops implements API
