@@ -114,6 +114,8 @@ type RouteGroup struct {
 	// used to wait for all the `Close` packets to run through the loop and come back
 	closeDone sync.WaitGroup
 	once      sync.Once
+
+	closeError error
 }
 
 // NewRouteGroup creates a new RouteGroup.
@@ -217,6 +219,7 @@ func (rg *RouteGroup) Close() error {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
 
+	rg.logger.Error("RouteGroup.Close")
 	return rg.close(routing.CloseRequested)
 }
 
@@ -279,6 +282,11 @@ func (rg *RouteGroup) BandwidthSent() uint64 {
 // BandwidthReceived returns amount of bandwidth received (bytes).
 func (rg *RouteGroup) BandwidthReceived() uint64 {
 	return rg.networkStats.BandwidthReceived()
+}
+
+// SetError sets write deadline.
+func (rg *RouteGroup) SetError(err error) {
+	rg.closeError = err
 }
 
 // read reads incoming data. It tries to fetch the data from the internal buffer.
@@ -529,6 +537,20 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 	return ErrNoSuitableTransport
 }
 
+func (rg *RouteGroup) sendError(rule routing.Rule, tp *transport.ManagedTransport) error {
+	errPayload := rg.closeError
+	if errPayload == nil {
+		return nil
+	}
+
+	packet, err := routing.MakeErrorPacket(rule.NextRouteID(), []byte(errPayload.Error()))
+	if err != nil {
+		return err
+	}
+
+	return rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
+}
+
 // Close closes a RouteGroup with the specified close `code`:
 // - Send Close packet for all ForwardRules with the code `code`.
 // - Delete all rules (ForwardRules and ConsumeRules) from routing table.
@@ -549,6 +571,7 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 		rg.closeDone.Add(len(rg.tps))
 	}
 
+	rg.logger.Error("RouteGroup.close")
 	rg.broadcastClosePackets(code)
 
 	if closeInitiator {
@@ -673,14 +696,20 @@ func (rg *RouteGroup) handleClosePacket(code routing.CloseCode) error {
 		rg.closeDone.Done()
 		return nil
 	}
+	rg.logger.Error("RouteGroup.handleClosePacket")
 
 	return rg.close(code)
 }
 
 func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) {
+	rg.logger.Error("RouteGroup.broadcastClosePackets")
 	for i := 0; i < len(rg.tps); i++ {
 		if rg.tps[i] == nil || rg.fwd[i] == nil {
 			continue
+		}
+
+		if err := rg.sendError(rg.fwd[i], rg.tps[i]); err != nil {
+			rg.logger.WithError(err).Errorf("Failed to send error packet to %s", rg.tps[i].Remote())
 		}
 
 		packet := routing.MakeClosePacket(rg.fwd[i].NextRouteID(), code)
