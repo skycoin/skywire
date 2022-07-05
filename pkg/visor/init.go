@@ -1199,7 +1199,7 @@ func getPublicIP(v *Visor, service string) (string, error) {
 }
 
 type ipAPI struct {
-	PublicIP string `json:"public_ip"`
+	PublicIP string `json:"ip_address"`
 }
 
 func getIP() (string, error) {
