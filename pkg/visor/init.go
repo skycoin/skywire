@@ -1173,7 +1173,7 @@ func getPublicIP(v *Visor, service string) (string, error) {
 	var serviceURL dmsgget.URL
 	var pIP string
 	err := serviceURL.Fill(service)
-	// only get the IP from the stun client if the url is of dmsg
+	// only get the IP if the url is of dmsg
 	// else just send empty string as ip
 	if serviceURL.Scheme != "dmsg" {
 		return pIP, nil
