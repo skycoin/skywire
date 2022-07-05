@@ -36,12 +36,12 @@ func init() {
 	updateCmd.Flags().StringVar(&setPublicAutoconnect, "public-autoconn", "", "change public autoconnect configuration")
 	updateCmd.Flags().IntVar(&minHops, "set-minhop", -1, "change min hops value")
 	updateCmd.PersistentFlags().StringVarP(&input, "input", "i", "", "path of input config file.")
-	hiddenflags = append(hiddenflags, "input")
+	uhiddenflags = append(uhiddenflags, "input")
 	updateCmd.PersistentFlags().StringVarP(&output, "output", "o", "", "config file to output")
 	if root {
 		if _, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.Configjson); err == nil {
 			updateCmd.PersistentFlags().BoolVarP(&pkg, "pkg", "p", false, "update package config "+skyenv.SkywirePath+"/"+skyenv.Configjson)
-			hiddenflags = append(hiddenflags, "pkg")
+			uhiddenflags = append(uhiddenflags, "pkg")
 		}
 	}
 	if !root {
@@ -50,7 +50,7 @@ func init() {
 		}
 	}
 
-	for _, j := range hiddenflags {
+	for _, j := range uhiddenflags {
 		updateCmd.Flags().MarkHidden(j) //nolint
 	}
 
