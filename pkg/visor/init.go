@@ -1181,7 +1181,9 @@ func getPublicIP(v *Visor, service string) (pIP string, err error) {
 
 	// Wait until stun client is ready
 	<-v.stunReady
-
+	if v.stunClient.PublicIP == nil {
+		return "", fmt.Errorf("all STUN servers are offline, use direct URL config instead dmsghttp")
+	}
 	pIP = v.stunClient.PublicIP.IP()
 	return pIP, nil
 }
