@@ -195,7 +195,7 @@ func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, logger *log
 }
 
 func mVPNClientEnable(rpcC visor.API, logger *logging.Logger) {
-	logger.Warn("Initializing...")
+	logger.Info("Initializing...")
 	for {
 		isReady, _ := rpcC.IsDMSGClientReady()
 		if isReady {
@@ -203,7 +203,7 @@ func mVPNClientEnable(rpcC visor.API, logger *logging.Logger) {
 			logger.Info("Initialized.")
 			return
 		}
-		logger.Warn("DSMG-Client not ready yet, will check in next 10 seconds.")
+		logger.Warn("DMSG-Client not ready yet, will check in next 10 seconds.")
 		time.Sleep(10 * time.Second)
 	}
 }
