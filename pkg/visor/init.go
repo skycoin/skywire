@@ -1182,7 +1182,11 @@ func getPublicIP(service string) (string, error) {
 		return pIP, fmt.Errorf("provided URL is invalid: %w", err)
 	}
 
-	pIP = getip2()
+	pIP, err = getip2()
+	if err != nil {
+		return pIP, fmt.Errorf("cannot fetch public ip")
+	}
+
 	return pIP, nil
 }
 
@@ -1190,20 +1194,23 @@ type ipAPI struct {
 	Query string
 }
 
-func getip2() string {
+func getip2() (string, error) {
 	req, err := http.Get("http://ip-api.com/json/")
 	if err != nil {
-		return err.Error()
+		return "", err
 	}
-	defer req.Body.Close()
+	defer req.Body.Close() // nolint
 
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		return err.Error()
+		return "", err
 	}
 
 	var ip ipAPI
-	json.Unmarshal(body, &ip)
+	err = json.Unmarshal(body, &ip)
+	if err != nil {
+		return "", err
+	}
 
-	return ip.Query
+	return ip.Query, nil
 }
