@@ -12,7 +12,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -189,8 +189,8 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 // makeDefaultLauncherAppsConfig creates default launcher config for apps,
 // for package based installation in other platform (Darwin, Windows) it only includes
 // the shipped apps for that platforms
-func makeDefaultLauncherAppsConfig() []launcher.AppConfig {
-	defaultConfig := []launcher.AppConfig{
+func makeDefaultLauncherAppsConfig() []appserver.AppConfig {
+	defaultConfig := []appserver.AppConfig{
 		{
 			Name:      skyenv.VPNClientName,
 			AutoStart: false,

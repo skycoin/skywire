@@ -20,7 +20,6 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
-	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -121,15 +120,15 @@ func (rc *rpcClient) Uptime() (float64, error) {
 }
 
 // Apps calls Apps.
-func (rc *rpcClient) Apps() ([]*launcher.AppState, error) {
-	states := make([]*launcher.AppState, 0)
+func (rc *rpcClient) Apps() ([]*appserver.AppState, error) {
+	states := make([]*appserver.AppState, 0)
 	err := rc.Call("Apps", &struct{}{}, &states)
 	return states, err
 }
 
 // App calls App.
-func (rc *rpcClient) App(appName string) (*launcher.AppState, error) {
-	var state *launcher.AppState
+func (rc *rpcClient) App(appName string) (*appserver.AppState, error) {
+	var state *appserver.AppState
 	err := rc.Call("App", appName, &state)
 	return state, err
 }
@@ -354,6 +353,11 @@ func (rc *rpcClient) Restart() error {
 	return rc.Call("Restart", &struct{}{}, &struct{}{})
 }
 
+// Shutdown calls Shutdown.
+func (rc *rpcClient) Shutdown() error {
+	return rc.Call("Shutdown", &struct{}{}, &struct{}{})
+}
+
 // Exec calls Exec.
 func (rc *rpcClient) Exec(command string) ([]byte, error) {
 	output := make([]byte, 0)
@@ -393,11 +397,18 @@ type StatusMessage struct {
 	IsError bool
 }
 
+// VPNServers calls VPNServers.
+func (rc *rpcClient) VPNServers() ([]string, error) {
+	output := []string{}
+	rc.Call("VPNServers", &struct{}{}, &output) // nolint
+	return output, nil
+}
+
 // RemoteVisors calls RemoteVisors.
-func (rc *rpcClient) RemoteVisors() []string {
+func (rc *rpcClient) RemoteVisors() ([]string, error) {
 	output := []string{}
 	rc.Call("RemoteVisors", &struct{}{}, &output) // nolint
-	return output
+	return output, nil
 }
 
 // MockRPCClient mocks API.
@@ -432,7 +443,7 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, AP
 		log.Infof("tp[%2d]: %v", i, tps[i])
 	}
 
-	rt := routing.NewTable()
+	rt := routing.NewTable(log)
 	ruleKeepAlive := router.DefaultRouteKeepAlive
 
 	for i := 0; i < r.Intn(maxRules+1); i++ {
@@ -483,9 +494,9 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, AP
 			PubKey:          localPK,
 			BuildInfo:       buildinfo.Get(),
 			AppProtoVersion: supportedProtocolVersion,
-			Apps: []*launcher.AppState{
-				{AppConfig: launcher.AppConfig{Name: "foo.v1.0", AutoStart: false, Port: 10}},
-				{AppConfig: launcher.AppConfig{Name: "bar.v2.0", AutoStart: false, Port: 20}},
+			Apps: []*appserver.AppState{
+				{AppConfig: appserver.AppConfig{Name: "foo.v1.0", AutoStart: false, Port: 10}},
+				{AppConfig: appserver.AppConfig{Name: "bar.v2.0", AutoStart: false, Port: 20}},
 			},
 			Transports:  tps,
 			RoutesCount: rt.Count(),
@@ -584,8 +595,8 @@ func (mc *mockRPCClient) Uptime() (float64, error) {
 }
 
 // Apps implements API.
-func (mc *mockRPCClient) Apps() ([]*launcher.AppState, error) {
-	var apps []*launcher.AppState
+func (mc *mockRPCClient) Apps() ([]*appserver.AppState, error) {
+	var apps []*appserver.AppState
 	err := mc.do(false, func() error {
 		for _, a := range mc.o.Apps {
 			a := a
@@ -597,8 +608,8 @@ func (mc *mockRPCClient) Apps() ([]*launcher.AppState, error) {
 }
 
 // App implements API.
-func (mc *mockRPCClient) App(appName string) (*launcher.AppState, error) {
-	var app *launcher.AppState
+func (mc *mockRPCClient) App(appName string) (*appserver.AppState, error) {
+	var app *appserver.AppState
 	err := mc.do(false, func() error {
 		for _, a := range mc.o.Apps {
 			if a.Name == appName {
@@ -912,6 +923,11 @@ func (mc *mockRPCClient) Restart() error {
 	return nil
 }
 
+// Shutdown implements API.
+func (mc *mockRPCClient) Shutdown() error {
+	return nil
+}
+
 // Exec implements API.
 func (mc *mockRPCClient) Exec(string) ([]byte, error) {
 	return []byte("mock"), nil
@@ -937,7 +953,12 @@ func (mc *mockRPCClient) GetPersistentTransports() ([]transport.PersistentTransp
 	return []transport.PersistentTransports{}, nil
 }
 
+// VPNServers implements API
+func (mc *mockRPCClient) VPNServers() ([]string, error) {
+	return []string{}, nil
+}
+
 // RemoteVisors implements API
-func (mc *mockRPCClient) RemoteVisors() []string {
-	return []string{}
+func (mc *mockRPCClient) RemoteVisors() ([]string, error) {
+	return []string{}, nil
 }

@@ -6,6 +6,8 @@ import (
 	"math"
 	"sync"
 	"time"
+
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
 var (
@@ -52,13 +54,15 @@ type memTable struct {
 	nextID   RouteID
 	rules    map[RouteID]Rule
 	activity map[RouteID]time.Time
+	log      *logging.Logger
 }
 
 // NewTable returns an in-memory routing table implementation with a specified configuration.
-func NewTable() Table {
+func NewTable(log *logging.Logger) Table {
 	mt := &memTable{
 		rules:    map[RouteID]Rule{},
 		activity: make(map[RouteID]time.Time),
+		log:      log,
 	}
 
 	return mt
@@ -101,7 +105,7 @@ func (mt *memTable) SaveRule(rule Rule) error {
 	defer mt.Unlock()
 
 	mt.rules[key] = rule
-	fmt.Printf("ROUTING TABLE CONTENTS: %v\n", mt.rules)
+	mt.log.Debugf("ROUTING TABLE CONTENTS: %v", mt.rules)
 	mt.activity[key] = now
 
 	return nil
