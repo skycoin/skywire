@@ -474,8 +474,6 @@ github.com/sirupsen/logrus v1.4.1/go.mod h1:ni0Sbl8bgC9z8RoU9G6nDWqqs/fq4eDPysMB
 github.com/sirupsen/logrus v1.4.2/go.mod h1:tLMulIdttU9McNUspp0xgXVQah82FyeX6MwdIuYE2rE=
 github.com/sirupsen/logrus v1.8.1 h1:dJKuHgqk1NNQlqoA6BTlM1Wf9DOH3NBjQyu0h9+AZZE=
 github.com/sirupsen/logrus v1.8.1/go.mod h1:yWOB1SBYBC5VeMP7gHvWumXLIWorT60ONWic61uBYv0=
-github.com/skycoin/dmsg v0.0.0-20220617100223-c17f98a92a47 h1:d/KdILjeiZOj3QFOm8KkOwIr5wwx9zWCl+oGVXPln1o=
-github.com/skycoin/dmsg v0.0.0-20220617100223-c17f98a92a47/go.mod h1:7ixxeJVjbe3lxDkI4Yizj/TWoafYxs8cPJfxjlDeG+w=
 github.com/skycoin/dmsg v0.0.0-20220704102949-fece1bd9c40c h1:v7d+0yOp066U8FmcUdQ0Nh9Q+qshBO7+w3ZybGJlBnk=
 github.com/skycoin/dmsg v0.0.0-20220704102949-fece1bd9c40c/go.mod h1:7ixxeJVjbe3lxDkI4Yizj/TWoafYxs8cPJfxjlDeG+w=
 github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6 h1:1Nc5EBY6pjfw1kwW0duwyG+7WliWz5u9kgk1h5MnLuA=
