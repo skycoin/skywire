@@ -28,7 +28,6 @@ type SkywireNetworker struct {
 	r         router.Router
 	porter    *netutil.Porter
 	isServing int32
-	err       error
 }
 
 // NewSkywireNetworker constructs skywire networker.
@@ -113,7 +112,7 @@ func (r *SkywireNetworker) serveRouteGroup(ctx context.Context) error {
 	for {
 		log.Debug("Awaiting to accept route group...")
 
-		conn, err := r.r.AcceptRoutes(ctx)
+		conn, rg, err := r.r.AcceptRoutes(ctx)
 		if err != nil {
 			log.WithError(err).Debug("Stopped accepting routes.")
 			return err
@@ -124,12 +123,12 @@ func (r *SkywireNetworker) serveRouteGroup(ctx context.Context) error {
 			WithField("remote", conn.RemoteAddr()).
 			Debug("Accepted route group.")
 
-		go r.serve(conn)
+		go r.serve(conn, rg)
 	}
 }
 
 // serveRG passes accepted router group to the corresponding listener.
-func (r *SkywireNetworker) serve(conn net.Conn) {
+func (r *SkywireNetworker) serve(conn net.Conn, rg *router.RouteGroup) {
 	localAddr, ok := conn.LocalAddr().(routing.Addr)
 	if !ok {
 		r.close(conn)
@@ -140,10 +139,11 @@ func (r *SkywireNetworker) serve(conn net.Conn) {
 
 	lisIfc, ok := r.porter.PortValue(uint16(localAddr.Port))
 	if !ok {
-		err := errors.New(fmt.Sprintf("no listener on port %d", localAddr.Port))
-		r.setErr(err)
-		r.close(conn)
+		err := fmt.Errorf("no listener on port %d", localAddr.Port)
 		r.log.Error(err)
+		rg.SetError(err)
+		r.close(conn)
+
 		return
 	}
 
@@ -156,14 +156,6 @@ func (r *SkywireNetworker) serve(conn net.Conn) {
 	}
 
 	lis.putConn(conn)
-}
-
-func (r *SkywireNetworker) setErr(err error) {
-	r.err = err
-}
-
-func (r *SkywireNetworker) Err() error {
-	return r.err
 }
 
 // closeRG closes router group and logs error if any.
