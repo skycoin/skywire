@@ -888,6 +888,9 @@
       "data-units-info": "Allows to select the units that will be used to display the data transmission statistics.",
       "minimum-hops": "Minimum hops",
       "minimum-hops-info": "Allows to set the minimum number of hops the connections must pass through other Skywire visors before reaching the final destination.",
+      "dns": "Custom DNS server",
+      "dns-info": "Allows to use a custom DNS server, which could improve privacy and prevent sites from being blocked by the default DNS server of your ISP.",
+      "setting-none": "None",
       "setting-on": "On",
       "setting-off": "Off",
       "working-warning": "The system is busy. Please wait for the previous operation to finish.",
@@ -899,6 +902,13 @@
         "only-bytes": "Bytes for all stats",
         "bits-speed-and-bytes-volume": "Bits for speed and bytes for volume (default)"
       }
+    },
+
+    "dns-config": {
+      "title": "Custom DNS server",
+      "ip": "Custom DNS server IP address",
+      "save-config-button": "Save configuration",
+      "done": "Changes saved."
     }
   }
 }
