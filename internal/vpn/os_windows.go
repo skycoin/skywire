@@ -54,7 +54,7 @@ func (c *Client) SetupDNS() {
 func (c *Client) RevertDNS() {
 	if c.cfg.DNSAddr != "" {
 		dnsRevertCmd := fmt.Sprintf(tunDNSCMDFmt, c.tun.Name(), "none")
-		osutil.RunWithResult("cmd", "/C", dnsRevertCmd)
+		osutil.RunWithResult("cmd", "/C", dnsRevertCmd) //nolint
 	}
 }
 
