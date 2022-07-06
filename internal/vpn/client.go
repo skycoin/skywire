@@ -449,7 +449,7 @@ serveLoop:
 func (c *Client) dialServeConn() error {
 	conn, err := c.dialServer(c.appCl, c.cfg.ServerPK)
 	if err != nil {
-		fmt.Printf("error connecting to VPN server: %s", err)
+		fmt.Printf("error connecting to VPN server: %s\n", err)
 		return err
 	}
 
