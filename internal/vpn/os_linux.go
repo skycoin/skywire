@@ -48,7 +48,7 @@ func (c *Client) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 	}
 	c.releaseSysPrivileges()
 	if c.cfg.DNSAddr != "" {
-		if err := c.AddDNS(c.cfg.DNSAddr, c.tun.Name()); err != nil {
+		if err := c.SetupDNS(); err != nil {
 			fmt.Printf("error setting dns for interface: %s", err)
 		}
 	}
@@ -105,17 +105,32 @@ func (c *Client) DeleteRoute(ip, gateway string) error {
 	return osutil.Run("ip", "r", "del", ip, "via", gateway)
 }
 
-// AddDNS set dns address for TUN device on tun0
-func (c *Client) AddDNS(dnsAddr, tunName string) error {
-	fmt.Printf("Set DNS on TUN %s\n", tunName)
+// SetupDNS set dns address for TUN device on tun0
+func (c *Client) SetupDNS() error {
+	fmt.Printf("Set DNS on TUN %s\n", c.tun.Name())
 	if err := c.setSysPrivileges(); err != nil {
 		print(fmt.Sprintf("Failed to setup system privileges for AddDNS: %v\n", err))
 		return err
 	}
-	err := osutil.Run("nmcli", "dev", "mod", tunName, "+ipv4.dns", dnsAddr)
+	err := osutil.Run("nmcli", "dev", "mod", c.tun.Name(), "+ipv4.dns", c.cfg.DNSAddr)
 	c.releaseSysPrivileges()
 
 	return err
+}
+
+// RevertDNS trying to revert DNS values same as before starting vpn-client if it changed
+func (c *Client) RevertDNS() {
+	if c.cfg.DNSAddr != "" {
+		if err := c.setSysPrivileges(); err != nil {
+			print(fmt.Sprintf("Failed to setup system privileges for RevertDNS: %v\n", err))
+			return
+		}
+		err := osutil.Run("nmcli", "dev", "mod", c.tun.Name(), "-ipv4.dns", "0")
+		if err != nil {
+			print(fmt.Sprintf("Failed to revert DNS: %v\n", err))
+		}
+		c.releaseSysPrivileges()
+	}
 }
 
 // Server

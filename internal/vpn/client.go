@@ -52,7 +52,7 @@ type Client struct {
 
 	connectedDuration int64
 
-	defaultSystemDNS string
+	defaultSystemDNS string //nolint
 }
 
 // NewClient creates VPN client instance.
