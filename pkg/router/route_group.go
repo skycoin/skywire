@@ -115,6 +115,7 @@ type RouteGroup struct {
 	closeDone sync.WaitGroup
 	once      sync.Once
 
+	errorMu    sync.RWMutex
 	closeError error
 }
 
@@ -284,9 +285,20 @@ func (rg *RouteGroup) BandwidthReceived() uint64 {
 	return rg.networkStats.BandwidthReceived()
 }
 
-// SetError sets write deadline.
+// SetError sets the close error.
 func (rg *RouteGroup) SetError(err error) {
+	rg.errorMu.Lock()
+	defer rg.errorMu.Unlock()
+
 	rg.closeError = err
+}
+
+// GetError gets the close error.
+func (rg *RouteGroup) GetError() error {
+	rg.errorMu.RLock()
+	defer rg.errorMu.RUnlock()
+
+	return rg.closeError
 }
 
 // read reads incoming data. It tries to fetch the data from the internal buffer.
@@ -538,7 +550,7 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 }
 
 func (rg *RouteGroup) sendError(rule routing.Rule, tp *transport.ManagedTransport) error {
-	errPayload := rg.closeError
+	errPayload := rg.GetError()
 	if errPayload == nil {
 		return nil
 	}
