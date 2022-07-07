@@ -112,7 +112,7 @@ func (r *SkywireNetworker) serveRouteGroup(ctx context.Context) error {
 	for {
 		log.Debug("Awaiting to accept route group...")
 
-		conn, rg, err := r.r.AcceptRoutes(ctx)
+		conn, err := r.r.AcceptRoutes(ctx)
 		if err != nil {
 			log.WithError(err).Debug("Stopped accepting routes.")
 			return err
@@ -123,12 +123,13 @@ func (r *SkywireNetworker) serveRouteGroup(ctx context.Context) error {
 			WithField("remote", conn.RemoteAddr()).
 			Debug("Accepted route group.")
 
-		go r.serve(conn, rg)
+		go r.serve(conn)
 	}
 }
 
 // serveRG passes accepted router group to the corresponding listener.
-func (r *SkywireNetworker) serve(conn net.Conn, rg *router.RouteGroup) {
+func (r *SkywireNetworker) serve(conn net.Conn) {
+	rg := conn.(*router.RouteGroup)
 	localAddr, ok := conn.LocalAddr().(routing.Addr)
 	if !ok {
 		r.close(conn)

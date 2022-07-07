@@ -132,7 +132,7 @@ type Router interface {
 	// Then the following should happen:
 	// - Save to routing.Table and internal RouteGroup map.
 	// - Return the RoutingGroup.
-	AcceptRoutes(context.Context) (net.Conn, *RouteGroup, error)
+	AcceptRoutes(context.Context) (net.Conn, error)
 	SaveRoutingRules(rules ...routing.Rule) error
 	ReserveKeys(n int) ([]routing.RouteID, error)
 	IntroduceRules(rules routing.EdgeRules) error
@@ -309,7 +309,7 @@ func (r *router) DialRoutes(
 // Then the following should happen:
 // - Save to routing.Table and internal RouteGroup map.
 // - Return the RoutingGroup.
-func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, *RouteGroup, error) {
+func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, error) {
 	var (
 		rules routing.EdgeRules
 		ok    bool
@@ -317,7 +317,7 @@ func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, *RouteGroup, error
 
 	select {
 	case <-ctx.Done():
-		return nil, nil, ctx.Err()
+		return nil, ctx.Err()
 	case rules, ok = <-r.accept:
 	}
 
@@ -329,11 +329,11 @@ func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, *RouteGroup, error
 			Err:    errors.New("use of closed network connection"),
 		}
 
-		return nil, nil, err
+		return nil, err
 	}
 
 	if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
-		return nil, nil, fmt.Errorf("SaveRoutingRules: %w", err)
+		return nil, fmt.Errorf("SaveRoutingRules: %w", err)
 	}
 
 	nsConf := noise.Config{
@@ -345,12 +345,12 @@ func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, *RouteGroup, error
 
 	nrg, err := r.saveRouteGroupRules(rules, nsConf)
 	if err != nil {
-		return nil, nil, fmt.Errorf("saveRouteGroupRules: %w", err)
+		return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
 	}
 
 	nrg.rg.startOffServiceLoops()
 
-	return nrg, nrg.rg, nil
+	return nrg, nil
 }
 
 // Serve starts transport listening loop.
