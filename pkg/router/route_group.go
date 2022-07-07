@@ -554,6 +554,10 @@ func (rg *RouteGroup) sendError(rule routing.Rule, tp *transport.ManagedTranspor
 		return nil
 	}
 
+	if !rg.isCloseInitiator() {
+		return nil
+	}
+
 	packet, err := routing.MakeErrorPacket(rule.NextRouteID(), []byte(errPayload.Error()))
 	if err != nil {
 		return err
@@ -692,6 +696,8 @@ func (rg *RouteGroup) handleErrorPacket(packet routing.Packet) error {
 	if rg.isRemoteClosed() {
 		return nil
 	}
+
+	rg.SetError(fmt.Errorf(string(packet.Payload())))
 	rg.logger.Error(string(packet.Payload()))
 	return nil
 }
