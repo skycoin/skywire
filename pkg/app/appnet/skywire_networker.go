@@ -128,7 +128,6 @@ func (r *SkywireNetworker) serveRouteGroup(ctx context.Context) error {
 
 // serveRG passes accepted router group to the corresponding listener.
 func (r *SkywireNetworker) serve(conn net.Conn) {
-	ng := conn.(*router.NoiseRouteGroup)
 	localAddr, ok := conn.LocalAddr().(routing.Addr)
 	if !ok {
 		r.close(conn)
@@ -141,7 +140,10 @@ func (r *SkywireNetworker) serve(conn net.Conn) {
 	if !ok {
 		err := ErrServiceOffline(uint16(localAddr.Port))
 		r.log.Error(err)
-		ng.SetError(err)
+		ng, ok := conn.(*router.NoiseRouteGroup)
+		if ok {
+			ng.SetError(err)
+		}
 		r.close(conn)
 
 		return
