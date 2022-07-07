@@ -3,7 +3,6 @@ package appnet
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -140,7 +139,7 @@ func (r *SkywireNetworker) serve(conn net.Conn) {
 
 	lisIfc, ok := r.porter.PortValue(uint16(localAddr.Port))
 	if !ok {
-		err := fmt.Errorf("no listener on port %d", localAddr.Port)
+		err := ErrServiceOffline(uint16(localAddr.Port))
 		r.log.Error(err)
 		ng.SetError(err)
 		r.close(conn)
