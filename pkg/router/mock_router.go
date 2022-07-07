@@ -14,7 +14,7 @@ type MockRouter struct {
 }
 
 // AcceptRoutes provides a mock function with given fields: _a0
-func (_m *MockRouter) AcceptRoutes(_a0 context.Context) (net.Conn, *RouteGroup, error) {
+func (_m *MockRouter) AcceptRoutes(_a0 context.Context) (net.Conn, error) {
 	ret := _m.Called(_a0)
 
 	var r0 net.Conn
@@ -26,23 +26,14 @@ func (_m *MockRouter) AcceptRoutes(_a0 context.Context) (net.Conn, *RouteGroup, 
 		}
 	}
 
-	var r1 *RouteGroup
-	if rf, ok := ret.Get(1).(func(context.Context) *RouteGroup); ok {
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
 		r1 = rf(_a0)
 	} else {
-		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*RouteGroup)
-		}
+		r1 = ret.Error(1)
 	}
 
-	var r2 error
-	if rf, ok := ret.Get(2).(func(context.Context) error); ok {
-		r2 = rf(_a0)
-	} else {
-		r2 = ret.Error(2)
-	}
-
-	return r0, r1, r2
+	return r0, r1
 }
 
 // Close provides a mock function with given fields:
