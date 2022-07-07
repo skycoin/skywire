@@ -20,7 +20,6 @@ import (
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
-	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
@@ -679,10 +678,6 @@ func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error)
 
 	var sHello ServerHello
 	if err := ReadJSONWithTimeout(conn, &sHello, handshakeTimeout); err != nil {
-		ng := conn.(*router.NoiseRouteGroup)
-		if serverErr := ng.GetError(); serverErr != nil {
-			return nil, nil, serverErr
-		}
 		return nil, nil, fmt.Errorf("error reading server hello: %w", err)
 	}
 
