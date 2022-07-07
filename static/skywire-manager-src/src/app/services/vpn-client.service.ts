@@ -295,7 +295,10 @@ export class VpnClientService {
       return of(['8.8.8.8 (testing)', 'United States (testing)']);
     }
 
-    return this.http.request('GET', window.location.protocol + '//ip.skycoin.com/').pipe(
+    // The date is added to avoid the browser cache.
+    const date = (new Date()).getTime();
+
+    return this.http.request('GET', window.location.protocol + '//ip.skycoin.com/?t=' + date).pipe(
       retryWhen(errors => concat(errors.pipe(delay(this.standardWaitTime), take(4)), throwError(''))),
       map(data => {
         let ip = '';
