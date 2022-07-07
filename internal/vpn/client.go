@@ -9,6 +9,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -680,7 +681,13 @@ func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error)
 
 	var sHello ServerHello
 	if err := ReadJSONWithTimeout(conn, &sHello, handshakeTimeout); err != nil {
-		return nil, nil, fmt.Errorf("error reading server hello: %w", err)
+		fmt.Printf("error reading server hello: %v\n", err)
+		if strings.Contains(err.Error(), appnet.ErrServiceOffline(skyenv.VPNServerPort).Error()) {
+			err = appserver.RPCErr{
+				Err: err.Error(),
+			}
+		}
+		return nil, nil, err
 	}
 
 	fmt.Printf("Got server hello: %v", sHello)
