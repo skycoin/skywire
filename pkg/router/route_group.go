@@ -698,7 +698,6 @@ func (rg *RouteGroup) handleErrorPacket(packet routing.Packet) error {
 	}
 
 	rg.SetError(fmt.Errorf(string(packet.Payload())))
-	rg.logger.Error(string(packet.Payload()))
 	return nil
 }
 
