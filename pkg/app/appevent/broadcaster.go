@@ -6,7 +6,8 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skycoin/src/util/logging"
+
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
 // Broadcaster combines multiple RPCClients (which connects to the RPCGateway of the apps).
@@ -69,11 +70,13 @@ func (mc *Broadcaster) Broadcast(ctx context.Context, e *Event) error {
 	// Delete inactive clients and associated error channels.
 	for client, errCh := range mc.clients {
 		if err := <-errCh; err != nil {
-			mc.log.
-				WithError(err).
-				WithField("close_error", client.Close()).
-				WithField("hello", client.Hello().String()).
-				Warn("Events RPC client closed due to error.")
+			if err.Error() != "connection is shut down" {
+				mc.log.
+					WithError(err).
+					WithField("close_error", client.Close()).
+					WithField("hello", client.Hello().String()).
+					Warn("Events RPC client closed due to error.")
+			}
 
 			delete(mc.clients, client)
 			close(errCh)

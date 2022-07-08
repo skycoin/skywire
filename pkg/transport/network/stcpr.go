@@ -2,13 +2,11 @@ package network
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net"
 
-	"github.com/skycoin/dmsg/cipher"
-
-	"github.com/skycoin/skywire/pkg/util/netutil"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 )
 
 type stcprClient struct {
@@ -26,12 +24,7 @@ func (c *stcprClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16)
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
 	}
-	c.log.Infof("Dialing PK %v", rPK)
-	visorData, err := c.ar.Resolve(ctx, string(STCPR), rPK)
-	if err != nil {
-		return nil, fmt.Errorf("resolve PK: %w", err)
-	}
-	c.log.Infof("Resolved PK %v to visor data %v", rPK, visorData)
+	c.log.Debugf("Dialing PK %v", rPK)
 	conn, err := c.dialVisor(ctx, rPK, c.dial)
 	if err != nil {
 		return nil, err
@@ -73,14 +66,14 @@ func (c *stcprClient) serve() {
 		c.log.Errorf("Failed to check for public IP: %v", err)
 	}
 	if !hasPublic {
-		c.log.Infof("Not binding STCPR: no public IP address found")
+		c.log.Debug("Not binding STCPR: no public IP address found")
 		return
 	}
-	c.log.Infof("Binding")
+	c.log.Debug("Binding")
 	if err := c.ar.BindSTCPR(context.Background(), port); err != nil {
 		c.log.Errorf("Failed to bind STCPR: %v", err)
 		return
 	}
-	c.log.Infof("Successfully bound stcpr to port %s", port)
+	c.log.Debugf("Successfully bound stcpr to port %s", port)
 	c.acceptTransports(lis)
 }

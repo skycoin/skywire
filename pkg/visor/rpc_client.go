@@ -14,20 +14,18 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/buildinfo"
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
-	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/cipherutil"
-	"github.com/skycoin/skywire/pkg/util/updater"
 )
 
 var (
@@ -47,6 +45,7 @@ type rpcClient struct {
 	conn    io.ReadWriteCloser
 	client  *rpc.Client
 	prefix  string
+	FixGob  bool
 }
 
 // NewRPCClient creates a new API.
@@ -121,10 +120,17 @@ func (rc *rpcClient) Uptime() (float64, error) {
 }
 
 // Apps calls Apps.
-func (rc *rpcClient) Apps() ([]*launcher.AppState, error) {
-	states := make([]*launcher.AppState, 0)
+func (rc *rpcClient) Apps() ([]*appserver.AppState, error) {
+	states := make([]*appserver.AppState, 0)
 	err := rc.Call("Apps", &struct{}{}, &states)
 	return states, err
+}
+
+// App calls App.
+func (rc *rpcClient) App(appName string) (*appserver.AppState, error) {
+	var state *appserver.AppState
+	err := rc.Call("App", appName, &state)
+	return state, err
 }
 
 // StartApp calls StartApp.
@@ -190,6 +196,14 @@ func (rc *rpcClient) SetAppKillswitch(appName string, killswitch bool) error {
 	}, &struct{}{})
 }
 
+// SetAppKillswitch implements API.
+func (rc *rpcClient) SetAppNetworkInterface(appName, netifc string) error {
+	return rc.Call("SetAppNetworkInterface", &SetAppNetworkInterfaceIn{
+		AppName: appName,
+		NetIfc:  netifc,
+	}, &struct{}{})
+}
+
 // SetAppSecure implements API.
 func (rc *rpcClient) SetAppSecure(appName string, isSecure bool) error {
 	return rc.Call("SetAppSecure", &SetAppBoolIn{
@@ -221,6 +235,16 @@ func (rc *rpcClient) GetAppStats(appName string) (appserver.AppStats, error) {
 	}
 
 	return stats, nil
+}
+
+func (rc *rpcClient) GetAppError(appName string) (string, error) {
+	var appErr string
+
+	if err := rc.Call("GetAppError", &appName, &appErr); err != nil {
+		return appErr, err
+	}
+
+	return appErr, nil
 }
 
 // GetAppConnectionsSummary get connections stats for the app.
@@ -329,18 +353,16 @@ func (rc *rpcClient) Restart() error {
 	return rc.Call("Restart", &struct{}{}, &struct{}{})
 }
 
+// Shutdown calls Shutdown.
+func (rc *rpcClient) Shutdown() error {
+	return rc.Call("Shutdown", &struct{}{}, &struct{}{})
+}
+
 // Exec calls Exec.
 func (rc *rpcClient) Exec(command string) ([]byte, error) {
 	output := make([]byte, 0)
 	err := rc.Call("Exec", &command, &output)
 	return output, err
-}
-
-// Update calls Update.
-func (rc *rpcClient) Update(config updater.UpdateConfig) (bool, error) {
-	var updated bool
-	err := rc.Call("Update", &config, &updated)
-	return updated, err
 }
 
 // RuntimeLogs calls RuntimeLogs.
@@ -375,95 +397,18 @@ type StatusMessage struct {
 	IsError bool
 }
 
-// UpdateWithStatus combines results of Update and UpdateStatus.
-func (rc *rpcClient) UpdateWithStatus(config updater.UpdateConfig) <-chan StatusMessage {
-	ch := make(chan StatusMessage, 512)
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				var status string
-
-				err := rc.Call("UpdateStatus", &struct{}{}, &status)
-				if err != nil {
-					rc.log.WithError(err).Errorf("Failed to check update status")
-					status = ""
-				}
-
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					switch status {
-					case "", io.EOF.Error():
-
-					default:
-						ch <- StatusMessage{
-							Text: status,
-						}
-					}
-					time.Sleep(100 * time.Millisecond)
-				}
-			}
-		}
-	}()
-
-	go func() {
-		defer func() {
-			cancel()
-			close(ch)
-		}()
-
-		var updated bool
-
-		if err := rc.Call("Update", &config, &updated); err != nil {
-			ch <- StatusMessage{
-				Text:    err.Error(),
-				IsError: true,
-			}
-		} else if updated {
-			ch <- StatusMessage{
-				Text: "Finished",
-			}
-		} else {
-			ch <- StatusMessage{
-				Text: "No update found",
-			}
-		}
-	}()
-
-	return ch
+// VPNServers calls VPNServers.
+func (rc *rpcClient) VPNServers() ([]string, error) {
+	output := []string{}
+	rc.Call("VPNServers", &struct{}{}, &output) // nolint
+	return output, nil
 }
 
-// UpdateAvailable calls UpdateAvailable.
-func (rc *rpcClient) UpdateAvailable(channel updater.Channel) (*updater.Version, error) {
-	var version, empty updater.Version
-	err := rc.Call("UpdateAvailable", &channel, &version)
-	if err != nil {
-		return nil, err
-	}
-
-	if version == empty {
-		return nil, nil
-	}
-
-	return &version, err
-}
-
-// UpdateStatus calls UpdateStatus
-func (rc *rpcClient) UpdateStatus() (string, error) {
-	var result string
-	err := rc.Call("UpdateStatus", &struct{}{}, &result)
-	if err != nil {
-		return "", err
-	}
-
-	return result, err
+// RemoteVisors calls RemoteVisors.
+func (rc *rpcClient) RemoteVisors() ([]string, error) {
+	output := []string{}
+	rc.Call("RemoteVisors", &struct{}{}, &output) // nolint
+	return output, nil
 }
 
 // MockRPCClient mocks API.
@@ -498,7 +443,7 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, AP
 		log.Infof("tp[%2d]: %v", i, tps[i])
 	}
 
-	rt := routing.NewTable()
+	rt := routing.NewTable(log)
 	ruleKeepAlive := router.DefaultRouteKeepAlive
 
 	for i := 0; i < r.Intn(maxRules+1); i++ {
@@ -549,9 +494,9 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, AP
 			PubKey:          localPK,
 			BuildInfo:       buildinfo.Get(),
 			AppProtoVersion: supportedProtocolVersion,
-			Apps: []*launcher.AppState{
-				{AppConfig: launcher.AppConfig{Name: "foo.v1.0", AutoStart: false, Port: 10}},
-				{AppConfig: launcher.AppConfig{Name: "bar.v2.0", AutoStart: false, Port: 20}},
+			Apps: []*appserver.AppState{
+				{AppConfig: appserver.AppConfig{Name: "foo.v1.0", AutoStart: false, Port: 10}},
+				{AppConfig: appserver.AppConfig{Name: "bar.v2.0", AutoStart: false, Port: 20}},
 			},
 			Transports:  tps,
 			RoutesCount: rt.Count(),
@@ -650,8 +595,8 @@ func (mc *mockRPCClient) Uptime() (float64, error) {
 }
 
 // Apps implements API.
-func (mc *mockRPCClient) Apps() ([]*launcher.AppState, error) {
-	var apps []*launcher.AppState
+func (mc *mockRPCClient) Apps() ([]*appserver.AppState, error) {
+	var apps []*appserver.AppState
 	err := mc.do(false, func() error {
 		for _, a := range mc.o.Apps {
 			a := a
@@ -660,6 +605,21 @@ func (mc *mockRPCClient) Apps() ([]*launcher.AppState, error) {
 		return nil
 	})
 	return apps, err
+}
+
+// App implements API.
+func (mc *mockRPCClient) App(appName string) (*appserver.AppState, error) {
+	var app *appserver.AppState
+	err := mc.do(false, func() error {
+		for _, a := range mc.o.Apps {
+			if a.Name == appName {
+				app = a
+				break
+			}
+		}
+		return nil
+	})
+	return app, err
 }
 
 // StartApp implements API.
@@ -733,6 +693,21 @@ func (mc *mockRPCClient) SetAppPassword(string, string) error {
 	})
 }
 
+// SetAppPassword implements API.
+func (mc *mockRPCClient) SetAppNetworkInterface(string, string) error {
+	return mc.do(true, func() error {
+		const vpnServerName = "vpn-server"
+
+		for i := range mc.o.Apps {
+			if mc.o.Apps[i].Name == vpnServerName {
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", vpnServerName)
+	})
+}
+
 // SetAppPK implements API.
 func (mc *mockRPCClient) SetAppPK(string, cipher.PubKey) error {
 	return mc.do(true, func() error {
@@ -785,6 +760,10 @@ func (mc *mockRPCClient) LogsSince(timestamp time.Time, _ string) ([]string, err
 
 func (mc *mockRPCClient) GetAppStats(_ string) (appserver.AppStats, error) {
 	return appserver.AppStats{}, nil
+}
+
+func (mc *mockRPCClient) GetAppError(_ string) (string, error) {
+	return "", nil
 }
 
 // GetAppConnectionsSummary get connections stats for the app.
@@ -944,29 +923,14 @@ func (mc *mockRPCClient) Restart() error {
 	return nil
 }
 
+// Shutdown implements API.
+func (mc *mockRPCClient) Shutdown() error {
+	return nil
+}
+
 // Exec implements API.
 func (mc *mockRPCClient) Exec(string) ([]byte, error) {
 	return []byte("mock"), nil
-}
-
-// Update implements API.
-func (mc *mockRPCClient) Update(_ updater.UpdateConfig) (bool, error) {
-	return false, nil
-}
-
-// UpdateWithStatus implements API.
-func (mc *mockRPCClient) UpdateWithStatus(_ updater.UpdateConfig) <-chan StatusMessage {
-	return make(chan StatusMessage)
-}
-
-// UpdateAvailable implements API.
-func (mc *mockRPCClient) UpdateAvailable(_ updater.Channel) (*updater.Version, error) {
-	return nil, nil
-}
-
-// UpdateStatus implements API.
-func (mc *mockRPCClient) UpdateStatus() (string, error) {
-	return "", nil
 }
 
 // RuntimeLogs implements API.
@@ -987,4 +951,14 @@ func (mc *mockRPCClient) SetPersistentTransports(_ []transport.PersistentTranspo
 // GetPersistentTransports implements API
 func (mc *mockRPCClient) GetPersistentTransports() ([]transport.PersistentTransports, error) {
 	return []transport.PersistentTransports{}, nil
+}
+
+// VPNServers implements API
+func (mc *mockRPCClient) VPNServers() ([]string, error) {
+	return []string{}, nil
+}
+
+// RemoteVisors implements API
+func (mc *mockRPCClient) RemoteVisors() ([]string, error) {
+	return []string{}, nil
 }

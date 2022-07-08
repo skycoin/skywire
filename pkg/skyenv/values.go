@@ -1,49 +1,28 @@
 package skyenv
 
 import (
+	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
-	"github.com/skycoin/dmsg/cipher"
+	"github.com/bitfield/script"
+	"github.com/skycoin/dmsg/pkg/dmsgpty"
+
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+)
+
+const (
+	// ConfigName is the default config name. Updated by setting config file path.
+	ConfigName = "skywire-config.json"
+
+	// DMSGHTTPName is the default dmsghttp config name
+	DMSGHTTPName = "dmsghttp-config.json"
 )
 
 // Constants for skywire root directories.
-const (
-	DefaultSkywirePath = "."
-)
-
-// Constants for old default services.
-const (
-	OldDefaultTpDiscAddr          = "http://transport.discovery.skywire.skycoin.com"
-	OldDefaultDmsgDiscAddr        = "http://dmsg.discovery.skywire.skycoin.com"
-	OldDefaultServiceDiscAddr     = "http://service.discovery.skycoin.com"
-	OldDefaultRouteFinderAddr     = "http://routefinder.skywire.skycoin.com"
-	OldDefaultUptimeTrackerAddr   = "http://uptime-tracker.skywire.skycoin.com"
-	OldDefaultAddressResolverAddr = "http://address.resolver.skywire.skycoin.com"
-)
-
-// Constants for new default services.
-const (
-	DefaultTpDiscAddr          = "http://tpd.skywire.skycoin.com"
-	DefaultDmsgDiscAddr        = "http://dmsgd.skywire.skycoin.com"
-	DefaultServiceDiscAddr     = "http://sd.skycoin.com"
-	DefaultRouteFinderAddr     = "http://rf.skywire.skycoin.com"
-	DefaultUptimeTrackerAddr   = "http://ut.skywire.skycoin.com"
-	DefaultAddressResolverAddr = "http://ar.skywire.skycoin.com"
-	DefaultSetupPK             = "0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557"
-)
-
-// Constants for testing deployment.
-const (
-	TestTpDiscAddr          = "http://tpd.skywire.dev"
-	TestDmsgDiscAddr        = "http://dmsgd.skywire.dev"
-	TestServiceDiscAddr     = "http://sd.skywire.dev"
-	TestRouteFinderAddr     = "http://rf.skywire.dev"
-	TestUptimeTrackerAddr   = "http://ut.skywire.dev"
-	TestAddressResolverAddr = "http://ar.skywire.dev"
-	TestSetupPK             = "026c2a3e92d6253c5abd71a42628db6fca9dd9aa037ab6f4e3a31108558dfd87cf"
-)
-
 // Dmsg port constants.
 // TODO(evanlinjin): Define these properly. These are currently random.
 const (
@@ -59,17 +38,21 @@ const (
 	TransportPort uint16 = 45 // Listening port of a visor for incoming transports.
 )
 
-// Default dmsgpty constants.
+// Dmsgpty constants.
 const (
-	DmsgPtyPort           uint16 = 22
-	DefaultDmsgPtyCLINet         = "unix"
-	DefaultDmsgPtyCLIAddr        = "/tmp/dmsgpty.sock"
+	DmsgPtyPort   uint16 = 22
+	DmsgPtyCLINet        = "unix"
 )
 
-// Default Skywire-TCP constants.
+// Skywire-TCP constants.
 const (
-	DefaultSTCPAddr = ":7777"
+	STCPAddr = ":7777"
 )
+
+// DmsgPtyCLIAddr determines CLI address per each platform
+func DmsgPtyCLIAddr() string {
+	return dmsgpty.DefaultCLIAddr()
+}
 
 // Default skywire app constants.
 const (
@@ -94,96 +77,62 @@ const (
 
 // RPC constants.
 const (
-	DefaultRPCAddr      = "localhost:3435"
-	DefaultRPCTimeout   = 20 * time.Second
+	RPCAddr             = "localhost:3435"
+	RPCTimeout          = 20 * time.Second
 	TransportRPCTimeout = 1 * time.Minute
 	UpdateRPCTimeout    = 6 * time.Hour // update requires huge timeout
 )
 
 // Default skywire app server and discovery constants
 const (
-	DefaultAppSrvAddr         = "localhost:5505"
+	AppSrvAddr                = "localhost:5505"
 	ServiceDiscUpdateInterval = time.Minute
-	DefaultAppBinPath         = DefaultSkywirePath + "/apps"
-	DefaultLogLevel           = "info"
+	AppBinPath                = "./apps"
+	LogLevel                  = "info"
 )
 
-// Default routing constants
+// Routing constants
 const (
-	DefaultTpLogStore = DefaultSkywirePath + "/transport_logs"
+	TpLogStore = "./transport_logs"
 )
 
-// Skybian defaults
+// Local constants
 const (
-	SkybianAppBinPath       = "/usr/bin/apps"
-	SkybianDmsgPtyWhiteList = "/var/skywire-visor/dsmgpty/whitelist.json"
-	SkybianDmsgPtyCLIAddr   = "/run/skywire-visor/dmsgpty/cli.sock"
-	SkybianLocalPath        = "/var/skywire-visor/apps"
-	SkybianTpLogStore       = "/var/skywire-visor/transports"
-	SkybianEnableTLS        = false
-	SkybianDBPath           = "/var/skywire-visor/users.db"
-	SkybianTLSKey           = "/var/skywire-visor/ssl/key.pem"
-	SkybianTLSCert          = "/var/skywire-visor/ssl/cert.pem"
-)
-
-// Default local constants
-const (
-	DefaultLocalPath = DefaultSkywirePath + "/local"
+	LocalPath = "./local"
 )
 
 // Default hypervisor constants
 const (
-	DefaultHypervisorDB      = ".skycoin/hypervisor/users.db"
-	DefaultEnableAuth        = true
-	DefaultPackageEnableAuth = false
-	DefaultEnableTLS         = false
-	DefaultTLSKey            = DefaultSkywirePath + "/ssl/key.pem"
-	DefaultTLSCert           = DefaultSkywirePath + "/ssl/cert.pem"
+	HypervisorDB      = ".skycoin/hypervisor/users.db"
+	EnableAuth        = false
+	PackageEnableAuth = true
+	EnableTLS         = false
+	TLSKey            = "./ssl/key.pem"
+	TLSCert           = "./ssl/cert.pem"
 )
 
-// PackageLocalPath is the path to local directory
-func PackageLocalPath() string {
-	return filepath.Join(PackageSkywirePath(), "local")
+const (
+	// IPCShutdownMessageType sends IPC shutdown message type
+	IPCShutdownMessageType = 68
+)
+
+// PkgConfig struct contains paths specific to the linux packages
+type PkgConfig struct {
+	Launcher struct {
+		BinPath string `json:"bin_path"`
+	} `json:"launcher"`
+	LocalPath  string `json:"local_path"`
+	Hypervisor struct {
+		DbPath     string `json:"db_path"`
+		EnableAuth bool   `json:"enable_auth"`
+	} `json:"hypervisor"`
+	//		TLSCertFile string `json:"tls_cert_file"`
+	//		TLSKeyFile  string `json:"tls_key_file"`
 }
 
-// PackageDmsgPtyCLIAddr is the path to dmsgpty-cli file socket
-func PackageDmsgPtyCLIAddr() string {
-	return filepath.Join(PackageSkywirePath(), "dmsgpty", "cli.sock")
-}
-
-// PackageDBPath is the filepath location to the local db
-func PackageDBPath() string {
-	return filepath.Join(PackageSkywirePath(), "users.db")
-}
-
-// PackageDmsgPtyWhiteList gets dmsgpty whitelist path for installed Skywire.
-func PackageDmsgPtyWhiteList() string {
-	return filepath.Join(PackageSkywirePath(), "dmsgpty", "whitelist.json")
-}
-
-// PackageAppLocalPath gets `.local` path for installed Skywire.
-func PackageAppLocalPath() string {
-	return filepath.Join(PackageSkywirePath(), "local")
-}
-
-// PackageAppBinPath gets apps path for installed Skywire.
-func PackageAppBinPath() string {
-	return filepath.Join(appBinPath(), "apps")
-}
-
-// PackageTpLogStore gets transport logs path for installed Skywire.
-func PackageTpLogStore() string {
-	return filepath.Join(PackageSkywirePath(), "transport_logs")
-}
-
-// PackageTLSKey gets TLS key path for installed Skywire.
-func PackageTLSKey() string {
-	return filepath.Join(PackageSkywirePath(), "ssl", "key.pem")
-}
-
-// PackageTLSCert gets TLS cert path for installed Skywire.
-func PackageTLSCert() string {
-	return filepath.Join(PackageSkywirePath(), "ssl", "cert.pem")
+// DmsgPtyWhiteList gets dmsgpty whitelist path for installed Skywire.
+func DmsgPtyWhiteList() string {
+	return filepath.Join(SkywirePath, "dmsgpty", "whitelist.json")
 }
 
 // MustPK unmarshals string PK to cipher.PubKey. It panics if unmarshaling fails.
@@ -196,16 +145,27 @@ func MustPK(pk string) cipher.PubKey {
 	return sPK
 }
 
-// GetStunServers gives back deafault Stun Servers
-func GetStunServers() []string {
-	return []string{
-		"45.118.133.242:3478",
-		"192.53.173.68:3478",
-		"192.46.228.39:3478",
-		"192.53.113.106:3478",
-		"192.53.117.158:3478",
-		"192.53.114.142:3478",
-		"139.177.189.166:3478",
-		"192.46.227.227:3478",
+//Version gets the version of the installation for the config
+func Version() string {
+	u := buildinfo.Version()
+	v := u
+	if u == "unknown" {
+		//check for .git folder for versioning
+		if _, err := os.Stat(".git"); err == nil {
+			//attempt to version from git sources
+			if _, err = exec.LookPath("git"); err == nil {
+				if v, err = script.Exec(`git describe`).String(); err == nil {
+					v = strings.ReplaceAll(v, "\n", "")
+					v = strings.Split(v, "-")[0]
+				}
+			}
+		}
 	}
+	return v
+}
+
+// HomePath gets the current user's home folder
+func HomePath() string {
+	dir, _ := os.UserHomeDir() //nolint
+	return dir
 }

@@ -3,25 +3,30 @@ package skysocks
 import (
 	"fmt"
 	"net"
+	"os"
 	"sync"
 	"sync/atomic"
 
 	"github.com/armon/go-socks5"
-	"github.com/sirupsen/logrus"
+	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/skycoin/yamux"
+
+	"github.com/skycoin/skywire/pkg/app"
+	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 // Server implements multiplexing proxy server using yamux.
 type Server struct {
+	appCl    *app.Client
 	sMu      sync.Mutex
 	socks    *socks5.Server
 	listener net.Listener
-	log      logrus.FieldLogger
 	closed   uint32
 }
 
 // NewServer constructs a new Server.
-func NewServer(passcode string, l logrus.FieldLogger) (*Server, error) {
+func NewServer(passcode string, appCl *app.Client) (*Server, error) {
 	var credentials socks5.CredentialStore
 	if passcode != "" {
 		credentials = passcodeCredentials(passcode)
@@ -32,7 +37,12 @@ func NewServer(passcode string, l logrus.FieldLogger) (*Server, error) {
 		return nil, fmt.Errorf("socks5: %w", err)
 	}
 
-	return &Server{socks: s, log: l}, nil
+	server := &Server{
+		appCl: appCl,
+		socks: s,
+	}
+
+	return server, nil
 }
 
 // Serve accept connections from listener and serves socks5 proxy for
@@ -42,6 +52,10 @@ func (s *Server) Serve(l net.Listener) error {
 	s.listener = l
 	s.sMu.Unlock()
 
+	if s.appCl != nil {
+		s.setAppStatus(appserver.AppDetailedStatusRunning)
+	}
+
 	for {
 		if s.isClosed() {
 			return nil
@@ -50,16 +64,16 @@ func (s *Server) Serve(l net.Listener) error {
 		conn, err := l.Accept()
 		if err != nil {
 			if s.isClosed() {
-				s.log.WithError(err).Debugln("Failed to accept skysocks connection, but server is closed")
+				fmt.Printf("Failed to accept skysocks connection, but server is closed: %v\n", err)
 				return nil
 			}
 
-			s.log.WithError(err).Debugln("Failed to accept skysocks connection")
+			fmt.Printf("Failed to accept skysocks connection: %v\n", err)
 
 			return fmt.Errorf("accept: %w", err)
 		}
 
-		s.log.Infoln("Accepted new skysocks connection")
+		fmt.Println("Accepted new skysocks connection")
 
 		sessionCfg := yamux.DefaultConfig()
 		sessionCfg.EnableKeepAlive = false
@@ -70,9 +84,26 @@ func (s *Server) Serve(l net.Listener) error {
 
 		go func() {
 			if err := s.socks.Serve(session); err != nil {
-				s.log.Error("Failed to start SOCKS5 server:", err)
+				print(fmt.Sprintf("Failed to start SOCKS5 server: %v\n", err))
 			}
 		}()
+	}
+}
+
+// ListenIPC starts named-pipe based connection server for windows or unix socket in Linux/Mac
+func (s *Server) ListenIPC(client *ipc.Client) {
+	listenIPC(client, skyenv.SkychatName, func() {
+		client.Close()
+		if err := s.Close(); err != nil {
+			fmt.Println("Error closing skysocks server: ", err.Error())
+			os.Exit(1)
+		}
+	})
+}
+
+func (s *Server) setAppStatus(status appserver.AppDetailedStatus) {
+	if err := s.appCl.SetDetailedStatus(string(status)); err != nil {
+		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
 	}
 }
 

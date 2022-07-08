@@ -20,7 +20,7 @@ import { FilterProperties, FilterFieldTypes } from 'src/app/utils/filters';
 import { LabeledElementTextComponent } from '../../layout/labeled-element-text/labeled-element-text.component';
 import { SortingModes, SortingColumn, DataSorter } from 'src/app/utils/lists/data-sorter';
 import { DataFilterer } from 'src/app/utils/lists/data-filterer';
-import { UpdateComponent, NodeData } from '../../layout/update/update.component';
+import { NodeData, UpdateAllComponent } from '../../layout/update-all/update-all.component';
 
 /**
  * Page for showing the node list.
@@ -54,6 +54,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
   tabsData: TabButtonData[] = [];
   options: MenuOptionData[] = [];
   showDmsgInfo = false;
+  canLogOut = true;
 
   // Vars for the pagination functionality.
   allNodes: Node[];
@@ -138,13 +139,12 @@ export class NodeListComponent implements OnInit, OnDestroy {
     route: ActivatedRoute,
   ) {
     // Configure the options menu shown in the top bar.
-    this.updateOptionsMenu(true);
+    this.updateOptionsMenu();
 
     // Check if logout button must be removed.
     this.authVerificationSubscription = this.authService.checkLogin().subscribe(response => {
-      if (response === AuthStates.AuthDisabled) {
-        this.updateOptionsMenu(false);
-      }
+      this.canLogOut = response !== AuthStates.AuthDisabled;
+      this.updateOptionsMenu();
     });
 
     // Show the dmsg info if the dmsg url was used.
@@ -233,18 +233,17 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
   /**
    * Configures the options menu shown in the top bar.
-   * @param showLogoutOption If the logout option must be included.
    */
-  private updateOptionsMenu(showLogoutOption: boolean) {
-    this.options = [
-      {
-        name: 'nodes.update-all',
-        actionName: 'updateAll',
-        icon: 'get_app'
-      }
-    ];
+  private updateOptionsMenu() {
+    this.options = [];
 
-    if (showLogoutOption) {
+    this.options.push({
+      name: 'nodes.update-all',
+      actionName: 'updateAll',
+      icon: 'get_app'
+    });
+
+    if (this.canLogOut) {
       this.options.push({
         name: 'common.logout',
         actionName: 'logout',
@@ -366,6 +365,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
             // If the data was obtained.
             if (result.data && !result.error) {
               this.allNodes = result.data as Node[];
+
               if (this.showDmsgInfo) {
                 // Add the label data to the array, to be able to use it for filtering and sorting.
                 this.allNodes.forEach(node => {
@@ -459,17 +459,26 @@ export class NodeListComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const nodesData: NodeData[] = [];
+    const updatableNodes: NodeData[] = [];
+    const nonUpdatableNodes: NodeData[] = [];
     this.dataSource.forEach(node => {
       if (node.online) {
-        nodesData.push({
+        const nodeData: NodeData = {
           key: node.localPk,
           label: node.label,
-        });
+          version: node.version,
+          tag: node.buildTag,
+        };
+
+        if (GeneralUtils.checkIfTagIsUpdatable(node.buildTag)) {
+          updatableNodes.push(nodeData);
+        } else {
+          nonUpdatableNodes.push(nodeData);
+        }
       }
     });
 
-    UpdateComponent.openDialog(this.dialog, nodesData);
+    UpdateAllComponent.openDialog(this.dialog, updatableNodes, nonUpdatableNodes);
   }
 
   /**
@@ -480,6 +489,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
    * @param errors Errors found during the process. For internal use.
    */
   private recursivelyUpdateWallets(keys: string[], labels: string[], errors = 0): Observable<number> {
+    /* eslint-disable arrow-body-style */
     return this.nodeService.update(keys[keys.length - 1]).pipe(catchError(() => {
       // If there is a problem updating a visor, return null to be able to continue with
       // the process.

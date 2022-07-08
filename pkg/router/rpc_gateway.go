@@ -1,8 +1,7 @@
 package router
 
 import (
-	"github.com/skycoin/skycoin/src/util/logging"
-
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -13,9 +12,9 @@ type RPCGateway struct {
 }
 
 // NewRPCGateway creates a new RPCGateway.
-func NewRPCGateway(router Router) *RPCGateway {
+func NewRPCGateway(router Router, mLog *logging.MasterLogger) *RPCGateway {
 	return &RPCGateway{
-		logger: logging.MustGetLogger("router-gateway"),
+		logger: mLog.PackageLogger("router-gateway"),
 		router: router,
 	}
 }

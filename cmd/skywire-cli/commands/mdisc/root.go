@@ -1,29 +1,33 @@
-package mdisc
+package climdisc
 
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"text/tabwriter"
 	"time"
 
-	"github.com/skycoin/dmsg/disc"
+	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire-utilities/pkg/logging"
+	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
-	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 var mdAddr string
+var masterLogger = logging.NewMasterLogger()
+var packageLogger = masterLogger.PackageLogger("mdisc:disc")
 
 func init() {
-	RootCmd.PersistentFlags().StringVar(&mdAddr, "addr", skyenv.DefaultDmsgDiscAddr, "address of DMSG discovery server")
+	RootCmd.PersistentFlags().StringVar(&mdAddr, "addr", utilenv.DmsgDiscAddr, "address of DMSG discovery server\n")
 }
 
 // RootCmd is the command that contains sub-commands which interacts with DMSG services.
 var RootCmd = &cobra.Command{
 	Use:   "mdisc",
-	Short: "Contains sub-commands that interact with a remote DMSG Discovery",
+	Short: "Query remote DMSG Discovery",
 }
 
 func init() {
@@ -35,25 +39,25 @@ func init() {
 
 var entryCmd = &cobra.Command{
 	Use:   "entry <visor-public-key>",
-	Short: "fetches an entry from DMSG discovery",
+	Short: "Fetch an entry",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
 		pk := internal.ParsePK("visor-public-key", args[0])
-		entry, err := disc.NewHTTP(mdAddr).Entry(ctx, pk)
+		entry, err := disc.NewHTTP(mdAddr, &http.Client{}, packageLogger).Entry(ctx, pk)
 		internal.Catch(err)
 		fmt.Println(entry)
 	},
 }
 
 var availableServersCmd = &cobra.Command{
-	Use:   "available-servers",
-	Short: "fetch available servers from DMSG discovery",
+	Use:   "servers",
+	Short: "Fetch available servers",
 	Run: func(_ *cobra.Command, _ []string) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
-		entries, err := disc.NewHTTP(mdAddr).AvailableServers(ctx)
+		entries, err := disc.NewHTTP(mdAddr, &http.Client{}, packageLogger).AvailableServers(ctx)
 		internal.Catch(err)
 		printAvailableServers(entries)
 	},

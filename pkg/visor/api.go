@@ -3,8 +3,9 @@ package visor
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
-	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -13,17 +14,18 @@ import (
 
 	"github.com/ccding/go-stun/stun"
 	"github.com/google/uuid"
-	"github.com/skycoin/dmsg/buildinfo"
-	"github.com/skycoin/dmsg/cipher"
+	"github.com/sirupsen/logrus"
 
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/app/appserver"
-	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
-	"github.com/skycoin/skywire/pkg/util/netutil"
-	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 )
 
@@ -35,7 +37,8 @@ type API interface {
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
 
-	Apps() ([]*launcher.AppState, error)
+	App(appName string) (*appserver.AppState, error)
+	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
 	StopApp(appName string) error
 	SetAppDetailedStatus(appName, state string) error
@@ -46,9 +49,13 @@ type API interface {
 	SetAppPK(appName string, pk cipher.PubKey) error
 	SetAppSecure(appName string, isSecure bool) error
 	SetAppKillswitch(appName string, killswitch bool) error
+	SetAppNetworkInterface(appName string, netifc string) error
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
 	GetAppStats(appName string) (appserver.AppStats, error)
+	GetAppError(appName string) (string, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
+	VPNServers() ([]string, error)
+	RemoteVisors() ([]string, error)
 
 	TransportTypes() ([]string, error)
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
@@ -68,11 +75,8 @@ type API interface {
 	RouteGroups() ([]RouteGroupInfo, error)
 
 	Restart() error
+	Shutdown() error
 	Exec(command string) ([]byte, error)
-	Update(config updater.UpdateConfig) (bool, error)
-	UpdateWithStatus(config updater.UpdateConfig) <-chan StatusMessage
-	UpdateAvailable(channel updater.Channel) (*updater.Version, error)
-	UpdateStatus() (string, error)
 	RuntimeLogs() (string, error)
 
 	SetMinHops(uint16) error
@@ -90,15 +94,16 @@ type HealthCheckable interface {
 
 // Overview provides a range of basic information about a Visor.
 type Overview struct {
-	PubKey          cipher.PubKey        `json:"local_pk"`
-	BuildInfo       *buildinfo.Info      `json:"build_info"`
-	AppProtoVersion string               `json:"app_protocol_version"`
-	Apps            []*launcher.AppState `json:"apps"`
-	Transports      []*TransportSummary  `json:"transports"`
-	RoutesCount     int                  `json:"routes_count"`
-	LocalIP         string               `json:"local_ip"`
-	PublicIP        string               `json:"public_ip"`
-	IsSymmetricNAT  bool                 `json:"is_symmetic_nat"`
+	PubKey          cipher.PubKey         `json:"local_pk"`
+	BuildInfo       *buildinfo.Info       `json:"build_info"`
+	AppProtoVersion string                `json:"app_protocol_version"`
+	Apps            []*appserver.AppState `json:"apps"`
+	Transports      []*TransportSummary   `json:"transports"`
+	RoutesCount     int                   `json:"routes_count"`
+	LocalIP         string                `json:"local_ip"`
+	PublicIP        string                `json:"public_ip"`
+	IsSymmetricNAT  bool                  `json:"is_symmetic_nat"`
+	Hypervisors     []cipher.PubKey       `json:"hypervisors"`
 }
 
 // Overview implements API.
@@ -117,7 +122,8 @@ func (v *Visor) Overview() (*Overview, error) {
 			newTransportSummary(v.tpM, tp, true, v.router.SetupIsTrusted(tp.Remote())))
 		return true
 	})
-	if v.stunClient != nil {
+
+	if v.isStunReady() {
 		switch v.stunClient.NATType {
 		case stun.NATNone, stun.NATFull, stun.NATRestricted, stun.NATPortRestricted:
 			publicIP = v.stunClient.PublicIP.IP()
@@ -151,6 +157,8 @@ func (v *Visor) Overview() (*Overview, error) {
 		// active network interface, there's usually just a single IP
 		overview.LocalIP = localIPs[0].String()
 	}
+
+	overview.Hypervisors = v.conf.Hypervisors
 
 	return overview, nil
 }
@@ -212,6 +220,12 @@ func (v *Visor) Summary() (*Summary, error) {
 		return nil, fmt.Errorf("pts")
 	}
 
+	dmsgStatValue := &dmsgtracker.DmsgClientSummary{}
+	if v.isDTMReady() {
+		dmsgTracker, _ := v.dtm.Get(v.conf.PK) //nolint
+		dmsgStatValue = &dmsgTracker
+	}
+
 	summary := &Summary{
 		Overview:             overview,
 		Health:               health,
@@ -222,6 +236,7 @@ func (v *Visor) Summary() (*Summary, error) {
 		SkybianBuildVersion:  skybianBuildVersion,
 		BuildTag:             BuildTag,
 		PublicAutoconnect:    v.conf.Transport.PublicAutoconnect,
+		DmsgStats:            dmsgStatValue,
 	}
 
 	return summary, nil
@@ -283,8 +298,17 @@ func (v *Visor) Uptime() (float64, error) {
 }
 
 // Apps implements API.
-func (v *Visor) Apps() ([]*launcher.AppState, error) {
+func (v *Visor) Apps() ([]*appserver.AppState, error) {
 	return v.appL.AppStates(), nil
+}
+
+// App implements API.
+func (v *Visor) App(appName string) (*appserver.AppState, error) {
+	appState, ok := v.appL.AppState(appName)
+	if !ok {
+		return &appserver.AppState{}, ErrAppProcNotRunning
+	}
+	return appState, nil
 }
 
 // SkybianBuildVersion implements API.
@@ -299,20 +323,36 @@ func (v *Visor) StartApp(appName string) error {
 	if appName == skyenv.VPNClientName {
 		// todo: can we use some kind of app start hook that will be used for both autostart
 		// and start? Reason: this is also called in init for autostart
-		maker := vpnEnvMaker(v.conf, v.dmsgC, v.tpM.STCPRRemoteAddrs())
+
+		// check transport manager availability
+		if v.tpM == nil {
+			return ErrTrpMangerNotAvailable
+		}
+		maker := vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.STCPRRemoteAddrs())
 		envs, err = maker()
 		if err != nil {
 			return err
 		}
-	}
 
-	return v.appL.StartApp(appName, nil, envs)
+		if v.GetVPNClientAddress() == "" {
+			return errors.New("VPN server pub key is missing")
+		}
+	}
+	// check process manager availability
+	if v.procM != nil {
+		return v.appL.StartApp(appName, nil, envs)
+	}
+	return ErrProcNotAvailable
 }
 
 // StopApp implements API.
 func (v *Visor) StopApp(appName string) error {
-	_, err := v.appL.StopApp(appName) //nolint:errcheck
-	return err
+	// check process manager availability
+	if v.procM != nil {
+		_, err := v.appL.StopApp(appName) //nolint:errcheck
+		return err
+	}
+	return ErrProcNotAvailable
 }
 
 // SetAppDetailedStatus implements API.
@@ -322,7 +362,6 @@ func (v *Visor) SetAppDetailedStatus(appName, status string) error {
 		return ErrAppProcNotRunning
 	}
 
-	v.log.Infof("Setting app detailed status %v for app %v", status, appName)
 	proc.SetDetailedStatus(status)
 
 	return nil
@@ -389,6 +428,27 @@ func (v *Visor) SetAppPassword(appName, password string) error {
 	}
 
 	v.log.Infof("Updated %v password", appName)
+
+	return nil
+}
+
+// SetAppNetworkInterface implements API.
+func (v *Visor) SetAppNetworkInterface(appName, netifc string) error {
+	if skyenv.VPNServerName != appName {
+		return fmt.Errorf("app %s is not allowed to set network interface", appName)
+	}
+
+	v.log.Infof("Changing %s network interface to %q", appName, netifc)
+
+	const (
+		netifcArgName = "--netifc"
+	)
+
+	if err := v.conf.UpdateAppArg(v.appL, appName, netifcArgName, netifc); err != nil {
+		return err
+	}
+
+	v.log.Infof("Updated %v network interface", appName)
 
 	return nil
 }
@@ -491,14 +551,57 @@ func (v *Visor) GetAppStats(appName string) (appserver.AppStats, error) {
 	return stats, nil
 }
 
+// GetAppError implements API.
+func (v *Visor) GetAppError(appName string) (string, error) {
+	appErr, _ := v.procM.ErrorByName(appName)
+	return appErr, nil
+}
+
 // GetAppConnectionsSummary implements API.
 func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error) {
-	cSummary, err := v.procM.ConnectionsSummary(appName)
+	// check process manager availability
+	if v.procM != nil {
+		cSummary, err := v.procM.ConnectionsSummary(appName)
+		if err != nil {
+			return nil, err
+		}
+
+		return cSummary, nil
+	}
+	return nil, ErrProcNotAvailable
+}
+
+// VPNServers gets available public VPN server from service discovery URL
+func (v *Visor) VPNServers() ([]string, error) {
+	log := logging.MustGetLogger("vpnservers")
+	vlog := logging.NewMasterLogger()
+	vlog.SetLevel(logrus.InfoLevel)
+
+	sdClient := servicedisc.NewClient(log, vlog, servicedisc.Config{
+		Type:     servicedisc.ServiceTypeVPN,
+		PK:       v.conf.PK,
+		SK:       v.conf.SK,
+		DiscAddr: v.conf.Launcher.ServiceDisc,
+	}, &http.Client{Timeout: time.Duration(1) * time.Second}, "")
+	vpnServers, err := sdClient.Services(context.Background(), 0)
 	if err != nil {
+		v.log.Error("Error getting public vpn servers: ", err)
 		return nil, err
 	}
+	serverAddrs := make([]string, len(vpnServers))
+	for idx, server := range vpnServers {
+		serverAddrs[idx] = server.Addr.PubKey().String()
+	}
+	return serverAddrs, nil
+}
 
-	return cSummary, nil
+// RemoteVisors return list of connected remote visors
+func (v *Visor) RemoteVisors() ([]string, error) {
+	var visors []string
+	for _, conn := range v.remoteVisors {
+		visors = append(visors, conn.Addr.PK.String())
+	}
+	return visors, nil
 }
 
 // TransportTypes implements API.
@@ -663,106 +766,20 @@ func (v *Visor) Restart() error {
 	return v.restartCtx.Restart()
 }
 
+// Shutdown implements API.
+func (v *Visor) Shutdown() error {
+	if v.restartCtx == nil {
+		return ErrMalformedRestartContext
+	}
+	return v.Close()
+}
+
 // Exec implements API.
 // Exec executes a shell command. It returns combined stdout and stderr output and an error.
 func (v *Visor) Exec(command string) ([]byte, error) {
 	args := strings.Split(command, " ")
 	cmd := exec.Command(args[0], args[1:]...) // nolint: gosec
 	return cmd.CombinedOutput()
-}
-
-// Update implements API.
-// Update updates visor.
-// It checks if visor update is available.
-// If it is, the method downloads a new visor versions, starts it and kills the current process.
-func (v *Visor) Update(updateConfig updater.UpdateConfig) (bool, error) {
-	updated, err := v.updater.Update(updateConfig)
-	if err != nil {
-		v.log.Errorf("Failed to update visor: %v", err)
-		return false, err
-	}
-
-	return updated, nil
-}
-
-// UpdateWithStatus implements API.
-// UpdateWithStatus combines results of Update and UpdateStatus.
-func (v *Visor) UpdateWithStatus(config updater.UpdateConfig) <-chan StatusMessage {
-	ch := make(chan StatusMessage, 512)
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				status, err := v.UpdateStatus()
-				if err != nil {
-					v.log.WithError(err).Errorf("Failed to check update status")
-					status = ""
-				}
-
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					switch status {
-					case "", io.EOF.Error():
-
-					default:
-						ch <- StatusMessage{
-							Text: status,
-						}
-					}
-					time.Sleep(100 * time.Millisecond)
-				}
-			}
-		}
-	}()
-
-	go func() {
-		defer func() {
-			cancel()
-			close(ch)
-		}()
-
-		updated, err := v.Update(config)
-		if err != nil {
-			ch <- StatusMessage{
-				Text:    err.Error(),
-				IsError: true,
-			}
-		} else if updated {
-			ch <- StatusMessage{
-				Text: "Finished",
-			}
-		} else {
-			ch <- StatusMessage{
-				Text: "No update found",
-			}
-		}
-	}()
-
-	return ch
-}
-
-// UpdateAvailable implements API.
-// UpdateAvailable checks if visor update is available.
-func (v *Visor) UpdateAvailable(channel updater.Channel) (*updater.Version, error) {
-	version, err := v.updater.UpdateAvailable(channel)
-	if err != nil {
-		v.log.Errorf("Failed to check if visor update is available: %v", err)
-		return nil, err
-	}
-
-	return version, nil
-}
-
-// UpdateStatus returns status of the current updating operation.
-func (v *Visor) UpdateStatus() (string, error) {
-	return v.updater.Status(), nil
 }
 
 // RuntimeLogs returns visor runtime logs
@@ -794,4 +811,18 @@ func (v *Visor) GetPersistentTransports() ([]transport.PersistentTransports, err
 // SetPublicAutoconnect sets public_autoconnect config of visor
 func (v *Visor) SetPublicAutoconnect(pAc bool) error {
 	return v.conf.UpdatePublicAutoconnect(pAc)
+}
+
+// GetVPNClientAddress get PK address of server set on vpn-client
+func (v *Visor) GetVPNClientAddress() string {
+	for _, v := range v.conf.Launcher.Apps {
+		if v.Name == skyenv.VPNClientName {
+			for index := range v.Args {
+				if v.Args[index] == "-srv" {
+					return v.Args[index+1]
+				}
+			}
+		}
+	}
+	return ""
 }

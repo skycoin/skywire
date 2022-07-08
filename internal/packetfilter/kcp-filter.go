@@ -5,8 +5,9 @@ import (
 	"net"
 	"sync/atomic"
 
-	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/xtaci/kcp-go"
+
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
 const (
@@ -21,9 +22,9 @@ type KCPConversationFilter struct {
 }
 
 // NewKCPConversationFilter returns a new KCPConversationFilter.
-func NewKCPConversationFilter() *KCPConversationFilter {
+func NewKCPConversationFilter(mLog *logging.MasterLogger) *KCPConversationFilter {
 	return &KCPConversationFilter{
-		log: logging.MustGetLogger("kcp-filter"),
+		log: mLog.PackageLogger("kcp-filter"),
 	}
 }
 

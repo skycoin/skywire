@@ -3,12 +3,13 @@ package vpn
 import (
 	"fmt"
 	"net"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
 
-	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/pkg/dmsgget"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 const (
@@ -127,11 +128,23 @@ func IPFromEnv(key string) (net.IP, bool, error) {
 // - domain without port;
 // - IP with port;
 // - IP without port.
+// - dmshhttp url with port;
+// - dmshhttp url without port.
 // In case domain is provided instead of an IP address, a DNS lookup is also
 // performed to resolve the actual IP address
 func ParseIP(addr string) (net.IP, bool, error) {
 	if addr == "" {
 		return nil, false, nil
+	}
+	var url dmsgget.URL
+
+	// in case dmsghttp url is provided
+	err := url.Fill(addr)
+	if url.Scheme == "dmsg" {
+		if err != nil {
+			return nil, false, err
+		}
+		return nil, true, nil
 	}
 
 	// in case whole URL is passed with the scheme

@@ -10,8 +10,9 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/skycoin/dmsg/cipher"
 	"go.etcd.io/bbolt"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 const (
@@ -99,6 +100,7 @@ type UserStore interface {
 	AddUser(user User) error
 	SetUser(user User) error
 	RemoveUser(name string) error
+	Close() error
 }
 
 // BoltUserStore implements UserStore, storing users in a bbolt database file.

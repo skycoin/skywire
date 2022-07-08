@@ -7,7 +7,8 @@ import (
 	"errors"
 	"strconv"
 
-	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/geo"
 )
 
 const (
@@ -89,21 +90,13 @@ func (a *SWAddr) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-// GeoLocation represents a geolocation point.
-type GeoLocation struct {
-	Lat     float64 `json:"lat"`
-	Lon     float64 `json:"lon"`
-	Country string  `json:"country,omitempty"`
-	Region  string  `json:"region,omitempty"`
-}
-
 // Service represents a service entry in service-discovery.
 type Service struct {
-	Addr     SWAddr       `json:"address"`
-	Type     string       `json:"type"`
-	Geo      *GeoLocation `json:"geo,omitempty"`
-	Version  string       `json:"version,omitempty"`
-	LocalIPs []string     `json:"local_ips,omitempty"`
+	Addr     SWAddr            `json:"address"`
+	Type     string            `json:"type"`
+	Geo      *geo.LocationData `json:"geo,omitempty"`
+	Version  string            `json:"version,omitempty"`
+	LocalIPs []string          `json:"local_ips,omitempty"`
 }
 
 // MarshalBinary implements encoding.BinaryMarshaller
@@ -125,4 +118,16 @@ func (p Service) Check() error {
 		return errors.New("port cannot be 0 in address")
 	}
 	return nil
+}
+
+func (p Service) String() string {
+	var serviceMap map[string]interface{}
+
+	data, _ := json.Marshal(p)            // nolint:errcheck
+	_ = json.Unmarshal(data, &serviceMap) // nolint:errcheck
+
+	serviceMap["address"] = p.Addr.String()
+
+	sString, _ := json.Marshal(serviceMap) // nolint:errcheck
+	return string(sString)
 }

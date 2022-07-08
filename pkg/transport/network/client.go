@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync"
 
-	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/dmsg/pkg/dmsg"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/transport/network/handshake"
@@ -56,11 +57,16 @@ type ClientFactory struct {
 	ARClient   addrresolver.APIClient
 	EB         *appevent.Broadcaster
 	DmsgC      *dmsg.Client
+	MLogger    *logging.MasterLogger
 }
 
 // MakeClient creates a new client of specified type
 func (f *ClientFactory) MakeClient(netType Type) (Client, error) {
 	log := logging.MustGetLogger(string(netType))
+	if f.MLogger != nil {
+		log = f.MLogger.PackageLogger(string(netType))
+	}
+
 	p := porter.New(porter.MinEphemeral)
 
 	generic := &genericClient{}
@@ -68,6 +74,7 @@ func (f *ClientFactory) MakeClient(netType Type) (Client, error) {
 	generic.done = make(chan struct{})
 	generic.listeners = make(map[uint16]*listener)
 	generic.log = log
+	generic.mLog = f.MLogger
 	generic.porter = p
 	generic.eb = f.EB
 	generic.lPK = f.PK
@@ -103,6 +110,7 @@ type genericClient struct {
 	netType    Type
 
 	log    *logging.Logger
+	mLog   *logging.MasterLogger
 	porter *porter.Porter
 	eb     *appevent.Broadcaster
 
@@ -124,7 +132,7 @@ func (c *genericClient) initTransport(ctx context.Context, conn net.Conn, rPK ci
 	}
 	lAddr, rAddr := dmsg.Addr{PK: c.lPK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort}
 	remoteAddr := conn.RemoteAddr()
-	c.log.Infof("Performing handshake with %v", remoteAddr)
+	c.log.Debugf("Performing handshake with %v", remoteAddr)
 	hs := handshake.InitiatorHandshake(c.lSK, lAddr, rAddr)
 	return c.wrapTransport(conn, hs, true, freePort)
 }
@@ -137,12 +145,18 @@ func (c *genericClient) acceptTransports(lis net.Listener) {
 	c.connListener = lis
 	close(c.listenStarted)
 	c.mu.Unlock()
-	c.log.Infof("listening on addr: %v", c.connListener.Addr())
+	c.log.Debugf("listening on addr: %v", c.connListener.Addr())
 	for {
 		if err := c.acceptTransport(); err != nil {
 			if errors.Is(err, io.EOF) {
 				continue // likely it's a dummy connection from service discovery
 			}
+
+			if c.isClosed() && (errors.Is(err, io.ErrClosedPipe) || strings.Contains(err.Error(), "use of closed network connection")) {
+				c.log.Debug("Cleanly stopped serving.")
+				return
+			}
+
 			c.log.Warnf("failed to accept incoming connection: %v", err)
 			if !handshake.IsHandshakeError(err) {
 				c.log.Warnf("stopped serving")
@@ -161,7 +175,7 @@ func (c *genericClient) wrapTransport(rawConn net.Conn, hs handshake.Handshake, 
 		return nil, err
 	}
 	transport.freePort = onClose
-	c.log.Infof("Sent handshake to %v, local addr %v, remote addr %v", rawConn.RemoteAddr(), transport.lAddr, transport.rAddr)
+	c.log.Debugf("Sent handshake to %v, local addr %v, remote addr %v", rawConn.RemoteAddr(), transport.lAddr, transport.rAddr)
 	if err := transport.encrypt(c.lPK, c.lSK, initiator); err != nil {
 		return nil, err
 	}
@@ -181,7 +195,7 @@ func (c *genericClient) acceptTransport() error {
 		return err
 	}
 	remoteAddr := conn.RemoteAddr()
-	c.log.Infof("Accepted connection from %v", remoteAddr)
+	c.log.Debugf("Accepted connection from %v", remoteAddr)
 
 	onClose := func() {}
 	hs := handshake.ResponderHandshake(handshake.MakeF2PortChecker(c.checkListener))
@@ -312,6 +326,7 @@ func (c *resolvedClient) dialVisor(ctx context.Context, rPK cipher.PubKey, dial 
 	if err != nil {
 		return nil, fmt.Errorf("resolve PK: %w", err)
 	}
+	c.log.Debugf("Resolved PK %v to visor data %v", rPK, visorData)
 
 	if visorData.IsLocal {
 		for _, host := range visorData.Addresses {

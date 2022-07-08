@@ -1,3 +1,6 @@
+//go:build !windows
+// +build !windows
+
 package restart
 
 import (
@@ -8,9 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
 func TestCaptureContext(t *testing.T) {
@@ -46,6 +50,7 @@ func TestContext_Start(t *testing.T) {
 
 		cmd := "touch"
 		path := "/tmp/test_start"
+
 		cc.cmd = exec.Command(cmd, path) // nolint:gosec
 
 		assert.NoError(t, cc.start())
@@ -62,6 +67,7 @@ func TestContext_Start(t *testing.T) {
 		// TODO: Add error text for Windows
 		possibleErrors := []string{
 			`exec: "bad_command": executable file not found in $PATH`,
+			`exec: "bad_command": executable file not found in %PATH%`,
 		}
 		err := cc.start()
 		require.NotNil(t, err)
@@ -74,6 +80,7 @@ func TestContext_Start(t *testing.T) {
 
 		cmd := "sleep"
 		duration := "5"
+
 		cc.cmd = exec.Command(cmd, duration) // nolint:gosec
 
 		errCh := make(chan error, 1)
@@ -94,8 +101,6 @@ func TestContext_SetCheckDelay(t *testing.T) {
 	cc := CaptureContext()
 	require.Equal(t, DefaultCheckDelay, cc.checkDelay)
 
-	const oneSecond = 1 * time.Second
-
-	cc.SetCheckDelay(oneSecond)
-	require.Equal(t, oneSecond, cc.checkDelay)
+	cc.SetCheckDelay(time.Second)
+	require.Equal(t, time.Second, cc.checkDelay)
 }

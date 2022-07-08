@@ -3,15 +3,16 @@ package setup
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/rpc"
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/dmsg/disc"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/dmsg/pkg/disc"
+	"github.com/skycoin/dmsg/pkg/dmsg"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router/routerclient"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/setup/setupmetrics"
@@ -31,9 +32,10 @@ func NewNode(conf *Config) (*Node, error) {
 	if lvl, err := logging.LevelFromString(conf.LogLevel); err == nil {
 		logging.SetLevel(lvl)
 	}
-
+	masterLogger := logging.NewMasterLogger()
+	packageLogger := masterLogger.PackageLogger("node:disc")
 	// Connect to dmsg network.
-	dmsgDisc := disc.NewHTTP(conf.Dmsg.Discovery)
+	dmsgDisc := disc.NewHTTP(conf.Dmsg.Discovery, &http.Client{}, packageLogger)
 	dmsgConf := &dmsg.Config{MinSessions: conf.Dmsg.SessionsCount}
 	dmsgC := dmsg.NewClient(conf.PK, conf.SK, dmsgDisc, dmsgConf)
 	go dmsgC.Serve(context.Background())

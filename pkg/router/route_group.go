@@ -7,14 +7,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/skycoin/dmsg/ioutil"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/dmsg/pkg/ioutil"
 
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/util/deadline"
@@ -116,14 +117,18 @@ type RouteGroup struct {
 }
 
 // NewRouteGroup creates a new RouteGroup.
-func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDescriptor) *RouteGroup {
+func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDescriptor, mLoggger *logging.MasterLogger) *RouteGroup {
 	if cfg == nil {
 		cfg = DefaultRouteGroupConfig()
+	}
+	logger := logging.MustGetLogger(fmt.Sprintf("RouteGroup %s", desc.String()))
+	if mLoggger != nil {
+		logger = mLoggger.PackageLogger(fmt.Sprintf("RouteGroup %s", desc.String()))
 	}
 
 	rg := &RouteGroup{
 		cfg:                cfg,
-		logger:             logging.MustGetLogger(fmt.Sprintf("RouteGroup %s", desc.String())),
+		logger:             logger,
 		desc:               desc,
 		rt:                 rt,
 		tps:                make([]*transport.ManagedTransport, 0),
@@ -315,7 +320,7 @@ func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule ro
 		return 0, err
 	}
 
-	rg.logger.Debugf("Writing packet of type %s, route ID %d and next ID %d", packet.Type(),
+	rg.logger.WithField("func", "RouteGroup.write").Tracef("Writing packet of type %s, route ID %d and next ID %d", packet.Type(),
 		rule.KeyRouteID(), rule.NextRouteID())
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -359,12 +364,14 @@ func (rg *RouteGroup) writePacket(ctx context.Context, tp *transport.ManagedTran
 	err := tp.WritePacket(ctx, packet)
 	// note equality here. update activity only if there was NO error
 	if err == nil {
-		if packet.Type() == routing.DataPacket {
+		if packet.Type() != routing.ClosePacket || packet.Type() != routing.HandshakePacket {
 			rg.networkStats.AddBandwidthSent(uint64(packet.Size()))
 		}
 
 		if err := rg.rt.UpdateActivity(ruleID); err != nil {
-			rg.logger.WithError(err).Errorf("error updating activity of rule %d", ruleID)
+			if !rg.isClosed() {
+				rg.logger.WithError(err).Errorf("error updating activity of rule %d", ruleID)
+			}
 		}
 	}
 
@@ -422,8 +429,7 @@ func (rg *RouteGroup) sendNetworkProbe() error {
 	}
 
 	throughput := rg.networkStats.RemoteThroughput()
-	timestamp := time.Now().UnixNano() / int64(time.Millisecond)
-
+	timestamp := time.Now().UTC().UnixNano() / int64(time.Millisecond)
 	rg.networkStats.SetDownloadSpeed(uint32(throughput))
 
 	packet := routing.MakeNetworkProbePacket(rule.NextRouteID(), timestamp, throughput)
@@ -444,7 +450,7 @@ func (rg *RouteGroup) servicePacketLoop(name string, interval time.Duration, f s
 	for {
 		select {
 		case <-rg.remoteClosed:
-			rg.logger.Infof("Remote got closed, stopping %s loop", name)
+			rg.logger.Debugf("Remote got closed, stopping %s loop", name)
 			return
 		case <-ticker.C:
 			f(interval)
@@ -512,11 +518,11 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 
 		err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
 		if err == nil {
-			rg.logger.Infof("Sent handshake via transport %v", tp.Entry.ID)
+			rg.logger.Debugf("Sent handshake via transport %v", tp.Entry.ID)
 			return nil
 		}
 
-		rg.logger.Infof("Failed to send handshake via transport %v: %v [%v/%v]",
+		rg.logger.Debugf("Failed to send handshake via transport %v: %v [%v/%v]",
 			tp.Entry.ID, err, i+1, len(rg.tps))
 	}
 
@@ -575,9 +581,6 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 	switch packet.Type() {
 	case routing.ClosePacket:
-		rg.mu.Lock()
-		defer rg.mu.Unlock()
-
 		return rg.handleClosePacket(routing.CloseCode(packet.Payload()[0]))
 	case routing.DataPacket:
 		rg.handshakeProcessedOnce.Do(func() {
@@ -610,9 +613,18 @@ func (rg *RouteGroup) handleNetworkProbePacket(packet routing.Packet) error {
 	throughput := binary.BigEndian.Uint64(payload[8:])
 
 	ms := sentAtMs % 1000
-	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond))
+	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond)).UTC()
 
-	rg.networkStats.SetLatency(time.Since(sentAt))
+	latency := time.Now().UTC().Sub(sentAt).Milliseconds()
+	// todo (ersonp): this is a dirty fix, we need to implement new packets Ping and Pong to calculate the RTT.
+	// if latency is negative we set it to be the previous one
+	if math.Signbit(float64(latency)) {
+		latency = int64(rg.networkStats.Latency())
+	}
+
+	rg.logger.WithField("func", "RouteGroup.handleNetworkProbePacket").Tracef("Latency is around %d ms", latency)
+
+	rg.networkStats.SetLatency(uint32(latency))
 	rg.networkStats.SetUploadSpeed(uint32(throughput))
 
 	return nil
@@ -638,7 +650,7 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
 }
 
 func (rg *RouteGroup) handleClosePacket(code routing.CloseCode) error {
-	rg.logger.Infof("Got close packet with code %d", code)
+	rg.logger.Debugf("Got close packet with code %d", code)
 
 	if rg.isCloseInitiator() {
 		// this route group initiated close loop and got response

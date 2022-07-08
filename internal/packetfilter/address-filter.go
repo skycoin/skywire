@@ -3,7 +3,7 @@ package packetfilter
 import (
 	"net"
 
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
 // AddressFilter filters packets from specified address.
@@ -13,9 +13,9 @@ type AddressFilter struct {
 }
 
 // NewAddressFilter returns a new AddressFilter.
-func NewAddressFilter(addr net.Addr) *AddressFilter {
+func NewAddressFilter(addr net.Addr, mLog *logging.MasterLogger) *AddressFilter {
 	return &AddressFilter{
-		log:  logging.MustGetLogger("address-filter"),
+		log:  mLog.PackageLogger("address-filter"),
 		addr: addr,
 	}
 }

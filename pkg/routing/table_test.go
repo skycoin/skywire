@@ -7,9 +7,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
 func TestMain(m *testing.M) {
@@ -70,5 +71,5 @@ func RoutingTableSuite(t *testing.T, tbl Table) {
 }
 
 func TestRoutingTable(t *testing.T) {
-	RoutingTableSuite(t, NewTable())
+	RoutingTableSuite(t, NewTable(logging.MustGetLogger("tt")))
 }

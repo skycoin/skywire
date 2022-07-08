@@ -1,7 +1,6 @@
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
-import { TranslateService } from '@ngx-translate/core';
 import { Injector } from '@angular/core';
 
 import { BasicTerminalComponent } from './basic-terminal/basic-terminal.component';
@@ -13,7 +12,6 @@ import { OperationError } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
 import { MenuOptionData } from 'src/app/components/layout/top-bar/top-bar.component';
-import { UpdateComponent } from 'src/app/components/layout/update/update.component';
 import { StorageService } from 'src/app/services/storage.service';
 
 /**
@@ -27,8 +25,12 @@ export class NodeActionsHelper {
   private showingFullList: boolean;
   private currentNode: Node;
   private currentNodeKey: string;
+  private canBeUpdated = false;
+  private canBeRestarted = false;
+  private canOpenTerminal = false;
 
   options: MenuOptionData[] = [];
+
   returnButtonText: string;
 
   private rebootSubscription: Subscription;
@@ -39,7 +41,6 @@ export class NodeActionsHelper {
   private router: Router;
   private snackbarService: SnackbarService;
   private nodeService: NodeService;
-  private translateService: TranslateService;
   private storageService: StorageService;
 
   constructor(injector: Injector, showingFullList: boolean) {
@@ -48,35 +49,49 @@ export class NodeActionsHelper {
     this.router = injector.get(Router);
     this.snackbarService = injector.get(SnackbarService);
     this.nodeService = injector.get(NodeService);
-    this.translateService = injector.get(TranslateService);
     this.storageService = injector.get(StorageService);
-
-    // Options for the menu shown in the top bar.
-    this.options = [
-      {
-        name: 'actions.menu.terminal',
-        actionName: 'terminal',
-        icon: 'laptop'
-      },
-      {
-        name: 'actions.menu.reboot',
-        actionName: 'reboot',
-        icon: 'rotate_right'
-      },
-      {
-        name: 'actions.menu.update',
-        actionName: 'update',
-        icon: 'get_app',
-      },
-      {
-        name: 'actions.menu.logs',
-        actionName: 'logs',
-        icon: 'subject',
-      }
-    ];
 
     this.showingFullList = showingFullList;
     this.returnButtonText = !showingFullList ? 'nodes.title' : 'node.title';
+
+    this.updateOptions();
+  }
+
+  /**
+   * Options for the menu shown in the top bar.
+   */
+  private updateOptions() {
+    this.options = [];
+
+    if (this.canOpenTerminal) {
+      this.options.push({
+        name: 'actions.menu.terminal',
+        actionName: 'terminal',
+        icon: 'laptop'
+      });
+    }
+
+    this.options.push({
+      name: 'actions.menu.logs',
+      actionName: 'logs',
+      icon: 'subject',
+    });
+
+    if (this.canBeRestarted) {
+      this.options.push({
+        name: 'actions.menu.reboot',
+        actionName: 'reboot',
+        icon: 'rotate_right'
+      });
+    }
+
+    if (this.canBeUpdated) {
+      this.options.push({
+        name: 'actions.menu.update',
+        actionName: 'update',
+        icon: 'get_app',
+      });
+    }
   }
 
   /**
@@ -84,6 +99,18 @@ export class NodeActionsHelper {
    */
   setCurrentNode(currentNode: Node) {
     this.currentNode = currentNode;
+
+    if (GeneralUtils.checkIfTagIsUpdatable(currentNode.buildTag)) {
+      this.canBeUpdated = true;
+      this.canBeRestarted = true;
+    } else {
+      this.canBeUpdated = false;
+      this.canBeRestarted = false;
+    }
+
+    this.canOpenTerminal = GeneralUtils.checkIfTagCanOpenterminal(currentNode.buildTag);
+
+    this.updateOptions();
   }
 
   /**
@@ -143,9 +170,15 @@ export class NodeActionsHelper {
   }
 
   update() {
-    const labelInfo = this.storageService.getLabelInfo(this.currentNodeKey);
-    const label = labelInfo ? labelInfo.label : '';
-    UpdateComponent.openDialog(this.dialog, [{key: this.currentNodeKey, label: label}]);
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'actions.update.confirmation');
+
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      const protocol = window.location.protocol;
+      const hostname = window.location.host.replace('localhost:4200', '127.0.0.1:8000');
+      window.open(protocol + '//' + hostname + '/pty/' + this.currentNodeKey + '?commands=update', '_blank', 'noopener noreferrer');
+
+      confirmationDialog.close();
+    });
   }
 
   terminal() {

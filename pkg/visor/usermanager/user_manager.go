@@ -11,9 +11,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/securecookie"
-	"github.com/skycoin/dmsg/httputil"
-	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire-utilities/pkg/httputil"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
 
@@ -59,9 +59,9 @@ type UserManager struct {
 }
 
 // NewUserManager creates a new UserManager.
-func NewUserManager(users UserStore, config hypervisorconfig.CookieConfig) *UserManager {
+func NewUserManager(mLog *logging.MasterLogger, users UserStore, config hypervisorconfig.CookieConfig) *UserManager {
 	return &UserManager{
-		log:      logging.MustGetLogger("user_manager"),
+		log:      mLog.PackageLogger("user_manager"),
 		db:       users,
 		c:        config,
 		sessions: make(map[uuid.UUID]Session),
@@ -311,6 +311,11 @@ func (s *UserManager) newSession(w http.ResponseWriter, session Session) error {
 	})
 
 	return nil
+}
+
+// Close closes the underlying db, used for Windows.
+func (s *UserManager) Close() error {
+	return s.db.Close()
 }
 
 func (s *UserManager) delSession(w http.ResponseWriter, r *http.Request) error {

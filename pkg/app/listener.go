@@ -27,14 +27,14 @@ type Listener struct {
 
 // Accept accepts a connection from listener.
 func (l *Listener) Accept() (net.Conn, error) {
-	fmt.Print("Calling app RPC Accept")
+	fmt.Println("Calling app RPC Accept")
 
 	connID, remote, err := l.rpc.Accept(l.id)
 	if err != nil {
 		return nil, err
 	}
 
-	fmt.Print("Accepted conn from app RPC")
+	fmt.Println("Accepted conn from app RPC")
 
 	conn := &Conn{
 		id:     connID,

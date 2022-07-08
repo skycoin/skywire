@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/AudriusButkevicius/pfilter"
-	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/xtaci/kcp-go"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/internal/packetfilter"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/transport/network/handshake"
@@ -64,7 +64,7 @@ func (c *sudphClient) listen() (net.Listener, error) {
 	c.filter = pfilter.NewPacketFilter(packetListener)
 	sudphVisorsConn := c.filter.NewConn(visorsConnPriority, nil)
 	c.filter.Start()
-	c.log.Infof("Binding")
+	c.log.Debug("Binding")
 	addrCh, err := c.ar.BindSUDPH(c.filter, c.makeBindHandshake())
 	if err != nil {
 		return nil, err
@@ -75,7 +75,7 @@ func (c *sudphClient) listen() (net.Listener, error) {
 		return nil, err
 	}
 
-	c.log.Infof("Successfully bound sudph to port %s", localPort)
+	c.log.Debugf("Successfully bound sudph to port %s", localPort)
 
 	go c.acceptAddresses(sudphVisorsConn, addrCh)
 	return kcp.ServeConn(nil, 0, 0, sudphVisorsConn)
@@ -103,13 +103,12 @@ func (c *sudphClient) acceptAddresses(conn net.PacketConn, addrCh <-chan addrres
 			continue
 		}
 
-		c.log.Infof("Sending hole punch packet to %v", addr)
-
+		c.log.Debugf("Sending hole punch packet to %v", addr)
 		if _, err := conn.WriteTo([]byte(holePunchMessage), udpAddr); err != nil {
 			c.log.WithError(err).Errorf("Failed to send hole punch packet to %v", udpAddr)
 			continue
 		}
-		c.log.Infof("Sent hole punch packet to %v", addr)
+		c.log.Debugf("Sent hole punch packet to %v", addr)
 	}
 }
 
@@ -130,7 +129,7 @@ func (c *sudphClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16)
 func (c *sudphClient) dialWithTimeout(ctx context.Context, addr string) (net.Conn, error) {
 	timedCtx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
-	c.log.Infof("Dialing %v", addr)
+	c.log.Debugf("Dialing %v", addr)
 
 	for {
 		select {
@@ -139,7 +138,7 @@ func (c *sudphClient) dialWithTimeout(ctx context.Context, addr string) (net.Con
 		default:
 			conn, err := c.dial(addr)
 			if err == nil {
-				c.log.Infof("Dialed %v", addr)
+				c.log.Debugf("Dialed %v", addr)
 				return conn, nil
 			}
 			c.log.WithError(err).
@@ -156,7 +155,7 @@ func (c *sudphClient) dial(remoteAddr string) (net.Conn, error) {
 		return nil, fmt.Errorf("net.ResolveUDPAddr (remote): %w", err)
 	}
 
-	dialConn := c.filter.NewConn(dialConnPriority, packetfilter.NewKCPConversationFilter())
+	dialConn := c.filter.NewConn(dialConnPriority, packetfilter.NewKCPConversationFilter(c.mLog))
 
 	if _, err := dialConn.WriteTo([]byte(holePunchMessage), rAddr); err != nil {
 		return nil, fmt.Errorf("dialConn.WriteTo: %w", err)

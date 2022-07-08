@@ -27,6 +27,7 @@ export interface Application {
   autostart: boolean;
   port: number;
   status: number;
+  detailedStatus: string;
   args: any[];
 }
 
@@ -81,7 +82,7 @@ interface RouteDescriptor {
 }
 
 export interface HealthInfo {
-  servicesHealth?: String;
+  servicesHealth?: string;
 }
 
 export class ProxyDiscoveryEntry {

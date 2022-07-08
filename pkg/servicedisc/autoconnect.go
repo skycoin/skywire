@@ -2,12 +2,16 @@ package servicedisc
 
 import (
 	"context"
+	"errors"
+	"io"
+	"net/http"
 	"time"
 
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
 
-	"github.com/skycoin/skywire/internal/netutil"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
@@ -37,9 +41,10 @@ type autoconnector struct {
 
 // MakeConnector returns a new connector that will try to connect to at most maxConns
 // services
-func MakeConnector(conf Config, maxConns int, tm *transport.Manager, log *logging.Logger) Autoconnector {
+func MakeConnector(conf Config, maxConns int, tm *transport.Manager, httpC *http.Client, clientPublicIP string,
+	log *logging.Logger, mLog *logging.MasterLogger) Autoconnector {
 	connector := &autoconnector{}
-	connector.client = NewClient(log, conf)
+	connector.client = NewClient(log, mLog, conf, httpC, clientPublicIP)
 	connector.maxConns = maxConns
 	connector.log = log
 	connector.tm = tm
@@ -50,46 +55,61 @@ func MakeConnector(conf Config, maxConns int, tm *transport.Manager, log *loggin
 func (a *autoconnector) Run(ctx context.Context) (err error) {
 	// failed addresses will be populated everytime any failed attempt at establishing transport occurs.
 	failedAddresses := map[cipher.PubKey]int{}
+	publicServiceTicket := time.NewTicker(PublicServiceDelay)
 
 	for {
-		time.Sleep(PublicServiceDelay)
+		select {
+		case <-publicServiceTicket.C:
+			// successfully established transports
+			tps := a.tm.GetTransportsByLabel(transport.LabelAutomatic)
 
-		// successfully established transports
-		tps := a.tm.GetTransportsByLabel(transport.LabelAutomatic)
-
-		// don't fetch public addresses if there are more or equal to the number of maximum transport defined.
-		if len(tps) >= a.maxConns {
-			a.log.Debugln("autoconnect: maximum number of established transports reached: ", a.maxConns)
-			return err
-		}
-
-		a.log.Infoln("Fetching public visors")
-		addrs, err := a.fetchPubAddresses(ctx)
-		if err != nil {
-			a.log.Errorf("Cannot fetch public services: %s", err)
-		}
-
-		// filter out any established transports
-		absent := a.filterDuplicates(addrs, tps)
-
-		for _, pk := range absent {
-			val, ok := failedAddresses[pk]
-			if !ok || val < maxFailedAddressRetryAttempt {
-				a.log.WithField("pk", pk).WithField("attempt", val).Debugln("Trying to add transport to public visor")
-				logger := a.log.WithField("pk", pk).WithField("type", string(network.STCPR))
-				if _, err := a.tm.SaveTransport(ctx, pk, network.STCPR, transport.LabelAutomatic); err != nil {
-					logger.WithError(err).Warnln("Failed to add transport to public visor")
-					failedAddresses[pk]++
-					continue
-				}
-				logger.Infoln("Added transport to public visor")
+			// don't fetch public addresses if there are more or equal to the number of maximum transport defined.
+			if len(tps) >= a.maxConns {
+				a.log.Debugln("autoconnect: maximum number of established transports reached: ", a.maxConns)
+				return err
 			}
+
+			a.log.Infoln("Fetching public visors")
+			addrs, err := a.fetchPubAddresses(ctx)
+			if err != nil {
+				a.log.Errorf("Cannot fetch public services: %s", err)
+			}
+
+			// filter out any established transports
+			absent := a.filterDuplicates(addrs, tps)
+
+			for _, pk := range absent {
+				val, ok := failedAddresses[pk]
+				if !ok || val < maxFailedAddressRetryAttempt {
+					a.log.WithField("pk", pk).WithField("attempt", val).Debugln("Trying to add transport to public visor")
+					logger := a.log.WithField("pk", pk).WithField("type", string(network.STCPR))
+					if err = a.tryEstablishTransport(ctx, pk, logger); err != nil {
+						if !errors.Is(err, io.ErrClosedPipe) {
+							logger.WithError(err).Warnln("Failed to add transport to public visor")
+						}
+						failedAddresses[pk]++
+						continue
+					}
+				}
+			}
+		case <-ctx.Done():
+			return context.Canceled
 		}
 	}
 }
 
+// tryEstablish transport will try to establish transport to the remote pk via STCPR or SUDPH, if both failed, return error.
+func (a *autoconnector) tryEstablishTransport(ctx context.Context, pk cipher.PubKey, logger *logrus.Entry) error {
+	if _, err := a.tm.SaveTransport(ctx, pk, network.STCPR, transport.LabelAutomatic); err != nil {
+		return err
+	}
+
+	logger.Debugln("Added transport to public visor")
+	return nil
+}
+
 func (a *autoconnector) fetchPubAddresses(ctx context.Context) ([]cipher.PubKey, error) {
-	retrier := netutil.NewRetrier(fetchServicesDelay, 5, 3, a.log)
+	retrier := netutil.NewRetrier(a.log, fetchServicesDelay, 0, 5, 3)
 	var services []Service
 	fetch := func() (err error) {
 		// "return" services up from the closure
@@ -99,7 +119,7 @@ func (a *autoconnector) fetchPubAddresses(ctx context.Context) ([]cipher.PubKey,
 		}
 		return nil
 	}
-	if err := retrier.Do(fetch); err != nil {
+	if err := retrier.Do(ctx, fetch); err != nil {
 		return nil, err
 	}
 	pks := make([]cipher.PubKey, len(services))

@@ -8,15 +8,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/cipher"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/app/appserver"
-	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
-	"github.com/skycoin/skywire/pkg/util/updater"
 )
 
 const (
@@ -197,7 +195,7 @@ func (r *RPC) SetAppError(in *SetAppErrorIn, _ *struct{}) (err error) {
 }
 
 // Apps returns list of Apps registered on the Visor.
-func (r *RPC) Apps(_ *struct{}, reply *[]*launcher.AppState) (err error) {
+func (r *RPC) Apps(_ *struct{}, reply *[]*appserver.AppState) (err error) {
 	defer rpcutil.LogCall(r.log, "Apps", nil)(reply, &err)
 
 	apps, err := r.visor.Apps()
@@ -253,6 +251,19 @@ func (r *RPC) SetAppPassword(in *SetAppPasswordIn, _ *struct{}) (err error) {
 	return r.visor.SetAppPassword(in.AppName, in.Password)
 }
 
+// SetAppNetworkInterfaceIn is input for SetAppNetworkInterface.
+type SetAppNetworkInterfaceIn struct {
+	AppName string
+	NetIfc  string
+}
+
+// SetAppNetworkInterface sets network interface for the app.
+func (r *RPC) SetAppNetworkInterface(in *SetAppNetworkInterfaceIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppNetworkInterface", in)(nil, &err)
+
+	return r.visor.SetAppNetworkInterface(in.AppName, in.NetIfc)
+}
+
 // SetAppPKIn is input for SetAppPK.
 type SetAppPKIn struct {
 	AppName string
@@ -291,6 +302,18 @@ func (r *RPC) GetAppStats(appName *string, out *appserver.AppStats) (err error) 
 	defer rpcutil.LogCall(r.log, "GetAppStats", appName)(out, &err)
 
 	stats, err := r.visor.GetAppStats(*appName)
+	if err != nil {
+		*out = stats
+	}
+
+	return err
+}
+
+// GetAppError gets app runtime error.
+func (r *RPC) GetAppError(appName *string, out *string) (err error) {
+	defer rpcutil.LogCall(r.log, "GetAppError", appName)(out, &err)
+
+	stats, err := r.visor.GetAppError(*appName)
 	if err != nil {
 		*out = stats
 	}
@@ -472,59 +495,20 @@ func (r *RPC) Restart(_ *struct{}, _ *struct{}) (err error) {
 	return r.visor.Restart()
 }
 
+// Shutdown shuts down visor.
+func (r *RPC) Shutdown(_ *struct{}, _ *struct{}) (err error) {
+	// @evanlinjin: do not defer this log statement, as the underlying visor.Logger will get closed.
+	rpcutil.LogCall(r.log, "Shutdown", nil)(nil, nil)
+
+	return r.visor.Shutdown()
+}
+
 // Exec executes a given command in cmd and writes its output to out.
 func (r *RPC) Exec(cmd *string, out *[]byte) (err error) {
 	defer rpcutil.LogCall(r.log, "Exec", cmd)(out, &err)
 
 	*out, err = r.visor.Exec(*cmd)
 	return err
-}
-
-// Update updates visor.
-func (r *RPC) Update(updateConfig *updater.UpdateConfig, updated *bool) (err error) {
-	defer rpcutil.LogCall(r.log, "Update", updateConfig)(updated, &err)
-
-	config := updater.UpdateConfig{}
-
-	if updateConfig != nil {
-		config = *updateConfig
-	}
-
-	*updated, err = r.visor.Update(config)
-	return
-}
-
-// UpdateAvailable checks if visor update is available.
-func (r *RPC) UpdateAvailable(channel *updater.Channel, version *updater.Version) (err error) {
-	defer rpcutil.LogCall(r.log, "UpdateAvailable", channel)(version, &err)
-
-	if channel == nil {
-		return updater.ErrUnknownChannel
-	}
-
-	v, err := r.visor.UpdateAvailable(*channel)
-	if err != nil {
-		return err
-	}
-
-	if v == nil {
-		return nil
-	}
-
-	*version = *v
-	return nil
-}
-
-// UpdateStatus returns visor update status.
-func (r *RPC) UpdateStatus(_ *struct{}, status *string) (err error) {
-	*status, err = r.visor.UpdateStatus()
-	return
-}
-
-// RuntimeLogs returns visor runtime logs
-func (r *RPC) RuntimeLogs(_ *struct{}, logs *string) (err error) {
-	*logs, err = r.visor.RuntimeLogs()
-	return
 }
 
 // SetMinHops sets min_hops in visor's routing config
@@ -554,5 +538,25 @@ func (r *RPC) SetPersistentTransports(pTs *[]transport.PersistentTransports, _ *
 func (r *RPC) SetPublicAutoconnect(pAc *bool, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetPublicAutoconnect", *pAc)
 	err = r.visor.SetPublicAutoconnect(*pAc)
+	return err
+}
+
+// VPNServers gets available public VPN server from service discovery URL
+func (r *RPC) VPNServers(_ *struct{}, out *[]string) (err error) {
+	defer rpcutil.LogCall(r.log, "RemoteVisor", nil)(out, &err)
+	vpnServers, err := r.visor.VPNServers()
+	if vpnServers != nil {
+		*out = vpnServers
+	}
+	return err
+}
+
+// RemoteVisors return connected remote visors
+func (r *RPC) RemoteVisors(_ *struct{}, out *[]string) (err error) {
+	defer rpcutil.LogCall(r.log, "RemoteVisor", nil)(out, &err)
+	remoteVisors, err := r.visor.RemoteVisors()
+	if remoteVisors != nil {
+		*out = remoteVisors
+	}
 	return err
 }

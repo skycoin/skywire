@@ -6,10 +6,11 @@ import (
 	"net/rpc"
 	"testing"
 
-	"github.com/skycoin/dmsg/cipher"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/internal/testhelpers"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -91,9 +92,9 @@ func TestClient_ReserveIDs(t *testing.T) {
 func prepRPCServerAndClient(t *testing.T, r router.Router) (s *rpc.Server, cl *Client, cleanup func()) {
 	l, err := nettest.NewLocalListener("tcp")
 	require.NoError(t, err)
-
+	mlog := logging.NewMasterLogger()
 	s = rpc.NewServer()
-	require.NoError(t, s.Register(router.NewRPCGateway(r)))
+	require.NoError(t, s.Register(router.NewRPCGateway(r, mlog)))
 	go s.Accept(l)
 
 	conn, err := net.Dial("tcp", l.Addr().String())

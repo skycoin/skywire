@@ -1,38 +1,62 @@
 ### Windows
 
+Prequisites:
+
+- `gcc` (for systray)
+- `git`
+- `go`
+- `make`
+- `powershell` (we don't support running it from `CMD` at the moment)
+
 Skywire visor may be run on Windows, but this process requires some manual operations at the moment.
 
-In order to run the skywire visor on Windows, you will need to manually build it. Do not forget the `.exe` extensions.
+In order to run the skywire visor on Windows, you will need to build it first:
 
-`go build -o ./skywire-visor.exe ./cmd/skywire-visor`
-
-Apps may be built the same way:
-
-`go build -o ./apps/vpn-client.exe ./cmd/apps/vpn-client`
+```powershell
+> make build-windows 
+```
 
 Apps should be declared in the config without `.exe` extension.
 
-Change the encoding of the logs in your terminal to increase legibility.
 
+To run it, you can generate a config first via:
+
+```powershell
+> .\skywire-cli.exe config gen -t --is-hypervisor -r -o .\skywire-config.json
 ```
-CHCP 65001
+
+It will create a file called `skywire-config.json` on the root directory of this project.
+
+Then you can run the visor via:
+
+```powershell
+> .\skywire-visor.exe -c .\skywire-config.json
 ```
 
 #### Unsupported features
 
-- `dmsgpty`
 - `syslog`
 
-Using `dmsgpty` and `syslog` is currently not supported on Windows.
+Using `syslog` is currently not supported on Windows.
+
+#### Partially Supported Features
+
+- `dmsgpty`
+
+Will only work on Windows Server 2019 and Windows 10.
 
 #### Running a VPN-client
 
-Running the Skywire VPN-client on Windows requires the `wintun` driver to be installed. You can either install the driver itself or install `Wireguard` which includes the driver.
+Running the Skywire VPN-client on Windows requires the `wintun` version `0.14` driver to be installed. 
 
-The VPN client requires `local system` user rights to be run. You can set these with `PsExec`: https://docs.microsoft.com/en-us/sysinternals/downloads/psexec . To start your terminal with `local system` rights use:
+- Download it from [here](https://wintun.net/builds/wintun-0.14.zip)
+- Extract the file
+- Copy the `wintun.dll` in the `wintun\bin\<YOUR_ARCH>\wintun.dll` to the `C:\Windows\System32\wintun.dll`
+- For better output (formatted logs, etc), install [Windows Terminal](https://github.com/microsoft/terminal)
+- Run windows terminal as administrator and run
 
+```powershell 
+> .\skywire-visor.exe -c .\skywire-config.json
 ```
-PsExec.exe -i -s C:\Windows\system32\cmd.exe
-```
 
-Run Skywire from this terminal Window. 
+- You can follow the rest of the guide for connecting the VPN Client in skywire wiki.

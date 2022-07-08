@@ -3,9 +3,10 @@ package router
 import (
 	"testing"
 
-	"github.com/skycoin/dmsg/cipher"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -30,7 +31,8 @@ func TestRouteGroup_RemoteAddr(t *testing.T) {
 }
 
 func createRouteGroup(cfg *RouteGroupConfig) *RouteGroup {
-	rt := routing.NewTable()
+	l := logging.NewMasterLogger()
+	rt := routing.NewTable(l.PackageLogger("rgt"))
 
 	pk1, _ := cipher.GenerateKeyPair()
 	pk2, _ := cipher.GenerateKeyPair()
@@ -38,7 +40,6 @@ func createRouteGroup(cfg *RouteGroupConfig) *RouteGroup {
 	port2 := routing.Port(2)
 	desc := routing.NewRouteDescriptor(pk1, pk2, port1, port2)
 
-	rg := NewRouteGroup(cfg, rt, desc)
-
+	rg := NewRouteGroup(cfg, rt, desc, l)
 	return rg
 }

@@ -12,19 +12,24 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
+
+var masterLogger = logging.NewMasterLogger()
 
 const (
 	payload      = "Hello, client\n"
 	errorMessage = `{"error":{"message":"SW-Nonce does not match","code":401}}`
+	ip           = ""
 )
 
 func TestMain(m *testing.M) {
 	loggingLevel, ok := os.LookupEnv("TEST_LOGGING_LEVEL")
+	log := logging.MustGetLogger("httpauth")
 	if ok {
 		lvl, err := logging.LevelFromString(loggingLevel)
 		if err != nil {
@@ -45,7 +50,7 @@ func TestClient(t *testing.T) {
 	ts := newTestServer(t, pk, headerCh)
 	defer ts.Close()
 
-	c, err := NewClient(context.TODO(), ts.URL, pk, sk)
+	c, err := NewClient(context.TODO(), ts.URL, pk, sk, &http.Client{}, ip, masterLogger)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, ts.URL+"/foo", bytes.NewBufferString(payload))
@@ -71,7 +76,7 @@ func TestClient_BadNonce(t *testing.T) {
 	ts := newTestServer(t, pk, headerCh)
 	defer ts.Close()
 
-	c, err := NewClient(context.TODO(), ts.URL, pk, sk)
+	c, err := NewClient(context.TODO(), ts.URL, pk, sk, &http.Client{}, ip, masterLogger)
 	require.NoError(t, err)
 
 	c.nonce = 999

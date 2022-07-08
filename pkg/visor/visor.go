@@ -5,13 +5,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
-	"github.com/skycoin/dmsg"
-	"github.com/skycoin/skycoin/src/util/logging"
+	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
+	"github.com/skycoin/dmsg/pkg/dmsg"
 
-	"github.com/skycoin/skywire/internal/utclient"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -22,7 +24,8 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
-	"github.com/skycoin/skywire/pkg/util/updater"
+	"github.com/skycoin/skywire/pkg/utclient"
+	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorinit"
@@ -31,6 +34,10 @@ import (
 var (
 	// ErrAppProcNotRunning represents lookup error for App related calls.
 	ErrAppProcNotRunning = errors.New("no process of given app is running")
+	// ErrProcNotAvailable represents error for unavailable process manager
+	ErrProcNotAvailable = errors.New("no process manager available")
+	// ErrTrpMangerNotAvailable represents error for unavailable transport manager
+	ErrTrpMangerNotAvailable = errors.New("no transport manager available")
 )
 
 const (
@@ -52,28 +59,38 @@ type Visor struct {
 
 	startedAt     time.Time
 	restartCtx    *restart.Context
-	updater       *updater.Updater
 	uptimeTracker utclient.APIClient
 
-	ebc   *appevent.Broadcaster // event broadcaster
-	dmsgC *dmsg.Client
+	ebc          *appevent.Broadcaster // event broadcaster
+	dmsgC        *dmsg.Client
+	dmsgDC       *dmsg.Client       // dmsg direct client
+	dClient      dmsgdisc.APIClient // dmsg direct api client
+	dmsgHTTP     *http.Client       // dmsghttp client
+	dtm          *dmsgtracker.Manager
+	dtmReady     chan struct{}
+	dtmReadyOnce sync.Once
 
-	stunClient *network.StunDetails
-	tpM        *transport.Manager
-	arClient   addrresolver.APIClient
-	router     router.Router
-	rfClient   rfclient.Client
+	stunClient    *network.StunDetails
+	stunReady     chan struct{}
+	stunReadyOnce sync.Once
+
+	tpM      *transport.Manager
+	arClient addrresolver.APIClient
+	router   router.Router
+	rfClient rfclient.Client
 
 	procM       appserver.ProcManager // proc manager
 	appL        *launcher.Launcher    // app launcher
 	serviceDisc appdisc.Factory
-	initLock    *sync.Mutex
+	initLock    *sync.RWMutex
 	// when module is failed it pushes its error to this channel
 	// used by init and shutdown to show/check for any residual errors
 	// produced by concurrent parts of modules
 	runtimeErrors chan error
 
 	isServicesHealthy *internalHealthInfo
+
+	remoteVisors map[cipher.PubKey]Conn // copy of connected remote visors to hypervisor
 }
 
 // todo: consider moving module closing to the module system
@@ -97,29 +114,29 @@ func (v *Visor) MasterLogger() *logging.MasterLogger {
 }
 
 // NewVisor constructs new Visor.
-func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) {
+func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) {
+
 	v := &Visor{
 		log:               conf.MasterLogger().PackageLogger("visor"),
 		conf:              conf,
 		restartCtx:        restartCtx,
-		initLock:          new(sync.Mutex),
+		initLock:          new(sync.RWMutex),
 		isServicesHealthy: newInternalHealthInfo(),
+		dtmReady:          make(chan struct{}),
+		stunReady:         make(chan struct{}),
 	}
-
 	v.isServicesHealthy.init()
 
 	if logLvl, err := logging.LevelFromString(conf.LogLevel); err != nil {
 		v.log.WithError(err).Warn("Failed to read log level from config.")
 	} else {
 		v.conf.MasterLogger().SetLevel(logLvl)
-		logging.SetLevel(logLvl)
 	}
 
 	log := v.MasterLogger().PackageLogger("visor:startup")
 	log.WithField("public_key", conf.PK).
 		Info("Begin startup.")
 	v.startedAt = time.Now()
-	ctx := context.Background()
 	ctx = context.WithValue(ctx, visorKey, v)
 	v.runtimeErrors = make(chan error)
 	ctx = context.WithValue(ctx, runtimeErrsKey, v.runtimeErrors)
@@ -130,17 +147,37 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 	} else {
 		mainModule = hv
 	}
+	// run Transport module in a non blocking mode
+	go tm.InitConcurrent(ctx)
 	mainModule.InitConcurrent(ctx)
 	if err := mainModule.Wait(ctx); err != nil {
-		log.Error(err)
+		select {
+		case <-ctx.Done():
+			if err := v.Close(); err != nil {
+				log.WithError(err).Error("Visor closed with error.")
+			}
+		default:
+			log.Error(err)
+		}
 		return nil, false
 	}
-	tm.InitConcurrent(ctx)
+	if err := tm.Wait(ctx); err != nil {
+		select {
+		case <-ctx.Done():
+			if err := v.Close(); err != nil {
+				log.WithError(err).Error("Visor closed with error.")
+			}
+		default:
+			log.Error(err)
+		}
+		return nil, false
+	}
 	// todo: rewrite to be infinite concurrent loop that will watch for
 	// module runtime errors and act on it (by stopping visor for example)
 	if !v.processRuntimeErrs() {
 		return nil, false
 	}
+	log.Info("Startup complete.")
 	return v, true
 }
 
@@ -154,6 +191,15 @@ func (v *Visor) processRuntimeErrs() bool {
 		default:
 			return ok
 		}
+	}
+}
+
+func (v *Visor) isStunReady() bool {
+	select {
+	case <-v.stunReady:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -181,7 +227,7 @@ func (v *Visor) Close() error {
 
 		log := v.MasterLogger().PackageLogger(fmt.Sprintf("visor:shutdown:%s", cl.src)).
 			WithField("func", fmt.Sprintf("[%d/%d]", i+1, len(v.closeStack)))
-		log.Info("Shutting down module...")
+		log.Debug("Shutting down module...")
 
 		go func(cl closer) {
 			errCh <- cl.fn()
@@ -195,7 +241,7 @@ func (v *Visor) Close() error {
 				log.WithError(err).WithField("elapsed", time.Since(start)).Warn("Module stopped with unexpected result.")
 				continue
 			}
-			log.WithField("elapsed", time.Since(start)).Info("Module stopped cleanly.")
+			log.WithField("elapsed", time.Since(start)).Debug("Module stopped cleanly.")
 
 		case <-t.C:
 			log.WithField("elapsed", time.Since(start)).Error("Module timed out.")
@@ -204,6 +250,15 @@ func (v *Visor) Close() error {
 	v.processRuntimeErrs()
 	log.Info("Shutdown complete. Goodbye!")
 	return nil
+}
+
+func (v *Visor) isDTMReady() bool {
+	select {
+	case <-v.dtmReady:
+		return true
+	default:
+		return false
+	}
 }
 
 // SetLogstore sets visor runtime logstore

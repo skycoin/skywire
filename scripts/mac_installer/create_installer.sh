@@ -6,11 +6,9 @@ installer_build_dir="./mac_build"
 installer_package_dir="${installer_build_dir}"/binaries/Skywire.app
 git_tag=$(git describe --tags)
 date_format=$(date -u "+%Y-%m-%d")
-go_arch=$(go env GOARCH) # build for amd64 and arm64 from single host
+go_arch=
 sign_binary=false
 notarize_binary=false
-staple_notarization=false
-package_path=
 developer_id=
 output=
 
@@ -26,19 +24,12 @@ if [[ "$current_os" != "Darwin" ]]; then
 fi
 
 function print_usage() {
-  echo "Usage: sh create_installer.sh [-o|--output output_skywire_dir] [-s | --sign signs the binary] [-n | --notarize notarize the binary ] [-t <PACKAGE_PATH> | --staple <PACKAGE_PATH> ]"
+  echo "Usage: sh create_installer.sh [-o|--output output_skywire_dir] [-s | --sign signs the binary] [-n | --notarize notarize the binary ]"
   echo "You need to provide the following environment variables if you want to sign and notarize the binary:"
   echo -e "${greent}MAC_HASH_APPLICATION_ID${nct}: Hash of Developer ID Application"
   echo -e "${greent}MAC_HASH_INSTALLER_ID${nct}  : Hash of Developer ID Installer"
   echo -e "${greent}MAC_DEVELOPER_USERNAME${nct} : Developer Account Email"
   echo -e "${greent}MAC_DEVELOPER_PASSWORD${nct} : Application specific / Apple ID password ${yellowt}https://support.apple.com/en-us/HT204397${nct}"
-}
-
-function staple_installer() {
-  if [ -z "$package_path" ]; then
-    echo "package_path of option -t cannot be empty"
-  fi
-  xcrun stapler staple "${package_path}"
 }
 
 function build_installer() {
@@ -56,9 +47,10 @@ function build_installer() {
     echo "Storing installer to ${output}"
   fi
 
-  # build skywire binariea
-  make CGO_ENABLED=1 GOOS=darwin GOARCH="${go_arch}" build-systray
-
+  # fetch skywire binaries from last release
+  download_url=$(eval curl https://api.github.com/repos/skycoin/skywire/releases | jq '.[0].assets[] | select(.name|match("darwin-'${go_arch}'.tar.gz")) | .browser_download_url')
+  wget ${download_url:1:$((${#download_url} - 2))} -O - | tar -xz
+  
   if [ -d ${installer_build_dir}/binaries/Skywire.app ]; then
     rm -rf ${installer_build_dir}/binaries/Skywire.app
   fi
@@ -68,7 +60,7 @@ function build_installer() {
   mkdir -p ${installer_package_dir}/Contents/{Resources,MacOS/apps}
 
   # build deinstaller
-  go build -o ${installer_package_dir}/Contents/MacOS/deinstaller ${mac_script_dir}/desktop-deinstaller
+  go build -o ${installer_package_dir}/Contents/MacOS/deinstaller ${mac_script_dir}/desktop-deinstaller/deinstaller.go
 
   # prepare Distribution.xml
   cp ${mac_script_dir}/Distribution.xml ${installer_build_dir}/
@@ -82,11 +74,12 @@ function build_installer() {
   mv ./skywire-visor ${installer_package_dir}/Contents/MacOS/skywire-visor
   mv ./skywire-cli ${installer_package_dir}/Contents/MacOS/skywire-cli
   mv ./apps/vpn-client ${installer_package_dir}/Contents/MacOS/apps/vpn-client
+  cp ./dmsghttp-config.json ${installer_package_dir}/Contents/MacOS/dmsghttp-config.json
 
   cat <<EOF >${installer_package_dir}/Contents/MacOS/Skywire
 #!/bin/bash
 
-osascript -e "do shell script \"/Applications/Skywire.app/Contents/MacOS/skywire-visor --systray > /Users/\${USER}/Library/Logs/skywire/visor.log\" with administrator privileges"
+osascript -e "do shell script \"/Applications/Skywire.app/Contents/MacOS/skywire-visor -c '/Users/\${USER}/Library/Application Support/Skywire/skywire-config.json' > /Users/\${USER}/Library/Logs/skywire/visor.log\" with administrator privileges"
 
 EOF
 
@@ -115,7 +108,7 @@ EOF
   pkgbuild --root ${installer_build_dir}/binaries --identifier com.skycoin.skywire.updater --install-location /Applications/ --scripts ${installer_build_dir}/update_scripts ${installer_build_dir}/updater.pkg
   pkgbuild --nopayload --identifier com.skycoin.skywire.remover --scripts ${installer_build_dir}/remove_scripts ${installer_build_dir}/remover.pkg
 
-  package_name=SkywireInstaller-${git_tag}-${date_format}-${go_arch}.pkg
+  package_name=skywire-installer-${git_tag}-darwin-${go_arch}.pkg
 
   cp ${mac_script_dir}/Distribution_customized.xml ${installer_build_dir}/Distribution.xml
 
@@ -135,6 +128,8 @@ EOF
       echo -e "${greent}check your email for notarization status${nct}"
     }
   fi
+
+  rm -rf ${installer_build_dir}
 }
 
 while :; do
@@ -167,11 +162,6 @@ while :; do
     notarize_binary=true
     shift
     ;;
-  -t | --staple)
-    staple_notarization=true
-    package_path="${2}"
-    shift
-    ;;
   -?*)
     printf 'WARN: Unknown option (ignored): %s\n' "$1" >&2
     ;;
@@ -182,22 +172,10 @@ while :; do
   shift
 done
 
-# call build_installer twice, once for the original host architecture
-# and one for the other one (x86_64 and arm64 or vice versa)
+# call build_installer twice, once for amd64 and once for arm64
 
-if [ "$staple_notarization" == false ]; then
-  build_installer
+go_arch=arm64
+build_installer
 
-  case ${go_arch} in
-  amd64)
-    go_arch=arm64
-    build_installer
-    ;;
-    # arm64)
-    #   go_arch=amd64
-    #   build_installer
-    #   ;;
-  esac
-else
-  staple_installer
-fi
+go_arch=amd64
+build_installer

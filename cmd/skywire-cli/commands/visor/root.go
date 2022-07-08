@@ -1,4 +1,4 @@
-package visor
+package clivisor
 
 import (
 	"net"
@@ -21,7 +21,7 @@ func init() {
 // RootCmd contains commands that interact with the skywire-visor
 var RootCmd = &cobra.Command{
 	Use:   "visor",
-	Short: "Contains sub-commands that interact with the local Skywire Visor",
+	Short: "Query the Skywire Visor",
 }
 
 func rpcClient() visor.API {

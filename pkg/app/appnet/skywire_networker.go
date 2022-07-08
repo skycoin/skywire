@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/netutil"
 
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 )
@@ -113,14 +113,14 @@ func (r *SkywireNetworker) serveRouteGroup(ctx context.Context) error {
 
 		conn, err := r.r.AcceptRoutes(ctx)
 		if err != nil {
-			log.WithError(err).Info("Stopped accepting routes.")
+			log.WithError(err).Debug("Stopped accepting routes.")
 			return err
 		}
 
 		log.
 			WithField("local", conn.LocalAddr()).
 			WithField("remote", conn.RemoteAddr()).
-			Info("Accepted route group.")
+			Debug("Accepted route group.")
 
 		go r.serve(conn)
 	}

@@ -7,8 +7,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/skycoin/skycoin/src/util/logging"
-
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/idmanager"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -277,7 +276,11 @@ func (r *RPCIngressGateway) Read(req *ReadReq, resp *ReadResp) error {
 		copy(resp.B, buf[:resp.N])
 	}
 	if err != nil {
-		r.log.WithError(err).Warn("Received unexpected error when reading from server.")
+		// we don't print warning if the conn is already closed
+		_, ok := r.cm.Get(req.ConnID)
+		if ok {
+			r.log.WithError(err).Warn("Received unexpected error when reading from server.")
+		}
 	}
 
 	resp.Err = ioErrToRPCIOErr(err)
@@ -300,7 +303,7 @@ func (r *RPCIngressGateway) CloseConn(connID *uint16, _ *struct{}) (err error) {
 
 // CloseListener closes listener specified by `lisID`.
 func (r *RPCIngressGateway) CloseListener(lisID *uint16, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "CloseConn", lisID)(nil, &err)
+	defer rpcutil.LogCall(r.log, "CloseListener", lisID)(nil, &err)
 
 	lis, err := r.popListener(*lisID)
 	if err != nil {
@@ -400,7 +403,7 @@ func ioErrToRPCIOErr(err error) *RPCIOErr {
 	if netErr, ok := err.(net.Error); ok {
 		rpcIOErr.IsNetErr = true
 		rpcIOErr.IsTimeoutErr = netErr.Timeout()
-		rpcIOErr.IsTemporaryErr = netErr.Temporary()
+		rpcIOErr.IsTemporaryErr = netErr.Temporary() // nolint
 	}
 
 	return rpcIOErr

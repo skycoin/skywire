@@ -286,6 +286,9 @@
       "confirmation": "¿Seguro que desea reiniciar el visor?",
       "done": "El visor se está reiniciando."
     },
+    "update": {
+      "confirmation": "Una terminal será abierta en una nueva pestaña y el proceso de actualización iniciará automáticamente. ¿Desea continuar?"
+    },
     "terminal-options": {
       "full": "Terminal completa",
       "simple": "Terminal simple"
@@ -321,6 +324,13 @@
     "starting": "Preparando para actualizar",
     "finished": "Conexión de estado terminada",
     "install": "Instalar actualizaciones"
+  },
+
+  "update-all": {
+    "title": "Actualizar",
+    "updatable-list-text": "Por favor, presione los botones de los visores que desea actualizar. Una terminal será abierta en una nueva pestaña por cada visor y el proceso de actualización iniciará automáticamente.",
+    "non-updatable-list-text": "Los siguientes visores no pueden ser actualizados vía la terminal:",
+    "update-button": "Actualizar"
   },
 
   "apps": {
@@ -379,6 +389,7 @@
       "vpn-title": "Configuración de VPN-Server",
       "new-password": "Nueva contraseña (dejar en blanco para eliminar la contraseña)",
       "repeat-password": "Repita la contraseña",
+      "netifc": "Interfaz de red predeterminada (opcional)",
       "passwords-not-match": "Las contraseñas no coinciden.",
       "secure-mode-check": "Usar modo seguro",
       "secure-mode-info": "Cuando está activo, el servidor no permite SSH con los clientes y no permite ningún tráfico de clientes VPN a la red local del servidor.",
@@ -465,11 +476,13 @@
     "operation-completed": "Operación completada.",
     "operation-unnecessary": "La selección ya tiene la configuración solicitada.",
     "status-running": "Corriendo",
+    "status-connecting": "Conectando",
     "status-stopped": "Detenida",
-    "status-failed": "Fallida",
+    "status-failed": "Finalizó con el siguiente error: {{ error }}",
     "status-running-tooltip": "La aplicación está actualmente corriendo",
+    "status-connecting-tooltip": "La aplicación está actualmente conectando",
     "status-stopped-tooltip": "La aplicación está actualmente detenida",
-    "status-failed-tooltip": "Algo salió mal. Revise los mensajes de la aplicación para más información"
+    "status-failed-tooltip": "La app finalizó con el siguiente error: {{ error }}"
   },
 
   "transports": {

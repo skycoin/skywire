@@ -5,11 +5,11 @@ package setupclient
 import (
 	context "context"
 
-	dmsg "github.com/skycoin/dmsg"
-	cipher "github.com/skycoin/dmsg/cipher"
-	logging "github.com/skycoin/skycoin/src/util/logging"
+	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
 	mock "github.com/stretchr/testify/mock"
 
+	cipher "github.com/skycoin/skywire-utilities/pkg/cipher"
+	logging "github.com/skycoin/skywire-utilities/pkg/logging"
 	routing "github.com/skycoin/skywire/pkg/routing"
 )
 

@@ -6,8 +6,7 @@ import (
 	"io"
 	"net"
 
-	"github.com/skycoin/dmsg/cipher"
-
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 )
 
@@ -38,7 +37,7 @@ func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) 
 		return nil, io.ErrClosedPipe
 	}
 
-	c.log.Infof("Dialing PK %v", rPK)
+	c.log.Debugf("Dialing PK %v", rPK)
 
 	var conn net.Conn
 	addr, ok := c.table.Addr(rPK)
@@ -52,7 +51,7 @@ func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) 
 		return nil, err
 	}
 
-	c.log.Infof("Dialed %v:%v@%v", rPK, rPort, conn.RemoteAddr())
+	c.log.Debugf("Dialed %v:%v@%v", rPK, rPort, conn.RemoteAddr())
 	return c.initTransport(ctx, conn, rPK, rPort)
 }
 

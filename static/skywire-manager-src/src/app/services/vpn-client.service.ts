@@ -289,49 +289,30 @@ export class VpnClientService {
    * Gets the public IP of the machine running this app. If there is an error, it could
    * return null.
    */
-  getIp(): Observable<string> {
+   getIpData(): Observable<string[]> {
     // Use a test value if in development mode.
     if (!environment.production && AppConfig.vpn.hardcodedIpWhileDeveloping) {
-      return of('8.8.8.8 (testing)');
+      return of(['8.8.8.8 (testing)', 'United States (testing)']);
     }
 
-    return this.http.request('GET', 'https://api.ipify.org?format=json').pipe(
+    return this.http.request('GET', window.location.protocol + '//ip.skycoin.com/').pipe(
       retryWhen(errors => concat(errors.pipe(delay(this.standardWaitTime), take(4)), throwError(''))),
       map(data => {
-        if (data && data['ip']) {
-          return  data['ip'];
+        let ip = '';
+        if (data && data['ip_address']) {
+          ip = data['ip_address'];
+        } else {
+          ip = this.translateService.instant('common.unknown');
         }
 
-        return null;
-      })
-    );
-  }
-
-  /**
-   * Gets the country of the public IP of the machine running this app. If there is an error,
-   * it could return null.
-   */
-  getIpCountry(ip: string): Observable<string> {
-    // Use a test value if in development mode.
-    if (!environment.production && AppConfig.vpn.hardcodedIpWhileDeveloping) {
-      return of('United States (testing)');
-    }
-
-    return this.http.request('GET', 'https://ip2c.org/' + ip, { responseType: 'text' }).pipe(
-      retryWhen(errors => concat(errors.pipe(delay(2000), take(4)), throwError(''))),
-      map(data => {
-        let country: string = null;
-
-        // The name must be the fourth element of the retrieved value.
-        if (data) {
-          const dataParts: string[] = data.split(';');
-
-          if (dataParts.length === 4) {
-            country = dataParts[3];
-          }
+        let country = '';
+        if (data && data['country_name']) {
+          country = data['country_name'];
+        } else {
+          country = this.translateService.instant('common.unknown');
         }
 
-        return country;
+        return [ip, country];
       })
     );
   }
@@ -514,6 +495,7 @@ export class VpnClientService {
       this.vpnClientAppName,
       data,
     ).pipe(
+      /* eslint-disable arrow-body-style */
       catchError(err => {
         // If the response was an error, check the state of the backend, to know if the change
         // was made. There are some cases in which this may happen.
@@ -532,19 +514,17 @@ export class VpnClientService {
       retryWhen(errors =>
         concat(errors.pipe(delay(this.standardWaitTime), take(3)), errors.pipe(mergeMap(err => throwError(err))))
       ),
-    ).subscribe(() => {
+    ).subscribe(appData => {
       this.working = false;
 
-      // Update the local values.
-      if (startApp) {
-        this.currentEventData.vpnClientAppData.running = true;
+      const vpnClientData = this.processAppData(appData);
+      if (vpnClientData.running) {
         this.lastServiceState = VpnServiceStates.Running;
-
-        this.vpnSavedDataService.updateHistory();
       } else {
-        this.currentEventData.vpnClientAppData.running = false;
         this.lastServiceState = VpnServiceStates.Off;
       }
+      this.currentEventData.vpnClientAppData = vpnClientData;
+      this.currentEventData.updateDate = Date.now();
 
       // Make the service work normally again.
       this.sendUpdate();
@@ -593,29 +573,28 @@ export class VpnClientService {
     this.continuousUpdateSubscription = of(0).pipe(
       delay(delayMs),
       mergeMap(() => this.getVpnClientState()),
-      retryWhen(err => {
-        return err.pipe(mergeMap((error: OperationError) => {
-          this.errorSubject.next(true);
+      retryWhen(err => err.pipe(mergeMap((error: OperationError) => {
+        this.errorSubject.next(true);
 
-          error = processServiceError(error);
-          // If the problem was because the user is not authorized, don't retry.
-          if (
-            error.originalError &&
-            (error.originalError as HttpErrorResponse).status &&
-            (error.originalError as HttpErrorResponse).status === 401
-          ) {
-            return throwError(error);
-          }
+        error = processServiceError(error);
+        // If the problem was because the user is not authorized, don't retry.
+        if (
+          error.originalError &&
+          (error.originalError as HttpErrorResponse).status &&
+          (error.originalError as HttpErrorResponse).status === 401
+        ) {
+          return throwError(error);
+        }
 
-          // Retry a few times if this is the first connection, or indefinitely if it is not.
-          if (this.lastServiceState !== VpnServiceStates.PerformingInitialCheck || retries < 4) {
-            retries += 1;
-            return of(error).pipe(delay(this.standardWaitTime));
-          } else {
-            return throwError(error);
-          }
-        }));
-      }),
+        // Retry a few times if this is the first connection, or indefinitely if it is not.
+        if (this.lastServiceState !== VpnServiceStates.PerformingInitialCheck || retries < 4) {
+          retries += 1;
+
+          return of(error).pipe(delay(this.standardWaitTime));
+        } else {
+          return throwError(error);
+        }
+      }))),
     ).subscribe(appData => {
       if (appData) {
         this.errorSubject.next(false);
@@ -698,42 +677,7 @@ export class VpnClientService {
 
       // Get the required data from the app properties.
       if (appData) {
-        vpnClientData = new VpnClientAppData();
-        vpnClientData.running = appData.status === 1;
-        vpnClientData.connectionDuration = appData.connection_duration;
-
-        vpnClientData.appState = AppState.Stopped;
-        if (vpnClientData.running) {
-          if (appData.detailed_status === AppState.Connecting) {
-            vpnClientData.appState = AppState.Connecting;
-          } else if (appData.detailed_status === AppState.Running) {
-            vpnClientData.appState = AppState.Running;
-          } else if (appData.detailed_status === AppState.ShuttingDown) {
-            vpnClientData.appState = AppState.ShuttingDown;
-          } else if (appData.detailed_status === AppState.Reconnecting) {
-            vpnClientData.appState = AppState.Reconnecting;
-          }
-        } else if (appData.status === 2) {
-          vpnClientData.lastErrorMsg = appData.detailed_status;
-
-          if (!vpnClientData.lastErrorMsg) {
-            vpnClientData.lastErrorMsg = this.translateService.instant('vpn.status-page.unknown-error');
-          }
-        }
-
-        vpnClientData.killswitch = false;
-
-        if (appData.args && appData.args.length > 0) {
-          for (let i = 0; i < appData.args.length; i++) {
-            if (appData.args[i] === '-srv' && i + 1 < appData.args.length) {
-              vpnClientData.serverPk = appData.args[i + 1];
-            }
-
-            if (appData.args[i].toLowerCase().includes('-killswitch')) {
-              vpnClientData.killswitch = (appData.args[i] as string).toLowerCase().includes('true');
-            }
-          }
-        }
+        vpnClientData = this.processAppData(appData);
       }
 
       // Get the min hops value.
@@ -802,6 +746,50 @@ export class VpnClientService {
 
       return vpnClientData;
     }));
+  }
+
+  /**
+   * Gets the required data from the app properties.
+   */
+  private processAppData(appData: any): VpnClientAppData {
+    const vpnClientData = new VpnClientAppData();
+    vpnClientData.running = appData.status !== 0 && appData.status !== 2;
+    vpnClientData.connectionDuration = appData.connection_duration;
+
+    vpnClientData.appState = AppState.Stopped;
+    if (vpnClientData.running) {
+      if (appData.detailed_status === AppState.Connecting || appData.status === 3) {
+        vpnClientData.appState = AppState.Connecting;
+      } else if (appData.detailed_status === AppState.Running) {
+        vpnClientData.appState = AppState.Running;
+      } else if (appData.detailed_status === AppState.ShuttingDown) {
+        vpnClientData.appState = AppState.ShuttingDown;
+      } else if (appData.detailed_status === AppState.Reconnecting) {
+        vpnClientData.appState = AppState.Reconnecting;
+      }
+    } else if (appData.status === 2) {
+      vpnClientData.lastErrorMsg = appData.detailed_status;
+
+      if (!vpnClientData.lastErrorMsg) {
+        vpnClientData.lastErrorMsg = this.translateService.instant('vpn.status-page.unknown-error');
+      }
+    }
+
+    vpnClientData.killswitch = false;
+
+    if (appData.args && appData.args.length > 0) {
+      for (let i = 0; i < appData.args.length; i++) {
+        if (appData.args[i] === '-srv' && i + 1 < appData.args.length) {
+          vpnClientData.serverPk = appData.args[i + 1];
+        }
+
+        if (appData.args[i].toLowerCase().includes('-killswitch')) {
+          vpnClientData.killswitch = (appData.args[i] as string).toLowerCase().includes('true');
+        }
+      }
+    }
+
+    return vpnClientData;
   }
 
   /**

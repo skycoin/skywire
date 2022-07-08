@@ -15,15 +15,18 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
 const (
 	invalidNonceErrorMessage = "SW-Nonce does not match"
 )
 
-var log = logging.MustGetLogger("httpauth")
+// Error is the object returned to the client when there's an error.
+type Error struct {
+	Error string `json:"error"`
+}
 
 // NextNonceResponse represents a ServeHTTP response for json encoding
 type NextNonceResponse struct {
@@ -44,17 +47,17 @@ type HTTPError struct {
 }
 
 // Client implements Client for auth services.
-// As Client needs to dial both with reusing address and without it, it uses two http clients: reuseClient and client.
 type Client struct {
 	// atomic requires 64-bit alignment for struct field access
-	nonce       uint64
-	mu          sync.Mutex
-	reqMu       sync.Mutex
-	client      *http.Client
-	reuseClient *http.Client
-	key         cipher.PubKey
-	sec         cipher.SecKey
-	addr        string // sanitized address of the client, which may differ from addr used in NewClient
+	nonce          uint64
+	mu             sync.Mutex
+	reqMu          sync.Mutex
+	client         *http.Client
+	key            cipher.PubKey
+	sec            cipher.SecKey
+	addr           string // sanitized address of the client, which may differ from addr used in NewClient
+	clientPublicIP string // public ip of the local client needed as a header for dmsghttp
+	log            *logging.Logger
 }
 
 // NewClient creates a new client setting a public key to the client to be used for Auth.
@@ -63,13 +66,15 @@ type Client struct {
 // * SW-Public: The specified public key
 // * SW-Nonce:  The nonce for that public key
 // * SW-Sig:    The signature of the payload + the nonce
-func NewClient(ctx context.Context, addr string, key cipher.PubKey, sec cipher.SecKey) (*Client, error) {
+func NewClient(ctx context.Context, addr string, key cipher.PubKey, sec cipher.SecKey, client *http.Client, clientPublicIP string,
+	mLog *logging.MasterLogger) (*Client, error) {
 	c := &Client{
-		client:      &http.Client{},
-		reuseClient: &http.Client{},
-		key:         key,
-		sec:         sec,
-		addr:        sanitizedAddr(addr),
+		client:         client,
+		key:            key,
+		sec:            sec,
+		addr:           sanitizedAddr(addr),
+		clientPublicIP: clientPublicIP,
+		log:            mLog.PackageLogger("httpauth"),
 	}
 
 	// request server for a nonce
@@ -80,25 +85,6 @@ func NewClient(ctx context.Context, addr string, key cipher.PubKey, sec cipher.S
 	c.nonce = uint64(nonce)
 
 	return c, nil
-}
-
-// Header returns headers for httpauth.
-func (c *Client) Header() (http.Header, error) {
-	nonce := c.getCurrentNonce()
-	body := make([]byte, 0)
-	sign, err := Sign(body, nonce, c.sec)
-	if err != nil {
-		return nil, err
-	}
-
-	header := make(http.Header)
-
-	// use nonce, later, if no err from req update such nonce
-	header.Set("SW-Nonce", strconv.FormatUint(uint64(nonce), 10))
-	header.Set("SW-Sig", sign.Hex())
-	header.Set("SW-Public", c.key.Hex())
-
-	return header, nil
 }
 
 // Do performs a new authenticated Request and returns the response. Internally, if the request was
@@ -118,7 +104,7 @@ func (c *Client) do(client *http.Client, req *http.Request) (*http.Response, err
 			return nil, err
 		}
 		if err := req.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close HTTP request body")
+			c.log.WithError(err).Warn("Failed to close HTTP request body")
 		}
 		req.Body = ioutil.NopCloser(bytes.NewBuffer(auxBody))
 		body = auxBody
@@ -129,7 +115,7 @@ func (c *Client) do(client *http.Client, req *http.Request) (*http.Response, err
 		return nil, err
 	}
 
-	isNonceValid, err := isNonceValid(resp)
+	resp, isNonceValid, err := isNonceValid(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +128,7 @@ func (c *Client) do(client *http.Client, req *http.Request) (*http.Response, err
 		c.SetNonce(nonce)
 
 		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close HTTP response body")
+			c.log.WithError(err).Warn("Failed to close HTTP response body")
 		}
 
 		req.Body = ioutil.NopCloser(bytes.NewBuffer(body))
@@ -178,12 +164,12 @@ func (c *Client) Nonce(ctx context.Context, key cipher.PubKey) (Nonce, error) {
 
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close HTTP response body")
+			c.log.WithError(err).Warn("Failed to close HTTP response body")
 		}
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("error getting current nonce: status: %d <- %v", resp.StatusCode, extractError(resp.Body))
+		return 0, fmt.Errorf("error getting current nonce: status: %d <- %v", resp.StatusCode, extractHTTPError(resp.Body))
 	}
 
 	var nr NextNonceResponse
@@ -192,22 +178,6 @@ func (c *Client) Nonce(ctx context.Context, key cipher.PubKey) (Nonce, error) {
 	}
 
 	return nr.NextNonce, nil
-}
-
-// ReuseClient returns HTTP client that reuses port for dialing.
-func (c *Client) ReuseClient() *http.Client {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	return c.reuseClient
-}
-
-// SetTransport sets transport for HTTP client that reuses port for dialing.
-func (c *Client) SetTransport(transport http.RoundTripper) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.reuseClient.Transport = transport
 }
 
 // SetNonce sets client current nonce to given nonce
@@ -231,6 +201,9 @@ func (c *Client) doRequest(client *http.Client, req *http.Request, body []byte) 
 	req.Header.Set("SW-Nonce", strconv.FormatUint(uint64(nonce), 10))
 	req.Header.Set("SW-Sig", sign.Hex())
 	req.Header.Set("SW-Public", c.key.Hex())
+	if c.clientPublicIP != "" {
+		req.Header.Set("SW-PublicIP", c.clientPublicIP)
+	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -250,26 +223,28 @@ func (c *Client) IncrementNonce() {
 // isNonceValid checks if `res` contains an invalid nonce error.
 // The error is occurred if status code equals to `http.StatusUnauthorized`
 // and body contains `invalidNonceErrorMessage`.
-func isNonceValid(res *http.Response) (bool, error) {
+func isNonceValid(res *http.Response) (*http.Response, bool, error) {
 	var serverResponse HTTPResponse
+	var auxResp http.Response
 
 	auxRespBody, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		return false, err
+		return nil, false, err
 	}
 	if err := res.Body.Close(); err != nil {
-		return false, err
+		return nil, false, err
 	}
-	res.Body = ioutil.NopCloser(bytes.NewBuffer(auxRespBody))
+	auxResp = *res
+	auxResp.Body = ioutil.NopCloser(bytes.NewBuffer(auxRespBody))
 
 	if err := json.Unmarshal(auxRespBody, &serverResponse); err != nil || serverResponse.Error == nil {
-		return true, nil
+		return &auxResp, true, nil
 	}
 
 	isAuthorized := serverResponse.Error.Code != http.StatusUnauthorized
 	hasValidNonce := serverResponse.Error.Message != invalidNonceErrorMessage
 
-	return isAuthorized && hasValidNonce, nil
+	return &auxResp, isAuthorized && hasValidNonce, nil
 }
 
 func sanitizedAddr(addr string) string {
@@ -290,8 +265,8 @@ func sanitizedAddr(addr string) string {
 	return u.String()
 }
 
-// extractError returns the decoded error message from Body.
-func extractError(r io.Reader) error {
+// extractHTTPError returns the decoded error message from Body.
+func extractHTTPError(r io.Reader) error {
 	var serverError HTTPResponse
 
 	body, err := ioutil.ReadAll(r)
@@ -304,4 +279,20 @@ func extractError(r io.Reader) error {
 	}
 
 	return errors.New(serverError.Error.Message)
+}
+
+// ExtractError returns the decoded error message from Body.
+func ExtractError(r io.Reader) error {
+	var apiError Error
+
+	body, err := ioutil.ReadAll(r)
+	if err != nil {
+		return err
+	}
+
+	if err := json.Unmarshal(body, &apiError); err != nil {
+		return errors.New(string(body))
+	}
+
+	return errors.New(apiError.Error)
 }

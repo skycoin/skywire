@@ -2,23 +2,25 @@ package dmsgc
 
 import (
 	"context"
+	"net/http"
 
-	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/dmsg/disc"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/dmsg/pkg/disc"
+	"github.com/skycoin/dmsg/pkg/dmsg"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 )
 
 // DmsgConfig defines config for Dmsg network.
 type DmsgConfig struct {
-	Discovery     string `json:"discovery"`
-	SessionsCount int    `json:"sessions_count"`
+	Discovery     string        `json:"discovery"`
+	SessionsCount int           `json:"sessions_count"`
+	Servers       []*disc.Entry `json:"servers"`
 }
 
 // New makes new dmsg client from configuration
-func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *DmsgConfig) *dmsg.Client {
+func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *DmsgConfig, httpC *http.Client, masterLogger *logging.MasterLogger) *dmsg.Client {
 	dmsgConf := &dmsg.Config{
 		MinSessions: conf.SessionsCount,
 		Callbacks: &dmsg.ClientCallbacks{
@@ -36,7 +38,8 @@ func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *Dms
 			},
 		},
 	}
-	dmsgC := dmsg.NewClient(pk, sk, disc.NewHTTP(conf.Discovery), dmsgConf)
-	dmsgC.SetLogger(logging.MustGetLogger("dmsgC"))
+	dmsgC := dmsg.NewClient(pk, sk, disc.NewHTTP(conf.Discovery, httpC, masterLogger.PackageLogger("dmsgC:disc")), dmsgConf)
+	dmsgC.SetLogger(masterLogger.PackageLogger("dmsgC"))
+	dmsgC.SetMasterLogger(masterLogger)
 	return dmsgC
 }

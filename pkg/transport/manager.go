@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/dmsg/pkg/dmsg"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -94,7 +94,7 @@ func (tm *Manager) Serve(ctx context.Context) {
 	tm.wg.Add(2)
 	go tm.cleanupTransports(ctx)
 	go tm.runReconnectPersistent(ctx)
-	tm.Logger.Info("transport manager is serving.")
+	tm.Logger.Debug("transport manager is serving.")
 }
 
 func (tm *Manager) runReconnectPersistent(ctx context.Context) {
@@ -173,7 +173,7 @@ func (tm *Manager) runClient(ctx context.Context, netType network.Type) {
 	tm.mx.Lock()
 	client := tm.netClients[netType]
 	tm.mx.Unlock()
-	tm.Logger.Infof("Serving %s network", client.Type())
+	tm.Logger.Debugf("Serving %s network", client.Type())
 	err := client.Start()
 	if err != nil {
 		tm.Logger.WithError(err).Errorf("Failed to listen on %s network", client.Type())
@@ -184,7 +184,7 @@ func (tm *Manager) runClient(ctx context.Context, netType network.Type) {
 			client.Type(), skyenv.TransportPort)
 		return
 	}
-	tm.Logger.Infof("listening on network: %s", client.Type())
+	tm.Logger.Debugf("listening on network: %s", client.Type())
 	if client.Type() != network.DMSG {
 		tm.wg.Add(1)
 	}
@@ -205,7 +205,7 @@ func (tm *Manager) acceptTransports(ctx context.Context, lis network.Listener, t
 			if err := tm.acceptTransport(ctx, lis); err != nil {
 				log := tm.Logger.WithError(err)
 				if errors.Is(err, dmsg.ErrEntityClosed) {
-					log.Info("Dmsg client stopped serving.")
+					log.Debug("Dmsg client stopped serving.")
 					return
 				}
 				if errors.Is(err, io.ErrClosedPipe) {
@@ -225,7 +225,6 @@ func (tm *Manager) cleanupTransports(ctx context.Context) {
 		select {
 		case <-ticker.C:
 			tm.mx.Lock()
-			tm.Logger.Debugf("Locked in cleanup")
 			var toDelete []*ManagedTransport
 			for _, tp := range tm.tps {
 				if tp.IsClosed() {
@@ -236,9 +235,8 @@ func (tm *Manager) cleanupTransports(ctx context.Context) {
 				delete(tm.tps, tp.Entry.ID)
 			}
 			tm.mx.Unlock()
-			tm.Logger.Debugf("Unlocked in cleanup")
 			if len(toDelete) > 0 {
-				tm.Logger.Infof("Deleted %d unused transport entries", len(toDelete))
+				tm.Logger.Debugf("Deleted %d unused transport entries", len(toDelete))
 			}
 		case <-ctx.Done():
 		case <-tm.done:
@@ -270,12 +268,10 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 		return err
 	}
 
-	tm.Logger.Infof("recv transport request: type(%s) remote(%s)", lis.Network(), transport.RemotePK())
+	tm.Logger.Debugf("recv transport request: type(%s) remote(%s)", lis.Network(), transport.RemotePK())
 
 	tm.mx.Lock()
-	tm.Logger.Debugf("Locked in accept")
 	defer tm.mx.Unlock()
-	defer tm.Logger.Debugf("Unlocked in accept")
 
 	if tm.isClosing() {
 		return errors.New("transport.Manager is closing. Skipping incoming transport")
@@ -301,16 +297,15 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 			RemotePK:       transport.RemotePK(),
 			TransportLabel: LabelUser,
 			ebc:            tm.ebc,
+			mlog:           tm.factory.MLogger,
 		})
 
 		go func() {
 			mTp.Serve(tm.readCh)
 
 			tm.mx.Lock()
-			tm.Logger.Debugf("Locked in deleting after serve in accept")
 			delete(tm.tps, mTp.Entry.ID)
 			tm.mx.Unlock()
-			tm.Logger.Debugf("Locked in deleting after serve in accept")
 		}()
 
 		tm.tps[tpID] = mTp
@@ -322,7 +317,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 		return err
 	}
 
-	tm.Logger.Infof("accepted tp: type(%s) remote(%s) tpID(%s) new(%v)", lis.Network(), transport.RemotePK(), tpID, !ok)
+	tm.Logger.Debugf("accepted tp: type(%s) remote(%s) tpID(%s) new(%v)", lis.Network(), transport.RemotePK(), tpID, !ok)
 	return nil
 }
 
@@ -427,6 +422,7 @@ func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, netT
 		LS:             tm.Conf.LogStore,
 		RemotePK:       remote,
 		TransportLabel: label,
+		mlog:           tm.factory.MLogger,
 	})
 
 	tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.client.Type())
@@ -442,11 +438,9 @@ func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, netT
 	}
 	go mTp.Serve(tm.readCh)
 	tm.mx.Lock()
-	tm.Logger.Debug("Locked in saveTransport")
 	tm.tps[tpID] = mTp
 	tm.mx.Unlock()
-	tm.Logger.Debug("Unlocked in saveTransport")
-	tm.Logger.Infof("saved transport: remote(%s) type(%s) tpID(%s)", remote, netType, tpID)
+	tm.Logger.Debugf("saved transport: remote(%s) type(%s) tpID(%s)", remote, netType, tpID)
 	return mTp, nil
 }
 
@@ -458,9 +452,11 @@ func (tm *Manager) STCPRRemoteAddrs() []string {
 	defer tm.mx.RUnlock()
 
 	for _, tp := range tm.tps {
-		remoteRaw := tp.transport.RemoteRawAddr().String()
-		if tp.Entry.Type == network.STCPR && remoteRaw != "" {
-			addrs = append(addrs, remoteRaw)
+		if tp.transport != nil {
+			remoteRaw := tp.transport.RemoteRawAddr().String()
+			if tp.Entry.Type == network.STCPR && remoteRaw != "" {
+				addrs = append(addrs, remoteRaw)
+			}
 		}
 	}
 
@@ -470,9 +466,7 @@ func (tm *Manager) STCPRRemoteAddrs() []string {
 // DeleteTransport deregisters the Transport of Transport ID in transport discovery and deletes it locally.
 func (tm *Manager) DeleteTransport(id uuid.UUID) {
 	tm.mx.Lock()
-	tm.Logger.Debugf("Locked in DeleteTransport")
 	defer tm.mx.Unlock()
-	defer tm.Logger.Debug("Unlocked in DeleteTransport")
 
 	if tm.isClosing() {
 		return
@@ -532,8 +526,6 @@ func (tm *Manager) Close() {
 	default:
 	}
 	close(tm.done)
-	tm.Logger.Info("transport manager is closing.")
-	defer tm.Logger.Info("transport manager closed.")
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
 

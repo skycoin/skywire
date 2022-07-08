@@ -1,3 +1,6 @@
+//go:build darwin && systray
+// +build darwin,systray
+
 package main
 
 import (
@@ -6,9 +9,7 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/skycoin/skycoin/src/util/logging"
-
-	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 )
 
@@ -48,7 +49,6 @@ pkgutil --forget ` + osxServiceIdentifier + `
 pkgutil --forget com.skycoin.skywire.updater
 pkgutil --forget com.skycoin.skywire.remover
 
-rm -rf ` + filepath.Join(skyenv.PackageSkywirePath(), "local") + `
 rm -rf ` + filepath.Join(os.Getenv("HOME"), "Library", "Logs", "skywire") + `
 unlink /usr/local/bin/skywire-cli
 rm -rf /Applications/Skywire.app

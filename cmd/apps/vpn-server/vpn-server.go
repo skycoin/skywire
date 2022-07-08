@@ -1,18 +1,20 @@
 package main
 
 import (
+	"errors"
 	"flag"
+	"fmt"
 	"os"
 	"os/signal"
 	"runtime"
 	"syscall"
 
-	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/cipher"
-
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
@@ -23,19 +25,27 @@ const (
 )
 
 var (
-	log = logrus.New()
-)
-
-var (
 	localPKStr = flag.String("pk", "", "Local PubKey")
 	localSKStr = flag.String("sk", "", "Local SecKey")
 	passcode   = flag.String("passcode", "", "Passcode to authenticate connecting users")
+	networkIfc = flag.String("netifc", "", "Default network interface for multiple available interfaces")
 	secure     = flag.Bool("secure", true, "Forbid connections from clients to server local network")
 )
 
 func main() {
+
+	appCl := app.NewClient(nil)
+	defer appCl.Close()
+
+	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
+		print(fmt.Sprintf("Failed to output build info: %v\n", err))
+	}
+
 	if runtime.GOOS != "linux" {
-		log.Fatalln("OS is not supported")
+		err := errors.New("OS is not supported")
+		print(err)
+		setAppErr(appCl, err)
+		os.Exit(1)
 	}
 
 	flag.Parse()
@@ -43,19 +53,20 @@ func main() {
 	localPK := cipher.PubKey{}
 	if *localPKStr != "" {
 		if err := localPK.UnmarshalText([]byte(*localPKStr)); err != nil {
-			log.WithError(err).Fatalln("Invalid local PK")
+			print(fmt.Sprintf("Invalid local PK: %v\n", err))
+			setAppErr(appCl, err)
+			os.Exit(1)
 		}
 	}
 
 	localSK := cipher.SecKey{}
 	if *localSKStr != "" {
 		if err := localSK.UnmarshalText([]byte(*localSKStr)); err != nil {
-			log.WithError(err).Fatalln("Invalid local SK")
+			print(fmt.Sprintf("Invalid local SK: %v\n", err))
+			setAppErr(appCl, err)
+			os.Exit(1)
 		}
 	}
-
-	appClient := app.NewClient(nil)
-	defer appClient.Close()
 
 	osSigs := make(chan os.Signal, 2)
 
@@ -64,25 +75,29 @@ func main() {
 		signal.Notify(osSigs, sig)
 	}
 
-	l, err := appClient.Listen(netType, vpnPort)
+	l, err := appCl.Listen(netType, vpnPort)
 	if err != nil {
-		log.WithError(err).Errorf("Error listening network %v on port %d", netType, vpnPort)
-		return
+		print(fmt.Sprintf("Error listening network %v on port %d: %v\n", netType, vpnPort, err))
+		setAppErr(appCl, err)
+		os.Exit(1)
 	}
 
-	log.Infof("Got app listener, bound to %d", vpnPort)
+	fmt.Printf("Got app listener, bound to %d\n", vpnPort)
 
 	srvCfg := vpn.ServerConfig{
-		Passcode: *passcode,
-		Secure:   *secure,
+		Passcode:         *passcode,
+		Secure:           *secure,
+		NetworkInterface: *networkIfc,
 	}
-	srv, err := vpn.NewServer(srvCfg, log)
+	srv, err := vpn.NewServer(srvCfg, appCl)
 	if err != nil {
-		log.WithError(err).Fatalln("Error creating VPN server")
+		print(fmt.Sprintf("Error creating VPN server: %v\n", err))
+		setAppErr(appCl, err)
+		os.Exit(1)
 	}
 	defer func() {
 		if err := srv.Close(); err != nil {
-			log.WithError(err).Errorln("Error closing server")
+			print(fmt.Sprintf("Error closing server: %v\n", err))
 		}
 	}()
 
@@ -95,9 +110,23 @@ func main() {
 		close(errCh)
 	}()
 
+	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+
 	select {
 	case <-osSigs:
 	case err := <-errCh:
-		log.WithError(err).Errorln("Error serving")
+		print(fmt.Sprintf("Error serving: %v\n", err))
+	}
+}
+
+func setAppErr(appCl *app.Client, err error) {
+	if appErr := appCl.SetError(err.Error()); appErr != nil {
+		print(fmt.Sprintf("Failed to set error %v: %v\n", err, appErr))
+	}
+}
+
+func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
+	if err := appCl.SetDetailedStatus(string(status)); err != nil {
+		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
 	}
 }

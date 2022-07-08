@@ -13,18 +13,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/dmsg/netutil"
+	ipc "github.com/james-barrow/golang-ipc"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
-	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
-	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	skynetutil "github.com/skycoin/skywire/pkg/util/netutil"
 )
 
 const (
@@ -35,7 +32,6 @@ const (
 
 // Client is a VPN client.
 type Client struct {
-	log            *logrus.Logger
 	cfg            ClientConfig
 	appCl          *app.Client
 	directIPSMu    sync.Mutex
@@ -47,8 +43,8 @@ type Client struct {
 	prevTUNGateway   net.IP
 	prevTUNGatewayMu sync.Mutex
 
-	suidMu sync.Mutex
-	suid   int
+	suidMu sync.Mutex //nolint
+	suid   int        //nolint
 
 	tunMu      sync.Mutex
 	tun        TUNDevice
@@ -114,8 +110,6 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 		directIPs = append(directIPs, utIP)
 	}
 
-	log := logrus.New()
-
 	defaultGateway, err := DefaultNetworkGateway()
 	if err != nil {
 		return nil, fmt.Errorf("error getting default network gateway: %w", err)
@@ -124,7 +118,6 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 	fmt.Printf("Got default network gateway IP: %s\n", defaultGateway)
 
 	return &Client{
-		log:            log,
 		cfg:            cfg,
 		appCl:          appCl,
 		directIPs:      filterOutEqualIPs(directIPs),
@@ -135,71 +128,49 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 
 // Serve dials VPN server, sets up TUN and establishes VPN session.
 func (c *Client) Serve() error {
-	if err := c.setSysPrivileges(); err != nil {
-		return fmt.Errorf("failed to setup system privileges: %w", err)
-	}
+
+	c.setAppStatus(appserver.AppDetailedStatusStarting)
+
 	// we setup direct routes to skywire services once for all the client lifetime since routes don't change.
 	// but if they change, new routes get delivered to the app via callbacks.
 	if err := c.setupDirectRoutes(); err != nil {
-		c.releaseSysPrivileges()
+		c.setAppError(err)
 		return fmt.Errorf("error setting up direct routes: %w", err)
 	}
-	c.releaseSysPrivileges()
 
 	defer func() {
-		if err := c.setSysPrivileges(); err != nil {
-			fmt.Printf("failed to setup system privileges: %v\n", err)
-			return
-		}
-		defer c.releaseSysPrivileges()
-
 		c.removeDirectRoutes()
 	}()
 
 	// we call this preliminary, so it will be called on app stop
 	defer func() {
 		if c.cfg.Killswitch {
-			err := c.setSysPrivileges()
-			if err != nil {
-				fmt.Printf("Error setting up system privileges: %v\n", err)
-			} else {
-				c.prevTUNGatewayMu.Lock()
-				if len(c.prevTUNGateway) > 0 {
-					fmt.Printf("Routing traffic directly, previous TUN gateway: %s\n", c.prevTUNGateway.String())
-					c.routeTrafficDirectly(c.prevTUNGateway)
-				}
-				c.prevTUNGateway = nil
-				c.prevTUNGatewayMu.Unlock()
-
-				c.releaseSysPrivileges()
+			c.prevTUNGatewayMu.Lock()
+			if len(c.prevTUNGateway) > 0 {
+				fmt.Printf("Routing traffic directly, previous TUN gateway: %s\n", c.prevTUNGateway.String())
+				c.routeTrafficDirectly(c.prevTUNGateway)
 			}
+			c.prevTUNGateway = nil
+			c.prevTUNGatewayMu.Unlock()
 		}
 
 		if err := c.closeTUN(); err != nil {
-			fmt.Printf("Failed to close TUN: %v\n", err)
+			print(fmt.Sprintf("Failed to close TUN: %v\n", err))
 		}
 
-		c.log.Info("Closing TUN")
+		fmt.Println("Closing TUN")
 	}()
 
 	defer func() {
-		c.setAppStatus(ClientStatusShuttingDown)
+		c.setAppStatus(appserver.AppDetailedStatusShuttingDown)
 		c.resetConnDuration()
 	}()
 
-	c.setAppStatus(ClientStatusConnecting)
+	c.setAppStatus(appserver.AppDetailedStatusVPNConnecting)
 
-	errNoTransportFound := appserver.RPCErr{
-		Err: router.ErrNoTransportFound.Error(),
-	}
-
-	errTransportNotFound := appserver.RPCErr{
-		Err: rfclient.ErrTransportNotFound.Error(),
-	}
-
-	r := netutil.NewRetrier(c.log, netutil.DefaultInitBackoff, netutil.DefaultMaxBackoff, 3, netutil.DefaultFactor).
+	r := netutil.NewRetrier(nil, netutil.DefaultInitBackoff, netutil.DefaultMaxBackoff, 3, netutil.DefaultFactor).
 		WithErrWhitelist(errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
-			errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound)
+			errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound, errErrSetupNode, errNotPermitted)
 
 	err := r.Do(context.Background(), func() error {
 		if c.isClosed() {
@@ -209,19 +180,18 @@ func (c *Client) Serve() error {
 		if err := c.dialServeConn(); err != nil {
 			switch err {
 			case errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
-				errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound:
+				errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound, errErrSetupNode, errNotPermitted:
 				c.setAppError(err)
 				c.resetConnDuration()
 				return err
 			default:
 				c.resetConnDuration()
-				c.setAppStatus(ClientStatusReconnecting)
+				c.setAppStatus(appserver.AppDetailedStatusReconnecting)
 				c.setAppError(errTimeout)
 				fmt.Println("\nConnection broke, reconnecting...")
 				return fmt.Errorf("dialServeConn: %w", err)
 			}
 		}
-
 		return nil
 	})
 	if err != nil {
@@ -229,6 +199,30 @@ func (c *Client) Serve() error {
 	}
 
 	return nil
+}
+
+// ListenIPC starts named-pipe based connection server for windows or unix socket in Linux/Mac
+func (c *Client) ListenIPC(client *ipc.Client) {
+	if client == nil {
+		print(fmt.Sprintln("Unable to create IPC Client: server is non-existent"))
+		return
+	}
+	for {
+		m, err := client.Read()
+		if err != nil {
+			print(fmt.Sprintf("%s IPC received error: %v\n", skyenv.VPNClientName, err))
+		}
+
+		if m != nil {
+			if m.MsgType == skyenv.IPCShutdownMessageType {
+				fmt.Println("Stopping " + skyenv.VPNClientName + " via IPC")
+				break
+			}
+		}
+
+	}
+	client.Close()
+	c.Close()
 }
 
 // Close closes client.
@@ -252,21 +246,11 @@ func (c *Client) AddDirectRoute(ip net.IP) error {
 
 	c.directIPs = append(c.directIPs, ip)
 
-	if err := c.setSysPrivileges(); err != nil {
-		return fmt.Errorf("failed to setup system privileges: %w", err)
-	}
-	defer c.releaseSysPrivileges()
-
 	return c.setupDirectRoute(ip)
 }
 
 func (c *Client) removeDirectRouteFn(ip net.IP, i int) error {
 	c.directIPs = append(c.directIPs[:i], c.directIPs[i+1:]...)
-
-	if err := c.setSysPrivileges(); err != nil {
-		return fmt.Errorf("failed to setup system privileges: %w", err)
-	}
-	defer c.releaseSysPrivileges()
 
 	return c.removeDirectRoute(ip)
 }
@@ -289,18 +273,20 @@ func (c *Client) RemoveDirectRoute(ip net.IP) error {
 	return nil
 }
 
-func (c *Client) setSysPrivileges() error {
-	c.suidMu.Lock()
+func (c *Client) setSysPrivileges() error { //nolint
+	if runtime.GOOS != "windows" {
+		c.suidMu.Lock()
 
-	// we don't release the lock here to avoid races,
-	// lock will be released after reverting system privileges
+		// we don't release the lock here to avoid races,
+		// lock will be released after reverting system privileges
 
-	suid, err := setupClientSysPrivileges()
-	if err != nil {
-		return err
+		suid, err := setupClientSysPrivileges()
+		if err != nil {
+			return err
+		}
+
+		c.suid = suid
 	}
-
-	c.suid = suid
 
 	return nil
 }
@@ -345,13 +331,13 @@ func (c *Client) setupTUN(tunIP, tunGateway net.IP) error {
 		return errors.New("TUN is not created")
 	}
 
-	return SetupTUN(c.tun.Name(), tunIP.String()+TUNNetmaskCIDR, tunGateway.String(), TUNMTU)
+	return c.SetupTUN(c.tun.Name(), tunIP.String()+TUNNetmaskCIDR, tunGateway.String(), TUNMTU)
 }
 
 func (c *Client) serveConn(conn net.Conn) error {
 	tunIP, tunGateway, err := c.shakeHands(conn)
 	if err != nil {
-		fmt.Printf("error during client/server handshake: %s", err)
+		fmt.Printf("error during client/server handshake: %s\n", err)
 		return err
 	}
 
@@ -359,15 +345,7 @@ func (c *Client) serveConn(conn net.Conn) error {
 	fmt.Printf("Local TUN IP: %s\n", tunIP.String())
 	fmt.Printf("Local TUN gateway: %s\n", tunGateway.String())
 
-	if err := c.setSysPrivileges(); err != nil {
-		return fmt.Errorf("failed to setup system privileges: %w", err)
-	}
-
-	// this call is important. it will either run on an error down the line,
-	// or, in case VPN sessions finishes, it will be the last call in deferred stack,
-	// releasing system privileges after cleanup
-	defer c.releaseSysPrivileges()
-
+	fmt.Println("CREATING TUN INTERFACE")
 	tun, err := c.createTUN()
 	if err != nil {
 		return fmt.Errorf("error allocating TUN interface: %w", err)
@@ -380,6 +358,7 @@ func (c *Client) serveConn(conn net.Conn) error {
 
 	fmt.Printf("Allocated TUN %s: %v\n", tun.Name(), err)
 
+	fmt.Printf("Setting up TUN device with: %s and Gateway %s\n", tunIP, tunGateway)
 	if err := c.setupTUN(tunIP, tunGateway); err != nil {
 		return fmt.Errorf("error setting up TUN %s: %w", tun.Name(), err)
 	}
@@ -389,8 +368,10 @@ func (c *Client) serveConn(conn net.Conn) error {
 		// interface doesn't get its values immediately. Reason is unknown,
 		// all credits go to Microsoft. Delay may be different, this one is
 		// fairly large to cover not really performant systems.
-		time.Sleep(10 * time.Second)
+		time.Sleep(13 * time.Second)
 	}
+
+	fmt.Printf("TUN %s all sets\n", tunIP)
 
 	isNewRoute := true
 	if c.cfg.Killswitch {
@@ -407,7 +388,7 @@ func (c *Client) serveConn(conn net.Conn) error {
 		return fmt.Errorf("error routing traffic through TUN %s: %w", tun.Name(), err)
 	}
 
-	c.setAppStatus(ClientStatusRunning)
+	c.setAppStatus(appserver.AppDetailedStatusRunning)
 	c.resetConnDuration()
 	t := time.NewTicker(time.Second)
 
@@ -419,7 +400,6 @@ func (c *Client) serveConn(conn net.Conn) error {
 	}()
 
 	// we release privileges here (user is not root for Mac OS systems from here on)
-	c.releaseSysPrivileges()
 
 	connToTunDoneCh := make(chan struct{})
 	tunToConnCh := make(chan struct{})
@@ -428,14 +408,22 @@ func (c *Client) serveConn(conn net.Conn) error {
 		defer close(connToTunDoneCh)
 
 		if _, err := io.Copy(tun, conn); err != nil {
-			fmt.Printf("Error resending traffic from TUN %s to VPN server: %v\n", tun.Name(), err)
+			if !c.isClosed() {
+				print(fmt.Sprintf("Error resending traffic from TUN %s to VPN server: %v\n", tun.Name(), err))
+				// when the vpn-server is closed we get the error EOF
+				if err.Error() == io.EOF.Error() {
+					c.setAppError(errVPNServerClosed)
+				}
+			}
 		}
 	}()
 	go func() {
 		defer close(tunToConnCh)
 
 		if _, err := io.Copy(conn, tun); err != nil {
-			fmt.Printf("Error resending traffic from VPN server to TUN %s: %v\n", tun.Name(), err)
+			if !c.isClosed() {
+				print(fmt.Sprintf("Error resending traffic from VPN server to TUN %s: %v\n", tun.Name(), err))
+			}
 		}
 	}()
 
@@ -455,11 +443,6 @@ serveLoop:
 		}
 	}
 
-	// here we setup system privileges again, so deferred calls may be done safely
-	if err := c.setSysPrivileges(); err != nil {
-		fmt.Printf("Failed to setup system privileges for cleanup: %v\n", err)
-	}
-
 	return nil
 }
 
@@ -474,7 +457,7 @@ func (c *Client) dialServeConn() error {
 
 	defer func() {
 		if err := conn.Close(); err != nil {
-			fmt.Printf("Error closing app conn: %v\n", err)
+			print(fmt.Sprintf("Error closing app conn: %v\n", err))
 		}
 	}()
 
@@ -493,17 +476,17 @@ func (c *Client) dialServeConn() error {
 func (c *Client) routeTrafficThroughTUN(tunGateway net.IP, isNewRoute bool) error {
 	// route all traffic through TUN gateway
 	if isNewRoute {
-		if err := AddRoute(ipv4FirstHalfAddr, tunGateway.String()); err != nil {
+		if err := c.AddRoute(ipv4FirstHalfAddr, tunGateway.String()); err != nil {
 			return err
 		}
-		if err := AddRoute(ipv4SecondHalfAddr, tunGateway.String()); err != nil {
+		if err := c.AddRoute(ipv4SecondHalfAddr, tunGateway.String()); err != nil {
 			return err
 		}
 	} else {
-		if err := ChangeRoute(ipv4FirstHalfAddr, tunGateway.String()); err != nil {
+		if err := c.ChangeRoute(ipv4FirstHalfAddr, tunGateway.String()); err != nil {
 			return err
 		}
-		if err := ChangeRoute(ipv4SecondHalfAddr, tunGateway.String()); err != nil {
+		if err := c.ChangeRoute(ipv4SecondHalfAddr, tunGateway.String()); err != nil {
 			return err
 		}
 	}
@@ -515,11 +498,11 @@ func (c *Client) routeTrafficDirectly(tunGateway net.IP) {
 	fmt.Println("Routing all traffic through default network gateway")
 
 	// remove main route
-	if err := DeleteRoute(ipv4FirstHalfAddr, tunGateway.String()); err != nil {
-		fmt.Printf("Error routing traffic through default network gateway: %v\n", err)
+	if err := c.DeleteRoute(ipv4FirstHalfAddr, tunGateway.String()); err != nil {
+		print(fmt.Sprintf("Error routing traffic through default network gateway: %v\n", err))
 	}
-	if err := DeleteRoute(ipv4SecondHalfAddr, tunGateway.String()); err != nil {
-		fmt.Printf("Error routing traffic through default network gateway: %v\n", err)
+	if err := c.DeleteRoute(ipv4SecondHalfAddr, tunGateway.String()); err != nil {
+		print(fmt.Sprintf("Error routing traffic through default network gateway: %v\n", err))
 	}
 }
 
@@ -538,8 +521,8 @@ func (c *Client) setupDirectRoutes() error {
 
 func (c *Client) setupDirectRoute(ip net.IP) error {
 	if !ip.IsLoopback() {
-		fmt.Printf("Adding direct route to %s, via %s", ip.String(), c.defaultGateway.String())
-		if err := AddRoute(ip.String()+directRouteNetmaskCIDR, c.defaultGateway.String()); err != nil {
+		fmt.Printf("Adding direct route to %s, via %s\n", ip.String(), c.defaultGateway.String())
+		if err := c.AddRoute(ip.String()+directRouteNetmaskCIDR, c.defaultGateway.String()); err != nil {
 			return fmt.Errorf("error adding direct route to %s: %w", ip.String(), err)
 		}
 	}
@@ -550,7 +533,7 @@ func (c *Client) setupDirectRoute(ip net.IP) error {
 func (c *Client) removeDirectRoute(ip net.IP) error {
 	if !ip.IsLoopback() {
 		fmt.Printf("Removing direct route to %s\n", ip.String())
-		if err := DeleteRoute(ip.String()+directRouteNetmaskCIDR, c.defaultGateway.String()); err != nil {
+		if err := c.DeleteRoute(ip.String()+directRouteNetmaskCIDR, c.defaultGateway.String()); err != nil {
 			return err
 		}
 	}
@@ -565,7 +548,7 @@ func (c *Client) removeDirectRoutes() {
 	for _, ip := range c.directIPs {
 		if err := c.removeDirectRoute(ip); err != nil {
 			// shouldn't return, just keep on trying the other IPs
-			fmt.Printf("Error removing direct route to %s: %v\n", ip.String(), err)
+			print(fmt.Sprintf("Error removing direct route to %s: %v\n", ip.String(), err))
 		}
 	}
 }
@@ -674,7 +657,7 @@ func stcpEntitiesFromEnv() ([]net.IP, error) {
 }
 
 func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error) {
-	unavailableIPs, err := skynetutil.LocalNetworkInterfaceIPs()
+	unavailableIPs, err := netutil.LocalNetworkInterfaceIPs()
 	if err != nil {
 		return nil, nil, fmt.Errorf("error getting unavailable private IPs: %w", err)
 	}
@@ -708,14 +691,6 @@ func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error)
 	return sHello.TUNIP, sHello.TUNGateway, nil
 }
 
-func (c *Client) releaseSysPrivileges() {
-	defer c.suidMu.Unlock()
-
-	if err := releaseClientSysPrivileges(c.suid); err != nil {
-		fmt.Printf("Failed to release system privileges: %v\n", err)
-	}
-}
-
 func (c *Client) dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
 	const (
 		netType = appnet.TypeSkynet
@@ -743,21 +718,21 @@ func (c *Client) dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, erro
 	return conn, nil
 }
 
-func (c *Client) setAppStatus(status ClientStatus) {
+func (c *Client) setAppStatus(status appserver.AppDetailedStatus) {
 	if err := c.appCl.SetDetailedStatus(string(status)); err != nil {
-		fmt.Printf("Failed to set status %v: %v\n", status, err)
+		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
 	}
 }
 
 func (c *Client) setConnectionDuration() {
 	if err := c.appCl.SetConnectionDuration(atomic.LoadInt64(&c.connectedDuration)); err != nil {
-		fmt.Printf("Failed to set connection duration: %v\n", err)
+		print(fmt.Sprintf("Failed to set connection duration: %v\n", err))
 	}
 }
 
 func (c *Client) setAppError(appErr error) {
 	if err := c.appCl.SetError(appErr.Error()); err != nil {
-		fmt.Printf("Failed to set error %v: %v\n", appErr, err)
+		print(fmt.Sprintf("Failed to set error %v: %v\n", appErr, err))
 	}
 }
 
@@ -792,11 +767,13 @@ func filterOutEqualIPs(ips []net.IP) []net.IP {
 	ipsSet := make(map[string]struct{})
 	var filteredIPs []net.IP
 	for _, ip := range ips {
-		ipStr := ip.String()
+		if ip != nil {
+			ipStr := ip.String()
 
-		if _, ok := ipsSet[ipStr]; !ok {
-			filteredIPs = append(filteredIPs, ip)
-			ipsSet[ip.String()] = struct{}{}
+			if _, ok := ipsSet[ipStr]; !ok {
+				filteredIPs = append(filteredIPs, ip)
+				ipsSet[ip.String()] = struct{}{}
+			}
 		}
 	}
 

@@ -6,15 +6,11 @@ package commands
 import (
 	"context"
 
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
-func extraFlags() {
-
-}
-
-func runApp(args ...string) {
-	runVisor(args)
+func runApp() {
+	runVisor(nil)
 }
 
 // setStopFunction sets the stop function

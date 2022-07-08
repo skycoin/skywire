@@ -16,13 +16,12 @@ import (
 	"time"
 
 	"github.com/AudriusButkevicius/pfilter"
-	"github.com/skycoin/dmsg/cipher"
-	dmsgnetutil "github.com/skycoin/dmsg/netutil"
-	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/xtaci/kcp-go"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/internal/httpauth"
-	"github.com/skycoin/skywire/internal/netutil"
 	"github.com/skycoin/skywire/internal/packetfilter"
 )
 
@@ -43,6 +42,8 @@ var (
 	ErrNoEntry = errors.New("no entry for this PK")
 	// ErrNotReady is returned when address resolver is not ready.
 	ErrNotReady = errors.New("address resolver is not ready")
+	// ErrNoTransportsFound returned when no transports are found.
+	ErrNoTransportsFound = errors.New("failed to get response data from AR transports endpoint")
 )
 
 // Error is the object returned to the client when there's an error.
@@ -57,6 +58,7 @@ type APIClient interface {
 	BindSTCPR(ctx context.Context, port string) error
 	BindSUDPH(filter *pfilter.PacketFilter, handshake Handshake) (<-chan RemoteVisor, error)
 	Resolve(ctx context.Context, netType string, pk cipher.PubKey) (VisorData, error)
+	Transports(ctx context.Context) (map[cipher.PubKey][]string, error)
 	Close() error
 }
 
@@ -70,12 +72,14 @@ type VisorData struct {
 // httpClient implements APIClient for address resolver API.
 type httpClient struct {
 	log            *logging.Logger
+	mLog           *logging.MasterLogger
 	httpClient     *httpauth.Client
 	pk             cipher.PubKey
 	sk             cipher.SecKey
 	remoteHTTPAddr string
 	remoteUDPAddr  string
 	sudphConn      net.PacketConn
+	clientPublicIP string
 	ready          chan struct{}
 	closed         chan struct{}
 	delBindSudphWg sync.WaitGroup
@@ -87,7 +91,8 @@ type httpClient struct {
 // * SW-Public: The specified public key.
 // * SW-Nonce:  The nonce for that public key.
 // * SW-Sig:    The signature of the payload + the nonce.
-func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, log *logging.Logger) (APIClient, error) {
+func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.Client, clientPublicIP string, log *logging.Logger,
+	mLog *logging.MasterLogger) (APIClient, error) {
 	remoteURL, err := url.Parse(remoteAddr)
 	if err != nil {
 		return nil, fmt.Errorf("parse URL: %w", err)
@@ -100,32 +105,33 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, log *logging
 
 	client := &httpClient{
 		log:            log,
+		mLog:           mLog,
 		pk:             pk,
 		sk:             sk,
 		remoteHTTPAddr: remoteAddr,
 		remoteUDPAddr:  remoteUDP,
+		clientPublicIP: clientPublicIP,
 		ready:          make(chan struct{}),
 		closed:         make(chan struct{}),
 	}
 
-	client.log.Infof("Remote UDP server: %q", remoteUDP)
+	client.log.Debugf("Remote UDP server: %q", remoteUDP)
 
-	go client.initHTTPClient()
+	go client.initHTTPClient(httpC)
 
 	return client, nil
 }
 
-func (c *httpClient) initHTTPClient() {
-	httpAuthClient, err := httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk)
+func (c *httpClient) initHTTPClient(httpC *http.Client) {
+	httpAuthClient, err := httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, httpC, c.clientPublicIP, c.mLog)
 	if err != nil {
 		c.log.WithError(err).
 			Warnf("Failed to connect to address resolver. STCPR/SUDPH services are temporarily unavailable. Retrying...")
 
-		retryLog := logging.MustGetLogger("snet.arclient.retrier")
-		retry := dmsgnetutil.NewRetrier(retryLog, 1*time.Second, 10*time.Second, 0, 1)
+		retry := netutil.NewRetrier(c.log, 1*time.Second, 10*time.Second, 0, 1)
 
 		err := retry.Do(context.Background(), func() error {
-			httpAuthClient, err = httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk)
+			httpAuthClient, err = httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, httpC, c.clientPublicIP, c.mLog)
 			return err
 		})
 
@@ -136,7 +142,7 @@ func (c *httpClient) initHTTPClient() {
 		}
 	}
 
-	c.log.Infof("Connected to address resolver. STCPR/SUDPH services are available.")
+	c.log.Debug("Connected to address resolver. STCPR/SUDPH services are available.")
 
 	c.httpClient = httpAuthClient
 	close(c.ready)
@@ -190,7 +196,6 @@ func (c *httpClient) Delete(ctx context.Context, path string) (*http.Response, e
 	if err != nil {
 		return nil, err
 	}
-
 	return c.httpClient.Do(req.WithContext(ctx))
 }
 
@@ -207,10 +212,11 @@ type LocalAddresses struct {
 
 // BindSTCPR binds client PK to IP:port on address resolver.
 func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
+	log := c.log.WithField("func", "httpClient.BindSTCPR")
 	if !c.isReady() {
-		c.log.Infof("BindSTCPR: Address resolver is not ready yet, waiting...")
+		log.Debug("Address resolver is not ready yet, waiting...")
 		<-c.ready
-		c.log.Infof("BindSTCPR: Address resolver became ready, binding")
+		log.Debug("Address resolver became ready, binding")
 	}
 
 	addresses, err := netutil.LocalAddresses()
@@ -222,7 +228,7 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 		Addresses: addresses,
 		Port:      port,
 	}
-	c.log.Infof("BindSTCPR: Address resolver binding with: %v", addresses)
+	log.Debugf("Address resolver binding with: %v", addresses)
 	resp, err := c.Post(ctx, stcprBindPath, localAddresses)
 	if err != nil {
 		return err
@@ -230,12 +236,12 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			c.log.WithError(err).Warn("Failed to close response body")
+			log.WithError(err).Warn("Failed to close response body")
 		}
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
+		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, httpauth.ExtractError(resp.Body))
 	}
 
 	return nil
@@ -243,13 +249,14 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 
 // delBindSTCPR uinbinds STCPR entry PK to IP:port on address resolver.
 func (c *httpClient) delBindSTCPR(ctx context.Context) error {
+	log := c.log.WithField("func", "httpClient.delBindSTCPR")
 	if !c.isReady() {
-		c.log.Debugf("delBindSTCPR: Address resolver is not ready yet, waiting...")
+		log.Debug("Address resolver is not ready yet, waiting...")
 		<-c.ready
-		c.log.Debugf("delBindSTCPR: Address resolver became ready, unbinding")
+		log.Debug("Address resolver became ready, unbinding")
 	}
 
-	c.log.Debugf("delBindSTCPR: deleting the binding pk: %v from Address resolver", c.pk.String())
+	log.Debugf("Deleting the binding pk: %v from Address resolver", c.pk.String())
 	resp, err := c.Delete(ctx, stcprBindPath)
 	if err != nil {
 		return err
@@ -257,15 +264,15 @@ func (c *httpClient) delBindSTCPR(ctx context.Context) error {
 
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			c.log.WithError(err).Warn("Failed to close response body")
+			log.WithError(err).Warn("Failed to close response body")
 		}
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
+		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, httpauth.ExtractError(resp.Body))
 	}
 
-	c.log.Debugf("delBindSTCPR: Deleted bind pk: %v from Address resolver successfully", c.pk.String())
+	log.Debugf("Deleted bind pk: %v from Address resolver successfully", c.pk.String())
 	return nil
 }
 
@@ -273,10 +280,11 @@ func (c *httpClient) delBindSTCPR(ctx context.Context) error {
 type Handshake func(net.Conn) (net.Conn, error)
 
 func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter, hs Handshake) (<-chan RemoteVisor, error) {
+	log := c.log.WithField("func", "httpClient.BindSUDPR")
 	if !c.isReady() {
-		c.log.Infof("BindSUDPR: Address resolver is not ready yet, waiting...")
+		log.Debug("BindSUDPR: Address resolver is not ready yet, waiting...")
 		<-c.ready
-		c.log.Infof("BindSUDPR: Address resolver became ready, binding")
+		log.Debug("BindSUDPR: Address resolver became ready, binding")
 	}
 
 	rAddr, err := net.ResolveUDPAddr("udp", c.remoteUDPAddr)
@@ -284,14 +292,14 @@ func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter, hs Handshake) (<-ch
 		return nil, err
 	}
 
-	c.sudphConn = filter.NewConn(sudphPriority, packetfilter.NewAddressFilter(rAddr))
+	c.sudphConn = filter.NewConn(sudphPriority, packetfilter.NewAddressFilter(rAddr, c.mLog))
 
 	_, localPort, err := net.SplitHostPort(c.sudphConn.LocalAddr().String())
 	if err != nil {
 		return nil, err
 	}
 
-	c.log.Infof("SUDPH Local port: %v", localPort)
+	log.Debugf("SUDPH Local port: %v", localPort)
 	kcpConn, err := kcp.NewConn(c.remoteUDPAddr, nil, 0, 0, c.sudphConn)
 	if err != nil {
 		return nil, err
@@ -324,13 +332,13 @@ func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter, hs Handshake) (<-ch
 
 	go func() {
 		if err := c.keepSudphHeartbeatLoop(arConn); err != nil {
-			c.log.WithError(err).Errorf("Failed to send UDP heartbeat packet to address-resolver")
+			log.WithError(err).Errorf("Failed to send UDP heartbeat packet to address-resolver")
 		}
 	}()
 
 	go func() {
 		if err := c.delBindSUDPH(arConn); err != nil {
-			c.log.WithError(err).Errorf("Failed to send UDP unbind packet to address-resolver")
+			log.WithError(err).Errorf("Failed to send UDP unbind packet to address-resolver")
 		}
 	}()
 
@@ -360,7 +368,7 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return VisorData{}, fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
+		return VisorData{}, fmt.Errorf("status: %d, error: %w", resp.StatusCode, httpauth.ExtractError(resp.Body))
 	}
 
 	rawBody, err := ioutil.ReadAll(resp.Body)
@@ -375,6 +383,58 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 	}
 
 	return resolveResp, nil
+}
+
+// Transports query available transports.
+func (c *httpClient) Transports(ctx context.Context) (map[cipher.PubKey][]string, error) {
+	resp, err := c.Get(ctx, "/transports")
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err = resp.Body.Close(); err != nil {
+			c.log.WithError(err).Warn("Failed to close response body")
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		c.log.Warn(ErrNoTransportsFound.Error())
+		return nil, ErrNoTransportsFound
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	transportsMap := map[string][]string{}
+	if err = json.Unmarshal(body, &transportsMap); err != nil {
+		return nil, err
+	}
+
+	results := map[cipher.PubKey][]string{}
+
+	for k, pks := range transportsMap {
+		for _, pk := range pks {
+			rPK := cipher.PubKey{}
+			if err := rPK.Set(pk); err != nil {
+				c.log.WithError(err).Warn("unable to transform PK")
+				continue
+			}
+
+			// Two kinds of network, SUDPH and STCPR
+			if _, ok := results[rPK]; ok {
+				if len(results[rPK]) == 1 && k != results[rPK][0] {
+					results[rPK] = append(results[rPK], k)
+				}
+			} else {
+				nTypeSlice := make([]string, 0, 2)
+				nTypeSlice = append(nTypeSlice, k)
+				results[rPK] = nTypeSlice
+			}
+		}
+	}
+	return results, nil
 }
 
 func (c *httpClient) isReady() bool {
@@ -410,14 +470,14 @@ func (c *httpClient) readSUDPHMessages(reader io.Reader) <-chan RemoteVisor {
 				n, err := reader.Read(buf)
 				if err != nil {
 					if c.isClosed() {
-						c.log.Infof("SUDPH conn closed on shutdown message: %v", err)
+						c.log.Debugf("SUDPH conn closed on shutdown message: %v", err)
 						return
 					}
 					c.log.Errorf("Failed to read SUDPH message: %v", err)
 					return
 				}
 
-				c.log.Infof("New SUDPH message: %v", string(buf[:n]))
+				c.log.Debugf("New SUDPH message: %v", string(buf[:n]))
 
 				var remote RemoteVisor
 				if err := json.Unmarshal(buf[:n], &remote); err != nil {
@@ -453,8 +513,14 @@ func (c *httpClient) Close() error {
 		}
 	}
 
-	if err := c.delBindSTCPR(context.Background()); err != nil {
-		c.log.WithError(err).Errorf("Failed to delete STCPR binding")
+	hasPublic, err := netutil.HasPublicIP()
+	if err != nil {
+		c.log.Errorf("Failed to check for public IP: %v", err)
+	}
+	if hasPublic {
+		if err := c.delBindSTCPR(context.Background()); err != nil {
+			c.log.WithError(err).Errorf("Failed to delete STCPR binding")
+		}
 	}
 
 	return nil
@@ -483,7 +549,7 @@ func (c *httpClient) delBindSUDPH(w io.Writer) error {
 	if _, err := w.Write([]byte(UDPDelBindMessage)); err != nil {
 		return err
 	}
-	c.log.Debugf("delBindSUDPH: Deleted bind pk: %v from Address resolver successfully", c.pk.String())
+	c.log.WithField("func", "httpClient.delBindSUDPH").Debugf("Deleted bind pk: %v from Address resolver successfully", c.pk.String())
 
 	return nil
 }
@@ -495,20 +561,4 @@ func (c *httpClient) isClosed() bool {
 	default:
 		return false
 	}
-}
-
-// extractError returns the decoded error message from Body.
-func extractError(r io.Reader) error {
-	var apiError Error
-
-	body, err := ioutil.ReadAll(r)
-	if err != nil {
-		return err
-	}
-
-	if err := json.Unmarshal(body, &apiError); err != nil {
-		return errors.New(string(body))
-	}
-
-	return errors.New(apiError.Error)
 }

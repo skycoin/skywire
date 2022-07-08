@@ -6,6 +6,7 @@ package vpn
 import (
 	"bytes"
 	"net"
+	"strings"
 
 	"github.com/skycoin/skywire/pkg/util/osutil"
 )
@@ -39,7 +40,11 @@ func DefaultNetworkGateway() (net.IP, error) {
 }
 
 func setupClientSysPrivileges() (int, error) {
-	return osutil.GainRoot()
+	value, err := osutil.GainRoot()
+	if err != nil && strings.Contains(err.Error(), "operation not permitted") {
+		return value, errPermissionDenied
+	}
+	return value, err
 }
 
 func releaseClientSysPrivileges(oldUID int) error {

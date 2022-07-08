@@ -11,11 +11,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/dmsg/httputil"
-	"github.com/skycoin/skycoin/src/util/logging"
-
-	"github.com/skycoin/skywire/internal/netutil"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/httputil"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -46,6 +45,7 @@ type ManagedTransportConfig struct {
 	RemotePK        cipher.PubKey
 	TransportLabel  Label
 	InactiveTimeout time.Duration
+	mlog            *logging.MasterLogger
 }
 
 // ManagedTransport manages a direct line of communication between two visor nodes.
@@ -76,8 +76,13 @@ type ManagedTransport struct {
 // NewManagedTransport creates a new ManagedTransport.
 func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 	aPK, bPK := conf.client.PK(), conf.RemotePK
+	log := logging.MustGetLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6]))
+	if conf.mlog != nil {
+		log = conf.mlog.PackageLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6]))
+	}
+
 	mt := &ManagedTransport{
-		log:         logging.MustGetLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6])),
+		log:         log,
 		rPK:         conf.RemotePK,
 		dc:          conf.DC,
 		ls:          conf.LS,
@@ -99,12 +104,12 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 		WithField("remote_pk", mt.rPK).
 		WithField("tp_index", atomic.AddInt32(&mTpCount, 1))
 
-	log.Info("Serving.")
+	log.Debug("Serving.")
 
 	defer func() {
 		mt.close()
 		log.WithField("remaining_tps", atomic.AddInt32(&mTpCount, -1)).
-			Info("Stopped serving.")
+			Debug("Stopped serving.")
 	}()
 
 	go mt.readLoop(readCh)
@@ -168,7 +173,6 @@ func (mt *ManagedTransport) isServing() bool {
 // It only returns an error if transport status update fails.
 func (mt *ManagedTransport) Close() (err error) {
 	mt.close()
-	mt.log.Debug("Waiting for the waitgroup")
 	mt.wg.Wait()
 	return nil
 }
@@ -190,24 +194,21 @@ func (mt *ManagedTransport) IsClosed() bool {
 // regular transport close operations should probably call it concurrently
 // need to find a way to handle this properly (done channel in return?)
 func (mt *ManagedTransport) close() {
-	mt.log.Debug("Closing...")
 	select {
 	case <-mt.done:
 		return
 	default:
 		close(mt.done)
 	}
-	mt.log.Debug("Locking transportMx")
 	mt.transportMx.Lock()
 	close(mt.transportCh)
 	if mt.transport != nil {
 		if err := mt.transport.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close underlying transport.")
+			mt.log.WithError(err).Warn("Failed to close underlying transport.")
 		}
 		mt.transport = nil
 	}
 	mt.transportMx.Unlock()
-	mt.log.Debug("Unlocking transportMx")
 	_ = mt.deleteFromDiscovery() //nolint:errcheck
 }
 
@@ -233,7 +234,7 @@ func (mt *ManagedTransport) Accept(ctx context.Context, transport network.Transp
 	defer cancel()
 
 	mt.log.Debug("Performing settlement handshake...")
-	if err := MakeSettlementHS(false).Do(ctx, mt.dc, transport, mt.client.SK()); err != nil {
+	if err := MakeSettlementHS(false, mt.log).Do(ctx, mt.dc, transport, mt.client.SK()); err != nil {
 		return fmt.Errorf("settlement handshake failed: %w", err)
 	}
 
@@ -271,7 +272,7 @@ func (mt *ManagedTransport) dial(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
 	defer cancel()
 
-	if err := MakeSettlementHS(true).Do(ctx, mt.dc, transport, mt.client.SK()); err != nil {
+	if err := MakeSettlementHS(true, mt.log).Do(ctx, mt.dc, transport, mt.client.SK()); err != nil {
 		return fmt.Errorf("settlement handshake failed: %w", err)
 	}
 
@@ -309,14 +310,14 @@ func (mt *ManagedTransport) setTransport(newTransport network.Transport) error {
 		if mt.isLeastSignificantEdge() {
 			mt.log.Debug("Underlying transport already exists, closing new transport.")
 			if err := newTransport.Close(); err != nil {
-				log.WithError(err).Warn("Failed to close new transport.")
+				mt.log.WithError(err).Warn("Failed to close new transport.")
 			}
 			return ErrTransportAlreadyExists
 		}
 
 		mt.log.Debug("Underlying transport already exists, closing old transport.")
 		if err := mt.transport.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close old transport.")
+			mt.log.WithError(err).Warn("Failed to close old transport.")
 		}
 		mt.transport = nil
 	}
@@ -332,14 +333,14 @@ func (mt *ManagedTransport) setTransport(newTransport network.Transport) error {
 }
 
 func (mt *ManagedTransport) deleteFromDiscovery() error {
-	retrier := netutil.NewRetrier(1*time.Second, 5, 2, mt.log)
-	return retrier.Do(func() error {
+	retrier := netutil.NewRetrier(mt.log, 1*time.Second, netutil.DefaultMaxBackoff, 5, 2)
+	return retrier.Do(context.Background(), func() error {
 		err := mt.dc.DeleteTransport(context.Background(), mt.Entry.ID)
 		mt.log.WithField("tp-id", mt.Entry.ID).WithError(err).Debug("Error deleting transport")
-		if netErr, ok := err.(net.Error); ok && netErr.Temporary() {
+		if netErr, ok := err.(net.Error); ok && netErr.Temporary() { // nolint
 			mt.log.
 				WithError(err).
-				WithField("temporary", true).
+				WithField("timeout", true).
 				Warn("Failed to update transport status.")
 			return err
 		}
@@ -390,20 +391,20 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 		}
 	}
 
-	log.Debug("Awaiting packet...")
+	log.Trace("Awaiting packet...")
 
 	h := make(routing.Packet, routing.PacketHeaderSize)
 	if _, err = io.ReadFull(transport, h); err != nil {
 		log.WithError(err).Debugf("Failed to read packet header.")
 		return nil, err
 	}
-	log.WithField("header_len", len(h)).WithField("header_raw", h).Debug("Read packet header.")
+	log.WithField("header_len", len(h)).WithField("header_raw", h).Trace("Read packet header.")
 	p := make([]byte, h.Size())
 	if _, err = io.ReadFull(transport, p); err != nil {
 		log.WithError(err).Debugf("Failed to read packet payload.")
 		return nil, err
 	}
-	log.WithField("payload_len", len(p)).Debug("Read packet payload.")
+	log.WithField("payload_len", len(p)).Trace("Read packet payload.")
 
 	packet = append(h, p...)
 	if n := len(packet); n > routing.PacketHeaderSize {
@@ -413,7 +414,7 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 	log.WithField("type", packet.Type().String()).
 		WithField("rt_id", packet.RouteID()).
 		WithField("size", packet.Size()).
-		Debug("Received packet.")
+		Trace("Received packet.")
 	return packet, nil
 }
 
@@ -435,7 +436,7 @@ func (mt *ManagedTransport) logRecv(b uint64) {
 // and returns true if it was bigger than 0
 func (mt *ManagedTransport) logMod() bool {
 	if ops := atomic.SwapUint32(&mt.logUpdates, 0); ops > 0 {
-		mt.log.Infof("entry log: recording %d operations", ops)
+		mt.log.WithField("func", "ManagedTransport.logMod").Tracef("entry log: recording %d operations", ops)
 		return true
 	}
 	return false
@@ -447,7 +448,7 @@ func (mt *ManagedTransport) recordLog() {
 		return
 	}
 	if err := mt.ls.Record(mt.Entry.ID, mt.LogEntry); err != nil {
-		log.WithError(err).Warn("Failed to record log entry.")
+		mt.log.WithError(err).Warn("Failed to record log entry.")
 	}
 }
 

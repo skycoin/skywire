@@ -4,20 +4,22 @@ proxy client app for skywire visor
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"net"
 	"os"
 	"time"
 
-	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/buildinfo"
-	"github.com/skycoin/dmsg/cipher"
-
-	"github.com/skycoin/skywire/internal/netutil"
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/internal/skysocks"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
@@ -27,13 +29,11 @@ const (
 	socksPort = routing.Port(3)
 )
 
-var log = logrus.New()
+var r = netutil.NewRetrier(nil, time.Second, netutil.DefaultMaxBackoff, 0, 1)
 
-var r = netutil.NewRetrier(time.Second, 0, 1, log)
-
-func dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
+func dialServer(ctx context.Context, appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
 	var conn net.Conn
-	err := r.Do(func() error {
+	err := r.Do(ctx, func() error {
 		var err error
 		conn, err = appCl.Dial(appnet.Addr{
 			Net:    netType,
@@ -50,13 +50,14 @@ func dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
 }
 
 func main() {
-	appC := app.NewClient(nil)
-	defer appC.Close()
+	appCl := app.NewClient(nil)
+	defer appCl.Close()
 
-	skysocks.Log = log
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
-		log.Printf("Failed to output build info: %v", err)
+		print(fmt.Sprintf("Failed to output build info: %v\n", err))
 	}
 
 	var addr = flag.String("addr", skyenv.SkysocksClientAddr, "Client address to listen on")
@@ -64,39 +65,60 @@ func main() {
 	flag.Parse()
 
 	if *serverPK == "" {
-		log.Warn("Empty server PubKey. Exiting")
-		return
+		err := errors.New("Empty server PubKey. Exiting")
+		print(fmt.Sprintf("%v\n", err))
+		setAppErr(appCl, err)
+		os.Exit(1)
 	}
 
 	pk := cipher.PubKey{}
 	if err := pk.UnmarshalText([]byte(*serverPK)); err != nil {
-		log.Fatal("Invalid server PubKey: ", err)
+		print(fmt.Sprintf("Invalid server PubKey: %v\n", err))
+		setAppErr(appCl, err)
+		os.Exit(1)
 	}
-
+	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
 	for {
-		conn, err := dialServer(appC, pk)
+		conn, err := dialServer(ctx, appCl, pk)
 		if err != nil {
-			log.Fatalf("Failed to dial to a server: %v", err)
+			print(fmt.Sprintf("Failed to dial to a server: %v\n", err))
+			setAppErr(appCl, err)
+			os.Exit(1)
 		}
 
-		log.Printf("Connected to %v\n", pk)
+		fmt.Printf("Connected to %v\n", pk)
 
-		client, err := skysocks.NewClient(conn)
+		client, err := skysocks.NewClient(conn, appCl)
 		if err != nil {
-			log.Fatal("Failed to create a new client: ", err)
+			print(fmt.Sprintf("Failed to create a new client: %v\n", err))
+			setAppErr(appCl, err)
+			os.Exit(1)
 		}
 
-		log.Printf("Serving proxy client %v\n", *addr)
+		fmt.Printf("Serving proxy client %v\n", *addr)
 
 		if err := client.ListenAndServe(*addr); err != nil {
-			log.Errorf("Error serving proxy client: %v\n", err)
+			print(fmt.Sprintf("Error serving proxy client: %v\n", err))
 		}
 
 		// need to filter this out, cause usually client failure means app conn is already closed
 		if err := conn.Close(); err != nil && err != io.ErrClosedPipe {
-			log.Errorf("Error closing app conn: %v\n", err)
+			print(fmt.Sprintf("Error closing app conn: %v\n", err))
 		}
 
-		log.Println("Reconnecting to skysocks server")
+		fmt.Println("Reconnecting to skysocks server")
+		setAppStatus(appCl, appserver.AppDetailedStatusReconnecting)
+	}
+}
+
+func setAppErr(appCl *app.Client, err error) {
+	if appErr := appCl.SetError(err.Error()); appErr != nil {
+		print(fmt.Sprintf("Failed to set error %v: %v\n", err, appErr))
+	}
+}
+
+func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
+	if err := appCl.SetDetailedStatus(string(status)); err != nil {
+		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
 	}
 }

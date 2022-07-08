@@ -3,20 +3,25 @@ package appserver
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/rpc"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/skycoin/skycoin/src/util/logging"
+	ipc "github.com/james-barrow/golang-ipc"
+	"github.com/sirupsen/logrus"
 
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 var (
@@ -28,9 +33,11 @@ var (
 // communication.
 // TODO(evanlinjin): In the future, we will implement the ability to run multiple instances (procs) of a single app.
 type Proc struct {
-	disc appdisc.Updater // app discovery client
-	conf appcommon.ProcConfig
-	log  *logging.Logger
+	ipcServer   *ipc.Server
+	ipcServerWg sync.WaitGroup
+	disc        appdisc.Updater // app discovery client
+	conf        appcommon.ProcConfig
+	log         *logging.Logger
 
 	logDB appcommon.LogStore
 
@@ -59,6 +66,10 @@ type Proc struct {
 
 	errMx sync.RWMutex
 	err   string
+
+	cmdStderr io.ReadCloser
+
+	startWg sync.WaitGroup
 }
 
 // NewProc constructs `Proc`.
@@ -76,20 +87,32 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	cmd.Env = append(os.Environ(), envs...)
 	cmd.Dir = conf.ProcWorkDir
 
-	appLog, appLogDB := appcommon.NewProcLogger(conf)
-	cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").Writer()
-	cmd.Stderr = appLog.WithField("_module", moduleName).WithField("func", "(STDERR)").Writer()
+	appLog, appLogDB := appcommon.NewProcLogger(conf, mLog)
+	cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").WriterLevel(logrus.DebugLevel)
 
-	return &Proc{
-		disc:    disc,
-		conf:    conf,
-		log:     mLog.PackageLogger(moduleName),
-		logDB:   appLogDB,
-		cmd:     cmd,
-		connCh:  make(chan struct{}, 1),
-		m:       m,
-		appName: appName,
+	// we read the Stderr pipe in order to filter some false positive app errors
+	errorLog := appLog.WithField("_module", moduleName).WithField("func", "(STDERR)")
+	stderr, _ := cmd.StderrPipe() //nolint:errcheck
+	printStdErr(stderr, errorLog)
+
+	p := &Proc{
+		disc:      disc,
+		conf:      conf,
+		log:       mLog.PackageLogger(moduleName),
+		logDB:     appLogDB,
+		cmd:       cmd,
+		connCh:    make(chan struct{}, 1),
+		m:         m,
+		appName:   appName,
+		startWg:   sync.WaitGroup{},
+		cmdStderr: stderr,
 	}
+
+	if runtime.GOOS == "windows" {
+		p.ipcServerWg.Add(1)
+	}
+	p.startWg.Add(1)
+	return p
 }
 
 // Logs obtains the log store.
@@ -143,7 +166,7 @@ func (p *Proc) awaitConn() bool {
 
 	go rpcS.ServeConn(p.conn)
 
-	p.log.Info("Associated and serving proc conn.")
+	p.log.Debug("Associated and serving proc conn.")
 	return true
 }
 
@@ -211,9 +234,24 @@ func (p *Proc) Start() error {
 			return
 		}
 
-		// App discovery start/stop.
-		p.disc.Start()
+		go func() {
+			// App discovery start/stop.
+			p.startWg.Wait()
+			p.disc.Start()
+		}()
 		defer p.disc.Stop()
+
+		if runtime.GOOS == "windows" {
+			ipcServer, err := ipc.StartServer(p.appName, nil)
+			if err != nil {
+				_ = p.cmd.Process.Kill() //nolint:errcheck
+				p.waitMx.Unlock()
+				p.ipcServerWg.Done()
+				return
+			}
+			p.ipcServer = ipcServer
+			p.ipcServerWg.Done()
+		}
 
 		// Wait for proc to exit.
 		p.waitErr = <-waitErrCh
@@ -239,9 +277,18 @@ func (p *Proc) Stop() error {
 	}
 
 	if p.cmd.Process != nil {
-		err := p.cmd.Process.Signal(os.Interrupt)
-		if err != nil {
-			return err
+		if runtime.GOOS != "windows" {
+			err := p.cmd.Process.Signal(os.Interrupt)
+			if err != nil {
+				return err
+			}
+		} else {
+			p.ipcServerWg.Wait()
+			if p.ipcServer != nil {
+				if err := p.ipcServer.Write(skyenv.IPCShutdownMessageType, []byte("")); err != nil {
+					return err
+				}
+			}
 		}
 	}
 
@@ -251,6 +298,12 @@ func (p *Proc) Stop() error {
 	// the lock will be acquired as soon as the cmd finishes its work
 	p.waitMx.Lock()
 	defer func() {
+		if p.ipcServer != nil {
+			p.ipcServer.Close()
+		}
+		if p.cmdStderr != nil {
+			_ = p.cmdStderr.Close() //nolint:errcheck
+		}
 		p.waitMx.Unlock()
 		p.connOnce.Do(func() { close(p.connCh) })
 	}()
@@ -280,6 +333,13 @@ func (p *Proc) IsRunning() bool {
 func (p *Proc) SetDetailedStatus(status string) {
 	p.statusMx.Lock()
 	defer p.statusMx.Unlock()
+	if status == AppDetailedStatusRunning {
+		p.startWg.Done()
+	}
+
+	if status == AppDetailedStatusRunning || status == AppDetailedStatusStopped {
+		p.log.Infof("App %v is %v", p.appName, status)
+	}
 
 	p.status = status
 }

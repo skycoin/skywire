@@ -9,11 +9,13 @@
 *.pem
 
 .idea/
+.vscode/
 
 /skywire.json
 /apps/
 /skywire/
-/local*
+/local/*
+/local*/*
 /transport_logs
 /dmsgpty
 
@@ -30,6 +32,7 @@ pkg/visor/foo/
 /*-cli
 /*-server
 /*.json
+!/dmsghttp-config.json
 /*.sh
 /*.log
 
@@ -50,6 +53,11 @@ Char
 /scripts/mac_installer/icon_128x128.png
 /scripts/mac_installer/icon_128x128@2x.png
 /mac_build
-/SkywireInstaller*.pkg
+/skywire-installer*.pkg
 *.dmg
 /scripts/mac_installer/icon.iconset/
+releaseChangelog.md
+skywire.msi
+/scripts/win_installer/build/
+goreleaser*
+gh*
