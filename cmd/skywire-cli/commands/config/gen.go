@@ -27,7 +27,7 @@ func init() {
 	RootCmd.AddCommand(genConfigCmd)
 
 	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", "", "services conf")
-	hiddenflags = append(hiddenflags, "url")
+	ghiddenflags = append(ghiddenflags, "url")
 	genConfigCmd.Flags().StringVar(&logLevel, "log-level", "info", "level of logging in config")
 	ghiddenflags = append(ghiddenflags, "log-level")
 	genConfigCmd.Flags().BoolVarP(&bestProtocol, "bestproto", "b", false, "best protocol (dmsg | direct) based on location")
