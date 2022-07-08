@@ -26,7 +26,7 @@ func init() {
 	genConfigCmd.Flags().SortFlags = false
 	RootCmd.AddCommand(genConfigCmd)
 
-	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", svcconf, "services conf")
+	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", "", "services conf")
 	hiddenflags = append(hiddenflags, "url")
 	genConfigCmd.Flags().StringVar(&logLevel, "log-level", "info", "level of logging in config")
 	hiddenflags = append(hiddenflags, "log-level")
@@ -218,6 +218,7 @@ var genConfigCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
+		serviceConfURL = svcconf
 		//use test deployment
 		if testEnv {
 			serviceConfURL = testconf
