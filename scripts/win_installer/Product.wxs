@@ -16,8 +16,8 @@
             Language="1033">
 
       <Package InstallerVersion="200" Compressed="yes" Comments="Windows Installer Package" InstallScope="perMachine"/>
-      <WixVariable Id="WixUIBannerBmp" Value=".\images\Banner.bmp" />
-      <WixVariable Id="WixUIDialogBmp" Value=".\images\Dialog.bmp" />
+      <WixVariable Id="WixUIBannerBmp" Value=".\images\Banner.png" />
+      <WixVariable Id="WixUIDialogBmp" Value=".\images\Dialog.png" />
       <Media Id="1" Cabinet="product.cab" EmbedCab="yes"/>
 
       <Upgrade Id="cd7955bc-304e-470f-9c24-eb9f429a8085">
