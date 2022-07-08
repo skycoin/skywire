@@ -140,8 +140,7 @@ func (r *SkywireNetworker) serve(conn net.Conn) {
 	if !ok {
 		err := ErrServiceOffline(uint16(localAddr.Port))
 		r.log.Error(err)
-		ng, ok := conn.(*router.NoiseRouteGroup)
-		if ok {
+		if ng, ok := conn.(*router.NoiseRouteGroup); ok {
 			ng.SetError(err)
 		}
 		r.close(conn)
