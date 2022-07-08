@@ -24,6 +24,7 @@ func Fetch(mLog *logging.MasterLogger, serviceConfURL string, stdout bool) (serv
 	if err != nil {
 		mLog.WithError(err).Fatal("Failed to create http request\n")
 	}
+	req.Header.Add("Cache-Control", "no-cache")
 	//check for errors in the response
 	res, err := client.Do(req)
 	if err != nil {
