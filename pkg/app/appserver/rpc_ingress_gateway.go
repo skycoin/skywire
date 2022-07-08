@@ -283,10 +283,8 @@ func (r *RPCIngressGateway) Read(req *ReadReq, resp *ReadResp) error {
 		}
 	}
 
-	wrappedConn, ok := conn.(*appnet.WrappedConn)
-	if ok {
-		skywireConn, ok := wrappedConn.Conn.(*appnet.SkywireConn)
-		if ok {
+	if wrappedConn, ok := conn.(*appnet.WrappedConn); ok {
+		if skywireConn, ok := wrappedConn.Conn.(*appnet.SkywireConn); ok {
 			if ngErr := skywireConn.GetError(); ngErr != nil {
 				err = ngErr
 			}
