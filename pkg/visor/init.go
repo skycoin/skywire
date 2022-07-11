@@ -489,7 +489,7 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 			establishedTransports, _ := v.Transports([]string{string(network.STCPR), string(network.SUDPH), string(network.DMSG)}, []cipher.PubKey{v.conf.PK}, false) //nolint
 			for _, transportSum := range establishedTransports {
 				if transportSum.Remote.Hex() == rPK.Hex() {
-					log.Info("Established transport available")
+					log.Debugf("Established transport exist. Type: %s", transportSum.Type)
 					return nil
 				}
 			}
