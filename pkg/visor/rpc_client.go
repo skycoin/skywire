@@ -212,6 +212,14 @@ func (rc *rpcClient) SetAppSecure(appName string, isSecure bool) error {
 	}, &struct{}{})
 }
 
+// SetAppDNS implements API.
+func (rc *rpcClient) SetAppDNS(appName string, dnsAddr string) error {
+	return rc.Call("SetAppDNS", &SetAppStringIn{
+		AppName: appName,
+		Val:     dnsAddr,
+	}, &struct{}{})
+}
+
 // LogsSince calls LogsSince
 func (rc *rpcClient) LogsSince(timestamp time.Time, appName string) ([]string, error) {
 	res := make([]string, 0)
@@ -742,6 +750,21 @@ func (mc *mockRPCClient) SetAppKillswitch(appName string, killswitch bool) error
 func (mc *mockRPCClient) SetAppSecure(appName string, isSecure bool) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks"
+
+		for i := range mc.o.Apps {
+			if mc.o.Apps[i].Name == socksName {
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", socksName)
+	})
+}
+
+// SetAppDNS implements API.
+func (mc *mockRPCClient) SetAppDNS(string, string) error {
+	return mc.do(true, func() error {
+		const socksName = "vpn-client"
 
 		for i := range mc.o.Apps {
 			if mc.o.Apps[i].Name == socksName {

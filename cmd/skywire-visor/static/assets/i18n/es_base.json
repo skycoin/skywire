@@ -286,6 +286,9 @@
       "confirmation": "Are you sure you want to reboot the visor?",
       "done": "The visor is restarting."
     },
+    "update": {
+      "confirmation": "A terminal will be opened in a new tab and the update procedure will be started automatically. Do you want to continue?"
+    },
     "terminal-options": {
       "full": "Full terminal",
       "simple": "Simple terminal"
@@ -321,6 +324,13 @@
     "starting": "Preparing to update",
     "finished": "Status connection finished",
     "install": "Install updates"
+  },
+
+  "update-all": {
+    "title": "Update",
+    "updatable-list-text": "Please press the buttons of the visors you want to update. A terminal will be opened in a new tab for each visor and the update procedure will be started automatically.",
+    "non-updatable-list-text": "The following visors can not be updated via the terminal:",
+    "update-button": "Update"
   },
 
   "apps": {
@@ -882,6 +892,9 @@
       "data-units-info": "Allows to select the units that will be used to display the data transmission statistics.",
       "minimum-hops": "Minimum hops",
       "minimum-hops-info": "Allows to set the minimum number of hops the connections must pass through other Skywire visors before reaching the final destination.",
+      "dns": "Custom DNS server",
+      "dns-info": "Allows to use a custom DNS server, which could improve privacy and prevent sites from being blocked by the default DNS server of your ISP.",
+      "setting-none": "None",
       "setting-on": "On",
       "setting-off": "Off",
       "working-warning": "The system is busy. Please wait for the previous operation to finish.",
@@ -893,6 +906,13 @@
         "only-bytes": "Bytes for all stats",
         "bits-speed-and-bytes-volume": "Bits for speed and bytes for volume (default)"
       }
+    },
+
+    "dns-config": {
+      "title": "Custom DNS server",
+      "ip": "Custom DNS server IP address",
+      "save-config-button": "Save configuration",
+      "done": "Changes saved."
     }
   }
 }

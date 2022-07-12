@@ -286,6 +286,9 @@
       "confirmation": "¿Seguro que desea reiniciar el visor?",
       "done": "El visor se está reiniciando."
     },
+    "update": {
+      "confirmation": "Una terminal será abierta en una nueva pestaña y el proceso de actualización iniciará automáticamente. ¿Desea continuar?"
+    },
     "terminal-options": {
       "full": "Terminal completa",
       "simple": "Terminal simple"
@@ -321,6 +324,13 @@
     "starting": "Preparando para actualizar",
     "finished": "Conexión de estado terminada",
     "install": "Instalar actualizaciones"
+  },
+
+  "update-all": {
+    "title": "Actualizar",
+    "updatable-list-text": "Por favor, presione los botones de los visores que desea actualizar. Una terminal será abierta en una nueva pestaña por cada visor y el proceso de actualización iniciará automáticamente.",
+    "non-updatable-list-text": "Los siguientes visores no pueden ser actualizados vía la terminal:",
+    "update-button": "Actualizar"
   },
 
   "apps": {
@@ -882,6 +892,9 @@
       "data-units-info": "Permite seleccionar las unidades que se utilizarán para mostrar las estadísticas de transmisión de datos.",
       "minimum-hops": "Saltos mínimos",
       "minimum-hops-info": "Permite configurar la cantidad mínima de saltos que la conexión deberá realizar a través de otros visores de Skywire antes de alcanzar el destino final.",
+      "dns": "Servidor DNS personalizado",
+      "dns-info": "Permite usar un servidor DNS personalizado, lo que podría mejorar la privacidad y prevenir que algunos sitios sean bloqueados por el servidor DNS por defecto de su proveedor.",
+      "setting-none": "Ninguno",
       "setting-on": "Encendido",
       "setting-off": "Apagado",
       "working-warning": "El sistema está ocupado. Por favor, espere a que finalice la operación anterior.",
@@ -893,6 +906,13 @@
         "only-bytes": "Bytes para todas las estadísticas",
         "bits-speed-and-bytes-volume": "Bits para velocidad y bytes para volumen (predeterminado)"
       }
+    },
+
+    "dns-config": {
+      "title": "Servidor DNS personalizado",
+      "ip": "Dirección IP del servidor DNS personalizado",
+      "save-config-button": "Guardar configuración",
+      "done": "Cambios guardados."
     }
   }
 }

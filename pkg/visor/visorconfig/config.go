@@ -29,9 +29,9 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	if services == nil {
 		//fall back on skyev defaults
 		if !testEnv {
-			services = &Services{utilenv.DmsgDiscAddr, utilenv.TpDiscAddr, utilenv.AddressResolverAddr, utilenv.RouteFinderAddr, []cipher.PubKey{skyenv.MustPK(utilenv.SetupPK)}, utilenv.UptimeTrackerAddr, utilenv.ServiceDiscAddr, utilenv.GetStunServers()}
+			services = &Services{utilenv.DmsgDiscAddr, utilenv.TpDiscAddr, utilenv.AddressResolverAddr, utilenv.RouteFinderAddr, []cipher.PubKey{skyenv.MustPK(utilenv.SetupPK)}, utilenv.UptimeTrackerAddr, utilenv.ServiceDiscAddr, utilenv.GetStunServers(), utilenv.DNSServer}
 		} else {
-			services = &Services{utilenv.TestDmsgDiscAddr, utilenv.TestTpDiscAddr, utilenv.TestAddressResolverAddr, utilenv.TestRouteFinderAddr, []cipher.PubKey{skyenv.MustPK(utilenv.TestSetupPK)}, utilenv.TestUptimeTrackerAddr, utilenv.TestServiceDiscAddr, utilenv.GetStunServers()}
+			services = &Services{utilenv.TestDmsgDiscAddr, utilenv.TestTpDiscAddr, utilenv.TestAddressResolverAddr, utilenv.TestRouteFinderAddr, []cipher.PubKey{skyenv.MustPK(utilenv.TestSetupPK)}, utilenv.TestUptimeTrackerAddr, utilenv.TestServiceDiscAddr, utilenv.GetStunServers(), utilenv.DNSServer}
 		}
 	}
 	conf := new(V1)
@@ -119,6 +119,13 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 	}
 	var dmsgHTTPServersList *DmsgHTTPServers
 
+	dnsServer := utilenv.DNSServer
+	if services != nil {
+		if services.DNSServer != "" {
+			dnsServer = services.DNSServer
+		}
+	}
+
 	if dmsgHTTP {
 		dmsgHTTPPath := skyenv.DMSGHTTPName
 		if pkgEnv {
@@ -136,7 +143,7 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 	// Actual config generation.
 	conf := MakeBaseConfig(cc, testEnv, dmsgHTTP, services, dmsgHTTPServersList)
 
-	conf.Launcher.Apps = makeDefaultLauncherAppsConfig()
+	conf.Launcher.Apps = makeDefaultLauncherAppsConfig(dnsServer)
 
 	conf.Hypervisors = make([]cipher.PubKey, 0)
 
@@ -189,12 +196,13 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 // makeDefaultLauncherAppsConfig creates default launcher config for apps,
 // for package based installation in other platform (Darwin, Windows) it only includes
 // the shipped apps for that platforms
-func makeDefaultLauncherAppsConfig() []appserver.AppConfig {
+func makeDefaultLauncherAppsConfig(dnsServer string) []appserver.AppConfig {
 	defaultConfig := []appserver.AppConfig{
 		{
 			Name:      skyenv.VPNClientName,
 			AutoStart: false,
 			Port:      routing.Port(skyenv.VPNClientPort),
+			Args:      []string{"-dns", dnsServer},
 		},
 		{
 			Name:      skyenv.SkychatName,

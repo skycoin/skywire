@@ -276,6 +276,12 @@ type SetAppBoolIn struct {
 	Val     bool
 }
 
+// SetAppStringIn is input for SetApp string flags
+type SetAppStringIn struct {
+	AppName string
+	Val     string
+}
+
 // SetAppPK sets PK for the app.
 func (r *RPC) SetAppPK(in *SetAppPKIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppPK", in)(nil, &err)
