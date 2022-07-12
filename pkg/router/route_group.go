@@ -465,6 +465,28 @@ func (rg *RouteGroup) sendPing() error {
 	return rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
 }
 
+func (rg *RouteGroup) sendPong(timestamp int64) error {
+	rg.mu.Lock()
+
+	if len(rg.tps) == 0 || len(rg.fwd) == 0 {
+		rg.mu.Unlock()
+		// if no transports, no rules, then no latency probe
+		return nil
+	}
+
+	tp := rg.tps[0]
+	rule := rg.fwd[0]
+	rg.mu.Unlock()
+
+	if tp == nil {
+		return nil
+	}
+
+	packet := routing.MakePingPacket(rule.NextRouteID(), timestamp)
+
+	return rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
+}
+
 func (rg *RouteGroup) networkProbeServiceFn(_ time.Duration) {
 	if err := rg.sendNetworkProbe(); err != nil {
 		rg.logger.Warnf("Failed to send network probe: %v", err)
@@ -662,7 +684,6 @@ func (rg *RouteGroup) handleNetworkProbePacket(packet routing.Packet) error {
 
 	rg.logger.WithField("func", "RouteGroup.handleNetworkProbePacket").Tracef("Latency is around %d ms", latency)
 
-	rg.networkStats.SetLatency(uint32(latency))
 	rg.networkStats.SetUploadSpeed(uint32(throughput))
 
 	return nil
@@ -702,49 +723,30 @@ func (rg *RouteGroup) handleClosePacket(code routing.CloseCode) error {
 }
 
 func (rg *RouteGroup) handlePingPacket(packet routing.Packet) error {
-	payload := packet.Payload()
 
-	sentAtMs := binary.BigEndian.Uint64(payload)
-	// throughput := binary.BigEndian.Uint64(payload[8:])
+	timestamp := int64(binary.BigEndian.Uint64(packet[routing.PacketPayloadOffset:]))
 
-	ms := sentAtMs % 1000
-	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond)).UTC()
+	rg.logger.WithField("func", "RouteGroup.handlePingPacket").Tracef("Timestamp in Ping is %d", timestamp)
 
-	latency := time.Now().UTC().Sub(sentAt).Milliseconds()
-	// todo (ersonp): this is a dirty fix, we need to implement new packets Ping and Pong to calculate the RTT.
-	// if latency is negative we set it to be the previous one
-	if math.Signbit(float64(latency)) {
-		latency = int64(rg.networkStats.Latency())
-	}
-
-	rg.logger.WithField("func", "RouteGroup.handlePingPacket").Errorf("Ping is around %d ms", latency)
-
-	// rg.networkStats.SetLatency(uint32(latency))
-	// rg.networkStats.SetUploadSpeed(uint32(throughput))
-
-	return nil
+	return rg.sendPong(timestamp)
 }
 
 func (rg *RouteGroup) handlePongPacket(packet routing.Packet) error {
 	payload := packet.Payload()
 
 	sentAtMs := binary.BigEndian.Uint64(payload)
-	// throughput := binary.BigEndian.Uint64(payload[8:])
 
 	ms := sentAtMs % 1000
 	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond)).UTC()
 
 	latency := time.Now().UTC().Sub(sentAt).Milliseconds()
-	// todo (ersonp): this is a dirty fix, we need to implement new packets Ping and Pong to calculate the RTT.
-	// if latency is negative we set it to be the previous one
 	if math.Signbit(float64(latency)) {
 		latency = int64(rg.networkStats.Latency())
 	}
 
 	rg.logger.WithField("func", "RouteGroup.handlePongPacket").Tracef("Latency is around %d ms", latency)
 
-	// rg.networkStats.SetLatency(uint32(latency))
-	// rg.networkStats.SetUploadSpeed(uint32(throughput))
+	rg.networkStats.SetLatency(uint32(latency))
 
 	return nil
 }
