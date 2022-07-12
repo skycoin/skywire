@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -673,11 +672,6 @@ func (rg *RouteGroup) handlePingPacket(packet routing.Packet) error {
 	sentAt := time.Unix(int64(timestamp/1000), int64(ms)*int64(time.Millisecond)).UTC()
 
 	latency := time.Now().UTC().Sub(sentAt).Milliseconds()
-	// todo (ersonp): this is a dirty fix, we need to implement new packets Ping and Pong to calculate the RTT.
-	// if latency is negative we set it to be the previous one
-	if math.Signbit(float64(latency)) {
-		latency = int64(rg.networkStats.Latency())
-	}
 
 	rg.logger.WithField("func", "RouteGroup.handlePingPacket").Tracef("Latency is around %d ms", latency)
 
@@ -695,9 +689,6 @@ func (rg *RouteGroup) handlePongPacket(packet routing.Packet) error {
 	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond)).UTC()
 
 	latency := time.Now().UTC().Sub(sentAt).Milliseconds()
-	if math.Signbit(float64(latency)) {
-		latency = int64(rg.networkStats.Latency())
-	}
 
 	rg.logger.WithField("func", "RouteGroup.handlePongPacket").Tracef("Latency is around %d ms", latency)
 
