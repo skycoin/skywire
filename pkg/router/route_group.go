@@ -482,7 +482,7 @@ func (rg *RouteGroup) sendPong(timestamp int64) error {
 		return nil
 	}
 
-	packet := routing.MakePingPacket(rule.NextRouteID(), timestamp)
+	packet := routing.MakePongPacket(rule.NextRouteID(), timestamp)
 
 	return rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
 }
