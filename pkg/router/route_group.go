@@ -24,6 +24,7 @@ import (
 const (
 	defaultRouteGroupKeepAliveInterval = DefaultRouteKeepAlive / 2
 	defaultNetworkProbeInterval        = 3 * time.Second
+	defaultPingInterval                = 3 * time.Second
 	defaultReadChBufSize               = 1024
 	closeRoutineTimeout                = 2 * time.Second
 )
@@ -54,6 +55,7 @@ type RouteGroupConfig struct {
 	ReadChBufSize        int
 	KeepAliveInterval    time.Duration
 	NetworkProbeInterval time.Duration
+	PingInterval         time.Duration
 }
 
 // DefaultRouteGroupConfig returns default RouteGroup config.
@@ -62,6 +64,7 @@ func DefaultRouteGroupConfig() *RouteGroupConfig {
 	return &RouteGroupConfig{
 		KeepAliveInterval:    defaultRouteGroupKeepAliveInterval,
 		NetworkProbeInterval: defaultNetworkProbeInterval,
+		PingInterval:         defaultPingInterval,
 		ReadChBufSize:        defaultReadChBufSize,
 	}
 }
@@ -409,6 +412,7 @@ func (rg *RouteGroup) tp() (*transport.ManagedTransport, error) {
 func (rg *RouteGroup) startOffServiceLoops() {
 	go rg.servicePacketLoop("keep-alive", rg.cfg.KeepAliveInterval, rg.keepAliveServiceFn)
 	go rg.servicePacketLoop("network probe", rg.cfg.NetworkProbeInterval, rg.networkProbeServiceFn)
+	go rg.servicePacketLoop("ping", rg.cfg.PingInterval, rg.pingServiceFn)
 }
 
 func (rg *RouteGroup) sendNetworkProbe() error {
@@ -437,8 +441,38 @@ func (rg *RouteGroup) sendNetworkProbe() error {
 	return rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
 }
 
+func (rg *RouteGroup) sendPing() error {
+	rg.mu.Lock()
+
+	if len(rg.tps) == 0 || len(rg.fwd) == 0 {
+		rg.mu.Unlock()
+		// if no transports, no rules, then no latency probe
+		return nil
+	}
+
+	tp := rg.tps[0]
+	rule := rg.fwd[0]
+	rg.mu.Unlock()
+
+	if tp == nil {
+		return nil
+	}
+
+	timestamp := time.Now().UTC().UnixNano() / int64(time.Millisecond)
+
+	packet := routing.MakePingPacket(rule.NextRouteID(), timestamp)
+
+	return rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
+}
+
 func (rg *RouteGroup) networkProbeServiceFn(_ time.Duration) {
 	if err := rg.sendNetworkProbe(); err != nil {
+		rg.logger.Warnf("Failed to send network probe: %v", err)
+	}
+}
+
+func (rg *RouteGroup) pingServiceFn(_ time.Duration) {
+	if err := rg.sendPing(); err != nil {
 		rg.logger.Warnf("Failed to send network probe: %v", err)
 	}
 }
@@ -683,7 +717,7 @@ func (rg *RouteGroup) handlePingPacket(packet routing.Packet) error {
 		latency = int64(rg.networkStats.Latency())
 	}
 
-	rg.logger.WithField("func", "RouteGroup.handlePingPacket").Tracef("Latency is around %d ms", latency)
+	rg.logger.WithField("func", "RouteGroup.handlePingPacket").Errorf("Ping is around %d ms", latency)
 
 	// rg.networkStats.SetLatency(uint32(latency))
 	// rg.networkStats.SetUploadSpeed(uint32(throughput))
