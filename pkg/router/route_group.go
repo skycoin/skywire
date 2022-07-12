@@ -601,6 +601,10 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 
 			close(rg.handshakeProcessed)
 		})
+	case routing.PingPacket:
+		return rg.handlePingPacket(packet)
+	case routing.PongPacket:
+		return rg.handlePongPacket(packet)
 	}
 
 	return nil
@@ -661,6 +665,54 @@ func (rg *RouteGroup) handleClosePacket(code routing.CloseCode) error {
 	}
 
 	return rg.close(code)
+}
+
+func (rg *RouteGroup) handlePingPacket(packet routing.Packet) error {
+	payload := packet.Payload()
+
+	sentAtMs := binary.BigEndian.Uint64(payload)
+	// throughput := binary.BigEndian.Uint64(payload[8:])
+
+	ms := sentAtMs % 1000
+	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond)).UTC()
+
+	latency := time.Now().UTC().Sub(sentAt).Milliseconds()
+	// todo (ersonp): this is a dirty fix, we need to implement new packets Ping and Pong to calculate the RTT.
+	// if latency is negative we set it to be the previous one
+	if math.Signbit(float64(latency)) {
+		latency = int64(rg.networkStats.Latency())
+	}
+
+	rg.logger.WithField("func", "RouteGroup.handlePingPacket").Tracef("Latency is around %d ms", latency)
+
+	// rg.networkStats.SetLatency(uint32(latency))
+	// rg.networkStats.SetUploadSpeed(uint32(throughput))
+
+	return nil
+}
+
+func (rg *RouteGroup) handlePongPacket(packet routing.Packet) error {
+	payload := packet.Payload()
+
+	sentAtMs := binary.BigEndian.Uint64(payload)
+	// throughput := binary.BigEndian.Uint64(payload[8:])
+
+	ms := sentAtMs % 1000
+	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond)).UTC()
+
+	latency := time.Now().UTC().Sub(sentAt).Milliseconds()
+	// todo (ersonp): this is a dirty fix, we need to implement new packets Ping and Pong to calculate the RTT.
+	// if latency is negative we set it to be the previous one
+	if math.Signbit(float64(latency)) {
+		latency = int64(rg.networkStats.Latency())
+	}
+
+	rg.logger.WithField("func", "RouteGroup.handlePongPacket").Tracef("Latency is around %d ms", latency)
+
+	// rg.networkStats.SetLatency(uint32(latency))
+	// rg.networkStats.SetUploadSpeed(uint32(throughput))
+
+	return nil
 }
 
 func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) {
