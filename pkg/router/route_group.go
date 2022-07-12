@@ -668,12 +668,7 @@ func (rg *RouteGroup) handlePingPacket(packet routing.Packet) error {
 	timestamp := binary.BigEndian.Uint64(payload)
 	throughput := binary.BigEndian.Uint64(payload[8:])
 
-	ms := timestamp % 1000
-	sentAt := time.Unix(int64(timestamp/1000), int64(ms)*int64(time.Millisecond)).UTC()
-
-	latency := time.Now().UTC().Sub(sentAt).Milliseconds()
-
-	rg.logger.WithField("func", "RouteGroup.handlePingPacket").Tracef("Latency is around %d ms", latency)
+	rg.logger.WithField("func", "RouteGroup.handlePingPacket").Tracef("Throughput is around %d", throughput)
 
 	rg.networkStats.SetUploadSpeed(uint32(throughput))
 
