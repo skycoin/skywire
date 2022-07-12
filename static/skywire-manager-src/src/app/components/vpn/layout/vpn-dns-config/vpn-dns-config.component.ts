@@ -10,6 +10,7 @@ import { OperationError } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
 import { AppsService } from 'src/app/services/apps.service';
 import { VpnClientService } from 'src/app/services/vpn-client.service';
+import GeneralUtils from 'src/app/utils/generalUtils';
 
 /**
  * Params for VpnDnsConfigComponent.
@@ -83,21 +84,9 @@ export class VpnDnsConfigComponent implements OnInit, OnDestroy {
   private validateIp() {
     if (this.form) {
       const value = this.form.get('ip').value as string;
-      if (!value) {
-        return;
-      }
+      const validOrEmpty = GeneralUtils.checkIfIpValidOrEmpty(value);
 
-      const parts = value.split('.');
-      if (parts.length !== 4) {
-        return { invalid: true };
-      }
-
-      for (const part of parts) {
-        const number = Number.parseInt(part, 10);
-        if (isNaN(number) || (number + '') !== part || number < 0 || number > 255) {
-          return { invalid: true };
-        }
-      }
+      return validOrEmpty ? null : { invalid: true };
     }
 
     return null;
