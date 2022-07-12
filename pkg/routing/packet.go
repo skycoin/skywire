@@ -57,9 +57,9 @@ func (t PacketType) String() string {
 // - ClosePacket     - Payload is a type CloseCode byte.
 // - KeepAlivePacket - Payload is empty.
 // - HandshakePacket - Payload is supportEncryptionVal byte.
-// - PingPacket - Payload is timestamp and throughput.
-// - PongPacket - Payload is timestamp.
-// - ErrorPacket - Payload is error.
+// - PingPacket      - Payload is timestamp and throughput.
+// - PongPacket      - Payload is timestamp.
+// - ErrorPacket     - Payload is error.
 const (
 	DataPacket PacketType = iota
 	ClosePacket
