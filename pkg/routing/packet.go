@@ -146,11 +146,11 @@ func MakeNetworkProbePacket(id RouteID, timestamp, throughput int64) Packet {
 	return packet
 }
 
-// MakePingPacket constructs a new NetworkProbePacket.
+// MakePingPacket constructs a new PingPacket.
 func MakePingPacket(id RouteID, timestamp int64) Packet {
 	packet := make([]byte, PacketHeaderSize+16)
 
-	packet[PacketTypeOffset] = byte(NetworkProbePacket)
+	packet[PacketTypeOffset] = byte(PingPacket)
 	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
 	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(16))
 	binary.BigEndian.PutUint64(packet[PacketPayloadOffset:], uint64(timestamp))
@@ -158,11 +158,11 @@ func MakePingPacket(id RouteID, timestamp int64) Packet {
 	return packet
 }
 
-// MakePongPacket constructs a new NetworkProbePacket.
+// MakePongPacket constructs a new PongPacket.
 func MakePongPacket(id RouteID, timestamp int64) Packet {
 	packet := make([]byte, PacketHeaderSize+16)
 
-	packet[PacketTypeOffset] = byte(NetworkProbePacket)
+	packet[PacketTypeOffset] = byte(PongPacket)
 	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
 	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(16))
 	binary.BigEndian.PutUint64(packet[PacketPayloadOffset:], uint64(timestamp))
