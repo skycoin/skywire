@@ -41,8 +41,6 @@ func (t PacketType) String() string {
 		return "ClosePacket"
 	case KeepAlivePacket:
 		return "KeepAlivePacket"
-	case NetworkProbePacket:
-		return "NetworkProbe"
 	case HandshakePacket:
 		return "Handshake"
 	case PingPacket:
@@ -59,16 +57,14 @@ func (t PacketType) String() string {
 // - ClosePacket     - Payload is a type CloseCode byte.
 // - KeepAlivePacket - Payload is empty.
 // - HandshakePacket -
-// - NetworkProbePacket -
-// - ErrorPacket - Payload is error.
 // - PingPacket -
 // - PongPacket -
+// - ErrorPacket - Payload is error.
 const (
 	DataPacket PacketType = iota
 	ClosePacket
 	KeepAlivePacket
 	HandshakePacket
-	NetworkProbePacket
 	PingPacket
 	PongPacket
 )
@@ -133,27 +129,15 @@ func MakeKeepAlivePacket(id RouteID) Packet {
 	return packet
 }
 
-// MakeNetworkProbePacket constructs a new NetworkProbePacket.
-func MakeNetworkProbePacket(id RouteID, timestamp, throughput int64) Packet {
-	packet := make([]byte, PacketHeaderSize+16)
-
-	packet[PacketTypeOffset] = byte(NetworkProbePacket)
-	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
-	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(16))
-	binary.BigEndian.PutUint64(packet[PacketPayloadOffset:], uint64(timestamp))
-	binary.BigEndian.PutUint64(packet[PacketPayloadOffset+8:], uint64(throughput))
-
-	return packet
-}
-
-// MakePingPacket constructs a new PingPacket.
-func MakePingPacket(id RouteID, timestamp int64) Packet {
+// MakePingPacket constructs a new MakePingPacket.
+func MakePingPacket(id RouteID, timestamp, throughput int64) Packet {
 	packet := make([]byte, PacketHeaderSize+16)
 
 	packet[PacketTypeOffset] = byte(PingPacket)
 	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
 	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(16))
 	binary.BigEndian.PutUint64(packet[PacketPayloadOffset:], uint64(timestamp))
+	binary.BigEndian.PutUint64(packet[PacketPayloadOffset+8:], uint64(throughput))
 
 	return packet
 }
