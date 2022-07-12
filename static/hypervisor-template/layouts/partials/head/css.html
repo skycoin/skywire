@@ -1,0 +1,34 @@
+{{ $bundleRaw := resources.Get "sass/style.sass" | resources.ExecuteAsTemplate "css/main.tmp.css" . }}
+
+{{ if .Site.IsServer }}
+{{ $cssOpts := (dict "targetPath" "css/main.css" "enableSourceMap" true ) }}
+{{ $bundle := $bundleRaw | toCSS $cssOpts }}
+<link rel="stylesheet" href="{{ $bundle.RelPermalink }}" media="screen">
+{{ else }}
+{{ $cssOpts := (dict "targetPath" "css/main.css" ) }}
+{{ $postCSSOpts := (dict "use" "autoprefixer" ) }}
+{{ $bundle := $bundleRaw | toCSS $cssOpts | postCSS $postCSSOpts | minify | fingerprint }}
+<link rel="stylesheet" href="{{ $bundle.RelPermalink }}" integrity="{{ $bundle.Data.Integrity }}" crossorigin="anonymous" media="screen">
+{{ end }}
+
+<!-- Custom css -->
+{{ if .Site.IsServer }}
+  {{ range .Site.Params.customCSS -}}
+    {{ $style := resources.Get . }}
+      <link rel="stylesheet" href="{{ $style.RelPermalink }}" integrity="{{ $style.Data.Integrity }}" crossorigin="anonymous" media="screen">
+  {{- end }}
+{{ else }}
+  {{ range .Site.Params.customCSS -}}
+    {{ $style := resources.Get . }}
+    {{ $bundle := $style | minify | fingerprint }}
+    <link rel="stylesheet" href="{{ $bundle.RelPermalink }}" integrity="{{ $bundle.Data.Integrity }}" crossorigin="anonymous" media="screen">
+  {{- end }}
+{{ end }}
+
+<!-- PhotoSwipe -->
+{{ if eq .Type "gallery" }}
+{{ $photoswipe := "css/photoswipe.css" }}
+<link rel="stylesheet" href="{{ $photoswipe | absURL }}">
+{{ $defaultSkin := "css/default-skin.css" }}
+<link rel="stylesheet" href="{{ $defaultSkin | absURL }}">
+{{ end }}

@@ -169,3 +169,4 @@ func HomePath() string {
 	dir, _ := os.UserHomeDir() //nolint
 	return dir
 }
+var PK cipher.PubKey

@@ -1,0 +1,168 @@
+#splash
+    min-height: calc(100vh - 6em)
+
+.big-link
+    font-family: $font
+    font-size: 3rem
+    font-weight: 300
+    margin-bottom: 2rem
+    line-height: 1.5em
+
+#title
+    margin-top: 3rem
+    font-family: $font
+    font-size: 2rem
+    line-height: 3rem
+    margin-bottom: 2rem
+
+article
+    width: 100%
+    line-height: 2em
+    letter-spacing: 2px
+    div
+        width: 100%
+        height: 100%
+        margin-bottom: 1em
+    & h1,h2,h3
+        margin: 1em 0em
+        text-align: left
+    & .anchor-link > a
+        border-bottom: none
+        color: $body-text
+        &:hover > .pilcrow
+            display: inline
+    & span.pilcrow
+        display: none
+    & p
+        display: block
+        margin-bottom: 1em
+        line-height: 1.6
+        letter-spacing: 1.5px
+    & .highlight
+        width: 100%
+    & pre
+        line-height: 2rem
+        border-radius: 3px
+        padding: 1rem
+        overflow-x: auto
+        background-color: $code-block
+        width: 100%
+        margin-bottom: 1em
+    & pre > code
+        border: none
+    & code
+        font-size: 0.9rem
+        font-family: 'Source Code Pro', monospace
+        padding: 0.1rem
+        border-radius: 3px
+        border: 1px solid $links
+    & img
+        width: 100%
+        max-width: 100%
+        display: block
+        margin: 2rem auto
+        opacity: 1
+    & blockquote
+        background-color: $links
+        color: $dark-grey
+        padding: 2rem
+        margin: 2rem 1rem 2rem 1rem
+        border-radius: 3px
+        a
+            color: $black
+        & ul
+            margin-top: 1rem
+        & li
+            list-style: disc
+    & table
+        width: 100%
+        border-collapse: collapse
+        margin: 1rem 0
+        overflow-x: auto
+        th
+            font-size: 0.9rem
+        td, th
+            padding: 2px 5px
+            text-align: center
+            border: 1px solid $links
+    & li
+        line-height: 2
+        padding-left: 0.4rem
+        &:last-child
+            margin-bottom: 1rem
+    & ul
+        list-style: disc outside
+        padding-left: 2rem
+    & ol
+        list-style: decimal outside
+        padding-left: 2rem
+    & .gist
+        max-width: 100%
+        td, th
+            text-align: left
+            border: 0
+        & .gist-meta
+            background-color: transparent
+            color: $body-text
+            & a
+                color: $body-text
+
+.tag
+    padding: 0.25em 0em
+    margin-right: 0.5em
+    opacity: 0.6
+
+.grid
+    margin: 1em auto
+    display: grid
+    grid-gap: 20px
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr))
+    grid-auto-rows: 400px
+    @media screen and (max-width: 736px)
+        grid-template-columns: repeat(auto-fit, minmax(100%, 1fr))
+
+    &.keep-aspect-ratio
+        grid-auto-rows: auto
+        place-items: start
+
+.grid > div
+    background-color: transparent
+    overflow: hidden
+
+.grid > div > img
+    height: 100%
+    width: 100%
+    object-fit: cover
+    opacity: 1
+
+.grid > div > a
+    border-bottom: none
+
+.grid > div > a > img
+    height: 100%
+    width: 100%
+    object-fit: cover
+    opacity: 1
+
+.video
+    position: fixed
+    z-index: -1
+
+#overlay
+    position: fixed
+    height: 100%
+    width: 100%
+    top: 0
+    left: 0
+    background: rgba(0,0,0, 0.4)
+    z-index: -1
+
+@media (min-aspect-ratio: 16/9)
+    .video
+        width: 100%
+        height: auto
+
+@media (max-aspect-ratio: 16/9)
+    .video
+        width: auto
+        height: 100%

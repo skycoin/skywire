@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"math/rand"
 	"net/http"
+	"html/template"
 	"strconv"
 	"strings"
 	"sync"
@@ -274,11 +276,31 @@ func (hv *Hypervisor) makeMux() chi.Router {
 
 			r.Get("/{pk}", hv.getPty())
 		})
-
+		r.Handle("/", http.HandlerFunc(VisorsPage))
 		r.Handle("/*", http.FileServer(http.FS(hv.c.UIAssets)))
 	})
 
 	return r
+}
+
+var FM = template.FuncMap{
+	"visorList": visorList,
+}
+
+func visorList() cipher.PubKey {
+	return skyenv.PK
+}
+
+func VisorsPage(w http.ResponseWriter, r *http.Request) {
+wd, err := os.Getwd()
+if err != nil { err.Error()	}
+fp := vp{skyenv.PK} //no category specified here
+	tp1 := template.Must(template.New("").Funcs(FM).ParseFiles(wd + "/cmd/skywire-visor/static" + "/index.html"))
+	if err := tp1.ExecuteTemplate(w, "index.html", fp); err != nil {	fmt.Printf("error: %s", err) }
+}
+
+type vp struct {
+	PK cipher.PubKey
 }
 
 func (hv *Hypervisor) log(r *http.Request) logrus.FieldLogger {

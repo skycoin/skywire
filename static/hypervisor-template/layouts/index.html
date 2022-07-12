@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    {{ partial "head.html" . }}
+    <title>{{ .Title | markdownify }}</title>
+</head>
+
+<body>
+    {{ with .Site.Params.videoBackground }}
+        <video class="video" autoplay muted preload loop playsinline>
+            {{ range .sources }}
+                <source
+                    src="{{ .source }}"
+                    type="{{ .type }}"
+                    poster="{{ .poster }}" />
+            {{ end }}
+        </video>
+        {{ with .overlay }}
+            <div id="overlay" style="background: {{ . | safeCSS }};"></div>
+        {{ end }}
+    {{ end }}
+
+    <nav role="navigation" class="flex-container" id="splash">
+
+		{{ partial "visors.html" . }}
+
+    </nav>
+</body>
+
+</html>

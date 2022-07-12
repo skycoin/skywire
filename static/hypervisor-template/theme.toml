@@ -1,0 +1,12 @@
+name = "Call me Sam."
+license = "Apache-2.0"
+licenselink = "https://github.com/victoriadrake/hugo-theme-sam/blob/master/LICENSE.txt"
+description = "Simple And Minimalist theme for Hugo."
+homepage = "https://github.com/victoriadrake/hugo-theme-sam"
+tags = ["clean", "simple", "blog", "portfolio", "flexbox", "css grid", "minimalist", "responsive", "syntax highlighting", "gallery", "starter"]
+features = ["responsive", "gallery"]
+min_version = "0.49"
+
+[author]
+  name = "Victoria Drake"
+  homepage = "https://victoria.dev"

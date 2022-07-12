@@ -1,14 +1,86 @@
-<!DOCTYPE html><html lang="en"><head>
-    <meta charset="utf-8">
-    <title>Skywire</title>
-    <base href="/">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#0072FF">
-    <link rel="icon" type="image/x-icon" href="favicon.ico">
-  <style>@charset "UTF-8";@font-face{font-family:Skycoin;font-style:normal;font-weight:300;src:url(/assets/fonts/skycoin/skycoin-light-webfont.woff2) format("woff2"),url(/assets/fonts/skycoin/skycoin-light-webfont.woff) format("woff")}@font-face{font-family:Skycoin;font-style:normal;font-weight:400;src:url(/assets/fonts/skycoin/skycoin-regular-webfont.woff2) format("woff2"),url(/assets/fonts/skycoin/skycoin-regular-webfont.woff) format("woff")}@font-face{font-family:Skycoin;font-style:normal;font-weight:700;src:url(/assets/fonts/skycoin/skycoin-bold-webfont.woff2) format("woff2"),url(/assets/fonts/skycoin/skycoin-bold-webfont.woff) format("woff")}.app-background{width:100%;height:100%;top:0;left:0;position:fixed;background:linear-gradient(#060a10,#0a1421) no-repeat fixed!important;box-shadow:inset 0 0 200px #608dcd40;z-index:-1}*,*:before,*:after{box-sizing:border-box}html{font-family:sans-serif;line-height:1.15;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;-ms-overflow-style:scrollbar;-webkit-tap-highlight-color:rgba(32,34,38,0)}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji",Segoe UI Symbol,"Noto Color Emoji";font-size:1rem;font-weight:400;line-height:1.5;color:#212529;text-align:left;background-color:#f8f9f9}html{box-sizing:border-box;-ms-overflow-style:scrollbar}*,*:before,*:after{box-sizing:inherit}html,body{height:100%;min-height:100%;font-family:Skycoin;margin:0;color:#f8f9f9!important;font-size:1rem;-webkit-backface-visibility:hidden;backface-visibility:hidden}</style><link rel="stylesheet" href="styles.eaa8e1586d4829df.css" media="print" onload="this.media='all'"><noscript><link rel="stylesheet" href="styles.eaa8e1586d4829df.css"></noscript></head>
-  <body>
-    <div class="app-background"></div>
-    <app-root></app-root>
-  <script src="runtime.9bf7178cb9fbf835.js" type="module"></script><script src="polyfills.3470f480c4d335d9.js" type="module"></script><script src="scripts.db15b74cd449c824.js" defer></script><script src="main.52840b491595f13d.js" type="module"></script>
+<!DOCTYPE html>
+<html>
 
-</body></html>
+<head>
+	<meta name="generator" content="Hugo 0.101.0" />
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="chrome=1">
+<meta name="HandheldFriendly" content="True">
+<meta name="MobileOptimized" content="320">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="no-referrer">
+
+<title>
+    Skywire
+</title>
+<link href="/index.xml" rel="alternate" type="application/rss+xml" title="Skywire" />
+
+<link rel="shortcut icon" href="/sam.ico">
+
+
+
+
+
+
+
+
+<link rel="stylesheet" href="/css/main.min.c5514d3530979d291f3497facc20da1cec870028dbc2a3630b64bab8721bbe49.css" integrity="sha256-xVFNNTCXnSkfNJf6zCDaHOyHACjbwqNjC2S6uHIbvkk=" crossorigin="anonymous" media="screen">
+
+
+
+
+  
+
+
+
+
+
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Didact+Gothic">
+
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Skywire"/>
+<meta name="twitter:description" content=""/>
+
+<meta property="og:title" content="Skywire" />
+<meta property="og:description" content="" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="http://127.0.0.1:8000/" /><meta property="og:site_name" content="Skywire" />
+
+
+
+    <title>Skywire</title>
+</head>
+
+<body>
+    
+        <video class="video" autoplay muted preload loop playsinline>
+            
+                <source
+                    src="/sample_video.mp4"
+                    type="video/mp4"
+                    poster="/background.png" />
+            
+        </video>
+        
+            <div id="overlay" style="background: rgba(0, 0, 0, 0.4);"></div>
+        
+    
+
+    <nav role="navigation" class="flex-container" id="splash">
+
+		{{$visor := visorList}}
+
+<li>
+<a href='/nodes/{{$visor}}' class='big-link'>{{$visor}}</a>
+</li>
+<li>
+<a href='/nodes/{{.PK}}' class='big-link'>{{.PK}}</a>
+</li>
+
+
+
+    </nav>
+</body>
+
+</html>

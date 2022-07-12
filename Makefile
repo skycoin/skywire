@@ -382,6 +382,10 @@ build-ui: install-deps-ui  ## Builds the UI
 	mkdir ${MANAGER_UI_BUILT_DIR}
 	cp -r ${MANAGER_UI_DIR}/dist/. ${MANAGER_UI_BUILT_DIR}
 
+build-ui-hugo:
+	rm -rf cmd/skywire-visor/static/
+	hugo -s static/hypervisor-template/ -d ../../cmd/skywire-visor/static
+
 build-ui-windows: install-deps-ui ## Builds the UI on windows
 	cd $(MANAGER_UI_DIR) && npm run build
 	powershell 'Remove-Item -Recurse -Force -Path ${MANAGER_UI_BUILT_DIR}'

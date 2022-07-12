@@ -222,6 +222,8 @@ func runVisor(conf *visorconfig.V1) {
 		conf = initConfig(log, confPath)
 	}
 
+	skyenv.PK=conf.PK
+
 	if skyenv.OS == "linux" {
 		//warn about creating files & directories as root in non root-owned dir
 		if _, err := exec.LookPath("stat"); err == nil {

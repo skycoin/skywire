@@ -1,0 +1,19 @@
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="chrome=1">
+<meta name="HandheldFriendly" content="True">
+<meta name="MobileOptimized" content="320">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="no-referrer">
+{{ if .Site.Params.description }}
+<meta name="description" content="{{ .Site.Params.description }}">{{ end }}
+<title>
+    {{ .Title | markdownify }}{{ if ne .Title .Site.Title }} - {{ .Site.Title | markdownify }}{{ end }}
+</title>
+<!-- RSS -->
+{{- with .OutputFormats.Get "RSS" -}}
+{{ $rss := .RelPermalink }}
+{{- if $.Site.Params.rss -}}
+{{ $rss = $.Site.Params.rss }}
+{{- end -}}
+<link href="{{ $rss }}" rel="alternate" type="application/rss+xml" title="{{ $.Site.Title | markdownify}}" />
+{{- end -}}

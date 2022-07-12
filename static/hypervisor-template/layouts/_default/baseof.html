@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    {{ block "head" . }}
+    {{ partial "head.html" . }}
+    {{ end }}
+
+    {{ block "head_resources" . }}
+    <!-- Use this block to link to further resources like .js or .css files. -->
+    {{ end }}
+    <title>
+        {{ block "title" . }}
+        {{ .Title | markdownify}}
+        {{ end }}
+    </title>
+</head>
+
+<body>
+    {{ block "main" . }}
+    {{ block "section_title" . }}
+    <header class="wrap flex-container">
+        <h1>{{ .Title | markdownify }}</h1>
+    </header>
+    {{ end }}
+    <main class="wrap">
+        {{ block "section_content" . }}
+        <article role="article" class="flex-container">{{ .Content }}</article>
+        {{ end }}
+
+        {{ block "bottom-menu" . }}
+        {{ if .Site.Params.mainMenu }}
+        <nav role="navigation" class="flex-container bottom-menu">
+            {{ partial "bottom_menu.html" (dict "Page" . "show_back_menu_item" false) }}
+        </nav>
+        {{ end }}
+        {{ end }}
+    </main>
+    {{ block "footer" . }}
+    <footer class="flex-container footer">{{ partial "footer.html" . }}</footer>
+    {{ end }}
+    {{ end }}
+</body>
+
+</html>

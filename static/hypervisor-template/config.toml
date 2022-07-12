@@ -1,0 +1,49 @@
+baseurl                  = "http://127.0.0.1:8000/"           # Your domain name
+languageCode             = "en-us"
+defaultContentLanguage   = "en"
+isMultilingual           = false
+title                    = "Skywire"
+theme                    = "github.com/victoriadrake/hugo-theme-sam"    # pull in theme as hugo module
+# theme                  = "sam"                      # install theme locally (git clone or submodule)
+pygmentsStyle            = "monokai"                        # https://help.farbox.com/pygments.html
+pygmentsCodefences       = true
+# googleAnalytics        = ""                               # Tracking code, eg. "UA-111111111-1"
+
+[params]
+    dateform             = "Mon Jan 02, 2006"
+    dateformfull         = "Mon Jan 2 2006 15:04:05 EST"
+    favicon              = "sam.ico"
+    homepage             = "main"                           # What to call the home page link, link will not be rendered if empty
+    footerText           = "Call me Sam, a theme for Hugo."
+
+# Metadata for Open Graph and Twitter
+#    description          = "A new Hugo site."               # Max 160 characters show in search results
+#    images               = ["tn.png"]                       # Image that shows on Twitter cards and Open Graph links to the site
+    title                = "Skywire"
+    # rss                = ""
+
+[[params.videoBackground.sources]]
+    source  = "/sample_video.mp4"
+    type    = "video/mp4"
+    poster  = "/background.png"
+[params.videoBackground]
+    overlay = "rgba(0, 0, 0, 0.4)" # optional
+
+#[[params.mainMenu]]
+#    link = "posts"
+#    text = "posts"
+#
+#[[params.mainMenu]]
+#    link = "gallery"
+#    text = "gallery"
+#
+#[[params.mainMenu]]
+#    link = "portfolio"
+#    text = "portfolio"
+#
+#[[params.mainMenu]]
+#    link = "about"
+#    text = "who is sam?"
+#
+[imaging]
+    quality = 75

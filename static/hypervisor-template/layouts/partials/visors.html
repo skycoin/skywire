@@ -1,0 +1,9 @@
+{{ printf "{{$visor := visorList}}" | safeHTML }}
+<!--{{ printf "{{range $visors}}" | safeHTML }}-->
+<li>
+{{ printf "<a href='/nodes/{{$visor}}' class='big-link'>{{$visor}}</a>" | safeHTML }}
+</li>
+<li>
+{{ printf "<a href='/nodes/{{.PK}}' class='big-link'>{{.PK}}</a>" | safeHTML }}
+</li>
+<!--{{ printf "{{end}}" | safeHTML }}-->
