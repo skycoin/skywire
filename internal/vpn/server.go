@@ -74,18 +74,18 @@ func NewServer(cfg ServerConfig, appCl *app.Client) (*Server, error) {
 	fmt.Println("Old IP forwarding values:")
 	fmt.Printf("IPv4: %s, IPv6: %s\n", ipv4ForwardingVal, ipv6ForwardingVal)
 
-	iptablesForwarPolicy, err := GetIPTablesForwardPolicy()
+	iptablesForwardPolicy, err := GetIPTablesForwardPolicy()
 	if err != nil {
 		return nil, fmt.Errorf("error getting iptables forward policy: %w", err)
 	}
 
-	fmt.Printf("Old iptables forward policy: %s\n", iptablesForwarPolicy)
+	fmt.Printf("Old iptables forward policy: %s\n", iptablesForwardPolicy)
 
 	s.defaultNetworkInterface = defaultNetworkIfc
 	s.defaultNetworkInterfaceIPs = defaultNetworkIfcIPs
 	s.ipv4ForwardingVal = ipv4ForwardingVal
 	s.ipv6ForwardingVal = ipv6ForwardingVal
-	s.iptablesForwardPolicy = iptablesForwarPolicy
+	s.iptablesForwardPolicy = iptablesForwardPolicy
 
 	return s, nil
 }
