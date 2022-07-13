@@ -3,8 +3,8 @@ package clivisor
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"os"
-	"unicode/utf8"
 
 	"github.com/spf13/cobra"
 
@@ -14,16 +14,18 @@ import (
 var path string
 var pkg bool
 var web bool
+var webport string
+var pk string
 
 func init() {
 	RootCmd.AddCommand(pkCmd)
 	pkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
 	pkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
-	pkCmd.Flags().BoolVarP(&web, "http", "w", false, "format as http response")
+	pkCmd.Flags().BoolVarP(&web, "http", "w", false, "serve public key via http")
+	pkCmd.Flags().StringVarP(&webport, "prt", "x", "7998", "serve public key via http")
 	RootCmd.AddCommand(hvpkCmd)
 	hvpkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
 	hvpkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
-	hvpkCmd.Flags().BoolVarP(&web, "http", "w", false, "format as http response")
 	RootCmd.AddCommand(summaryCmd)
 	RootCmd.AddCommand(buildInfoCmd)
 }
@@ -47,10 +49,11 @@ var pkCmd = &cobra.Command{
 			if err != nil {
 				logger.Fatal("Failed to connect:", err)
 			}
+			pk = overview.PubKey.String()
 			if web {
-				rc := utf8.RuneCountInString(overview.PubKey.String())
-				header := fmt.Sprintf("HTTP/1.0 200 OK\r\nContent-Length: %d\r\n", rc)
-				fmt.Println(header)
+				http.HandleFunc("/", srvpk)
+				logger.Info("\nServing public key " + pk + " on port " + webport)
+				http.ListenAndServe(":"+webport, nil) //nolint
 			}
 			fmt.Println(overview.PubKey)
 		}
@@ -109,4 +112,8 @@ var buildInfoCmd = &cobra.Command{
 			log.Fatal("Failed to output build info:", err)
 		}
 	},
+}
+
+func srvpk(w http.ResponseWriter, _ *http.Request) {
+	fmt.Fprintf(w, pk) //nolint
 }
