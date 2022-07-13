@@ -41,7 +41,7 @@ func NewServer(cfg ServerConfig, appCl *app.Client) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error getting default network interface: %w", err)
 	}
-	ifcs, hasMultiple := s.hasMutipleNetworkInterfaces(defaultNetworkIfcs)
+	ifcs, hasMultiple := s.hasMultipleNetworkInterfaces(defaultNetworkIfcs)
 	if hasMultiple {
 		if cfg.NetworkInterface == "" {
 			return nil, fmt.Errorf("multiple default network interfaces detected...set a default one for VPN server or remove one: %v", ifcs)
@@ -335,7 +335,7 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, unsecureVP
 
 	if err := WriteJSON(conn, &sHello); err != nil {
 		unsecureVPN()
-		return nil, nil, nil, fmt.Errorf("error finishing hadnshake: error sending server hello: %w", err)
+		return nil, nil, nil, fmt.Errorf("error finishing handshake: error sending server hello: %w", err)
 	}
 
 	return sTUNIP, sTUNGateway, unsecureVPN, nil
@@ -363,7 +363,7 @@ func (s *Server) sendServerErrHello(conn net.Conn, status HandshakeStatus) {
 	}
 }
 
-func (s *Server) hasMutipleNetworkInterfaces(defaultNetworkInterface string) ([]string, bool) {
+func (s *Server) hasMultipleNetworkInterfaces(defaultNetworkInterface string) ([]string, bool) {
 	networkInterfaces := strings.Split(defaultNetworkInterface, "\n")
 	if len(networkInterfaces) > 1 {
 		return networkInterfaces, true
