@@ -28,12 +28,12 @@ type VictoriaMetrics struct {
 // NewVictoriaMetrics returns the Victoria Metrics implementation of Metrics.
 func NewVictoriaMetrics() *VictoriaMetrics {
 	return &VictoriaMetrics{
-		activeRequests:        metricsutil.NewVictoriaMetricsIntGauge("active_request_count"),
-		reqDurationsFailed:    metrics.GetOrCreateHistogram("request_durations{success=\"true\"}"),
-		reqDurationsSuccesses: metrics.GetOrCreateHistogram("request_durations{success=\"false\"}"),
-		routesSetup:           metricsutil.NewVictoriaMetricsIntGauge("no_of_route_setups"),
-		routesSetupFailed:     metricsutil.NewVictoriaMetricsIntGauge("no_of_failed_route_setups"),
-		routesSetupDuration:   metrics.GetOrCreateHistogram("route_setup_duration{success=\"true\"}"),
+		activeRequests:        metricsutil.NewVictoriaMetricsIntGauge("setup_node_active_request_count"),
+		reqDurationsFailed:    metrics.GetOrCreateHistogram("setup_node_request_durations{success=\"false\"}"),
+		reqDurationsSuccesses: metrics.GetOrCreateHistogram("setup_node_request_durations{success=\"true\"}"),
+		routesSetup:           metricsutil.NewVictoriaMetricsIntGauge("setup_node_no_of_route_setups"),
+		routesSetupFailed:     metricsutil.NewVictoriaMetricsIntGauge("setup_node_no_of_failed_route_setups"),
+		routesSetupDuration:   metrics.GetOrCreateHistogram("setup_node_route_setup_duration{success=\"true\"}"),
 	}
 }
 
