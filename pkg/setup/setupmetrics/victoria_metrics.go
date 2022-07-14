@@ -29,8 +29,8 @@ type VictoriaMetrics struct {
 func NewVictoriaMetrics() *VictoriaMetrics {
 	return &VictoriaMetrics{
 		activeRequests:        metricsutil.NewVictoriaMetricsIntGauge("setup_node_active_request_count"),
-		reqDurationsFailed:    metrics.GetOrCreateHistogram("setup_node_request_durations{success=\"true\"}"),
-		reqDurationsSuccesses: metrics.GetOrCreateHistogram("setup_node_request_durations{success=\"false\"}"),
+		reqDurationsFailed:    metrics.GetOrCreateHistogram("setup_node_request_durations{success=\"false\"}"),
+		reqDurationsSuccesses: metrics.GetOrCreateHistogram("setup_node_request_durations{success=\"true\"}"),
 		routesSetup:           metricsutil.NewVictoriaMetricsIntGauge("setup_node_no_of_route_setups"),
 		routesSetupFailed:     metricsutil.NewVictoriaMetricsIntGauge("setup_node_no_of_failed_route_setups"),
 		routesSetupDuration:   metrics.GetOrCreateHistogram("setup_node_route_setup_duration{success=\"true\"}"),
