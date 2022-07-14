@@ -474,8 +474,6 @@ github.com/sirupsen/logrus v1.4.1/go.mod h1:ni0Sbl8bgC9z8RoU9G6nDWqqs/fq4eDPysMB
 github.com/sirupsen/logrus v1.4.2/go.mod h1:tLMulIdttU9McNUspp0xgXVQah82FyeX6MwdIuYE2rE=
 github.com/sirupsen/logrus v1.8.1 h1:dJKuHgqk1NNQlqoA6BTlM1Wf9DOH3NBjQyu0h9+AZZE=
 github.com/sirupsen/logrus v1.8.1/go.mod h1:yWOB1SBYBC5VeMP7gHvWumXLIWorT60ONWic61uBYv0=
-github.com/skycoin/dmsg v0.0.0-20220617100223-c17f98a92a47 h1:d/KdILjeiZOj3QFOm8KkOwIr5wwx9zWCl+oGVXPln1o=
-github.com/skycoin/dmsg v0.0.0-20220617100223-c17f98a92a47/go.mod h1:7ixxeJVjbe3lxDkI4Yizj/TWoafYxs8cPJfxjlDeG+w=
 github.com/skycoin/dmsg v0.0.0-20220704102949-fece1bd9c40c h1:v7d+0yOp066U8FmcUdQ0Nh9Q+qshBO7+w3ZybGJlBnk=
 github.com/skycoin/dmsg v0.0.0-20220704102949-fece1bd9c40c/go.mod h1:7ixxeJVjbe3lxDkI4Yizj/TWoafYxs8cPJfxjlDeG+w=
 github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6 h1:1Nc5EBY6pjfw1kwW0duwyG+7WliWz5u9kgk1h5MnLuA=
@@ -483,10 +481,6 @@ github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6/go.mod h1:UXghlricA7
 github.com/skycoin/skycoin v0.27.1 h1:HatxsRwVSPaV4qxH6290xPBmkH/HgiuAoY2qC+e8C9I=
 github.com/skycoin/skycoin v0.27.1/go.mod h1:78nHjQzd8KG0jJJVL/j0xMmrihXi70ti63fh8vXScJw=
 github.com/skycoin/skywire-utilities v0.0.0-20220617085111-5c8c8d3ced14/go.mod h1:B63p56igl38Ha+zjqi26d2om6XEe9jozwB6kzAWMnm0=
-github.com/skycoin/skywire-utilities v0.0.0-20220630144749-6ea8913bf1e8 h1:xUPi4duqObtDt4BYiNhbwssiUOFTor67Nftqx1F6/uc=
-github.com/skycoin/skywire-utilities v0.0.0-20220630144749-6ea8913bf1e8/go.mod h1:B63p56igl38Ha+zjqi26d2om6XEe9jozwB6kzAWMnm0=
-github.com/skycoin/skywire-utilities v0.0.0-20220706133229-02cc62ac2323 h1:W+LSTySKEg3/UyVZXziQYyIdIo66g28VuKBk7sl0718=
-github.com/skycoin/skywire-utilities v0.0.0-20220706133229-02cc62ac2323/go.mod h1:B63p56igl38Ha+zjqi26d2om6XEe9jozwB6kzAWMnm0=
 github.com/skycoin/skywire-utilities v0.0.0-20220712142443-abafa30105ce h1:+AkZeazhMXpzdPhAG2tn71ubVSPwUECMXYK/LIIVQSU=
 github.com/skycoin/skywire-utilities v0.0.0-20220712142443-abafa30105ce/go.mod h1:B63p56igl38Ha+zjqi26d2om6XEe9jozwB6kzAWMnm0=
 github.com/skycoin/systray v1.10.1-0.20220630135132-48d2a1fb85d8 h1:2IA2Iw6rgNpbd/rogzBbmNpfGLPhf9zYE68RY8CmU4k=
