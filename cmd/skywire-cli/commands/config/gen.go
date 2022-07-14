@@ -75,6 +75,10 @@ func init() {
 	ghiddenflags = append(ghiddenflags, "hide")
 	genConfigCmd.Flags().BoolVarP(&retainHypervisors, "retainhv", "x", false, "retain existing hypervisors with regen")
 	ghiddenflags = append(ghiddenflags, "retainhv")
+	if os.Getenv("SKYBIAN") == "true" {
+		genConfigCmd.Flags().BoolVarP(&autopeer, "autopeer", "y", false, "automatically peer to hypervisor")
+		ghiddenflags = append(ghiddenflags, "retainhv")
+	}
 	genConfigCmd.Flags().StringVar(&ver, "version", "", "custom version testing override")
 	ghiddenflags = append(ghiddenflags, "version")
 	genConfigCmd.Flags().BoolVar(&all, "all", false, "show all flags")
@@ -221,6 +225,12 @@ var genConfigCmd = &cobra.Command{
 		//use test deployment
 		if testEnv {
 			serviceConfURL = testconf
+		}
+		if autopeer {
+			ip, err := script.Exec(`ip route show | grep -i 'default via'| awk '{print $3 }'`).String()
+			if err != nil {
+				logger.Error("cannot determine gateway IP: " + ip)
+			}
 		}
 		//fetch the service endpoints
 		services = visorconfig.Fetch(mLog, serviceConfURL, stdout)
