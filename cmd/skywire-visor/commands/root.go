@@ -55,6 +55,8 @@ var (
 	hypervisorUI         bool
 	remoteHypervisorPKs  string
 	disableHypervisorPKs bool
+	autopeer             bool
+	peercmd              string
 	stopVisorFn          func()
 	stopVisorWg          sync.WaitGroup
 	completion           string
@@ -88,6 +90,10 @@ func init() {
 	hiddenflags = append(hiddenflags, "hv")
 	rootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors set in config file")
 	hiddenflags = append(hiddenflags, "xhv")
+	rootCmd.Flags().StringVarP(&peercmd, "peercmd", "l", "skywire-cli hv pk", "command to run which returns the hypervisor key used with autopeer")
+	hiddenflags = append(hiddenflags, "peercmd")
+	rootCmd.Flags().BoolVarP(&autopeer, "autopeer", "m", false, "enable autopeering")
+	hiddenflags = append(hiddenflags, "autopeer")
 	rootCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
 	hiddenflags = append(hiddenflags, "stdin")
 	if root {
@@ -250,16 +256,42 @@ func runVisor(conf *visorconfig.V1) {
 		conf.Hypervisors = []cipher.PubKey{}
 	}
 
+	pubkey := cipher.PubKey{}
 	if remoteHypervisorPKs != "" {
 		hypervisorPKsSlice := strings.Split(remoteHypervisorPKs, ",")
 		for _, pubkeyString := range hypervisorPKsSlice {
-			pubkey := cipher.PubKey{}
 			if err := pubkey.Set(pubkeyString); err != nil {
 				log.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
 				continue
 			}
 			log.Infof("%s PK added as remote hypervisor PK", pubkeyString)
 			conf.Hypervisors = append(conf.Hypervisors, pubkey)
+		}
+	}
+	log.Infof("autopeering?")
+	//autopeering should only happen when there is no local or remote hypervisor set in the config.
+	if conf.Hypervisors != nil {
+		if conf.Hypervisor != nil {
+			autopeer = false
+		}
+	}
+	if autopeer {
+		log.Infof("autopeering...")
+		hvkey, err := script.Exec(peercmd).String() //TODO: mrpalide this needs to run again on loss of connection to the hypervisor within the same constraints
+		if err != nil {
+			log.Error("error autopeering")
+		} else {
+			log.Infof("hvkey:", hvkey)
+
+			hypervisorPKsSlice := strings.Split(hvkey, ",")
+			for _, pubkeyString := range hypervisorPKsSlice {
+				if err := pubkey.Set(pubkeyString); err != nil {
+					log.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
+					continue
+				}
+				log.Infof("%s PK added as remote hypervisor PK", pubkeyString)
+				conf.Hypervisors = append(conf.Hypervisors, pubkey)
+			}
 		}
 	}
 
