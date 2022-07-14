@@ -90,7 +90,8 @@ type Visor struct {
 
 	isServicesHealthy *internalHealthInfo
 
-	remoteVisors map[cipher.PubKey]Conn // copy of connected remote visors to hypervisor
+	remoteVisors         map[cipher.PubKey]Conn // copy of connected remote visors to hypervisor
+	connectedHypervisors map[cipher.PubKey]bool
 }
 
 // todo: consider moving module closing to the module system
@@ -117,13 +118,14 @@ func (v *Visor) MasterLogger() *logging.MasterLogger {
 func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) {
 
 	v := &Visor{
-		log:               conf.MasterLogger().PackageLogger("visor"),
-		conf:              conf,
-		restartCtx:        restartCtx,
-		initLock:          new(sync.RWMutex),
-		isServicesHealthy: newInternalHealthInfo(),
-		dtmReady:          make(chan struct{}),
-		stunReady:         make(chan struct{}),
+		log:                  conf.MasterLogger().PackageLogger("visor"),
+		conf:                 conf,
+		restartCtx:           restartCtx,
+		initLock:             new(sync.RWMutex),
+		isServicesHealthy:    newInternalHealthInfo(),
+		dtmReady:             make(chan struct{}),
+		stunReady:            make(chan struct{}),
+		connectedHypervisors: make(map[cipher.PubKey]bool),
 	}
 	v.isServicesHealthy.init()
 
