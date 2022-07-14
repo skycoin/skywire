@@ -17,6 +17,8 @@ var (
 	pk      string
 	url     string
 	pkg     bool
+	port    int
+	ipadd   string
 )
 
 // RootCmd contains commands that interact with the skywire-visor

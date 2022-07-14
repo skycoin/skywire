@@ -18,6 +18,7 @@ var (
 	output                 string
 	confPath               string
 	configName             string
+	autopeer               bool
 	stdout                 bool
 	regen                  bool
 	retainHypervisors      bool
