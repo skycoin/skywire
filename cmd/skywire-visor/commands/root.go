@@ -282,7 +282,6 @@ func runVisor(conf *visorconfig.V1) {
 			log.Error("error autopeering")
 		} else {
 			hvkey = strings.TrimSuffix(hvkey, "\n")
-			log.Infof("remote hypervisor key(s): %s", hvkey)
 			hypervisorPKsSlice := strings.Split(hvkey, ",")
 			for _, pubkeyString := range hypervisorPKsSlice {
 				if err := pubkey.Set(pubkeyString); err != nil {
