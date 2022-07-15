@@ -38,7 +38,6 @@ func ServeRPCClient(ctx context.Context, log logrus.FieldLogger, dmsgC *dmsg.Cli
 			log.Info("Dialing...")
 			addr := dmsg.Addr{PK: rAddr.PK, Port: rAddr.Port}
 			if skyenv.AutoPeer {
-				log.Infof("autopeering...")
 				var hvkey string
 				hvkey, err := script.Exec(skyenv.AutoPeercmd).String()
 				if err != nil {
@@ -51,7 +50,6 @@ func ServeRPCClient(ctx context.Context, log logrus.FieldLogger, dmsgC *dmsg.Cli
 								log.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
 								continue
 							}
-							log.Infof("%s PK added as remote hypervisor PK", pubkeyString)
 						addr.PK = pubkey
 					}
 				}
