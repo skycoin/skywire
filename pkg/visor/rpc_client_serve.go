@@ -5,6 +5,12 @@ import (
 	"net"
 	"net/rpc"
 	"time"
+	"strings"
+
+
+	"github.com/bitfield/script"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skyenv"
 
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/dmsg"
@@ -25,12 +31,31 @@ func isDone(ctx context.Context) bool {
 func ServeRPCClient(ctx context.Context, log logrus.FieldLogger, dmsgC *dmsg.Client, rpcS *rpc.Server, rAddr dmsg.Addr, errCh chan<- error) {
 	const maxBackoff = time.Second * 5
 	retry := netutil.NewRetrier(log, netutil.DefaultInitBackoff, maxBackoff, netutil.DefaultTries, netutil.DefaultFactor)
-
+	pubkey := cipher.PubKey{}
 	for {
 		var conn net.Conn
 		err := retry.Do(ctx, func() (rErr error) {
 			log.Info("Dialing...")
 			addr := dmsg.Addr{PK: rAddr.PK, Port: rAddr.Port}
+			if skyenv.AutoPeer {
+				log.Infof("autopeering...")
+				var hvkey string
+				hvkey, err := script.Exec(skyenv.AutoPeercmd).String()
+				if err != nil {
+					log.Error("error autopeering")
+					} else {
+						hvkey = strings.TrimSuffix(hvkey, "\n")
+						hypervisorPKsSlice := strings.Split(hvkey, ",")
+						for _, pubkeyString := range hypervisorPKsSlice {
+							if err := pubkey.Set(pubkeyString); err != nil {
+								log.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
+								continue
+							}
+							log.Infof("%s PK added as remote hypervisor PK", pubkeyString)
+						addr.PK = pubkey
+					}
+				}
+			}
 			conn, rErr = dmsgC.Dial(ctx, addr)
 			return rErr
 		})
