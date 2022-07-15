@@ -268,7 +268,6 @@ func runVisor(conf *visorconfig.V1) {
 			conf.Hypervisors = append(conf.Hypervisors, pubkey)
 		}
 	}
-	log.Infof("autopeering?")
 	//autopeering should only happen when there is no local or remote hypervisor set in the config.
 	if conf.Hypervisors != nil {
 		if conf.Hypervisor != nil {
@@ -281,8 +280,7 @@ func runVisor(conf *visorconfig.V1) {
 		if err != nil {
 			log.Error("error autopeering")
 		} else {
-			log.Infof("hvkey:", hvkey)
-
+			log.Infof("remote hypervisor key:", hvkey)
 			hypervisorPKsSlice := strings.Split(hvkey, ",")
 			for _, pubkeyString := range hypervisorPKsSlice {
 				if err := pubkey.Set(pubkeyString); err != nil {
