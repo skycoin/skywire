@@ -276,11 +276,13 @@ func runVisor(conf *visorconfig.V1) {
 	}
 	if autopeer {
 		log.Infof("autopeering...")
+		var hvkey string
 		hvkey, err := script.Exec(peercmd).String() //TODO: mrpalide this needs to run again on loss of connection to the hypervisor within the same constraints
 		if err != nil {
 			log.Error("error autopeering")
 		} else {
-			log.Infof("remote hypervisor key:", hvkey)
+			hvkey = strings.TrimSuffix(hvkey, "\n")
+			log.Infof("remote hypervisor key(s): %s", hvkey)
 			hypervisorPKsSlice := strings.Split(hvkey, ",")
 			for _, pubkeyString := range hypervisorPKsSlice {
 				if err := pubkey.Set(pubkeyString); err != nil {
@@ -289,6 +291,8 @@ func runVisor(conf *visorconfig.V1) {
 				}
 				log.Infof("%s PK added as remote hypervisor PK", pubkeyString)
 				conf.Hypervisors = append(conf.Hypervisors, pubkey)
+				skyenv.AutoPeer = true
+				skyenv.AutoPeercmd = peercmd
 			}
 		}
 	}
