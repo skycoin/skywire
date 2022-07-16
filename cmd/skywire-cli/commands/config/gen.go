@@ -75,6 +75,10 @@ func init() {
 	ghiddenflags = append(ghiddenflags, "hide")
 	genConfigCmd.Flags().BoolVarP(&retainHypervisors, "retainhv", "x", false, "retain existing hypervisors with regen")
 	ghiddenflags = append(ghiddenflags, "retainhv")
+	genConfigCmd.Flags().BoolVarP(&publicautoconn, "autoconn", "y", false, "disable autoconnect to public visors")
+	ghiddenflags = append(ghiddenflags, "hide")
+	genConfigCmd.Flags().BoolVarP(&ispublic, "ispublic", "z", false, "publicize visor in service discovery")
+	ghiddenflags = append(ghiddenflags, "ispublic")
 	genConfigCmd.Flags().StringVar(&ver, "version", "", "custom version testing override")
 	ghiddenflags = append(ghiddenflags, "version")
 	genConfigCmd.Flags().BoolVar(&all, "all", false, "show all flags")
@@ -117,7 +121,7 @@ var genConfigCmd = &cobra.Command{
 		}
 		//hide defeats the purpose of stdout.
 		if (stdout) && (hide) {
-			logger.Fatal("Use of mutually exclusive flags: -w --hide and -n --stdout")
+			logger.Info("Use of mutually exclusive flags: -w --hide and -n --stdout")
 		}
 		//--force will delete a config, which excludes --regen
 		if (force) && (regen) {
@@ -354,6 +358,13 @@ var genConfigCmd = &cobra.Command{
 		if ver != "" {
 			conf.Common.Version = ver
 		}
+		if conf.Transport.PublicAutoconnect == publicautoconn {
+			conf.Transport.PublicAutoconnect = !publicautoconn
+		}
+		if ispublic != conf.IsPublic {
+			conf.IsPublic = ispublic
+		}
+
 		//don't write file with stdout
 		if !stdout {
 			// Save config to file.
