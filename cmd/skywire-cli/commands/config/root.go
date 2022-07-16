@@ -71,6 +71,8 @@ var (
 	minHops                int
 	conf                   *visorconfig.V1
 	usr                    bool
+	ispublic               bool
+	publicautoconn         bool
 )
 
 // RootCmd contains commands that interact with the config of local skywire-visor
