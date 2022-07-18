@@ -5,7 +5,7 @@
   >
     <img src="/assets/img/logo-v.png" class="logo" />
     <form class="mt-5" [formGroup]="form">
-      <div class="login-input">
+      <div class="login-input" [ngClass]="{'element-disabled' : loading}">
         <input
           type="password"
           formControlName="password"
