@@ -87,7 +87,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       flatMap(() => this.authService.checkLogin())
     ).subscribe(
       result => {
-        //this.authChecked = true;
+        this.authChecked = true;
         this.authActive = result === AuthStates.Logged;
       },
       () => {
