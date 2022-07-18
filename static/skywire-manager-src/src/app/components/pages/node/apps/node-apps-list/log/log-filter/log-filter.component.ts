@@ -49,7 +49,7 @@ export class LogFilterComponent implements OnInit, OnDestroy {
 
   constructor(
     @Inject(MAT_DIALOG_DATA) private data: LogsFilter,
-    private dialogRef: MatDialogRef<LogFilterComponent>,
+    public dialogRef: MatDialogRef<LogFilterComponent>,
     private formBuilder: FormBuilder,
   ) { }
 

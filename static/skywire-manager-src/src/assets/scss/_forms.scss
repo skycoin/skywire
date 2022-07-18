@@ -34,3 +34,9 @@ mat-form-field {
   @extend .form-help-icon-container;
   color: scale-color($white, $alpha: -20%);
 }
+
+// Used for showing a form field disabled.
+.element-disabled {
+  pointer-events: none !important;
+  opacity: 0.5 !important;
+}
