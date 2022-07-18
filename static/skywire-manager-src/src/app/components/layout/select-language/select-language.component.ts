@@ -30,7 +30,7 @@ export class SelectLanguageComponent implements OnInit, OnDestroy {
   }
 
   constructor(
-    private dialogRef: MatDialogRef<SelectLanguageComponent>,
+    public dialogRef: MatDialogRef<SelectLanguageComponent>,
     private languageService: LanguageService,
   ) { }
 
