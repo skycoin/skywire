@@ -50,7 +50,7 @@ export class SelectOptionComponent {
 
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: ComponentData,
-    private dialogRef: MatDialogRef<SelectOptionComponent>,
+    public dialogRef: MatDialogRef<SelectOptionComponent>,
   ) { }
 
   closePopup(selectedOption: number) {

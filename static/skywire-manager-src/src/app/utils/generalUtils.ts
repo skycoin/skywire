@@ -17,7 +17,7 @@ export default class GeneralUtils {
       headerText: 'confirmation.header-text',
       confirmButtonText: 'confirmation.confirm-button',
       cancelButtonText: 'confirmation.cancel-button',
-      disableDismiss: true,
+      disableDismiss: false,
     };
 
     const config = new MatDialogConfig();

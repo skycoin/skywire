@@ -1,7 +1,7 @@
-<app-dialog [headline]="'router-config.title' | translate">
+<app-dialog [headline]="'router-config.title' | translate" [dialog]="dialogRef" [disableDismiss]="disableDismiss">
   <!-- TODO: add help text. -->
   <div class="info-container">{{'router-config.info' | translate}}</div>
-  <form [formGroup]="form">
+  <form [formGroup]="form" [ngClass]="{'element-disabled' : disableDismiss}">
     <mat-form-field>
       <input
         #firstInput

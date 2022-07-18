@@ -23,4 +23,8 @@ export class InitialSetupComponent {
 
     return dialog.open(InitialSetupComponent, config);
   }
+
+  constructor(
+    public dialogRef: MatDialogRef<InitialSetupComponent>,
+  ) { }
 }
