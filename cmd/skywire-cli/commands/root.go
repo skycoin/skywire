@@ -10,9 +10,11 @@ import (
 	cliconfig "github.com/skycoin/skywire/cmd/skywire-cli/commands/config"
 	clidmsgpty "github.com/skycoin/skywire/cmd/skywire-cli/commands/dmsgpty"
 	clihv "github.com/skycoin/skywire/cmd/skywire-cli/commands/hv"
+	clivpn "github.com/skycoin/skywire/cmd/skywire-cli/commands/vpn"
 	climdisc "github.com/skycoin/skywire/cmd/skywire-cli/commands/mdisc"
 	clirtfind "github.com/skycoin/skywire/cmd/skywire-cli/commands/rtfind"
 	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 )
 
 var rootCmd = &cobra.Command{
@@ -33,10 +35,16 @@ func init() {
 		clidmsgpty.RootCmd,
 		clivisor.RootCmd,
 		clihv.RootCmd,
+		clivpn.RootCmd,
 		clirtfind.RootCmd,
 		climdisc.RootCmd,
 		clicompletion.RootCmd,
 	)
+	var helpflag bool
+	rootCmd.PersistentFlags().StringVarP(&clirpc.RpcAddr, "rpc", "", "localhost:3435", "RPC server address")
+	rootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+rootCmd.Use)
+	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
+	rootCmd.PersistentFlags().MarkHidden("help") //nolint
 }
 
 // Execute executes root CLI command.

@@ -9,6 +9,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+
 )
 
 var path string
@@ -42,7 +44,7 @@ var pkCmd = &cobra.Command{
 			}
 			fmt.Println(conf.PK.Hex())
 		} else {
-			client := rpcClient()
+			client := clirpc.RpcClient()
 			overview, err := client.Overview()
 			if err != nil {
 				logger.Fatal("Failed to connect:", err)
@@ -71,7 +73,7 @@ var hvpkCmd = &cobra.Command{
 			}
 			fmt.Println(conf.Hypervisors)
 		} else {
-			client := rpcClient()
+			client := clirpc.RpcClient()
 			overview, err := client.Overview()
 			if err != nil {
 				logger.Fatal("Failed to connect:", err)
@@ -85,7 +87,7 @@ var summaryCmd = &cobra.Command{
 	Use:   "info",
 	Short: "Summary of visor info",
 	Run: func(_ *cobra.Command, _ []string) {
-		summary, err := rpcClient().Summary()
+		summary, err := clirpc.RpcClient().Summary()
 		if err != nil {
 			log.Fatal("Failed to connect:", err)
 		}
@@ -100,7 +102,7 @@ var buildInfoCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Version and build info",
 	Run: func(_ *cobra.Command, _ []string) {
-		client := rpcClient()
+		client := clirpc.RpcClient()
 		overview, err := client.Overview()
 		if err != nil {
 			log.Fatal("Failed to connect:", err)

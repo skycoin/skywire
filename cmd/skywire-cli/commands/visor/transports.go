@@ -16,6 +16,8 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+
 )
 
 var (
@@ -45,13 +47,20 @@ func init() {
 var tpCmd = &cobra.Command{
 	Use:   "tp",
 	Short: "View and set transports",
+	Long: `
+	Transports are bidirectional communication protocols
+	used between two Skywire Visors (or Transport Edges)
+
+	Each Transport is represented as a unique 16 byte (128 bit)
+	UUID value called the Transport ID
+	and has a Transport Type that identifies
+	a specific implementation of the Transport.`,
 }
 
 var lsTypesCmd = &cobra.Command{
-	Use:   "type",
-	Short: "Transport types used by the local visor",
+	Use:   "type",Short: "Transport types used by the local visor",
 	Run: func(_ *cobra.Command, _ []string) {
-		types, err := rpcClient().TransportTypes()
+		types, err := clirpc.RpcClient().TransportTypes()
 		internal.Catch(err)
 		for _, t := range types {
 			fmt.Println(t)
@@ -60,7 +69,7 @@ var lsTypesCmd = &cobra.Command{
 }
 
 func init() {
-	lsTpCmd.Flags().StringSliceVarP(&filterTypes, "types", "t", filterTypes, "show transport(s) type(s) comma-separated")
+	lsTpCmd.Flags().StringSliceVarP(&filterTypes, "types", "t", filterTypes, "show transport(s) type(s) comma-separated\n")
 	lsTpCmd.Flags().VarP(&filterPubKeys, "pks", "p", "show transport(s) for public key(s) comma-separated")
 	lsTpCmd.Flags().BoolVarP(&showLogs, "logs", "l", true, "show transport logs")
 }
@@ -69,7 +78,7 @@ var lsTpCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "Available transports",
 	Run: func(_ *cobra.Command, _ []string) {
-		transports, err := rpcClient().Transports(filterTypes, filterPubKeys, showLogs)
+		transports, err := clirpc.RpcClient().Transports(filterTypes, filterPubKeys, showLogs)
 		internal.Catch(err)
 		printTransports(transports...)
 	},
@@ -81,7 +90,7 @@ var idCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		tpID := internal.ParseUUID("transport-id", args[0])
-		tp, err := rpcClient().Transport(tpID)
+		tp, err := clirpc.RpcClient().Transport(tpID)
 		internal.Catch(err)
 		printTransports(tp)
 	},
@@ -117,7 +126,7 @@ var addTpCmd = &cobra.Command{
 		var err error
 
 		if transportType != "" {
-			tp, err = rpcClient().AddTransport(pk, transportType, timeout)
+			tp, err = clirpc.RpcClient().AddTransport(pk, transportType, timeout)
 			if err != nil {
 				logger.WithError(err).Fatalf("Failed to establish %v transport", transportType)
 			}
@@ -131,7 +140,7 @@ var addTpCmd = &cobra.Command{
 				network.DMSG,
 			}
 			for _, transportType := range transportTypes {
-				tp, err = rpcClient().AddTransport(pk, string(transportType), timeout)
+				tp, err = clirpc.RpcClient().AddTransport(pk, string(transportType), timeout)
 				if err == nil {
 					logger.Infof("Established %v transport to %v", transportType, pk)
 					break
@@ -149,7 +158,7 @@ var rmTpCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		tID := internal.ParseUUID("transport-id", args[0])
-		internal.Catch(rpcClient().RemoveTransport(tID))
+		internal.Catch(clirpc.RpcClient().RemoveTransport(tID))
 		fmt.Println("OK")
 	},
 }
@@ -194,7 +203,7 @@ var discTpCmd = &cobra.Command{
 	},
 	Run: func(_ *cobra.Command, _ []string) {
 
-		if rc := rpcClient(); tpPK.Null() {
+		if rc := clirpc.RpcClient(); tpPK.Null() {
 			entry, err := rc.DiscoverTransportByID(uuid.UUID(tpID))
 			internal.Catch(err)
 			printTransportEntries(entry)

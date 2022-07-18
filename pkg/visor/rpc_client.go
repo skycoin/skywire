@@ -20,6 +20,8 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/servicedisc"
+
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -398,8 +400,8 @@ type StatusMessage struct {
 }
 
 // VPNServers calls VPNServers.
-func (rc *rpcClient) VPNServers() ([]string, error) {
-	output := []string{}
+func (rc *rpcClient) VPNServers() ([]servicedisc.Service, error) {
+	output := []servicedisc.Service{}
 	rc.Call("VPNServers", &struct{}{}, &output) // nolint
 	return output, nil
 }
@@ -954,8 +956,8 @@ func (mc *mockRPCClient) GetPersistentTransports() ([]transport.PersistentTransp
 }
 
 // VPNServers implements API
-func (mc *mockRPCClient) VPNServers() ([]string, error) {
-	return []string{}, nil
+func (mc *mockRPCClient) VPNServers() ([]servicedisc.Service, error) {
+	return []servicedisc.Service{}, nil
 }
 
 // RemoteVisors implements API

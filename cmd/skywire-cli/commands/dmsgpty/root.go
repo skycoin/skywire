@@ -17,14 +17,22 @@ import (
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
-var rpcAddr string
-var ptyPort string
-var masterLogger = logging.NewMasterLogger()
-var packageLogger = masterLogger.PackageLogger("dmsgpty")
+var (
+	ptyPort string
+	masterLogger = logging.NewMasterLogger()
+	packageLogger = masterLogger.PackageLogger("dmsgpty")
+	logger  = logging.MustGetLogger("skywire-cli")
+	rpcAddr string
+	path    string
+	pk      string
+	url     string
+	pkg     bool
+)
 
 func init() {
-	RootCmd.PersistentFlags().StringVarP(&rpcAddr, "rpc", "", "localhost:3435", "RPC server address")
-	RootCmd.PersistentFlags().StringVarP(&ptyPort, "port", "p", "22", "port of remote visor dmsgpty")
+	visorsCmd.PersistentFlags().StringVarP(&rpcAddr, "rpc", "", "localhost:3435", "RPC server address")
+	shellCmd.PersistentFlags().StringVarP(&rpcAddr, "rpc", "", "localhost:3435", "RPC server address")
+	shellCmd.PersistentFlags().StringVarP(&ptyPort, "port", "p", "22", "port of remote visor dmsgpty")
 }
 
 // RootCmd is the command that contains sub-commands which interacts with dmsgpty.
@@ -61,7 +69,7 @@ var visorsCmd = &cobra.Command{
 
 var shellCmd = &cobra.Command{
 	Use:   "start <pk>",
-	Short: "Start dmsgpty for specific visor by its dmsg address pk:port",
+	Short: "Start dmsgpty session",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(_ *cobra.Command, args []string) error {
 		cli := dmsgpty.DefaultCLI()

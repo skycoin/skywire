@@ -54,7 +54,7 @@ type API interface {
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
-	VPNServers() ([]string, error)
+	VPNServers() ([]servicedisc.Service, error)
 	RemoteVisors() ([]string, error)
 
 	TransportTypes() ([]string, error)
@@ -571,8 +571,45 @@ func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.Connection
 	return nil, ErrProcNotAvailable
 }
 
+type VSD []struct {
+	Address string `json:"address"`
+	Type    string `json:"type"`
+	Geo     struct {
+		Lat     float64 `json:"lat"`
+		Lon     float64 `json:"lon"`
+		Country string  `json:"country"`
+		Region  string  `json:"region"`
+	} `json:"geo,omitempty"`
+	Version string `json:"version"`
+	Geo0    struct {
+		Lat     float64 `json:"lat"`
+		Lon     float64 `json:"lon"`
+		Country string  `json:"country"`
+	} `json:"geo,omitempty"`
+	Geo1 struct {
+		Lat     float64 `json:"lat"`
+		Lon     float64 `json:"lon"`
+		Country string  `json:"country"`
+	} `json:"geo,omitempty"`
+	Geo2 struct {
+		Lat     float64 `json:"lat"`
+		Lon     float64 `json:"lon"`
+		Country string  `json:"country"`
+	} `json:"geo,omitempty"`
+	Geo3 struct {
+		Lat     float64 `json:"lat"`
+		Lon     float64 `json:"lon"`
+		Country string  `json:"country"`
+	} `json:"geo,omitempty"`
+	Geo4 struct {
+		Lat     float64 `json:"lat"`
+		Lon     float64 `json:"lon"`
+		Country string  `json:"country"`
+	} `json:"geo,omitempty"`
+}
+
 // VPNServers gets available public VPN server from service discovery URL
-func (v *Visor) VPNServers() ([]string, error) {
+func (v *Visor) VPNServers() ([]servicedisc.Service, error) {
 	log := logging.MustGetLogger("vpnservers")
 	vlog := logging.NewMasterLogger()
 	vlog.SetLevel(logrus.InfoLevel)
@@ -588,11 +625,11 @@ func (v *Visor) VPNServers() ([]string, error) {
 		v.log.Error("Error getting public vpn servers: ", err)
 		return nil, err
 	}
-	serverAddrs := make([]string, len(vpnServers))
-	for idx, server := range vpnServers {
-		serverAddrs[idx] = server.Addr.PubKey().String()
-	}
-	return serverAddrs, nil
+//	serverAddrs := make([]string, len(vpnServers))
+//	for idx, server := range vpnServers {
+//		serverAddrs[idx] = server.Addr.PubKey().String()
+//	}
+	return vpnServers, nil
 }
 
 // RemoteVisors return list of connected remote visors

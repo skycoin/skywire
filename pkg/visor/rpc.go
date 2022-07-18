@@ -15,6 +15,8 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
+	"github.com/skycoin/skywire/pkg/servicedisc"
+
 )
 
 const (
@@ -542,7 +544,7 @@ func (r *RPC) SetPublicAutoconnect(pAc *bool, _ *struct{}) (err error) {
 }
 
 // VPNServers gets available public VPN server from service discovery URL
-func (r *RPC) VPNServers(_ *struct{}, out *[]string) (err error) {
+func (r *RPC) VPNServers(_ *struct{}, out *[]servicedisc.Service) (err error) {
 	defer rpcutil.LogCall(r.log, "RemoteVisor", nil)(out, &err)
 	vpnServers, err := r.visor.VPNServers()
 	if vpnServers != nil {

@@ -7,6 +7,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+
 )
 
 func init() {
@@ -20,7 +22,7 @@ var execCmd = &cobra.Command{
 	Short: "Execute a command",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
-		out, err := rpcClient().Exec(strings.Join(args, " "))
+		out, err := clirpc.RpcClient().Exec(strings.Join(args, " "))
 		internal.Catch(err)
 		fmt.Print(string(out))
 	},
