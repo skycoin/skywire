@@ -2,8 +2,6 @@ package clivpn
 
 import (
 	"encoding/json"
-	"io/ioutil"
-	"net/http"
 	"strings"
 	"time"
 
@@ -13,7 +11,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/toqueteos/webbrowser"
-	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	skyenv "github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
@@ -130,7 +127,7 @@ var vpnListCmd = &cobra.Command{
 			servers = a
 			a = []servicedisc.Service{}
 		}
-		var u uptime
+		//var u *visor.Uptime
 		var s []string
 		if len(servers) == 0 {
 			fmt.Printf("No VPN Servers found\n")
@@ -138,52 +135,6 @@ var vpnListCmd = &cobra.Command{
 			}
 		for _, i := range servers {
 			s = append(s, strings.Replace(i.Addr.String(), ":44", "", 1)+",")
-		}
-		//https://ut.skywire.skycoin.com/uptimes?visors=
-		urlstr := []string{utilenv.UptimeTrackerAddr, "/uptimes?visors="}
-		for _, i := range s {
-			urlstr = append(urlstr, i)
-		}
-		serviceConf := strings.Join(urlstr, "")
-		httpclient := http.Client{
-			Timeout: time.Second * 2, // Timeout after 2 seconds
-		}
-		//create the http request
-		req, err := http.NewRequest(http.MethodGet, serviceConf, nil)
-		if err != nil {
-			logger.WithError(err).Fatal("Failed to create http request\n")
-		}
-		req.Header.Add("Cache-Control", "no-cache")
-		//check for errors in the response
-		res, err := httpclient.Do(req)
-		if err != nil {
-			logger.Error("Failed to fetch online status for visor")
-		} else {
-			// nil error from client.Do(req)
-			if res.Body != nil {
-				defer res.Body.Close() //nolint
-				}
-				body, err := ioutil.ReadAll(res.Body)
-				if err != nil {
-					logger.WithError(err).Fatal("Failed to read response\n")
-				}
-				//fill in services struct with the response
-				err = json.Unmarshal(body, &u)
-				if err == nil {
-					for _, i := range u {
-						if i.Online {
-							for _, j := range servers {
-								if j.Addr.String() == i.Key {
-								a = append(a, j)
-							}
-						}
-					}
-				}
-			}
-		}
-		if len(a) > 0 {
-			servers = a
-			a = []servicedisc.Service{}
 		}
 
 		if stats {
@@ -250,13 +201,4 @@ var vpnStopCmd = &cobra.Command{
 		internal.Catch(clirpc.RpcClient().StopVPNClient(skyenv.VPNClientName))
 		fmt.Println("OK")
 	},
-}
-
-
-type uptime []struct {
-	Key        string  `json:"key"`
-	Uptime     int     `json:"uptime"`
-	Downtime   int     `json:"downtime"`
-	Percentage float64 `json:"percentage"`
-	Online     bool    `json:"online"`
 }

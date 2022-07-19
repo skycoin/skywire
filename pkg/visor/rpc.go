@@ -80,7 +80,7 @@ func (r *RPC) Health(_ *struct{}, out *HealthInfo) (err error) {
 }
 
 /*
-	<<< NODE UPTIME >>>
+	<<< THIS NODE UPTIME >>>
 */
 
 // Uptime returns for how long the visor has been running in seconds
@@ -89,6 +89,20 @@ func (r *RPC) Uptime(_ *struct{}, out *float64) (err error) {
 
 	uptime, err := r.visor.Uptime()
 	*out = uptime
+
+	return err
+}
+
+/*
+	<<< UPTIME FROM TRACKER >>>
+*/
+
+// QueryUptime returns results of a query to the uptime tracker the visor is using
+func (r *RPC) QueryUptime(pubkeys []string, _ *struct{}, out *Uptime) (err error) {
+	defer rpcutil.LogCall(r.log, "QueryUptime", pubkeys)(out, &err)
+
+	uptime, err := r.visor.QueryUptime(pubkeys)
+	out = uptime
 
 	return err
 }

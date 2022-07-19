@@ -120,6 +120,12 @@ func (rc *rpcClient) Uptime() (float64, error) {
 	err := rc.Call("Uptime", &struct{}{}, &out)
 	return out, err
 }
+// QueryUptime calls QueryUptime
+func (rc *rpcClient) QueryUptime(pubkeys []string) (*Uptime, error) {
+	var out *Uptime
+	err := rc.Call("QueryUptime", &struct{}{}, &out)
+	return out, err
+}
 
 // Apps calls Apps.
 func (rc *rpcClient) Apps() ([]*appserver.AppState, error) {
@@ -604,6 +610,11 @@ func (mc *mockRPCClient) Health() (*HealthInfo, error) {
 // Uptime implements API
 func (mc *mockRPCClient) Uptime() (float64, error) {
 	return time.Since(mc.startedAt).Seconds(), nil
+}
+
+// Uptime implements API
+func (mc *mockRPCClient) QueryUptime(pubkeys []string) (*Uptime, error) {
+	return nil, ErrNotImplemented
 }
 
 // Apps implements API.

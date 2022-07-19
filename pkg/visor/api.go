@@ -2,6 +2,8 @@ package visor
 
 import (
 	"context"
+	"encoding/json"
+	"io/ioutil"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -36,6 +38,7 @@ type API interface {
 
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
+	QueryUptime(pubkeys []string) (*Uptime, error)
 
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
@@ -299,6 +302,55 @@ func (v *Visor) Uptime() (float64, error) {
 	return time.Since(v.startedAt).Seconds(), nil
 }
 
+// Uptime is the struct representing https://ut.skywire.skycoin.com/visors
+type Uptime []struct {
+	Key        string  `json:"key"`
+	Uptime     int     `json:"uptime"`
+	Downtime   int     `json:"downtime"`
+	Percentage float64 `json:"percentage"`
+	Online     bool    `json:"online"`
+}
+
+// QueryUptime implements API.
+func (v *Visor) QueryUptime(pubkeys []string) (*Uptime, error) {
+	var u *Uptime
+	//https://ut.skywire.skycoin.com/uptimes?visors=
+	urlstr := []string{v.conf.UptimeTracker.Addr, "/uptimes?visors="}
+	for _, i := range pubkeys {
+		urlstr = append(urlstr, i)
+	}
+	ut := strings.Join(urlstr, "")
+	httpclient := http.Client{
+		Timeout: time.Second * 2, // Timeout after 2 seconds
+	}
+	//create the http request
+	req, err := http.NewRequest(http.MethodGet, ut, nil)
+	if err != nil {
+		return u, err
+	}
+	req.Header.Add("Cache-Control", "no-cache")
+	//check for errors in the response
+	res, err := httpclient.Do(req)
+	if err != nil {
+		return u, err
+	}
+
+	if res.Body != nil {
+		defer res.Body.Close() //nolint
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return u, err
+	}
+	//fill in services struct with the response
+	err = json.Unmarshal(body, &u)
+	if err != nil {
+		return u, err
+	}
+	return u, nil
+
+}
+
 // Apps implements API.
 func (v *Visor) Apps() ([]*appserver.AppState, error) {
 	return v.appL.AppStates(), nil
@@ -362,30 +414,23 @@ func (v *Visor) StopApp(appName string) error {
 func (v *Visor) StartVPNClient(pubkey string) error {
 	var envs []string
 	var err error
-	// todo: can we use some kind of app start hook that will be used for both autostart
-	// and start? Reason: this is also called in init for autostart
-	// check transport manager availability
 	if v.tpM == nil {
 		return ErrTrpMangerNotAvailable
 	}
 	v.conf.Launcher.Apps[0].Args = []string{"-srv", pubkey}
-	for _, i := range v.conf.Launcher.Apps[0].Args {
-		v.log.Infof(i)
-
-	}
 	maker := vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.STCPRRemoteAddrs())
 	envs, err = maker()
 	if err != nil {
 		return err
 	}
 
-//	if v.GetVPNClientAddress() == "" {
-//		return errors.New("VPN server pub key is missing")
-//	}
+	if v.GetVPNClientAddress() == "" {
+		return errors.New("VPN server pub key is missing")
+	}
 
 	// check process manager availability
 	if v.procM != nil {
-		return v.appL.StartApp(skyenv.VPNClientName, nil, envs)
+		return v.appL.StartApp(skyenv.VPNClientName, v.conf.Launcher.Apps[0].Args, envs)
 	}
 	return ErrProcNotAvailable
 }
@@ -615,43 +660,6 @@ func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.Connection
 		return cSummary, nil
 	}
 	return nil, ErrProcNotAvailable
-}
-
-type VSD []struct {
-	Address string `json:"address"`
-	Type    string `json:"type"`
-	Geo     struct {
-		Lat     float64 `json:"lat"`
-		Lon     float64 `json:"lon"`
-		Country string  `json:"country"`
-		Region  string  `json:"region"`
-	} `json:"geo,omitempty"`
-	Version string `json:"version"`
-	Geo0    struct {
-		Lat     float64 `json:"lat"`
-		Lon     float64 `json:"lon"`
-		Country string  `json:"country"`
-	} `json:"geo,omitempty"`
-	Geo1 struct {
-		Lat     float64 `json:"lat"`
-		Lon     float64 `json:"lon"`
-		Country string  `json:"country"`
-	} `json:"geo,omitempty"`
-	Geo2 struct {
-		Lat     float64 `json:"lat"`
-		Lon     float64 `json:"lon"`
-		Country string  `json:"country"`
-	} `json:"geo,omitempty"`
-	Geo3 struct {
-		Lat     float64 `json:"lat"`
-		Lon     float64 `json:"lon"`
-		Country string  `json:"country"`
-	} `json:"geo,omitempty"`
-	Geo4 struct {
-		Lat     float64 `json:"lat"`
-		Lon     float64 `json:"lon"`
-		Country string  `json:"country"`
-	} `json:"geo,omitempty"`
 }
 
 // VPNServers gets available public VPN server from service discovery URL
