@@ -80,7 +80,7 @@ var lsTpCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, _ []string) {
 		transports, err := clirpc.RpcClient().Transports(filterTypes, filterPubKeys, showLogs)
 		internal.Catch(err)
-		printTransports(transports...)
+		PrintTransports(transports...)
 	},
 }
 
@@ -92,7 +92,7 @@ var idCmd = &cobra.Command{
 		tpID := internal.ParseUUID("transport-id", args[0])
 		tp, err := clirpc.RpcClient().Transport(tpID)
 		internal.Catch(err)
-		printTransports(tp)
+		PrintTransports(tp)
 	},
 }
 
@@ -148,7 +148,7 @@ var addTpCmd = &cobra.Command{
 				logger.WithError(err).Warnf("Failed to establish %v transport", transportType)
 			}
 		}
-		printTransports(tp)
+		PrintTransports(tp)
 	},
 }
 
@@ -163,7 +163,7 @@ var rmTpCmd = &cobra.Command{
 	},
 }
 
-func printTransports(tps ...*visor.TransportSummary) {
+func PrintTransports(tps ...*visor.TransportSummary) {
 	sortTransports(tps...)
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
 	_, err := fmt.Fprintln(w, "type\tid\tremote\tmode\tlabel")
@@ -206,16 +206,16 @@ var discTpCmd = &cobra.Command{
 		if rc := clirpc.RpcClient(); tpPK.Null() {
 			entry, err := rc.DiscoverTransportByID(uuid.UUID(tpID))
 			internal.Catch(err)
-			printTransportEntries(entry)
+			PrintTransportEntries(entry)
 		} else {
 			entries, err := rc.DiscoverTransportsByPK(tpPK)
 			internal.Catch(err)
-			printTransportEntries(entries...)
+			PrintTransportEntries(entries...)
 		}
 	},
 }
 
-func printTransportEntries(entries ...*transport.Entry) {
+func PrintTransportEntries(entries ...*transport.Entry) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
 	_, err := fmt.Fprintln(w, "id\ttype\tedge1\tedge2")
 	internal.Catch(err)

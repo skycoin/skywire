@@ -16,6 +16,8 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
 	"github.com/skycoin/skywire/pkg/servicedisc"
+//	"github.com/skycoin/skywire/pkg/skyenv"
+
 
 )
 
@@ -218,6 +220,20 @@ func (r *RPC) StopApp(name *string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StopApp", name)(nil, &err)
 
 	return r.visor.StopApp(*name)
+}
+
+// StartVPNClient starts VPNClient App
+func (r *RPC) StartVPNClient(pubkey *string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StartApp", pubkey)(nil, &err)
+
+	return r.visor.StartVPNClient(*pubkey)
+}
+
+// StopVPNClient stops VPNClient App
+func (r *RPC) StopVPNClient(name *string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StopApp", name)(nil, &err)
+
+	return r.visor.StopVPNClient(*name)
 }
 
 // RestartApp restarts App with provided name.

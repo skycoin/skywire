@@ -41,6 +41,8 @@ type API interface {
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
 	StopApp(appName string) error
+	StartVPNClient(pubkey string) error
+	StopVPNClient(appName string) error
 	SetAppDetailedStatus(appName, state string) error
 	SetAppError(appName, stateErr string) error
 	RestartApp(appName string) error
@@ -354,6 +356,50 @@ func (v *Visor) StopApp(appName string) error {
 	}
 	return ErrProcNotAvailable
 }
+
+
+// StartVPNClient implements API.
+func (v *Visor) StartVPNClient(pubkey string) error {
+	var envs []string
+	var err error
+	// todo: can we use some kind of app start hook that will be used for both autostart
+	// and start? Reason: this is also called in init for autostart
+	// check transport manager availability
+	if v.tpM == nil {
+		return ErrTrpMangerNotAvailable
+	}
+	v.conf.Launcher.Apps[0].Args = []string{"-srv", pubkey}
+	for _, i := range v.conf.Launcher.Apps[0].Args {
+		v.log.Infof(i)
+
+	}
+	maker := vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.STCPRRemoteAddrs())
+	envs, err = maker()
+	if err != nil {
+		return err
+	}
+
+//	if v.GetVPNClientAddress() == "" {
+//		return errors.New("VPN server pub key is missing")
+//	}
+
+	// check process manager availability
+	if v.procM != nil {
+		return v.appL.StartApp(skyenv.VPNClientName, nil, envs)
+	}
+	return ErrProcNotAvailable
+}
+
+// StopVPNClient implements API.
+func (v *Visor) StopVPNClient(appName string) error {
+	// check process manager availability
+	if v.procM != nil {
+		_, err := v.appL.StopApp(skyenv.VPNClientName) //nolint:errcheck
+		return err
+	}
+	return ErrProcNotAvailable
+}
+
 
 // SetAppDetailedStatus implements API.
 func (v *Visor) SetAppDetailedStatus(appName, status string) error {

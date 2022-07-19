@@ -145,6 +145,16 @@ func (rc *rpcClient) StopApp(appName string) error {
 	return rc.Call("StopApp", &appName, &struct{}{})
 }
 
+// StartVPNClient calls StartVPNClient.
+func (rc *rpcClient) StartVPNClient(pubkey string) error {
+	return rc.Call("StartVPNClient", &pubkey, &struct{}{})
+}
+
+// StopVPNClient calls StopVPNClient.
+func (rc *rpcClient) StopVPNClient(appName string) error {
+	return rc.Call("StopVPNClient", &appName, &struct{}{})
+}
+
 // SetAppDetailedStatus sets app's detailed state.
 func (rc *rpcClient) SetAppDetailedStatus(appName, status string) error {
 	return rc.Call("SetAppDetailedStatus", &SetAppStatusIn{
@@ -631,6 +641,16 @@ func (*mockRPCClient) StartApp(string) error {
 
 // StopApp implements API.
 func (*mockRPCClient) StopApp(string) error {
+	return nil
+}
+
+// StartVPNClient implements API.
+func (*mockRPCClient) StartVPNClient(string) error {
+	return nil
+}
+
+// StopVPNClient implements API.
+func (*mockRPCClient) StopVPNClient(string) error {
 	return nil
 }
 

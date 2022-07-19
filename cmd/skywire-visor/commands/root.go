@@ -262,6 +262,7 @@ func runVisor(conf *visorconfig.V1) {
 			conf.Hypervisors = append(conf.Hypervisors, pubkey)
 		}
 	}
+fmt.Printf("%+v\n", conf.Launcher.Apps[0].Args)
 
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 	vis, ok := visor.NewVisor(ctx, conf, restartCtx)
