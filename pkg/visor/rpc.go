@@ -12,13 +12,10 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
-	"github.com/skycoin/skywire/pkg/servicedisc"
-//	"github.com/skycoin/skywire/pkg/skyenv"
-
-
 )
 
 const (
@@ -96,6 +93,7 @@ func (r *RPC) Uptime(_ *struct{}, out *float64) (err error) {
 /*
 	<<< UPTIME FROM TRACKER >>>
 */
+/*
 
 // QueryUptime returns results of a query to the uptime tracker the visor is using
 func (r *RPC) QueryUptime(pubkeys []string, _ *struct{}, out *Uptime) (err error) {
@@ -106,6 +104,7 @@ func (r *RPC) QueryUptime(pubkeys []string, _ *struct{}, out *Uptime) (err error
 
 	return err
 }
+*/
 
 /*
 	<<< APP LOGS >>>
@@ -245,7 +244,7 @@ func (r *RPC) StartVPNClient(pubkey *string, _ *struct{}) (err error) {
 
 // StopVPNClient stops VPNClient App
 func (r *RPC) StopVPNClient(name *string, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "StopApp", name)(nil, &err)
+	defer rpcutil.LogCall(r.log, "StopVPNClient", name)(nil, &err)
 
 	return r.visor.StopVPNClient(*name)
 }

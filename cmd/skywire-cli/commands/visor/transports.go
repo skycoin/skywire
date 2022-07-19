@@ -12,12 +12,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor"
-	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
-
 )
 
 var (
@@ -58,9 +57,9 @@ var tpCmd = &cobra.Command{
 }
 
 var lsTypesCmd = &cobra.Command{
-	Use:   "type",Short: "Transport types used by the local visor",
+	Use: "type", Short: "Transport types used by the local visor",
 	Run: func(_ *cobra.Command, _ []string) {
-		types, err := clirpc.RpcClient().TransportTypes()
+		types, err := clirpc.RPCClient().TransportTypes()
 		internal.Catch(err)
 		for _, t := range types {
 			fmt.Println(t)
@@ -78,7 +77,7 @@ var lsTpCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "Available transports",
 	Run: func(_ *cobra.Command, _ []string) {
-		transports, err := clirpc.RpcClient().Transports(filterTypes, filterPubKeys, showLogs)
+		transports, err := clirpc.RPCClient().Transports(filterTypes, filterPubKeys, showLogs)
 		internal.Catch(err)
 		PrintTransports(transports...)
 	},
@@ -90,7 +89,7 @@ var idCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		tpID := internal.ParseUUID("transport-id", args[0])
-		tp, err := clirpc.RpcClient().Transport(tpID)
+		tp, err := clirpc.RPCClient().Transport(tpID)
 		internal.Catch(err)
 		PrintTransports(tp)
 	},
@@ -126,7 +125,7 @@ var addTpCmd = &cobra.Command{
 		var err error
 
 		if transportType != "" {
-			tp, err = clirpc.RpcClient().AddTransport(pk, transportType, timeout)
+			tp, err = clirpc.RPCClient().AddTransport(pk, transportType, timeout)
 			if err != nil {
 				logger.WithError(err).Fatalf("Failed to establish %v transport", transportType)
 			}
@@ -140,7 +139,7 @@ var addTpCmd = &cobra.Command{
 				network.DMSG,
 			}
 			for _, transportType := range transportTypes {
-				tp, err = clirpc.RpcClient().AddTransport(pk, string(transportType), timeout)
+				tp, err = clirpc.RPCClient().AddTransport(pk, string(transportType), timeout)
 				if err == nil {
 					logger.Infof("Established %v transport to %v", transportType, pk)
 					break
@@ -158,11 +157,12 @@ var rmTpCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		tID := internal.ParseUUID("transport-id", args[0])
-		internal.Catch(clirpc.RpcClient().RemoveTransport(tID))
+		internal.Catch(clirpc.RPCClient().RemoveTransport(tID))
 		fmt.Println("OK")
 	},
 }
 
+// PrintTransports prints transports used by the visor
 func PrintTransports(tps ...*visor.TransportSummary) {
 	sortTransports(tps...)
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
@@ -203,7 +203,7 @@ var discTpCmd = &cobra.Command{
 	},
 	Run: func(_ *cobra.Command, _ []string) {
 
-		if rc := clirpc.RpcClient(); tpPK.Null() {
+		if rc := clirpc.RPCClient(); tpPK.Null() {
 			entry, err := rc.DiscoverTransportByID(uuid.UUID(tpID))
 			internal.Catch(err)
 			PrintTransportEntries(entry)
@@ -215,6 +215,7 @@ var discTpCmd = &cobra.Command{
 	},
 }
 
+// PrintTransportEntries prints the transport entries
 func PrintTransportEntries(entries ...*transport.Entry) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
 	_, err := fmt.Fprintln(w, "id\ttype\tedge1\tedge2")

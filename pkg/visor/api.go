@@ -2,8 +2,6 @@ package visor
 
 import (
 	"context"
-	"encoding/json"
-	"io/ioutil"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -38,8 +36,7 @@ type API interface {
 
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
-	QueryUptime(pubkeys []string) (*Uptime, error)
-
+	//	QueryUptime(pubkeys []string) (*Uptime, error)
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
@@ -302,6 +299,7 @@ func (v *Visor) Uptime() (float64, error) {
 	return time.Since(v.startedAt).Seconds(), nil
 }
 
+/*
 // Uptime is the struct representing https://ut.skywire.skycoin.com/visors
 type Uptime []struct {
 	Key        string  `json:"key"`
@@ -316,9 +314,7 @@ func (v *Visor) QueryUptime(pubkeys []string) (*Uptime, error) {
 	var u *Uptime
 	//https://ut.skywire.skycoin.com/uptimes?visors=
 	urlstr := []string{v.conf.UptimeTracker.Addr, "/uptimes?visors="}
-	for _, i := range pubkeys {
-		urlstr = append(urlstr, i)
-	}
+	urlstr = append(urlstr, pubkeys...)
 	ut := strings.Join(urlstr, "")
 	httpclient := http.Client{
 		Timeout: time.Second * 2, // Timeout after 2 seconds
@@ -350,6 +346,7 @@ func (v *Visor) QueryUptime(pubkeys []string) (*Uptime, error) {
 	return u, nil
 
 }
+*/
 
 // Apps implements API.
 func (v *Visor) Apps() ([]*appserver.AppState, error) {
@@ -409,7 +406,6 @@ func (v *Visor) StopApp(appName string) error {
 	return ErrProcNotAvailable
 }
 
-
 // StartVPNClient implements API.
 func (v *Visor) StartVPNClient(pubkey string) error {
 	var envs []string
@@ -439,12 +435,11 @@ func (v *Visor) StartVPNClient(pubkey string) error {
 func (v *Visor) StopVPNClient(appName string) error {
 	// check process manager availability
 	if v.procM != nil {
-		_, err := v.appL.StopApp(skyenv.VPNClientName) //nolint:errcheck
+		_, err := v.appL.StopApp(appName) //nolint:errcheck
 		return err
 	}
 	return ErrProcNotAvailable
 }
-
 
 // SetAppDetailedStatus implements API.
 func (v *Visor) SetAppDetailedStatus(appName, status string) error {
@@ -679,10 +674,10 @@ func (v *Visor) VPNServers() ([]servicedisc.Service, error) {
 		v.log.Error("Error getting public vpn servers: ", err)
 		return nil, err
 	}
-//	serverAddrs := make([]string, len(vpnServers))
-//	for idx, server := range vpnServers {
-//		serverAddrs[idx] = server.Addr.PubKey().String()
-//	}
+	//	serverAddrs := make([]string, len(vpnServers))
+	//	for idx, server := range vpnServers {
+	//		serverAddrs[idx] = server.Addr.PubKey().String()
+	//	}
 	return vpnServers, nil
 }
 

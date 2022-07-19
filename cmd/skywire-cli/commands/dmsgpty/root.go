@@ -18,15 +18,15 @@ import (
 )
 
 var (
-	ptyPort string
-	masterLogger = logging.NewMasterLogger()
+	ptyPort       string
+	masterLogger  = logging.NewMasterLogger()
 	packageLogger = masterLogger.PackageLogger("dmsgpty")
-	logger  = logging.MustGetLogger("skywire-cli")
-	rpcAddr string
-	path    string
-	pk      string
-	url     string
-	pkg     bool
+	logger        = logging.MustGetLogger("skywire-cli")
+	rpcAddr       string
+	path          string
+	pk            string
+	url           string
+	pkg           bool
 )
 
 func init() {

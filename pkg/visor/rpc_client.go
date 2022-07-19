@@ -20,10 +20,9 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
-	"github.com/skycoin/skywire/pkg/servicedisc"
-
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -120,12 +119,15 @@ func (rc *rpcClient) Uptime() (float64, error) {
 	err := rc.Call("Uptime", &struct{}{}, &out)
 	return out, err
 }
+
+/*
 // QueryUptime calls QueryUptime
-func (rc *rpcClient) QueryUptime(pubkeys []string) (*Uptime, error) {
-	var out *Uptime
+func (rc *rpcClient) QueryUptime(pubkeys []string) (Uptime, error) {
+	var out Uptime
 	err := rc.Call("QueryUptime", &struct{}{}, &out)
 	return out, err
 }
+*/
 
 // Apps calls Apps.
 func (rc *rpcClient) Apps() ([]*appserver.AppState, error) {
@@ -612,11 +614,12 @@ func (mc *mockRPCClient) Uptime() (float64, error) {
 	return time.Since(mc.startedAt).Seconds(), nil
 }
 
+/*
 // Uptime implements API
 func (mc *mockRPCClient) QueryUptime(pubkeys []string) (*Uptime, error) {
 	return nil, ErrNotImplemented
 }
-
+*/
 // Apps implements API.
 func (mc *mockRPCClient) Apps() ([]*appserver.AppState, error) {
 	var apps []*appserver.AppState

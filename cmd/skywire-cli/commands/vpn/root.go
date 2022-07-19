@@ -1,7 +1,6 @@
 package clivpn
 
 import (
-
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/logging"
@@ -9,16 +8,12 @@ import (
 
 var (
 	logger  = logging.MustGetLogger("skywire-cli")
-	rpcAddr string
 	path    string
-	pk      string
-	url     string
 	pkg     bool
-	ver		string
-	country		string
-	systray		bool
-	stats		bool
-
+	ver     string
+	country string
+	systray bool
+	stats   bool
 )
 
 // RootCmd contains commands that interact with the skywire-visor
