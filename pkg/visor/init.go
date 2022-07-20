@@ -2,8 +2,10 @@ package visor
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -1167,10 +1169,11 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 	return &http.Client{}, nil
 }
 
-func getPublicIP(v *Visor, service string) (pIP string, err error) {
+func getPublicIP(v *Visor, service string) (string, error) {
 	var serviceURL dmsgget.URL
-	err = serviceURL.Fill(service)
-	// only get the IP from the stun client if the url is of dmsg
+	var pIP string
+	err := serviceURL.Fill(service)
+	// only get the IP if the url is of dmsg
 	// else just send empty string as ip
 	if serviceURL.Scheme != "dmsg" {
 		return pIP, nil
@@ -1179,9 +1182,43 @@ func getPublicIP(v *Visor, service string) (pIP string, err error) {
 		return pIP, fmt.Errorf("provided URL is invalid: %w", err)
 	}
 
-	// Wait until stun client is ready
-	<-v.stunReady
+	pIP, err = getIP()
+	if err != nil {
+		<-v.stunReady
+		if v.stunClient.PublicIP != nil {
+			pIP = v.stunClient.PublicIP.IP()
+			return pIP, nil
+		}
+		err = fmt.Errorf("cannot fetch public ip")
+	}
+	if err != nil {
+		return pIP, err
+	}
 
-	pIP = v.stunClient.PublicIP.IP()
 	return pIP, nil
+}
+
+type ipAPI struct {
+	PublicIP string `json:"ip_address"`
+}
+
+func getIP() (string, error) {
+	req, err := http.Get("http://ip.skycoin.com")
+	if err != nil {
+		return "", err
+	}
+	defer req.Body.Close() // nolint
+
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		return "", err
+	}
+
+	var ip ipAPI
+	err = json.Unmarshal(body, &ip)
+	if err != nil {
+		return "", err
+	}
+
+	return ip.PublicIP, nil
 }
