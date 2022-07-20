@@ -413,7 +413,13 @@ func (v *Visor) StartVPNClient(pubkey string) error {
 	if v.tpM == nil {
 		return ErrTrpMangerNotAvailable
 	}
-	v.conf.Launcher.Apps[0].Args = []string{"-srv", pubkey}
+	var appindex int
+	for i, app := range v.conf.Launcher.Apps {
+		if app.Name == skyenv.VPNClientName {
+			app.Args = []string{"-srv", pubkey}
+			appindex = i
+		}
+	}
 	maker := vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.STCPRRemoteAddrs())
 	envs, err = maker()
 	if err != nil {
@@ -426,7 +432,7 @@ func (v *Visor) StartVPNClient(pubkey string) error {
 
 	// check process manager availability
 	if v.procM != nil {
-		return v.appL.StartApp(skyenv.VPNClientName, v.conf.Launcher.Apps[0].Args, envs)
+		return v.appL.StartApp(skyenv.VPNClientName, v.conf.Launcher.Apps[appindex].Args, envs)
 	}
 	return ErrProcNotAvailable
 }
@@ -651,7 +657,6 @@ func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.Connection
 		if err != nil {
 			return nil, err
 		}
-
 		return cSummary, nil
 	}
 	return nil, ErrProcNotAvailable
@@ -674,10 +679,6 @@ func (v *Visor) VPNServers() ([]servicedisc.Service, error) {
 		v.log.Error("Error getting public vpn servers: ", err)
 		return nil, err
 	}
-	//	serverAddrs := make([]string, len(vpnServers))
-	//	for idx, server := range vpnServers {
-	//		serverAddrs[idx] = server.Addr.PubKey().String()
-	//	}
 	return vpnServers, nil
 }
 
