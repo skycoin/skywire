@@ -1167,6 +1167,7 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 	return &http.Client{
 		Transport: &http.Transport{
 			DisableKeepAlives: true,
+			IdleConnTimeout:   time.Second * 5,
 		},
 	}, nil
 }
