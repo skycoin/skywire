@@ -778,7 +778,7 @@ func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error {
-	const tickDuration = 1 * time.Minute
+	const tickDuration = 5 * time.Minute
 
 	conf := v.conf.UptimeTracker
 
@@ -1166,7 +1166,12 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 		}
 		return v.dmsgHTTP, nil
 	}
-	return &http.Client{}, nil
+	return &http.Client{
+		Transport: &http.Transport{
+			DisableKeepAlives: true,
+			IdleConnTimeout:   time.Second * 5,
+		},
+	}, nil
 }
 
 func getPublicIP(v *Visor, service string) (string, error) {
