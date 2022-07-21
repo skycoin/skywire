@@ -15,7 +15,6 @@ import (
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/servicedisc"
-	skyenv "github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -167,7 +166,7 @@ var vpnStopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "stop the vpn",
 	Run: func(_ *cobra.Command, _ []string) {
-		internal.Catch(clirpc.RPCClient().StopVPNClient(skyenv.VPNClientName))
+		internal.Catch(clirpc.RPCClient().StopVPNClient("vpn-client"))
 		fmt.Println("OK")
 	},
 }
