@@ -6,22 +6,18 @@ import (
 	"log"
 	"os"
 	"strings"
-	"time"
+	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 	"github.com/toqueteos/webbrowser"
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
-	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	skyenv "github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/transport/network"
-	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
-
-var timeout time.Duration
 
 func init() {
 	RootCmd.AddCommand(
@@ -30,11 +26,14 @@ func init() {
 		vpnURLCmd,
 		vpnStartCmd,
 		vpnStopCmd,
+		vpnStatusCmd,
 	)
+	vpnUICmd.Flags().BoolVarP(&isPkg, "pkg", "p", false, "use package config path")
+	vpnUICmd.Flags().StringVarP(&path, "config", "c", "", "config path")
 	vpnListCmd.Flags().StringVarP(&ver, "ver", "v", "1.0.1", "filter results by version")
 	vpnListCmd.Flags().StringVarP(&country, "country", "c", "", "filter results by country")
-	vpnListCmd.Flags().BoolVarP(&stats, "stats", "s", false, "return only a count of the resuts")
-	vpnListCmd.Flags().BoolVarP(&systray, "systray", "y", false, "format results for systray")
+	vpnListCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the resuts")
+	vpnListCmd.Flags().BoolVarP(&isSystray, "systray", "y", false, "format results for isSystray")
 }
 
 var vpnUICmd = &cobra.Command{
@@ -42,7 +41,7 @@ var vpnUICmd = &cobra.Command{
 	Short: "Open VPN UI in default browser",
 	Run: func(_ *cobra.Command, _ []string) {
 		var url string
-		if pkg {
+		if isPkg {
 			path = visorconfig.Pkgpath
 		}
 		if path != "" {
@@ -70,7 +69,7 @@ var vpnURLCmd = &cobra.Command{
 	Short: "Show VPN UI URL",
 	Run: func(_ *cobra.Command, _ []string) {
 		var url string
-		if pkg {
+		if isPkg {
 			path = visorconfig.Pkgpath
 		}
 		if path != "" {
@@ -124,11 +123,11 @@ var vpnListCmd = &cobra.Command{
 			fmt.Printf("No VPN Servers found\n")
 			os.Exit(0)
 		}
-		if stats {
+		if isStats {
 			fmt.Printf("%d VPN Servers\n", len(servers))
 			os.Exit(0)
 		}
-		if systray {
+		if isSystray {
 			for _, i := range servers {
 				b := strings.Replace(i.Addr.String(), ":44", "", 1)
 				fmt.Printf("%s", b)
@@ -156,24 +155,8 @@ var vpnStartCmd = &cobra.Command{
 	Short: "start the vpn for <public-key>",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
-		pk := internal.ParsePK("remote-public-key", args[0])
-		var tp *visor.TransportSummary
-		var err error
-		transportTypes := []network.Type{
-			network.STCP,
-			network.STCPR,
-			network.SUDPH,
-			network.DMSG,
-		}
-		for _, transportType := range transportTypes {
-			tp, err = clirpc.RPCClient().AddTransport(pk, string(transportType), timeout)
-			if err == nil {
-				logger.Infof("Established %v transport to %v", transportType, pk)
-			} else {
-				logger.WithError(err).Warnf("Failed to establish %v transport", transportType)
-			}
-		}
-		clivisor.PrintTransports(tp)
+		//pk := internal.ParsePK("remote-public-key", args[0])
+		//var err error
 		fmt.Println("%s", args[0])
 		internal.Catch(clirpc.RPCClient().StartVPNClient(args[0]))
 		fmt.Println("OK")
@@ -183,9 +166,34 @@ var vpnStartCmd = &cobra.Command{
 var vpnStopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "stop the vpn",
-	Args:  cobra.MinimumNArgs(1),
-	Run: func(_ *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		internal.Catch(clirpc.RPCClient().StopVPNClient(skyenv.VPNClientName))
 		fmt.Println("OK")
+	},
+}
+
+var vpnStatusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "vpn status",
+	Run: func(_ *cobra.Command, _ []string) {
+		states, err := clirpc.RPCClient().Apps()
+		internal.Catch(err)
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
+		//_, err = fmt.Fprintln(w, "app\tports\tauto_start\tstatus")
+		internal.Catch(err)
+		for _, state := range states {
+			if state.Name == "vpn-client" {
+				status := "stopped"
+				if state.Status == appserver.AppStatusRunning {
+					status = "running"
+				}
+				if state.Status == appserver.AppStatusErrored {
+					status = "errored"
+				}
+				_, err = fmt.Fprintf(w, "%s\n", status)
+				internal.Catch(err)
+			}
+		}
+		internal.Catch(w.Flush())
 	},
 }

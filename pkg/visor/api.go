@@ -299,55 +299,6 @@ func (v *Visor) Uptime() (float64, error) {
 	return time.Since(v.startedAt).Seconds(), nil
 }
 
-/*
-// Uptime is the struct representing https://ut.skywire.skycoin.com/visors
-type Uptime []struct {
-	Key        string  `json:"key"`
-	Uptime     int     `json:"uptime"`
-	Downtime   int     `json:"downtime"`
-	Percentage float64 `json:"percentage"`
-	Online     bool    `json:"online"`
-}
-
-// QueryUptime implements API.
-func (v *Visor) QueryUptime(pubkeys []string) (*Uptime, error) {
-	var u *Uptime
-	//https://ut.skywire.skycoin.com/uptimes?visors=
-	urlstr := []string{v.conf.UptimeTracker.Addr, "/uptimes?visors="}
-	urlstr = append(urlstr, pubkeys...)
-	ut := strings.Join(urlstr, "")
-	httpclient := http.Client{
-		Timeout: time.Second * 2, // Timeout after 2 seconds
-	}
-	//create the http request
-	req, err := http.NewRequest(http.MethodGet, ut, nil)
-	if err != nil {
-		return u, err
-	}
-	req.Header.Add("Cache-Control", "no-cache")
-	//check for errors in the response
-	res, err := httpclient.Do(req)
-	if err != nil {
-		return u, err
-	}
-
-	if res.Body != nil {
-		defer res.Body.Close() //nolint
-	}
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return u, err
-	}
-	//fill in services struct with the response
-	err = json.Unmarshal(body, &u)
-	if err != nil {
-		return u, err
-	}
-	return u, nil
-
-}
-*/
-
 // Apps implements API.
 func (v *Visor) Apps() ([]*appserver.AppState, error) {
 	return v.appL.AppStates(), nil
@@ -413,12 +364,10 @@ func (v *Visor) StartVPNClient(pubkey string) error {
 	if v.tpM == nil {
 		return ErrTrpMangerNotAvailable
 	}
-	var appindex int
-	for i, app := range v.conf.Launcher.Apps {
-		if app.Name == skyenv.VPNClientName {
-			app.Args = []string{"-srv", pubkey}
-			appindex = i
-		}
+	if len(v.conf.Launcher.Apps) > 0 {
+		v.conf.Launcher.Apps[0].Args = []string{"-srv", pubkey}
+	} else {
+		return errors.New("no vpn app configuration found")
 	}
 	maker := vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.STCPRRemoteAddrs())
 	envs, err = maker()
@@ -429,10 +378,17 @@ func (v *Visor) StartVPNClient(pubkey string) error {
 	if v.GetVPNClientAddress() == "" {
 		return errors.New("VPN server pub key is missing")
 	}
+	var pk cipher.PubKey
+	err = pk.Set(pubkey)
+	if err != nil {
+		return err
+	}
 
+	getRouteSetupHooks(context.Background(), v, v.log)
 	// check process manager availability
 	if v.procM != nil {
-		return v.appL.StartApp(skyenv.VPNClientName, v.conf.Launcher.Apps[appindex].Args, envs)
+		return v.appL.StartApp(skyenv.VPNClientName, v.conf.Launcher.Apps[0].Args, envs)
+		//		return v.appL.StartApp(skyenv.VPNClientName, v.conf.Launcher.Apps[appindex].Args, envs)
 	}
 	return ErrProcNotAvailable
 }
