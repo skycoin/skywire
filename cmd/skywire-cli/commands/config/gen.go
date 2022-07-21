@@ -358,11 +358,11 @@ var genConfigCmd = &cobra.Command{
 		if ver != "" {
 			conf.Common.Version = ver
 		}
-		if conf.Transport.PublicAutoconnect == publicautoconn {
-			conf.Transport.PublicAutoconnect = !publicautoconn
+		if publicautoconn {
+			conf.Transport.PublicAutoconnect = false
 		}
-		if ispublic != conf.IsPublic {
-			conf.IsPublic = ispublic
+		if ispublic {
+			conf.IsPublic = true
 		}
 
 		//don't write file with stdout
