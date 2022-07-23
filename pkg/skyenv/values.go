@@ -169,9 +169,3 @@ func HomePath() string {
 	dir, _ := os.UserHomeDir() //nolint
 	return dir
 }
-
-// AutoPeer corresponds to the -m flag for skywire-visor
-var AutoPeer bool
-
-// AutoPeercmd coresponds to the -l flag for skywire-visor and is only set when -m flag is used
-var AutoPeercmd string
