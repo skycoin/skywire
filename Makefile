@@ -346,7 +346,7 @@ run-vpnsrv: prepare
 
 ## Run skywire from source with test endpoints
 run-source-test: prepare
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -nit | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -nit | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
 
 ## Run skywire from source, with vpn server enabled
 run-vpnsrv-test: prepare
