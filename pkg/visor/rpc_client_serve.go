@@ -13,7 +13,6 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
-	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 func isDone(ctx context.Context) bool {
@@ -26,7 +25,7 @@ func isDone(ctx context.Context) bool {
 }
 
 // ServeRPCClient repetitively dials to a remote dmsg address and serves a RPC server to that address.
-func ServeRPCClient(ctx context.Context, log logrus.FieldLogger, dmsgC *dmsg.Client, rpcS *rpc.Server, rAddr dmsg.Addr, errCh chan<- error) {
+func ServeRPCClient(ctx context.Context, log logrus.FieldLogger, autoPeer bool, autoPeerCmd string, dmsgC *dmsg.Client, rpcS *rpc.Server, rAddr dmsg.Addr, errCh chan<- error) {
 	const maxBackoff = time.Second * 5
 	retry := netutil.NewRetrier(log, netutil.DefaultInitBackoff, maxBackoff, netutil.DefaultTries, netutil.DefaultFactor)
 	pubkey := cipher.PubKey{}
@@ -35,15 +34,16 @@ func ServeRPCClient(ctx context.Context, log logrus.FieldLogger, dmsgC *dmsg.Cli
 		err := retry.Do(ctx, func() (rErr error) {
 			log.Info("Dialing...")
 			addr := dmsg.Addr{PK: rAddr.PK, Port: rAddr.Port}
-			if skyenv.AutoPeer {
+			if autoPeer {
 				var hvkey string
-				hvkey, err := script.Exec(skyenv.AutoPeercmd).String()
+				hvkey, err := script.Exec(autoPeerCmd).String()
 				if err != nil {
 					log.Error("error autopeering")
 				} else {
 					hvkey = strings.TrimSuffix(hvkey, "\n")
 					hypervisorPKsSlice := strings.Split(hvkey, ",")
 					for _, pubkeyString := range hypervisorPKsSlice {
+						//use pubkey.Set as validation or to convert the string to a pubkey
 						if err := pubkey.Set(pubkeyString); err != nil {
 							log.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
 							continue
