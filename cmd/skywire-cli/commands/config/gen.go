@@ -226,12 +226,6 @@ var genConfigCmd = &cobra.Command{
 		if testEnv {
 			serviceConfURL = testconf
 		}
-		if autopeer {
-			ip, err := script.Exec(`ip route show | grep -i 'default via'| awk '{print $3 }'`).String()
-			if err != nil {
-				logger.Error("cannot determine gateway IP: " + ip)
-			}
-		}
 		//fetch the service endpoints
 		services = visorconfig.Fetch(mLog, serviceConfURL, stdout)
 		// Read in old config and obtain old secret key or generate a new random secret key
