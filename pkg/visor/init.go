@@ -762,7 +762,7 @@ func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 		go func(hvErrs chan error) {
 			defer wg.Done()
-			ServeRPCClient(ctx, log, v.dmsgC, rpcS, addr, hvErrs)
+			ServeRPCClient(ctx, log, v.autoPeer, v.autoPeerCmd, v.dmsgC, rpcS, addr, hvErrs)
 		}(hvErrs)
 
 		v.pushCloseStack("hypervisor."+hvPK.String()[:shortHashLen], func() error {

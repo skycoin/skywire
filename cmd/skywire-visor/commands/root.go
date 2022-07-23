@@ -55,8 +55,8 @@ var (
 	hypervisorUI         bool
 	remoteHypervisorPKs  string
 	disableHypervisorPKs bool
-	autopeer             bool
-	peercmd              string
+	isAutoPeer           bool
+	autoPeerCmd          string
 	stopVisorFn          func()
 	stopVisorWg          sync.WaitGroup
 	completion           string
@@ -90,10 +90,12 @@ func init() {
 	hiddenflags = append(hiddenflags, "hv")
 	rootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors set in config file")
 	hiddenflags = append(hiddenflags, "xhv")
-	rootCmd.Flags().StringVarP(&peercmd, "peercmd", "l", "skywire-cli hv pk", "command to run which returns the hypervisor key used with autopeer")
-	hiddenflags = append(hiddenflags, "peercmd")
-	rootCmd.Flags().BoolVarP(&autopeer, "autopeer", "m", false, "enable autopeering")
-	hiddenflags = append(hiddenflags, "autopeer")
+	if os.Getenv("SKYBIAN") == "true" {
+		rootCmd.Flags().StringVarP(&autoPeerCmd, "peerCmd", "l", "skywire-cli hv pk", "command to run which returns the hypervisor key used with autopeer")
+		hiddenflags = append(hiddenflags, "peerCmd")
+		rootCmd.Flags().BoolVarP(&isAutoPeer, "autopeer", "m", false, "enable autopeering")
+		hiddenflags = append(hiddenflags, "autopeer")
+	}
 	rootCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
 	hiddenflags = append(hiddenflags, "stdin")
 	if root {
@@ -271,13 +273,13 @@ func runVisor(conf *visorconfig.V1) {
 	//autopeering should only happen when there is no local or remote hypervisor set in the config.
 	if conf.Hypervisors != nil {
 		if conf.Hypervisor != nil {
-			autopeer = false
+			isAutoPeer = false
 		}
 	}
-	if autopeer {
+	if isAutoPeer {
 		log.Infof("autopeering...")
 		var hvkey string
-		hvkey, err := script.Exec(peercmd).String() //TODO: mrpalide this needs to run again on loss of connection to the hypervisor within the same constraints
+		hvkey, err := script.Exec(autoPeerCmd).String()
 		if err != nil {
 			log.Error("error autopeering")
 		} else {
@@ -290,14 +292,12 @@ func runVisor(conf *visorconfig.V1) {
 				}
 				log.Infof("%s PK added as remote hypervisor PK", pubkeyString)
 				conf.Hypervisors = append(conf.Hypervisors, pubkey)
-				skyenv.AutoPeer = true
-				skyenv.AutoPeercmd = peercmd
 			}
 		}
 	}
 
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
-	vis, ok := visor.NewVisor(ctx, conf, restartCtx)
+	vis, ok := visor.NewVisor(ctx, conf, restartCtx, isAutoPeer, autoPeerCmd)
 	if !ok {
 		select {
 		case <-ctx.Done():
