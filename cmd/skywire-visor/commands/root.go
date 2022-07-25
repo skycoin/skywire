@@ -303,7 +303,7 @@ func runVisor(conf *visorconfig.V1) {
 		if err != nil {
 			log.Error("error autopeering")
 		} else {
-			hvkey = strings.TrimSuffix(hvkey, "\n")
+			hvkey = strings.TrimSpace(hvkey)
 			hypervisorPKsSlice := strings.Split(hvkey, ",")
 			for _, pubkeyString := range hypervisorPKsSlice {
 				if err := pubkey.Set(pubkeyString); err != nil {
