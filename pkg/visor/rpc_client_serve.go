@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bitfield/script"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 
@@ -35,8 +34,7 @@ func ServeRPCClient(ctx context.Context, log logrus.FieldLogger, autoPeer bool, 
 			log.Info("Dialing...")
 			addr := dmsg.Addr{PK: rAddr.PK, Port: rAddr.Port}
 			if autoPeer {
-				var hvkey string
-				hvkey, err := script.Exec(autoPeerCmd).String()
+				hvkey, err := FetchHvPk(autoPeerCmd)
 				if err != nil {
 					log.Error("error autopeering")
 				} else {

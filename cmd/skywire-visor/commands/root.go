@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"io/ioutil"
+	"net"
 	"net/http"
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
@@ -28,6 +29,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/syslog"
@@ -45,6 +47,7 @@ const (
 )
 
 var (
+	logger               = logging.MustGetLogger("skywire-visor")
 	tag                  string
 	syslogAddr           string
 	pprofMode            string
@@ -64,6 +67,7 @@ var (
 	all                  bool
 	pkg                  bool
 	usr                  bool
+	localIPs             []net.IP
 	// root indicates process is run with root permissions
 	root bool // nolint:unused
 	// visorBuildInfo holds information about the build
@@ -79,6 +83,14 @@ func init() {
 		root = true
 	}
 
+	localIPs, err = netutil.DefaultNetworkInterfaceIPs()
+	if err != nil {
+		logger.WithError(err).Warn("Could not determine network interface IP address")
+		if len(localIPs) == 0 {
+			localIPs = append(localIPs, net.ParseIP("192.168.0.1"))
+		}
+	}
+
 	rootCmd.Flags().SortFlags = false
 
 	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use (default): "+skyenv.ConfigName)
@@ -91,8 +103,8 @@ func init() {
 	rootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors set in config file")
 	hiddenflags = append(hiddenflags, "xhv")
 	if os.Getenv("SKYBIAN") == "true" {
-		rootCmd.Flags().StringVarP(&autoPeerCmd, "peerCmd", "l", "skywire-cli hv pk", "command to run which returns the hypervisor key used with autopeer")
-		hiddenflags = append(hiddenflags, "peerCmd")
+		rootCmd.Flags().StringVarP(&autoPeerCmd, "hvip", "l", trimStringFromDot(localIPs[0].String())+".2:7998", "set hypervisor by ip")
+		hiddenflags = append(hiddenflags, "hvip")
 		rootCmd.Flags().BoolVarP(&isAutoPeer, "autopeer", "m", false, "enable autopeering")
 		hiddenflags = append(hiddenflags, "autopeer")
 	}
@@ -126,6 +138,13 @@ func init() {
 	}
 }
 
+func trimStringFromDot(s string) string {
+	if idx := strings.LastIndex(s, "."); idx != -1 {
+		return s[:idx]
+	}
+	return s
+}
+
 var rootCmd = &cobra.Command{
 	Use:   "skywire-visor",
 	Short: "Skywire Visor",
@@ -137,6 +156,7 @@ var rootCmd = &cobra.Command{
 		// --all unhide flags and print help menu
 		if all {
 			for _, j := range hiddenflags {
+				fmt.Println(j)
 				f := cmd.Flags().Lookup(j) //nolint
 				f.Hidden = false
 			}

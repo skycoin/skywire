@@ -2,15 +2,14 @@ package clihv
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net"
-	"net/http"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/visor"
 )
 
 func init() {
@@ -39,18 +38,10 @@ var pkCmd = &cobra.Command{
 	Use:   "pk",
 	Short: "Fetch Hypervisor Public Key",
 	Run: func(_ *cobra.Command, _ []string) {
-		req, err := http.NewRequest(http.MethodGet, "http://"+ipAddr, nil)
+		s, err := visor.FetchHvPk(ipAddr)
 		if err != nil {
-			logger.WithError(err).Fatalln("failed to create http request")
+			logger.WithError(err).Fatalln("failed to fetch hypervisor public key")
 		}
-		res, err := http.DefaultClient.Do(req)
-		if err != nil {
-			logger.WithError(err).Fatalln("failed to execte http request")
-		}
-		resBody, err := ioutil.ReadAll(res.Body)
-		if err != nil {
-			logger.WithError(err).Fatalln("failed to read http response")
-		}
-		fmt.Printf("%s", resBody)
+		fmt.Printf("%s", s)
 	},
 }
