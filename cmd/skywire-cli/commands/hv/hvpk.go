@@ -42,6 +42,6 @@ var pkCmd = &cobra.Command{
 		if err != nil {
 			logger.WithError(err).Fatalln("failed to fetch hypervisor public key")
 		}
-		fmt.Printf("%s", s)
+		fmt.Printf("%s\n", s)
 	},
 }
