@@ -91,4 +91,11 @@ export class ButtonComponent implements OnDestroy {
       this.disabled = false;
     }
   }
+
+  /**
+   * Returns true if the button is showing the loading animation.
+   */
+  get isLoading(): boolean {
+    return this.state === ButtonStates.Loading;
+  }
 }

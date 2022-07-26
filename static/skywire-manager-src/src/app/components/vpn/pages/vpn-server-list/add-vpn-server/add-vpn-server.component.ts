@@ -44,7 +44,7 @@ export class AddVpnServerComponent implements OnInit {
   }
 
   constructor(
-    private dialogRef: MatDialogRef<AddVpnServerComponent>,
+    public dialogRef: MatDialogRef<AddVpnServerComponent>,
     @Inject(MAT_DIALOG_DATA) private data: string,
     private formBuilder: FormBuilder,
     private dialog: MatDialog,
