@@ -1,4 +1,4 @@
-<app-dialog [headline]="'labeled-element.edit-label' | translate">
+<app-dialog [headline]="'labeled-element.edit-label' | translate" [dialog]="dialogRef">
   <form [formGroup]="form">
     <mat-form-field>
       <input #firstInput [placeholder]="'edit-label.label' | translate" formControlName="label" maxlength="66" matInput>

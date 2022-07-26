@@ -1,8 +1,10 @@
 <app-dialog
   [headline]="('apps.vpn-socks-server-settings.' + ( configuringVpn ? 'vpn-title' : 'socks-title')) | translate"
+  [dialog]="dialogRef"
+  [disableDismiss]="disableDismiss"
 >
   <form [formGroup]="form">
-    <mat-form-field>
+    <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
       <input
         id="password"
         type="password"
@@ -13,7 +15,7 @@
         matInput
       >
     </mat-form-field>
-    <mat-form-field>
+    <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
       <input
         id="passwordConfirmation"
         type="password"
@@ -27,7 +29,7 @@
         {{ 'apps.vpn-socks-server-settings.passwords-not-match' | translate }}
       </mat-error>
     </mat-form-field>
-    <mat-form-field *ngIf="configuringVpn">
+    <mat-form-field *ngIf="configuringVpn" [ngClass]="{'element-disabled' : disableDismiss}">
       <input
         id="netifc"
         type="text"
@@ -41,6 +43,7 @@
         color="primary"
         [checked]="secureMode"
         (change)="setSecureMode($event)"
+        [ngClass]="{'element-disabled' : disableDismiss}"
       >
         {{ 'apps.vpn-socks-server-settings.secure-mode-check' | translate }}
         <mat-icon [inline]="true" class="help-icon" [matTooltip]="'apps.vpn-socks-server-settings.secure-mode-info' | translate">help</mat-icon>
