@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - `autoConn` and `isPublic` flag for `skywire-cli`
 
+### Changed
+
+- improve UI reaction while system is busy
+- hide password options in UI if authentication is disabled
+
+### Removed
+
+- remove updater settings from UI
+
 ## 1.0.0
 
 ### Changed
