@@ -1,4 +1,4 @@
-<app-dialog [headline]="(state !== updatingStates.Error ? 'update.title' : 'update.error-title') | translate">
+<app-dialog [headline]="(state !== updatingStates.Error ? 'update.title' : 'update.error-title') | translate" [dialog]="dialogRef">
   <!-- Main black text area. -->
   <div class="text-container">
     <ng-container *ngIf="state === updatingStates.InitialProcessing">
