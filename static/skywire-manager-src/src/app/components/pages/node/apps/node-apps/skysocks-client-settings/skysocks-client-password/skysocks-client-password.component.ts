@@ -32,7 +32,7 @@ export class SkysocksClientPasswordComponent implements OnInit {
   }
 
   constructor(
-    private dialogRef: MatDialogRef<SkysocksClientPasswordComponent>,
+    public dialogRef: MatDialogRef<SkysocksClientPasswordComponent>,
     private formBuilder: FormBuilder,
   ) { }
 
