@@ -710,7 +710,7 @@ func (c *Client) dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, erro
 	}
 
 	if c.isClosed() {
-		// we need to signal outer code that connection object is inalid
+		// we need to signal outer code that connection object is invalid
 		// in this case
 		return nil, errors.New("client got closed")
 	}
