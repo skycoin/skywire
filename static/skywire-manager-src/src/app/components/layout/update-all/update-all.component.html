@@ -1,4 +1,4 @@
-<app-dialog [headline]="'update-all.title' | translate">
+<app-dialog [headline]="'update-all.title' | translate" [dialog]="dialogRef">
   <ng-container *ngIf="updatableNodes && updatableNodes.length > 0">
     <div class="text-container">
       {{ 'update-all.updatable-list-text' | translate }}

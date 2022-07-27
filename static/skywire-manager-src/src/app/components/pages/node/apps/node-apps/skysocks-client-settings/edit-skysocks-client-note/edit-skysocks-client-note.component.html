@@ -1,4 +1,4 @@
-<app-dialog [headline]="'apps.vpn-socks-client-settings.change-note-dialog.title' | translate">
+<app-dialog [headline]="'apps.vpn-socks-client-settings.change-note-dialog.title' | translate" [dialog]="dialogRef">
   <form [formGroup]="form">
     <mat-form-field>
       <input #firstInput [placeholder]="'apps.vpn-socks-client-settings.change-note-dialog.note' | translate" formControlName="note" maxlength="100" matInput>

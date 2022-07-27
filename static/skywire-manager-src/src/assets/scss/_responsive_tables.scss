@@ -18,7 +18,7 @@ $responsive-table-colors: (
 
     td, th {
       color: nth($colors, 3) !important;
-      padding: 12px 10px !important;
+      padding: 12px 10px;
       border-bottom: 1px solid $separator;
     }
 
@@ -44,6 +44,14 @@ $responsive-table-colors: (
           top: 2px;
         }
       }      
+    }
+
+    .link-row {
+      display: table-row;
+
+      &:hover {
+        text-decoration: none;
+      }
     }
 
     // Column used for the check boxes.

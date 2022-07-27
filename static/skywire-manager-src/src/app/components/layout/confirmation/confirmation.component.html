@@ -1,4 +1,4 @@
-<app-dialog [headline]="(state !== confirmationStates.Done ? data.headerText : doneTitle) | translate" [disableDismiss]="disableDismiss">
+<app-dialog [headline]="(state !== confirmationStates.Done ? data.headerText : doneTitle) | translate" [dialog]="dialogRef" [disableDismiss]="disableDismiss">
   <div class="text-container">
     {{ (state !== confirmationStates.Done ? data.text : doneText) | translate }}
   </div>
