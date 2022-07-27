@@ -46,7 +46,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	conf.Transport = &Transport{
 		Discovery:         services.TransportDiscovery, //utilenv.TpDiscAddr,
 		AddressResolver:   services.AddressResolver,    //utilenv.AddressResolverAddr,
-		PublicAutoconnect: true,
+		PublicAutoconnect: skyenv.PublicAutoconnect,
 	}
 	conf.Routing = &Routing{
 		RouteFinder:        services.RouteFinder, //utilenv.RouteFinderAddr,
@@ -101,7 +101,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 			}
 		}
 	}
-
+	conf.IsPublic = skyenv.IsPublic
 	return conf
 }
 

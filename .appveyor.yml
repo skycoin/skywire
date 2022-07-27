@@ -39,7 +39,7 @@ for:
         - job_name: Linux
 
     install:
-      - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.44.2
+      - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.46.2
       - make dep
       - sh: ci_scripts/create-ip-aliases.sh
     
