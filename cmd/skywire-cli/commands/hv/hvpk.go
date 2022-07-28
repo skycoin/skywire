@@ -30,7 +30,6 @@ func init() {
 	pkCmd.Flags().StringVarP(&ipAddr, "ip", "i", s+".2:7998", "ip:port to query")
 }
 
-
 var pkCmd = &cobra.Command{
 	Use:   "pk",
 	Short: "Fetch Hypervisor Public Key",
