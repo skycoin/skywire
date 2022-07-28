@@ -488,6 +488,14 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 	retrier := netutil.NewRetrier(log, time.Second, time.Second*20, 3, 1.3)
 	return []router.RouteSetupHook{
 		func(rPK cipher.PubKey, tm *transport.Manager) error {
+			establishedTransports, _ := v.Transports([]string{string(network.STCPR), string(network.SUDPH), string(network.DMSG)}, []cipher.PubKey{v.conf.PK}, false) //nolint
+			for _, transportSum := range establishedTransports {
+				if transportSum.Remote.Hex() == rPK.Hex() {
+					log.Debugf("Established transport exist. Type: %s", transportSum.Type)
+					return nil
+				}
+			}
+
 			allTransports, err := v.arClient.Transports(ctx)
 			if err != nil {
 				log.WithError(err).Warn("failed to fetch AR transport")
