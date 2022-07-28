@@ -4,16 +4,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## 1.0.2
+## 1.1.0
 
 ### Added
 
-- `autoConn` and `isPublic` flag for `skywire-cli`
+- `autoConn` and `isPublic` flag for `skywire-cli` [#1309](https://github.com/skycoin/skywire/pull/1319)
+- added error packet to routes to propagate route errors [#1181](https://github.com/skycoin/skywire/issues/1181)
+- add `skywire-cli chvpk` to get list of connected hypervisors [#1306](https://github.com/skycoin/skywire/issues/1306)
 
 ### Changed
 
 - improve UI reaction while system is busy
 - hide password options in UI if authentication is disabled
+- fix freezing hypervisor UI on hypervisor disconnection [#1321](https://github.com/skycoin/skywire/issues/1321)
+- fixed route setup hooks to check if transport to remote is established [#1297](https://github.com/skycoin/skywire/issues/1297)
 
 ### Removed
 
