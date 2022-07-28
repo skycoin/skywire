@@ -296,11 +296,9 @@ func runVisor(conf *visorconfig.V1) {
 		}
 	}
 	if isAutoPeer {
-		log.Infof("autopeering...")
-		var hvkey string
-		hvkey, err := script.Exec(autoPeerIP).String()
+		hvkey, err := visor.FetchHvPk(autoPeerIP)
 		if err != nil {
-			log.Error("error autopeering")
+			log.WithError(err).Error("Failure autopeering - unable to obtain hypervisor public key")
 		} else {
 			hvkey = strings.TrimSpace(hvkey)
 			hypervisorPKsSlice := strings.Split(hvkey, ",")
