@@ -276,7 +276,7 @@ func (r *RPCIngressGateway) Read(req *ReadReq, resp *ReadResp) error {
 		copy(resp.B, buf[:resp.N])
 	}
 	if err != nil {
-		if err != io.EOF {
+		if err.Error() != io.EOF.Error() {
 			// we don't print warning if the conn is already closed
 			_, ok := r.cm.Get(req.ConnID)
 			if ok {
