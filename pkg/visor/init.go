@@ -772,6 +772,8 @@ func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 		go func(hvErrs chan error) {
 			defer wg.Done()
+			defer delete(v.connectedHypervisors, hvPK)
+			v.connectedHypervisors[hvPK] = true
 			ServeRPCClient(ctx, log, v.dmsgC, rpcS, addr, hvErrs)
 		}(hvErrs)
 
