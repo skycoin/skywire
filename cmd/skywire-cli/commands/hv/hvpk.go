@@ -23,16 +23,13 @@ func init() {
 	if len(localIPs) == 0 {
 		localIPs = append(localIPs, net.ParseIP("192.168.0.1"))
 	}
-
-	pkCmd.Flags().StringVarP(&ipAddr, "ip", "i", trimStringFromDot(localIPs[0].String())+".2:7998", "ip:port to query")
-}
-
-func trimStringFromDot(s string) string {
-	if idx := strings.LastIndex(s, "."); idx != -1 {
-		return s[:idx]
+	var s string
+	if idx := strings.LastIndex(localIPs[0].String(), "."); idx != -1 {
+		s = localIPs[0].String()[:idx]
 	}
-	return s
+	pkCmd.Flags().StringVarP(&ipAddr, "ip", "i", s+".2:7998", "ip:port to query")
 }
+
 
 var pkCmd = &cobra.Command{
 	Use:   "pk",
