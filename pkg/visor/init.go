@@ -762,7 +762,7 @@ func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 		go func(hvErrs chan error) {
 			defer wg.Done()
-			var autoPeerIP str
+			var autoPeerIP string
 			if v.autoPeer {
 				autoPeerIP = v.autoPeerIP
 			} else {

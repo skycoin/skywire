@@ -59,7 +59,7 @@ var (
 	remoteHypervisorPKs  string
 	disableHypervisorPKs bool
 	isAutoPeer           bool
-	autoPeerCmd          string
+	autoPeerIP           string
 	stopVisorFn          func()
 	stopVisorWg          sync.WaitGroup
 	completion           string
@@ -103,7 +103,7 @@ func init() {
 	rootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors set in config file")
 	hiddenflags = append(hiddenflags, "xhv")
 	if os.Getenv("SKYBIAN") == "true" {
-		rootCmd.Flags().StringVarP(&autoPeerCmd, "hvip", "l", trimStringFromDot(localIPs[0].String())+".2:7998", "set hypervisor by ip")
+		rootCmd.Flags().StringVarP(&autoPeerIP, "hvip", "l", trimStringFromDot(localIPs[0].String())+".2:7998", "set hypervisor by ip")
 		hiddenflags = append(hiddenflags, "hvip")
 		rootCmd.Flags().BoolVarP(&isAutoPeer, "autopeer", "m", false, "enable autopeering")
 		hiddenflags = append(hiddenflags, "autopeer")
@@ -298,7 +298,7 @@ func runVisor(conf *visorconfig.V1) {
 	if isAutoPeer {
 		log.Infof("autopeering...")
 		var hvkey string
-		hvkey, err := script.Exec(autoPeerCmd).String()
+		hvkey, err := script.Exec(autoPeerIP).String()
 		if err != nil {
 			log.Error("error autopeering")
 		} else {
@@ -316,7 +316,7 @@ func runVisor(conf *visorconfig.V1) {
 	}
 
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
-	vis, ok := visor.NewVisor(ctx, conf, restartCtx, isAutoPeer, autoPeerCmd)
+	vis, ok := visor.NewVisor(ctx, conf, restartCtx, isAutoPeer, autoPeerIP)
 	if !ok {
 		select {
 		case <-ctx.Done():

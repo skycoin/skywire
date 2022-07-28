@@ -92,7 +92,7 @@ type Visor struct {
 
 	remoteVisors map[cipher.PubKey]Conn // copy of connected remote visors to hypervisor
 	autoPeer     bool                   // autoPeer=true tells the visor to query the http endpoint of the hypervisor on the local network for the hypervisor's public key when connectio to the hypervisor is lost
-	autoPeerCmd  string                 // autoPeerCmd is the command string used to return the public key of the hypervisor
+	autoPeerIP   string                 // autoPeerCmd is the command string used to return the public key of the hypervisor
 }
 
 // todo: consider moving module closing to the module system
@@ -116,7 +116,7 @@ func (v *Visor) MasterLogger() *logging.MasterLogger {
 }
 
 // NewVisor constructs new Visor.
-func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Context, autoPeer bool, autoPeerCmd string) (*Visor, bool) {
+func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Context, autoPeer bool, autoPeerIP string) (*Visor, bool) {
 
 	v := &Visor{
 		log:               conf.MasterLogger().PackageLogger("visor"),
@@ -181,7 +181,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Con
 	}
 	if autoPeer {
 		v.autoPeer = true
-		v.autoPeerCmd = autoPeerCmd
+		v.autoPeerIP = autoPeerIP
 	}
 	log.Info("Startup complete.")
 	return v, true
