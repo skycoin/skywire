@@ -156,7 +156,6 @@ var rootCmd = &cobra.Command{
 		// --all unhide flags and print help menu
 		if all {
 			for _, j := range hiddenflags {
-				fmt.Println(j)
 				f := cmd.Flags().Lookup(j) //nolint
 				f.Hidden = false
 			}
