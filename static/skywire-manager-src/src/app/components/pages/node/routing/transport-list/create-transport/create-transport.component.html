@@ -1,7 +1,7 @@
-<app-dialog [headline]="'transports.create' | translate">
+<app-dialog [headline]="'transports.create' | translate" [dialog]="dialogRef" [disableDismiss]="disableDismiss">
   <app-loading-indicator [showWhite]="false" *ngIf="!types"></app-loading-indicator>
   <form [formGroup]="form" *ngIf="types">
-    <mat-form-field>
+    <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
       <input
         formControlName="remoteKey"
         maxlength="66"
@@ -19,7 +19,7 @@
       </ng-template>
     </mat-form-field>
 
-    <mat-form-field>
+    <mat-form-field  [ngClass]="{'element-disabled' : disableDismiss}">
       <input
         formControlName="label"
         maxlength="66"
@@ -28,7 +28,7 @@
       >
     </mat-form-field>
 
-    <mat-form-field>
+    <mat-form-field  [ngClass]="{'element-disabled' : disableDismiss}">
       <mat-select
         formControlName="type"
         [placeholder]="'transports.dialog.transport-type' | translate"
@@ -44,6 +44,7 @@
       color="primary"
       [checked]="makePersistent"
       (change)="setMakePersistent($event)"
+      [ngClass]="{'element-disabled' : disableDismiss}"
     >
       {{ 'transports.dialog.make-persistent' | translate }}
       <mat-icon [inline]="true" class="help-icon" [matTooltip]="'transports.dialog.persistent-tooltip' | translate">help</mat-icon>

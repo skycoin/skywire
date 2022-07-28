@@ -1,4 +1,4 @@
-<app-dialog [headline]="'filters.filter-action' | translate">
+<app-dialog [headline]="'filters.filter-action' | translate" [dialog]="dialogRef">
   <form [formGroup]="form">
     <!-- Form fields. -->
     <ng-container *ngFor="let fieldParams of data.filterPropertiesList">
