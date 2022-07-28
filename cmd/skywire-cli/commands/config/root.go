@@ -18,59 +18,61 @@ var (
 	output                 string
 	confPath               string
 	configName             string
-	stdout                 bool
-	regen                  bool
-	retainHypervisors      bool
-	testEnv                bool
+	isStdout               bool
+	isRegen                bool
+	isRetainHypervisors    bool
+	isTestEnv              bool
 	ptext                  string
-	pkgEnv                 bool
-	usrEnv                 bool
-	hypervisor             bool
+	isPkgEnv               bool
+	isUsrEnv               bool
+	isHypervisor           bool
 	hypervisorPKs          string
-	dmsgHTTP               bool
-	publicRPC              bool
-	vpnServerEnable        bool
-	disableauth            bool
-	enableauth             bool
+	isDmsgHTTP             bool
+	isPublicRPC            bool
+	isVpnServerEnable      bool
+	isDisableauth          bool
+	isEnableauth           bool
 	selectedOS             string
 	disableApps            string
-	bestProtocol           bool
+	isBestProtocol         bool
 	serviceConfURL         string
 	services               *visorconfig.Services
-	force                  bool
-	hide                   bool
-	all                    bool
-	outunset               bool
+	isForce                bool
+	isHide                 bool
+	isAll                  bool
+	isOutUnset             bool
 	ver                    string
-	root                   bool
+	isRoot                 bool
 	svcconf                = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")     //skyenv.DefaultServiceConfAddr
 	testconf               = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "") //skyenv.DefaultServiceConfAddr
 	ghiddenflags           []string
 	uhiddenflags           []string
 	binPath                string
 	logLevel               string
-	pkg                    bool
+	isPkg                  bool
 	input                  string
-	updateEndpoints        bool
+	isUpdateEndpoints      bool
 	addHypervisorPKs       string
-	resetHypervisor        bool
+	isResetHypervisor      bool
 	setVPNClientKillswitch string
 	addVPNClientSrv        string
 	addVPNClientPasscode   string
-	resetVPNclient         bool
+	isResetVPNclient       bool
 	addVPNServerPasscode   string
 	setVPNServerSecure     string
 	setVPNServerAutostart  string
 	setVPNServerNetIfc     string
-	resetVPNServer         bool
+	isResetVPNServer       bool
 	addSkysocksClientSrv   string
-	resetSkysocksClient    bool
+	isResetSkysocksClient  bool
 	skysocksPasscode       string
-	resetSkysocks          bool
+	isResetSkysocks        bool
 	setPublicAutoconnect   string
 	minHops                int
 	conf                   *visorconfig.V1
-	usr                    bool
+	isUsr                  bool
+	isPublic               bool
+	isPublicAutoConn       bool
 )
 
 // RootCmd contains commands that interact with the config of local skywire-visor
