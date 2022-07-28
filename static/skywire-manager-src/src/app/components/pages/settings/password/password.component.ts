@@ -66,6 +66,13 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
     this.formSubscription.unsubscribe();
   }
 
+  /**
+   * If true, the component is working and the form must be disabled.
+   */
+   get working(): boolean {
+    return this.button ? this.button.isLoading : false;
+  }
+
   changePassword() {
     if (this.form.valid && !this.button.disabled) {
       this.button.showLoading();

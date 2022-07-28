@@ -33,7 +33,7 @@ export class EditLabelComponent implements OnInit, AfterViewInit {
   }
 
   constructor(
-    private dialogRef: MatDialogRef<EditLabelComponent>,
+    public dialogRef: MatDialogRef<EditLabelComponent>,
     @Inject(MAT_DIALOG_DATA) private data: LabelInfo,
     private formBuilder: FormBuilder,
     private storageService: StorageService,
