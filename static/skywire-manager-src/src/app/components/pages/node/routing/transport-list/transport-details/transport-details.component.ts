@@ -28,5 +28,6 @@ export class TransportDetailsComponent {
 
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: Transport,
+    public dialogRef: MatDialogRef<TransportDetailsComponent>,
   ) { }
 }

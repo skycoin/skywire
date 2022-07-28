@@ -124,3 +124,7 @@ button:focus {
   line-height: 1.8;
   padding: 7px 14px !important;
 }
+
+.mat-tooltip-panel {
+  pointer-events: none !important;
+}

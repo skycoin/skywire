@@ -188,7 +188,7 @@ export class UpdateComponent implements AfterViewInit, OnDestroy {
   }
 
   constructor(
-    private dialogRef: MatDialogRef<UpdateComponent>,
+    public dialogRef: MatDialogRef<UpdateComponent>,
     @Inject(MAT_DIALOG_DATA) public data: NodeData[],
     private nodeService: NodeService,
     private translateService: TranslateService,
