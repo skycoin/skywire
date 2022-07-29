@@ -766,8 +766,7 @@ func (r *router) handleErrorPacket(ctx context.Context, packet routing.Packet) e
 		return nrg.handlePacket(packet)
 	}
 
-	// we don't have nrg for this packet. it's either handshake message or
-	// we don't have route for this one completely
+	// we don't have nrg for this packet and we don't have route for this one completely
 
 	rg, ok := r.initializingRouteGroup(desc)
 	if !ok {
