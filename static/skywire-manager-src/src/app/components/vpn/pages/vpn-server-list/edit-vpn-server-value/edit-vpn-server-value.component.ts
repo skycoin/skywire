@@ -45,7 +45,7 @@ export class EditVpnServerValueComponent implements OnInit {
   }
 
   constructor(
-    private dialogRef: MatDialogRef<EditVpnServerValueComponent>,
+    public dialogRef: MatDialogRef<EditVpnServerValueComponent>,
     @Inject(MAT_DIALOG_DATA) public data: EditVpnServerParams,
     private formBuilder: FormBuilder,
     private snackbarService: SnackbarService,

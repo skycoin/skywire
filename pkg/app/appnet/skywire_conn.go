@@ -47,6 +47,16 @@ func (c *SkywireConn) BandwidthReceived() uint64 {
 	return c.nrg.BandwidthReceived()
 }
 
+// SetError sets the close error.
+func (c *SkywireConn) SetError(err error) {
+	c.nrg.SetError(err)
+}
+
+// GetError gets the close error.
+func (c *SkywireConn) GetError() error {
+	return c.nrg.GetError()
+}
+
 // Close closes connection.
 func (c *SkywireConn) Close() error {
 	var err error

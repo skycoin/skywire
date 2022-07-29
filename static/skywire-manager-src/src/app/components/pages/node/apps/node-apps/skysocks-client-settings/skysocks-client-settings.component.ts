@@ -128,7 +128,7 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
 
   constructor(
     @Inject(MAT_DIALOG_DATA) private data: Application,
-    private dialogRef: MatDialogRef<SkysocksClientSettingsComponent>,
+    public dialogRef: MatDialogRef<SkysocksClientSettingsComponent>,
     private appsService: AppsService,
     private formBuilder: FormBuilder,
     private snackbarService: SnackbarService,
@@ -197,6 +197,13 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
     if (this.operationSubscription) {
       this.operationSubscription.unsubscribe();
     }
+  }
+
+  /**
+   * If true, all the ways provided by default by the UI for closing the modal window are disabled.
+   */
+   get disableDismiss(): boolean {
+    return this.button && this.settingsButton ? (this.button.isLoading || this.settingsButton.isLoading) : false;
   }
 
   // Used by the checkbox for the killswitch setting.
