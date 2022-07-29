@@ -1,9 +1,13 @@
-<app-dialog [headline]="('apps.vpn-socks-client-settings.' + ( configuringVpn ? 'vpn-title' : 'socks-title')) | translate">
+<app-dialog
+  [headline]="('apps.vpn-socks-client-settings.' + ( configuringVpn ? 'vpn-title' : 'socks-title')) | translate"
+  [dialog]="dialogRef"
+  [disableDismiss]="disableDismiss"
+>
   <mat-tab-group>
     <!-- Form. -->
     <mat-tab [label]="'apps.vpn-socks-client-settings.remote-visor-tab' | translate">
       <form [formGroup]="form">
-        <mat-form-field>
+        <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
           <input
             id="pk"
             formControlName="pk"
@@ -22,7 +26,7 @@
           </ng-template>
         </mat-form-field>
 
-        <mat-form-field *ngIf="configuringVpn">
+        <mat-form-field *ngIf="configuringVpn" [ngClass]="{'element-disabled' : disableDismiss}">
           <input
             id="password"
             type="password"
