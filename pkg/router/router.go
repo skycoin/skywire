@@ -171,7 +171,7 @@ type router struct {
 }
 
 // New constructs a new Router.
-func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook, logger *logging.Logger) (Router, error) {
+func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (Router, error) {
 	config.SetDefaults()
 
 	sl, err := dmsgC.Listen(skyenv.DmsgAwaitSetupPort)
@@ -193,7 +193,7 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook, l
 		logger:          config.Logger,
 		mLogger:         config.MasterLogger,
 		tm:              config.TransportManager,
-		rt:              routing.NewTable(logger),
+		rt:              routing.NewTable(config.Logger),
 		sl:              sl,
 		dmsgC:           dmsgC,
 		rgsNs:           make(map[routing.RouteDescriptor]*NoiseRouteGroup),
