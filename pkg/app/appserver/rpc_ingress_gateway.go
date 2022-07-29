@@ -283,6 +283,14 @@ func (r *RPCIngressGateway) Read(req *ReadReq, resp *ReadResp) error {
 		}
 	}
 
+	if wrappedConn, ok := conn.(*appnet.WrappedConn); ok {
+		if skywireConn, ok := wrappedConn.Conn.(*appnet.SkywireConn); ok {
+			if ngErr := skywireConn.GetError(); ngErr != nil {
+				err = ngErr
+			}
+		}
+	}
+
 	resp.Err = ioErrToRPCIOErr(err)
 
 	// avoid error in RPC pipeline, error is included in response body

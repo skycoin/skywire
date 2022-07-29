@@ -38,7 +38,7 @@ type AppState struct {
 type AppDetailedStatus string
 
 const (
-	// AppDetailedStatusStarting is set during app initilization process.
+	// AppDetailedStatusStarting is set during app initialization process.
 	AppDetailedStatusStarting = "Starting"
 
 	// AppDetailedStatusRunning is set when the app is running.
