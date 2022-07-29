@@ -70,7 +70,8 @@ func ReadJSON(conn net.Conn, data interface{}) error {
 	for {
 		n, err := conn.Read(buf)
 		if err != nil {
-			return fmt.Errorf("error reading data: %w", err)
+			fmt.Printf("error reading data: %v\n", err)
+			return err
 		}
 
 		dataBytes = append(dataBytes, buf[:n]...)

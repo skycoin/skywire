@@ -138,8 +138,12 @@ func (r *SkywireNetworker) serve(conn net.Conn) {
 
 	lisIfc, ok := r.porter.PortValue(uint16(localAddr.Port))
 	if !ok {
+		err := ErrServiceOffline(uint16(localAddr.Port))
+		r.log.Error(err)
+		if ng, ok := conn.(*router.NoiseRouteGroup); ok {
+			ng.SetError(err)
+		}
 		r.close(conn)
-		r.log.Errorf("no listener on port %d", localAddr.Port)
 
 		return
 	}

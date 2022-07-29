@@ -113,6 +113,9 @@ type RouteGroup struct {
 	// used to wait for all the `Close` packets to run through the loop and come back
 	closeDone sync.WaitGroup
 	once      sync.Once
+
+	errorMu    sync.RWMutex
+	closeError error
 }
 
 // NewRouteGroup creates a new RouteGroup.
@@ -278,6 +281,22 @@ func (rg *RouteGroup) BandwidthSent() uint64 {
 // BandwidthReceived returns amount of bandwidth received (bytes).
 func (rg *RouteGroup) BandwidthReceived() uint64 {
 	return rg.networkStats.BandwidthReceived()
+}
+
+// SetError sets the close error.
+func (rg *RouteGroup) SetError(err error) {
+	rg.errorMu.Lock()
+	defer rg.errorMu.Unlock()
+
+	rg.closeError = err
+}
+
+// GetError gets the close error.
+func (rg *RouteGroup) GetError() error {
+	rg.errorMu.RLock()
+	defer rg.errorMu.RUnlock()
+
+	return rg.closeError
 }
 
 // read reads incoming data. It tries to fetch the data from the internal buffer.
@@ -550,6 +569,24 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 	return ErrNoSuitableTransport
 }
 
+func (rg *RouteGroup) sendError(rule routing.Rule, tp *transport.ManagedTransport) error {
+	errPayload := rg.GetError()
+	if errPayload == nil {
+		return nil
+	}
+
+	if !rg.isCloseInitiator() {
+		return nil
+	}
+
+	packet, err := routing.MakeErrorPacket(rule.NextRouteID(), []byte(errPayload.Error()))
+	if err != nil {
+		return err
+	}
+
+	return rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
+}
+
 // Close closes a RouteGroup with the specified close `code`:
 // - Send Close packet for all ForwardRules with the code `code`.
 // - Delete all rules (ForwardRules and ConsumeRules) from routing table.
@@ -624,6 +661,8 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 		return rg.handlePingPacket(packet)
 	case routing.PongPacket:
 		return rg.handlePongPacket(packet)
+	case routing.ErrorPacket:
+		return rg.handleErrorPacket(packet)
 	}
 
 	return nil
@@ -645,6 +684,19 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
 	case rg.readCh <- packet.Payload():
 	}
 
+	return nil
+}
+
+func (rg *RouteGroup) handleErrorPacket(packet routing.Packet) error {
+
+	// in this case remote is already closed, and `readCh` is closed too,
+	// but some packets may still reach the rg causing panic on writing
+	// to `readCh`, so we simple omit such packets
+	if rg.isRemoteClosed() {
+		return nil
+	}
+
+	rg.SetError(fmt.Errorf(string(packet.Payload())))
 	return nil
 }
 
@@ -696,6 +748,10 @@ func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) {
 	for i := 0; i < len(rg.tps); i++ {
 		if rg.tps[i] == nil || rg.fwd[i] == nil {
 			continue
+		}
+
+		if err := rg.sendError(rg.fwd[i], rg.tps[i]); err != nil {
+			rg.logger.WithError(err).Errorf("Failed to send error packet to %s", rg.tps[i].Remote())
 		}
 
 		packet := routing.MakeClosePacket(rg.fwd[i].NextRouteID(), code)
