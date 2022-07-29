@@ -257,7 +257,7 @@ func (r *router) DialRoutes(
 	}
 
 	// check if transports are available
-	ok := r.checkIfTransportAvalailable()
+	ok := r.checkIfTransportAvailable()
 	if !ok {
 		return nil, ErrNoTransportFound
 	}
@@ -534,6 +534,8 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 		return r.handlePingPacket(ctx, packet)
 	case routing.PongPacket:
 		return r.handlePongPacket(ctx, packet)
+	case routing.ErrorPacket:
+		return r.handleErrorPacket(ctx, packet)
 	default:
 		return ErrUnknownPacketType
 	}
@@ -788,6 +790,57 @@ func (r *router) handlePongPacket(ctx context.Context, packet routing.Packet) er
 	return rg.handlePacket(packet)
 }
 
+func (r *router) handleErrorPacket(ctx context.Context, packet routing.Packet) error {
+	rule, err := r.GetRule(packet.RouteID())
+	if err != nil {
+		return err
+	}
+	log := r.logger.WithField("func", "router.handleErrorPacket")
+	if rt := rule.Type(); rt == routing.RuleForward || rt == routing.RuleIntermediary {
+		log.Tracef("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
+			packet.RouteID(), rule.NextRouteID())
+		return r.forwardPacket(ctx, packet, rule)
+	}
+
+	log.Tracef("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
+
+	desc := rule.RouteDescriptor()
+	nrg, ok := r.noiseRouteGroup(desc)
+
+	log.Tracef("Handling packet with descriptor %s", &desc)
+
+	if ok {
+		if nrg == nil {
+			return errors.New("noiseRouteGroup is nil")
+		}
+
+		// in this case we have already initialized nrg and may use it straightforward
+		log.Tracef("Got new remote packet with size %d and route ID %d. Using rule: %s",
+			len(packet.Payload()), packet.RouteID(), rule)
+
+		return nrg.handlePacket(packet)
+	}
+
+	// we don't have nrg for this packet and we don't have route for this one completely
+
+	rg, ok := r.initializingRouteGroup(desc)
+	if !ok {
+		// no route, just return error
+		log.Tracef("Descriptor not found for rule with type %s, descriptor: %s", rule.Type(), &desc)
+		return errors.New("route descriptor does not exist")
+	}
+
+	if rg == nil {
+		return errors.New("initializing RouteGroup is nil")
+	}
+
+	// handshake packet, handling with the raw rg
+	log.Tracef("Got new remote packet with size %d and route ID %d. Using rule: %s",
+		len(packet.Payload()), packet.RouteID(), rule)
+
+	return rg.handlePacket(packet)
+}
+
 // GetRule gets routing rule.
 func (r *router) GetRule(routeID routing.RouteID) (routing.Rule, error) {
 	rule, err := r.rt.Rule(routeID)
@@ -873,6 +926,13 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 	case routing.PongPacket:
 		timestamp := int64(binary.BigEndian.Uint64(packet[routing.PacketPayloadOffset:]))
 		p = routing.MakePongPacket(rule.NextRouteID(), timestamp)
+	case routing.ErrorPacket:
+		var err error
+
+		p, err = routing.MakeErrorPacket(rule.NextRouteID(), packet.Payload())
+		if err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("packet of type %s can't be forwarded", packet.Type())
 	}
@@ -1133,7 +1193,7 @@ func (r *router) removeRouteGroupOfRule(rule routing.Rule) {
 	log.Debug("Noise route group closed.")
 }
 
-func (r *router) checkIfTransportAvalailable() (ok bool) {
+func (r *router) checkIfTransportAvailable() (ok bool) {
 	r.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
 		ok = true
 		return ok

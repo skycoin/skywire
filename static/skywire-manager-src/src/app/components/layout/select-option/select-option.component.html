@@ -1,4 +1,4 @@
-<app-dialog [headline]="data.title | translate" [includeVerticalMargins]="false">
+<app-dialog [headline]="data.title | translate" [dialog]="dialogRef" [includeVerticalMargins]="false">
   <div class="options-list-button-container" *ngFor="let option of data.options; let i = index">
     <button
       mat-button

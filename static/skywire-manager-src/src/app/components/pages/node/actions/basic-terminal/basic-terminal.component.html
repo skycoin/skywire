@@ -2,6 +2,7 @@
   [headline]="('actions.terminal.title' | translate) + ' - ' + this.data.label + ' (' + this.data.pk + ')'"
   [includeScrollableArea]="false"
   [includeVerticalMargins]="false"
+  [dialog]="dialogRef"
 >
   <mat-dialog-content #dialogContent (click)="focusTerminal()">
     <div class="wrapper">

@@ -54,6 +54,16 @@ func (nrg *NoiseRouteGroup) BandwidthReceived() uint64 {
 	return nrg.rg.BandwidthReceived()
 }
 
+// SetError sets the close error.
+func (nrg *NoiseRouteGroup) SetError(err error) {
+	nrg.rg.SetError(err)
+}
+
+// GetError gets the close error.
+func (nrg *NoiseRouteGroup) GetError() error {
+	return nrg.rg.GetError()
+}
+
 func (nrg *NoiseRouteGroup) isClosed() bool {
 	return nrg.rg.isClosed()
 }

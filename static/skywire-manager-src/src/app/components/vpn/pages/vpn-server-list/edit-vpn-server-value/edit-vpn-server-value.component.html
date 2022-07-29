@@ -1,4 +1,4 @@
-<app-dialog [headline]="('vpn.server-options.edit-value.' + (data.editName ? 'name' : 'note' ) + '-title') | translate">
+<app-dialog [headline]="('vpn.server-options.edit-value.' + (data.editName ? 'name' : 'note' ) + '-title') | translate" [dialog]="dialogRef">
   <form [formGroup]="form">
     <!-- Value field. -->
     <mat-form-field>
