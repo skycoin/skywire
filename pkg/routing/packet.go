@@ -41,10 +41,12 @@ func (t PacketType) String() string {
 		return "ClosePacket"
 	case KeepAlivePacket:
 		return "KeepAlivePacket"
-	case NetworkProbePacket:
-		return "NetworkProbe"
 	case HandshakePacket:
 		return "Handshake"
+	case NetworkProbePacket:
+		return "NetworkProbe"
+	case ErrorPacket:
+		return "Error"
 	default:
 		return fmt.Sprintf("Unknown(%d)", t)
 	}
@@ -60,6 +62,7 @@ const (
 	KeepAlivePacket
 	HandshakePacket
 	NetworkProbePacket
+	ErrorPacket
 )
 
 // CloseCode represents close code for ClosePacket.
@@ -150,6 +153,23 @@ func MakeHandshakePacket(id RouteID, supportEncryption bool) Packet {
 	packet[PacketPayloadOffset] = byte(supportEncryptionVal)
 
 	return packet
+}
+
+// MakeErrorPacket constructs a new ErrorPacket.
+// If payload size is more than uint16, MakeErrorPacket returns an error.
+func MakeErrorPacket(id RouteID, errPayload []byte) (Packet, error) {
+	if len(errPayload) > math.MaxUint16 {
+		return Packet{}, ErrPayloadTooBig
+	}
+
+	packet := make([]byte, PacketHeaderSize+len(errPayload))
+
+	packet[PacketTypeOffset] = byte(ErrorPacket)
+	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(len(errPayload)))
+	copy(packet[PacketPayloadOffset:], errPayload)
+
+	return packet, nil
 }
 
 // Type returns Packet's type.
