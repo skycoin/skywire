@@ -490,8 +490,6 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 		wg := new(sync.WaitGroup)
 		wg.Add(len(hv.remoteVisors))
 
-		i := 1
-
 		dmsgStats := make(map[string]dmsgtracker.DmsgClientSummary)
 		wg.Add(1)
 		go func() {
@@ -502,7 +500,7 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 			wg.Done()
 		}()
 
-		summaries := make([]Summary, len(hv.remoteVisors)+i)
+		summaries := make([]Summary, 0)
 
 		summary, err := hv.visor.Summary()
 		if err != nil {
@@ -515,10 +513,10 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 			}
 		}
 
-		summaries[0] = makeSummaryResp(err == nil, true, summary)
+		summaries = append(summaries, makeSummaryResp(err == nil, true, summary))
 
 		for pk, c := range hv.remoteVisors {
-			go func(pk cipher.PubKey, c Conn, i int) {
+			go func(pk cipher.PubKey, c Conn) {
 				log := hv.log(r).
 					WithField("visor_addr", c.Addr).
 					WithField("func", "getVisors")
@@ -529,21 +527,14 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 				if err != nil {
 					log.WithError(err).
 						Warn("Failed to obtain summary via RPC.", pk)
-
-					summary = &Summary{
-						Overview: &Overview{
-							PubKey: pk,
-						},
-						Health: &HealthInfo{},
-					}
+					delete(hv.remoteVisors, pk)
 				} else {
 					log.Trace("Obtained summary via RPC.")
+					resp := makeSummaryResp(err == nil, false, summary)
+					summaries = append(summaries, resp)
 				}
-				resp := makeSummaryResp(err == nil, false, summary)
-				summaries[i] = resp
 				wg.Done()
-			}(pk, c, i)
-			i++
+			}(pk, c)
 		}
 
 		wg.Wait()

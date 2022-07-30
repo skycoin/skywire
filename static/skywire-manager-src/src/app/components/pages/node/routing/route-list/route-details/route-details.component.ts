@@ -39,7 +39,7 @@ export class RouteDetailsComponent {
 
   constructor(
     @Inject(MAT_DIALOG_DATA) data: Route,
-    private dialogRef: MatDialogRef<RouteDetailsComponent>,
+    public dialogRef: MatDialogRef<RouteDetailsComponent>,
     private storageService: StorageService,
   ) {
     this.routeRule = data;
