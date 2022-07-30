@@ -167,7 +167,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
       sortableColumns.push(this.pingSortData);
     }
     this.dataSorter = new DataSorter(
-      this.dialog, this.translateService, sortableColumns, 3, this.showDmsgInfo ? this.dmsgListId : this.nodesListId
+      this.dialog, this.translateService, this.storageService, sortableColumns, 3, this.showDmsgInfo ? this.dmsgListId : this.nodesListId
     );
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
       // When this happens, the data in allNodes has already been sorted.

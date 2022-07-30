@@ -7,5 +7,6 @@
 </div>
 <div class="flex-1 content container-fluid">
   <div [ngClass]="{'background': inVpnClient}"></div>
-  <router-outlet></router-outlet>
+  <router-outlet *ngIf="hypervisorPkObtained"></router-outlet>
+  <app-loading-indicator class="h-100" *ngIf="!hypervisorPkObtained"></app-loading-indicator>
 </div>

@@ -1,11 +1,14 @@
 import { Component } from '@angular/core';
 import { Router, NavigationEnd } from '@angular/router';
-import { Location } from '@angular/common';
 import { MatDialog } from '@angular/material/dialog';
+import { of } from 'rxjs';
+import { delay, flatMap } from 'rxjs/operators';
 
 import { StorageService } from './services/storage.service';
 import { SnackbarService } from './services/snackbar.service';
 import { LanguageService } from './services/language.service';
+import { ApiService } from './services/api.service';
+import { processServiceError } from './utils/errors';
 
 /**
  * Root app component.
@@ -19,14 +22,18 @@ export class AppComponent {
   // If the app is showing the VPN client.
   inVpnClient = false;
 
+  // If the pk of the hypervisor has been obtained.
+  hypervisorPkObtained = false;
+  pkErrorShown = false;
+
   constructor(
     // Imported to call its constructor right after opening the app.
-    storage: StorageService,
-    location: Location,
+    private storage: StorageService,
     router: Router,
-    snackbarService: SnackbarService,
     dialog: MatDialog,
-    languageService: LanguageService,
+    private snackbarService: SnackbarService,
+    private languageService: LanguageService,
+    private apiService: ApiService,
   ) {
     // Close the snackbar when opening a modal window.
     dialog.afterOpened.subscribe(() => snackbarService.closeCurrent());
@@ -45,9 +52,6 @@ export class AppComponent {
     // as modal windows can open the snackbar for showing messages that should stay open.
     dialog.afterAllClosed.subscribe(() => snackbarService.closeCurrentIfTemporaryError());
 
-    // Initialize the language configuration.
-    languageService.loadLanguageSettings();
-
     // Check if the app is showing the VPN client.
     router.events.subscribe(() => {
       this.inVpnClient = router.url.includes('/vpn/') || router.url.includes('vpnlogin');
@@ -61,5 +65,39 @@ export class AppComponent {
         }
       }
     });
+
+    // Initialize the language configuration.
+    this.languageService.loadLanguageSettings();
+
+    this.checkHypervisorPk(0);
+  }
+
+  /**
+   * Gets the pk of the hypervisor. After that, it initializes services and allows the app to start working.
+   */
+  private checkHypervisorPk(delayMs: number) {
+    of(1).pipe(delay(delayMs), flatMap(() => this.apiService.get('about'))).subscribe(result => {
+      if (result.public_key) {
+        this.finishStartup(result.public_key);
+        this.hypervisorPkObtained = true;
+      } else {
+        if (!this.pkErrorShown) {
+          this.snackbarService.showError('start.loading-error', null, true);
+          this.pkErrorShown = true;
+        }
+        this.checkHypervisorPk(1000);
+      }
+    }, err => {
+      if (!this.pkErrorShown) {
+        const e = processServiceError(err);
+        this.snackbarService.showError('start.loading-error', null, true, e);
+        this.pkErrorShown = true;
+      }
+      this.checkHypervisorPk(1000);
+    });
+  }
+
+  private finishStartup(hypervisorPk: string) {
+    this.storage.initialize(hypervisorPk);
   }
 }
