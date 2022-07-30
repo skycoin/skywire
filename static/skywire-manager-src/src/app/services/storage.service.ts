@@ -88,6 +88,7 @@ export enum LabeledElementTypes {
 })
 export class StorageService {
   private storage: Storage;
+  private hypervisorPk: string;
   /**
    * The currently saved value of the time interval (seconds) in which the UI should automatically
    * referesh the data from the backend.
@@ -108,9 +109,13 @@ export class StorageService {
    */
   private savedVisibleLocalNodes = new Set<string>();
 
-  constructor() {
+  initialize(hypervisorPk: string) {
     this.storage = localStorage;
-    this.currentRefreshTime = parseInt(this.storage.getItem(KEY_REFRESH_SECONDS), 10) || 10;
+    this.hypervisorPk = hypervisorPk;
+
+    this.migrateDataToHvStorage();
+
+    this.currentRefreshTime = parseInt(this.getDataForHv(KEY_REFRESH_SECONDS), 10) || 10;
     this.currentRefreshTimeSubject.next(this.currentRefreshTime);
 
     // Load the saved local nodes and labels.
@@ -133,6 +138,51 @@ export class StorageService {
 
     this.saveLocalNodes(sanitizedLocalNodesList);
     this.saveLabels(sanitizedLabelList);
+  }
+
+  /**
+   * Gets data in LocalStorage, associated with the current hypervisor.
+   * @param key Key of the data to retrieve.
+   */
+  getDataForHv(key: string): string {
+    return this.storage.getItem(this.hypervisorPk + key);
+  }
+
+  /**
+   * Sets data in LocalStorage, associated with the current hypervisor.
+   * @param key Key of the data to save.
+   * @param value Data to save
+   */
+  setDataForHv(key: string, value) {
+    return this.storage.setItem(this.hypervisorPk + key, value);
+  }
+
+  /**
+   * It checks if there is data saved from a previous version of the app, without being assigned to a
+   * hypervisor. If the functions finds old data, it is migrated to the new format and assigned to the
+   * current hypervisor.
+   */
+  private migrateDataToHvStorage() {
+    const oldSavedRefreshTime = this.storage.getItem(KEY_REFRESH_SECONDS);
+    if (oldSavedRefreshTime) {
+      const v = parseInt(oldSavedRefreshTime, 10) || 10;
+      this.setRefreshTime(v);
+      this.storage.removeItem(KEY_REFRESH_SECONDS);
+    }
+
+    const oldSavedLocalNodes = this.storage.getItem(KEY_LOCAL_NODES);
+    if (oldSavedLocalNodes) {
+      const v = JSON.parse(oldSavedLocalNodes) || [];
+      this.saveLocalNodes(v);
+      this.storage.removeItem(KEY_LOCAL_NODES);
+    }
+
+    const oldSavedLabels = this.storage.getItem(KEY_SAVED_LABELS);
+    if (oldSavedLabels) {
+      const v = JSON.parse(oldSavedLabels) || [];
+      this.saveLabels(v);
+      this.storage.removeItem(KEY_SAVED_LABELS);
+    }
   }
 
   /**
@@ -182,7 +232,7 @@ export class StorageService {
    * from the backend.
    */
   setRefreshTime(seconds: number) {
-    this.storage.setItem(KEY_REFRESH_SECONDS, seconds.toString());
+    this.setDataForHv(KEY_REFRESH_SECONDS, seconds.toString());
     this.currentRefreshTime = seconds;
     this.currentRefreshTimeSubject.next(this.currentRefreshTime);
   }
@@ -305,7 +355,7 @@ export class StorageService {
    * Gets the saved local nodes array, directly from the persistent storage, not the cached map.
    */
   getSavedLocalNodes(): LocalNodeInfo[] {
-    return JSON.parse(this.storage.getItem(KEY_LOCAL_NODES)) || [];
+    return JSON.parse(this.getDataForHv(KEY_LOCAL_NODES)) || [];
   }
 
   /**
@@ -320,21 +370,21 @@ export class StorageService {
    * Saves a local nodes array in the persistent storage. It replaces any previously saved array.
    */
   private saveLocalNodes(nodes: LocalNodeInfo[]) {
-    this.storage.setItem(KEY_LOCAL_NODES, JSON.stringify(nodes));
+    this.setDataForHv(KEY_LOCAL_NODES, JSON.stringify(nodes));
   }
 
   /**
    * Gets the saved labels array, directly from the persistent storage, not the cached map.
    */
   getSavedLabels(): LabelInfo[] {
-    return JSON.parse(this.storage.getItem(KEY_SAVED_LABELS)) || [];
+    return JSON.parse(this.getDataForHv(KEY_SAVED_LABELS)) || [];
   }
 
   /**
    * Saves a labels array in the persistent storage. It replaces any previously saved array.
    */
   private saveLabels(labels: LabelInfo[]) {
-    this.storage.setItem(KEY_SAVED_LABELS, JSON.stringify(labels));
+    this.setDataForHv(KEY_SAVED_LABELS, JSON.stringify(labels));
   }
 
   /**
