@@ -50,7 +50,7 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
   constructor(
     private transportService: TransportService,
     private formBuilder: FormBuilder,
-    private dialogRef: MatDialogRef<CreateTransportComponent>,
+    public dialogRef: MatDialogRef<CreateTransportComponent>,
     private snackbarService: SnackbarService,
     private storageService: StorageService,
     private nodeService: NodeService,
@@ -77,6 +77,13 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
     if (this.operationSubscription) {
       this.operationSubscription.unsubscribe();
     }
+  }
+
+  /**
+   * If true, all the ways provided by default by the UI for closing the modal window are disabled.
+   */
+  get disableDismiss(): boolean {
+    return this.button ? this.button.isLoading : false;
   }
 
   /**

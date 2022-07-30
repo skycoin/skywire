@@ -33,7 +33,7 @@ export class EditSkysocksClientNoteComponent implements OnInit {
   }
 
   constructor(
-    private dialogRef: MatDialogRef<EditSkysocksClientNoteComponent>,
+    public dialogRef: MatDialogRef<EditSkysocksClientNoteComponent>,
     @Inject(MAT_DIALOG_DATA) private data: string,
     private formBuilder: FormBuilder,
   ) { }

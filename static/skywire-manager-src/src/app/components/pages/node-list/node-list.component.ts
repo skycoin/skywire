@@ -677,13 +677,4 @@ export class NodeListComponent implements OnInit, OnDestroy {
       }
     });
   }
-
-  /**
-   * Opens the page with the details of the node.
-   */
-  open(node: Node) {
-    if (node.online) {
-      this.router.navigate(['nodes', node.localPk]);
-    }
-  }
 }
