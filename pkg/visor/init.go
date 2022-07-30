@@ -2,8 +2,10 @@ package visor
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -89,7 +91,7 @@ var (
 	trs vinit.Module
 	// Routing system
 	rt vinit.Module
-	// Application launcer
+	// Application launcher
 	launch vinit.Module
 	// CLI
 	cli vinit.Module
@@ -458,7 +460,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) error {
 	ctx, cancel := context.WithCancel(ctx)
-	// To remove the block set by NewTransportListener if dmsg is not initilized
+	// To remove the block set by NewTransportListener if dmsg is not initialized
 	go func() {
 		ts, err := ts.NewTransportListener(ctx, v.conf, v.dmsgC, v.tpM, v.MasterLogger())
 		if err != nil {
@@ -472,7 +474,7 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 		}
 	}()
 
-	// waiting for atleast one transport to initilize
+	// waiting for at least one transport to initialize
 	<-v.tpM.Ready()
 
 	v.pushCloseStack("transport_setup.rpc", func() error {
@@ -486,6 +488,14 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 	retrier := netutil.NewRetrier(log, time.Second, time.Second*20, 3, 1.3)
 	return []router.RouteSetupHook{
 		func(rPK cipher.PubKey, tm *transport.Manager) error {
+			establishedTransports, _ := v.Transports([]string{string(network.STCPR), string(network.SUDPH), string(network.DMSG)}, []cipher.PubKey{v.conf.PK}, false) //nolint
+			for _, transportSum := range establishedTransports {
+				if transportSum.Remote.Hex() == rPK.Hex() {
+					log.Debugf("Established transport exist. Type: %s", transportSum.Type)
+					return nil
+				}
+			}
+
 			allTransports, err := v.arClient.Transports(ctx)
 			if err != nil {
 				log.WithError(err).Warn("failed to fetch AR transport")
@@ -762,6 +772,8 @@ func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 		go func(hvErrs chan error) {
 			defer wg.Done()
+			defer delete(v.connectedHypervisors, hvPK)
+			v.connectedHypervisors[hvPK] = true
 			ServeRPCClient(ctx, log, v.dmsgC, rpcS, addr, hvErrs)
 		}(hvErrs)
 
@@ -776,7 +788,7 @@ func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error {
-	const tickDuration = 1 * time.Minute
+	const tickDuration = 5 * time.Minute
 
 	conf := v.conf.UptimeTracker
 
@@ -1164,13 +1176,19 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 		}
 		return v.dmsgHTTP, nil
 	}
-	return &http.Client{}, nil
+	return &http.Client{
+		Transport: &http.Transport{
+			DisableKeepAlives: true,
+			IdleConnTimeout:   time.Second * 5,
+		},
+	}, nil
 }
 
-func getPublicIP(v *Visor, service string) (pIP string, err error) {
+func getPublicIP(v *Visor, service string) (string, error) {
 	var serviceURL dmsgget.URL
-	err = serviceURL.Fill(service)
-	// only get the IP from the stun client if the url is of dmsg
+	var pIP string
+	err := serviceURL.Fill(service)
+	// only get the IP if the url is of dmsg
 	// else just send empty string as ip
 	if serviceURL.Scheme != "dmsg" {
 		return pIP, nil
@@ -1179,9 +1197,43 @@ func getPublicIP(v *Visor, service string) (pIP string, err error) {
 		return pIP, fmt.Errorf("provided URL is invalid: %w", err)
 	}
 
-	// Wait until stun client is ready
-	<-v.stunReady
+	pIP, err = getIP()
+	if err != nil {
+		<-v.stunReady
+		if v.stunClient.PublicIP != nil {
+			pIP = v.stunClient.PublicIP.IP()
+			return pIP, nil
+		}
+		err = fmt.Errorf("cannot fetch public ip")
+	}
+	if err != nil {
+		return pIP, err
+	}
 
-	pIP = v.stunClient.PublicIP.IP()
 	return pIP, nil
+}
+
+type ipAPI struct {
+	PublicIP string `json:"ip_address"`
+}
+
+func getIP() (string, error) {
+	req, err := http.Get("http://ip.skycoin.com")
+	if err != nil {
+		return "", err
+	}
+	defer req.Body.Close() // nolint
+
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		return "", err
+	}
+
+	var ip ipAPI
+	err = json.Unmarshal(body, &ip)
+	if err != nil {
+		return "", err
+	}
+
+	return ip.PublicIP, nil
 }

@@ -51,7 +51,7 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
     @Inject(MAT_DIALOG_DATA) private data: Application,
     private appsService: AppsService,
     private formBuilder: FormBuilder,
-    private dialogRef: MatDialogRef<SkysocksSettingsComponent>,
+    public dialogRef: MatDialogRef<SkysocksSettingsComponent>,
     private snackbarService: SnackbarService,
     private dialog: MatDialog,
   ) {
@@ -92,6 +92,13 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
     if (this.operationSubscription) {
       this.operationSubscription.unsubscribe();
     }
+  }
+
+  /**
+   * If true, all the ways provided by default by the UI for closing the modal window are disabled.
+   */
+   get disableDismiss(): boolean {
+    return this.button ? this.button.isLoading : false;
   }
 
   // Used by the checkbox for the secure mode setting.
