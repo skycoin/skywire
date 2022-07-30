@@ -66,6 +66,7 @@ export class LogComponent implements OnInit, OnDestroy {
 
   constructor(
     @Inject(MAT_DIALOG_DATA) private data: Application,
+    public dialogRef: MatDialogRef<LogComponent>,
     private appsService: AppsService,
     private dialog: MatDialog,
     private snackbarService: SnackbarService,

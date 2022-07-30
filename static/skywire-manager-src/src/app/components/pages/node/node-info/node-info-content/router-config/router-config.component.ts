@@ -55,7 +55,7 @@ export class RouterConfigComponent implements OnInit, OnDestroy {
   }
 
   constructor(
-    private dialogRef: MatDialogRef<RouterConfigComponent>,
+    public dialogRef: MatDialogRef<RouterConfigComponent>,
     @Inject(MAT_DIALOG_DATA) private data: RouterConfigParams,
     private formBuilder: FormBuilder,
     private snackbarService: SnackbarService,
@@ -78,6 +78,13 @@ export class RouterConfigComponent implements OnInit, OnDestroy {
     if (this.operationSubscription) {
       this.operationSubscription.unsubscribe();
     }
+  }
+
+  /**
+   * If true, all the ways provided by default by the UI for closing the modal window are disabled.
+   */
+   get disableDismiss(): boolean {
+    return this.button ? this.button.isLoading : false;
   }
 
   save() {

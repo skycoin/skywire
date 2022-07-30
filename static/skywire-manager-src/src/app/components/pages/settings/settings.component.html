@@ -11,13 +11,20 @@
   </div>
   <div class="content col-12 mt-4.5">
     <app-refresh-rate class="d-block mb-4"></app-refresh-rate>
-    <app-password></app-password>
+
+    <app-password *ngIf="authChecked && authActive"></app-password>
+    <div class="white-theme checking-container" *ngIf="!authChecked && !waitBeforeShowingLoading">
+      <mat-spinner [diameter]="11"></mat-spinner> {{ 'settings.checking-auth' | translate }}
+    </div>
+
     <app-label-list
       [showShortList]="true">
     </app-label-list>
+    <!-- TODO: must be removed, with the text, if the old updater is removed.
     <div class="d-block mt-4" *ngIf="!mustShowUpdaterSettings" (click)="showUpdaterSettings()">
       <span class="show-link">{{ 'settings.updater-config.open-link' | translate }}</span>
     </div>
     <app-updater-config class="d-block mt-4" *ngIf="mustShowUpdaterSettings"></app-updater-config>
+    -->
   </div>
 </div>

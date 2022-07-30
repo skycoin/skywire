@@ -53,7 +53,7 @@ export class SkysocksClientFilterComponent implements OnInit {
 
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: FilterWindowData,
-    private dialogRef: MatDialogRef<SkysocksClientFilterComponent>,
+    public dialogRef: MatDialogRef<SkysocksClientFilterComponent>,
     private formBuilder: FormBuilder,
   ) { }
 
