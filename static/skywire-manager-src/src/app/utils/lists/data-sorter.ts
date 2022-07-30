@@ -3,6 +3,7 @@ import { TranslateService } from '@ngx-translate/core';
 import { Subject, Observable } from 'rxjs';
 
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
+import { StorageService } from 'src/app/services/storage.service';
 
 /**
  * Data about a column that can be used to sort the data of a list.
@@ -147,6 +148,7 @@ export class DataSorter {
   constructor(
     private dialog: MatDialog,
     private translateService: TranslateService,
+    private storageService: StorageService,
     columns: SortingColumn[],
     defaultColumnIndex: number,
     id: string,
@@ -157,7 +159,7 @@ export class DataSorter {
     this.sortBy = columns[defaultColumnIndex];
 
     // Restore any previously saved configuration.
-    const savedColumn = localStorage.getItem(this.columnStorageKeyPrefix + id);
+    const savedColumn = this.storageService.getDataForHv(this.columnStorageKeyPrefix + id);
     if (savedColumn) {
       const savedColumnData = columns.find(column => column.id === savedColumn);
       if (savedColumnData) {
@@ -165,8 +167,8 @@ export class DataSorter {
       }
     }
 
-    this.sortReverse = localStorage.getItem(this.orderStorageKeyPrefix + id) === 'true';
-    this.sortByLabel = localStorage.getItem(this.labelStorageKeyPrefix + id) === 'true';
+    this.sortReverse = this.storageService.getDataForHv(this.orderStorageKeyPrefix + id) === 'true';
+    this.sortByLabel = this.storageService.getDataForHv(this.labelStorageKeyPrefix + id) === 'true';
   }
 
   /**
@@ -227,7 +229,7 @@ export class DataSorter {
     } else {
       // If the same column was selected, change the order.
       this.sortReverse = !this.sortReverse;
-      localStorage.setItem(this.orderStorageKeyPrefix + this.id, String(this.sortReverse));
+      this.storageService.setDataForHv(this.orderStorageKeyPrefix + this.id, String(this.sortReverse));
 
       this.sortData();
     }
@@ -241,9 +243,9 @@ export class DataSorter {
     this.sortByLabel = sortByLabel;
     this.sortReverse = sortReverse;
 
-    localStorage.setItem(this.columnStorageKeyPrefix + this.id, column.id);
-    localStorage.setItem(this.orderStorageKeyPrefix + this.id, String(this.sortReverse));
-    localStorage.setItem(this.labelStorageKeyPrefix + this.id, String(this.sortByLabel));
+    this.storageService.setDataForHv(this.columnStorageKeyPrefix + this.id, column.id);
+    this.storageService.setDataForHv(this.orderStorageKeyPrefix + this.id, String(this.sortReverse));
+    this.storageService.setDataForHv(this.labelStorageKeyPrefix + this.id, String(this.sortByLabel));
 
     this.sortData();
   }

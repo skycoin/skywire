@@ -3,6 +3,8 @@ import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { Observable, Subscription } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
+import { map } from 'rxjs/operators';
+import { StorageService } from 'src/app/services/storage.service';
 
 import { Application } from '../../../../../app.datatypes';
 import { AppsService } from '../../../../../services/apps.service';
@@ -20,7 +22,6 @@ import { SkysocksClientSettingsComponent } from '../node-apps/skysocks-client-se
 import { FilterProperties, FilterFieldTypes } from 'src/app/utils/filters';
 import { SortingColumn, SortingModes, DataSorter } from 'src/app/utils/lists/data-sorter';
 import { DataFilterer } from 'src/app/utils/lists/data-filterer';
-import { map } from 'rxjs/operators';
 
 /**
  * Shows the list of applications of a node. I can be used to show a short preview, with just some
@@ -158,6 +159,7 @@ export class NodeAppsListComponent implements OnDestroy {
     private router: Router,
     private snackbarService: SnackbarService,
     private translateService: TranslateService,
+    private storageService: StorageService,
   ) {
     // Initialize the data sorter.
     const sortableColumns: SortingColumn[] = [
@@ -166,7 +168,7 @@ export class NodeAppsListComponent implements OnDestroy {
       this.portSortData,
       this.autoStartSortData,
     ];
-    this.dataSorter = new DataSorter(this.dialog, this.translateService, sortableColumns, 1, this.listId);
+    this.dataSorter = new DataSorter(this.dialog, this.translateService, this.storageService, sortableColumns, 1, this.listId);
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
       // When this happens, the data in allApps has already been sorted.
       this.recalculateElementsToShow();
