@@ -81,12 +81,6 @@ var hvpkCmd = &cobra.Command{
 			if err != nil {
 				logger.Fatal("Failed to connect:", err)
 			}
-			pk = overview.Hypervisors
-			if web {
-				http.HandleFunc("/", overview.Hypervisors)
-				logger.Info("\nServing public key " + pk + " on port " + webPort)
-				http.ListenAndServe(":"+webPort, nil) //nolint
-			}
 			fmt.Println(overview.Hypervisors)
 		}
 	},
