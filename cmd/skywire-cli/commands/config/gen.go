@@ -30,22 +30,22 @@ func init() {
 	ghiddenflags = append(ghiddenflags, "url")
 	genConfigCmd.Flags().StringVar(&logLevel, "log-level", "info", "level of logging in config")
 	ghiddenflags = append(ghiddenflags, "log-level")
-	genConfigCmd.Flags().BoolVarP(&bestProtocol, "bestproto", "b", false, "best protocol (dmsg | direct) based on location")
-	genConfigCmd.Flags().BoolVarP(&disableauth, "noauth", "c", false, "disable authentication for hypervisor UI")
+	genConfigCmd.Flags().BoolVarP(&isBestProtocol, "bestproto", "b", false, "best protocol (dmsg | direct) based on location")
+	genConfigCmd.Flags().BoolVarP(&isDisableauth, "noauth", "c", false, "disable authentication for hypervisor UI")
 	ghiddenflags = append(ghiddenflags, "noauth")
-	genConfigCmd.Flags().BoolVarP(&dmsgHTTP, "dmsghttp", "d", false, "use dmsg connection to skywire services")
+	genConfigCmd.Flags().BoolVarP(&isDmsgHTTP, "dmsghttp", "d", false, "use dmsg connection to skywire services")
 	ghiddenflags = append(ghiddenflags, "dmsghttp")
-	genConfigCmd.Flags().BoolVarP(&enableauth, "auth", "e", false, "enable auth on hypervisor UI")
+	genConfigCmd.Flags().BoolVarP(&isEnableauth, "auth", "e", false, "enable auth on hypervisor UI")
 	ghiddenflags = append(ghiddenflags, "auth")
-	genConfigCmd.Flags().BoolVarP(&force, "force", "f", false, "remove pre-existing config")
+	genConfigCmd.Flags().BoolVarP(&isForce, "force", "f", false, "remove pre-existing config")
 	ghiddenflags = append(ghiddenflags, "force")
 	genConfigCmd.Flags().StringVarP(&disableApps, "disableapps", "g", "", "comma separated list of apps to disable")
 	ghiddenflags = append(ghiddenflags, "disableapps")
-	genConfigCmd.Flags().BoolVarP(&hypervisor, "ishv", "i", false, "local hypervisor configuration")
+	genConfigCmd.Flags().BoolVarP(&isHypervisor, "ishv", "i", false, "local hypervisor configuration")
 	genConfigCmd.Flags().StringVarP(&hypervisorPKs, "hvpks", "j", "", "list of public keys to use as hypervisor")
 	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", skyenv.OS, "(linux / mac / win) paths")
 	ghiddenflags = append(ghiddenflags, "os")
-	genConfigCmd.Flags().BoolVarP(&stdout, "stdout", "n", false, "write config to stdout")
+	genConfigCmd.Flags().BoolVarP(&isStdout, "stdout", "n", false, "write config to stdout")
 	ghiddenflags = append(ghiddenflags, "stdout")
 	genConfigCmd.Flags().StringVarP(&output, "out", "o", "", "output config: "+skyenv.ConfigName)
 	if skyenv.OS == "win" {
@@ -57,31 +57,31 @@ func init() {
 	if skyenv.OS == "mac" {
 		ptext = "use mac installation path: "
 	}
-	genConfigCmd.Flags().BoolVarP(&pkgEnv, "pkg", "p", false, ptext+skyenv.SkywirePath)
+	genConfigCmd.Flags().BoolVarP(&isPkgEnv, "pkg", "p", false, ptext+skyenv.SkywirePath)
 	homepath := skyenv.HomePath()
 	if homepath != "" {
-		genConfigCmd.Flags().BoolVarP(&usrEnv, "user", "u", false, "use paths for user space: "+homepath)
+		genConfigCmd.Flags().BoolVarP(&isUsrEnv, "user", "u", false, "use paths for user space: "+homepath)
 	}
-	genConfigCmd.Flags().BoolVarP(&publicRPC, "publicrpc", "q", false, "allow rpc requests from LAN")
+	genConfigCmd.Flags().BoolVarP(&isPublicRPC, "publicrpc", "q", false, "allow rpc requests from LAN")
 	ghiddenflags = append(ghiddenflags, "publicrpc")
-	genConfigCmd.Flags().BoolVarP(&regen, "regen", "r", false, "re-generate existing config & retain keys")
+	genConfigCmd.Flags().BoolVarP(&isRegen, "regen", "r", false, "re-generate existing config & retain keys")
 	genConfigCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
 	ghiddenflags = append(ghiddenflags, "sk")
-	genConfigCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "use test deployment "+testconf)
+	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", false, "use test deployment "+testconf)
 	ghiddenflags = append(ghiddenflags, "testenv")
-	genConfigCmd.Flags().BoolVarP(&vpnServerEnable, "servevpn", "v", false, "enable vpn server")
+	genConfigCmd.Flags().BoolVarP(&isVpnServerEnable, "servevpn", "v", false, "enable vpn server")
 	ghiddenflags = append(ghiddenflags, "servevpn")
-	genConfigCmd.Flags().BoolVarP(&hide, "hide", "w", false, "dont print the config to the terminal")
+	genConfigCmd.Flags().BoolVarP(&isHide, "hide", "w", false, "dont print the config to the terminal")
 	ghiddenflags = append(ghiddenflags, "hide")
-	genConfigCmd.Flags().BoolVarP(&retainHypervisors, "retainhv", "x", false, "retain existing hypervisors with regen")
+	genConfigCmd.Flags().BoolVarP(&isRetainHypervisors, "retainhv", "x", false, "retain existing hypervisors with regen")
 	ghiddenflags = append(ghiddenflags, "retainhv")
-	if os.Getenv("SKYBIAN") == "true" {
-		genConfigCmd.Flags().BoolVarP(&autopeer, "autopeer", "y", false, "automatically peer to hypervisor")
-		ghiddenflags = append(ghiddenflags, "retainhv")
-	}
+	genConfigCmd.Flags().BoolVarP(&isPublicAutoConn, "autoconn", "y", false, "disable autoconnect to public visors")
+	ghiddenflags = append(ghiddenflags, "hide")
+	genConfigCmd.Flags().BoolVarP(&isPublic, "public", "z", false, "publicize visor in service discovery")
+	ghiddenflags = append(ghiddenflags, "public")
 	genConfigCmd.Flags().StringVar(&ver, "version", "", "custom version testing override")
 	ghiddenflags = append(ghiddenflags, "version")
-	genConfigCmd.Flags().BoolVar(&all, "all", false, "show all flags")
+	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
 	genConfigCmd.Flags().StringVar(&binPath, "binpath", "", "set bin_path")
 	ghiddenflags = append(ghiddenflags, "binpath")
 	for _, j := range ghiddenflags {
@@ -94,7 +94,7 @@ var genConfigCmd = &cobra.Command{
 	Short: "Generate a config file",
 	PreRun: func(cmd *cobra.Command, _ []string) {
 		//--all unhides flags, prints help menu, and exits
-		if all {
+		if isAll {
 			for _, j := range ghiddenflags {
 				f := cmd.Flags().Lookup(j) //nolint
 				f.Hidden = false
@@ -105,7 +105,7 @@ var genConfigCmd = &cobra.Command{
 		}
 		//set default output filename
 		if output == "" {
-			outunset = true
+			isOutUnset = true
 			confPath = skyenv.ConfigName
 			output = confPath
 		} else {
@@ -113,47 +113,47 @@ var genConfigCmd = &cobra.Command{
 		}
 
 		if output == visorconfig.StdoutName {
-			stdout = true
-			force = false
+			isStdout = true
+			isForce = false
 		}
-		if stdout {
-			regen = false
+		if isStdout {
+			isRegen = false
 		}
 		//hide defeats the purpose of stdout.
-		if (stdout) && (hide) {
-			logger.Fatal("Use of mutually exclusive flags: -w --hide and -n --stdout")
+		if (isStdout) && (isHide) {
+			logger.Warn("Use of mutually exclusive flags: -w --hide and -n --stdout")
 		}
 		//--force will delete a config, which excludes --regen
-		if (force) && (regen) {
+		if (isForce) && (isRegen) {
 			logger.Fatal("Use of mutually exclusive flags: -f --force cannot override -r --regen")
 		}
 		// these flags overwrite each other
-		if (usrEnv) && (pkgEnv) {
+		if (isUsrEnv) && (isPkgEnv) {
 			logger.Fatal("Use of mutually exclusive flags: -u --user and -p --pkg")
 		}
 		//enable local hypervisor by default for user
-		if usrEnv {
-			hypervisor = true
+		if isUsrEnv {
+			isHypervisor = true
 		}
 		var err error
-		if dmsgHTTP {
+		if isDmsgHTTP {
 			dmsgHTTPPath := skyenv.DMSGHTTPName
-			if pkgEnv {
+			if isPkgEnv {
 				dmsgHTTPPath = skyenv.SkywirePath + "/" + skyenv.DMSGHTTPName
 			}
 			if _, err := os.Stat(dmsgHTTPPath); err == nil {
-				if !stdout {
+				if !isStdout {
 					logger.Info("Found Dmsghttp config: ", dmsgHTTPPath)
 				}
 			} else {
 				logger.Fatal("Dmsghttp config not found at: ", dmsgHTTPPath)
 			}
 		}
-		if !stdout {
+		if !isStdout {
 			if confPath, err = filepath.Abs(confPath); err != nil {
 				logger.WithError(err).Fatal("Invalid output provided.")
 			}
-			if force {
+			if isForce {
 				if _, err := os.Stat(confPath); err == nil {
 					err := os.Remove(confPath)
 					if err != nil {
@@ -165,18 +165,18 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 		// skywire-cli config gen -p
-		if !stdout && outunset {
-			if pkgEnv && (selectedOS == "linux") {
+		if !isStdout && isOutUnset {
+			if isPkgEnv && (selectedOS == "linux") {
 				configName = skyenv.Configjson
 				confPath = skyenv.SkywirePath + "/" + configName
 				output = confPath
 			}
-			if usrEnv {
+			if isUsrEnv {
 				confPath = skyenv.HomePath() + "/" + skyenv.ConfigName
 				output = confPath
 			}
 		}
-		if !regen && !stdout {
+		if !isRegen && !isStdout {
 			//check if the config exists
 			if _, err := os.Stat(confPath); err == nil {
 				//error config exists !regen
@@ -184,14 +184,14 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 		//don't write file with stdout
-		if !stdout {
+		if !isStdout {
 			if skyenv.OS == "linux" {
 				userLvl, err := user.Current()
 				if err != nil {
 					logger.WithError(err).Error("Failed to detect user.")
 				} else {
 					if userLvl.Username == "root" {
-						root = true
+						isRoot = true
 					}
 				}
 				//warn when writing config as root to non root owned dir & fail on the reverse instance
@@ -208,10 +208,10 @@ var genConfigCmd = &cobra.Command{
 					if err != nil {
 						logger.Error("cannot stat: /root")
 					}
-					if (owner != rootOwner) && root {
+					if (owner != rootOwner) && isRoot {
 						logger.Warn("writing config as root to directory not owned by root")
 					}
-					if !root && (owner == rootOwner) {
+					if !isRoot && (owner == rootOwner) {
 						logger.Fatal("Insufficient permissions to write to the specified path")
 					}
 				}
@@ -223,21 +223,21 @@ var genConfigCmd = &cobra.Command{
 		mLog.SetLevel(logrus.InfoLevel)
 		serviceConfURL = svcconf
 		//use test deployment
-		if testEnv {
+		if isTestEnv {
 			serviceConfURL = testconf
 		}
 		//fetch the service endpoints
-		services = visorconfig.Fetch(mLog, serviceConfURL, stdout)
+		services = visorconfig.Fetch(mLog, serviceConfURL, isStdout)
 		// Read in old config and obtain old secret key or generate a new random secret key
 		// and obtain old hypervisors (if any)
 		var sk cipher.SecKey
 		if oldConf, err := visorconfig.ReadFile(confPath); err != nil {
-			if !stdout {
+			if !isStdout {
 				_, sk = cipher.GenerateKeyPair()
 			}
 		} else {
 			sk = oldConf.SK
-			if retainHypervisors {
+			if isRetainHypervisors {
 				for _, j := range oldConf.Hypervisors {
 					hypervisorPKs = hypervisorPKs + "," + fmt.Sprintf("\t%s\n", j)
 				}
@@ -245,22 +245,22 @@ var genConfigCmd = &cobra.Command{
 		}
 
 		//determine best protocol
-		if bestProtocol && netutil.LocalProtocol() {
-			dmsgHTTP = true
+		if isBestProtocol && netutil.LocalProtocol() {
+			isDmsgHTTP = true
 		}
 
 		//create the conf
-		conf, err := visorconfig.MakeDefaultConfig(mLog, &sk, usrEnv, pkgEnv, testEnv, dmsgHTTP, hypervisor, confPath, hypervisorPKs, services)
+		conf, err := visorconfig.MakeDefaultConfig(mLog, &sk, isUsrEnv, isPkgEnv, isTestEnv, isDmsgHTTP, isHypervisor, confPath, hypervisorPKs, services)
 		if err != nil {
 			logger.WithError(err).Fatal("Failed to create config.")
 		}
 		//edit the conf
 		// Change rpc address from local to public
-		if publicRPC {
+		if isPublicRPC {
 			conf.CLIAddr = ":3435"
 		}
 		// Set autostart enable vpn-server
-		if vpnServerEnable {
+		if isVpnServerEnable {
 			for i, app := range conf.Launcher.Apps {
 				if app.Name == "vpn-server" {
 					conf.Launcher.Apps[i].AutoStart = true
@@ -268,8 +268,8 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 		skywire := os.Args[0]
-		match := strings.Contains("/tmp/", skywire)
-		if (!stdout) || (!match) {
+		isMatch := strings.Contains("/tmp/", skywire)
+		if (!isStdout) || (!isMatch) {
 			//binaries have .exe extension on windows
 			var exe string
 			if skyenv.OS == "win" {
@@ -328,19 +328,19 @@ var genConfigCmd = &cobra.Command{
 			conf.Launcher.Apps = newConfLauncherApps
 		}
 		// Set EnableAuth true  hypervisor UI by --enable-auth flag
-		if hypervisor {
+		if isHypervisor {
 			// Make false EnableAuth hypervisor UI by --disable-auth flag
-			if disableauth {
+			if isDisableauth {
 				conf.Hypervisor.EnableAuth = false
 			}
 			// Set EnableAuth true  hypervisor UI by --enable-auth flag
-			if enableauth {
+			if isEnableauth {
 				conf.Hypervisor.EnableAuth = true
 			}
 		}
 		// Check OS and enable auth windows or macos
 		if (selectedOS == "win") || (selectedOS == "mac") {
-			if hypervisor {
+			if isHypervisor {
 				conf.Hypervisor.EnableAuth = true
 			}
 		}
@@ -358,8 +358,15 @@ var genConfigCmd = &cobra.Command{
 		if ver != "" {
 			conf.Common.Version = ver
 		}
+		if isPublicAutoConn {
+			conf.Transport.PublicAutoconnect = false
+		}
+		if isPublic {
+			conf.IsPublic = true
+		}
+
 		//don't write file with stdout
-		if !stdout {
+		if !isStdout {
 			// Save config to file.
 			if err := conf.Flush(); err != nil {
 				logger.WithError(err).Fatal("Failed to flush config to file.")
@@ -372,12 +379,12 @@ var genConfigCmd = &cobra.Command{
 		}
 		//omit logging messages with stdout
 		//print config to stdout, omit logging messages, exit
-		if stdout {
+		if isStdout {
 			fmt.Printf("%s", j)
 			os.Exit(0)
 		}
 		//hide the printing of the config to the terminal
-		if hide {
+		if isHide {
 			logger.Infof("Updated file '%s'\n", output)
 			os.Exit(0)
 		}

@@ -3,7 +3,6 @@ import { MatDialogRef, MAT_DIALOG_DATA, MatDialog, MatDialogConfig } from '@angu
 
 import { AppConfig } from 'src/app/app.config';
 
-
 /**
  * Data about a node.
  */
@@ -41,6 +40,7 @@ export class UpdateAllComponent {
   }
 
   constructor(
+    public dialogRef: MatDialogRef<UpdateAllComponent>,
     @Inject(MAT_DIALOG_DATA) data: NodeData[][],
   ) {
     this.updatableNodes = data[0];
