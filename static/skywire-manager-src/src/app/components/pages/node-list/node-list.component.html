@@ -111,7 +111,12 @@
         </tr>
 
         <!-- Values. -->
-        <tr *ngFor="let node of dataSource" (click)="open(node)" class="selectable">
+        <a
+          *ngFor="let node of dataSource"
+          [ngClass]="{'click-effect': node.online, 'non-selectable': !node.online}"
+          class="selectable link-row"
+          [routerLink]="node.online ? ['/nodes', node.localPk] : null"
+        >
           <td>
             <mat-icon *ngIf="node.isHypervisor" class="hypervisor-icon" [inline]="true" [matTooltip]="'nodes.hypervisor-info' | translate">star</mat-icon>
           </td>
@@ -139,9 +144,9 @@
               {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
             </ng-container>
           </td>
-          <td (click)="$event.stopPropagation()" class="actions">
+          <td class="actions">
             <button
-              (click)="copyToClipboard(node)"
+              (click)="$event.stopPropagation(); $event.preventDefault(); copyToClipboard(node);"
               mat-icon-button
               [matTooltip]="(showDmsgInfo ? 'nodes.copy-data' : 'nodes.copy-key') | translate"
               class="big-action-button transparent-button"
@@ -149,7 +154,7 @@
               <mat-icon [inline]="true">filter_none</mat-icon>
             </button>
             <button
-              (click)="showEditLabelDialog(node)"
+              (click)="$event.stopPropagation(); $event.preventDefault(); showEditLabelDialog(node);"
               mat-icon-button
               [matTooltip]="'labeled-element.edit-label' | translate"
               class="big-action-button transparent-button"
@@ -158,7 +163,6 @@
             </button>
             <button
               *ngIf="node.online"
-              (click)="open(node)"
               mat-icon-button
               [matTooltip]="'nodes.view-node' | translate"
               class="big-action-button transparent-button"
@@ -167,7 +171,7 @@
             </button>
             <button
               *ngIf="!node.online"
-              (click)="deleteNode(node)"
+              (click)="$event.stopPropagation(); $event.preventDefault(); deleteNode(node);"
               mat-icon-button
               [matTooltip]="'nodes.delete-node' | translate"
               class="big-action-button transparent-button"
@@ -175,7 +179,7 @@
               <mat-icon>close</mat-icon>
             </button>
           </td>
-        </tr>
+        </a>
       </table>
 
       <!-- List for small screens. -->
@@ -185,7 +189,7 @@
         cellspacing="0" cellpadding="0"
       >
         <!-- Sorting button. -->
-        <tr class="selectable" (click)="dataSorter.openSortingOrderModal()"><td>
+        <tr class="selectable click-effect" (click)="dataSorter.openSortingOrderModal()"><td>
           <div class="list-item-container">
             <div class="left-part">
               <div class="title">{{ 'tables.sorting-title' | translate }}</div>
@@ -200,7 +204,7 @@
           </div>
         </td></tr>
         <!-- Values. -->
-        <tr *ngFor="let node of dataSource" (click)="open(node)" class="selectable"><td>
+        <a *ngFor="let node of dataSource" class="link-row" [ngClass]="{'selectable click-effect': node.online}" [routerLink]="node.online ? ['/nodes', node.localPk] : null"><tr class="d-block"><td class="d-block">
           <div class="list-item-container">
             <div class="left-part">
               <div class="list-row" *ngIf="node.isHypervisor">
@@ -235,7 +239,7 @@
             <div class="margin-part"></div>
             <div class="right-part">
               <button
-                (click)="$event.stopPropagation(); showOptionsDialog(node)"
+                (click)="$event.stopPropagation(); $event.preventDefault(); showOptionsDialog(node);"
                 mat-icon-button
                 [matTooltip]="'common.options' | translate"
                 class="transparent-button"
@@ -244,7 +248,7 @@
               </button>
             </div>
           </div>
-        </td></tr>
+        </td></tr></a>
       </table>
     </div></div>
 
