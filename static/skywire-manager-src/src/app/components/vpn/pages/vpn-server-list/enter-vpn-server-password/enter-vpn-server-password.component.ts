@@ -32,7 +32,7 @@ export class EnterVpnServerPasswordComponent implements OnInit {
   }
 
   constructor(
-    private dialogRef: MatDialogRef<EnterVpnServerPasswordComponent>,
+    public dialogRef: MatDialogRef<EnterVpnServerPasswordComponent>,
     @Inject(MAT_DIALOG_DATA) public data: boolean,
     private formBuilder: FormBuilder,
   ) { }

@@ -35,7 +35,8 @@ const (
 
 // Transport port constants.
 const (
-	TransportPort uint16 = 45 // Listening port of a visor for incoming transports.
+	TransportPort     uint16 = 45 // Listening port of a visor for incoming transports.
+	PublicAutoconnect        = true
 )
 
 // Dmsgpty constants.
@@ -114,6 +115,11 @@ const (
 const (
 	// IPCShutdownMessageType sends IPC shutdown message type
 	IPCShutdownMessageType = 68
+)
+
+const (
+	//IsPublic advertises the visor in the service discovery
+	IsPublic = false
 )
 
 // PkgConfig struct contains paths specific to the linux packages

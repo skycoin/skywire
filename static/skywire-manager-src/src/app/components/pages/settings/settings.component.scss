@@ -1,5 +1,14 @@
 @import "variables";
 
+.checking-container {
+  font-size: 10px;
+  opacity: 0.5;
+
+  .mat-spinner {
+    display: inline-block;
+  }
+}
+
 .show-link {
   cursor: pointer;
   font-size: $font-size-smaller;

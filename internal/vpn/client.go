@@ -9,6 +9,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -170,7 +171,8 @@ func (c *Client) Serve() error {
 
 	r := netutil.NewRetrier(nil, netutil.DefaultInitBackoff, netutil.DefaultMaxBackoff, 3, netutil.DefaultFactor).
 		WithErrWhitelist(errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
-			errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound, errErrSetupNode, errNotPermitted)
+			errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound, errErrSetupNode, errNotPermitted,
+			errErrServerOffline)
 
 	err := r.Do(context.Background(), func() error {
 		if c.isClosed() {
@@ -180,7 +182,8 @@ func (c *Client) Serve() error {
 		if err := c.dialServeConn(); err != nil {
 			switch err {
 			case errHandshakeStatusForbidden, errHandshakeStatusInternalError, errHandshakeNoFreeIPs,
-				errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound, errErrSetupNode, errNotPermitted:
+				errHandshakeStatusBadRequest, errNoTransportFound, errTransportNotFound, errErrSetupNode, errNotPermitted,
+				errErrServerOffline:
 				c.setAppError(err)
 				c.resetConnDuration()
 				return err
@@ -449,10 +452,9 @@ serveLoop:
 func (c *Client) dialServeConn() error {
 	conn, err := c.dialServer(c.appCl, c.cfg.ServerPK)
 	if err != nil {
-		fmt.Printf("error connecting to VPN server: %s", err)
+		fmt.Printf("error connecting to VPN server: %s\n", err)
 		return err
 	}
-
 	fmt.Printf("Dialed %s\n", conn.RemoteAddr())
 
 	defer func() {
@@ -679,7 +681,13 @@ func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error)
 
 	var sHello ServerHello
 	if err := ReadJSONWithTimeout(conn, &sHello, handshakeTimeout); err != nil {
-		return nil, nil, fmt.Errorf("error reading server hello: %w", err)
+		fmt.Printf("error reading server hello: %v\n", err)
+		if strings.Contains(err.Error(), appnet.ErrServiceOffline(skyenv.VPNServerPort).Error()) {
+			err = appserver.RPCErr{
+				Err: err.Error(),
+			}
+		}
+		return nil, nil, err
 	}
 
 	fmt.Printf("Got server hello: %v", sHello)
@@ -710,7 +718,7 @@ func (c *Client) dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, erro
 	}
 
 	if c.isClosed() {
-		// we need to signal outer code that connection object is inalid
+		// we need to signal outer code that connection object is invalid
 		// in this case
 		return nil, errors.New("client got closed")
 	}

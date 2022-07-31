@@ -3,10 +3,12 @@ package vpn
 import (
 	"errors"
 
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/setup/setupclient"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 var (
@@ -28,5 +30,8 @@ var (
 	}
 	errErrSetupNode = appserver.RPCErr{
 		Err: setupclient.ErrSetupNode.Error(),
+	}
+	errErrServerOffline = appserver.RPCErr{
+		Err: appnet.ErrServiceOffline(skyenv.VPNServerPort).Error(),
 	}
 )

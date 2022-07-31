@@ -26,6 +26,8 @@ func init() {
 	RootCmd.AddCommand(hvpkCmd)
 	hvpkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
 	hvpkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
+	hvpkCmd.Flags().BoolVarP(&web, "http", "w", false, "serve public key via http")
+	RootCmd.AddCommand(chvpkCmd)
 	RootCmd.AddCommand(summaryCmd)
 	RootCmd.AddCommand(buildInfoCmd)
 }
@@ -79,8 +81,27 @@ var hvpkCmd = &cobra.Command{
 			if err != nil {
 				logger.Fatal("Failed to connect:", err)
 			}
+			pk = overview.Hypervisors
+			if web {
+				http.HandleFunc("/", overview.Hypervisors)
+				logger.Info("\nServing public key " + pk + " on port " + webPort)
+				http.ListenAndServe(":"+webPort, nil) //nolint
+			}
 			fmt.Println(overview.Hypervisors)
 		}
+	},
+}
+
+var chvpkCmd = &cobra.Command{
+	Use:   "chvpk",
+	Short: "Public key of connected hypervisors",
+	Run: func(_ *cobra.Command, _ []string) {
+		client := rpcClient()
+		overview, err := client.Overview()
+		if err != nil {
+			logger.Fatal("Failed to connect:", err)
+		}
+		fmt.Println(overview.ConnectedHypervisor)
 	},
 }
 
