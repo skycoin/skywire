@@ -776,6 +776,7 @@ func (v *Visor) Shutdown() error {
 	if v.restartCtx == nil {
 		return ErrMalformedRestartContext
 	}
+	defer os.Exit(0)
 	return v.Close()
 }
 
