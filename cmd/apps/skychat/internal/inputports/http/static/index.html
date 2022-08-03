@@ -1,0 +1,1426 @@
+<!doctype html>
+
+<html lang="en">
+
+<head>
+  <title>Skychat</title>
+  <link href="data:image/x-icon;base64,AAABAAMAEBAAAAEAIABoBAAANgAAACAgAAABACAAqBAAAJ4EAAAwMAAAAQAgAKglAABGFQAAKAAA
+  ABAAAAAgAAAAAQAgAAAAAAAABAAAEwsAABMLAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/3MAAP9y
+  AAD/cgAJ/3IAKP9yACL/cgAx/3IAHv9yADD/cgAa/3IALf9yABf/cgAr/3IAEv9yAAP/cgAA/3IA
+  AP9xAAD/cgA8/3IAjv9yANf/cgCu/3IA0v9yAKD/cgDF/3IAlP9yALX/cgCL/3IAo/9yAIL/cgBS
+  /3IAN/9yAAD/cgA0/3IA2f9yAOn/cgDO/3IA4v9yALf/cgDc/3IAoP9yANf/cgCJ/3IA0f9yAHT/
+  cgDK/3IAYv9yAL//cgAs/3IAn/9yAP//cgD9/3IAxf9yAO7/cgCy/3IA5P9yAKD/cgDY/3IAkf9y
+  AMr/cgCF/3IAuf9yAHv/cgCp/3IAk/9yANH/cgD//3IA//9yAOH/cgDR/3IA2/9yALz/cgDV/3IA
+  pv9yAM//cgCP/3IAyf9yAHn/cgDD/3IAZf9yALX/cgDC/3IA//9yAP//cgD7/3IAw/9yAO//cgCu
+  /3IA6P9yAJv/cgDe/3IAiv9yANH/cgB8/3IAwv9yAHT/cgBh/3IAbv9yAPj/cgD//3IA//9yANz/
+  cgDX/3IA1P9yAMP/cgDM/3IArf9yAMb/cgCY/3IAwP9yAIL/cgC6/3IAFP9yAA7/cgCS/3IA+P9y
+  AP//cgD4/3IAwv9yAPD/cgCs/3IA6f9yAJf/cgDh/3IAhf9yANf/cgB1/3IAZv9yAAn/cgAA/3IA
+  Cv9yAFH/cgCZ/3IA8P9yANf/cgDc/3IAzP9yAMr/cgDD/3IAt/9yALb/cgBj/3IAOv9qAAD/cgAA
+  AAAAAAAAAAD/cgAA/3IACv9yAL7/cgD5/3IAw/9yAO7/cgCs/3IA6f9yAJn/cgCi/3IABv9yAAAA
+  AAAAAAAAAAAAAAAAAAAA/3IAAP9yAAD/cgBt/3IA/f9yANH/cgDh/3IAxf9yANL/cgC7/3IANP9y
+  AAD/cgAAAAAAAAAAAAAAAAAAAAAAAAAAAAD/cgAA/3IADv9yAJP/cgDn/3IAyP9yAOz/cgCm/3IA
+  gv9yAAb/cgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP9yAAD/cgAJ/3IARf9yAF3/cgBy
+  /3IAMP9yAAT/cgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP9yAAD/
+  cgAA/3IAAP9yAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD//wAA//8AAMADAACAAQAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAgAMAAOAHAADwDwAA8A8AAPgfAAD//wAAKAAAACAAAABAAAAAAQAg
+  AAAAAAAAEAAAEwsAABMLAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD/cwAA/3IA
+  AP9yAAr/cgAq/3IARv9yADL/cgAp/3IATv9yAE7/cgAv/3IAHP9yAE3/cgBO/3IALf9yABD/cgBJ
+  /3IAT/9yACz/cgAH/3IAQv9yAE7/cgAo/3IAAP9yAAL/cgAA/3IAAAAAAAAAAAAAAAAAAAAAAAD/
+  cwAA/3IAAP9yAAz/cgBJ/3IAbv9yAOb/cgD6/3IAzP9yAGj/cgDx/3IA/v9yAMf/cgBE/3IA4P9y
+  AP//cgDD/3IAKP9yAMb/cgD//3IAvv9yABb/cgCj/3IA//9yALj/cgAL/3IAPP9yAE3/cgAG/3IA
+  AAAAAAAAAAAA/3MAAP9yAAD/cgAZ/3IAn/9yAPX/cgCV/3IA2v9yAP//cgD8/3IAdv9yALr/cgD/
+  /3IA+/9yAGT/cgCV/3IA//9yAPr/cgBY/3IAbP9yAP//cgD4/3IAUP9yAEb/cgD0/3IA9v9yAEr/
+  cgAo/3IA1v9yAI7/cgAQ/3IAAAAAAAD/cgAA/3IAEP9yAKj/cgD//3IA//9yAMr/cgCd/3IA//9y
+  AP//cgDC/3IAcf9yAPr/cgD//3IAvP9yAEr/cgDs/3IA//9yALf/cgAr/3IA1f9yAP//cgCy/3IA
+  Ff9yALX/cgD//3IArP9yAAn/cgCP/3IA//9yAJL/cgAI/3IAAP9xAAD/cgB0/3IA/P9yAP//cgD/
+  /3IA+P9yAI7/cgDi/3IA//9yAPj/cgBt/3IAx/9yAP//cgD3/3IAWP9yAKT/cgD//3IA9f9yAEv/
+  cgB8/3IA//9yAPL/cgBC/3IAVP9yAPr/cgDw/3IAPP9yADH/cgDq/3IA+P9yAFv/cgAA/3IAIf9y
+  ANX/cgD//3IA//9yAP//cgD//3IAwP9yAKb/cgD//3IA//9yALX/cgB6/3IA/f9yAP//cgCu/3IA
+  Uv9yAPP/cgD//3IAqP9yADD/cgDg/3IA//9yAKP/cgAX/3IAw/9yAP//cgCc/3IACP9yAJ//cgD/
+  /3IAwf9yABL/cgBg/3IA+f9yAP//cgD//3IA//9yAP//cgDz/3IAi/9yAOn/cgD//3IA8v9yAGf/
+  cgDS/3IA//9yAPH/cgBP/3IAs/9yAP//cgDv/3IAP/9yAIz/cgD//3IA6/9yADX/cgBk/3IA/v9y
+  AOj/cgAv/3IAPv9yAPH/cgDx/3IARP9yAJH/cgD//3IA//9yAP//cgD//3IA//9yAP//cgC1/3IA
+  r/9yAP//cgD//3IAp/9yAIX/cgD//3IA//9yAJ//cgBc/3IA+P9yAP//cgCZ/3IAN/9yAOn/cgD/
+  /3IAk/9yABv/cgDQ/3IA//9yAIz/cgAJ/3IArv9yAP//cgBx/3IAov9yAP//cgD//3IA//9yAP//
+  cgD//3IA//9yAO7/cgCK/3IA8P9yAP//cgDs/3IAZP9yAN3/cgD//3IA6v9yAEj/cgDA/3IA//9y
+  AOf/cgA1/3IAnP9yAP//cgDj/3IAKv9yAHT/cgD//3IA3/9yACT/cgBN/3IA9v9yAIL/cgCS/3IA
+  //9yAP//cgD//3IA//9yAP//cgD//3IA//9yAKv/cgC6/3IA//9yAP//cgCa/3IAkf9yAP//cgD/
+  /3IAkP9yAGj/cgD8/3IA//9yAIn/cgBB/3IA8P9yAP//cgCC/3IAIv9yANv/cgD//3IAfP9yAA3/
+  cgC7/3IAdf9yAGL/cgD5/3IA//9yAP//cgD//3IA//9yAP//cgD//3IA5v9yAIz/cgD2/3IA//9y
+  AOP/cgBj/3IA5v9yAP//cgDh/3IARP9yAM3/cgD//3IA3v9yAC//cgCs/3IA//9yANn/cgAh/3IA
+  hf9yAP//cgDV/3IAG/9yAE//cgBA/3IAI/9yANf/cgD//3IA//9yAP//cgD//3IA//9yAP//cgD/
+  /3IAov9yAMT/cgD//3IA//9yAI3/cgCe/3IA//9yAP//cgCB/3IAdf9yAP//cgD//3IAeP9yAE7/
+  cgD2/3IA//9yAHL/cgAr/3IA5f9yAP//cgBt/3MAA/9yAAX/cQAA/3IAeP9yAP3/cgD//3IA//9y
+  AP//cgD//3IA//9yAP//cgDe/3IAj/9yAPr/cgD//3IA2v9yAGX/cgDu/3IA//9yANf/cgBD/3IA
+  2f9yAP//cgDT/3IAKv9yALr/cgD//3IAzv9yABv/cgCV/3IA//9yAMX/cgAQ/3IAAP9yAAD/cgAS
+  /3IArP9yAP//cgD//3IA//9yAP//cgD//3IA//9yAP//cgCa/3IAzv9yAP//cgD//3IAgf9yAKv/
+  cgD//3IA/v9yAHP/cgCE/3IA//9yAP3/cgBp/3IAW/9yAPv/cgD8/3IAYv9yADf/cgDr/3IAlv9y
+  AAj/cgAA/3YAAP9yAAD/cgAb/3IApP9yAPn/cgD//3IA//9yAP//cgD//3IA//9yANX/cgCV/3IA
+  /f9yAP//cgDP/3IAaf9yAPT/cgD//3IAy/9yAEX/cgDj/3IA//9yAMb/cgAp/3IAyP9yAP//cgDD
+  /3IAGv9yAFP/cgAU/3IAAAAAAAAAAAAA/3MAAP9yAAD/cgAN/3IAX/9yAL7/cgDr/3IA+f9yAP7/
+  cgD//3IA/P9yAJP/cgDY/3IA//9yAPz/cgB3/3IAuf9yAP//cgD7/3IAZf9yAJP/cgD//3IA+v9y
+  AFr/cgBo/3IA5/9yAKv/cgAc/3IAAP90AAAAAAAAAAAAAAAAAAAAAAAAAAAAAP9zAAD/cQAA/3IA
+  DP9yAC7/cgBQ/3IA1P9yAP//cgD//3IAy/9yAJz/cgD//3IA//9yAMP/cgBw/3IA+f9yAP//cgC+
+  /3IASv9yAOv/cgD//3IAn/9yAA//cgAl/3IACf9yAAD/dAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAA/3IAAP9yAAT/cgCu/3IA//9yAP//cgD5/3IAjv9yAOH/cgD//3IA+P9y
+  AG7/cgDF/3IA//9yAPf/cgBa/3IAov9yAP//cgCT/3EAAP9yAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD/cwAA/3IAAP9yAH3/cgD//3IA//9yAP//cgDB
+  /3IApf9yAP//cgD//3IAtv9yAHn/cgD9/3IA//9yALD/cgBR/3IA8P9yAGH/cgAA/3MAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD/cgAA/3IANP9y
+  AOn/cgD//3IA//9yAPT/cgCL/3IA6f9yAP//cgDz/3IAaP9yANH/cgD//3IA8v9yAFL/cgCL/3IA
+  JP9yAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAP9yAAD/cgAD/3IAjP9yAP//cgD//3IA//9yALf/cgCu/3IA//9yAP//cgCp/3IAhP9yAP//
+  cgD//3IApf9yABX/cgAC/3IAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAP9yAAD/cgAX/3IAsv9yAP//cgD//3IA7v9yAIr/cgDv/3IA
+  //9yAO3/cgBk/3IA3P9yAP//cgCX/3IABv9yAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/3MAAP9yAAD/cgAb/3IAm/9yAPT/
+  cgD//3IArv9yALn/cgD//3IA//9yAJ//cgCG/3IAjf9yABL/cgAA/5kAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/3gA
+  AP9yAAD/cgAI/3IAS/9yAKP/cgC9/3IAff9yAN//cgDS/3IAiP9yABb/cgAF/3IAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAP90AAD/cgAA/3IAA/9yABX/cgAT/3IAIf9yABP/cgAC/3IAAP90
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAD///////////////////////////gAAF/gAAAHwAAAA4AAAAGAAAAB
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAGAAAABwAAAA+AAAA/4AAAf/gAA//8AAP//
+  AAD//wAA//+AAf//wAP//+AH///4H////////////ygAAAAwAAAAYAAAAAEAIAAAAAAAACQAABML
+  AAATCwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAD/ZgAA/2YAAP9mAAD/ZgAAAAAAAAAAAAAAAAAA/20AAP9tAAD/bQAA/20AAAAAAAAAAAAA
+  /3gAAP94AAD/eAAA/3gAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD/cwAA/3QAAP9yAAn/cgAo/3IAS/9y
+  AGP/cgBc/3IAEv9yAFD/cgBs/3IAav9yAGv/cgBZ/3IACf9yADf/cgBs/3IAav9yAGv/cgBW/3IA
+  Bv9yAB3/cgBn/3IAav9yAGv/cgBS/3IABf9yAAr/cgBa/3IAa/9yAGr/cgBK/3IABP9yAAD/cwAB
+  /3IAAP9yAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/3MAAP9yAAD/
+  cgAV/3IAJv9yAIT/cgDp/3IA+f9yAP//cgD3/3IAUv9yAIL/cgD//3IA//9yAP//cgDz/3IARf9y
+  AEf/cgD0/3IA//9yAP//cgDv/3IAPf9yABr/cgDU/3IA//9yAP//cgDq/3IANf90AAL/cgCh/3IA
+  //9yAP//cgDk/3IALf9yAAD/cgAm/3IAS/9yAAz/cgAA/3UAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAD/cgAA/3IAAv9yAEb/cgDF/3IAs/9yAHD/cgD7/3IA//9yAP//cgD//3IArv9yADb/
+  cgDj/3IA//9yAP//cgD//3IApv9zABL/cgC2/3IA//9yAP//cgD//3IAnP90AAL/cgB7/3IA//9y
+  AP//cgD//3IAkf9xAAD/cgBC/3IA8f9yAP//cgD//3IAhv9xAAD/cgAZ/3IAxv9yALD/cgAx/24A
+  AP9zAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP9yAAD/cwAF/3IAbP9yAOv/cgD//3IA9P9yAGL/cgDH
+  /3IA//9yAP//cgD//3IA8f9yAEb/cgCR/3IA//9yAP//cgD//3IA7f9yADf/cgBV/3IA+f9yAP//
+  cgD//3IA6P9yADD/cgAj/3IA3v9yAP//cgD//3IA4v9yACn/cgAG/3IAr/9yAP//cgD//3IA2/9y
+  ACP/cgAA/3IAc/9yAP//cgDc/3IATv91AAH/cwAAAAAAAAAAAAAAAAAA/3MAAP9zAAH/cgBr/3IA
+  8/9yAP//cgD//3IA//9yAKn/cgB3/3IA/v9yAP//cgD//3IA//9yAJ//cgA9/3IA6/9yAP//cgD/
+  /3IA//9yAJb/cgAU/3IAxP9yAP//cgD//3IA//9yAIz/dgAB/3IAjP9yAP//cgD//3IA//9yAIH/
+  cgAA/3IAUP9yAPb/cgD//3IA//9yAHb/cgAA/3IAIf9yANj/cgD//3IA5v9yAEv/cgAA/3MAAAAA
+  AAD/cwAA/3IAAP9yAEb/cgDq/3IA//9yAP//cgD//3IA//9yAO7/cgBd/3IA0/9yAP//cgD//3IA
+  //9yAOr/cgA8/3IAof9yAP//cgD//3IA//9yAOX/cgAs/3IAZf9yAP3/cgD//3IA//9yAN//cgAk
+  /3IAL/9yAOf/cgD//3IA//9yANf/cgAf/3IADP9yAL3/cgD//3IA//9yAND/cgAZ/3EAAP9yAIP/
+  cgD//3IA//9yANX/cgAp/3IAAP90AAD/cgAA/3IAEv9yAL//cgD//3IA//9yAP//cgD//3IA//9y
+  AP//cgCb/3IAg/9yAP//cgD//3IA//9yAP//cgCP/3IAR/9yAPL/cgD//3IA//9yAP//cgCG/3IA
+  Gv9yAND/cgD//3IA//9yAP//cgB8/3QAAv9yAJv/cgD//3IA//9yAP7/cgBx/3IAAP9yAF//cgD7
+  /3IA//9yAPz/cgBn/3IAAP9yACv/cgDi/3IA//9yAP//cgCc/3MABf9zAAD/cgAA/3IAXf9yAPr/
+  cgD//3IA//9yAP//cgD//3IA//9yAP//cgDm/3IAWv9yAN7/cgD//3IA//9yAP//cgDh/3IANf9y
+  ALD/cgD//3IA//9yAP//cgDc/3IAIv9yAHX/cgD//3IA//9yAP//cgDU/3IAGv9yADz/cgDv/3IA
+  //9yAP//cgDM/3IAFv9yABT/cgDK/3IA//9yAP//cgDD/3IAEf94AAD/cgCT/3IA//9yAP//cgDt
+  /3IAOv9yAAD/cwAI/3IAr/9yAP//cgD//3IA//9yAP//cgD//3IA//9yAP//cgD//3IAjv9yAJD/
+  cgD//3IA//9yAP//cgD//3IAf/9yAFP/cgD3/3IA//9yAP//cgD//3IAdv9yACH/cgDb/3IA//9y
+  AP//cgD9/3IAbP9zAAX/cgCr/3IA//9yAP//cgD7/3IAYv9yAAD/cgBu/3IA/v9yAP//cgD5/3IA
+  V/9yAAD/cgA3/3IA6/9yAP//cgD//3IAiP9xAAD/cgAp/3IA4P9yAP//cgD//3IA//9yAP//cgD/
+  /3IA//9yAP//cgD//3IA3P9yAFv/cgDn/3IA//9yAP//cgD//3IA1/9yADH/cgC//3IA//9yAP//
+  cgD//3IA0f9yABr/cgCG/3IA//9yAP//cgD//3IAyP9yABH/cgBL/3IA9f9yAP//cgD//3IAv/9y
+  AA7/cgAd/3IA1v9yAP//cgD//3IAtv9yAAv/cgAE/3IAov9yAP//cgD//3IAw/9yAA//cgBN/3IA
+  9f9yAP//cgD//3IA//9yAP//cgD//3IA//9yAP//cgD//3IA//9yAIH/cgCd/3IA//9yAP//cgD/
+  /3IA/v9yAG//cgBh/3IA/P9yAP//cgD//3IA/f9yAGX/cgAr/3IA5f9yAP//cgD//3IA+v9yAFz/
+  cgAJ/3IAuf9yAP//cgD//3IA9/9yAFL/cgAA/3IAfv9yAP//cgD//3IA9P9yAEn/cgAA/3IARP9y
+  APL/cgD//3IA4v9yACn/cgBm/3IA/P9yAP//cgD//3IA//9yAP//cgD//3IA//9yAP//cgD//3IA
+  //9yANL/cgBe/3IA7/9yAP//cgD//3IA//9yAMz/cgAv/3IAzP9yAP//cgD//3IA//9yAMT/cgAV
+  /3IAlv9yAP//cgD//3IA//9yALv/cgAK/3IAWv9yAPr/cgD//3IA//9yALH/cgAH/3IAJ/9yAOD/
+  cgD//3IA//9yAKf/cgAG/3IACf9yALH/cgD//3IA7v9yADz/cgBs/3IA/f9yAP//cgD//3IA//9y
+  AP//cgD//3IA//9yAP//cgD//3IA//9yAP3/cgB1/3IAq/9yAP//cgD//3IA//9yAPz/cgBh/3IA
+  cP9yAP//cgD//3IA//9yAPn/cgBV/3IAN/9yAO3/cgD//3IA//9yAPb/cgBN/3IAEP9yAMb/cgD/
+  /3IA//9yAPL/cgBE/3EAAP9yAI7/cgD//3IA//9yAO3/cgA7/3IAAP9yAFL/cgD4/3IA8f9yAEH/
+  cgBe/3IA+v9yAP//cgD//3IA//9yAP//cgD//3IA//9yAP//cgD//3IA//9yAP//cgDF/3IAY/9y
+  APX/cgD//3IA//9yAP//cgC+/3IAMf9yANf/cgD//3IA//9yAP//cgC3/3IAEv9yAKb/cgD//3IA
+  //9yAP//cgCt/3MABf9yAGn/cgD9/3IA//9yAP//cgCj/3QAAv9yADP/cgDp/3IA//9yAP//cgCY
+  /3MAAv9yAA//cgDA/3IA7v9yADX/cgA+/3IA7v9yAP//cgD//3IA//9yAP//cgD//3IA//9yAP//
+  cgD//3IA//9yAP//cgD6/3IAa/9yALn/cgD//3IA//9yAP//cgD3/3IAU/9yAH//cgD//3IA//9y
+  AP//cgD0/3IAR/9yAET/cgDz/3IA//9yAP//cgDw/3IAPv9yABj/cgDS/3IA//9yAP//cgDr/3IA
+  N/91AAH/cgCe/3IA//9yAP//cgDl/3IAL/9yAAD/cgBk/3IA0v9yAB3/cgAY/3IAz/9yAP//cgD/
+  /3IA//9yAP//cgD//3IA//9yAP//cgD//3IA//9yAP//cgD//3IAuf9yAGv/cgD6/3IA//9yAP//
+  cgD//3IAsP9yADX/cgDi/3IA//9yAP//cgD//3IAqP9yABL/cgC1/3IA//9yAP//cgD//3IAnv90
+  AAL/cgB6/3IA//9yAP//cgD//3IAk/9xAAD/cgBA/3IA8P9yAP//cgD//3IAiP9xAAD/cgAa/3IA
+  dv9yAAj/agAA/3IAjf9yAP//cgD//3IA//9yAP//cgD//3IA//9yAP//cgD//3IA//9yAP//cgD/
+  /3IA9f9yAGP/cgDG/3IA//9yAP//cgD//3IA8v9yAEf/cgCP/3IA//9yAP//cgD//3IA7v9yADn/
+  cgBT/3IA+P9yAP//cgD//3IA6P9yADH/cgAi/3IA3f9yAP//cgD//3IA4/9yACv/cgAG/3IArf9y
+  AP//cgD//3IA3P9yACT/cgAA/3IADP9zAAH/cgAA/3IANv9yAOn/cgD//3IA//9yAP//cgD//3IA
+  //9yAP//cgD//3IA//9yAP//cgD//3IA//9yAKv/cgB1/3IA/f9yAP//cgD//3IA//9yAKH/cgA8
+  /3IA6v9yAP//cgD//3IA//9yAJj/cgAU/3IAwv9yAP//cgD//3IA//9yAI7/dgAB/3IAiv9yAP//
+  cgD//3IA//9yAIP/cgAA/3IATv9yAPb/cgD//3IA//9yAHj/cQAA/3MAAAAAAAD/cgAA/3MAA/9y
+  AIv/cgD//3IA//9yAP//cgD//3IA//9yAP//cgD//3IA//9yAP//cgD//3IA//9yAO7/cgBe/3IA
+  0v9yAP//cgD//3IA//9yAOv/cgA9/3IAn/9yAP//cgD//3IA//9yAOb/cgAt/3IAY/9yAPz/cgD/
+  /3IA//9yAOD/cgAl/3IALv9yAOb/cgD//3IA//9yANn/cgAg/3IADP9yALv/cgD//3IA//9yAM3/
+  cgAU/3IAAAAAAAAAAAAA/3IAAP9yABr/cgC9/3IA//9yAP//cgD//3IA//9yAP//cgD//3IA//9y
+  AP//cgD//3IA//9yAP//cgCd/3IAgf9yAP//cgD//3IA//9yAP//cgCR/3IARv9yAPH/cgD//3IA
+  //9yAP//cgCI/3IAGf9yAM//cgD//3IA//9yAP//cgB+/3QAAv9yAJr/cgD//3IA//9yAP//cgBz
+  /3IAAP9yAF3/cgD6/3IA//9yAJv/cgAJ/3IAAAAAAAAAAAAA/3QAAP9yAAD/cgAr/3IAx/9yAP//
+  cgD//3IA//9yAP//cgD//3IA//9yAP//cgD//3IA//9yAP//cgDn/3IAW/9yAN3/cgD//3IA//9y
+  AP//cgDj/3IANv9yAK//cgD//3IA//9yAP//cgDd/3IAI/9yAHP/cgD//3IA//9yAP//cgDV/3IA
+  G/9yADv/cgDu/3IA//9yAP//cgDN/3IAF/9yABP/cgDH/3IArP9yABf/cgAAAAAAAAAAAAAAAAAA
+  AAAAAP9zAAD/cgAA/3IAJv9yAK7/cgD6/3IA//9yAP//cgD//3IA//9yAP//cgD//3IA//9yAP//
+  cgD//3IAj/9yAI7/cgD//3IA//9yAP//cgD//3IAgf9yAFL/cgD3/3IA//9yAP//cgD//3IAd/9y
+  ACD/cgDa/3IA//9yAP//cgD+/3IAbv9zAAT/cgCp/3IA//9yAP//cgD8/3IAZv9xAAD/cgA1/3IA
+  GP9yAAD/cwAAAAAAAAAAAAAAAAAAAAAAAAAAAAD/dwAA/3IAAP9yAA//cgBp/3IAzv9yAPr/cgD/
+  /3IA//9yAP//cgD//3IA//9yAP//cgD//3IA3f9yAFv/cgDm/3IA//9yAP//cgD//3IA2P9yADH/
+  cgC9/3IA//9yAP//cgD//3IA0v9yABv/cgCE/3IA//9yAP//cgD//3IAyv9yABL/cgBJ/3IA9P9y
+  AP//cgD3/3IAjv9zAAP/cwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AP9zAAD/dwAA/3IAF/9yAFX/cgCU/3IAvv9yANL/cgDz/3IA//9yAP//cgD//3IA//9yAIL/cgCc
+  /3IA//9yAP//cgD//3IA//9yAHH/cgBf/3IA+/9yAP//cgD//3IA/f9yAGf/cgAq/3IA5P9yAP//
+  cgD//3IA+/9yAFv/cgAJ/3IAiv9yAIj/cgBE/3IAD/9yAAD/cwAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP9zAAD/cwAB/3IACf9yABb/cgC0/3IA
+  //9yAP//cgD//3IA//9yANP/cgBd/3IA7v9yAP//cgD//3IA//9yAM3/cgAv/3IAyv9yAP//cgD/
+  /3IA//9yAMb/cgAV/3IAlP9yAP//cgD//3IA//9yAIL/cgAA/3MAAv9zAAD/cwAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAA/3MAAP9vAAD/cgCa/3IA//9yAP//cgD//3IA//9yAP3/cgB2/3IAqv9yAP//cgD//3IA
+  //9yAPz/cgBi/3IAbv9yAP7/cgD//3IA//9yAPn/cgBX/3IANv9yAOz/cgD//3IA//9yAG//cgAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/3MAAP9yAAD/cgBy/3IA//9yAP//cgD//3IA//9y
+  AP//cgDH/3IAY/9yAPT/cgD//3IA//9yAP//cgDA/3IAMP9yANb/cgD//3IA//9yAP//cgC4/3IA
+  Ev9yAKT/cgD//3IA+P9yAEn/cgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP9yAAD/
+  cgA7/3IA8f9yAP//cgD//3IA//9yAP//cgD6/3IAbP9yALf/cgD//3IA//9yAP//cgD4/3IAVP9y
+  AH7/cgD//3IA//9yAP//cgD1/3IASP9yAEP/cgD1/3IA2v9yAB3/cgAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAP9yAAD/cgAN/3IAu/9yAP//cgD//3IA//9yAP//cgD//3IAuv9yAGr/
+  cgD5/3IA//9yAP//cgD//3IAsv9yADT/cgDh/3IA//9yAP//cgD//3IAqv9yABL/cgC2/3IAl/90
+  AAH/cwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP9zAAD/cgAA/3IAWf9yAPf/cgD/
+  /3IA//9yAP//cgD//3IA9f9yAGT/cgDE/3IA//9yAP//cgD//3IA8/9yAEj/cgCO/3IA//9yAP//
+  cgD//3IA7v9yADv/cgA//3IAMf9yAAD/dQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAD/cgAA/3IAC/9yAKX/cgD//3IA//9yAP//cgD//3IA//9yAKz/cgB0/3IA/f9yAP//cgD/
+  /3IA//9yAKP/cgA7/3IA6f9yAP//cgD//3IA//9yAJz/cwAF/3MAAf9zAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD/dAAA/3IAAP9yACT/cgDH/3IA//9yAP//cgD//3IA
+  //9yAO//cgBe/3IA0f9yAP//cgD//3IA//9yAOz/cgA+/3IAnf9yAP//cgD//3IA//9yAKD/cgAH
+  /3IAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/3MAAP9y
+  AAD/cgAv/3IAxf9yAP//cgD//3IA//9yAP//cgCf/3IAgP9yAP//cgD//3IA//9yAP//cgCT/3IA
+  Rf9yAPH/cgD+/3IAq/9yABv/cgAA/3IAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAP9zAAD/cgAA/3IAIP9yAJ3/cgD0/3IA//9yAP//cgDo/3IAW/9y
+  ANv/cgD//3IA//9yAP//cgDl/3IAOf9yAJ3/cgCJ/3IAE/9yAAD/cwAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD/eAAA/3IAAP9yAAj/
+  cgBM/3IArf9yAOj/cgD//3IAk/9yAI7/cgD//3IA//9yAPv/cgDh/3IAUv9zAA3/cgAF/3IAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAP90AAD/cgAA/3IAB/9yACv/cgBc/3IAZP9yADX/cgCL/3IAfP9yAFT/
+  cgAj/3IABf9yAAD/dgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD/cwAA
+  /3MAAP90AAD/dAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD/////
+  //8AAP///////wAA////////AAD///////8AAP///////wAA////////AAD///////8AAP//////
+  /wAA/wAAAAL/AAD8AAAAAj8AAPAAAACCHwAA4AAAAAEHAADAAAAAQQcAAMAAAAAAgwAAgAAAACCB
+  AACAAAAAAEEAAAAAAAAQQQAAAAAAAAAAAAAAAAAACCAAAAAAAAAAAAAAAAAAAAQQAAAAAAAAAAAA
+  AAAAAAAACAAAAAAAAAIIAACAAAAAAAQAAIAAAAABBwAAgAAAAAADAADAAAAAAIMAAOAAAAAABwAA
+  8AAAAABPAAD4AAAAAD8AAP4AAAAAfwAA/4AAAAv/AAD/8AAAD/8AAP/wAAAP/wAA//AAAA//AAD/
+  8AAAD/8AAP/4AAAf/wAA//gAAB//AAD//AAAP/8AAP/+AAB//wAA//8AAP//AAD//4AB//8AAP//
+  4Af//wAA////////AAD///////8AAP///////wAA////////AAA=" rel="icon" type="image/x-icon" />
+  <meta charset="utf-8">
+
+  <style>
+    html {
+      font-family: sans-serif;
+      font-size: 13px;
+    }
+
+    body {
+      display: flex;
+      height: 100vh;
+      margin: 0;
+      background: #455164;
+    }
+
+    a {
+      text-decoration: none;
+      color: inherit;
+    }
+
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      width: 240px;
+      padding: 1em;
+      color: #99a2b4;
+      overflow: auto;
+    }
+
+    .user{
+      flex: 0;
+      margin-top: 1em;
+      margin-bottom: 1em;
+    }
+
+    .user a {
+      display: flex;
+      border-bottom: solid black 1px;
+      margin: 0 -1em;
+      padding: 1em;
+    }
+
+    .user a .active {
+      color: white;
+      background: black;
+      cursor: unset;
+    }
+    
+    .user a .small-profile-picture {
+      width: 30px;
+      height: 30px;
+      margin-right: 10px;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+
+    .user a .text-container {
+      min-width: 0;
+    }
+
+    .user a .alias{
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .user a .pk {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .chat-list {
+      flex: 1;
+      margin-top: 1em;
+    }
+
+    .chat-list a {
+      display: flex;
+      border-bottom: solid black 1px;
+      margin: 0 -1em;
+      padding: 1em;
+    }
+
+    .chat-list a.active {
+      color: white;
+      background: black;
+      cursor: unset;
+    }
+
+    .chat-list a .small-profile-picture {
+      width: 30px;
+      height: 30px;
+      margin-right: 10px;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+
+    .chat-list a .text-container {
+      min-width: 0;
+    }
+
+    .chat-list a .pk {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .chat-list a .msg {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      margin-top: 2px;
+      opacity: 0.8;
+      font-size: 11px;
+    }
+
+    .chat-list a .unreaded {
+      color: white;
+      background: red;
+      border-radius: 5px;
+      padding: 5px 8px;
+      margin-left: 5px;
+      flex-shrink: 0;
+    }
+
+    .chatbox {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      margin: 0.3em;
+      background: white;
+      border-radius: 2px;
+    }
+
+    .message-list {
+      overflow: auto;
+      padding: 1em;
+      flex: 1;
+    }
+
+    .content-left {
+      text-align: left;
+    }
+
+    .content-right {
+      text-align: right;
+    }
+
+    .content-center {
+      text-align: center;
+    }
+
+    .date-container {
+      display: inline-block;
+      background-color: #eaeaea;
+      padding: 10px;
+      font-size: 12px;
+      border-radius: 10px;
+      margin-bottom: 5px;
+    }
+
+    .msg-container {
+      color: white;
+      padding: 8px 12px;
+      border-radius: 10px;
+      margin-bottom: 5px;
+      display: inline-block;
+      max-width: 80%;
+      font-size: 14px;
+      line-height: 1.3;
+    }
+
+    .msg-received {
+      background-color: #525f73;
+      border-bottom-left-radius: 0;
+    }
+
+    .msg-sent {
+      background-color: #5ba74a;
+      border-bottom-right-radius: 0;
+    }
+
+    .message-time {
+      font-size: 11px;
+      opacity: 0.5;
+      text-align: right;
+      margin-top: 3px;
+    }
+
+    .message-form {
+      flex-shrink: 0;
+      display: flex;
+      padding: 0.3em;
+      background: #eee;
+      border-top: 2px solid #ddd;
+    }
+
+    input[type=text] {
+      flex: 1;
+      padding: 0.5em;
+      margin-right: 1em;
+      border: 1px solid #ddd;
+      border-radius: 2px;
+    }
+
+    input[type=submit] {
+      padding: 0.5em 2em;
+      background: #f6f6f6;
+      border: 1px solid #ddd;
+      border-radius: 2px;
+      outline: none;
+    }
+
+    .chat-form input[type=submit] {
+      padding: 0.5em 0.7em;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .chat-header-container {
+      height: 60px;
+      border: 1px solid black;
+      background: #303948;
+    }
+
+    .chat-buttons-container {
+      height: 0px;
+      z-index: 10;
+      align-self: flex-end;
+      margin-right: 25px;
+      transform: translateY(5px);
+      display: flex;
+    }
+
+    .chat-button {
+      border: solid #d5d5d5 1px;
+      background: white;
+      color: #5e5e5e;
+      width: 30px;
+      height: 30px;
+      line-height: 32px;
+      text-align: center;
+      border-radius: 100%;
+      font-weight: bolder;
+      font-size: 15px;
+      cursor: pointer;
+      margin-left: 5px;
+    }
+
+    .chat-image-config {
+      position: fixed;
+      width: 100%;
+      height: 100%;
+      background: white;
+      z-index: 100;
+      overflow: auto;
+    }
+
+    .chat-image-config .small-text {
+      font-size: 10px;
+    }
+
+    .chat-image-config .close-button {
+      position: fixed;
+      right: 25px;
+      padding: 10px;
+      font-size: 20px;
+      font-weight: bolder;
+      cursor: pointer;
+    }
+
+    .chat-image-config .main-area {
+      margin: 30px;
+      text-align: center;
+    }
+
+    .chat-image-config .main-area .big-profile-picture {
+      width: 250px;
+      height: 250px;
+      margin-top: 20px;
+      object-fit: cover;
+    }
+
+    .chat-image-config .main-area .name {
+      font-size: 18px;
+      font-weight: bold;
+    }
+
+    .chat-image-config .main-area .buttons-area {
+      margin-top: 20px;
+    }
+
+    .settings-container {
+      display: flex;
+      justify-content: center;
+      flex-direction: column;
+      margin: 0.3em;
+      padding: 10px;
+      background: #455164;
+      border-radius: 2px;
+    }
+
+    .settings-close-button{
+      border: solid #d5d5d5 1px;
+      background: white;
+      color: #5e5e5e;
+      width: 15px;
+      height: 15px;
+      line-height: 16px;
+      text-align: center;
+      border-radius: 100%;
+      font-weight: bolder;
+      font-size: 7px;
+      cursor: pointer;
+      margin: 5px;
+    }
+
+    .settings-user-info-container {
+      background: #99a2b4;
+    }
+
+    .settings-user-info-heading{
+      margin: 0.3em;
+    }
+
+    .settings-user-info-form {
+      margin: 0.3em;
+    }
+
+    .settings-settings-container{
+      background: #5e6573;
+    }
+
+    .settings-settings-heading {
+      margin: 0.3em;
+    }
+
+    .settings-settings-form {
+      margin: 0.3em;
+    }
+
+  </style>
+</head>
+
+<body>
+  <aside class="sidebar">
+    <div id="user" class="user"></div>
+    <form class="chat-form" onsubmit="app.addChat(this); return false;">
+      <input id="pkToAdd" type="text" placeholder="Enter public key" />
+      <input type="submit" value="+">
+    </form>
+    <ul id="chats" class="chat-list"></ul>
+  </aside>
+
+  <main class="chatbox">
+    <div id="chatHeaderContainer" class="chat-header-container">
+      <div id="chatHeaderInformation" class="chat-header-information"></div>
+      <div id="chatButtonsContainer" class="chat-buttons-container hidden">
+        <div class="chat-button" onclick="app.deleteChat(this);">X</div>
+      </div>
+    </div>
+    <ul id="settings"></ul>
+    <ul id="messages" class="message-list"></ul>
+
+    <form id="msgForm" class="message-form hidden" autocomplete="off" onsubmit="app.sendMessage(this); return false;">
+      <input id="msgField" type="text" placeholder="Write your message" />
+      <input type="submit" value="Send">
+    </form>
+  </main>
+
+  <div class="chat-image-config hidden">
+    <div class="close-button" onclick="app.closeImageOptions();">X</div>
+    <div class="main-area">
+      <div class="name">---</div>
+      <!--<img class="big-profile-picture" src="p.png" />-->
+      <div class="small-text">
+        (Current profile picture)
+      </div>
+      <div class="buttons-area">
+        <input type="file" id="profilePicture">
+        <div class="small-text">
+          (New profile picture)
+        </div>
+      </div>
+      <div class="buttons-area">
+        <input type="button" value="Use the new profile picture" onclick="app.updatePicture();">
+        <input type="button" value="Remove the current profile picture" onclick="app.removePicture();">
+      </div>
+    </div>
+  </div>
+
+  <script>
+
+/////////////////////////////////////////////////////////////
+//// Classes
+/////////////////////////////////////////////////////////////
+
+    class Info{
+      constructor(pk,alias,desc,img){
+        this.pk = pk;
+        this.alias = alias;
+        this.desc = desc;
+        this.img = img;
+      }
+    }
+
+    class Settings{
+      constructor(blacklist){
+        this.blacklist = blacklist;
+      }
+    }
+
+    class User{
+      constructor(info,settings){
+      this.info = info;
+      this.settings = settings;
+      this.inSettings = false;
+      }
+    }
+
+    class Peer{
+      constructor(info){
+        this.info = info;
+      }
+    }
+
+    class Message{
+      constructor(id,origin,ts,sender,type,subtype,message,seen){
+        this.id = id;
+        this.origin = origin;
+        this.ts = ts;
+        this.sender = sender;
+        this.type = type;
+        this.subtype = subtype;
+        this.message = message
+        this.seen = seen;
+      }
+    }
+
+    class Chat{
+      constructor(pk, type, messages, info, peers) {
+        this.pk = pk;
+        this.type = type;
+        this.messages = messages;
+        this.info = info;
+        this.peers = peers;
+      }
+    }
+
+/////////////////////////////////////////////////////////////
+//// Skychat
+/////////////////////////////////////////////////////////////
+    class Skychat {
+      constructor() {}
+
+      fetchData(){
+        return Promise.all([this.getUserInfo(),
+                this.getUserSettings(),
+                this.getChatAll()
+              ]).then(([userInfo,userSettings,chats]) => {
+                this.user = new User(userInfo,userSettings);
+                this.chats = chats
+                return this.init()
+              });
+      }
+     
+      init(){
+        //this.user = dummyUser;//User-Test-Dummy
+        this._addUser(this.user);
+       
+        //this.chats = this.getChatAll();
+        //this.chats = [dummyPeerChat1,dummyPeerChat2];
+        this.chat = null;
+        if (this.chats != null){
+          this.chats.forEach(r => this._addChat(r));
+        }
+        
+        this.notificationsSubscribe();
+        return this;
+      }
+
+/////////////////////////////////////////////////////////////
+//// UI specific functions
+/////////////////////////////////////////////////////////////
+
+      _addUser(c) {
+
+        document.getElementById('user').innerHTML +=
+          `<a href="#" class="${c.inSettings ? 'active' : ''} destination" onclick="app._showSettings(); return false;">
+            <img class="small-profile-picture" src="data:image/png;base64,${c.info.img}" />
+            <div class="text-container">
+              <div class="alias">
+                ${c.info.alias}
+              </div>
+              <div class="pk">
+                ${c.info.pk}
+              </div>
+            </div>
+          </a>`;
+
+      }
+
+      _updateUser(c) {
+        this.user = c
+
+        document.getElementById('user').innerHTML =
+          `<a href="#" class="${c.inSettings ? 'active' : ''} destination" onclick="app._showSettings(); return false;">
+            <img class="small-profile-picture" src="data:image/png;base64,${c.info.img}" />
+            <div class="text-container">
+              <div class="alias">
+                ${c.info.alias}
+              </div>
+              <div class="pk">
+                ${c.info.pk}
+              </div>
+            </div>
+          </a>`;
+      }
+
+      _addChat(r) {
+        if (!this.chats.includes(r)) {
+          this.chats.push(r);
+        }
+
+
+        let lastMsg = this.getLastMessageFromPK(r.pk)
+
+        document.getElementById('chats').innerHTML +=
+          `<div id="chat_${r.pk}">
+            <li><a href="#" class="${r.pk === this.chat ? 'active' : ''} destination" onclick="app._selectChat('${r.pk}'); return false;">
+              <img class="small-profile-picture" src="data:image/png;base64,${r.info.img}" />
+              <div class="text-container">
+                <div class="alias">
+                  ${r.info.alias}
+                </div>
+                <div class="pk">
+                  ${r.pk}
+                </div>
+                <div class="msg">
+                  ${lastMsg.message}
+                </div>
+              </div>
+              <!-- <div>
+                <div class="unreaded">
+                  0
+                </div>
+              </div> -->
+            </a></li></div>`;
+
+      }
+
+      _updateChat(r) {
+        this.chats[this.getChatIndex(r.pk)] = r
+
+        let lastMsg = this.getLastMessageFromPK(r.pk)
+
+        document.getElementById('chat_'+ r.pk).innerHTML =
+          `<li><a href="#" class="${r.pk === this.chat ? 'active' : ''} destination" onclick="app._selectChat('${r.pk}'); return false;">
+            <img class="small-profile-picture" src="data:image/png;base64,${r.info.img}" />
+            <div class="text-container">
+              <div class="alias">
+                ${r.info.alias}
+              </div>
+              <div class="pk">
+                ${r.pk}
+              </div>
+              <div class="msg">
+                ${lastMsg.message}
+              </div>
+            </div>
+            <!-- <div>
+              <div class="unreaded">
+                0
+              </div>
+            </div> -->
+          </a></li>`;
+
+        if (this.chat = r.pk){
+          document.getElementById('messages').innerHTML = '';
+          this.getMessagesFromPK(r.pk).forEach(msg => this._showMessage(msg));
+          document.getElementById('chatButtonsContainer').classList.remove('hidden');
+          document.getElementById('msgForm').classList.remove('hidden');
+          document.getElementById('msgField').focus();
+
+          let msgArea = document.getElementById('messages');
+          msgArea.scrollTop = msgArea.scrollHeight;
+        }
+      }
+
+
+      _showSettings(){
+        this.user.inSettings = true;
+
+        let info = this.user.info;
+        let settings = this.user.settings;
+        this.chat = null
+
+        //unselect chats in sidebar
+        document.querySelectorAll('.destination').forEach(item => 
+        {    
+          item.classList.remove('active');
+        });
+
+        //empty messages
+        document.getElementById('messages').innerHTML = '';
+
+        document.getElementById('settings').innerHTML += 
+        `<div id="settingsContainer" class="settings-container" style="z-index:100; position: fixed;">
+          <div class="settings-close-button" onclick="app._hideSettings();">X</div>
+          <div id="userInfoContainer" class="settings-user-info-container">
+            <div id="userInfoHeading" class="settings-user-info-heading">User Info</div>
+            <form id="userInfoForm" class="settings-user-info-form" onsubmit="app.setUserInfo(this); return false;">
+              <div id="pkField">${info.pk}</div>
+              <input id="aliasField" type="text" placeholder="Alias" value="${info.alias}"/>
+              <input id="descField" type="text" placeholder="Description" value="${info.desc}"/>
+              <input id="imgField" type="text" placeholder="Image" value="${info.img}"/>
+              <!--<div class="chat-button" onclick="app.openImageOptions();">&#x058D</div>-->
+              <input type="submit" value="Save Info">
+            </form>
+            <a href="https://onlinepngtools.com/convert-png-to-base64" target="_blank">Generate String for Image form PNG here</a>
+          </div>
+          <div id="settingsSettingsContainer" class="settings-settings-container">
+            <div id="settingsHeading" class="settings-settings-heading">Settings</div>
+            <form id="settingsForm" class="settings-settings-form" onsubmit="app.setUserSettings(this); return false;">
+              <input id="blacklistField" type="text" placeholder="Blacklist" value="${settings.blacklist}"/>
+              <input type="submit" value="Save Settings">
+            </form>
+          </div>
+        </div>`;
+
+
+        document.getElementById('chatButtonsContainer').classList.add('hidden');
+        document.getElementById('msgForm').classList.add('hidden');
+      }
+
+      _hideSettings(){
+        this.user.inSettings = false;
+        document.getElementById('settings').innerHTML = 
+        ``;
+      }
+
+      _showMessage(msg) {
+        //TODO: check if pk/chat is group type or peer type. if group type show alias or pubkey of origin inside message container
+        let c = this.user;
+
+        switch(msg.type) {
+          case 1:
+            let connMsgOrigin
+            if (msg.sender == c.info.pk){
+              connMsgOrigin = "user"
+            } else {
+              connMsgOrigin = "peer"
+            }
+            let connMsg
+            if (msg.subtype == 1){
+              connMsg = "chat request from " + connMsgOrigin
+            }
+            else if (msg.subtype == 2){
+              connMsg = "chat accepted"
+            }
+            else if (msg.subtype == 3){
+              connMsg = "chat rejected"
+            }
+            else {
+              connMsg = "undefined chat type message"
+            }
+            document.getElementById('messages').innerHTML += `<li class="content-center"><div class="date-container">${connMsg}</div></li>`;
+          break;
+        case 2:
+        if (!msg.date) {
+            const liClassName = msg.origin === c.info.pk  ? 'content-right' : 'content-left';
+            const containerClassName = msg.origin === c.info.pk ? 'msg-sent' : 'msg-received';
+
+            let msgArea = document.getElementById('messages');
+            let mustScroll = (msgArea.scrollHeight - msgArea.scrollTop) === msgArea.userHeight;
+
+            document.getElementById('messages').innerHTML +=
+              `<li class="${liClassName}"><div class="msg-container ${containerClassName}"><div>${msg.message}</div><div class="message-time">${msg.ts}</div></div></li>`;
+
+            if (mustScroll) {
+              msgArea.scrollTop = msgArea.scrollHeight;
+            }
+          } else {
+            let date = msg.date.getFullYear().toString().padStart(2, '0') + '-';
+            date += (msg.date.getMonth() + 1).toString().padStart(2, '0') + '-';
+            date += msg.date.getDate().toString().padStart(2, '0');
+
+            document.getElementById('messages').innerHTML += `<li class="content-center"><div class="date-container">${date}</div></li>`;
+          }
+          break;
+          case 3:
+            let infoMsg
+            if (msg.origin == c.info.pk) {
+              infoMsg = "sent info to peer"
+            } else {
+              infoMsg = "peer updated info"
+            }
+           document.getElementById('messages').innerHTML += `<li class="content-center"><div class="date-container">${infoMsg}</div></li>`;
+            break;
+        }
+      }
+
+      _selectChat(pk) {
+        if (this.chat === pk) {
+          return;
+        }
+
+        this._hideSettings();
+
+        this.chat = pk;
+        document.querySelectorAll('.destination').forEach(item => {
+          const pkArea = item.getElementsByClassName('pk')[0];
+
+          if (pkArea.innerText === pk) {
+            item.classList.add('active');
+          } else {
+            item.classList.remove('active');
+          }
+        });
+
+        document.getElementById('messages').innerHTML = '';
+        this.getMessagesFromPK(pk).forEach(msg => this._showMessage(msg));
+        document.getElementById('chatButtonsContainer').classList.remove('hidden');
+        document.getElementById('msgForm').classList.remove('hidden');
+        document.getElementById('msgField').focus();
+
+        let msgArea = document.getElementById('messages');
+        msgArea.scrollTop = msgArea.scrollHeight;
+
+      }
+
+      /////////////////////////////////////////////////////////////
+    //// HTTP /user
+    /////////////////////////////////////////////////////////////
+    //// GET
+    //returns [Info] from [User]
+    getUserInfo(){
+      return fetch('user/info', { method: 'GET', body: null })
+        .then(res => {
+          if (res.ok) {
+            return res.json().then(i => {
+              var info = new Info(i.Pk,i.Alias,i.Desc,i.Img);
+              return info
+              });
+          } else {
+            res.text().then(text => alert(`Failed to get info`));
+          }
+        });
+    }
+    //returns [Settings] from [User]
+    getUserSettings(){
+
+    return fetch('user/settings', { method: 'GET', body: null })
+      .then(res => {
+        if (res.ok) {
+          return res.json().then(s => {
+            var settings = new Settings(s.Blacklist);
+            return settings;
+            });
+        } else {
+          res.text().then(text => alert(`Failed to get settings`));
+        }
+      });
+
+    }
+    //// PUT
+    setUserInfo(el){
+    let info = new Info(this.user.info.pk, el[0].value.trim(), el[1].value.trim(), el[2].value.trim());
+
+    if (info.alias.length == 0) {
+      return;
+    }
+
+    fetch('user/info', { method: 'PUT', body: JSON.stringify({ alias: info.alias, desc: info.desc, img: info.img}) })
+      .then(res => {
+        if (res.ok) {
+          this.getUserInfo().then(info => {
+            this._updateUser(new User(info, this.user.settings));
+          });
+        } else {
+          res.text().then(text => alert(`Failed to set info`));
+        }
+      });
+
+    }
+
+    setUserSettings(el){
+    let settings = new Settings(el[0].value.trim());
+
+    //TODO:check for regex of blacklist array. --> maybe add one pk after another to blacklist.
+    
+    fetch('user/settings', { method: 'PUT', body: JSON.stringify({ blacklist: settings.blacklist}) })
+      .then(res => {
+        if (res.ok) {
+          this.getUserSettings().then(settings => {
+            this._updateUser(new User(this.user.info, settings));
+          });
+        } else {
+          res.text().then(text => alert(`Failed to set settings`));
+        }
+      });
+
+    }
+/////////////////////////////////////////////////////////////
+//// HTTP /chats
+/////////////////////////////////////////////////////////////
+//// GET
+        //returns an array of [Chat]
+        getChatAll(){
+
+          return fetch('chats', { method: 'GET', body: null })
+            .then(res => {
+              if (res.ok) {
+                return res.json().then(chats => {
+                  //TODO:handle if chats = null --> no chats is also possible.
+
+                  var c_ = []
+                  if (chats != null){
+                  chats.forEach( c => {
+                    console.log(c)
+                    var i = new Info(c.Info.Pk,c.Info.Alias,c.Info.Desc,c.Info.Img)
+                    var msgs = []
+                    c.Msgs.forEach(m => {
+                      msgs.push(new Message(m.Id,m.Origin,m.Time,m.Sender,m.Msgtype,m.MsgSubtype,m.Message,m.Seen))
+                    })
+                    if (c.CType == 1){
+                      var peers = []
+                      c.Peers.forEach(p => {
+                        let i = new Info(p.Info.Pk,p.Info.Alias,p.Info.Desc,p.Info.Img)
+                        peers.push(new Peer(i))
+                      })
+                      c_.push(new Chat(c.Pk,c.CType,msgs,i,peers))
+                    } else {
+                      c_.push(new Chat(c.Pk,c.CType,msgs,i))
+                    }
+                    
+                    console.log(c_)
+                  })}
+                  else {
+                    console.log("No chats available")
+                  }
+                  return c_
+                });
+              } else {
+                res.text().then(text => alert(`Failed to get chats`));
+              }
+            });
+        }
+
+        //returns the [Chat] with the given pk
+        getChatByPK(pk){
+
+          return fetch('chats/' + pk.toString(), { method: 'GET', body: null })
+            .then(res => {
+              if (res.ok) {
+                return res.json().then(c => {
+                var i = new Info(c.Info.Pk,c.Info.Alias,c.Info.Desc,c.Info.Img)
+                  var msgs = []
+                  c.Msgs.forEach(m => {
+                    msgs.push(new Message(m.Id,m.Origin,m.Time,m.Sender,m.Msgtype,m.MsgSubtype,m.Message,m.Seen))
+                  })
+                  if (c.CType == 1){
+                    var peers = []
+                    c.Peers.forEach(p => {
+                      let i = new Info(p.Info.Pk,p.Info.Alias,p.Info.Desc,p.Info.Img)
+                      peers.push(new Peer(i))
+                    })
+                    return new Chat(c.Pk,c.CType,msgs,i,peers)
+                  } else {
+                    return new Chat(c.Pk,c.CType,msgs,i)
+                  }
+                })
+              } else {
+                res.text().then(text => alert(`Failed to get chat`));
+              }
+            });
+
+        }
+//// POST
+        //tries to add the pk as [Chat]
+        //returns nothing
+        addChat(el) {
+          const pk = this.processPk(el[0].value.trim());
+
+          if (pk.length != 66) {
+            alert('Public keys must be 66 characters long.')
+            return;
+          }
+
+          if (!/^[0-9a-fA-F]+$/.test(pk)) {
+            alert('The public key includes invalid characters.')
+            return;
+          }
+
+          if (pk == this.user.info.pk){
+            alert('you cannot send messages to yourself')
+            return;
+          }
+
+          document.getElementById('pkToAdd').value = "";
+
+          fetch('chats', { method: 'POST', body: JSON.stringify({ pk: pk}) })
+            .then(res => {
+              if (res.ok) {
+                //this.getChatByPK(pk).then(c => {
+                //   this._addChat(c)
+                //    this._selectChat(pk)
+              //  });
+              } else {
+                res.text().then(text => alert(`Failed to add chat: ${text}`));
+              }
+            })
+        }
+
+        //tries to send a [Message] to the current selected [Chat]
+        //returns nothing
+        sendMessage(el) {
+          const msg = el[0].value;
+
+          if (msg.length == 0) {
+            return;
+          }
+
+          const destination = this.chat;
+
+          fetch('chats/sendmessage', { method: 'POST', body: JSON.stringify({ pk: destination, message: msg }) })
+            .then(res => {
+              if (res.ok) {
+                el[0].value = '';
+              } else {
+                res.text().then(text => alert(`Failed to send message: ${text}`));
+              }
+            })
+            .catch(e => alert(e.message));
+        }
+//// DELETE
+
+        //tries to delete the current selected [Chat]
+        deleteChat() {
+          if (!this.chat) {
+            return;
+          }
+          
+          const response = window.confirm("Are you sure you want to delete the chat?");
+
+          if (response) {
+            
+            fetch('chats' + '/' + this.chat.toString() , { method: 'DELETE' })
+            .then(res => {
+              if (res.ok) {
+                this.chats = this.chats.filter(v => v.pk != this.chat);
+                
+                document.getElementById('messages').innerHTML = '';
+                document.getElementById('chatButtonsContainer').classList.add('hidden');
+                document.getElementById('msgForm').classList.add('hidden');
+                document.querySelectorAll('.destination').forEach(item => {
+                
+                const pkArea = item.getElementsByClassName('pk')[0];
+
+                if (pkArea.innerText === this.chat) {
+                  item.parentNode.removeChild(item);
+                }});
+                this.chat = null;
+              } else {
+                res.text().then(text => alert(`Failed to delete chat ${this.chat}: ${text}`));
+              }
+            })
+
+          }
+        }
+
+/////////////////////////////////////////////////////////////
+//// HTTP /notification
+/////////////////////////////////////////////////////////////
+//// Subscribe
+        notificationsSubscribe() {
+          const source = new EventSource('/notifications');
+          source.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            console.log(data)
+            const notifMessage = JSON.parse(data.message)
+            let pk = notifMessage.pk
+              switch(data.type) {
+                //NewAddChatNotifType
+                case 1:
+                  console.log("new add chat notification")
+                  this.getChatByPK(pk).then(chat => {
+                    this._addChat(chat)
+                    this._selectChat(pk)
+                  })
+                  break;
+                //NewChatNotifType
+                case 2:
+                  console.log("new peer chat notification")
+                  this.getChatByPK(pk).then(chat => {
+                    this._addChat(chat)
+                  })
+                  break;
+                //NewMsgNotifType
+                case 3:
+                  //Fetch data of chat with new message from HTTP
+                  console.log("new message notification") 
+                  const message = JSON.parse(notifMessage.message)
+                  console.log(message)
+                  this.getChatByPK(pk).then(chat => {
+                    this._updateChat(chat)
+                  })
+                  break;
+                default:
+                  console.log("unknown notification")
+                  break;
+              }            
+            }
+        };
+
+/////////////////////////////////////////////////////////////
+//// Helper Functions to get or process sub steps
+/////////////////////////////////////////////////////////////
+      //returns the given pk as lowerCase representation
+      processPk(pk) {
+        return pk.toLowerCase();
+      }
+
+      //returns the index inside this.chats of the given pk/chat 
+      getChatIndex(pk) {
+        let arr = this.chats;
+        for (var i=0, iLen=arr.length; i<iLen;i++){
+          if (arr[i].pk == pk) return i;
+        }
+      }
+
+      //returns an array of [Message] of the given pk/chat
+      getMessagesFromPK(pk) {
+         return this.chats[this.getChatIndex(pk)].messages;
+      }
+
+      //returns the last [Message] of the given pk/chat
+      getLastMessageFromPK(pk){
+        let arr = this.chats;
+        for (var i=0, iLen=arr.length; i<iLen;i++){
+            if (arr[i].messages.length != 0){
+              if (arr[i].pk == pk) return arr[i].messages[arr[i].messages.length - 1];}
+            else{
+              return "New Chat"
+            }
+          }
+      }
+
+/////////////////////////////////////////////////////////////
+//// Picture and Settings Handling
+/////////////////////////////////////////////////////////////
+
+//--> Not gone into detail here, this is old code not working right now.
+
+      openImageOptions() {
+        const configArea = document.getElementsByClassName('chat-image-config')[0];
+        configArea.classList.remove('hidden');
+        configArea.getElementsByClassName('name')[0].innerHTML = this.chat;
+
+        const image = localStorage.getItem(`i_${this.chat}`);
+        if (image) {
+          configArea.getElementsByClassName('big-profile-picture')[0].src = image;
+        } else {
+          configArea.getElementsByClassName('big-profile-picture')[0].src = 'p.png';
+        }
+      }
+
+      closeImageOptions() {
+        document.getElementsByClassName('chat-image-config')[0].classList.add('hidden');
+      }
+
+      updatePicture() {
+        const profilePictureInput = document.getElementById('profilePicture');
+
+        if (profilePictureInput.files.length < 1) {
+          alert('Please select a file.');
+          return;
+        }
+
+        const file = profilePictureInput.files[0];
+
+        if (file.type.indexOf('image') < 0) {
+          alert('Invalid file type.');
+          return;
+        }
+
+        if (file.size > 250 * 1024) {
+          alert('The file must be smaller than 250 KB.');
+          return;
+        }
+
+        const fileReader = new FileReader();
+        fileReader.onload = () => {
+          localStorage.setItem(`i_${this.chat}`, fileReader.result);
+          this.closeImageOptions();
+
+          this.updatePictureInMenu(this.chat);
+        };
+
+        fileReader.readAsDataURL(file);
+      }
+
+      removePicture() {
+        if (!localStorage.getItem(`i_${this.chat}`)) {
+          alert('There is no profile picture to remove.');
+          return;
+        }
+
+        const response = window.confirm("Are you sure you want to delete the image?");
+
+        if (response) {
+          localStorage.removeItem(`i_${this.chat}`);
+          this.closeImageOptions();
+
+          this.updatePictureInMenu(this.chat);
+        }
+      }
+
+      updatePictureInMenu(remotePk) {
+        let image = localStorage.getItem(`i_${remotePk}`);
+        if (!image) {
+          image = 'p.png';
+        }
+
+        document.querySelectorAll('.destination').forEach(item => {
+          const pkArea = item.getElementsByClassName('pk')[0];
+
+          if (pkArea.innerText === remotePk) {
+            item.getElementsByClassName('small-profile-picture')[0].src = image;
+          }
+        });
+      }
+    }
+
+    function createSkychat(){
+      let x = new Skychat()
+      return x.fetchData()
+    }
+
+    createSkychat().then(skychat => {
+      window.app = skychat
+    });
+  </script>
+</body>
+
+</html>
