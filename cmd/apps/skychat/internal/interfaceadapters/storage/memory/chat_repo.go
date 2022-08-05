@@ -6,8 +6,6 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/chat"
-	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/info"
-	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/message"
 )
 
 //ChatRepo Implements the Repository Interface to provide an in-memory storage provider
@@ -85,6 +83,7 @@ func (r *ChatRepo) Delete(pk cipher.PubKey) error {
 	return nil
 }
 
+/*
 func NewDummyChatRepo(pk cipher.PubKey) *ChatRepo {
 	cR := ChatRepo{}
 
@@ -116,3 +115,4 @@ func NewDummyChatRepo(pk cipher.PubKey) *ChatRepo {
 
 	return &cR
 }
+*/

@@ -17,7 +17,7 @@ type ClientRepo struct {
 func NewClientRepo() *ClientRepo {
 	cR := ClientRepo{}
 
-	cR.client, _ = cR.New()
+	cR.client, _ = cR.New() //nolint
 
 	return &cR
 }

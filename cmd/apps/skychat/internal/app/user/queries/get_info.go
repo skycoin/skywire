@@ -18,11 +18,11 @@ type GetUserInfoRequestHandler interface {
 }
 
 type getUserInfoRequestHandler struct {
-	usrRepo user.UserRepository
+	usrRepo user.Repository
 }
 
 //NewGetUserInfoRequestHandler Handler constructor
-func NewGetUserInfoRequestHandler(usrRepo user.UserRepository) GetUserInfoRequestHandler {
+func NewGetUserInfoRequestHandler(usrRepo user.Repository) GetUserInfoRequestHandler {
 	return getUserInfoRequestHandler{usrRepo: usrRepo}
 }
 

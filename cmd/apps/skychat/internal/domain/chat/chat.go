@@ -11,10 +11,13 @@ import (
 
 const (
 	errChatType = iota
+	// GroupChat is a group chat
 	GroupChat
+	// PeerChat is a direct message
 	PeerChat
 )
 
+// Chat is the struct of the chat itself
 type Chat struct {
 	PK    cipher.PubKey
 	CType int
@@ -26,48 +29,56 @@ type Chat struct {
 	peers []peer.Peer
 }
 
-// Getter
+// GetPK gets the public key
 func (c *Chat) GetPK() cipher.PubKey {
 	return c.PK
 }
 
+// GetType gets the chat type
 func (c *Chat) GetType() int {
 	return c.CType
 }
 
+// GetConnection returns net.Conn
 func (c *Chat) GetConnection() net.Conn {
 	return c.Conn
 }
 
+// GetInfo returns info.Info
 func (c *Chat) GetInfo() info.Info {
 	return c.Info
 }
 
+// GetMessages returns []message.Message
 func (c *Chat) GetMessages() []message.Message {
 	return c.Msgs
 }
 
+// GetPeers returns []peer.Peer
 func (c *Chat) GetPeers() []peer.Peer {
 	return c.peers
 }
 
 //Setter
 
+// SetConnection sets the connection type used
 func (c *Chat) SetConnection(Conn net.Conn) {
 	c.Conn = Conn
 }
 
+// DeleteConnection clears the connection
 func (c *Chat) DeleteConnection() {
 	c.Conn = nil
 }
 
-//Add the given message to the given chat
+// AddMessage Add the given message to the given chat
 func (c *Chat) AddMessage(m message.Message) {
 	c.Msgs = append(c.Msgs, m)
 }
 
-//Constructors
+// Constructors
 
+// NewUndefinedChat creates undefined empty chat to a public key
 func NewUndefinedChat(PK cipher.PubKey) Chat {
 	c := Chat{}
 	c.PK = PK
@@ -78,6 +89,7 @@ func NewUndefinedChat(PK cipher.PubKey) Chat {
 	return c
 }
 
+// NewChat creates a new chat
 func NewChat(PK cipher.PubKey, CType int, i info.Info, Msgs []message.Message) Chat {
 	c := Chat{}
 	c.PK = PK

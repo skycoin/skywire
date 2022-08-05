@@ -19,12 +19,12 @@ type DeleteChatRequestHandler interface {
 }
 
 type deleteChatRequestHandler struct {
-	cliRepo  client.ClientRepository
-	chatRepo chat.ChatRepository
+	cliRepo  client.Repository
+	chatRepo chat.Repository
 }
 
 //NewDeleteChatRequestHandler Handler constructor
-func NewDeleteChatRequestHandler(cliRepo client.ClientRepository, chatRepo chat.ChatRepository) DeleteChatRequestHandler {
+func NewDeleteChatRequestHandler(cliRepo client.Repository, chatRepo chat.Repository) DeleteChatRequestHandler {
 	return deleteChatRequestHandler{cliRepo: cliRepo, chatRepo: chatRepo}
 }
 

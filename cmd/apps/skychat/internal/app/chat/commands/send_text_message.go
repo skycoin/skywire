@@ -5,7 +5,7 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/messenger"
 )
 
-//SendTextMessageModel of SendTextMessageRequestHandler
+//SendTextMessageRequest of SendTextMessageRequestHandler
 type SendTextMessageRequest struct {
 	Pk  cipher.PubKey
 	Msg []byte
@@ -20,7 +20,7 @@ type sendTextMessageRequestHandler struct {
 	messengerService messenger.Service
 }
 
-//NewAddChatRequestHandler Initializes an AddCommandHandler
+//NewSendTextMessageRequestHandler Initializes an AddCommandHandler
 func NewSendTextMessageRequestHandler(messengerService messenger.Service) SendTextMessageRequestHandler {
 	return sendTextMessageRequestHandler{messengerService: messengerService}
 }

@@ -1,11 +1,13 @@
 package commands
 
 import (
+	"errors"
+
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/info"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/user"
 )
 
-//SetInfoModel of SetInfoRequestHandler
+//SetInfoRequest of SetInfoRequestHandler
 type SetInfoRequest struct {
 	Alias string
 	Desc  string
@@ -18,11 +20,11 @@ type SetInfoRequestHandler interface {
 }
 
 type setInfoRequestHandler struct {
-	usrRepo user.UserRepository
+	usrRepo user.Repository
 }
 
 //NewSetInfoRequestHandler Initializes an SetInfoHandler
-func NewSetInfoRequestHandler(usrRepo user.UserRepository) SetInfoRequestHandler {
+func NewSetInfoRequestHandler(usrRepo user.Repository) SetInfoRequestHandler {
 	return setInfoRequestHandler{usrRepo: usrRepo}
 }
 
@@ -31,7 +33,7 @@ func (h setInfoRequestHandler) Handle(req SetInfoRequest) error {
 
 	pUsr, err := h.usrRepo.GetUser()
 	if err != nil {
-		//TODO: implement error
+		return errors.New("failed to get user")
 	}
 
 	i := info.NewInfo(pUsr.GetInfo().GetPK(), req.Alias, req.Desc, req.Img)

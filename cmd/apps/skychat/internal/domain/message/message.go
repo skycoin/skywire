@@ -31,6 +31,7 @@ const (
 	MsgStatusReceived
 )
 
+// Message defines a message
 type Message struct {
 	ID         int64         //an identifier for p2p chats and groups, Id is set by the receiver/server
 	Origin     cipher.PubKey //the originator of the Message
@@ -43,6 +44,7 @@ type Message struct {
 	Seen       bool          //flag to save whether the Message was read or not by the receiver (only for local notifications) -> online feedback will be implemented in future versions
 }
 
+// JSONMessage defines a json message
 type JSONMessage struct {
 	ID         int64         `json:"Id"`
 	Origin     cipher.PubKey `json:"Origin"`
@@ -55,6 +57,7 @@ type JSONMessage struct {
 	Seen       bool          `json:"Seen"`
 }
 
+// NewJSONMessage return a JSONMessage from a message
 func NewJSONMessage(m Message) JSONMessage {
 	return JSONMessage{
 		m.ID,
@@ -69,6 +72,7 @@ func NewJSONMessage(m Message) JSONMessage {
 	}
 }
 
+// NewMessage returns a message from a JSONMessage
 func NewMessage(m JSONMessage) Message {
 	return Message{
 		m.ID,
@@ -83,10 +87,12 @@ func NewMessage(m JSONMessage) Message {
 	}
 }
 
+// MarshalJSON returns marshaled json message and error
 func (m Message) MarshalJSON() ([]byte, error) {
 	return json.Marshal(NewJSONMessage(m))
 }
 
+// NewTextMessage returns a Message
 func NewTextMessage(pk cipher.PubKey, msg []byte) Message {
 	m := Message{}
 	m.Origin = pk
@@ -99,6 +105,7 @@ func NewTextMessage(pk cipher.PubKey, msg []byte) Message {
 	return m
 }
 
+// NewChatRequestMessage returns a request Message
 func NewChatRequestMessage(pk cipher.PubKey) Message {
 	m := Message{}
 	m.Origin = pk
@@ -110,6 +117,7 @@ func NewChatRequestMessage(pk cipher.PubKey) Message {
 	return m
 }
 
+// NewChatAcceptMessage returns a chat accepted message
 func NewChatAcceptMessage(pk cipher.PubKey) Message {
 	m := Message{}
 	m.Origin = pk
@@ -121,6 +129,7 @@ func NewChatAcceptMessage(pk cipher.PubKey) Message {
 	return m
 }
 
+// NewChatRejectMessage returns new chat rejected message
 func NewChatRejectMessage(pk cipher.PubKey) Message {
 	m := Message{}
 	m.Origin = pk
@@ -132,6 +141,7 @@ func NewChatRejectMessage(pk cipher.PubKey) Message {
 	return m
 }
 
+// NewChatInfoMessage returns new chat info
 func NewChatInfoMessage(pk cipher.PubKey, info []byte) Message {
 	m := Message{}
 	m.Origin = pk
@@ -143,38 +153,47 @@ func NewChatInfoMessage(pk cipher.PubKey, info []byte) Message {
 	return m
 }
 
-func (m *Message) GetId() int64 {
+// GetID returns message ID
+func (m *Message) GetID() int64 {
 	return m.ID
 }
 
+// GetOrigin returns origin public key
 func (m *Message) GetOrigin() cipher.PubKey {
 	return m.Origin
 }
 
+// GetTime returns time.Time of the message
 func (m *Message) GetTime() time.Time {
 	return m.Time
 }
 
+// GetSender returns the sender public key
 func (m *Message) GetSender() cipher.PubKey {
 	return m.Sender
 }
 
+// GetMessageType returns the message type integer
 func (m *Message) GetMessageType() int {
 	return m.Msgtype
 }
 
+// GetMessage returns the message in bytes
 func (m *Message) GetMessage() []byte {
 	return m.Message
 }
 
+// GetStatus returns the message status int
 func (m *Message) GetStatus() int {
 	return m.Status
 }
 
+// GetSeen returns the read status of the message
 func (m *Message) GetSeen() bool {
 	return m.Seen
 }
 
+// SetStatus sets the message status
 func (m *Message) SetStatus(status int) {
 	m.Status = status
 }

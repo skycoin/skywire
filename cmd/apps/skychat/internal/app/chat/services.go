@@ -29,7 +29,7 @@ type ChatServices struct {
 }
 
 // NewServices Bootstraps Application Layer dependencies
-func NewServices(cliRepo client.ClientRepository, chatRepo chat.ChatRepository, ms messenger.Service) ChatServices {
+func NewServices(cliRepo client.Repository, chatRepo chat.Repository, ms messenger.Service) ChatServices {
 	return ChatServices{
 		Queries: Queries{
 			GetAllChatsHandler:            queries.NewGetAllChatsRequestHandler(chatRepo),

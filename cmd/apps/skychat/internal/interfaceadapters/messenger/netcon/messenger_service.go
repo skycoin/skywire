@@ -22,13 +22,13 @@ import (
 type MessengerService struct {
 	ctx      context.Context
 	ns       notification.Service
-	cliRepo  client.ClientRepository
-	usrRepo  user.UserRepository
-	chatRepo chat.ChatRepository
+	cliRepo  client.Repository
+	usrRepo  user.Repository
+	chatRepo chat.Repository
 }
 
 // NewMessengerService constructor for MessengerService
-func NewMessengerService(ns notification.Service, cR client.ClientRepository, uR user.UserRepository, chR chat.ChatRepository) *MessengerService {
+func NewMessengerService(ns notification.Service, cR client.Repository, uR user.Repository, chR chat.Repository) *MessengerService {
 	ms := MessengerService{}
 
 	/*ctx, cancel := context.WithCancel(context.Background())
@@ -50,7 +50,7 @@ func (ms MessengerService) Handle(pk cipher.PubKey) error {
 	c, err := ms.chatRepo.GetByPK(pk)
 	if err != nil {
 		ch := chat.NewUndefinedChat(pk)
-		ms.chatRepo.Add(ch)
+		ms.chatRepo.Add(ch) //nolint:errcheck
 		c = &ch
 		fmt.Printf("New skychat added: %s\n", pk)
 	}

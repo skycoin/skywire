@@ -6,7 +6,7 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/message"
 )
 
-//GetAllMessagesFromChat Model of the Handler
+//GetAllMessagesFromChatRequest Model of the Handler
 type GetAllMessagesFromChatRequest struct {
 	pk cipher.PubKey
 }
@@ -16,17 +16,17 @@ type GetAllMessagesFromChatResult struct {
 	messages []message.Message
 }
 
-//type GetAllMessagesFromChatRequestHandler provides an interfaces to handle a GetAllMessagesFromChatRequest and return a *GetAllMessagesFromChatResult
+//GetAllMessagesFromChatRequestHandler provides an interfaces to handle a GetAllMessagesFromChatRequest and return a *GetAllMessagesFromChatResult
 type GetAllMessagesFromChatRequestHandler interface {
 	Handle(query GetAllMessagesFromChatRequest) (GetAllMessagesFromChatResult, error)
 }
 
 type getAllMessagesFromChatRequestHandler struct {
-	repo chat.ChatRepository
+	repo chat.Repository
 }
 
 //NewGetAllMessagesFromChatRequestHandler Handler Constructor
-func NewGetAllMessagesFromChatRequestHandler(repo chat.ChatRepository) GetAllMessagesFromChatRequestHandler {
+func NewGetAllMessagesFromChatRequestHandler(repo chat.Repository) GetAllMessagesFromChatRequestHandler {
 	return getAllMessagesFromChatRequestHandler{repo: repo}
 }
 

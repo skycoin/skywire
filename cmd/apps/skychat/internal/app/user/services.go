@@ -26,7 +26,7 @@ type UserServices struct {
 }
 
 // NewServices Bootstraps Application Layer dependencies
-func NewServices(cliRepo user.UserRepository, chatRepo chat.ChatRepository) UserServices {
+func NewServices(cliRepo user.Repository, chatRepo chat.Repository) UserServices {
 	return UserServices{
 		Queries: Queries{
 			GetUserInfoHandler:     queries.NewGetUserInfoRequestHandler(cliRepo),

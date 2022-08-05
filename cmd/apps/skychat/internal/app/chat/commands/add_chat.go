@@ -8,23 +8,23 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/chat"
 )
 
-//AddChatModel of AddChatRequestHandler
+//AddChatRequest of AddChatRequestHandler
 type AddChatRequest struct {
 	Pk cipher.PubKey
 }
 
-//AddNewChatRequestHandler struct that allows handling AddChatRequest
+//AddChatRequestHandler struct that allows handling AddChatRequest
 type AddChatRequestHandler interface {
 	Handle(command AddChatRequest) error
 }
 
 type addChatRequestHandler struct {
 	messengerService messenger.Service
-	chatRepo         chat.ChatRepository
+	chatRepo         chat.Repository
 }
 
 //NewAddChatRequestHandler Initializes an AddCommandHandler
-func NewAddChatRequestHandler(chatRepo chat.ChatRepository, messengerService messenger.Service) AddChatRequestHandler {
+func NewAddChatRequestHandler(chatRepo chat.Repository, messengerService messenger.Service) AddChatRequestHandler {
 	return addChatRequestHandler{chatRepo: chatRepo, messengerService: messengerService}
 }
 

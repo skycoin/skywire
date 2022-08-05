@@ -17,6 +17,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
+// Client defines a chat client
 type Client struct {
 	appCl    *app.Client     // Skywire app client
 	ipcCl    *ipc.Client     // IPC client
@@ -26,28 +27,34 @@ type Client struct {
 	clientCh chan string     // client channel
 }
 
-//Getter
+// Getter
 
+// GetAppClient returns *app.Client
 func (c *Client) GetAppClient() *app.Client {
 	return c.appCl
 }
 
+// GetNetType returns appnet.Type
 func (c *Client) GetNetType() appnet.Type {
 	return c.netType
 }
 
+// GetPort returns routing.Port
 func (c *Client) GetPort() routing.Port {
 	return c.port
 }
+
+// GetLog returns *logging.Logger
 func (c *Client) GetLog() *logging.Logger {
 	return c.log
 }
 
+//  GetChannel returns chan string
 func (c *Client) GetChannel() chan string {
 	return c.clientCh
 }
 
-//
+// NewClient retrns *Client
 func NewClient() *Client {
 	c := Client{}
 	c.appCl = app.NewClient(nil)
@@ -93,10 +100,12 @@ func NewClient() *Client {
 	return &c
 }
 
+// IsEmtpy checks if the cient is empty
 func (c *Client) IsEmtpy() bool {
 	return *c == Client{}
 }
 
+// SetAppStatus sets appserver.AppDetailedStatus
 func (c *Client) SetAppStatus(status appserver.AppDetailedStatus) {
 	err := c.appCl.SetDetailedStatus(string(status))
 	if err != nil {
@@ -104,6 +113,7 @@ func (c *Client) SetAppStatus(status appserver.AppDetailedStatus) {
 	}
 }
 
+// SetAppError sets the appErr.Error
 func (c *Client) SetAppError(appErr error) {
 	err := c.appCl.SetError(appErr.Error())
 	if err != nil {

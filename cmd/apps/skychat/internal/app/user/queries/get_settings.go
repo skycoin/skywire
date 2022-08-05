@@ -15,11 +15,11 @@ type GetUserSettingsRequestHandler interface {
 }
 
 type getUserSettingsRequestHandler struct {
-	usrRepo user.UserRepository
+	usrRepo user.Repository
 }
 
 //NewGetUserSettingsRequestHandler Handler constructor
-func NewGetUserSettingsRequestHandler(usrRepo user.UserRepository) GetUserSettingsRequestHandler {
+func NewGetUserSettingsRequestHandler(usrRepo user.Repository) GetUserSettingsRequestHandler {
 	return getUserSettingsRequestHandler{usrRepo: usrRepo}
 }
 

@@ -6,7 +6,7 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/user"
 )
 
-//SetSettingsRequestModel of SetSettingsRequestHandler
+//SetSettingsRequest of SetSettingsRequestHandler
 type SetSettingsRequest struct {
 	Blacklist []cipher.PubKey
 }
@@ -17,11 +17,11 @@ type SetSettingsRequestHandler interface {
 }
 
 type setSettingsRequestHandler struct {
-	usrRepo user.UserRepository
+	usrRepo user.Repository
 }
 
 //NewSetSettingsRequestHandler Initializes an SetSettingsRequestHandler
-func NewSetSettingsRequestHandler(usrRepo user.UserRepository) SetSettingsRequestHandler {
+func NewSetSettingsRequestHandler(usrRepo user.Repository) SetSettingsRequestHandler {
 	return setSettingsRequestHandler{usrRepo: usrRepo}
 }
 

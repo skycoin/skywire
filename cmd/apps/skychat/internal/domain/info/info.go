@@ -27,7 +27,7 @@ func (i Info) GetDescription() string {
 	return i.Desc
 }
 
-// GetDescription returns the Img string
+// GetImg returns the Img string
 func (i Info) GetImg() string {
 	return i.Img
 }

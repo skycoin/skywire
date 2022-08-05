@@ -19,7 +19,7 @@ type Handler struct {
 	chatServices chatservices.ChatServices
 }
 
-//NewHandler Constructor
+// NewHandler Constructor returns *Handler
 func NewHandler(cs chatservices.ChatServices) *Handler {
 	return &Handler{chatServices: cs}
 }
@@ -81,7 +81,7 @@ type AddChatRequestModel struct {
 	Pk string `json:"pk"`
 }
 
-//AddChat adds the provided pk
+//Add adds the provided pk
 func (c Handler) Add(w http.ResponseWriter, r *http.Request) {
 	//fmt.Println(formatRequest(r))
 	var chatToAdd AddChatRequestModel
@@ -191,7 +191,7 @@ func formatRequest(r *http.Request) string {
 	}
 	// If this is a POST, add post data
 	if r.Method == "POST" {
-		r.ParseForm()
+		r.ParseForm() //nolint
 		request = append(request, "\n")
 		request = append(request, r.Form.Encode())
 	} // Return the request as a string

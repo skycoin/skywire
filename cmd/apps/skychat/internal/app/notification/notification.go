@@ -24,6 +24,7 @@ type Notification struct {
 	Message string `json:"message"`
 }
 
+// NewMsgNotification notifies the user of a new message
 func NewMsgNotification(pk cipher.PubKey, msg message.Message) Notification {
 	Msg, err := json.Marshal(message.NewJSONMessage(msg))
 	if err != nil {
@@ -40,6 +41,7 @@ func NewMsgNotification(pk cipher.PubKey, msg message.Message) Notification {
 	}
 }
 
+// NewAddChatNotification notifies the user about add chat request
 func NewAddChatNotification(pk cipher.PubKey) Notification {
 	clientMsg, err := json.Marshal(map[string]string{"pk": pk.Hex()})
 	if err != nil {
@@ -51,6 +53,7 @@ func NewAddChatNotification(pk cipher.PubKey) Notification {
 	}
 }
 
+// NewChatNotification notifies the user about new chat
 func NewChatNotification(pk cipher.PubKey) Notification {
 	clientMsg, err := json.Marshal(map[string]string{"pk": pk.Hex()})
 	if err != nil {

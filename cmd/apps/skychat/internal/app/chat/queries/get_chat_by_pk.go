@@ -10,7 +10,7 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/peer"
 )
 
-//GetChatByPK Model of the Handler
+//GetChatByPKRequest Model of the Handler
 type GetChatByPKRequest struct {
 	Pk cipher.PubKey
 }
@@ -31,11 +31,11 @@ type GetChatByPKRequestHandler interface {
 }
 
 type getChatByPKRequestHandler struct {
-	repo chat.ChatRepository
+	repo chat.Repository
 }
 
 //NewGetChatByPKRequestHandler Handler constructor
-func NewGetChatByPKRequestHandler(repo chat.ChatRepository) GetChatByPKRequestHandler {
+func NewGetChatByPKRequestHandler(repo chat.Repository) GetChatByPKRequestHandler {
 	return getChatByPKRequestHandler{repo: repo}
 }
 

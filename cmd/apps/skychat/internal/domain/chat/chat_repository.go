@@ -4,7 +4,8 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
-type ChatRepository interface {
+// Repository is the interface to the chat repository
+type Repository interface {
 	GetByPK(pk cipher.PubKey) (*Chat, error)
 	GetAll() ([]Chat, error)
 	Add(c Chat) error

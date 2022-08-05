@@ -23,11 +23,11 @@ type GetAllChatsRequestHandler interface {
 }
 
 type getAllChatsRequestHandler struct {
-	repo chat.ChatRepository
+	repo chat.Repository
 }
 
 //NewGetAllChatsRequestHandler Handler constructor
-func NewGetAllChatsRequestHandler(repo chat.ChatRepository) GetAllChatsRequestHandler {
+func NewGetAllChatsRequestHandler(repo chat.Repository) GetAllChatsRequestHandler {
 	return getAllChatsRequestHandler{repo: repo}
 }
 

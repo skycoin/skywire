@@ -1,6 +1,7 @@
 package client
 
-type ClientRepository interface {
+// Repository defines the interface to the client repository
+type Repository interface {
 	New() (Client, error)
 	GetClient() (*Client, error)
 	SetClient(c Client) error

@@ -13,9 +13,9 @@ import (
 
 //Services contains the exposed services of interface adapters
 type Services struct {
-	ClientRepository    client.ClientRepository
-	UserRepository      user.UserRepository
-	ChatRepository      chat.ChatRepository
+	ClientRepository    client.Repository
+	UserRepository      user.Repository
+	ChatRepository      chat.Repository
 	MessengerService    messenger.Service
 	NotificationService notification.Service
 }
@@ -23,7 +23,7 @@ type Services struct {
 //NewServices Instantiates the interface adapter services
 func NewServices() Services {
 	cliRepo := memory.NewClientRepo()
-	cli, _ := cliRepo.GetClient()
+	cli, _ := cliRepo.GetClient() //nolint
 	usrRepo := memory.NewUserRepo(cli.GetAppClient().Config().VisorPK)
 	chtRepo := memory.NewChatRepo() //memory.NewDummyChatRepo(cli.GetAppClient().Config().VisorPK)
 	ns := channel.NewNotificationService()
