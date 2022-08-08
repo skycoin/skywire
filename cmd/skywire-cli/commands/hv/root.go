@@ -11,12 +11,15 @@ import (
 )
 
 var (
-	logger  = logging.MustGetLogger("skywire-cli")
-	rpcAddr string
-	path    string
-	pk      string
-	url     string
-	pkg     bool
+	logger   = logging.MustGetLogger("skywire-cli")
+	rpcAddr  string
+	path     string
+	pk       string
+	url      string
+	pkg      bool
+	ipAddr   string
+	localIPs []net.IP
+	err      error
 )
 
 // RootCmd contains commands that interact with the skywire-visor
