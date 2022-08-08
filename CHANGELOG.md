@@ -8,19 +8,21 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 
-- Port of the autopeering system from skybian to the skywire source code.  [#1309](https://github.com/skycoin/skywire/pull/1309)
+- port of the autopeering system from skybian to the skywire source code.  [#1309](https://github.com/skycoin/skywire/pull/1309)
 - `-l --hvip` and `-m --autopeer` flags for `skywire-visor` ; connect to a hypervisor by ip address.  [#1309](https://github.com/skycoin/skywire/pull/1309)
 - `skywire-cli visor pk -w` flag ; http endpoint for visor public key [#1309](https://github.com/skycoin/skywire/pull/1309)
 - `-y --autoconn` and `-z --ispublic` flags for `skywire-cli config gen` [#1319](https://github.com/skycoin/skywire/pull/1319)
 - error packet to routes to propagate route errors [#1181](https://github.com/skycoin/skywire/issues/1181)
 - `skywire-cli chvpk` subcommand to list remote hypervisor(s) a visor is currently connected to [#1306](https://github.com/skycoin/skywire/issues/1306)
+- pong packet to send as a response to ping to calculate latency [#1261](https://github.com/skycoin/skywire/issues/1261)
 
 ### Changed
 
 - improve UI reaction while system is busy
 - hide password options in UI if authentication is disabled
 - fix freezing hypervisor UI on hypervisor disconnection [#1321](https://github.com/skycoin/skywire/issues/1321)
-- fixed route setup hooks to check if transport to remote is established [#1297](https://github.com/skycoin/skywire/issues/1297)
+- fix route setup hooks to check if transport to remote is established [#1297](https://github.com/skycoin/skywire/issues/1297)
+- rename network probe packet to ping [#1261](https://github.com/skycoin/skywire/issues/1261)
 
 ### Removed
 
