@@ -5,11 +5,11 @@ import (
 
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 
 	clicompletion "github.com/skycoin/skywire/cmd/skywire-cli/commands/completion"
 	cliconfig "github.com/skycoin/skywire/cmd/skywire-cli/commands/config"
 	clidmsgpty "github.com/skycoin/skywire/cmd/skywire-cli/commands/dmsgpty"
-	clihv "github.com/skycoin/skywire/cmd/skywire-cli/commands/hv"
 	climdisc "github.com/skycoin/skywire/cmd/skywire-cli/commands/mdisc"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	clirtfind "github.com/skycoin/skywire/cmd/skywire-cli/commands/rtfind"
@@ -27,6 +27,7 @@ var rootCmd = &cobra.Command{
 	SilenceErrors:      true,
 	SilenceUsage:       true,
 	DisableSuggestions: true,
+	Version: buildinfo.Version(),
 }
 
 func init() {
@@ -34,7 +35,6 @@ func init() {
 		cliconfig.RootCmd,
 		clidmsgpty.RootCmd,
 		clivisor.RootCmd,
-		clihv.RootCmd,
 		clivpn.RootCmd,
 		clirtfind.RootCmd,
 		climdisc.RootCmd,

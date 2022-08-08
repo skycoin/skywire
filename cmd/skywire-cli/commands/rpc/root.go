@@ -14,8 +14,8 @@ var (
 	logger  = logging.MustGetLogger("skywire-cli")
 )
 
-// RPCClient is used by the other cli commands to query the visor rpc
-func RPCClient() visor.API {
+// Client is used by other skywire-cli commands to query the visor rpc
+func Client() visor.API {
 	const rpcDialTimeout = time.Second * 5
 	conn, err := net.DialTimeout("tcp", RPCAddr, rpcDialTimeout)
 	if err != nil {

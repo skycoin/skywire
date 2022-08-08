@@ -59,7 +59,7 @@ var tpCmd = &cobra.Command{
 var lsTypesCmd = &cobra.Command{
 	Use: "type", Short: "Transport types used by the local visor",
 	Run: func(_ *cobra.Command, _ []string) {
-		types, err := clirpc.RPCClient().TransportTypes()
+		types, err := clirpc.Client().TransportTypes()
 		internal.Catch(err)
 		for _, t := range types {
 			fmt.Println(t)
@@ -77,7 +77,7 @@ var lsTpCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "Available transports",
 	Run: func(_ *cobra.Command, _ []string) {
-		transports, err := clirpc.RPCClient().Transports(filterTypes, filterPubKeys, showLogs)
+		transports, err := clirpc.Client().Transports(filterTypes, filterPubKeys, showLogs)
 		internal.Catch(err)
 		PrintTransports(transports...)
 	},
@@ -89,7 +89,7 @@ var idCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		tpID := internal.ParseUUID("transport-id", args[0])
-		tp, err := clirpc.RPCClient().Transport(tpID)
+		tp, err := clirpc.Client().Transport(tpID)
 		internal.Catch(err)
 		PrintTransports(tp)
 	},
@@ -125,7 +125,7 @@ var addTpCmd = &cobra.Command{
 		var err error
 
 		if transportType != "" {
-			tp, err = clirpc.RPCClient().AddTransport(pk, transportType, timeout)
+			tp, err = clirpc.Client().AddTransport(pk, transportType, timeout)
 			if err != nil {
 				logger.WithError(err).Fatalf("Failed to establish %v transport", transportType)
 			}
@@ -139,7 +139,7 @@ var addTpCmd = &cobra.Command{
 				network.DMSG,
 			}
 			for _, transportType := range transportTypes {
-				tp, err = clirpc.RPCClient().AddTransport(pk, string(transportType), timeout)
+				tp, err = clirpc.Client().AddTransport(pk, string(transportType), timeout)
 				if err == nil {
 					logger.Infof("Established %v transport to %v", transportType, pk)
 					break
@@ -157,7 +157,7 @@ var rmTpCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		tID := internal.ParseUUID("transport-id", args[0])
-		internal.Catch(clirpc.RPCClient().RemoveTransport(tID))
+		internal.Catch(clirpc.Client().RemoveTransport(tID))
 		fmt.Println("OK")
 	},
 }
@@ -203,7 +203,7 @@ var discTpCmd = &cobra.Command{
 	},
 	Run: func(_ *cobra.Command, _ []string) {
 
-		if rc := clirpc.RPCClient(); tpPK.Null() {
+		if rc := clirpc.Client(); tpPK.Null() {
 			entry, err := rc.DiscoverTransportByID(uuid.UUID(tpID))
 			internal.Catch(err)
 			PrintTransportEntries(entry)

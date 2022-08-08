@@ -14,6 +14,7 @@ var (
 	country   string
 	isSystray bool
 	isStats   bool
+	isFiltered bool
 )
 
 // RootCmd contains commands that interact with the skywire-visor

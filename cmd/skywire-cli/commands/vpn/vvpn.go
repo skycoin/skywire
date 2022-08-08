@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/toqueteos/webbrowser"
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
@@ -27,9 +28,14 @@ func init() {
 		vpnStopCmd,
 		vpnStatusCmd,
 	)
+	version := buildinfo.Version()
+	if version == "unknown" {
+		version = "1.0.1"
+	}
 	vpnUICmd.Flags().BoolVarP(&isPkg, "pkg", "p", false, "use package config path")
 	vpnUICmd.Flags().StringVarP(&path, "config", "c", "", "config path")
-	vpnListCmd.Flags().StringVarP(&ver, "ver", "v", "1.0.1", "filter results by version")
+//	vpnListCmd.Flags().BoolVarP(&isFiltered, "nofilter", "n", false, "provide unfiltered results")
+	vpnListCmd.Flags().StringVarP(&ver, "ver", "v", version, "filter results by version")
 	vpnListCmd.Flags().StringVarP(&country, "country", "c", "", "filter results by country")
 	vpnListCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the resuts")
 	vpnListCmd.Flags().BoolVarP(&isSystray, "systray", "y", false, "format results for isSystray")
@@ -50,7 +56,7 @@ var vpnUICmd = &cobra.Command{
 			}
 			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", conf.PK.Hex())
 		} else {
-			client := clirpc.RPCClient()
+			client := clirpc.Client()
 			overview, err := client.Overview()
 			if err != nil {
 				log.Fatal("Failed to connect; is skywire running?\n", err)
@@ -78,7 +84,7 @@ var vpnURLCmd = &cobra.Command{
 			}
 			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", conf.PK.Hex())
 		} else {
-			client := clirpc.RPCClient()
+			client := clirpc.Client()
 			overview, err := client.Overview()
 			if err != nil {
 				logger.Fatal("Failed to connect; is skywire running?\n", err)
@@ -93,7 +99,7 @@ var vpnListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List public VPN servers",
 	Run: func(_ *cobra.Command, _ []string) {
-		client := clirpc.RPCClient()
+		client := clirpc.Client()
 		servers, err := client.VPNServers()
 		if err != nil {
 			logger.Fatal("Failed to connect; is skywire running?\n", err)
@@ -157,7 +163,7 @@ var vpnStartCmd = &cobra.Command{
 		//pk := internal.ParsePK("remote-public-key", args[0])
 		//var err error
 		fmt.Println("%s", args[0])
-		internal.Catch(clirpc.RPCClient().StartVPNClient(args[0]))
+		internal.Catch(clirpc.Client().StartVPNClient(args[0]))
 		fmt.Println("OK")
 	},
 }
@@ -166,7 +172,7 @@ var vpnStopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "stop the vpn",
 	Run: func(_ *cobra.Command, _ []string) {
-		internal.Catch(clirpc.RPCClient().StopVPNClient("vpn-client"))
+		internal.Catch(clirpc.Client().StopVPNClient("vpn-client"))
 		fmt.Println("OK")
 	},
 }
@@ -175,7 +181,7 @@ var vpnStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "vpn status",
 	Run: func(_ *cobra.Command, _ []string) {
-		states, err := clirpc.RPCClient().Apps()
+		states, err := clirpc.Client().Apps()
 		internal.Catch(err)
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
 		//_, err = fmt.Fprintln(w, "app\tports\tauto_start\tstatus")

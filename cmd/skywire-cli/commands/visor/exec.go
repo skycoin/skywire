@@ -21,7 +21,7 @@ var execCmd = &cobra.Command{
 	Short: "Execute a command",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
-		out, err := clirpc.RPCClient().Exec(strings.Join(args, " "))
+		out, err := clirpc.Client().Exec(strings.Join(args, " "))
 		internal.Catch(err)
 		fmt.Print(string(out))
 	},
