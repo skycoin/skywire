@@ -530,8 +530,10 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 		return r.handleClosePacket(ctx, packet)
 	case routing.KeepAlivePacket:
 		return r.handleKeepAlivePacket(ctx, packet)
-	case routing.NetworkProbePacket:
-		return r.handleNetworkProbePacket(ctx, packet)
+	case routing.PingPacket:
+		return r.handlePingPacket(ctx, packet)
+	case routing.PongPacket:
+		return r.handlePongPacket(ctx, packet)
 	case routing.ErrorPacket:
 		return r.handleErrorPacket(ctx, packet)
 	default:
@@ -652,12 +654,42 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 	return nil
 }
 
-func (r *router) handleNetworkProbePacket(ctx context.Context, packet routing.Packet) error {
+func (r *router) handleKeepAlivePacket(ctx context.Context, packet routing.Packet) error {
+	routeID := packet.RouteID()
+
+	log := r.logger.WithField("func", "router.handleKeepAlivePacket")
+	log.Tracef("Received keepalive packet for route ID %v", routeID)
+
+	rule, err := r.GetRule(routeID)
+	if err != nil {
+		return err
+	}
+
+	if rule.Type() == routing.RuleReverse {
+		log.Tracef("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
+	} else {
+		log.Tracef("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
+			packet.RouteID(), rule.NextRouteID())
+	}
+
+	// propagate packet only for intermediary rule. forward rule workflow doesn't get here,
+	// consume rules should be omitted, activity is already updated
+	if t := rule.Type(); t == routing.RuleIntermediary {
+		log.Traceln("Handling intermediary keep-alive packet")
+		return r.forwardPacket(ctx, packet, rule)
+	}
+
+	log.Tracef("Route ID %v found, updated activity", routeID)
+
+	return nil
+}
+
+func (r *router) handlePingPacket(ctx context.Context, packet routing.Packet) error {
 	rule, err := r.GetRule(packet.RouteID())
 	if err != nil {
 		return err
 	}
-	log := r.logger.WithField("func", "router.handleNetworkProbePacket")
+	log := r.logger.WithField("func", "router.handlePingPacket")
 
 	if rt := rule.Type(); rt == routing.RuleForward || rt == routing.RuleIntermediary {
 		log.Tracef("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
@@ -705,34 +737,57 @@ func (r *router) handleNetworkProbePacket(ctx context.Context, packet routing.Pa
 	return rg.handlePacket(packet)
 }
 
-func (r *router) handleKeepAlivePacket(ctx context.Context, packet routing.Packet) error {
-	routeID := packet.RouteID()
-
-	log := r.logger.WithField("func", "router.handleKeepAlivePacket")
-	log.Tracef("Received keepalive packet for route ID %v", routeID)
-
-	rule, err := r.GetRule(routeID)
+func (r *router) handlePongPacket(ctx context.Context, packet routing.Packet) error {
+	rule, err := r.GetRule(packet.RouteID())
 	if err != nil {
 		return err
 	}
+	log := r.logger.WithField("func", "router.handlePongPacket")
 
-	if rule.Type() == routing.RuleReverse {
-		log.Tracef("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
-	} else {
+	if rt := rule.Type(); rt == routing.RuleForward || rt == routing.RuleIntermediary {
 		log.Tracef("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
 			packet.RouteID(), rule.NextRouteID())
-	}
-
-	// propagate packet only for intermediary rule. forward rule workflow doesn't get here,
-	// consume rules should be omitted, activity is already updated
-	if t := rule.Type(); t == routing.RuleIntermediary {
-		log.Traceln("Handling intermediary keep-alive packet")
 		return r.forwardPacket(ctx, packet, rule)
 	}
 
-	log.Tracef("Route ID %v found, updated activity", routeID)
+	log.Tracef("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
 
-	return nil
+	desc := rule.RouteDescriptor()
+	nrg, ok := r.noiseRouteGroup(desc)
+
+	log.Tracef("Handling packet with descriptor %s", &desc)
+
+	if ok {
+		if nrg == nil {
+			return errors.New("noiseRouteGroup is nil")
+		}
+
+		// in this case we have already initialized nrg and may use it straightforward
+		log.Tracef("Got new remote packet with size %d and route ID %d. Using rule: %s",
+			len(packet.Payload()), packet.RouteID(), rule)
+
+		return nrg.handlePacket(packet)
+	}
+
+	// we don't have nrg for this packet. it's either handshake message or
+	// we don't have route for this one completely
+
+	rg, ok := r.initializingRouteGroup(desc)
+	if !ok {
+		// no route, just return error
+		log.Tracef("Descriptor not found for rule with type %s, descriptor: %s", rule.Type(), &desc)
+		return errors.New("route descriptor does not exist")
+	}
+
+	if rg == nil {
+		return errors.New("initializing RouteGroup is nil")
+	}
+
+	// handshake packet, handling with the raw rg
+	log.Tracef("Got new remote packet with size %d and route ID %d. Using rule: %s",
+		len(packet.Payload()), packet.RouteID(), rule)
+
+	return rg.handlePacket(packet)
 }
 
 func (r *router) handleErrorPacket(ctx context.Context, packet routing.Packet) error {
@@ -860,14 +915,17 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 			supportEncryptionVal = false
 		}
 		p = routing.MakeHandshakePacket(rule.NextRouteID(), supportEncryptionVal)
-	case routing.NetworkProbePacket:
-		timestamp := int64(binary.BigEndian.Uint64(packet[routing.PacketPayloadOffset:]))
-		throughput := int64(binary.BigEndian.Uint64(packet[routing.PacketPayloadOffset+8:]))
-		p = routing.MakeNetworkProbePacket(rule.NextRouteID(), timestamp, throughput)
 	case routing.KeepAlivePacket:
 		p = routing.MakeKeepAlivePacket(rule.NextRouteID())
 	case routing.ClosePacket:
 		p = routing.MakeClosePacket(rule.NextRouteID(), routing.CloseCode(packet.Payload()[0]))
+	case routing.PingPacket:
+		timestamp := int64(binary.BigEndian.Uint64(packet[routing.PacketPayloadOffset:]))
+		throughput := int64(binary.BigEndian.Uint64(packet[routing.PacketPayloadOffset+8:]))
+		p = routing.MakePingPacket(rule.NextRouteID(), timestamp, throughput)
+	case routing.PongPacket:
+		timestamp := int64(binary.BigEndian.Uint64(packet[routing.PacketPayloadOffset:]))
+		p = routing.MakePongPacket(rule.NextRouteID(), timestamp)
 	case routing.ErrorPacket:
 		var err error
 

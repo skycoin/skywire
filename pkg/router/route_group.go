@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -23,7 +22,7 @@ import (
 
 const (
 	defaultRouteGroupKeepAliveInterval = DefaultRouteKeepAlive / 2
-	defaultNetworkProbeInterval        = 3 * time.Second
+	defaultPingInterval                = 3 * time.Second
 	defaultReadChBufSize               = 1024
 	closeRoutineTimeout                = 2 * time.Second
 )
@@ -51,18 +50,18 @@ type sendServicePacketFn func(interval time.Duration)
 
 // RouteGroupConfig configures RouteGroup.
 type RouteGroupConfig struct {
-	ReadChBufSize        int
-	KeepAliveInterval    time.Duration
-	NetworkProbeInterval time.Duration
+	ReadChBufSize     int
+	KeepAliveInterval time.Duration
+	PingInterval      time.Duration
 }
 
 // DefaultRouteGroupConfig returns default RouteGroup config.
 // Used by default if config is nil.
 func DefaultRouteGroupConfig() *RouteGroupConfig {
 	return &RouteGroupConfig{
-		KeepAliveInterval:    defaultRouteGroupKeepAliveInterval,
-		NetworkProbeInterval: defaultNetworkProbeInterval,
-		ReadChBufSize:        defaultReadChBufSize,
+		KeepAliveInterval: defaultRouteGroupKeepAliveInterval,
+		PingInterval:      defaultPingInterval,
+		ReadChBufSize:     defaultReadChBufSize,
 	}
 }
 
@@ -427,10 +426,10 @@ func (rg *RouteGroup) tp() (*transport.ManagedTransport, error) {
 
 func (rg *RouteGroup) startOffServiceLoops() {
 	go rg.servicePacketLoop("keep-alive", rg.cfg.KeepAliveInterval, rg.keepAliveServiceFn)
-	go rg.servicePacketLoop("network probe", rg.cfg.NetworkProbeInterval, rg.networkProbeServiceFn)
+	go rg.servicePacketLoop("ping", rg.cfg.PingInterval, rg.pingServiceFn)
 }
 
-func (rg *RouteGroup) sendNetworkProbe() error {
+func (rg *RouteGroup) sendPing() error {
 	rg.mu.Lock()
 
 	if len(rg.tps) == 0 || len(rg.fwd) == 0 {
@@ -451,13 +450,35 @@ func (rg *RouteGroup) sendNetworkProbe() error {
 	timestamp := time.Now().UTC().UnixNano() / int64(time.Millisecond)
 	rg.networkStats.SetDownloadSpeed(uint32(throughput))
 
-	packet := routing.MakeNetworkProbePacket(rule.NextRouteID(), timestamp, throughput)
+	packet := routing.MakePingPacket(rule.NextRouteID(), timestamp, throughput)
 
 	return rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
 }
 
-func (rg *RouteGroup) networkProbeServiceFn(_ time.Duration) {
-	if err := rg.sendNetworkProbe(); err != nil {
+func (rg *RouteGroup) sendPong(timestamp int64) error {
+	rg.mu.Lock()
+
+	if len(rg.tps) == 0 || len(rg.fwd) == 0 {
+		rg.mu.Unlock()
+		// if no transports, no rules, then no latency probe
+		return nil
+	}
+
+	tp := rg.tps[0]
+	rule := rg.fwd[0]
+	rg.mu.Unlock()
+
+	if tp == nil {
+		return nil
+	}
+
+	packet := routing.MakePongPacket(rule.NextRouteID(), timestamp)
+
+	return rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
+}
+
+func (rg *RouteGroup) pingServiceFn(_ time.Duration) {
+	if err := rg.sendPing(); err != nil {
 		rg.logger.Warnf("Failed to send network probe: %v", err)
 	}
 }
@@ -626,8 +647,6 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 			close(rg.handshakeProcessed)
 		})
 		return rg.handleDataPacket(packet)
-	case routing.NetworkProbePacket:
-		return rg.handleNetworkProbePacket(packet)
 	case routing.HandshakePacket:
 		rg.handshakeProcessedOnce.Do(func() {
 			// first packet is handshake packet, so we're communicating with the new visor
@@ -638,33 +657,13 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 
 			close(rg.handshakeProcessed)
 		})
+	case routing.PingPacket:
+		return rg.handlePingPacket(packet)
+	case routing.PongPacket:
+		return rg.handlePongPacket(packet)
 	case routing.ErrorPacket:
 		return rg.handleErrorPacket(packet)
 	}
-
-	return nil
-}
-
-func (rg *RouteGroup) handleNetworkProbePacket(packet routing.Packet) error {
-	payload := packet.Payload()
-
-	sentAtMs := binary.BigEndian.Uint64(payload)
-	throughput := binary.BigEndian.Uint64(payload[8:])
-
-	ms := sentAtMs % 1000
-	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond)).UTC()
-
-	latency := time.Now().UTC().Sub(sentAt).Milliseconds()
-	// todo (ersonp): this is a dirty fix, we need to implement new packets Ping and Pong to calculate the RTT.
-	// if latency is negative we set it to be the previous one
-	if math.Signbit(float64(latency)) {
-		latency = int64(rg.networkStats.Latency())
-	}
-
-	rg.logger.WithField("func", "RouteGroup.handleNetworkProbePacket").Tracef("Latency is around %d ms", latency)
-
-	rg.networkStats.SetLatency(uint32(latency))
-	rg.networkStats.SetUploadSpeed(uint32(throughput))
 
 	return nil
 }
@@ -713,6 +712,36 @@ func (rg *RouteGroup) handleClosePacket(code routing.CloseCode) error {
 	}
 
 	return rg.close(code)
+}
+
+func (rg *RouteGroup) handlePingPacket(packet routing.Packet) error {
+	payload := packet.Payload()
+
+	timestamp := binary.BigEndian.Uint64(payload)
+	throughput := binary.BigEndian.Uint64(payload[8:])
+
+	rg.logger.WithField("func", "RouteGroup.handlePingPacket").Tracef("Throughput is around %d", throughput)
+
+	rg.networkStats.SetUploadSpeed(uint32(throughput))
+
+	return rg.sendPong(int64(timestamp))
+}
+
+func (rg *RouteGroup) handlePongPacket(packet routing.Packet) error {
+	payload := packet.Payload()
+
+	sentAtMs := binary.BigEndian.Uint64(payload)
+
+	ms := sentAtMs % 1000
+	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond)).UTC()
+
+	latency := time.Now().UTC().Sub(sentAt).Milliseconds()
+
+	rg.logger.WithField("func", "RouteGroup.handlePongPacket").Tracef("Latency is around %d ms", latency)
+
+	rg.networkStats.SetLatency(uint32(latency))
+
+	return nil
 }
 
 func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) {

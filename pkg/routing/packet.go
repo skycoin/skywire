@@ -43,8 +43,10 @@ func (t PacketType) String() string {
 		return "KeepAlivePacket"
 	case HandshakePacket:
 		return "Handshake"
-	case NetworkProbePacket:
-		return "NetworkProbe"
+	case PingPacket:
+		return "Ping"
+	case PongPacket:
+		return "Pong"
 	case ErrorPacket:
 		return "Error"
 	default:
@@ -56,12 +58,17 @@ func (t PacketType) String() string {
 // - DataPacket      - Payload is just the underlying data.
 // - ClosePacket     - Payload is a type CloseCode byte.
 // - KeepAlivePacket - Payload is empty.
+// - HandshakePacket - Payload is supportEncryptionVal byte.
+// - PingPacket      - Payload is timestamp and throughput.
+// - PongPacket      - Payload is timestamp.
+// - ErrorPacket     - Payload is error.
 const (
 	DataPacket PacketType = iota
 	ClosePacket
 	KeepAlivePacket
 	HandshakePacket
-	NetworkProbePacket
+	PingPacket
+	PongPacket
 	ErrorPacket
 )
 
@@ -125,15 +132,27 @@ func MakeKeepAlivePacket(id RouteID) Packet {
 	return packet
 }
 
-// MakeNetworkProbePacket constructs a new NetworkProbePacket.
-func MakeNetworkProbePacket(id RouteID, timestamp, throughput int64) Packet {
+// MakePingPacket constructs a new MakePingPacket.
+func MakePingPacket(id RouteID, timestamp, throughput int64) Packet {
 	packet := make([]byte, PacketHeaderSize+16)
 
-	packet[PacketTypeOffset] = byte(NetworkProbePacket)
+	packet[PacketTypeOffset] = byte(PingPacket)
 	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
 	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(16))
 	binary.BigEndian.PutUint64(packet[PacketPayloadOffset:], uint64(timestamp))
 	binary.BigEndian.PutUint64(packet[PacketPayloadOffset+8:], uint64(throughput))
+
+	return packet
+}
+
+// MakePongPacket constructs a new PongPacket.
+func MakePongPacket(id RouteID, timestamp int64) Packet {
+	packet := make([]byte, PacketHeaderSize+16)
+
+	packet[PacketTypeOffset] = byte(PongPacket)
+	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(16))
+	binary.BigEndian.PutUint64(packet[PacketPayloadOffset:], uint64(timestamp))
 
 	return packet
 }
