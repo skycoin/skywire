@@ -215,7 +215,7 @@ func onReady() {
 		for {
 			select {
 			case <-mHV.ClickedCh:
-				_, err = script.Exec(skywirecli + ` hv ui`).Stdout()
+				_, err = script.Exec(skywirecli + ` visor hvui`).Stdout()
 				if err != nil {
 					l.WithError(err).Warn("Failed to open hypervisor UI")
 				}
@@ -227,7 +227,7 @@ func onReady() {
 			case <-mVPNButton.ClickedCh:
 				handleVPNButton()
 			case <-mPTY.ClickedCh:
-				_, err = script.Exec(skywirecli + ` hv dmsg ui`).Stdout()
+				_, err = script.Exec(skywirecli + ` dmsg ui`).Stdout()
 				if err != nil {
 					l.WithError(err).Warn("Failed to open dmsgpty UI")
 				}
@@ -248,7 +248,7 @@ func onReady() {
 				}
 			case <-mShutdown.ClickedCh:
 				if skyenv.OS == "linux" {
-					_, _ = script.Exec(`systemctl disable --now skywire skywire-visor`).Stdout() //nolint:errcheck
+					_, _ = script.Exec(`systemctl disable --now skywire`).Stdout() //nolint:errcheck
 					ToggleOff()
 				} else {
 					l.Warn("shutdown of services not yet implemented on windows / mac")
