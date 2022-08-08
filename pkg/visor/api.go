@@ -96,16 +96,17 @@ type HealthCheckable interface {
 
 // Overview provides a range of basic information about a Visor.
 type Overview struct {
-	PubKey          cipher.PubKey         `json:"local_pk"`
-	BuildInfo       *buildinfo.Info       `json:"build_info"`
-	AppProtoVersion string                `json:"app_protocol_version"`
-	Apps            []*appserver.AppState `json:"apps"`
-	Transports      []*TransportSummary   `json:"transports"`
-	RoutesCount     int                   `json:"routes_count"`
-	LocalIP         string                `json:"local_ip"`
-	PublicIP        string                `json:"public_ip"`
-	IsSymmetricNAT  bool                  `json:"is_symmetic_nat"`
-	Hypervisors     []cipher.PubKey       `json:"hypervisors"`
+	PubKey              cipher.PubKey         `json:"local_pk"`
+	BuildInfo           *buildinfo.Info       `json:"build_info"`
+	AppProtoVersion     string                `json:"app_protocol_version"`
+	Apps                []*appserver.AppState `json:"apps"`
+	Transports          []*TransportSummary   `json:"transports"`
+	RoutesCount         int                   `json:"routes_count"`
+	LocalIP             string                `json:"local_ip"`
+	PublicIP            string                `json:"public_ip"`
+	IsSymmetricNAT      bool                  `json:"is_symmetic_nat"`
+	Hypervisors         []cipher.PubKey       `json:"hypervisors"`
+	ConnectedHypervisor []cipher.PubKey       `json:"connected_hypervisor"`
 }
 
 // Overview implements API.
@@ -161,6 +162,10 @@ func (v *Visor) Overview() (*Overview, error) {
 	}
 
 	overview.Hypervisors = v.conf.Hypervisors
+
+	for connectedHV := range v.connectedHypervisors {
+		overview.ConnectedHypervisor = append(overview.ConnectedHypervisor, connectedHV)
+	}
 
 	return overview, nil
 }
@@ -814,6 +819,7 @@ func (v *Visor) Shutdown() error {
 	if v.restartCtx == nil {
 		return ErrMalformedRestartContext
 	}
+	defer os.Exit(0)
 	return v.Close()
 }
 

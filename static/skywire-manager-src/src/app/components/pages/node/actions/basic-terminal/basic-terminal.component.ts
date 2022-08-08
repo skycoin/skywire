@@ -64,6 +64,7 @@ export class BasicTerminalComponent implements AfterViewInit, OnDestroy {
 
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: BasicTerminalData,
+    public dialogRef: MatDialogRef<BasicTerminalComponent>,
     private renderer: Renderer2,
     private apiService: ApiService,
     private translate: TranslateService,

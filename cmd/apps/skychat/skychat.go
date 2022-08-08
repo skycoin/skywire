@@ -98,7 +98,7 @@ func main() {
 
 	err := http.ListenAndServe(*addr, nil)
 	if err != nil {
-		print(err)
+		print(err.Error())
 		setAppError(appCl, err)
 		os.Exit(1)
 	}
