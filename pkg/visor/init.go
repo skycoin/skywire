@@ -1064,6 +1064,11 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 		cancel()
 	}()
 
+	v.pushCloseStack("hypervisor", func() error {
+		cancel()
+		return err
+	})
+
 	return nil
 }
 
