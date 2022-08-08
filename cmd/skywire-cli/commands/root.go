@@ -41,7 +41,7 @@ func init() {
 		clicompletion.RootCmd,
 	)
 	var helpflag bool
-	rootCmd.PersistentFlags().StringVarP(&clirpc.RPCAddr, "rpc", "", "localhost:3435", "RPC server address")
+	rootCmd.PersistentFlags().StringVarP(&clirpc.Addr, "rpc", "", "localhost:3435", "RPC server address")
 	rootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+rootCmd.Use)
 	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
 	rootCmd.PersistentFlags().MarkHidden("help") //nolint
