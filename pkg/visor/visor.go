@@ -88,10 +88,11 @@ type Visor struct {
 	// produced by concurrent parts of modules
 	runtimeErrors chan error
 
-	isServicesHealthy *internalHealthInfo
-
-	remoteVisors         map[cipher.PubKey]Conn // copy of connected remote visors to hypervisor
-	connectedHypervisors map[cipher.PubKey]bool
+	isServicesHealthy    *internalHealthInfo
+	autoPeer             bool                   // autoPeer=true tells the visor to query the http endpoint of the hypervisor on the local network for the hypervisor's public key when connectio to the hypervisor is lost
+	autoPeerIP           string                 // autoPeerCmd is the command string used to return the public key of the hypervisor
+	remoteVisors         map[cipher.PubKey]Conn // remote hypervisors the visor is attempting to connect to
+	connectedHypervisors map[cipher.PubKey]bool // remote hypervisors the visor is currently connected to
 }
 
 // todo: consider moving module closing to the module system
@@ -115,7 +116,7 @@ func (v *Visor) MasterLogger() *logging.MasterLogger {
 }
 
 // NewVisor constructs new Visor.
-func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) {
+func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Context, autoPeer bool, autoPeerIP string) (*Visor, bool) {
 
 	v := &Visor{
 		log:                  conf.MasterLogger().PackageLogger("visor"),
@@ -178,6 +179,10 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Con
 	// module runtime errors and act on it (by stopping visor for example)
 	if !v.processRuntimeErrs() {
 		return nil, false
+	}
+	if autoPeer {
+		v.autoPeer = true
+		v.autoPeerIP = autoPeerIP
 	}
 	log.Info("Startup complete.")
 	return v, true
