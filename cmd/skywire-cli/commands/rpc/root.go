@@ -9,9 +9,15 @@ import (
 )
 
 var (
-	// RPCAddr is the address to reach the rpc server
-	RPCAddr string
-	logger  = logging.MustGetLogger("skywire-cli")
+	logger   = logging.MustGetLogger("skywire-cli")
+	RPCAddr  string
+	path     string
+	pk       string
+	url      string
+	pkg      bool
+	ipAddr   string
+	localIPs []net.IP
+	err      error
 )
 
 // Client is used by other skywire-cli commands to query the visor rpc

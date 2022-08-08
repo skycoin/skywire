@@ -7,13 +7,13 @@ import (
 )
 
 var (
-	logger    = logging.MustGetLogger("skywire-cli")
-	path      string
-	isPkg     bool
-	ver       string
-	country   string
-	isSystray bool
-	isStats   bool
+	logger     = logging.MustGetLogger("skywire-cli")
+	path       string
+	isPkg      bool
+	ver        string
+	country    string
+	isSystray  bool
+	isStats    bool
 	isFiltered bool
 )
 

@@ -245,14 +245,20 @@ func (s *Server) serveConn(conn net.Conn) {
 		defer close(connToTunDoneCh)
 
 		if _, err := io.Copy(tun, conn); err != nil {
-			print(fmt.Sprintf("Error resending traffic from VPN client to TUN %s: %v\n", tun.Name(), err))
+			// when the vpn-client is closed we get the error "EOF"
+			if err.Error() != io.EOF.Error() {
+				print(fmt.Sprintf("Error resending traffic from VPN client to TUN %s: %v\n", tun.Name(), err))
+			}
 		}
 	}()
 	go func() {
 		defer close(tunToConnCh)
 
 		if _, err := io.Copy(conn, tun); err != nil {
-			print(fmt.Sprintf("Error resending traffic from TUN %s to VPN client: %v\n", tun.Name(), err))
+			// when the vpn-client is closed we get the error "read tun: file already closed"
+			if err.Error() != "read tun: file already closed" {
+				print(fmt.Sprintf("Error resending traffic from TUN %s to VPN client: %v\n", tun.Name(), err))
+			}
 		}
 	}()
 

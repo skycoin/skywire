@@ -10,8 +10,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/toqueteos/webbrowser"
-	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -34,7 +34,7 @@ func init() {
 	}
 	vpnUICmd.Flags().BoolVarP(&isPkg, "pkg", "p", false, "use package config path")
 	vpnUICmd.Flags().StringVarP(&path, "config", "c", "", "config path")
-//	vpnListCmd.Flags().BoolVarP(&isFiltered, "nofilter", "n", false, "provide unfiltered results")
+	//	vpnListCmd.Flags().BoolVarP(&isFiltered, "nofilter", "n", false, "provide unfiltered results")
 	vpnListCmd.Flags().StringVarP(&ver, "ver", "v", version, "filter results by version")
 	vpnListCmd.Flags().StringVarP(&country, "country", "c", "", "filter results by country")
 	vpnListCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the resuts")

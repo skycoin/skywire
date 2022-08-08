@@ -772,9 +772,16 @@ func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 		go func(hvErrs chan error) {
 			defer wg.Done()
+			var autoPeerIP string
+			if v.autoPeer {
+				autoPeerIP = v.autoPeerIP
+			} else {
+				autoPeerIP = ""
+			}
 			defer delete(v.connectedHypervisors, hvPK)
 			v.connectedHypervisors[hvPK] = true
-			ServeRPCClient(ctx, log, v.dmsgC, rpcS, addr, hvErrs)
+			ServeRPCClient(ctx, log, autoPeerIP, v.dmsgC, rpcS, addr, hvErrs)
+
 		}(hvErrs)
 
 		v.pushCloseStack("hypervisor."+hvPK.String()[:shortHashLen], func() error {
