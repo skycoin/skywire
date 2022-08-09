@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 
 import { VpnServer } from './vpn-client-discovery.service';
 import { ManualVpnServerData } from '../components/vpn/pages/vpn-server-list/add-vpn-server/add-vpn-server.component';
+import { StorageService } from './storage.service';
 
 /**
  * Special conditions a server may have.
@@ -136,16 +137,18 @@ export class VpnSavedDataService {
   private favoritesSubject = new ReplaySubject<LocalServerData[]>(1);
   private blockedSubject = new ReplaySubject<LocalServerData[]>(1);
 
-  constructor(private router: Router) {}
+  constructor(private router: Router, private storageService: StorageService) {}
 
   /**
    * Loads the data from local storage and updates all the vars, so the service can work correctly.
    */
   initialize() {
+    this.migrateDataToHvStorage();
+
     this.serversMap = new Map<string, LocalServerData>();
 
     // Get the saved servers and the pk of the currently selected one.
-    const retrievedServers = localStorage.getItem(this.savedServersStorageKey);
+    const retrievedServers = this.storageService.getDataForHv(this.savedServersStorageKey);
     if (retrievedServers) {
       const servers: SavedServersData = JSON.parse(retrievedServers);
       servers.serverList.forEach(server => {
@@ -161,6 +164,31 @@ export class VpnSavedDataService {
 
     // Launch the events with the updated server lists.
     this.launchListEvents();
+  }
+
+  /**
+   * It checks if there is data saved from a previous version of the app, without being assigned to a
+   * hypervisor. If the functions finds old data, it is migrated to the new format and assigned to the
+   * current hypervisor.
+   */
+  private migrateDataToHvStorage() {
+    const oldSavedServers = localStorage.getItem(this.savedServersStorageKey);
+    if (oldSavedServers) {
+      this.storageService.setDataForHv(this.savedServersStorageKey, oldSavedServers);
+      localStorage.removeItem(this.savedServersStorageKey);
+    }
+
+    const oldSavedIpSetting = localStorage.getItem(this.checkIpSettingStorageKey);
+    if (oldSavedIpSetting) {
+      this.storageService.setDataForHv(this.checkIpSettingStorageKey, oldSavedIpSetting);
+      localStorage.removeItem(this.checkIpSettingStorageKey);
+    }
+
+    const oldSavedDataUnitsSetting = localStorage.getItem(this.dataUnitsSettingStorageKey);
+    if (oldSavedDataUnitsSetting) {
+      this.storageService.setDataForHv(this.dataUnitsSettingStorageKey, oldSavedDataUnitsSetting);
+      localStorage.removeItem(this.dataUnitsSettingStorageKey);
+    }
   }
 
   /**
@@ -219,7 +247,7 @@ export class VpnSavedDataService {
    * If the user has not changed the setting, it returns true by default.
    */
   getCheckIpSetting(): boolean {
-    const val = localStorage.getItem(this.checkIpSettingStorageKey);
+    const val = this.storageService.getDataForHv(this.checkIpSettingStorageKey);
     if (val === null || val === undefined) {
       return true;
     }
@@ -231,7 +259,7 @@ export class VpnSavedDataService {
    * Sets if the app should check the current local IP (true) or not (false).
    */
   setCheckIpSetting(value: boolean) {
-    localStorage.setItem(this.checkIpSettingStorageKey, value ? 'true' : 'false');
+    this.storageService.setDataForHv(this.checkIpSettingStorageKey, value ? 'true' : 'false');
   }
 
   /**
@@ -239,7 +267,7 @@ export class VpnSavedDataService {
    * the setting, it returns DataUnits.BitsSpeedAndBytesVolume by default.
    */
    getDataUnitsSetting(): DataUnits {
-    const val = localStorage.getItem(this.dataUnitsSettingStorageKey);
+    const val = this.storageService.getDataForHv(this.dataUnitsSettingStorageKey);
     if (val === null || val === undefined) {
       return DataUnits.BitsSpeedAndBytesVolume;
     }
@@ -251,7 +279,7 @@ export class VpnSavedDataService {
    * Sets the data units that must be shown in the UI.
    */
    setDataUnitsSetting(value: DataUnits) {
-    localStorage.setItem(this.dataUnitsSettingStorageKey, value);
+    this.storageService.setDataForHv(this.dataUnitsSettingStorageKey, value);
   }
 
   /**
@@ -528,7 +556,7 @@ export class VpnSavedDataService {
   private saveData() {
     // Check the version of the data saved in persistent storage.
     let lastSavedVersion = 0;
-    const retrievedServers = localStorage.getItem(this.savedServersStorageKey);
+    const retrievedServers = this.storageService.getDataForHv(this.savedServersStorageKey);
     if (retrievedServers) {
       const servers: SavedServersData = JSON.parse(retrievedServers);
       lastSavedVersion = servers.version;
@@ -550,7 +578,7 @@ export class VpnSavedDataService {
       selectedServerPk: this.currentServerPk,
     };
     const dataToSave = JSON.stringify(data);
-    localStorage.setItem(this.savedServersStorageKey, dataToSave);
+    this.storageService.setDataForHv(this.savedServersStorageKey, dataToSave);
 
     // Update the events.
     this.launchListEvents();
@@ -565,7 +593,7 @@ export class VpnSavedDataService {
   private checkIfDataWasChanged() {
     let lastSavedVersion = 0;
 
-    const retrievedServers = localStorage.getItem(this.savedServersStorageKey);
+    const retrievedServers = this.storageService.getDataForHv(this.savedServersStorageKey);
     if (retrievedServers) {
       const servers: SavedServersData = JSON.parse(retrievedServers);
       lastSavedVersion = servers.version;
