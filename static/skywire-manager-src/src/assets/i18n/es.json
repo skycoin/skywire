@@ -79,7 +79,8 @@
   },
 
   "start": {
-    "title": "Inicio"
+    "title": "Inicio",
+    "loading-error": "Hubo un error obteniendo los datos iniciales. Reintentando..."
   },
 
   "node": {

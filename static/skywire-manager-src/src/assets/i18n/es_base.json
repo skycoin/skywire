@@ -79,7 +79,8 @@
   },
 
   "start": {
-    "title": "Start"
+    "title": "Start",
+    "loading-error": "An error occurred while getting the initial data. Retrying..."
   },
 
   "node": {
