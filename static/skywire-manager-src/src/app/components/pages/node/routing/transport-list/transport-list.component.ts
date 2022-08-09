@@ -183,7 +183,7 @@ export class TransportListComponent implements OnDestroy {
       this.uploadedSortData,
       this.downloadedSortData,
     ];
-    this.dataSorter = new DataSorter(this.dialog, this.translateService, sortableColumns, 1, this.listId);
+    this.dataSorter = new DataSorter(this.dialog, this.translateService, this.storageService, sortableColumns, 1, this.listId);
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
       // When this happens, the data in allTransports has already been sorted.
       this.recalculateElementsToShow();
