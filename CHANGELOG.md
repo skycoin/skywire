@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - error packet to routes to propagate route errors [#1181](https://github.com/skycoin/skywire/issues/1181)
 - `skywire-cli chvpk` subcommand to list remote hypervisor(s) a visor is currently connected to [#1306](https://github.com/skycoin/skywire/issues/1306)
 - pong packet to send as a response to ping to calculate latency [#1261](https://github.com/skycoin/skywire/issues/1261)
+- store UI settings per hypervisor key [#1329](https://github.com/skycoin/skywire/pull/1329)
 
 ### Changed
 
