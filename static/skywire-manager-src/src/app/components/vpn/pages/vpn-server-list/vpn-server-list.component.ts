@@ -16,6 +16,7 @@ import { AddVpnServerComponent } from './add-vpn-server/add-vpn-server.component
 import { VpnSavedDataService, LocalServerData, ServerFlags } from 'src/app/services/vpn-saved-data.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { EnterVpnServerPasswordComponent } from './enter-vpn-server-password/enter-vpn-server-password.component';
+import { StorageService } from 'src/app/services/storage.service';
 
 /**
  * Server lists VpnServerListComponent can show.
@@ -226,6 +227,7 @@ export class VpnServerListComponent implements OnDestroy {
     private vpnClientService: VpnClientService,
     private vpnSavedDataService: VpnSavedDataService,
     private snackbarService: SnackbarService,
+    private storageService: StorageService,
   ) {
     this.navigationsSubscription = route.paramMap.subscribe(params => {
       // Get which list must be shown.
@@ -597,7 +599,7 @@ export class VpnServerListComponent implements OnDestroy {
       defaultColumn = this.currentList === Lists.History ? 0 : 1;
       tieBreakerColumn = this.currentList === Lists.History ? 2 : 3;
     }
-    this.dataSorter = new DataSorter(this.dialog, this.translateService, sortableColumns, defaultColumn, this.listId);
+    this.dataSorter = new DataSorter(this.dialog, this.translateService, this.storageService, sortableColumns, defaultColumn, this.listId);
     this.dataSorter.setTieBreakerColumnIndex(tieBreakerColumn);
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
       // When this happens, the data in allServers has already been sorted.

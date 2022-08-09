@@ -118,7 +118,7 @@ export class LabelListComponent implements OnDestroy {
       this.idSortData,
       this.typeSortData,
     ];
-    this.dataSorter = new DataSorter(this.dialog, this.translateService, sortableColumns, 0, this.listId);
+    this.dataSorter = new DataSorter(this.dialog, this.translateService, this.storageService, sortableColumns, 0, this.listId);
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
       // When this happens, the data in allLabels has already been sorted.
       this.recalculateElementsToShow();
