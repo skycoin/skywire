@@ -418,9 +418,12 @@ type StatusMessage struct {
 }
 
 // VPNServers calls VPNServers.
-func (rc *rpcClient) VPNServers() ([]servicedisc.Service, error) {
+func (rc *rpcClient) VPNServers(version, country string) ([]servicedisc.Service, error) {
 	output := []servicedisc.Service{}
-	rc.Call("VPNServers", &struct{}{}, &output) // nolint
+	rc.Call("VPNServers", &FilterVPNServersIn{
+		Version: version,
+		Country: country,
+	}, &output) // nolint
 	return output, nil
 }
 
@@ -990,7 +993,7 @@ func (mc *mockRPCClient) GetPersistentTransports() ([]transport.PersistentTransp
 }
 
 // VPNServers implements API
-func (mc *mockRPCClient) VPNServers() ([]servicedisc.Service, error) {
+func (mc *mockRPCClient) VPNServers(_, _ string) ([]servicedisc.Service, error) {
 	return []servicedisc.Service{}, nil
 }
 

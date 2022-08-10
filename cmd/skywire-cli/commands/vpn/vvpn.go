@@ -30,11 +30,11 @@ func init() {
 	)
 	version := buildinfo.Version()
 	if version == "unknown" {
-		version = "1.0.1"
+		version = ""
 	}
 	vpnUICmd.Flags().BoolVarP(&isPkg, "pkg", "p", false, "use package config path")
 	vpnUICmd.Flags().StringVarP(&path, "config", "c", "", "config path")
-	//	vpnListCmd.Flags().BoolVarP(&isFiltered, "nofilter", "n", false, "provide unfiltered results")
+	vpnListCmd.Flags().BoolVarP(&isUnFiltered, "nofilter", "n", false, "provide unfiltered results")
 	vpnListCmd.Flags().StringVarP(&ver, "ver", "v", version, "filter results by version")
 	vpnListCmd.Flags().StringVarP(&country, "country", "c", "", "filter results by country")
 	vpnListCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the resuts")
@@ -100,16 +100,20 @@ var vpnListCmd = &cobra.Command{
 	Short: "List public VPN servers",
 	Run: func(_ *cobra.Command, _ []string) {
 		client := clirpc.Client()
-		servers, err := client.VPNServers()
+		if isUnFiltered {
+			ver = ""
+			country = ""
+		}
+		servers, err := client.VPNServers(ver, country)
 		if err != nil {
 			logger.Fatal("Failed to connect; is skywire running?\n", err)
 		}
 		var a []servicedisc.Service
 		for _, i := range servers {
-			if (ver == "") || (ver == "unknown") || (strings.Replace(i.Version, "v", "", 1) == ver) {
+//			if (ver == "") || (ver == "unknown") || (strings.Replace(i.Version, "v", "", 1) == ver) {
 				a = append(a, i)
 			}
-		}
+//		}
 		if len(a) > 0 {
 			servers = a
 			a = []servicedisc.Service{}

@@ -10,6 +10,7 @@ var (
 	logger    = logging.MustGetLogger("skywire-cli")
 	path      string
 	isPkg     bool
+	isUnFiltered     bool
 	ver       string
 	country   string
 	isSystray bool
