@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - fix freezing hypervisor UI on hypervisor disconnection [#1321](https://github.com/skycoin/skywire/issues/1321)
 - fix route setup hooks to check if transport to remote is established [#1297](https://github.com/skycoin/skywire/issues/1297)
 - rename network probe packet to ping [#1261](https://github.com/skycoin/skywire/issues/1261)
+- added Value/Scan method to SWAddr for using in DB directly
+- added new fields (ID, CreatedAT) to Service type for using in DB directly
 
 ### Removed
 
