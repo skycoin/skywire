@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - rename network probe packet to ping [#1261](https://github.com/skycoin/skywire/issues/1261)
 - added Value/Scan method to SWAddr for using in DB directly
 - added new fields (ID, CreatedAT) to Service type for using in DB directly
+- fixed entrypoint.sh for Dockerfile [#1336](https://github.com/skycoin/skywire/pull/1336)
 
 ### Removed
 
