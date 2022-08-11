@@ -2,10 +2,12 @@ package servicedisc
 
 import (
 	"bytes"
+	"database/sql/driver"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"strconv"
+	"time"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/geo"
@@ -90,13 +92,36 @@ func (a *SWAddr) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+// Scan implement a scanner to get data from database
+func (a *SWAddr) Scan(value interface{}) error {
+	str, ok := value.(string)
+	if !ok {
+		return errors.New("provided value not of type string")
+	}
+
+	err := a.UnmarshalText([]byte(str))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Value is a method to get value of data fetched from database
+func (a SWAddr) Value() (driver.Value, error) {
+	str := a.String()
+	return str, nil
+}
+
 // Service represents a service entry in service-discovery.
 type Service struct {
-	Addr     SWAddr            `json:"address"`
-	Type     string            `json:"type"`
-	Geo      *geo.LocationData `json:"geo,omitempty"`
-	Version  string            `json:"version,omitempty"`
-	LocalIPs []string          `json:"local_ips,omitempty"`
+	ID        uint              `json:"-" gorm:"primarykey"`
+	CreatedAt time.Time         `json:"-"`
+	Addr      SWAddr            `json:"address"`
+	Type      string            `json:"type"`
+	Geo       *geo.LocationData `json:"geo,omitempty" gorm:"embedded"`
+	Version   string            `json:"version,omitempty"`
+	LocalIPs  []string          `json:"local_ips,omitempty" gorm:"type:text"`
 }
 
 // MarshalBinary implements encoding.BinaryMarshaller
