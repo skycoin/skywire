@@ -119,7 +119,7 @@ type Service struct {
 	CreatedAt time.Time         `json:"-"`
 	Addr      SWAddr            `json:"address"`
 	Type      string            `json:"type"`
-	Geo       *geo.LocationData `json:"geo,omitempty" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE"`
+	Geo       *geo.LocationData `json:"geo,omitempty" gorm:"embedded"`
 	Version   string            `json:"version,omitempty"`
 	LocalIPs  []string          `json:"local_ips,omitempty" gorm:"type:text"`
 }
