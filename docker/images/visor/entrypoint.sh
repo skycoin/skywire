@@ -9,7 +9,7 @@ default_config_path=/opt/skywire/config.json
 
 gen_default_config() {
   echo "no config found, generating one...."
-  /release/skywire-cli config gen -o "$default_config_path" -r --is-hypervisor
+  /release/skywire-cli config gen -o "$default_config_path" -ri
   sed -i 's/localhost//g' "$default_config_path"
   echo "config generated"
 }
