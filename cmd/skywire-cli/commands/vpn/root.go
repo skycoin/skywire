@@ -7,14 +7,14 @@ import (
 )
 
 var (
-	logger    = logging.MustGetLogger("skywire-cli")
-	path      string
-	isPkg     bool
-	isUnFiltered     bool
-	ver       string
-	country   string
-	isSystray bool
-	isStats   bool
+	logger       = logging.MustGetLogger("skywire-cli")
+	path         string
+	isPkg        bool
+	isUnFiltered bool
+	ver          string
+	country      string
+	isSystray    bool
+	isStats      bool
 )
 
 // RootCmd contains commands that interact with the skywire-visor

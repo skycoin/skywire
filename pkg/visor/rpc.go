@@ -91,22 +91,6 @@ func (r *RPC) Uptime(_ *struct{}, out *float64) (err error) {
 }
 
 /*
-	<<< UPTIME FROM TRACKER >>>
-*/
-/*
-
-// QueryUptime returns results of a query to the uptime tracker the visor is using
-func (r *RPC) QueryUptime(pubkeys []string, _ *struct{}, out *Uptime) (err error) {
-	defer rpcutil.LogCall(r.log, "QueryUptime", pubkeys)(out, &err)
-
-	uptime, err := r.visor.QueryUptime(pubkeys)
-	out = uptime
-
-	return err
-}
-*/
-
-/*
 	<<< APP LOGS >>>
 */
 
@@ -572,15 +556,20 @@ func (r *RPC) SetPublicAutoconnect(pAc *bool, _ *struct{}) (err error) {
 	return err
 }
 
+/* //query filtering
 // FilterVPNServersIn is input for VPNServers
 type FilterVPNServersIn struct {
 	Version string
 	Country string
 }
+*/
+
 // VPNServers gets available public VPN server from service discovery URL
-func (r *RPC) VPNServers(vc *FilterVPNServersIn, _ *struct{}, out *[]servicedisc.Service) (err error) {
+func (r *RPC) VPNServers(_ *struct{}, out *[]servicedisc.Service) (err error) {
+	//func (r *RPC) VPNServers(vc *FilterVPNServersIn, _ *struct{}, out *[]servicedisc.Service) (err error) {		//query filtering
 	defer rpcutil.LogCall(r.log, "VPNServers", nil)(out, &err)
-	vpnServers, err := r.visor.VPNServers(vc.Version, vc.Country)
+	//	vpnServers, err := r.visor.VPNServers(vc.Version, vc.Country)		//query filtering
+	vpnServers, err := r.visor.VPNServers()
 	if vpnServers != nil {
 		*out = vpnServers
 	}

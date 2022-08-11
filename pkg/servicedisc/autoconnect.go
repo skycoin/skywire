@@ -12,7 +12,6 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
-	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
@@ -114,11 +113,8 @@ func (a *autoconnector) fetchPubAddresses(ctx context.Context) ([]cipher.PubKey,
 	var services []Service
 	fetch := func() (err error) {
 		// "return" services up from the closure
-		version := buildinfo.Version()
-		if version == "unknown" {
-			version = ""
-		}
-		services, err = a.client.Services(ctx, a.maxConns, version, "")
+		//services, err = a.client.Services(ctx, a.maxConns, "", "")		//query filtering
+		services, err = a.client.Services(ctx, a.maxConns)
 		if err != nil {
 			return err
 		}

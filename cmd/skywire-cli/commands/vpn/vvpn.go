@@ -104,16 +104,19 @@ var vpnListCmd = &cobra.Command{
 			ver = ""
 			country = ""
 		}
-		servers, err := client.VPNServers(ver, country)
+		//		servers, err := client.VPNServers(ver, country)		//query filtering
+		servers, err := client.VPNServers()
 		if err != nil {
 			logger.Fatal("Failed to connect; is skywire running?\n", err)
 		}
+
+		/*vv remove when query filtering is implemented vv*/
 		var a []servicedisc.Service
 		for _, i := range servers {
-//			if (ver == "") || (ver == "unknown") || (strings.Replace(i.Version, "v", "", 1) == ver) {
+			if (ver == "") || (ver == "unknown") || (strings.Replace(i.Version, "v", "", 1) == ver) {
 				a = append(a, i)
 			}
-//		}
+		}
 		if len(a) > 0 {
 			servers = a
 			a = []servicedisc.Service{}
@@ -128,6 +131,8 @@ var vpnListCmd = &cobra.Command{
 			}
 			servers = a
 		}
+		/*^^ remove when query filtering is implemented ^^*/
+
 		if len(servers) == 0 {
 			fmt.Printf("No VPN Servers found\n")
 			os.Exit(0)
@@ -155,7 +160,6 @@ var vpnListCmd = &cobra.Command{
 		}
 
 		fmt.Printf("%s", j)
-		//		fmt.Println(servers)
 	},
 }
 
@@ -164,8 +168,6 @@ var vpnStartCmd = &cobra.Command{
 	Short: "start the vpn for <public-key>",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
-		//pk := internal.ParsePK("remote-public-key", args[0])
-		//var err error
 		fmt.Println("%s", args[0])
 		internal.Catch(clirpc.Client().StartVPNClient(args[0]))
 		fmt.Println("OK")
@@ -188,7 +190,6 @@ var vpnStatusCmd = &cobra.Command{
 		states, err := clirpc.Client().Apps()
 		internal.Catch(err)
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
-		//_, err = fmt.Fprintln(w, "app\tports\tauto_start\tstatus")
 		internal.Catch(err)
 		for _, state := range states {
 			if state.Name == "vpn-client" {

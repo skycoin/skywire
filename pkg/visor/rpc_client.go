@@ -120,15 +120,6 @@ func (rc *rpcClient) Uptime() (float64, error) {
 	return out, err
 }
 
-/*
-// QueryUptime calls QueryUptime
-func (rc *rpcClient) QueryUptime(pubkeys []string) (Uptime, error) {
-	var out Uptime
-	err := rc.Call("QueryUptime", &struct{}{}, &out)
-	return out, err
-}
-*/
-
 // Apps calls Apps.
 func (rc *rpcClient) Apps() ([]*appserver.AppState, error) {
 	states := make([]*appserver.AppState, 0)
@@ -418,12 +409,16 @@ type StatusMessage struct {
 }
 
 // VPNServers calls VPNServers.
-func (rc *rpcClient) VPNServers(version, country string) ([]servicedisc.Service, error) {
+func (rc *rpcClient) VPNServers() ([]servicedisc.Service, error) {
+	//func (rc *rpcClient) VPNServers(version, country string) ([]servicedisc.Service, error) {		//query filtering
 	output := []servicedisc.Service{}
+	/* //query filtering
 	rc.Call("VPNServers", &FilterVPNServersIn{
 		Version: version,
 		Country: country,
 	}, &output) // nolint
+	*/
+	rc.Call("VPNServers", &struct{}{}, &output) // nolint
 	return output, nil
 }
 
@@ -617,12 +612,6 @@ func (mc *mockRPCClient) Uptime() (float64, error) {
 	return time.Since(mc.startedAt).Seconds(), nil
 }
 
-/*
-// Uptime implements API
-func (mc *mockRPCClient) QueryUptime(pubkeys []string) (*Uptime, error) {
-	return nil, ErrNotImplemented
-}
-*/
 // Apps implements API.
 func (mc *mockRPCClient) Apps() ([]*appserver.AppState, error) {
 	var apps []*appserver.AppState
@@ -993,7 +982,8 @@ func (mc *mockRPCClient) GetPersistentTransports() ([]transport.PersistentTransp
 }
 
 // VPNServers implements API
-func (mc *mockRPCClient) VPNServers(_, _ string) ([]servicedisc.Service, error) {
+func (mc *mockRPCClient) VPNServers() ([]servicedisc.Service, error) {
+	//func (mc *mockRPCClient) VPNServers(_, _ string) ([]servicedisc.Service, error) {		//query filtering
 	return []servicedisc.Service{}, nil
 }
 
