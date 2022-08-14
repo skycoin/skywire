@@ -29,6 +29,9 @@ const (
 	updateRetryDelay     = 5 * time.Second
 	discServiceTypeParam = "type"
 	discServiceQtyParam  = "quantity"
+
+//	discServiceCountryParam = "country"		//query filtering
+//	discServiceVersionParam = "version"		//query filtering
 )
 
 // Config configures the HTTPClient.
@@ -68,6 +71,7 @@ func NewClient(log logrus.FieldLogger, mLog *logging.MasterLogger, conf Config, 
 }
 
 func (c *HTTPClient) addr(path, serviceType string, quantity int) (string, error) {
+	//func (c *HTTPClient) addr(path, serviceType, version, country string, quantity int) (string, error) {		//query filtering
 	addr := c.conf.DiscAddr
 	url, err := url.Parse(addr)
 	if err != nil {
@@ -81,6 +85,15 @@ func (c *HTTPClient) addr(path, serviceType string, quantity int) (string, error
 	if quantity > 1 {
 		q.Set(discServiceQtyParam, strconv.Itoa(quantity))
 	}
+	//query filtering
+	/*
+		if version != "" {
+			q.Set(discServiceVersionParam, version)
+		}
+		if country != "" {
+			q.Set(discServiceCountryParam, country)
+		}
+	*/
 	url.RawQuery = q.Encode()
 	return url.String(), nil
 }
@@ -112,6 +125,8 @@ func (c *HTTPClient) Auth(ctx context.Context) (*httpauth.Client, error) {
 
 // Services calls 'GET /api/services'.
 func (c *HTTPClient) Services(ctx context.Context, quantity int) (out []Service, err error) {
+	//func (c *HTTPClient) Services(ctx context.Context, quantity int, version, country string) (out []Service, err error) {		//query filtering
+	//url, err := c.addr("/api/services", c.entry.Type, version, country, quantity)
 	url, err := c.addr("/api/services", c.entry.Type, quantity)
 	if err != nil {
 		return nil, err
@@ -187,6 +202,7 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 		return Service{}, err
 	}
 
+	//	url, err := c.addr("/api/services", "", "", "", 1)		//query filtering
 	url, err := c.addr("/api/services", "", 1)
 	if err != nil {
 		return Service{}, nil
@@ -244,6 +260,7 @@ func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
 		return err
 	}
 
+	//	url, err := c.addr("/api/services/"+c.entry.Addr.String(), c.entry.Type, "", "", 1)		//query filtering
 	url, err := c.addr("/api/services/"+c.entry.Addr.String(), c.entry.Type, 1)
 	if err != nil {
 		return err

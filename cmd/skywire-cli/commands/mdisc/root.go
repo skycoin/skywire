@@ -22,6 +22,9 @@ var packageLogger = masterLogger.PackageLogger("mdisc:disc")
 
 func init() {
 	RootCmd.PersistentFlags().StringVar(&mdAddr, "addr", utilenv.DmsgDiscAddr, "address of DMSG discovery server\n")
+	var helpflag bool
+	RootCmd.Flags().BoolVarP(&helpflag, "help", "h", false, "help for "+RootCmd.Use)
+	RootCmd.Flags().MarkHidden("help") //nolint
 }
 
 // RootCmd is the command that contains sub-commands which interacts with DMSG services.

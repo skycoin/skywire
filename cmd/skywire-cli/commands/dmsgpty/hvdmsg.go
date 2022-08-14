@@ -1,4 +1,4 @@
-package clihv
+package clidmsgpty
 
 import (
 	"fmt"
@@ -11,9 +11,7 @@ import (
 )
 
 func init() {
-	RootCmd.AddCommand(dmsgCmd)
-	dmsgCmd.PersistentFlags().StringVarP(&rpcAddr, "rpc", "", "localhost:3435", "RPC server address")
-	dmsgCmd.AddCommand(
+	RootCmd.AddCommand(
 		dmsgUICmd,
 		dmsgURLCmd,
 	)
@@ -23,11 +21,6 @@ func init() {
 	dmsgURLCmd.Flags().StringVarP(&path, "input", "i", "", "read from specified config file")
 	dmsgURLCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from "+visorconfig.Pkgpath)
 	dmsgURLCmd.Flags().StringVarP(&pk, "visor", "v", "", "public key of visor to connect to")
-}
-
-var dmsgCmd = &cobra.Command{
-	Use:   "dmsg",
-	Short: "DMSGPTY UI",
 }
 
 var dmsgUICmd = &cobra.Command{
