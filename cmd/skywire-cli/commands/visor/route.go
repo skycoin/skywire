@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -35,7 +36,7 @@ var lsRulesCmd = &cobra.Command{
 	Use:   "ls-rules",
 	Short: "List routing rules",
 	Run: func(_ *cobra.Command, _ []string) {
-		rules, err := rpcClient().RoutingRules()
+		rules, err := clirpc.Client().RoutingRules()
 		internal.Catch(err)
 
 		printRoutingRules(rules...)
@@ -50,7 +51,7 @@ var ruleCmd = &cobra.Command{
 		id, err := strconv.ParseUint(args[0], 10, 32)
 		internal.Catch(err)
 
-		rule, err := rpcClient().RoutingRule(routing.RouteID(id))
+		rule, err := clirpc.Client().RoutingRule(routing.RouteID(id))
 		internal.Catch(err)
 
 		printRoutingRules(rule)
@@ -64,7 +65,7 @@ var rmRuleCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, args []string) {
 		id, err := strconv.ParseUint(args[0], 10, 32)
 		internal.Catch(err)
-		internal.Catch(rpcClient().RemoveRoutingRule(routing.RouteID(id)))
+		internal.Catch(clirpc.Client().RemoveRoutingRule(routing.RouteID(id)))
 		fmt.Println("OK")
 	},
 }
@@ -119,7 +120,7 @@ var addRuleCmd = &cobra.Command{
 			rIDKey = rule.KeyRouteID()
 		}
 
-		internal.Catch(rpcClient().SaveRoutingRule(rule))
+		internal.Catch(clirpc.Client().SaveRoutingRule(rule))
 		fmt.Println("Routing Rule Key:", rIDKey)
 	},
 }

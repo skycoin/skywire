@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 )
@@ -34,7 +35,7 @@ var lsAppsCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "List apps",
 	Run: func(_ *cobra.Command, _ []string) {
-		states, err := rpcClient().Apps()
+		states, err := clirpc.Client().Apps()
 		internal.Catch(err)
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
 		_, err = fmt.Fprintln(w, "app\tports\tauto_start\tstatus")
@@ -59,7 +60,7 @@ var startAppCmd = &cobra.Command{
 	Short: "Launch app",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
-		internal.Catch(rpcClient().StartApp(args[0]))
+		internal.Catch(clirpc.Client().StartApp(args[0]))
 		fmt.Println("OK")
 	},
 }
@@ -69,7 +70,7 @@ var stopAppCmd = &cobra.Command{
 	Short: "Halt app",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
-		internal.Catch(rpcClient().StopApp(args[0]))
+		internal.Catch(clirpc.Client().StopApp(args[0]))
 		fmt.Println("OK")
 	},
 }
@@ -88,7 +89,7 @@ var setAppAutostartCmd = &cobra.Command{
 		default:
 			internal.Catch(fmt.Errorf("invalid args[1] value: %s", args[1]))
 		}
-		internal.Catch(rpcClient().SetAutoStart(args[0], autostart))
+		internal.Catch(clirpc.Client().SetAutoStart(args[0], autostart))
 		fmt.Println("OK")
 	},
 }
@@ -107,7 +108,7 @@ var appLogsSinceCmd = &cobra.Command{
 			t, err = time.Parse(time.RFC3339Nano, strTime)
 			internal.Catch(err)
 		}
-		logs, err := rpcClient().LogsSince(t, args[0])
+		logs, err := clirpc.Client().LogsSince(t, args[0])
 		internal.Catch(err)
 		if len(logs) > 0 {
 			fmt.Println(logs)

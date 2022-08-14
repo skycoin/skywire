@@ -12,6 +12,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
@@ -76,7 +77,7 @@ func (r *RPC) Health(_ *struct{}, out *HealthInfo) (err error) {
 }
 
 /*
-	<<< NODE UPTIME >>>
+	<<< THIS NODE UPTIME >>>
 */
 
 // Uptime returns for how long the visor has been running in seconds
@@ -216,6 +217,20 @@ func (r *RPC) StopApp(name *string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StopApp", name)(nil, &err)
 
 	return r.visor.StopApp(*name)
+}
+
+// StartVPNClient starts VPNClient App
+func (r *RPC) StartVPNClient(pubkey *string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StartApp", pubkey)(nil, &err)
+
+	return r.visor.StartVPNClient(*pubkey)
+}
+
+// StopVPNClient stops VPNClient App
+func (r *RPC) StopVPNClient(name *string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StopVPNClient", name)(nil, &err)
+
+	return r.visor.StopVPNClient(*name)
 }
 
 // RestartApp restarts App with provided name.
@@ -541,9 +556,19 @@ func (r *RPC) SetPublicAutoconnect(pAc *bool, _ *struct{}) (err error) {
 	return err
 }
 
+/* //query filtering
+// FilterVPNServersIn is input for VPNServers
+type FilterVPNServersIn struct {
+	Version string
+	Country string
+}
+*/
+
 // VPNServers gets available public VPN server from service discovery URL
-func (r *RPC) VPNServers(_ *struct{}, out *[]string) (err error) {
-	defer rpcutil.LogCall(r.log, "RemoteVisor", nil)(out, &err)
+func (r *RPC) VPNServers(_ *struct{}, out *[]servicedisc.Service) (err error) {
+	//func (r *RPC) VPNServers(vc *FilterVPNServersIn, _ *struct{}, out *[]servicedisc.Service) (err error) {		//query filtering
+	defer rpcutil.LogCall(r.log, "VPNServers", nil)(out, &err)
+	//	vpnServers, err := r.visor.VPNServers(vc.Version, vc.Country)		//query filtering
 	vpnServers, err := r.visor.VPNServers()
 	if vpnServers != nil {
 		*out = vpnServers

@@ -36,11 +36,12 @@ type API interface {
 
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
-
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
 	StopApp(appName string) error
+	StartVPNClient(pubkey string) error
+	StopVPNClient(appName string) error
 	SetAppDetailedStatus(appName, state string) error
 	SetAppError(appName, stateErr string) error
 	RestartApp(appName string) error
@@ -54,7 +55,8 @@ type API interface {
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
-	VPNServers() ([]string, error)
+	//	VPNServers(version, country string) ([]servicedisc.Service, error)	//query filtering
+	VPNServers() ([]servicedisc.Service, error)
 	RemoteVisors() ([]string, error)
 
 	TransportTypes() ([]string, error)
@@ -360,6 +362,52 @@ func (v *Visor) StopApp(appName string) error {
 	return ErrProcNotAvailable
 }
 
+// StartVPNClient implements API.
+func (v *Visor) StartVPNClient(pubkey string) error {
+	var envs []string
+	var err error
+	if v.tpM == nil {
+		return ErrTrpMangerNotAvailable
+	}
+	if len(v.conf.Launcher.Apps) > 0 {
+		v.conf.Launcher.Apps[0].Args = []string{"-srv", pubkey}
+	} else {
+		return errors.New("no vpn app configuration found")
+	}
+	maker := vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.STCPRRemoteAddrs())
+	envs, err = maker()
+	if err != nil {
+		return err
+	}
+
+	if v.GetVPNClientAddress() == "" {
+		return errors.New("VPN server pub key is missing")
+	}
+	var pk cipher.PubKey
+	err = pk.Set(pubkey)
+	if err != nil {
+		return err
+	}
+
+	getRouteSetupHooks(context.Background(), v, v.log)
+	// check process manager availability
+	if v.procM != nil {
+		return v.appL.StartApp(skyenv.VPNClientName, v.conf.Launcher.Apps[0].Args, envs)
+		//		return v.appL.StartApp(skyenv.VPNClientName, v.conf.Launcher.Apps[appindex].Args, envs)
+	}
+	return ErrProcNotAvailable
+}
+
+// StopVPNClient implements API.
+func (v *Visor) StopVPNClient(appName string) error {
+	// check process manager availability
+	if v.procM != nil {
+		_, err := v.appL.StopApp(appName) //nolint:errcheck
+		return err
+	}
+	return ErrProcNotAvailable
+}
+
 // SetAppDetailedStatus implements API.
 func (v *Visor) SetAppDetailedStatus(appName, status string) error {
 	proc, ok := v.procM.ProcByName(appName)
@@ -570,14 +618,14 @@ func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.Connection
 		if err != nil {
 			return nil, err
 		}
-
 		return cSummary, nil
 	}
 	return nil, ErrProcNotAvailable
 }
 
 // VPNServers gets available public VPN server from service discovery URL
-func (v *Visor) VPNServers() ([]string, error) {
+func (v *Visor) VPNServers() ([]servicedisc.Service, error) {
+	//func (v *Visor) VPNServers(version, country string) ([]servicedisc.Service, error) {	//query filtering
 	log := logging.MustGetLogger("vpnservers")
 	vlog := logging.NewMasterLogger()
 	vlog.SetLevel(logrus.InfoLevel)
@@ -588,16 +636,13 @@ func (v *Visor) VPNServers() ([]string, error) {
 		SK:       v.conf.SK,
 		DiscAddr: v.conf.Launcher.ServiceDisc,
 	}, &http.Client{Timeout: time.Duration(1) * time.Second}, "")
+	//	vpnServers, err := sdClient.Services(context.Background(), 0, version, country)	//query filtering
 	vpnServers, err := sdClient.Services(context.Background(), 0)
 	if err != nil {
 		v.log.Error("Error getting public vpn servers: ", err)
 		return nil, err
 	}
-	serverAddrs := make([]string, len(vpnServers))
-	for idx, server := range vpnServers {
-		serverAddrs[idx] = server.Addr.PubKey().String()
-	}
-	return serverAddrs, nil
+	return vpnServers, nil
 }
 
 // RemoteVisors return list of connected remote visors
