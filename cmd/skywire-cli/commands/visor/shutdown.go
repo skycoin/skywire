@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 )
 
 func init() {
@@ -14,7 +16,7 @@ var shutdownCmd = &cobra.Command{
 	Use:   "halt",
 	Short: "Stop a running visor",
 	Run: func(_ *cobra.Command, args []string) {
-		rpcClient().Shutdown() //nolint
+		clirpc.Client().Shutdown() //nolint
 		fmt.Println("Visor was shut down")
 	},
 }
