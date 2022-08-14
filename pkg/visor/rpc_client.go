@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -141,6 +142,16 @@ func (rc *rpcClient) StartApp(appName string) error {
 // StopApp calls StopApp.
 func (rc *rpcClient) StopApp(appName string) error {
 	return rc.Call("StopApp", &appName, &struct{}{})
+}
+
+// StartVPNClient calls StartVPNClient.
+func (rc *rpcClient) StartVPNClient(pubkey string) error {
+	return rc.Call("StartVPNClient", &pubkey, &struct{}{})
+}
+
+// StopVPNClient calls StopVPNClient.
+func (rc *rpcClient) StopVPNClient(appName string) error {
+	return rc.Call("StopVPNClient", &appName, &struct{}{})
 }
 
 // SetAppDetailedStatus sets app's detailed state.
@@ -398,8 +409,15 @@ type StatusMessage struct {
 }
 
 // VPNServers calls VPNServers.
-func (rc *rpcClient) VPNServers() ([]string, error) {
-	output := []string{}
+func (rc *rpcClient) VPNServers() ([]servicedisc.Service, error) {
+	//func (rc *rpcClient) VPNServers(version, country string) ([]servicedisc.Service, error) {		//query filtering
+	output := []servicedisc.Service{}
+	/* //query filtering
+	rc.Call("VPNServers", &FilterVPNServersIn{
+		Version: version,
+		Country: country,
+	}, &output) // nolint
+	*/
 	rc.Call("VPNServers", &struct{}{}, &output) // nolint
 	return output, nil
 }
@@ -629,6 +647,16 @@ func (*mockRPCClient) StartApp(string) error {
 
 // StopApp implements API.
 func (*mockRPCClient) StopApp(string) error {
+	return nil
+}
+
+// StartVPNClient implements API.
+func (*mockRPCClient) StartVPNClient(string) error {
+	return nil
+}
+
+// StopVPNClient implements API.
+func (*mockRPCClient) StopVPNClient(string) error {
 	return nil
 }
 
@@ -954,8 +982,9 @@ func (mc *mockRPCClient) GetPersistentTransports() ([]transport.PersistentTransp
 }
 
 // VPNServers implements API
-func (mc *mockRPCClient) VPNServers() ([]string, error) {
-	return []string{}, nil
+func (mc *mockRPCClient) VPNServers() ([]servicedisc.Service, error) {
+	//func (mc *mockRPCClient) VPNServers(_, _ string) ([]servicedisc.Service, error) {		//query filtering
+	return []servicedisc.Service{}, nil
 }
 
 // RemoteVisors implements API
