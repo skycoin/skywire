@@ -290,10 +290,11 @@ func runVisor(conf *visorconfig.V1) {
 		}
 	}
 	//autopeering should only happen when there is no local or remote hypervisor set in the config.
+	if conf.Hypervisor != nil {
+		isAutoPeer = false
+	}
 	if conf.Hypervisors != nil {
-		if conf.Hypervisor != nil {
-			isAutoPeer = false
-		}
+		isAutoPeer = false
 	}
 	if isAutoPeer {
 		hvkey, err := visor.FetchHvPk(autoPeerIP)
