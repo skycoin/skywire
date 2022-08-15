@@ -105,7 +105,7 @@ var vpnListCmd = &cobra.Command{
 		}
 		servers, err := client.VPNServers(ver, country)
 		if err != nil {
-			logger.Fatal("Failed to connect; is skywire running?\n", err)
+			logger.Fatal(err)
 		}
 		if len(servers) == 0 {
 			fmt.Printf("No VPN Servers found\n")
