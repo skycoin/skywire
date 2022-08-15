@@ -411,11 +411,11 @@ type StatusMessage struct {
 // VPNServers calls VPNServers.
 func (rc *rpcClient) VPNServers(version, country string) ([]servicedisc.Service, error) {
 	output := []servicedisc.Service{}
-	rc.Call("VPNServers", &FilterVPNServersIn{ // nolint
+	err := rc.Call("VPNServers", &FilterVPNServersIn{ // nolint
 		Version: version,
 		Country: country,
 	}, &output)
-	return output, nil
+	return output, err
 }
 
 // RemoteVisors calls RemoteVisors.
