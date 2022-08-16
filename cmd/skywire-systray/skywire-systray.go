@@ -239,7 +239,7 @@ func onReady() {
 					ToggleOn()
 				}
 			case <-mAutoconfig.ClickedCh:
-				//execute the skywire-sudoautoconfig script includedwith the skywire package
+				//execute the skywire-autoconfig script includedwith the skywire package
 				_, err = script.Exec(`exo-open --launch TerminalEmulator bash -c 'sudo SKYBIAN=true skywire-autoconfig && sleep 5'`).Stdout()
 				if err != nil {
 					l.WithError(err).Warn("Failed to generate skywire configuration")

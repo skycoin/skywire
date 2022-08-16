@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 
+- service discovery query filtering for `skywire-cli vpn list`	[#1337](https://github.com/skycoin/skywire/pull/1337)
+- `skywire-cli vpn` subcommands	[#1317](https://github.com/skycoin/skywire/pull/1317)
+- separate systray application which uses `skywire-cli vpn` subcommands	[#1317](https://github.com/skycoin/skywire/pull/1317)
 - port of the autopeering system from skybian to the skywire source code.  [#1309](https://github.com/skycoin/skywire/pull/1309)
 - `-l --hvip` and `-m --autopeer` flags for `skywire-visor` ; connect to a hypervisor by ip address.  [#1309](https://github.com/skycoin/skywire/pull/1309)
 - `skywire-cli visor pk -w` flag ; http endpoint for visor public key [#1309](https://github.com/skycoin/skywire/pull/1309)
