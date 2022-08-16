@@ -15,7 +15,6 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/app/appserver"
-	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -104,35 +103,10 @@ var vpnListCmd = &cobra.Command{
 			ver = ""
 			country = ""
 		}
-		//		servers, err := client.VPNServers(ver, country)		//query filtering
-		servers, err := client.VPNServers()
+		servers, err := client.VPNServers(ver, country)
 		if err != nil {
-			logger.Fatal("Failed to connect; is skywire running?\n", err)
+			logger.Fatal(err)
 		}
-
-		/*vv remove when query filtering is implemented vv*/
-		var a []servicedisc.Service
-		for _, i := range servers {
-			if (ver == "") || (ver == "unknown") || (strings.Replace(i.Version, "v", "", 1) == ver) {
-				a = append(a, i)
-			}
-		}
-		if len(a) > 0 {
-			servers = a
-			a = []servicedisc.Service{}
-		}
-		if country != "" {
-			for _, i := range servers {
-				if i.Geo != nil {
-					if i.Geo.Country == country {
-						a = append(a, i)
-					}
-				}
-			}
-			servers = a
-		}
-		/*^^ remove when query filtering is implemented ^^*/
-
 		if len(servers) == 0 {
 			fmt.Printf("No VPN Servers found\n")
 			os.Exit(0)
@@ -168,7 +142,7 @@ var vpnStartCmd = &cobra.Command{
 	Short: "start the vpn for <public-key>",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
-		fmt.Println("%s", args[0])
+		fmt.Println(args[0])
 		internal.Catch(clirpc.Client().StartVPNClient(args[0]))
 		fmt.Println("OK")
 	},
