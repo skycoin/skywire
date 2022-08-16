@@ -55,8 +55,7 @@ type API interface {
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
-	//	VPNServers(version, country string) ([]servicedisc.Service, error)	//query filtering
-	VPNServers() ([]servicedisc.Service, error)
+	VPNServers(version, country string) ([]servicedisc.Service, error)
 	RemoteVisors() ([]string, error)
 
 	TransportTypes() ([]string, error)
@@ -624,8 +623,7 @@ func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.Connection
 }
 
 // VPNServers gets available public VPN server from service discovery URL
-func (v *Visor) VPNServers() ([]servicedisc.Service, error) {
-	//func (v *Visor) VPNServers(version, country string) ([]servicedisc.Service, error) {	//query filtering
+func (v *Visor) VPNServers(version, country string) ([]servicedisc.Service, error) {
 	log := logging.MustGetLogger("vpnservers")
 	vlog := logging.NewMasterLogger()
 	vlog.SetLevel(logrus.InfoLevel)
@@ -636,8 +634,7 @@ func (v *Visor) VPNServers() ([]servicedisc.Service, error) {
 		SK:       v.conf.SK,
 		DiscAddr: v.conf.Launcher.ServiceDisc,
 	}, &http.Client{Timeout: time.Duration(1) * time.Second}, "")
-	//	vpnServers, err := sdClient.Services(context.Background(), 0, version, country)	//query filtering
-	vpnServers, err := sdClient.Services(context.Background(), 0)
+	vpnServers, err := sdClient.Services(context.Background(), 0, version, country)
 	if err != nil {
 		v.log.Error("Error getting public vpn servers: ", err)
 		return nil, err
