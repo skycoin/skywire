@@ -303,7 +303,7 @@ func getAvailPublicVPNServers(conf *visorconfig.V1, httpC *http.Client, logger *
 		DiscAddr: conf.Launcher.ServiceDisc,
 	}
 	sdClient := servicedisc.NewClient(log, log, svrConfig, httpC, "")
-	vpnServers, err := sdClient.Services(context.Background(), 0)
+	vpnServers, err := sdClient.Services(context.Background(), 0, "", "")
 	if err != nil {
 		logger.Error("Error getting vpn servers: ", err)
 		return nil
