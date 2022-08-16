@@ -253,6 +253,9 @@ bin-systray: ## Build `skywire-visor`, `skywire-cli`
 	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/setup-node
 
+separate-systray: ## Build separate systray binary
+	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/skywire-systray
+
 # Static Bin
 bin-static: ## Build `skywire-visor`, `skywire-cli`
 	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-visor ./cmd/skywire-visor
