@@ -556,20 +556,16 @@ func (r *RPC) SetPublicAutoconnect(pAc *bool, _ *struct{}) (err error) {
 	return err
 }
 
-/* //query filtering
 // FilterVPNServersIn is input for VPNServers
 type FilterVPNServersIn struct {
 	Version string
 	Country string
 }
-*/
 
 // VPNServers gets available public VPN server from service discovery URL
-func (r *RPC) VPNServers(_ *struct{}, out *[]servicedisc.Service) (err error) {
-	//func (r *RPC) VPNServers(vc *FilterVPNServersIn, _ *struct{}, out *[]servicedisc.Service) (err error) {		//query filtering
+func (r *RPC) VPNServers(vc *FilterVPNServersIn, out *[]servicedisc.Service) (err error) {
 	defer rpcutil.LogCall(r.log, "VPNServers", nil)(out, &err)
-	//	vpnServers, err := r.visor.VPNServers(vc.Version, vc.Country)		//query filtering
-	vpnServers, err := r.visor.VPNServers()
+	vpnServers, err := r.visor.VPNServers(vc.Version, vc.Country)
 	if vpnServers != nil {
 		*out = vpnServers
 	}
