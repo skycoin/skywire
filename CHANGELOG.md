@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - store UI settings per hypervisor key [#1329](https://github.com/skycoin/skywire/pull/1329)
 
 ### Changed
-
+- Autopeer on env `AUTOPEER=1`
 - improve UI reaction while system is busy
 - hide password options in UI if authentication is disabled
 - fix freezing hypervisor UI on hypervisor disconnection [#1321](https://github.com/skycoin/skywire/issues/1321)
