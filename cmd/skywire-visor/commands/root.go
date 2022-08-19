@@ -105,7 +105,11 @@ func init() {
 	if os.Getenv("SKYBIAN") == "true" {
 		rootCmd.Flags().StringVarP(&autoPeerIP, "hvip", "l", trimStringFromDot(localIPs[0].String())+".2:7998", "set hypervisor by ip")
 		hiddenflags = append(hiddenflags, "hvip")
-		rootCmd.Flags().BoolVarP(&isAutoPeer, "autopeer", "m", false, "enable autopeering")
+		isDefaultAutopeer := false
+		if os.Getenv("AUTOPEER") == "1" {
+			isDefaultAutopeer = true
+		}
+		rootCmd.Flags().BoolVarP(&isAutoPeer, "autopeer", "m", isDefaultAutopeer, "enable autopeering")
 		hiddenflags = append(hiddenflags, "autopeer")
 	}
 	rootCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
