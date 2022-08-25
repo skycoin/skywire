@@ -84,6 +84,8 @@ type API interface {
 
 	GetPersistentTransports() ([]transport.PersistentTransports, error)
 	SetPersistentTransports([]transport.PersistentTransports) error
+
+	IsDMSGClientReady() (bool, error)
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -873,4 +875,15 @@ func (v *Visor) GetVPNClientAddress() string {
 		}
 	}
 	return ""
+}
+
+// IsDMSGClientReady return availability of dsmg client
+func (v *Visor) IsDMSGClientReady() (bool, error) {
+	if v.isDTMReady() {
+		dmsgTracker, _ := v.dtm.Get(v.conf.PK) //nolint
+		if dmsgTracker.ServerPK.Hex()[:5] != "00000" {
+			return true, nil
+		}
+	}
+	return false, errors.New("dmsg client is not ready")
 }

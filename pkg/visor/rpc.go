@@ -581,3 +581,12 @@ func (r *RPC) RemoteVisors(_ *struct{}, out *[]string) (err error) {
 	}
 	return err
 }
+
+// IsDMSGClientReady return status of dmsg client
+func (r *RPC) IsDMSGClientReady(_ *struct{}, out *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "IsDMSGClientReady", nil)(out, &err)
+
+	status, err := r.visor.IsDMSGClientReady()
+	*out = status
+	return err
+}
