@@ -3,6 +3,7 @@ package internal
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/google/uuid"
 
@@ -60,4 +61,21 @@ func PrintOutput(output interface{}, isJSON bool) {
 		return
 	}
 	fmt.Println(output)
+}
+
+// PrintFatalError ss
+func PrintFatalError(err error, logger *logging.Logger, isJSON bool) {
+	if isJSON {
+		errJSON := CLIOutput{
+			Err: err.Error(),
+		}
+		b, err := json.MarshalIndent(errJSON, "", "  ")
+		if err != nil {
+			fmt.Println(err)
+		}
+		fmt.Print(string(b) + "\n")
+		os.Exit(1)
+		return
+	}
+	logger.Fatal(err)
 }

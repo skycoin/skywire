@@ -1,7 +1,8 @@
 package clivisor
 
 import (
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
+
 	"github.com/spf13/cobra"
 )
 

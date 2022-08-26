@@ -45,14 +45,14 @@ var pkCmd = &cobra.Command{
 		if path != "" {
 			conf, err := visorconfig.ReadFile(path)
 			if err != nil {
-				logger.Fatal("Failed to read config:", err)
+				internal.PrintFatalError(fmt.Errorf("Failed to read config: %v", err), logger, internal.JSONOutput)
 			}
 			outputPK = conf.PK.Hex()
 		} else {
 			client := clirpc.Client()
 			overview, err := client.Overview()
 			if err != nil {
-				logger.Fatal("Failed to connect:", err)
+				internal.PrintFatalError(fmt.Errorf("Failed to connect: %v", err), logger, internal.JSONOutput)
 			}
 			pk = overview.PubKey.String()
 			if web {
