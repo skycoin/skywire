@@ -19,6 +19,13 @@ var JSONString = "json"
 
 // Catch handles errors for skywire-cli commands packages
 func Catch(cmdFlags *pflag.FlagSet, err error) {
+	if err != nil {
+		PrintError(cmdFlags, err)
+	}
+}
+
+// PrintError prints errors for skywire-cli commands packages
+func PrintError(cmdFlags *pflag.FlagSet, err error) {
 	isJSON, _ := cmdFlags.GetBool(JSONString) //nolint:errcheck
 	if isJSON {
 		errJSON := CLIOutput{
@@ -30,7 +37,6 @@ func Catch(cmdFlags *pflag.FlagSet, err error) {
 		}
 		fmt.Print(string(b) + "\n")
 		os.Exit(1)
-		return
 	}
 	log.Fatal(err)
 }
