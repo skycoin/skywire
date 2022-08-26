@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/google/uuid"
+	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
@@ -13,8 +14,8 @@ import (
 
 var log = logging.MustGetLogger("skywire-cli")
 
-// JSONOutput prints the cli output in json if true
-var JSONOutput bool
+// JSONString is the name of the json flag
+var JSONString = "json"
 
 // Catch handles errors for skywire-cli commands packages
 func Catch(err error, msgs ...string) {
@@ -48,7 +49,8 @@ type CLIOutput struct {
 }
 
 // PrintOutput ss
-func PrintOutput(output interface{}, isJSON bool) {
+func PrintOutput(output interface{}, cmdFlags *pflag.FlagSet) {
+	isJSON, _ := cmdFlags.GetBool(JSONString) //nolint:errcheck
 	if isJSON {
 		outputJSON := CLIOutput{
 			Output: output,
@@ -64,7 +66,8 @@ func PrintOutput(output interface{}, isJSON bool) {
 }
 
 // PrintFatalError ss
-func PrintFatalError(err error, logger *logging.Logger, isJSON bool) {
+func PrintFatalError(err error, logger *logging.Logger, cmdFlags *pflag.FlagSet) {
+	isJSON, _ := cmdFlags.GetBool(JSONString) //nolint:errcheck
 	if isJSON {
 		errJSON := CLIOutput{
 			Err: err.Error(),

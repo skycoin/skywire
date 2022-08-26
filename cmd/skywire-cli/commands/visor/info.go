@@ -37,7 +37,7 @@ func init() {
 var pkCmd = &cobra.Command{
 	Use:   "pk",
 	Short: "Public key of the visor",
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		if pkg {
 			path = visorconfig.Pkgpath
 		}
@@ -45,14 +45,14 @@ var pkCmd = &cobra.Command{
 		if path != "" {
 			conf, err := visorconfig.ReadFile(path)
 			if err != nil {
-				internal.PrintFatalError(fmt.Errorf("Failed to read config: %v", err), logger, internal.JSONOutput)
+				internal.PrintFatalError(fmt.Errorf("Failed to read config: %v", err), logger, cmd.Flags())
 			}
 			outputPK = conf.PK.Hex()
 		} else {
 			client := clirpc.Client()
 			overview, err := client.Overview()
 			if err != nil {
-				internal.PrintFatalError(fmt.Errorf("Failed to connect: %v", err), logger, internal.JSONOutput)
+				internal.PrintFatalError(fmt.Errorf("Failed to connect: %v", err), logger, cmd.Flags())
 			}
 			pk = overview.PubKey.String()
 			if web {
@@ -63,7 +63,7 @@ var pkCmd = &cobra.Command{
 			outputPK = overview.PubKey.Hex()
 		}
 
-		internal.PrintOutput(outputPK, internal.JSONOutput)
+		internal.PrintOutput(outputPK, cmd.Flags())
 	},
 }
 
