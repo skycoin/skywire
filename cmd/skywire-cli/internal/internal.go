@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -10,6 +11,9 @@ import (
 )
 
 var log = logging.MustGetLogger("skywire-cli")
+
+// JSONOutput prints the cli output in json if true
+var JSONOutput bool
 
 // Catch handles errors for skywire-cli commands packages
 func Catch(err error, msgs ...string) {
@@ -34,4 +38,23 @@ func ParseUUID(name, v string) uuid.UUID {
 	id, err := uuid.Parse(v)
 	Catch(err, fmt.Sprintf("failed to parse <%s>:", name))
 	return id
+}
+
+// CLIOutput ss
+type CLIOutput struct {
+	Output interface{} `json:"output,omitempty"`
+	Err    string      `json:"error,omitempty"`
+}
+
+// PrintOutput ss
+func PrintOutput(output CLIOutput, isJSON bool) {
+	if isJSON {
+		b, err := json.MarshalIndent(output, "", "  ")
+		if err != nil {
+			fmt.Println(err)
+		}
+		fmt.Print(string(b) + "\n")
+		return
+	}
+	fmt.Println(output.Output)
 }
