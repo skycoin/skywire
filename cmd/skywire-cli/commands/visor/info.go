@@ -99,13 +99,13 @@ var hvpkCmd = &cobra.Command{
 var chvpkCmd = &cobra.Command{
 	Use:   "chvpk",
 	Short: "Public key of connected hypervisors",
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		client := clirpc.Client()
 		overview, err := client.Overview()
 		if err != nil {
-			logger.Fatal("Failed to connect:", err)
+			internal.PrintFatalError(fmt.Errorf("Failed to connect: %v", err), logger, cmd.Flags())
 		}
-		fmt.Println(overview.ConnectedHypervisor)
+		internal.PrintOutput(overview.ConnectedHypervisor, cmd.Flags())
 	},
 }
 
