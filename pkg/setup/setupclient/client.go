@@ -1,3 +1,4 @@
+// Package setupclient client.go
 package setupclient
 
 import (

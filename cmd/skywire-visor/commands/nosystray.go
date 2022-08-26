@@ -1,6 +1,7 @@
 //go:build !systray
 // +build !systray
 
+// Package commands nosystray.go
 package commands
 
 import (

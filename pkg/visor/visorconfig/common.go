@@ -1,9 +1,10 @@
+// Package visorconfig defines the visor's config
 package visorconfig
 
 import (
 	"encoding/json"
 	"errors"
-	"io/ioutil"
+	"os"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
@@ -100,5 +101,5 @@ func (c *Common) flush(v interface{}) (err error) {
 		return err
 	}
 	const filePerm = 0644
-	return ioutil.WriteFile(c.path, raw, filePerm)
+	return os.WriteFile(c.path, raw, filePerm)
 }

@@ -2,7 +2,6 @@ package pathutil
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -41,7 +40,7 @@ func AtomicWriteFile(filename string, data []byte) error {
 		}
 	}
 
-	if err := ioutil.WriteFile(tempFilePath, data, ownerRWOtherRW); err != nil {
+	if err := os.WriteFile(tempFilePath, data, ownerRWOtherRW); err != nil {
 		return err
 	}
 
@@ -50,7 +49,7 @@ func AtomicWriteFile(filename string, data []byte) error {
 
 // AtomicAppendToFile calls AtomicWriteFile but appends new data to destiny file
 func AtomicAppendToFile(filename string, data []byte) error {
-	oldFile, err := ioutil.ReadFile(filepath.Clean(filename))
+	oldFile, err := os.ReadFile(filepath.Clean(filename))
 	if err != nil {
 		return err
 	}

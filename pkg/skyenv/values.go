@@ -1,3 +1,4 @@
+// Package skyenv defines variables and constants for different operating systems
 package skyenv
 
 import (
@@ -151,7 +152,7 @@ func MustPK(pk string) cipher.PubKey {
 	return sPK
 }
 
-//Version gets the version of the installation for the config
+// Version gets the version of the installation for the config
 func Version() string {
 	u := buildinfo.Version()
 	v := u

@@ -95,8 +95,12 @@ func main() {
 		}()
 	}
 	setAppStatus(appCl, appserver.AppDetailedStatusRunning)
-
-	err := http.ListenAndServe(*addr, nil)
+	srv := &http.Server{
+		Addr:         *addr,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+	err := srv.ListenAndServe()
 	if err != nil {
 		print(err.Error())
 		setAppError(appCl, err)

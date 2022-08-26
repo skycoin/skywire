@@ -1,3 +1,4 @@
+// Package stcp skywire-tcp
 package stcp
 
 import (

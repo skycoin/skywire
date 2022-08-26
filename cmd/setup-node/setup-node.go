@@ -1,3 +1,4 @@
+/*Package main setup-node*/
 package main
 
 import (

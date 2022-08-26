@@ -2,7 +2,7 @@ package visorconfig
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -124,7 +124,7 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 		if pkgEnv {
 			dmsgHTTPPath = skyenv.SkywirePath + "/" + skyenv.DMSGHTTPName
 		}
-		serversListJSON, err := ioutil.ReadFile(filepath.Clean(dmsgHTTPPath))
+		serversListJSON, err := os.ReadFile(filepath.Clean(dmsgHTTPPath))
 		if err != nil {
 			log.WithError(err).Fatal("Failed to read dmsghttp-config.json file.")
 		}

@@ -1,3 +1,4 @@
+// Package setup node
 package setup
 
 import (

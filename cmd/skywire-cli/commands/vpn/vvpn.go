@@ -33,6 +33,8 @@ func init() {
 	}
 	vpnUICmd.Flags().BoolVarP(&isPkg, "pkg", "p", false, "use package config path")
 	vpnUICmd.Flags().StringVarP(&path, "config", "c", "", "config path")
+	vpnURLCmd.Flags().BoolVarP(&isPkg, "pkg", "p", false, "use package config path")
+	vpnURLCmd.Flags().StringVarP(&path, "config", "c", "", "config path")
 	vpnListCmd.Flags().BoolVarP(&isUnFiltered, "nofilter", "n", false, "provide unfiltered results")
 	vpnListCmd.Flags().StringVarP(&ver, "ver", "v", version, "filter results by version")
 	vpnListCmd.Flags().StringVarP(&country, "country", "c", "", "filter results by country")

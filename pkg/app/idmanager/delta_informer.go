@@ -1,3 +1,4 @@
+// Package idmanager delta_informer.go
 package idmanager
 
 // DeltaInformer informs when there has been a change to the id-manager.
