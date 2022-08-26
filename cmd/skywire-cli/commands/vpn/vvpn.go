@@ -141,9 +141,9 @@ var vpnStartCmd = &cobra.Command{
 	Use:   "start",
 	Short: "start the vpn for <public-key>",
 	Args:  cobra.MinimumNArgs(1),
-	Run: func(_ *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println(args[0])
-		internal.Catch(clirpc.Client().StartVPNClient(args[0]))
+		internal.Catch(cmd.Flags(), clirpc.Client().StartVPNClient(args[0]))
 		fmt.Println("OK")
 	},
 }
@@ -151,8 +151,8 @@ var vpnStartCmd = &cobra.Command{
 var vpnStopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "stop the vpn",
-	Run: func(_ *cobra.Command, _ []string) {
-		internal.Catch(clirpc.Client().StopVPNClient("vpn-client"))
+	Run: func(cmd *cobra.Command, _ []string) {
+		internal.Catch(cmd.Flags(), clirpc.Client().StopVPNClient("vpn-client"))
 		fmt.Println("OK")
 	},
 }
@@ -160,11 +160,11 @@ var vpnStopCmd = &cobra.Command{
 var vpnStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "vpn status",
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		states, err := clirpc.Client().Apps()
-		internal.Catch(err)
+		internal.Catch(cmd.Flags(), err)
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
-		internal.Catch(err)
+		internal.Catch(cmd.Flags(), err)
 		for _, state := range states {
 			if state.Name == "vpn-client" {
 				status := "stopped"
@@ -175,9 +175,9 @@ var vpnStatusCmd = &cobra.Command{
 					status = "errored"
 				}
 				_, err = fmt.Fprintf(w, "%s\n", status)
-				internal.Catch(err)
+				internal.Catch(cmd.Flags(), err)
 			}
 		}
-		internal.Catch(w.Flush())
+		internal.Catch(cmd.Flags(), w.Flush())
 	},
 }

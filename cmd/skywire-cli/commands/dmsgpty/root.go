@@ -71,9 +71,9 @@ var shellCmd = &cobra.Command{
 	Use:   "start <pk>",
 	Short: "Start dmsgpty session",
 	Args:  cobra.MinimumNArgs(1),
-	RunE: func(_ *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		cli := dmsgpty.DefaultCLI()
-		addr := internal.ParsePK("pk", args[0])
+		addr := internal.ParsePK(cmd.Flags(), "pk", args[0])
 		port, _ := strconv.ParseUint(ptyPort, 10, 16) //nolint
 		ctx, cancel := cmdutil.SignalContext(context.Background(), nil)
 		defer cancel()

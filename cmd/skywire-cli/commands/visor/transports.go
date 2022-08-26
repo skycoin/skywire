@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
@@ -58,9 +59,9 @@ var tpCmd = &cobra.Command{
 
 var lsTypesCmd = &cobra.Command{
 	Use: "type", Short: "Transport types used by the local visor",
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		types, err := clirpc.Client().TransportTypes()
-		internal.Catch(err)
+		internal.Catch(cmd.Flags(), err)
 		for _, t := range types {
 			fmt.Println(t)
 		}
@@ -76,10 +77,10 @@ func init() {
 var lsTpCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "Available transports",
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		transports, err := clirpc.Client().Transports(filterTypes, filterPubKeys, showLogs)
-		internal.Catch(err)
-		PrintTransports(transports...)
+		internal.Catch(cmd.Flags(), err)
+		PrintTransports(cmd.Flags(), transports...)
 	},
 }
 
@@ -87,11 +88,11 @@ var idCmd = &cobra.Command{
 	Use:   "id <transport-id>",
 	Short: "Transport summary by id",
 	Args:  cobra.MinimumNArgs(1),
-	Run: func(_ *cobra.Command, args []string) {
-		tpID := internal.ParseUUID("transport-id", args[0])
+	Run: func(cmd *cobra.Command, args []string) {
+		tpID := internal.ParseUUID(cmd.Flags(), "transport-id", args[0])
 		tp, err := clirpc.Client().Transport(tpID)
-		internal.Catch(err)
-		PrintTransports(tp)
+		internal.Catch(cmd.Flags(), err)
+		PrintTransports(cmd.Flags(), tp)
 	},
 }
 
@@ -118,8 +119,8 @@ var addTpCmd = &cobra.Command{
 	Use:   "add <remote-public-key>",
 	Short: "Add a transport",
 	Args:  cobra.MinimumNArgs(1),
-	Run: func(_ *cobra.Command, args []string) {
-		pk := internal.ParsePK("remote-public-key", args[0])
+	Run: func(cmd *cobra.Command, args []string) {
+		pk := internal.ParsePK(cmd.Flags(), "remote-public-key", args[0])
 
 		var tp *visor.TransportSummary
 		var err error
@@ -147,7 +148,7 @@ var addTpCmd = &cobra.Command{
 				logger.WithError(err).Warnf("Failed to establish %v transport", transportType)
 			}
 		}
-		PrintTransports(tp)
+		PrintTransports(cmd.Flags(), tp)
 	},
 }
 
@@ -155,28 +156,28 @@ var rmTpCmd = &cobra.Command{
 	Use:   "rm <transport-id>",
 	Short: "Remove transport(s) by id",
 	Args:  cobra.MinimumNArgs(1),
-	Run: func(_ *cobra.Command, args []string) {
-		tID := internal.ParseUUID("transport-id", args[0])
-		internal.Catch(clirpc.Client().RemoveTransport(tID))
+	Run: func(cmd *cobra.Command, args []string) {
+		tID := internal.ParseUUID(cmd.Flags(), "transport-id", args[0])
+		internal.Catch(cmd.Flags(), clirpc.Client().RemoveTransport(tID))
 		fmt.Println("OK")
 	},
 }
 
 // PrintTransports prints transports used by the visor
-func PrintTransports(tps ...*visor.TransportSummary) {
+func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
 	sortTransports(tps...)
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
 	_, err := fmt.Fprintln(w, "type\tid\tremote\tmode\tlabel")
-	internal.Catch(err)
+	internal.Catch(cmdFlags, err)
 	for _, tp := range tps {
 		tpMode := "regular"
 		if tp.IsSetup {
 			tpMode = "setup"
 		}
 		_, err = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", tp.Type, tp.ID, tp.Remote, tpMode, tp.Label)
-		internal.Catch(err)
+		internal.Catch(cmdFlags, err)
 	}
-	internal.Catch(w.Flush())
+	internal.Catch(cmdFlags, w.Flush())
 }
 
 func sortTransports(tps ...*visor.TransportSummary) {
@@ -201,31 +202,31 @@ var discTpCmd = &cobra.Command{
 		}
 		return nil
 	},
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 
 		if rc := clirpc.Client(); tpPK.Null() {
 			entry, err := rc.DiscoverTransportByID(uuid.UUID(tpID))
-			internal.Catch(err)
-			PrintTransportEntries(entry)
+			internal.Catch(cmd.Flags(), err)
+			PrintTransportEntries(cmd.Flags(), entry)
 		} else {
 			entries, err := rc.DiscoverTransportsByPK(tpPK)
-			internal.Catch(err)
-			PrintTransportEntries(entries...)
+			internal.Catch(cmd.Flags(), err)
+			PrintTransportEntries(cmd.Flags(), entries...)
 		}
 	},
 }
 
 // PrintTransportEntries prints the transport entries
-func PrintTransportEntries(entries ...*transport.Entry) {
+func PrintTransportEntries(cmdFlags *pflag.FlagSet, entries ...*transport.Entry) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
 	_, err := fmt.Fprintln(w, "id\ttype\tedge1\tedge2")
-	internal.Catch(err)
+	internal.Catch(cmdFlags, err)
 	for _, e := range entries {
 		_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
 			e.ID, e.Type, e.Edges[0], e.Edges[1])
-		internal.Catch(err)
+		internal.Catch(cmdFlags, err)
 	}
-	internal.Catch(w.Flush())
+	internal.Catch(cmdFlags, w.Flush())
 }
 
 type transportID uuid.UUID

@@ -10,6 +10,7 @@ import (
 
 	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
@@ -44,12 +45,12 @@ var entryCmd = &cobra.Command{
 	Use:   "entry <visor-public-key>",
 	Short: "Fetch an entry",
 	Args:  cobra.MinimumNArgs(1),
-	Run: func(_ *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, args []string) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
-		pk := internal.ParsePK("visor-public-key", args[0])
+		pk := internal.ParsePK(cmd.Flags(), "visor-public-key", args[0])
 		entry, err := disc.NewHTTP(mdAddr, &http.Client{}, packageLogger).Entry(ctx, pk)
-		internal.Catch(err)
+		internal.Catch(cmd.Flags(), err)
 		fmt.Println(entry)
 	},
 }
@@ -57,23 +58,23 @@ var entryCmd = &cobra.Command{
 var availableServersCmd = &cobra.Command{
 	Use:   "servers",
 	Short: "Fetch available servers",
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
 		entries, err := disc.NewHTTP(mdAddr, &http.Client{}, packageLogger).AvailableServers(ctx)
-		internal.Catch(err)
-		printAvailableServers(entries)
+		internal.Catch(cmd.Flags(), err)
+		printAvailableServers(cmd.Flags(), entries)
 	},
 }
 
-func printAvailableServers(entries []*disc.Entry) {
+func printAvailableServers(cmdFlags *pflag.FlagSet, entries []*disc.Entry) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
 	_, err := fmt.Fprintln(w, "version\tregistered\tpublic-key\taddress\tavailable-sessions")
-	internal.Catch(err)
+	internal.Catch(cmdFlags, err)
 	for _, entry := range entries {
 		_, err := fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%d\n",
 			entry.Version, entry.Timestamp, entry.Static, entry.Server.Address, entry.Server.AvailableSessions)
-		internal.Catch(err)
+		internal.Catch(cmdFlags, err)
 	}
-	internal.Catch(w.Flush())
+	internal.Catch(cmdFlags, w.Flush())
 }

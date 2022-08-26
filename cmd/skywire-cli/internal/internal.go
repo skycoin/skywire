@@ -18,55 +18,7 @@ var log = logging.MustGetLogger("skywire-cli")
 var JSONString = "json"
 
 // Catch handles errors for skywire-cli commands packages
-func Catch(err error, msgs ...string) {
-	if err != nil {
-		if len(msgs) > 0 {
-			log.Fatalln(append(msgs, err.Error()))
-		} else {
-			log.Fatalln(err)
-		}
-	}
-}
-
-// ParsePK parses a public key
-func ParsePK(name, v string) cipher.PubKey {
-	var pk cipher.PubKey
-	Catch(pk.Set(v), fmt.Sprintf("failed to parse <%s>:", name))
-	return pk
-}
-
-// ParseUUID parses a uuid
-func ParseUUID(name, v string) uuid.UUID {
-	id, err := uuid.Parse(v)
-	Catch(err, fmt.Sprintf("failed to parse <%s>:", name))
-	return id
-}
-
-// CLIOutput ss
-type CLIOutput struct {
-	Output interface{} `json:"output,omitempty"`
-	Err    string      `json:"error,omitempty"`
-}
-
-// PrintOutput ss
-func PrintOutput(outputJSON, output interface{}, cmdFlags *pflag.FlagSet) {
-	isJSON, _ := cmdFlags.GetBool(JSONString) //nolint:errcheck
-	if isJSON {
-		outputJSON := CLIOutput{
-			Output: outputJSON,
-		}
-		b, err := json.MarshalIndent(outputJSON, "", "  ")
-		if err != nil {
-			fmt.Println(err)
-		}
-		fmt.Print(string(b) + "\n")
-		return
-	}
-	fmt.Println(output)
-}
-
-// PrintFatalError ss
-func PrintFatalError(err error, logger *logging.Logger, cmdFlags *pflag.FlagSet) {
+func Catch(cmdFlags *pflag.FlagSet, err error) {
 	isJSON, _ := cmdFlags.GetBool(JSONString) //nolint:errcheck
 	if isJSON {
 		errJSON := CLIOutput{
@@ -80,5 +32,42 @@ func PrintFatalError(err error, logger *logging.Logger, cmdFlags *pflag.FlagSet)
 		os.Exit(1)
 		return
 	}
-	logger.Fatal(err)
+	log.Fatal(err)
+}
+
+// ParsePK parses a public key
+func ParsePK(cmdFlags *pflag.FlagSet, name, v string) cipher.PubKey {
+	var pk cipher.PubKey
+	Catch(cmdFlags, fmt.Errorf("failed to parse <%s>: %v", name, pk.Set(v)))
+	return pk
+}
+
+// ParseUUID parses a uuid
+func ParseUUID(cmdFlags *pflag.FlagSet, name, v string) uuid.UUID {
+	id, err := uuid.Parse(v)
+	Catch(cmdFlags, fmt.Errorf("failed to parse <%s>: %v", name, err))
+	return id
+}
+
+// CLIOutput ss
+type CLIOutput struct {
+	Output interface{} `json:"output,omitempty"`
+	Err    string      `json:"error,omitempty"`
+}
+
+// PrintOutput ss
+func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output interface{}) {
+	isJSON, _ := cmdFlags.GetBool(JSONString) //nolint:errcheck
+	if isJSON {
+		outputJSON := CLIOutput{
+			Output: outputJSON,
+		}
+		b, err := json.MarshalIndent(outputJSON, "", "  ")
+		if err != nil {
+			fmt.Println(err)
+		}
+		fmt.Print(string(b) + "\n")
+		return
+	}
+	fmt.Println(output)
 }

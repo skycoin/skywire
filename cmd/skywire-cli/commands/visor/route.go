@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
@@ -35,11 +36,11 @@ func init() {
 var lsRulesCmd = &cobra.Command{
 	Use:   "ls-rules",
 	Short: "List routing rules",
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		rules, err := clirpc.Client().RoutingRules()
-		internal.Catch(err)
+		internal.Catch(cmd.Flags(), err)
 
-		printRoutingRules(rules...)
+		printRoutingRules(cmd.Flags(), rules...)
 	},
 }
 
@@ -47,14 +48,14 @@ var ruleCmd = &cobra.Command{
 	Use:   "rule <route-id>",
 	Short: "Return routing rule by route ID key",
 	Args:  cobra.MinimumNArgs(1),
-	Run: func(_ *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, args []string) {
 		id, err := strconv.ParseUint(args[0], 10, 32)
-		internal.Catch(err)
+		internal.Catch(cmd.Flags(), err)
 
 		rule, err := clirpc.Client().RoutingRule(routing.RouteID(id))
-		internal.Catch(err)
+		internal.Catch(cmd.Flags(), err)
 
-		printRoutingRules(rule)
+		printRoutingRules(cmd.Flags(), rule)
 	},
 }
 
@@ -62,10 +63,10 @@ var rmRuleCmd = &cobra.Command{
 	Use:   "rm-rule <route-id>",
 	Short: "Remove routing rule",
 	Args:  cobra.MinimumNArgs(1),
-	Run: func(_ *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, args []string) {
 		id, err := strconv.ParseUint(args[0], 10, 32)
-		internal.Catch(err)
-		internal.Catch(clirpc.Client().RemoveRoutingRule(routing.RouteID(id)))
+		internal.Catch(cmd.Flags(), err)
+		internal.Catch(cmd.Flags(), clirpc.Client().RemoveRoutingRule(routing.RouteID(id)))
 		fmt.Println("OK")
 	},
 }
@@ -96,22 +97,22 @@ var addRuleCmd = &cobra.Command{
 		}
 		return errors.New("expected 'app' or 'fwd' after 'add-rule'")
 	},
-	Run: func(_ *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, args []string) {
 		var rule routing.Rule
 		switch args[0] {
 		case "app":
 			var (
-				routeID    = routing.RouteID(parseUint("route-id", args[1], 32))
-				localPK    = internal.ParsePK("local-pk", args[2])
-				localPort  = routing.Port(parseUint("local-port", args[3], 16))
-				remotePK   = internal.ParsePK("remote-pk", args[4])
-				remotePort = routing.Port(parseUint("remote-port", args[5], 16))
+				routeID    = routing.RouteID(parseUint(cmd.Flags(), "route-id", args[1], 32))
+				localPK    = internal.ParsePK(cmd.Flags(), "local-pk", args[2])
+				localPort  = routing.Port(parseUint(cmd.Flags(), "local-port", args[3], 16))
+				remotePK   = internal.ParsePK(cmd.Flags(), "remote-pk", args[4])
+				remotePort = routing.Port(parseUint(cmd.Flags(), "remote-port", args[5], 16))
 			)
 			rule = routing.ConsumeRule(keepAlive, routeID, localPK, remotePK, localPort, remotePort)
 		case "fwd":
 			var (
-				nextRouteID = routing.RouteID(parseUint("next-route-id", args[1], 32))
-				nextTpID    = internal.ParseUUID("next-transport-id", args[2])
+				nextRouteID = routing.RouteID(parseUint(cmd.Flags(), "next-route-id", args[1], 32))
+				nextTpID    = internal.ParseUUID(cmd.Flags(), "next-transport-id", args[2])
 			)
 			rule = routing.IntermediaryForwardRule(keepAlive, 0, nextRouteID, nextTpID)
 		}
@@ -120,26 +121,26 @@ var addRuleCmd = &cobra.Command{
 			rIDKey = rule.KeyRouteID()
 		}
 
-		internal.Catch(clirpc.Client().SaveRoutingRule(rule))
+		internal.Catch(cmd.Flags(), clirpc.Client().SaveRoutingRule(rule))
 		fmt.Println("Routing Rule Key:", rIDKey)
 	},
 }
 
-func printRoutingRules(rules ...routing.Rule) {
+func printRoutingRules(cmdFlags *pflag.FlagSet, rules ...routing.Rule) {
 	printConsumeRule := func(w io.Writer, id routing.RouteID, s *routing.RuleSummary) {
 		_, err := fmt.Fprintf(w, "%d\t%s\t%d\t%d\t%s\t%s\t%s\t%s\t%s\n", id, s.Type,
 			s.ConsumeFields.RouteDescriptor.SrcPort, s.ConsumeFields.RouteDescriptor.DstPort,
 			s.ConsumeFields.RouteDescriptor.DstPK, "-", "-", "-", s.KeepAlive)
-		internal.Catch(err)
+		internal.Catch(cmdFlags, err)
 	}
 	printFwdRule := func(w io.Writer, id routing.RouteID, s *routing.RuleSummary) {
 		_, err := fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n", id, s.Type, "-",
 			"-", "-", "-", s.ForwardFields.NextRID, s.ForwardFields.NextTID, s.KeepAlive)
-		internal.Catch(err)
+		internal.Catch(cmdFlags, err)
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
 	_, err := fmt.Fprintln(w, "id\ttype\tlocal-port\tremote-port\tremote-pk\tresp-id\tnext-route-id\tnext-transport-id\texpire-at")
-	internal.Catch(err)
+	internal.Catch(cmdFlags, err)
 	for _, rule := range rules {
 		if rule.Summary().ConsumeFields != nil {
 			printConsumeRule(w, rule.KeyRouteID(), rule.Summary())
@@ -147,11 +148,11 @@ func printRoutingRules(rules ...routing.Rule) {
 			printFwdRule(w, rule.NextRouteID(), rule.Summary())
 		}
 	}
-	internal.Catch(w.Flush())
+	internal.Catch(cmdFlags, w.Flush())
 }
 
-func parseUint(name, v string, bitSize int) uint64 {
+func parseUint(cmdFlags *pflag.FlagSet, name, v string, bitSize int) uint64 {
 	i, err := strconv.ParseUint(v, 10, bitSize)
-	internal.Catch(err, fmt.Sprintf("failed to parse <%s>:", name))
+	internal.Catch(cmdFlags, fmt.Errorf("failed to parse <%s>: %v", name, err))
 	return i
 }
