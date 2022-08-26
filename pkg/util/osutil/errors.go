@@ -1,3 +1,4 @@
+// Package osutil handles errors
 package osutil
 
 // ErrorWithStderr is an error raised by the external process.

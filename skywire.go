@@ -1,5 +1,4 @@
 /*
-This file is a workaround to avoid go module errors.
+Package skywire ; workaround to avoid go module errors.
 */
-
 package skywire

@@ -3,7 +3,6 @@ package transport_test
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -41,7 +40,7 @@ func TestInMemoryTransportLogStore(t *testing.T) {
 }
 
 func TestFileTransportLogStore(t *testing.T) {
-	dir, err := ioutil.TempDir("", "log_store")
+	dir, err := os.MkdirTemp("", "log_store")
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, os.RemoveAll(dir))

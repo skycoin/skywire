@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -58,7 +58,7 @@ func TestClient(t *testing.T) {
 	res, err := c.Do(req)
 	require.NoError(t, err)
 
-	b, err := ioutil.ReadAll(res.Body)
+	b, err := io.ReadAll(res.Body)
 	require.NoError(t, err)
 	require.NoError(t, res.Body.Close())
 	assert.Equal(t, []byte(payload), b)
@@ -86,7 +86,7 @@ func TestClient_BadNonce(t *testing.T) {
 	res, err := c.Do(req)
 	require.NoError(t, err)
 
-	b, err := ioutil.ReadAll(res.Body)
+	b, err := io.ReadAll(res.Body)
 	require.NoError(t, err)
 	require.NoError(t, res.Body.Close())
 	assert.Equal(t, uint64(2), c.nonce)
@@ -109,7 +109,7 @@ func newTestServer(t *testing.T, pk cipher.PubKey, headerCh chan<- http.Header) 
 		if r.URL.String() == fmt.Sprintf("/security/nonces/%s", pk) {
 			require.NoError(t, json.NewEncoder(w).Encode(&NextNonceResponse{pk, Nonce(nonce)}))
 		} else {
-			body, err := ioutil.ReadAll(r.Body)
+			body, err := io.ReadAll(r.Body)
 			if body != nil {
 				defer func() {
 					require.NoError(t, r.Body.Close())

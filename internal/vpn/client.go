@@ -1,3 +1,4 @@
+// Package vpn internal vpn
 package vpn
 
 import (

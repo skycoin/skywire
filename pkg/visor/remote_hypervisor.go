@@ -1,7 +1,7 @@
 package visor
 
 import (
-	"io/ioutil"
+	"io"
 	"net/http"
 )
 
@@ -16,7 +16,7 @@ func FetchHvPk(ipPort string) (string, error) {
 		return "", err
 	}
 	defer res.Body.Close() //nolint:errcheck
-	resBody, err := ioutil.ReadAll(res.Body)
+	resBody, err := io.ReadAll(res.Body)
 	if err != nil {
 		return "", err
 	}

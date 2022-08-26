@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -371,7 +370,7 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 		return VisorData{}, fmt.Errorf("status: %d, error: %w", resp.StatusCode, httpauth.ExtractError(resp.Body))
 	}
 
-	rawBody, err := ioutil.ReadAll(resp.Body)
+	rawBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return VisorData{}, err
 	}
@@ -402,7 +401,7 @@ func (c *httpClient) Transports(ctx context.Context) (map[cipher.PubKey][]string
 		return nil, ErrNoTransportsFound
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}

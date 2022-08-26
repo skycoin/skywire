@@ -1,3 +1,4 @@
+// Package rename rename.go
 package rename
 
 import (

@@ -2,7 +2,7 @@ package skysocks
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -79,7 +79,7 @@ func TestProxy(t *testing.T) {
 	res, err := c.Get(ts.URL)
 	require.NoError(t, err)
 
-	msg, err := ioutil.ReadAll(res.Body)
+	msg, err := io.ReadAll(res.Body)
 	require.NoError(t, err)
 	require.NoError(t, res.Body.Close())
 	assert.Equal(t, "Hello, client\n", string(msg))

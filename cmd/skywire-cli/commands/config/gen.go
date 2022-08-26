@@ -1,3 +1,4 @@
+// Package cliconfig gen.go
 package cliconfig
 
 import (

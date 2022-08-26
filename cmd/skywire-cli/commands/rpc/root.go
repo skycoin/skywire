@@ -1,3 +1,4 @@
+// Package clirpc root.go
 package clirpc
 
 import (

@@ -2,7 +2,6 @@ package appcommon
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -11,7 +10,7 @@ import (
 )
 
 func TestLogStore(t *testing.T) {
-	p, err := ioutil.TempFile("", "test-db")
+	p, err := os.CreateTemp("", "test-db")
 	require.NoError(t, err)
 
 	defer os.Remove(p.Name()) // nolint

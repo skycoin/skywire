@@ -1,3 +1,4 @@
+// Package main skywire-cli.go
 package main
 
 import (

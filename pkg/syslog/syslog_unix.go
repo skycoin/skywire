@@ -1,6 +1,7 @@
 //go:build !windows
 // +build !windows
 
+// Package syslog contains SetupHook
 package syslog
 
 import (

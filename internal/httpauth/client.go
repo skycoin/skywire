@@ -1,3 +1,4 @@
+// Package httpauth http authorizatioon
 package httpauth
 
 import (
@@ -7,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -99,14 +99,14 @@ func (c *Client) do(client *http.Client, req *http.Request) (*http.Response, err
 
 	body := make([]byte, 0)
 	if req.ContentLength != 0 {
-		auxBody, err := ioutil.ReadAll(req.Body)
+		auxBody, err := io.ReadAll(req.Body)
 		if err != nil {
 			return nil, err
 		}
 		if err := req.Body.Close(); err != nil {
 			c.log.WithError(err).Warn("Failed to close HTTP request body")
 		}
-		req.Body = ioutil.NopCloser(bytes.NewBuffer(auxBody))
+		req.Body = io.NopCloser(bytes.NewBuffer(auxBody))
 		body = auxBody
 	}
 
@@ -131,7 +131,7 @@ func (c *Client) do(client *http.Client, req *http.Request) (*http.Response, err
 			c.log.WithError(err).Warn("Failed to close HTTP response body")
 		}
 
-		req.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+		req.Body = io.NopCloser(bytes.NewBuffer(body))
 
 		resp, err = c.doRequest(client, req, body)
 		if err != nil {
@@ -227,7 +227,7 @@ func isNonceValid(res *http.Response) (*http.Response, bool, error) {
 	var serverResponse HTTPResponse
 	var auxResp http.Response
 
-	auxRespBody, err := ioutil.ReadAll(res.Body)
+	auxRespBody, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, false, err
 	}
@@ -235,7 +235,7 @@ func isNonceValid(res *http.Response) (*http.Response, bool, error) {
 		return nil, false, err
 	}
 	auxResp = *res
-	auxResp.Body = ioutil.NopCloser(bytes.NewBuffer(auxRespBody))
+	auxResp.Body = io.NopCloser(bytes.NewBuffer(auxRespBody))
 
 	if err := json.Unmarshal(auxRespBody, &serverResponse); err != nil || serverResponse.Error == nil {
 		return &auxResp, true, nil
@@ -269,7 +269,7 @@ func sanitizedAddr(addr string) string {
 func extractHTTPError(r io.Reader) error {
 	var serverError HTTPResponse
 
-	body, err := ioutil.ReadAll(r)
+	body, err := io.ReadAll(r)
 	if err != nil {
 		return err
 	}
@@ -285,7 +285,7 @@ func extractHTTPError(r io.Reader) error {
 func ExtractError(r io.Reader) error {
 	var apiError Error
 
-	body, err := ioutil.ReadAll(r)
+	body, err := io.ReadAll(r)
 	if err != nil {
 		return err
 	}

@@ -1,5 +1,6 @@
 // Copyright (c) 2015 Klaus Post, released under MIT License. See LICENSE file.
 
+//go:build (386 && !gccgo) || (amd64 && !gccgo)
 // +build 386,!gccgo amd64,!gccgo
 
 package cpuid

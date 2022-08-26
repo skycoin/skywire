@@ -10,8 +10,9 @@ import (
 // Packet defines generic packet recognized by all skywire visors.
 // The unit of communication for routing/router is called packets.
 // Packet format:
-//     | type (byte) | route ID (uint32) | payload size (uint16) | payload (~) |
-//     | 1[0:1]      | 4[1:5]            | 2[5:7]                | [7:~]       |
+//
+//	| type (byte) | route ID (uint32) | payload size (uint16) | payload (~) |
+//	| 1[0:1]      | 4[1:5]            | 2[5:7]                | [7:~]       |
 type Packet []byte
 
 // Packet sizes and offsets.

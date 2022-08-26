@@ -1,3 +1,4 @@
+//go:build !gccgo
 // +build !gccgo
 
 package reflect2

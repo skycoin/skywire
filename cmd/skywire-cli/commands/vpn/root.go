@@ -1,3 +1,4 @@
+// Package clivpn root.go
 package clivpn
 
 import (
