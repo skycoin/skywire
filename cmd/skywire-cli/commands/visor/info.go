@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -40,12 +41,13 @@ var pkCmd = &cobra.Command{
 		if pkg {
 			path = visorconfig.Pkgpath
 		}
+		var outputPK string
 		if path != "" {
 			conf, err := visorconfig.ReadFile(path)
 			if err != nil {
 				logger.Fatal("Failed to read config:", err)
 			}
-			fmt.Println(conf.PK.Hex())
+			outputPK = conf.PK.Hex()
 		} else {
 			client := clirpc.Client()
 			overview, err := client.Overview()
@@ -58,8 +60,10 @@ var pkCmd = &cobra.Command{
 				logger.Info("\nServing public key " + pk + " on port " + webPort)
 				http.ListenAndServe(":"+webPort, nil) //nolint
 			}
-			fmt.Println(overview.PubKey)
+			outputPK = overview.PubKey.Hex()
 		}
+
+		internal.PrintOutput(outputPK, internal.JSONOutput)
 	},
 }
 

@@ -47,14 +47,17 @@ type CLIOutput struct {
 }
 
 // PrintOutput ss
-func PrintOutput(output CLIOutput, isJSON bool) {
+func PrintOutput(output interface{}, isJSON bool) {
 	if isJSON {
-		b, err := json.MarshalIndent(output, "", "  ")
+		outputJSON := CLIOutput{
+			Output: output,
+		}
+		b, err := json.MarshalIndent(outputJSON, "", "  ")
 		if err != nil {
 			fmt.Println(err)
 		}
 		fmt.Print(string(b) + "\n")
 		return
 	}
-	fmt.Println(output.Output)
+	fmt.Println(output)
 }
