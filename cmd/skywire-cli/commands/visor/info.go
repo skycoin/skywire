@@ -64,7 +64,7 @@ var pkCmd = &cobra.Command{
 			outputPK = overview.PubKey.Hex()
 		}
 
-		internal.PrintOutput(outputPK, cmd.Flags())
+		internal.PrintOutput(outputPK, outputPK, cmd.Flags())
 	},
 }
 
@@ -92,7 +92,7 @@ var hvpkCmd = &cobra.Command{
 			}
 			hypervisors = overview.Hypervisors
 		}
-		internal.PrintOutput(hypervisors, cmd.Flags())
+		internal.PrintOutput(hypervisors, hypervisors, cmd.Flags())
 	},
 }
 
@@ -105,22 +105,46 @@ var chvpkCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(fmt.Errorf("Failed to connect: %v", err), logger, cmd.Flags())
 		}
-		internal.PrintOutput(overview.ConnectedHypervisor, cmd.Flags())
+		internal.PrintOutput(overview.ConnectedHypervisor, overview.ConnectedHypervisor, cmd.Flags())
 	},
 }
 
 var summaryCmd = &cobra.Command{
 	Use:   "info",
 	Short: "Summary of visor info",
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		summary, err := clirpc.Client().Summary()
 		if err != nil {
-			log.Fatal("Failed to connect:", err)
+			internal.PrintFatalError(fmt.Errorf("Failed to connect: %v", err), logger, cmd.Flags())
 		}
-		msg := fmt.Sprintf(".:: Visor Summary ::.\nPublic key: %q\nSymmetric NAT: %t\nIP: %s\nDMSG Server: %q\nPing: %q\nVisor Version: %s\nSkybian Version: %s\nUptime Tracker: %s\nTime Online: %f seconds\nBuild Tag: %s\n", summary.Overview.PubKey, summary.Overview.IsSymmetricNAT, summary.Overview.LocalIP, summary.DmsgStats.ServerPK, summary.DmsgStats.RoundTrip, summary.Overview.BuildInfo.Version, summary.SkybianBuildVersion, summary.Health.ServicesHealth, summary.Uptime, summary.BuildTag)
-		if _, err := os.Stdout.Write([]byte(msg)); err != nil {
-			log.Fatal("Failed to output build info:", err)
+		msg := fmt.Sprintf(".:: Visor Summary ::.\nPublic key: %q\nSymmetric NAT: %t\nIP: %s\nDMSG Server: %q\nPing: %q\nVisor Version: %s\nSkybian Version: %s\nUptime Tracker: %s\nTime Online: %f seconds\nBuild Tag: %s",
+			summary.Overview.PubKey, summary.Overview.IsSymmetricNAT, summary.Overview.LocalIP, summary.DmsgStats.ServerPK, summary.DmsgStats.RoundTrip, summary.Overview.BuildInfo.Version, summary.SkybianBuildVersion,
+			summary.Health.ServicesHealth, summary.Uptime, summary.BuildTag)
+
+		outputJSON := struct {
+			PublicKey      string  `json:"public_key"`
+			IsSymmetricNAT bool    `json:"symmetric_nat"`
+			IP             string  `json:"ip"`
+			DmsgServer     string  `json:"dmsg_server"`
+			Ping           string  `json:"ping"`
+			VisorVersion   string  `json:"visor_version"`
+			SkybianVersion string  `json:"skybian_version"`
+			UptimeTracker  string  `json:"uptime_tracker"`
+			TimeOnline     float64 `json:"time_online"`
+			BuildTag       string  `json:"build_tag"`
+		}{
+			PublicKey:      summary.Overview.PubKey.String(),
+			IsSymmetricNAT: summary.Overview.IsSymmetricNAT,
+			IP:             summary.Overview.LocalIP,
+			DmsgServer:     summary.DmsgStats.ServerPK.String(),
+			Ping:           summary.DmsgStats.RoundTrip.String(),
+			VisorVersion:   summary.Overview.BuildInfo.Version,
+			SkybianVersion: summary.SkybianBuildVersion,
+			UptimeTracker:  summary.Health.ServicesHealth,
+			TimeOnline:     summary.Uptime,
+			BuildTag:       summary.BuildTag,
 		}
+		internal.PrintOutput(outputJSON, msg, cmd.Flags())
 	},
 }
 

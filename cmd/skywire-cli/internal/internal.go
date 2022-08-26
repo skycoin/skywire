@@ -49,11 +49,11 @@ type CLIOutput struct {
 }
 
 // PrintOutput ss
-func PrintOutput(output interface{}, cmdFlags *pflag.FlagSet) {
+func PrintOutput(outputJSON, output interface{}, cmdFlags *pflag.FlagSet) {
 	isJSON, _ := cmdFlags.GetBool(JSONString) //nolint:errcheck
 	if isJSON {
 		outputJSON := CLIOutput{
-			Output: output,
+			Output: outputJSON,
 		}
 		b, err := json.MarshalIndent(outputJSON, "", "  ")
 		if err != nil {
