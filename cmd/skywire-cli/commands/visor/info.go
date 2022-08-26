@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -70,24 +71,28 @@ var pkCmd = &cobra.Command{
 var hvpkCmd = &cobra.Command{
 	Use:   "hvpk",
 	Short: "Public key of remote hypervisor",
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
+		var hypervisors []cipher.PubKey
+
 		if pkg {
 			path = visorconfig.Pkgpath
 		}
+
 		if path != "" {
 			conf, err := visorconfig.ReadFile(path)
 			if err != nil {
-				logger.Fatal("Failed to read config:", err)
+				internal.PrintFatalError(fmt.Errorf("Failed to read config: %v", err), logger, cmd.Flags())
 			}
-			fmt.Println(conf.Hypervisors)
+			hypervisors = conf.Hypervisors
 		} else {
 			client := clirpc.Client()
 			overview, err := client.Overview()
 			if err != nil {
-				logger.Fatal("Failed to connect:", err)
+				internal.PrintFatalError(fmt.Errorf("Failed to connect: %v", err), logger, cmd.Flags())
 			}
-			fmt.Println(overview.Hypervisors)
+			hypervisors = overview.Hypervisors
 		}
+		internal.PrintOutput(hypervisors, cmd.Flags())
 	},
 }
 
