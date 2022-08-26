@@ -1,3 +1,4 @@
+// Package clirtfind subcommand for skywire-cli
 package clirtfind
 
 import (

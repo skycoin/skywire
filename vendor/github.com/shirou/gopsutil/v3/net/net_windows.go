@@ -1,3 +1,4 @@
+//go:build windows
 // +build windows
 
 package net
@@ -332,7 +333,6 @@ func ConntrackStats(percpu bool) ([]ConntrackStat, error) {
 func ConntrackStatsWithContext(ctx context.Context, percpu bool) ([]ConntrackStat, error) {
 	return nil, common.ErrNotImplementedError
 }
-
 
 // NetProtoCounters returns network statistics for the entire system
 // If protocols is empty then all protocols are returned, otherwise

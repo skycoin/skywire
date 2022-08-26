@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -224,7 +224,7 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, err := ioutil.ReadAll(resp.Body)
+		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return Service{}, fmt.Errorf("read response body: %w", err)
 		}

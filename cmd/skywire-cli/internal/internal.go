@@ -1,3 +1,4 @@
+// Package internal contain functions used internally by different skywire-cli subcommands
 package internal
 
 import (

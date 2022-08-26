@@ -1,3 +1,4 @@
+// Package usermanager user.go
 package usermanager
 
 import (

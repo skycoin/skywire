@@ -1,3 +1,4 @@
+// Package clidmsgpty hvdmsg.go
 package clidmsgpty
 
 import (

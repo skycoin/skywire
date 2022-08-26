@@ -1,3 +1,4 @@
+// Package visorinit initializes the visor
 package visorinit
 
 import (
