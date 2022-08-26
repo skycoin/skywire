@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"runtime"
@@ -34,7 +33,7 @@ func RunElevatedWithResult(bin string, args ...string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	stdoutBytes, err := ioutil.ReadAll(stdout)
+	stdoutBytes, err := io.ReadAll(stdout)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read stdout: %w", err)
 	}
@@ -56,7 +55,7 @@ func RunWithResult(bin string, args ...string) ([]byte, error) {
 		return nil, err
 	}
 
-	stdoutBytes, err := ioutil.ReadAll(stdout)
+	stdoutBytes, err := io.ReadAll(stdout)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read stdout: %w", err)
 	}

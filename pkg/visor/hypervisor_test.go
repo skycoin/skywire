@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -33,8 +32,7 @@ func TestNewNode(t *testing.T) {
 	config.EnableAuth = true
 	config.FillDefaults(false)
 
-	confDir, err := ioutil.TempDir(os.TempDir(), "SWHV")
-	require.NoError(t, err)
+	confDir := os.TempDir()
 
 	config.DBPath = filepath.Join(confDir, "users_test.db")
 

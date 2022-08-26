@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -1051,10 +1051,17 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 		Info("Serving hypervisor...")
 
 	go func() {
-		if handler := hv.HTTPHandler(); conf.EnableTLS {
-			err = http.ListenAndServeTLS(conf.HTTPAddr, conf.TLSCertFile, conf.TLSKeyFile, handler)
+		handler := hv.HTTPHandler()
+		srv := &http.Server{
+			Addr:         conf.HTTPAddr,
+			Handler:      handler,
+			ReadTimeout:  5 * time.Second,
+			WriteTimeout: 10 * time.Second,
+		}
+		if conf.EnableTLS {
+			err = srv.ListenAndServeTLS(conf.TLSCertFile, conf.TLSKeyFile)
 		} else {
-			err = http.ListenAndServe(conf.HTTPAddr, handler)
+			err = srv.ListenAndServe()
 		}
 
 		if err != nil {
@@ -1236,7 +1243,7 @@ func getIP() (string, error) {
 	}
 	defer req.Body.Close() // nolint
 
-	body, err := ioutil.ReadAll(req.Body)
+	body, err := io.ReadAll(req.Body)
 	if err != nil {
 		return "", err
 	}

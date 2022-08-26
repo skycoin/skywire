@@ -1,3 +1,4 @@
+// Package commands root.go
 package commands
 
 import (

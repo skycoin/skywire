@@ -1,3 +1,4 @@
+/*Package deprecated contains transport status*/
 package deprecated
 
 import (

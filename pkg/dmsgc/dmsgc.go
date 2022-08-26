@@ -1,3 +1,4 @@
+// Package dmsgc dmsg config and client
 package dmsgc
 
 import (

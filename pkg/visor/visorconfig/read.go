@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 )
 
@@ -14,7 +13,7 @@ const Pkgpath = "/opt/skywire/skywire.json"
 
 // Reader accepts io.Reader
 func Reader(r io.Reader, confPath string) (*V1, error) {
-	raw, err := ioutil.ReadAll(r)
+	raw, err := io.ReadAll(r)
 	if err != nil {
 		return nil, fmt.Errorf("%w", err)
 	}
@@ -27,7 +26,7 @@ func ReadFile(confPath string) (*V1, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w", err)
 	}
-	raw, err := ioutil.ReadAll(bytes.NewReader(f))
+	raw, err := io.ReadAll(bytes.NewReader(f))
 	if err != nil {
 		return nil, fmt.Errorf("%w", err)
 	}

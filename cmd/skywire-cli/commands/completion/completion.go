@@ -1,3 +1,4 @@
+// Package clicompletion generate completion script
 package clicompletion
 
 import (

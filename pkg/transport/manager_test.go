@@ -1,7 +1,7 @@
 package transport_test
 
 import (
-	"io/ioutil"
+	"io"
 	"log"
 	"os"
 	"testing"
@@ -25,7 +25,7 @@ func TestMain(m *testing.M) {
 		}
 		masterLogger.SetLevel(lvl)
 	} else {
-		masterLogger.Out = ioutil.Discard
+		masterLogger.Out = io.Discard
 	}
 
 	os.Exit(m.Run())

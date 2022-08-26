@@ -1,3 +1,4 @@
+// Package appevent broadcaster.go
 package appevent
 
 import (

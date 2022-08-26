@@ -1,3 +1,4 @@
+/*Package packetfilter filter packets*/
 package packetfilter
 
 import (

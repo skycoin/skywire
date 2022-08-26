@@ -1,3 +1,4 @@
+// Package handshake handles handhakes
 package handshake
 
 import (

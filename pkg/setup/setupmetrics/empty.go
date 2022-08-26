@@ -1,3 +1,4 @@
+// Package setupmetrics metrics of setup
 package setupmetrics
 
 import (

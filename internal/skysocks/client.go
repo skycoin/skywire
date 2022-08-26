@@ -1,3 +1,4 @@
+// Package skysocks client.go
 package skysocks
 
 import (

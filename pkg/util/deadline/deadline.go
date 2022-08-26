@@ -1,6 +1,5 @@
+/*Package deadline Copied from https://golang.org/src/net/pipe.go with some changes.*/
 package deadline
-
-// Copied from https://golang.org/src/net/pipe.go with some changes.
 
 import (
 	"sync"

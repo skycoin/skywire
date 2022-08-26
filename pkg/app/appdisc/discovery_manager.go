@@ -1,3 +1,4 @@
+// Package appdisc updates app discovery
 package appdisc
 
 import (

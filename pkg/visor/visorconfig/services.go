@@ -2,7 +2,7 @@ package visorconfig
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -38,7 +38,7 @@ func Fetch(mLog *logging.MasterLogger, serviceConfURL string, stdout bool) (serv
 		if res.Body != nil {
 			defer res.Body.Close() //nolint
 		}
-		body, err := ioutil.ReadAll(res.Body)
+		body, err := io.ReadAll(res.Body)
 		if err != nil {
 			mLog.WithError(err).Fatal("Failed to read response\n")
 		}
