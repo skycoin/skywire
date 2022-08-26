@@ -1,3 +1,4 @@
+// Package climdisc root.go
 package climdisc
 
 import (

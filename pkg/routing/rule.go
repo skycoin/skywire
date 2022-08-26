@@ -53,7 +53,6 @@ const (
 
 // Rule represents a routing rule.
 // There are two types of routing rules; App and Forward.
-//
 type Rule []byte
 
 func (r Rule) assertLen(l int) {

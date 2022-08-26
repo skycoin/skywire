@@ -1,3 +1,4 @@
+// Package hypervisorconfig config.go
 package hypervisorconfig
 
 import (

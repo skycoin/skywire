@@ -1,3 +1,4 @@
+// Package servicedisc works with the service discovery
 package servicedisc
 
 import (

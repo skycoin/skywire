@@ -1,3 +1,4 @@
+// Package logstore logstore.go
 package logstore
 
 import (

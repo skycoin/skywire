@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 
 	"github.com/sirupsen/logrus"
+
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"

@@ -1,3 +1,4 @@
+// Package rpcutil rpcutil.go
 package rpcutil
 
 import (

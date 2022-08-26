@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"net"
 	"net/http"
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
@@ -386,7 +385,7 @@ func initLogger(tag string, syslogAddr string) *logging.MasterLogger {
 			mLog.WithError(err).Error("Failed to connect to the syslog daemon.")
 		} else {
 			mLog.AddHook(hook)
-			mLog.Out = ioutil.Discard
+			mLog.Out = io.Discard
 		}
 	}
 	return mLog
@@ -399,7 +398,13 @@ func initPProf(log *logging.MasterLogger, tag string, profMode string, profAddr 
 	case "none", "":
 	case "http":
 		go func() {
-			err := http.ListenAndServe(profAddr, nil)
+			srv := &http.Server{
+				Addr:         profAddr,
+				Handler:      nil,
+				ReadTimeout:  5 * time.Second,
+				WriteTimeout: 10 * time.Second,
+			}
+			err := srv.ListenAndServe()
 			log.WithError(err).
 				WithField("mode", profMode).
 				WithField("addr", profAddr).

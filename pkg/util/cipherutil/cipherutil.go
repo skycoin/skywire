@@ -1,3 +1,4 @@
+// Package cipherutil works with public keys
 package cipherutil
 
 import "github.com/skycoin/skywire-utilities/pkg/cipher"
