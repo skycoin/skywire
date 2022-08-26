@@ -2,9 +2,7 @@ package clivisor
 
 import (
 	"fmt"
-	"log"
 	"net/http"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -151,15 +149,15 @@ var summaryCmd = &cobra.Command{
 var buildInfoCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Version and build info",
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		client := clirpc.Client()
 		overview, err := client.Overview()
 		if err != nil {
-			log.Fatal("Failed to connect:", err)
+			internal.PrintFatalError(fmt.Errorf("Failed to connect: %v", err), logger, cmd.Flags())
 		}
-		if _, err := overview.BuildInfo.WriteTo(os.Stdout); err != nil {
-			log.Fatal("Failed to output build info:", err)
-		}
+		buildInfo := overview.BuildInfo
+		msg := fmt.Sprintf("Version %q built on %q against commit %q", buildInfo.Version, buildInfo.Date, buildInfo.Commit)
+		internal.PrintOutput(buildInfo, msg, cmd.Flags())
 	},
 }
 
