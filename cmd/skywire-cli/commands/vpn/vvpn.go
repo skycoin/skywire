@@ -43,7 +43,7 @@ func init() {
 var vpnUICmd = &cobra.Command{
 	Use:   "ui",
 	Short: "Open VPN UI in default browser",
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		var url string
 		if isPkg {
 			path = visorconfig.Pkgpath
@@ -51,19 +51,19 @@ var vpnUICmd = &cobra.Command{
 		if path != "" {
 			conf, err := visorconfig.ReadFile(path)
 			if err != nil {
-				log.Fatal("Failed to read in config:", err)
+				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to read in config: %v", err))
 			}
 			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", conf.PK.Hex())
 		} else {
 			client := clirpc.Client()
 			overview, err := client.Overview()
 			if err != nil {
-				log.Fatal("Failed to connect; is skywire running?\n", err)
+				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect; is skywire running?: %v", err))
 			}
 			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", overview.PubKey.Hex())
 		}
 		if err := webbrowser.Open(url); err != nil {
-			log.Fatal("Failed to open VPN UI in browser:", err)
+			internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to open VPN UI in browser:: %v", err))
 		}
 	},
 }
