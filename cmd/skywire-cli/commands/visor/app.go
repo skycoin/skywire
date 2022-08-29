@@ -82,7 +82,7 @@ var startAppCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		internal.Catch(cmd.Flags(), clirpc.Client().StartApp(args[0]))
-		fmt.Println("OK")
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
 
@@ -92,7 +92,7 @@ var stopAppCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		internal.Catch(cmd.Flags(), clirpc.Client().StopApp(args[0]))
-		fmt.Println("OK")
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
 
@@ -111,13 +111,13 @@ var setAppAutostartCmd = &cobra.Command{
 			internal.Catch(cmd.Flags(), fmt.Errorf("invalid args[1] value: %s", args[1]))
 		}
 		internal.Catch(cmd.Flags(), clirpc.Client().SetAutoStart(args[0], autostart))
-		fmt.Println("OK")
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
 
 var appLogsSinceCmd = &cobra.Command{
 	Use:   "log <name> <timestamp>",
-	Short: "Logs from app since RFC3339Nano-formated timestamp.\n                    \"beginning\" is a special timestamp to fetch all the logs",
+	Short: "Logs from app since RFC3339Nano-formatted timestamp.\n                    \"beginning\" is a special timestamp to fetch all the logs",
 	Args:  cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		var t time.Time
@@ -132,9 +132,9 @@ var appLogsSinceCmd = &cobra.Command{
 		logs, err := clirpc.Client().LogsSince(t, args[0])
 		internal.Catch(cmd.Flags(), err)
 		if len(logs) > 0 {
-			fmt.Println(logs)
+			internal.PrintOutput(cmd.Flags(), logs, fmt.Sprintf("%v\n", logs))
 		} else {
-			fmt.Println("no logs")
+			internal.PrintOutput(cmd.Flags(), "no logs", "no logs\n")
 		}
 	},
 }
