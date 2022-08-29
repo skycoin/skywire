@@ -139,7 +139,7 @@ var vpnStartCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println(args[0])
 		internal.Catch(cmd.Flags(), clirpc.Client().StartVPNClient(args[0]))
-		fmt.Println("OK")
+		internal.PrintOutput(cmd.Flags(), "OK", fmt.Sprintln("OK"))
 	},
 }
 
@@ -148,7 +148,7 @@ var vpnStopCmd = &cobra.Command{
 	Short: "stop the vpn",
 	Run: func(cmd *cobra.Command, _ []string) {
 		internal.Catch(cmd.Flags(), clirpc.Client().StopVPNClient("vpn-client"))
-		fmt.Println("OK")
+		internal.PrintOutput(cmd.Flags(), "OK", fmt.Sprintln("OK"))
 	},
 }
 
