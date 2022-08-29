@@ -67,7 +67,7 @@ var rmRuleCmd = &cobra.Command{
 		id, err := strconv.ParseUint(args[0], 10, 32)
 		internal.Catch(cmd.Flags(), err)
 		internal.Catch(cmd.Flags(), clirpc.Client().RemoveRoutingRule(routing.RouteID(id)))
-		fmt.Println("OK")
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
 
