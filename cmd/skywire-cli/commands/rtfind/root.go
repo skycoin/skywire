@@ -47,7 +47,14 @@ var RootCmd = &cobra.Command{
 			&rfclient.RouteOptions{MinHops: frMinHops, MaxHops: frMaxHops})
 		internal.Catch(cmd.Flags(), err)
 
-		fmt.Println("forward: ", routes[forward][0])
-		fmt.Println("reverse: ", routes[backward][0])
+		output := fmt.Sprintf("forward: %v\n reverse: %v", routes[forward][0], routes[backward][0])
+		outputJSON := struct {
+			Forward []routing.Hop `json:"forward"`
+			Reverse []routing.Hop `json:"reverse"`
+		}{
+			Forward: routes[forward][0],
+			Reverse: routes[backward][0],
+		}
+		internal.PrintOutput(cmd.Flags(), outputJSON, output)
 	},
 }
