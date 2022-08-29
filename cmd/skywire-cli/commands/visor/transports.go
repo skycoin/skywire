@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -62,9 +63,7 @@ var lsTypesCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		types, err := clirpc.Client().TransportTypes()
 		internal.Catch(cmd.Flags(), err)
-		for _, t := range types {
-			fmt.Println(t)
-		}
+		internal.PrintOutput(cmd.Flags(), types, fmt.Sprintln(strings.Join(types, "\n")))
 	},
 }
 
