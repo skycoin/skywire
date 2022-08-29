@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os"
 	"strconv"
 	"time"
 
@@ -50,19 +49,17 @@ func init() {
 var visorsCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List connected visors",
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		remoteVisors, err := rpcClient().RemoteVisors()
 		if err != nil {
-			packageLogger.Fatal("RPC connection failed; is skywire running?\n", err)
+			internal.PrintError(cmd.Flags(), fmt.Errorf("RPC connection failed; is skywire running?: %v", err))
 		}
 
 		var msg string
 		for idx, pk := range remoteVisors {
 			msg += fmt.Sprintf("%d. %s\n", idx+1, pk)
 		}
-		if _, err := os.Stdout.Write([]byte(msg)); err != nil {
-			packageLogger.Fatal("Failed to output build info:", err)
-		}
+		internal.PrintOutput(cmd.Flags(), remoteVisors, msg)
 	},
 }
 
