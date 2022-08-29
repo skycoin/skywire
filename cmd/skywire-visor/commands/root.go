@@ -398,7 +398,7 @@ func initPProf(log *logging.MasterLogger, tag string, profMode string, profAddr 
 	case "none", "":
 	case "http":
 		go func() {
-			srv := &http.Server{
+			srv := &http.Server{ //nolint gosec
 				Addr:         profAddr,
 				Handler:      nil,
 				ReadTimeout:  5 * time.Second,

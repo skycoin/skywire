@@ -1052,7 +1052,7 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 
 	go func() {
 		handler := hv.HTTPHandler()
-		srv := &http.Server{
+		srv := &http.Server{ //nolint gosec
 			Addr:         conf.HTTPAddr,
 			Handler:      handler,
 			ReadTimeout:  5 * time.Second,
