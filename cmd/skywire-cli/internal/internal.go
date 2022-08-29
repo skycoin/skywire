@@ -44,14 +44,19 @@ func PrintError(cmdFlags *pflag.FlagSet, err error) {
 // ParsePK parses a public key
 func ParsePK(cmdFlags *pflag.FlagSet, name, v string) cipher.PubKey {
 	var pk cipher.PubKey
-	Catch(cmdFlags, fmt.Errorf("failed to parse <%s>: %v", name, pk.Set(v)))
+	err := pk.Set(v)
+	if err != nil {
+		PrintError(cmdFlags, fmt.Errorf("failed to parse <%s>: %v", name, err))
+	}
 	return pk
 }
 
 // ParseUUID parses a uuid
 func ParseUUID(cmdFlags *pflag.FlagSet, name, v string) uuid.UUID {
 	id, err := uuid.Parse(v)
-	Catch(cmdFlags, fmt.Errorf("failed to parse <%s>: %v", name, err))
+	if err != nil {
+		PrintError(cmdFlags, fmt.Errorf("failed to parse <%s>: %v", name, err))
+	}
 	return id
 }
 
