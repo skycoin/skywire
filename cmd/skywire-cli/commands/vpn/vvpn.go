@@ -1,8 +1,8 @@
 package clivpn
 
 import (
+	"bytes"
 	"fmt"
-	"os"
 	"strings"
 	"text/tabwriter"
 
@@ -158,10 +158,17 @@ var vpnStatusCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		states, err := clirpc.Client().Apps()
 		internal.Catch(cmd.Flags(), err)
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
+
+		var b bytes.Buffer
+		w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
 		internal.Catch(cmd.Flags(), err)
+		type appState struct {
+			Status string `json:"status"`
+		}
+		var jsonAppStatus appState
 		for _, state := range states {
 			if state.Name == "vpn-client" {
+
 				status := "stopped"
 				if state.Status == appserver.AppStatusRunning {
 					status = "running"
@@ -169,10 +176,14 @@ var vpnStatusCmd = &cobra.Command{
 				if state.Status == appserver.AppStatusErrored {
 					status = "errored"
 				}
+				jsonAppStatus = appState{
+					Status: status,
+				}
 				_, err = fmt.Fprintf(w, "%s\n", status)
 				internal.Catch(cmd.Flags(), err)
 			}
 		}
 		internal.Catch(cmd.Flags(), w.Flush())
+		internal.PrintOutput(cmd.Flags(), jsonAppStatus, b.String())
 	},
 }
