@@ -1,8 +1,8 @@
 package clivisor
 
 import (
+	"bytes"
 	"fmt"
-	"os"
 	"strconv"
 	"text/tabwriter"
 	"time"
@@ -37,9 +37,20 @@ var lsAppsCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		states, err := clirpc.Client().Apps()
 		internal.Catch(cmd.Flags(), err)
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
-		_, err = fmt.Fprintln(w, "app\tports\tauto_start\tstatus")
+		var b bytes.Buffer
+		w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
+		_, err = fmt.Fprintln(w, "app\tport\tauto_start\tstatus\tdetailed_status")
 		internal.Catch(cmd.Flags(), err)
+
+		type appState struct {
+			App            string `json:"app"`
+			Port           int    `json:"port"`
+			AutoStart      bool   `json:"auto_start"`
+			Status         string `json:"status"`
+			DetailedStatus string `json:"detailed_status"`
+		}
+
+		var appStates []appState
 		for _, state := range states {
 			status := "stopped"
 			if state.Status == appserver.AppStatusRunning {
@@ -48,10 +59,20 @@ var lsAppsCmd = &cobra.Command{
 			if state.Status == appserver.AppStatusErrored {
 				status = "errored"
 			}
-			_, err = fmt.Fprintf(w, "%s\t%s\t%t\t%s\n", state.Name, strconv.Itoa(int(state.Port)), state.AutoStart, status)
+			_, err = fmt.Fprintf(w, "%s\t%s\t%t\t%s\t%s\n", state.Name, strconv.Itoa(int(state.Port)),
+				state.AutoStart, status, state.DetailedStatus)
 			internal.Catch(cmd.Flags(), err)
+			s := appState{
+				App:            state.Name,
+				Port:           int(state.Port),
+				AutoStart:      state.AutoStart,
+				Status:         status,
+				DetailedStatus: state.DetailedStatus,
+			}
+			appStates = append(appStates, s)
 		}
 		internal.Catch(cmd.Flags(), w.Flush())
+		internal.PrintOutput(cmd.Flags(), appStates, b.String())
 	},
 }
 

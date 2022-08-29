@@ -6,7 +6,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -53,13 +52,13 @@ var pkCmd = &cobra.Command{
 			if err != nil {
 				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 			}
-			pk = overview.PubKey.String()
+			pk = overview.PubKey.String() + "\n"
 			if web {
 				http.HandleFunc("/", srvpk)
 				logger.Info("\nServing public key " + pk + " on port " + webPort)
 				http.ListenAndServe(":"+webPort, nil) //nolint
 			}
-			outputPK = overview.PubKey.Hex()
+			outputPK = overview.PubKey.Hex() + "\n"
 		}
 
 		internal.PrintOutput(cmd.Flags(), outputPK, outputPK)
@@ -70,7 +69,7 @@ var hvpkCmd = &cobra.Command{
 	Use:   "hvpk",
 	Short: "Public key of remote hypervisor",
 	Run: func(cmd *cobra.Command, _ []string) {
-		var hypervisors []cipher.PubKey
+		var hypervisors string
 
 		if pkg {
 			path = visorconfig.Pkgpath
@@ -81,14 +80,14 @@ var hvpkCmd = &cobra.Command{
 			if err != nil {
 				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to read config: %v", err))
 			}
-			hypervisors = conf.Hypervisors
+			hypervisors = fmt.Sprintf("%v\n", conf.Hypervisors)
 		} else {
 			client := clirpc.Client()
 			overview, err := client.Overview()
 			if err != nil {
 				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 			}
-			hypervisors = overview.Hypervisors
+			hypervisors = fmt.Sprintf("%v\n", overview.Hypervisors)
 		}
 		internal.PrintOutput(cmd.Flags(), hypervisors, hypervisors)
 	},
@@ -103,7 +102,7 @@ var chvpkCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 		}
-		internal.PrintOutput(cmd.Flags(), overview.ConnectedHypervisor, overview.ConnectedHypervisor)
+		internal.PrintOutput(cmd.Flags(), overview.ConnectedHypervisor, fmt.Sprintf("%v\n", overview.ConnectedHypervisor))
 	},
 }
 
@@ -115,7 +114,7 @@ var summaryCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 		}
-		msg := fmt.Sprintf(".:: Visor Summary ::.\nPublic key: %q\nSymmetric NAT: %t\nIP: %s\nDMSG Server: %q\nPing: %q\nVisor Version: %s\nSkybian Version: %s\nUptime Tracker: %s\nTime Online: %f seconds\nBuild Tag: %s",
+		msg := fmt.Sprintf(".:: Visor Summary ::.\nPublic key: %q\nSymmetric NAT: %t\nIP: %s\nDMSG Server: %q\nPing: %q\nVisor Version: %s\nSkybian Version: %s\nUptime Tracker: %s\nTime Online: %f seconds\nBuild Tag: %s\n",
 			summary.Overview.PubKey, summary.Overview.IsSymmetricNAT, summary.Overview.LocalIP, summary.DmsgStats.ServerPK, summary.DmsgStats.RoundTrip, summary.Overview.BuildInfo.Version, summary.SkybianBuildVersion,
 			summary.Health.ServicesHealth, summary.Uptime, summary.BuildTag)
 
@@ -156,7 +155,7 @@ var buildInfoCmd = &cobra.Command{
 			internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 		}
 		buildInfo := overview.BuildInfo
-		msg := fmt.Sprintf("Version %q built on %q against commit %q", buildInfo.Version, buildInfo.Date, buildInfo.Commit)
+		msg := fmt.Sprintf("Version %q built on %q against commit %q\n", buildInfo.Version, buildInfo.Date, buildInfo.Commit)
 		internal.PrintOutput(cmd.Flags(), buildInfo, msg)
 	},
 }

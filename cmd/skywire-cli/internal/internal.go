@@ -75,5 +75,7 @@ func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output interface{}) {
 		fmt.Print(string(b) + "\n")
 		return
 	}
-	fmt.Println(output)
+	if output != "" {
+		fmt.Print(output)
+	}
 }
