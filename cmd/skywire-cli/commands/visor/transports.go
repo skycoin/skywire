@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -239,15 +238,34 @@ var discTpCmd = &cobra.Command{
 
 // PrintTransportEntries prints the transport entries
 func PrintTransportEntries(cmdFlags *pflag.FlagSet, entries ...*transport.Entry) {
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
+
+	var b bytes.Buffer
+	w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
 	_, err := fmt.Fprintln(w, "id\ttype\tedge1\tedge2")
 	internal.Catch(cmdFlags, err)
+
+	type outputEntry struct {
+		ID    uuid.UUID     `json:"id"`
+		Type  network.Type  `json:"type"`
+		Edge1 cipher.PubKey `json:"edge1"`
+		Edge2 cipher.PubKey `json:"edge2"`
+	}
+
+	var outputEntries []outputEntry
 	for _, e := range entries {
 		_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
 			e.ID, e.Type, e.Edges[0], e.Edges[1])
 		internal.Catch(cmdFlags, err)
+		oEntry := outputEntry{
+			ID:    e.ID,
+			Type:  e.Type,
+			Edge1: e.Edges[0],
+			Edge2: e.Edges[1],
+		}
+		outputEntries = append(outputEntries, oEntry)
 	}
 	internal.Catch(cmdFlags, w.Flush())
+	internal.PrintOutput(cmdFlags, outputEntries, b.String())
 }
 
 type transportID uuid.UUID
