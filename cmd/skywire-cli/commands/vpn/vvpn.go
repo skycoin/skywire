@@ -3,7 +3,6 @@ package clivpn
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -71,7 +70,7 @@ var vpnUICmd = &cobra.Command{
 var vpnURLCmd = &cobra.Command{
 	Use:   "url",
 	Short: "Show VPN UI URL",
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		var url string
 		if isPkg {
 			path = visorconfig.Pkgpath
@@ -79,18 +78,25 @@ var vpnURLCmd = &cobra.Command{
 		if path != "" {
 			conf, err := visorconfig.ReadFile(path)
 			if err != nil {
-				log.Fatal("Failed to read in config:", err)
+				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to read in config: %v", err))
 			}
 			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", conf.PK.Hex())
 		} else {
 			client := clirpc.Client()
 			overview, err := client.Overview()
 			if err != nil {
-				logger.Fatal("Failed to connect; is skywire running?\n", err)
+				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect; is skywire running?: %v", err))
 			}
 			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", overview.PubKey.Hex())
 		}
-		fmt.Println(url)
+
+		output := struct {
+			URL string `json:"url"`
+		}{
+			URL: url,
+		}
+
+		internal.PrintOutput(cmd.Flags(), output, fmt.Sprintln(url))
 	},
 }
 
