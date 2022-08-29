@@ -1,7 +1,6 @@
 package clivpn
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -35,8 +34,7 @@ func init() {
 	vpnListCmd.Flags().BoolVarP(&isUnFiltered, "nofilter", "n", false, "provide unfiltered results")
 	vpnListCmd.Flags().StringVarP(&ver, "ver", "v", version, "filter results by version")
 	vpnListCmd.Flags().StringVarP(&country, "country", "c", "", "filter results by country")
-	vpnListCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the resuts")
-	vpnListCmd.Flags().BoolVarP(&isSystray, "systray", "y", false, "format results for isSystray")
+	vpnListCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the results")
 }
 
 var vpnUICmd = &cobra.Command{
@@ -103,7 +101,7 @@ var vpnURLCmd = &cobra.Command{
 var vpnListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List public VPN servers",
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		client := clirpc.Client()
 		if isUnFiltered {
 			ver = ""
@@ -111,35 +109,26 @@ var vpnListCmd = &cobra.Command{
 		}
 		servers, err := client.VPNServers(ver, country)
 		if err != nil {
-			logger.Fatal(err)
+			internal.PrintError(cmd.Flags(), err)
 		}
 		if len(servers) == 0 {
-			fmt.Printf("No VPN Servers found\n")
-			os.Exit(0)
+			internal.PrintError(cmd.Flags(), fmt.Errorf("No VPN Servers found"))
 		}
 		if isStats {
-			fmt.Printf("%d VPN Servers\n", len(servers))
-			os.Exit(0)
-		}
-		if isSystray {
-			for _, i := range servers {
-				b := strings.Replace(i.Addr.String(), ":44", "", 1)
-				fmt.Printf("%s", b)
-				if i.Geo != nil {
-					fmt.Printf(" | ")
-					fmt.Printf("%s\n", i.Geo.Country)
-				} else {
-					fmt.Printf("\n")
-				}
-			}
-			os.Exit(0)
-		}
-		j, err := json.MarshalIndent(servers, "", "\t")
-		if err != nil {
-			logger.WithError(err).Fatal("Could not marshal json.")
+			internal.PrintError(cmd.Flags(), fmt.Errorf("%d VPN Servers", len(servers)))
 		}
 
-		fmt.Printf("%s", j)
+		var msg string
+		for _, i := range servers {
+			msg += strings.Replace(i.Addr.String(), ":44", "", 1)
+			if i.Geo != nil {
+				msg += fmt.Sprintf(" | %s\n", i.Geo.Country)
+			} else {
+				msg += "\n"
+			}
+		}
+
+		internal.PrintOutput(cmd.Flags(), servers, msg)
 	},
 }
 
