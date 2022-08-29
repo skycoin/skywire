@@ -49,6 +49,7 @@ require (
 	github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
 	github.com/skycoin/skywire-utilities v0.0.0-20220712142443-abafa30105ce
 	github.com/skycoin/systray v1.10.1-0.20220630135132-48d2a1fb85d8
+	github.com/spf13/pflag v1.0.5
 )
 
 require (
@@ -72,7 +73,6 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6 // indirect
-	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stretchr/objx v0.1.1 // indirect
 	github.com/tevino/abool v1.2.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.4 // indirect

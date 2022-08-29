@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os/user"
 
-	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
-
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
+
+	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 )
 
 var sourcerun bool

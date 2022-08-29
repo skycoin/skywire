@@ -1,9 +1,9 @@
 package clivisor
 
 import (
-	"github.com/skycoin/skywire-utilities/pkg/logging"
-
 	"github.com/spf13/cobra"
+
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
 var logger = logging.MustGetLogger("skywire-cli")
