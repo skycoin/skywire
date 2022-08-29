@@ -1,10 +1,10 @@
 package clivisor
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"text/tabwriter"
 	"time"
@@ -127,19 +127,59 @@ var addRuleCmd = &cobra.Command{
 }
 
 func printRoutingRules(cmdFlags *pflag.FlagSet, rules ...routing.Rule) {
+
+	type jsonRule struct {
+		ID          routing.RouteID `json:"id"`
+		Type        string          `json:"type"`
+		LocalPort   string          `json:"local_port,omitempty"`
+		RemotePort  string          `json:"remote_port,omitempty"`
+		RemotePK    string          `json:"remote_pk,omitempty"`
+		NextRouteID string          `json:"next_route_id,omitempty"`
+		NextTpID    string          `json:"next_transport_id,omitempty"`
+		ExpireAt    time.Duration   `json:"expire-at"`
+	}
+
+	var jsonRules []jsonRule
+
 	printConsumeRule := func(w io.Writer, id routing.RouteID, s *routing.RuleSummary) {
-		_, err := fmt.Fprintf(w, "%d\t%s\t%d\t%d\t%s\t%s\t%s\t%s\t%s\n", id, s.Type,
+		_, err := fmt.Fprintf(w, "%d\t%s\t%d\t%d\t%s\t%s\t%s\t%s\n", id, s.Type,
 			s.ConsumeFields.RouteDescriptor.SrcPort, s.ConsumeFields.RouteDescriptor.DstPort,
-			s.ConsumeFields.RouteDescriptor.DstPK, "-", "-", "-", s.KeepAlive)
+			s.ConsumeFields.RouteDescriptor.DstPK, "-", "-", s.KeepAlive)
+
+		jRule := jsonRule{
+			ID:          id,
+			Type:        s.Type.String(),
+			LocalPort:   fmt.Sprint(s.ConsumeFields.RouteDescriptor.SrcPort),
+			RemotePort:  fmt.Sprint(s.ConsumeFields.RouteDescriptor.DstPort),
+			RemotePK:    s.ConsumeFields.RouteDescriptor.DstPK.Hex(),
+			NextRouteID: "-",
+			NextTpID:    "-",
+			ExpireAt:    s.KeepAlive,
+		}
+		jsonRules = append(jsonRules, jRule)
 		internal.Catch(cmdFlags, err)
 	}
 	printFwdRule := func(w io.Writer, id routing.RouteID, s *routing.RuleSummary) {
-		_, err := fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n", id, s.Type, "-",
-			"-", "-", "-", s.ForwardFields.NextRID, s.ForwardFields.NextTID, s.KeepAlive)
+		_, err := fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n", id, s.Type, "-",
+			"-", "-", s.ForwardFields.NextRID, s.ForwardFields.NextTID, s.KeepAlive)
+
+		jRule := jsonRule{
+			ID:          id,
+			Type:        s.Type.String(),
+			LocalPort:   "-",
+			RemotePort:  "-",
+			RemotePK:    "-",
+			NextRouteID: fmt.Sprint(s.ForwardFields.NextRID),
+			NextTpID:    s.ForwardFields.NextTID.String(),
+			ExpireAt:    s.KeepAlive,
+		}
+		jsonRules = append(jsonRules, jRule)
 		internal.Catch(cmdFlags, err)
 	}
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
-	_, err := fmt.Fprintln(w, "id\ttype\tlocal-port\tremote-port\tremote-pk\tresp-id\tnext-route-id\tnext-transport-id\texpire-at")
+
+	var b bytes.Buffer
+	w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
+	_, err := fmt.Fprintln(w, "id\ttype\tlocal-port\tremote-port\tremote-pk\tnext-route-id\tnext-transport-id\texpire-at")
 	internal.Catch(cmdFlags, err)
 	for _, rule := range rules {
 		if rule.Summary().ConsumeFields != nil {
@@ -149,6 +189,7 @@ func printRoutingRules(cmdFlags *pflag.FlagSet, rules ...routing.Rule) {
 		}
 	}
 	internal.Catch(cmdFlags, w.Flush())
+	internal.PrintOutput(cmdFlags, jsonRules, b.String())
 }
 
 func parseUint(cmdFlags *pflag.FlagSet, name, v string, bitSize int) uint64 {
