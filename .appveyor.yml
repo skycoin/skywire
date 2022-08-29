@@ -39,7 +39,7 @@ for:
         - job_name: Linux
 
     install:
-      - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.49.0
+      - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.47.2
       - make dep
       - sh: ci_scripts/create-ip-aliases.sh
 
@@ -57,7 +57,7 @@ for:
         - job_name: MacOS
 
     install:
-      - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.49.0
+      - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.47.2
       - make dep
       - sh: ci_scripts/create-ip-aliases.sh
 
@@ -79,7 +79,7 @@ for:
 
     install:
       - choco install make
-      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.49.0
+      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.47.2
       - make dep
       - set PATH=C:\Users\appveyor\go\bin;C:\msys64\mingw64\bin;C:\msys64\usr\bin;%PATH%
 
