@@ -1,6 +1,7 @@
 package clivisor
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -165,18 +166,42 @@ var rmTpCmd = &cobra.Command{
 // PrintTransports prints transports used by the visor
 func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
 	sortTransports(tps...)
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
-	_, err := fmt.Fprintln(w, "type\tid\tremote\tmode\tlabel")
+
+	var b bytes.Buffer
+	w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
+	_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel")
 	internal.Catch(cmdFlags, err)
+
+	type outputTP struct {
+		Type   network.Type    `json:"type"`
+		ID     uuid.UUID       `json:"id"`
+		Remote cipher.PubKey   `json:"remote_pk"`
+		TpMode string          `json:"mode"`
+		Label  transport.Label `json:"label"`
+	}
+
+	var outputTPS []outputTP
+
 	for _, tp := range tps {
 		tpMode := "regular"
 		if tp.IsSetup {
 			tpMode = "setup"
 		}
+		tp.Log = nil
+		oTP := outputTP{
+			Type:   tp.Type,
+			ID:     tp.ID,
+			Remote: tp.Remote,
+			TpMode: tpMode,
+			Label:  tp.Label,
+		}
+		outputTPS = append(outputTPS, oTP)
+
 		_, err = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", tp.Type, tp.ID, tp.Remote, tpMode, tp.Label)
 		internal.Catch(cmdFlags, err)
 	}
 	internal.Catch(cmdFlags, w.Flush())
+	internal.PrintOutput(cmdFlags, outputTPS, b.String())
 }
 
 func sortTransports(tps ...*visor.TransportSummary) {
