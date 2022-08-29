@@ -98,7 +98,6 @@ var idCmd = &cobra.Command{
 
 var (
 	transportType string
-	public        bool
 	timeout       time.Duration
 )
 
@@ -106,12 +105,10 @@ func init() {
 	const (
 		typeFlagUsage = "type of transport to add; if unspecified, cli will attempt to establish a transport " +
 			"in the following order: skywire-tcp, stcpr, sudph, dmsg"
-		publicFlagUsage  = "whether to make the transport public (deprecated)"
 		timeoutFlagUsage = "if specified, sets an operation timeout"
 	)
 
 	addTpCmd.Flags().StringVar(&transportType, "type", "", typeFlagUsage)
-	addTpCmd.Flags().BoolVar(&public, "public", true, publicFlagUsage)
 	addTpCmd.Flags().DurationVarP(&timeout, "timeout", "t", 0, timeoutFlagUsage)
 }
 
