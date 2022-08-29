@@ -95,7 +95,7 @@ func main() {
 		}()
 	}
 	setAppStatus(appCl, appserver.AppDetailedStatusRunning)
-	srv := &http.Server{
+	srv := &http.Server{ //nolint gosec
 		Addr:         *addr,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
