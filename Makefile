@@ -269,10 +269,15 @@ build-deploy: ## Build for deployment Docker images
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
-github-release:
+github-prepare-release:
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags | cut -c 2-6))
 	sed '/^## ${GITHUB_TAG}$$/,/^## .*/!d;//d;/^$$/d' ./CHANGELOG.md > releaseChangelog.md
+
+github-release: github-prepare-release
 	goreleaser --rm-dist --config .goreleaser-linux.yml --release-notes releaseChangelog.md
+
+github-release-archlinux: github-prepare-release
+	goreleaser --rm-dist --config .goreleaser-archlinux.yml --release-notes releaseChangelog.md
 
 github-release-darwin:
 	goreleaser --rm-dist  --config .goreleaser-darwin.yml --skip-publish
