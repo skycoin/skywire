@@ -140,9 +140,10 @@
       }
     }
   },
-  "defaultProject": "skywire-manager",
   "cli": {
     "analytics": "2d518d5d-5b45-41d0-ab29-e449d316a742",
-    "defaultCollection": "@angular-eslint/schematics"
+    "schematicCollections": [
+      "@angular-eslint/schematics"
+    ]
   }
 }
