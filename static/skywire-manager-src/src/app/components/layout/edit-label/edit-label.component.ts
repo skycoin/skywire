@@ -1,6 +1,6 @@
 import { Component, Inject, ViewChild, ElementRef, AfterViewInit, OnInit } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogConfig, MatDialog } from '@angular/material/dialog';
-import { FormGroup, FormBuilder } from '@angular/forms';
+import { UntypedFormGroup, UntypedFormBuilder } from '@angular/forms';
 
 import { StorageService, LabelInfo } from '../../../services/storage.service';
 import { SnackbarService } from '../../../services/snackbar.service';
@@ -18,7 +18,7 @@ import { AppConfig } from 'src/app/app.config';
 export class EditLabelComponent implements OnInit, AfterViewInit {
   @ViewChild('firstInput') firstInput: ElementRef;
 
-  form: FormGroup;
+  form: UntypedFormGroup;
 
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
@@ -35,7 +35,7 @@ export class EditLabelComponent implements OnInit, AfterViewInit {
   constructor(
     public dialogRef: MatDialogRef<EditLabelComponent>,
     @Inject(MAT_DIALOG_DATA) private data: LabelInfo,
-    private formBuilder: FormBuilder,
+    private formBuilder: UntypedFormBuilder,
     private storageService: StorageService,
     private snackbarService: SnackbarService,
   ) { }

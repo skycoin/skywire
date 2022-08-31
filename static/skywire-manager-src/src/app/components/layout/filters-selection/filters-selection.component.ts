@@ -1,6 +1,6 @@
 import { Component, Inject, OnInit } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef, MatDialogConfig } from '@angular/material/dialog';
-import { FormGroup, FormBuilder } from '@angular/forms';
+import { UntypedFormGroup, UntypedFormBuilder } from '@angular/forms';
 
 import { AppConfig } from 'src/app/app.config';
 import { FilterFieldTypes, CompleteFilterProperties } from 'src/app/utils/filters';
@@ -33,7 +33,7 @@ export interface FiltersSelectiondParams {
   styleUrls: ['./filters-selection.component.scss']
 })
 export class FiltersSelectionComponent implements OnInit {
-  form: FormGroup;
+  form: UntypedFormGroup;
   filterFieldTypes = FilterFieldTypes;
 
   /**
@@ -52,7 +52,7 @@ export class FiltersSelectionComponent implements OnInit {
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: FiltersSelectiondParams,
     public dialogRef: MatDialogRef<FiltersSelectionComponent>,
-    private formBuilder: FormBuilder,
+    private formBuilder: UntypedFormBuilder,
   ) { }
 
   ngOnInit() {
