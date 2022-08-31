@@ -9,7 +9,7 @@ release:
     owner: skycoin
     name: skywire
 
-  prerelease: true
+  #prerelease: true
 
 before:
   hooks:
@@ -108,7 +108,7 @@ builds:
       - CC=/home/appveyor/projects/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
     main: ./cmd/skywire-cli/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
-  
+
   - id: skywire-cli-arm64
     binary: skywire-cli
     goos:
@@ -160,7 +160,7 @@ builds:
       - CC=/home/appveyor/projects/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
     main: ./cmd/apps/skychat/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-  
+
   - id: skychat-arm64
     binary: apps/skychat
     goos:
@@ -424,7 +424,7 @@ archives:
       - skychat-amd64
       - vpn-server-amd64
       - vpn-client-amd64
-  
+
   - id: arm64
     format: tar.gz
     wrap_in_directory: false
@@ -439,7 +439,7 @@ archives:
       - skychat-arm64
       - vpn-server-arm64
       - vpn-client-arm64
-  
+
   - id: arm
     format: tar.gz
     wrap_in_directory: false
@@ -469,7 +469,7 @@ archives:
       - skychat-armhf
       - vpn-server-armhf
       - vpn-client-armhf
-  
+
   - id: amd64-systray
     format: tar.gz
     wrap_in_directory: false
@@ -484,7 +484,7 @@ archives:
       - skychat-amd64
       - vpn-server-amd64
       - vpn-client-amd64
-  
+
   - id: arm64-systray
     format: tar.gz
     wrap_in_directory: false
@@ -499,9 +499,9 @@ archives:
       - skychat-arm64
       - vpn-server-arm64
       - vpn-client-arm64
-  
+
 checksum:
-  name_template: 'checksums.txt'  
+  name_template: 'checksums.txt'
 snapshot:
   name_template: "{{ .Tag }}-next"
 changelog:
