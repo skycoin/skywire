@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os"
 	"strconv"
 	"time"
 
@@ -21,7 +20,6 @@ var (
 	ptyPort       string
 	masterLogger  = logging.NewMasterLogger()
 	packageLogger = masterLogger.PackageLogger("dmsgpty")
-	logger        = logging.MustGetLogger("skywire-cli")
 	rpcAddr       string
 	path          string
 	pk            string
@@ -51,19 +49,17 @@ func init() {
 var visorsCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List connected visors",
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		remoteVisors, err := rpcClient().RemoteVisors()
 		if err != nil {
-			packageLogger.Fatal("RPC connection failed; is skywire running?\n", err)
+			internal.PrintError(cmd.Flags(), fmt.Errorf("RPC connection failed; is skywire running?: %v", err))
 		}
 
 		var msg string
 		for idx, pk := range remoteVisors {
 			msg += fmt.Sprintf("%d. %s\n", idx+1, pk)
 		}
-		if _, err := os.Stdout.Write([]byte(msg)); err != nil {
-			packageLogger.Fatal("Failed to output build info:", err)
-		}
+		internal.PrintOutput(cmd.Flags(), remoteVisors, msg)
 	},
 }
 
@@ -71,9 +67,9 @@ var shellCmd = &cobra.Command{
 	Use:   "start <pk>",
 	Short: "Start dmsgpty session",
 	Args:  cobra.MinimumNArgs(1),
-	RunE: func(_ *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		cli := dmsgpty.DefaultCLI()
-		addr := internal.ParsePK("pk", args[0])
+		addr := internal.ParsePK(cmd.Flags(), "pk", args[0])
 		port, _ := strconv.ParseUint(ptyPort, 10, 16) //nolint
 		ctx, cancel := cmdutil.SignalContext(context.Background(), nil)
 		defer cancel()
