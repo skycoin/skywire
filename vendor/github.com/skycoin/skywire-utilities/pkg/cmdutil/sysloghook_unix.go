@@ -9,7 +9,6 @@ import (
 
 	"github.com/sirupsen/logrus"
 	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
-
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
