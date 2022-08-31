@@ -1,5 +1,5 @@
-//go:build darwin && cgo
-// +build darwin,cgo
+// +build darwin
+// +build cgo
 
 package process
 

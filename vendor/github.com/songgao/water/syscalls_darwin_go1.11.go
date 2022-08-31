@@ -1,4 +1,3 @@
-//go:build darwin && go1.11
 // +build darwin,go1.11
 
 package water
