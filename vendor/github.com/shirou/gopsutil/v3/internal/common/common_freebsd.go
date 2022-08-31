@@ -1,4 +1,3 @@
-//go:build freebsd || openbsd
 // +build freebsd openbsd
 
 package common

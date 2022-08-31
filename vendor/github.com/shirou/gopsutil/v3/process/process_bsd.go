@@ -1,4 +1,3 @@
-//go:build darwin || freebsd || openbsd
 // +build darwin freebsd openbsd
 
 package process
@@ -74,3 +73,4 @@ func parseKinfoProc(buf []byte) (KinfoProc, error) {
 	err := common.Read(br, binary.LittleEndian, &k)
 	return k, err
 }
+

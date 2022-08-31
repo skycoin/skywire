@@ -1,4 +1,3 @@
-//go:build linux || freebsd || darwin || openbsd
 // +build linux freebsd darwin openbsd
 
 package common

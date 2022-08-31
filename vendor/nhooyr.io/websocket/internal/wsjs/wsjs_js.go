@@ -1,4 +1,3 @@
-//go:build js
 // +build js
 
 // Package wsjs implements typed access to the browser javascript WebSocket API.

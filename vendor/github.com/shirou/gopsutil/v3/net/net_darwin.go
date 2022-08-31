@@ -1,4 +1,3 @@
-//go:build darwin
 // +build darwin
 
 package net
@@ -7,12 +6,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/shirou/gopsutil/v3/internal/common"
 	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/shirou/gopsutil/v3/internal/common"
 )
 
 var (
