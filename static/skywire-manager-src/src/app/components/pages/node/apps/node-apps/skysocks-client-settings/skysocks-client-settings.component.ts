@@ -1,5 +1,5 @@
 import { Component, OnInit, ViewChild, OnDestroy, ElementRef, Inject } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { MatDialogRef, MatDialog, MatDialogConfig, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { Subscription } from 'rxjs';
 
@@ -72,7 +72,7 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   @ViewChild('button') button: ButtonComponent;
   @ViewChild('settingsButton') settingsButton: ButtonComponent;
   @ViewChild('firstInput') firstInput: ElementRef;
-  form: FormGroup;
+  form: UntypedFormGroup;
   // Entries to show on the history.
   history: HistoryEntry[];
 
@@ -131,7 +131,7 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
     @Inject(MAT_DIALOG_DATA) private data: Application,
     public dialogRef: MatDialogRef<SkysocksClientSettingsComponent>,
     private appsService: AppsService,
-    private formBuilder: FormBuilder,
+    private formBuilder: UntypedFormBuilder,
     private snackbarService: SnackbarService,
     private dialog: MatDialog,
     private proxyDiscoveryService: ProxyDiscoveryService,

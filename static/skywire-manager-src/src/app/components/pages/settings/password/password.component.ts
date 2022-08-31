@@ -1,5 +1,5 @@
 import { Component, OnInit, Input, ViewChild, ElementRef, AfterViewInit, OnDestroy } from '@angular/core';
-import { FormControl, FormGroup, Validators } from '@angular/forms';
+import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { Subscription } from 'rxjs';
@@ -28,7 +28,7 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   @Input() forInitialConfig = false;
 
-  form: FormGroup;
+  form: UntypedFormGroup;
 
   private subscription: Subscription;
   private formSubscription: Subscription;
@@ -42,10 +42,10 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnInit() {
     // TODO: Password validation is not exactly the same as in the hypervisor code.
-    this.form = new FormGroup({
-      oldPassword: new FormControl('', !this.forInitialConfig ? Validators.required : null),
-      newPassword: new FormControl('', Validators.compose([Validators.required, Validators.minLength(6), Validators.maxLength(64)])),
-      newPasswordConfirmation: new FormControl('', [Validators.required, this.validatePasswords.bind(this)]),
+    this.form = new UntypedFormGroup({
+      oldPassword: new UntypedFormControl('', !this.forInitialConfig ? Validators.required : null),
+      newPassword: new UntypedFormControl('', Validators.compose([Validators.required, Validators.minLength(6), Validators.maxLength(64)])),
+      newPasswordConfirmation: new UntypedFormControl('', [Validators.required, this.validatePasswords.bind(this)]),
     });
 
     this.formSubscription = this.form.controls['newPassword'].valueChanges
