@@ -5,19 +5,18 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## 1.2.0
+
 ### Added
-- `skywire-cli` global flag `--json` [#1346](https://github.com/skycoin/skywire/pull/1346)
 
 ### Changed
-- `skywire-cli visor route add-rule` subcommands [#1346](https://github.com/skycoin/skywire/pull/1346)
 
 ### Removed
-- `skywire-cli visor tp add` flag `--public` [#1346](https://github.com/skycoin/skywire/pull/1346)
 
 ## 1.1.0
 
 ### Added
 
+- `skywire-cli` global flag `--json` [#1346](https://github.com/skycoin/skywire/pull/1346)
 - service discovery query filtering for `skywire-cli vpn list`	[#1337](https://github.com/skycoin/skywire/pull/1337)
 - `skywire-cli vpn` subcommands	[#1317](https://github.com/skycoin/skywire/pull/1317)
 - separate systray application which uses `skywire-cli vpn` subcommands	[#1317](https://github.com/skycoin/skywire/pull/1317)
@@ -31,6 +30,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - store UI settings per hypervisor key [#1329](https://github.com/skycoin/skywire/pull/1329)
 
 ### Changed
+
+- `skywire-cli visor route add-rule` subcommands [#1346](https://github.com/skycoin/skywire/pull/1346)
 - Autopeer on env `AUTOPEER=1`
 - improve UI reaction while system is busy
 - hide password options in UI if authentication is disabled
@@ -43,6 +44,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Removed
 
+- `skywire-cli visor tp add` flag `--public` [#1346](https://github.com/skycoin/skywire/pull/1346)
 - remove updater settings from UI
 
 ## 1.0.0
