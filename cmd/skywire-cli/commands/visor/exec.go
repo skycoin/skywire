@@ -1,7 +1,6 @@
 package clivisor
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -20,9 +19,10 @@ var execCmd = &cobra.Command{
 	Use:   "exec <command>",
 	Short: "Execute a command",
 	Args:  cobra.MinimumNArgs(1),
-	Run: func(_ *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, args []string) {
 		out, err := clirpc.Client().Exec(strings.Join(args, " "))
-		internal.Catch(err)
-		fmt.Print(string(out))
+		internal.Catch(cmd.Flags(), err)
+		// since the output of this command can be anything it is not formatted, so it's advisable to not use the `--json` flag for this one
+		internal.PrintOutput(cmd.Flags(), string(out), string(out))
 	},
 }

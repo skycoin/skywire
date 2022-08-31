@@ -16,6 +16,7 @@ import (
 	clirtfind "github.com/skycoin/skywire/cmd/skywire-cli/commands/rtfind"
 	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 	clivpn "github.com/skycoin/skywire/cmd/skywire-cli/commands/vpn"
+	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 )
 
 var rootCmd = &cobra.Command{
@@ -41,8 +42,12 @@ func init() {
 		climdisc.RootCmd,
 		clicompletion.RootCmd,
 	)
+
 	var helpflag bool
-	rootCmd.PersistentFlags().StringVarP(&clirpc.Addr, "rpc", "", "localhost:3435", "RPC server address")
+	var jsonOutput bool
+
+	rootCmd.PersistentFlags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
+	rootCmd.PersistentFlags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
 	rootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+rootCmd.Use)
 	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
 	rootCmd.PersistentFlags().MarkHidden("help") //nolint
