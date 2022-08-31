@@ -1,4 +1,3 @@
-//go:build linux && !go1.11
 // +build linux,!go1.11
 
 package water
