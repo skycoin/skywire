@@ -3,6 +3,10 @@
 
 package skyenv
 
+import (
+	"periph.io/x/periph/host/distro"
+)
+
 const (
 	//OS detection at runtime
 	OS = "linux"
@@ -30,4 +34,14 @@ func UserConfig() PkgConfig {
 	usrconfig.Hypervisor.DbPath = HomePath() + "/.skywire/users.db"
 	usrconfig.Hypervisor.EnableAuth = true
 	return usrconfig
+}
+
+// UpdateCommand returns the commands which are run when the update button is clicked in the ui
+func UpdateCommand() []string {
+	if distro.IsArmbian() || distro.IsDebian() || distro.IsRaspbian() || distro.IsUbuntu() {
+		//enabling install-skyire.service and rebooting is required to avoid interrupting an update when the running visor is stopped
+		//install-skywire.service is provided by the skybian package and calls install-skywire.sh
+		return []string{`systemctl enable install-skywire.service && systemctl reboot || echo -e "Resource unavailable.\nPlease update manually as specified here:\nhttps://github.com/skycoin/skywire/wiki/Skywire-Package-Installation"`}
+	}
+	return []string{`echo -e "Update not implemented for this linux distro.\nPlease update skywire the same way you installed it."`}
 }

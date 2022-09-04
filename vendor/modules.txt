@@ -317,3 +317,6 @@ nhooyr.io/websocket/internal/bpool
 nhooyr.io/websocket/internal/errd
 nhooyr.io/websocket/internal/wsjs
 nhooyr.io/websocket/internal/xsync
+# periph.io/x/periph v3.6.8+incompatible
+## explicit
+periph.io/x/periph/host/distro
