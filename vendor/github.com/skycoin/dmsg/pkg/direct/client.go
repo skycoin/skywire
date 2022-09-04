@@ -1,14 +1,14 @@
+// Package direct pkg/direct/client.go
 package direct
 
 import (
 	"context"
 	"sync"
 
-	"github.com/skycoin/dmsg/pkg/disc"
-
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-
 	"github.com/skycoin/skywire-utilities/pkg/logging"
+
+	"github.com/skycoin/dmsg/pkg/disc"
 )
 
 // directClient represents a client that doesnot communicates with a dmsg-discovery,

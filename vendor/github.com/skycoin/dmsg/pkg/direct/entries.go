@@ -1,9 +1,9 @@
 package direct
 
 import (
-	"github.com/skycoin/dmsg/pkg/disc"
-
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+
+	"github.com/skycoin/dmsg/pkg/disc"
 )
 
 // GetClientEntry gives all client entries

@@ -1,3 +1,4 @@
+// Package noise pkg/noise/noise.go
 package noise
 
 import (
@@ -7,9 +8,8 @@ import (
 	"fmt"
 
 	"github.com/skycoin/noise"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
-
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
 var noiseLogger = logging.MustGetLogger("noise")
@@ -45,8 +45,8 @@ type Noise struct {
 }
 
 // New creates a new Noise with:
-//	- provided pattern for handshake.
-//	- Secp256k1 for the curve.
+//   - provided pattern for handshake.
+//   - Secp256k1 for the curve.
 func New(pattern noise.HandshakePattern, config Config) (*Noise, error) {
 	nc := noise.Config{
 		CipherSuite: noise.NewCipherSuite(Secp256k1{}, noise.CipherChaChaPoly, noise.HashSHA256),
@@ -76,15 +76,15 @@ func New(pattern noise.HandshakePattern, config Config) (*Noise, error) {
 }
 
 // KKAndSecp256k1 creates a new Noise with:
-//	- KK pattern for handshake.
-//	- Secp256k1 for the curve.
+//   - KK pattern for handshake.
+//   - Secp256k1 for the curve.
 func KKAndSecp256k1(config Config) (*Noise, error) {
 	return New(noise.HandshakeKK, config)
 }
 
 // XKAndSecp256k1 creates a new Noise with:
-//  - XK pattern for handshake.
-//	- Secp256 for the curve.
+//   - XK pattern for handshake.
+//   - Secp256 for the curve.
 func XKAndSecp256k1(config Config) (*Noise, error) {
 	return New(noise.HandshakeXK, config)
 }

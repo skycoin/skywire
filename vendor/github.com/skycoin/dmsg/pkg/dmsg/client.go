@@ -1,3 +1,4 @@
+// Package dmsg pkg/dmsg/client.go
 package dmsg
 
 import (
@@ -8,12 +9,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 
 	"github.com/skycoin/dmsg/pkg/disc"
-
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/netutil"
 )
 
 // SessionDialCallback is triggered BEFORE a session is dialed to.
