@@ -31,3 +31,8 @@ func UserConfig() PkgConfig {
 	usrconfig.Hypervisor.EnableAuth = true
 	return usrconfig
 }
+
+// UpdateCommand returns the commands which are run when the update button is clicked in the ui
+func UpdateCommand() []string {
+	return []string{`echo "update not implemented for macOS. Download a new version from the release section here: https://github.com/skycoin/skywire/releases"`}
+}
