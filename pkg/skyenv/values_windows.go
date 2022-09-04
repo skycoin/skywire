@@ -34,5 +34,5 @@ func UserConfig() PkgConfig {
 
 // UpdateCommand returns the commands which are run when the update button is clicked in the ui
 func UpdateCommand() []string {
-	return `echo "Update not implemented for windows. Download a new version from the release section here: https://github.com/skycoin/skywire/releases"`
+	return []string{`echo "Update not implemented for windows. Download a new version from the release section here: https://github.com/skycoin/skywire/releases"`}
 }
