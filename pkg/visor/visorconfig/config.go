@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/skycoin/dmsg/pkg/disc"
+	"github.com/skycoin/dmsg/pkg/dmsgpty"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -72,7 +73,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	conf.Dmsgpty = &Dmsgpty{
 		DmsgPort: skyenv.DmsgPtyPort,
 		CLINet:   skyenv.DmsgPtyCLINet,
-		CLIAddr:  skyenv.DmsgPtyCLIAddr(),
+		CLIAddr:  dmsgpty.DefaultCLIAddr(),
 	}
 
 	conf.STCP = &network.STCPConfig{
