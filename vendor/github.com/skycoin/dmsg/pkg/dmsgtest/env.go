@@ -7,12 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"golang.org/x/net/nettest"
 
 	"github.com/skycoin/dmsg/pkg/disc"
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
-
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 // DefaultTimeout is the recommended timeout for the Env.
@@ -37,6 +36,7 @@ type Env struct {
 // The inputs 't' and 'timeout' are optional.
 // If 't' is specified, some log messages are displayed via 't.Log()'.
 // If 'timeout' is not '0', starting entities (such as servers and clients) must complete in the given duration,
+//
 //	otherwise it will fail.
 func NewEnv(t *testing.T, timeout time.Duration) *Env {
 	return &Env{

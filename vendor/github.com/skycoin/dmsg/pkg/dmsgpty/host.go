@@ -12,11 +12,10 @@ import (
 	"sync/atomic"
 
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
-
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 // Host represents the main instance of dmsgpty.
