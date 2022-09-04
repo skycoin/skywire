@@ -1,16 +1,17 @@
+// Package dmsghttp pkg/dmsghttp/http.go
 package dmsghttp
 
 import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 
 	"github.com/skycoin/dmsg/pkg/disc"
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
-
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
 // ListenAndServe serves http over dmsg
@@ -30,6 +31,13 @@ func ListenAndServe(ctx context.Context, pk cipher.PubKey, sk cipher.SecKey, a h
 
 	log.WithField("dmsg_addr", fmt.Sprintf("dmsg://%v", lis.Addr().String())).
 		Debug("Serving...")
+	srv := &http.Server{
+		ReadTimeout:       1 * time.Second,
+		WriteTimeout:      1 * time.Second,
+		IdleTimeout:       30 * time.Second,
+		ReadHeaderTimeout: 2 * time.Second,
+		Handler:           a,
+	}
 
-	return http.Serve(lis, a)
+	return srv.Serve(lis)
 }

@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/VictoriaMetrics/metrics"
-
 	"github.com/skycoin/skywire-utilities/pkg/metricsutil"
 )
 
@@ -24,15 +23,15 @@ type VictoriaMetrics struct {
 // NewVictoriaMetrics returns the Victoria Metrics implementation of Metrics.
 func NewVictoriaMetrics() *VictoriaMetrics {
 	return &VictoriaMetrics{
-		packetsPerMinute:   metricsutil.NewVictoriaMetricsUintGauge("packets_per_minute"),
-		packetsPerSecond:   metricsutil.NewVictoriaMetricsUintGauge("packets_per_second"),
-		clientsCount:       metricsutil.NewVictoriaMetricsIntGauge("clients_count"),
-		activeSessions:     metricsutil.NewVictoriaMetricsIntGauge("vm_active_sessions_count"),
-		successfulSessions: metrics.GetOrCreateCounter("vm_session_success_total"),
-		failedSessions:     metrics.GetOrCreateCounter("vm_session_fail_total"),
-		activeStreams:      metricsutil.NewVictoriaMetricsIntGauge("vm_active_streams_count"),
-		successfulStreams:  metrics.GetOrCreateCounter("vm_stream_success_total"),
-		failedStreams:      metrics.GetOrCreateCounter("vm_stream_fail_total"),
+		packetsPerMinute:   metricsutil.NewVictoriaMetricsUintGauge("dmsg_server_packets_per_minute"),
+		packetsPerSecond:   metricsutil.NewVictoriaMetricsUintGauge("dmsg_server_packets_per_second"),
+		clientsCount:       metricsutil.NewVictoriaMetricsIntGauge("dmsg_server_clients_count"),
+		activeSessions:     metricsutil.NewVictoriaMetricsIntGauge("dmsg_server_vm_active_sessions_count"),
+		successfulSessions: metrics.GetOrCreateCounter("dmsg_server_vm_session_success_total"),
+		failedSessions:     metrics.GetOrCreateCounter("dmsg_server_vm_session_fail_total"),
+		activeStreams:      metricsutil.NewVictoriaMetricsIntGauge("dmsg_server_vm_active_streams_count"),
+		successfulStreams:  metrics.GetOrCreateCounter("dmsg_server_vm_stream_success_total"),
+		failedStreams:      metrics.GetOrCreateCounter("dmsg_server_vm_stream_fail_total"),
 	}
 }
 

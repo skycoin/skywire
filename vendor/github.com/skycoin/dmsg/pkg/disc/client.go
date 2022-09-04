@@ -5,15 +5,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"sync"
 	"time"
 
 	jsoniter "github.com/json-iterator/go"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
-
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
 var json = jsoniter.ConfigFastest
@@ -129,7 +128,7 @@ func (c *httpClient) PostEntry(ctx context.Context, entry *Entry) error {
 	if resp.StatusCode != http.StatusOK {
 		var httpResponse HTTPMessage
 
-		bodyBytes, err := ioutil.ReadAll(resp.Body)
+		bodyBytes, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return err
 		}
@@ -183,7 +182,7 @@ func (c *httpClient) DelEntry(ctx context.Context, entry *Entry) error {
 	if resp.StatusCode != http.StatusOK {
 		var httpResponse HTTPMessage
 
-		bodyBytes, err := ioutil.ReadAll(resp.Body)
+		bodyBytes, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return err
 		}
