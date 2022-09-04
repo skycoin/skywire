@@ -1,3 +1,4 @@
+// Package dmsgget pkg/dmsgget/dmsgget.go
 package dmsgget
 
 import (
@@ -13,13 +14,12 @@ import (
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 
 	"github.com/skycoin/dmsg/pkg/disc"
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
-
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 var json = jsoniter.ConfigFastest
