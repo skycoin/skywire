@@ -1,6 +1,6 @@
 import { Component, Inject, ViewChild, ElementRef, OnInit, OnDestroy } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogConfig, MatDialog } from '@angular/material/dialog';
-import { FormGroup, FormBuilder, Validators } from '@angular/forms';
+import { UntypedFormGroup, UntypedFormBuilder, Validators } from '@angular/forms';
 import { Subscription } from 'rxjs';
 
 import { SnackbarService } from '../../../../../../services/snackbar.service';
@@ -38,7 +38,7 @@ export class RouterConfigComponent implements OnInit, OnDestroy {
   @ViewChild('button') button: ButtonComponent;
   @ViewChild('firstInput') firstInput: ElementRef;
 
-  form: FormGroup;
+  form: UntypedFormGroup;
 
   private operationSubscription: Subscription;
 
@@ -57,7 +57,7 @@ export class RouterConfigComponent implements OnInit, OnDestroy {
   constructor(
     public dialogRef: MatDialogRef<RouterConfigComponent>,
     @Inject(MAT_DIALOG_DATA) private data: RouterConfigParams,
-    private formBuilder: FormBuilder,
+    private formBuilder: UntypedFormBuilder,
     private snackbarService: SnackbarService,
     private routeService: RouteService,
   ) { }
