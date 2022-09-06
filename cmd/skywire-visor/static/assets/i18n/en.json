@@ -79,7 +79,8 @@
   },
 
   "start": {
-    "title": "Start"
+    "title": "Start",
+    "loading-error": "An error occurred while getting the initial data. Retrying..."
   },
 
   "node": {
@@ -217,6 +218,7 @@
 
   "settings": {
     "title": "Settings",
+    "checking-auth": "Checking authentication settings.",
     "password" : {
       "initial-config-help": "Use this option for setting the initial password. After a password has been set, it is not possible to use this option to modify it.",
       "help": "Options for changing your password.",
