@@ -79,7 +79,8 @@
   },
 
   "start": {
-    "title": "Inicio"
+    "title": "Inicio",
+    "loading-error": "Hubo un error obteniendo los datos iniciales. Reintentando..."
   },
 
   "node": {
@@ -221,6 +222,7 @@
 
   "settings": {
     "title": "Configuración",
+    "checking-auth": "Revisando configuración de autenticación.",
     "password" : {
       "initial-config-help": "Use esta opción para establecer la contraseña inicial. Después de establecer una contraseña no es posible usar esta opción para modificarla.",
       "help": "Opciones para cambiar la contraseña.",
