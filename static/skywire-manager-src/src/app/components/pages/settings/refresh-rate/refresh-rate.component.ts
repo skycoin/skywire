@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { FormBuilder, FormGroup } from '@angular/forms';
+import { UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
 import { Subscription } from 'rxjs';
 
 import { StorageService } from '../../../../services/storage.service';
@@ -14,7 +14,7 @@ import { SnackbarService } from 'src/app/services/snackbar.service';
   styleUrls: ['./refresh-rate.component.scss']
 })
 export class RefreshRateComponent implements OnInit, OnDestroy {
-  form: FormGroup;
+  form: UntypedFormGroup;
 
   // Options in seconds.
   readonly timesList = ['3', '5', '10', '15', '30', '60', '90', '150', '300'];
@@ -22,7 +22,7 @@ export class RefreshRateComponent implements OnInit, OnDestroy {
   private subscription: Subscription;
 
   constructor(
-    private formBuilder: FormBuilder,
+    private formBuilder: UntypedFormBuilder,
     private storageService: StorageService,
     private snackbarService: SnackbarService,
   ) { }

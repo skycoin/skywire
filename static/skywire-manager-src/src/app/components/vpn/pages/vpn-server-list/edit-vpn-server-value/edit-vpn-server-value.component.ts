@@ -1,5 +1,5 @@
 import { Component, ViewChild, ElementRef, Inject, OnInit } from '@angular/core';
-import { FormBuilder, FormGroup } from '@angular/forms';
+import { UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
 import { MatDialogRef, MatDialog, MatDialogConfig, MAT_DIALOG_DATA } from '@angular/material/dialog';
 
 import { AppConfig } from 'src/app/app.config';
@@ -30,7 +30,7 @@ export interface EditVpnServerParams {
 })
 export class EditVpnServerValueComponent implements OnInit {
   @ViewChild('firstInput') firstInput: ElementRef;
-  form: FormGroup;
+  form: UntypedFormGroup;
 
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
@@ -47,7 +47,7 @@ export class EditVpnServerValueComponent implements OnInit {
   constructor(
     public dialogRef: MatDialogRef<EditVpnServerValueComponent>,
     @Inject(MAT_DIALOG_DATA) public data: EditVpnServerParams,
-    private formBuilder: FormBuilder,
+    private formBuilder: UntypedFormBuilder,
     private snackbarService: SnackbarService,
     private vpnSavedDataService: VpnSavedDataService,
   ) { }

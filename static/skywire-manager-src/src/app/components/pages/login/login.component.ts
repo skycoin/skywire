@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { FormControl, FormGroup, Validators } from '@angular/forms';
+import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { Subscription } from 'rxjs';
@@ -20,7 +20,7 @@ import { processServiceError } from '../../../utils/errors';
   styleUrls: ['./login.component.scss']
 })
 export class LoginComponent implements OnInit, OnDestroy {
-  form: FormGroup;
+  form: UntypedFormGroup;
   loading = false;
   isForVpn = false;
   vpnKey = '';
@@ -52,8 +52,8 @@ export class LoginComponent implements OnInit, OnDestroy {
       });
     });
 
-    this.form = new FormGroup({
-      password: new FormControl('', Validators.required),
+    this.form = new UntypedFormGroup({
+      password: new UntypedFormControl('', Validators.required),
     });
   }
 
