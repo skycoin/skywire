@@ -1,5 +1,5 @@
 import { Component, OnInit, ViewChild, OnDestroy, ElementRef } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { MatDialogRef, MatDialog, MatDialogConfig } from '@angular/material/dialog';
 import { Subscription, of } from 'rxjs';
 import { delay, flatMap } from 'rxjs/operators';
@@ -28,7 +28,7 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
   @ViewChild('button') button: ButtonComponent;
   @ViewChild('firstInput') firstInput: ElementRef;
   types: string[];
-  form: FormGroup;
+  form: UntypedFormGroup;
 
   makePersistent = false;
 
@@ -49,7 +49,7 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
 
   constructor(
     private transportService: TransportService,
-    private formBuilder: FormBuilder,
+    private formBuilder: UntypedFormBuilder,
     public dialogRef: MatDialogRef<CreateTransportComponent>,
     private snackbarService: SnackbarService,
     private storageService: StorageService,

@@ -1,6 +1,6 @@
 import { Component, ViewChild, ElementRef, OnInit, Inject } from '@angular/core';
 import { MatDialogRef, MatDialogConfig, MatDialog, MAT_DIALOG_DATA } from '@angular/material/dialog';
-import { FormGroup, FormBuilder } from '@angular/forms';
+import { UntypedFormGroup, UntypedFormBuilder } from '@angular/forms';
 
 import { AppConfig } from 'src/app/app.config';
 
@@ -18,7 +18,7 @@ import { AppConfig } from 'src/app/app.config';
 export class EditSkysocksClientNoteComponent implements OnInit {
   @ViewChild('firstInput', { static: false }) firstInput: ElementRef;
 
-  form: FormGroup;
+  form: UntypedFormGroup;
 
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
@@ -35,7 +35,7 @@ export class EditSkysocksClientNoteComponent implements OnInit {
   constructor(
     public dialogRef: MatDialogRef<EditSkysocksClientNoteComponent>,
     @Inject(MAT_DIALOG_DATA) private data: string,
-    private formBuilder: FormBuilder,
+    private formBuilder: UntypedFormBuilder,
   ) { }
 
   ngOnInit() {

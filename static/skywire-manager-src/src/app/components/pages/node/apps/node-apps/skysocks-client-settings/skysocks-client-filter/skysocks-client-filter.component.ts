@@ -1,5 +1,5 @@
 import { Component, OnInit, Inject } from '@angular/core';
-import { FormBuilder, FormGroup } from '@angular/forms';
+import { UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialog, MatDialogConfig } from '@angular/material/dialog';
 
 import { AppConfig } from 'src/app/app.config';
@@ -35,7 +35,7 @@ export interface FilterWindowData {
   styleUrls: ['./skysocks-client-filter.component.scss']
 })
 export class SkysocksClientFilterComponent implements OnInit {
-  form: FormGroup;
+  form: UntypedFormGroup;
 
   completeCountriesList = countriesList;
 
@@ -54,7 +54,7 @@ export class SkysocksClientFilterComponent implements OnInit {
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: FilterWindowData,
     public dialogRef: MatDialogRef<SkysocksClientFilterComponent>,
-    private formBuilder: FormBuilder,
+    private formBuilder: UntypedFormBuilder,
   ) { }
 
   ngOnInit() {
