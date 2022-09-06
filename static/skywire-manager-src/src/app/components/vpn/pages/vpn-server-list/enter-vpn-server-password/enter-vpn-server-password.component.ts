@@ -1,5 +1,5 @@
 import { Component, ViewChild, ElementRef, OnInit, Inject } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { MatDialogRef, MatDialog, MatDialogConfig, MAT_DIALOG_DATA } from '@angular/material/dialog';
 
 import { AppConfig } from 'src/app/app.config';
@@ -16,7 +16,7 @@ import { AppConfig } from 'src/app/app.config';
 })
 export class EnterVpnServerPasswordComponent implements OnInit {
   @ViewChild('firstInput') firstInput: ElementRef;
-  form: FormGroup;
+  form: UntypedFormGroup;
 
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
@@ -34,7 +34,7 @@ export class EnterVpnServerPasswordComponent implements OnInit {
   constructor(
     public dialogRef: MatDialogRef<EnterVpnServerPasswordComponent>,
     @Inject(MAT_DIALOG_DATA) public data: boolean,
-    private formBuilder: FormBuilder,
+    private formBuilder: UntypedFormBuilder,
   ) { }
 
   ngOnInit() {
