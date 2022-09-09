@@ -135,11 +135,10 @@ var vpnListCmd = &cobra.Command{
 }
 
 var vpnStartCmd = &cobra.Command{
-	Use:   "start",
+	Use:   "start <public-key>",
 	Short: "start the vpn for <public-key>",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(args[0])
 		internal.Catch(cmd.Flags(), clirpc.Client().StartVPNClient(args[0]))
 		internal.PrintOutput(cmd.Flags(), "OK", fmt.Sprintln("OK"))
 	},
