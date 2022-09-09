@@ -3,6 +3,7 @@ package clivisor
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -60,8 +61,7 @@ var pkCmd = &cobra.Command{
 			}
 			outputPK = overview.PubKey.Hex() + "\n"
 		}
-
-		internal.PrintOutput(cmd.Flags(), outputPK, outputPK)
+		internal.PrintOutput(cmd.Flags(), strings.TrimSuffix(outputPK, "\n"), outputPK)
 	},
 }
 
