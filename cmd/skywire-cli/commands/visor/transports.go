@@ -155,7 +155,7 @@ var rmTpCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		tID := internal.ParseUUID(cmd.Flags(), "transport-id", args[0])
 		internal.Catch(cmd.Flags(), clirpc.Client().RemoveTransport(tID))
-		fmt.Println("OK")
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
 
