@@ -298,7 +298,7 @@ func printRoutingRules(cmdFlags *pflag.FlagSet, rules ...routing.Rule) {
 func parseUint(cmdFlags *pflag.FlagSet, name, v string, bitSize int) uint64 {
 	i, err := strconv.ParseUint(v, 10, bitSize)
 	if err != nil {
-		internal.PrintError(cmdFlags, fmt.Errorf("failed to parse <%s>: %v", name, err))
+		internal.PrintFatalError(cmdFlags, fmt.Errorf("failed to parse <%s>: %v", name, err))
 	}
 	return i
 }

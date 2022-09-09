@@ -52,7 +52,7 @@ var visorsCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		remoteVisors, err := rpcClient().RemoteVisors()
 		if err != nil {
-			internal.PrintError(cmd.Flags(), fmt.Errorf("RPC connection failed; is skywire running?: %v", err))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC connection failed; is skywire running?: %v", err))
 		}
 
 		var msg string

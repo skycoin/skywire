@@ -45,14 +45,14 @@ var pkCmd = &cobra.Command{
 		if path != "" {
 			conf, err := visorconfig.ReadFile(path)
 			if err != nil {
-				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to read config: %v", err))
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to read config: %v", err))
 			}
 			outputPK = conf.PK.Hex()
 		} else {
 			client := clirpc.Client()
 			overview, err := client.Overview()
 			if err != nil {
-				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 			}
 			pk = overview.PubKey.String() + "\n"
 			if web {
@@ -79,14 +79,14 @@ var hvpkCmd = &cobra.Command{
 		if path != "" {
 			conf, err := visorconfig.ReadFile(path)
 			if err != nil {
-				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to read config: %v", err))
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to read config: %v", err))
 			}
 			hypervisors = conf.Hypervisors
 		} else {
 			client := clirpc.Client()
 			overview, err := client.Overview()
 			if err != nil {
-				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 			}
 			hypervisors = overview.Hypervisors
 		}
@@ -101,7 +101,7 @@ var chvpkCmd = &cobra.Command{
 		client := clirpc.Client()
 		overview, err := client.Overview()
 		if err != nil {
-			internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 		}
 		internal.PrintOutput(cmd.Flags(), overview.ConnectedHypervisor, fmt.Sprintf("%v\n", overview.ConnectedHypervisor))
 	},
@@ -113,7 +113,7 @@ var summaryCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		summary, err := clirpc.Client().Summary()
 		if err != nil {
-			internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 		}
 		msg := fmt.Sprintf(".:: Visor Summary ::.\nPublic key: %q\nSymmetric NAT: %t\nIP: %s\nDMSG Server: %q\nPing: %q\nVisor Version: %s\nSkybian Version: %s\nUptime Tracker: %s\nTime Online: %f seconds\nBuild Tag: %s\n",
 			summary.Overview.PubKey, summary.Overview.IsSymmetricNAT, summary.Overview.LocalIP, summary.DmsgStats.ServerPK, summary.DmsgStats.RoundTrip, summary.Overview.BuildInfo.Version, summary.SkybianBuildVersion,
@@ -153,7 +153,7 @@ var buildInfoCmd = &cobra.Command{
 		client := clirpc.Client()
 		overview, err := client.Overview()
 		if err != nil {
-			internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 		}
 		buildInfo := overview.BuildInfo
 		msg := fmt.Sprintf("Version %q built on %q against commit %q\n", buildInfo.Version, buildInfo.Date, buildInfo.Commit)

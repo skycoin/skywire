@@ -126,7 +126,7 @@ var addTpCmd = &cobra.Command{
 		if transportType != "" {
 			tp, err = clirpc.Client().AddTransport(pk, transportType, timeout)
 			if err != nil {
-				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to establish %v transport: %v", transportType, err))
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to establish %v transport: %v", transportType, err))
 			}
 			if !isJSON {
 				logger.Infof("Established %v transport to %v", transportType, pk)
