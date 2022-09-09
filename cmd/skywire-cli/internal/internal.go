@@ -61,13 +61,13 @@ func ParseUUID(cmdFlags *pflag.FlagSet, name, v string) uuid.UUID {
 	return id
 }
 
-// CLIOutput ss
+// CLIOutput is used to print the cli output in json
 type CLIOutput struct {
 	Output interface{} `json:"output,omitempty"`
 	Err    string      `json:"error,omitempty"`
 }
 
-// PrintOutput ss
+// PrintOutput prints either the normal output or the json output as per the global `--json` flag
 func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output interface{}) {
 	isJSON, _ := cmdFlags.GetBool(JSONString) //nolint:errcheck
 	if isJSON {
