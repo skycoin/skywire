@@ -1,8 +1,8 @@
+// Package pathutil installation and config file paths
 package pathutil
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -153,7 +153,7 @@ func WriteJSONConfig(conf interface{}, output string, replace bool) {
 	}
 
 	// nolint:gosec
-	if err := ioutil.WriteFile(output, raw, 0744); err != nil {
+	if err := os.WriteFile(output, raw, 0744); err != nil {
 		log.WithError(err).Fatalln("failed to write file")
 	}
 

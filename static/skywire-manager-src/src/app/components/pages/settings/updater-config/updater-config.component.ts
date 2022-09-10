@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { FormControl, FormGroup } from '@angular/forms';
+import { UntypedFormControl, UntypedFormGroup } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { Subscription } from 'rxjs';
 
@@ -16,7 +16,7 @@ import GeneralUtils from 'src/app/utils/generalUtils';
   styleUrls: ['./updater-config.component.scss']
 })
 export class UpdaterConfigComponent implements OnInit, OnDestroy {
-  form: FormGroup;
+  form: UntypedFormGroup;
 
   // If there are custom settings saved in the app.
   hasCustomSettings: boolean;
@@ -59,11 +59,11 @@ export class UpdaterConfigComponent implements OnInit, OnDestroy {
       !!this.initialArchiveURL ||
       !!this.initialChecksumsURL;
 
-    this.form = new FormGroup({
-      channel: new FormControl(this.initialChannel),
-      version: new FormControl(this.initialVersion),
-      archiveURL: new FormControl(this.initialArchiveURL),
-      checksumsURL: new FormControl(this.initialChecksumsURL),
+    this.form = new UntypedFormGroup({
+      channel: new UntypedFormControl(this.initialChannel),
+      version: new UntypedFormControl(this.initialVersion),
+      archiveURL: new UntypedFormControl(this.initialArchiveURL),
+      checksumsURL: new UntypedFormControl(this.initialChecksumsURL),
     });
   }
 

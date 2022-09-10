@@ -19,7 +19,6 @@ require (
 	github.com/pkg/profile v1.5.0
 	github.com/shirou/gopsutil/v3 v3.21.4
 	github.com/sirupsen/logrus v1.8.1
-	github.com/skycoin/dmsg v0.0.0-20220704102949-fece1bd9c40c
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
@@ -31,7 +30,6 @@ require (
 	github.com/tjfoc/gmsm v1.4.0 // indirect
 	github.com/toqueteos/webbrowser v1.2.0
 	github.com/xtaci/kcp-go v5.4.20+incompatible
-	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
 	go.etcd.io/bbolt v1.3.6
 	golang.org/x/net v0.0.0-20211020060615-d418f374d309
 	golang.org/x/sys v0.0.0-20220627191245-f75cf1eec38b
@@ -48,8 +46,11 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/ivanpirog/coloredcobra v1.0.0
 	github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
+	github.com/skycoin/dmsg v0.0.0-20220904231115-c313c992c788
 	github.com/skycoin/skywire-utilities v0.0.0-20220712142443-abafa30105ce
 	github.com/skycoin/systray v1.10.1-0.20220630135132-48d2a1fb85d8
+	github.com/spf13/pflag v1.0.5
+	periph.io/x/periph v3.6.8+incompatible
 )
 
 require (
@@ -73,7 +74,6 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6 // indirect
-	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stretchr/objx v0.1.1 // indirect
 	github.com/tevino/abool v1.2.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.4 // indirect

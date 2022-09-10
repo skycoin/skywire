@@ -1,17 +1,20 @@
 package clivisor
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
-	"os"
 	"sort"
+	"strings"
 	"text/tabwriter"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -45,22 +48,27 @@ func init() {
 var tpCmd = &cobra.Command{
 	Use:   "tp",
 	Short: "View and set transports",
+	Long: `
+	Transports are bidirectional communication protocols
+	used between two Skywire Visors (or Transport Edges)
+
+	Each Transport is represented as a unique 16 byte (128 bit)
+	UUID value called the Transport ID
+	and has a Transport Type that identifies
+	a specific implementation of the Transport.`,
 }
 
 var lsTypesCmd = &cobra.Command{
-	Use:   "type",
-	Short: "Transport types used by the local visor",
-	Run: func(_ *cobra.Command, _ []string) {
-		types, err := rpcClient().TransportTypes()
-		internal.Catch(err)
-		for _, t := range types {
-			fmt.Println(t)
-		}
+	Use: "type", Short: "Transport types used by the local visor",
+	Run: func(cmd *cobra.Command, _ []string) {
+		types, err := clirpc.Client().TransportTypes()
+		internal.Catch(cmd.Flags(), err)
+		internal.PrintOutput(cmd.Flags(), types, fmt.Sprintln(strings.Join(types, "\n")))
 	},
 }
 
 func init() {
-	lsTpCmd.Flags().StringSliceVarP(&filterTypes, "types", "t", filterTypes, "show transport(s) type(s) comma-separated")
+	lsTpCmd.Flags().StringSliceVarP(&filterTypes, "types", "t", filterTypes, "show transport(s) type(s) comma-separated\n")
 	lsTpCmd.Flags().VarP(&filterPubKeys, "pks", "p", "show transport(s) for public key(s) comma-separated")
 	lsTpCmd.Flags().BoolVarP(&showLogs, "logs", "l", true, "show transport logs")
 }
@@ -68,10 +76,10 @@ func init() {
 var lsTpCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "Available transports",
-	Run: func(_ *cobra.Command, _ []string) {
-		transports, err := rpcClient().Transports(filterTypes, filterPubKeys, showLogs)
-		internal.Catch(err)
-		printTransports(transports...)
+	Run: func(cmd *cobra.Command, _ []string) {
+		transports, err := clirpc.Client().Transports(filterTypes, filterPubKeys, showLogs)
+		internal.Catch(cmd.Flags(), err)
+		PrintTransports(cmd.Flags(), transports...)
 	},
 }
 
@@ -79,17 +87,16 @@ var idCmd = &cobra.Command{
 	Use:   "id <transport-id>",
 	Short: "Transport summary by id",
 	Args:  cobra.MinimumNArgs(1),
-	Run: func(_ *cobra.Command, args []string) {
-		tpID := internal.ParseUUID("transport-id", args[0])
-		tp, err := rpcClient().Transport(tpID)
-		internal.Catch(err)
-		printTransports(tp)
+	Run: func(cmd *cobra.Command, args []string) {
+		tpID := internal.ParseUUID(cmd.Flags(), "transport-id", args[0])
+		tp, err := clirpc.Client().Transport(tpID)
+		internal.Catch(cmd.Flags(), err)
+		PrintTransports(cmd.Flags(), tp)
 	},
 }
 
 var (
 	transportType string
-	public        bool
 	timeout       time.Duration
 )
 
@@ -97,12 +104,10 @@ func init() {
 	const (
 		typeFlagUsage = "type of transport to add; if unspecified, cli will attempt to establish a transport " +
 			"in the following order: skywire-tcp, stcpr, sudph, dmsg"
-		publicFlagUsage  = "whether to make the transport public (deprecated)"
 		timeoutFlagUsage = "if specified, sets an operation timeout"
 	)
 
 	addTpCmd.Flags().StringVar(&transportType, "type", "", typeFlagUsage)
-	addTpCmd.Flags().BoolVar(&public, "public", true, publicFlagUsage)
 	addTpCmd.Flags().DurationVarP(&timeout, "timeout", "t", 0, timeoutFlagUsage)
 }
 
@@ -110,14 +115,14 @@ var addTpCmd = &cobra.Command{
 	Use:   "add <remote-public-key>",
 	Short: "Add a transport",
 	Args:  cobra.MinimumNArgs(1),
-	Run: func(_ *cobra.Command, args []string) {
-		pk := internal.ParsePK("remote-public-key", args[0])
+	Run: func(cmd *cobra.Command, args []string) {
+		pk := internal.ParsePK(cmd.Flags(), "remote-public-key", args[0])
 
 		var tp *visor.TransportSummary
 		var err error
 
 		if transportType != "" {
-			tp, err = rpcClient().AddTransport(pk, transportType, timeout)
+			tp, err = clirpc.Client().AddTransport(pk, transportType, timeout)
 			if err != nil {
 				logger.WithError(err).Fatalf("Failed to establish %v transport", transportType)
 			}
@@ -131,7 +136,7 @@ var addTpCmd = &cobra.Command{
 				network.DMSG,
 			}
 			for _, transportType := range transportTypes {
-				tp, err = rpcClient().AddTransport(pk, string(transportType), timeout)
+				tp, err = clirpc.Client().AddTransport(pk, string(transportType), timeout)
 				if err == nil {
 					logger.Infof("Established %v transport to %v", transportType, pk)
 					break
@@ -139,7 +144,7 @@ var addTpCmd = &cobra.Command{
 				logger.WithError(err).Warnf("Failed to establish %v transport", transportType)
 			}
 		}
-		printTransports(tp)
+		PrintTransports(cmd.Flags(), tp)
 	},
 }
 
@@ -147,27 +152,52 @@ var rmTpCmd = &cobra.Command{
 	Use:   "rm <transport-id>",
 	Short: "Remove transport(s) by id",
 	Args:  cobra.MinimumNArgs(1),
-	Run: func(_ *cobra.Command, args []string) {
-		tID := internal.ParseUUID("transport-id", args[0])
-		internal.Catch(rpcClient().RemoveTransport(tID))
+	Run: func(cmd *cobra.Command, args []string) {
+		tID := internal.ParseUUID(cmd.Flags(), "transport-id", args[0])
+		internal.Catch(cmd.Flags(), clirpc.Client().RemoveTransport(tID))
 		fmt.Println("OK")
 	},
 }
 
-func printTransports(tps ...*visor.TransportSummary) {
+// PrintTransports prints transports used by the visor
+func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
 	sortTransports(tps...)
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
-	_, err := fmt.Fprintln(w, "type\tid\tremote\tmode\tlabel")
-	internal.Catch(err)
+
+	var b bytes.Buffer
+	w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
+	_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel")
+	internal.Catch(cmdFlags, err)
+
+	type outputTP struct {
+		Type   network.Type    `json:"type"`
+		ID     uuid.UUID       `json:"id"`
+		Remote cipher.PubKey   `json:"remote_pk"`
+		TpMode string          `json:"mode"`
+		Label  transport.Label `json:"label"`
+	}
+
+	var outputTPS []outputTP
+
 	for _, tp := range tps {
 		tpMode := "regular"
 		if tp.IsSetup {
 			tpMode = "setup"
 		}
+		tp.Log = nil
+		oTP := outputTP{
+			Type:   tp.Type,
+			ID:     tp.ID,
+			Remote: tp.Remote,
+			TpMode: tpMode,
+			Label:  tp.Label,
+		}
+		outputTPS = append(outputTPS, oTP)
+
 		_, err = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", tp.Type, tp.ID, tp.Remote, tpMode, tp.Label)
-		internal.Catch(err)
+		internal.Catch(cmdFlags, err)
 	}
-	internal.Catch(w.Flush())
+	internal.Catch(cmdFlags, w.Flush())
+	internal.PrintOutput(cmdFlags, outputTPS, b.String())
 }
 
 func sortTransports(tps ...*visor.TransportSummary) {
@@ -192,30 +222,50 @@ var discTpCmd = &cobra.Command{
 		}
 		return nil
 	},
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 
-		if rc := rpcClient(); tpPK.Null() {
+		if rc := clirpc.Client(); tpPK.Null() {
 			entry, err := rc.DiscoverTransportByID(uuid.UUID(tpID))
-			internal.Catch(err)
-			printTransportEntries(entry)
+			internal.Catch(cmd.Flags(), err)
+			PrintTransportEntries(cmd.Flags(), entry)
 		} else {
 			entries, err := rc.DiscoverTransportsByPK(tpPK)
-			internal.Catch(err)
-			printTransportEntries(entries...)
+			internal.Catch(cmd.Flags(), err)
+			PrintTransportEntries(cmd.Flags(), entries...)
 		}
 	},
 }
 
-func printTransportEntries(entries ...*transport.Entry) {
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
+// PrintTransportEntries prints the transport entries
+func PrintTransportEntries(cmdFlags *pflag.FlagSet, entries ...*transport.Entry) {
+
+	var b bytes.Buffer
+	w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
 	_, err := fmt.Fprintln(w, "id\ttype\tedge1\tedge2")
-	internal.Catch(err)
+	internal.Catch(cmdFlags, err)
+
+	type outputEntry struct {
+		ID    uuid.UUID     `json:"id"`
+		Type  network.Type  `json:"type"`
+		Edge1 cipher.PubKey `json:"edge1"`
+		Edge2 cipher.PubKey `json:"edge2"`
+	}
+
+	var outputEntries []outputEntry
 	for _, e := range entries {
 		_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
 			e.ID, e.Type, e.Edges[0], e.Edges[1])
-		internal.Catch(err)
+		internal.Catch(cmdFlags, err)
+		oEntry := outputEntry{
+			ID:    e.ID,
+			Type:  e.Type,
+			Edge1: e.Edges[0],
+			Edge2: e.Edges[1],
+		}
+		outputEntries = append(outputEntries, oEntry)
 	}
-	internal.Catch(w.Flush())
+	internal.Catch(cmdFlags, w.Flush())
+	internal.PrintOutput(cmdFlags, outputEntries, b.String())
 }
 
 type transportID uuid.UUID

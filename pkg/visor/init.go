@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -772,9 +772,16 @@ func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 		go func(hvErrs chan error) {
 			defer wg.Done()
+			var autoPeerIP string
+			if v.autoPeer {
+				autoPeerIP = v.autoPeerIP
+			} else {
+				autoPeerIP = ""
+			}
 			defer delete(v.connectedHypervisors, hvPK)
 			v.connectedHypervisors[hvPK] = true
-			ServeRPCClient(ctx, log, v.dmsgC, rpcS, addr, hvErrs)
+			ServeRPCClient(ctx, log, autoPeerIP, v.dmsgC, rpcS, addr, hvErrs)
+
 		}(hvErrs)
 
 		v.pushCloseStack("hypervisor."+hvPK.String()[:shortHashLen], func() error {
@@ -1044,10 +1051,17 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 		Info("Serving hypervisor...")
 
 	go func() {
-		if handler := hv.HTTPHandler(); conf.EnableTLS {
-			err = http.ListenAndServeTLS(conf.HTTPAddr, conf.TLSCertFile, conf.TLSKeyFile, handler)
+		handler := hv.HTTPHandler()
+		srv := &http.Server{ //nolint gosec
+			Addr:         conf.HTTPAddr,
+			Handler:      handler,
+			ReadTimeout:  5 * time.Second,
+			WriteTimeout: 10 * time.Second,
+		}
+		if conf.EnableTLS {
+			err = srv.ListenAndServeTLS(conf.TLSCertFile, conf.TLSKeyFile)
 		} else {
-			err = http.ListenAndServe(conf.HTTPAddr, handler)
+			err = srv.ListenAndServe()
 		}
 
 		if err != nil {
@@ -1229,7 +1243,7 @@ func getIP() (string, error) {
 	}
 	defer req.Body.Close() // nolint
 
-	body, err := ioutil.ReadAll(req.Body)
+	body, err := io.ReadAll(req.Body)
 	if err != nil {
 		return "", err
 	}

@@ -1,6 +1,7 @@
 //go:build windows
 // +build windows
 
+// Package syslog syslog_windows.go
 package syslog
 
 import (

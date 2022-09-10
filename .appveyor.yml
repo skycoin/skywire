@@ -1,6 +1,6 @@
 version: "{build}"
 
-stack: node 16.8.0, go 1.17.11
+stack: node 16.8.0
 
 environment:
   matrix:
@@ -12,7 +12,7 @@ environment:
     appveyor_build_worker_image: macos-bigsur
     GOARCH: amd64
   - job_name: Windows
-    appveyor_build_worker_image: Visual Studio 2019
+    appveyor_build_worker_image: Previous Visual Studio 2019
     GOARCH: amd64
 
   # For release, by pushing tag
@@ -23,14 +23,14 @@ environment:
     appveyor_build_worker_image: macos-bigsur
     GOARCH: amd64
   - job_name: make-release-windows
-    appveyor_build_worker_image: Visual Studio 2019
+    appveyor_build_worker_image: Previous Visual Studio 2019
     GOARCH: amd64
 
   - job_name: DockerDeployMaster
     appveyor_build_worker_image: ubuntu2004
   - job_name: DockerDeployDevelop
     appveyor_build_worker_image: ubuntu2004
-  
+
 for:
   - # Linux
     skip_tags: true
@@ -39,13 +39,13 @@ for:
         - job_name: Linux
 
     install:
-      - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.46.2
+      - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.47.2
       - make dep
       - sh: ci_scripts/create-ip-aliases.sh
-    
+
     before_build:
       - make check
-   
+
     build_script:
       - make build
       - make build-systray
@@ -57,13 +57,13 @@ for:
         - job_name: MacOS
 
     install:
-      - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.44.2
+      - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.47.2
       - make dep
       - sh: ci_scripts/create-ip-aliases.sh
-    
+
     before_build:
       - make check
-   
+
     build_script:
       - make build
 
@@ -79,14 +79,14 @@ for:
 
     install:
       - choco install make
-      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.44.2
+      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.47.2
       - make dep
       - set PATH=C:\Users\appveyor\go\bin;C:\msys64\mingw64\bin;C:\msys64\usr\bin;%PATH%
 
     before_build:
       - set GO111MODULE=on
       - make check-windows
-  
+
     build_script:
       - make build-windows-appveyor
       - make build-systray-windows-appveyor
@@ -117,7 +117,7 @@ for:
     build_script:
       - make github-release-darwin
       - make mac-installer-release
-    
+
   - # Release (Windows)
     skip_non_tags: true
     matrix:
@@ -132,7 +132,7 @@ for:
     build_script:
       - make github-release-windows
       - make windows-installer-release
-    
+
   - # Docker Deploy (Master)
     skip_tags: true
     build: off

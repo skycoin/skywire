@@ -1,3 +1,4 @@
+// Package network client.go
 package network
 
 import (

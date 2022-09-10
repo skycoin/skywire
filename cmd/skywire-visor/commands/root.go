@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
+	"net"
 	"net/http"
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
@@ -28,6 +28,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/syslog"
@@ -45,6 +46,7 @@ const (
 )
 
 var (
+	logger               = logging.MustGetLogger("skywire-visor")
 	tag                  string
 	syslogAddr           string
 	pprofMode            string
@@ -55,6 +57,8 @@ var (
 	hypervisorUI         bool
 	remoteHypervisorPKs  string
 	disableHypervisorPKs bool
+	isAutoPeer           bool
+	autoPeerIP           string
 	stopVisorFn          func()
 	stopVisorWg          sync.WaitGroup
 	completion           string
@@ -62,6 +66,7 @@ var (
 	all                  bool
 	pkg                  bool
 	usr                  bool
+	localIPs             []net.IP
 	// root indicates process is run with root permissions
 	root bool // nolint:unused
 	// visorBuildInfo holds information about the build
@@ -77,6 +82,14 @@ func init() {
 		root = true
 	}
 
+	localIPs, err = netutil.DefaultNetworkInterfaceIPs()
+	if err != nil {
+		logger.WithError(err).Warn("Could not determine network interface IP address")
+		if len(localIPs) == 0 {
+			localIPs = append(localIPs, net.ParseIP("192.168.0.1"))
+		}
+	}
+
 	rootCmd.Flags().SortFlags = false
 
 	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use (default): "+skyenv.ConfigName)
@@ -88,6 +101,16 @@ func init() {
 	hiddenflags = append(hiddenflags, "hv")
 	rootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors set in config file")
 	hiddenflags = append(hiddenflags, "xhv")
+	if os.Getenv("SKYBIAN") == "true" {
+		rootCmd.Flags().StringVarP(&autoPeerIP, "hvip", "l", trimStringFromDot(localIPs[0].String())+".2:7998", "set hypervisor by ip")
+		hiddenflags = append(hiddenflags, "hvip")
+		isDefaultAutopeer := false
+		if os.Getenv("AUTOPEER") == "1" {
+			isDefaultAutopeer = true
+		}
+		rootCmd.Flags().BoolVarP(&isAutoPeer, "autopeer", "m", isDefaultAutopeer, "enable autopeering")
+		hiddenflags = append(hiddenflags, "autopeer")
+	}
 	rootCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
 	hiddenflags = append(hiddenflags, "stdin")
 	if root {
@@ -116,6 +139,13 @@ func init() {
 	for _, j := range hiddenflags {
 		rootCmd.Flags().MarkHidden(j) //nolint
 	}
+}
+
+func trimStringFromDot(s string) string {
+	if idx := strings.LastIndex(s, "."); idx != -1 {
+		return s[:idx]
+	}
+	return s
 }
 
 var rootCmd = &cobra.Command{
@@ -250,10 +280,10 @@ func runVisor(conf *visorconfig.V1) {
 		conf.Hypervisors = []cipher.PubKey{}
 	}
 
+	pubkey := cipher.PubKey{}
 	if remoteHypervisorPKs != "" {
 		hypervisorPKsSlice := strings.Split(remoteHypervisorPKs, ",")
 		for _, pubkeyString := range hypervisorPKsSlice {
-			pubkey := cipher.PubKey{}
 			if err := pubkey.Set(pubkeyString); err != nil {
 				log.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
 				continue
@@ -262,9 +292,39 @@ func runVisor(conf *visorconfig.V1) {
 			conf.Hypervisors = append(conf.Hypervisors, pubkey)
 		}
 	}
+	//autopeering should only happen when there is no local or remote hypervisor set in the config.
+	if isAutoPeer && conf.Hypervisor != nil {
+		log.Info("Local hypervisor running, disabling autopeer")
+		isAutoPeer = false
+	}
+
+	if isAutoPeer && len(conf.Hypervisors) > 0 {
+		log.Info("%d Remote hypervisor(s) set in config; disabling autopeer", len(conf.Hypervisors))
+		log.Info(conf.Hypervisors)
+		isAutoPeer = false
+	}
+
+	if isAutoPeer {
+		log.Info("Autopeer: ", isAutoPeer)
+		hvkey, err := visor.FetchHvPk(autoPeerIP)
+		if err != nil {
+			log.WithError(err).Error("Failure autopeering - unable to obtain hypervisor public key")
+		} else {
+			hvkey = strings.TrimSpace(hvkey)
+			hypervisorPKsSlice := strings.Split(hvkey, ",")
+			for _, pubkeyString := range hypervisorPKsSlice {
+				if err := pubkey.Set(pubkeyString); err != nil {
+					log.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
+					continue
+				}
+				log.Infof("%s PK added as remote hypervisor PK", pubkeyString)
+				conf.Hypervisors = append(conf.Hypervisors, pubkey)
+			}
+		}
+	}
 
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
-	vis, ok := visor.NewVisor(ctx, conf, restartCtx)
+	vis, ok := visor.NewVisor(ctx, conf, restartCtx, isAutoPeer, autoPeerIP)
 	if !ok {
 		select {
 		case <-ctx.Done():
@@ -325,7 +385,7 @@ func initLogger(tag string, syslogAddr string) *logging.MasterLogger {
 			mLog.WithError(err).Error("Failed to connect to the syslog daemon.")
 		} else {
 			mLog.AddHook(hook)
-			mLog.Out = ioutil.Discard
+			mLog.Out = io.Discard
 		}
 	}
 	return mLog
@@ -338,7 +398,13 @@ func initPProf(log *logging.MasterLogger, tag string, profMode string, profAddr 
 	case "none", "":
 	case "http":
 		go func() {
-			err := http.ListenAndServe(profAddr, nil)
+			srv := &http.Server{ //nolint gosec
+				Addr:         profAddr,
+				Handler:      nil,
+				ReadTimeout:  5 * time.Second,
+				WriteTimeout: 10 * time.Second,
+			}
+			err := srv.ListenAndServe()
 			log.WithError(err).
 				WithField("mode", profMode).
 				WithField("addr", profAddr).

@@ -8,11 +8,10 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/yamux"
 
 	"github.com/skycoin/dmsg/pkg/noise"
-
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 // SessionCommon contains the common fields and methods used by a session, whether it be it from the client or server

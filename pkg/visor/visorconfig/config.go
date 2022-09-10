@@ -2,11 +2,12 @@ package visorconfig
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/skycoin/dmsg/pkg/disc"
+	"github.com/skycoin/dmsg/pkg/dmsgpty"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -72,7 +73,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	conf.Dmsgpty = &Dmsgpty{
 		DmsgPort: skyenv.DmsgPtyPort,
 		CLINet:   skyenv.DmsgPtyCLINet,
-		CLIAddr:  skyenv.DmsgPtyCLIAddr(),
+		CLIAddr:  dmsgpty.DefaultCLIAddr(),
 	}
 
 	conf.STCP = &network.STCPConfig{
@@ -124,7 +125,7 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 		if pkgEnv {
 			dmsgHTTPPath = skyenv.SkywirePath + "/" + skyenv.DMSGHTTPName
 		}
-		serversListJSON, err := ioutil.ReadFile(filepath.Clean(dmsgHTTPPath))
+		serversListJSON, err := os.ReadFile(filepath.Clean(dmsgHTTPPath))
 		if err != nil {
 			log.WithError(err).Fatal("Failed to read dmsghttp-config.json file.")
 		}

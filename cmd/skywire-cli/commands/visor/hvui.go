@@ -1,4 +1,4 @@
-package clihv
+package clivisor
 
 import (
 	"github.com/spf13/cobra"
@@ -10,7 +10,7 @@ func init() {
 }
 
 var hvuiCmd = &cobra.Command{
-	Use:   "ui",
+	Use:   "hvui",
 	Short: "Hypervisor UI",
 	Run: func(_ *cobra.Command, _ []string) {
 		//TODO: get the actual port from config instead of using default value here

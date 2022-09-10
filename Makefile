@@ -185,7 +185,7 @@ format: tidy ## Formats the code. Must have goimports and goimports-reviser inst
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./cmd
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./internal
-	find . -type f -name '*.go' -not -path "./.git/*" -not -path "./vendor/*"  -exec goimports-reviser -project-name ${PROJECT_BASE} -file-path {} \;
+	find . -type f -name '*.go' -not -path "./.git/*" -not -path "./vendor/*"  -exec goimports-reviser -project-name ${PROJECT_BASE} {} \;
 
 format-windows: tidy ## Formats the code. Must have goimports and goimports-reviser installed (use make install-linters).
 	powershell 'Get-ChildItem -Directory | where Name -NotMatch vendor | % { Get-ChildItem $$_ -Recurse -Include *.go } | % {goimports -w -local ${PROJECT_BASE} $$_ }'
@@ -253,6 +253,9 @@ bin-systray: ## Build `skywire-visor`, `skywire-cli`
 	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/setup-node
 
+separate-systray: ## Build separate systray binary
+	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/skywire-systray
+
 # Static Bin
 bin-static: ## Build `skywire-visor`, `skywire-cli`
 	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-visor ./cmd/skywire-visor
@@ -266,10 +269,15 @@ build-deploy: ## Build for deployment Docker images
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
-github-release:
+github-prepare-release:
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags | cut -c 2-6))
 	sed '/^## ${GITHUB_TAG}$$/,/^## .*/!d;//d;/^$$/d' ./CHANGELOG.md > releaseChangelog.md
+
+github-release: github-prepare-release
 	goreleaser --rm-dist --config .goreleaser-linux.yml --release-notes releaseChangelog.md
+
+github-release-archlinux: github-prepare-release
+	goreleaser --rm-dist --config .goreleaser-archlinux.yml --release-notes releaseChangelog.md
 
 github-release-darwin:
 	goreleaser --rm-dist  --config .goreleaser-darwin.yml --skip-publish
@@ -334,43 +342,43 @@ prepare-systray: prepare
 
 ## Run skywire from source, without compiling binaries - requires skywire cloned
 run-source: prepare
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -in | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -in | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
 
 ## Run skywire from source, with vpn server enabled
 run-systray: prepare-systray
-	go run -tags systray ./cmd/skywire-cli/skywire-cli.go config gen -ni | go run -tags systray ./cmd/skywire-visor/skywire-visor.go -nb || true
+	go run -tags systray ./cmd/skywire-cli/skywire-cli.go config gen -ni | sudo go run -tags systray ./cmd/skywire-visor/skywire-visor.go -n || true
 
 ## Run skywire from source, without compiling binaries - requires skywire cloned
 run-vpnsrv: prepare
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -in --servevpn | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -in --servevpn | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
 
 ## Run skywire from source with test endpoints
 run-source-test: prepare
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -nit | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -nit | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
 
 ## Run skywire from source, with vpn server enabled
 run-vpnsrv-test: prepare
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -nit --servevpn | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -nit --servevpn | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
 
 ## Run skywire from source, with vpn server enabled
 run-systray-test: prepare-systray
-	go run -tags systray ./cmd/skywire-cli/skywire-cli.go config gen -nit | go run -tags systray ./cmd/skywire-visor/skywire-visor.go -nb || true
+	go run -tags systray ./cmd/skywire-cli/skywire-cli.go config gen -nit | sudo go run -tags systray ./cmd/skywire-visor/skywire-visor.go -nb || true
 
 ## Run skywire from source with dmsghttp config
 run-source-dmsghttp: prepare
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -din | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -din | sudo go run ./cmd/skywire-visor/skywire-visor.go -nb || true
 
 ## Run skywire from source with dmsghttp config and vpn server
 run-vpnsrv-dmsghttp: prepare
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -din --servevpn | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -din --servevpn | sudo go run ./cmd/skywire-visor/skywire-visor.go -nb || true
 
 ## Run skywire from source with dmsghttp config and test endpoints
 run-source-dmsghttp-test: prepare
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -dint | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -dint | sudo go run ./cmd/skywire-visor/skywire-visor.go -nb || true
 
 ## Run skywire from source with dmsghttp config, vpn server, and test endpoints
 run-vpnsrv-dmsghttp-test: prepare
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -dint --servevpn | go run ./cmd/skywire-visor/skywire-visor.go -nb || true
+	go run ./cmd/skywire-cli/skywire-cli.go config gen -dint --servevpn | sudo go run ./cmd/skywire-visor/skywire-visor.go -nb || true
 
 lint-ui:  ## Lint the UI code
 	cd $(MANAGER_UI_DIR) && npm run lint

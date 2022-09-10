@@ -1,5 +1,5 @@
 import { Component, OnInit, ViewChild, OnDestroy, ElementRef, Inject } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { MatDialogRef, MatDialog, MatDialogConfig, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { Subscription } from 'rxjs';
 
@@ -23,6 +23,7 @@ import {
 import { countriesList } from 'src/app/utils/countries-list';
 import { SkysocksClientPasswordComponent } from './skysocks-client-password/skysocks-client-password.component';
 import { ClipboardService } from 'src/app/services/clipboard.service';
+import { StorageService } from 'src/app/services/storage.service';
 
 /**
  * Data of the entries from the history.
@@ -71,7 +72,7 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   @ViewChild('button') button: ButtonComponent;
   @ViewChild('settingsButton') settingsButton: ButtonComponent;
   @ViewChild('firstInput') firstInput: ElementRef;
-  form: FormGroup;
+  form: UntypedFormGroup;
   // Entries to show on the history.
   history: HistoryEntry[];
 
@@ -130,11 +131,12 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
     @Inject(MAT_DIALOG_DATA) private data: Application,
     public dialogRef: MatDialogRef<SkysocksClientSettingsComponent>,
     private appsService: AppsService,
-    private formBuilder: FormBuilder,
+    private formBuilder: UntypedFormBuilder,
     private snackbarService: SnackbarService,
     private dialog: MatDialog,
     private proxyDiscoveryService: ProxyDiscoveryService,
     private clipboardService: ClipboardService,
+    private storageService: StorageService,
   ) {
     if (data.name.toLocaleLowerCase().indexOf('vpn') !== -1) {
       this.configuringVpn = true;
@@ -142,6 +144,8 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
+    this.migrateDataToHvStorage();
+
     // Get the proxies or vpn servers from the discovery service.
     this.discoverySubscription = this.proxyDiscoveryService.getServices(!this.configuringVpn).subscribe(response => {
       this.proxiesFromDiscovery = response;
@@ -158,7 +162,7 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
     });
 
     // Get the history.
-    const retrievedHistory = localStorage.getItem(this.configuringVpn ? this.vpnHistoryStorageKey : this.socksHistoryStorageKey);
+    const retrievedHistory = this.storageService.getDataForHv(this.configuringVpn ? this.vpnHistoryStorageKey : this.socksHistoryStorageKey);
     if (retrievedHistory) {
       this.history = JSON.parse(retrievedHistory);
     } else {
@@ -200,9 +204,28 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * It checks if there is data saved from a previous version of the app, without being assigned to a
+   * hypervisor. If the functions finds old data, it is migrated to the new format and assigned to the
+   * current hypervisor.
+   */
+  private migrateDataToHvStorage() {
+    const oldSavedSocksHistory = localStorage.getItem(this.socksHistoryStorageKey);
+    if (oldSavedSocksHistory) {
+      this.storageService.setDataForHv(this.socksHistoryStorageKey, oldSavedSocksHistory);
+      localStorage.removeItem(this.socksHistoryStorageKey);
+    }
+
+    const oldSavedVpnHistory = localStorage.getItem(this.vpnHistoryStorageKey);
+    if (oldSavedVpnHistory) {
+      this.storageService.setDataForHv(this.vpnHistoryStorageKey, oldSavedVpnHistory);
+      localStorage.removeItem(this.vpnHistoryStorageKey);
+    }
+  }
+
+  /**
    * If true, all the ways provided by default by the UI for closing the modal window are disabled.
    */
-   get disableDismiss(): boolean {
+  get disableDismiss(): boolean {
     return this.button && this.settingsButton ? (this.button.isLoading || this.settingsButton.isLoading) : false;
   }
 
@@ -406,7 +429,7 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       this.history = this.history.filter(value => value.key !== key);
       const dataToSave = JSON.stringify(this.history);
-      localStorage.setItem(this.configuringVpn ? this.vpnHistoryStorageKey : this.socksHistoryStorageKey, dataToSave);
+      this.storageService.setDataForHv(this.configuringVpn ? this.vpnHistoryStorageKey : this.socksHistoryStorageKey, dataToSave);
 
       confirmationDialog.close();
     });
@@ -428,7 +451,7 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
 
         // Save the changes..
         const dataToSave = JSON.stringify(this.history);
-        localStorage.setItem(this.configuringVpn ? this.vpnHistoryStorageKey : this.socksHistoryStorageKey, dataToSave);
+        this.storageService.setDataForHv(this.configuringVpn ? this.vpnHistoryStorageKey : this.socksHistoryStorageKey, dataToSave);
 
         if (!response) {
           this.snackbarService.showWarning('apps.vpn-socks-client-settings.default-note-warning');
@@ -615,7 +638,7 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
     this.form.get('pk').setValue(publicKey);
 
     const dataToSave = JSON.stringify(this.history);
-    localStorage.setItem(this.configuringVpn ? this.vpnHistoryStorageKey : this.socksHistoryStorageKey, dataToSave);
+    this.storageService.setDataForHv(this.configuringVpn ? this.vpnHistoryStorageKey : this.socksHistoryStorageKey, dataToSave);
 
     NodeComponent.refreshCurrentDisplayedData();
     this.snackbarService.showDone('apps.vpn-socks-client-settings.changes-made');

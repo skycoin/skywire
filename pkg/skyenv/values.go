@@ -1,3 +1,4 @@
+// Package skyenv defines variables and constants for different operating systems
 package skyenv
 
 import (
@@ -8,7 +9,6 @@ import (
 	"time"
 
 	"github.com/bitfield/script"
-	"github.com/skycoin/dmsg/pkg/dmsgpty"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -49,11 +49,6 @@ const (
 const (
 	STCPAddr = ":7777"
 )
-
-// DmsgPtyCLIAddr determines CLI address per each platform
-func DmsgPtyCLIAddr() string {
-	return dmsgpty.DefaultCLIAddr()
-}
 
 // Default skywire app constants.
 const (
@@ -151,7 +146,7 @@ func MustPK(pk string) cipher.PubKey {
 	return sPK
 }
 
-//Version gets the version of the installation for the config
+// Version gets the version of the installation for the config
 func Version() string {
 	u := buildinfo.Version()
 	v := u

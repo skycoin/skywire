@@ -1,3 +1,4 @@
+// Package servicedisc works with the service discovery
 package servicedisc
 
 import (
@@ -113,7 +114,7 @@ func (a *autoconnector) fetchPubAddresses(ctx context.Context) ([]cipher.PubKey,
 	var services []Service
 	fetch := func() (err error) {
 		// "return" services up from the closure
-		services, err = a.client.Services(ctx, a.maxConns)
+		services, err = a.client.Services(ctx, a.maxConns, "", "")
 		if err != nil {
 			return err
 		}

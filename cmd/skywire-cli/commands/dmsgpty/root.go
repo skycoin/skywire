@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os"
 	"strconv"
 	"time"
 
@@ -17,14 +16,21 @@ import (
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
-var rpcAddr string
-var ptyPort string
-var masterLogger = logging.NewMasterLogger()
-var packageLogger = masterLogger.PackageLogger("dmsgpty")
+var (
+	ptyPort       string
+	masterLogger  = logging.NewMasterLogger()
+	packageLogger = masterLogger.PackageLogger("dmsgpty")
+	rpcAddr       string
+	path          string
+	pk            string
+	url           string
+	pkg           bool
+)
 
 func init() {
-	RootCmd.PersistentFlags().StringVarP(&rpcAddr, "rpc", "", "localhost:3435", "RPC server address")
-	RootCmd.PersistentFlags().StringVarP(&ptyPort, "port", "p", "22", "port of remote visor dmsgpty")
+	visorsCmd.PersistentFlags().StringVarP(&rpcAddr, "rpc", "", "localhost:3435", "RPC server address")
+	shellCmd.PersistentFlags().StringVarP(&rpcAddr, "rpc", "", "localhost:3435", "RPC server address")
+	shellCmd.PersistentFlags().StringVarP(&ptyPort, "port", "p", "22", "port of remote visor dmsgpty")
 }
 
 // RootCmd is the command that contains sub-commands which interacts with dmsgpty.
@@ -43,29 +49,27 @@ func init() {
 var visorsCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List connected visors",
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		remoteVisors, err := rpcClient().RemoteVisors()
 		if err != nil {
-			packageLogger.Fatal("RPC connection failed; is skywire running?\n", err)
+			internal.PrintError(cmd.Flags(), fmt.Errorf("RPC connection failed; is skywire running?: %v", err))
 		}
 
 		var msg string
 		for idx, pk := range remoteVisors {
 			msg += fmt.Sprintf("%d. %s\n", idx+1, pk)
 		}
-		if _, err := os.Stdout.Write([]byte(msg)); err != nil {
-			packageLogger.Fatal("Failed to output build info:", err)
-		}
+		internal.PrintOutput(cmd.Flags(), remoteVisors, msg)
 	},
 }
 
 var shellCmd = &cobra.Command{
 	Use:   "start <pk>",
-	Short: "Start dmsgpty for specific visor by its dmsg address pk:port",
+	Short: "Start dmsgpty session",
 	Args:  cobra.MinimumNArgs(1),
-	RunE: func(_ *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		cli := dmsgpty.DefaultCLI()
-		addr := internal.ParsePK("pk", args[0])
+		addr := internal.ParsePK(cmd.Flags(), "pk", args[0])
 		port, _ := strconv.ParseUint(ptyPort, 10, 16) //nolint
 		ctx, cancel := cmdutil.SignalContext(context.Background(), nil)
 		defer cancel()

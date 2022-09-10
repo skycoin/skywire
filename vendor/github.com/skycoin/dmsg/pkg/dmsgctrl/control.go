@@ -1,3 +1,4 @@
+// Package dmsgctrl pkg/dmsgctrl/control.go
 package dmsgctrl
 
 import (

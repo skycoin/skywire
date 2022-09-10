@@ -1,3 +1,4 @@
+// Package commands root.go
 package commands
 
 import (
@@ -5,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"io/ioutil"
 	"os"
 
 	cc "github.com/ivanpirog/coloredcobra"
@@ -80,7 +80,7 @@ var rootCmd = &cobra.Command{
 
 		conf := &setup.Config{}
 
-		raw, err := ioutil.ReadAll(rdr)
+		raw, err := io.ReadAll(rdr)
 		if err != nil {
 			log.Fatalf("Failed to read config: %v", err)
 		}
