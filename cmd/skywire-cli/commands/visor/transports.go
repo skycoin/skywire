@@ -116,6 +116,8 @@ var addTpCmd = &cobra.Command{
 	Short: "Add a transport",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
+
 		pk := internal.ParsePK(cmd.Flags(), "remote-public-key", args[0])
 
 		var tp *visor.TransportSummary
@@ -124,24 +126,29 @@ var addTpCmd = &cobra.Command{
 		if transportType != "" {
 			tp, err = clirpc.Client().AddTransport(pk, transportType, timeout)
 			if err != nil {
-				logger.WithError(err).Fatalf("Failed to establish %v transport", transportType)
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to establish %v transport: %v", transportType, err))
 			}
-
-			logger.Infof("Established %v transport to %v", transportType, pk)
+			if !isJSON {
+				logger.Infof("Established %v transport to %v", transportType, pk)
+			}
 		} else {
 			transportTypes := []network.Type{
-				network.STCP,
 				network.STCPR,
 				network.SUDPH,
 				network.DMSG,
+				network.STCP,
 			}
 			for _, transportType := range transportTypes {
 				tp, err = clirpc.Client().AddTransport(pk, string(transportType), timeout)
 				if err == nil {
-					logger.Infof("Established %v transport to %v", transportType, pk)
+					if !isJSON {
+						logger.Infof("Established %v transport to %v", transportType, pk)
+					}
 					break
 				}
-				logger.WithError(err).Warnf("Failed to establish %v transport", transportType)
+				if !isJSON {
+					logger.WithError(err).Warnf("Failed to establish %v transport", transportType)
+				}
 			}
 		}
 		PrintTransports(cmd.Flags(), tp)
@@ -155,7 +162,7 @@ var rmTpCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		tID := internal.ParseUUID(cmd.Flags(), "transport-id", args[0])
 		internal.Catch(cmd.Flags(), clirpc.Client().RemoveTransport(tID))
-		fmt.Println("OK")
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
 

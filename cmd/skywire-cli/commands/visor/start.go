@@ -44,7 +44,7 @@ var startCmd = &cobra.Command{
 			output, err = script.Exec(`bash -c 'go run cmd/skywire-visor/skywire-visor.go'`).String()
 		}
 		if err != nil {
-			internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to start visor: %v", err))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to start visor: %v", err))
 		}
 		internal.PrintOutput(cmd.Flags(), output, fmt.Sprintln(output))
 	},
