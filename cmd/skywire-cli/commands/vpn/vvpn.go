@@ -50,19 +50,19 @@ var vpnUICmd = &cobra.Command{
 		if path != "" {
 			conf, err := visorconfig.ReadFile(path)
 			if err != nil {
-				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to read in config: %v", err))
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to read in config: %v", err))
 			}
 			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", conf.PK.Hex())
 		} else {
 			client := clirpc.Client()
 			overview, err := client.Overview()
 			if err != nil {
-				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect; is skywire running?: %v", err))
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect; is skywire running?: %v", err))
 			}
 			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", overview.PubKey.Hex())
 		}
 		if err := webbrowser.Open(url); err != nil {
-			internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to open VPN UI in browser:: %v", err))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to open VPN UI in browser:: %v", err))
 		}
 	},
 }
@@ -78,14 +78,14 @@ var vpnURLCmd = &cobra.Command{
 		if path != "" {
 			conf, err := visorconfig.ReadFile(path)
 			if err != nil {
-				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to read in config: %v", err))
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to read in config: %v", err))
 			}
 			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", conf.PK.Hex())
 		} else {
 			client := clirpc.Client()
 			overview, err := client.Overview()
 			if err != nil {
-				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect; is skywire running?: %v", err))
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect; is skywire running?: %v", err))
 			}
 			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", overview.PubKey.Hex())
 		}
@@ -111,13 +111,13 @@ var vpnListCmd = &cobra.Command{
 		}
 		servers, err := client.VPNServers(ver, country)
 		if err != nil {
-			internal.PrintError(cmd.Flags(), err)
+			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		if len(servers) == 0 {
-			internal.PrintError(cmd.Flags(), fmt.Errorf("No VPN Servers found"))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("No VPN Servers found"))
 		}
 		if isStats {
-			internal.PrintError(cmd.Flags(), fmt.Errorf("%d VPN Servers", len(servers)))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("%d VPN Servers", len(servers)))
 		}
 
 		var msg string
@@ -135,11 +135,10 @@ var vpnListCmd = &cobra.Command{
 }
 
 var vpnStartCmd = &cobra.Command{
-	Use:   "start",
+	Use:   "start <public-key>",
 	Short: "start the vpn for <public-key>",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(args[0])
 		internal.Catch(cmd.Flags(), clirpc.Client().StartVPNClient(args[0]))
 		internal.PrintOutput(cmd.Flags(), "OK", fmt.Sprintln("OK"))
 	},
