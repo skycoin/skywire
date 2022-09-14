@@ -22,9 +22,21 @@ func init() {
 		lsAppsCmd,
 		startAppCmd,
 		stopAppCmd,
-		setAppAutostartCmd,
 		appLogsSinceCmd,
+		argCmd,
 	)
+	argCmd.AddCommand(
+		setAppAutostartCmd,
+		setAppPasscodeCmd,
+		setAppKillswitchCmd,
+		setAppSecureCmd,
+		setAppNetworkInterfaceCmd,
+	)
+}
+
+var argCmd = &cobra.Command{
+	Use:   "arg",
+	Short: "App args",
 }
 
 var appCmd = &cobra.Command{
@@ -99,7 +111,7 @@ var stopAppCmd = &cobra.Command{
 
 var setAppAutostartCmd = &cobra.Command{
 	Use:   "autostart <name> (on|off)",
-	Short: "Autostart app",
+	Short: "Set app autostart",
 	Args:  cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		var autostart bool
@@ -116,9 +128,75 @@ var setAppAutostartCmd = &cobra.Command{
 	},
 }
 
+var setAppKillswitchCmd = &cobra.Command{
+	Use:   "killswitch <name> (on|off)",
+	Short: "Set app killswitch",
+	Args:  cobra.MinimumNArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		var killswitch bool
+		switch args[1] {
+		case "on":
+			killswitch = true
+		case "off":
+			killswitch = false
+		default:
+			internal.Catch(cmd.Flags(), fmt.Errorf("invalid args[1] value: %s", args[1]))
+		}
+		internal.Catch(cmd.Flags(), clirpc.Client().SetAppKillswitch(args[0], killswitch))
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+	},
+}
+
+var setAppSecureCmd = &cobra.Command{
+	Use:   "secure <name> (on|off)",
+	Short: "Set app secure",
+	Args:  cobra.MinimumNArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		var secure bool
+		switch args[1] {
+		case "on":
+			secure = true
+		case "off":
+			secure = false
+		default:
+			internal.Catch(cmd.Flags(), fmt.Errorf("invalid args[1] value: %s", args[1]))
+		}
+		internal.Catch(cmd.Flags(), clirpc.Client().SetAppSecure(args[0], secure))
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+	},
+}
+
+var setAppPasscodeCmd = &cobra.Command{
+	Use:   "passcode <name> <passcode>",
+	Short: "Set app passcode.\n\"remove\" is a special arg to remove the passcode",
+	Args:  cobra.MinimumNArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		passcode := args[1]
+		if args[1] == "remove" {
+			passcode = ""
+		}
+		internal.Catch(cmd.Flags(), clirpc.Client().SetAppPassword(args[0], passcode))
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+	},
+}
+
+var setAppNetworkInterfaceCmd = &cobra.Command{
+	Use:   "netifc <name> <interface>",
+	Short: "Set app network interface.\n\"remove\" is a special arg to remove the netifc",
+	Args:  cobra.MinimumNArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		netifc := args[1]
+		if args[1] == "remove" {
+			netifc = ""
+		}
+		internal.Catch(cmd.Flags(), clirpc.Client().SetAppNetworkInterface(args[0], netifc))
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+	},
+}
+
 var appLogsSinceCmd = &cobra.Command{
 	Use:   "log <name> <timestamp>",
-	Short: "Logs from app since RFC3339Nano-formatted timestamp.\n                    \"beginning\" is a special timestamp to fetch all the logs",
+	Short: "Logs from app since RFC3339Nano-formatted timestamp.\n\"beginning\" is a special timestamp to fetch all the logs",
 	Args:  cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		var t time.Time
