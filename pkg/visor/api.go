@@ -490,7 +490,7 @@ func (v *Visor) SetAppNetworkInterface(appName, netifc string) error {
 		return fmt.Errorf("app %s is not allowed to set network interface", appName)
 	}
 
-	v.log.Infof("Changing %s network interface to %q", appName, netifc)
+	v.log.Infof("Changing %s network interface to %v", appName, netifc)
 
 	const (
 		netifcArgName = "--netifc"
@@ -511,7 +511,7 @@ func (v *Visor) SetAppKillswitch(appName string, killswitch bool) error {
 		return fmt.Errorf("app %s is not allowed to set killswitch", appName)
 	}
 
-	v.log.Infof("Setting %s killswitch to %q", appName, killswitch)
+	v.log.Infof("Setting %s killswitch to %v", appName, killswitch)
 
 	const (
 		killSwitchArg = "--killswitch"
@@ -532,7 +532,7 @@ func (v *Visor) SetAppSecure(appName string, isSecure bool) error {
 		return fmt.Errorf("app %s is not allowed to change 'secure' parameter", appName)
 	}
 
-	v.log.Infof("Setting %s secure to %q", appName, isSecure)
+	v.log.Infof("Setting %s secure to %v", appName, isSecure)
 
 	const (
 		secureArgName = "--secure"
