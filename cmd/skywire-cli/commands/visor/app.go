@@ -27,9 +27,9 @@ func init() {
 	)
 	argCmd.AddCommand(
 		setAppAutostartCmd,
-		setAppPasscodeCmd,
 		setAppKillswitchCmd,
 		setAppSecureCmd,
+		setAppPasscodeCmd,
 		setAppNetworkInterfaceCmd,
 	)
 }
