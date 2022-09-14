@@ -110,15 +110,15 @@ var stopAppCmd = &cobra.Command{
 }
 
 var setAppAutostartCmd = &cobra.Command{
-	Use:   "autostart <name> (on|off)",
+	Use:   "autostart <name> (true|false)",
 	Short: "Set app autostart",
 	Args:  cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		var autostart bool
 		switch args[1] {
-		case "on":
+		case "true":
 			autostart = true
-		case "off":
+		case "false":
 			autostart = false
 		default:
 			internal.Catch(cmd.Flags(), fmt.Errorf("invalid args[1] value: %s", args[1]))
@@ -129,15 +129,15 @@ var setAppAutostartCmd = &cobra.Command{
 }
 
 var setAppKillswitchCmd = &cobra.Command{
-	Use:   "killswitch <name> (on|off)",
+	Use:   "killswitch <name> (true|false)",
 	Short: "Set app killswitch",
 	Args:  cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		var killswitch bool
 		switch args[1] {
-		case "on":
+		case "true":
 			killswitch = true
-		case "off":
+		case "false":
 			killswitch = false
 		default:
 			internal.Catch(cmd.Flags(), fmt.Errorf("invalid args[1] value: %s", args[1]))
@@ -148,15 +148,15 @@ var setAppKillswitchCmd = &cobra.Command{
 }
 
 var setAppSecureCmd = &cobra.Command{
-	Use:   "secure <name> (on|off)",
+	Use:   "secure <name> (true|false)",
 	Short: "Set app secure",
 	Args:  cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		var secure bool
 		switch args[1] {
-		case "on":
+		case "true":
 			secure = true
-		case "off":
+		case "false":
 			secure = false
 		default:
 			internal.Catch(cmd.Flags(), fmt.Errorf("invalid args[1] value: %s", args[1]))
