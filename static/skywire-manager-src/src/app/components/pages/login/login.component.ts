@@ -10,6 +10,7 @@ import { SnackbarService } from '../../../services/snackbar.service';
 import { InitialSetupComponent } from './initial-setup/initial-setup.component';
 import { OperationError } from '../../../utils/operation-error';
 import { processServiceError } from '../../../utils/errors';
+import { AppComponent } from 'src/app/app.component';
 
 /**
  * Login page.
@@ -46,8 +47,12 @@ export class LoginComponent implements OnInit, OnDestroy {
       // Check if the user is already logged.
       this.verificationSubscription = this.authService.checkLogin().subscribe(response => {
         if (response !== AuthStates.NotLogged) {
-          const destination = !this.isForVpn ? ['nodes'] : ['vpn', this.vpnKey, 'status'];
-          this.router.navigate(destination, { replaceUrl: true });
+          // Inform about the redirect a frame before it is done, to avoid problems.
+          AppComponent.currentInstance.processLoginDone();
+          setTimeout(() => {
+            const destination = !this.isForVpn ? ['nodes'] : ['vpn', this.vpnKey, 'status'];
+            this.router.navigate(destination, { replaceUrl: true });
+          });
         }
       });
     });
@@ -83,8 +88,12 @@ export class LoginComponent implements OnInit, OnDestroy {
   }
 
   private onLoginSuccess() {
-    const destination = !this.isForVpn ? ['nodes'] : ['vpn', this.vpnKey, 'status'];
-    this.router.navigate(destination, { replaceUrl: true });
+    // Inform about the redirect a frame before it is done, to avoid problems.
+    AppComponent.currentInstance.processLoginDone();
+    setTimeout(() => {
+      const destination = !this.isForVpn ? ['nodes'] : ['vpn', this.vpnKey, 'status'];
+      this.router.navigate(destination, { replaceUrl: true });
+    });
   }
 
   private onLoginError(err: OperationError) {
