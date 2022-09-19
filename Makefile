@@ -40,6 +40,10 @@ ifeq ($(VERSION),)
 	VERSION = unknown
 endif
 
+ifeq ($(COMMIT),)
+	COMMIT = unknown
+endif
+
 ifeq ($(BUILDTAG),)
 	ifeq ($(OS),Windows_NT)
 		BUILDTAG = Windows
