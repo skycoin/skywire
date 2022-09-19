@@ -9,6 +9,7 @@ import (
 
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
@@ -50,7 +51,7 @@ var visorsCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List connected visors",
 	Run: func(cmd *cobra.Command, _ []string) {
-		remoteVisors, err := rpcClient().RemoteVisors()
+		remoteVisors, err := rpcClient(cmd.Flags()).RemoteVisors()
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC connection failed; is skywire running?: %v", err))
 		}
@@ -77,11 +78,11 @@ var shellCmd = &cobra.Command{
 	},
 }
 
-func rpcClient() visor.API {
+func rpcClient(cmdFlags *pflag.FlagSet) visor.API {
 	const rpcDialTimeout = time.Second * 5
 	conn, err := net.DialTimeout("tcp", rpcAddr, rpcDialTimeout)
 	if err != nil {
-		packageLogger.Fatal("RPC connection failed; is skywire running?\n", err)
+		internal.PrintFatalError(cmdFlags, fmt.Errorf("RPC connection failed; is skywire running?: %v", err))
 	}
 	return visor.NewRPCClient(packageLogger, conn, visor.RPCPrefix, 0)
 }

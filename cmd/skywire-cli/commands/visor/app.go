@@ -48,7 +48,7 @@ var lsAppsCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "List apps",
 	Run: func(cmd *cobra.Command, _ []string) {
-		states, err := clirpc.Client().Apps()
+		states, err := clirpc.Client(cmd.Flags()).Apps()
 		internal.Catch(cmd.Flags(), err)
 		var b bytes.Buffer
 		w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
@@ -94,7 +94,7 @@ var startAppCmd = &cobra.Command{
 	Short: "Launch app",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		internal.Catch(cmd.Flags(), clirpc.Client().StartApp(args[0]))
+		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).StartApp(args[0]))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
@@ -104,7 +104,7 @@ var stopAppCmd = &cobra.Command{
 	Short: "Halt app",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		internal.Catch(cmd.Flags(), clirpc.Client().StopApp(args[0]))
+		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).StopApp(args[0]))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
@@ -123,7 +123,7 @@ var setAppAutostartCmd = &cobra.Command{
 		default:
 			internal.Catch(cmd.Flags(), fmt.Errorf("invalid args[1] value: %s", args[1]))
 		}
-		internal.Catch(cmd.Flags(), clirpc.Client().SetAutoStart(args[0], autostart))
+		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).SetAutoStart(args[0], autostart))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
@@ -142,7 +142,7 @@ var setAppKillswitchCmd = &cobra.Command{
 		default:
 			internal.Catch(cmd.Flags(), fmt.Errorf("invalid args[1] value: %s", args[1]))
 		}
-		internal.Catch(cmd.Flags(), clirpc.Client().SetAppKillswitch(args[0], killswitch))
+		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).SetAppKillswitch(args[0], killswitch))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
@@ -161,7 +161,7 @@ var setAppSecureCmd = &cobra.Command{
 		default:
 			internal.Catch(cmd.Flags(), fmt.Errorf("invalid args[1] value: %s", args[1]))
 		}
-		internal.Catch(cmd.Flags(), clirpc.Client().SetAppSecure(args[0], secure))
+		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).SetAppSecure(args[0], secure))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
@@ -175,7 +175,7 @@ var setAppPasscodeCmd = &cobra.Command{
 		if args[1] == "remove" {
 			passcode = ""
 		}
-		internal.Catch(cmd.Flags(), clirpc.Client().SetAppPassword(args[0], passcode))
+		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).SetAppPassword(args[0], passcode))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
@@ -189,7 +189,7 @@ var setAppNetworkInterfaceCmd = &cobra.Command{
 		if args[1] == "remove" {
 			netifc = ""
 		}
-		internal.Catch(cmd.Flags(), clirpc.Client().SetAppNetworkInterface(args[0], netifc))
+		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).SetAppNetworkInterface(args[0], netifc))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
@@ -208,7 +208,7 @@ var appLogsSinceCmd = &cobra.Command{
 			t, err = time.Parse(time.RFC3339Nano, strTime)
 			internal.Catch(cmd.Flags(), err)
 		}
-		logs, err := clirpc.Client().LogsSince(t, args[0])
+		logs, err := clirpc.Client(cmd.Flags()).LogsSince(t, args[0])
 		internal.Catch(cmd.Flags(), err)
 		if len(logs) > 0 {
 			internal.PrintOutput(cmd.Flags(), logs, fmt.Sprintf("%v\n", logs))
