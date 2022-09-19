@@ -50,10 +50,10 @@ ifeq ($(BUILDTAG),)
 	else
 		UNAME_S := $(shell uname -s)
 		ifeq ($(UNAME_S),Linux)
-			BUILDTAG = "Linux"
+			BUILDTAG = Linux
 		endif
 	 	ifeq ($(UNAME_S),Darwin)
-			BUILDTAG = "Darwin"
+			BUILDTAG = Darwin
 		endif
 	endif
 endif
