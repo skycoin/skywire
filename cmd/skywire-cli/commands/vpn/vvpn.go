@@ -10,6 +10,7 @@ import (
 	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -139,7 +140,10 @@ var vpnStartCmd = &cobra.Command{
 	Short: "start the vpn for <public-key>",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		internal.Catch(cmd.Flags(), clirpc.Client().StartVPNClient(args[0]))
+
+		var pk cipher.PubKey
+		internal.Catch(cmd.Flags(), pk.Set(args[0]))
+		internal.Catch(cmd.Flags(), clirpc.Client().StartVPNClient(pk))
 		internal.PrintOutput(cmd.Flags(), "OK", fmt.Sprintln("OK"))
 	},
 }
