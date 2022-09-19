@@ -220,10 +220,10 @@ func (r *RPC) StopApp(name *string, _ *struct{}) (err error) {
 }
 
 // StartVPNClient starts VPNClient App
-func (r *RPC) StartVPNClient(pubkey *string, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "StartApp", pubkey)(nil, &err)
+func (r *RPC) StartVPNClient(pk *cipher.PubKey, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StartApp", pk)(nil, &err)
 
-	return r.visor.StartVPNClient(*pubkey)
+	return r.visor.StartVPNClient(*pk)
 }
 
 // StopVPNClient stops VPNClient App
