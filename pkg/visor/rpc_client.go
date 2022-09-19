@@ -145,8 +145,8 @@ func (rc *rpcClient) StopApp(appName string) error {
 }
 
 // StartVPNClient calls StartVPNClient.
-func (rc *rpcClient) StartVPNClient(pubkey string) error {
-	return rc.Call("StartVPNClient", &pubkey, &struct{}{})
+func (rc *rpcClient) StartVPNClient(pk cipher.PubKey) error {
+	return rc.Call("StartVPNClient", &pk, &struct{}{})
 }
 
 // StopVPNClient calls StopVPNClient.
@@ -647,7 +647,7 @@ func (*mockRPCClient) StopApp(string) error {
 }
 
 // StartVPNClient implements API.
-func (*mockRPCClient) StartVPNClient(string) error {
+func (*mockRPCClient) StartVPNClient(cipher.PubKey) error {
 	return nil
 }
 

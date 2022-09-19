@@ -40,7 +40,7 @@ type API interface {
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
 	StopApp(appName string) error
-	StartVPNClient(pubkey string) error
+	StartVPNClient(pk cipher.PubKey) error
 	StopVPNClient(appName string) error
 	SetAppDetailedStatus(appName, state string) error
 	SetAppError(appName, stateErr string) error
@@ -362,7 +362,7 @@ func (v *Visor) StopApp(appName string) error {
 }
 
 // StartVPNClient implements API.
-func (v *Visor) StartVPNClient(pubkey string) error {
+func (v *Visor) StartVPNClient(pk cipher.PubKey) error {
 	var envs []string
 	var err error
 	if v.tpM == nil {
@@ -378,7 +378,7 @@ func (v *Visor) StartVPNClient(pubkey string) error {
 			// we set the args in memory and pass it in `v.appL.StartApp`
 			// unlike the api method `StartApp` where `nil` is passed in `v.appL.StartApp` as args
 			// but the args are set in the config
-			v.conf.Launcher.Apps[index].Args = []string{"-srv", pubkey}
+			v.conf.Launcher.Apps[index].Args = []string{"-srv", pk.Hex()}
 			maker := vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.STCPRRemoteAddrs())
 			envs, err = maker()
 			if err != nil {
@@ -387,12 +387,6 @@ func (v *Visor) StartVPNClient(pubkey string) error {
 
 			if v.GetVPNClientAddress() == "" {
 				return errors.New("VPN server pub key is missing")
-			}
-
-			var pk cipher.PubKey
-			err = pk.Set(pubkey)
-			if err != nil {
-				return err
 			}
 
 			// check process manager availability
