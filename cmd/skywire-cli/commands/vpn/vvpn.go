@@ -54,7 +54,7 @@ var vpnUICmd = &cobra.Command{
 			}
 			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", conf.PK.Hex())
 		} else {
-			client := clirpc.Client()
+			client := clirpc.Client(cmd.Flags())
 			overview, err := client.Overview()
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect; is skywire running?: %v", err))
@@ -82,7 +82,7 @@ var vpnURLCmd = &cobra.Command{
 			}
 			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", conf.PK.Hex())
 		} else {
-			client := clirpc.Client()
+			client := clirpc.Client(cmd.Flags())
 			overview, err := client.Overview()
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect; is skywire running?: %v", err))
@@ -104,7 +104,7 @@ var vpnListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List public VPN servers",
 	Run: func(cmd *cobra.Command, _ []string) {
-		client := clirpc.Client()
+		client := clirpc.Client(cmd.Flags())
 		if isUnFiltered {
 			ver = ""
 			country = ""
@@ -139,7 +139,7 @@ var vpnStartCmd = &cobra.Command{
 	Short: "start the vpn for <public-key>",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		internal.Catch(cmd.Flags(), clirpc.Client().StartVPNClient(args[0]))
+		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).StartVPNClient(args[0]))
 		internal.PrintOutput(cmd.Flags(), "OK", fmt.Sprintln("OK"))
 	},
 }
@@ -148,7 +148,7 @@ var vpnStopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "stop the vpn",
 	Run: func(cmd *cobra.Command, _ []string) {
-		internal.Catch(cmd.Flags(), clirpc.Client().StopVPNClient("vpn-client"))
+		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).StopVPNClient("vpn-client"))
 		internal.PrintOutput(cmd.Flags(), "OK", fmt.Sprintln("OK"))
 	},
 }
@@ -157,7 +157,7 @@ var vpnStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "vpn status",
 	Run: func(cmd *cobra.Command, _ []string) {
-		states, err := clirpc.Client().Apps()
+		states, err := clirpc.Client(cmd.Flags()).Apps()
 		internal.Catch(cmd.Flags(), err)
 
 		var b bytes.Buffer
