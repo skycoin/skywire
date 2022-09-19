@@ -36,16 +36,24 @@ else
     endif
 endif
 
+ifeq ($(VERSION),)
+	VERSION = unknown
+endif
+
+ifeq ($(COMMIT),)
+	COMMIT = unknown
+endif
+
 ifeq ($(BUILDTAG),)
 	ifeq ($(OS),Windows_NT)
 		BUILDTAG = Windows
 	else
 		UNAME_S := $(shell uname -s)
 		ifeq ($(UNAME_S),Linux)
-			BUILDTAG = "Linux"
+			BUILDTAG = Linux
 		endif
 	 	ifeq ($(UNAME_S),Darwin)
-			BUILDTAG = "Darwin"
+			BUILDTAG = Darwin
 		endif
 	endif
 endif
