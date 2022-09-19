@@ -40,7 +40,7 @@ type API interface {
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
 	StopApp(appName string) error
-	StartVPNClient(pubkey string) error
+	StartVPNClient(pk cipher.PubKey) error
 	StopVPNClient(appName string) error
 	SetAppDetailedStatus(appName, state string) error
 	SetAppError(appName, stateErr string) error
@@ -362,39 +362,41 @@ func (v *Visor) StopApp(appName string) error {
 }
 
 // StartVPNClient implements API.
-func (v *Visor) StartVPNClient(pubkey string) error {
+func (v *Visor) StartVPNClient(pk cipher.PubKey) error {
 	var envs []string
 	var err error
 	if v.tpM == nil {
 		return ErrTrpMangerNotAvailable
 	}
-	if len(v.conf.Launcher.Apps) > 0 {
-		v.conf.Launcher.Apps[0].Args = []string{"-srv", pubkey}
-	} else {
+
+	if len(v.conf.Launcher.Apps) == 0 {
 		return errors.New("no vpn app configuration found")
 	}
-	maker := vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.STCPRRemoteAddrs())
-	envs, err = maker()
-	if err != nil {
-		return err
-	}
 
-	if v.GetVPNClientAddress() == "" {
-		return errors.New("VPN server pub key is missing")
-	}
-	var pk cipher.PubKey
-	err = pk.Set(pubkey)
-	if err != nil {
-		return err
-	}
+	for index, app := range v.conf.Launcher.Apps {
+		if app.Name == skyenv.VPNClientName {
+			// we set the args in memory and pass it in `v.appL.StartApp`
+			// unlike the api method `StartApp` where `nil` is passed in `v.appL.StartApp` as args
+			// but the args are set in the config
+			v.conf.Launcher.Apps[index].Args = []string{"-srv", pk.Hex()}
+			maker := vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.STCPRRemoteAddrs())
+			envs, err = maker()
+			if err != nil {
+				return err
+			}
 
-	getRouteSetupHooks(context.Background(), v, v.log)
-	// check process manager availability
-	if v.procM != nil {
-		return v.appL.StartApp(skyenv.VPNClientName, v.conf.Launcher.Apps[0].Args, envs)
-		//		return v.appL.StartApp(skyenv.VPNClientName, v.conf.Launcher.Apps[appindex].Args, envs)
+			if v.GetVPNClientAddress() == "" {
+				return errors.New("VPN server pub key is missing")
+			}
+
+			// check process manager availability
+			if v.procM != nil {
+				return v.appL.StartApp(skyenv.VPNClientName, v.conf.Launcher.Apps[index].Args, envs)
+			}
+			return ErrProcNotAvailable
+		}
 	}
-	return ErrProcNotAvailable
+	return errors.New("no vpn app configuration found")
 }
 
 // StopVPNClient implements API.
