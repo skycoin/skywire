@@ -47,7 +47,7 @@ var lsRulesCmd = &cobra.Command{
 	Use:   "ls-rules",
 	Short: "List routing rules",
 	Run: func(cmd *cobra.Command, _ []string) {
-		rules, err := clirpc.Client().RoutingRules()
+		rules, err := clirpc.Client(cmd.Flags()).RoutingRules()
 		internal.Catch(cmd.Flags(), err)
 
 		printRoutingRules(cmd.Flags(), rules...)
@@ -62,7 +62,7 @@ var ruleCmd = &cobra.Command{
 		id, err := strconv.ParseUint(args[0], 10, 32)
 		internal.Catch(cmd.Flags(), err)
 
-		rule, err := clirpc.Client().RoutingRule(routing.RouteID(id))
+		rule, err := clirpc.Client(cmd.Flags()).RoutingRule(routing.RouteID(id))
 		internal.Catch(cmd.Flags(), err)
 
 		printRoutingRules(cmd.Flags(), rule)
@@ -76,7 +76,7 @@ var rmRuleCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		id, err := strconv.ParseUint(args[0], 10, 32)
 		internal.Catch(cmd.Flags(), err)
-		internal.Catch(cmd.Flags(), clirpc.Client().RemoveRoutingRule(routing.RouteID(id)))
+		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).RemoveRoutingRule(routing.RouteID(id)))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
@@ -115,7 +115,7 @@ var addAppRuleCmd = &cobra.Command{
 			rIDKey = rule.KeyRouteID()
 		}
 
-		internal.Catch(cmd.Flags(), clirpc.Client().SaveRoutingRule(rule))
+		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).SaveRoutingRule(rule))
 
 		output := struct {
 			RoutingRuleKey routing.RouteID `json:"routing_route_key"`
@@ -156,7 +156,7 @@ var addFwdRuleCmd = &cobra.Command{
 			rIDKey = rule.KeyRouteID()
 		}
 
-		internal.Catch(cmd.Flags(), clirpc.Client().SaveRoutingRule(rule))
+		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).SaveRoutingRule(rule))
 
 		output := struct {
 			RoutingRuleKey routing.RouteID `json:"routing_route_key"`
@@ -193,7 +193,7 @@ var addIntFwdRuleCmd = &cobra.Command{
 			rIDKey = rule.KeyRouteID()
 		}
 
-		internal.Catch(cmd.Flags(), clirpc.Client().SaveRoutingRule(rule))
+		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).SaveRoutingRule(rule))
 
 		output := struct {
 			RoutingRuleKey routing.RouteID `json:"routing_route_key"`

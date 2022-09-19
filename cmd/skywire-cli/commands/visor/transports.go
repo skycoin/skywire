@@ -61,7 +61,7 @@ var tpCmd = &cobra.Command{
 var lsTypesCmd = &cobra.Command{
 	Use: "type", Short: "Transport types used by the local visor",
 	Run: func(cmd *cobra.Command, _ []string) {
-		types, err := clirpc.Client().TransportTypes()
+		types, err := clirpc.Client(cmd.Flags()).TransportTypes()
 		internal.Catch(cmd.Flags(), err)
 		internal.PrintOutput(cmd.Flags(), types, fmt.Sprintln(strings.Join(types, "\n")))
 	},
@@ -77,7 +77,7 @@ var lsTpCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "Available transports",
 	Run: func(cmd *cobra.Command, _ []string) {
-		transports, err := clirpc.Client().Transports(filterTypes, filterPubKeys, showLogs)
+		transports, err := clirpc.Client(cmd.Flags()).Transports(filterTypes, filterPubKeys, showLogs)
 		internal.Catch(cmd.Flags(), err)
 		PrintTransports(cmd.Flags(), transports...)
 	},
@@ -89,7 +89,7 @@ var idCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		tpID := internal.ParseUUID(cmd.Flags(), "transport-id", args[0])
-		tp, err := clirpc.Client().Transport(tpID)
+		tp, err := clirpc.Client(cmd.Flags()).Transport(tpID)
 		internal.Catch(cmd.Flags(), err)
 		PrintTransports(cmd.Flags(), tp)
 	},
@@ -124,7 +124,7 @@ var addTpCmd = &cobra.Command{
 		var err error
 
 		if transportType != "" {
-			tp, err = clirpc.Client().AddTransport(pk, transportType, timeout)
+			tp, err = clirpc.Client(cmd.Flags()).AddTransport(pk, transportType, timeout)
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to establish %v transport: %v", transportType, err))
 			}
@@ -139,7 +139,7 @@ var addTpCmd = &cobra.Command{
 				network.STCP,
 			}
 			for _, transportType := range transportTypes {
-				tp, err = clirpc.Client().AddTransport(pk, string(transportType), timeout)
+				tp, err = clirpc.Client(cmd.Flags()).AddTransport(pk, string(transportType), timeout)
 				if err == nil {
 					if !isJSON {
 						logger.Infof("Established %v transport to %v", transportType, pk)
@@ -161,7 +161,7 @@ var rmTpCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		tID := internal.ParseUUID(cmd.Flags(), "transport-id", args[0])
-		internal.Catch(cmd.Flags(), clirpc.Client().RemoveTransport(tID))
+		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).RemoveTransport(tID))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
@@ -231,7 +231,7 @@ var discTpCmd = &cobra.Command{
 	},
 	Run: func(cmd *cobra.Command, _ []string) {
 
-		if rc := clirpc.Client(); tpPK.Null() {
+		if rc := clirpc.Client(cmd.Flags()); tpPK.Null() {
 			entry, err := rc.DiscoverTransportByID(uuid.UUID(tpID))
 			internal.Catch(cmd.Flags(), err)
 			PrintTransportEntries(cmd.Flags(), entry)

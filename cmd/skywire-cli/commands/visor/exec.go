@@ -20,7 +20,7 @@ var execCmd = &cobra.Command{
 	Short: "Execute a command",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		out, err := clirpc.Client().Exec(strings.Join(args, " "))
+		out, err := clirpc.Client(cmd.Flags()).Exec(strings.Join(args, " "))
 		internal.Catch(cmd.Flags(), err)
 		// since the output of this command can be anything it is not formatted, so it's advisable to not use the `--json` flag for this one
 		internal.PrintOutput(cmd.Flags(), string(out), string(out))

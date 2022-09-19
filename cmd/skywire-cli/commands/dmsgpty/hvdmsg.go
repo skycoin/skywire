@@ -28,7 +28,7 @@ func init() {
 var dmsgUICmd = &cobra.Command{
 	Use:   "ui",
 	Short: "Open dmsgpty UI in default browser",
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		if pk == "" {
 			if pkg {
 				path = visorconfig.Pkgpath
@@ -40,7 +40,7 @@ var dmsgUICmd = &cobra.Command{
 				}
 				url = fmt.Sprintf("http://127.0.0.1:8000/pty/%s", conf.PK.Hex())
 			} else {
-				client := rpcClient()
+				client := rpcClient(cmd.Flags())
 				overview, err := client.Overview()
 				if err != nil {
 					log.Fatal("Failed to connect; is skywire running?\n", err)
@@ -71,7 +71,7 @@ var dmsgURLCmd = &cobra.Command{
 				}
 				url = fmt.Sprintf("http://127.0.0.1:8000/pty/%s", conf.PK.Hex())
 			} else {
-				client := rpcClient()
+				client := rpcClient(cmd.Flags())
 				overview, err := client.Overview()
 				if err != nil {
 					internal.Catch(cmd.Flags(), fmt.Errorf("Failed to connect; is skywire running?: %v", err))
