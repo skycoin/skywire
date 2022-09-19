@@ -36,6 +36,10 @@ else
     endif
 endif
 
+ifeq ($(VERSION),)
+	VERSION = unknown
+endif
+
 ifeq ($(BUILDTAG),)
 	ifeq ($(OS),Windows_NT)
 		BUILDTAG = Windows
