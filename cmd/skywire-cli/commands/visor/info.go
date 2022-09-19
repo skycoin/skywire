@@ -49,7 +49,7 @@ var pkCmd = &cobra.Command{
 			}
 			outputPK = conf.PK.Hex()
 		} else {
-			client := clirpc.Client()
+			client := clirpc.Client(cmd.Flags())
 			overview, err := client.Overview()
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
@@ -83,7 +83,7 @@ var hvpkCmd = &cobra.Command{
 			}
 			hypervisors = conf.Hypervisors
 		} else {
-			client := clirpc.Client()
+			client := clirpc.Client(cmd.Flags())
 			overview, err := client.Overview()
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
@@ -98,7 +98,7 @@ var chvpkCmd = &cobra.Command{
 	Use:   "chvpk",
 	Short: "Public key of connected hypervisors",
 	Run: func(cmd *cobra.Command, _ []string) {
-		client := clirpc.Client()
+		client := clirpc.Client(cmd.Flags())
 		overview, err := client.Overview()
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
@@ -111,7 +111,7 @@ var summaryCmd = &cobra.Command{
 	Use:   "info",
 	Short: "Summary of visor info",
 	Run: func(cmd *cobra.Command, _ []string) {
-		summary, err := clirpc.Client().Summary()
+		summary, err := clirpc.Client(cmd.Flags()).Summary()
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 		}
@@ -150,7 +150,7 @@ var buildInfoCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Version and build info",
 	Run: func(cmd *cobra.Command, _ []string) {
-		client := clirpc.Client()
+		client := clirpc.Client(cmd.Flags())
 		overview, err := client.Overview()
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
