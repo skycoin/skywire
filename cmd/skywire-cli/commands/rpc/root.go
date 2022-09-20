@@ -6,11 +6,11 @@ import (
 	"net"
 	"time"
 
+	"github.com/spf13/pflag"
+
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/visor"
-
-	"github.com/spf13/pflag"
 )
 
 var (
