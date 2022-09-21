@@ -4,6 +4,7 @@ package skyenv
 import (
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"time"
@@ -169,4 +170,18 @@ func Version() string {
 func HomePath() string {
 	dir, _ := os.UserHomeDir() //nolint
 	return dir
+}
+
+// Config returns either UserConfig or PackageConfig based on permissions
+func Config() PkgConfig {
+	if IsRoot() {
+		return PackageConfig()
+	}
+	return UserConfig()
+}
+
+// IsRoot checks for root permissions
+func IsRoot() bool {
+	userLvl, _ := user.Current() //nolint
+	return userLvl.Username == "root"
 }
