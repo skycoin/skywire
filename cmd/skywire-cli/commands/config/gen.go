@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"os/user"
 	"path/filepath"
 	"strings"
 
@@ -187,14 +186,6 @@ var genConfigCmd = &cobra.Command{
 		//don't write file with stdout
 		if !isStdout {
 			if skyenv.OS == "linux" {
-				userLvl, err := user.Current()
-				if err != nil {
-					logger.WithError(err).Error("Failed to detect user.")
-				} else {
-					if userLvl.Username == "root" {
-						isRoot = true
-					}
-				}
 				//warn when writing config as root to non root owned dir & fail on the reverse instance
 				if _, err = exec.LookPath("stat"); err == nil {
 					confPath1, _ := filepath.Split(confPath)
