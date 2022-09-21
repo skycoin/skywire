@@ -22,8 +22,7 @@ func init() {
 	// default is genesis address for skycoin blockchain ; for testing
 	privacyConfigCmd.Flags().StringVarP(&rewardAddress, "address", "a", "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6", "reward address")
 	//use the correct path for the available pemissions
-	setting := skyenv.Config()
-	ptext = setting.LocalPath
+	ptext = skyenv.Config().LocalPath
 	privacyConfigCmd.Flags().StringVarP(&output, "out", "o", "", "output config: "+ptext+"/privacy.json")
 }
 
