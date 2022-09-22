@@ -20,7 +20,7 @@ import (
 var (
 	dir            = skyenv.PackageConfig().LocalPath // local dir to serve via http
 	dmsgDisc       = "http://dmsgd.skywire.skycoin.com"
-	dmsgPort       = uint(80)
+	dmsgPort       = uint(81)
 	pubkey, seckey = cipher.GenerateKeyPair() //nolint
 )
 
@@ -85,9 +85,10 @@ Serves the local folder via dmsghttp`,
 			}
 		}()
 		srv := &http.Server{
-			ReadTimeout:  5 * time.Second,
-			WriteTimeout: 10 * time.Second,
-			Handler:      http.FileServer(http.Dir(dir)),
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       5 * time.Second,
+			WriteTimeout:      10 * time.Second,
+			Handler:           http.FileServer(http.Dir(dir)),
 		}
 		log.WithField("dir", dir).
 			WithField("dmsg_addr", lis.Addr().String()).
