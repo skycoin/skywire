@@ -14,7 +14,6 @@ WORKDIR /skywire
 
 RUN apk add --no-cache make git && \
     sh -c /skywire/docker/images/visor/install-preq.sh && \
-    make host-apps && \
     make build-deploy && \
     mkdir -p /apps && \
     cp ./apps/vpn-server /apps/ && \
