@@ -237,6 +237,24 @@ host-apps-static: ## Build app
 	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/ ./cmd/apps/vpn-server
 	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/ ./cmd/apps/vpn-client
 
+host-apps-deploy: ## Build app
+	test -d apps && rm -r apps || true
+	mkdir -p ./apps
+	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o ./apps/ ./cmd/apps/skychat
+	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o ./apps/ ./cmd/apps/skysocks
+	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o ./apps/ ./cmd/apps/skysocks-client
+	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o ./apps/ ./cmd/apps/vpn-server
+	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o ./apps/ ./cmd/apps/vpn-client
+
+host-apps-race: ## Build app
+	test -d apps && rm -r apps || true
+	mkdir -p ./apps
+	CGO_ENABLED=1${OPTS} go build ${BUILD_OPTS} -race -o ./apps/ ./cmd/apps/skychat
+	CGO_ENABLED=1${OPTS} go build ${BUILD_OPTS} -race -o ./apps/ ./cmd/apps/skysocks
+	CGO_ENABLED=1${OPTS} go build ${BUILD_OPTS} -race -o ./apps/ ./cmd/apps/skysocks-client
+	CGO_ENABLED=1${OPTS} go build ${BUILD_OPTS} -race -o ./apps/ ./cmd/apps/vpn-server
+	CGO_ENABLED=1${OPTS} go build ${BUILD_OPTS} -race -o ./apps/ ./cmd/apps/vpn-client
+
 # Bin
 bin: ## Build `skywire-visor`, `skywire-cli`
 	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/skywire-visor
@@ -270,12 +288,13 @@ bin-static: ## Build `skywire-visor`, `skywire-cli`
 	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-cli  ./cmd/skywire-cli
 	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./setup-node ./cmd/setup-node
 
-build-deploy: ## Build for deployment Docker images
+build-deploy: host-apps-deploy ## Build for deployment Docker images
 	${OPTS} go build -tags netgo ${BUILD_OPTS_DEPLOY} -o /release/skywire-visor ./cmd/skywire-visor
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/skywire-cli ./cmd/skywire-cli
-	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skychat ./cmd/apps/skychat
-	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks ./cmd/apps/skysocks
-	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
+
+build-race: host-apps-race ## Build for testing Docker images
+	CGO_ENABLED=1 ${OPTS} go build -tags netgo ${BUILD_OPTS} -race -o /release/skywire-visor ./cmd/skywire-visor
+	CGO_ENABLED=1 ${OPTS} go build ${BUILD_OPTS} -race -o /release/skywire-cli ./cmd/skywire-cli
 
 github-prepare-release:
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags | cut -c 2-6))
