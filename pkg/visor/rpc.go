@@ -91,6 +91,27 @@ func (r *RPC) Uptime(_ *struct{}, out *float64) (err error) {
 }
 
 /*
+	<<< SKYCOIN REWARD ADDRESS AND PRIVACY SETTING >>>
+*/
+//create the conf
+type privacy struct {
+	DisplayNodeIP bool   `json:"display_node_ip"`
+	RewardAddress string `json:"reward_address,omitempty"`
+}
+// SetPrivacy sets the reward address and privacy setting in privacy.json
+func (r *RPC) SetPrivacy(p *privacy, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetPrivacy", p)(nil, &err)
+
+	return r.visor.SetPrivacy(p.DisplayNodeIP, p.RewardAddress)
+}
+// GetPrivacy reads the reward address and privacy setting from privacy.json
+func (r *RPC) GetPrivacy(_ *struct{}, p *privacy) (err error) {
+	defer rpcutil.LogCall(r.log, "GetPrivacy", nil)(p, &err)
+
+	return err
+}
+
+/*
 	<<< APP LOGS >>>
 */
 
