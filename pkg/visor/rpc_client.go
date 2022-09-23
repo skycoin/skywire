@@ -120,6 +120,19 @@ func (rc *rpcClient) Uptime() (float64, error) {
 	return out, err
 }
 
+// SetPrivacy implements API.
+func (rc *rpcClient) SetPrivacy(p privacy) error {
+
+	err := rc.Call("SetPrivacy", &p, &struct{}{})
+	return err
+}
+
+// GetPrivacy implements API.
+func (rc *rpcClient) GetPrivacy() (p privacy, err error) {
+	err := rc.Call("GetPrivacy", &struct{}{}, &p)
+	return p, err
+}
+
 // Apps calls Apps.
 func (rc *rpcClient) Apps() ([]*appserver.AppState, error) {
 	states := make([]*appserver.AppState, 0)
