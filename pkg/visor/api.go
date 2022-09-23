@@ -15,6 +15,7 @@ import (
 	"github.com/ccding/go-stun/stun"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
+	"github.com/bitfield/script"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -36,6 +37,8 @@ type API interface {
 
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
+	SetPrivacy(public bool, address string) (error)
+	GetPrivacy() ( bool, string, error)
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
@@ -300,6 +303,26 @@ func (v *Visor) Health() (*HealthInfo, error) {
 
 // Uptime implements API.
 func (v *Visor) Uptime() (float64, error) {
+	return time.Since(v.startedAt).Seconds(), nil
+}
+
+// SetPrivacy implements API.
+func (v *Visor) SetPrivacy(displayNodeIP bool, rewardAddress string) error {
+	clicmd := `skywire-cli config priv`
+	if displayNodeIP {
+		clicmd = clicmd + `-i `
+	}
+	if rewardAddress != "" {
+		clicmd = clicmd + `-a ` + rewardAddress
+	}
+	clicmd = clicmd + `-o ` + v.conf.LocalPath + "privacy.json"
+
+	_, err := script.Exec(`skywire-cli `).Stdout()
+	return err
+}
+
+// GetPrivacy implements API.
+func (v *Visor) GetPrivacy() (float64, error) {
 	return time.Since(v.startedAt).Seconds(), nil
 }
 
