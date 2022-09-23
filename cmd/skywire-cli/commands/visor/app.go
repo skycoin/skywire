@@ -168,7 +168,7 @@ var setAppSecureCmd = &cobra.Command{
 
 var setAppPasscodeCmd = &cobra.Command{
 	Use:   "passcode <name> <passcode>",
-	Short: "Set app passcode.\n\"remove\" is a special arg to remove the passcode",
+	Short: "Set app passcode.\n               \"remove\" is a special arg to remove the passcode",
 	Args:  cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		passcode := args[1]
@@ -182,7 +182,7 @@ var setAppPasscodeCmd = &cobra.Command{
 
 var setAppNetworkInterfaceCmd = &cobra.Command{
 	Use:   "netifc <name> <interface>",
-	Short: "Set app network interface.\n\"remove\" is a special arg to remove the netifc",
+	Short: "Set app network interface.\n               \"remove\" is a special arg to remove the netifc",
 	Args:  cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		netifc := args[1]
@@ -196,7 +196,7 @@ var setAppNetworkInterfaceCmd = &cobra.Command{
 
 var appLogsSinceCmd = &cobra.Command{
 	Use:   "log <name> <timestamp>",
-	Short: "Logs from app since RFC3339Nano-formatted timestamp.\n\"beginning\" is a special timestamp to fetch all the logs",
+	Short: "Logs from app since RFC3339Nano-formatted timestamp.\n               \"beginning\" is a special timestamp to fetch all the logs",
 	Args:  cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		var t time.Time
