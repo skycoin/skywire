@@ -13,6 +13,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
@@ -93,19 +94,16 @@ func (r *RPC) Uptime(_ *struct{}, out *float64) (err error) {
 /*
 	<<< SKYCOIN REWARD ADDRESS AND PRIVACY SETTING >>>
 */
-//create the conf
-type privacy struct {
-	DisplayNodeIP bool   `json:"display_node_ip"`
-	RewardAddress string `json:"reward_address,omitempty"`
-}
+
 // SetPrivacy sets the reward address and privacy setting in privacy.json
-func (r *RPC) SetPrivacy(p *privacy, _ *struct{}) (err error) {
+func (r *RPC) SetPrivacy(p skyenv.Privacy, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetPrivacy", p)(nil, &err)
 
-	return r.visor.SetPrivacy(p.DisplayNodeIP, p.RewardAddress)
+	return r.visor.SetPrivacy(p)
 }
+
 // GetPrivacy reads the reward address and privacy setting from privacy.json
-func (r *RPC) GetPrivacy(_ *struct{}, p *privacy) (err error) {
+func (r *RPC) GetPrivacy(_ *struct{}, p skyenv.Privacy) (err error) {
 	defer rpcutil.LogCall(r.log, "GetPrivacy", nil)(p, &err)
 
 	return err
