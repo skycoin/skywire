@@ -185,3 +185,9 @@ func IsRoot() bool {
 	userLvl, _ := user.Current() //nolint
 	return userLvl.Username == "root"
 }
+
+// Privacy represents the json-encoded contents of the privacy.json file
+type Privacy struct {
+	DisplayNodeIP bool   `json:"display_node_ip"`
+	RewardAddress string `json:"reward_address,omitempty"`
+}

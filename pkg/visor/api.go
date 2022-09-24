@@ -3,6 +3,7 @@ package visor
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -12,10 +13,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/bitfield/script"
 	"github.com/ccding/go-stun/stun"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
-	"github.com/bitfield/script"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -37,8 +38,8 @@ type API interface {
 
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
-	SetPrivacy(public bool, address string) (error)
-	GetPrivacy() ( bool, string, error)
+	SetPrivacy(skyenv.Privacy) error
+	GetPrivacy() (skyenv.Privacy, error)
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
@@ -306,24 +307,38 @@ func (v *Visor) Uptime() (float64, error) {
 	return time.Since(v.startedAt).Seconds(), nil
 }
 
+/*
+ */
+
 // SetPrivacy implements API.
-func (v *Visor) SetPrivacy(displayNodeIP bool, rewardAddress string) error {
-	clicmd := `skywire-cli config priv`
-	if displayNodeIP {
+func (v *Visor) SetPrivacy(p skyenv.Privacy) error {
+	clicmd := `skywire-cli config priv set`
+	if p.DisplayNodeIP {
 		clicmd = clicmd + `-i `
 	}
-	if rewardAddress != "" {
-		clicmd = clicmd + `-a ` + rewardAddress
+	if p.RewardAddress != "" {
+		clicmd = clicmd + `-a ` + p.RewardAddress
 	}
 	clicmd = clicmd + `-o ` + v.conf.LocalPath + "privacy.json"
 
-	_, err := script.Exec(`skywire-cli `).Stdout()
+	_, err := script.Exec(clicmd).Stdout()
 	return err
 }
 
 // GetPrivacy implements API.
-func (v *Visor) GetPrivacy() (float64, error) {
-	return time.Since(v.startedAt).Seconds(), nil
+func (v *Visor) GetPrivacy() (p skyenv.Privacy, err error) {
+	clicmd := `skywire-cli config priv get`
+	clicmd = clicmd + `-o ` + v.conf.LocalPath + "privacy.json --json"
+
+	o, err := script.Exec(clicmd).String()
+	if err != nil {
+		return p, err
+	}
+	err = json.Unmarshal([]byte(o), &p)
+	if err != nil {
+		return p, err
+	}
+	return p, err
 }
 
 // Apps implements API.

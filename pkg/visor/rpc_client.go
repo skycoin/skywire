@@ -121,15 +121,15 @@ func (rc *rpcClient) Uptime() (float64, error) {
 }
 
 // SetPrivacy implements API.
-func (rc *rpcClient) SetPrivacy(p privacy) error {
+func (rc *rpcClient) SetPrivacy(p skyenv.Privacy) error {
 
 	err := rc.Call("SetPrivacy", &p, &struct{}{})
 	return err
 }
 
 // GetPrivacy implements API.
-func (rc *rpcClient) GetPrivacy() (p privacy, err error) {
-	err := rc.Call("GetPrivacy", &struct{}{}, &p)
+func (rc *rpcClient) GetPrivacy() (p skyenv.Privacy, err error) {
+	err = rc.Call("GetPrivacy", &struct{}{}, &p)
 	return p, err
 }
 
@@ -619,6 +619,16 @@ func (mc *mockRPCClient) Health() (*HealthInfo, error) {
 // Uptime implements API
 func (mc *mockRPCClient) Uptime() (float64, error) {
 	return time.Since(mc.startedAt).Seconds(), nil
+}
+
+// SetPrivacy implements API
+func (mc *mockRPCClient) SetPrivacy(p skyenv.Privacy) error {
+	return nil
+}
+
+// GetPrivacy implements API.
+func (mc *mockRPCClient) GetPrivacy() (p skyenv.Privacy, err error) {
+	return p, nil
 }
 
 // Apps implements API.
