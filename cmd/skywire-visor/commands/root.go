@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -248,14 +249,17 @@ func runVisor(conf *visorconfig.V1) {
 		conf = initConfig(log, confPath)
 	}
 
-	//	go func() {
-	//		log.Debug("initializing dmsghttp logserver")
-	//		clicmd := fmt.Sprintf("skywire-cli visor logserver --sk %s", conf.SK)
-	//		_, err := script.Exec(clicmd).Stdout()
-	//		if err != nil {
-	//			log.WithError(err).Error("dmsghttp-logserver error")
-	//		}
-	//	}()
+	survey := skyenv.HwSurvey()
+	survey.PubKey = conf.PK
+	// Print results.
+	s, err := json.MarshalIndent(survey, "", "\t")
+	if err != nil {
+		log.WithError(err).Error("Could not marshal json.")
+	}
+	err = os.WriteFile(conf.LocalPath+"/"+skyenv.SurveyFile, s, 0644) //nolint
+	if err != nil {
+		log.WithError(err).Error("Failed to write system hardware survey to file.")
+	}
 
 	if skyenv.OS == "linux" {
 		//warn about creating files & directories as root in non root-owned dir
