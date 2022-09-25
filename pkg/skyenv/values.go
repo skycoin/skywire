@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/bitfield/script"
+	"github.com/google/uuid"
+	"github.com/jaypipes/ghw"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -190,4 +192,25 @@ func IsRoot() bool {
 type Privacy struct {
 	DisplayNodeIP bool   `json:"display_node_ip"`
 	RewardAddress string `json:"reward_address,omitempty"`
+}
+
+// Survey system hardware survey struct
+type Survey struct {
+	UUID    uuid.UUID
+	PubKey  cipher.PubKey
+	Disks   *ghw.BlockInfo
+	Product *ghw.ProductInfo
+	Memory  *ghw.MemoryInfo
+}
+
+// SurveyFile is the name of the survey file
+const SurveyFile string = "system.json"
+
+// HwSurvey returns system hardware survey
+func HwSurvey() (s Survey) {
+	s.UUID = uuid.New()
+	s.Disks, _ = ghw.Block()     //nolint
+	s.Product, _ = ghw.Product() //nolint
+	s.Memory, _ = ghw.Memory()   //nolint
+	return s
 }
