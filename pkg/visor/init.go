@@ -109,8 +109,6 @@ var (
 	hv vinit.Module
 	// Dmsg ctrl module
 	dmsgCtrl vinit.Module
-	// Dmsg http log server module
-	dmsgHTTPLogServer vinit.Module
 	// Dmsg http module
 	dmsgHTTP vinit.Module
 	// Dmsg trackers module
@@ -139,7 +137,6 @@ func registerModules(logger *logging.MasterLogger) {
 	stcpC = maker("stcp", initStcpClient, &tr)
 	dmsgC = maker("dmsg", initDmsg, &ebc, &dmsgHTTP)
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &dmsgC, &tr)
-	dmsgHTTPLogServer = maker("dmsghttp_logserver", initDmsgHTTPLogServer, &dmsgC, &tr)
 	dmsgTrackers = maker("dmsg_trackers", initDmsgTrackers, &dmsgC)
 
 	pty = maker("dmsg_pty", initDmsgpty, &dmsgC)
@@ -150,7 +147,7 @@ func registerModules(logger *logging.MasterLogger) {
 	ut = maker("uptime_tracker", initUptimeTracker, &dmsgHTTP)
 	pv = maker("public_autoconnect", initPublicAutoconnect, &tr, &disc)
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
-	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl, &dmsgHTTPLogServer, &dmsgTrackers)
+	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl, &dmsgTrackers)
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
 		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC)
@@ -344,53 +341,6 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	v.pushCloseStack("dmsgctrl", cl.Close)
 
 	dmsgctrl.ServeListener(cl, 0)
-	return nil
-}
-
-func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) error {
-	dmsgC := v.dmsgC
-	if dmsgC == nil {
-		return nil
-	}
-	const dmsgTimeout = time.Second * 20
-	logger := dmsgC.Logger().WithField("timeout", dmsgTimeout)
-
-	c := dmsg.NewClient(v.conf.PK, v.conf.SK, dmsgdisc.NewHTTP(v.conf.Dmsg.Discovery, &http.Client{}, log), dmsg.DefaultConfig())
-	defer func() {
-		if err := c.Close(); err != nil {
-			logger.WithError(err).Error()
-		}
-	}()
-	go c.Serve(context.Background())
-	select {
-	case <-ctx.Done():
-		logger.WithError(ctx.Err()).Warn()
-		return ctx.Err()
-	case <-c.Ready():
-	}
-	lis, err := dmsgC.Listen(uint16(uint(80)))
-	if err != nil {
-		logger.WithError(err).Fatal()
-	}
-	go func() {
-		<-ctx.Done()
-		if err := lis.Close(); err != nil {
-			logger.WithError(err).Error()
-		}
-	}()
-	v.pushCloseStack("dmsghttp_logserver", lis.Close)
-	srv := &http.Server{
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       5 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		Handler:           http.FileServer(http.Dir(v.conf.LocalPath)),
-	}
-	logger.WithField("dir", v.conf.LocalPath).
-		WithField("dmsg_addr", lis.Addr().String()).
-		Info("Serving...")
-	logger.Fatal(srv.Serve(lis))
-	dmsgctrl.ServeListener(lis, 0)
-
 	return nil
 }
 
