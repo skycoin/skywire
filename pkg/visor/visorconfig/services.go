@@ -14,8 +14,8 @@ import (
 // Fetch fetches the service URLs & ip:ports from the config service endpoint
 func Fetch(mLog *logging.MasterLogger, serviceConfURL string, stdout bool) (services *Services) {
 
-	urlstr := []string{"http://", serviceConfURL}
-	serviceConf := strings.Join(urlstr, "")
+	urlStr := []string{"http://", serviceConfURL}
+	serviceConf := strings.Join(urlStr, "")
 	client := http.Client{
 		Timeout: time.Second * 2, // Timeout after 2 seconds
 	}

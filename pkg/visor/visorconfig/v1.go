@@ -315,7 +315,7 @@ const V101Name = "v1.0.1"
 // Added public_autoconnect field to transport section
 // Added transport_setup_nodes field to transport section
 // Removed authorization_file field from dmsgpty section
-// Default urls are changed to newer shortned ones
+// Default urls are changed to newer shortened ones
 // Added stun_servers field to the config
 // Added persistent_transports field to the config
 // Changed proxy_discovery_addr field to service_discovery

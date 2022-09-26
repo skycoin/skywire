@@ -28,11 +28,29 @@ import (
 func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Services, dmsgHTTPServersList *DmsgHTTPServers) *V1 {
 	//check if any services were passed
 	if services == nil {
-		//fall back on skyev defaults
+		//fall back on skyenv defaults
 		if !testEnv {
-			services = &Services{utilenv.DmsgDiscAddr, utilenv.TpDiscAddr, utilenv.AddressResolverAddr, utilenv.RouteFinderAddr, []cipher.PubKey{skyenv.MustPK(utilenv.SetupPK)}, utilenv.UptimeTrackerAddr, utilenv.ServiceDiscAddr, utilenv.GetStunServers()}
+			services = &Services{
+				DmsgDiscovery:      utilenv.DmsgDiscAddr,
+				TransportDiscovery: utilenv.TpDiscAddr,
+				AddressResolver:    utilenv.AddressResolverAddr,
+				RouteFinder:        utilenv.RouteFinderAddr,
+				SetupNodes:         []cipher.PubKey{skyenv.MustPK(utilenv.SetupPK)},
+				UptimeTracker:      utilenv.UptimeTrackerAddr,
+				ServiceDiscovery:   utilenv.ServiceDiscAddr,
+				StunServers:        utilenv.GetStunServers(),
+			}
 		} else {
-			services = &Services{utilenv.TestDmsgDiscAddr, utilenv.TestTpDiscAddr, utilenv.TestAddressResolverAddr, utilenv.TestRouteFinderAddr, []cipher.PubKey{skyenv.MustPK(utilenv.TestSetupPK)}, utilenv.TestUptimeTrackerAddr, utilenv.TestServiceDiscAddr, utilenv.GetStunServers()}
+			services = &Services{
+				DmsgDiscovery:      utilenv.TestDmsgDiscAddr,
+				TransportDiscovery: utilenv.TestTpDiscAddr,
+				AddressResolver:    utilenv.TestAddressResolverAddr,
+				RouteFinder:        utilenv.TestRouteFinderAddr,
+				SetupNodes:         []cipher.PubKey{skyenv.MustPK(utilenv.TestSetupPK)},
+				UptimeTracker:      utilenv.TestUptimeTrackerAddr,
+				ServiceDiscovery:   utilenv.TestServiceDiscAddr,
+				StunServers:        utilenv.GetStunServers(),
+			}
 		}
 	}
 	conf := new(V1)
@@ -167,21 +185,21 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 		conf.Hypervisor = &config
 	}
 	if pkgEnv {
-		pkgconfig := skyenv.PackageConfig()
-		conf.LocalPath = pkgconfig.LocalPath
-		conf.Launcher.BinPath = pkgconfig.Launcher.BinPath
+		pkgConfig := skyenv.PackageConfig()
+		conf.LocalPath = pkgConfig.LocalPath
+		conf.Launcher.BinPath = pkgConfig.Launcher.BinPath
 		if conf.Hypervisor != nil {
-			conf.Hypervisor.EnableAuth = pkgconfig.Hypervisor.EnableAuth
-			conf.Hypervisor.DBPath = pkgconfig.Hypervisor.DbPath
+			conf.Hypervisor.EnableAuth = pkgConfig.Hypervisor.EnableAuth
+			conf.Hypervisor.DBPath = pkgConfig.Hypervisor.DbPath
 		}
 	}
 	if usrEnv {
-		usrconfig := skyenv.UserConfig()
-		conf.LocalPath = usrconfig.LocalPath
-		conf.Launcher.BinPath = usrconfig.Launcher.BinPath
+		usrConfig := skyenv.UserConfig()
+		conf.LocalPath = usrConfig.LocalPath
+		conf.Launcher.BinPath = usrConfig.Launcher.BinPath
 		if conf.Hypervisor != nil {
-			conf.Hypervisor.EnableAuth = usrconfig.Hypervisor.EnableAuth
-			conf.Hypervisor.DBPath = usrconfig.Hypervisor.DbPath
+			conf.Hypervisor.EnableAuth = usrConfig.Hypervisor.EnableAuth
+			conf.Hypervisor.DBPath = usrConfig.Hypervisor.DbPath
 		}
 	}
 	return conf, nil
