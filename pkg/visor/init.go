@@ -351,7 +351,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 	if dmsgC == nil {
 		return nil
 	}
-	const dmsgTimeout = time.Second * 20
+	var dmsgTimeout = v.conf.LogRotationInterval
 	logger := dmsgC.Logger().WithField("timeout", dmsgTimeout)
 
 	c := dmsg.NewClient(v.conf.PK, v.conf.SK, dmsgdisc.NewHTTP(v.conf.Dmsg.Discovery, &http.Client{}, log), dmsg.DefaultConfig())
