@@ -69,6 +69,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	conf.StunServers = services.StunServers //utilenv.GetStunServers()
 	conf.ShutdownTimeout = DefaultTimeout
 	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
+	conf.LogRotationInterval = DefaultTimeout
 
 	conf.Dmsgpty = &Dmsgpty{
 		DmsgPort: skyenv.DmsgPtyPort,
