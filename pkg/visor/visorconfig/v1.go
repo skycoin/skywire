@@ -178,6 +178,22 @@ func (v1 *V1) GetPersistentTransports() ([]transport.PersistentTransports, error
 	return v1.PersistentTransports, nil
 }
 
+// UpdateLogRotationInterval updates log_rotation_interval in config
+func (v1 *V1) UpdateLogRotationInterval(d Duration) error {
+	v1.mu.Lock()
+	v1.LogRotationInterval = d
+	v1.mu.Unlock()
+
+	return v1.flush(v1)
+}
+
+// GetLogRotationInterval gets log_rotation_interval from config
+func (v1 *V1) GetLogRotationInterval() (Duration, error) {
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+	return v1.LogRotationInterval, nil
+}
+
 // UpdatePublicAutoconnect updates public_autoconnect in config
 func (v1 *V1) UpdatePublicAutoconnect(pAc bool) error {
 	v1.mu.Lock()
