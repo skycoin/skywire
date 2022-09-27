@@ -378,8 +378,12 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 	go func() {
 		defer wg.Done()
 		err = srv.Serve(lis)
+		if errors.Is(err, dmsg.ErrEntityClosed) {
+			logger.Debug("Dmsg client stopped serving.")
+			return
+		}
 		if err != nil {
-			v.log.WithError(err).Error("Logserver exited with error.")
+			logger.WithError(err).Error("Logserver exited with error.")
 		}
 	}()
 
