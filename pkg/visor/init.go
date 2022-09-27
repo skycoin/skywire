@@ -290,8 +290,7 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	if err != nil {
 		return err
 	}
-	dc := dmsgdisc.NewHTTP(v.conf.Dmsg.Discovery, httpC, v.MasterLogger().PackageLogger("dmsgC:disc"))
-	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg, httpC, dc, v.MasterLogger())
+	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg, httpC, v.MasterLogger())
 
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
@@ -352,24 +351,11 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 		return nil
 	}
 	var dmsgTimeout = v.conf.LogRotationInterval
-	logger := dmsgC.Logger().WithField("timeout", dmsgTimeout)
+	logger := v.MasterLogger().PackageLogger("dmsghttp_logserver").WithField("timeout", dmsgTimeout)
 
-	c := dmsg.NewClient(v.conf.PK, v.conf.SK, dmsgdisc.NewHTTP(v.conf.Dmsg.Discovery, &http.Client{}, log), dmsg.DefaultConfig())
-	defer func() {
-		if err := c.Close(); err != nil {
-			logger.WithError(err).Error()
-		}
-	}()
-	go c.Serve(context.Background())
-	select {
-	case <-ctx.Done():
-		logger.WithError(ctx.Err()).Warn()
-		return ctx.Err()
-	case <-c.Ready():
-	}
 	lis, err := dmsgC.Listen(uint16(uint(80)))
 	if err != nil {
-		logger.WithError(err).Fatal()
+		return err
 	}
 	go func() {
 		<-ctx.Done()
@@ -377,18 +363,33 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 			logger.WithError(err).Error()
 		}
 	}()
-	v.pushCloseStack("dmsghttp_logserver", lis.Close)
 	srv := &http.Server{
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       5 * time.Second,
-		WriteTimeout:      10 * time.Second,
+		WriteTimeout:      time.Duration(dmsgTimeout),
 		Handler:           http.FileServer(http.Dir(v.conf.LocalPath)),
 	}
 	logger.WithField("dir", v.conf.LocalPath).
 		WithField("dmsg_addr", lis.Addr().String()).
 		Info("Serving...")
-	logger.Fatal(srv.Serve(lis))
-	dmsgctrl.ServeListener(lis, 0)
+	wg := new(sync.WaitGroup)
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		err = srv.Serve(lis)
+		if err != nil {
+			v.log.WithError(err).Error("Logserver exited with error.")
+		}
+	}()
+
+	v.pushCloseStack("dmsghttp.logserver", func() error {
+		if err := srv.Close(); err != nil {
+			return err
+		}
+		wg.Wait()
+		return nil
+	})
 
 	return nil
 }
