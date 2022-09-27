@@ -627,10 +627,10 @@ func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.Connection
 // VPNServers gets available public VPN server from service discovery URL
 func (v *Visor) VPNServers(version, country string) ([]servicedisc.Service, error) {
 	log := logging.MustGetLogger("vpnservers")
-	vlog := logging.NewMasterLogger()
-	vlog.SetLevel(logrus.InfoLevel)
+	vLog := logging.NewMasterLogger()
+	vLog.SetLevel(logrus.InfoLevel)
 
-	sdClient := servicedisc.NewClient(log, vlog, servicedisc.Config{
+	sdClient := servicedisc.NewClient(log, vLog, servicedisc.Config{
 		Type:     servicedisc.ServiceTypeVPN,
 		PK:       v.conf.PK,
 		SK:       v.conf.SK,
