@@ -45,6 +45,7 @@ require (
 	github.com/go-chi/chi/v5 v5.0.8-0.20220103230436-7dbe9a0bd10f
 	github.com/ivanpirog/coloredcobra v1.0.0
 	github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
+	github.com/lib/pq v1.10.7
 	github.com/skycoin/dmsg v0.0.0-20220904231115-c313c992c788
 	github.com/skycoin/skywire-utilities v0.0.0-20220712142443-abafa30105ce
 	github.com/skycoin/systray v1.10.1-0.20220630135132-48d2a1fb85d8

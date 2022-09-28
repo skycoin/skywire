@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"time"
 
+	pq "github.com/lib/pq"
+
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/geo"
 )
@@ -121,7 +123,7 @@ type Service struct {
 	Type      string            `json:"type"`
 	Geo       *geo.LocationData `json:"geo,omitempty" gorm:"embedded"`
 	Version   string            `json:"version,omitempty"`
-	LocalIPs  []string          `json:"local_ips,omitempty" gorm:"type:text"`
+	LocalIPs  pq.StringArray    `json:"local_ips,omitempty" gorm:"type:text[]"`
 }
 
 // MarshalBinary implements encoding.BinaryMarshaller
