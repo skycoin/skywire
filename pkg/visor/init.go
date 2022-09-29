@@ -348,7 +348,7 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 	dmsgC := v.dmsgC
 	if dmsgC == nil {
-		return nil
+		return fmt.Errorf("cannot initialize dmsg log server: dmsg not configured")
 	}
 	var dmsgTimeout = v.conf.LogRotationInterval
 	logger := v.MasterLogger().PackageLogger("dmsghttp_logserver").WithField("timeout", dmsgTimeout)
