@@ -368,9 +368,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 		WriteTimeout:      10 * time.Second,
 		Handler:           http.FileServer(http.Dir(v.conf.LocalPath)),
 	}
-	logger.WithField("dir", v.conf.LocalPath).
-		WithField("dmsg_addr", lis.Addr().String()).
-		Info("Serving...")
+
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
 
@@ -378,7 +376,6 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 		defer wg.Done()
 		err = srv.Serve(lis)
 		if errors.Is(err, dmsg.ErrEntityClosed) {
-			logger.Debug("Dmsg client stopped serving.")
 			return
 		}
 		if err != nil {
