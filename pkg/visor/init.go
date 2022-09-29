@@ -350,8 +350,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 	if dmsgC == nil {
 		return fmt.Errorf("cannot initialize dmsg log server: dmsg not configured")
 	}
-	var dmsgTimeout = v.conf.LogRotationInterval
-	logger := v.MasterLogger().PackageLogger("dmsghttp_logserver").WithField("timeout", dmsgTimeout)
+	logger := v.MasterLogger().PackageLogger("dmsghttp_logserver")
 
 	lis, err := dmsgC.Listen(uint16(uint(80)))
 	if err != nil {
@@ -366,7 +365,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 	srv := &http.Server{
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       5 * time.Second,
-		WriteTimeout:      time.Duration(dmsgTimeout),
+		WriteTimeout:      10 * time.Second,
 		Handler:           http.FileServer(http.Dir(v.conf.LocalPath)),
 	}
 	logger.WithField("dir", v.conf.LocalPath).
