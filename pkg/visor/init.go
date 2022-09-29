@@ -352,7 +352,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 	}
 	logger := v.MasterLogger().PackageLogger("dmsghttp_logserver")
 
-	lis, err := dmsgC.Listen(uint16(uint(80)))
+	lis, err := dmsgC.Listen(skyenv.DmsgHTTPPort)
 	if err != nil {
 		return err
 	}
