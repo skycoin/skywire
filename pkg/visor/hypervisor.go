@@ -1243,7 +1243,7 @@ func (hv *Hypervisor) putPrivacy() http.HandlerFunc {
 			return
 		}
 
-		if err := ctx.API.SetPrivacy(reqBody); err != nil {
+		if _, err := ctx.API.SetPrivacy(reqBody); err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
