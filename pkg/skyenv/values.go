@@ -206,6 +206,9 @@ type Survey struct {
 // SurveyFile is the name of the survey file
 const SurveyFile string = "system.json"
 
+// PrivFile is the name of the file containing skycoin rewards address and privacy setting
+const PrivFile string = "privacy.json"
+
 // HwSurvey returns system hardware survey
 func HwSurvey() (s Survey) {
 	s.UUID = uuid.New()
