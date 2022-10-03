@@ -399,7 +399,10 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	logS := transport.InMemoryTransportLogStore()
+	logS, err := transport.FileTransportLogStore(v.conf.LocalPath + "/test")
+	if err != nil {
+		return err
+	}
 
 	pTps, err := v.conf.GetPersistentTransports()
 	if err != nil {
