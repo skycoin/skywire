@@ -109,6 +109,8 @@ var (
 	hv vinit.Module
 	// Dmsg ctrl module
 	dmsgCtrl vinit.Module
+	// Dmsg http log server module
+	dmsgHTTPLogServer vinit.Module
 	// Dmsg http module
 	dmsgHTTP vinit.Module
 	// Dmsg trackers module
@@ -137,6 +139,7 @@ func registerModules(logger *logging.MasterLogger) {
 	stcpC = maker("stcp", initStcpClient, &tr)
 	dmsgC = maker("dmsg", initDmsg, &ebc, &dmsgHTTP)
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &dmsgC, &tr)
+	dmsgHTTPLogServer = maker("dmsghttp_logserver", initDmsgHTTPLogServer, &dmsgC, &tr)
 	dmsgTrackers = maker("dmsg_trackers", initDmsgTrackers, &dmsgC)
 
 	pty = maker("dmsg_pty", initDmsgpty, &dmsgC)
@@ -147,7 +150,7 @@ func registerModules(logger *logging.MasterLogger) {
 	ut = maker("uptime_tracker", initUptimeTracker, &dmsgHTTP)
 	pv = maker("public_autoconnect", initPublicAutoconnect, &tr, &disc)
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
-	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl, &dmsgTrackers)
+	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl, &dmsgHTTPLogServer, &dmsgTrackers)
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
 		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC)
@@ -165,13 +168,12 @@ func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return nil
 	}
 
-	pk, sk := cipher.GenerateKeyPair()
-	keys = append(keys, pk)
+	keys = append(keys, v.conf.PK)
 	entries := direct.GetAllEntries(keys, servers)
 	dClient := direct.NewClient(entries, v.MasterLogger().PackageLogger("dmsg_http:direct_client"))
 
 	dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, v.MasterLogger().PackageLogger("dmsg_http:dmsgDC"),
-		pk, sk, dClient, dmsg.DefaultConfig())
+		v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
 	if err != nil {
 		return fmt.Errorf("failed to start dmsg: %w", err)
 	}
@@ -288,7 +290,6 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	if err != nil {
 		return err
 	}
-
 	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg, httpC, v.MasterLogger())
 
 	wg := new(sync.WaitGroup)
@@ -341,6 +342,55 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	v.pushCloseStack("dmsgctrl", cl.Close)
 
 	dmsgctrl.ServeListener(cl, 0)
+	return nil
+}
+
+func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) error {
+	dmsgC := v.dmsgC
+	if dmsgC == nil {
+		return fmt.Errorf("cannot initialize dmsg log server: dmsg not configured")
+	}
+	logger := v.MasterLogger().PackageLogger("dmsghttp_logserver")
+
+	lis, err := dmsgC.Listen(skyenv.DmsgHTTPPort)
+	if err != nil {
+		return err
+	}
+	go func() {
+		<-ctx.Done()
+		if err := lis.Close(); err != nil {
+			logger.WithError(err).Error()
+		}
+	}()
+	srv := &http.Server{
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       5 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		Handler:           http.FileServer(http.Dir(v.conf.LocalPath)),
+	}
+
+	wg := new(sync.WaitGroup)
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		err = srv.Serve(lis)
+		if errors.Is(err, dmsg.ErrEntityClosed) {
+			return
+		}
+		if err != nil {
+			logger.WithError(err).Error("Logserver exited with error.")
+		}
+	}()
+
+	v.pushCloseStack("dmsghttp.logserver", func() error {
+		if err := srv.Close(); err != nil {
+			return err
+		}
+		wg.Wait()
+		return nil
+	})
+
 	return nil
 }
 

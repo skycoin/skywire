@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 - `skywire-cli` subcommand `arg` under `visor app` [#1356](https://github.com/skycoin/skywire/pull/1356)
+- `log_rotation_interval` field to config [#1374](https://github.com/skycoin/skywire/pull/1374)
 
 ### Changed
 - moved `skywire-cli` subcommand `autoconnect` from `visor app` to `visor app arg` [#1356](https://github.com/skycoin/skywire/pull/1356)
