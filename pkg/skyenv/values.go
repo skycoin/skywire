@@ -210,8 +210,8 @@ const SurveyFile string = "system.json"
 // PrivFile is the name of the file containing skycoin rewards address and privacy setting
 const PrivFile string = "privacy.json"
 
-// HwSurvey returns system hardware survey
-func HwSurvey() (s Survey) {
+// SystemSurvey returns system hardware survey
+func SystemSurvey() (s Survey) {
 	s.UUID = uuid.New()
 	s.Disks, _ = ghw.Block()     //nolint
 	s.Product, _ = ghw.Product() //nolint
