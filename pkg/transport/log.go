@@ -2,6 +2,7 @@ package transport
 
 import (
 	"bytes"
+	"encoding/csv"
 	"encoding/gob"
 	"encoding/json"
 	"errors"
@@ -11,11 +12,20 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
+
+// CsvEntry represents a logging entry for csv for a given Transport.
+type CsvEntry struct {
+	TpID uuid.UUID `json:"tp_id"`
+	// atomic requires 64-bit alignment for struct field access
+	LogEntry
+	TimeStamp time.Time `json:"time_stamp"` // TimeStamp should be time.RFC3339Nano formatted
+}
 
 // LogEntry represents a logging entry for a given Transport.
 // The entry is updated every time a packet is received or sent.
@@ -118,7 +128,7 @@ type fileTransportLogStore struct {
 
 // FileTransportLogStore implements file TransportLogStore.
 func FileTransportLogStore(dir string) (LogStore, error) {
-	if err := os.MkdirAll(dir, 0707); err != nil {
+	if err := os.MkdirAll(dir, 0606); err != nil {
 		return nil, err
 	}
 	log := logging.MustGetLogger("transport")
@@ -145,7 +155,18 @@ func (tls *fileTransportLogStore) Entry(id uuid.UUID) (*LogEntry, error) {
 }
 
 func (tls *fileTransportLogStore) Record(id uuid.UUID, entry *LogEntry) error {
-	f, err := os.OpenFile(filepath.Join(tls.dir, fmt.Sprintf("%s.log", id)), os.O_RDWR|os.O_CREATE, 0600)
+	cEntry := CsvEntry{
+		TpID:      id,
+		LogEntry:  *entry,
+		TimeStamp: time.Now().UTC(),
+	}
+
+	return tls.writeJSONToCSV(cEntry)
+}
+
+func (tls *fileTransportLogStore) writeJSONToCSV(entry CsvEntry) error {
+	today := time.Now().UTC().Format("2006-01-02")
+	f, err := os.OpenFile(filepath.Join(tls.dir, fmt.Sprintf("%s.csv", today)), os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
 		return fmt.Errorf("open: %w", err)
 	}
@@ -155,9 +176,80 @@ func (tls *fileTransportLogStore) Record(id uuid.UUID, entry *LogEntry) error {
 		}
 	}()
 
-	if err := json.NewEncoder(f).Encode(entry); err != nil {
-		return fmt.Errorf("json: %w", err)
+	csvReader := csv.NewReader(f)
+	data, err := csvReader.ReadAll()
+	if err != nil {
+		return err
+	}
+
+	readLogs, err := createCsvEntry(data)
+	if err != nil {
+		return err
+	}
+
+	var writeLogs []CsvEntry
+	for _, log := range readLogs {
+		if log.TpID == entry.TpID {
+			writeLogs = append(writeLogs, entry)
+			continue
+		}
+		writeLogs = append(writeLogs, log)
+	}
+
+	writer := csv.NewWriter(f)
+	defer writer.Flush()
+
+	header := []string{"tp_id", "recv", "sent", "time_stamp"}
+	if err := writer.Write(header); err != nil {
+		return err
+	}
+
+	for _, r := range writeLogs {
+		var csvRow []string
+		csvRow = append(csvRow, r.TpID.String(), fmt.Sprint(r.LogEntry.RecvBytes), fmt.Sprint(r.LogEntry.SentBytes), r.TimeStamp.String())
+		if err := writer.Write(csvRow); err != nil {
+			return err
+		}
 	}
 
 	return nil
+}
+
+func createCsvEntry(data [][]string) ([]CsvEntry, error) {
+	// convert csv lines to array of structs
+	var csvEntries []CsvEntry
+	for i, line := range data {
+		if i > 0 { // omit header line
+			var entry CsvEntry
+			for j, field := range line {
+				if j == 0 {
+					tpID, err := uuid.Parse(field)
+					if err != nil {
+						return nil, err
+					}
+					entry.TpID = tpID
+				} else if j == 1 {
+					recvBytes, err := strconv.Atoi(field)
+					if err != nil {
+						return nil, err
+					}
+					entry.LogEntry.RecvBytes = uint64(recvBytes)
+				} else if j == 2 {
+					sentBytes, err := strconv.Atoi(field)
+					if err != nil {
+						return nil, err
+					}
+					entry.LogEntry.SentBytes = uint64(sentBytes)
+				} else if j == 3 {
+					date, err := time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", field)
+					if err != nil {
+						return nil, err
+					}
+					entry.TimeStamp = date
+				}
+			}
+			csvEntries = append(csvEntries, entry)
+		}
+	}
+	return csvEntries, nil
 }
