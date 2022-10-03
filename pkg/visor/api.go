@@ -28,6 +28,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // API represents visor API.
@@ -87,6 +88,8 @@ type API interface {
 
 	GetPersistentTransports() ([]transport.PersistentTransports, error)
 	SetPersistentTransports([]transport.PersistentTransports) error
+	GetLogRotationInterval() (visorconfig.Duration, error)
+	SetLogRotationInterval(visorconfig.Duration) error
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -659,10 +662,10 @@ func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.Connection
 // VPNServers gets available public VPN server from service discovery URL
 func (v *Visor) VPNServers(version, country string) ([]servicedisc.Service, error) {
 	log := logging.MustGetLogger("vpnservers")
-	vlog := logging.NewMasterLogger()
-	vlog.SetLevel(logrus.InfoLevel)
+	vLog := logging.NewMasterLogger()
+	vLog.SetLevel(logrus.InfoLevel)
 
-	sdClient := servicedisc.NewClient(log, vlog, servicedisc.Config{
+	sdClient := servicedisc.NewClient(log, vLog, servicedisc.Config{
 		Type:     servicedisc.ServiceTypeVPN,
 		PK:       v.conf.PK,
 		SK:       v.conf.SK,
@@ -885,9 +888,19 @@ func (v *Visor) SetPersistentTransports(pTps []transport.PersistentTransports) e
 	return v.conf.UpdatePersistentTransports(pTps)
 }
 
-// GetPersistentTransports sets min_hops routing config of visor
+// GetPersistentTransports gets min_hops routing config of visor
 func (v *Visor) GetPersistentTransports() ([]transport.PersistentTransports, error) {
 	return v.conf.GetPersistentTransports()
+}
+
+// SetLogRotationInterval sets log_rotation_interval config of visor
+func (v *Visor) SetLogRotationInterval(d visorconfig.Duration) error {
+	return v.conf.UpdateLogRotationInterval(d)
+}
+
+// GetLogRotationInterval gets log_rotation_interval config of visor
+func (v *Visor) GetLogRotationInterval() (visorconfig.Duration, error) {
+	return v.conf.GetLogRotationInterval()
 }
 
 // SetPublicAutoconnect sets public_autoconnect config of visor
