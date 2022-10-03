@@ -249,7 +249,7 @@ func runVisor(conf *visorconfig.V1) {
 		conf = initConfig(log, confPath)
 	}
 
-	survey := skyenv.HwSurvey()
+	survey := skyenv.SystemSurvey()
 	survey.PubKey = conf.PK
 	// Print results.
 	s, err := json.MarshalIndent(survey, "", "\t")
