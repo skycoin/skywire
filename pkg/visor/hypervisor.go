@@ -33,6 +33,7 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 	"github.com/skycoin/skywire/pkg/visor/usermanager"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 const (
@@ -263,6 +264,8 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Post("/visors/{pk}/min-hops", hv.postMinHops())
 				r.Get("/visors/{pk}/persistent-transports", hv.getPersistentTransports())
 				r.Put("/visors/{pk}/persistent-transports", hv.putPersistentTransports())
+				r.Get("/visors/{pk}/log/rotation", hv.getLogRotationInterval())
+				r.Put("/visors/{pk}/log/rotation", hv.putLogRotationInterval())
 			})
 		})
 
@@ -1220,6 +1223,39 @@ func (hv *Hypervisor) putPersistentTransports() http.HandlerFunc {
 func (hv *Hypervisor) getPersistentTransports() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		pts, err := ctx.API.GetPersistentTransports()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, pts)
+	})
+}
+
+func (hv *Hypervisor) putLogRotationInterval() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var reqBody struct {
+			LogRotationInterval visorconfig.Duration `json:"log_rotation_interval"`
+		}
+
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("putLogRotationInterval request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+
+		if err := ctx.API.SetLogRotationInterval(reqBody.LogRotationInterval); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
+func (hv *Hypervisor) getLogRotationInterval() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		pts, err := ctx.API.GetLogRotationInterval()
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return

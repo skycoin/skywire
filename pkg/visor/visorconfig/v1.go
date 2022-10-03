@@ -30,13 +30,13 @@ type V1 struct {
 	Hypervisors []cipher.PubKey `json:"hypervisors"`
 	CLIAddr     string          `json:"cli_addr"`
 
-	LogLevel          string   `json:"log_level"`
-	LocalPath         string   `json:"local_path"`
-	StunServers       []string `json:"stun_servers"`
-	ShutdownTimeout   Duration `json:"shutdown_timeout,omitempty"`    // time value, examples: 10s, 1m, etc
-	RestartCheckDelay Duration `json:"restart_check_delay,omitempty"` // time value, examples: 10s, 1m, etc
-	IsPublic          bool     `json:"is_public"`
-
+	LogLevel             string                           `json:"log_level"`
+	LocalPath            string                           `json:"local_path"`
+	StunServers          []string                         `json:"stun_servers"`
+	ShutdownTimeout      Duration                         `json:"shutdown_timeout,omitempty"`    // time value, examples: 10s, 1m, etc
+	RestartCheckDelay    Duration                         `json:"restart_check_delay,omitempty"` // time value, examples: 10s, 1m, etc
+	LogRotationInterval  Duration                         `json:"log_rotation_interval"`         // time value, examples: 10s, 1m, etc
+	IsPublic             bool                             `json:"is_public"`
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 
 	Hypervisor *hypervisorconfig.Config `json:"hypervisor,omitempty"`
@@ -178,6 +178,22 @@ func (v1 *V1) GetPersistentTransports() ([]transport.PersistentTransports, error
 	return v1.PersistentTransports, nil
 }
 
+// UpdateLogRotationInterval updates log_rotation_interval in config
+func (v1 *V1) UpdateLogRotationInterval(d Duration) error {
+	v1.mu.Lock()
+	v1.LogRotationInterval = d
+	v1.mu.Unlock()
+
+	return v1.flush(v1)
+}
+
+// GetLogRotationInterval gets log_rotation_interval from config
+func (v1 *V1) GetLogRotationInterval() (Duration, error) {
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+	return v1.LogRotationInterval, nil
+}
+
 // UpdatePublicAutoconnect updates public_autoconnect in config
 func (v1 *V1) UpdatePublicAutoconnect(pAc bool) error {
 	v1.mu.Lock()
@@ -315,7 +331,7 @@ const V101Name = "v1.0.1"
 // Added public_autoconnect field to transport section
 // Added transport_setup_nodes field to transport section
 // Removed authorization_file field from dmsgpty section
-// Default urls are changed to newer shortned ones
+// Default urls are changed to newer shortened ones
 // Added stun_servers field to the config
 // Added persistent_transports field to the config
 // Changed proxy_discovery_addr field to service_discovery

@@ -30,6 +30,7 @@ const (
 	DmsgSetupPort          uint16 = 36  // Listening port of a setup node.
 	DmsgHypervisorPort     uint16 = 46  // Listening port of a hypervisor for incoming RPC visor connections over dmsg.
 	DmsgTransportSetupPort uint16 = 47  // Listening port for transport setup RPC over dmsg.
+	DmsgHTTPPort           uint16 = 80  // Listening port for dmsghttp logserver.
 	DmsgAwaitSetupPort     uint16 = 136 // Listening port of a visor for setup operations.
 )
 
