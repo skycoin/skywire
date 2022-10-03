@@ -27,6 +27,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/cipherutil"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var (
@@ -400,6 +401,19 @@ func (rc *rpcClient) GetPersistentTransports() ([]transport.PersistentTransports
 	var tps []transport.PersistentTransports
 	err := rc.Call("GetPersistentTransports", &struct{}{}, &tps)
 	return tps, err
+}
+
+// SetLogRotationInterval sets the log_rotation_interval from visor config
+func (rc *rpcClient) SetLogRotationInterval(d visorconfig.Duration) error {
+	err := rc.Call("SetLogRotationInterval", &d, &struct{}{})
+	return err
+}
+
+// GetLogRotationInterval gets the log_rotation_interval from visor config
+func (rc *rpcClient) GetLogRotationInterval() (visorconfig.Duration, error) {
+	var d visorconfig.Duration
+	err := rc.Call("GetLogRotationInterval", &struct{}{}, &d)
+	return d, err
 }
 
 // StatusMessage defines a status of visor update.
@@ -975,6 +989,17 @@ func (mc *mockRPCClient) SetPersistentTransports(_ []transport.PersistentTranspo
 // GetPersistentTransports implements API
 func (mc *mockRPCClient) GetPersistentTransports() ([]transport.PersistentTransports, error) {
 	return []transport.PersistentTransports{}, nil
+}
+
+// SetLogRotationInterval implements API
+func (mc *mockRPCClient) SetLogRotationInterval(_ visorconfig.Duration) error {
+	return nil
+}
+
+// GetLogRotationInterval implements API
+func (mc *mockRPCClient) GetLogRotationInterval() (visorconfig.Duration, error) {
+	var d visorconfig.Duration
+	return d, nil
 }
 
 // VPNServers implements API
