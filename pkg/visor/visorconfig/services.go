@@ -63,4 +63,5 @@ type Services struct {
 	UptimeTracker      string          `json:"uptime_tracker"`
 	ServiceDiscovery   string          `json:"service_discovery"`
 	StunServers        []string        `json:"stun_servers"`
+	DNSServer          string          `json:"dns_server"`
 }
