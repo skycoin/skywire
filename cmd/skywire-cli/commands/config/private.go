@@ -5,11 +5,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sirupsen/logrus"
 	coincipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/privacyconfig"
 )
@@ -63,8 +62,6 @@ var setPrivacyConfigCmd = &cobra.Command{
 	Short: "set reward address & node privacy",
 	Long:  "set reward address & node privacy",
 	Run: func(cmd *cobra.Command, args []string) {
-		mLog := logging.NewMasterLogger()
-		mLog.SetLevel(logrus.InfoLevel)
 		if out == "" {
 			out = fullPathStr
 		}
@@ -75,7 +72,7 @@ var setPrivacyConfigCmd = &cobra.Command{
 		}
 		cAddr, err := coincipher.DecodeBase58Address(rewardAddress)
 		if err != nil {
-			logger.WithError(err).Fatal("invalid address specified")
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid address specified: %v", err))
 		}
 
 		confP := privacyconfig.Privacy{
@@ -85,9 +82,10 @@ var setPrivacyConfigCmd = &cobra.Command{
 
 		j, err := privacyconfig.SetReward(confP, out, pathStr)
 		if err != nil {
-			logger.Fatal(err)
+			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		logger.Infof("Updated file '%s' to:\n%s\n", out, j)
+		output := fmt.Sprintf("Updated file '%s' to:\n%s\n", out, j)
+		internal.PrintOutput(cmd.Flags(), output, output)
 	},
 }
 var getPrivacyConfigCmd = &cobra.Command{
@@ -95,19 +93,17 @@ var getPrivacyConfigCmd = &cobra.Command{
 	Short: "read reward address & privacy setting from file",
 	Long:  `read reward address & privacy setting from file`,
 	Run: func(cmd *cobra.Command, args []string) {
-		mLog := logging.NewMasterLogger()
-		mLog.SetLevel(logrus.InfoLevel)
 		if out == "" {
 			out = getPathStr
 		}
 		if out == "" {
-			logger.Fatal("config was not detected and no path was specified.")
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("config was not detected and no path was specified"))
 		}
 
 		j, err := privacyconfig.GetReward(out)
 		if err != nil {
-			logger.Fatal(err)
+			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Printf("%s\n", j)
+		internal.PrintOutput(cmd.Flags(), string(j), string(j))
 	},
 }
