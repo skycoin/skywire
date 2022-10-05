@@ -3,12 +3,10 @@ package clivisor
 import (
 	"fmt"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	coincipher "github.com/skycoin/skycoin/src/cipher"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
@@ -44,9 +42,6 @@ var setPrivacyCmd = &cobra.Command{
 	Short: "set privacy.json via rpc",
 	Long:  "configure privacy settings\n\ntest of the api endpoint SetPrivacy",
 	Run: func(cmd *cobra.Command, args []string) {
-		mLog := logging.NewMasterLogger()
-		mLog.SetLevel(logrus.InfoLevel)
-		log := logging.MustGetLogger("skywire-cli visor priv set")
 		client := clirpc.Client(cmd.Flags())
 
 		cAddr, err := coincipher.DecodeBase58Address(rewardAddress)
@@ -58,7 +53,8 @@ var setPrivacyCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 		}
-		log.Info("Privacy settings updated to:\n", resp)
+		output := fmt.Sprint("Privacy settings updated to:\n", resp)
+		internal.PrintOutput(cmd.Flags(), output, output)
 	},
 }
 
@@ -67,10 +63,10 @@ var getPrivacyCmd = &cobra.Command{
 	Short: "read privacy setting from file",
 	Long:  "configure privacy settings\n\ntest of the api endpoints GetPrivacy",
 	Run: func(cmd *cobra.Command, args []string) {
-		p, err := clirpc.Client(cmd.Flags()).GetPrivacy()
+		j, err := clirpc.Client(cmd.Flags()).GetPrivacy()
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 		}
-		fmt.Printf("%s", p)
+		internal.PrintOutput(cmd.Flags(), string(j), string(j))
 	},
 }
