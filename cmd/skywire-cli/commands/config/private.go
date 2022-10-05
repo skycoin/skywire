@@ -18,10 +18,9 @@ var (
 	displayNodeIP bool
 	rewardAddress string
 	out           string
-	pathstr       string
-	fullpathstr   string
-	getpathstr    string
-	dummy         string
+	pathStr       string
+	fullPathStr   string
+	getPathStr    string
 )
 
 func init() {
@@ -33,17 +32,15 @@ func init() {
 	setPrivacyConfigCmd.Flags().BoolVarP(&displayNodeIP, "publicip", "i", false, "display node ip")
 	// default is genesis address for skycoin blockchain ; for testing
 	setPrivacyConfigCmd.Flags().StringVarP(&rewardAddress, "address", "a", "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6", "reward address")
-	//use the correct path for the available pemissions
-	pathstr = skyenv.PackageConfig().LocalPath
-	fullpathstr = strings.Join([]string{pathstr, skyenv.PrivFile}, "/")
-	getpathstr = fullpathstr
-	if _, err := os.Stat(getpathstr); os.IsNotExist(err) {
-		getpathstr = ""
+	//use the correct path for the available permissions
+	pathStr = skyenv.PackageConfig().LocalPath
+	fullPathStr = strings.Join([]string{pathStr, skyenv.PrivFile}, "/")
+	getPathStr = fullPathStr
+	if _, err := os.Stat(getPathStr); os.IsNotExist(err) {
+		getPathStr = ""
 	}
-	setPrivacyConfigCmd.Flags().StringVarP(&out, "out", "o", "", "output config: "+fullpathstr)
-	getPrivacyConfigCmd.Flags().StringVarP(&out, "out", "o", "", "read config from: "+getpathstr)
-	RootCmd.PersistentFlags().StringVar(&dummy, "rpc", "localhost:3435", "RPC server address")
-	RootCmd.PersistentFlags().MarkHidden("rpc") // nolint
+	setPrivacyConfigCmd.Flags().StringVarP(&out, "out", "o", "", "output config: "+fullPathStr)
+	getPrivacyConfigCmd.Flags().StringVarP(&out, "out", "o", "", "read config from: "+getPathStr)
 
 }
 
@@ -69,7 +66,7 @@ var setPrivacyConfigCmd = &cobra.Command{
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
 		if out == "" {
-			out = fullpathstr
+			out = fullPathStr
 		}
 		if len(args) > 0 {
 			if args[0] != "" {
@@ -86,7 +83,7 @@ var setPrivacyConfigCmd = &cobra.Command{
 			RewardAddress: cAddr,
 		}
 
-		j, err := privacyconfig.SetReward(confP, out, pathstr)
+		j, err := privacyconfig.SetReward(confP, out, pathStr)
 		if err != nil {
 			logger.Fatal(err)
 		}
@@ -101,7 +98,7 @@ var getPrivacyConfigCmd = &cobra.Command{
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
 		if out == "" {
-			out = getpathstr
+			out = getPathStr
 		}
 		if out == "" {
 			logger.Fatal("config was not detected and no path was specified.")
