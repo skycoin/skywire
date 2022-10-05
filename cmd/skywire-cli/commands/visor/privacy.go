@@ -2,7 +2,6 @@ package clivisor
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -13,15 +12,12 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/privacyconfig"
 )
 
 var (
 	displayNodeIP bool
 	rewardAddress string
-	out           string
-	pathstr       string
 )
 
 func init() {
@@ -33,9 +29,7 @@ func init() {
 	setPrivacyCmd.Flags().BoolVarP(&displayNodeIP, "publicip", "i", false, "display node ip")
 	// default is genesis address for skycoin blockchain ; for testing
 	setPrivacyCmd.Flags().StringVarP(&rewardAddress, "address", "a", "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6", "reward address")
-	//use the correct path for the available pemissions
-	pathstr = strings.Join([]string{skyenv.Config().LocalPath, skyenv.PrivFile}, "/")
-	setPrivacyCmd.Flags().StringVarP(&out, "out", "o", "", "output config: "+pathstr)
+	//use the correct path for the available permissions
 }
 
 var privacyCmd = &cobra.Command{
