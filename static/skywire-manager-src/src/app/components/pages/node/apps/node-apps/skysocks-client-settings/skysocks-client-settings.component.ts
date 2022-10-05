@@ -73,6 +73,7 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   @ViewChild('settingsButton') settingsButton: ButtonComponent;
   @ViewChild('firstInput') firstInput: ElementRef;
   form: UntypedFormGroup;
+  settingsForm: FormGroup;
   // Entries to show on the history.
   history: HistoryEntry[];
 
@@ -104,10 +105,11 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   // True if configuring Vpn-Client, false if configuring Skysocks-Client.
   configuringVpn = false;
 
-  // Indicates if the killswitch option is selected in the UI or not.
-  killswitch = false;
-  // Indicates if the killswitch is active in the backend or not.
+  // Indicates the value of the killswitch option in the backend the last time it was checked or changed.
   initialKillswitchSetting = false;
+
+  // Indicates the value of the dns option in the backend the last time it was checked or changed.
+  initialDnsSetting = '';
 
   // If the operation in currently being made.
   working = false;
@@ -177,11 +179,22 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
           currentVal = this.data.args[i + 1];
         }
         if ((this.data.args[i] as string).toLowerCase().includes('-killswitch')) {
-          this.killswitch = (this.data.args[i] as string).toLowerCase().includes('true');
-          this.initialKillswitchSetting = this.killswitch;
+          this.initialKillswitchSetting = (this.data.args[i] as string).toLowerCase().includes('true');
+        }
+
+        if ((this.data.args[i] as string).toLowerCase().includes('-dns')) {
+          this.initialDnsSetting = (this.data.args[i + 1] as string);
         }
       }
     }
+
+    this.settingsForm = this.formBuilder.group({
+      killswitch: [this.initialKillswitchSetting, Validators.required],
+      dns: [this.initialDnsSetting, Validators.compose([
+        Validators.maxLength(15),
+        this.validateIp.bind(this)
+      ])]
+    });
 
     this.form = this.formBuilder.group({
       pk: [currentVal, Validators.compose([
@@ -229,11 +242,22 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
     return this.button && this.settingsButton ? (this.button.isLoading || this.settingsButton.isLoading) : false;
   }
 
-  // Used by the checkbox for the killswitch setting.
-  setKillswitch(event) {
-    if (!this.working) {
-      this.killswitch = event.checked ? true : false;
+  // Validates an IPv4 address.
+  private validateIp() {
+    if (this.settingsForm) {
+      const value = this.settingsForm.get('dns').value as string;
+      const validOrEmpty = GeneralUtils.checkIfIpValidOrEmpty(value);
+
+      return validOrEmpty ? null : { invalid: true };
     }
+
+    return null;
+  }
+
+  // If the UI must tell the user that the changes made in the settings have not been saved.
+  get settingsChanged(): boolean {
+    return this.initialKillswitchSetting !== this.settingsForm.get('killswitch').value ||
+      this.initialDnsSetting !== this.settingsForm.get('dns').value ;
   }
 
   // Opens the modal window for selecting the filters.
@@ -529,7 +553,10 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const data = { killswitch: this.killswitch };
+    const data = {
+      killswitch: this.settingsForm.get('killswitch').value,
+      dns: this.settingsForm.get('dns').value,
+    };
 
     this.settingsButton.showLoading(false);
     this.button.showLoading(false);
@@ -541,7 +568,8 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
       data,
     ).subscribe(
       () => {
-        this.initialKillswitchSetting = this.killswitch;
+        this.initialKillswitchSetting = data.killswitch;
+        this.initialDnsSetting = data.dns;
 
         this.snackbarService.showDone('apps.vpn-socks-client-settings.changes-made');
 

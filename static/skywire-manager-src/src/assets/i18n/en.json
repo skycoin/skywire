@@ -433,6 +433,8 @@
       "no-history": "This tab will show the last {{ number }} public keys used.",
       "default-note-warning": "The default note has been used.",
       "pagination-info": "{{ currentElementsRange }} of {{ totalElements }}",
+      "dns": "Custom DNS server IP address",
+      "dns-error": "Invalid value.",
       "killswitch-check": "Activate killswitch",
       "killswitch-info": "When active, all network connections will be disabled if the app is running but the VPN protection is interrupted (for temporary errors or any other problem). This avoids data leaks.",
       "settings-changed-alert": " The changes have not been saved yet.",
