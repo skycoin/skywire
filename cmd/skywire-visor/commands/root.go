@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -12,7 +13,6 @@ import (
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
 	"os/exec"
-	"os/user"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -55,6 +55,7 @@ var (
 	stdin                bool
 	launchBrowser        bool
 	hypervisorUI         bool
+	noHypervisorUI       bool
 	remoteHypervisorPKs  string
 	disableHypervisorPKs bool
 	isAutoPeer           bool
@@ -66,7 +67,7 @@ var (
 	all                  bool
 	pkg                  bool
 	usr                  bool
-	localIPs             []net.IP
+	localIPs             []net.IP //  nolint:unused
 	// root indicates process is run with root permissions
 	root bool // nolint:unused
 	// visorBuildInfo holds information about the build
@@ -74,15 +75,9 @@ var (
 )
 
 func init() {
-	usrLvl, err := user.Current()
-	if err != nil {
-		panic(err)
-	}
-	if usrLvl.Username == "root" {
-		root = true
-	}
+	root = skyenv.IsRoot()
 
-	localIPs, err = netutil.DefaultNetworkInterfaceIPs()
+	localIPs, err := netutil.DefaultNetworkInterfaceIPs()
 	if err != nil {
 		logger.WithError(err).Warn("Could not determine network interface IP address")
 		if len(localIPs) == 0 {
@@ -97,6 +92,8 @@ func init() {
 		rootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
 	}
 	rootCmd.Flags().BoolVarP(&hypervisorUI, "hvui", "i", false, "run as hypervisor")
+	rootCmd.Flags().BoolVarP(&noHypervisorUI, "nohvui", "x", false, "disable hypervisor")
+	hiddenflags = append(hiddenflags, "nohvui")
 	rootCmd.Flags().StringVarP(&remoteHypervisorPKs, "hv", "j", "", "add remote hypervisor PKs at runtime")
 	hiddenflags = append(hiddenflags, "hv")
 	rootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors set in config file")
@@ -252,6 +249,18 @@ func runVisor(conf *visorconfig.V1) {
 		conf = initConfig(log, confPath)
 	}
 
+	survey := skyenv.SystemSurvey()
+	survey.PubKey = conf.PK
+	// Print results.
+	s, err := json.MarshalIndent(survey, "", "\t")
+	if err != nil {
+		log.WithError(err).Error("Could not marshal json.")
+	}
+	err = os.WriteFile(conf.LocalPath+"/"+skyenv.SurveyFile, s, 0644) //nolint
+	if err != nil {
+		log.WithError(err).Error("Failed to write system hardware survey to file.")
+	}
+
 	if skyenv.OS == "linux" {
 		//warn about creating files & directories as root in non root-owned dir
 		if _, err := exec.LookPath("stat"); err == nil {
@@ -268,7 +277,7 @@ func runVisor(conf *visorconfig.V1) {
 				log.Error("cannot stat: /root")
 			}
 			if (owner != rootOwner) && root {
-				log.Warn("writing config as root to directory not owned by root")
+				log.Warn("writing as root to directory not owned by root")
 			}
 			if !root && (owner == rootOwner) {
 				log.Fatal("Insufficient permissions to write to the specified path")
@@ -466,6 +475,10 @@ func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 { /
 	if conf.Hypervisor != nil {
 		conf.Hypervisor.UIAssets = uiAssets
 	}
+	if noHypervisorUI {
+		conf.Hypervisor = nil
+	}
+
 	return conf
 }
 
