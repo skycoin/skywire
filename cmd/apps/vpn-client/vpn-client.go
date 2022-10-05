@@ -28,6 +28,7 @@ var (
 	localSKStr  = flag.String("sk", "", "Local SecKey")
 	passcode    = flag.String("passcode", "", "Passcode to authenticate connection")
 	killswitch  = flag.Bool("killswitch", false, "If set, the Internet won't be restored during reconnection attempts")
+	dnsAddr     = flag.String("dns", "", "address of DNS want set to tun")
 )
 
 func main() {
@@ -106,12 +107,24 @@ func main() {
 		}
 	}
 
+	var dnsAddress string
+	if *dnsAddr != "" {
+		dnsIP := parseIP(*dnsAddr)
+		if dnsIP == nil {
+			fmt.Println("Invalid DNS Address value. VPN will use current machine DNS.")
+			dnsAddress = ""
+		} else {
+			dnsAddress = dnsIP.String()
+		}
+	}
+
 	fmt.Printf("Connecting to VPN server %s\n", serverPK.String())
 
 	vpnClientCfg := vpn.ClientConfig{
 		Passcode:   *passcode,
 		Killswitch: *killswitch,
 		ServerPK:   serverPK,
+		DNSAddr:    dnsAddress,
 	}
 
 	vpnClient, err := vpn.NewClient(vpnClientCfg, appCl)
