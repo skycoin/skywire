@@ -13,6 +13,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
@@ -87,6 +88,26 @@ func (r *RPC) Uptime(_ *struct{}, out *float64) (err error) {
 	uptime, err := r.visor.Uptime()
 	*out = uptime
 
+	return err
+}
+
+/*
+	<<< SKYCOIN REWARD ADDRESS AND PRIVACY SETTING >>>
+*/
+
+// SetPrivacy sets the reward address and privacy setting in privacy.json
+func (r *RPC) SetPrivacy(p skyenv.Privacy, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetPrivacy", p)(nil, &err)
+	_, err = r.visor.SetPrivacy(p)
+	return err
+}
+
+// GetPrivacy reads the reward address and privacy setting from privacy.json
+func (r *RPC) GetPrivacy(_ *struct{}, p *string) (err error) {
+	defer rpcutil.LogCall(r.log, "GetPrivacy", nil)(p, &err)
+	var q string
+	q, err = r.visor.GetPrivacy()
+	*p = q
 	return err
 }
 
