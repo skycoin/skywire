@@ -73,7 +73,7 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   @ViewChild('settingsButton') settingsButton: ButtonComponent;
   @ViewChild('firstInput') firstInput: ElementRef;
   form: UntypedFormGroup;
-  settingsForm: FormGroup;
+  settingsForm: UntypedFormGroup;
   // Entries to show on the history.
   history: HistoryEntry[];
 
