@@ -7,10 +7,14 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	coincipher "github.com/skycoin/skycoin/src/cipher"
+
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/privacyconfig"
 )
 
 var (
@@ -40,6 +44,7 @@ var privacyCmd = &cobra.Command{
 	Long:   "configure privacy settings\n\ntest of the api endpoints GetPrivacy & SetPrivacy",
 	Hidden: true,
 }
+
 var setPrivacyCmd = &cobra.Command{
 	Use:   "set",
 	Short: "set privacy.json via rpc",
@@ -49,13 +54,20 @@ var setPrivacyCmd = &cobra.Command{
 		mLog.SetLevel(logrus.InfoLevel)
 		log := logging.MustGetLogger("skywire-cli visor priv set")
 		client := clirpc.Client(cmd.Flags())
-		resp, err := client.SetPrivacy(skyenv.Privacy{DisplayNodeIP: displayNodeIP, RewardAddress: rewardAddress})
+
+		cAddr, err := coincipher.DecodeBase58Address(rewardAddress)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid address specified: %v", err))
+		}
+
+		resp, err := client.SetPrivacy(privacyconfig.Privacy{DisplayNodeIP: displayNodeIP, RewardAddress: cAddr})
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 		}
 		log.Info("Privacy settings updated to:\n", resp)
 	},
 }
+
 var getPrivacyCmd = &cobra.Command{
 	Use:   "get",
 	Short: "read privacy setting from file",

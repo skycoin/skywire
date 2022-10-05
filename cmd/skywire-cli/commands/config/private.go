@@ -1,10 +1,8 @@
 package cliconfig
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -13,6 +11,7 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/privacyconfig"
 )
 
 var (
@@ -77,26 +76,19 @@ var setPrivacyConfigCmd = &cobra.Command{
 				rewardAddress = args[0]
 			}
 		}
-		_, err := coincipher.DecodeBase58Address(rewardAddress)
+		cAddr, err := coincipher.DecodeBase58Address(rewardAddress)
 		if err != nil {
 			logger.WithError(err).Fatal("invalid address specified")
 		}
 
-		confp := &skyenv.Privacy{}
-		confp.DisplayNodeIP = displayNodeIP
-		confp.RewardAddress = rewardAddress
+		confP := privacyconfig.Privacy{
+			DisplayNodeIP: displayNodeIP,
+			RewardAddress: cAddr,
+		}
 
-		// Print results.
-		j, err := json.MarshalIndent(confp, "", "\t")
+		j, err := privacyconfig.SetReward(confP, out, pathstr)
 		if err != nil {
-			logger.WithError(err).Fatal("Could not marshal json.")
-		}
-		if _, err := os.Stat(pathstr); os.IsNotExist(err) {
-			logger.WithError(err).Fatal("\n	local directory not found ; run skywire first to create this path\n ")
-		}
-		err = os.WriteFile(out, j, 0644) //nolint
-		if err != nil {
-			logger.WithError(err).Fatal("Failed to write config to file.")
+			logger.Fatal(err)
 		}
 		logger.Infof("Updated file '%s' to:\n%s\n", out, j)
 	},
@@ -114,10 +106,11 @@ var getPrivacyConfigCmd = &cobra.Command{
 		if out == "" {
 			logger.Fatal("config was not detected and no path was specified.")
 		}
-		p, err := os.ReadFile(filepath.Clean(out))
+
+		j, err := privacyconfig.GetReward(out)
 		if err != nil {
-			logger.WithError(err).Fatal("Failed to read config file.")
+			logger.Fatal(err)
 		}
-		fmt.Printf("%s\n", p)
+		fmt.Printf("%s\n", j)
 	},
 }

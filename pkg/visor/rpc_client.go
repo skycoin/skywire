@@ -28,6 +28,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/cipherutil"
+	"github.com/skycoin/skywire/pkg/visor/privacyconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -123,7 +124,7 @@ func (rc *rpcClient) Uptime() (float64, error) {
 }
 
 // SetPrivacy implements API.
-func (rc *rpcClient) SetPrivacy(p skyenv.Privacy) (string, error) {
+func (rc *rpcClient) SetPrivacy(p privacyconfig.Privacy) (string, error) {
 	err := rc.Call("SetPrivacy", &p, &struct{}{})
 	if err != nil {
 		return "", err
@@ -643,7 +644,7 @@ func (mc *mockRPCClient) Uptime() (float64, error) {
 }
 
 // SetPrivacy implements API
-func (mc *mockRPCClient) SetPrivacy(p skyenv.Privacy) (string, error) {
+func (mc *mockRPCClient) SetPrivacy(p privacyconfig.Privacy) (string, error) {
 	return "", nil
 }
 

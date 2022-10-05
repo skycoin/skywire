@@ -12,7 +12,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/bitfield/script"
 	"github.com/ccding/go-stun/stun"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
@@ -28,6 +27,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
+	"github.com/skycoin/skywire/pkg/visor/privacyconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -38,7 +38,7 @@ type API interface {
 
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
-	SetPrivacy(skyenv.Privacy) (string, error)
+	SetPrivacy(privacyconfig.Privacy) (string, error)
 	GetPrivacy() (string, error)
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
@@ -310,32 +310,23 @@ func (v *Visor) Uptime() (float64, error) {
 }
 
 // SetPrivacy implements API.
-func (v *Visor) SetPrivacy(p skyenv.Privacy) (string, error) {
-	/*
-		skywire-cli config priv set <address> [flags]
-		Flags:
-		-a, --address string   reward address (default "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6")
-		-o, --out string       output config: /opt/skywire/local/privacy.json
-		-i, --publicip         display node ip
-	*/
-	clicmd := `skywire-cli config priv set `
-	//Set flags for node privacy and reward address based on input
-	if p.DisplayNodeIP {
-		clicmd = clicmd + ` -i `
+func (v *Visor) SetPrivacy(p privacyconfig.Privacy) (string, error) {
+	path := v.conf.LocalPath + "/" + skyenv.PrivFile
+	j, err := privacyconfig.SetReward(p, path, path)
+	if err != nil {
+		return "", err
 	}
-	if p.RewardAddress != "" {
-		clicmd = clicmd + ` -a ` + p.RewardAddress
-	}
-	//use the currently configured local_path this visor is using
-	clicmd = clicmd + ` -o ` + strings.Join([]string{v.conf.LocalPath, skyenv.PrivFile}, "/")
-
-	return script.Exec(clicmd).String()
+	return string(j), nil
 }
 
 // GetPrivacy implements API.
 func (v *Visor) GetPrivacy() (p string, err error) {
-	clicmd := `skywire-cli config priv get -o ` + strings.Join([]string{v.conf.LocalPath, skyenv.PrivFile}, "/") + ` --json`
-	return script.Exec(clicmd).String()
+	path := v.conf.LocalPath + "/" + skyenv.PrivFile
+	j, err := privacyconfig.GetReward(path)
+	if err != nil {
+		return "", err
+	}
+	return string(j), nil
 }
 
 // Apps implements API.

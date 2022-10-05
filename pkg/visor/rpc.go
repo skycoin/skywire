@@ -13,10 +13,10 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
+	"github.com/skycoin/skywire/pkg/visor/privacyconfig"
 )
 
 const (
@@ -96,7 +96,7 @@ func (r *RPC) Uptime(_ *struct{}, out *float64) (err error) {
 */
 
 // SetPrivacy sets the reward address and privacy setting in privacy.json
-func (r *RPC) SetPrivacy(p skyenv.Privacy, _ *struct{}) (err error) {
+func (r *RPC) SetPrivacy(p privacyconfig.Privacy, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetPrivacy", p)(nil, &err)
 	_, err = r.visor.SetPrivacy(p)
 	return err
@@ -117,7 +117,7 @@ func (r *RPC) GetPrivacy(_ *struct{}, p *string) (err error) {
 
 // AppLogsRequest represents a LogSince method request
 type AppLogsRequest struct {
-	// TimeStamp should be time.RFC3339Nano formated
+	// TimeStamp should be time.RFC3339Nano formatted
 	TimeStamp time.Time `json:"time_stamp"`
 	// AppName should match the app name in visor config
 	AppName string `json:"app_name"`
