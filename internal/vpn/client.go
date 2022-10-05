@@ -53,6 +53,8 @@ type Client struct {
 	tunCreated bool
 
 	connectedDuration int64
+
+	defaultSystemDNS string //nolint
 }
 
 // NewClient creates VPN client instance.
