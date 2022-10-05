@@ -7,6 +7,18 @@ const (
 	PtyProxyURI = "dmsgpty/proxy"
 )
 
+const (
+	// DefaultCLINet for windows
+	DefaultCLINet = "unix"
+)
+
+// Constants related to dmsg.
+const (
+	DefaultPort     = uint16(22)
+	DefaultCmd      = "/bin/bash"
+	DefaultFlagExec = "-c"
+)
+
 // Constants related to whitelist.
 const (
 	WhitelistRPCName = "whitelist"
