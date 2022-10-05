@@ -326,6 +326,8 @@ func (c *Client) closeTUN() error {
 
 	c.tunCreated = false
 
+	c.RevertDNS()
+
 	return c.tun.Close()
 }
 
