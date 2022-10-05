@@ -124,6 +124,7 @@ type Service struct {
 	Geo       *geo.LocationData `json:"geo,omitempty" gorm:"embedded"`
 	Version   string            `json:"version,omitempty"`
 	LocalIPs  pq.StringArray    `json:"local_ips,omitempty" gorm:"type:text[]"`
+	Info      interface{}       `json:"info,omitempty" gorm:"-"`
 }
 
 // MarshalBinary implements encoding.BinaryMarshaller
