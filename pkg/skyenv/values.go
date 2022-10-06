@@ -4,11 +4,14 @@ package skyenv
 import (
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/bitfield/script"
+	"github.com/google/uuid"
+	"github.com/jaypipes/ghw"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -30,6 +33,7 @@ const (
 	DmsgSetupPort          uint16 = 36  // Listening port of a setup node.
 	DmsgHypervisorPort     uint16 = 46  // Listening port of a hypervisor for incoming RPC visor connections over dmsg.
 	DmsgTransportSetupPort uint16 = 47  // Listening port for transport setup RPC over dmsg.
+	DmsgHTTPPort           uint16 = 80  // Listening port for dmsghttp logserver.
 	DmsgAwaitSetupPort     uint16 = 136 // Listening port of a visor for setup operations.
 )
 
@@ -169,4 +173,48 @@ func Version() string {
 func HomePath() string {
 	dir, _ := os.UserHomeDir() //nolint
 	return dir
+}
+
+// Config returns either UserConfig or PackageConfig based on permissions
+func Config() PkgConfig {
+	if IsRoot() {
+		return PackageConfig()
+	}
+	return UserConfig()
+}
+
+// IsRoot checks for root permissions
+func IsRoot() bool {
+	userLvl, _ := user.Current() //nolint
+	return userLvl.Username == "root"
+}
+
+// Privacy represents the json-encoded contents of the privacy.json file
+type Privacy struct {
+	DisplayNodeIP bool   `json:"display_node_ip"`
+	RewardAddress string `json:"reward_address,omitempty"`
+}
+
+// Survey system hardware survey struct
+type Survey struct {
+	UUID    uuid.UUID
+	PubKey  cipher.PubKey
+	Disks   *ghw.BlockInfo
+	Product *ghw.ProductInfo
+	Memory  *ghw.MemoryInfo
+}
+
+// SurveyFile is the name of the survey file
+const SurveyFile string = "system.json"
+
+// PrivFile is the name of the file containing skycoin rewards address and privacy setting
+const PrivFile string = "privacy.json"
+
+// SystemSurvey returns system hardware survey
+func SystemSurvey() (s Survey) {
+	s.UUID = uuid.New()
+	s.Disks, _ = ghw.Block()     //nolint
+	s.Product, _ = ghw.Product() //nolint
+	s.Memory, _ = ghw.Memory()   //nolint
+	return s
 }
