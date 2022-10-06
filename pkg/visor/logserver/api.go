@@ -13,6 +13,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 // API register all the API endpoints.
@@ -25,7 +26,7 @@ type API struct {
 }
 
 // New creates a new api.
-func New(log *logging.Logger, tpLogPath, systemJSONPath string) *API {
+func New(log *logging.Logger, tpLogPath, localPath string) *API {
 	api := &API{
 		logger:    log,
 		startedAt: time.Now(),
@@ -40,11 +41,14 @@ func New(log *logging.Logger, tpLogPath, systemJSONPath string) *API {
 	r.Use(httputil.SetLoggerMiddleware(log))
 
 	r.Get("/health", api.health)
-	fs := http.FileServer(http.Dir(tpLogPath))
-	r.Handle("/*", http.StripPrefix("/", fs))
 
-	fs2 := http.FileServer(http.Dir(systemJSONPath))
-	r.Handle("/system.json", http.StripPrefix("/", fs2))
+	fsTP := http.FileServer(http.Dir(tpLogPath))
+	r.Handle("/*", http.StripPrefix("/", fsTP))
+
+	fsLocal := http.FileServer(http.Dir(localPath))
+	r.Handle("/"+skyenv.SurveyFile, http.StripPrefix("/", fsLocal))
+
+	r.Handle("/"+skyenv.PrivFile, http.StripPrefix("/", fsLocal))
 
 	api.Handler = r
 	return api
