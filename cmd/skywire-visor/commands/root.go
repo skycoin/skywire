@@ -111,8 +111,8 @@ func init() {
 	rootCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
 	hiddenflags = append(hiddenflags, "stdin")
 	if root {
-		if _, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.Configjson); err == nil {
-			rootCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "use package config "+skyenv.SkywirePath+"/"+skyenv.Configjson)
+		if _, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.ConfigJSON); err == nil {
+			rootCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "use package config "+skyenv.SkywirePath+"/"+skyenv.ConfigJSON)
 			hiddenflags = append(hiddenflags, "pkg")
 		}
 	}
@@ -203,7 +203,7 @@ var rootCmd = &cobra.Command{
 			}
 			//use package config
 			if pkg {
-				confPath = skyenv.SkywirePath + "/" + skyenv.Configjson
+				confPath = skyenv.SkywirePath + "/" + skyenv.ConfigJSON
 			}
 			if usr {
 				confPath = skyenv.HomePath() + "/" + skyenv.ConfigName
