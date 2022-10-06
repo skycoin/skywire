@@ -14,8 +14,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gocarina/gocsv"
 	"github.com/google/uuid"
-
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
@@ -182,12 +182,15 @@ func (tls *fileTransportLogStore) writeJSONToCSV(entry CsvEntry) error {
 		return err
 	}
 
-	readLogs, err := createCsvEntry(data)
+	readLogs, err := readCSVToStruct(data)
 	if err != nil {
 		return err
 	}
-
+	tls.log.Errorf("readLogs: %v", readLogs)
 	var writeLogs []CsvEntry
+	if len(readLogs) == 0 {
+		writeLogs = append(writeLogs, entry)
+	}
 	for _, log := range readLogs {
 		if log.TpID == entry.TpID {
 			writeLogs = append(writeLogs, entry)
@@ -198,12 +201,8 @@ func (tls *fileTransportLogStore) writeJSONToCSV(entry CsvEntry) error {
 
 	writer := csv.NewWriter(f)
 	defer writer.Flush()
-
-	header := []string{"tp_id", "recv", "sent", "time_stamp"}
-	if err := writer.Write(header); err != nil {
-		return err
-	}
-
+	// os.WriteFile()
+	tls.log.Errorf("writeLogs: %v", writeLogs)
 	for _, r := range writeLogs {
 		var csvRow []string
 		csvRow = append(csvRow, r.TpID.String(), fmt.Sprint(r.LogEntry.RecvBytes), fmt.Sprint(r.LogEntry.SentBytes), r.TimeStamp.String())
@@ -215,7 +214,7 @@ func (tls *fileTransportLogStore) writeJSONToCSV(entry CsvEntry) error {
 	return nil
 }
 
-func createCsvEntry(data [][]string) ([]CsvEntry, error) {
+func readCSVToStruct(data [][]string) ([]CsvEntry, error) {
 	// convert csv lines to array of structs
 	var csvEntries []CsvEntry
 	for i, line := range data {
@@ -252,4 +251,38 @@ func createCsvEntry(data [][]string) ([]CsvEntry, error) {
 		}
 	}
 	return csvEntries, nil
+}
+
+func (tls *fileTransportLogStore) test() {
+	today := time.Now().UTC().Format("2006-01-02")
+	clientsFile, err := os.OpenFile(filepath.Join(tls.dir, fmt.Sprintf("%s.csv", today)), os.O_RDWR|os.O_CREATE, os.ModePerm)
+	if err != nil {
+		panic(err)
+	}
+	defer clientsFile.Close()
+
+	clients := []*CsvEntry{}
+
+	if err := gocsv.UnmarshalFile(clientsFile, &clients); err != nil { // Load clients from file
+		panic(err)
+	}
+	for _, client := range clients {
+		fmt.Println("Hello", client.TpID)
+	}
+
+	if _, err := clientsFile.Seek(0, 0); err != nil { // Go to the start of the file
+		panic(err)
+	}
+
+	// clients = append(clients, &CsvEntry{Id: "12", Name: "John", Age: "21"}) // Add clients
+	// clients = append(clients, &CsvEntry{Id: "13", Name: "Fred"})
+	// clients = append(clients, &CsvEntry{Id: "14", Name: "James", Age: "32"})
+	// clients = append(clients, &CsvEntry{Id: "15", Name: "Danny"})
+	csvContent, err := gocsv.MarshalString(&clients) // Get all clients as CSV string
+	//err = gocsv.MarshalFile(&clients, clientsFile) // Use this to save the CSV back to the file
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(csvContent) // Display all clients as CSV string
+
 }
