@@ -18,22 +18,32 @@ const (
 
 // PackageConfig contains installation paths (for linux)
 func PackageConfig() PkgConfig {
-	var pkgconfig PkgConfig
-	pkgconfig.Launcher.BinPath = "/opt/skywire/apps"
-	pkgconfig.LocalPath = "/opt/skywire/local"
-	pkgconfig.Hypervisor.DbPath = "/opt/skywire/users.db"
-	pkgconfig.Hypervisor.EnableAuth = true
-	return pkgconfig
+	pkgConfig := PkgConfig{
+		Launcher: Launcher{
+			BinPath: "/opt/skywire/apps",
+		},
+		LocalPath: "/opt/skywire/local",
+		Hypervisor: Hypervisor{
+			DbPath:     "/opt/skywire/users.db",
+			EnableAuth: true,
+		},
+	}
+	return pkgConfig
 }
 
 // UserConfig contains installation paths (for linux)
 func UserConfig() PkgConfig {
-	var usrconfig PkgConfig
-	usrconfig.Launcher.BinPath = "/opt/skywire/apps"
-	usrconfig.LocalPath = HomePath() + "/.skywire/local"
-	usrconfig.Hypervisor.DbPath = HomePath() + "/.skywire/users.db"
-	usrconfig.Hypervisor.EnableAuth = true
-	return usrconfig
+	usrConfig := PkgConfig{
+		Launcher: Launcher{
+			BinPath: "/opt/skywire/apps",
+		},
+		LocalPath: HomePath() + "/.skywire/local",
+		Hypervisor: Hypervisor{
+			DbPath:     HomePath() + "/.skywire/users.db",
+			EnableAuth: true,
+		},
+	}
+	return usrConfig
 }
 
 // UpdateCommand returns the commands which are run when the update button is clicked in the ui
