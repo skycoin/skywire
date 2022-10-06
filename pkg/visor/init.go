@@ -366,7 +366,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       5 * time.Second,
 		WriteTimeout:      10 * time.Second,
-		Handler:           http.FileServer(http.Dir(v.conf.LocalPath)),
+		Handler:           http.FileServer(http.Dir(v.conf.LocalPath + "/" + skyenv.TpLogStore)),
 	}
 
 	wg := new(sync.WaitGroup)
@@ -449,7 +449,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	logS, err := transport.FileTransportLogStore(v.conf.LocalPath + "/test")
+	logS, err := transport.FileTransportLogStore(v.conf.LocalPath + "/" + skyenv.TpLogStore)
 	if err != nil {
 		return err
 	}

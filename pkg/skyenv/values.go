@@ -93,7 +93,7 @@ const (
 
 // Routing constants
 const (
-	TpLogStore = "./transport_logs"
+	TpLogStore = "transport_logs"
 )
 
 // Local constants
