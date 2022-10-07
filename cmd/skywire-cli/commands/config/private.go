@@ -3,26 +3,19 @@ package cliconfig
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
 
-	"github.com/sirupsen/logrus"
 	coincipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/privacyconfig"
 )
 
 var (
 	displayNodeIP bool
 	rewardAddress string
-	out           string
-	pathstr       string
-	fullpathstr   string
-	getpathstr    string
-	dummy         string
 )
 
 func init() {
@@ -34,17 +27,28 @@ func init() {
 	setPrivacyConfigCmd.Flags().BoolVarP(&displayNodeIP, "publicip", "i", false, "display node ip")
 	// default is genesis address for skycoin blockchain ; for testing
 	setPrivacyConfigCmd.Flags().StringVarP(&rewardAddress, "address", "a", "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6", "reward address")
-	//use the correct path for the available pemissions
-	pathstr = skyenv.PackageConfig().LocalPath
-	fullpathstr = strings.Join([]string{pathstr, skyenv.PrivFile}, "/")
-	getpathstr = fullpathstr
-	if _, err := os.Stat(getpathstr); os.IsNotExist(err) {
-		getpathstr = ""
+
+	path := skyenv.LocalPath + "/" + skyenv.PrivFile
+	setPrivacyConfigCmd.Flags().StringVarP(&output, "out", "o", "", "write privacy config to: "+path)
+	getPrivacyConfigCmd.Flags().StringVarP(&output, "out", "o", "", "read privacy config from: "+path)
+
+	if skyenv.OS == "win" {
+		pText = "use .msi installation path: "
 	}
-	setPrivacyConfigCmd.Flags().StringVarP(&out, "out", "o", "", "output config: "+fullpathstr)
-	getPrivacyConfigCmd.Flags().StringVarP(&out, "out", "o", "", "read config from: "+getpathstr)
-	RootCmd.PersistentFlags().StringVar(&dummy, "rpc", "localhost:3435", "RPC server address")
-	RootCmd.PersistentFlags().MarkHidden("rpc") // nolint
+	if skyenv.OS == "linux" {
+		pText = "use path for package: "
+	}
+	if skyenv.OS == "mac" {
+		pText = "use mac installation path: "
+	}
+	setPrivacyConfigCmd.Flags().BoolVarP(&isPkgEnv, "pkg", "p", false, pText+skyenv.PackageConfig().LocalPath)
+	getPrivacyConfigCmd.Flags().BoolVarP(&isPkgEnv, "pkg", "p", false, pText+skyenv.PackageConfig().LocalPath)
+
+	userPath := skyenv.UserConfig().LocalPath
+	if userPath != "" {
+		setPrivacyConfigCmd.Flags().BoolVarP(&isUsrEnv, "user", "u", false, "use paths for user space: "+userPath)
+		getPrivacyConfigCmd.Flags().BoolVarP(&isUsrEnv, "user", "u", false, "use paths for user space: "+userPath)
+	}
 
 }
 
@@ -67,57 +71,71 @@ var setPrivacyConfigCmd = &cobra.Command{
 	Short: "set reward address & node privacy",
 	Long:  "set reward address & node privacy",
 	Run: func(cmd *cobra.Command, args []string) {
-		mLog := logging.NewMasterLogger()
-		mLog.SetLevel(logrus.InfoLevel)
-		if out == "" {
-			out = fullpathstr
-		}
+
+		getOutput(cmd.Flags())
+
 		if len(args) > 0 {
 			if args[0] != "" {
 				rewardAddress = args[0]
 			}
 		}
-		_, err := coincipher.DecodeBase58Address(rewardAddress)
+
+		cAddr, err := coincipher.DecodeBase58Address(rewardAddress)
 		if err != nil {
-			logger.WithError(err).Fatal("invalid address specified")
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid address specified: %v", err))
 		}
 
-		confp := &skyenv.Privacy{}
-		confp.DisplayNodeIP = displayNodeIP
-		confp.RewardAddress = rewardAddress
+		confP := &privacyconfig.Privacy{
+			DisplayNodeIP: displayNodeIP,
+			RewardAddress: cAddr.String(),
+		}
 
-		// Print results.
-		j, err := json.MarshalIndent(confp, "", "\t")
+		jsonOutput, err := privacyconfig.SetReward(confP, output)
 		if err != nil {
-			logger.WithError(err).Fatal("Could not marshal json.")
+			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		if _, err := os.Stat(pathstr); os.IsNotExist(err) {
-			logger.WithError(err).Fatal("\n	local directory not found ; run skywire first to create this path\n ")
-		}
-		err = os.WriteFile(out, j, 0644) //nolint
+		j, err := json.MarshalIndent(jsonOutput, "", "\t")
 		if err != nil {
-			logger.WithError(err).Fatal("Failed to write config to file.")
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Could not marshal json. err=%v", err))
 		}
-		logger.Infof("Updated file '%s' to:\n%s\n", out, j)
+		output := fmt.Sprintf("Updated file '%s' to:\n%s\n", output, j)
+		internal.PrintOutput(cmd.Flags(), jsonOutput, output)
 	},
 }
+
 var getPrivacyConfigCmd = &cobra.Command{
 	Use:   "get",
 	Short: "read reward address & privacy setting from file",
 	Long:  `read reward address & privacy setting from file`,
 	Run: func(cmd *cobra.Command, args []string) {
-		mLog := logging.NewMasterLogger()
-		mLog.SetLevel(logrus.InfoLevel)
-		if out == "" {
-			out = getpathstr
-		}
-		if out == "" {
-			logger.Fatal("config was not detected and no path was specified.")
-		}
-		p, err := os.ReadFile(filepath.Clean(out))
+		getOutput(cmd.Flags())
+
+		jsonOutput, err := privacyconfig.GetReward(output)
 		if err != nil {
-			logger.WithError(err).Fatal("Failed to read config file.")
+			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Printf("%s\n", p)
+		j, err := json.MarshalIndent(jsonOutput, "", "\t")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Could not marshal json. err=%v", err))
+		}
+		internal.PrintOutput(cmd.Flags(), jsonOutput, string(j)+"\n")
 	},
+}
+
+func getOutput(flags *pflag.FlagSet) {
+	// these flags overwrite each other
+	if (isUsrEnv) && (isPkgEnv) {
+		internal.PrintFatalError(flags, fmt.Errorf("Use of mutually exclusive flags: -u --user and -p --pkg"))
+	}
+	if output == "" {
+		output = skyenv.LocalPath + "/" + skyenv.PrivFile
+	}
+	if isPkgEnv {
+		confPath = skyenv.PackageConfig().LocalPath + "/" + skyenv.PrivFile
+		output = confPath
+	}
+	if isUsrEnv {
+		confPath = skyenv.UserConfig().LocalPath + "/" + skyenv.PrivFile
+		output = confPath
+	}
 }
