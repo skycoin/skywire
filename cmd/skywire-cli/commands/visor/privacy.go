@@ -1,6 +1,8 @@
 package clivisor
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -21,20 +23,18 @@ var (
 func init() {
 
 	RootCmd.AddCommand(privacyCmd)
+	privacyCmd.Flags().SortFlags = false
 	privacyCmd.AddCommand(setPrivacyCmd)
 	privacyCmd.AddCommand(getPrivacyCmd)
-	privacyCmd.Flags().SortFlags = false
 	setPrivacyCmd.Flags().BoolVarP(&displayNodeIP, "publicip", "i", false, "display node ip")
 	// default is genesis address for skycoin blockchain ; for testing
 	setPrivacyCmd.Flags().StringVarP(&rewardAddress, "address", "a", "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6", "reward address")
-	//use the correct path for the available permissions
 }
 
 var privacyCmd = &cobra.Command{
-	Use:    "priv",
-	Short:  "privacy settings",
-	Long:   "configure privacy settings\n\ntest of the api endpoints GetPrivacy & SetPrivacy",
-	Hidden: true,
+	Use:   "priv",
+	Short: "privacy settings",
+	Long:  "configure privacy settings\n\ntest of the api endpoints GetPrivacy & SetPrivacy",
 }
 
 var setPrivacyCmd = &cobra.Command{
@@ -53,8 +53,21 @@ var setPrivacyCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 		}
-		output := fmt.Sprint("Privacy settings updated to:\n", resp)
-		internal.PrintOutput(cmd.Flags(), output, output)
+
+		var prettyJSON bytes.Buffer
+		err = json.Indent(&prettyJSON, []byte(resp), "", "   ")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("JSON parse error: %v", err))
+		}
+
+		output := fmt.Sprintf("Privacy settings updated to:\n %v\n", prettyJSON.String())
+
+		var jsonOutput map[string]interface{}
+		err = json.Unmarshal([]byte(resp), &jsonOutput)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to unmarshal json: %v", err))
+		}
+		internal.PrintOutput(cmd.Flags(), jsonOutput, output)
 	},
 }
 
@@ -67,6 +80,6 @@ var getPrivacyCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 		}
-		internal.PrintOutput(cmd.Flags(), string(j), string(j))
+		internal.PrintOutput(cmd.Flags(), string(j), string(j+"\n"))
 	},
 }
