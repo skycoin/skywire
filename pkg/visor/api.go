@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/bitfield/script"
 	"github.com/ccding/go-stun/stun"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
@@ -37,6 +38,8 @@ type API interface {
 
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
+	SetPrivacy(skyenv.Privacy) (string, error)
+	GetPrivacy() (string, error)
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
@@ -306,6 +309,35 @@ func (v *Visor) Health() (*HealthInfo, error) {
 // Uptime implements API.
 func (v *Visor) Uptime() (float64, error) {
 	return time.Since(v.startedAt).Seconds(), nil
+}
+
+// SetPrivacy implements API.
+func (v *Visor) SetPrivacy(p skyenv.Privacy) (string, error) {
+	/*
+		skywire-cli config priv set <address> [flags]
+		Flags:
+		-a, --address string   reward address (default "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6")
+		-o, --out string       output config: /opt/skywire/local/privacy.json
+		-i, --publicip         display node ip
+	*/
+	clicmd := `skywire-cli config priv set `
+	//Set flags for node privacy and reward address based on input
+	if p.DisplayNodeIP {
+		clicmd = clicmd + ` -i `
+	}
+	if p.RewardAddress != "" {
+		clicmd = clicmd + ` -a ` + p.RewardAddress
+	}
+	//use the currently configured local_path this visor is using
+	clicmd = clicmd + ` -o ` + strings.Join([]string{v.conf.LocalPath, skyenv.PrivFile}, "/")
+
+	return script.Exec(clicmd).String()
+}
+
+// GetPrivacy implements API.
+func (v *Visor) GetPrivacy() (p string, err error) {
+	clicmd := `skywire-cli config priv get -o ` + strings.Join([]string{v.conf.LocalPath, skyenv.PrivFile}, "/") + ` --json`
+	return script.Exec(clicmd).String()
 }
 
 // Apps implements API.

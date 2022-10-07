@@ -266,6 +266,9 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Put("/visors/{pk}/persistent-transports", hv.putPersistentTransports())
 				r.Get("/visors/{pk}/log/rotation", hv.getLogRotationInterval())
 				r.Put("/visors/{pk}/log/rotation", hv.putLogRotationInterval())
+				r.Get("/visors/{pubkey}/privacy", hv.getPrivacy())
+				r.Put("/visors/{pubkey}/privacy", hv.putPrivacy())
+
 			})
 		})
 
@@ -1264,6 +1267,37 @@ func (hv *Hypervisor) getLogRotationInterval() http.HandlerFunc {
 	})
 }
 
+func (hv *Hypervisor) putPrivacy() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var reqBody skyenv.Privacy
+
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("putPersistentTransports request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+
+		if _, err := ctx.API.SetPrivacy(reqBody); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
+func (hv *Hypervisor) getPrivacy() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		pts, err := ctx.API.GetPrivacy()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, pts)
+	})
+}
+
 /*
 	<<< Helper functions >>>
 */
@@ -1480,6 +1514,8 @@ func setupDmsgPtyUI(dmsgC *dmsg.Client, visorPK cipher.PubKey) *dmsgPtyUI {
 
 func (hv *Hypervisor) getPty() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		ctx.PtyUI.PtyUI.Handler()(w, r)
+		customCommand := make(map[string][]string)
+		customCommand["update"] = skyenv.UpdateCommand()
+		ctx.PtyUI.PtyUI.Handler(customCommand)(w, r)
 	})
 }
