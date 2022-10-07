@@ -45,6 +45,9 @@ github.com/fatih/color
 # github.com/gen2brain/dlgs v0.0.0-20210911090025-cbd38e821b98
 ## explicit
 github.com/gen2brain/dlgs
+# github.com/ghodss/yaml v1.0.0
+## explicit
+github.com/ghodss/yaml
 # github.com/go-chi/chi/v5 v5.0.8-0.20220103230436-7dbe9a0bd10f
 ## explicit; go 1.14
 github.com/go-chi/chi/v5
@@ -76,6 +79,32 @@ github.com/ivanpirog/coloredcobra
 # github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
 ## explicit; go 1.15
 github.com/james-barrow/golang-ipc
+# github.com/jaypipes/ghw v0.9.0
+## explicit; go 1.15
+github.com/jaypipes/ghw
+github.com/jaypipes/ghw/pkg/baseboard
+github.com/jaypipes/ghw/pkg/bios
+github.com/jaypipes/ghw/pkg/block
+github.com/jaypipes/ghw/pkg/chassis
+github.com/jaypipes/ghw/pkg/context
+github.com/jaypipes/ghw/pkg/cpu
+github.com/jaypipes/ghw/pkg/gpu
+github.com/jaypipes/ghw/pkg/linuxdmi
+github.com/jaypipes/ghw/pkg/linuxpath
+github.com/jaypipes/ghw/pkg/marshal
+github.com/jaypipes/ghw/pkg/memory
+github.com/jaypipes/ghw/pkg/net
+github.com/jaypipes/ghw/pkg/option
+github.com/jaypipes/ghw/pkg/pci
+github.com/jaypipes/ghw/pkg/pci/address
+github.com/jaypipes/ghw/pkg/product
+github.com/jaypipes/ghw/pkg/snapshot
+github.com/jaypipes/ghw/pkg/topology
+github.com/jaypipes/ghw/pkg/unitutil
+github.com/jaypipes/ghw/pkg/util
+# github.com/jaypipes/pcidb v1.0.0
+## explicit; go 1.17
+github.com/jaypipes/pcidb
 # github.com/json-iterator/go v1.1.12
 ## explicit; go 1.12
 github.com/json-iterator/go
@@ -105,6 +134,9 @@ github.com/mattn/go-isatty
 # github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
 ## explicit
 github.com/mgutz/ansi
+# github.com/mitchellh/go-homedir v1.1.0
+## explicit
+github.com/mitchellh/go-homedir
 # github.com/mmcloughlin/avo v0.0.0-20200523190732-4439b6b2c061
 ## explicit; go 1.11
 github.com/mmcloughlin/avo/attr
@@ -310,9 +342,15 @@ golang.zx2c4.com/wireguard/rwcancel
 golang.zx2c4.com/wireguard/tun
 golang.zx2c4.com/wireguard/tun/wintun
 golang.zx2c4.com/wireguard/tun/wintun/memmod
+# gopkg.in/yaml.v2 v2.4.0
+## explicit; go 1.15
+gopkg.in/yaml.v2
 # gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 ## explicit
 gopkg.in/yaml.v3
+# howett.net/plist v1.0.0
+## explicit; go 1.12
+howett.net/plist
 # nhooyr.io/websocket v1.8.2
 ## explicit; go 1.13
 nhooyr.io/websocket
