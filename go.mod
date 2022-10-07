@@ -47,7 +47,7 @@ require (
 	github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
 	github.com/jaypipes/ghw v0.9.0
 	github.com/lib/pq v1.10.7
-	github.com/skycoin/dmsg v0.0.0-20221007055158-40f1e5bcb2e2
+	github.com/skycoin/dmsg v0.0.0-20221007110410-643ca4fc9f82
 	github.com/skycoin/skywire-utilities v0.0.0-20220812192633-7137eb730383
 	github.com/skycoin/systray v1.10.1-0.20220630135132-48d2a1fb85d8
 	github.com/spf13/pflag v1.0.5
@@ -84,6 +84,7 @@ require (
 	github.com/tklauser/numcpus v0.2.1 // indirect
 	github.com/valyala/fastrand v1.1.0 // indirect
 	github.com/valyala/histogram v1.2.0 // indirect
+	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519 // indirect
 	golang.org/x/mod v0.5.0 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect

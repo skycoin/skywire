@@ -14,7 +14,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"nhooyr.io/websocket"
 )
 
@@ -100,7 +99,7 @@ func (ui *UI) writeBanner(w io.Writer, uiAddr string, sID int32) error {
 }
 
 // Handler returns a http handler that serves the dmsgpty-ui.
-func (ui *UI) Handler() http.HandlerFunc {
+func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 	var sc int32 // session counter
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := ui.log.WithField("remote_addr", r.RemoteAddr)
@@ -179,7 +178,7 @@ func (ui *UI) Handler() http.HandlerFunc {
 		}()
 
 		// urlCommands from URL | set DMSGPTYTERM=1 all times
-		ptyC.Write([]byte(urlCommands(r))) //nolint
+		ptyC.Write([]byte(urlCommands(r, customCommands))) //nolint
 
 		// io
 		done, once := make(chan struct{}), new(sync.Once)
@@ -238,7 +237,7 @@ func writeError(log logrus.FieldLogger, w http.ResponseWriter, r *http.Request, 
 	})
 }
 
-func urlCommands(r *http.Request) string {
+func urlCommands(r *http.Request, customCommands map[string][]string) string {
 	commands := []string{"export DMSGPTYTERM=1"}
 	if commandsQuery, ok := r.URL.Query()["commands"]; ok {
 		if len(commandsQuery[0]) > 0 {
@@ -247,8 +246,8 @@ func urlCommands(r *http.Request) string {
 	}
 	// var commandQuery string
 	for i, command := range commands {
-		if command == "update" {
-			commands[i] = strings.Join(skyenv.UpdateCommand(), " && ")
+		if val, ok := customCommands[command]; ok {
+			commands[i] = strings.Join(val, " && ")
 		}
 	}
 	stringCommands := strings.Join(commands, " && ")
