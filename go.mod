@@ -46,7 +46,7 @@ require (
 	github.com/ivanpirog/coloredcobra v1.0.0
 	github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
 	github.com/lib/pq v1.10.7
-	github.com/skycoin/dmsg v0.0.0-20220922094502-49fed0dcef0e
+	github.com/skycoin/dmsg v0.0.0-20221007055158-40f1e5bcb2e2
 	github.com/skycoin/skywire-utilities v0.0.0-20220812192633-7137eb730383
 	github.com/skycoin/systray v1.10.1-0.20220630135132-48d2a1fb85d8
 	github.com/spf13/pflag v1.0.5
@@ -58,11 +58,11 @@ require (
 	github.com/ActiveState/termtest/conpty v0.5.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20170929234023-d6e3b3328b78 // indirect
 	github.com/Microsoft/go-winio v0.4.16 // indirect
-	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
+	github.com/StackExchange/wmi v1.2.1 // indirect
 	github.com/creack/pty v1.1.15 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fatih/color v1.13.0 // indirect
-	github.com/go-ole/go-ole v1.2.4 // indirect
+	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
