@@ -1514,6 +1514,8 @@ func setupDmsgPtyUI(dmsgC *dmsg.Client, visorPK cipher.PubKey) *dmsgPtyUI {
 
 func (hv *Hypervisor) getPty() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		ctx.PtyUI.PtyUI.Handler()(w, r)
+		customCommand := make(map[string][]string)
+		customCommand["update"] = skyenv.UpdateCommand()
+		ctx.PtyUI.PtyUI.Handler(customCommand)(w, r)
 	})
 }
