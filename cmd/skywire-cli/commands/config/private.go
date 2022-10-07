@@ -6,6 +6,7 @@ import (
 
 	coincipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -71,7 +72,7 @@ var setPrivacyConfigCmd = &cobra.Command{
 	Long:  "set reward address & node privacy",
 	Run: func(cmd *cobra.Command, args []string) {
 
-		getOutput()
+		getOutput(cmd.Flags())
 
 		if len(args) > 0 {
 			if args[0] != "" {
@@ -84,21 +85,20 @@ var setPrivacyConfigCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid address specified: %v", err))
 		}
 
-		confP := privacyconfig.Privacy{
+		confP := &privacyconfig.Privacy{
 			DisplayNodeIP: displayNodeIP,
 			RewardAddress: cAddr,
 		}
 
-		j, err := privacyconfig.SetReward(confP, output)
+		jsonOutput, err := privacyconfig.SetReward(confP, output)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		output := fmt.Sprintf("Updated file '%s' to:\n%s\n", output, j)
-		var jsonOutput map[string]interface{}
-		err = json.Unmarshal(j, &jsonOutput)
+		j, err := json.MarshalIndent(jsonOutput, "", "\t")
 		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to unmarshal json: %v", err))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Could not marshal json. err=%v", err))
 		}
+		output := fmt.Sprintf("Updated file '%s' to:\n%s\n", output, j)
 		internal.PrintOutput(cmd.Flags(), jsonOutput, output)
 	},
 }
@@ -108,25 +108,24 @@ var getPrivacyConfigCmd = &cobra.Command{
 	Short: "read reward address & privacy setting from file",
 	Long:  `read reward address & privacy setting from file`,
 	Run: func(cmd *cobra.Command, args []string) {
-		getOutput()
+		getOutput(cmd.Flags())
 
-		j, err := privacyconfig.GetReward(output)
+		jsonOutput, err := privacyconfig.GetReward(output)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		var jsonOutput map[string]interface{}
-		err = json.Unmarshal(j, &jsonOutput)
+		j, err := json.MarshalIndent(jsonOutput, "", "\t")
 		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to unmarshal json: %v", err))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Could not marshal json. err=%v", err))
 		}
 		internal.PrintOutput(cmd.Flags(), jsonOutput, string(j)+"\n")
 	},
 }
 
-func getOutput() {
+func getOutput(flags *pflag.FlagSet) {
 	// these flags overwrite each other
 	if (isUsrEnv) && (isPkgEnv) {
-		logger.Fatal("Use of mutually exclusive flags: -u --user and -p --pkg")
+		internal.PrintFatalError(flags, fmt.Errorf("Use of mutually exclusive flags: -u --user and -p --pkg"))
 	}
 	if output == "" {
 		output = skyenv.LocalPath + "/" + skyenv.PrivFile

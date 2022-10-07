@@ -96,18 +96,24 @@ func (r *RPC) Uptime(_ *struct{}, out *float64) (err error) {
 */
 
 // SetPrivacy sets the reward address and privacy setting in privacy.json
-func (r *RPC) SetPrivacy(p privacyconfig.Privacy, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "SetPrivacy", p)(nil, &err)
-	_, err = r.visor.SetPrivacy(p)
+func (r *RPC) SetPrivacy(p *privacyconfig.Privacy, out *privacyconfig.Privacy) (err error) {
+	defer rpcutil.LogCall(r.log, "SetPrivacy", p)(out, &err)
+
+	pConfig, err := r.visor.SetPrivacy(p)
+	if pConfig != nil {
+		*out = *pConfig
+	}
+
 	return err
 }
 
 // GetPrivacy reads the reward address and privacy setting from privacy.json
-func (r *RPC) GetPrivacy(_ *struct{}, p *string) (err error) {
-	defer rpcutil.LogCall(r.log, "GetPrivacy", nil)(p, &err)
-	var q string
-	q, err = r.visor.GetPrivacy()
-	*p = q
+func (r *RPC) GetPrivacy(_ *struct{}, out *privacyconfig.Privacy) (err error) {
+	defer rpcutil.LogCall(r.log, "GetPrivacy", nil)(out, &err)
+	pConfig, err := r.visor.GetPrivacy()
+	if pConfig != nil {
+		*out = *pConfig
+	}
 	return err
 }
 

@@ -1,7 +1,6 @@
 package clivisor
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 
@@ -49,25 +48,18 @@ var setPrivacyCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid address specified: %v", err))
 		}
 
-		resp, err := client.SetPrivacy(privacyconfig.Privacy{DisplayNodeIP: displayNodeIP, RewardAddress: cAddr})
+		pConfig, err := client.SetPrivacy(&privacyconfig.Privacy{DisplayNodeIP: displayNodeIP, RewardAddress: cAddr})
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 		}
 
-		var prettyJSON bytes.Buffer
-		err = json.Indent(&prettyJSON, []byte(resp), "", "   ")
+		j, err := json.MarshalIndent(pConfig, "", "\t")
 		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("JSON parse error: %v", err))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Could not marshal json. err=%v", err))
 		}
+		output := fmt.Sprintf("Privacy settings updated to:\n %v\n", string(j))
 
-		output := fmt.Sprintf("Privacy settings updated to:\n %v\n", prettyJSON.String())
-
-		var jsonOutput map[string]interface{}
-		err = json.Unmarshal([]byte(resp), &jsonOutput)
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to unmarshal json: %v", err))
-		}
-		internal.PrintOutput(cmd.Flags(), jsonOutput, output)
+		internal.PrintOutput(cmd.Flags(), pConfig, output)
 	},
 }
 
@@ -76,10 +68,14 @@ var getPrivacyCmd = &cobra.Command{
 	Short: "read privacy setting from file",
 	Long:  "configure privacy settings\n\ntest of the api endpoints GetPrivacy",
 	Run: func(cmd *cobra.Command, args []string) {
-		j, err := clirpc.Client(cmd.Flags()).GetPrivacy()
+		pConfig, err := clirpc.Client(cmd.Flags()).GetPrivacy()
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 		}
-		internal.PrintOutput(cmd.Flags(), string(j), string(j+"\n"))
+		j, err := json.MarshalIndent(pConfig, "", "\t")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Could not marshal json. err=%v", err))
+		}
+		internal.PrintOutput(cmd.Flags(), pConfig, string(j)+"\n")
 	},
 }

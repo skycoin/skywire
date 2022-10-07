@@ -267,8 +267,8 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Put("/visors/{pk}/persistent-transports", hv.putPersistentTransports())
 				r.Get("/visors/{pk}/log/rotation", hv.getLogRotationInterval())
 				r.Put("/visors/{pk}/log/rotation", hv.putLogRotationInterval())
-				r.Get("/visors/{pubkey}/privacy", hv.getPrivacy())
-				r.Put("/visors/{pubkey}/privacy", hv.putPrivacy())
+				r.Get("/visors/{pk}/privacy", hv.getPrivacy())
+				r.Put("/visors/{pk}/privacy", hv.putPrivacy())
 
 			})
 		})
@@ -1270,7 +1270,7 @@ func (hv *Hypervisor) getLogRotationInterval() http.HandlerFunc {
 
 func (hv *Hypervisor) putPrivacy() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var reqBody privacyconfig.Privacy
+		var reqBody *privacyconfig.Privacy
 
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
 			if err != io.EOF {
@@ -1280,11 +1280,12 @@ func (hv *Hypervisor) putPrivacy() http.HandlerFunc {
 			return
 		}
 
-		if _, err := ctx.API.SetPrivacy(reqBody); err != nil {
+		pConf, err := ctx.API.SetPrivacy(reqBody)
+		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
-		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+		httputil.WriteJSON(w, r, http.StatusOK, pConf)
 	})
 }
 

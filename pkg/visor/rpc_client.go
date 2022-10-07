@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -124,22 +123,18 @@ func (rc *rpcClient) Uptime() (float64, error) {
 }
 
 // SetPrivacy implements API.
-func (rc *rpcClient) SetPrivacy(p privacyconfig.Privacy) (string, error) {
-	err := rc.Call("SetPrivacy", &p, &struct{}{})
+func (rc *rpcClient) SetPrivacy(p *privacyconfig.Privacy) (pConfig *privacyconfig.Privacy, err error) {
+	err = rc.Call("SetPrivacy", &p, &pConfig)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	q, err := json.Marshal(p)
-	if err != nil {
-		return "", err
-	}
-	return string(q), err
+	return pConfig, err
 }
 
 // GetPrivacy implements API.
-func (rc *rpcClient) GetPrivacy() (p string, err error) {
-	err = rc.Call("GetPrivacy", &struct{}{}, &p)
-	return p, err
+func (rc *rpcClient) GetPrivacy() (pConfig *privacyconfig.Privacy, err error) {
+	err = rc.Call("GetPrivacy", &struct{}{}, &pConfig)
+	return pConfig, err
 }
 
 // Apps calls Apps.
@@ -644,13 +639,13 @@ func (mc *mockRPCClient) Uptime() (float64, error) {
 }
 
 // SetPrivacy implements API
-func (mc *mockRPCClient) SetPrivacy(p privacyconfig.Privacy) (string, error) {
-	return "", nil
+func (mc *mockRPCClient) SetPrivacy(p *privacyconfig.Privacy) (*privacyconfig.Privacy, error) {
+	return nil, nil
 }
 
 // GetPrivacy implements API.
-func (mc *mockRPCClient) GetPrivacy() (p string, err error) {
-	return p, nil
+func (mc *mockRPCClient) GetPrivacy() (*privacyconfig.Privacy, error) {
+	return nil, nil
 }
 
 // Apps implements API.

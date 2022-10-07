@@ -38,8 +38,8 @@ type API interface {
 
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
-	SetPrivacy(privacyconfig.Privacy) (string, error)
-	GetPrivacy() (string, error)
+	SetPrivacy(*privacyconfig.Privacy) (*privacyconfig.Privacy, error)
+	GetPrivacy() (*privacyconfig.Privacy, error)
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
@@ -310,23 +310,23 @@ func (v *Visor) Uptime() (float64, error) {
 }
 
 // SetPrivacy implements API.
-func (v *Visor) SetPrivacy(p privacyconfig.Privacy) (string, error) {
+func (v *Visor) SetPrivacy(p *privacyconfig.Privacy) (*privacyconfig.Privacy, error) {
 	path := v.conf.LocalPath + "/" + skyenv.PrivFile
-	j, err := privacyconfig.SetReward(p, path)
+	pConfig, err := privacyconfig.SetReward(p, path)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return string(j), nil
+	return pConfig, nil
 }
 
 // GetPrivacy implements API.
-func (v *Visor) GetPrivacy() (p string, err error) {
+func (v *Visor) GetPrivacy() (*privacyconfig.Privacy, error) {
 	path := v.conf.LocalPath + "/" + skyenv.PrivFile
-	j, err := privacyconfig.GetReward(path)
+	pConfig, err := privacyconfig.GetReward(path)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return string(j), nil
+	return pConfig, nil
 }
 
 // Apps implements API.
