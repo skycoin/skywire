@@ -1,9 +1,8 @@
 package cliconfig
 
 import (
+	"encoding/json"
 	"fmt"
-	"os"
-	"strings"
 
 	coincipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
@@ -16,10 +15,6 @@ import (
 var (
 	displayNodeIP bool
 	rewardAddress string
-	out           string
-	pathStr       string
-	fullPathStr   string
-	getPathStr    string
 )
 
 func init() {
@@ -31,15 +26,28 @@ func init() {
 	setPrivacyConfigCmd.Flags().BoolVarP(&displayNodeIP, "publicip", "i", false, "display node ip")
 	// default is genesis address for skycoin blockchain ; for testing
 	setPrivacyConfigCmd.Flags().StringVarP(&rewardAddress, "address", "a", "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6", "reward address")
-	//use the correct path for the available permissions
-	pathStr = skyenv.PackageConfig().LocalPath
-	fullPathStr = strings.Join([]string{pathStr, skyenv.PrivFile}, "/")
-	getPathStr = fullPathStr
-	if _, err := os.Stat(getPathStr); os.IsNotExist(err) {
-		getPathStr = ""
+
+	path := skyenv.LocalPath + "/" + skyenv.PrivFile
+	setPrivacyConfigCmd.Flags().StringVarP(&output, "out", "o", "", "write privacy config to: "+path)
+	getPrivacyConfigCmd.Flags().StringVarP(&output, "out", "o", "", "read privacy config from: "+path)
+
+	if skyenv.OS == "win" {
+		pText = "use .msi installation path: "
 	}
-	setPrivacyConfigCmd.Flags().StringVarP(&out, "out", "o", "", "output config: "+fullPathStr)
-	getPrivacyConfigCmd.Flags().StringVarP(&out, "out", "o", "", "read config from: "+getPathStr)
+	if skyenv.OS == "linux" {
+		pText = "use path for package: "
+	}
+	if skyenv.OS == "mac" {
+		pText = "use mac installation path: "
+	}
+	setPrivacyConfigCmd.Flags().BoolVarP(&isPkgEnv, "pkg", "p", false, pText+skyenv.PackageConfig().LocalPath)
+	getPrivacyConfigCmd.Flags().BoolVarP(&isPkgEnv, "pkg", "p", false, pText+skyenv.PackageConfig().LocalPath)
+
+	userPath := skyenv.UserConfig().LocalPath
+	if userPath != "" {
+		setPrivacyConfigCmd.Flags().BoolVarP(&isUsrEnv, "user", "u", false, "use paths for user space: "+userPath)
+		getPrivacyConfigCmd.Flags().BoolVarP(&isUsrEnv, "user", "u", false, "use paths for user space: "+userPath)
+	}
 
 }
 
@@ -62,14 +70,15 @@ var setPrivacyConfigCmd = &cobra.Command{
 	Short: "set reward address & node privacy",
 	Long:  "set reward address & node privacy",
 	Run: func(cmd *cobra.Command, args []string) {
-		if out == "" {
-			out = fullPathStr
-		}
+
+		getOutput()
+
 		if len(args) > 0 {
 			if args[0] != "" {
 				rewardAddress = args[0]
 			}
 		}
+
 		cAddr, err := coincipher.DecodeBase58Address(rewardAddress)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid address specified: %v", err))
@@ -80,30 +89,54 @@ var setPrivacyConfigCmd = &cobra.Command{
 			RewardAddress: cAddr,
 		}
 
-		j, err := privacyconfig.SetReward(confP, out, pathStr)
+		j, err := privacyconfig.SetReward(confP, output)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		output := fmt.Sprintf("Updated file '%s' to:\n%s\n", out, j)
-		internal.PrintOutput(cmd.Flags(), output, output)
+		output := fmt.Sprintf("Updated file '%s' to:\n%s\n", output, j)
+		var jsonOutput map[string]interface{}
+		err = json.Unmarshal(j, &jsonOutput)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to unmarshal json: %v", err))
+		}
+		internal.PrintOutput(cmd.Flags(), jsonOutput, output)
 	},
 }
+
 var getPrivacyConfigCmd = &cobra.Command{
 	Use:   "get",
 	Short: "read reward address & privacy setting from file",
 	Long:  `read reward address & privacy setting from file`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if out == "" {
-			out = getPathStr
-		}
-		if out == "" {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("config was not detected and no path was specified"))
-		}
+		getOutput()
 
-		j, err := privacyconfig.GetReward(out)
+		j, err := privacyconfig.GetReward(output)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		internal.PrintOutput(cmd.Flags(), string(j), string(j))
+		var jsonOutput map[string]interface{}
+		err = json.Unmarshal(j, &jsonOutput)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to unmarshal json: %v", err))
+		}
+		internal.PrintOutput(cmd.Flags(), jsonOutput, string(j)+"\n")
 	},
+}
+
+func getOutput() {
+	// these flags overwrite each other
+	if (isUsrEnv) && (isPkgEnv) {
+		logger.Fatal("Use of mutually exclusive flags: -u --user and -p --pkg")
+	}
+	if output == "" {
+		output = skyenv.LocalPath + "/" + skyenv.PrivFile
+	}
+	if isPkgEnv {
+		confPath = skyenv.PackageConfig().LocalPath + "/" + skyenv.PrivFile
+		output = confPath
+	}
+	if isUsrEnv {
+		confPath = skyenv.UserConfig().LocalPath + "/" + skyenv.PrivFile
+		output = confPath
+	}
 }
