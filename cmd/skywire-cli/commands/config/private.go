@@ -6,7 +6,6 @@ import (
 
 	coincipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -28,27 +27,9 @@ func init() {
 	// default is genesis address for skycoin blockchain ; for testing
 	setPrivacyConfigCmd.Flags().StringVarP(&rewardAddress, "address", "a", "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6", "reward address")
 
-	path := skyenv.LocalPath + "/" + skyenv.PrivFile
+	path := skyenv.PackageConfig().LocalPath + "/" + skyenv.PrivFile
 	setPrivacyConfigCmd.Flags().StringVarP(&output, "out", "o", "", "write privacy config to: "+path)
 	getPrivacyConfigCmd.Flags().StringVarP(&output, "out", "o", "", "read privacy config from: "+path)
-
-	if skyenv.OS == "win" {
-		pText = "use .msi installation path: "
-	}
-	if skyenv.OS == "linux" {
-		pText = "use path for package: "
-	}
-	if skyenv.OS == "mac" {
-		pText = "use mac installation path: "
-	}
-	setPrivacyConfigCmd.Flags().BoolVarP(&isPkgEnv, "pkg", "p", false, pText+skyenv.PackageConfig().LocalPath)
-	getPrivacyConfigCmd.Flags().BoolVarP(&isPkgEnv, "pkg", "p", false, pText+skyenv.PackageConfig().LocalPath)
-
-	userPath := skyenv.UserConfig().LocalPath
-	if userPath != "" {
-		setPrivacyConfigCmd.Flags().BoolVarP(&isUsrEnv, "user", "u", false, "use paths for user space: "+userPath)
-		getPrivacyConfigCmd.Flags().BoolVarP(&isUsrEnv, "user", "u", false, "use paths for user space: "+userPath)
-	}
 
 }
 
@@ -72,7 +53,9 @@ var setPrivacyConfigCmd = &cobra.Command{
 	Long:  "set reward address & node privacy",
 	Run: func(cmd *cobra.Command, args []string) {
 
-		getOutput(cmd.Flags())
+		if output == "" {
+			output = skyenv.PackageConfig().LocalPath + "/" + skyenv.PrivFile + "/" + skyenv.PrivFile
+		}
 
 		if len(args) > 0 {
 			if args[0] != "" {
@@ -108,7 +91,10 @@ var getPrivacyConfigCmd = &cobra.Command{
 	Short: "read reward address & privacy setting from file",
 	Long:  `read reward address & privacy setting from file`,
 	Run: func(cmd *cobra.Command, args []string) {
-		getOutput(cmd.Flags())
+
+		if output == "" {
+			output = skyenv.PackageConfig().LocalPath + "/" + skyenv.PrivFile + "/" + skyenv.PrivFile
+		}
 
 		jsonOutput, err := privacyconfig.GetReward(output)
 		if err != nil {
@@ -120,22 +106,4 @@ var getPrivacyConfigCmd = &cobra.Command{
 		}
 		internal.PrintOutput(cmd.Flags(), jsonOutput, string(j)+"\n")
 	},
-}
-
-func getOutput(flags *pflag.FlagSet) {
-	// these flags overwrite each other
-	if (isUsrEnv) && (isPkgEnv) {
-		internal.PrintFatalError(flags, fmt.Errorf("Use of mutually exclusive flags: -u --user and -p --pkg"))
-	}
-	if output == "" {
-		output = skyenv.LocalPath + "/" + skyenv.PrivFile
-	}
-	if isPkgEnv {
-		confPath = skyenv.PackageConfig().LocalPath + "/" + skyenv.PrivFile
-		output = confPath
-	}
-	if isUsrEnv {
-		confPath = skyenv.UserConfig().LocalPath + "/" + skyenv.PrivFile
-		output = confPath
-	}
 }
