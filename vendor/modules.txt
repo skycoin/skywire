@@ -146,7 +146,7 @@ github.com/shirou/gopsutil/v3/process
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v0.0.0-20220922094502-49fed0dcef0e
+# github.com/skycoin/dmsg v0.0.0-20221007110410-643ca4fc9f82
 ## explicit; go 1.16
 github.com/skycoin/dmsg/internal/servermetrics
 github.com/skycoin/dmsg/pkg/direct
@@ -239,6 +239,8 @@ github.com/valyala/histogram
 # github.com/xtaci/kcp-go v5.4.20+incompatible
 ## explicit
 github.com/xtaci/kcp-go
+# github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37
+## explicit; go 1.13
 # go.etcd.io/bbolt v1.3.6
 ## explicit; go 1.12
 go.etcd.io/bbolt
