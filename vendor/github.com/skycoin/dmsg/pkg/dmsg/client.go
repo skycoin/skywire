@@ -229,7 +229,7 @@ func (ce *Client) Ready() <-chan struct{} {
 }
 
 func (ce *Client) discoverServers(ctx context.Context) (entries []*disc.Entry, err error) {
-	err = netutil.NewDefaultRetrier(ce.log.WithField("func", "discoverServers")).Do(ctx, func() error {
+	err = netutil.NewDefaultRetrier(ce.log).Do(ctx, func() error {
 		entries, err = ce.dc.AvailableServers(ctx)
 		return err
 	})
@@ -409,7 +409,7 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 			// We should only report an error when client is not closed.
 			// Also, when the client is closed, it will automatically delete all sessions.
 			ce.errCh <- fmt.Errorf("failed to serve dialed session to %s: %v", dSes.RemotePK(), err)
-			ce.delSession(ctx, dSes.RemotePK())
+			ce.delSession(ctx, dSes.RemotePK(), false)
 		}
 
 		// Trigger disconnect callback.
