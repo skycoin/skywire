@@ -23,7 +23,7 @@ var (
 	isRegen                bool
 	isRetainHypervisors    bool
 	isTestEnv              bool
-	ptext                  string
+	pText                  string
 	isPkgEnv               bool
 	isUsrEnv               bool
 	isHypervisor           bool
@@ -31,8 +31,8 @@ var (
 	isDmsgHTTP             bool
 	isPublicRPC            bool
 	isVpnServerEnable      bool
-	isDisableauth          bool
-	isEnableauth           bool
+	isDisableAuth          bool
+	isEnableAuth           bool
 	selectedOS             string
 	disableApps            string
 	isBestProtocol         bool
@@ -44,10 +44,10 @@ var (
 	isOutUnset             bool
 	ver                    string
 	isRoot                 = skyenv.IsRoot()
-	svcconf                = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")     //skyenv.DefaultServiceConfAddr
-	testconf               = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "") //skyenv.DefaultServiceConfAddr
-	ghiddenflags           []string
-	uhiddenflags           []string
+	svcConf                = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")     //skyenv.DefaultServiceConfAddr
+	testConf               = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "") //skyenv.DefaultServiceConfAddr
+	gHiddenFlags           []string
+	uHiddenFlags           []string
 	binPath                string
 	logLevel               string
 	isPkg                  bool
