@@ -87,7 +87,7 @@ var setPrivacyConfigCmd = &cobra.Command{
 
 		confP := &privacyconfig.Privacy{
 			DisplayNodeIP: displayNodeIP,
-			RewardAddress: cAddr,
+			RewardAddress: cAddr.String(),
 		}
 
 		jsonOutput, err := privacyconfig.SetReward(confP, output)

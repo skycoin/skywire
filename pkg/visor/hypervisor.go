@@ -20,6 +20,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
+	coincipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -1280,6 +1281,11 @@ func (hv *Hypervisor) putPrivacy() http.HandlerFunc {
 			return
 		}
 
+		_, err := coincipher.DecodeBase58Address(reqBody.RewardAddress)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
 		pConf, err := ctx.API.SetPrivacy(reqBody)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)

@@ -48,7 +48,7 @@ var setPrivacyCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid address specified: %v", err))
 		}
 
-		pConfig, err := client.SetPrivacy(&privacyconfig.Privacy{DisplayNodeIP: displayNodeIP, RewardAddress: cAddr})
+		pConfig, err := client.SetPrivacy(&privacyconfig.Privacy{DisplayNodeIP: displayNodeIP, RewardAddress: cAddr.String()})
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 		}

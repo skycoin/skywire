@@ -5,14 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	coincipher "github.com/skycoin/skycoin/src/cipher"
 )
 
 // Privacy represents the json-encoded contents of the privacy.json file
 type Privacy struct {
-	DisplayNodeIP bool               `json:"display_node_ip"`
-	RewardAddress coincipher.Address `json:"reward_address,omitempty"`
+	DisplayNodeIP bool   `json:"display_node_ip"`
+	RewardAddress string `json:"reward_address,omitempty"`
 }
 
 // SetReward sets the reward address in privacy config file
