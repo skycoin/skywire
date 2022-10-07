@@ -36,6 +36,7 @@ func init() {
 var privacyConfigCmd = &cobra.Command{
 	SilenceErrors: true,
 	SilenceUsage:  true,
+	Hidden:        true,
 	Use:           "priv",
 	Short:         "rewards & privacy setting",
 	Long: `rewards & privacy setting
