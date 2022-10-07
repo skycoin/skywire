@@ -312,7 +312,7 @@ func (v *Visor) Uptime() (float64, error) {
 // SetPrivacy implements API.
 func (v *Visor) SetPrivacy(p privacyconfig.Privacy) (string, error) {
 	path := v.conf.LocalPath + "/" + skyenv.PrivFile
-	j, err := privacyconfig.SetReward(p, path, path)
+	j, err := privacyconfig.SetReward(p, path)
 	if err != nil {
 		return "", err
 	}

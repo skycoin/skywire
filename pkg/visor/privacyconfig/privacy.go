@@ -16,14 +16,10 @@ type Privacy struct {
 }
 
 // SetReward sets the reward address in privacy config file
-func SetReward(confP Privacy, out, pathStr string) ([]byte, error) {
-	// Print results.
+func SetReward(confP Privacy, out string) ([]byte, error) {
 	j, err := json.MarshalIndent(confP, "", "\t")
 	if err != nil {
 		return nil, fmt.Errorf("Could not marshal json. err=%v", err)
-	}
-	if _, err := os.Stat(pathStr); os.IsNotExist(err) {
-		return nil, fmt.Errorf("local directory not found ; run skywire first to create this path. err=%v", err)
 	}
 	err = os.WriteFile(out, j, 0644) //nolint
 	if err != nil {
