@@ -370,11 +370,8 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 	log.WithField("dmsg_addr", fmt.Sprintf("dmsg://%v", lis.Addr().String())).
 		Error("Serving...")
 	srv := &http.Server{
-		ReadTimeout:       1 * time.Second,
-		WriteTimeout:      1 * time.Second,
-		IdleTimeout:       30 * time.Second,
-		ReadHeaderTimeout: 2 * time.Second,
-		Handler:           lsAPI,
+		IdleTimeout: 30 * time.Second,
+		Handler:     lsAPI,
 	}
 
 	wg := new(sync.WaitGroup)
