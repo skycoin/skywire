@@ -587,8 +587,8 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 			trySUDPH := false
 
 			for _, trans := range transports {
-				ntype := network.Type(trans)
-				if ntype == network.STCPR {
+				nType := network.Type(trans)
+				if nType == network.STCPR {
 					trySTCPR = true
 					continue
 				}
@@ -597,7 +597,7 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 				<-v.stunReady
 
 				// skip if SUDPH is under symmetric NAT / under UDP firewall.
-				if ntype == network.SUDPH && (v.stunClient.NATType == stun.NATSymmetric ||
+				if nType == network.SUDPH && (v.stunClient.NATType == stun.NATSymmetric ||
 					v.stunClient.NATType == stun.NATSymmetricUDPFirewall) {
 					continue
 				}
