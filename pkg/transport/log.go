@@ -158,13 +158,13 @@ func (tls *fileTransportLogStore) Record(id uuid.UUID, entry *LogEntry) error {
 }
 
 func (tls *fileTransportLogStore) writeToCSV(cEntry *CsvEntry) error {
-	clientsFile, err := os.OpenFile(filepath.Join(tls.dir, fmt.Sprintf("%s.csv", tls.today())), os.O_RDWR|os.O_CREATE, os.ModePerm)
+	f, err := os.OpenFile(filepath.Join(tls.dir, fmt.Sprintf("%s.csv", tls.today())), os.O_RDWR|os.O_CREATE, os.ModePerm)
 	if err != nil {
 		return err
 	}
 
 	defer func() {
-		if err := clientsFile.Close(); err != nil {
+		if err := f.Close(); err != nil {
 			tls.log.WithError(err).Errorln("Failed to close hypervisor response body")
 		}
 	}()
@@ -172,7 +172,7 @@ func (tls *fileTransportLogStore) writeToCSV(cEntry *CsvEntry) error {
 	readClients := []*CsvEntry{}
 	writeClients := []*CsvEntry{}
 
-	if err := gocsv.UnmarshalFile(clientsFile, &readClients); err != nil && !errors.Is(err, gocsv.ErrEmptyCSVFile) { // Load clients from file
+	if err := gocsv.UnmarshalFile(f, &readClients); err != nil && !errors.Is(err, gocsv.ErrEmptyCSVFile) { // Load clients from file
 		return err
 	}
 
@@ -188,7 +188,7 @@ func (tls *fileTransportLogStore) writeToCSV(cEntry *CsvEntry) error {
 		writeClients = append(writeClients, client)
 	}
 
-	if _, err := clientsFile.Seek(0, 0); err != nil { // Go to the start of the file
+	if _, err := f.Seek(0, 0); err != nil { // Go to the start of the file
 		return err
 	}
 
@@ -197,7 +197,7 @@ func (tls *fileTransportLogStore) writeToCSV(cEntry *CsvEntry) error {
 		return err
 	}
 
-	err = gocsv.MarshalFile(&writeClients, clientsFile) // Use this to save the CSV back to the file
+	err = gocsv.MarshalFile(&writeClients, f) // Use this to save the CSV back to the file
 	if err != nil {
 		return err
 	}
@@ -205,20 +205,20 @@ func (tls *fileTransportLogStore) writeToCSV(cEntry *CsvEntry) error {
 }
 
 func (tls *fileTransportLogStore) readFromCSV(fileName string) ([]*CsvEntry, error) {
-	clientsFile, err := os.OpenFile(filepath.Join(tls.dir, fmt.Sprint(fileName)), os.O_RDWR|os.O_CREATE, os.ModePerm)
+	f, err := os.OpenFile(filepath.Join(tls.dir, fmt.Sprint(fileName)), os.O_RDWR|os.O_CREATE, os.ModePerm)
 	if err != nil {
 		return nil, err
 	}
 
 	defer func() {
-		if err := clientsFile.Close(); err != nil {
+		if err := f.Close(); err != nil {
 			tls.log.WithError(err).Errorln("Failed to close hypervisor response body")
 		}
 	}()
 
 	readClients := []*CsvEntry{}
 
-	if err := gocsv.UnmarshalFile(clientsFile, &readClients); err != nil && !errors.Is(err, gocsv.ErrEmptyCSVFile) { // Load clients from file
+	if err := gocsv.UnmarshalFile(f, &readClients); err != nil && !errors.Is(err, gocsv.ErrEmptyCSVFile) { // Load clients from file
 		return nil, err
 	}
 	return readClients, nil
