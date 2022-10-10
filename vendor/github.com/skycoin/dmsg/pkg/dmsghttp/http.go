@@ -32,10 +32,10 @@ func ListenAndServe(ctx context.Context, pk cipher.PubKey, sk cipher.SecKey, a h
 	log.WithField("dmsg_addr", fmt.Sprintf("dmsg://%v", lis.Addr().String())).
 		Debug("Serving...")
 	srv := &http.Server{
-		ReadTimeout:       1 * time.Second,
-		WriteTimeout:      1 * time.Second,
+		ReadTimeout:       3 * time.Second,
+		WriteTimeout:      3 * time.Second,
 		IdleTimeout:       30 * time.Second,
-		ReadHeaderTimeout: 2 * time.Second,
+		ReadHeaderTimeout: 3 * time.Second,
 		Handler:           a,
 	}
 

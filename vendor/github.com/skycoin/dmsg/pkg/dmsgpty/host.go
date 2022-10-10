@@ -57,6 +57,10 @@ func (h *Host) ServeCLI(ctx context.Context, lis net.Listener) error {
 	for {
 		conn, err := lis.Accept()
 		if err != nil {
+			// TODO (ersonp): Temporary has been depricaited but there is no replacement for it
+			// since ServeCLI is based on Serve of `net/http.Server` https://github.com/golang/go/blob/ab9d31da9e088a271e656120a3d99cd3b1103ab6/src/net/http/server.go#L3047-L3059
+			// and it is still using Temporary we should keep an eye on it and make changes when it's changed there.
+			// This is the main comment for reference https://github.com/golang/go/issues/45729#issuecomment-1104607098
 			if err, ok := err.(net.Error); ok && err.Temporary() { //nolint
 				log.Warn("Failed to accept CLI connection with temporary error, continuing...")
 				continue
@@ -107,6 +111,10 @@ func (h *Host) ListenAndServe(ctx context.Context, port uint16) error {
 		stream, err := lis.AcceptStream()
 		if err != nil {
 			log := log.WithError(err)
+			// TODO (ersonp): Temporary has been depricaited but there is no replacement for it
+			// since ListenAndServe is based on Serve of `net/http.Server` https://github.com/golang/go/blob/ab9d31da9e088a271e656120a3d99cd3b1103ab6/src/net/http/server.go#L3047-L3059
+			// and it is still using Temporary we should keep an eye on it and make changes when it's changed there.
+			// This is the main comment for reference https://github.com/golang/go/issues/45729#issuecomment-1104607098
 			if err, ok := err.(net.Error); ok && err.Temporary() { //nolint
 				log.Warn("Failed to accept dmsg.Stream with temporary error, continuing...")
 				continue
