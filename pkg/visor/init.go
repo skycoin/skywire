@@ -355,7 +355,6 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 
 	fileServerPath := v.conf.LocalPath + "/" + skyenv.TpLogStore
 	lsAPI := logserver.New(logger, fileServerPath, v.conf.LocalPath)
-	//TODO(ersonp): try to use dmsghttp.ListenAndServe instead
 	lis, err := dmsgC.Listen(skyenv.DmsgHTTPPort)
 	if err != nil {
 		return err
