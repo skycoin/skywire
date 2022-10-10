@@ -60,6 +60,8 @@ func (a *autoconnector) Run(ctx context.Context) (err error) {
 
 	for {
 		select {
+		case <-ctx.Done():
+			return context.Canceled
 		case <-publicServiceTicket.C:
 			// successfully established transports
 			tps := a.tm.GetTransportsByLabel(transport.LabelAutomatic)
@@ -93,8 +95,6 @@ func (a *autoconnector) Run(ctx context.Context) (err error) {
 					}
 				}
 			}
-		case <-ctx.Done():
-			return context.Canceled
 		}
 	}
 }
