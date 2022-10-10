@@ -26,7 +26,7 @@ type API struct {
 }
 
 // New creates a new api.
-func New(log *logging.Logger, tpLogPath, localPath string) *API {
+func New(log *logging.Logger, tpLogPath, localPath, customPath string) *API {
 	api := &API{
 		logger:    log,
 		startedAt: time.Now(),
@@ -49,6 +49,9 @@ func New(log *logging.Logger, tpLogPath, localPath string) *API {
 	r.Handle("/"+skyenv.SurveyFile, http.StripPrefix("/", fsLocal))
 
 	r.Handle("/"+skyenv.PrivFile, http.StripPrefix("/", fsLocal))
+
+	fsCustom := http.FileServer(http.Dir(customPath))
+	r.Handle("/*", http.StripPrefix("/", fsCustom))
 
 	api.Handler = r
 	return api

@@ -95,6 +95,7 @@ const (
 // Routing constants
 const (
 	TpLogStore = "transport_logs"
+	Custom     = "custom"
 )
 
 // Local constants

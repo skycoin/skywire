@@ -353,8 +353,9 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 	}
 	logger := v.MasterLogger().PackageLogger("dmsghttp_logserver")
 
-	fileServerPath := v.conf.LocalPath + "/" + skyenv.TpLogStore
-	lsAPI := logserver.New(logger, fileServerPath, v.conf.LocalPath)
+	tpLogPath := v.conf.LocalPath + "/" + skyenv.TpLogStore
+	customPath := v.conf.LocalPath + "/" + skyenv.Custom
+	lsAPI := logserver.New(logger, tpLogPath, v.conf.LocalPath, customPath)
 	lis, err := dmsgC.Listen(skyenv.DmsgHTTPPort)
 	if err != nil {
 		return err
