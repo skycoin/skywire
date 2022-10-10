@@ -368,7 +368,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 	}()
 
 	log.WithField("dmsg_addr", fmt.Sprintf("dmsg://%v", lis.Addr().String())).
-		Error("Serving...")
+		Debug("Serving...")
 	srv := &http.Server{
 		IdleTimeout: 30 * time.Second,
 		Handler:     lsAPI,
