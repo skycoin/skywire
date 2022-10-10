@@ -26,7 +26,7 @@ type API struct {
 }
 
 // New creates a new api.
-func New(log *logging.Logger, tpLogPath, localPath, customPath string) *API {
+func New(log *logging.Logger, tpLogPath, localPath, customPath string, printLog bool) *API {
 	api := &API{
 		logger:    log,
 		startedAt: time.Now(),
@@ -36,8 +36,10 @@ func New(log *logging.Logger, tpLogPath, localPath, customPath string) *API {
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
+	if printLog {
+		r.Use(middleware.Logger)
+		r.Use(middleware.Recoverer)
+	}
 	r.Use(httputil.SetLoggerMiddleware(log))
 
 	r.Get("/health", api.health)

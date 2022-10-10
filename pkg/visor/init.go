@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ccding/go-stun/stun"
+	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/direct"
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
@@ -355,7 +356,14 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 
 	tpLogPath := v.conf.LocalPath + "/" + skyenv.TpLogStore
 	customPath := v.conf.LocalPath + "/" + skyenv.Custom
-	lsAPI := logserver.New(logger, tpLogPath, v.conf.LocalPath, customPath)
+
+	var printLog bool
+	if v.MasterLogger().GetLevel() == logrus.DebugLevel || v.MasterLogger().GetLevel() == logrus.TraceLevel {
+		printLog = true
+	}
+
+	lsAPI := logserver.New(logger, tpLogPath, v.conf.LocalPath, customPath, printLog)
+
 	lis, err := dmsgC.Listen(skyenv.DmsgHTTPPort)
 	if err != nil {
 		return err
