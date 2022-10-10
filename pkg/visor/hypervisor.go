@@ -20,6 +20,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
+	coincipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -32,6 +33,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
+	"github.com/skycoin/skywire/pkg/visor/privacyconfig"
 	"github.com/skycoin/skywire/pkg/visor/usermanager"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -266,8 +268,8 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Put("/visors/{pk}/persistent-transports", hv.putPersistentTransports())
 				r.Get("/visors/{pk}/log/rotation", hv.getLogRotationInterval())
 				r.Put("/visors/{pk}/log/rotation", hv.putLogRotationInterval())
-				r.Get("/visors/{pubkey}/privacy", hv.getPrivacy())
-				r.Put("/visors/{pubkey}/privacy", hv.putPrivacy())
+				r.Get("/visors/{pk}/privacy", hv.getPrivacy())
+				r.Put("/visors/{pk}/privacy", hv.putPrivacy())
 
 			})
 		})
@@ -1269,7 +1271,7 @@ func (hv *Hypervisor) getLogRotationInterval() http.HandlerFunc {
 
 func (hv *Hypervisor) putPrivacy() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var reqBody skyenv.Privacy
+		var reqBody *privacyconfig.Privacy
 
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
 			if err != io.EOF {
@@ -1279,11 +1281,17 @@ func (hv *Hypervisor) putPrivacy() http.HandlerFunc {
 			return
 		}
 
-		if _, err := ctx.API.SetPrivacy(reqBody); err != nil {
+		_, err := coincipher.DecodeBase58Address(reqBody.RewardAddress)
+		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
-		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+		pConf, err := ctx.API.SetPrivacy(reqBody)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, pConf)
 	})
 }
 
@@ -1514,6 +1522,8 @@ func setupDmsgPtyUI(dmsgC *dmsg.Client, visorPK cipher.PubKey) *dmsgPtyUI {
 
 func (hv *Hypervisor) getPty() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		ctx.PtyUI.PtyUI.Handler()(w, r)
+		customCommand := make(map[string][]string)
+		customCommand["update"] = skyenv.UpdateCommand()
+		ctx.PtyUI.PtyUI.Handler(customCommand)(w, r)
 	})
 }

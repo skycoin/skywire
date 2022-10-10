@@ -123,16 +123,22 @@ const (
 
 // PkgConfig struct contains paths specific to the linux packages
 type PkgConfig struct {
-	Launcher struct {
-		BinPath string `json:"bin_path"`
-	} `json:"launcher"`
+	Launcher   `json:"launcher"`
 	LocalPath  string `json:"local_path"`
-	Hypervisor struct {
-		DbPath     string `json:"db_path"`
-		EnableAuth bool   `json:"enable_auth"`
-	} `json:"hypervisor"`
+	Hypervisor `json:"hypervisor"`
 	//		TLSCertFile string `json:"tls_cert_file"`
 	//		TLSKeyFile  string `json:"tls_key_file"`
+}
+
+// Launcher struct contains the BinPath specific to the linux packages
+type Launcher struct {
+	BinPath string `json:"bin_path"`
+}
+
+// Hypervisor struct contains Hypervisor paths specific to the linux packages
+type Hypervisor struct {
+	DbPath     string `json:"db_path"`
+	EnableAuth bool   `json:"enable_auth"`
 }
 
 // DmsgPtyWhiteList gets dmsgpty whitelist path for installed Skywire.
@@ -189,12 +195,6 @@ func IsRoot() bool {
 	return userLvl.Username == "root"
 }
 
-// Privacy represents the json-encoded contents of the privacy.json file
-type Privacy struct {
-	DisplayNodeIP bool   `json:"display_node_ip"`
-	RewardAddress string `json:"reward_address,omitempty"`
-}
-
 // Survey system hardware survey struct
 type Survey struct {
 	UUID    uuid.UUID
@@ -211,10 +211,24 @@ const SurveyFile string = "system.json"
 const PrivFile string = "privacy.json"
 
 // SystemSurvey returns system hardware survey
-func SystemSurvey() (s Survey) {
-	s.UUID = uuid.New()
-	s.Disks, _ = ghw.Block()     //nolint
-	s.Product, _ = ghw.Product() //nolint
-	s.Memory, _ = ghw.Memory()   //nolint
-	return s
+func SystemSurvey() (Survey, error) {
+	disks, err := ghw.Block()
+	if err != nil {
+		return Survey{}, err
+	}
+	product, err := ghw.Product()
+	if err != nil {
+		return Survey{}, err
+	}
+	memory, err := ghw.Memory()
+	if err != nil {
+		return Survey{}, err
+	}
+	s := Survey{
+		UUID:    uuid.New(),
+		Disks:   disks,
+		Product: product,
+		Memory:  memory,
+	}
+	return s, nil
 }
