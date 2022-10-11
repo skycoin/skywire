@@ -135,7 +135,7 @@ func FileTransportLogStore(dir string) (LogStore, error) {
 }
 
 func (tls *fileTransportLogStore) Entry(tpID uuid.UUID) (*LogEntry, error) {
-	entries, err := tls.readFromCSV(tls.today())
+	entries, err := tls.readFromCSV(tls.todayFileName())
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +158,7 @@ func (tls *fileTransportLogStore) Record(id uuid.UUID, entry *LogEntry) error {
 }
 
 func (tls *fileTransportLogStore) writeToCSV(cEntry *CsvEntry) error {
-	f, err := os.OpenFile(filepath.Join(tls.dir, fmt.Sprintf("%s.csv", tls.today())), os.O_RDWR|os.O_CREATE, os.ModePerm)
+	f, err := os.OpenFile(filepath.Join(tls.dir, fmt.Sprint(tls.todayFileName())), os.O_RDWR|os.O_CREATE, os.ModePerm)
 	if err != nil {
 		return err
 	}
@@ -228,6 +228,6 @@ func (tls *fileTransportLogStore) readFromCSV(fileName string) ([]*CsvEntry, err
 	return readClients, nil
 }
 
-func (tls *fileTransportLogStore) today() string {
-	return time.Now().UTC().Format("2006-01-02")
+func (tls *fileTransportLogStore) todayFileName() string {
+	return fmt.Sprintf("%s.csv", time.Now().UTC().Format("2006-01-02"))
 }
