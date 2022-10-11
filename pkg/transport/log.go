@@ -165,7 +165,7 @@ func (tls *fileTransportLogStore) writeToCSV(cEntry *CsvEntry) error {
 
 	defer func() {
 		if err := f.Close(); err != nil {
-			tls.log.WithError(err).Errorln("Failed to close hypervisor response body")
+			tls.log.WithError(err).Errorln("Failed to close csv file")
 		}
 	}()
 
@@ -216,7 +216,7 @@ func (tls *fileTransportLogStore) readFromCSV(fileName string) ([]*CsvEntry, err
 
 	defer func() {
 		if err := f.Close(); err != nil {
-			tls.log.WithError(err).Errorln("Failed to close hypervisor response body")
+			tls.log.WithError(err).Errorln("Failed to close csv file")
 		}
 	}()
 
