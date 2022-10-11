@@ -23,7 +23,7 @@ type CsvEntry struct {
 	TpID uuid.UUID `csv:"tp_id"`
 	// atomic requires 64-bit alignment for struct field access
 	LogEntry
-	TimeStamp time.Time `csv:"time_stamp"` // TimeStamp should be time.RFC3339Nano formatted
+	TimeStamp int64 `csv:"time_stamp"` // TimeStamp should be time.RFC3339Nano formatted
 }
 
 // LogEntry represents a logging entry for a given Transport.
@@ -159,7 +159,7 @@ func (tls *fileTransportLogStore) Record(id uuid.UUID, entry *LogEntry) error {
 	cEntry := &CsvEntry{
 		TpID:      id,
 		LogEntry:  *entry,
-		TimeStamp: time.Now().UTC(),
+		TimeStamp: time.Now().UTC().Unix(),
 	}
 
 	return tls.writeToCSV(cEntry)
