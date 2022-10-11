@@ -123,18 +123,24 @@ func (tls *inMemoryTransportLogStore) Record(id uuid.UUID, entry *LogEntry) erro
 type fileTransportLogStore struct {
 	dir string
 	log *logging.Logger
+	mu  sync.Mutex
 }
 
 // FileTransportLogStore implements file TransportLogStore.
 func FileTransportLogStore(dir string) (LogStore, error) {
-	if err := os.MkdirAll(dir, 0606); err != nil {
+	if err := os.MkdirAll(dir, 0644); err != nil {
 		return nil, err
 	}
 	log := logging.MustGetLogger("transport")
-	return &fileTransportLogStore{dir, log}, nil
+	return &fileTransportLogStore{
+		dir: dir,
+		log: log,
+	}, nil
 }
 
 func (tls *fileTransportLogStore) Entry(tpID uuid.UUID) (*LogEntry, error) {
+	tls.mu.Lock()
+	defer tls.mu.Unlock()
 	entries, err := tls.readFromCSV(tls.todayFileName())
 	if err != nil {
 		return nil, err
@@ -148,6 +154,8 @@ func (tls *fileTransportLogStore) Entry(tpID uuid.UUID) (*LogEntry, error) {
 }
 
 func (tls *fileTransportLogStore) Record(id uuid.UUID, entry *LogEntry) error {
+	tls.mu.Lock()
+	defer tls.mu.Unlock()
 	cEntry := &CsvEntry{
 		TpID:      id,
 		LogEntry:  *entry,
@@ -158,7 +166,7 @@ func (tls *fileTransportLogStore) Record(id uuid.UUID, entry *LogEntry) error {
 }
 
 func (tls *fileTransportLogStore) writeToCSV(cEntry *CsvEntry) error {
-	f, err := os.OpenFile(filepath.Join(tls.dir, fmt.Sprint(tls.todayFileName())), os.O_RDWR|os.O_CREATE, os.ModePerm)
+	f, err := os.OpenFile(filepath.Join(tls.dir, fmt.Sprint(tls.todayFileName())), os.O_RDWR|os.O_CREATE, 0644) //nolint
 	if err != nil {
 		return err
 	}
@@ -196,11 +204,6 @@ func (tls *fileTransportLogStore) writeToCSV(cEntry *CsvEntry) error {
 		return err
 	}
 
-	_, err = gocsv.MarshalString(&writeClients) // Get all clients as CSV string
-	if err != nil {
-		return err
-	}
-
 	err = gocsv.MarshalFile(&writeClients, f) // Use this to save the CSV back to the file
 	if err != nil {
 		return err
@@ -209,7 +212,7 @@ func (tls *fileTransportLogStore) writeToCSV(cEntry *CsvEntry) error {
 }
 
 func (tls *fileTransportLogStore) readFromCSV(fileName string) ([]*CsvEntry, error) {
-	f, err := os.OpenFile(filepath.Join(tls.dir, fmt.Sprint(fileName)), os.O_RDWR|os.O_CREATE, os.ModePerm)
+	f, err := os.OpenFile(filepath.Join(tls.dir, fmt.Sprint(fileName)), os.O_RDWR|os.O_CREATE, 0644) //nolint
 	if err != nil {
 		return nil, err
 	}
