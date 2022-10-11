@@ -3,7 +3,6 @@ package transport
 import (
 	"bytes"
 	"encoding/gob"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -11,18 +10,28 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
+	"github.com/gocarina/gocsv"
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
+// CsvEntry represents a logging entry for csv for a given Transport.
+type CsvEntry struct {
+	TpID uuid.UUID `csv:"tp_id"`
+	// atomic requires 64-bit alignment for struct field access
+	LogEntry
+	TimeStamp time.Time `csv:"time_stamp"` // TimeStamp should be time.RFC3339Nano formatted
+}
+
 // LogEntry represents a logging entry for a given Transport.
 // The entry is updated every time a packet is received or sent.
 type LogEntry struct {
 	// atomic requires 64-bit alignment for struct field access
-	RecvBytes uint64 `json:"recv"` // Total received bytes.
-	SentBytes uint64 `json:"sent"` // Total sent bytes.
+	RecvBytes uint64 `csv:"recv"` // Total received bytes.
+	SentBytes uint64 `csv:"sent"` // Total sent bytes.
 }
 
 // AddRecv records read.
@@ -118,46 +127,103 @@ type fileTransportLogStore struct {
 
 // FileTransportLogStore implements file TransportLogStore.
 func FileTransportLogStore(dir string) (LogStore, error) {
-	if err := os.MkdirAll(dir, 0707); err != nil {
+	if err := os.MkdirAll(dir, 0606); err != nil {
 		return nil, err
 	}
 	log := logging.MustGetLogger("transport")
 	return &fileTransportLogStore{dir, log}, nil
 }
 
-func (tls *fileTransportLogStore) Entry(id uuid.UUID) (*LogEntry, error) {
-	f, err := os.Open(filepath.Join(tls.dir, fmt.Sprintf("%s.log", id)))
+func (tls *fileTransportLogStore) Entry(tpID uuid.UUID) (*LogEntry, error) {
+	entries, err := tls.readFromCSV(tls.today())
 	if err != nil {
-		return nil, fmt.Errorf("open: %w", err)
+		return nil, err
 	}
-	defer func() {
-		if err := f.Close(); err != nil {
-			tls.log.WithError(err).Warn("Failed to close file")
+	for _, entry := range entries {
+		if entry.TpID == tpID {
+			return &entry.LogEntry, nil
 		}
-	}()
-
-	entry := &LogEntry{}
-	if err := json.NewDecoder(f).Decode(entry); err != nil {
-		return nil, fmt.Errorf("json: %w", err)
 	}
-
-	return entry, nil
+	return nil, nil
 }
 
 func (tls *fileTransportLogStore) Record(id uuid.UUID, entry *LogEntry) error {
-	f, err := os.OpenFile(filepath.Join(tls.dir, fmt.Sprintf("%s.log", id)), os.O_RDWR|os.O_CREATE, 0600)
-	if err != nil {
-		return fmt.Errorf("open: %w", err)
+	cEntry := &CsvEntry{
+		TpID:      id,
+		LogEntry:  *entry,
+		TimeStamp: time.Now().UTC(),
 	}
+
+	return tls.writeToCSV(cEntry)
+}
+
+func (tls *fileTransportLogStore) writeToCSV(cEntry *CsvEntry) error {
+	f, err := os.OpenFile(filepath.Join(tls.dir, fmt.Sprintf("%s.csv", tls.today())), os.O_RDWR|os.O_CREATE, os.ModePerm)
+	if err != nil {
+		return err
+	}
+
 	defer func() {
 		if err := f.Close(); err != nil {
-			tls.log.WithError(err).Warn("Failed to close file")
+			tls.log.WithError(err).Errorln("Failed to close hypervisor response body")
 		}
 	}()
 
-	if err := json.NewEncoder(f).Encode(entry); err != nil {
-		return fmt.Errorf("json: %w", err)
+	readClients := []*CsvEntry{}
+	writeClients := []*CsvEntry{}
+
+	if err := gocsv.UnmarshalFile(f, &readClients); err != nil && !errors.Is(err, gocsv.ErrEmptyCSVFile) { // Load clients from file
+		return err
 	}
 
+	if len(readClients) == 0 {
+		writeClients = append(writeClients, cEntry)
+	}
+
+	for _, client := range readClients {
+		if client.TpID == cEntry.TpID {
+			writeClients = append(writeClients, cEntry)
+			continue
+		}
+		writeClients = append(writeClients, client)
+	}
+
+	if _, err := f.Seek(0, 0); err != nil { // Go to the start of the file
+		return err
+	}
+
+	_, err = gocsv.MarshalString(&writeClients) // Get all clients as CSV string
+	if err != nil {
+		return err
+	}
+
+	err = gocsv.MarshalFile(&writeClients, f) // Use this to save the CSV back to the file
+	if err != nil {
+		return err
+	}
 	return nil
+}
+
+func (tls *fileTransportLogStore) readFromCSV(fileName string) ([]*CsvEntry, error) {
+	f, err := os.OpenFile(filepath.Join(tls.dir, fmt.Sprint(fileName)), os.O_RDWR|os.O_CREATE, os.ModePerm)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		if err := f.Close(); err != nil {
+			tls.log.WithError(err).Errorln("Failed to close hypervisor response body")
+		}
+	}()
+
+	readClients := []*CsvEntry{}
+
+	if err := gocsv.UnmarshalFile(f, &readClients); err != nil && !errors.Is(err, gocsv.ErrEmptyCSVFile) { // Load clients from file
+		return nil, err
+	}
+	return readClients, nil
+}
+
+func (tls *fileTransportLogStore) today() string {
+	return time.Now().UTC().Format("2006-01-02")
 }
