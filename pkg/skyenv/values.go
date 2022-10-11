@@ -12,8 +12,8 @@ import (
 	"github.com/bitfield/script"
 	"github.com/google/uuid"
 	"github.com/jaypipes/ghw"
-
 	"github.com/skycoin/dmsg/pkg/dmsg"
+
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
