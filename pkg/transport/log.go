@@ -34,6 +34,21 @@ type LogEntry struct {
 	SentBytes uint64 `csv:"sent"` // Total sent bytes.
 }
 
+// MakeLogEntry makes a new LogEntry by adding the info from old entry if found
+func MakeLogEntry(ls LogStore, tpID uuid.UUID, log *logging.Logger) *LogEntry {
+	oldLogEntry, err := ls.Entry(tpID)
+	if err != nil {
+		log.Warn(err)
+		return &LogEntry{}
+	}
+	newEntry := new(LogEntry)
+	if oldLogEntry != nil {
+		newEntry.AddRecv(oldLogEntry.RecvBytes)
+		newEntry.AddSent(oldLogEntry.SentBytes)
+	}
+	return newEntry
+}
+
 // AddRecv records read.
 func (le *LogEntry) AddRecv(n uint64) {
 	atomic.AddUint64(&le.RecvBytes, n)
@@ -153,11 +168,11 @@ func (tls *fileTransportLogStore) Entry(tpID uuid.UUID) (*LogEntry, error) {
 	return nil, nil
 }
 
-func (tls *fileTransportLogStore) Record(id uuid.UUID, entry *LogEntry) error {
+func (tls *fileTransportLogStore) Record(tpID uuid.UUID, entry *LogEntry) error {
 	tls.mu.Lock()
 	defer tls.mu.Unlock()
 	cEntry := &CsvEntry{
-		TpID:      id,
+		TpID:      tpID,
 		LogEntry:  *entry,
 		TimeStamp: time.Now().UTC().Unix(),
 	}
