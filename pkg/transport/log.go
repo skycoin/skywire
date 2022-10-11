@@ -176,16 +176,20 @@ func (tls *fileTransportLogStore) writeToCSV(cEntry *CsvEntry) error {
 		return err
 	}
 
-	if len(readClients) == 0 {
-		writeClients = append(writeClients, cEntry)
-	}
-
+	var update bool
 	for _, client := range readClients {
+		// update if readClients contains the cEntry
 		if client.TpID == cEntry.TpID {
 			writeClients = append(writeClients, cEntry)
+			update = true
 			continue
 		}
 		writeClients = append(writeClients, client)
+	}
+
+	// write when the readClients are does not contain cEntry
+	if !update {
+		writeClients = append(writeClients, cEntry)
 	}
 
 	if _, err := f.Seek(0, 0); err != nil { // Go to the start of the file
