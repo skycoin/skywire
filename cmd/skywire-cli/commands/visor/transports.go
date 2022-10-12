@@ -23,10 +23,8 @@ import (
 
 var (
 	filterTypes   []string
-	filterPubKeys cipher.PubKeys
+	filterPubKeys []string
 	showLogs      bool
-	tpID          transportID
-	tpPK          cipher.PubKey
 )
 
 func init() {
@@ -40,8 +38,6 @@ func init() {
 		rmTpCmd,
 		discTpCmd,
 	)
-	discTpCmd.Flags().Var(&tpID, "id", "if specified, obtains a single transport of given ID")
-	discTpCmd.Flags().Var(&tpPK, "pk", "if specified, obtains transports associated with given public key")
 }
 
 // RootCmd contains commands that interact with the skywire-visor
@@ -59,7 +55,10 @@ var tpCmd = &cobra.Command{
 }
 
 var lsTypesCmd = &cobra.Command{
-	Use: "type", Short: "Transport types used by the local visor",
+	Use: "type",
+	Short: "Transport types used by the local visor",
+	Long: "\n	Transport types used by the local visor",
+	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, _ []string) {
 		types, err := clirpc.Client(cmd.Flags()).TransportTypes()
 		internal.Catch(cmd.Flags(), err)
@@ -68,16 +67,20 @@ var lsTypesCmd = &cobra.Command{
 }
 
 func init() {
-	lsTpCmd.Flags().StringSliceVarP(&filterTypes, "types", "t", filterTypes, "show transport(s) type(s) comma-separated\n")
-	lsTpCmd.Flags().VarP(&filterPubKeys, "pks", "p", "show transport(s) for public key(s) comma-separated")
+	lsTpCmd.Flags().StringSliceVarP(&filterTypes, "types", "t", filterTypes, "show transport(s) type(s) comma-separated")
+	lsTpCmd.Flags().StringSliceVarP(&filterPubKeys, "pks", "p", filterPubKeys, "show transport(s) for public key(s) comma-separated")
 	lsTpCmd.Flags().BoolVarP(&showLogs, "logs", "l", true, "show transport logs")
 }
 
 var lsTpCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "Available transports",
+	Long: "\n	Available transports\n\n	displays transports of the local visor",
 	Run: func(cmd *cobra.Command, _ []string) {
-		transports, err := clirpc.Client(cmd.Flags()).Transports(filterTypes, filterPubKeys, showLogs)
+		var pks cipher.PubKeys
+
+		internal.Catch(cmd.Flags(), pks.Set(strings.Join(filterPubKeys, ",")))
+		transports, err := clirpc.Client(cmd.Flags()).Transports(filterTypes, pks, showLogs)
 		internal.Catch(cmd.Flags(), err)
 		PrintTransports(cmd.Flags(), transports...)
 	},
@@ -86,10 +89,12 @@ var lsTpCmd = &cobra.Command{
 var idCmd = &cobra.Command{
 	Use:   "id <transport-id>",
 	Short: "Transport summary by id",
+	Long: "\n	Transport summary by id",
 	Args:  cobra.MinimumNArgs(1),
+	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
-		tpID := internal.ParseUUID(cmd.Flags(), "transport-id", args[0])
-		tp, err := clirpc.Client(cmd.Flags()).Transport(tpID)
+		tpid := internal.ParseUUID(cmd.Flags(), "transport-id", args[0])
+		tp, err := clirpc.Client(cmd.Flags()).Transport(tpid)
 		internal.Catch(cmd.Flags(), err)
 		PrintTransports(cmd.Flags(), tp)
 	},
@@ -102,8 +107,7 @@ var (
 
 func init() {
 	const (
-		typeFlagUsage = "type of transport to add; if unspecified, cli will attempt to establish a transport " +
-			"in the following order: skywire-tcp, stcpr, sudph, dmsg"
+		typeFlagUsage = "type of transport to add."
 		timeoutFlagUsage = "if specified, sets an operation timeout"
 	)
 
@@ -114,7 +118,14 @@ func init() {
 var addTpCmd = &cobra.Command{
 	Use:   "add <remote-public-key>",
 	Short: "Add a transport",
+	Long: `
+	Add a transport
+
+	If the transport type is unspecified,
+	the visor will attempt to establish a transport
+	in the following order: skywire-tcp, stcpr, sudph, dmsg`,
 	Args:  cobra.MinimumNArgs(1),
+	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
 
@@ -158,7 +169,9 @@ var addTpCmd = &cobra.Command{
 var rmTpCmd = &cobra.Command{
 	Use:   "rm <transport-id>",
 	Short: "Remove transport(s) by id",
+	Long: "\n	Remove transport(s) by id",
 	Args:  cobra.MinimumNArgs(1),
+	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		tID := internal.ParseUUID(cmd.Flags(), "transport-id", args[0])
 		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).RemoveTransport(tID))
@@ -213,30 +226,40 @@ func sortTransports(tps ...*visor.TransportSummary) {
 	})
 }
 
-var discTpCmd = &cobra.Command{
-	Use:   "disc (--id=<transport-id> | --pk=<edge-public-key>)",
-	Short: "Discover transport(s) by ID or public key",
-	Args: func(_ *cobra.Command, _ []string) error {
-		var (
-			nilID = uuid.UUID(tpID) == (uuid.UUID{})
-			nilPK = tpPK.Null()
-		)
-		if nilID && nilPK {
-			return errors.New("must specify --id flag or --pk flag")
-		}
-		if !nilID && !nilPK {
-			return errors.New("cannot specify --id and --pk flag")
-		}
-		return nil
-	},
-	Run: func(cmd *cobra.Command, _ []string) {
+var (
+	tpID          string
+	tpPK          string
+)
+func init() {
+	discTpCmd.Flags().StringVarP(&tpID, "id", "i", "", "obtain transport of given ID")
+	discTpCmd.Flags().StringVarP(&tpPK, "pk", "p", "", "obtain transports by public key")
+}
 
-		if rc := clirpc.Client(cmd.Flags()); tpPK.Null() {
-			entry, err := rc.DiscoverTransportByID(uuid.UUID(tpID))
+var discTpCmd = &cobra.Command{
+	Use:   "disc (--id=<transport-id> || --pk=<edge-public-key>)",
+	Short: "Discover remote transport(s)",
+	Long: "\n	Discover remote transport(s) by ID or public key",
+	DisableFlagsInUseLine: true,
+	Args: func(_ *cobra.Command, _ []string) error {
+	if tpID == "" && tpPK == "" {
+		return errors.New("must specify either transport id or public key")
+	}
+	if tpID != "" && tpPK != "" {
+		return errors.New("cannot specify both transport id and public key")
+	}
+	return nil
+},
+	Run: func(cmd *cobra.Command, _ []string) {
+		var tppk cipher.PubKey
+		var tpid transportID
+		internal.Catch(cmd.Flags(), tpid.Set(tpID))
+		internal.Catch(cmd.Flags(), tppk.Set(tpPK))
+		if rc := clirpc.Client(cmd.Flags()); tppk.Null() {
+			entry, err := rc.DiscoverTransportByID(uuid.UUID(tpid))
 			internal.Catch(cmd.Flags(), err)
 			PrintTransportEntries(cmd.Flags(), entry)
 		} else {
-			entries, err := rc.DiscoverTransportsByPK(tpPK)
+			entries, err := rc.DiscoverTransportsByPK(tppk)
 			internal.Catch(cmd.Flags(), err)
 			PrintTransportEntries(cmd.Flags(), entries...)
 		}
