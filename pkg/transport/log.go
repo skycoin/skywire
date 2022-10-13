@@ -30,8 +30,8 @@ type CsvEntry struct {
 // The entry is updated every time a packet is received or sent.
 type LogEntry struct {
 	// atomic requires 64-bit alignment for struct field access
-	RecvBytes uint64 `csv:"recv"` // Total received bytes.
-	SentBytes uint64 `csv:"sent"` // Total sent bytes.
+	RecvBytes *uint64 `csv:"recv"` // Total received bytes.
+	SentBytes *uint64 `csv:"sent"` // Total sent bytes.
 }
 
 // MakeLogEntry makes a new LogEntry by adding the info from old entry if found
@@ -41,34 +41,39 @@ func MakeLogEntry(ls LogStore, tpID uuid.UUID, log *logging.Logger) *LogEntry {
 		log.Warn(err)
 		return &LogEntry{}
 	}
-	newEntry := new(LogEntry)
+	recv := uint64(0)
+	sent := uint64(0)
+	newEntry := &LogEntry{
+		RecvBytes: &recv,
+		SentBytes: &sent,
+	}
 	if oldLogEntry != nil {
-		newEntry.AddRecv(oldLogEntry.RecvBytes)
-		newEntry.AddSent(oldLogEntry.SentBytes)
+		newEntry.AddRecv(*oldLogEntry.RecvBytes)
+		newEntry.AddSent(*oldLogEntry.SentBytes)
 	}
 	return newEntry
 }
 
 // AddRecv records read.
 func (le *LogEntry) AddRecv(n uint64) {
-	atomic.AddUint64(&le.RecvBytes, n)
+	atomic.AddUint64(le.RecvBytes, n)
 }
 
 // AddSent records write.
 func (le *LogEntry) AddSent(n uint64) {
-	atomic.AddUint64(&le.SentBytes, n)
+	atomic.AddUint64(le.SentBytes, n)
 }
 
 // Reset resets LogEntry.
 func (le *LogEntry) Reset() {
-	atomic.AddUint64(&le.SentBytes, -le.SentBytes)
-	atomic.AddUint64(&le.RecvBytes, -le.RecvBytes)
+	atomic.AddUint64(le.SentBytes, -*le.SentBytes)
+	atomic.AddUint64(le.RecvBytes, -*le.RecvBytes)
 }
 
 // MarshalJSON implements json.Marshaller
 func (le *LogEntry) MarshalJSON() ([]byte, error) {
-	rb := strconv.FormatUint(atomic.LoadUint64(&le.RecvBytes), 10)
-	sb := strconv.FormatUint(atomic.LoadUint64(&le.SentBytes), 10)
+	rb := strconv.FormatUint(atomic.LoadUint64(le.RecvBytes), 10)
+	sb := strconv.FormatUint(atomic.LoadUint64(le.SentBytes), 10)
 	return []byte(`{"recv":` + rb + `,"sent":` + sb + `}`), nil
 }
 
@@ -97,8 +102,8 @@ func (le *LogEntry) GobDecode(b []byte) error {
 	if err := dec.Decode(&sb); err != nil {
 		return err
 	}
-	atomic.StoreUint64(&le.RecvBytes, rb)
-	atomic.StoreUint64(&le.SentBytes, sb)
+	atomic.StoreUint64(le.RecvBytes, rb)
+	atomic.StoreUint64(le.SentBytes, sb)
 	return nil
 }
 
