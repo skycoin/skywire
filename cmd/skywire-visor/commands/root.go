@@ -49,6 +49,7 @@ var (
 	logger               = logging.MustGetLogger("skywire-visor")
 	tag                  string
 	syslogAddr           string
+	logLvl           string
 	pprofMode            string
 	pprofAddr            string
 	confPath             string
@@ -86,17 +87,17 @@ func init() {
 	}
 
 	rootCmd.Flags().SortFlags = false
-
+	//the default is not set to fix the asthetic of the help command
 	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use (default): "+skyenv.ConfigName)
 	if ((skyenv.OS == "linux") && !root) || ((skyenv.OS == "mac") && !root) || (skyenv.OS == "win") {
 		rootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
 	}
-	rootCmd.Flags().BoolVarP(&hypervisorUI, "hvui", "i", false, "run as hypervisor")
-	rootCmd.Flags().BoolVarP(&noHypervisorUI, "nohvui", "x", false, "disable hypervisor")
+	rootCmd.Flags().BoolVarP(&hypervisorUI, "hvui", "i", false, "run as hypervisor (config override)")
+	rootCmd.Flags().BoolVarP(&noHypervisorUI, "nohvui", "x", false, "disable hypervisor (config override)")
 	hiddenflags = append(hiddenflags, "nohvui")
-	rootCmd.Flags().StringVarP(&remoteHypervisorPKs, "hv", "j", "", "add remote hypervisor PKs at runtime")
+	rootCmd.Flags().StringVarP(&remoteHypervisorPKs, "hv", "j", "", "add remote hypervisor (config override)")
 	hiddenflags = append(hiddenflags, "hv")
-	rootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors set in config file")
+	rootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors (config override)")
 	hiddenflags = append(hiddenflags, "xhv")
 	if os.Getenv("SKYBIAN") == "true" {
 		rootCmd.Flags().StringVarP(&autoPeerIP, "hvip", "l", trimStringFromDot(localIPs[0].String())+".2:7998", "set hypervisor by ip")
@@ -127,6 +128,8 @@ func init() {
 	hiddenflags = append(hiddenflags, "pprofaddr")
 	rootCmd.Flags().StringVarP(&tag, "tag", "t", "skywire", "logging tag")
 	hiddenflags = append(hiddenflags, "tag")
+	rootCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "", "set log level to INFO/DEBUG/TRACE (config override)")
+	hiddenflags = append(hiddenflags, "loglvl")
 	rootCmd.Flags().StringVarP(&syslogAddr, "syslog", "y", "", "syslog server address. E.g. localhost:514")
 	hiddenflags = append(hiddenflags, "syslog")
 	rootCmd.Flags().StringVarP(&completion, "completion", "z", "", "[ bash | zsh | fish | powershell ]")
@@ -334,6 +337,13 @@ func runVisor(conf *visorconfig.V1) {
 			}
 		}
 	}
+	if logLvl != "" {
+		if logLvl == "INFO" ||  logLvl == "DEBUG" ||  logLvl == "TRACE" {
+			log.Info("setting log level to: ", logLvl)
+			conf.LogLevel = logLvl
+		}
+	}
+
 
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 	vis, ok := visor.NewVisor(ctx, conf, restartCtx, isAutoPeer, autoPeerIP)
