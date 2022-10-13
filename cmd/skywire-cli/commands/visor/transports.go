@@ -118,12 +118,7 @@ func init() {
 var addTpCmd = &cobra.Command{
 	Use:   "add <remote-public-key>",
 	Short: "Add a transport",
-	Long: `
-	Add a transport
-
-	If the transport type is unspecified,
-	the visor will attempt to establish a transport
-	in the following order: skywire-tcp, stcpr, sudph, dmsg`,
+	Long: "\n	Add a transport\n	\n	If the transport type is unspecified,\n	the visor will attempt to establish a transport\n	in the following order: skywire-tcp, stcpr, sudph, dmsg",
 	Args:  cobra.MinimumNArgs(1),
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {

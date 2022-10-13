@@ -84,7 +84,7 @@ var rmRuleCmd = &cobra.Command{
 var keepAlive time.Duration
 
 func init() {
-	addRuleCmd.PersistentFlags().DurationVar(&keepAlive, "keep-alive", router.DefaultRouteKeepAlive, "duration after which routing rule will expire if no activity is present")
+	addRuleCmd.PersistentFlags().DurationVar(&keepAlive, "keep-alive", router.DefaultRouteKeepAlive, "timeout for rule expiration")
 }
 
 var addAppRuleCmd = &cobra.Command{
