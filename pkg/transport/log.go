@@ -2,12 +2,15 @@ package transport
 
 import (
 	"bytes"
+	"context"
 	"encoding/gob"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,6 +20,8 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
+
+const dateFormat string = "2006-01-02"
 
 // CsvEntry represents a logging entry for csv for a given Transport.
 type CsvEntry struct {
@@ -154,15 +159,32 @@ type fileTransportLogStore struct {
 }
 
 // FileTransportLogStore implements file TransportLogStore.
-func FileTransportLogStore(dir string) (LogStore, error) {
+func FileTransportLogStore(ctx context.Context, dir string, rInterval time.Duration) (LogStore, error) {
 	if err := os.MkdirAll(dir, 0644); err != nil {
 		return nil, err
 	}
 	log := logging.MustGetLogger("transport")
-	return &fileTransportLogStore{
+
+	fLogStore := &fileTransportLogStore{
 		dir: dir,
 		log: log,
-	}, nil
+	}
+
+	go func() {
+		ticker := time.NewTicker(time.Hour * 5)
+		defer ticker.Stop()
+		fLogStore.cleanLogs(rInterval)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				fLogStore.cleanLogs(rInterval)
+			}
+		}
+	}()
+
+	return fLogStore, nil
 }
 
 func (tls *fileTransportLogStore) Entry(tpID uuid.UUID) (*LogEntry, error) {
@@ -280,6 +302,32 @@ func (tls *fileTransportLogStore) readFromCSV(fileName string) ([]*CsvEntry, err
 	return readClients, nil
 }
 
+// CleanLogs cleans the logs that are older than the given log rotation interval
+func (tls *fileTransportLogStore) cleanLogs(rInterval time.Duration) {
+
+	files, err := ioutil.ReadDir(tls.dir)
+	if err != nil {
+		tls.log.Warn(err)
+	}
+
+	for _, file := range files {
+		if !file.IsDir() {
+			interval := time.Now().UTC().Add(-rInterval)
+			date, err := time.Parse(dateFormat, strings.ReplaceAll(file.Name(), ".csv", ""))
+			if err != nil {
+				tls.log.Warn(err)
+			}
+			if date.Before(interval) {
+				err = os.Remove(tls.dir + "/" + file.Name())
+				if err != nil {
+					tls.log.Warn(err)
+				}
+				tls.log.Debugf("transport log file cleaned: %v", file.Name())
+			}
+		}
+	}
+}
+
 func (tls *fileTransportLogStore) todayFileName() string {
-	return fmt.Sprintf("%s.csv", time.Now().UTC().Format("2006-01-02"))
+	return fmt.Sprintf("%s.csv", time.Now().UTC().Format(dateFormat))
 }
