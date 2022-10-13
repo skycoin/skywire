@@ -59,6 +59,12 @@ func (le *LogEntry) AddSent(n uint64) {
 	atomic.AddUint64(&le.SentBytes, n)
 }
 
+// Reset resets LogEntry.
+func (le *LogEntry) Reset() {
+	atomic.AddUint64(&le.SentBytes, -le.SentBytes)
+	atomic.AddUint64(&le.RecvBytes, -le.RecvBytes)
+}
+
 // MarshalJSON implements json.Marshaller
 func (le *LogEntry) MarshalJSON() ([]byte, error) {
 	rb := strconv.FormatUint(atomic.LoadUint64(&le.RecvBytes), 10)
@@ -136,9 +142,10 @@ func (tls *inMemoryTransportLogStore) Record(id uuid.UUID, entry *LogEntry) erro
 }
 
 type fileTransportLogStore struct {
-	dir string
-	log *logging.Logger
-	mu  sync.Mutex
+	dir      string
+	log      *logging.Logger
+	mu       sync.Mutex
+	fileName string
 }
 
 // FileTransportLogStore implements file TransportLogStore.
@@ -156,6 +163,7 @@ func FileTransportLogStore(dir string) (LogStore, error) {
 func (tls *fileTransportLogStore) Entry(tpID uuid.UUID) (*LogEntry, error) {
 	tls.mu.Lock()
 	defer tls.mu.Unlock()
+
 	entries, err := tls.readFromCSV(tls.todayFileName())
 	if err != nil {
 		return nil, err
@@ -168,12 +176,13 @@ func (tls *fileTransportLogStore) Entry(tpID uuid.UUID) (*LogEntry, error) {
 	return nil, nil
 }
 
-func (tls *fileTransportLogStore) Record(tpID uuid.UUID, entry *LogEntry) error {
+func (tls *fileTransportLogStore) Record(tpID uuid.UUID, lEntry *LogEntry) error {
 	tls.mu.Lock()
 	defer tls.mu.Unlock()
+
 	cEntry := &CsvEntry{
 		TpID:      tpID,
-		LogEntry:  *entry,
+		LogEntry:  *lEntry,
 		TimeStamp: time.Now().UTC().Unix(),
 	}
 
@@ -181,7 +190,19 @@ func (tls *fileTransportLogStore) Record(tpID uuid.UUID, entry *LogEntry) error 
 }
 
 func (tls *fileTransportLogStore) writeToCSV(cEntry *CsvEntry) error {
-	f, err := os.OpenFile(filepath.Join(tls.dir, fmt.Sprint(tls.todayFileName())), os.O_RDWR|os.O_CREATE, 0644) //nolint
+
+	today := tls.todayFileName()
+	// we check if the date of the file has changed or not
+	// if it is then it means it's a new day so we need to reset the LogEntry
+	// so that we can start the count again for the new day and file
+	if tls.fileName != "" && tls.fileName != tls.todayFileName() {
+		// before we reset we need to save the current data so we save it in the previous days file
+		// note: the timestamp of this entry will likely be of the current day so if a log file has
+		// a timestamp of next day then it is an indicator that it's an inter-day transport log
+		today = tls.fileName
+	}
+
+	f, err := os.OpenFile(filepath.Join(tls.dir, today), os.O_RDWR|os.O_CREATE, 0644) //nolint
 	if err != nil {
 		return err
 	}
@@ -223,6 +244,14 @@ func (tls *fileTransportLogStore) writeToCSV(cEntry *CsvEntry) error {
 	if err != nil {
 		return err
 	}
+
+	// we reset the entry after it is saved
+	if tls.fileName != "" && tls.fileName != tls.todayFileName() {
+		cEntry.LogEntry.Reset()
+	}
+
+	tls.fileName = tls.todayFileName()
+
 	return nil
 }
 
