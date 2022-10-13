@@ -71,12 +71,12 @@ func Execute() {
 	}
 }
 
-const help="\u001b[94;1mUsage:\u001b[0m\r\n"+
-"  {{.UseLine}}\u001b[0m{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}\r\n\r\n"+
-"\u001b[94;1m{{.NameAndAliases}}\u001b[0m{{end}}{{if .HasAvailableSubCommands}}\r\n\r\n"+
-"\u001b[94;1mAvailable Commands:\u001b[0m{{range .Commands}}{{if (or .IsAvailableCommand)}}\r\n  "+
-"\u001b[94;1m{{rpad .Name .NamePadding }} {{.Short}}\u001b[0m{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}\r\n\r\n"+
-"\u001b[94;1mFlags:\u001b[0m\r\n"+
-"\u001b[94;1m{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}\u001b[0m{{end}}{{if .HasAvailableInheritedFlags}}\r\n\r\n"+
-"\u001b[94;1mGlobal Flags:\u001b[0m\r\n"+
-"\u001b[94;1m{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}\u001b[0m{{end}}\r\n\r\n"
+const help="Usage:\r\n"+
+"  {{.UseLine}}{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}\r\n\r\n"+
+"{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}\r\n\r\n"+
+"Available Commands:{{range .Commands}}{{if (or .IsAvailableCommand)}}\r\n  "+
+"{{rpad .Name .NamePadding }} {{.Short}}\u001b[0m{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}\r\n\r\n"+
+"Flags:\r\n"+
+"{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}\r\n\r\n"+
+"Global Flags:\r\n"+
+"{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}\r\n\r\n"
