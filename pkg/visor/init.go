@@ -463,9 +463,17 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	logS, err := transport.FileTransportLogStore(v.conf.LocalPath + "/" + skyenv.TpLogStore)
-	if err != nil {
-		return err
+	var logS transport.LogStore
+	log.Errorf(v.conf.Transport.LogStore.Type)
+	if v.conf.Transport.LogStore.Type == visorconfig.MemoryLogStore {
+		logS = transport.InMemoryTransportLogStore()
+	} else if v.conf.Transport.LogStore.Type == visorconfig.FileLogStore {
+		logS, err = transport.FileTransportLogStore(v.conf.Transport.LogStore.Location)
+		if err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("invalid store type: %v", v.conf.Transport.LogStore.Type)
 	}
 
 	pTps, err := v.conf.GetPersistentTransports()
