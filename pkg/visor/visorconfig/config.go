@@ -89,6 +89,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	conf.CLIAddr = skyenv.RPCAddr
 	conf.LogLevel = skyenv.LogLevel
 	conf.LocalPath = skyenv.LocalPath
+	conf.CustomDmsgHTTPPath = skyenv.LocalPath + "/" + skyenv.Custom
 	conf.StunServers = services.StunServers //utilenv.GetStunServers()
 	conf.ShutdownTimeout = DefaultTimeout
 	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
@@ -191,7 +192,9 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 	if pkgEnv {
 		pkgConfig := skyenv.PackageConfig()
 		conf.LocalPath = pkgConfig.LocalPath
+		conf.CustomDmsgHTTPPath = pkgConfig.LocalPath + "/" + skyenv.Custom
 		conf.Launcher.BinPath = pkgConfig.Launcher.BinPath
+		conf.Transport.LogStore.Location = pkgConfig.LocalPath + "/" + skyenv.TpLogStore
 		if conf.Hypervisor != nil {
 			conf.Hypervisor.EnableAuth = pkgConfig.Hypervisor.EnableAuth
 			conf.Hypervisor.DBPath = pkgConfig.Hypervisor.DbPath
@@ -200,7 +203,9 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 	if usrEnv {
 		usrConfig := skyenv.UserConfig()
 		conf.LocalPath = usrConfig.LocalPath
+		conf.CustomDmsgHTTPPath = usrConfig.LocalPath + "/" + skyenv.Custom
 		conf.Launcher.BinPath = usrConfig.Launcher.BinPath
+		conf.Transport.LogStore.Location = usrConfig.LocalPath + "/" + skyenv.TpLogStore
 		if conf.Hypervisor != nil {
 			conf.Hypervisor.EnableAuth = usrConfig.Hypervisor.EnableAuth
 			conf.Hypervisor.DBPath = usrConfig.Hypervisor.DbPath
