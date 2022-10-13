@@ -15,7 +15,7 @@ import (
 	clirtfind "github.com/skycoin/skywire/cmd/skywire-cli/commands/rtfind"
 	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 	clivpn "github.com/skycoin/skywire/cmd/skywire-cli/commands/vpn"
-		"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 )
 
 var rootCmd = &cobra.Command{
@@ -71,12 +71,12 @@ func Execute() {
 	}
 }
 
-const help="Usage:\r\n"+
-"  {{.UseLine}}{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}\r\n\r\n"+
-"{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}\r\n\r\n"+
-"Available Commands:{{range .Commands}}{{if (or .IsAvailableCommand)}}\r\n  "+
-"{{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}\r\n\r\n"+
-"Flags:\r\n"+
-"{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}\r\n\r\n"+
-"Global Flags:\r\n"+
-"{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}\r\n\r\n"
+const help = "Usage:\r\n" +
+	"  {{.UseLine}}{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}\r\n\r\n" +
+	"{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}\r\n\r\n" +
+	"Available Commands:{{range .Commands}}{{if (or .IsAvailableCommand)}}\r\n  " +
+	"{{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}\r\n\r\n" +
+	"Flags:\r\n" +
+	"{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}\r\n\r\n" +
+	"Global Flags:\r\n" +
+	"{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}\r\n\r\n"

@@ -21,11 +21,13 @@ import (
 var routeCmd = &cobra.Command{
 	Use:   "route",
 	Short: "View and set rules",
+	Long:  "\n	View and set routing rules",
 }
 
 var addRuleCmd = &cobra.Command{
 	Use:   "add-rule",
 	Short: "Add routing rule",
+	Long:  "\n	Add routing rule",
 }
 
 func init() {
@@ -46,6 +48,7 @@ func init() {
 var lsRulesCmd = &cobra.Command{
 	Use:   "ls-rules",
 	Short: "List routing rules",
+	Long:  "\n	List routing rules",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rules, err := clirpc.Client(cmd.Flags()).RoutingRules()
 		internal.Catch(cmd.Flags(), err)
@@ -57,6 +60,7 @@ var lsRulesCmd = &cobra.Command{
 var ruleCmd = &cobra.Command{
 	Use:   "rule <route-id>",
 	Short: "Return routing rule by route ID key",
+	Long:  "\n	Return routing rule by route ID key",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		id, err := strconv.ParseUint(args[0], 10, 32)
@@ -69,14 +73,26 @@ var ruleCmd = &cobra.Command{
 	},
 }
 
+func init() {
+	rmRuleCmd.Flags().BoolVarP(&removeAll, "all", "a", false, "remove all routing rules")
+}
+
 var rmRuleCmd = &cobra.Command{
 	Use:   "rm-rule <route-id>",
 	Short: "Remove routing rule",
-	Args:  cobra.MinimumNArgs(1),
+	Long:  "\n	Remove routing rule",
+	//Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		//TODO
+		//if removeAll {
+		//rules, err := clirpc.Client(cmd.Flags()).RoutingRules()
+		//internal.Catch(cmd.Flags(), err)
+		//internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).RemoveRoutingRule(routing.RouteID(rules...)))
+		//} else {
 		id, err := strconv.ParseUint(args[0], 10, 32)
 		internal.Catch(cmd.Flags(), err)
 		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).RemoveRoutingRule(routing.RouteID(id)))
+		//}
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
@@ -90,6 +106,7 @@ func init() {
 var addAppRuleCmd = &cobra.Command{
 	Use:   "app <route-id> <local-pk> <local-port> <remote-pk> <remote-port>",
 	Short: "Add app/consume routing rule",
+	Long:  "\n	Add app/consume routing rule",
 	Args: func(_ *cobra.Command, args []string) error {
 		if len(args) > 0 {
 			if len(args[0:]) == 5 {
@@ -130,6 +147,7 @@ var addAppRuleCmd = &cobra.Command{
 var addFwdRuleCmd = &cobra.Command{
 	Use:   "fwd <route-id> <next-route-id> <next-transport-id> <local-pk> <local-port> <remote-pk> <remote-port>",
 	Short: "Add forward routing rule",
+	Long:  "\n  Add forward routing rule",
 	Args: func(_ *cobra.Command, args []string) error {
 		if len(args) > 0 {
 			if len(args[1:]) == 6 {
@@ -171,6 +189,7 @@ var addFwdRuleCmd = &cobra.Command{
 var addIntFwdRuleCmd = &cobra.Command{
 	Use:   "intfwd <route-id> <next-route-id> <next-transport-id>",
 	Short: "Add intermediary forward routing rule",
+	Long:  "\n  Add intermediary forward routing rule",
 	Args: func(_ *cobra.Command, args []string) error {
 		if len(args) > 0 {
 			if len(args[0:]) == 3 {

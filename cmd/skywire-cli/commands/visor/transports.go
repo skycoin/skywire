@@ -55,9 +55,9 @@ var tpCmd = &cobra.Command{
 }
 
 var lsTypesCmd = &cobra.Command{
-	Use: "type",
-	Short: "Transport types used by the local visor",
-	Long: "\n	Transport types used by the local visor",
+	Use:                   "type",
+	Short:                 "Transport types used by the local visor",
+	Long:                  "\n	Transport types used by the local visor",
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, _ []string) {
 		types, err := clirpc.Client(cmd.Flags()).TransportTypes()
@@ -75,7 +75,7 @@ func init() {
 var lsTpCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "Available transports",
-	Long: "\n	Available transports\n\n	displays transports of the local visor",
+	Long:  "\n	Available transports\n\n	displays transports of the local visor",
 	Run: func(cmd *cobra.Command, _ []string) {
 		var pks cipher.PubKeys
 
@@ -87,10 +87,10 @@ var lsTpCmd = &cobra.Command{
 }
 
 var idCmd = &cobra.Command{
-	Use:   "id <transport-id>",
-	Short: "Transport summary by id",
-	Long: "\n	Transport summary by id",
-	Args:  cobra.MinimumNArgs(1),
+	Use:                   "id <transport-id>",
+	Short:                 "Transport summary by id",
+	Long:                  "\n	Transport summary by id",
+	Args:                  cobra.MinimumNArgs(1),
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		tpid := internal.ParseUUID(cmd.Flags(), "transport-id", args[0])
@@ -107,7 +107,7 @@ var (
 
 func init() {
 	const (
-		typeFlagUsage = "type of transport to add."
+		typeFlagUsage    = "type of transport to add."
 		timeoutFlagUsage = "if specified, sets an operation timeout"
 	)
 
@@ -116,10 +116,10 @@ func init() {
 }
 
 var addTpCmd = &cobra.Command{
-	Use:   "add <remote-public-key>",
-	Short: "Add a transport",
-	Long: "\n	Add a transport\n	\n	If the transport type is unspecified,\n	the visor will attempt to establish a transport\n	in the following order: skywire-tcp, stcpr, sudph, dmsg",
-	Args:  cobra.MinimumNArgs(1),
+	Use:                   "add <remote-public-key>",
+	Short:                 "Add a transport",
+	Long:                  "\n	Add a transport\n	\n	If the transport type is unspecified,\n	the visor will attempt to establish a transport\n	in the following order: skywire-tcp, stcpr, sudph, dmsg",
+	Args:                  cobra.MinimumNArgs(1),
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
@@ -161,16 +161,29 @@ var addTpCmd = &cobra.Command{
 	},
 }
 
+func init() {
+	lsTpCmd.Flags().BoolVarP(&removeAll, "all", "a", false, "remove all transport logs")
+}
+
 var rmTpCmd = &cobra.Command{
-	Use:   "rm <transport-id>",
-	Short: "Remove transport(s) by id",
-	Long: "\n	Remove transport(s) by id",
-	Args:  cobra.MinimumNArgs(1),
+	Use:                   "rm <transport-id>",
+	Short:                 "Remove transport(s) by id",
+	Long:                  "\n	Remove transport(s) by id",
+	Args:                  cobra.MinimumNArgs(1),
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
+		//TODO
+		//if removeAll {
+		//	var pks cipher.PubKeys
+		//	internal.Catch(cmd.Flags(), pks.Set(strings.Join(filterPubKeys, ",")))
+		//	tID, err := clirpc.Client(cmd.Flags()).Transports(filterTypes, pks, showLogs)
+		//	internal.Catch(cmd.Flags(), err)
+		//	internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).RemoveTransport(tID))
+		//} else {
 		tID := internal.ParseUUID(cmd.Flags(), "transport-id", args[0])
 		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).RemoveTransport(tID))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+		//}
 	},
 }
 
@@ -222,28 +235,29 @@ func sortTransports(tps ...*visor.TransportSummary) {
 }
 
 var (
-	tpID          string
-	tpPK          string
+	tpID string
+	tpPK string
 )
+
 func init() {
 	discTpCmd.Flags().StringVarP(&tpID, "id", "i", "", "obtain transport of given ID")
 	discTpCmd.Flags().StringVarP(&tpPK, "pk", "p", "", "obtain transports by public key")
 }
 
 var discTpCmd = &cobra.Command{
-	Use:   "disc (--id=<transport-id> || --pk=<edge-public-key>)",
-	Short: "Discover remote transport(s)",
-	Long: "\n	Discover remote transport(s) by ID or public key",
+	Use:                   "disc (--id=<transport-id> || --pk=<edge-public-key>)",
+	Short:                 "Discover remote transport(s)",
+	Long:                  "\n	Discover remote transport(s) by ID or public key",
 	DisableFlagsInUseLine: true,
 	Args: func(_ *cobra.Command, _ []string) error {
-	if tpID == "" && tpPK == "" {
-		return errors.New("must specify either transport id or public key")
-	}
-	if tpID != "" && tpPK != "" {
-		return errors.New("cannot specify both transport id and public key")
-	}
-	return nil
-},
+		if tpID == "" && tpPK == "" {
+			return errors.New("must specify either transport id or public key")
+		}
+		if tpID != "" && tpPK != "" {
+			return errors.New("cannot specify both transport id and public key")
+		}
+		return nil
+	},
 	Run: func(cmd *cobra.Command, _ []string) {
 		var tppk cipher.PubKey
 		var tpid transportID

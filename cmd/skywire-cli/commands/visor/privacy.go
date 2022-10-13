@@ -4,12 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 
+	coincipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
 
-	coincipher "github.com/skycoin/skycoin/src/cipher"
-
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
-
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/visor/privacyconfig"
 )

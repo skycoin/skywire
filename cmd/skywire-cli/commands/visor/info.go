@@ -31,6 +31,7 @@ func init() {
 var pkCmd = &cobra.Command{
 	Use:   "pk",
 	Short: "Public key of the visor",
+	Long:  "\n  Public key of the visor",
 	Run: func(cmd *cobra.Command, _ []string) {
 		if pkg {
 			path = visorconfig.Pkgpath
@@ -63,6 +64,7 @@ var pkCmd = &cobra.Command{
 var summaryCmd = &cobra.Command{
 	Use:   "info",
 	Short: "Summary of visor info",
+	Long:  "\n  Summary of visor info",
 	Run: func(cmd *cobra.Command, _ []string) {
 		summary, err := clirpc.Client(cmd.Flags()).Summary()
 		if err != nil {
@@ -102,6 +104,7 @@ var summaryCmd = &cobra.Command{
 var buildInfoCmd = &cobra.Command{
 	Use:   "ver",
 	Short: "Version and build info",
+	Long:  "\n  Version and build info",
 	Run: func(cmd *cobra.Command, _ []string) {
 		client := clirpc.Client(cmd.Flags())
 		overview, err := client.Overview()
