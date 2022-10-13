@@ -1,10 +1,12 @@
 package transport_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -46,7 +48,7 @@ func TestFileTransportLogStore(t *testing.T) {
 		require.NoError(t, os.RemoveAll(dir))
 	}()
 
-	ls, err := transport.FileTransportLogStore(dir)
+	ls, err := transport.FileTransportLogStore(context.TODO(), dir, time.Minute*10)
 	require.NoError(t, err)
 	testTransportLogStore(t, ls)
 }
