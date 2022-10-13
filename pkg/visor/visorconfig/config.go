@@ -66,6 +66,11 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		Discovery:         services.TransportDiscovery, //utilenv.TpDiscAddr,
 		AddressResolver:   services.AddressResolver,    //utilenv.AddressResolverAddr,
 		PublicAutoconnect: skyenv.PublicAutoconnect,
+		LogStore: &LogStore{
+			Type:             FileLogStore,
+			Location:         skyenv.LocalPath + "/" + skyenv.TpLogStore,
+			RotationInterval: DefaultLogRotationInterval,
+		},
 	}
 	conf.Routing = &Routing{
 		RouteFinder:        services.RouteFinder, //utilenv.RouteFinderAddr,
@@ -87,7 +92,6 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	conf.StunServers = services.StunServers //utilenv.GetStunServers()
 	conf.ShutdownTimeout = DefaultTimeout
 	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
-	conf.LogRotationInterval = DefaultTimeout
 
 	conf.Dmsgpty = &Dmsgpty{
 		DmsgPort: skyenv.DmsgPtyPort,
