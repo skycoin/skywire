@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -48,7 +49,8 @@ func TestFileTransportLogStore(t *testing.T) {
 		require.NoError(t, os.RemoveAll(dir))
 	}()
 
-	ls, err := transport.FileTransportLogStore(context.TODO(), dir, time.Minute*10)
+	log := logging.MustGetLogger("transport")
+	ls, err := transport.FileTransportLogStore(context.TODO(), dir, time.Minute*10, log)
 	require.NoError(t, err)
 	testTransportLogStore(t, ls)
 }

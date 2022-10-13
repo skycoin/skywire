@@ -6,7 +6,6 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -159,11 +158,10 @@ type fileTransportLogStore struct {
 }
 
 // FileTransportLogStore implements file TransportLogStore.
-func FileTransportLogStore(ctx context.Context, dir string, rInterval time.Duration) (LogStore, error) {
+func FileTransportLogStore(ctx context.Context, dir string, rInterval time.Duration, log *logging.Logger) (LogStore, error) {
 	if err := os.MkdirAll(dir, 0644); err != nil {
 		return nil, err
 	}
-	log := logging.MustGetLogger("transport")
 
 	fLogStore := &fileTransportLogStore{
 		dir: dir,
@@ -305,7 +303,7 @@ func (tls *fileTransportLogStore) readFromCSV(fileName string) ([]*CsvEntry, err
 // CleanLogs cleans the logs that are older than the given log rotation interval
 func (tls *fileTransportLogStore) cleanLogs(rInterval time.Duration) {
 
-	files, err := ioutil.ReadDir(tls.dir)
+	files, err := os.ReadDir(tls.dir)
 	if err != nil {
 		tls.log.Warn(err)
 	}

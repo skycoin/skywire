@@ -464,7 +464,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if v.conf.Transport.LogStore.Type == visorconfig.MemoryLogStore {
 		logS = transport.InMemoryTransportLogStore()
 	} else if v.conf.Transport.LogStore.Type == visorconfig.FileLogStore {
-		logS, err = transport.FileTransportLogStore(ctx, v.conf.Transport.LogStore.Location, time.Duration(v.conf.Transport.LogStore.RotationInterval))
+		logS, err = transport.FileTransportLogStore(ctx, v.conf.Transport.LogStore.Location, time.Duration(v.conf.Transport.LogStore.RotationInterval), log)
 		if err != nil {
 			return err
 		}
