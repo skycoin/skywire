@@ -482,7 +482,7 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, AP
 			Local:  localPK,
 			Remote: remotePK,
 			Type:   types[r.Int()%len(types)],
-			Log:    new(transport.LogEntry),
+			Log:    transport.NewLogEntry(),
 		}
 		log.Infof("tp[%2d]: %v", i, tps[i])
 	}
@@ -903,7 +903,7 @@ func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ tim
 		Local:  mc.o.PubKey,
 		Remote: remote,
 		Type:   network.Type(tpType),
-		Log:    new(transport.LogEntry),
+		Log:    transport.NewLogEntry(),
 	}
 	return summary, mc.do(true, func() error {
 		mc.o.Transports = append(mc.o.Transports, summary)
