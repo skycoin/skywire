@@ -45,17 +45,22 @@ func MakeLogEntry(ls LogStore, tpID uuid.UUID, log *logging.Logger) *LogEntry {
 		log.Warn(err)
 		return &LogEntry{}
 	}
-	recv := uint64(0)
-	sent := uint64(0)
-	newEntry := &LogEntry{
-		RecvBytes: &recv,
-		SentBytes: &sent,
-	}
+	newEntry := NewLogEntry()
 	if oldLogEntry != nil {
 		newEntry.AddRecv(*oldLogEntry.RecvBytes)
 		newEntry.AddSent(*oldLogEntry.SentBytes)
 	}
 	return newEntry
+}
+
+// NewLogEntry creates a new LogEntry
+func NewLogEntry() *LogEntry {
+	recv := uint64(0)
+	sent := uint64(0)
+	return &LogEntry{
+		RecvBytes: &recv,
+		SentBytes: &sent,
+	}
 }
 
 // AddRecv records read.
@@ -76,8 +81,14 @@ func (le *LogEntry) Reset() {
 
 // MarshalJSON implements json.Marshaller
 func (le *LogEntry) MarshalJSON() ([]byte, error) {
-	rb := strconv.FormatUint(atomic.LoadUint64(le.RecvBytes), 10)
-	sb := strconv.FormatUint(atomic.LoadUint64(le.SentBytes), 10)
+	var rb string
+	var sb string
+	if le.RecvBytes != nil {
+		rb = strconv.FormatUint(atomic.LoadUint64(le.RecvBytes), 10)
+	}
+	if le.SentBytes != nil {
+		sb = strconv.FormatUint(atomic.LoadUint64(le.SentBytes), 10)
+	}
 	return []byte(`{"recv":` + rb + `,"sent":` + sb + `}`), nil
 }
 
@@ -85,11 +96,15 @@ func (le *LogEntry) MarshalJSON() ([]byte, error) {
 func (le *LogEntry) GobEncode() ([]byte, error) {
 	var b bytes.Buffer
 	enc := gob.NewEncoder(&b)
-	if err := enc.Encode(le.RecvBytes); err != nil {
-		return nil, err
+	if le.RecvBytes != nil {
+		if err := enc.Encode(le.RecvBytes); err != nil {
+			return nil, err
+		}
 	}
-	if err := enc.Encode(le.SentBytes); err != nil {
-		return nil, err
+	if le.SentBytes != nil {
+		if err := enc.Encode(le.SentBytes); err != nil {
+			return nil, err
+		}
 	}
 	return b.Bytes(), nil
 }
