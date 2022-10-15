@@ -49,7 +49,7 @@ var (
 	logger               = logging.MustGetLogger("skywire-visor")
 	tag                  string
 	syslogAddr           string
-	logLvl           string
+	logLvl               string
 	pprofMode            string
 	pprofAddr            string
 	confPath             string
@@ -87,7 +87,7 @@ func init() {
 	}
 
 	rootCmd.Flags().SortFlags = false
-	//the default is not set to fix the asthetic of the help command
+	//the default is not set to fix the aesthetic of the help command
 	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use (default): "+skyenv.ConfigName)
 	if ((skyenv.OS == "linux") && !root) || ((skyenv.OS == "mac") && !root) || (skyenv.OS == "win") {
 		rootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
@@ -338,12 +338,11 @@ func runVisor(conf *visorconfig.V1) {
 		}
 	}
 	if logLvl != "" {
-		if logLvl == "INFO" ||  logLvl == "DEBUG" ||  logLvl == "TRACE" {
+		if logLvl == "INFO" || logLvl == "DEBUG" || logLvl == "TRACE" {
 			log.Info("setting log level to: ", logLvl)
 			conf.LogLevel = logLvl
 		}
 	}
-
 
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 	vis, ok := visor.NewVisor(ctx, conf, restartCtx, isAutoPeer, autoPeerIP)
