@@ -51,7 +51,7 @@ func TestFileTransportLogStore(t *testing.T) {
 	}()
 
 	log := logging.MustGetLogger("transport")
-	ls, err := transport.FileTransportLogStore(context.TODO(), dir, time.Minute*10, log)
+	ls, err := transport.FileTransportLogStore(context.TODO(), dir, time.Hour*10, log)
 	require.NoError(t, err)
 	testTransportLogStore(t, ls)
 }
