@@ -661,7 +661,7 @@ func (v *Visor) VPNServers(version, country string) ([]servicedisc.Service, erro
 		PK:       v.conf.PK,
 		SK:       v.conf.SK,
 		DiscAddr: v.conf.Launcher.ServiceDisc,
-	}, &http.Client{Timeout: time.Duration(1) * time.Second}, "")
+	}, &http.Client{Timeout: time.Duration(20) * time.Second}, "")
 	vpnServers, err := sdClient.Services(context.Background(), 0, version, country)
 	if err != nil {
 		v.log.Error("Error getting public vpn servers: ", err)
