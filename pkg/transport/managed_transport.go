@@ -80,6 +80,8 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 	if conf.mlog != nil {
 		log = conf.mlog.PackageLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6]))
 	}
+	entry := MakeEntry(aPK, bPK, conf.client.Type(), conf.TransportLabel)
+	logEntry := MakeLogEntry(conf.LS, entry.ID, log)
 
 	mt := &ManagedTransport{
 		log:         log,
@@ -87,8 +89,8 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 		dc:          conf.DC,
 		ls:          conf.LS,
 		client:      conf.client,
-		Entry:       MakeEntry(aPK, bPK, conf.client.Type(), conf.TransportLabel),
-		LogEntry:    new(LogEntry),
+		Entry:       entry,
+		LogEntry:    logEntry,
 		transportCh: make(chan struct{}, 1),
 		done:        make(chan struct{}),
 		timeout:     conf.InactiveTimeout,
