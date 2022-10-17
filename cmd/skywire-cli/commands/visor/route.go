@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/router"
@@ -24,19 +25,8 @@ var routeCmd = &cobra.Command{
 	Long:  "\n	View and set routing rules",
 }
 
-var addRuleCmd = &cobra.Command{
-	Use:   "add-rule",
-	Short: "Add routing rule",
-	Long:  "\n	Add routing rule",
-}
-
 func init() {
 	RootCmd.AddCommand(routeCmd)
-	addRuleCmd.AddCommand(
-		addAppRuleCmd,
-		addFwdRuleCmd,
-		addIntFwdRuleCmd,
-	)
 	routeCmd.AddCommand(
 		lsRulesCmd,
 		ruleCmd,
@@ -97,36 +87,117 @@ var rmRuleCmd = &cobra.Command{
 	},
 }
 
+var addRuleCmd = &cobra.Command{
+	Use:   "add-rule ( app | fwd | intfwd )",
+	Short: "Add routing rule",
+	Long:  "\n	Add routing rule",
+}
+
 var keepAlive time.Duration
+
+var (
+	nrID  string
+	ntpID string
+	rID   string
+	lPK   string
+	lPt   string
+	rPK   string
+	rPt   string
+)
+
+//skywire-cli visor route add-rule app
 
 func init() {
 	addRuleCmd.PersistentFlags().DurationVar(&keepAlive, "keep-alive", router.DefaultRouteKeepAlive, "timeout for rule expiration")
+	addRuleCmd.AddCommand(
+		addAppRuleCmd,
+	)
+	addAppRuleCmd.Flags().SortFlags = false
+	addAppRuleCmd.Flags().StringVarP(&rID, "rid", "i", "", "route id")
+	addAppRuleCmd.Flags().StringVarP(&lPK, "lpk", "l", "", "local public key")
+	addAppRuleCmd.Flags().StringVarP(&lPt, "lpt", "m", "", "local port")
+	addAppRuleCmd.Flags().StringVarP(&rPK, "rpk", "p", "", "remote pk")
+	addAppRuleCmd.Flags().StringVarP(&rPt, "rpt", "q", "", "remote port")
 }
 
 var addAppRuleCmd = &cobra.Command{
-	Use:   "app <route-id> <local-pk> <local-port> <remote-pk> <remote-port>",
+	Use:   "app \\\n			    <route-id> \\\n			    <local-pk> \\\n			  <local-port> \\\n			   <remote-pk> \\\n			 <remote-port> \\\n 			  || ",
 	Short: "Add app/consume routing rule",
 	Long:  "\n	Add app/consume routing rule",
 	Args: func(_ *cobra.Command, args []string) error {
-		if len(args) > 0 {
-			if len(args[0:]) == 5 {
-				return nil
+		if rID == "" && lPK == "" && lPt == "" && rPK == "" && rPt == "" {
+			if len(args) > 0 {
+				if len(args[0:]) == 5 {
+					return nil
+				}
+				return errors.New("expected 5 args after 'app'")
 			}
 			return errors.New("expected 5 args after 'app'")
 		}
-		return errors.New("expected 5 args after 'app'")
+		return nil
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		var rule routing.Rule
 		var (
-			routeID    = routing.RouteID(parseUint(cmd.Flags(), "route-id", args[0], 32))
-			localPK    = internal.ParsePK(cmd.Flags(), "local-pk", args[1])
-			localPort  = routing.Port(parseUint(cmd.Flags(), "local-port", args[2], 16))
-			remotePK   = internal.ParsePK(cmd.Flags(), "remote-pk", args[3])
-			remotePort = routing.Port(parseUint(cmd.Flags(), "remote-port", args[4], 16))
+			rule       routing.Rule
+			routeID    routing.RouteID
+			localPK    cipher.PubKey
+			localPort  routing.Port
+			remotePK   cipher.PubKey
+			remotePort routing.Port
 		)
-		rule = routing.ConsumeRule(keepAlive, routeID, localPK, remotePK, localPort, remotePort)
+		//use args if flags are empty strings
+		if rID == "" && lPK == "" && lPt == "" && rPK == "" && rPt == "" {
+			routeID = routing.RouteID(parseUint(cmd.Flags(), "route-id", args[0], 32))
+			localPK = internal.ParsePK(cmd.Flags(), "local-pk", args[1])
+			localPort = routing.Port(parseUint(cmd.Flags(), "local-port", args[2], 16))
+			remotePK = internal.ParsePK(cmd.Flags(), "remote-pk", args[3])
+			remotePort = routing.Port(parseUint(cmd.Flags(), "remote-port", args[4], 16))
+		} else {
+			//the presence of every flag is enforced on an individual basis
+			if rID != "" {
+				i, err := strconv.ParseUint(rID, 10, 32)
+				if err != nil {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse <%s>: %v", rID, err))
+				}
+				routeID = routing.RouteID(i)
+			} else {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("required flag not specified"))
+			}
 
+			if lPK != "" {
+				internal.Catch(cmd.Flags(), localPK.Set(lPK))
+			} else {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("required flag not specified"))
+			}
+
+			if lPt != "" {
+				i, err := strconv.ParseUint(lPt, 10, 16)
+				if err != nil {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse <%s>: %v", lPt, err))
+				}
+				localPort = routing.Port(i)
+			} else {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("required flag not specified"))
+			}
+
+			if rPK != "" {
+				internal.Catch(cmd.Flags(), remotePK.Set(rPK))
+			} else {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("required flag not specified"))
+			}
+
+			if rPt != "" {
+				i, err := strconv.ParseUint(rPt, 10, 16)
+				if err != nil {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse <%s>: %v", rPt, err))
+				}
+				localPort = routing.Port(i)
+			} else {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("required flag not specified"))
+			}
+		}
+
+		rule = routing.ConsumeRule(keepAlive, routeID, localPK, remotePK, localPort, remotePort)
 		var rIDKey routing.RouteID
 		if rule != nil {
 			rIDKey = rule.KeyRouteID()
@@ -144,8 +215,24 @@ var addAppRuleCmd = &cobra.Command{
 	},
 }
 
+//skywire-cli visor route add-rule fwd
+
+func init() {
+	addRuleCmd.AddCommand(
+		addFwdRuleCmd,
+	)
+	addFwdRuleCmd.Flags().SortFlags = false
+	addFwdRuleCmd.Flags().StringVarP(&rID, "rid", "i", "", "route id")
+	addFwdRuleCmd.Flags().StringVarP(&nrID, "nrid", "j", "", "next route id")
+	addFwdRuleCmd.Flags().StringVarP(&ntpID, "ntpid", "k", "", "next transport id")
+	addFwdRuleCmd.Flags().StringVarP(&lPK, "lpk", "l", "", "local public key")
+	addFwdRuleCmd.Flags().StringVarP(&lPt, "lpt", "m", "", "local port")
+	addFwdRuleCmd.Flags().StringVarP(&rPK, "rpk", "p", "", "remote pk")
+	addFwdRuleCmd.Flags().StringVarP(&rPt, "rpt", "q", "", "remote port")
+}
+
 var addFwdRuleCmd = &cobra.Command{
-	Use:   "fwd <route-id> <next-route-id> <next-transport-id> <local-pk> <local-port> <remote-pk> <remote-port>",
+	Use:   "fwd \\\n			    <route-id> \\\n		       <next-route-id> \\\n		   <next-transport-id> \\\n			    <local-pk> \\\n			  <local-port> \\\n			   <remote-pk> \\\n			 <remote-port> \\\n			   || ",
 	Short: "Add forward routing rule",
 	Long:  "\n  Add forward routing rule",
 	Args: func(_ *cobra.Command, args []string) error {
@@ -186,8 +273,20 @@ var addFwdRuleCmd = &cobra.Command{
 	},
 }
 
+//skywire-cli visor route add-rule intfwd
+
+func init() {
+	addRuleCmd.AddCommand(
+		addIntFwdRuleCmd,
+	)
+	addIntFwdRuleCmd.Flags().SortFlags = false
+	addIntFwdRuleCmd.Flags().StringVarP(&rID, "rid", "i", "", "route id")
+	addIntFwdRuleCmd.Flags().StringVarP(&nrID, "nrid", "n", "", "next route id")
+	addIntFwdRuleCmd.Flags().StringVarP(&rPt, "tpid", "t", "", "next transport id")
+}
+
 var addIntFwdRuleCmd = &cobra.Command{
-	Use:   "intfwd <route-id> <next-route-id> <next-transport-id>",
+	Use:   "intfwd \\\n			       <route-id> \\\n			  <next-route-id> \\\n		      <next-transport-id> \\\n			      || ",
 	Short: "Add intermediary forward routing rule",
 	Long:  "\n  Add intermediary forward routing rule",
 	Args: func(_ *cobra.Command, args []string) error {
