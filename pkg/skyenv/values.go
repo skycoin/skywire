@@ -12,6 +12,7 @@ import (
 	"github.com/bitfield/script"
 	"github.com/google/uuid"
 	"github.com/jaypipes/ghw"
+	"github.com/skycoin/dmsg/pkg/dmsg"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -29,12 +30,12 @@ const (
 // Dmsg port constants.
 // TODO(evanlinjin): Define these properly. These are currently random.
 const (
-	DmsgCtrlPort           uint16 = 7   // Listening port for dmsgctrl protocol (similar to TCP Echo Protocol).
-	DmsgSetupPort          uint16 = 36  // Listening port of a setup node.
-	DmsgHypervisorPort     uint16 = 46  // Listening port of a hypervisor for incoming RPC visor connections over dmsg.
-	DmsgTransportSetupPort uint16 = 47  // Listening port for transport setup RPC over dmsg.
-	DmsgHTTPPort           uint16 = 80  // Listening port for dmsghttp logserver.
-	DmsgAwaitSetupPort     uint16 = 136 // Listening port of a visor for setup operations.
+	DmsgCtrlPort           uint16 = 7                        // Listening port for dmsgctrl protocol (similar to TCP Echo Protocol).
+	DmsgSetupPort          uint16 = 36                       // Listening port of a setup node.
+	DmsgHypervisorPort     uint16 = 46                       // Listening port of a hypervisor for incoming RPC visor connections over dmsg.
+	DmsgTransportSetupPort uint16 = 47                       // Listening port for transport setup RPC over dmsg.
+	DmsgHTTPPort           uint16 = dmsg.DefaultDmsgHTTPPort // Listening port for dmsghttp logserver.
+	DmsgAwaitSetupPort     uint16 = 136                      // Listening port of a visor for setup operations.
 )
 
 // Transport port constants.
@@ -93,7 +94,8 @@ const (
 
 // Routing constants
 const (
-	TpLogStore = "./transport_logs"
+	TpLogStore = "transport_logs"
+	Custom     = "custom"
 )
 
 // Local constants

@@ -124,14 +124,14 @@ type Service struct {
 	Geo       *geo.LocationData `json:"geo,omitempty" gorm:"embedded"`
 	Version   string            `json:"version,omitempty"`
 	LocalIPs  pq.StringArray    `json:"local_ips,omitempty" gorm:"type:text[]"`
-	Info      VPNInfo           `json:"info,omitempty" gorm:"-"`
+	Info      *VPNInfo          `json:"info,omitempty" gorm:"-"`
 }
 
 // VPNInfo used for showing VPN metrics info, like latency, uptime and count of connections
 type VPNInfo struct {
-	Latency     float64
-	Uptime      float64
-	Connections int
+	Latency     float64 `json:"latency,omitempty"`
+	Uptime      float64 `json:"uptime,omitempty"`
+	Connections int     `json:"connections,omitempty"`
 }
 
 // MarshalBinary implements encoding.BinaryMarshaller

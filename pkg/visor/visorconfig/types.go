@@ -15,6 +15,8 @@ const (
 const (
 	// DefaultTimeout is used for default config generation and if it is not set in config.
 	DefaultTimeout = Duration(10 * time.Second)
+	// DefaultLogRotationInterval is used as default for RotationInterval and if it is not set in Log.
+	DefaultLogRotationInterval = Duration(time.Hour * 24 * 7)
 )
 
 // Duration wraps around time.Duration to allow parsing from and to JSON

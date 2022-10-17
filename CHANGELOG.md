@@ -8,7 +8,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 - `skywire-cli` subcommand `arg` under `visor app` [#1356](https://github.com/skycoin/skywire/pull/1356)
-- `log_rotation_interval` field to config [#1374](https://github.com/skycoin/skywire/pull/1374)
+- `log_store` field to `transport` in config [#1386](https://github.com/skycoin/skywire/pull/1386)
+- `type`, `location`, `rotation_interval`, field to `log_store` inside `transport` in config [#1374](https://github.com/skycoin/skywire/pull/1374)
+- transport file logging to CSV [#1374](https://github.com/skycoin/skywire/pull/1374)
+- transport file logging to CSV [#1374](https://github.com/skycoin/skywire/pull/1374)
+- dmsghttp server [#1364](https://github.com/skycoin/skywire/issues/1364)
 
 ### Changed
 - moved `skywire-cli` subcommand `autoconnect` from `visor app` to `visor app arg` [#1356](https://github.com/skycoin/skywire/pull/1356)

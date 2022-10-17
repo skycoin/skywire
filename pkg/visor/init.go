@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ccding/go-stun/stun"
+	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/direct"
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
@@ -47,6 +48,7 @@ import (
 	"github.com/skycoin/skywire/pkg/utclient"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
+	"github.com/skycoin/skywire/pkg/visor/logserver"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	vinit "github.com/skycoin/skywire/pkg/visor/visorinit"
 )
@@ -352,6 +354,13 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 	}
 	logger := v.MasterLogger().PackageLogger("dmsghttp_logserver")
 
+	var printLog bool
+	if v.MasterLogger().GetLevel() == logrus.DebugLevel || v.MasterLogger().GetLevel() == logrus.TraceLevel {
+		printLog = true
+	}
+
+	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.CustomDmsgHTTPPath, printLog)
+
 	lis, err := dmsgC.Listen(skyenv.DmsgHTTPPort)
 	if err != nil {
 		return err
@@ -362,11 +371,13 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 			logger.WithError(err).Error()
 		}
 	}()
+
+	log.WithField("dmsg_addr", fmt.Sprintf("dmsg://%v", lis.Addr().String())).
+		Debug("Serving...")
 	srv := &http.Server{
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       5 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		Handler:           http.FileServer(http.Dir(v.conf.LocalPath)),
+		ReadHeaderTimeout: 2 * time.Second,
+		IdleTimeout:       30 * time.Second,
+		Handler:           lsAPI,
 	}
 
 	wg := new(sync.WaitGroup)
@@ -449,7 +460,17 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	logS := transport.InMemoryTransportLogStore()
+	var logS transport.LogStore
+	if v.conf.Transport.LogStore.Type == visorconfig.MemoryLogStore {
+		logS = transport.InMemoryTransportLogStore()
+	} else if v.conf.Transport.LogStore.Type == visorconfig.FileLogStore {
+		logS, err = transport.FileTransportLogStore(ctx, v.conf.Transport.LogStore.Location, time.Duration(v.conf.Transport.LogStore.RotationInterval), log)
+		if err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("invalid store type: %v", v.conf.Transport.LogStore.Type)
+	}
 
 	pTps, err := v.conf.GetPersistentTransports()
 	if err != nil {
@@ -579,8 +600,8 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 			trySUDPH := false
 
 			for _, trans := range transports {
-				ntype := network.Type(trans)
-				if ntype == network.STCPR {
+				nType := network.Type(trans)
+				if nType == network.STCPR {
 					trySTCPR = true
 					continue
 				}
@@ -589,7 +610,7 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 				<-v.stunReady
 
 				// skip if SUDPH is under symmetric NAT / under UDP firewall.
-				if ntype == network.SUDPH && (v.stunClient.NATType == stun.NATSymmetric ||
+				if nType == network.SUDPH && (v.stunClient.NATType == stun.NATSymmetric ||
 					v.stunClient.NATType == stun.NATSymmetricUDPFirewall) {
 					continue
 				}
