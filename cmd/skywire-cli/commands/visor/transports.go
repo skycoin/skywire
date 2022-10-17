@@ -169,8 +169,8 @@ var addTpCmd = &cobra.Command{
 }
 
 func init() {
-	lsTpCmd.Flags().BoolVarP(&removeAll, "all", "a", false, "remove all transports")
-	lsTpCmd.Flags().StringVarP(&tpID, "id", "i", "", "remove transport of given ID")
+	rmTpCmd.Flags().BoolVarP(&removeAll, "all", "a", false, "remove all transports")
+	rmTpCmd.Flags().StringVarP(&tpID, "id", "i", "", "remove transport of given ID")
 }
 
 var rmTpCmd = &cobra.Command{
