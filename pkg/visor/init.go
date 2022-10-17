@@ -354,15 +354,12 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 	}
 	logger := v.MasterLogger().PackageLogger("dmsghttp_logserver")
 
-	tpLogPath := v.conf.LocalPath + "/" + skyenv.TpLogStore
-	customPath := v.conf.LocalPath + "/" + skyenv.Custom
-
 	var printLog bool
 	if v.MasterLogger().GetLevel() == logrus.DebugLevel || v.MasterLogger().GetLevel() == logrus.TraceLevel {
 		printLog = true
 	}
 
-	lsAPI := logserver.New(logger, tpLogPath, v.conf.LocalPath, customPath, printLog)
+	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.CustomDmsgHTTPPath, printLog)
 
 	lis, err := dmsgC.Listen(skyenv.DmsgHTTPPort)
 	if err != nil {
@@ -463,9 +460,16 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	logS, err := transport.FileTransportLogStore(v.conf.LocalPath + "/" + skyenv.TpLogStore)
-	if err != nil {
-		return err
+	var logS transport.LogStore
+	if v.conf.Transport.LogStore.Type == visorconfig.MemoryLogStore {
+		logS = transport.InMemoryTransportLogStore()
+	} else if v.conf.Transport.LogStore.Type == visorconfig.FileLogStore {
+		logS, err = transport.FileTransportLogStore(ctx, v.conf.Transport.LogStore.Location, time.Duration(v.conf.Transport.LogStore.RotationInterval), log)
+		if err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("invalid store type: %v", v.conf.Transport.LogStore.Type)
 	}
 
 	pTps, err := v.conf.GetPersistentTransports()

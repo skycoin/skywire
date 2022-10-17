@@ -2,12 +2,14 @@ package transport
 
 import (
 	"bytes"
+	"context"
 	"encoding/gob"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -18,36 +20,75 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
+const dateFormat string = "2006-01-02"
+
 // CsvEntry represents a logging entry for csv for a given Transport.
 type CsvEntry struct {
 	TpID uuid.UUID `csv:"tp_id"`
 	// atomic requires 64-bit alignment for struct field access
 	LogEntry
-	TimeStamp time.Time `csv:"time_stamp"` // TimeStamp should be time.RFC3339Nano formatted
+	TimeStamp int64 `csv:"time_stamp"` // TimeStamp should be time.RFC3339Nano formatted
 }
 
 // LogEntry represents a logging entry for a given Transport.
 // The entry is updated every time a packet is received or sent.
 type LogEntry struct {
 	// atomic requires 64-bit alignment for struct field access
-	RecvBytes uint64 `csv:"recv"` // Total received bytes.
-	SentBytes uint64 `csv:"sent"` // Total sent bytes.
+	RecvBytes *uint64 `csv:"recv"` // Total received bytes.
+	SentBytes *uint64 `csv:"sent"` // Total sent bytes.
+}
+
+// MakeLogEntry makes a new LogEntry by adding the info from old entry if found
+func MakeLogEntry(ls LogStore, tpID uuid.UUID, log *logging.Logger) *LogEntry {
+	oldLogEntry, err := ls.Entry(tpID)
+	if err != nil {
+		log.Warn(err)
+		return &LogEntry{}
+	}
+	newEntry := NewLogEntry()
+	if oldLogEntry != nil {
+		newEntry.AddRecv(*oldLogEntry.RecvBytes)
+		newEntry.AddSent(*oldLogEntry.SentBytes)
+	}
+	return newEntry
+}
+
+// NewLogEntry creates a new LogEntry
+func NewLogEntry() *LogEntry {
+	recv := uint64(0)
+	sent := uint64(0)
+	return &LogEntry{
+		RecvBytes: &recv,
+		SentBytes: &sent,
+	}
 }
 
 // AddRecv records read.
 func (le *LogEntry) AddRecv(n uint64) {
-	atomic.AddUint64(&le.RecvBytes, n)
+	atomic.AddUint64(le.RecvBytes, n)
 }
 
 // AddSent records write.
 func (le *LogEntry) AddSent(n uint64) {
-	atomic.AddUint64(&le.SentBytes, n)
+	atomic.AddUint64(le.SentBytes, n)
+}
+
+// Reset resets LogEntry.
+func (le *LogEntry) Reset() {
+	atomic.AddUint64(le.SentBytes, -*le.SentBytes)
+	atomic.AddUint64(le.RecvBytes, -*le.RecvBytes)
 }
 
 // MarshalJSON implements json.Marshaller
 func (le *LogEntry) MarshalJSON() ([]byte, error) {
-	rb := strconv.FormatUint(atomic.LoadUint64(&le.RecvBytes), 10)
-	sb := strconv.FormatUint(atomic.LoadUint64(&le.SentBytes), 10)
+	var rb string
+	var sb string
+	if le.RecvBytes != nil {
+		rb = strconv.FormatUint(atomic.LoadUint64(le.RecvBytes), 10)
+	}
+	if le.SentBytes != nil {
+		sb = strconv.FormatUint(atomic.LoadUint64(le.SentBytes), 10)
+	}
 	return []byte(`{"recv":` + rb + `,"sent":` + sb + `}`), nil
 }
 
@@ -55,11 +96,15 @@ func (le *LogEntry) MarshalJSON() ([]byte, error) {
 func (le *LogEntry) GobEncode() ([]byte, error) {
 	var b bytes.Buffer
 	enc := gob.NewEncoder(&b)
-	if err := enc.Encode(le.RecvBytes); err != nil {
-		return nil, err
+	if le.RecvBytes != nil {
+		if err := enc.Encode(le.RecvBytes); err != nil {
+			return nil, err
+		}
 	}
-	if err := enc.Encode(le.SentBytes); err != nil {
-		return nil, err
+	if le.SentBytes != nil {
+		if err := enc.Encode(le.SentBytes); err != nil {
+			return nil, err
+		}
 	}
 	return b.Bytes(), nil
 }
@@ -76,8 +121,8 @@ func (le *LogEntry) GobDecode(b []byte) error {
 	if err := dec.Decode(&sb); err != nil {
 		return err
 	}
-	atomic.StoreUint64(&le.RecvBytes, rb)
-	atomic.StoreUint64(&le.SentBytes, sb)
+	atomic.StoreUint64(le.RecvBytes, rb)
+	atomic.StoreUint64(le.SentBytes, sb)
 	return nil
 }
 
@@ -121,21 +166,45 @@ func (tls *inMemoryTransportLogStore) Record(id uuid.UUID, entry *LogEntry) erro
 }
 
 type fileTransportLogStore struct {
-	dir string
-	log *logging.Logger
+	dir      string
+	log      *logging.Logger
+	mu       sync.Mutex
+	fileName string
 }
 
 // FileTransportLogStore implements file TransportLogStore.
-func FileTransportLogStore(dir string) (LogStore, error) {
-	if err := os.MkdirAll(dir, 0606); err != nil {
+func FileTransportLogStore(ctx context.Context, dir string, rInterval time.Duration, log *logging.Logger) (LogStore, error) {
+	if err := os.MkdirAll(dir, 0644); err != nil {
 		return nil, err
 	}
-	log := logging.MustGetLogger("transport")
-	return &fileTransportLogStore{dir, log}, nil
+
+	fLogStore := &fileTransportLogStore{
+		dir: dir,
+		log: log,
+	}
+
+	go func() {
+		ticker := time.NewTicker(time.Hour * 5)
+		defer ticker.Stop()
+		fLogStore.cleanLogs(rInterval)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				fLogStore.cleanLogs(rInterval)
+			}
+		}
+	}()
+
+	return fLogStore, nil
 }
 
 func (tls *fileTransportLogStore) Entry(tpID uuid.UUID) (*LogEntry, error) {
-	entries, err := tls.readFromCSV(tls.today())
+	tls.mu.Lock()
+	defer tls.mu.Unlock()
+
+	entries, err := tls.readFromCSV(tls.todayFileName())
 	if err != nil {
 		return nil, err
 	}
@@ -147,25 +216,40 @@ func (tls *fileTransportLogStore) Entry(tpID uuid.UUID) (*LogEntry, error) {
 	return nil, nil
 }
 
-func (tls *fileTransportLogStore) Record(id uuid.UUID, entry *LogEntry) error {
+func (tls *fileTransportLogStore) Record(tpID uuid.UUID, lEntry *LogEntry) error {
+	tls.mu.Lock()
+	defer tls.mu.Unlock()
+
 	cEntry := &CsvEntry{
-		TpID:      id,
-		LogEntry:  *entry,
-		TimeStamp: time.Now().UTC(),
+		TpID:      tpID,
+		LogEntry:  *lEntry,
+		TimeStamp: time.Now().UTC().Unix(),
 	}
 
 	return tls.writeToCSV(cEntry)
 }
 
 func (tls *fileTransportLogStore) writeToCSV(cEntry *CsvEntry) error {
-	f, err := os.OpenFile(filepath.Join(tls.dir, fmt.Sprintf("%s.csv", tls.today())), os.O_RDWR|os.O_CREATE, os.ModePerm)
+
+	today := tls.todayFileName()
+	// we check if the date of the file has changed or not
+	// if it is then it means it's a new day so we need to reset the LogEntry
+	// so that we can start the count again for the new day and file
+	if tls.fileName != "" && tls.fileName != tls.todayFileName() {
+		// before we reset we need to save the current data so we save it in the previous days file
+		// note: the timestamp of this entry will likely be of the current day so if a log file has
+		// a timestamp of next day then it is an indicator that it's an inter-day transport log
+		today = tls.fileName
+	}
+
+	f, err := os.OpenFile(filepath.Join(tls.dir, today), os.O_RDWR|os.O_CREATE, 0644) //nolint
 	if err != nil {
 		return err
 	}
 
 	defer func() {
 		if err := f.Close(); err != nil {
-			tls.log.WithError(err).Errorln("Failed to close hypervisor response body")
+			tls.log.WithError(err).Errorln("Failed to close csv file")
 		}
 	}()
 
@@ -176,24 +260,23 @@ func (tls *fileTransportLogStore) writeToCSV(cEntry *CsvEntry) error {
 		return err
 	}
 
-	if len(readClients) == 0 {
-		writeClients = append(writeClients, cEntry)
-	}
-
+	var update bool
 	for _, client := range readClients {
+		// update if readClients contains the cEntry
 		if client.TpID == cEntry.TpID {
 			writeClients = append(writeClients, cEntry)
+			update = true
 			continue
 		}
 		writeClients = append(writeClients, client)
 	}
 
-	if _, err := f.Seek(0, 0); err != nil { // Go to the start of the file
-		return err
+	// write when the readClients are does not contain cEntry
+	if !update {
+		writeClients = append(writeClients, cEntry)
 	}
 
-	_, err = gocsv.MarshalString(&writeClients) // Get all clients as CSV string
-	if err != nil {
+	if _, err := f.Seek(0, 0); err != nil { // Go to the start of the file
 		return err
 	}
 
@@ -201,18 +284,26 @@ func (tls *fileTransportLogStore) writeToCSV(cEntry *CsvEntry) error {
 	if err != nil {
 		return err
 	}
+
+	// we reset the entry after it is saved
+	if tls.fileName != "" && tls.fileName != tls.todayFileName() {
+		cEntry.LogEntry.Reset()
+	}
+
+	tls.fileName = tls.todayFileName()
+
 	return nil
 }
 
 func (tls *fileTransportLogStore) readFromCSV(fileName string) ([]*CsvEntry, error) {
-	f, err := os.OpenFile(filepath.Join(tls.dir, fmt.Sprint(fileName)), os.O_RDWR|os.O_CREATE, os.ModePerm)
+	f, err := os.OpenFile(filepath.Join(tls.dir, fmt.Sprint(fileName)), os.O_RDWR|os.O_CREATE, 0644) //nolint
 	if err != nil {
 		return nil, err
 	}
 
 	defer func() {
 		if err := f.Close(); err != nil {
-			tls.log.WithError(err).Errorln("Failed to close hypervisor response body")
+			tls.log.WithError(err).Errorln("Failed to close csv file")
 		}
 	}()
 
@@ -224,6 +315,32 @@ func (tls *fileTransportLogStore) readFromCSV(fileName string) ([]*CsvEntry, err
 	return readClients, nil
 }
 
-func (tls *fileTransportLogStore) today() string {
-	return time.Now().UTC().Format("2006-01-02")
+// CleanLogs cleans the logs that are older than the given log rotation interval
+func (tls *fileTransportLogStore) cleanLogs(rInterval time.Duration) {
+
+	files, err := os.ReadDir(tls.dir)
+	if err != nil {
+		tls.log.Warn(err)
+	}
+
+	for _, file := range files {
+		if !file.IsDir() {
+			interval := time.Now().UTC().Add(-rInterval)
+			date, err := time.Parse(dateFormat, strings.ReplaceAll(file.Name(), ".csv", ""))
+			if err != nil {
+				tls.log.Warn(err)
+			}
+			if date.Before(interval) {
+				err = os.Remove(tls.dir + "/" + file.Name())
+				if err != nil {
+					tls.log.Warn(err)
+				}
+				tls.log.Debugf("transport log file cleaned: %v", file.Name())
+			}
+		}
+	}
+}
+
+func (tls *fileTransportLogStore) todayFileName() string {
+	return fmt.Sprintf("%s.csv", time.Now().UTC().Format(dateFormat))
 }
