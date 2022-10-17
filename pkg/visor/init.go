@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ccding/go-stun/stun"
+	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/direct"
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
@@ -47,6 +48,7 @@ import (
 	"github.com/skycoin/skywire/pkg/utclient"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
+	"github.com/skycoin/skywire/pkg/visor/logserver"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	vinit "github.com/skycoin/skywire/pkg/visor/visorinit"
 )
@@ -352,6 +354,13 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 	}
 	logger := v.MasterLogger().PackageLogger("dmsghttp_logserver")
 
+	var printLog bool
+	if v.MasterLogger().GetLevel() == logrus.DebugLevel || v.MasterLogger().GetLevel() == logrus.TraceLevel {
+		printLog = true
+	}
+
+	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.CustomDmsgHTTPPath, printLog)
+
 	lis, err := dmsgC.Listen(skyenv.DmsgHTTPPort)
 	if err != nil {
 		return err
@@ -362,11 +371,13 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 			logger.WithError(err).Error()
 		}
 	}()
+
+	log.WithField("dmsg_addr", fmt.Sprintf("dmsg://%v", lis.Addr().String())).
+		Debug("Serving...")
 	srv := &http.Server{
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       5 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		Handler:           http.FileServer(http.Dir(v.conf.LocalPath)),
+		ReadHeaderTimeout: 2 * time.Second,
+		IdleTimeout:       30 * time.Second,
+		Handler:           lsAPI,
 	}
 
 	wg := new(sync.WaitGroup)
@@ -449,7 +460,17 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	logS := transport.InMemoryTransportLogStore()
+	var logS transport.LogStore
+	if v.conf.Transport.LogStore.Type == visorconfig.MemoryLogStore {
+		logS = transport.InMemoryTransportLogStore()
+	} else if v.conf.Transport.LogStore.Type == visorconfig.FileLogStore {
+		logS, err = transport.FileTransportLogStore(ctx, v.conf.Transport.LogStore.Location, time.Duration(v.conf.Transport.LogStore.RotationInterval), log)
+		if err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("invalid store type: %v", v.conf.Transport.LogStore.Type)
+	}
 
 	pTps, err := v.conf.GetPersistentTransports()
 	if err != nil {
@@ -534,6 +555,7 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 	return nil
 }
 
+// getRouteSetupHooks aka autotransport
 func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []router.RouteSetupHook {
 	retrier := netutil.NewRetrier(log, time.Second, time.Second*20, 3, 1.3)
 	return []router.RouteSetupHook{
@@ -554,6 +576,9 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 			dmsgFallback := func() error {
 				return retrier.Do(ctx, func() error {
 					_, err := tm.SaveTransport(ctx, rPK, network.DMSG, transport.LabelAutomatic)
+					if err != nil {
+						log.Debugf("Establishing automatic DMSG transport failed.")
+					}
 					return err
 				})
 			}
@@ -568,10 +593,6 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 				log.WithField("pk", rPK.String()).Warn("pk not found in the transports")
 				// check if automatic transport is available, if it does,
 				// continue with route creation
-				if v.conf.Transport.PublicAutoconnect {
-					// we return nil here, router will use multi-hop STCPR rather than one hop DMSG
-					return nil
-				}
 				return dmsgFallback()
 			}
 			// try to establish direct connection to rPK (single hop) using SUDPH or STCPR
@@ -579,8 +600,8 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 			trySUDPH := false
 
 			for _, trans := range transports {
-				ntype := network.Type(trans)
-				if ntype == network.STCPR {
+				nType := network.Type(trans)
+				if nType == network.STCPR {
 					trySTCPR = true
 					continue
 				}
@@ -589,7 +610,7 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 				<-v.stunReady
 
 				// skip if SUDPH is under symmetric NAT / under UDP firewall.
-				if ntype == network.SUDPH && (v.stunClient.NATType == stun.NATSymmetric ||
+				if nType == network.SUDPH && (v.stunClient.NATType == stun.NATSymmetric ||
 					v.stunClient.NATType == stun.NATSymmetricUDPFirewall) {
 					continue
 				}
@@ -602,7 +623,10 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 					_, err := tm.SaveTransport(ctx, rPK, network.STCPR, transport.LabelAutomatic)
 					return err
 				})
-				return err
+				if err == nil {
+					return nil
+				}
+				log.Debugf("Establishing automatic STCPR transport failed.")
 			}
 			// trying to establish direct connection to rPK using SUDPH
 			if trySUDPH {
@@ -610,7 +634,10 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 					_, err := tm.SaveTransport(ctx, rPK, network.SUDPH, transport.LabelAutomatic)
 					return err
 				})
-				return err
+				if err == nil {
+					return nil
+				}
+				log.Debugf("Establishing automatic SUDPH transport failed.")
 			}
 
 			return dmsgFallback()

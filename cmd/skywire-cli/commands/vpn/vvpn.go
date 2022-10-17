@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/toqueteos/webbrowser"
@@ -145,7 +146,32 @@ var vpnStartCmd = &cobra.Command{
 		var pk cipher.PubKey
 		internal.Catch(cmd.Flags(), pk.Set(args[0]))
 		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).StartVPNClient(pk))
-		internal.PrintOutput(cmd.Flags(), "OK", fmt.Sprintln("OK"))
+		internal.PrintOutput(cmd.Flags(), "Starting.", "Starting.")
+		startProcess := true
+		for startProcess {
+			time.Sleep(time.Second * 1)
+			internal.PrintOutput(cmd.Flags(), ".", ".")
+			states, err := clirpc.Client(cmd.Flags()).Apps()
+			internal.Catch(cmd.Flags(), err)
+
+			var b bytes.Buffer
+			w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
+			internal.Catch(cmd.Flags(), err)
+			for _, state := range states {
+				if state.Name == "vpn-client" {
+					if state.Status == appserver.AppStatusRunning {
+						startProcess = false
+						internal.Catch(cmd.Flags(), w.Flush())
+						internal.PrintOutput(cmd.Flags(), "\nRunning!", fmt.Sprintln("\nRunning!"))
+					}
+					if state.Status == appserver.AppStatusErrored {
+						startProcess = false
+						internal.Catch(cmd.Flags(), w.Flush())
+						internal.PrintOutput(cmd.Flags(), "\nError! > "+state.DetailedStatus, fmt.Sprintln("\nError! > "+state.DetailedStatus))
+					}
+				}
+			}
+		}
 	},
 }
 
