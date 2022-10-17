@@ -28,6 +28,7 @@ var rootCmd = &cobra.Command{
 	SilenceErrors:      true,
 	SilenceUsage:       true,
 	DisableSuggestions: true,
+	DisableFlagsInUseLine: true,
 	Version:            buildinfo.Version(),
 }
 
