@@ -18,12 +18,6 @@
         "server":{
           "address":"139.162.45.141:8083"
         }
-      },
-      {
-        "static":"02c5c21778c510f9bd29a54565db1ab20b9248804dce3d3fed171ae45a096f4037",
-        "server":{
-          "address":"194.147.142.202:30052"
-        }
       }
     ],
     "dmsg_discovery": "dmsg://03cd2336e5de74bdab2bbdb44b06b0c8c713a5ee9029615f5526f8c99a6afe87b8:80",
@@ -69,12 +63,6 @@
         "static":"02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0",
         "server":{
           "address":"dmsg.server02a4.skywire.skycoin.com:30089"
-        }
-      },
-      {
-        "static":"02113579604c79b704e169a4fd94fd78167b86fe40da1016f8146935babcc9abcb",
-        "server":{
-          "address":"194.147.142.202:30050"
         }
       }
     ],
