@@ -25,11 +25,11 @@ var rootCmd = &cobra.Command{
 	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐  ┌─┐┬  ┬
 	└─┐├┴┐└┬┘││││├┬┘├┤───│  │  │
 	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘  └─┘┴─┘┴`,
-	SilenceErrors:      true,
-	SilenceUsage:       true,
-	DisableSuggestions: true,
+	SilenceErrors:         true,
+	SilenceUsage:          true,
+	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
-	Version:            buildinfo.Version(),
+	Version:               buildinfo.Version(),
 }
 
 func init() {
