@@ -357,11 +357,10 @@ var genConfigCmd = &cobra.Command{
 		if isPublic {
 			conf.IsPublic = true
 		}
-//		uncomment after config struct changes		
-//		if isDisplayNodeIP {
-//			conf.DisplayNodeIP = true
-//		}
-
+		//		uncomment after config struct changes
+		//		if isDisplayNodeIP {
+		//			conf.DisplayNodeIP = true
+		//		}
 
 		//don't write file with stdout
 		if !isStdout {
