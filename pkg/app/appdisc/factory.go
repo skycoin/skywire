@@ -20,6 +20,7 @@ type Factory struct {
 	PK             cipher.PubKey
 	SK             cipher.SecKey
 	ServiceDisc    string // Address of service-discovery
+	DisplayNodeIP  bool
 	Client         *http.Client
 	ClientPublicIP string
 }
