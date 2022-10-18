@@ -44,6 +44,7 @@ func init() {
 	genConfigCmd.Flags().BoolVarP(&isHypervisor, "ishv", "i", false, "local hypervisor configuration")
 	genConfigCmd.Flags().StringVarP(&hypervisorPKs, "hvpks", "j", "", "list of public keys to use as hypervisor")
 	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", skyenv.OS, "(linux / mac / win) paths")
+	genConfigCmd.Flags().BoolVarP(&isDisplayNodeIP, "publicip", "l", false, "allow display node ip in services")
 	gHiddenFlags = append(gHiddenFlags, "os")
 	genConfigCmd.Flags().BoolVarP(&isStdout, "stdout", "n", false, "write config to stdout")
 	gHiddenFlags = append(gHiddenFlags, "stdout")
@@ -356,6 +357,11 @@ var genConfigCmd = &cobra.Command{
 		if isPublic {
 			conf.IsPublic = true
 		}
+//		uncomment after config struct changes		
+//		if isDisplayNodeIP {
+//			conf.DisplayNodeIP = true
+//		}
+
 
 		//don't write file with stdout
 		if !isStdout {

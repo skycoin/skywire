@@ -210,7 +210,7 @@ type Survey struct {
 const SurveyFile string = "system.json"
 
 // PrivFile is the name of the file containing skycoin rewards address and privacy setting
-const PrivFile string = "privacy.json"
+const PrivFile string = "reward.txt"
 
 // SystemSurvey returns system hardware survey
 func SystemSurvey() (Survey, error) {
