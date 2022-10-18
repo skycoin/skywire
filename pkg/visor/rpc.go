@@ -16,7 +16,6 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
-	"github.com/skycoin/skywire/pkg/visor/privacyconfig"
 )
 
 const (
@@ -96,26 +95,26 @@ func (r *RPC) Uptime(_ *struct{}, out *float64) (err error) {
 */
 
 // SetPrivacy sets the reward address and privacy setting in privacy.json
-func (r *RPC) SetPrivacy(p *privacyconfig.Privacy, out *privacyconfig.Privacy) (err error) {
-	defer rpcutil.LogCall(r.log, "SetPrivacy", p)(out, &err)
-
-	pConfig, err := r.visor.SetPrivacy(p)
-	if pConfig != nil {
-		*out = *pConfig
-	}
-
-	return err
-}
+//func (r *RPC) SetPrivacy(p *privacyconfig.Privacy, out *privacyconfig.Privacy) (err error) {
+//	defer rpcutil.LogCall(r.log, "SetPrivacy", p)(out, &err)
+//
+//	pConfig, err := r.visor.SetPrivacy(p)
+//	if pConfig != nil {
+//		*out = *pConfig
+//	}
+//
+//	return err
+//}
 
 // GetPrivacy reads the reward address and privacy setting from privacy.json
-func (r *RPC) GetPrivacy(_ *struct{}, out *privacyconfig.Privacy) (err error) {
-	defer rpcutil.LogCall(r.log, "GetPrivacy", nil)(out, &err)
-	pConfig, err := r.visor.GetPrivacy()
-	if pConfig != nil {
-		*out = *pConfig
-	}
-	return err
-}
+//func (r *RPC) GetPrivacy(_ *struct{}, out *privacyconfig.Privacy) (err error) {
+//	defer rpcutil.LogCall(r.log, "GetPrivacy", nil)(out, &err)
+//	pConfig, err := r.visor.GetPrivacy()
+//	if pConfig != nil {
+//		*out = *pConfig
+//	}
+//	return err
+//}
 
 /*
 	<<< APP LOGS >>>

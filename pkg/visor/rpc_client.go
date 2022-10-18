@@ -27,7 +27,6 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/cipherutil"
-	"github.com/skycoin/skywire/pkg/visor/privacyconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -123,19 +122,19 @@ func (rc *rpcClient) Uptime() (float64, error) {
 }
 
 // SetPrivacy implements API.
-func (rc *rpcClient) SetPrivacy(p *privacyconfig.Privacy) (pConfig *privacyconfig.Privacy, err error) {
-	err = rc.Call("SetPrivacy", &p, &pConfig)
-	if err != nil {
-		return nil, err
-	}
-	return pConfig, err
-}
+//func (rc *rpcClient) SetPrivacy(p *privacyconfig.Privacy) (pConfig *privacyconfig.Privacy, err error) {
+//	err = rc.Call("SetPrivacy", &p, &pConfig)
+//	if err != nil {
+//		return nil, err
+//	}
+//	return pConfig, err
+//}
 
 // GetPrivacy implements API.
-func (rc *rpcClient) GetPrivacy() (pConfig *privacyconfig.Privacy, err error) {
-	err = rc.Call("GetPrivacy", &struct{}{}, &pConfig)
-	return pConfig, err
-}
+//func (rc *rpcClient) GetPrivacy() (pConfig *privacyconfig.Privacy, err error) {
+//	err = rc.Call("GetPrivacy", &struct{}{}, &pConfig)
+//	return pConfig, err
+//}
 
 // Apps calls Apps.
 func (rc *rpcClient) Apps() ([]*appserver.AppState, error) {
@@ -639,14 +638,14 @@ func (mc *mockRPCClient) Uptime() (float64, error) {
 }
 
 // SetPrivacy implements API
-func (mc *mockRPCClient) SetPrivacy(p *privacyconfig.Privacy) (*privacyconfig.Privacy, error) {
-	return nil, nil
-}
+//func (mc *mockRPCClient) SetPrivacy(p *privacyconfig.Privacy) (*privacyconfig.Privacy, error) {
+//	return nil, nil
+//}
 
 // GetPrivacy implements API.
-func (mc *mockRPCClient) GetPrivacy() (*privacyconfig.Privacy, error) {
-	return nil, nil
-}
+//func (mc *mockRPCClient) GetPrivacy() (*privacyconfig.Privacy, error) {
+//	return nil, nil
+//}
 
 // Apps implements API.
 func (mc *mockRPCClient) Apps() ([]*appserver.AppState, error) {

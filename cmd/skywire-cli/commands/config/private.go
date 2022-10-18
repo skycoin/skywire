@@ -67,7 +67,7 @@ var setPrivacyConfigCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid address specified: %v", err))
 		}
 
-		internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(cAddr.String()), 0644))
+		internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(cAddr.String()), 0644)) //nolint
 		readRewardFile(cmd.Flags())
 	},
 }
