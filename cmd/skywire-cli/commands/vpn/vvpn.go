@@ -164,7 +164,7 @@ var vpnStartCmd = &cobra.Command{
 						internal.Catch(cmd.Flags(), w.Flush())
 						internal.PrintOutput(cmd.Flags(), "\nRunning!", fmt.Sprintln("\nRunning!"))
 						ip, err := visor.GetIP()
-						if err != nil {
+						if err == nil {
 							internal.PrintOutput(cmd.Flags(), fmt.Sprintf("\nYour current IP is %s!\n", ip), fmt.Sprintf("\nYour current IP is %s!\n", ip))
 						}
 					}
