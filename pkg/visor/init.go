@@ -1293,7 +1293,7 @@ func getPublicIP(v *Visor, service string) (string, error) {
 		return pIP, fmt.Errorf("provided URL is invalid: %w", err)
 	}
 
-	pIP, err = getIP()
+	pIP, err = GetIP()
 	if err != nil {
 		<-v.stunReady
 		if v.stunClient.PublicIP != nil {
@@ -1313,7 +1313,8 @@ type ipAPI struct {
 	PublicIP string `json:"ip_address"`
 }
 
-func getIP() (string, error) {
+// GetIP used for getting current IP of visor
+func GetIP() (string, error) {
 	req, err := http.Get("http://ip.skycoin.com")
 	if err != nil {
 		return "", err
