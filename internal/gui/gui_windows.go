@@ -1,5 +1,5 @@
-//go:build windows && systray
-// +build windows,systray
+//go:build windows
+// +build windows
 
 package gui
 

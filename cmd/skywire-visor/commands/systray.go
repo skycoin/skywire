@@ -1,6 +1,3 @@
-//go:build systray
-// +build systray
-
 package commands
 
 import (
@@ -12,7 +9,7 @@ import (
 	"github.com/skycoin/skywire/internal/gui"
 )
 
-func runApp(args ...string) {
+func runAppSystray(args ...string) {
 	l := logging.NewMasterLogger()
 	sysTrayIcon, err := gui.ReadSysTrayIcon()
 	if err != nil {
@@ -30,7 +27,7 @@ func runApp(args ...string) {
 
 }
 
-func setStopFunction(log *logging.MasterLogger, cancel context.CancelFunc, fn func() error) {
+func setStopFunctionSystray(log *logging.MasterLogger, cancel context.CancelFunc, fn func() error) {
 	stopVisorWg.Add(1)
 	defer stopVisorWg.Done()
 
@@ -49,4 +46,22 @@ func setStopFunction(log *logging.MasterLogger, cancel context.CancelFunc, fn fu
 
 func quitSystray() {
 	systray.Quit()
+}
+
+func runApp() {
+	runVisor(nil)
+}
+
+// setStopFunction sets the stop function
+func setStopFunction(log *logging.MasterLogger, cancel context.CancelFunc, fn func() error) {
+	stopVisorWg.Add(1)
+	defer stopVisorWg.Done()
+
+	stopVisorFn = func() {
+		if err := fn(); err != nil {
+			log.WithError(err).Error("Visor closed with error.")
+		}
+		cancel()
+		stopVisorWg.Wait()
+	}
 }

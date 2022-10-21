@@ -67,6 +67,7 @@ var (
 	all                  bool
 	pkg                  bool
 	usr                  bool
+	runAsSystray         bool
 	localIPs             []net.IP //  nolint:unused
 	// root indicates process is run with root permissions
 	root bool // nolint:unused
@@ -91,6 +92,7 @@ func init() {
 	if ((skyenv.OS == "linux") && !root) || ((skyenv.OS == "mac") && !root) || (skyenv.OS == "win") {
 		rootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
 	}
+	rootCmd.Flags().BoolVar(&runAsSystray, "systray", false, "run as systray")
 	rootCmd.Flags().BoolVarP(&hypervisorUI, "hvui", "i", false, "run as hypervisor")
 	rootCmd.Flags().BoolVarP(&noHypervisorUI, "nohvui", "x", false, "disable hypervisor")
 	hiddenflags = append(hiddenflags, "nohvui")
@@ -231,7 +233,11 @@ var rootCmd = &cobra.Command{
 		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
-		runApp()
+		if runAsSystray {
+			runAppSystray()
+		} else {
+			runApp()
+		}
 	},
 	Version: buildinfo.Version(),
 }
@@ -344,11 +350,16 @@ func runVisor(conf *visorconfig.V1) {
 		default:
 			log.Errorln("Failed to start visor.")
 		}
-		quitSystray()
+		if runAsSystray {
+			quitSystray()
+		}
 		return
 	}
-
-	setStopFunction(log, cancel, vis.Close)
+	if runAsSystray {
+		setStopFunctionSystray(log, cancel, vis.Close)
+	} else {
+		setStopFunction(log, cancel, vis.Close)
+	}
 
 	vis.SetLogstore(store)
 

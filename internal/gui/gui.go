@@ -1,6 +1,3 @@
-//go:build systray
-// +build systray
-
 package gui
 
 import (
