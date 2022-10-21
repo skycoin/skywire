@@ -92,23 +92,6 @@ func init() {
 	if ((skyenv.OS == "linux") && !root) || ((skyenv.OS == "mac") && !root) || (skyenv.OS == "win") {
 		rootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
 	}
-	rootCmd.Flags().BoolVarP(&hypervisorUI, "hvui", "i", false, "run as hypervisor (config override)")
-	rootCmd.Flags().BoolVarP(&noHypervisorUI, "nohvui", "x", false, "disable hypervisor (config override)")
-	hiddenflags = append(hiddenflags, "nohvui")
-	rootCmd.Flags().StringVarP(&remoteHypervisorPKs, "hv", "j", "", "add remote hypervisor (config override)")
-	hiddenflags = append(hiddenflags, "hv")
-	rootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors (config override)")
-	hiddenflags = append(hiddenflags, "xhv")
-	if os.Getenv("SKYBIAN") == "true" {
-		rootCmd.Flags().StringVarP(&autoPeerIP, "hvip", "l", trimStringFromDot(localIPs[0].String())+".2:7998", "set hypervisor by ip")
-		hiddenflags = append(hiddenflags, "hvip")
-		isDefaultAutopeer := false
-		if os.Getenv("AUTOPEER") == "1" {
-			isDefaultAutopeer = true
-		}
-		rootCmd.Flags().BoolVarP(&isAutoPeer, "autopeer", "m", isDefaultAutopeer, "enable autopeering")
-		hiddenflags = append(hiddenflags, "autopeer")
-	}
 	rootCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
 	hiddenflags = append(hiddenflags, "stdin")
 	if root {
@@ -122,14 +105,31 @@ func init() {
 			rootCmd.Flags().BoolVarP(&usr, "user", "u", false, "use config at: $HOME/"+skyenv.ConfigName)
 		}
 	}
-	rootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "q", "", "pprof mode: cpu, mem, mutex, block, trace, http")
+	rootCmd.Flags().BoolVarP(&hypervisorUI, "hvui", "i", false, "run as hypervisor \u001b[0m*")
+	rootCmd.Flags().BoolVarP(&noHypervisorUI, "nohvui", "x", false, "disable hypervisor \u001b[0m*")
+	hiddenflags = append(hiddenflags, "nohvui")
+	rootCmd.Flags().StringVarP(&remoteHypervisorPKs, "hv", "j", "", "add remote hypervisor \u001b[0m*")
+	hiddenflags = append(hiddenflags, "hv")
+	rootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors \u001b[0m*")
+	hiddenflags = append(hiddenflags, "xhv")
+	if os.Getenv("SKYBIAN") == "true" {
+		rootCmd.Flags().StringVarP(&autoPeerIP, "hvip", "l", trimStringFromDot(localIPs[0].String())+".2:7998", "set hypervisor by ip")
+		hiddenflags = append(hiddenflags, "hvip")
+		isDefaultAutopeer := false
+		if os.Getenv("AUTOPEER") == "1" {
+			isDefaultAutopeer = true
+		}
+		rootCmd.Flags().BoolVarP(&isAutoPeer, "autopeer", "m", isDefaultAutopeer, "enable autopeering")
+		hiddenflags = append(hiddenflags, "autopeer")
+	}
+	rootCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "", "[ debug | warn | error | fatal | panic | trace ] \u001b[0m*")
+	hiddenflags = append(hiddenflags, "loglvl")
+	rootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "q", "", "[ cpu | mem | mutex | block | trace | http ]")
 	hiddenflags = append(hiddenflags, "pprofmode")
 	rootCmd.Flags().StringVarP(&pprofAddr, "pprofaddr", "r", "localhost:6060", "pprof http port")
 	hiddenflags = append(hiddenflags, "pprofaddr")
 	rootCmd.Flags().StringVarP(&tag, "tag", "t", "skywire", "logging tag")
 	hiddenflags = append(hiddenflags, "tag")
-	rootCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "", "set log level to INFO/DEBUG/TRACE (config override)")
-	hiddenflags = append(hiddenflags, "loglvl")
 	rootCmd.Flags().StringVarP(&syslogAddr, "syslog", "y", "", "syslog server address. E.g. localhost:514")
 	hiddenflags = append(hiddenflags, "syslog")
 	rootCmd.Flags().StringVarP(&completion, "completion", "z", "", "[ bash | zsh | fish | powershell ]")
@@ -162,8 +162,10 @@ var rootCmd = &cobra.Command{
 				f := cmd.Flags().Lookup(j) //nolint
 				f.Hidden = false
 			}
-			cmd.Flags().MarkHidden("all") //nolint
-			cmd.Help()                    //nolint
+			cmd.Flags().MarkHidden("all")  //nolint
+			cmd.Flags().MarkHidden("help") //nolint
+			cmd.Help()                     //nolint
+			fmt.Println("                            * \u001b[94moverrides config file\u001b[0m")
 			os.Exit(0)
 		}
 		// -z --completion
@@ -338,9 +340,13 @@ func runVisor(conf *visorconfig.V1) {
 		}
 	}
 	if logLvl != "" {
-		if logLvl == "INFO" || logLvl == "DEBUG" || logLvl == "TRACE" {
-			log.Info("setting log level to: ", logLvl)
+		//validate & set log level
+		_, err := logging.LevelFromString(logLvl)
+		if err != nil {
+			log.WithError(err).Error("Invalid log level specified: ", logLvl)
+		} else {
 			conf.LogLevel = logLvl
+			log.Info("setting log level to: ", logLvl)
 		}
 	}
 
