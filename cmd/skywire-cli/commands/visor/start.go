@@ -29,6 +29,7 @@ func init() {
 var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start a visor",
+	Long:  "\n  Start a visor",
 	Run: func(cmd *cobra.Command, args []string) {
 		var output string
 		var err error
