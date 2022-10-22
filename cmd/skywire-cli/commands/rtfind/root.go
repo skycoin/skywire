@@ -21,10 +21,11 @@ var frMinHops, frMaxHops uint16
 var timeout time.Duration
 
 func init() {
-	RootCmd.Flags().StringVarP(&frAddr, "addr", "a", utilenv.RouteFinderAddr, "route finder service address")
+	RootCmd.Flags().SortFlags = false
 	RootCmd.Flags().Uint16VarP(&frMinHops, "min-hops", "n", 1, "minimum hops")
 	RootCmd.Flags().Uint16VarP(&frMaxHops, "max-hops", "x", 1000, "maximum hops")
 	RootCmd.Flags().DurationVarP(&timeout, "timeout", "t", 10*time.Second, "request timeout")
+	RootCmd.Flags().StringVarP(&frAddr, "addr", "a", utilenv.RouteFinderAddr, "route finder service address\n")
 	var helpflag bool
 	RootCmd.Flags().BoolVarP(&helpflag, "help", "h", false, "help for "+RootCmd.Use)
 	RootCmd.Flags().MarkHidden("help") //nolint
