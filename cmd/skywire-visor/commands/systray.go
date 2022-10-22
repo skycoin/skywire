@@ -9,7 +9,7 @@ import (
 	"github.com/skycoin/skywire/internal/gui"
 )
 
-func runAppSystray(args ...string) {
+func runAppSystray() {
 	l := logging.NewMasterLogger()
 	sysTrayIcon, err := gui.ReadSysTrayIcon()
 	if err != nil {
