@@ -1,3 +1,4 @@
+// Package privacyconfig pkg/visor/privacyconfig/privacy.go
 package privacyconfig
 
 import (

@@ -15,10 +15,12 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 func init() {
+	RootCmd.PersistentFlags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
 	RootCmd.AddCommand(
 		vpnListCmd,
 		vpnUICmd,
@@ -162,6 +164,10 @@ var vpnStartCmd = &cobra.Command{
 						startProcess = false
 						internal.Catch(cmd.Flags(), w.Flush())
 						internal.PrintOutput(cmd.Flags(), "\nRunning!", fmt.Sprintln("\nRunning!"))
+						ip, err := visor.GetIP()
+						if err == nil {
+							internal.PrintOutput(cmd.Flags(), fmt.Sprintf("\nYour current IP: %s", ip), fmt.Sprintf("Your current IP: %s\n", ip))
+						}
 					}
 					if state.Status == appserver.AppStatusErrored {
 						startProcess = false
