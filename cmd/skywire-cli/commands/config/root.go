@@ -74,6 +74,7 @@ var (
 	isUsr                  bool
 	isPublic               bool
 	isPublicAutoConn       bool
+	displayNodeIP          bool
 )
 
 // RootCmd contains commands that interact with the config of local skywire-visor

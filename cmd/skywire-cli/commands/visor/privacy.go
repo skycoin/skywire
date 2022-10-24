@@ -15,7 +15,6 @@ import (
 )
 
 var (
-	displayNodeIP bool
 	rewardAddress string
 )
 
@@ -25,7 +24,6 @@ func init() {
 	privacyCmd.Flags().SortFlags = false
 	privacyCmd.AddCommand(setPrivacyCmd)
 	privacyCmd.AddCommand(getPrivacyCmd)
-	setPrivacyCmd.Flags().BoolVarP(&displayNodeIP, "publicip", "i", false, "display node ip")
 	// default is genesis address for skycoin blockchain ; for testing
 	setPrivacyCmd.Flags().StringVarP(&rewardAddress, "address", "a", "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6", "reward address")
 }
@@ -48,7 +46,7 @@ var setPrivacyCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid address specified: %v", err))
 		}
 
-		pConfig, err := client.SetPrivacy(&privacyconfig.Privacy{DisplayNodeIP: displayNodeIP, RewardAddress: cAddr.String()})
+		pConfig, err := client.SetPrivacy(&privacyconfig.Privacy{RewardAddress: cAddr.String()})
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 		}
