@@ -61,6 +61,7 @@ func NewLauncher(log logrus.FieldLogger, conf Config, dmsgC *dmsg.Client, r rout
 		log:   log,
 		r:     r,
 		procM: procM,
+		mx:    sync.Mutex{},
 	}
 
 	// Ensure the existence of directories.
