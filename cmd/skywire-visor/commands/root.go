@@ -260,7 +260,7 @@ func runVisor(conf *visorconfig.V1) {
 	if conf == nil {
 		conf = initConfig(log, confPath)
 	}
-	pathutil.EnsureDir(conf.LocalPath)
+	pathutil.EnsureDir(conf.LocalPath) //nolint
 	survey, err := skyenv.SystemSurvey()
 	if err != nil {
 		log.WithError(err).Error("Could not read system info.")
