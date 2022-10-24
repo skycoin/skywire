@@ -22,8 +22,6 @@ builds:
     goarch:
       - arm64
       - amd64
-    tags:
-      - systray
     env:
       - CGO_ENABLED=1
     main: ./cmd/skywire-visor/
@@ -93,7 +91,7 @@ archives:
   - id: archive
     format: tar.gz
     wrap_in_directory: false
-    name_template: 'skywire-systray-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
+    name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
     files:
       - dmsghttp-config.json
     builds:

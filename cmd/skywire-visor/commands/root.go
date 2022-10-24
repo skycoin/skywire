@@ -32,6 +32,7 @@ import (
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/syslog"
+	pathutil "github.com/skycoin/skywire/pkg/util/pathutil"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
@@ -68,6 +69,7 @@ var (
 	all                  bool
 	pkg                  bool
 	usr                  bool
+	runAsSystray         bool
 	localIPs             []net.IP //  nolint:unused
 	// root indicates process is run with root permissions
 	root bool // nolint:unused
@@ -105,6 +107,7 @@ func init() {
 			rootCmd.Flags().BoolVarP(&usr, "user", "u", false, "use config at: $HOME/"+skyenv.ConfigName)
 		}
 	}
+	rootCmd.Flags().BoolVar(&runAsSystray, "systray", false, "run as systray")
 	rootCmd.Flags().BoolVarP(&hypervisorUI, "hvui", "i", false, "run as hypervisor \u001b[0m*")
 	rootCmd.Flags().BoolVarP(&noHypervisorUI, "nohvui", "x", false, "disable hypervisor \u001b[0m*")
 	hiddenflags = append(hiddenflags, "nohvui")
@@ -236,7 +239,11 @@ var rootCmd = &cobra.Command{
 		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
-		runApp()
+		if runAsSystray {
+			runAppSystray()
+		} else {
+			runApp()
+		}
 	},
 	Version: buildinfo.Version(),
 }
@@ -253,7 +260,7 @@ func runVisor(conf *visorconfig.V1) {
 	if conf == nil {
 		conf = initConfig(log, confPath)
 	}
-
+	pathutil.EnsureDir(conf.LocalPath) //nolint
 	survey, err := skyenv.SystemSurvey()
 	if err != nil {
 		log.WithError(err).Error("Could not read system info.")
@@ -359,11 +366,16 @@ func runVisor(conf *visorconfig.V1) {
 		default:
 			log.Errorln("Failed to start visor.")
 		}
-		quitSystray()
+		if runAsSystray {
+			quitSystray()
+		}
 		return
 	}
-
-	setStopFunction(log, cancel, vis.Close)
+	if runAsSystray {
+		setStopFunctionSystray(log, cancel, vis.Close)
+	} else {
+		setStopFunction(log, cancel, vis.Close)
+	}
 
 	vis.SetLogstore(store)
 
