@@ -106,7 +106,7 @@ func init() {
 			rootCmd.Flags().BoolVarP(&usr, "user", "u", false, "use config at: $HOME/"+skyenv.ConfigName)
 		}
 	}
-  rootCmd.Flags().BoolVar(&runAsSystray, "systray", false, "run as systray")
+	rootCmd.Flags().BoolVar(&runAsSystray, "systray", false, "run as systray")
 	rootCmd.Flags().BoolVarP(&hypervisorUI, "hvui", "i", false, "run as hypervisor \u001b[0m*")
 	rootCmd.Flags().BoolVarP(&noHypervisorUI, "nohvui", "x", false, "disable hypervisor \u001b[0m*")
 	hiddenflags = append(hiddenflags, "nohvui")
