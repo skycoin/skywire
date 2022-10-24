@@ -5,7 +5,6 @@ import (
 	"embed"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"strings"
@@ -455,7 +454,7 @@ func isHypervisorRunning(addr string) bool {
 		}
 	}()
 
-	if _, err := io.Copy(ioutil.Discard, resp.Body); err != nil {
+	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 		log.WithError(err).Errorln("Failed to discard hypervisor response body")
 	}
 
