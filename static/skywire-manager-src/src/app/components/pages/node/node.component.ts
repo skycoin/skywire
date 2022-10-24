@@ -1,8 +1,9 @@
 import { Component, OnDestroy, OnInit, NgZone, Injector } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription } from 'rxjs/internal/Subscription';
-import { Observable, ReplaySubject, timer } from 'rxjs';
+import { Observable, of, ReplaySubject, timer } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
+import { delay } from 'rxjs/operators';
 
 import { NodeService, BackendData } from '../../../services/node.service';
 import { Node } from '../../../app.datatypes';
@@ -57,10 +58,15 @@ export class NodeComponent implements OnInit, OnDestroy {
    * Keeps track of the browser URL.
    */
   private lastUrl: string;
+  /**
+   * Allows to know if a route event already fired.
+   */
+   private initialRouteEventFired = false;
 
   private dataSubscription: Subscription;
   private updateTimeSubscription: Subscription;
   private navigationsSubscription: Subscription;
+  private initSubscription: Subscription;
 
   // Vars for keeping track of the data updating.
   secondsSinceLastUpdate = 0;
@@ -111,17 +117,9 @@ export class NodeComponent implements OnInit, OnDestroy {
 
     this.navigationsSubscription = router.events.subscribe(event => {
       if (event['urlAfterRedirects']) {
-        NodeComponent.currentNodeKey = this.route.snapshot.params['key'];
-        if (this.nodeActionsHelper) {
-          this.nodeActionsHelper.setCurrentNodeKey(NodeComponent.currentNodeKey);
-        }
         this.lastUrl = event['urlAfterRedirects'] as string;
-        this.updateTabBar();
-        this.navigationsSubscription.unsubscribe();
-
-        // Load the data.
-        this.nodeService.startRequestingSpecificNode(NodeComponent.currentNodeKey);
-        this.startGettingData();
+        this.processRouteUpdate();
+        this.initialRouteEventFired = true;
       }
     });
   }
@@ -134,6 +132,26 @@ export class NodeComponent implements OnInit, OnDestroy {
           this.secondsSinceLastUpdate = Math.floor((Date.now() - this.lastUpdate) / 1000);
         }));
     });
+
+    this.initSubscription = of(0).pipe(delay(500)).subscribe(() => {
+      if (!this.initialRouteEventFired) {
+        this.lastUrl = window.location.href;
+        this.processRouteUpdate();
+      }
+    });
+  }
+
+  private processRouteUpdate() {
+    NodeComponent.currentNodeKey = this.route.snapshot.params['key'];
+    if (this.nodeActionsHelper) {
+      this.nodeActionsHelper.setCurrentNodeKey(NodeComponent.currentNodeKey);
+    }
+    this.updateTabBar();
+    this.navigationsSubscription.unsubscribe();
+
+    // Load the data.
+    this.nodeService.startRequestingSpecificNode(NodeComponent.currentNodeKey);
+    this.startGettingData();
   }
 
   private updateTabBar() {
@@ -311,6 +329,7 @@ export class NodeComponent implements OnInit, OnDestroy {
     this.dataSubscription.unsubscribe();
     this.updateTimeSubscription.unsubscribe();
     this.navigationsSubscription.unsubscribe();
+    this.initSubscription.unsubscribe();
 
     NodeComponent.currentInstanceInternal = undefined;
     NodeComponent.currentNodeKey = undefined;
