@@ -78,7 +78,9 @@ var lsTpCmd = &cobra.Command{
 	Long: "\n	Available transports\n\n	displays transports of the local visor",
 	Run: func(cmd *cobra.Command, _ []string) {
 		var pks cipher.PubKeys
-
+		if filterPubKeys != nil {
+			internal.Catch(cmd.Flags(), pks.Set(strings.Join(filterPubKeys, ",")))
+		}
 		transports, err := clirpc.Client(cmd.Flags()).Transports(filterTypes, pks, showLogs)
 		internal.Catch(cmd.Flags(), err)
 		PrintTransports(cmd.Flags(), transports...)
