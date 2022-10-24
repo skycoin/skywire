@@ -13,7 +13,6 @@ import (
 )
 
 var (
-	displayNodeIP bool
 	rewardAddress string
 )
 
@@ -23,7 +22,6 @@ func init() {
 	RootCmd.AddCommand(privacyConfigCmd)
 	privacyConfigCmd.AddCommand(setPrivacyConfigCmd)
 	privacyConfigCmd.AddCommand(getPrivacyConfigCmd)
-	setPrivacyConfigCmd.Flags().BoolVarP(&displayNodeIP, "publicip", "i", false, "display node ip")
 	// default is genesis address for skycoin blockchain ; for testing
 	setPrivacyConfigCmd.Flags().StringVarP(&rewardAddress, "address", "a", "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6", "reward address")
 
@@ -70,7 +68,6 @@ var setPrivacyConfigCmd = &cobra.Command{
 		}
 
 		confP := &privacyconfig.Privacy{
-			DisplayNodeIP: displayNodeIP,
 			RewardAddress: cAddr.String(),
 		}
 

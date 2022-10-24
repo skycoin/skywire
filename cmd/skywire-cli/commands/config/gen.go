@@ -79,6 +79,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "hide")
 	genConfigCmd.Flags().BoolVarP(&isPublic, "public", "z", false, "publicize visor in service discovery")
 	gHiddenFlags = append(gHiddenFlags, "public")
+	genConfigCmd.Flags().BoolVar(&displayNodeIP, "publicip", false, "display node ip")
 	genConfigCmd.Flags().StringVar(&ver, "version", "", "custom version testing override")
 	gHiddenFlags = append(gHiddenFlags, "version")
 	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
@@ -357,6 +358,9 @@ var genConfigCmd = &cobra.Command{
 			conf.IsPublic = true
 		}
 
+		if displayNodeIP {
+			conf.Launcher.DisplayNodeIP = true
+		}
 		//don't write file with stdout
 		if !isStdout {
 			// Save config to file.

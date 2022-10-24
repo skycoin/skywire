@@ -13,9 +13,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - `log_store` field to `transport` in config [#1386](https://github.com/skycoin/skywire/pull/1386)
 - `type`, `location`, `rotation_interval`, field to `log_store` inside `transport` in config [#1374](https://github.com/skycoin/skywire/pull/1374)
 - transport file logging to CSV [#1374](https://github.com/skycoin/skywire/pull/1374)
-- transport file logging to CSV [#1374](https://github.com/skycoin/skywire/pull/1374)
 - `skywire-cli config priv` & `skywire-cli visor priv` subcommands and rpc [#1369](https://github.com/skycoin/skywire/issues/1369)
 - dmsghttp server [#1364](https://github.com/skycoin/skywire/issues/1364)
+- `display_node_ip` field to `launcher` in config [#1392](https://github.com/skycoin/skywire/pull/1392)
 
 ### Changed
 - moved `skywire-cli visor` subcommands into `skywire-cil visor hv` [#1390](https://github.com/skycoin/skywire/pull/1390)
