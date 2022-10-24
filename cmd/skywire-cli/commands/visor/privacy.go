@@ -4,12 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 
+	coincipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
 
-	coincipher "github.com/skycoin/skycoin/src/cipher"
-
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
-
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/visor/privacyconfig"
 )
@@ -31,13 +29,13 @@ func init() {
 var privacyCmd = &cobra.Command{
 	Use:   "priv",
 	Short: "privacy settings",
-	Long:  "configure privacy settings\n\ntest of the api endpoints GetPrivacy & SetPrivacy",
+	Long:  "configure privacy settings",
 }
 
 var setPrivacyCmd = &cobra.Command{
 	Use:   "set",
 	Short: "set privacy.json via rpc",
-	Long:  "configure privacy settings\n\ntest of the api endpoint SetPrivacy",
+	Long:  "configure privacy settings",
 	Run: func(cmd *cobra.Command, args []string) {
 		client := clirpc.Client(cmd.Flags())
 
@@ -64,7 +62,7 @@ var setPrivacyCmd = &cobra.Command{
 var getPrivacyCmd = &cobra.Command{
 	Use:   "get",
 	Short: "read privacy setting from file",
-	Long:  "configure privacy settings\n\ntest of the api endpoints GetPrivacy",
+	Long:  "configure privacy settings",
 	Run: func(cmd *cobra.Command, args []string) {
 		pConfig, err := clirpc.Client(cmd.Flags()).GetPrivacy()
 		if err != nil {
