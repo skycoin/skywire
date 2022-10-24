@@ -659,10 +659,11 @@ func (v *Visor) VPNServers(version, country string) ([]servicedisc.Service, erro
 	vLog.SetLevel(logrus.InfoLevel)
 
 	sdClient := servicedisc.NewClient(log, vLog, servicedisc.Config{
-		Type:     servicedisc.ServiceTypeVPN,
-		PK:       v.conf.PK,
-		SK:       v.conf.SK,
-		DiscAddr: v.conf.Launcher.ServiceDisc,
+		Type:          servicedisc.ServiceTypeVPN,
+		PK:            v.conf.PK,
+		SK:            v.conf.SK,
+		DiscAddr:      v.conf.Launcher.ServiceDisc,
+		DisplayNodeIP: v.conf.Launcher.DisplayNodeIP,
 	}, &http.Client{Timeout: time.Duration(20) * time.Second}, "")
 	vpnServers, err := sdClient.Services(context.Background(), 0, version, country)
 	if err != nil {
