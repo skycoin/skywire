@@ -117,14 +117,15 @@ func (a SWAddr) Value() (driver.Value, error) {
 
 // Service represents a service entry in service-discovery.
 type Service struct {
-	ID        uint              `json:"-" gorm:"primarykey"`
-	CreatedAt time.Time         `json:"-"`
-	Addr      SWAddr            `json:"address"`
-	Type      string            `json:"type"`
-	Geo       *geo.LocationData `json:"geo,omitempty" gorm:"embedded"`
-	Version   string            `json:"version,omitempty"`
-	LocalIPs  pq.StringArray    `json:"local_ips,omitempty" gorm:"type:text[]"`
-	Info      *VPNInfo          `json:"info,omitempty" gorm:"-"`
+	ID            uint              `json:"-" gorm:"primarykey"`
+	CreatedAt     time.Time         `json:"-"`
+	Addr          SWAddr            `json:"address"`
+	Type          string            `json:"type"`
+	Geo           *geo.LocationData `json:"geo,omitempty" gorm:"embedded"`
+	DisplayNodeIP bool              `json:"display_node_ip,omitempty"`
+	Version       string            `json:"version,omitempty"`
+	LocalIPs      pq.StringArray    `json:"local_ips,omitempty" gorm:"type:text[]"`
+	Info          *VPNInfo          `json:"info,omitempty" gorm:"-"`
 }
 
 // VPNInfo used for showing VPN metrics info, like latency, uptime and count of connections

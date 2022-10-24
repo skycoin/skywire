@@ -36,11 +36,12 @@ var (
 
 // Config configures the launcher.
 type Config struct {
-	VisorPK    cipher.PubKey
-	Apps       []appserver.AppConfig
-	ServerAddr string
-	BinPath    string
-	LocalPath  string
+	VisorPK       cipher.PubKey
+	Apps          []appserver.AppConfig
+	ServerAddr    string
+	BinPath       string
+	LocalPath     string
+	DisplayNodeIP bool
 }
 
 // Launcher is responsible for launching and keeping track of app states.

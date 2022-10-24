@@ -20,6 +20,7 @@ type Factory struct {
 	PK             cipher.PubKey
 	SK             cipher.SecKey
 	ServiceDisc    string // Address of service-discovery
+	DisplayNodeIP  bool
 	Client         *http.Client
 	ClientPublicIP string
 }
@@ -41,11 +42,12 @@ func (f *Factory) VisorUpdater(port uint16) Updater {
 	}
 
 	conf := servicedisc.Config{
-		Type:     servicedisc.ServiceTypeVisor,
-		PK:       f.PK,
-		SK:       f.SK,
-		Port:     port,
-		DiscAddr: f.ServiceDisc,
+		Type:          servicedisc.ServiceTypeVisor,
+		PK:            f.PK,
+		SK:            f.SK,
+		Port:          port,
+		DiscAddr:      f.ServiceDisc,
+		DisplayNodeIP: f.DisplayNodeIP,
 	}
 
 	return &serviceUpdater{

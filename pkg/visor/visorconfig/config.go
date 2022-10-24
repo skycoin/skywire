@@ -78,10 +78,11 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		RouteFinderTimeout: DefaultTimeout,
 	}
 	conf.Launcher = &Launcher{
-		ServiceDisc: services.ServiceDiscovery, //utilenv.ServiceDiscAddr,
-		Apps:        nil,
-		ServerAddr:  skyenv.AppSrvAddr,
-		BinPath:     skyenv.AppBinPath,
+		ServiceDisc:   services.ServiceDiscovery, //utilenv.ServiceDiscAddr,
+		Apps:          nil,
+		ServerAddr:    skyenv.AppSrvAddr,
+		BinPath:       skyenv.AppBinPath,
+		DisplayNodeIP: false,
 	}
 	conf.UptimeTracker = &UptimeTracker{
 		Addr: services.UptimeTracker, //utilenv.UptimeTrackerAddr,

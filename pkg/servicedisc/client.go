@@ -35,11 +35,12 @@ const (
 
 // Config configures the HTTPClient.
 type Config struct {
-	Type     string
-	PK       cipher.PubKey
-	SK       cipher.SecKey
-	Port     uint16
-	DiscAddr string
+	Type          string
+	PK            cipher.PubKey
+	SK            cipher.SecKey
+	Port          uint16
+	DiscAddr      string
+	DisplayNodeIP bool
 }
 
 // HTTPClient is responsible for interacting with the service-discovery
@@ -60,9 +61,10 @@ func NewClient(log logrus.FieldLogger, mLog *logging.MasterLogger, conf Config, 
 		mLog: mLog,
 		conf: conf,
 		entry: Service{
-			Addr:    NewSWAddr(conf.PK, conf.Port),
-			Type:    conf.Type,
-			Version: buildinfo.Version(),
+			Addr:          NewSWAddr(conf.PK, conf.Port),
+			Type:          conf.Type,
+			Version:       buildinfo.Version(),
+			DisplayNodeIP: conf.DisplayNodeIP,
 		},
 		client:         client,
 		clientPublicIP: clientPublicIP,

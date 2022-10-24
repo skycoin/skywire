@@ -81,10 +81,11 @@ type UptimeTracker struct {
 
 // Launcher configures the app appserver.
 type Launcher struct {
-	ServiceDisc string                `json:"service_discovery"`
-	Apps        []appserver.AppConfig `json:"apps"`
-	ServerAddr  string                `json:"server_addr"`
-	BinPath     string                `json:"bin_path"`
+	ServiceDisc   string                `json:"service_discovery"`
+	Apps          []appserver.AppConfig `json:"apps"`
+	ServerAddr    string                `json:"server_addr"`
+	BinPath       string                `json:"bin_path"`
+	DisplayNodeIP bool                  `json:"display_node_ip"`
 }
 
 // Flush flushes the config to file (if specified).
@@ -117,9 +118,10 @@ func (v1 *V1) UpdateAppAutostart(launch *launcher.Launcher, appName string, auto
 	}
 
 	launch.ResetConfig(launcher.Config{
-		VisorPK:    v1.PK,
-		Apps:       conf.Apps,
-		ServerAddr: conf.ServerAddr,
+		VisorPK:       v1.PK,
+		Apps:          conf.Apps,
+		ServerAddr:    conf.ServerAddr,
+		DisplayNodeIP: conf.DisplayNodeIP,
 	})
 	return v1.flush(v1)
 }
@@ -147,9 +149,10 @@ func (v1 *V1) UpdateAppArg(launch *launcher.Launcher, appName, argName string, v
 	}
 
 	launch.ResetConfig(launcher.Config{
-		VisorPK:    v1.PK,
-		Apps:       conf.Apps,
-		ServerAddr: conf.ServerAddr,
+		VisorPK:       v1.PK,
+		Apps:          conf.Apps,
+		ServerAddr:    conf.ServerAddr,
+		DisplayNodeIP: conf.DisplayNodeIP,
 	})
 
 	return v1.flush(v1)
