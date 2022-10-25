@@ -23,10 +23,8 @@ import (
 
 var (
 	filterTypes   []string
-	filterPubKeys cipher.PubKeys
+	filterPubKeys []string
 	showLogs      bool
-	tpID          transportID
-	tpPK          cipher.PubKey
 )
 
 func init() {
@@ -40,8 +38,6 @@ func init() {
 		rmTpCmd,
 		discTpCmd,
 	)
-	discTpCmd.Flags().Var(&tpID, "id", "if specified, obtains a single transport of given ID")
-	discTpCmd.Flags().Var(&tpPK, "pk", "if specified, obtains transports associated with given public key")
 }
 
 // RootCmd contains commands that interact with the skywire-visor
@@ -59,7 +55,10 @@ var tpCmd = &cobra.Command{
 }
 
 var lsTypesCmd = &cobra.Command{
-	Use: "type", Short: "Transport types used by the local visor",
+	Use:   "type",
+	Short: "Transport types used by the local visor",
+	Long: "\n	Transport types used by the local visor",
+	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, _ []string) {
 		types, err := clirpc.Client(cmd.Flags()).TransportTypes()
 		internal.Catch(cmd.Flags(), err)
@@ -68,28 +67,39 @@ var lsTypesCmd = &cobra.Command{
 }
 
 func init() {
-	lsTpCmd.Flags().StringSliceVarP(&filterTypes, "types", "t", filterTypes, "show transport(s) type(s) comma-separated\n")
-	lsTpCmd.Flags().VarP(&filterPubKeys, "pks", "p", "show transport(s) for public key(s) comma-separated")
+	lsTpCmd.Flags().StringSliceVarP(&filterTypes, "types", "t", filterTypes, "show transport(s) type(s) comma-separated")
+	lsTpCmd.Flags().StringSliceVarP(&filterPubKeys, "pks", "p", filterPubKeys, "show transport(s) for public key(s) comma-separated")
 	lsTpCmd.Flags().BoolVarP(&showLogs, "logs", "l", true, "show transport logs")
 }
 
 var lsTpCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "Available transports",
+	Long: "\n	Available transports\n\n	displays transports of the local visor",
 	Run: func(cmd *cobra.Command, _ []string) {
-		transports, err := clirpc.Client(cmd.Flags()).Transports(filterTypes, filterPubKeys, showLogs)
+		var pks cipher.PubKeys
+		if filterPubKeys != nil {
+			internal.Catch(cmd.Flags(), pks.Set(strings.Join(filterPubKeys, ",")))
+		}
+		transports, err := clirpc.Client(cmd.Flags()).Transports(filterTypes, pks, showLogs)
 		internal.Catch(cmd.Flags(), err)
 		PrintTransports(cmd.Flags(), transports...)
 	},
 }
 
+func init() {
+	idCmd.Flags().StringVarP(&tpID, "id", "i", "", "transport ID")
+}
+
 var idCmd = &cobra.Command{
-	Use:   "id <transport-id>",
+	Use:   "id (-i) <transport-id>",
 	Short: "Transport summary by id",
-	Args:  cobra.MinimumNArgs(1),
+	Long: "\n	Transport summary by id",
+	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
-		tpID := internal.ParseUUID(cmd.Flags(), "transport-id", args[0])
-		tp, err := clirpc.Client(cmd.Flags()).Transport(tpID)
+
+		tpid := internal.ParseUUID(cmd.Flags(), "transport-id", args[0])
+		tp, err := clirpc.Client(cmd.Flags()).Transport(tpid)
 		internal.Catch(cmd.Flags(), err)
 		PrintTransports(cmd.Flags(), tp)
 	},
@@ -98,27 +108,31 @@ var idCmd = &cobra.Command{
 var (
 	transportType string
 	timeout       time.Duration
+	rpk           string
 )
 
 func init() {
-	const (
-		typeFlagUsage = "type of transport to add; if unspecified, cli will attempt to establish a transport " +
-			"in the following order: skywire-tcp, stcpr, sudph, dmsg"
-		timeoutFlagUsage = "if specified, sets an operation timeout"
-	)
-
-	addTpCmd.Flags().StringVar(&transportType, "type", "", typeFlagUsage)
-	addTpCmd.Flags().DurationVarP(&timeout, "timeout", "t", 0, timeoutFlagUsage)
+	addTpCmd.Flags().StringVarP(&rpk, "rpk", "r", "", "remote public key.")
+	addTpCmd.Flags().StringVarP(&transportType, "type", "t", "", "type of transport to add.")
+	addTpCmd.Flags().DurationVarP(&timeout, "timeout", "o", 0, "if specified, sets an operation timeout")
 }
 
 var addTpCmd = &cobra.Command{
-	Use:   "add <remote-public-key>",
+	Use:   "add (-p) <remote-public-key>",
 	Short: "Add a transport",
-	Args:  cobra.MinimumNArgs(1),
+	Long: "\n	Add a transport\n	\n	If the transport type is unspecified,\n	the visor will attempt to establish a transport\n	in the following order: skywire-tcp, stcpr, sudph, dmsg",
+	Args:                  cobra.MinimumNArgs(1),
+	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
 
-		pk := internal.ParsePK(cmd.Flags(), "remote-public-key", args[0])
+		var pk cipher.PubKey
+
+		if rpk == "" {
+			pk = internal.ParsePK(cmd.Flags(), "remote-public-key", args[0])
+		} else {
+			internal.Catch(cmd.Flags(), pk.Set(rpk))
+		}
 
 		var tp *visor.TransportSummary
 		var err error
@@ -155,14 +169,32 @@ var addTpCmd = &cobra.Command{
 	},
 }
 
+func init() {
+	rmTpCmd.Flags().BoolVarP(&removeAll, "all", "a", false, "remove all transports")
+	rmTpCmd.Flags().StringVarP(&tpID, "id", "i", "", "remove transport of given ID")
+}
+
 var rmTpCmd = &cobra.Command{
-	Use:   "rm <transport-id>",
+	Use:   "rm ( -a || -i ) <transport-id>",
 	Short: "Remove transport(s) by id",
-	Args:  cobra.MinimumNArgs(1),
+	Long: "\n	Remove transport(s) by id",
+	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
-		tID := internal.ParseUUID(cmd.Flags(), "transport-id", args[0])
+		//TODO
+		//if removeAll {
+		//	var pks cipher.PubKeys
+		//	internal.Catch(cmd.Flags(), pks.Set(strings.Join(filterPubKeys, ",")))
+		//	tID, err := clirpc.Client(cmd.Flags()).Transports(filterTypes, pks, showLogs)
+		//	internal.Catch(cmd.Flags(), err)
+		//	internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).RemoveTransport(tID))
+		//} else {
+		if args[0] != "" {
+			tpID = args[0]
+		}
+		tID := internal.ParseUUID(cmd.Flags(), "transport-id", tpID)
 		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).RemoveTransport(tID))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+		//}
 	},
 }
 
@@ -213,30 +245,41 @@ func sortTransports(tps ...*visor.TransportSummary) {
 	})
 }
 
+var (
+	tpID string
+	tpPK string
+)
+
+func init() {
+	discTpCmd.Flags().StringVarP(&tpID, "id", "i", "", "obtain transport of given ID")
+	discTpCmd.Flags().StringVarP(&tpPK, "pk", "p", "", "obtain transports by public key")
+}
+
 var discTpCmd = &cobra.Command{
-	Use:   "disc (--id=<transport-id> | --pk=<edge-public-key>)",
-	Short: "Discover transport(s) by ID or public key",
+	Use:   "disc (--id=<transport-id> || --pk=<edge-public-key>)",
+	Short: "Discover remote transport(s)",
+	Long: "\n	Discover remote transport(s) by ID or public key",
+	DisableFlagsInUseLine: true,
 	Args: func(_ *cobra.Command, _ []string) error {
-		var (
-			nilID = uuid.UUID(tpID) == (uuid.UUID{})
-			nilPK = tpPK.Null()
-		)
-		if nilID && nilPK {
-			return errors.New("must specify --id flag or --pk flag")
+		if tpID == "" && tpPK == "" {
+			return errors.New("must specify either transport id or public key")
 		}
-		if !nilID && !nilPK {
-			return errors.New("cannot specify --id and --pk flag")
+		if tpID != "" && tpPK != "" {
+			return errors.New("cannot specify both transport id and public key")
 		}
 		return nil
 	},
 	Run: func(cmd *cobra.Command, _ []string) {
-
-		if rc := clirpc.Client(cmd.Flags()); tpPK.Null() {
-			entry, err := rc.DiscoverTransportByID(uuid.UUID(tpID))
+		var tppk cipher.PubKey
+		var tpid transportID
+		internal.Catch(cmd.Flags(), tpid.Set(tpID))
+		internal.Catch(cmd.Flags(), tppk.Set(tpPK))
+		if rc := clirpc.Client(cmd.Flags()); tppk.Null() {
+			entry, err := rc.DiscoverTransportByID(uuid.UUID(tpid))
 			internal.Catch(cmd.Flags(), err)
 			PrintTransportEntries(cmd.Flags(), entry)
 		} else {
-			entries, err := rc.DiscoverTransportsByPK(tpPK)
+			entries, err := rc.DiscoverTransportsByPK(tppk)
 			internal.Catch(cmd.Flags(), err)
 			PrintTransportEntries(cmd.Flags(), entries...)
 		}

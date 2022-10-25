@@ -42,11 +42,13 @@ var argCmd = &cobra.Command{
 var appCmd = &cobra.Command{
 	Use:   "app",
 	Short: "App settings",
+	Long:  "\n  App settings",
 }
 
 var lsAppsCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "List apps",
+	Long:  "\n  List apps",
 	Run: func(cmd *cobra.Command, _ []string) {
 		states, err := clirpc.Client(cmd.Flags()).Apps()
 		internal.Catch(cmd.Flags(), err)
@@ -92,6 +94,7 @@ var lsAppsCmd = &cobra.Command{
 var startAppCmd = &cobra.Command{
 	Use:   "start <name>",
 	Short: "Launch app",
+	Long:  "\n  Launch app",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).StartApp(args[0]))
@@ -102,6 +105,7 @@ var startAppCmd = &cobra.Command{
 var stopAppCmd = &cobra.Command{
 	Use:   "stop <name>",
 	Short: "Halt app",
+	Long:  "\n  Halt app",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).StopApp(args[0]))
@@ -131,6 +135,7 @@ var setAppAutostartCmd = &cobra.Command{
 var setAppKillswitchCmd = &cobra.Command{
 	Use:   "killswitch <name> (true|false)",
 	Short: "Set app killswitch",
+	Long:  "\n  Set app killswitch",
 	Args:  cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		var killswitch bool
@@ -150,6 +155,7 @@ var setAppKillswitchCmd = &cobra.Command{
 var setAppSecureCmd = &cobra.Command{
 	Use:   "secure <name> (true|false)",
 	Short: "Set app secure",
+	Long:  "\n  Set app secure",
 	Args:  cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		var secure bool
@@ -168,7 +174,8 @@ var setAppSecureCmd = &cobra.Command{
 
 var setAppPasscodeCmd = &cobra.Command{
 	Use:   "passcode <name> <passcode>",
-	Short: "Set app passcode.\n               \"remove\" is a special arg to remove the passcode",
+	Short: "Set app passcode",
+	Long:  "\n  Set app passcode.\n\r\n\r  \"remove\" is a special arg to remove the passcode",
 	Args:  cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		passcode := args[1]
@@ -182,7 +189,8 @@ var setAppPasscodeCmd = &cobra.Command{
 
 var setAppNetworkInterfaceCmd = &cobra.Command{
 	Use:   "netifc <name> <interface>",
-	Short: "Set app network interface.\n               \"remove\" is a special arg to remove the netifc",
+	Short: "Set app network interface",
+	Long:  "Set app network interface.\n\r\n\r  \"remove\" is a special arg to remove the netifc",
 	Args:  cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		netifc := args[1]
@@ -196,7 +204,8 @@ var setAppNetworkInterfaceCmd = &cobra.Command{
 
 var appLogsSinceCmd = &cobra.Command{
 	Use:   "log <name> <timestamp>",
-	Short: "Logs from app since RFC3339Nano-formatted timestamp.\n               \"beginning\" is a special timestamp to fetch all the logs",
+	Short: "Logs from app",
+	Long:  "\n  Logs from app since RFC3339Nano-formatted timestamp.\n\r\n\r  \"beginning\" is a special timestamp to fetch all the logs",
 	Args:  cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		var t time.Time

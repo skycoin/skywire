@@ -1,5 +1,5 @@
-//go:build linux && systray
-// +build linux,systray
+//go:build linux
+// +build linux
 
 package gui
 

@@ -15,10 +15,12 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 func init() {
+	RootCmd.PersistentFlags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
 	RootCmd.AddCommand(
 		vpnListCmd,
 		vpnUICmd,
@@ -145,28 +147,38 @@ var vpnStartCmd = &cobra.Command{
 		var pk cipher.PubKey
 		internal.Catch(cmd.Flags(), pk.Set(args[0]))
 		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).StartVPNClient(pk))
-		internal.PrintOutput(cmd.Flags(), "Starting.", "Starting.")
+		internal.PrintOutput(cmd.Flags(), nil, "Starting.")
 		startProcess := true
 		for startProcess {
 			time.Sleep(time.Second * 1)
-			internal.PrintOutput(cmd.Flags(), ".", ".")
+			internal.PrintOutput(cmd.Flags(), nil, ".")
 			states, err := clirpc.Client(cmd.Flags()).Apps()
 			internal.Catch(cmd.Flags(), err)
 
-			var b bytes.Buffer
-			w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
-			internal.Catch(cmd.Flags(), err)
+			type output struct {
+				CurrentIP string `json:"current_ip,omitempty"`
+				AppError  string `json:"app_error,omitempty"`
+			}
+
 			for _, state := range states {
 				if state.Name == "vpn-client" {
 					if state.Status == appserver.AppStatusRunning {
 						startProcess = false
-						internal.Catch(cmd.Flags(), w.Flush())
-						internal.PrintOutput(cmd.Flags(), "\nRunning!", fmt.Sprintln("\nRunning!"))
+						internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintln("\nRunning!"))
+						ip, err := visor.GetIP()
+						out := output{
+							CurrentIP: ip,
+						}
+						if err == nil {
+							internal.PrintOutput(cmd.Flags(), out, fmt.Sprintf("Your current IP: %s\n", ip))
+						}
 					}
 					if state.Status == appserver.AppStatusErrored {
 						startProcess = false
-						internal.Catch(cmd.Flags(), w.Flush())
-						internal.PrintOutput(cmd.Flags(), "\nError! > "+state.DetailedStatus, fmt.Sprintln("\nError! > "+state.DetailedStatus))
+						out := output{
+							AppError: state.DetailedStatus,
+						}
+						internal.PrintOutput(cmd.Flags(), out, fmt.Sprintln("\nError! > "+state.DetailedStatus))
 					}
 				}
 			}

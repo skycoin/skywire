@@ -57,6 +57,7 @@ type ManagedTransport struct {
 	rPK        cipher.PubKey
 	Entry      Entry
 	LogEntry   *LogEntry
+	logMx      sync.Mutex
 	logUpdates uint32
 
 	dc DiscoveryClient
@@ -425,11 +426,17 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 */
 
 func (mt *ManagedTransport) logSent(b uint64) {
+	mt.logMx.Lock()
+	defer mt.logMx.Unlock()
+
 	mt.LogEntry.AddSent(b)
 	atomic.AddUint32(&mt.logUpdates, 1)
 }
 
 func (mt *ManagedTransport) logRecv(b uint64) {
+	mt.logMx.Lock()
+	defer mt.logMx.Unlock()
+
 	mt.LogEntry.AddRecv(b)
 	atomic.AddUint32(&mt.logUpdates, 1)
 }
@@ -449,6 +456,10 @@ func (mt *ManagedTransport) recordLog() {
 	if !mt.logMod() {
 		return
 	}
+
+	mt.logMx.Lock()
+	defer mt.logMx.Unlock()
+
 	if err := mt.ls.Record(mt.Entry.ID, mt.LogEntry); err != nil {
 		mt.log.WithError(err).Warn("Failed to record log entry.")
 	}
