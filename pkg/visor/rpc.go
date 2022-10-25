@@ -222,6 +222,16 @@ func (r *RPC) SetAppError(in *SetAppErrorIn, _ *struct{}) (err error) {
 	return r.visor.SetAppError(in.AppName, in.Err)
 }
 
+// App returns App registered on the Visor.
+func (r *RPC) App(appName *string, reply *appserver.AppState) (err error) {
+	defer rpcutil.LogCall(r.log, "App", nil)(reply, &err)
+
+	app, err := r.visor.App(*appName)
+	*reply = *app
+
+	return err
+}
+
 // Apps returns list of Apps registered on the Visor.
 func (r *RPC) Apps(_ *struct{}, reply *[]*appserver.AppState) (err error) {
 	defer rpcutil.LogCall(r.log, "Apps", nil)(reply, &err)
