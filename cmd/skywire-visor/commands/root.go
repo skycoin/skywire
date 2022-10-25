@@ -1,3 +1,4 @@
+// Package commands cmd/skywire-visor/commands/root.go
 package commands
 
 import (

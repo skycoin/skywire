@@ -1,3 +1,4 @@
+// Package vpn internal/vpn/ip_generator.go
 package vpn
 
 import (

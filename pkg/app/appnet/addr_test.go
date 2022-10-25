@@ -1,3 +1,4 @@
+// Package appnet pkg/app/appnet/addr_test.go
 package appnet
 
 import (

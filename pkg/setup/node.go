@@ -1,3 +1,4 @@
+// Package setup pkg/setup/node.go
 package setup
 
 import (

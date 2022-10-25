@@ -1,3 +1,4 @@
+// Package appcommon pkg/app/appcommon/log_store.go
 package appcommon
 
 import (

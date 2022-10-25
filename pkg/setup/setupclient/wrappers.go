@@ -1,3 +1,4 @@
+// Package setupclient pkg/setup/setupclient/wrappers.go
 package setupclient
 
 import (

@@ -1,3 +1,4 @@
+// Package transport pkg/transport/errors.go
 package transport
 
 import "errors"

@@ -1,3 +1,4 @@
+// Package appserver pkg/app/appserver/errors.go
 package appserver
 
 // netErr implements `net.Error` to properly

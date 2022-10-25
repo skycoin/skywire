@@ -1,3 +1,4 @@
+// Package vpn internal/vpn/env.go
 package vpn
 
 import (

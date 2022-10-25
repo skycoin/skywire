@@ -1,3 +1,4 @@
+// Package appevent pkg/app/appevent/handshake.go
 package appevent
 
 import (

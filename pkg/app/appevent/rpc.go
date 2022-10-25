@@ -1,3 +1,4 @@
+// Package appevent pkg/app/appevent/rpc.go
 package appevent
 
 import (

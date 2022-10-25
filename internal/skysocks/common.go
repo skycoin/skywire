@@ -1,3 +1,4 @@
+// Package skysocks internal/skysocks/common.go
 package skysocks
 
 import (
