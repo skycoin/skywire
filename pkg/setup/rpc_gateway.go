@@ -1,3 +1,4 @@
+// Package setup pkg/setup/rpc_gateway.go
 package setup
 
 import (

@@ -1,3 +1,4 @@
+// Package vpn internal/vpn/handshake_status.go
 package vpn
 
 import "errors"

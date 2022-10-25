@@ -1,3 +1,4 @@
+// Package servicedisc pkg/servicedisc/query.go
 package servicedisc
 
 import (

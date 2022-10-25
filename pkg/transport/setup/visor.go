@@ -1,3 +1,4 @@
+// Package setup pkg/transport/setup/visor.go
 package setup
 
 import (

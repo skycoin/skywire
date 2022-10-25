@@ -1,3 +1,4 @@
+// Package visor pkg/visor/rpc_test.go
 package visor
 
 import (

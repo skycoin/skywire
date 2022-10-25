@@ -1,3 +1,4 @@
+// Package app pkg/app/client_test.go
 package app
 
 import (

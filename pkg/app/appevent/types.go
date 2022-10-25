@@ -1,3 +1,4 @@
+// Package appevent pkg/app/appevent/types.go
 package appevent
 
 // AllTypes returns all event types.

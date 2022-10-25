@@ -1,3 +1,4 @@
+// Package vpn internal/vpn/server.go
 package vpn
 
 import (

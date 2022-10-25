@@ -1,3 +1,4 @@
+// Package idmanager pkg/app/idmanager/manager_test.go
 package idmanager
 
 import (

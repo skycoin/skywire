@@ -1,3 +1,4 @@
+// Package servicedisc pkg/servicedisc/client.go
 package servicedisc
 
 import (

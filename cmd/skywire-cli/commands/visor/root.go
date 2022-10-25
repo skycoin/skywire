@@ -1,3 +1,4 @@
+// Package clivisor cmd/skywire-cli/commands/visor/root.go
 package clivisor
 
 import (

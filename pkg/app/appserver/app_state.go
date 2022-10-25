@@ -1,3 +1,4 @@
+// Package appserver pkg/app/appserver/app_state.go
 package appserver
 
 import "github.com/skycoin/skywire/pkg/routing"

@@ -1,4 +1,4 @@
-/*Package packetfilter filter packets*/
+// Package packetfilter internal/packetfilter/address-filter.go
 package packetfilter
 
 import (

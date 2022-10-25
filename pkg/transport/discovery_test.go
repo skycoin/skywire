@@ -1,3 +1,4 @@
+// Package transport_test pkg/transport/discovery_test.go
 package transport_test
 
 import (

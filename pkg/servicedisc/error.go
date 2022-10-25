@@ -1,3 +1,4 @@
+// Package servicedisc pkg/servicedisc/error.go
 package servicedisc
 
 import (
