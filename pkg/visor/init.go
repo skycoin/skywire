@@ -258,6 +258,7 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 		factory.PK = v.conf.PK
 		factory.SK = v.conf.SK
 		factory.ServiceDisc = conf.ServiceDisc
+		factory.DisplayNodeIP = conf.DisplayNodeIP
 		factory.Client = httpC
 		// only needed for dmsghttp
 		pIP, err := getPublicIP(v, conf.ServiceDisc)
@@ -709,11 +710,12 @@ func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	// Prepare launcher.
 	launchConf := launcher.Config{
-		VisorPK:    v.conf.PK,
-		Apps:       conf.Apps,
-		ServerAddr: conf.ServerAddr,
-		BinPath:    conf.BinPath,
-		LocalPath:  v.conf.LocalPath,
+		VisorPK:       v.conf.PK,
+		Apps:          conf.Apps,
+		ServerAddr:    conf.ServerAddr,
+		BinPath:       conf.BinPath,
+		LocalPath:     v.conf.LocalPath,
+		DisplayNodeIP: conf.DisplayNodeIP,
 	}
 
 	launchLog := v.MasterLogger().PackageLogger("launcher")
@@ -1081,11 +1083,12 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 	// advertising oneself and requires things like port that are not used
 	// in connecting to services
 	conf := servicedisc.Config{
-		Type:     servicedisc.ServiceTypeVisor,
-		PK:       v.conf.PK,
-		SK:       v.conf.SK,
-		Port:     uint16(0),
-		DiscAddr: serviceDisc,
+		Type:          servicedisc.ServiceTypeVisor,
+		PK:            v.conf.PK,
+		SK:            v.conf.SK,
+		Port:          uint16(0),
+		DiscAddr:      serviceDisc,
+		DisplayNodeIP: v.conf.Launcher.DisplayNodeIP,
 	}
 	// only needed for dmsghttp
 	pIP, err := getPublicIP(v, serviceDisc)
@@ -1293,7 +1296,7 @@ func getPublicIP(v *Visor, service string) (string, error) {
 		return pIP, fmt.Errorf("provided URL is invalid: %w", err)
 	}
 
-	pIP, err = getIP()
+	pIP, err = GetIP()
 	if err != nil {
 		<-v.stunReady
 		if v.stunClient.PublicIP != nil {
@@ -1313,7 +1316,8 @@ type ipAPI struct {
 	PublicIP string `json:"ip_address"`
 }
 
-func getIP() (string, error) {
+// GetIP used for getting current IP of visor
+func GetIP() (string, error) {
 	req, err := http.Get("http://ip.skycoin.com")
 	if err != nil {
 		return "", err

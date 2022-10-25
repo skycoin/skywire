@@ -89,6 +89,8 @@ type API interface {
 	SetPersistentTransports([]transport.PersistentTransports) error
 	GetLogRotationInterval() (visorconfig.Duration, error)
 	SetLogRotationInterval(visorconfig.Duration) error
+
+	IsDMSGClientReady() (bool, error)
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -656,10 +658,11 @@ func (v *Visor) VPNServers(version, country string) ([]servicedisc.Service, erro
 	vLog.SetLevel(logrus.InfoLevel)
 
 	sdClient := servicedisc.NewClient(log, vLog, servicedisc.Config{
-		Type:     servicedisc.ServiceTypeVPN,
-		PK:       v.conf.PK,
-		SK:       v.conf.SK,
-		DiscAddr: v.conf.Launcher.ServiceDisc,
+		Type:          servicedisc.ServiceTypeVPN,
+		PK:            v.conf.PK,
+		SK:            v.conf.SK,
+		DiscAddr:      v.conf.Launcher.ServiceDisc,
+		DisplayNodeIP: v.conf.Launcher.DisplayNodeIP,
 	}, &http.Client{Timeout: time.Duration(20) * time.Second}, "")
 	vpnServers, err := sdClient.Services(context.Background(), 0, version, country)
 	if err != nil {
@@ -910,4 +913,15 @@ func (v *Visor) GetVPNClientAddress() string {
 		}
 	}
 	return ""
+}
+
+// IsDMSGClientReady return availability of dsmg client
+func (v *Visor) IsDMSGClientReady() (bool, error) {
+	if v.isDTMReady() {
+		dmsgTracker, _ := v.dtm.Get(v.conf.PK) //nolint
+		if dmsgTracker.ServerPK.Hex()[:5] != "00000" {
+			return true, nil
+		}
+	}
+	return false, errors.New("dmsg client is not ready")
 }
