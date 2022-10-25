@@ -1,3 +1,4 @@
+// Package clivpn cmd/skywire-cli/commands/vpn/vvpn.go
 package clivpn
 
 import (

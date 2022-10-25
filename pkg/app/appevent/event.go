@@ -1,3 +1,4 @@
+// Package appevent pkg/app/appevent/event.go
 package appevent
 
 import (

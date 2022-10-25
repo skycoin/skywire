@@ -1,3 +1,4 @@
+// Package cliconfig cmd/skywire-cli/commands/config/private.go
 package cliconfig
 
 import (

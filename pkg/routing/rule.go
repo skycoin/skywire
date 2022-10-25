@@ -1,3 +1,4 @@
+// Package routing pkg/routing/rule.go
 package routing
 
 import (

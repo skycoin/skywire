@@ -1,3 +1,4 @@
+// Package servicedisc pkg/servicedisc/types_test.go
 package servicedisc
 
 import (

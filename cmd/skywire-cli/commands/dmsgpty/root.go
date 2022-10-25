@@ -1,3 +1,4 @@
+// Package clidmsgpty cmd/skywire-cli/commands/dmsgpty/root.go
 package clidmsgpty
 
 import (
