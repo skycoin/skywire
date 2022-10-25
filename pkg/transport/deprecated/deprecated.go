@@ -1,4 +1,4 @@
-/*Package deprecated contains transport status*/
+// Package deprecated pkg/transport/deprecated/deprecated.go
 package deprecated
 
 import (

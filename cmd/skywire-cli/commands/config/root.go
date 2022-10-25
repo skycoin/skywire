@@ -1,3 +1,4 @@
+// Package cliconfig cmd/skywire-cli/commands/config/root.go
 package cliconfig
 
 import (

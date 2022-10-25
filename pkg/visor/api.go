@@ -1,3 +1,4 @@
+// Package visor pkg/visor/api.go
 package visor
 
 import (

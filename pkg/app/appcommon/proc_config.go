@@ -1,3 +1,4 @@
+// Package appcommon pkg/app/appcommon/proc_config.go
 package appcommon
 
 import (

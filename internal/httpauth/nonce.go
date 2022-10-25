@@ -1,3 +1,4 @@
+// Package httpauth internal/httpauth/nonce.go
 package httpauth
 
 import (

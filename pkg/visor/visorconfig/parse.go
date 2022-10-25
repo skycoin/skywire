@@ -1,3 +1,4 @@
+// Package visorconfig pkg/visor/visorconfig/parse.go
 package visorconfig
 
 import (

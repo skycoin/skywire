@@ -1,3 +1,4 @@
+// Package network pkg/transport/network/network.go
 package network
 
 import (

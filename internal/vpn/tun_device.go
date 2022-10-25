@@ -1,3 +1,4 @@
+// Package vpn internal/vpn/tun_device.go
 package vpn
 
 import "io"

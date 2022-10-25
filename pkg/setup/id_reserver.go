@@ -1,3 +1,4 @@
+// Package setup pkg/setup/id_reserver.go
 package setup
 
 import (

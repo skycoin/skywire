@@ -1,3 +1,4 @@
+// Package vpn internal/vpn/server_config.go
 package vpn
 
 // ServerConfig is a configuration for VPN server.

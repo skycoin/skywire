@@ -1,3 +1,4 @@
+// Package appnet pkg/app/appnet/errors.go
 package appnet
 
 import (

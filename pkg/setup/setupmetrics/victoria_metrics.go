@@ -1,3 +1,4 @@
+// Package setupmetrics pkg/setup/setupmetrics/victoria_metrics.go
 package setupmetrics
 
 import (
