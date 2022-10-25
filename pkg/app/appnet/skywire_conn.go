@@ -1,3 +1,4 @@
+// Package appnet pkg/app/appnet/skywire_conn.go
 package appnet
 
 import (

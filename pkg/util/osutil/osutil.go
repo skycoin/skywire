@@ -1,3 +1,4 @@
+// Package osutil pkg/util/osutil/osutil.go
 package osutil
 
 import (

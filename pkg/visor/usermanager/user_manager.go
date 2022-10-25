@@ -1,3 +1,4 @@
+// Package usermanager pkg/visor/usermanager/user_manager.go
 package usermanager
 
 import (

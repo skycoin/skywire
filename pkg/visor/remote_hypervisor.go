@@ -1,3 +1,4 @@
+// Package visor pkg/visor/remote_hypervisor.go
 package visor
 
 import (

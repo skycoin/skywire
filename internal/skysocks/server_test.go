@@ -1,3 +1,4 @@
+// Package skysocks internal/skysocks/server_test.go
 package skysocks
 
 import (

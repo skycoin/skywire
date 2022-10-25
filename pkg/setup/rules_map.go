@@ -1,3 +1,4 @@
+// Package setup pkg/setup/rules_map.go
 package setup
 
 import (

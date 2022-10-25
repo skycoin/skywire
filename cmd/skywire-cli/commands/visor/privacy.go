@@ -1,9 +1,6 @@
 package clivisor
 
 import (
-<<<<<<< HEAD
-	"github.com/spf13/cobra"
-=======
 	"encoding/json"
 	"fmt"
 
@@ -13,7 +10,6 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/visor/privacyconfig"
->>>>>>> develop
 )
 
 var (
@@ -41,32 +37,25 @@ var setPrivacyCmd = &cobra.Command{
 	Short: "set privacy.json via rpc",
 	Long:  "configure privacy settings",
 	Run: func(cmd *cobra.Command, args []string) {
-		//client := clirpc.Client(cmd.Flags())
+		client := clirpc.Client(cmd.Flags())
 
-		//cAddr, err := coincipher.DecodeBase58Address(rewardAddress)
-		//if err != nil {
-		//	internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid address specified: %v", err))
-		//}
+		cAddr, err := coincipher.DecodeBase58Address(rewardAddress)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid address specified: %v", err))
+		}
 
-<<<<<<< HEAD
-		//		pConfig, err := client.SetPrivacy(&privacyconfig.Privacy{DisplayNodeIP: displayNodeIP, RewardAddress: cAddr.String()})
-		//		if err != nil {
-		//			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
-		//		}
-=======
 		pConfig, err := client.SetPrivacy(&privacyconfig.Privacy{RewardAddress: cAddr.String()})
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 		}
->>>>>>> develop
 
-		//		j, err := json.MarshalIndent(pConfig, "", "\t")
-		//		if err != nil {
-		//			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Could not marshal json. err=%v", err))
-		//		}
-		//		output := fmt.Sprintf("Privacy settings updated to:\n %v\n", string(j))
+		j, err := json.MarshalIndent(pConfig, "", "\t")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Could not marshal json. err=%v", err))
+		}
+		output := fmt.Sprintf("Privacy settings updated to:\n %v\n", string(j))
 
-		//		internal.PrintOutput(cmd.Flags(), pConfig, output)
+		internal.PrintOutput(cmd.Flags(), pConfig, output)
 	},
 }
 
@@ -75,14 +64,14 @@ var getPrivacyCmd = &cobra.Command{
 	Short: "read privacy setting from file",
 	Long:  "configure privacy settings",
 	Run: func(cmd *cobra.Command, args []string) {
-		//pConfig, err := clirpc.Client(cmd.Flags()).GetPrivacy()
-		//if err != nil {
-		//	internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
-		//}
-		//j, err := json.MarshalIndent(pConfig, "", "\t")
-		//if err != nil {
-		//	internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Could not marshal json. err=%v", err))
-		//}
-		//internal.PrintOutput(cmd.Flags(), pConfig, string(j)+"\n")
+		pConfig, err := clirpc.Client(cmd.Flags()).GetPrivacy()
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
+		}
+		j, err := json.MarshalIndent(pConfig, "", "\t")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Could not marshal json. err=%v", err))
+		}
+		internal.PrintOutput(cmd.Flags(), pConfig, string(j)+"\n")
 	},
 }

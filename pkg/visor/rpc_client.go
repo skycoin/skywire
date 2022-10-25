@@ -1,3 +1,4 @@
+// Package visor pkg/visor/rpc_client.go
 package visor
 
 import (
