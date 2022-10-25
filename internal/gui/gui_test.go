@@ -1,3 +1,4 @@
+// Package gui internal/gui/gui_test.go
 package gui
 
 import (

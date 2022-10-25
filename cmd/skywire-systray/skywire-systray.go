@@ -1,3 +1,4 @@
+// /* cmd/skywire-systray/skywire-systray.go
 /*
 skywire systray
 */

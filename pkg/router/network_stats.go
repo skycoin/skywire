@@ -1,3 +1,4 @@
+// Package router pkg/router/network_stats.go
 package router
 
 import (

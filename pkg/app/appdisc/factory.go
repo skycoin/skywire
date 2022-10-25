@@ -1,3 +1,4 @@
+// Package appdisc pkg/app/appdisc/factory.go
 package appdisc
 
 import (

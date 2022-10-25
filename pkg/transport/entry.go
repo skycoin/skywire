@@ -1,3 +1,4 @@
+// Package transport pkg/transport/entry.go
 package transport
 
 import (

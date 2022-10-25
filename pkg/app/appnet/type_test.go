@@ -1,3 +1,4 @@
+// Package appnet pkg/app/appnet/type_test.go
 package appnet
 
 import (

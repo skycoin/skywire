@@ -1,3 +1,4 @@
+// Package commands cmd/skywire-visor/commands/systray.go
 package commands
 
 import (

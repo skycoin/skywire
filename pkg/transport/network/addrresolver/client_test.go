@@ -1,3 +1,4 @@
+// Package addrresolver pkg/transport/network/addrresolver/client_test.go
 package addrresolver
 
 import (

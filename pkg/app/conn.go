@@ -1,3 +1,4 @@
+// Package app pkg/app/conn.go
 package app
 
 import (

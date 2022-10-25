@@ -1,3 +1,4 @@
+// Package setup pkg/setup/node_test.go
 package setup
 
 import (

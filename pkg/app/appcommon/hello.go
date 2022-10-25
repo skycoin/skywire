@@ -1,3 +1,4 @@
+// Package appcommon pkg/app/appcommon/hello.go
 package appcommon
 
 import (

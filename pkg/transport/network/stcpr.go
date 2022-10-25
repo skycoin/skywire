@@ -1,3 +1,4 @@
+// Package network pkg/transport/network/stcpr.go
 package network
 
 import (

@@ -1,3 +1,4 @@
+// Package vpn internal/vpn/const.go
 package vpn
 
 const (
