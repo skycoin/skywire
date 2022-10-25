@@ -1,3 +1,4 @@
+// Package appserver pkg/app/appserver/stderr.go
 package appserver
 
 import (

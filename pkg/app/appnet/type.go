@@ -1,3 +1,4 @@
+// Package appnet pkg/app/appnet/type.go
 package appnet
 
 // Type represents the network type.
