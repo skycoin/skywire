@@ -121,8 +121,12 @@ func (le *LogEntry) GobDecode(b []byte) error {
 	if err := dec.Decode(&sb); err != nil {
 		return err
 	}
-	atomic.StoreUint64(le.RecvBytes, rb)
-	atomic.StoreUint64(le.SentBytes, sb)
+	if le.RecvBytes != nil {
+		atomic.StoreUint64(le.RecvBytes, rb)
+	}
+	if le.SentBytes != nil {
+		atomic.StoreUint64(le.SentBytes, sb)
+	}
 	return nil
 }
 

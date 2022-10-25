@@ -71,14 +71,16 @@ type CLIOutput struct {
 func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output interface{}) {
 	isJSON, _ := cmdFlags.GetBool(JSONString) //nolint:errcheck
 	if isJSON {
-		outputJSON := CLIOutput{
-			Output: outputJSON,
+		if outputJSON != nil {
+			outputJSON := CLIOutput{
+				Output: outputJSON,
+			}
+			b, err := json.MarshalIndent(outputJSON, "", "  ")
+			if err != nil {
+				fmt.Println(err)
+			}
+			fmt.Print(string(b) + "\n")
 		}
-		b, err := json.MarshalIndent(outputJSON, "", "  ")
-		if err != nil {
-			fmt.Println(err)
-		}
-		fmt.Print(string(b) + "\n")
 		return
 	}
 	if output != "" {

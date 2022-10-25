@@ -16,6 +16,7 @@ func init() {
 var shutdownCmd = &cobra.Command{
 	Use:   "halt",
 	Short: "Stop a running visor",
+	Long:  "\n  Stop a running visor",
 	Run: func(cmd *cobra.Command, args []string) {
 		clirpc.Client(cmd.Flags()).Shutdown() //nolint
 		fmt.Println("Visor was shut down")

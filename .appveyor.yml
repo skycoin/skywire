@@ -48,7 +48,6 @@ for:
 
     build_script:
       - make build
-      - make build-systray
 
   - # MacOS
     skip_tags: true
@@ -89,7 +88,6 @@ for:
 
     build_script:
       - make build-windows-appveyor
-      - make build-systray-windows-appveyor
 
 
   - # Release (Linux)

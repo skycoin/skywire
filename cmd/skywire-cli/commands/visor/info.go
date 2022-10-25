@@ -7,7 +7,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -25,11 +24,6 @@ func init() {
 	pkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
 	pkCmd.Flags().BoolVarP(&web, "http", "w", false, "serve public key via http")
 	pkCmd.Flags().StringVarP(&webPort, "prt", "x", "7998", "serve public key via http")
-	RootCmd.AddCommand(hvpkCmd)
-	hvpkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
-	hvpkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
-	hvpkCmd.Flags().BoolVarP(&web, "http", "w", false, "serve public key via http")
-	RootCmd.AddCommand(chvpkCmd)
 	RootCmd.AddCommand(summaryCmd)
 	RootCmd.AddCommand(buildInfoCmd)
 }
@@ -37,6 +31,7 @@ func init() {
 var pkCmd = &cobra.Command{
 	Use:   "pk",
 	Short: "Public key of the visor",
+	Long:  "\n  Public key of the visor",
 	Run: func(cmd *cobra.Command, _ []string) {
 		if pkg {
 			path = visorconfig.Pkgpath
@@ -66,50 +61,10 @@ var pkCmd = &cobra.Command{
 	},
 }
 
-var hvpkCmd = &cobra.Command{
-	Use:   "hvpk",
-	Short: "Public key of remote hypervisor",
-	Run: func(cmd *cobra.Command, _ []string) {
-		var hypervisors []cipher.PubKey
-
-		if pkg {
-			path = visorconfig.Pkgpath
-		}
-
-		if path != "" {
-			conf, err := visorconfig.ReadFile(path)
-			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to read config: %v", err))
-			}
-			hypervisors = conf.Hypervisors
-		} else {
-			client := clirpc.Client(cmd.Flags())
-			overview, err := client.Overview()
-			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
-			}
-			hypervisors = overview.Hypervisors
-		}
-		internal.PrintOutput(cmd.Flags(), hypervisors, fmt.Sprintf("%v\n", hypervisors))
-	},
-}
-
-var chvpkCmd = &cobra.Command{
-	Use:   "chvpk",
-	Short: "Public key of connected hypervisors",
-	Run: func(cmd *cobra.Command, _ []string) {
-		client := clirpc.Client(cmd.Flags())
-		overview, err := client.Overview()
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
-		}
-		internal.PrintOutput(cmd.Flags(), overview.ConnectedHypervisor, fmt.Sprintf("%v\n", overview.ConnectedHypervisor))
-	},
-}
-
 var summaryCmd = &cobra.Command{
 	Use:   "info",
 	Short: "Summary of visor info",
+	Long:  "\n  Summary of visor info",
 	Run: func(cmd *cobra.Command, _ []string) {
 		summary, err := clirpc.Client(cmd.Flags()).Summary()
 		if err != nil {
@@ -147,8 +102,9 @@ var summaryCmd = &cobra.Command{
 }
 
 var buildInfoCmd = &cobra.Command{
-	Use:   "version",
+	Use:   "ver",
 	Short: "Version and build info",
+	Long:  "\n  Version and build info",
 	Run: func(cmd *cobra.Command, _ []string) {
 		client := clirpc.Client(cmd.Flags())
 		overview, err := client.Overview()
