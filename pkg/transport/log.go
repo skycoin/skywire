@@ -96,12 +96,14 @@ func (le *LogEntry) GobEncode() ([]byte, error) {
 	var b bytes.Buffer
 	enc := gob.NewEncoder(&b)
 	if le.RecvBytes != nil {
-		if err := enc.Encode(le.RecvBytes); err != nil {
+		rb := atomic.LoadUint64(le.RecvBytes)
+		if err := enc.Encode(rb); err != nil {
 			return nil, err
 		}
 	}
 	if le.SentBytes != nil {
-		if err := enc.Encode(le.SentBytes); err != nil {
+		sb := atomic.LoadUint64(le.SentBytes)
+		if err := enc.Encode(sb); err != nil {
 			return nil, err
 		}
 	}
