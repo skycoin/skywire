@@ -1,3 +1,4 @@
+// Package app pkg/app/conn_test.go
 package app
 
 import (

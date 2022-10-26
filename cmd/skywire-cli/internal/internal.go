@@ -21,12 +21,12 @@ var JSONString = "json"
 // Catch handles errors for skywire-cli commands packages
 func Catch(cmdFlags *pflag.FlagSet, err error) {
 	if err != nil {
-		PrintError(cmdFlags, err)
+		PrintFatalError(cmdFlags, err)
 	}
 }
 
-// PrintError prints errors for skywire-cli commands packages
-func PrintError(cmdFlags *pflag.FlagSet, err error) {
+// PrintFatalError prints errors for skywire-cli commands packages
+func PrintFatalError(cmdFlags *pflag.FlagSet, err error) {
 	isJSON, _ := cmdFlags.GetBool(JSONString) //nolint:errcheck
 	if isJSON {
 		errJSON := CLIOutput{
@@ -47,7 +47,7 @@ func ParsePK(cmdFlags *pflag.FlagSet, name, v string) cipher.PubKey {
 	var pk cipher.PubKey
 	err := pk.Set(v)
 	if err != nil {
-		PrintError(cmdFlags, fmt.Errorf("failed to parse <%s>: %v", name, err))
+		PrintFatalError(cmdFlags, fmt.Errorf("failed to parse <%s>: %v", name, err))
 	}
 	return pk
 }
@@ -56,29 +56,31 @@ func ParsePK(cmdFlags *pflag.FlagSet, name, v string) cipher.PubKey {
 func ParseUUID(cmdFlags *pflag.FlagSet, name, v string) uuid.UUID {
 	id, err := uuid.Parse(v)
 	if err != nil {
-		PrintError(cmdFlags, fmt.Errorf("failed to parse <%s>: %v", name, err))
+		PrintFatalError(cmdFlags, fmt.Errorf("failed to parse <%s>: %v", name, err))
 	}
 	return id
 }
 
-// CLIOutput ss
+// CLIOutput is used to print the cli output in json
 type CLIOutput struct {
 	Output interface{} `json:"output,omitempty"`
 	Err    string      `json:"error,omitempty"`
 }
 
-// PrintOutput ss
+// PrintOutput prints either the normal output or the json output as per the global `--json` flag
 func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output interface{}) {
 	isJSON, _ := cmdFlags.GetBool(JSONString) //nolint:errcheck
 	if isJSON {
-		outputJSON := CLIOutput{
-			Output: outputJSON,
+		if outputJSON != nil {
+			outputJSON := CLIOutput{
+				Output: outputJSON,
+			}
+			b, err := json.MarshalIndent(outputJSON, "", "  ")
+			if err != nil {
+				fmt.Println(err)
+			}
+			fmt.Print(string(b) + "\n")
 		}
-		b, err := json.MarshalIndent(outputJSON, "", "  ")
-		if err != nil {
-			fmt.Println(err)
-		}
-		fmt.Print(string(b) + "\n")
 		return
 	}
 	if output != "" {

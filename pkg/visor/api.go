@@ -1,3 +1,4 @@
+// Package visor pkg/visor/api.go
 package visor
 
 import (
@@ -27,6 +28,8 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
+	"github.com/skycoin/skywire/pkg/visor/privacyconfig"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // API represents visor API.
@@ -36,11 +39,13 @@ type API interface {
 
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
+	SetPrivacy(*privacyconfig.Privacy) (*privacyconfig.Privacy, error)
+	GetPrivacy() (*privacyconfig.Privacy, error)
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
 	StopApp(appName string) error
-	StartVPNClient(pubkey string) error
+	StartVPNClient(pk cipher.PubKey) error
 	StopVPNClient(appName string) error
 	SetAppDetailedStatus(appName, state string) error
 	SetAppError(appName, stateErr string) error
@@ -84,6 +89,10 @@ type API interface {
 
 	GetPersistentTransports() ([]transport.PersistentTransports, error)
 	SetPersistentTransports([]transport.PersistentTransports) error
+	GetLogRotationInterval() (visorconfig.Duration, error)
+	SetLogRotationInterval(visorconfig.Duration) error
+
+	IsDMSGClientReady() (bool, error)
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -303,6 +312,26 @@ func (v *Visor) Uptime() (float64, error) {
 	return time.Since(v.startedAt).Seconds(), nil
 }
 
+// SetPrivacy implements API.
+func (v *Visor) SetPrivacy(p *privacyconfig.Privacy) (*privacyconfig.Privacy, error) {
+	path := v.conf.LocalPath + "/" + skyenv.PrivFile
+	pConfig, err := privacyconfig.SetReward(p, path)
+	if err != nil {
+		return nil, err
+	}
+	return pConfig, nil
+}
+
+// GetPrivacy implements API.
+func (v *Visor) GetPrivacy() (*privacyconfig.Privacy, error) {
+	path := v.conf.LocalPath + "/" + skyenv.PrivFile
+	pConfig, err := privacyconfig.GetReward(path)
+	if err != nil {
+		return nil, err
+	}
+	return pConfig, nil
+}
+
 // Apps implements API.
 func (v *Visor) Apps() ([]*appserver.AppState, error) {
 	return v.appL.AppStates(), nil
@@ -362,39 +391,41 @@ func (v *Visor) StopApp(appName string) error {
 }
 
 // StartVPNClient implements API.
-func (v *Visor) StartVPNClient(pubkey string) error {
+func (v *Visor) StartVPNClient(pk cipher.PubKey) error {
 	var envs []string
 	var err error
 	if v.tpM == nil {
 		return ErrTrpMangerNotAvailable
 	}
-	if len(v.conf.Launcher.Apps) > 0 {
-		v.conf.Launcher.Apps[0].Args = []string{"-srv", pubkey}
-	} else {
+
+	if len(v.conf.Launcher.Apps) == 0 {
 		return errors.New("no vpn app configuration found")
 	}
-	maker := vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.STCPRRemoteAddrs())
-	envs, err = maker()
-	if err != nil {
-		return err
-	}
 
-	if v.GetVPNClientAddress() == "" {
-		return errors.New("VPN server pub key is missing")
-	}
-	var pk cipher.PubKey
-	err = pk.Set(pubkey)
-	if err != nil {
-		return err
-	}
+	for index, app := range v.conf.Launcher.Apps {
+		if app.Name == skyenv.VPNClientName {
+			// we set the args in memory and pass it in `v.appL.StartApp`
+			// unlike the api method `StartApp` where `nil` is passed in `v.appL.StartApp` as args
+			// but the args are set in the config
+			v.conf.Launcher.Apps[index].Args = []string{"-srv", pk.Hex()}
+			maker := vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.STCPRRemoteAddrs())
+			envs, err = maker()
+			if err != nil {
+				return err
+			}
 
-	getRouteSetupHooks(context.Background(), v, v.log)
-	// check process manager availability
-	if v.procM != nil {
-		return v.appL.StartApp(skyenv.VPNClientName, v.conf.Launcher.Apps[0].Args, envs)
-		//		return v.appL.StartApp(skyenv.VPNClientName, v.conf.Launcher.Apps[appindex].Args, envs)
+			if v.GetVPNClientAddress() == "" {
+				return errors.New("VPN server pub key is missing")
+			}
+
+			// check process manager availability
+			if v.procM != nil {
+				return v.appL.StartApp(skyenv.VPNClientName, v.conf.Launcher.Apps[index].Args, envs)
+			}
+			return ErrProcNotAvailable
+		}
 	}
-	return ErrProcNotAvailable
+	return errors.New("no vpn app configuration found")
 }
 
 // StopVPNClient implements API.
@@ -490,7 +521,7 @@ func (v *Visor) SetAppNetworkInterface(appName, netifc string) error {
 		return fmt.Errorf("app %s is not allowed to set network interface", appName)
 	}
 
-	v.log.Infof("Changing %s network interface to %q", appName, netifc)
+	v.log.Infof("Changing %s network interface to %v", appName, netifc)
 
 	const (
 		netifcArgName = "--netifc"
@@ -511,7 +542,7 @@ func (v *Visor) SetAppKillswitch(appName string, killswitch bool) error {
 		return fmt.Errorf("app %s is not allowed to set killswitch", appName)
 	}
 
-	v.log.Infof("Setting %s killswitch to %q", appName, killswitch)
+	v.log.Infof("Setting %s killswitch to %v", appName, killswitch)
 
 	const (
 		killSwitchArg = "--killswitch"
@@ -532,7 +563,7 @@ func (v *Visor) SetAppSecure(appName string, isSecure bool) error {
 		return fmt.Errorf("app %s is not allowed to change 'secure' parameter", appName)
 	}
 
-	v.log.Infof("Setting %s secure to %q", appName, isSecure)
+	v.log.Infof("Setting %s secure to %v", appName, isSecure)
 
 	const (
 		secureArgName = "--secure"
@@ -625,15 +656,16 @@ func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.Connection
 // VPNServers gets available public VPN server from service discovery URL
 func (v *Visor) VPNServers(version, country string) ([]servicedisc.Service, error) {
 	log := logging.MustGetLogger("vpnservers")
-	vlog := logging.NewMasterLogger()
-	vlog.SetLevel(logrus.InfoLevel)
+	vLog := logging.NewMasterLogger()
+	vLog.SetLevel(logrus.InfoLevel)
 
-	sdClient := servicedisc.NewClient(log, vlog, servicedisc.Config{
-		Type:     servicedisc.ServiceTypeVPN,
-		PK:       v.conf.PK,
-		SK:       v.conf.SK,
-		DiscAddr: v.conf.Launcher.ServiceDisc,
-	}, &http.Client{Timeout: time.Duration(1) * time.Second}, "")
+	sdClient := servicedisc.NewClient(log, vLog, servicedisc.Config{
+		Type:          servicedisc.ServiceTypeVPN,
+		PK:            v.conf.PK,
+		SK:            v.conf.SK,
+		DiscAddr:      v.conf.Launcher.ServiceDisc,
+		DisplayNodeIP: v.conf.Launcher.DisplayNodeIP,
+	}, &http.Client{Timeout: time.Duration(20) * time.Second}, "")
 	vpnServers, err := sdClient.Services(context.Background(), 0, version, country)
 	if err != nil {
 		v.log.Error("Error getting public vpn servers: ", err)
@@ -851,9 +883,19 @@ func (v *Visor) SetPersistentTransports(pTps []transport.PersistentTransports) e
 	return v.conf.UpdatePersistentTransports(pTps)
 }
 
-// GetPersistentTransports sets min_hops routing config of visor
+// GetPersistentTransports gets min_hops routing config of visor
 func (v *Visor) GetPersistentTransports() ([]transport.PersistentTransports, error) {
 	return v.conf.GetPersistentTransports()
+}
+
+// SetLogRotationInterval sets log_rotation_interval config of visor
+func (v *Visor) SetLogRotationInterval(d visorconfig.Duration) error {
+	return v.conf.UpdateLogRotationInterval(d)
+}
+
+// GetLogRotationInterval gets log_rotation_interval config of visor
+func (v *Visor) GetLogRotationInterval() (visorconfig.Duration, error) {
+	return v.conf.GetLogRotationInterval()
 }
 
 // SetPublicAutoconnect sets public_autoconnect config of visor
@@ -873,4 +915,15 @@ func (v *Visor) GetVPNClientAddress() string {
 		}
 	}
 	return ""
+}
+
+// IsDMSGClientReady return availability of dsmg client
+func (v *Visor) IsDMSGClientReady() (bool, error) {
+	if v.isDTMReady() {
+		dmsgTracker, _ := v.dtm.Get(v.conf.PK) //nolint
+		if dmsgTracker.ServerPK.Hex()[:5] != "00000" {
+			return true, nil
+		}
+	}
+	return false, errors.New("dmsg client is not ready")
 }

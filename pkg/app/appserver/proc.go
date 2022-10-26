@@ -1,3 +1,4 @@
+// Package appserver pkg/app/appserver/proc.go
 package appserver
 
 import (
@@ -69,7 +70,8 @@ type Proc struct {
 
 	cmdStderr io.ReadCloser
 
-	startWg sync.WaitGroup
+	readyCh   chan struct{} // push here when ready to start app disc - protected by 'readyOnce'
+	readyOnce sync.Once     // ensures we only push to 'readyCh' once
 }
 
 // NewProc constructs `Proc`.
@@ -104,14 +106,13 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 		connCh:    make(chan struct{}, 1),
 		m:         m,
 		appName:   appName,
-		startWg:   sync.WaitGroup{},
+		readyCh:   make(chan struct{}, 1),
 		cmdStderr: stderr,
 	}
 
 	if runtime.GOOS == "windows" {
 		p.ipcServerWg.Add(1)
 	}
-	p.startWg.Add(1)
 	return p
 }
 
@@ -236,7 +237,7 @@ func (p *Proc) Start() error {
 
 		go func() {
 			// App discovery start/stop.
-			p.startWg.Wait()
+			<-p.readyCh
 			p.disc.Start()
 		}()
 		defer p.disc.Stop()
@@ -334,7 +335,7 @@ func (p *Proc) SetDetailedStatus(status string) {
 	p.statusMx.Lock()
 	defer p.statusMx.Unlock()
 	if status == AppDetailedStatusRunning {
-		p.startWg.Done()
+		p.readyOnce.Do(func() { close(p.readyCh) })
 	}
 
 	if status == AppDetailedStatusRunning || status == AppDetailedStatusStopped {

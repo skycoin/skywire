@@ -1,3 +1,4 @@
+// Package visorconfig pkg/visor/visorconfig/v1_test.go
 package visorconfig
 
 import (

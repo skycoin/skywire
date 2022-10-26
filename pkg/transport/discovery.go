@@ -1,3 +1,4 @@
+// Package transport pkg/transport/discovery.go
 package transport
 
 import (

@@ -1,8 +1,10 @@
+// Package clivisor cmd/skywire-cli/commands/visor/info.go
 package clivisor
 
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -23,11 +25,6 @@ func init() {
 	pkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
 	pkCmd.Flags().BoolVarP(&web, "http", "w", false, "serve public key via http")
 	pkCmd.Flags().StringVarP(&webPort, "prt", "x", "7998", "serve public key via http")
-	RootCmd.AddCommand(hvpkCmd)
-	hvpkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
-	hvpkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
-	hvpkCmd.Flags().BoolVarP(&web, "http", "w", false, "serve public key via http")
-	RootCmd.AddCommand(chvpkCmd)
 	RootCmd.AddCommand(summaryCmd)
 	RootCmd.AddCommand(buildInfoCmd)
 }
@@ -35,6 +32,7 @@ func init() {
 var pkCmd = &cobra.Command{
 	Use:   "pk",
 	Short: "Public key of the visor",
+	Long:  "\n  Public key of the visor",
 	Run: func(cmd *cobra.Command, _ []string) {
 		if pkg {
 			path = visorconfig.Pkgpath
@@ -43,14 +41,14 @@ var pkCmd = &cobra.Command{
 		if path != "" {
 			conf, err := visorconfig.ReadFile(path)
 			if err != nil {
-				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to read config: %v", err))
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to read config: %v", err))
 			}
 			outputPK = conf.PK.Hex()
 		} else {
-			client := clirpc.Client()
+			client := clirpc.Client(cmd.Flags())
 			overview, err := client.Overview()
 			if err != nil {
-				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 			}
 			pk = overview.PubKey.String() + "\n"
 			if web {
@@ -60,59 +58,18 @@ var pkCmd = &cobra.Command{
 			}
 			outputPK = overview.PubKey.Hex() + "\n"
 		}
-
-		internal.PrintOutput(cmd.Flags(), outputPK, outputPK)
-	},
-}
-
-var hvpkCmd = &cobra.Command{
-	Use:   "hvpk",
-	Short: "Public key of remote hypervisor",
-	Run: func(cmd *cobra.Command, _ []string) {
-		var hypervisors string
-
-		if pkg {
-			path = visorconfig.Pkgpath
-		}
-
-		if path != "" {
-			conf, err := visorconfig.ReadFile(path)
-			if err != nil {
-				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to read config: %v", err))
-			}
-			hypervisors = fmt.Sprintf("%v\n", conf.Hypervisors)
-		} else {
-			client := clirpc.Client()
-			overview, err := client.Overview()
-			if err != nil {
-				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
-			}
-			hypervisors = fmt.Sprintf("%v\n", overview.Hypervisors)
-		}
-		internal.PrintOutput(cmd.Flags(), hypervisors, hypervisors)
-	},
-}
-
-var chvpkCmd = &cobra.Command{
-	Use:   "chvpk",
-	Short: "Public key of connected hypervisors",
-	Run: func(cmd *cobra.Command, _ []string) {
-		client := clirpc.Client()
-		overview, err := client.Overview()
-		if err != nil {
-			internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
-		}
-		internal.PrintOutput(cmd.Flags(), overview.ConnectedHypervisor, fmt.Sprintf("%v\n", overview.ConnectedHypervisor))
+		internal.PrintOutput(cmd.Flags(), strings.TrimSuffix(outputPK, "\n"), outputPK)
 	},
 }
 
 var summaryCmd = &cobra.Command{
 	Use:   "info",
 	Short: "Summary of visor info",
+	Long:  "\n  Summary of visor info",
 	Run: func(cmd *cobra.Command, _ []string) {
-		summary, err := clirpc.Client().Summary()
+		summary, err := clirpc.Client(cmd.Flags()).Summary()
 		if err != nil {
-			internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 		}
 		msg := fmt.Sprintf(".:: Visor Summary ::.\nPublic key: %q\nSymmetric NAT: %t\nIP: %s\nDMSG Server: %q\nPing: %q\nVisor Version: %s\nSkybian Version: %s\nUptime Tracker: %s\nTime Online: %f seconds\nBuild Tag: %s\n",
 			summary.Overview.PubKey, summary.Overview.IsSymmetricNAT, summary.Overview.LocalIP, summary.DmsgStats.ServerPK, summary.DmsgStats.RoundTrip, summary.Overview.BuildInfo.Version, summary.SkybianBuildVersion,
@@ -146,13 +103,14 @@ var summaryCmd = &cobra.Command{
 }
 
 var buildInfoCmd = &cobra.Command{
-	Use:   "version",
+	Use:   "ver",
 	Short: "Version and build info",
+	Long:  "\n  Version and build info",
 	Run: func(cmd *cobra.Command, _ []string) {
-		client := clirpc.Client()
+		client := clirpc.Client(cmd.Flags())
 		overview, err := client.Overview()
 		if err != nil {
-			internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 		}
 		buildInfo := overview.BuildInfo
 		msg := fmt.Sprintf("Version %q built on %q against commit %q\n", buildInfo.Version, buildInfo.Date, buildInfo.Commit)

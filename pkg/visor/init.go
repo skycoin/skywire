@@ -1,3 +1,4 @@
+// Package visor pkg/visor/init.go
 package visor
 
 import (
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/ccding/go-stun/stun"
+	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/direct"
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
@@ -47,6 +49,7 @@ import (
 	"github.com/skycoin/skywire/pkg/utclient"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
+	"github.com/skycoin/skywire/pkg/visor/logserver"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	vinit "github.com/skycoin/skywire/pkg/visor/visorinit"
 )
@@ -109,6 +112,8 @@ var (
 	hv vinit.Module
 	// Dmsg ctrl module
 	dmsgCtrl vinit.Module
+	// Dmsg http log server module
+	dmsgHTTPLogServer vinit.Module
 	// Dmsg http module
 	dmsgHTTP vinit.Module
 	// Dmsg trackers module
@@ -137,6 +142,7 @@ func registerModules(logger *logging.MasterLogger) {
 	stcpC = maker("stcp", initStcpClient, &tr)
 	dmsgC = maker("dmsg", initDmsg, &ebc, &dmsgHTTP)
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &dmsgC, &tr)
+	dmsgHTTPLogServer = maker("dmsghttp_logserver", initDmsgHTTPLogServer, &dmsgC, &tr)
 	dmsgTrackers = maker("dmsg_trackers", initDmsgTrackers, &dmsgC)
 
 	pty = maker("dmsg_pty", initDmsgpty, &dmsgC)
@@ -147,7 +153,7 @@ func registerModules(logger *logging.MasterLogger) {
 	ut = maker("uptime_tracker", initUptimeTracker, &dmsgHTTP)
 	pv = maker("public_autoconnect", initPublicAutoconnect, &tr, &disc)
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
-	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl, &dmsgTrackers)
+	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl, &dmsgHTTPLogServer, &dmsgTrackers)
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
 		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC)
@@ -165,13 +171,12 @@ func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return nil
 	}
 
-	pk, sk := cipher.GenerateKeyPair()
-	keys = append(keys, pk)
+	keys = append(keys, v.conf.PK)
 	entries := direct.GetAllEntries(keys, servers)
 	dClient := direct.NewClient(entries, v.MasterLogger().PackageLogger("dmsg_http:direct_client"))
 
 	dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, v.MasterLogger().PackageLogger("dmsg_http:dmsgDC"),
-		pk, sk, dClient, dmsg.DefaultConfig())
+		v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
 	if err != nil {
 		return fmt.Errorf("failed to start dmsg: %w", err)
 	}
@@ -254,6 +259,7 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 		factory.PK = v.conf.PK
 		factory.SK = v.conf.SK
 		factory.ServiceDisc = conf.ServiceDisc
+		factory.DisplayNodeIP = conf.DisplayNodeIP
 		factory.Client = httpC
 		// only needed for dmsghttp
 		pIP, err := getPublicIP(v, conf.ServiceDisc)
@@ -288,7 +294,6 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	if err != nil {
 		return err
 	}
-
 	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg, httpC, v.MasterLogger())
 
 	wg := new(sync.WaitGroup)
@@ -341,6 +346,64 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	v.pushCloseStack("dmsgctrl", cl.Close)
 
 	dmsgctrl.ServeListener(cl, 0)
+	return nil
+}
+
+func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) error {
+	dmsgC := v.dmsgC
+	if dmsgC == nil {
+		return fmt.Errorf("cannot initialize dmsg log server: dmsg not configured")
+	}
+	logger := v.MasterLogger().PackageLogger("dmsghttp_logserver")
+
+	var printLog bool
+	if v.MasterLogger().GetLevel() == logrus.DebugLevel || v.MasterLogger().GetLevel() == logrus.TraceLevel {
+		printLog = true
+	}
+
+	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.CustomDmsgHTTPPath, printLog)
+
+	lis, err := dmsgC.Listen(skyenv.DmsgHTTPPort)
+	if err != nil {
+		return err
+	}
+	go func() {
+		<-ctx.Done()
+		if err := lis.Close(); err != nil {
+			logger.WithError(err).Error()
+		}
+	}()
+
+	log.WithField("dmsg_addr", fmt.Sprintf("dmsg://%v", lis.Addr().String())).
+		Debug("Serving...")
+	srv := &http.Server{
+		ReadHeaderTimeout: 2 * time.Second,
+		IdleTimeout:       30 * time.Second,
+		Handler:           lsAPI,
+	}
+
+	wg := new(sync.WaitGroup)
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		err = srv.Serve(lis)
+		if errors.Is(err, dmsg.ErrEntityClosed) {
+			return
+		}
+		if err != nil {
+			logger.WithError(err).Error("Logserver exited with error.")
+		}
+	}()
+
+	v.pushCloseStack("dmsghttp.logserver", func() error {
+		if err := srv.Close(); err != nil {
+			return err
+		}
+		wg.Wait()
+		return nil
+	})
+
 	return nil
 }
 
@@ -399,7 +462,17 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	logS := transport.InMemoryTransportLogStore()
+	var logS transport.LogStore
+	if v.conf.Transport.LogStore.Type == visorconfig.MemoryLogStore {
+		logS = transport.InMemoryTransportLogStore()
+	} else if v.conf.Transport.LogStore.Type == visorconfig.FileLogStore {
+		logS, err = transport.FileTransportLogStore(ctx, v.conf.Transport.LogStore.Location, time.Duration(v.conf.Transport.LogStore.RotationInterval), log)
+		if err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("invalid store type: %v", v.conf.Transport.LogStore.Type)
+	}
 
 	pTps, err := v.conf.GetPersistentTransports()
 	if err != nil {
@@ -484,6 +557,7 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 	return nil
 }
 
+// getRouteSetupHooks aka autotransport
 func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []router.RouteSetupHook {
 	retrier := netutil.NewRetrier(log, time.Second, time.Second*20, 3, 1.3)
 	return []router.RouteSetupHook{
@@ -504,6 +578,9 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 			dmsgFallback := func() error {
 				return retrier.Do(ctx, func() error {
 					_, err := tm.SaveTransport(ctx, rPK, network.DMSG, transport.LabelAutomatic)
+					if err != nil {
+						log.Debugf("Establishing automatic DMSG transport failed.")
+					}
 					return err
 				})
 			}
@@ -518,10 +595,6 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 				log.WithField("pk", rPK.String()).Warn("pk not found in the transports")
 				// check if automatic transport is available, if it does,
 				// continue with route creation
-				if v.conf.Transport.PublicAutoconnect {
-					// we return nil here, router will use multi-hop STCPR rather than one hop DMSG
-					return nil
-				}
 				return dmsgFallback()
 			}
 			// try to establish direct connection to rPK (single hop) using SUDPH or STCPR
@@ -529,8 +602,8 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 			trySUDPH := false
 
 			for _, trans := range transports {
-				ntype := network.Type(trans)
-				if ntype == network.STCPR {
+				nType := network.Type(trans)
+				if nType == network.STCPR {
 					trySTCPR = true
 					continue
 				}
@@ -539,7 +612,7 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 				<-v.stunReady
 
 				// skip if SUDPH is under symmetric NAT / under UDP firewall.
-				if ntype == network.SUDPH && (v.stunClient.NATType == stun.NATSymmetric ||
+				if nType == network.SUDPH && (v.stunClient.NATType == stun.NATSymmetric ||
 					v.stunClient.NATType == stun.NATSymmetricUDPFirewall) {
 					continue
 				}
@@ -552,7 +625,10 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 					_, err := tm.SaveTransport(ctx, rPK, network.STCPR, transport.LabelAutomatic)
 					return err
 				})
-				return err
+				if err == nil {
+					return nil
+				}
+				log.Debugf("Establishing automatic STCPR transport failed.")
 			}
 			// trying to establish direct connection to rPK using SUDPH
 			if trySUDPH {
@@ -560,7 +636,10 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 					_, err := tm.SaveTransport(ctx, rPK, network.SUDPH, transport.LabelAutomatic)
 					return err
 				})
-				return err
+				if err == nil {
+					return nil
+				}
+				log.Debugf("Establishing automatic SUDPH transport failed.")
 			}
 
 			return dmsgFallback()
@@ -632,11 +711,12 @@ func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	// Prepare launcher.
 	launchConf := launcher.Config{
-		VisorPK:    v.conf.PK,
-		Apps:       conf.Apps,
-		ServerAddr: conf.ServerAddr,
-		BinPath:    conf.BinPath,
-		LocalPath:  v.conf.LocalPath,
+		VisorPK:       v.conf.PK,
+		Apps:          conf.Apps,
+		ServerAddr:    conf.ServerAddr,
+		BinPath:       conf.BinPath,
+		LocalPath:     v.conf.LocalPath,
+		DisplayNodeIP: conf.DisplayNodeIP,
 	}
 
 	launchLog := v.MasterLogger().PackageLogger("launcher")
@@ -1004,11 +1084,12 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 	// advertising oneself and requires things like port that are not used
 	// in connecting to services
 	conf := servicedisc.Config{
-		Type:     servicedisc.ServiceTypeVisor,
-		PK:       v.conf.PK,
-		SK:       v.conf.SK,
-		Port:     uint16(0),
-		DiscAddr: serviceDisc,
+		Type:          servicedisc.ServiceTypeVisor,
+		PK:            v.conf.PK,
+		SK:            v.conf.SK,
+		Port:          uint16(0),
+		DiscAddr:      serviceDisc,
+		DisplayNodeIP: v.conf.Launcher.DisplayNodeIP,
 	}
 	// only needed for dmsghttp
 	pIP, err := getPublicIP(v, serviceDisc)
@@ -1216,7 +1297,7 @@ func getPublicIP(v *Visor, service string) (string, error) {
 		return pIP, fmt.Errorf("provided URL is invalid: %w", err)
 	}
 
-	pIP, err = getIP()
+	pIP, err = GetIP()
 	if err != nil {
 		<-v.stunReady
 		if v.stunClient.PublicIP != nil {
@@ -1236,7 +1317,8 @@ type ipAPI struct {
 	PublicIP string `json:"ip_address"`
 }
 
-func getIP() (string, error) {
+// GetIP used for getting current IP of visor
+func GetIP() (string, error) {
 	req, err := http.Get("http://ip.skycoin.com")
 	if err != nil {
 		return "", err

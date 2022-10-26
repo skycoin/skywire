@@ -79,7 +79,7 @@ function build_installer() {
   cat <<EOF >${installer_package_dir}/Contents/MacOS/Skywire
 #!/bin/bash
 
-osascript -e "do shell script \"/Applications/Skywire.app/Contents/MacOS/skywire-visor -c '/Users/\${USER}/Library/Application Support/Skywire/skywire-config.json' > /Users/\${USER}/Library/Logs/skywire/visor.log\" with administrator privileges"
+osascript -e "do shell script \"/Applications/Skywire.app/Contents/MacOS/skywire-visor -c '/Users/\${USER}/Library/Application Support/Skywire/skywire-config.json' --systray > /Users/\${USER}/Library/Logs/skywire/visor.log\" with administrator privileges"
 
 EOF
 

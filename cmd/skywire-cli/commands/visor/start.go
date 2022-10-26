@@ -1,3 +1,4 @@
+// Package clivisor cmd/skywire-cli/commands/visor/start.go
 package clivisor
 
 import (
@@ -29,6 +30,7 @@ func init() {
 var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start a visor",
+	Long:  "\n  Start a visor",
 	Run: func(cmd *cobra.Command, args []string) {
 		var output string
 		var err error
@@ -44,7 +46,7 @@ var startCmd = &cobra.Command{
 			output, err = script.Exec(`bash -c 'go run cmd/skywire-visor/skywire-visor.go'`).String()
 		}
 		if err != nil {
-			internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to start visor: %v", err))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to start visor: %v", err))
 		}
 		internal.PrintOutput(cmd.Flags(), output, fmt.Sprintln(output))
 	},

@@ -1,3 +1,4 @@
+// Package visor pkg/visor/hypervisor.go
 package visor
 
 import (
@@ -20,6 +21,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
+	coincipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -32,7 +34,9 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
+	"github.com/skycoin/skywire/pkg/visor/privacyconfig"
 	"github.com/skycoin/skywire/pkg/visor/usermanager"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 const (
@@ -263,6 +267,11 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Post("/visors/{pk}/min-hops", hv.postMinHops())
 				r.Get("/visors/{pk}/persistent-transports", hv.getPersistentTransports())
 				r.Put("/visors/{pk}/persistent-transports", hv.putPersistentTransports())
+				r.Get("/visors/{pk}/log/rotation", hv.getLogRotationInterval())
+				r.Put("/visors/{pk}/log/rotation", hv.putLogRotationInterval())
+				r.Get("/visors/{pk}/privacy", hv.getPrivacy())
+				r.Put("/visors/{pk}/privacy", hv.putPrivacy())
+
 			})
 		})
 
@@ -1228,6 +1237,76 @@ func (hv *Hypervisor) getPersistentTransports() http.HandlerFunc {
 	})
 }
 
+func (hv *Hypervisor) putLogRotationInterval() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var reqBody struct {
+			LogRotationInterval visorconfig.Duration `json:"log_rotation_interval"`
+		}
+
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("putLogRotationInterval request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+
+		if err := ctx.API.SetLogRotationInterval(reqBody.LogRotationInterval); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
+func (hv *Hypervisor) getLogRotationInterval() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		pts, err := ctx.API.GetLogRotationInterval()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, pts)
+	})
+}
+
+func (hv *Hypervisor) putPrivacy() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var reqBody *privacyconfig.Privacy
+
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("putPersistentTransports request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+
+		_, err := coincipher.DecodeBase58Address(reqBody.RewardAddress)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		pConf, err := ctx.API.SetPrivacy(reqBody)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, pConf)
+	})
+}
+
+func (hv *Hypervisor) getPrivacy() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		pts, err := ctx.API.GetPrivacy()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, pts)
+	})
+}
+
 /*
 	<<< Helper functions >>>
 */
@@ -1444,6 +1523,8 @@ func setupDmsgPtyUI(dmsgC *dmsg.Client, visorPK cipher.PubKey) *dmsgPtyUI {
 
 func (hv *Hypervisor) getPty() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		ctx.PtyUI.PtyUI.Handler()(w, r)
+		customCommand := make(map[string][]string)
+		customCommand["update"] = skyenv.UpdateCommand()
+		ctx.PtyUI.PtyUI.Handler(customCommand)(w, r)
 	})
 }

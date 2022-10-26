@@ -34,6 +34,10 @@ export class ProxyDiscoveryService {
       // In case of error, retry.
       retryWhen(errors => errors.pipe(delay(4000))),
       map((result: any[]) => {
+        if (!result) {
+          result = [];
+        }
+
         // Process the data.
         result.forEach(proxy => {
           const currentEntry = new ProxyDiscoveryEntry();

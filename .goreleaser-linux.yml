@@ -69,34 +69,6 @@ builds:
     main: ./cmd/skywire-visor/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
-  - id: skywire-visor-systray-amd64
-    binary: skywire-visor
-    goos:
-      - linux
-    goarch:
-      - amd64
-    tags:
-      - systray
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
-    main: ./cmd/skywire-visor/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
-
-  - id: skywire-visor-systray-arm64
-    binary: skywire-visor
-    goos:
-      - linux
-    goarch:
-      - arm64
-    tags:
-      - systray
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
-    main: ./cmd/skywire-visor/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
-
   - id: skywire-cli-amd64
     binary: skywire-cli
     goos:
@@ -469,36 +441,6 @@ archives:
       - skychat-armhf
       - vpn-server-armhf
       - vpn-client-armhf
-
-  - id: amd64-systray
-    format: tar.gz
-    wrap_in_directory: false
-    name_template: 'skywire-systray-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
-    files:
-      - dmsghttp-config.json
-    builds:
-      - skywire-visor-systray-amd64
-      - skywire-cli-amd64
-      - skysocks-amd64
-      - skysocks-client-amd64
-      - skychat-amd64
-      - vpn-server-amd64
-      - vpn-client-amd64
-
-  - id: arm64-systray
-    format: tar.gz
-    wrap_in_directory: false
-    name_template: 'skywire-systray-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
-    files:
-      - dmsghttp-config.json
-    builds:
-      - skywire-visor-systray-arm64
-      - skywire-cli-arm64
-      - skysocks-arm64
-      - skysocks-client-arm64
-      - skychat-arm64
-      - vpn-server-arm64
-      - vpn-client-arm64
 
 checksum:
   name_template: 'checksums.txt'

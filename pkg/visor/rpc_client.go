@@ -1,3 +1,4 @@
+// Package visor pkg/visor/rpc_client.go
 package visor
 
 import (
@@ -27,6 +28,8 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/cipherutil"
+	"github.com/skycoin/skywire/pkg/visor/privacyconfig"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var (
@@ -120,6 +123,21 @@ func (rc *rpcClient) Uptime() (float64, error) {
 	return out, err
 }
 
+// SetPrivacy implements API.
+func (rc *rpcClient) SetPrivacy(p *privacyconfig.Privacy) (pConfig *privacyconfig.Privacy, err error) {
+	err = rc.Call("SetPrivacy", &p, &pConfig)
+	if err != nil {
+		return nil, err
+	}
+	return pConfig, err
+}
+
+// GetPrivacy implements API.
+func (rc *rpcClient) GetPrivacy() (pConfig *privacyconfig.Privacy, err error) {
+	err = rc.Call("GetPrivacy", &struct{}{}, &pConfig)
+	return pConfig, err
+}
+
 // Apps calls Apps.
 func (rc *rpcClient) Apps() ([]*appserver.AppState, error) {
 	states := make([]*appserver.AppState, 0)
@@ -145,8 +163,8 @@ func (rc *rpcClient) StopApp(appName string) error {
 }
 
 // StartVPNClient calls StartVPNClient.
-func (rc *rpcClient) StartVPNClient(pubkey string) error {
-	return rc.Call("StartVPNClient", &pubkey, &struct{}{})
+func (rc *rpcClient) StartVPNClient(pk cipher.PubKey) error {
+	return rc.Call("StartVPNClient", &pk, &struct{}{})
 }
 
 // StopVPNClient calls StopVPNClient.
@@ -402,6 +420,19 @@ func (rc *rpcClient) GetPersistentTransports() ([]transport.PersistentTransports
 	return tps, err
 }
 
+// SetLogRotationInterval sets the log_rotation_interval from visor config
+func (rc *rpcClient) SetLogRotationInterval(d visorconfig.Duration) error {
+	err := rc.Call("SetLogRotationInterval", &d, &struct{}{})
+	return err
+}
+
+// GetLogRotationInterval gets the log_rotation_interval from visor config
+func (rc *rpcClient) GetLogRotationInterval() (visorconfig.Duration, error) {
+	var d visorconfig.Duration
+	err := rc.Call("GetLogRotationInterval", &struct{}{}, &d)
+	return d, err
+}
+
 // StatusMessage defines a status of visor update.
 type StatusMessage struct {
 	Text    string
@@ -423,6 +454,13 @@ func (rc *rpcClient) RemoteVisors() ([]string, error) {
 	output := []string{}
 	rc.Call("RemoteVisors", &struct{}{}, &output) // nolint
 	return output, nil
+}
+
+// IsDMSGClientReady return availability of dsmg client
+func (rc *rpcClient) IsDMSGClientReady() (bool, error) {
+	var out bool
+	err := rc.Call("IsDMSGClientReady", &struct{}{}, &out)
+	return out, err
 }
 
 // MockRPCClient mocks API.
@@ -452,7 +490,7 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, AP
 			Local:  localPK,
 			Remote: remotePK,
 			Type:   types[r.Int()%len(types)],
-			Log:    new(transport.LogEntry),
+			Log:    transport.NewLogEntry(),
 		}
 		log.Infof("tp[%2d]: %v", i, tps[i])
 	}
@@ -608,6 +646,16 @@ func (mc *mockRPCClient) Uptime() (float64, error) {
 	return time.Since(mc.startedAt).Seconds(), nil
 }
 
+// SetPrivacy implements API
+func (mc *mockRPCClient) SetPrivacy(p *privacyconfig.Privacy) (*privacyconfig.Privacy, error) {
+	return nil, nil
+}
+
+// GetPrivacy implements API.
+func (mc *mockRPCClient) GetPrivacy() (*privacyconfig.Privacy, error) {
+	return nil, nil
+}
+
 // Apps implements API.
 func (mc *mockRPCClient) Apps() ([]*appserver.AppState, error) {
 	var apps []*appserver.AppState
@@ -647,7 +695,7 @@ func (*mockRPCClient) StopApp(string) error {
 }
 
 // StartVPNClient implements API.
-func (*mockRPCClient) StartVPNClient(string) error {
+func (*mockRPCClient) StartVPNClient(cipher.PubKey) error {
 	return nil
 }
 
@@ -863,7 +911,7 @@ func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ tim
 		Local:  mc.o.PubKey,
 		Remote: remote,
 		Type:   network.Type(tpType),
-		Log:    new(transport.LogEntry),
+		Log:    transport.NewLogEntry(),
 	}
 	return summary, mc.do(true, func() error {
 		mc.o.Transports = append(mc.o.Transports, summary)
@@ -977,6 +1025,17 @@ func (mc *mockRPCClient) GetPersistentTransports() ([]transport.PersistentTransp
 	return []transport.PersistentTransports{}, nil
 }
 
+// SetLogRotationInterval implements API
+func (mc *mockRPCClient) SetLogRotationInterval(_ visorconfig.Duration) error {
+	return nil
+}
+
+// GetLogRotationInterval implements API
+func (mc *mockRPCClient) GetLogRotationInterval() (visorconfig.Duration, error) {
+	var d visorconfig.Duration
+	return d, nil
+}
+
 // VPNServers implements API
 func (mc *mockRPCClient) VPNServers(_, _ string) ([]servicedisc.Service, error) {
 	return []servicedisc.Service{}, nil
@@ -985,4 +1044,9 @@ func (mc *mockRPCClient) VPNServers(_, _ string) ([]servicedisc.Service, error) 
 // RemoteVisors implements API
 func (mc *mockRPCClient) RemoteVisors() ([]string, error) {
 	return []string{}, nil
+}
+
+// IsDMSGClientReady implements API.
+func (mc *mockRPCClient) IsDMSGClientReady() (bool, error) {
+	return false, nil
 }

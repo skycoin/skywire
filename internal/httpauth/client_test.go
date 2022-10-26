@@ -1,3 +1,4 @@
+// Package httpauth internal/httpauth/client_test.go
 package httpauth
 
 import (

@@ -1,3 +1,4 @@
+// Package setup pkg/setup/testing_test.go
 package setup
 
 import (

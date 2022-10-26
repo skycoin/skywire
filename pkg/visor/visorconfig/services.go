@@ -1,10 +1,11 @@
+// Package visorconfig pkg/visor/visorconfig/services.go
 package visorconfig
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -14,8 +15,7 @@ import (
 // Fetch fetches the service URLs & ip:ports from the config service endpoint
 func Fetch(mLog *logging.MasterLogger, serviceConfURL string, stdout bool) (services *Services) {
 
-	urlstr := []string{"http://", serviceConfURL}
-	serviceConf := strings.Join(urlstr, "")
+	serviceConf := fmt.Sprint("http://", serviceConfURL)
 	client := http.Client{
 		Timeout: time.Second * 2, // Timeout after 2 seconds
 	}

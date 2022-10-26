@@ -1,3 +1,4 @@
+// Package clivisor cmd/skywire-cli/commands/visor/shutdown.go
 package clivisor
 
 import (
@@ -16,8 +17,9 @@ func init() {
 var shutdownCmd = &cobra.Command{
 	Use:   "halt",
 	Short: "Stop a running visor",
+	Long:  "\n  Stop a running visor",
 	Run: func(cmd *cobra.Command, args []string) {
-		clirpc.Client().Shutdown() //nolint
+		clirpc.Client(cmd.Flags()).Shutdown() //nolint
 		fmt.Println("Visor was shut down")
 		internal.PrintOutput(cmd.Flags(), "Visor was shut down", fmt.Sprintln("Visor was shut down"))
 	},

@@ -1,6 +1,4 @@
-//go:build systray
-// +build systray
-
+// Package gui internal/gui/gui.go
 package gui
 
 import (
@@ -8,7 +6,6 @@ import (
 	"embed"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"strings"
@@ -70,7 +67,7 @@ func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 	logger := logging.NewMasterLogger()
 	logger.SetLevel(logrus.InfoLevel)
 
-	httpC := getHTTPClient(conf, context.Background(), logger)
+	httpC := getHTTPClient(context.Background(), conf, logger)
 
 	if isRoot() {
 		return func() {
@@ -78,20 +75,19 @@ func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 			systray.SetTooltip("Skywire")
 			initUIBtns(conf)
 			initVpnClientBtn(conf, httpC, logger)
-			initAdvancedButton(conf)
+			initAdvancedButton()
 			initQuitBtn()
-			go handleRootInteraction(conf, doneCh)
+			go handleRootInteraction(doneCh)
 		}
-	} else {
-		return func() {
-			systray.SetTemplateIcon(icon, icon)
-			systray.SetTooltip("Skywire")
-			initUIBtns(conf)
-			initVpnClientBtn(conf, httpC, logger)
-			initAdvancedButton(conf)
-			initQuitBtn()
-			go handleUserInteraction(conf, doneCh)
-		}
+	}
+	return func() {
+		systray.SetTemplateIcon(icon, icon)
+		systray.SetTooltip("Skywire")
+		initUIBtns(conf)
+		initVpnClientBtn(conf, httpC, logger)
+		initAdvancedButton()
+		initQuitBtn()
+		go handleUserInteraction(conf, doneCh)
 	}
 }
 
@@ -127,7 +123,7 @@ func Stop() {
 	systray.Quit()
 }
 
-func initAdvancedButton(conf *visorconfig.V1) {
+func initAdvancedButton() {
 	mAdvancedButton := systray.AddMenuItem("Advanced", "Advanced Menu")
 	mUninstall = mAdvancedButton.AddSubMenuItem("Uninstall", "Uninstall Application")
 
@@ -178,14 +174,14 @@ func initUIBtns(vc *visorconfig.V1) {
 }
 
 func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, logger *logging.MasterLogger) {
-	rpc_logger := logger.PackageLogger("systray:rpc_client")
-	rpcC = rpcClient(conf, rpc_logger)
+	rpcLogger := logger.PackageLogger("systray:rpc_client")
+	rpcC = rpcClient(conf, rpcLogger)
 
 	mVPNClient = systray.AddMenuItem("VPN", "VPN Client Submenu")
 	// VPN Status
 	mVPNStatus = mVPNClient.AddSubMenuItem("Status: Disconnected", "VPN Client Status")
 	mVPNStatus.Disable()
-	go vpnStatusBtn(conf, rpcC)
+	go vpnStatusBtn(rpcC)
 	// VPN Connect/Disconnect Button
 	mVPNButton = mVPNClient.AddSubMenuItem("Connect", "VPN Client Switch Button")
 	// VPN Public Servers List
@@ -194,13 +190,13 @@ func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, logger *log
 	for _, server := range getAvailPublicVPNServers(conf, httpClient, logger.PackageLogger("systray:servers")) {
 		mVPNServers = append(mVPNServers, mVPNServersList.AddSubMenuItemCheckbox(server, "", false))
 	}
-	go serversBtn(conf, mVPNServers, rpcC)
+	go serversBtn(mVPNServers, rpcC)
 }
 
-func vpnStatusBtn(conf *visorconfig.V1, rpcClient visor.API) {
+func vpnStatusBtn(rpcClient visor.API) {
 	for {
 		vpnStatusMx.Lock()
-		stats, _ := rpcClient.GetAppConnectionsSummary(skyenv.VPNClientName)
+		stats, _ := rpcClient.GetAppConnectionsSummary(skyenv.VPNClientName) //nolint
 		if len(stats) == 1 {
 			if stats[0].IsAlive {
 				if vpnLastStatus != 1 {
@@ -231,11 +227,11 @@ func vpnStatusBtn(conf *visorconfig.V1, rpcClient visor.API) {
 	}
 }
 
-func serversBtn(conf *visorconfig.V1, servers []*systray.MenuItem, rpcClient visor.API) {
+func serversBtn(servers []*systray.MenuItem, rpcClient visor.API) {
 	btnChannel := make(chan int)
 	for index, server := range servers {
 		go func(chn chan int, server *systray.MenuItem, index int) {
-			for {
+			for { //nolint
 				select {
 				case <-server.ClickedCh:
 					chn <- index
@@ -259,24 +255,24 @@ func serversBtn(conf *visorconfig.V1, servers []*systray.MenuItem, rpcClient vis
 			continue
 		}
 
-		rpcClient.StopApp(skyenv.VPNClientName)
-		rpcClient.SetAppPK(skyenv.VPNClientName, pk)
+		rpcClient.StopApp(skyenv.VPNClientName)      //nolint
+		rpcClient.SetAppPK(skyenv.VPNClientName, pk) //nolint
 		vpnStatusMx.Lock()
 		vpnLastStatus = 3
 		vpnStatusMx.Unlock()
-		rpcClient.StartApp(skyenv.VPNClientName)
+		rpcClient.StartApp(skyenv.VPNClientName) //nolint
 	}
 }
 
-func handleVPNButton(conf *visorconfig.V1, rpcClient visor.API) {
-	stats, _ := rpcClient.GetAppConnectionsSummary(skyenv.VPNClientName)
+func handleVPNButton(rpcClient visor.API) {
+	stats, _ := rpcClient.GetAppConnectionsSummary(skyenv.VPNClientName) //nolint
 	if len(stats) == 1 {
-		rpcClient.StopApp(skyenv.VPNClientName)
+		rpcClient.StopApp(skyenv.VPNClientName) //nolint
 	} else {
 		vpnStatusMx.Lock()
 		vpnLastStatus = 3
 		vpnStatusMx.Unlock()
-		rpcClient.StartApp(skyenv.VPNClientName)
+		rpcClient.StartApp(skyenv.VPNClientName) //nolint
 	}
 }
 
@@ -319,9 +315,9 @@ func getAvailPublicVPNServers(conf *visorconfig.V1, httpC *http.Client, logger *
 	return serverAddrs
 }
 
-func getHTTPClient(conf *visorconfig.V1, ctx context.Context, logger *logging.MasterLogger) *http.Client {
+func getHTTPClient(ctx context.Context, conf *visorconfig.V1, logger *logging.MasterLogger) *http.Client {
 	var serviceURL dmsgget.URL
-	serviceURL.Fill(conf.Launcher.ServiceDisc)
+	serviceURL.Fill(conf.Launcher.ServiceDisc) //nolint
 	if serviceURL.Scheme == "dmsg" {
 		var keys cipher.PubKeys
 		servers := conf.Dmsg.Servers
@@ -371,19 +367,6 @@ func getHTTPClient(conf *visorconfig.V1, ctx context.Context, logger *logging.Ma
 	return &http.Client{}
 }
 
-func isSetVPNClientPKExist(conf *visorconfig.V1) bool {
-	for _, v := range conf.Launcher.Apps {
-		if v.Name == skyenv.VPNClientName {
-			for index := range v.Args {
-				if v.Args[index] == "-srv" {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
 func initQuitBtn() {
 	mQuit = systray.AddMenuItem("Quit", "")
 }
@@ -394,7 +377,7 @@ func handleUserInteraction(conf *visorconfig.V1, doneCh chan<- bool) {
 		case <-mOpenHypervisor.ClickedCh:
 			handleOpenHypervisor(conf)
 		case <-mVPNButton.ClickedCh:
-			handleVPNButton(conf, rpcC)
+			handleVPNButton(rpcC)
 		case <-mVPNLink.ClickedCh:
 			handleVPNLinkButton(conf)
 		case <-mUninstall.ClickedCh:
@@ -406,11 +389,11 @@ func handleUserInteraction(conf *visorconfig.V1, doneCh chan<- bool) {
 	}
 }
 
-func handleRootInteraction(conf *visorconfig.V1, doneCh chan<- bool) {
+func handleRootInteraction(doneCh chan<- bool) {
 	for {
 		select {
 		case <-mVPNButton.ClickedCh:
-			handleVPNButton(conf, rpcC)
+			handleVPNButton(rpcC)
 		case <-mUninstall.ClickedCh:
 			handleUninstall()
 		case <-mQuit.ClickedCh:
@@ -461,7 +444,7 @@ func stopVisor() {
 
 func isHypervisorRunning(addr string) bool {
 	// we check if it's up by querying `health` endpoint
-	resp, err := http.Get(addr)
+	resp, err := http.Get(addr) //nolint
 	if err != nil {
 		// hypervisor is not running in this case
 		return false
@@ -472,7 +455,7 @@ func isHypervisorRunning(addr string) bool {
 		}
 	}()
 
-	if _, err := io.Copy(ioutil.Discard, resp.Body); err != nil {
+	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 		log.WithError(err).Errorln("Failed to discard hypervisor response body")
 	}
 

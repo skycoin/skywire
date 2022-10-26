@@ -51,4 +51,4 @@ if exist "new.update" (
 start "" http://127.0.0.1:8000
 
 :: Running Skywire
-skywire-visor.exe -c "skywire-config.json" >> local\logs\skywire_%start_time%.log
+skywire-visor.exe -c "skywire-config.json" --systray >> local\logs\skywire_%start_time%.log

@@ -1,3 +1,4 @@
+// Package vpn internal/vpn/server_hello.go
 package vpn
 
 import "net"

@@ -4,11 +4,15 @@ package skyenv
 import (
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/bitfield/script"
+	"github.com/google/uuid"
+	"github.com/jaypipes/ghw"
+	"github.com/skycoin/dmsg/pkg/dmsg"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -26,11 +30,12 @@ const (
 // Dmsg port constants.
 // TODO(evanlinjin): Define these properly. These are currently random.
 const (
-	DmsgCtrlPort           uint16 = 7   // Listening port for dmsgctrl protocol (similar to TCP Echo Protocol).
-	DmsgSetupPort          uint16 = 36  // Listening port of a setup node.
-	DmsgHypervisorPort     uint16 = 46  // Listening port of a hypervisor for incoming RPC visor connections over dmsg.
-	DmsgTransportSetupPort uint16 = 47  // Listening port for transport setup RPC over dmsg.
-	DmsgAwaitSetupPort     uint16 = 136 // Listening port of a visor for setup operations.
+	DmsgCtrlPort           uint16 = 7                        // Listening port for dmsgctrl protocol (similar to TCP Echo Protocol).
+	DmsgSetupPort          uint16 = 36                       // Listening port of a setup node.
+	DmsgHypervisorPort     uint16 = 46                       // Listening port of a hypervisor for incoming RPC visor connections over dmsg.
+	DmsgTransportSetupPort uint16 = 47                       // Listening port for transport setup RPC over dmsg.
+	DmsgHTTPPort           uint16 = dmsg.DefaultDmsgHTTPPort // Listening port for dmsghttp logserver.
+	DmsgAwaitSetupPort     uint16 = 136                      // Listening port of a visor for setup operations.
 )
 
 // Transport port constants.
@@ -89,7 +94,8 @@ const (
 
 // Routing constants
 const (
-	TpLogStore = "./transport_logs"
+	TpLogStore = "transport_logs"
+	Custom     = "custom"
 )
 
 // Local constants
@@ -119,16 +125,22 @@ const (
 
 // PkgConfig struct contains paths specific to the linux packages
 type PkgConfig struct {
-	Launcher struct {
-		BinPath string `json:"bin_path"`
-	} `json:"launcher"`
+	Launcher   `json:"launcher"`
 	LocalPath  string `json:"local_path"`
-	Hypervisor struct {
-		DbPath     string `json:"db_path"`
-		EnableAuth bool   `json:"enable_auth"`
-	} `json:"hypervisor"`
+	Hypervisor `json:"hypervisor"`
 	//		TLSCertFile string `json:"tls_cert_file"`
 	//		TLSKeyFile  string `json:"tls_key_file"`
+}
+
+// Launcher struct contains the BinPath specific to the linux packages
+type Launcher struct {
+	BinPath string `json:"bin_path"`
+}
+
+// Hypervisor struct contains Hypervisor paths specific to the linux packages
+type Hypervisor struct {
+	DbPath     string `json:"db_path"`
+	EnableAuth bool   `json:"enable_auth"`
 }
 
 // DmsgPtyWhiteList gets dmsgpty whitelist path for installed Skywire.
@@ -169,4 +181,56 @@ func Version() string {
 func HomePath() string {
 	dir, _ := os.UserHomeDir() //nolint
 	return dir
+}
+
+// Config returns either UserConfig or PackageConfig based on permissions
+func Config() PkgConfig {
+	if IsRoot() {
+		return PackageConfig()
+	}
+	return UserConfig()
+}
+
+// IsRoot checks for root permissions
+func IsRoot() bool {
+	userLvl, _ := user.Current() //nolint
+	return userLvl.Username == "root"
+}
+
+// Survey system hardware survey struct
+type Survey struct {
+	UUID    uuid.UUID
+	PubKey  cipher.PubKey
+	Disks   *ghw.BlockInfo
+	Product *ghw.ProductInfo
+	Memory  *ghw.MemoryInfo
+}
+
+// SurveyFile is the name of the survey file
+const SurveyFile string = "system.json"
+
+// PrivFile is the name of the file containing skycoin rewards address and privacy setting
+const PrivFile string = "privacy.json"
+
+// SystemSurvey returns system hardware survey
+func SystemSurvey() (Survey, error) {
+	disks, err := ghw.Block()
+	if err != nil {
+		return Survey{}, err
+	}
+	product, err := ghw.Product()
+	if err != nil {
+		return Survey{}, err
+	}
+	memory, err := ghw.Memory()
+	if err != nil {
+		return Survey{}, err
+	}
+	s := Survey{
+		UUID:    uuid.New(),
+		Disks:   disks,
+		Product: product,
+		Memory:  memory,
+	}
+	return s, nil
 }

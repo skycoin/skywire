@@ -1,3 +1,4 @@
+// Package transport pkg/transport/manager.go
 package transport
 
 import (
@@ -258,6 +259,8 @@ func (tm *Manager) Networks() []network.Type {
 
 // Stcpr returns stcpr client
 func (tm *Manager) Stcpr() (network.Client, bool) {
+	tm.mx.Lock()
+	defer tm.mx.Unlock()
 	c, ok := tm.netClients[network.STCPR]
 	return c, ok
 }

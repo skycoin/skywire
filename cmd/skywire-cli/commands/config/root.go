@@ -1,3 +1,4 @@
+// Package cliconfig cmd/skywire-cli/commands/config/root.go
 package cliconfig
 
 import (
@@ -8,6 +9,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -22,7 +24,7 @@ var (
 	isRegen                bool
 	isRetainHypervisors    bool
 	isTestEnv              bool
-	ptext                  string
+	pText                  string
 	isPkgEnv               bool
 	isUsrEnv               bool
 	isHypervisor           bool
@@ -30,8 +32,8 @@ var (
 	isDmsgHTTP             bool
 	isPublicRPC            bool
 	isVpnServerEnable      bool
-	isDisableauth          bool
-	isEnableauth           bool
+	isDisableAuth          bool
+	isEnableAuth           bool
 	selectedOS             string
 	disableApps            string
 	isBestProtocol         bool
@@ -42,11 +44,11 @@ var (
 	isAll                  bool
 	isOutUnset             bool
 	ver                    string
-	isRoot                 bool
-	svcconf                = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")     //skyenv.DefaultServiceConfAddr
-	testconf               = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "") //skyenv.DefaultServiceConfAddr
-	ghiddenflags           []string
-	uhiddenflags           []string
+	isRoot                 = skyenv.IsRoot()
+	svcConf                = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")     //skyenv.DefaultServiceConfAddr
+	testConf               = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "") //skyenv.DefaultServiceConfAddr
+	gHiddenFlags           []string
+	uHiddenFlags           []string
 	binPath                string
 	logLevel               string
 	isPkg                  bool
@@ -73,6 +75,7 @@ var (
 	isUsr                  bool
 	isPublic               bool
 	isPublicAutoConn       bool
+	displayNodeIP          bool
 )
 
 // RootCmd contains commands that interact with the config of local skywire-visor

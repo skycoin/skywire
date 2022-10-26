@@ -1,3 +1,4 @@
+// Package pathutil pkg/util/pathutil/util.go
 package pathutil
 
 import (

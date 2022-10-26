@@ -36,11 +36,12 @@ var (
 
 // Config configures the launcher.
 type Config struct {
-	VisorPK    cipher.PubKey
-	Apps       []appserver.AppConfig
-	ServerAddr string
-	BinPath    string
-	LocalPath  string
+	VisorPK       cipher.PubKey
+	Apps          []appserver.AppConfig
+	ServerAddr    string
+	BinPath       string
+	LocalPath     string
+	DisplayNodeIP bool
 }
 
 // Launcher is responsible for launching and keeping track of app states.
@@ -60,6 +61,7 @@ func NewLauncher(log logrus.FieldLogger, conf Config, dmsgC *dmsg.Client, r rout
 		log:   log,
 		r:     r,
 		procM: procM,
+		mx:    sync.Mutex{},
 	}
 
 	// Ensure the existence of directories.
