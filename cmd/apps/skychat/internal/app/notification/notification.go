@@ -9,13 +9,17 @@ import (
 )
 
 const (
-	// ErrNotifType notify about errors
-	ErrNotifType        = iota
-	NewAddChatNotifType //notify about an added chat by the user
-	NewChatNotifType    //notify about a new chat initiated by a peer
-	NewMsgNotifType     //notify about new message
-	//DeleteChatNotifType //notify about a deleted chat
-	//TODO: add SentMsgnNotifType
+	// ErrNotifyType notifies about errors
+	ErrNotifyType = iota
+	//NewAddChatNotifyType notifies about an added chat by the user
+	NewAddChatNotifyType
+	//NewChatNotifyType notifies about a new chat initiated by a peer
+	NewChatNotifyType
+	//NewMsgNotifyType notifies about new message
+	NewMsgNotifyType
+	//DeleteChatNotifyType notifies about a deleted chat
+	//DeleteChatNotifyType
+	//TODO: add SentMsgNotifyType
 )
 
 // Notification provides a struct to send messages via the Service
@@ -36,7 +40,7 @@ func NewMsgNotification(pk cipher.PubKey, msg message.Message) Notification {
 		fmt.Printf("Failed to marshal json: %v", err)
 	}
 	return Notification{
-		Type:    NewMsgNotifType,
+		Type:    NewMsgNotifyType,
 		Message: string(clientMsg),
 	}
 }
@@ -48,7 +52,7 @@ func NewAddChatNotification(pk cipher.PubKey) Notification {
 		fmt.Printf("Failed to marshal json: %v", err)
 	}
 	return Notification{
-		Type:    NewAddChatNotifType,
+		Type:    NewAddChatNotifyType,
 		Message: string(clientMsg),
 	}
 }
@@ -60,7 +64,7 @@ func NewChatNotification(pk cipher.PubKey) Notification {
 		fmt.Printf("Failed to marshal json: %v", err)
 	}
 	return Notification{
-		Type:    NewChatNotifType,
+		Type:    NewChatNotifyType,
 		Message: string(clientMsg),
 	}
 }
