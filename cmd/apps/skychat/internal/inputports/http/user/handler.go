@@ -100,7 +100,7 @@ func (c Handler) SetInfo(w http.ResponseWriter, r *http.Request) {
 	err := c.userServices.Commands.SetInfoHandler.Handle(infoUpdateCommand)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, err.Error())
+		fmt.Fprint(w, err.Error())
 	}
 	w.WriteHeader(http.StatusOK)
 }
@@ -128,7 +128,7 @@ func (c Handler) SetSettings(w http.ResponseWriter, r *http.Request) {
 	err := keys.Set(reqSettingsToSet.Blacklist)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, err.Error())
+		fmt.Fprint(w, err.Error())
 	} else {
 		setSettingsCommand := commands.SetSettingsRequest{
 			Blacklist: keys,
@@ -137,7 +137,7 @@ func (c Handler) SetSettings(w http.ResponseWriter, r *http.Request) {
 		err = c.userServices.Commands.SetSettingsHandler.Handle(setSettingsCommand)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, err.Error())
+			fmt.Fprint(w, err.Error())
 		}
 	}
 	w.WriteHeader(http.StatusOK)
