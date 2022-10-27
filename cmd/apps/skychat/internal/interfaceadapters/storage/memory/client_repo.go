@@ -27,10 +27,13 @@ func NewClientRepo() *ClientRepo {
 func (r *ClientRepo) New() (client.Client, error) {
 	if !r.client.IsEmtpy() {
 		return r.client, fmt.Errorf("client already defined")
-	} else {
-		r.SetClient(*client.NewClient())
-		return r.client, nil
 	}
+	err := r.SetClient(*client.NewClient())
+	if err != nil {
+		return client.Client{}, err
+	}
+	return r.client, nil
+
 }
 
 //Get Returns the client
