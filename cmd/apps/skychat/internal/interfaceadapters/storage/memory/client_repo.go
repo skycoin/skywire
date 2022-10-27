@@ -13,7 +13,7 @@ type ClientRepo struct {
 	cliMu  sync.Mutex
 }
 
-//NewRepo Constructor
+//NewClientRepo Constructor
 func NewClientRepo() *ClientRepo {
 	cR := ClientRepo{}
 
@@ -36,7 +36,7 @@ func (r *ClientRepo) New() (client.Client, error) {
 
 }
 
-//Get Returns the client
+//GetClient Returns the client
 func (r *ClientRepo) GetClient() (*client.Client, error) {
 	r.cliMu.Lock()
 	defer r.cliMu.Unlock()
@@ -48,7 +48,7 @@ func (r *ClientRepo) GetClient() (*client.Client, error) {
 	}
 }
 
-//Update the provided client
+//SetClient updates the provided client
 func (r *ClientRepo) SetClient(client client.Client) error {
 	r.cliMu.Lock()
 	defer r.cliMu.Unlock()
