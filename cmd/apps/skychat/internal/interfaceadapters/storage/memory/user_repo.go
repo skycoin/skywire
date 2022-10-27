@@ -12,7 +12,7 @@ type UserRepo struct {
 	user user.User
 }
 
-//NewRepo Constructor
+//NewUserRepo Constructor
 func NewUserRepo(pk cipher.PubKey) *UserRepo {
 	uR := UserRepo{}
 
@@ -26,30 +26,31 @@ func NewUserRepo(pk cipher.PubKey) *UserRepo {
 	return &uR
 }
 
-//New fills repo with a new user, if none has been set
+//NewUser fills repo with a new user, if none has been set
 //also returns a user when a user has been set already
 func (r *UserRepo) NewUser() (user.User, error) {
 	if !r.user.IsEmpty() {
 		return r.user, fmt.Errorf("user already defined")
-	} else {
-		r.SetUser(user.NewDefaultUser())
-		fmt.Printf("New DefaultUser at %p\n", &r.user)
-		return r.user, nil
 	}
+	err := r.SetUser(user.NewDefaultUser())
+	if err != nil {
+		return user.User{}, err
+	}
+	fmt.Printf("New DefaultUser at %p\n", &r.user)
+	return r.user, nil
 }
 
-//Get Returns the user
+//GetUser returns the user
 func (r *UserRepo) GetUser() (*user.User, error) {
-	fmt.Printf("user-repo adress %p\n", r)
+	fmt.Printf("user-repo address %p", r)
 	if r.user.IsEmpty() {
 		return nil, fmt.Errorf("user not found")
-	} else {
-		fmt.Printf("Get User at %p", &r.user)
-		return &r.user, nil
 	}
+	fmt.Printf("Get User at %p", &r.user)
+	return &r.user, nil
 }
 
-//Update the provided user
+//SetUser updates the provided user
 func (r *UserRepo) SetUser(user *user.User) error {
 	r.user = *user
 	return nil

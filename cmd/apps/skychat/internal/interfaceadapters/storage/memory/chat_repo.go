@@ -14,7 +14,7 @@ type ChatRepo struct {
 	chatsMu sync.Mutex
 }
 
-//NewRepo Constructor
+//NewChatRepo Constructor
 func NewChatRepo() *ChatRepo {
 	cR := ChatRepo{}
 	cR.chats = make(map[cipher.PubKey]chat.Chat)
@@ -37,12 +37,12 @@ func (r *ChatRepo) GetByPK(pk cipher.PubKey) (*chat.Chat, error) {
 func (r *ChatRepo) GetAll() ([]chat.Chat, error) {
 	r.chatsMu.Lock()
 	defer r.chatsMu.Unlock()
+	// TODO(ersonp): code is unused; check for usage
+	// keys := make([]cipher.PubKey, 0)
 
-	keys := make([]cipher.PubKey, 0)
-
-	for key := range r.chats {
-		keys = append(keys, key)
-	}
+	// for key := range r.chats {
+	// 	keys = append(keys, key)
+	// }
 
 	var values []chat.Chat
 	for _, value := range r.chats {
