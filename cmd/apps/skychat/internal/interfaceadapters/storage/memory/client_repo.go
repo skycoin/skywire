@@ -25,7 +25,7 @@ func NewClientRepo() *ClientRepo {
 //New fills repo with a new client, if none has been set
 //also returns a client when a client has been set already
 func (r *ClientRepo) New() (client.Client, error) {
-	if !r.client.IsEmtpy() {
+	if !r.client.IsEmpty() {
 		return r.client, fmt.Errorf("client already defined")
 	}
 	err := r.SetClient(*client.NewClient())
@@ -41,7 +41,7 @@ func (r *ClientRepo) GetClient() (*client.Client, error) {
 	r.cliMu.Lock()
 	defer r.cliMu.Unlock()
 
-	if r.client.IsEmtpy() {
+	if r.client.IsEmpty() {
 		return nil, fmt.Errorf("client not found")
 	}
 	return &r.client, nil

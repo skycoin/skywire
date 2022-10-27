@@ -100,8 +100,8 @@ func NewClient() *Client {
 	return &c
 }
 
-// IsEmtpy checks if the cient is empty
-func (c *Client) IsEmtpy() bool {
+// IsEmpty checks if the client is empty
+func (c *Client) IsEmpty() bool {
 	return *c == Client{}
 }
 
