@@ -43,9 +43,9 @@ func (r *ClientRepo) GetClient() (*client.Client, error) {
 
 	if r.client.IsEmtpy() {
 		return nil, fmt.Errorf("client not found")
-	} else {
-		return &r.client, nil
 	}
+	return &r.client, nil
+
 }
 
 //SetClient updates the provided client
