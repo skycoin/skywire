@@ -40,7 +40,6 @@ func NewDefaultUser() *User {
 
 	u.info = info.NewDefaultInfo()
 	u.settings = settings.NewDefaultSettings()
-	fmt.Println(u)
 
 	return &u
 }
