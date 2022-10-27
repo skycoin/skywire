@@ -1,3 +1,4 @@
+// Package queries contains queries to get settings of a user
 package queries
 
 import (
@@ -9,7 +10,7 @@ type GetUserSettingsResult struct {
 	Blacklist []string
 }
 
-//GetUserSettingsRequestHandler Contains the dependencies of the Handler
+// GetUserSettingsRequestHandler Contains the dependencies of the Handler
 type GetUserSettingsRequestHandler interface {
 	Handle() (*GetUserSettingsResult, error)
 }
@@ -18,12 +19,12 @@ type getUserSettingsRequestHandler struct {
 	usrRepo user.Repository
 }
 
-//NewGetUserSettingsRequestHandler Handler constructor
+// NewGetUserSettingsRequestHandler Handler constructor
 func NewGetUserSettingsRequestHandler(usrRepo user.Repository) GetUserSettingsRequestHandler {
 	return getUserSettingsRequestHandler{usrRepo: usrRepo}
 }
 
-//Handle Handles the query
+// Handle Handles the query
 func (h getUserSettingsRequestHandler) Handle() (*GetUserSettingsResult, error) {
 	usr, err := h.usrRepo.GetUser()
 	var result *GetUserSettingsResult

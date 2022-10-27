@@ -1,3 +1,4 @@
+// Package chat is the http handler for inputports
 package chat
 
 import (
@@ -14,7 +15,7 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/chat/queries"
 )
 
-//Handler Chat http request handler
+// Handler Chat http request handler
 type Handler struct {
 	chatServices chatservices.ChatServices
 }
@@ -24,13 +25,13 @@ func NewHandler(cs chatservices.ChatServices) *Handler {
 	return &Handler{chatServices: cs}
 }
 
-//GetAll Returns all available chats
+// GetAll Returns all available chats
 func (c Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(formatRequest(r))
 	chats, err := c.chatServices.Queries.GetAllChatsHandler.Handle()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, err.Error())
+		fmt.Fprint(w, err.Error())
 		return
 	}
 
@@ -43,7 +44,7 @@ func (c Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 // GetChatPKURLParam contains the parameter identifier to be parsed by the handler
 const GetChatPKURLParam = "chatPK"
 
-//GetByPK Returns the chat with the provided pk
+// GetByPK Returns the chat with the provided pk
 func (c Handler) GetByPK(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(formatRequest(r))
 	vars := mux.Vars(r)
@@ -76,12 +77,12 @@ func (c Handler) GetByPK(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-//AddChatRequestModel represents the request model expected for Add request
+// AddChatRequestModel represents the request model expected for Add request
 type AddChatRequestModel struct {
 	Pk string `json:"pk"`
 }
 
-//Add adds the provided pk
+// Add adds the provided pk
 func (c Handler) Add(w http.ResponseWriter, r *http.Request) {
 	//fmt.Println(formatRequest(r))
 	var chatToAdd AddChatRequestModel
@@ -112,10 +113,10 @@ func (c Handler) Add(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-//DeleteChatPKURLParam contains the parameter identifier to be parsed by the handler
+// DeleteChatPKURLParam contains the parameter identifier to be parsed by the handler
 const DeleteChatPKURLParam = "delete"
 
-//Delete Deletes the crag with the provided id
+// Delete Deletes the crag with the provided id
 func (c Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(formatRequest(r))
 	vars := mux.Vars(r)
@@ -135,16 +136,16 @@ func (c Handler) Delete(w http.ResponseWriter, r *http.Request) {
 
 }
 
-//SendTextMessagePKURLParam contains the parameter identifier to be parsed by the handler
+// SendTextMessagePKURLParam contains the parameter identifier to be parsed by the handler
 const SendTextMessagePKURLParam = "sendTxtMsg"
 
-//SendTextMessageRequestModel represents the request model expected for Add request
+// SendTextMessageRequestModel represents the request model expected for Add request
 type SendTextMessageRequestModel struct {
 	Pk  string `json:"pk"`
 	Msg string `json:"message"`
 }
 
-//SendTextMessage sends a message to the provided pk
+// SendTextMessage sends a message to the provided pk
 func (c Handler) SendTextMessage(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(formatRequest(r))
 	var msgToSend SendTextMessageRequestModel

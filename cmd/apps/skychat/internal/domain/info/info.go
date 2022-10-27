@@ -1,3 +1,4 @@
+// Package info contains the info required by the chat app
 package info
 
 import (

@@ -1,3 +1,4 @@
+// Package chat contains the interface Repository for domain
 package chat
 
 import (

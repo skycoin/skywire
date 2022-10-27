@@ -1,3 +1,4 @@
+// Package notification contains notification related code
 package notification
 
 import (

@@ -1,3 +1,4 @@
+// Package chatservices contains services required by the chat app
 package chatservices
 
 import (
@@ -8,21 +9,21 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/client"
 )
 
-//Queries Contains all available query handlers of this app
+// Queries Contains all available query handlers of this app
 type Queries struct {
 	GetAllChatsHandler            queries.GetAllChatsRequestHandler
 	GetChatByPKHandler            queries.GetChatByPKRequestHandler
 	GetAllMessagesFromChatHandler queries.GetAllMessagesFromChatRequestHandler
 }
 
-//Commands Contains all available command handlers of this app
+// Commands Contains all available command handlers of this app
 type Commands struct {
 	AddChatHandler    commands.AddChatRequestHandler
 	DeleteChatHandler commands.DeleteChatRequestHandler
 	SendTextHandler   commands.SendTextMessageRequestHandler
 }
 
-//ChatServices Contains the grouped queries and commands of the app layer
+// ChatServices Contains the grouped queries and commands of the app layer
 type ChatServices struct {
 	Queries  Queries
 	Commands Commands

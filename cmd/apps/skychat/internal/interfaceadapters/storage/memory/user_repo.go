@@ -1,3 +1,4 @@
+// Package memory contains code of the user repo of interfaceadapters
 package memory
 
 import (
@@ -7,12 +8,12 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/user"
 )
 
-//UserRepo Implements the Repository Interface to provide an in-memory storage provider
+// UserRepo Implements the Repository Interface to provide an in-memory storage provider
 type UserRepo struct {
 	user user.User
 }
 
-//NewUserRepo Constructor
+// NewUserRepo Constructor
 func NewUserRepo(pk cipher.PubKey) *UserRepo {
 	uR := UserRepo{}
 
@@ -26,8 +27,8 @@ func NewUserRepo(pk cipher.PubKey) *UserRepo {
 	return &uR
 }
 
-//NewUser fills repo with a new user, if none has been set
-//also returns a user when a user has been set already
+// NewUser fills repo with a new user, if none has been set
+// also returns a user when a user has been set already
 func (r *UserRepo) NewUser() (user.User, error) {
 	if !r.user.IsEmpty() {
 		return r.user, fmt.Errorf("user already defined")
@@ -40,7 +41,7 @@ func (r *UserRepo) NewUser() (user.User, error) {
 	return r.user, nil
 }
 
-//GetUser returns the user
+// GetUser returns the user
 func (r *UserRepo) GetUser() (*user.User, error) {
 	fmt.Printf("user-repo address %p", r)
 	if r.user.IsEmpty() {
@@ -50,7 +51,7 @@ func (r *UserRepo) GetUser() (*user.User, error) {
 	return &r.user, nil
 }
 
-//SetUser updates the provided user
+// SetUser updates the provided user
 func (r *UserRepo) SetUser(user *user.User) error {
 	r.user = *user
 	return nil

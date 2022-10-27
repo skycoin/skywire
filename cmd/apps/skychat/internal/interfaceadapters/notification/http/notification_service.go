@@ -1,3 +1,4 @@
+// Package channel contains code of the notification service of interfaceadapters
 package channel
 
 import (

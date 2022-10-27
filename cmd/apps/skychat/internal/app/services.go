@@ -1,3 +1,4 @@
+// Package app contains the Services struct for the app
 package app
 
 import (

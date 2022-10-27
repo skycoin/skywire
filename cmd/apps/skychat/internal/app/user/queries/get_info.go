@@ -1,3 +1,4 @@
+// Package queries contains queries to get info of a user
 package queries
 
 import (
@@ -12,7 +13,7 @@ type GetUserInfoResult struct {
 	Img   string
 }
 
-//GetUserInfoRequestHandler Contains the dependencies of the Handler
+// GetUserInfoRequestHandler Contains the dependencies of the Handler
 type GetUserInfoRequestHandler interface {
 	Handle() (*GetUserInfoResult, error)
 }
@@ -21,12 +22,12 @@ type getUserInfoRequestHandler struct {
 	usrRepo user.Repository
 }
 
-//NewGetUserInfoRequestHandler Handler constructor
+// NewGetUserInfoRequestHandler Handler constructor
 func NewGetUserInfoRequestHandler(usrRepo user.Repository) GetUserInfoRequestHandler {
 	return getUserInfoRequestHandler{usrRepo: usrRepo}
 }
 
-//Handle Handles the query
+// Handle Handles the query
 func (h getUserInfoRequestHandler) Handle() (*GetUserInfoResult, error) {
 	usr, err := h.usrRepo.GetUser()
 	var result *GetUserInfoResult

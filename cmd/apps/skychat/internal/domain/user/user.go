@@ -1,3 +1,4 @@
+// Package user contains the code required by user of the chat app
 package user
 
 import (
@@ -13,7 +14,7 @@ type User struct {
 	settings settings.Settings // the settings of the local user
 }
 
-//GetInfo gets the user info
+// GetInfo gets the user info
 func (u *User) GetInfo() *info.Info {
 	return &u.info
 }
@@ -23,7 +24,7 @@ func (u *User) GetSettings() *settings.Settings {
 	return &u.settings
 }
 
-//SetInfo sets the chat info
+// SetInfo sets the chat info
 func (u *User) SetInfo(i info.Info) {
 	u.info = i
 }
@@ -33,7 +34,7 @@ func (u *User) SetSettings(s settings.Settings) {
 	u.settings = s
 }
 
-//NewDefaultUser returns *User
+// NewDefaultUser returns *User
 func NewDefaultUser() *User {
 	fmt.Println("user - NewDefaultUser")
 	u := User{}

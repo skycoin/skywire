@@ -1,3 +1,4 @@
+// Package queries contains queries to get all chats
 package queries
 
 import (
@@ -17,7 +18,7 @@ type GetAllChatsResult struct {
 	Peers []peer.Peer
 }
 
-//GetAllChatsRequestHandler Contains the dependencies of the Handler
+// GetAllChatsRequestHandler Contains the dependencies of the Handler
 type GetAllChatsRequestHandler interface {
 	Handle() ([]GetAllChatsResult, error)
 }
@@ -26,12 +27,12 @@ type getAllChatsRequestHandler struct {
 	repo chat.Repository
 }
 
-//NewGetAllChatsRequestHandler Handler constructor
+// NewGetAllChatsRequestHandler Handler constructor
 func NewGetAllChatsRequestHandler(repo chat.Repository) GetAllChatsRequestHandler {
 	return getAllChatsRequestHandler{repo: repo}
 }
 
-//Handle Handles the query
+// Handle Handles the query
 func (h getAllChatsRequestHandler) Handle() ([]GetAllChatsResult, error) {
 
 	res, err := h.repo.GetAll()

@@ -1,3 +1,4 @@
+// Package interfaceadapters contains the struct Services
 package interfaceadapters
 
 import (
@@ -11,7 +12,7 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/interfaceadapters/storage/memory"
 )
 
-//Services contains the exposed services of interface adapters
+// Services contains the exposed services of interface adapters
 type Services struct {
 	ClientRepository    client.Repository
 	UserRepository      user.Repository
@@ -20,7 +21,7 @@ type Services struct {
 	NotificationService notification.Service
 }
 
-//NewServices Instantiates the interface adapter services
+// NewServices Instantiates the interface adapter services
 func NewServices() Services {
 	cliRepo := memory.NewClientRepo()
 	cli, _ := cliRepo.GetClient() //nolint

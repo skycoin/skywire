@@ -1,3 +1,4 @@
+// Package client contains client related code for domain
 package client
 
 import (
@@ -49,7 +50,7 @@ func (c *Client) GetLog() *logging.Logger {
 	return c.log
 }
 
-//  GetChannel returns chan string
+// GetChannel returns chan string
 func (c *Client) GetChannel() chan string {
 	return c.clientCh
 }

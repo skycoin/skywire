@@ -1,3 +1,4 @@
+// Package queries contains queries to get chat by pk
 package queries
 
 import (
@@ -10,7 +11,7 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/peer"
 )
 
-//GetChatByPKRequest Model of the Handler
+// GetChatByPKRequest Model of the Handler
 type GetChatByPKRequest struct {
 	Pk cipher.PubKey
 }
@@ -25,7 +26,7 @@ type GetChatByPKResult struct {
 	Peers []peer.Peer
 }
 
-//GetChatByPKRequestHandler Contains the dependencies of the Handler
+// GetChatByPKRequestHandler Contains the dependencies of the Handler
 type GetChatByPKRequestHandler interface {
 	Handle(query GetChatByPKRequest) (GetChatByPKResult, error)
 }
@@ -34,12 +35,12 @@ type getChatByPKRequestHandler struct {
 	repo chat.Repository
 }
 
-//NewGetChatByPKRequestHandler Handler constructor
+// NewGetChatByPKRequestHandler Handler constructor
 func NewGetChatByPKRequestHandler(repo chat.Repository) GetChatByPKRequestHandler {
 	return getChatByPKRequestHandler{repo: repo}
 }
 
-//Handle Handles the query
+// Handle Handles the query
 func (h getChatByPKRequestHandler) Handle(query GetChatByPKRequest) (GetChatByPKResult, error) {
 
 	res, err := h.repo.GetByPK(query.Pk)

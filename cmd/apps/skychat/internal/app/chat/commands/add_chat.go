@@ -1,3 +1,4 @@
+// Package commands contains commands to add chat
 package commands
 
 import (
@@ -8,12 +9,12 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/chat"
 )
 
-//AddChatRequest of AddChatRequestHandler
+// AddChatRequest of AddChatRequestHandler
 type AddChatRequest struct {
 	Pk cipher.PubKey
 }
 
-//AddChatRequestHandler struct that allows handling AddChatRequest
+// AddChatRequestHandler struct that allows handling AddChatRequest
 type AddChatRequestHandler interface {
 	Handle(command AddChatRequest) error
 }
@@ -23,12 +24,12 @@ type addChatRequestHandler struct {
 	chatRepo         chat.Repository
 }
 
-//NewAddChatRequestHandler Initializes an AddCommandHandler
+// NewAddChatRequestHandler Initializes an AddCommandHandler
 func NewAddChatRequestHandler(chatRepo chat.Repository, messengerService messenger.Service) AddChatRequestHandler {
 	return addChatRequestHandler{chatRepo: chatRepo, messengerService: messengerService}
 }
 
-//Handle Handles the AddChatRequest
+// Handle Handles the AddChatRequest
 func (h addChatRequestHandler) Handle(req AddChatRequest) error {
 	fmt.Println("AddChatHandler - Request: " + req.Pk.Hex())
 	//1. check if the pubkey is already in chats

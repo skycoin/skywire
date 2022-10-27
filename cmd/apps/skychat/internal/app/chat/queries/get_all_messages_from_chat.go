@@ -1,3 +1,4 @@
+// Package queries contains queries to get all messages from a chat
 package queries
 
 import (
@@ -6,7 +7,7 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/message"
 )
 
-//GetAllMessagesFromChatRequest Model of the Handler
+// GetAllMessagesFromChatRequest Model of the Handler
 type GetAllMessagesFromChatRequest struct {
 	pk cipher.PubKey
 }
@@ -16,7 +17,7 @@ type GetAllMessagesFromChatResult struct {
 	messages []message.Message
 }
 
-//GetAllMessagesFromChatRequestHandler provides an interfaces to handle a GetAllMessagesFromChatRequest and return a *GetAllMessagesFromChatResult
+// GetAllMessagesFromChatRequestHandler provides an interfaces to handle a GetAllMessagesFromChatRequest and return a *GetAllMessagesFromChatResult
 type GetAllMessagesFromChatRequestHandler interface {
 	Handle(query GetAllMessagesFromChatRequest) (GetAllMessagesFromChatResult, error)
 }
@@ -25,12 +26,12 @@ type getAllMessagesFromChatRequestHandler struct {
 	repo chat.Repository
 }
 
-//NewGetAllMessagesFromChatRequestHandler Handler Constructor
+// NewGetAllMessagesFromChatRequestHandler Handler Constructor
 func NewGetAllMessagesFromChatRequestHandler(repo chat.Repository) GetAllMessagesFromChatRequestHandler {
 	return getAllMessagesFromChatRequestHandler{repo: repo}
 }
 
-//Handle Handlers the GetAllMessagesFromChatRequest query
+// Handle Handlers the GetAllMessagesFromChatRequest query
 func (h getAllMessagesFromChatRequestHandler) Handle(query GetAllMessagesFromChatRequest) (GetAllMessagesFromChatResult, error) {
 	var result GetAllMessagesFromChatResult
 

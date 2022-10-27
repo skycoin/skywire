@@ -1,3 +1,4 @@
+// Package commands contains commands to set settings of a user
 package commands
 
 import (
@@ -6,12 +7,12 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/user"
 )
 
-//SetSettingsRequest of SetSettingsRequestHandler
+// SetSettingsRequest of SetSettingsRequestHandler
 type SetSettingsRequest struct {
 	Blacklist []cipher.PubKey
 }
 
-//SetSettingsRequestHandler struct that allows handling SetSettingsRequest
+// SetSettingsRequestHandler struct that allows handling SetSettingsRequest
 type SetSettingsRequestHandler interface {
 	Handle(command SetSettingsRequest) error
 }
@@ -20,12 +21,12 @@ type setSettingsRequestHandler struct {
 	usrRepo user.Repository
 }
 
-//NewSetSettingsRequestHandler Initializes an SetSettingsRequestHandler
+// NewSetSettingsRequestHandler Initializes an SetSettingsRequestHandler
 func NewSetSettingsRequestHandler(usrRepo user.Repository) SetSettingsRequestHandler {
 	return setSettingsRequestHandler{usrRepo: usrRepo}
 }
 
-//Handle Handles the SetSettingsRequest
+// Handle Handles the SetSettingsRequest
 func (h setSettingsRequestHandler) Handle(req SetSettingsRequest) error {
 
 	pUsr, err := h.usrRepo.GetUser()

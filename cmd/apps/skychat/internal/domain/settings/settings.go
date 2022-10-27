@@ -1,3 +1,4 @@
+// Package settings contains the code required by settings of the chat app
 package settings
 
 import (

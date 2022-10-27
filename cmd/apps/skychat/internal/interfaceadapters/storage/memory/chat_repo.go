@@ -1,3 +1,4 @@
+// Package memory contains code of the chat repo of interfaceadapters
 package memory
 
 import (
@@ -8,20 +9,20 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/chat"
 )
 
-//ChatRepo Implements the Repository Interface to provide an in-memory storage provider
+// ChatRepo Implements the Repository Interface to provide an in-memory storage provider
 type ChatRepo struct {
 	chats   map[cipher.PubKey]chat.Chat
 	chatsMu sync.Mutex
 }
 
-//NewChatRepo Constructor
+// NewChatRepo Constructor
 func NewChatRepo() *ChatRepo {
 	cR := ChatRepo{}
 	cR.chats = make(map[cipher.PubKey]chat.Chat)
 	return &cR
 }
 
-//GetByPK Returns the chat with the provided pk
+// GetByPK Returns the chat with the provided pk
 func (r *ChatRepo) GetByPK(pk cipher.PubKey) (*chat.Chat, error) {
 	r.chatsMu.Lock()
 	defer r.chatsMu.Unlock()
@@ -33,7 +34,7 @@ func (r *ChatRepo) GetByPK(pk cipher.PubKey) (*chat.Chat, error) {
 	return &chat, nil
 }
 
-//GetAll Returns all stored chats
+// GetAll Returns all stored chats
 func (r *ChatRepo) GetAll() ([]chat.Chat, error) {
 	r.chatsMu.Lock()
 	defer r.chatsMu.Unlock()
@@ -52,7 +53,7 @@ func (r *ChatRepo) GetAll() ([]chat.Chat, error) {
 	return values, nil
 }
 
-//Add the provided chat
+// Add the provided chat
 func (r *ChatRepo) Add(chat chat.Chat) error {
 	r.chatsMu.Lock()
 	defer r.chatsMu.Unlock()
@@ -61,7 +62,7 @@ func (r *ChatRepo) Add(chat chat.Chat) error {
 	return nil
 }
 
-//Update the provided chat
+// Update the provided chat
 func (r *ChatRepo) Update(chat chat.Chat) error {
 	r.chatsMu.Lock()
 	defer r.chatsMu.Unlock()
@@ -70,7 +71,7 @@ func (r *ChatRepo) Update(chat chat.Chat) error {
 	return nil
 }
 
-//Delete the chat with the provided pk
+// Delete the chat with the provided pk
 func (r *ChatRepo) Delete(pk cipher.PubKey) error {
 	r.chatsMu.Lock()
 	defer r.chatsMu.Unlock()

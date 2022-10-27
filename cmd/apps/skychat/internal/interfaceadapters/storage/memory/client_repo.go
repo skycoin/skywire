@@ -1,3 +1,4 @@
+// Package memory contains code of the client repo of interfaceadapters
 package memory
 
 import (
@@ -7,13 +8,13 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/client"
 )
 
-//ClientRepo Implements the Repository Interface to provide an in-memory storage provider
+// ClientRepo Implements the Repository Interface to provide an in-memory storage provider
 type ClientRepo struct {
 	client client.Client
 	cliMu  sync.Mutex
 }
 
-//NewClientRepo Constructor
+// NewClientRepo Constructor
 func NewClientRepo() *ClientRepo {
 	cR := ClientRepo{}
 
@@ -22,8 +23,8 @@ func NewClientRepo() *ClientRepo {
 	return &cR
 }
 
-//New fills repo with a new client, if none has been set
-//also returns a client when a client has been set already
+// New fills repo with a new client, if none has been set
+// also returns a client when a client has been set already
 func (r *ClientRepo) New() (client.Client, error) {
 	if !r.client.IsEmpty() {
 		return r.client, fmt.Errorf("client already defined")
@@ -36,7 +37,7 @@ func (r *ClientRepo) New() (client.Client, error) {
 
 }
 
-//GetClient Returns the client
+// GetClient Returns the client
 func (r *ClientRepo) GetClient() (*client.Client, error) {
 	r.cliMu.Lock()
 	defer r.cliMu.Unlock()
@@ -48,7 +49,7 @@ func (r *ClientRepo) GetClient() (*client.Client, error) {
 
 }
 
-//SetClient updates the provided client
+// SetClient updates the provided client
 func (r *ClientRepo) SetClient(client client.Client) error {
 	r.cliMu.Lock()
 	defer r.cliMu.Unlock()

@@ -1,3 +1,4 @@
+// Package message contains the code required by the chat app
 package message
 
 import (

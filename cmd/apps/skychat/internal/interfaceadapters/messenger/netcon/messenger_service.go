@@ -1,3 +1,4 @@
+// Package netcon contains code of the messenger of interfaceadapters
 package netcon
 
 import (
@@ -143,8 +144,8 @@ func (ms MessengerService) Handle(pk cipher.PubKey) error {
 	}
 }
 
-//Handles an incoming connection message and either accepts it and sends back the own info as message
-//or if the public key is in the blacklist rejects the chat request.
+// handleConnMsgType handles an incoming connection message and either accepts it and sends back the own info as message
+// or if the public key is in the blacklist rejects the chat request.
 func (ms MessengerService) handleConnMsgType(m message.Message) error {
 	usr, err := ms.usrRepo.GetUser()
 	if err != nil {
@@ -270,7 +271,7 @@ func (ms MessengerService) Dial(pk cipher.PubKey) (net.Conn, error) {
 	return conn, nil
 }
 
-//sendMessage sends a message to the given chat
+// sendMessage sends a message to the given chat
 func (ms MessengerService) sendMessage(pk cipher.PubKey, m message.Message) error {
 	c, err := ms.chatRepo.GetByPK(pk)
 	if err != nil {
@@ -305,7 +306,7 @@ func (ms MessengerService) sendMessage(pk cipher.PubKey, m message.Message) erro
 	return nil
 }
 
-//SendChatRequestMessage sends a chat request message to request a chat
+// SendChatRequestMessage sends a chat request message to request a chat
 func (ms MessengerService) SendChatRequestMessage(pk cipher.PubKey) error {
 
 	usr, err := ms.usrRepo.GetUser()
@@ -321,7 +322,7 @@ func (ms MessengerService) SendChatRequestMessage(pk cipher.PubKey) error {
 		return err
 	}
 
-	//TODO: think about putting this notification in add_chat usecase
+	//TODO: think about putting this notification in add_chat use case
 	//notify about the added chat
 	an := notification.NewAddChatNotification(pk)
 	ms.ns.Notify(an)
@@ -333,7 +334,7 @@ func (ms MessengerService) SendChatRequestMessage(pk cipher.PubKey) error {
 	return nil
 }
 
-//SendTextMessage sends a text message to the given chat
+// SendTextMessage sends a text message to the given chat
 func (ms MessengerService) SendTextMessage(pk cipher.PubKey, msg []byte) error {
 	fmt.Println("MessengerService - SendTextMessage")
 
@@ -357,7 +358,7 @@ func (ms MessengerService) SendTextMessage(pk cipher.PubKey, msg []byte) error {
 	return nil
 }
 
-//SendInfoMessage sends a info message to the given chat
+// SendInfoMessage sends a info message to the given chat
 func (ms MessengerService) SendInfoMessage(pk cipher.PubKey, info info.Info) error {
 	fmt.Println("MessengerService - SendInfoMessage")
 
@@ -386,7 +387,7 @@ func (ms MessengerService) SendInfoMessage(pk cipher.PubKey, info info.Info) err
 	return nil
 }
 
-//used to listen for new incoming chats and pass them to the connection_handle routine
+// Listen is used to listen for new incoming chats and pass them to the connection_handle routine
 func (ms MessengerService) Listen() {
 	pCli, err := ms.cliRepo.GetClient()
 	if err != nil {

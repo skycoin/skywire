@@ -1,3 +1,4 @@
+// Package server contains the code required by the chat app for peering
 package server
 
 // Server defies the chat server

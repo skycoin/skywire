@@ -1,3 +1,4 @@
+// Package http is the server handler for inputports
 package http
 
 import (
@@ -26,7 +27,7 @@ type Server struct {
 	router      *mux.Router
 }
 
-//NewServer HTTP Server constructor
+// NewServer HTTP Server constructor
 func NewServer(appServices app.Services) *Server {
 	httpServer := &Server{appServices: appServices}
 	httpServer.router = mux.NewRouter()
@@ -74,14 +75,14 @@ func (httpServer *Server) AddNotificationHTTPRoutes() {
 	httpServer.router.HandleFunc(notificationHTTPRoutePath, notification.NewHandler(httpServer.appServices.NotificationService).SubscribeNotifications).Methods("GET")
 }
 
-//ListenAndServe Starts listening for requests
+// ListenAndServe Starts listening for requests
 func (httpServer *Server) ListenAndServe(addr *string) {
 	fmt.Println("Serving HTTP on", *addr)
 	log.Fatal(http.ListenAndServe(*addr, nil))
 
 }
 
-//get index file
+// getFileSystem gets index file
 func getFileSystem() http.FileSystem {
 	fsys, err := fs.Sub(embededFiles, "static")
 	if err != nil {

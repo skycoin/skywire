@@ -1,3 +1,4 @@
+// Package commands contains commands to set info of a user
 package commands
 
 import (
@@ -7,14 +8,14 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/user"
 )
 
-//SetInfoRequest of SetInfoRequestHandler
+// SetInfoRequest of SetInfoRequestHandler
 type SetInfoRequest struct {
 	Alias string
 	Desc  string
 	Img   string
 }
 
-//SetInfoRequestHandler struct that allows handling SetInfoRequest
+// SetInfoRequestHandler struct that allows handling SetInfoRequest
 type SetInfoRequestHandler interface {
 	Handle(command SetInfoRequest) error
 }
@@ -23,12 +24,12 @@ type setInfoRequestHandler struct {
 	usrRepo user.Repository
 }
 
-//NewSetInfoRequestHandler Initializes an SetInfoHandler
+// NewSetInfoRequestHandler Initializes an SetInfoHandler
 func NewSetInfoRequestHandler(usrRepo user.Repository) SetInfoRequestHandler {
 	return setInfoRequestHandler{usrRepo: usrRepo}
 }
 
-//Handle Handles the SetInfoRequest
+// Handle Handles the SetInfoRequest
 func (h setInfoRequestHandler) Handle(req SetInfoRequest) error {
 
 	pUsr, err := h.usrRepo.GetUser()

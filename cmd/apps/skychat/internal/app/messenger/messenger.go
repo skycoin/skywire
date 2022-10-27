@@ -1,3 +1,4 @@
+// Package messenger contains the interface Service required by the chat app
 package messenger
 
 import (

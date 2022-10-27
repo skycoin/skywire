@@ -1,3 +1,4 @@
+// Package peer contains the code required by the chat app for peering
 package peer
 
 import (

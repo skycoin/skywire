@@ -1,3 +1,4 @@
+// Package commands contains commands to delete chat
 package commands
 
 import (
@@ -8,12 +9,12 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/client"
 )
 
-//DeleteChatRequest Command Model
+// DeleteChatRequest Command Model
 type DeleteChatRequest struct {
 	Pk cipher.PubKey
 }
 
-//DeleteChatRequestHandler Handler Struct with Dependencies
+// DeleteChatRequestHandler Handler Struct with Dependencies
 type DeleteChatRequestHandler interface {
 	Handle(command DeleteChatRequest) error
 }
@@ -23,12 +24,12 @@ type deleteChatRequestHandler struct {
 	chatRepo chat.Repository
 }
 
-//NewDeleteChatRequestHandler Handler constructor
+// NewDeleteChatRequestHandler Handler constructor
 func NewDeleteChatRequestHandler(cliRepo client.Repository, chatRepo chat.Repository) DeleteChatRequestHandler {
 	return deleteChatRequestHandler{cliRepo: cliRepo, chatRepo: chatRepo}
 }
 
-//Handle Handles the DeleteChatRequest request
+// Handle Handles the DeleteChatRequest request
 func (h deleteChatRequestHandler) Handle(command DeleteChatRequest) error {
 	_, err := h.chatRepo.GetByPK(command.Pk)
 	if err != nil {

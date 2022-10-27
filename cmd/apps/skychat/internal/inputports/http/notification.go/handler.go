@@ -1,3 +1,4 @@
+// Package notification is the http handler for inputports
 package notification
 
 import (
@@ -7,17 +8,17 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/notification"
 )
 
-//Handler Chat http request handler
+// Handler Chat http request handler
 type Handler struct {
 	ns notification.Service
 }
 
-//NewHandler Constructor
+// NewHandler Constructor
 func NewHandler(ns notification.Service) *Handler {
 	return &Handler{ns: ns}
 }
 
-//SubscribeNotifications sends all received msgs from channel to http
+// SubscribeNotifications sends all received msgs from channel to http
 func (c Handler) SubscribeNotifications(w http.ResponseWriter, r *http.Request) {
 
 	f, ok := w.(http.Flusher)

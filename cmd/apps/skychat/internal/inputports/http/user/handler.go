@@ -1,3 +1,4 @@
+// Package user is the http handler for inputports
 package user
 
 import (
@@ -10,12 +11,12 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/user/commands"
 )
 
-//Handler User http request handler
+// Handler User http request handler
 type Handler struct {
 	userServices userservices.UserServices
 }
 
-//NewHandler Constructor
+// NewHandler Constructor
 func NewHandler(app userservices.UserServices) *Handler {
 	return &Handler{userServices: app}
 }
@@ -23,7 +24,7 @@ func NewHandler(app userservices.UserServices) *Handler {
 // GetSettingsURLParam contains the parameter identifier to be parsed by the handler
 const GetSettingsURLParam = "settings"
 
-//GetSettings Returns the settings of the user
+// GetSettings Returns the settings of the user
 func (c Handler) GetSettings(w http.ResponseWriter, r *http.Request) {
 	settings, err := c.userServices.Queries.GetUserSettingsHandler.Handle()
 	if err == nil && settings == nil {
@@ -48,7 +49,7 @@ func (c Handler) GetSettings(w http.ResponseWriter, r *http.Request) {
 // GetInfoURLParam contains the parameter identifier to be parsed by the handler
 const GetInfoURLParam = "info"
 
-//GetInfo Returns the info of the user
+// GetInfo Returns the info of the user
 func (c Handler) GetInfo(w http.ResponseWriter, r *http.Request) {
 	info, err := c.userServices.Queries.GetUserInfoHandler.Handle()
 	if err == nil && info == nil {
@@ -73,14 +74,14 @@ func (c Handler) GetInfo(w http.ResponseWriter, r *http.Request) {
 // SetInfoURLParam contains the parameter identifier to be parsed by the handler
 const SetInfoURLParam = "info"
 
-//SetInfoRequestModel represents the  request model of Update
+// SetInfoRequestModel represents the  request model of Update
 type SetInfoRequestModel struct {
 	Alias string `json:"alias"`
 	Desc  string `json:"desc"`
 	Img   string `json:"img"`
 }
 
-//SetInfo Updates the user's info with the provided data
+// SetInfo Updates the user's info with the provided data
 func (c Handler) SetInfo(w http.ResponseWriter, r *http.Request) {
 
 	var reqInfoToUpdate SetInfoRequestModel
@@ -108,12 +109,12 @@ func (c Handler) SetInfo(w http.ResponseWriter, r *http.Request) {
 // SetSettingsURLParam contains the parameter identifier to be parsed by the handler
 const SetSettingsURLParam = "settings"
 
-//SetSettingsRequestModel represents the  request model of SetSettings
+// SetSettingsRequestModel represents the  request model of SetSettings
 type SetSettingsRequestModel struct {
 	Blacklist string `json:"blacklist"`
 }
 
-//SetSettings sets the user's settings with the provided data
+// SetSettings sets the user's settings with the provided data
 func (c Handler) SetSettings(w http.ResponseWriter, r *http.Request) {
 
 	var reqSettingsToSet SetSettingsRequestModel
