@@ -8,27 +8,39 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
-//types of messages
+// types of messages
 const (
-	ErrMsgType  = iota
-	ConnMsgType //used to handle connections
-	TxtMsgType  //the txt peers send to each other or within groups
-	InfoMsgType //used to send and ask for info like what type of chat is the pk (group/peer), get all msgs, member infos etc.
-	CmdMsgType  //used to control a server (e.g. send ban-peer or delete-msg commands)
+	// ErrMsgType is used to handle message errors types
+	ErrMsgType = iota
+	// ConnMsgType is used to handle message connections
+	ConnMsgType
+	// TxtMsgType is used to txt peers send to each other or within groups
+	TxtMsgType
+	// InfoMsgType is used to send and ask for info like what type of chat is the pk (group/peer), get all msgs, member infos etc.
+	InfoMsgType
+	// CmdMsgType is used to control a server (e.g. send ban-peer or delete-msg commands)
+	CmdMsgType
 )
 
-//subtypes of connMsgType
+// subtypes of connMsgType
 const (
+	// ErrConnMsg is used to handle connection errors message
 	ErrConnMsg = iota
+	// ConnMsgTypeRequest is used handle connection message of type Request
 	ConnMsgTypeRequest
+	// ConnMsgTypeAccept is used handle connection message of type Accept
 	ConnMsgTypeAccept
+	// ConnMsgTypeReject is used handle connection message of type Reject
 	ConnMsgTypeReject
 )
 
-//types of messageStatus
+// types of messageStatus
 const (
+	// MsgStatusInitial is used handle message status Initial
 	MsgStatusInitial = iota
+	// ConnMsgTypeRequest is used handle message status Sent
 	MsgStatusSent
+	// ConnMsgTypeRequest is used handle message status Received
 	MsgStatusReceived
 )
 
