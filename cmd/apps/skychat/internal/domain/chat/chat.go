@@ -1,4 +1,4 @@
-// Package chat contains chat realated code for domain
+// Package chat contains chat related code for domain
 package chat
 
 import (
