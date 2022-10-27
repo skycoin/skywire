@@ -11,7 +11,7 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/user"
 )
 
-//Services contains all exposed services of the application layer
+// Services contains all exposed services of the application layer
 type Services struct {
 	NotificationService notification.Service
 	ChatServices        chatservices.ChatServices
