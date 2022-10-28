@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -82,15 +81,15 @@ func (le *LogEntry) Reset() {
 
 // MarshalJSON implements json.Marshaller
 func (le *LogEntry) MarshalJSON() ([]byte, error) {
-	var rb string
-	var sb string
+	var rb uint64
+	var sb uint64
 	if le.RecvBytes != nil {
-		rb = strconv.FormatUint(atomic.LoadUint64(le.RecvBytes), 10)
+		rb = atomic.LoadUint64(le.RecvBytes)
 	}
 	if le.SentBytes != nil {
-		sb = strconv.FormatUint(atomic.LoadUint64(le.SentBytes), 10)
+		sb = atomic.LoadUint64(le.SentBytes)
 	}
-	return []byte(`{"recv":` + rb + `,"sent":` + sb + `}`), nil
+	return []byte(`{"recv":` + fmt.Sprint(rb) + `,"sent":` + fmt.Sprint(sb) + `}`), nil
 }
 
 // GobEncode implements gob.GobEncoder
@@ -98,12 +97,14 @@ func (le *LogEntry) GobEncode() ([]byte, error) {
 	var b bytes.Buffer
 	enc := gob.NewEncoder(&b)
 	if le.RecvBytes != nil {
-		if err := enc.Encode(le.RecvBytes); err != nil {
+		rb := atomic.LoadUint64(le.RecvBytes)
+		if err := enc.Encode(rb); err != nil {
 			return nil, err
 		}
 	}
 	if le.SentBytes != nil {
-		if err := enc.Encode(le.SentBytes); err != nil {
+		sb := atomic.LoadUint64(le.SentBytes)
+		if err := enc.Encode(sb); err != nil {
 			return nil, err
 		}
 	}
