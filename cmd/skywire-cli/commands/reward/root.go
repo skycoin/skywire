@@ -58,9 +58,11 @@ func init() {
 	if err == nil {
 		useRPC = true
 	} else {
+		useRPC = false
 		rpcFlagTxt = "default: false - visor is not running"
 	}
 	if skyenv.IsRoot() {
+		useRPC = false
 		rpcFlagTxt = "default: false - root permissions available"
 	}
 	rewardCmd.Flags().BoolVarP(&isUseRPC, "userpc", "u", useRPC, "use the rpc of the running visor\n"+rpcFlagTxt)
