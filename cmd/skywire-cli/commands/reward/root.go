@@ -25,7 +25,7 @@ var (
 	useRPC               bool
 	isRead               bool
 	isRewarded           bool
-	isDeleteFile           bool
+	isDeleteFile         bool
 	isAll                bool
 	rpcFlagTxt           string
 	readFlagTxt          string
