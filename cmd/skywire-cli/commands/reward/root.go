@@ -25,6 +25,7 @@ var (
 	useRPC               bool
 	isRead               bool
 	isRewarded           bool
+	isDeleteFile           bool
 	isAll                bool
 	rpcFlagTxt           string
 	readFlagTxt          string
@@ -38,15 +39,15 @@ func init() {
 		//default is genesis address for skycoin blockchain ; for testing
 		defaultRewardAddress = "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6"
 	}
-	rewardCmd.Flags().StringVarP(&rewardAddress, "address", "a", defaultRewardAddress, "reward address")
+	defaultRewardAddress = strings.TrimSuffix(defaultRewardAddress, "\n")
+	rewardCmd.Flags().StringVarP(&rewardAddress, "address", "a", "", "reward address\ndefault: "+defaultRewardAddress)
 	cHiddenFlags = append(cHiddenFlags, "address")
 	rewardCmd.Flags().StringVarP(&output, "out", "o", "", "write reward address to: "+rewardFile)
 	cHiddenFlags = append(cHiddenFlags, "out")
 	if isRewarded {
-		defaultRewardAddress = strings.TrimSuffix(defaultRewardAddress, "\n")
 		readFlagTxt = "\n" + defaultRewardAddress
 	}
-	rewardCmd.Flags().BoolVarP(&isRead, "read", "r", false, "print the skycoin reward address"+readFlagTxt)
+	rewardCmd.Flags().BoolVarP(&isRead, "read", "r", false, "print the skycoin reward address & exit"+readFlagTxt)
 	cHiddenFlags = append(cHiddenFlags, "read")
 	//check if the visor is running
 
@@ -67,6 +68,8 @@ func init() {
 	}
 	rewardCmd.Flags().BoolVarP(&isUseRPC, "userpc", "u", useRPC, "use the rpc of the running visor\n"+rpcFlagTxt)
 	cHiddenFlags = append(cHiddenFlags, "userpc")
+	rewardCmd.Flags().BoolVarP(&isDeleteFile, "delete", "d", false, "delete reward addresss file - opt out of rewards")
+	cHiddenFlags = append(cHiddenFlags, "delete")
 
 	rewardCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
 	for _, j := range cHiddenFlags {
@@ -128,6 +131,12 @@ var rewardCmd = &cobra.Command{
 		if output == "" {
 			output = skyenv.PackageConfig().LocalPath + "/" + skyenv.RewardFile
 		}
+		if isDeleteFile {
+			err := os.Remove(output)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error deleting file. err=%v", err))
+			}
+		}
 		//print reward address and exit
 		if isRead {
 			dat, err := os.ReadFile(output) //nolint
@@ -143,6 +152,9 @@ var rewardCmd = &cobra.Command{
 			if args[0] != "" {
 				rewardAddress = args[0]
 			}
+		}
+		if rewardAddress == "" {
+			rewardAddress = defaultRewardAddress
 		}
 		//remove any newline from rewardAddress string
 		rewardAddress = strings.TrimSuffix(rewardAddress, "\n")
