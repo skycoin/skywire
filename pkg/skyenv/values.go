@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"runtime"
 
 	"github.com/bitfield/script"
 	"github.com/google/uuid"
@@ -217,7 +218,8 @@ const RewardFile string = "reward.txt"
 
 // SystemSurvey returns system survey
 func SystemSurvey() (Survey, error) {
-
+	operatingSystem :=  runtime.GOOS
+	systemArchitecture :=  runtime.GOOS
 	//	ip, err := externalip.DefaultConsensus(nil, nil).ExternalIP()
 	//	if err == nil {
 	//		fmt.Println(ip.String()) // print IPv4/IPv6 in string format
@@ -235,6 +237,8 @@ func SystemSurvey() (Survey, error) {
 		return Survey{}, err
 	}
 	s := Survey{
+		OS:	operatingSystem,
+		Architecture: systemArchitecture,
 		UUID:    uuid.New(),
 		Disks:   disks,
 		Product: product,
