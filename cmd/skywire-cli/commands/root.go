@@ -1,4 +1,4 @@
-// Package commands root.go
+// Package commands cmd/skywire-cli/commands/root.go
 package commands
 
 import (
@@ -12,6 +12,7 @@ import (
 	cliconfig "github.com/skycoin/skywire/cmd/skywire-cli/commands/config"
 	clidmsgpty "github.com/skycoin/skywire/cmd/skywire-cli/commands/dmsgpty"
 	climdisc "github.com/skycoin/skywire/cmd/skywire-cli/commands/mdisc"
+	clireward "github.com/skycoin/skywire/cmd/skywire-cli/commands/reward"
 	clirtfind "github.com/skycoin/skywire/cmd/skywire-cli/commands/rtfind"
 	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 	clivpn "github.com/skycoin/skywire/cmd/skywire-cli/commands/vpn"
@@ -38,6 +39,7 @@ func init() {
 		clidmsgpty.RootCmd,
 		clivisor.RootCmd,
 		clivpn.RootCmd,
+		clireward.RootCmd,
 		clirtfind.RootCmd,
 		climdisc.RootCmd,
 		clicompletion.RootCmd,

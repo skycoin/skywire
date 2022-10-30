@@ -199,21 +199,29 @@ func IsRoot() bool {
 
 // Survey system hardware survey struct
 type Survey struct {
-	UUID    uuid.UUID
-	PubKey  cipher.PubKey
-	Disks   *ghw.BlockInfo
-	Product *ghw.ProductInfo
-	Memory  *ghw.MemoryInfo
+	UUID         uuid.UUID        `json:"uuid,omitempty"`
+	PubKey       cipher.PubKey    `json:"public_key,omitempty"`
+	OS           string           `json:"os,omitempty"`
+	Architecture string           `json:"arch,omitempty"`
+	IP           cipher.PubKey    `json:"ip_address,omitempty"`
+	Disks        *ghw.BlockInfo   `json:"disks,omitempty"`
+	Product      *ghw.ProductInfo `json:"product_info,omitempty"`
+	Memory       *ghw.MemoryInfo  `json:"memory_info,omitempty"`
 }
 
 // SurveyFile is the name of the survey file
 const SurveyFile string = "system.json"
 
-// PrivFile is the name of the file containing skycoin rewards address and privacy setting
-const PrivFile string = "reward.txt"
+// RewardFile is the name of the file containing skycoin rewards address and privacy setting
+const RewardFile string = "reward.txt"
 
-// SystemSurvey returns system hardware survey
+// SystemSurvey returns system survey
 func SystemSurvey() (Survey, error) {
+
+	//	ip, err := externalip.DefaultConsensus(nil, nil).ExternalIP()
+	//	if err == nil {
+	//		fmt.Println(ip.String()) // print IPv4/IPv6 in string format
+	//	}
 	disks, err := ghw.Block()
 	if err != nil {
 		return Survey{}, err
