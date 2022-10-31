@@ -4,6 +4,7 @@ package commands
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -287,6 +288,14 @@ func runVisor(conf *visorconfig.V1) {
 				log.WithError(err).Error("Could not marshal json.")
 			}
 			err = os.WriteFile(conf.LocalPath+"/"+skyenv.SurveyFile, s, 0644) //nolint
+			if err != nil {
+				log.WithError(err).Error("Failed to write system hardware survey to file.")
+			}
+			f, err := os.ReadFile(filepath.Clean(conf.LocalPath + "/" + skyenv.SurveyFile))
+			if err != nil {
+				log.WithError(err).Error("Failed to write system hardware survey to file.")
+			}
+			err = os.WriteFile(conf.LocalPath+"/"+skyenv.SurveySha256, sha256.Sum256([]byte(f)), 0644) //nolint
 			if err != nil {
 				log.WithError(err).Error("Failed to write system hardware survey to file.")
 			}
