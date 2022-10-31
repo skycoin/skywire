@@ -309,6 +309,9 @@ type Survey struct {
 // SurveyFile is the name of the survey file
 const SurveyFile string = "system.json"
 
+// SurveySha256 is the name of the survey checksum file
+const SurveySha256 string = "system.sha"
+
 // RewardFile is the name of the file containing skycoin rewards address and privacy setting
 const RewardFile string = "reward.txt"
 

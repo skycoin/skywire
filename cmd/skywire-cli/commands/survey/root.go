@@ -2,6 +2,7 @@
 package clisurvey
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -17,10 +18,13 @@ import (
 var (
 	pk       cipher.PubKey
 	pkString string
+	isCksum  bool
 )
 
 func init() {
 	surveyCmd.Flags().SortFlags = false
+	surveyCmd.Flags().BoolVarP(&isCksum, "sha", "s", false, "generate checksum of system survey")
+
 }
 
 // RootCmd is surveyCmd
@@ -54,6 +58,10 @@ var surveyCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Could not marshal json: %v", err))
 		}
-		fmt.Printf("%s", s)
+		if isCksum {
+			fmt.Printf("%x/n", sha256.Sum256([]byte(s)))
+		} else {
+			fmt.Printf("%s", s)
+		}
 	},
 }
