@@ -301,9 +301,13 @@ func runVisor(conf *visorconfig.V1) {
 			}
 		}
 	} else {
-		err := os.Remove(skyenv.PackageConfig().LocalPath + "/" + skyenv.RewardFile)
+		err := os.Remove(skyenv.PackageConfig().LocalPath + "/" + skyenv.SurveyFile)
 		if err == nil {
 			log.Debug("removed hadware survey for visor not seeking rewards")
+		}
+		err = os.Remove(skyenv.PackageConfig().LocalPath + "/" + skyenv.SurveySha256)
+		if err == nil {
+			log.Debug("removed hadware survey checksum file")
 		}
 	}
 	if skyenv.OS == "linux" {
