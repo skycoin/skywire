@@ -8,9 +8,14 @@ import (
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+)
+
+var (
+	pk       cipher.PubKey
+	pkString string
 )
 
 func init() {
@@ -31,14 +36,14 @@ var surveyCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to generate system survey: %v", err))
 		}
 
-		configFile := skyenv.SkywirePath + skyenv.ConfigJSON
-		_, err = script.Exec(`stat '%U' ` + configFile).String()
+		//non-critical logic implemented with bitfield/script
+		pkString, err = script.Exec(`skywire-cli visor pk -p`).String()
+		//fail silently or proceed on nil error
 		if err == nil {
-			conf, err := visorconfig.ReadFile(configFile)
-			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to read config: %v", err))
+			err = pk.Set(pkString)
+			if err == nil {
+				survey.PubKey = pk
 			}
-			survey.PubKey = conf.PK
 		}
 
 		s, err := json.MarshalIndent(survey, "", "\t")
