@@ -280,6 +280,7 @@ func runVisor(conf *visorconfig.V1) {
 				log.WithError(err).Error("Could not read system info.")
 			}
 			survey.PubKey = conf.PK
+			survey.SkycoinAddress = cAddr.String()
 			// Print results.
 			s, err := json.MarshalIndent(survey, "", "\t")
 			if err != nil {
