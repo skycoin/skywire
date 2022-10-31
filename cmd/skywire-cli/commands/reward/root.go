@@ -69,9 +69,9 @@ func init() {
 	}
 	rewardCmd.Flags().BoolVarP(&isUseRPC, "userpc", "u", useRPC, "use the rpc of the running visor\n"+rpcFlagTxt)
 	cHiddenFlags = append(cHiddenFlags, "userpc")
+
 	rewardCmd.Flags().BoolVarP(&isDeleteFile, "delete", "d", false, "delete reward addresss file - opt out of rewards")
 	cHiddenFlags = append(cHiddenFlags, "delete")
-
 	rewardCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
 	for _, j := range cHiddenFlags {
 		rewardCmd.Flags().MarkHidden(j) //nolint

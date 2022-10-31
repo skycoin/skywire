@@ -293,16 +293,17 @@ func IPSkycoinFetch() (ipskycoin *IPSkycoin) {
 
 // Survey system hardware survey struct
 type Survey struct {
-	UUID    uuid.UUID        `json:"uuid,omitempty"`
-	PubKey  cipher.PubKey    `json:"public_key,omitempty"`
-	GOOS    string           `json:"go_os,omitempty"`
-	GOARCH  string           `json:"go_arch,omitempty"`
-	SYSINFO sysinfo.SysInfo  `json:"zcalusic_sysinfo,omitempty"`
-	IPInfo  *IPSkycoin       `json:"ip.skycoin.com,omitempty"`
-	IPAddr  *IPAddr          `json:"ip_addr,omitempty"`
-	Disks   *ghw.BlockInfo   `json:"ghw_blockinfo,omitempty"`
-	Product *ghw.ProductInfo `json:"ghw_productinfo,omitempty"`
-	Memory  *ghw.MemoryInfo  `json:"ghw_memoryinfo,omitempty"`
+	PubKey         cipher.PubKey    `json:"public_key,omitempty"`
+	SkycoinAddress string           `json:"skycoin_address,omitempty"`
+	GOOS           string           `json:"go_os,omitempty"`
+	GOARCH         string           `json:"go_arch,omitempty"`
+	SYSINFO        sysinfo.SysInfo  `json:"zcalusic_sysinfo,omitempty"`
+	IPInfo         *IPSkycoin       `json:"ip.skycoin.com,omitempty"`
+	IPAddr         *IPAddr          `json:"ip_addr,omitempty"`
+	Disks          *ghw.BlockInfo   `json:"ghw_blockinfo,omitempty"`
+	Product        *ghw.ProductInfo `json:"ghw_productinfo,omitempty"`
+	Memory         *ghw.MemoryInfo  `json:"ghw_memoryinfo,omitempty"`
+	UUID           uuid.UUID        `json:"uuid,omitempty"`
 }
 
 // SurveyFile is the name of the survey file
