@@ -51,6 +51,5 @@ var surveyCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Could not marshal json: %v", err))
 		}
 		fmt.Printf("%s", s)
-		//internal.PrintOutput(cmd.Flags(), s, s)
 	},
 }

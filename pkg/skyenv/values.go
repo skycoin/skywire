@@ -299,7 +299,7 @@ type Survey struct {
 	GOARCH  string           `json:"go_arch,omitempty"`
 	SYSINFO sysinfo.SysInfo  `json:"zcalusic_sysinfo,omitempty"`
 	IPInfo  *IPSkycoin       `json:"ip.skycoin.com,omitempty"`
-	IPAddr  *IPAddr       `json:"ip_addr,omitempty"`
+	IPAddr  *IPAddr          `json:"ip_addr,omitempty"`
 	Disks   *ghw.BlockInfo   `json:"ghw_blockinfo,omitempty"`
 	Product *ghw.ProductInfo `json:"ghw_productinfo,omitempty"`
 	Memory  *ghw.MemoryInfo  `json:"ghw_memoryinfo,omitempty"`
