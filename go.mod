@@ -52,6 +52,7 @@ require (
 	github.com/skycoin/skywire-utilities v0.0.0-20220812192633-7137eb730383
 	github.com/skycoin/systray v1.10.1-0.20220630135132-48d2a1fb85d8
 	github.com/spf13/pflag v1.0.5
+	github.com/zcalusic/sysinfo v0.9.5
 	periph.io/x/periph v3.6.8+incompatible
 )
 

@@ -49,6 +49,7 @@ func init() {
 	}
 	rewardCmd.Flags().BoolVarP(&isRead, "read", "r", false, "print the skycoin reward address & exit"+readFlagTxt)
 	cHiddenFlags = append(cHiddenFlags, "read")
+
 	//check if the visor is running
 
 	//	_, err = net.DialTimeout("tcp", "localhost:3435", 5)
