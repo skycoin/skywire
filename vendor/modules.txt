@@ -276,6 +276,10 @@ github.com/valyala/histogram
 github.com/xtaci/kcp-go
 # github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37
 ## explicit; go 1.13
+# github.com/zcalusic/sysinfo v0.9.5
+## explicit; go 1.17
+github.com/zcalusic/sysinfo
+github.com/zcalusic/sysinfo/cpuid
 # go.etcd.io/bbolt v1.3.6
 ## explicit; go 1.12
 go.etcd.io/bbolt

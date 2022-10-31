@@ -2,6 +2,10 @@
 package skyenv
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/user"
@@ -14,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jaypipes/ghw"
 	"github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/zcalusic/sysinfo"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -198,16 +203,106 @@ func IsRoot() bool {
 	return userLvl.Username == "root"
 }
 
+// IPAddr struct of `ip --json addr`
+type IPAddr []struct {
+	Ifindex   int      `json:"ifindex"`
+	Ifname    string   `json:"ifname"`
+	Flags     []string `json:"flags"`
+	Mtu       int      `json:"mtu"`
+	Qdisc     string   `json:"qdisc"`
+	Operstate string   `json:"operstate"`
+	Group     string   `json:"group"`
+	Txqlen    int      `json:"txqlen"`
+	LinkType  string   `json:"link_type"`
+	Address   string   `json:"address"`
+	Broadcast string   `json:"broadcast"`
+	AddrInfo  []struct {
+		Family            string `json:"family"`
+		Local             string `json:"local"`
+		Prefixlen         int    `json:"prefixlen"`
+		Scope             string `json:"scope"`
+		Label             string `json:"label,omitempty"`
+		ValidLifeTime     int64  `json:"valid_life_time"`
+		PreferredLifeTime int64  `json:"preferred_life_time"`
+	} `json:"addr_info"`
+}
+
+// IPA returns IPAddr struct filled in with the json response from `ip --json addr` command ; fail silently on errors
+func IPA() (ip *IPAddr) {
+	//non-critical logic implemented with bitfield/script
+	ipa, err := script.Exec(`ip --json addr`).String()
+	if err != nil {
+		return nil
+	}
+	err = json.Unmarshal([]byte(ipa), &ip)
+	if err != nil {
+		return nil
+	}
+	return ip
+}
+
+// IPSkycoin struct of ip.skycoin.com json
+type IPSkycoin struct {
+	IPAddress     string  `json:"ip_address"`
+	Latitude      float64 `json:"latitude"`
+	Longitude     float64 `json:"longitude"`
+	PostalCode    string  `json:"postal_code"`
+	ContinentCode string  `json:"continent_code"`
+	CountryCode   string  `json:"country_code"`
+	CountryName   string  `json:"country_name"`
+	RegionCode    string  `json:"region_code"`
+	RegionName    string  `json:"region_name"`
+	ProvinceCode  string  `json:"province_code"`
+	ProvinceName  string  `json:"province_name"`
+	CityName      string  `json:"city_name"`
+	Timezone      string  `json:"timezone"`
+}
+
+// IPSkycoinFetch fetches the json response from ip.skycoin.com
+func IPSkycoinFetch() (ipskycoin *IPSkycoin) {
+
+	url := fmt.Sprint("http://", "ip.skycoin.com")
+	client := http.Client{
+		Timeout: time.Second * 2, // Timeout after 2 seconds
+	}
+	//create the http request
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil
+	}
+	req.Header.Add("Cache-Control", "no-cache")
+	//check for errors in the response
+	res, err := client.Do(req)
+	if err != nil {
+		return nil
+	}
+	if res.Body != nil {
+		defer res.Body.Close() //nolint
+	}
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil
+	}
+	//fill in IPSkycoin struct with the response
+	err = json.Unmarshal(body, &ipskycoin)
+	if err != nil {
+		return nil
+	}
+	return ipskycoin
+}
+
 // Survey system hardware survey struct
 type Survey struct {
-	UUID         uuid.UUID        `json:"uuid,omitempty"`
-	PubKey       cipher.PubKey    `json:"public_key,omitempty"`
-	OS           string           `json:"os,omitempty"`
-	Architecture string           `json:"arch,omitempty"`
-	IP           cipher.PubKey    `json:"ip_address,omitempty"`
-	Disks        *ghw.BlockInfo   `json:"disks,omitempty"`
-	Product      *ghw.ProductInfo `json:"product_info,omitempty"`
-	Memory       *ghw.MemoryInfo  `json:"memory_info,omitempty"`
+	UUID    uuid.UUID        `json:"uuid,omitempty"`
+	PubKey  cipher.PubKey    `json:"public_key,omitempty"`
+	GOOS    string           `json:"go_os,omitempty"`
+	GOARCH  string           `json:"go_arch,omitempty"`
+	SYSINFO sysinfo.SysInfo  `json:"zcalusic_sysinfo,omitempty"`
+	IPInfo  *IPSkycoin       `json:"ip.skycoin.com,omitempty"`
+	IPAddr  *IPAddr       `json:"ip_addr,omitempty"`
+	Disks   *ghw.BlockInfo   `json:"ghw_blockinfo,omitempty"`
+	Product *ghw.ProductInfo `json:"ghw_productinfo,omitempty"`
+	Memory  *ghw.MemoryInfo  `json:"ghw_memoryinfo,omitempty"`
 }
 
 // SurveyFile is the name of the survey file
@@ -218,12 +313,8 @@ const RewardFile string = "reward.txt"
 
 // SystemSurvey returns system survey
 func SystemSurvey() (Survey, error) {
-	operatingSystem := runtime.GOOS
-	systemArchitecture := runtime.GOOS
-	//	ip, err := externalip.DefaultConsensus(nil, nil).ExternalIP()
-	//	if err == nil {
-	//		fmt.Println(ip.String()) // print IPv4/IPv6 in string format
-	//	}
+	var si sysinfo.SysInfo
+	si.GetSysInfo()
 	disks, err := ghw.Block()
 	if err != nil {
 		return Survey{}, err
@@ -237,12 +328,15 @@ func SystemSurvey() (Survey, error) {
 		return Survey{}, err
 	}
 	s := Survey{
-		OS:           operatingSystem,
-		Architecture: systemArchitecture,
-		UUID:         uuid.New(),
-		Disks:        disks,
-		Product:      product,
-		Memory:       memory,
+		IPInfo:  IPSkycoinFetch(),
+		IPAddr:  IPA(),
+		GOOS:    runtime.GOOS,
+		GOARCH:  runtime.GOARCH,
+		SYSINFO: si,
+		UUID:    uuid.New(),
+		Disks:   disks,
+		Product: product,
+		Memory:  memory,
 	}
 	return s, nil
 }
