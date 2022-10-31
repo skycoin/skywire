@@ -4,6 +4,7 @@ package clisurvey
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
@@ -35,7 +36,6 @@ var surveyCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to generate system survey: %v", err))
 		}
-
 		//non-critical logic implemented with bitfield/script
 		pkString, err = script.Exec(`skywire-cli visor pk -p`).String()
 		//fail silently or proceed on nil error
@@ -44,6 +44,10 @@ var surveyCmd = &cobra.Command{
 			if err == nil {
 				survey.PubKey = pk
 			}
+		}
+		skyaddr, err := os.ReadFile(skyenv.PackageConfig().LocalPath + "/" + skyenv.RewardFile) //nolint
+		if err == nil {
+			survey.SkycoinAddress = string(skyaddr)
 		}
 
 		s, err := json.MarshalIndent(survey, "", "\t")
