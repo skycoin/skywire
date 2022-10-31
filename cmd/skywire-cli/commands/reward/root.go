@@ -55,7 +55,7 @@ func init() {
 	//	_, err = net.DialTimeout("tcp", "localhost:3435", 5)
 	//the above was insufficient in practice
 
-	//TODO: re-implement this
+	//TODO: re-implement this simple check for the visor running
 	_, err := script.Exec(`skywire-cli visor pk`).String()
 	if err == nil {
 		useRPC = true
