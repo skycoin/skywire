@@ -23,7 +23,7 @@ import (
 var routeCmd = &cobra.Command{
 	Use:   "route",
 	Short: "View and set rules",
-	Long:  "\n    View and set routing rules", //nolint
+	Long:  "\n    View and set routing rules",
 }
 
 func init() {
@@ -39,7 +39,7 @@ func init() {
 var lsRulesCmd = &cobra.Command{
 	Use:   "ls-rules",
 	Short: "List routing rules",
-	Long:  "\n    List routing rules", //nolint
+	Long:  "\n    List routing rules",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rules, err := clirpc.Client(cmd.Flags()).RoutingRules()
 		internal.Catch(cmd.Flags(), err)
@@ -122,7 +122,7 @@ func init() {
 }
 
 var addAppRuleCmd = &cobra.Command{
-	Use:   "app \\\n    		    <route-id> \\\n    		    <local-pk> \\\n    		  <local-port> \\\n    		   <remote-pk> \\\n    		 <remote-port> \\\n 			  || ",
+	Use:   "app \\\n               <route-id> \\\n               <local-pk> \\\n               <local-port> \\\n               <remote-pk> \\\n               <remote-port> \\\n               || ",
 	Short: "Add app/consume routing rule",
 	Long:  "\n    Add app/consume routing rule",
 	Args: func(_ *cobra.Command, args []string) error {
@@ -233,9 +233,9 @@ func init() {
 }
 
 var addFwdRuleCmd = &cobra.Command{
-	Use:   "fwd \\\n    		    <route-id> \\\n    	       <next-route-id> \\\n    	   <next-transport-id> \\\n    		    <local-pk> \\\n    		  <local-port> \\\n    		   <remote-pk> \\\n    		 <remote-port> \\\n    		   || ",
+	Use:   "fwd \\\n               <route-id> \\\n               <next-route-id> \\\n               <next-transport-id> \\\n               <local-pk> \\\n               <local-port> \\\n               <remote-pk> \\\n               <remote-port> \\\n               || ",
 	Short: "Add forward routing rule",
-	Long:  "\n  Add forward routing rule",
+	Long:  "\n    Add forward routing rule",
 	Args: func(_ *cobra.Command, args []string) error {
 		if len(args) > 0 {
 			if len(args[1:]) == 6 {
@@ -287,9 +287,9 @@ func init() {
 }
 
 var addIntFwdRuleCmd = &cobra.Command{
-	Use:   "intfwd \\\n    		       <route-id> \\\n    		  <next-route-id> \\\n    	      <next-transport-id> \\\n    		      || ",
+	Use:   "intfwd \\\n               <route-id> \\\n               <next-route-id> \\\n               <next-transport-id> \\\n               || ",
 	Short: "Add intermediary forward routing rule",
-	Long:  "\n  Add intermediary forward routing rule",
+	Long:  "\n    Add intermediary forward routing rule",
 	Args: func(_ *cobra.Command, args []string) error {
 		if len(args) > 0 {
 			if len(args[0:]) == 3 {
