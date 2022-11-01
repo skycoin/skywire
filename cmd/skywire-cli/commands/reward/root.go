@@ -105,7 +105,7 @@ func longText() string {
 		}
 		isRewarded = true
 		defaultRewardAddress = fmt.Sprintf("%s\n", reward)
-		return "\n	skycoin reward address set to:\n	" + fmt.Sprintf("%s\n", reward) //+longtext
+		return "\n    skycoin reward address set to:\n    " + fmt.Sprintf("%s\n", reward) //+longtext
 	}
 	return longtext
 }
