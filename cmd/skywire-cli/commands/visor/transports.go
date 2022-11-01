@@ -76,7 +76,7 @@ func init() {
 var lsTpCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "Available transports",
-	Long:  "\n	Available transports\n\n	displays transports of the local visor", //nolint
+	Long:  "\n    Available transports\n\n    displays transports of the local visor", //nolint
 	Run: func(cmd *cobra.Command, _ []string) {
 		var pks cipher.PubKeys
 		if filterPubKeys != nil {
@@ -95,7 +95,7 @@ func init() {
 var idCmd = &cobra.Command{
 	Use:                   "id (-i) <transport-id>",
 	Short:                 "Transport summary by id",
-	Long:                  "\n	Transport summary by id",
+	Long:                  "\n    Transport summary by id", //nolint
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
 
@@ -121,7 +121,7 @@ func init() {
 var addTpCmd = &cobra.Command{
 	Use:                   "add (-p) <remote-public-key>",
 	Short:                 "Add a transport",
-	Long:                  "\n	Add a transport\n	\n	If the transport type is unspecified,\n	the visor will attempt to establish a transport\n	in the following order: skywire-tcp, stcpr, sudph, dmsg",
+	Long:                  "\n    Add a transport\n    \n    If the transport type is unspecified,\n    the visor will attempt to establish a transport\n    in the following order: skywire-tcp, stcpr, sudph, dmsg",
 	Args:                  cobra.MinimumNArgs(1),
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -178,7 +178,7 @@ func init() {
 var rmTpCmd = &cobra.Command{
 	Use:                   "rm ( -a || -i ) <transport-id>",
 	Short:                 "Remove transport(s) by id",
-	Long:                  "\n	Remove transport(s) by id",
+	Long:                  "\n    Remove transport(s) by id",
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		//TODO
@@ -259,7 +259,7 @@ func init() {
 var discTpCmd = &cobra.Command{
 	Use:                   "disc (--id=<transport-id> || --pk=<edge-public-key>)",
 	Short:                 "Discover remote transport(s)",
-	Long:                  "\n	Discover remote transport(s) by ID or public key",
+	Long:                  "\n    Discover remote transport(s) by ID or public key",
 	DisableFlagsInUseLine: true,
 	Args: func(_ *cobra.Command, _ []string) error {
 		if tpID == "" && tpPK == "" {
