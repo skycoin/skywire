@@ -3,6 +3,15 @@
 
 package skyenv
 
+import (
+	"runtime"
+
+	"github.com/google/uuid"
+	"github.com/jaypipes/ghw"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+)
+
 const (
 	//OS detection at runtime
 	OS = "win"
