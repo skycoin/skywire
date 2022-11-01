@@ -97,11 +97,11 @@ func longText() string {
 	if _, err := os.Stat(rewardFile); err == nil {
 		reward, err := os.ReadFile(rewardFile) //nolint
 		if err != nil {
-			fmt.Errorf("	reward settings misconfigured!") //nolint
+			fmt.Errorf("    reward settings misconfigured!") //nolint
 		}
 		_, err = coincipher.DecodeBase58Address(string(reward))
 		if err != nil {
-			fmt.Errorf("	invalid address in reward config %v", err) //nolint
+			fmt.Errorf("    invalid address in reward config %v", err) //nolint
 		}
 		isRewarded = true
 		defaultRewardAddress = fmt.Sprintf("%s\n", reward)
