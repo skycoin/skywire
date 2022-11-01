@@ -3,8 +3,11 @@ package commands
 
 import (
 	"log"
+	"strings"
 
 	cc "github.com/ivanpirog/coloredcobra"
+	"github.com/pterm/pterm"
+	"github.com/pterm/pterm/putils"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
@@ -34,6 +37,53 @@ var rootCmd = &cobra.Command{
 	Version:               buildinfo.Version(),
 }
 
+var treeCmd = &cobra.Command{
+	Use:                   "tree",
+	Short:                 "subcommand tree",
+	Long:                  `subcommand tree`,
+	SilenceErrors:         true,
+	SilenceUsage:          true,
+	DisableSuggestions:    true,
+	DisableFlagsInUseLine: true,
+	Run: func(cmd *cobra.Command, args []string) {
+		// You can use a LeveledList here, for easy generation.
+		leveledList := pterm.LeveledList{}
+		leveledList = append(leveledList, pterm.LeveledListItem{Level: 0, Text: rootCmd.Use})
+		for _, j := range rootCmd.Commands() {
+			use := strings.Split(j.Use, " ")
+			leveledList = append(leveledList, pterm.LeveledListItem{Level: 1, Text: use[0]})
+			for _, k := range j.Commands() {
+				use := strings.Split(k.Use, " ")
+				leveledList = append(leveledList, pterm.LeveledListItem{Level: 2, Text: use[0]})
+				for _, l := range k.Commands() {
+					use := strings.Split(l.Use, " ")
+					leveledList = append(leveledList, pterm.LeveledListItem{Level: 3, Text: use[0]})
+					for _, m := range l.Commands() {
+						use := strings.Split(m.Use, " ")
+						leveledList = append(leveledList, pterm.LeveledListItem{Level: 4, Text: use[0]})
+						for _, n := range m.Commands() {
+							use := strings.Split(n.Use, " ")
+							leveledList = append(leveledList, pterm.LeveledListItem{Level: 5, Text: use[0]})
+							for _, o := range n.Commands() {
+								use := strings.Split(o.Use, " ")
+								leveledList = append(leveledList, pterm.LeveledListItem{Level: 6, Text: use[0]})
+							}
+						}
+					}
+				}
+			}
+		}
+		// Generate tree from LeveledList.
+		r := putils.TreeFromLeveledList(leveledList)
+
+		// Render TreePrinter
+		err := pterm.DefaultTree.WithRoot(r).Render()
+		if err != nil {
+			log.Fatal("render subcommand tree: ", err)
+		}
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(
 		cliconfig.RootCmd,
@@ -45,6 +95,7 @@ func init() {
 		clirtfind.RootCmd,
 		climdisc.RootCmd,
 		clicompletion.RootCmd,
+		treeCmd,
 	)
 	var jsonOutput bool
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")

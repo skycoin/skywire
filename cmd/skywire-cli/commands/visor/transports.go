@@ -58,7 +58,7 @@ var tpCmd = &cobra.Command{
 var lsTypesCmd = &cobra.Command{
 	Use:                   "type",
 	Short:                 "Transport types used by the local visor",
-	Long:                  "\n	Transport types used by the local visor",
+	Long:                  "\n  Transport types used by the local visor",
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, _ []string) {
 		types, err := clirpc.Client(cmd.Flags()).TransportTypes()
