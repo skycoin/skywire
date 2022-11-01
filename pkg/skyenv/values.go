@@ -10,15 +10,11 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
 	"github.com/bitfield/script"
-	"github.com/google/uuid"
-	"github.com/jaypipes/ghw"
 	"github.com/skycoin/dmsg/pkg/dmsg"
-	"github.com/zcalusic/sysinfo"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -291,21 +287,6 @@ func IPSkycoinFetch() (ipskycoin *IPSkycoin) {
 	return ipskycoin
 }
 
-// Survey system hardware survey struct
-type Survey struct {
-	PubKey         cipher.PubKey    `json:"public_key,omitempty"`
-	SkycoinAddress string           `json:"skycoin_address,omitempty"`
-	GOOS           string           `json:"go_os,omitempty"`
-	GOARCH         string           `json:"go_arch,omitempty"`
-	SYSINFO        sysinfo.SysInfo  `json:"zcalusic_sysinfo,omitempty"`
-	IPInfo         *IPSkycoin       `json:"ip.skycoin.com,omitempty"`
-	IPAddr         *IPAddr          `json:"ip_addr,omitempty"`
-	Disks          *ghw.BlockInfo   `json:"ghw_blockinfo,omitempty"`
-	Product        *ghw.ProductInfo `json:"ghw_productinfo,omitempty"`
-	Memory         *ghw.MemoryInfo  `json:"ghw_memoryinfo,omitempty"`
-	UUID           uuid.UUID        `json:"uuid,omitempty"`
-}
-
 // SurveyFile is the name of the survey file
 const SurveyFile string = "system.json"
 
@@ -314,33 +295,3 @@ const SurveySha256 string = "system.sha"
 
 // RewardFile is the name of the file containing skycoin rewards address and privacy setting
 const RewardFile string = "reward.txt"
-
-// SystemSurvey returns system survey
-func SystemSurvey() (Survey, error) {
-	var si sysinfo.SysInfo
-	si.GetSysInfo()
-	disks, err := ghw.Block()
-	if err != nil {
-		return Survey{}, err
-	}
-	product, err := ghw.Product()
-	if err != nil {
-		return Survey{}, err
-	}
-	memory, err := ghw.Memory()
-	if err != nil {
-		return Survey{}, err
-	}
-	s := Survey{
-		IPInfo:  IPSkycoinFetch(),
-		IPAddr:  IPA(),
-		GOOS:    runtime.GOOS,
-		GOARCH:  runtime.GOARCH,
-		SYSINFO: si,
-		UUID:    uuid.New(),
-		Disks:   disks,
-		Product: product,
-		Memory:  memory,
-	}
-	return s, nil
-}
