@@ -295,7 +295,8 @@ func runVisor(conf *visorconfig.V1) {
 			if err != nil {
 				log.WithError(err).Error("Failed to write system hardware survey to file.")
 			}
-			err = os.WriteFile(conf.LocalPath+"/"+skyenv.SurveySha256, sha256.Sum256([]byte(f)), 0644) //nolint
+			srvySha256Byte32 := sha256.Sum256([]byte(f))
+			err = os.WriteFile(conf.LocalPath+"/"+skyenv.SurveySha256, srvySha256Byte32[:], 0644) //nolint
 			if err != nil {
 				log.WithError(err).Error("Failed to write system hardware survey to file.")
 			}
