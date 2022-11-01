@@ -68,6 +68,7 @@ type Survey struct {
 	Product        *ghw.ProductInfo `json:"ghw_productinfo,omitempty"`
 	Memory         *ghw.MemoryInfo  `json:"ghw_memoryinfo,omitempty"`
 	UUID           uuid.UUID        `json:"uuid,omitempty"`
+	SkywireVersion string           `json:"skywire_version,omitempty"`
 }
 
 // SystemSurvey returns system survey
@@ -85,14 +86,15 @@ func SystemSurvey() (Survey, error) {
 		return Survey{}, err
 	}
 	s := Survey{
-		IPInfo:  IPSkycoinFetch(),
-		IPAddr:  IPA(),
-		GOOS:    runtime.GOOS,
-		GOARCH:  runtime.GOARCH,
-		UUID:    uuid.New(),
-		Disks:   disks,
-		Product: product,
-		Memory:  memory,
+		IPInfo:         IPSkycoinFetch(),
+		IPAddr:         IPA(),
+		GOOS:           runtime.GOOS,
+		GOARCH:         runtime.GOARCH,
+		UUID:           uuid.New(),
+		Disks:          disks,
+		Product:        product,
+		Memory:         memory,
+		SkywireVersion: Version(),
 	}
 	return s, nil
 }
