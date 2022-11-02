@@ -4,7 +4,15 @@
 package skyenv
 
 import (
+	"runtime"
+
 	"periph.io/x/periph/host/distro"
+
+	"github.com/google/uuid"
+	"github.com/jaypipes/ghw"
+	"github.com/zcalusic/sysinfo"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 const (
@@ -54,4 +62,51 @@ func UpdateCommand() []string {
 		return []string{`systemctl enable install-skywire.service && systemctl reboot || echo -e "Resource unavailable.\nPlease update manually as specified here:\nhttps://github.com/skycoin/skywire/wiki/Skywire-Package-Installation"`}
 	}
 	return []string{`echo -e "Update not implemented for this linux distro.\nPlease update skywire the same way you installed it."`}
+}
+
+// Survey system hardware survey struct
+type Survey struct {
+	PubKey         cipher.PubKey    `json:"public_key,omitempty"`
+	SkycoinAddress string           `json:"skycoin_address,omitempty"`
+	GOOS           string           `json:"go_os,omitempty"`
+	GOARCH         string           `json:"go_arch,omitempty"`
+	SYSINFO        sysinfo.SysInfo  `json:"zcalusic_sysinfo,omitempty"`
+	IPInfo         *IPSkycoin       `json:"ip.skycoin.com,omitempty"`
+	IPAddr         *IPAddr          `json:"ip_addr,omitempty"`
+	Disks          *ghw.BlockInfo   `json:"ghw_blockinfo,omitempty"`
+	Product        *ghw.ProductInfo `json:"ghw_productinfo,omitempty"`
+	Memory         *ghw.MemoryInfo  `json:"ghw_memoryinfo,omitempty"`
+	UUID           uuid.UUID        `json:"uuid,omitempty"`
+	SkywireVersion string           `json:"skywire_version,omitempty"`
+}
+
+// SystemSurvey returns system survey
+func SystemSurvey() (Survey, error) {
+	var si sysinfo.SysInfo
+	si.GetSysInfo()
+	disks, err := ghw.Block()
+	if err != nil {
+		return Survey{}, err
+	}
+	product, err := ghw.Product()
+	if err != nil {
+		return Survey{}, err
+	}
+	memory, err := ghw.Memory()
+	if err != nil {
+		return Survey{}, err
+	}
+	s := Survey{
+		IPInfo:         IPSkycoinFetch(),
+		IPAddr:         IPA(),
+		GOOS:           runtime.GOOS,
+		GOARCH:         runtime.GOARCH,
+		SYSINFO:        si,
+		UUID:           uuid.New(),
+		Disks:          disks,
+		Product:        product,
+		Memory:         memory,
+		SkywireVersion: Version(),
+	}
+	return s, nil
 }
