@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -21,6 +22,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
@@ -77,6 +79,7 @@ type API interface {
 	RoutingRule(key routing.RouteID) (routing.Rule, error)
 	SaveRoutingRule(rule routing.Rule) error
 	RemoveRoutingRule(key routing.RouteID) error
+	TestRouting(pk cipher.PubKey) (string, error)
 
 	RouteGroups() ([]RouteGroupInfo, error)
 
@@ -793,6 +796,47 @@ func (v *Visor) DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error) {
 // RoutingRules implements API.
 func (v *Visor) RoutingRules() ([]routing.Rule, error) {
 	return v.router.Rules(), nil
+}
+
+// TestRouting implements API.
+func (v *Visor) TestRouting(pk cipher.PubKey) (string, error) {
+	addr := appnet.Addr{
+		Net:    appnet.TypeSkynet,
+		PubKey: pk,
+		Port:   1,
+	}
+
+	var err error
+	var conn net.Conn
+
+	ctx := context.TODO()
+	var r = netutil.NewRetrier(v.log, 2*time.Second, netutil.DefaultMaxBackoff, 5, 2)
+	err = r.Do(ctx, func() error {
+		conn, err = appnet.Dial(addr)
+		return err
+	})
+	if err != nil {
+		return "", err
+	}
+
+	defer func() {
+		err = conn.Close()
+	}()
+
+	skywireConn, isSkywireConn := conn.(*appnet.SkywireConn)
+	if !isSkywireConn {
+		return "", fmt.Errorf("Can't get such info from this conn")
+	}
+
+	var latency time.Duration
+	err = r.Do(ctx, func() error {
+		latency = skywireConn.Latency()
+		if latency.String() != "0s" {
+			return nil
+		}
+		return fmt.Errorf("unable to retrieve latency")
+	})
+	return fmt.Sprint(latency), nil
 }
 
 // RoutingRule implements API.

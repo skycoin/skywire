@@ -493,6 +493,14 @@ func (r *RPC) RoutingRules(_ *struct{}, out *[]routing.Rule) (err error) {
 	return err
 }
 
+// TestRouting obtains all routing rules of the RoutingTable.
+func (r *RPC) TestRouting(pk *cipher.PubKey, out *string) (err error) {
+	defer rpcutil.LogCall(r.log, "TestRouting", pk)(out, &err)
+
+	*out, err = r.visor.TestRouting(*pk)
+	return err
+}
+
 // RoutingRule obtains a routing rule of given RouteID.
 func (r *RPC) RoutingRule(key *routing.RouteID, rule *routing.Rule) (err error) {
 	defer rpcutil.LogCall(r.log, "RoutingRule", key)(rule, &err)

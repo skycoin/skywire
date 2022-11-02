@@ -353,6 +353,13 @@ func (rc *rpcClient) RoutingRules() ([]routing.Rule, error) {
 	return entries, err
 }
 
+// TestRouting calls RoutingRules.
+func (rc *rpcClient) TestRouting(pk cipher.PubKey) (string, error) {
+	var latency string
+	err := rc.Call("TestRouting", &pk, &latency)
+	return latency, err
+}
+
 // RoutingRule calls RoutingRule.
 func (rc *rpcClient) RoutingRule(key routing.RouteID) (routing.Rule, error) {
 	var rule routing.Rule
@@ -948,6 +955,11 @@ func (mc *mockRPCClient) SetPublicAutoconnect(_ bool) error {
 // RoutingRules implements API.
 func (mc *mockRPCClient) RoutingRules() ([]routing.Rule, error) {
 	return mc.rt.AllRules(), nil
+}
+
+// RoutingRules implements API.
+func (mc *mockRPCClient) TestRouting(_ cipher.PubKey) (string, error) {
+	return "", nil
 }
 
 // RoutingRule implements API.
