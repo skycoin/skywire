@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -28,7 +29,6 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
-	"github.com/skycoin/skywire/pkg/visor/privacyconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -39,8 +39,8 @@ type API interface {
 
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
-	SetPrivacy(*privacyconfig.Privacy) (*privacyconfig.Privacy, error)
-	GetPrivacy() (*privacyconfig.Privacy, error)
+	SetRewardAddress(string) (string, error)
+	GetRewardAddress() (string, error)
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
@@ -312,24 +312,24 @@ func (v *Visor) Uptime() (float64, error) {
 	return time.Since(v.startedAt).Seconds(), nil
 }
 
-// SetPrivacy implements API.
-func (v *Visor) SetPrivacy(p *privacyconfig.Privacy) (*privacyconfig.Privacy, error) {
-	path := v.conf.LocalPath + "/" + skyenv.PrivFile
-	pConfig, err := privacyconfig.SetReward(p, path)
+// SetRewardAddress implements API.
+func (v *Visor) SetRewardAddress(p string) (string, error) {
+	path := v.conf.LocalPath + "/" + skyenv.RewardFile
+	err := os.WriteFile(path, []byte(p), 0644) //nolint
 	if err != nil {
-		return nil, err
+		return p, fmt.Errorf("Failed to write config to file. err=%v", err)
 	}
-	return pConfig, nil
+	return p, nil
 }
 
-// GetPrivacy implements API.
-func (v *Visor) GetPrivacy() (*privacyconfig.Privacy, error) {
-	path := v.conf.LocalPath + "/" + skyenv.PrivFile
-	pConfig, err := privacyconfig.GetReward(path)
+// GetRewardAddress implements API.
+func (v *Visor) GetRewardAddress() (string, error) {
+	path := v.conf.LocalPath + "/" + skyenv.RewardFile
+	rConfig, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
-		return nil, err
+		return "", fmt.Errorf("Failed to read config file. err=%v", err)
 	}
-	return pConfig, nil
+	return string(rConfig), nil
 }
 
 // Apps implements API.
