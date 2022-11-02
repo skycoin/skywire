@@ -1,4 +1,4 @@
-// Package cliconfig gen.go
+// Package cliconfig cmd/skywire-cli/commands/config/gen.go
 package cliconfig
 
 import (
@@ -45,6 +45,8 @@ func init() {
 	genConfigCmd.Flags().StringVarP(&hypervisorPKs, "hvpks", "j", "", "list of public keys to use as hypervisor")
 	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", skyenv.OS, "(linux / mac / win) paths")
 	gHiddenFlags = append(gHiddenFlags, "os")
+	genConfigCmd.Flags().BoolVarP(&isDisplayNodeIP, "publicip", "l", false, "allow display node ip in services")
+	gHiddenFlags = append(gHiddenFlags, "publicip")
 	genConfigCmd.Flags().BoolVarP(&isStdout, "stdout", "n", false, "write config to stdout")
 	gHiddenFlags = append(gHiddenFlags, "stdout")
 	genConfigCmd.Flags().StringVarP(&output, "out", "o", "", "output config: "+skyenv.ConfigName)
@@ -79,7 +81,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "hide")
 	genConfigCmd.Flags().BoolVarP(&isPublic, "public", "z", false, "publicize visor in service discovery")
 	gHiddenFlags = append(gHiddenFlags, "public")
-	genConfigCmd.Flags().BoolVar(&displayNodeIP, "publicip", false, "display node ip")
+	//	genConfigCmd.Flags().BoolVar(&isDisplayNodeIP, "publicip", false, "display node ip")
 	genConfigCmd.Flags().StringVar(&ver, "version", "", "custom version testing override")
 	gHiddenFlags = append(gHiddenFlags, "version")
 	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
@@ -357,8 +359,7 @@ var genConfigCmd = &cobra.Command{
 		if isPublic {
 			conf.IsPublic = true
 		}
-
-		if displayNodeIP {
+		if isDisplayNodeIP {
 			conf.Launcher.DisplayNodeIP = true
 		}
 		//don't write file with stdout

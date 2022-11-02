@@ -4,6 +4,7 @@ package commands
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -22,6 +23,7 @@ import (
 	"github.com/bitfield/script"
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/pkg/profile"
+	coincipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
 	"github.com/toqueteos/webbrowser"
 
@@ -261,22 +263,54 @@ func runVisor(conf *visorconfig.V1) {
 	if conf == nil {
 		conf = initConfig(log, confPath)
 	}
-	pathutil.EnsureDir(conf.LocalPath) //nolint
-	survey, err := skyenv.SystemSurvey()
-	if err != nil {
-		log.WithError(err).Error("Could not read system info.")
+	//check for valid reward address set as prerequisite for generating the system survey
+	rewardAddressBytes, err := os.ReadFile(skyenv.PackageConfig().LocalPath + "/" + skyenv.RewardFile) //nolint
+	if err == nil {
+		//remove any newline from rewardAddress string
+		rewardAddress := strings.TrimSuffix(string(rewardAddressBytes), "\n")
+		//validate the skycoin address
+		cAddr, err := coincipher.DecodeBase58Address(rewardAddress)
+		if err != nil {
+			log.WithError(err).Error("Invalid skycoin reward address.")
+		} else {
+			log.Info("Skycoin reward address: ", cAddr.String())
+			//generate the system survey
+			pathutil.EnsureDir(conf.LocalPath) //nolint
+			survey, err := skyenv.SystemSurvey()
+			if err != nil {
+				log.WithError(err).Error("Could not read system info.")
+			}
+			survey.PubKey = conf.PK
+			survey.SkycoinAddress = cAddr.String()
+			// Print results.
+			s, err := json.MarshalIndent(survey, "", "\t")
+			if err != nil {
+				log.WithError(err).Error("Could not marshal json.")
+			}
+			err = os.WriteFile(conf.LocalPath+"/"+skyenv.SurveyFile, s, 0644) //nolint
+			if err != nil {
+				log.WithError(err).Error("Failed to write system hardware survey to file.")
+			}
+			f, err := os.ReadFile(filepath.Clean(conf.LocalPath + "/" + skyenv.SurveyFile))
+			if err != nil {
+				log.WithError(err).Error("Failed to write system hardware survey to file.")
+			}
+			srvySha256Byte32 := sha256.Sum256([]byte(f))
+			err = os.WriteFile(conf.LocalPath+"/"+skyenv.SurveySha256, srvySha256Byte32[:], 0644) //nolint
+			if err != nil {
+				log.WithError(err).Error("Failed to write system hardware survey to file.")
+			}
+		}
+	} else {
+		err := os.Remove(skyenv.PackageConfig().LocalPath + "/" + skyenv.SurveyFile)
+		if err == nil {
+			log.Debug("removed hadware survey for visor not seeking rewards")
+		}
+		err = os.Remove(skyenv.PackageConfig().LocalPath + "/" + skyenv.SurveySha256)
+		if err == nil {
+			log.Debug("removed hadware survey checksum file")
+		}
 	}
-	survey.PubKey = conf.PK
-	// Print results.
-	s, err := json.MarshalIndent(survey, "", "\t")
-	if err != nil {
-		log.WithError(err).Error("Could not marshal json.")
-	}
-	err = os.WriteFile(conf.LocalPath+"/"+skyenv.SurveyFile, s, 0644) //nolint
-	if err != nil {
-		log.WithError(err).Error("Failed to write system hardware survey to file.")
-	}
-
 	if skyenv.OS == "linux" {
 		//warn about creating files & directories as root in non root-owned dir
 		if _, err := exec.LookPath("stat"); err == nil {

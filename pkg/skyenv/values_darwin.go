@@ -3,6 +3,15 @@
 
 package skyenv
 
+import (
+	"runtime"
+
+	"github.com/google/uuid"
+	"github.com/jaypipes/ghw"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+)
+
 const (
 	//OS detection at runtime
 	OS = "mac"
@@ -45,4 +54,35 @@ func UserConfig() PkgConfig {
 // UpdateCommand returns the commands which are run when the update button is clicked in the ui
 func UpdateCommand() []string {
 	return []string{`echo "update not implemented for macOS. Download a new version from the release section here: https://github.com/skycoin/skywire/releases"`}
+}
+
+// Survey system hardware survey struct
+type Survey struct {
+	PubKey         cipher.PubKey  `json:"public_key,omitempty"`
+	SkycoinAddress string         `json:"skycoin_address,omitempty"`
+	GOOS           string         `json:"go_os,omitempty"`
+	GOARCH         string         `json:"go_arch,omitempty"`
+	IPInfo         *IPSkycoin     `json:"ip.skycoin.com,omitempty"`
+	IPAddr         *IPAddr        `json:"ip_addr,omitempty"`
+	Disks          *ghw.BlockInfo `json:"ghw_blockinfo,omitempty"`
+	UUID           uuid.UUID      `json:"uuid,omitempty"`
+	SkywireVersion string         `json:"skywire_version,omitempty"`
+}
+
+// SystemSurvey returns system survey
+func SystemSurvey() (Survey, error) {
+	disks, err := ghw.Block()
+	if err != nil {
+		return Survey{}, err
+	}
+	s := Survey{
+		IPInfo:         IPSkycoinFetch(),
+		IPAddr:         IPA(),
+		GOOS:           runtime.GOOS,
+		GOARCH:         runtime.GOARCH,
+		UUID:           uuid.New(),
+		Disks:          disks,
+		SkywireVersion: Version(),
+	}
+	return s, nil
 }
