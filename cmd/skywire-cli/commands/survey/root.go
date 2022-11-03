@@ -7,18 +7,16 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 var (
-	pk       cipher.PubKey
-	pkString string
-	isCksum  bool
+	//	pk       cipher.PubKey
+	//	pkString string
+	isCksum bool
 )
 
 func init() {
@@ -38,17 +36,21 @@ var surveyCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		survey, err := skyenv.SystemSurvey()
 		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to generate system survey: %v", err))
+			internal.Catch(cmd.Flags(), fmt.Errorf("Failed to generate system survey: %v", err))
 		}
-		//non-critical logic implemented with bitfield/script
-		pkString, err = script.Exec(`skywire-cli visor pk -p`).String()
-		//fail silently or proceed on nil error
-		if err == nil {
-			err = pk.Set(pkString)
-			if err == nil {
-				survey.PubKey = pk
-			}
-		}
+		//		//non-critical logic implemented with bitfield/script
+		//		pkString, err = script.Exec(`skywire-cli visor pk -p`).String()
+		//		//fail silently or proceed on nil error
+		//		if err != nil {
+		//			internal.Catch(cmd.Flags(), fmt.Errorf("failed to fetch visor public key: %v", err))
+		//		} else {
+		//			err = pk.Set(pkString)
+		//			if err != nil {
+		//			internal.Catch(cmd.Flags(), fmt.Errorf("failed to validate visor public key: %v", err))
+		//		} else {
+		//				survey.PubKey = pk
+		//			}
+		//		}
 		skyaddr, err := os.ReadFile(skyenv.PackageConfig().LocalPath + "/" + skyenv.RewardFile) //nolint
 		if err == nil {
 			survey.SkycoinAddress = string(skyaddr)
