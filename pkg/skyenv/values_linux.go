@@ -6,11 +6,10 @@ package skyenv
 import (
 	"runtime"
 
-	"periph.io/x/periph/host/distro"
-
 	"github.com/google/uuid"
 	"github.com/jaypipes/ghw"
 	"github.com/zcalusic/sysinfo"
+	"periph.io/x/periph/host/distro"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
