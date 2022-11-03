@@ -6,7 +6,6 @@ import (
 	"os"
 	"strings"
 
-//	"github.com/bitfield/script"
 	coincipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -56,13 +55,13 @@ func init() {
 	//the above was insufficient in practice
 
 	//TODO: re-implement this simple check for the visor running
-//	_, err := script.Exec(`skywire-cli visor pk`).String()
-//	if err == nil {
-//		useRPC = true
-//	} else {
-		useRPC = false
-		rpcFlagTxt = "default: false - visor is not running"
-//	}
+	//	_, err := script.Exec(`skywire-cli visor pk`).String()
+	//	if err == nil {
+	//		useRPC = true
+	//	} else {
+	useRPC = false
+	rpcFlagTxt = "default: false - visor is not running"
+	//	}
 	if skyenv.IsRoot() {
 		useRPC = false
 		rpcFlagTxt = "default: false - root permissions available"

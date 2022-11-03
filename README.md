@@ -50,6 +50,32 @@ further documentation can be found in the [skywire wiki](https://github.com/skyc
 
 A high-level overview of the process for building skywire from source and the paths and files which comprise the package-based installation is contained in the [PKGBUILD](https://github.com/skycoin/AUR/blob/main/skywire/PKGBUILD)
 
+this and other build variants can be built into a package with a single command, using `yay` on archlinux
+
+installing [skywire-bin](https://aur.archlinux.org/packages/skywire-bin) will install the release binaries provided by the release section of this repo
+
+```
+yay -S skywire-bin
+```
+
+to build the debian packages using the release binaries
+
+```
+yay --mflags " -p cc.deb.PKGBUILD " -S skywire-bin
+```
+
+installing [skywire](https://aur.archlinux.org/packages/skywire) will compile binaries using the source archive for the latest version release
+
+```
+yay -S skywire
+```
+
+build from git sources to the develop branch
+
+```
+yay --mflags " -p git.PKGBUILD " -S skywire
+```
+
 ## Dependencies
 
 The systray app requires other build and runtime dependencies and further steps to compile. These are listed in [/docs/systray-builds.md](/docs/systray-builds.md)
@@ -319,8 +345,7 @@ Running from source as outlined here does not write the config to disk or explic
     └──2022-11-12.csv
 ```
 
-the
-
+Some of these files are served via the [dmsghttp logserver](https://github.com/skycoin/skywire/wiki/DMSGHTTP-logserver)
 
 ## Configure Skywire
 
