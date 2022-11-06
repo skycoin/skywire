@@ -20,11 +20,12 @@ var (
 )
 
 // Client is used by other skywire-cli commands to query the visor rpc
-func Client(cmdFlags *pflag.FlagSet) visor.API {
+func Client(cmdFlags *pflag.FlagSet) (visor.API, error) {
 	const rpcDialTimeout = time.Second * 5
 	conn, err := net.DialTimeout("tcp", Addr, rpcDialTimeout)
 	if err != nil {
-		internal.PrintFatalError(cmdFlags, fmt.Errorf("RPC connection failed; is skywire running?: %v", err))
+		internal.PrintError(cmdFlags, fmt.Errorf("RPC connection failed; is skywire running?: %v", err))
+		return nil, err
 	}
-	return visor.NewRPCClient(logger, conn, visor.RPCPrefix, 0)
+	return visor.NewRPCClient(logger, conn, visor.RPCPrefix, 0), nil
 }

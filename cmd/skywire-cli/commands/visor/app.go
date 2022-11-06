@@ -4,6 +4,7 @@ package clivisor
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"strconv"
 	"text/tabwriter"
 	"time"
@@ -50,7 +51,11 @@ var lsAppsCmd = &cobra.Command{
 	Short: "List apps",
 	Long:  "\n  List apps",
 	Run: func(cmd *cobra.Command, _ []string) {
-		states, err := clirpc.Client(cmd.Flags()).Apps()
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		states, err := rpcClient.Apps()
 		internal.Catch(cmd.Flags(), err)
 		var b bytes.Buffer
 		w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
@@ -97,7 +102,11 @@ var startAppCmd = &cobra.Command{
 	Long:  "\n  Launch app",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).StartApp(args[0]))
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		internal.Catch(cmd.Flags(), rpcClient.StartApp(args[0]))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
@@ -108,7 +117,11 @@ var stopAppCmd = &cobra.Command{
 	Long:  "\n  Halt app",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).StopApp(args[0]))
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		internal.Catch(cmd.Flags(), rpcClient.StopApp(args[0]))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
@@ -127,7 +140,11 @@ var setAppAutostartCmd = &cobra.Command{
 		default:
 			internal.Catch(cmd.Flags(), fmt.Errorf("invalid args[1] value: %s", args[1]))
 		}
-		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).SetAutoStart(args[0], autostart))
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		internal.Catch(cmd.Flags(), rpcClient.SetAutoStart(args[0], autostart))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
@@ -147,7 +164,11 @@ var setAppKillswitchCmd = &cobra.Command{
 		default:
 			internal.Catch(cmd.Flags(), fmt.Errorf("invalid args[1] value: %s", args[1]))
 		}
-		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).SetAppKillswitch(args[0], killswitch))
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		internal.Catch(cmd.Flags(), rpcClient.SetAppKillswitch(args[0], killswitch))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
@@ -167,7 +188,11 @@ var setAppSecureCmd = &cobra.Command{
 		default:
 			internal.Catch(cmd.Flags(), fmt.Errorf("invalid args[1] value: %s", args[1]))
 		}
-		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).SetAppSecure(args[0], secure))
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		internal.Catch(cmd.Flags(), rpcClient.SetAppSecure(args[0], secure))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
@@ -182,7 +207,11 @@ var setAppPasscodeCmd = &cobra.Command{
 		if args[1] == "remove" {
 			passcode = ""
 		}
-		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).SetAppPassword(args[0], passcode))
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		internal.Catch(cmd.Flags(), rpcClient.SetAppPassword(args[0], passcode))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
@@ -197,7 +226,11 @@ var setAppNetworkInterfaceCmd = &cobra.Command{
 		if args[1] == "remove" {
 			netifc = ""
 		}
-		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).SetAppNetworkInterface(args[0], netifc))
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		internal.Catch(cmd.Flags(), rpcClient.SetAppNetworkInterface(args[0], netifc))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
@@ -217,7 +250,11 @@ var appLogsSinceCmd = &cobra.Command{
 			t, err = time.Parse(time.RFC3339Nano, strTime)
 			internal.Catch(cmd.Flags(), err)
 		}
-		logs, err := clirpc.Client(cmd.Flags()).LogsSince(t, args[0])
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		logs, err := rpcClient.LogsSince(t, args[0])
 		internal.Catch(cmd.Flags(), err)
 		if len(logs) > 0 {
 			internal.PrintOutput(cmd.Flags(), logs, fmt.Sprintf("%v\n", logs))
