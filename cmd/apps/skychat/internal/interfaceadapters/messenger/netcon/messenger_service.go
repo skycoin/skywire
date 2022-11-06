@@ -99,13 +99,19 @@ func (ms MessengerService) Handle(pk cipher.PubKey) error {
 		//! Can also be a message of the remote that the own send message has been received
 
 		//get the current chat so when updating nothing gets overwritten
-		c, _ := ms.chatRepo.GetByPK(pk)
+		c, err := ms.chatRepo.GetByPK(pk)
+		if err != nil {
+			fmt.Printf("Failed to update chat: %v", err)
+		}
 
 		switch m.GetMessageType() {
 		case message.ConnMsgType:
 			c.AddMessage(m)
-			ms.chatRepo.Update(*c)
-			err := ms.handleConnMsgType(m)
+			err := ms.chatRepo.Update(*c)
+			if err != nil {
+				fmt.Printf("Failed at ms.chatRepo.Update(*c): %v", err)
+			}
+			err = ms.handleConnMsgType(m)
 			if err != nil {
 				fmt.Println(err)
 			}
@@ -117,7 +123,10 @@ func (ms MessengerService) Handle(pk cipher.PubKey) error {
 			}
 			m = message.NewMessage(jm)
 			c.AddMessage(m)
-			ms.chatRepo.Update(*c)
+			err = ms.chatRepo.Update(*c)
+			if err != nil {
+				fmt.Printf("Failed at ms.chatRepo.Update(*c): %v", err)
+			}
 
 			err = ms.handleInfoMsgType(c, m)
 			if err != nil {
@@ -131,7 +140,10 @@ func (ms MessengerService) Handle(pk cipher.PubKey) error {
 			}
 			m = message.NewMessage(jm)
 			c.AddMessage(m)
-			ms.chatRepo.Update(*c)
+			err = ms.chatRepo.Update(*c)
+			if err != nil {
+				fmt.Printf("Failed at ms.chatRepo.Update(*c): %v", err)
+			}
 			err := ms.handleTextMsgType(c, m)
 			if err != nil {
 				fmt.Println(err)
@@ -159,31 +171,50 @@ func (ms MessengerService) handleConnMsgType(m message.Message) error {
 		if !usr.GetSettings().InBlacklist(m.Sender) {
 			//notify about the new chat initiated by the user
 			an := notification.NewChatNotification(m.Sender)
-			ms.ns.Notify(an)
+			err = ms.ns.Notify(an)
+			if err != nil {
+				fmt.Printf("Failed at ms.ns.Notify(n): %v", err)
+			}
 
 			msg := message.NewChatAcceptMessage(usr.GetInfo().GetPK())
-			ms.sendMessage(m.Sender, msg)
+			err = ms.sendMessage(m.Sender, msg)
+			if err != nil {
+				fmt.Printf("Failed at ms.sendMessage(m.Sender, msg): %v", err)
+			}
 
-			ms.SendInfoMessage(m.Sender, *usr.GetInfo())
-
+			err = ms.SendInfoMessage(m.Sender, *usr.GetInfo())
+			if err != nil {
+				fmt.Printf("Failed at ms.SendInfoMessage(m.Sender, *usr.GetInfo()): %v", err)
+			}
 			//n := notification.NewMsgNotification(m.Sender, m)
 			//ms.ns.Notify(n)
 		} else {
 			msg := message.NewChatRejectMessage(usr.GetInfo().GetPK())
-			ms.sendMessage(m.Sender, msg)
-			ms.chatRepo.Delete(m.Sender)
+			err = ms.sendMessage(m.Sender, msg)
+			if err != nil {
+				fmt.Printf("Failed at ms.sendMessage(m.Sender, msg): %v", err)
+			}
+			err = ms.chatRepo.Delete(m.Sender)
+			if err != nil {
+				fmt.Printf("Failed at ms.chatRepo.Delete(m.Sender): %v", err)
+			}
 
 			//TODO: notify about a rejected chat request cause of blacklist
 			return fmt.Errorf("pk in blacklist")
 		}
 	case message.ConnMsgTypeAccept:
-		ms.SendInfoMessage(m.Sender, *usr.GetInfo())
-
+		err = ms.SendInfoMessage(m.Sender, *usr.GetInfo())
+		if err != nil {
+			fmt.Printf("Failed at ms.SendInfoMessage(m.Sender, *usr.GetInfo()): %v", err)
+		}
 	case message.ConnMsgTypeReject:
 		//ms.chatRepo.Delete(m.Sender)
 
 		n := notification.NewMsgNotification(m.Sender, m)
-		ms.ns.Notify(n)
+		err = ms.ns.Notify(n)
+		if err != nil {
+			fmt.Printf("Failed at ms.ns.Notify(n): %v", err)
+		}
 		return fmt.Errorf("peer rejected chat")
 
 	}
@@ -191,7 +222,7 @@ func (ms MessengerService) handleConnMsgType(m message.Message) error {
 	return nil
 }
 
-//TODO: document what function does
+// TODO: document what function does
 func (ms MessengerService) handleInfoMsgType(c *chat.Chat, m message.Message) error {
 	//save info in chat info
 	//unmarshal the received message bytes to info.Info
@@ -201,20 +232,29 @@ func (ms MessengerService) handleInfoMsgType(c *chat.Chat, m message.Message) er
 		fmt.Printf("Failed to unmarshal json message: %v", err)
 	}
 	c.Info = i
-	ms.chatRepo.Update(*c)
+	err = ms.chatRepo.Update(*c)
+	if err != nil {
+		fmt.Printf("Failed at ms.chatRepo.Update(*c): %v", err)
+	}
 
 	//notify about new info message
 	n := notification.NewMsgNotification(c.GetPK(), m)
-	ms.ns.Notify(n)
+	err = ms.ns.Notify(n)
+	if err != nil {
+		fmt.Printf("Failed at ms.ns.Notify(n): %v", err)
+	}
 
 	return nil
 }
 
-//TODO: document what function does
+// TODO: document what function does
 func (ms MessengerService) handleTextMsgType(c *chat.Chat, m message.Message) error {
 
 	n := notification.NewMsgNotification(c.GetPK(), message.NewTextMessage(m.Sender, m.Message))
-	ms.ns.Notify(n)
+	err := ms.ns.Notify(n)
+	if err != nil {
+		fmt.Printf("Failed at ms.ns.Notify(n): %v", err)
+	}
 
 	return nil
 }
@@ -258,7 +298,7 @@ func (ms MessengerService) Dial(pk cipher.PubKey) (net.Conn, error) {
 		//TODO: notify that dialing is happening?
 		conn, err = pCli.GetAppClient().Dial(addr)
 		//could not find a valid connection to a chat, so delete it.
-		ms.chatRepo.Delete(c.PK)
+		err = ms.chatRepo.Delete(c.PK)
 		return err
 	})
 
@@ -267,7 +307,10 @@ func (ms MessengerService) Dial(pk cipher.PubKey) (net.Conn, error) {
 	}
 
 	c.SetConnection(conn)
-	ms.chatRepo.Update(*c)
+	err = ms.chatRepo.Update(*c)
+	if err != nil {
+		fmt.Printf("Failed at ms.chatRepo.Update(*c): %v", err)
+	}
 	return conn, nil
 }
 
@@ -276,7 +319,10 @@ func (ms MessengerService) sendMessage(pk cipher.PubKey, m message.Message) erro
 	c, err := ms.chatRepo.GetByPK(pk)
 	if err != nil {
 		ch := chat.NewUndefinedChat(pk)
-		ms.chatRepo.Add(ch)
+		err = ms.chatRepo.Add(ch)
+		if err != nil {
+			fmt.Printf("Failed at ms.chatRepo.Add(ch): %v", err)
+		}
 		c = &ch
 		fmt.Printf("New skychat added: %s\n", pk)
 	}
@@ -299,9 +345,15 @@ func (ms MessengerService) sendMessage(pk cipher.PubKey, m message.Message) erro
 		return err
 	}
 
-	c, _ = ms.chatRepo.GetByPK(pk)
+	c, err = ms.chatRepo.GetByPK(pk)
+	if err != nil {
+		fmt.Printf("Failed to update chat: %v", err)
+	}
 	c.AddMessage(m)
-	ms.chatRepo.Update(*c)
+	err = ms.chatRepo.Update(*c)
+	if err != nil {
+		fmt.Printf("Failed at ms.chatRepo.Update(*c): %v", err)
+	}
 
 	return nil
 }
@@ -325,11 +377,17 @@ func (ms MessengerService) SendChatRequestMessage(pk cipher.PubKey) error {
 	//TODO: think about putting this notification in add_chat use case
 	//notify about the added chat
 	an := notification.NewAddChatNotification(pk)
-	ms.ns.Notify(an)
+	err = ms.ns.Notify(an)
+	if err != nil {
+		fmt.Printf("Failed at ms.ns.Notify(an): %v", err)
+	}
 
 	//notify about sent chat request message
 	n := notification.NewMsgNotification(pk, m)
-	ms.ns.Notify(n)
+	err = ms.ns.Notify(n)
+	if err != nil {
+		fmt.Printf("Failed at ms.ns.Notify(n): %v", err)
+	}
 
 	return nil
 }
@@ -353,7 +411,10 @@ func (ms MessengerService) SendTextMessage(pk cipher.PubKey, msg []byte) error {
 
 	//notify about sent text message
 	n := notification.NewMsgNotification(pk, m)
-	ms.ns.Notify(n)
+	err = ms.ns.Notify(n)
+	if err != nil {
+		fmt.Printf("Failed at ms.ns.Notify(n): %v", err)
+	}
 
 	return nil
 }
@@ -382,7 +443,10 @@ func (ms MessengerService) SendInfoMessage(pk cipher.PubKey, info info.Info) err
 
 	//notify about sent info message
 	n := notification.NewMsgNotification(pk, m)
-	ms.ns.Notify(n)
+	err = ms.ns.Notify(n)
+	if err != nil {
+		fmt.Printf("Failed at ms.ns.Notify(n): %v", err)
+	}
 
 	return nil
 }
@@ -416,12 +480,18 @@ func (ms MessengerService) Listen() {
 		c, err := ms.chatRepo.GetByPK(raddr.PubKey)
 		if err != nil {
 			ch := chat.NewUndefinedChat(raddr.PubKey)
-			ms.chatRepo.Add(ch)
+			err = ms.chatRepo.Add(ch)
+			if err != nil {
+				fmt.Printf("Failed at ms.chatRepo.Add(ch): %v", err)
+			}
 			c = &ch
 			fmt.Printf("New skychat added: %s\n", raddr.PubKey)
 		}
 		c.SetConnection(conn)
-		ms.chatRepo.Update(*c)
+		err = ms.chatRepo.Update(*c)
+		if err != nil {
+			fmt.Printf("Failed at ms.chatRepo.Update(*c): %v", err)
+		}
 
 		go ms.Handle(raddr.PubKey)
 	}
