@@ -82,4 +82,5 @@ var (
 var RootCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Generate or update a skywire config",
+	Long:  "A primary function of skywire-cli is generating and updating the config file used by skywire-visor.",
 }
