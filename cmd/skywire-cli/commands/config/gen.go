@@ -87,8 +87,11 @@ func init() {
 	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
 	genConfigCmd.Flags().StringVar(&binPath, "binpath", "", "set bin_path")
 	gHiddenFlags = append(gHiddenFlags, "binpath")
-	for _, j := range gHiddenFlags {
-		genConfigCmd.Flags().MarkHidden(j) //nolint
+	//show all flags on help
+	if os.Getenv("UNHIDEFLAGS") != "1" {
+		for _, j := range gHiddenFlags {
+			genConfigCmd.Flags().MarkHidden(j) //nolint
+		}
 	}
 }
 
