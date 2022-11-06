@@ -4,31 +4,41 @@ Skywire requires a Golang version of `1.16` or higher.
 
 # Skywire
 
-- [Skywire](#skywire)
-- [Commands and Subcommands](#commands-and-subcommands)
-- [Build Overview](#build-overview)
-- [Dependencies](#dependencies)
-- [Runtime Deps](#runtime-deps)
-- [Build Deps](#build-deps)
-
-	- [Prepare](#prepare)
-	- [Build](#build)
-    - [Configure Skywire](#configure-skywire)
-        - [Expose hypervisorUI](#expose-hypervisorui)
-        - [Add remote hypervisor](#add-remote-hypervisor)
-    - [Run `skywire-visor`](#run-skywire-visor)
-        - [Using the Skywire VPN](#using-the-skywire-vpn)
-    - [Creating a GitHub release](#creating-a-github-release)
-        - [How to create a GitHub release](#how-to-create-a-github-release)
+* [Skywire](#skywire)
+  * [Commands and Subcommands](#commands-and-subcommands)
+  * [App documentation](#app-documentation)
+  * [Installing Skywire](#installing-skywire)
+  * [Build Overview](#build-overview)
+  * [Dependencies](#dependencies)
+    * [Runtime Deps](#runtime-deps)
+    * [Build Deps](#build-deps)
+  * [Prepare](#prepare)
+  * [Build](#build)
+  * [Install](#install)
+  * [Skywire\-autoconfig](#skywire-autoconfig)
+    * [Package tree](#package-tree)
+  * [Build with make](#build-with-make)
+  * [Build docker image](#build-docker-image)
+  * [Run from source](#run-from-source)
+  * [Files and folders created by skywire](#files-and-folders-created-by-skywire)
+  * [Configure Skywire](#configure-skywire)
+    * [Expose hypervisorUI](#expose-hypervisorui)
+    * [Add remote hypervisor](#add-remote-hypervisor)
+  * [Run skywire\-visor](#run-skywire-visor)
+    * [Using the Skywire VPN](#using-the-skywire-vpn)
+  * [Creating a GitHub release](#creating-a-github-release)
+    * [How to create a GitHub release](#how-to-create-a-github-release)
 
 ## Commands and Subcommands
+
+Documentation on skywire-cli interface as well as available flags for skywire-visor
 
 * [skywire-cli](cmd/skywire-cli/README.md)
 * [skywire-visor](cmd/skywire-visor/README.md)
 
 ## App documentation
 
-apps are not executed by the user, but hosted by the visor process
+Apps are not executed by the user, but hosted by the visor process
 
 * [skychat](cmd/apps/skychat/README.md)
 * [skysocks](cmd/apps/skysocks/README.md)
@@ -39,6 +49,8 @@ apps are not executed by the user, but hosted by the visor process
 further documentation can be found in the [skywire wiki](https://github.com/skycoin/skywire/wiki)
 
 ## Installing Skywire
+
+Pre-compiled resouces
 
 * [Windows installer](https://github.com/skycoin/skywire/releases/download/v1.2.1/skywire-installer-v1.2.1-windows-amd64.msi)
 * [MacOS amd64 package](https://github.com/skycoin/skywire/releases/download/v1.2.1/skywire-installer-v1.2.1-darwin-amd64.pkg)
@@ -53,25 +65,21 @@ A high-level overview of the process for building skywire from source and the pa
 this and other build variants can be built into a package with a single command, using `yay` on archlinux
 
 installing [skywire-bin](https://aur.archlinux.org/packages/skywire-bin) will install the release binaries provided by the release section of this repo
-
 ```
 yay -S skywire-bin
 ```
 
 to build the debian packages using the release binaries
-
 ```
 yay --mflags " -p cc.deb.PKGBUILD " -S skywire-bin
 ```
 
 installing [skywire](https://aur.archlinux.org/packages/skywire) will compile binaries using the source archive for the latest version release
-
 ```
 yay -S skywire
 ```
 
 build from git sources to the develop branch
-
 ```
 yay --mflags " -p git.PKGBUILD " -S skywire
 ```
@@ -298,13 +306,13 @@ output tree
 ```
 ├──skywire-cli
 └─┬skywire-visor
-└─┬apps
-├──skychat
-├──skysocks
-├──skysocks-client
-├──vpn-client
-├──vpn-server
-└──skychat
+	└─┬apps
+		├──skychat
+		├──skysocks
+		├──skysocks-client
+		├──vpn-client
+		├──vpn-server
+		└──skychat
 ```
 
 install these executables to the `GOPATH`
@@ -335,14 +343,14 @@ Running from source as outlined here does not write the config to disk or explic
 ```
 ├──skywire-config.json
 └─┬local
-  ├──skychat
-  ├──skysocks
-  ├──apps-pid.txt
-  ├──skychat_log.db
-  ├──reward.txt
-  ├──node-info.json
-  └─┬transport_logs
-    └──2022-11-12.csv
+ 	├──skychat
+ 	├──skysocks
+ 	├──apps-pid.txt
+  	├──skychat_log.db
+ 	├──reward.txt
+ 	├──node-info.json
+  	└─┬transport_logs
+		└──2022-11-12.csv
 ```
 
 Some of these files are served via the [dmsghttp logserver](https://github.com/skycoin/skywire/wiki/DMSGHTTP-logserver)
@@ -439,6 +447,10 @@ docker run --rm -p 8000:8000 --name=skywire skycoin/skywire:test skywire-visor
 
 `skywire-visor` can be run on Windows. The setup requires additional setup steps that are specified
 in [the docs](docs/windows-setup.md).
+
+### Using Skywire connection for apps
+
+to be documented
 
 ### Using the Skywire VPN
 
