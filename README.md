@@ -6,11 +6,10 @@ Skywire requires a Golang version of `1.16` or higher.
 
 - [Skywire](#skywire)
 - [Commands and Subcommands](#commands-and-subcommands)
+
 - [App documentation](#app-documentation)
 - [Installing Skywire](#)
 - [Build Overview](#build-overview)
-## Installing Skywire
-
 - [Dependencies](#dependencies)
 - [Runtime Deps](#runtime-deps)
 - [Build Deps](#build-deps)
