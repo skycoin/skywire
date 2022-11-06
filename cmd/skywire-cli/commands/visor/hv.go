@@ -3,6 +3,7 @@ package clivisor
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/toqueteos/webbrowser"
@@ -60,8 +61,11 @@ var hvpkCmd = &cobra.Command{
 			}
 			hypervisors = conf.Hypervisors
 		} else {
-			client := clirpc.Client(cmd.Flags())
-			overview, err := client.Overview()
+			rpcClient, err := clirpc.Client(cmd.Flags())
+			if err != nil {
+				os.Exit(1)
+			}
+			overview, err := rpcClient.Overview()
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 			}
@@ -76,8 +80,11 @@ var chvpkCmd = &cobra.Command{
 	Short: "Public key of remote hypervisor(s)",
 	Long:  "Public key of remote hypervisor(s) which are currently connected to",
 	Run: func(cmd *cobra.Command, _ []string) {
-		client := clirpc.Client(cmd.Flags())
-		overview, err := client.Overview()
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		overview, err := rpcClient.Overview()
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 		}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"text/tabwriter"
 	"time"
@@ -41,7 +42,11 @@ var lsRulesCmd = &cobra.Command{
 	Short: "List routing rules",
 	Long:  "\n    List routing rules",
 	Run: func(cmd *cobra.Command, _ []string) {
-		rules, err := clirpc.Client(cmd.Flags()).RoutingRules()
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		rules, err := rpcClient.RoutingRules()
 		internal.Catch(cmd.Flags(), err)
 
 		printRoutingRules(cmd.Flags(), rules...)
@@ -56,8 +61,11 @@ var ruleCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		id, err := strconv.ParseUint(args[0], 10, 32)
 		internal.Catch(cmd.Flags(), err)
-
-		rule, err := clirpc.Client(cmd.Flags()).RoutingRule(routing.RouteID(id))
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		rule, err := rpcClient.RoutingRule(routing.RouteID(id))
 		internal.Catch(cmd.Flags(), err)
 
 		printRoutingRules(cmd.Flags(), rule)
@@ -82,7 +90,11 @@ var rmRuleCmd = &cobra.Command{
 		//} else {
 		id, err := strconv.ParseUint(args[0], 10, 32)
 		internal.Catch(cmd.Flags(), err)
-		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).RemoveRoutingRule(routing.RouteID(id)))
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		internal.Catch(cmd.Flags(), rpcClient.RemoveRoutingRule(routing.RouteID(id)))
 		//}
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
@@ -204,7 +216,11 @@ var addAppRuleCmd = &cobra.Command{
 			rIDKey = rule.KeyRouteID()
 		}
 
-		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).SaveRoutingRule(rule))
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		internal.Catch(cmd.Flags(), rpcClient.SaveRoutingRule(rule))
 
 		output := struct {
 			RoutingRuleKey routing.RouteID `json:"routing_route_key"`
@@ -262,7 +278,11 @@ var addFwdRuleCmd = &cobra.Command{
 			rIDKey = rule.KeyRouteID()
 		}
 
-		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).SaveRoutingRule(rule))
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		internal.Catch(cmd.Flags(), rpcClient.SaveRoutingRule(rule))
 
 		output := struct {
 			RoutingRuleKey routing.RouteID `json:"routing_route_key"`
@@ -312,7 +332,11 @@ var addIntFwdRuleCmd = &cobra.Command{
 			rIDKey = rule.KeyRouteID()
 		}
 
-		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).SaveRoutingRule(rule))
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		internal.Catch(cmd.Flags(), rpcClient.SaveRoutingRule(rule))
 
 		output := struct {
 			RoutingRuleKey routing.RouteID `json:"routing_route_key"`

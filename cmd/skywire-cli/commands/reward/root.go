@@ -20,13 +20,10 @@ var (
 	rewardAddress        string
 	defaultRewardAddress string
 	output               string
-	isUseRPC             bool
-	useRPC               bool
 	isRead               bool
 	isRewarded           bool
 	isDeleteFile         bool
 	isAll                bool
-	rpcFlagTxt           string
 	readFlagTxt          string
 	cHiddenFlags         []string
 )
@@ -48,27 +45,6 @@ func init() {
 	}
 	rewardCmd.Flags().BoolVarP(&isRead, "read", "r", false, "print the skycoin reward address & exit"+readFlagTxt)
 	cHiddenFlags = append(cHiddenFlags, "read")
-
-	//check if the visor is running
-
-	//	_, err = net.DialTimeout("tcp", "localhost:3435", 5)
-	//the above was insufficient in practice
-
-	//TODO: re-implement this simple check for the visor running
-	//	_, err := script.Exec(`skywire-cli visor pk`).String()
-	//	if err == nil {
-	//		useRPC = true
-	//	} else {
-	useRPC = false
-	rpcFlagTxt = "default: false - visor is not running"
-	//	}
-	if skyenv.IsRoot() {
-		useRPC = false
-		rpcFlagTxt = "default: false - root permissions available"
-	}
-	rewardCmd.Flags().BoolVarP(&isUseRPC, "userpc", "u", useRPC, "use the rpc of the running visor\n"+rpcFlagTxt)
-	cHiddenFlags = append(cHiddenFlags, "userpc")
-
 	rewardCmd.Flags().BoolVarP(&isDeleteFile, "delete", "d", false, "delete reward addresss file - opt out of rewards")
 	cHiddenFlags = append(cHiddenFlags, "delete")
 	rewardCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
@@ -164,20 +140,20 @@ var rewardCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid address specified: %v", err))
 		}
 		//using the rpc of the running visor avoids needing sudo permissions
-		//true if visor is running
-		//false if sudo permissions exist
-		if isUseRPC {
-			client := clirpc.Client(cmd.Flags())
-			rewardaddress, err := client.SetRewardAddress(rewardAddress)
-			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
-			}
-			internal.PrintOutput(cmd.Flags(), rewardaddress, rewardaddress)
-
-		} else {
+		client, err := clirpc.Client(cmd.Flags())
+		if err != nil {
 			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(cAddr.String()), 0644)) //nolint
 			readRewardFile(cmd.Flags())
+			return
 		}
+		rewardaddress, err := client.SetRewardAddress(rewardAddress)
+		if err != nil {
+			internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
+			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(cAddr.String()), 0644)) //nolint
+			readRewardFile(cmd.Flags())
+			return
+		}
+		internal.PrintOutput(cmd.Flags(), rewardaddress, rewardaddress)
 	},
 }
 

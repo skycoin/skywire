@@ -4,6 +4,7 @@ package clivisor
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -45,8 +46,11 @@ var pkCmd = &cobra.Command{
 			}
 			outputPK = conf.PK.Hex()
 		} else {
-			client := clirpc.Client(cmd.Flags())
-			overview, err := client.Overview()
+			rpcClient, err := clirpc.Client(cmd.Flags())
+			if err != nil {
+				os.Exit(1)
+			}
+			overview, err := rpcClient.Overview()
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 			}
@@ -67,7 +71,11 @@ var summaryCmd = &cobra.Command{
 	Short: "Summary of visor info",
 	Long:  "\n  Summary of visor info",
 	Run: func(cmd *cobra.Command, _ []string) {
-		summary, err := clirpc.Client(cmd.Flags()).Summary()
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		summary, err := rpcClient.Summary()
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 		}
@@ -107,8 +115,11 @@ var buildInfoCmd = &cobra.Command{
 	Short: "Version and build info",
 	Long:  "\n  Version and build info",
 	Run: func(cmd *cobra.Command, _ []string) {
-		client := clirpc.Client(cmd.Flags())
-		overview, err := client.Overview()
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		overview, err := rpcClient.Overview()
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 		}
