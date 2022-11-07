@@ -77,9 +77,9 @@ const (
 	// TODO(darkrengarius): this one's not needed for the app to run but lack of it causes errors
 	VPNClientPort uint16 = 43
 
-	ExampleServerName        = "vpn-server"
+	ExampleServerName        = "example-server-app"
 	ExampleServerPort uint16 = 45
-	ExampleClientName        = "vpn-server"
+	ExampleClientName        = "example-client-app"
 	ExampleClientPort uint16 = 46
 )
 
