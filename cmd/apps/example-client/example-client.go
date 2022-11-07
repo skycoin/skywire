@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
@@ -58,7 +60,13 @@ func main() {
 		print(fmt.Sprintf("Failed to output build info: %v\n", err))
 	}
 
-	// var addr = flag.String("addr", skyenv.SkysocksClientAddr, "Client address to listen on")
+	osSigs := make(chan os.Signal, 2)
+
+	sigs := []os.Signal{syscall.SIGTERM, syscall.SIGINT}
+	for _, sig := range sigs {
+		signal.Notify(osSigs, sig)
+	}
+
 	var serverPK = flag.String("srv", "", "PubKey of the server to connect to")
 	flag.Parse()
 
@@ -76,17 +84,27 @@ func main() {
 		os.Exit(1)
 	}
 	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
-	for {
-		_, err := dialServer(ctx, appCl, pk)
-		if err != nil {
-			print(fmt.Sprintf("Failed to dial to a server: %v\n", err))
-			setAppErr(appCl, err)
-			os.Exit(1)
-		}
+	conn, err := dialServer(ctx, appCl, pk)
+	if err != nil {
+		print(fmt.Sprintf("Failed to dial to a server: %v\n", err))
+		setAppErr(appCl, err)
+		os.Exit(1)
+	}
 
-		fmt.Printf("Connected to %v\n", pk)
-
-		setAppStatus(appCl, appserver.AppDetailedStatusReconnecting)
+	print(fmt.Sprintf("Connected to %v\n", pk))
+	setAppStatus(appCl, appserver.AppDetailedStatusRunning)
+	helloMsg := "hello"
+	_, err = conn.Write([]byte(helloMsg))
+	if err != nil {
+		print(fmt.Sprintf("error sending data: %v\n", err))
+	}
+	_, _ = conn.(*appnet.SkywireConn)
+	// if !isSkywireConn {
+	// }
+	<-osSigs
+	err = conn.Close()
+	if err != nil {
+		print(fmt.Sprintf("Failed to close conn: %v\n", err))
 	}
 }
 

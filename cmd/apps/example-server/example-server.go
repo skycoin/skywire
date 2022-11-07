@@ -66,8 +66,15 @@ func main() {
 		}
 		fmt.Println("Accepted skychat conn")
 
-		raddr := conn.RemoteAddr().(appnet.Addr)
-		fmt.Printf("Accepted test-client conn on %s from %s\n", conn.LocalAddr(), raddr.PubKey)
+		rAddr := conn.RemoteAddr().(appnet.Addr)
+		fmt.Printf("Accepted test-client conn on %s from %s\n", conn.LocalAddr(), rAddr.PubKey)
+		var readHello []byte
+		_, err = conn.Read(readHello)
+		if err != nil {
+			print(fmt.Sprintf("Failed to read from conn: %v\n", err))
+			return
+		}
+		print(fmt.Sprintf("read from conn: %v\n", string(readHello)))
 	}
 }
 
