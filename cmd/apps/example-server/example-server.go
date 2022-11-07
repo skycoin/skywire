@@ -69,12 +69,12 @@ func main() {
 		rAddr := conn.RemoteAddr().(appnet.Addr)
 		fmt.Printf("Accepted test-client conn on %s from %s\n", conn.LocalAddr(), rAddr.PubKey)
 		var readHello []byte
-		_, err = conn.Read(readHello)
+		n, err := conn.Read(readHello)
 		if err != nil {
 			print(fmt.Sprintf("Failed to read from conn: %v\n", err))
 			return
 		}
-		print(fmt.Sprintf("read from conn: %v\n", string(readHello)))
+		print(fmt.Sprintf("read from conn: %v\n", string(readHello[:n])))
 	}
 }
 
