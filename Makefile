@@ -203,8 +203,8 @@ host-apps: ## Build app
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skysocks-client
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/vpn-server
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/vpn-client
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/test-client
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/test-server
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/example-client
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/example-server
 
 host-apps-windows:
 	powershell -Command new-item .\apps -itemtype directory -force
