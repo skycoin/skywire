@@ -118,6 +118,8 @@ var (
 	dmsgHTTP vinit.Module
 	// Dmsg trackers module
 	dmsgTrackers vinit.Module
+	// Ping module
+	ping vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 )
@@ -155,8 +157,9 @@ func registerModules(logger *logging.MasterLogger) {
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
 	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl, &dmsgHTTPLogServer, &dmsgTrackers)
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
+	ping = maker("ping", initPing, &dmsgC, &tm)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &ping)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -554,6 +557,32 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 		cancel()
 		return nil
 	})
+	return nil
+}
+
+func initPing(ctx context.Context, v *Visor, log *logging.Logger) error {
+	// ctx, cancel := context.WithCancel(ctx)
+	// To remove the block set by NewTransportListener if dmsg is not initialized
+	// go func() {
+	// 	ts, err := ts.NewTransportListener(ctx, v.conf, v.dmsgC, v.tpM, v.MasterLogger())
+	// 	if err != nil {
+	// 		log.Warn(err)
+	// 		cancel()
+	// 	}
+	// 	select {
+	// 	case <-ctx.Done():
+	// 	default:
+	// 		go ts.Serve(ctx)
+	// 	}
+	// }()
+
+	// waiting for at least one transport to initialize
+	<-v.tpM.Ready()
+
+	// v.pushCloseStack("transport_setup.rpc", func() error {
+	// 	cancel()
+	// 	return nil
+	// })
 	return nil
 }
 

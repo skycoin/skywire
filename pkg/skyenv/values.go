@@ -61,6 +61,9 @@ const (
 	SkychatPort uint16 = 1
 	SkychatAddr        = ":8001"
 
+	PingTestName        = "pingtest"
+	PingTestPort uint16 = 2
+
 	SkysocksName        = "skysocks"
 	SkysocksPort uint16 = 3
 
