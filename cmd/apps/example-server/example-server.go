@@ -100,6 +100,15 @@ func handleConn(conn net.Conn) {
 		if err != nil {
 			print(fmt.Sprintf("Failed to marshal json: %v\n", err))
 		}
-		fmt.Printf("Received and trashed: %s\n", clientMsg)
+		fmt.Printf("Received: %s\n", clientMsg)
+		if string(buf[:n]) == "hello" {
+			helloRsp := "hi"
+			_, err = conn.Write([]byte(helloRsp))
+			if err != nil {
+				print(fmt.Sprintf("error sending data: %v\n", err))
+				return
+			}
+			fmt.Println("Sent hello response")
+		}
 	}
 }

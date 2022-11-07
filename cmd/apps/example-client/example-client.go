@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -91,16 +92,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	print(fmt.Sprintf("Connected to %v\n", pk))
+	fmt.Printf("Connected to %v\n", pk)
 	setAppStatus(appCl, appserver.AppDetailedStatusRunning)
 	helloMsg := "hello"
 	_, err = conn.Write([]byte(helloMsg))
 	if err != nil {
 		print(fmt.Sprintf("error sending data: %v\n", err))
 	}
-	_, _ = conn.(*appnet.SkywireConn)
-	// if !isSkywireConn {
-	// }
+	go handleConn(conn)
 	<-osSigs
 	err = conn.Close()
 	if err != nil {
@@ -117,5 +116,23 @@ func setAppErr(appCl *app.Client, err error) {
 func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
 	if err := appCl.SetDetailedStatus(string(status)); err != nil {
 		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
+	}
+}
+
+func handleConn(conn net.Conn) {
+	rAddr := conn.RemoteAddr().(appnet.Addr)
+	for {
+		buf := make([]byte, 32*1024)
+		n, err := conn.Read(buf)
+		if err != nil {
+			fmt.Println("Failed to read packet:", err)
+			return
+		}
+
+		servMsg, err := json.Marshal(map[string]string{"sender": rAddr.PubKey.Hex(), "message": string(buf[:n])})
+		if err != nil {
+			print(fmt.Sprintf("Failed to marshal json: %v\n", err))
+		}
+		fmt.Printf("Received: %s\n", servMsg)
 	}
 }
