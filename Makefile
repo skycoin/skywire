@@ -108,6 +108,8 @@ build-windows-appveyor: host-apps-windows-appveyor bin-windows-appveyor ## Insta
 
 build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
+build-example: host-apps example-apps bin ## Build apps, example apps and binaries. `go build` with ${OPTS}
+
 installer: mac-installer ## Builds MacOS installer for skywire-visor
 
 install-system-linux: build # Workaround for debugging linux package installation
@@ -203,8 +205,10 @@ host-apps: ## Build app
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skysocks-client
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/vpn-server
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/vpn-client
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/example-client
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/example-server
+
+example-apps: ## Build example apps
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./example/example-client-app
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./example/example-server-app
 
 host-apps-windows:
 	powershell -Command new-item .\apps -itemtype directory -force
