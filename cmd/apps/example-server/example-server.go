@@ -5,8 +5,10 @@ proxy server app for skywire visor
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -68,13 +70,7 @@ func main() {
 
 		rAddr := conn.RemoteAddr().(appnet.Addr)
 		fmt.Printf("Accepted test-client conn on %s from %s\n", conn.LocalAddr(), rAddr.PubKey)
-		var readHello []byte
-		n, err := conn.Read(readHello)
-		if err != nil {
-			print(fmt.Sprintf("Failed to read from conn: %v\n", err))
-			return
-		}
-		print(fmt.Sprintf("read from conn: %v\n", string(readHello[:n])))
+		handleConn(conn)
 	}
 }
 
@@ -87,5 +83,23 @@ func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
 func setAppError(appCl *app.Client, appErr error) {
 	if err := appCl.SetError(appErr.Error()); err != nil {
 		print(fmt.Sprintf("Failed to set error %v: %v\n", appErr, err))
+	}
+}
+
+func handleConn(conn net.Conn) {
+	rAddr := conn.RemoteAddr().(appnet.Addr)
+	for {
+		buf := make([]byte, 32*1024)
+		n, err := conn.Read(buf)
+		if err != nil {
+			fmt.Println("Failed to read packet:", err)
+			return
+		}
+
+		clientMsg, err := json.Marshal(map[string]string{"sender": rAddr.PubKey.Hex(), "message": string(buf[:n])})
+		if err != nil {
+			print(fmt.Sprintf("Failed to marshal json: %v\n", err))
+		}
+		fmt.Printf("Received and trashed: %s\n", clientMsg)
 	}
 }
