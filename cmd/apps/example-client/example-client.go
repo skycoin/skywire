@@ -7,7 +7,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -17,7 +16,6 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -27,19 +25,18 @@ import (
 
 const (
 	netType = appnet.TypeSkynet
-	port    = routing.Port(2)
 )
 
 var r = netutil.NewRetrier(nil, time.Second, netutil.DefaultMaxBackoff, 0, 1)
 
-func dialServer(ctx context.Context, appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
+func dialServer(ctx context.Context, appCl *app.Client, hostAddr routing.Addr) (net.Conn, error) {
 	var conn net.Conn
 	err := r.Do(ctx, func() error {
 		var err error
 		conn, err = appCl.Dial(appnet.Addr{
 			Net:    netType,
-			PubKey: pk,
-			Port:   port,
+			PubKey: hostAddr.PubKey,
+			Port:   hostAddr.Port,
 		})
 		return err
 	})
@@ -68,31 +65,24 @@ func main() {
 		signal.Notify(osSigs, sig)
 	}
 
-	var serverPK = flag.String("srv", "", "PubKey of the server to connect to")
+	var serverAddr = flag.String("addr", "", "PubKey and port of the server to connect to")
 	flag.Parse()
-
-	if *serverPK == "" {
-		err := errors.New("Empty server PubKey. Exiting")
-		print(fmt.Sprintf("%v\n", err))
+	var hostAddr routing.Addr
+	if err := hostAddr.Set(*serverAddr); err != nil {
+		print(fmt.Sprintf("invalid host address: %v\n", err))
 		setAppErr(appCl, err)
 		os.Exit(1)
 	}
 
-	pk := cipher.PubKey{}
-	if err := pk.UnmarshalText([]byte(*serverPK)); err != nil {
-		print(fmt.Sprintf("Invalid server PubKey: %v\n", err))
-		setAppErr(appCl, err)
-		os.Exit(1)
-	}
 	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
-	conn, err := dialServer(ctx, appCl, pk)
+	conn, err := dialServer(ctx, appCl, hostAddr)
 	if err != nil {
 		print(fmt.Sprintf("Failed to dial to a server: %v\n", err))
 		setAppErr(appCl, err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("Connected to %v\n", pk)
+	fmt.Printf("Connected to %v\n", hostAddr.PubKey)
 	setAppStatus(appCl, appserver.AppDetailedStatusRunning)
 	helloMsg := "hello"
 	_, err = conn.Write([]byte(helloMsg))
