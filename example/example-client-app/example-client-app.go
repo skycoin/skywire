@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/app"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -48,13 +49,22 @@ func dialServer(ctx context.Context, appCl *app.Client, hostAddr routing.Addr) (
 }
 
 var serverAddr = flag.String("addr", "", "PubKey and port of the server to connect to")
-var procAddr = flag.String("proc", "localhost:5505", "proc server address to connect to")
+var procAddr = flag.String("procAddr", "localhost:5505", "proc server address to connect to")
+var procKey = flag.String("procKey", "", "proc server address to connect to")
 
-// TODO verify the flags
 func main() {
 	flag.Parse()
 
-	appCl := app.NewClient(nil, procAddr)
+	var pKey appcommon.ProcKey
+	if *procKey != "" {
+		err := pKey.UnmarshalText([]byte(*procKey))
+		if err != nil {
+			print(fmt.Sprintf("Failed to read procKey: %v\n", err))
+			os.Exit(1)
+		}
+	}
+
+	appCl := app.NewClient(nil, procAddr, &pKey)
 	defer appCl.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -78,7 +88,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
 	conn, err := dialServer(ctx, appCl, hostAddr)
 	if err != nil {
 		print(fmt.Sprintf("Failed to dial to a server: %v\n", err))
@@ -94,7 +103,9 @@ func main() {
 		print(fmt.Sprintf("error sending data: %v\n", err))
 	}
 	go handleConn(conn)
+
 	<-osSigs
+	setAppStatus(appCl, appserver.AppDetailedStatusStopped)
 	err = conn.Close()
 	if err != nil {
 		print(fmt.Sprintf("Failed to close conn: %v\n", err))
