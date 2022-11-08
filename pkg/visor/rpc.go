@@ -242,12 +242,18 @@ func (r *RPC) StartApp(name *string, _ *struct{}) (err error) {
 	return r.visor.StartApp(*name)
 }
 
-// RegisterApp reserves a App with provided proc config.
+// RegisterApp registers a App with provided proc config.
 func (r *RPC) RegisterApp(procConf *appcommon.ProcConfig, reply *appcommon.ProcKey) (err error) {
 	defer rpcutil.LogCall(r.log, "RegisterApp", procConf)(reply, &err)
 	procKey, err := r.visor.RegisterApp(*procConf)
 	*reply = procKey
 	return err
+}
+
+// DeregisterApp de registers a App with provided proc key.
+func (r *RPC) DeregisterApp(procKey *appcommon.ProcKey, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DeregisterApp", procKey)(nil, &err)
+	return r.visor.DeregisterApp(*procKey)
 }
 
 // StopApp stops App with provided name.

@@ -46,6 +46,7 @@ type API interface {
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
 	RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error)
+	DeregisterApp(procKey appcommon.ProcKey) error
 	StopApp(appName string) error
 	StartVPNClient(pk cipher.PubKey) error
 	StopVPNClient(appName string) error
@@ -389,6 +390,15 @@ func (v *Visor) RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, e
 		return v.appL.RegisterApp(procConf)
 	}
 	return appcommon.ProcKey{}, ErrProcNotAvailable
+}
+
+// DeregisterApp implements API.
+func (v *Visor) DeregisterApp(procKey appcommon.ProcKey) error {
+	// check process manager availability
+	if v.procM != nil {
+		return v.appL.DeregisterApp(procKey)
+	}
+	return ErrProcNotAvailable
 }
 
 // StopApp implements API.

@@ -38,6 +38,7 @@ type ProcManager interface {
 	io.Closer
 	Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 	Register(conf appcommon.ProcConfig) (appcommon.ProcKey, error)
+	Deregister(key appcommon.ProcKey) error
 	ProcByName(appName string) (*Proc, bool)
 	SetError(appName, status string) error
 	ErrorByName(appName string) (string, bool)
@@ -261,6 +262,17 @@ func (m *procManager) Register(conf appcommon.ProcConfig) (appcommon.ProcKey, er
 	}()
 	delete(m.errors, conf.AppName)
 	return proc.conf.ProcKey, nil
+}
+
+// Deregister de registers a proc used by an external app.
+func (m *procManager) Deregister(key appcommon.ProcKey) error {
+	m.mx.Lock()
+	proc := m.procsByKey[key]
+	m.mx.Unlock()
+
+	_, err := m.pop(proc.appName) //nolint:errcheck
+
+	return err
 }
 
 func (m *procManager) ProcByName(appName string) (*Proc, bool) {

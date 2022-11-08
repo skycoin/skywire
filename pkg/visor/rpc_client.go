@@ -163,6 +163,11 @@ func (rc *rpcClient) RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcK
 	return procKey, err
 }
 
+// DeregisterApp calls DeregisterApp.
+func (rc *rpcClient) DeregisterApp(procKey appcommon.ProcKey) error {
+	return rc.Call("DeregisterApp", procKey, &struct{}{})
+}
+
 // StopApp calls StopApp.
 func (rc *rpcClient) StopApp(appName string) error {
 	return rc.Call("StopApp", &appName, &struct{}{})
@@ -698,6 +703,11 @@ func (*mockRPCClient) StartApp(string) error {
 // RegisterApp implements API.
 func (*mockRPCClient) RegisterApp(appcommon.ProcConfig) (appcommon.ProcKey, error) {
 	return appcommon.ProcKey{}, nil
+}
+
+// DeregisterApp implements API.
+func (*mockRPCClient) DeregisterApp(appcommon.ProcKey) error {
+	return nil
 }
 
 // StopApp implements API.
