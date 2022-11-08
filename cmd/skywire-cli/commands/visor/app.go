@@ -21,6 +21,7 @@ import (
 
 var appName string
 var localPath string
+var procKey string
 
 func init() {
 	cobra.EnableCommandSorting = false
@@ -30,6 +31,7 @@ func init() {
 		startAppCmd,
 		stopAppCmd,
 		registerAppCmd,
+		deregisterAppCmd,
 		appLogsSinceCmd,
 		argCmd,
 	)
@@ -41,7 +43,8 @@ func init() {
 		setAppNetworkInterfaceCmd,
 	)
 	registerAppCmd.Flags().StringVarP(&appName, "appname", "a", "", "name of the app")
-	registerAppCmd.Flags().StringVarP(&localPath, "localpath", "b", "./local", "path of the local folder")
+	registerAppCmd.Flags().StringVarP(&localPath, "localpath", "p", "./local", "path of the local folder")
+	deregisterAppCmd.Flags().StringVarP(&procKey, "procKey", "k", "", "proc key of the app to deregister")
 }
 
 var argCmd = &cobra.Command{
@@ -163,6 +166,28 @@ var registerAppCmd = &cobra.Command{
 		procKey, err := rpcClient.RegisterApp(procConfig)
 		internal.Catch(cmd.Flags(), err)
 		internal.PrintOutput(cmd.Flags(), procKey, fmt.Sprintf("%v\n", procKey))
+	},
+}
+
+var deregisterAppCmd = &cobra.Command{
+	Use:   "deregister",
+	Short: "Deregister app",
+	Long:  "\n  Deregister app",
+	Run: func(cmd *cobra.Command, args []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		var pKey appcommon.ProcKey
+		if procKey != "" {
+			err := pKey.UnmarshalText([]byte(procKey))
+			if err != nil {
+				internal.Catch(cmd.Flags(), fmt.Errorf("failed to read procKey: %v", err))
+			}
+		}
+		err = rpcClient.DeregisterApp(pKey)
+		internal.Catch(cmd.Flags(), err)
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
 
