@@ -253,7 +253,12 @@ func (m *procManager) Register(conf appcommon.ProcConfig) (appcommon.ProcKey, er
 	proc := NewProc(m.mLog, conf, disc, m, conf.AppName)
 	m.procs[conf.AppName] = proc
 	m.procsByKey[conf.ProcKey] = proc
-
+	go func() {
+		if ok := proc.AwaitConn(); !ok {
+			log.WithField("appName", conf.AppName).
+				Warn("AwaitConn.")
+		}
+	}()
 	delete(m.errors, conf.AppName)
 	return proc.conf.ProcKey, nil
 }

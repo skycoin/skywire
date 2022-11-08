@@ -159,7 +159,9 @@ func (p *Proc) InjectConn(conn net.Conn) bool {
 	return ok
 }
 
-func (p *Proc) awaitConn() bool {
+// AwaitConn waits for the connection.
+func (p *Proc) AwaitConn() bool {
+	<-p.connCh
 	rpcS := rpc.NewServer()
 	if err := rpcS.RegisterName(p.conf.ProcKey.String(), p.rpcGW); err != nil {
 		panic(err)
@@ -229,7 +231,7 @@ func (p *Proc) Start() error {
 		// here, the connection is established, so we're not blocked by awaiting it anymore,
 		// execution may be continued as usual.
 
-		if ok := p.awaitConn(); !ok {
+		if ok := p.AwaitConn(); !ok {
 			_ = p.cmd.Process.Kill() //nolint:errcheck
 			p.waitMx.Unlock()
 			return
