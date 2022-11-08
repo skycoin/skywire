@@ -28,17 +28,18 @@ type Client struct {
 }
 
 // NewClient creates a new Client, panicking on any error.
-func NewClient(eventSubs *appevent.Subscriber, procAddr *string) *Client {
+func NewClient(eventSubs *appevent.Subscriber, procAddr *string, procKey *appcommon.ProcKey) *Client {
 	log := logrus.New()
 
 	conf, err := appcommon.ProcConfigFromEnv()
 	if err != nil {
-		if procAddr == nil {
+		if procAddr == nil && procKey == nil {
 			log.WithError(err).Fatal("Failed to obtain proc config.")
 		}
 		log.WithError(err).Warn("Failed to obtain proc config.")
 		conf.ProcKey = appcommon.ProcKey{}
 		conf.AppSrvAddr = *procAddr
+		conf.ProcKey = *procKey
 	}
 	client, err := NewClientFromConfig(log, conf, eventSubs)
 	if err != nil {
@@ -90,7 +91,6 @@ func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	conn := &Conn{
 		id:  connID,
 		rpc: c.rpcC,
