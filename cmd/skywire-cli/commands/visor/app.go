@@ -5,16 +5,22 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"text/tabwriter"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 )
+
+var appName string
+var localPath string
 
 func init() {
 	cobra.EnableCommandSorting = false
@@ -23,6 +29,7 @@ func init() {
 		lsAppsCmd,
 		startAppCmd,
 		stopAppCmd,
+		registerAppCmd,
 		appLogsSinceCmd,
 		argCmd,
 	)
@@ -33,6 +40,8 @@ func init() {
 		setAppPasscodeCmd,
 		setAppNetworkInterfaceCmd,
 	)
+	registerAppCmd.Flags().StringVarP(&appName, "appname", "a", "", "name of the app")
+	registerAppCmd.Flags().StringVarP(&localPath, "localpath", "b", "./local", "path of the local folder")
 }
 
 var argCmd = &cobra.Command{
@@ -123,6 +132,37 @@ var stopAppCmd = &cobra.Command{
 		}
 		internal.Catch(cmd.Flags(), rpcClient.StopApp(args[0]))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+	},
+}
+
+var registerAppCmd = &cobra.Command{
+	Use:   "register",
+	Short: "Register app",
+	Long:  "\n  Register app",
+	Run: func(cmd *cobra.Command, args []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+
+		// Ensure the existence of directories.
+		err = ensureDir(&localPath)
+		internal.Catch(cmd.Flags(), err)
+
+		procConfig := appcommon.ProcConfig{
+			AppName:     appName,
+			AppSrvAddr:  "",
+			ProcKey:     appcommon.RandProcKey(),
+			ProcArgs:    nil,
+			ProcWorkDir: "",
+			VisorPK:     cipher.PubKey{},
+			RoutingPort: 0,
+			BinaryLoc:   "",
+			LogDBLoc:    filepath.Join(localPath, appName+"_log.db"),
+		}
+		procKey, err := rpcClient.RegisterApp(procConfig)
+		internal.Catch(cmd.Flags(), err)
+		internal.PrintOutput(cmd.Flags(), procKey, fmt.Sprintf("%v\n", procKey))
 	},
 }
 
@@ -262,4 +302,18 @@ var appLogsSinceCmd = &cobra.Command{
 			internal.PrintOutput(cmd.Flags(), "no logs", "no logs\n")
 		}
 	},
+}
+
+func ensureDir(path *string) error {
+	var err error
+	if *path, err = filepath.Abs(*path); err != nil {
+		return fmt.Errorf("failed to expand path: %s", err)
+	}
+	if _, err := os.Stat(*path); !os.IsNotExist(err) {
+		return nil
+	}
+	if err := os.MkdirAll(*path, 0707); err != nil {
+		return fmt.Errorf("failed to create dir: %s", err)
+	}
+	return nil
 }
