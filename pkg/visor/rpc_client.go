@@ -157,10 +157,10 @@ func (rc *rpcClient) StartApp(appName string) error {
 }
 
 // RegisterApp calls RegisterApp.
-func (rc *rpcClient) RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcID, error) {
-	var procID appcommon.ProcID
-	err := rc.Call("RegisterApp", procConf, &procID)
-	return procID, err
+func (rc *rpcClient) RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error) {
+	var procKey appcommon.ProcKey
+	err := rc.Call("RegisterApp", procConf, &procKey)
+	return procKey, err
 }
 
 // StopApp calls StopApp.
@@ -696,8 +696,8 @@ func (*mockRPCClient) StartApp(string) error {
 }
 
 // RegisterApp implements API.
-func (*mockRPCClient) RegisterApp(appcommon.ProcConfig) (appcommon.ProcID, error) {
-	return 0, nil
+func (*mockRPCClient) RegisterApp(appcommon.ProcConfig) (appcommon.ProcKey, error) {
+	return appcommon.ProcKey{}, nil
 }
 
 // StopApp implements API.

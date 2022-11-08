@@ -211,13 +211,12 @@ func (l *Launcher) StartApp(cmd string, args, envs []string) error {
 	return l.startApp(cmd, args, envs)
 }
 
-// RegisterApp reserves a proc for an external app to use.
-// If 'args' is nil, default args will be used.
-func (l *Launcher) RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcID, error) {
+// RegisterApp registers a proc for an external app to use.
+func (l *Launcher) RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error) {
 	l.mx.Lock()
 	defer l.mx.Unlock()
 
-	return l.procM.Reserve(procConf)
+	return l.procM.Register(procConf)
 }
 
 func (l *Launcher) startApp(cmd string, args, envs []string) error {
