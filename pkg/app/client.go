@@ -28,12 +28,17 @@ type Client struct {
 }
 
 // NewClient creates a new Client, panicking on any error.
-func NewClient(eventSubs *appevent.Subscriber) *Client {
+func NewClient(eventSubs *appevent.Subscriber, procAddr *string) *Client {
 	log := logrus.New()
 
 	conf, err := appcommon.ProcConfigFromEnv()
 	if err != nil {
-		log.WithError(err).Fatal("Failed to obtain proc config.")
+		if procAddr == nil {
+			log.WithError(err).Fatal("Failed to obtain proc config.")
+		}
+		log.WithError(err).Warn("Failed to obtain proc config.")
+		conf.ProcKey = appcommon.ProcKey{}
+		conf.AppSrvAddr = *procAddr
 	}
 	client, err := NewClientFromConfig(log, conf, eventSubs)
 	if err != nil {
