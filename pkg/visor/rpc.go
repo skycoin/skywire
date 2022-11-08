@@ -11,6 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
@@ -239,6 +240,14 @@ func (r *RPC) StartApp(name *string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StartApp", name)(nil, &err)
 
 	return r.visor.StartApp(*name)
+}
+
+// ReserveApp reserves a App with provided proc config.
+func (r *RPC) ReserveApp(procConf *appcommon.ProcConfig, reply *appcommon.ProcID) (err error) {
+	defer rpcutil.LogCall(r.log, "ReserveApp", procConf)(reply, &err)
+	procID, err := r.visor.ReserveApp(*procConf)
+	*reply = procID
+	return err
 }
 
 // StopApp stops App with provided name.

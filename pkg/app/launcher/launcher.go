@@ -211,6 +211,15 @@ func (l *Launcher) StartApp(cmd string, args, envs []string) error {
 	return l.startApp(cmd, args, envs)
 }
 
+// ReserveApp reserves a proc for an external app to use.
+// If 'args' is nil, default args will be used.
+func (l *Launcher) ReserveApp(procConf appcommon.ProcConfig) (appcommon.ProcID, error) {
+	l.mx.Lock()
+	defer l.mx.Unlock()
+
+	return l.procM.Reserve(procConf)
+}
+
 func (l *Launcher) startApp(cmd string, args, envs []string) error {
 	log := l.log.WithField("func", "StartApp").WithField("cmd", cmd)
 

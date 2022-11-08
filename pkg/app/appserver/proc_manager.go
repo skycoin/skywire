@@ -37,6 +37,7 @@ var (
 type ProcManager interface {
 	io.Closer
 	Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
+	Reserve(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 	ProcByName(appName string) (*Proc, bool)
 	SetError(appName, status string) error
 	ErrorByName(appName string) (string, bool)
@@ -213,6 +214,46 @@ func (m *procManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 
 		return 0, err
 	}
+	delete(m.errors, conf.AppName)
+	return appcommon.ProcID(proc.cmd.Process.Pid), nil
+}
+
+// Reserve reserves a proc slot for an external app.
+func (m *procManager) Reserve(conf appcommon.ProcConfig) (appcommon.ProcID, error) {
+	m.mx.Lock()
+	defer m.mx.Unlock()
+
+	log := m.mLog.PackageLogger("proc:" + conf.AppName + ":" + conf.ProcKey.String())
+
+	// isDone should be called within the protection of a mutex.
+	// Otherwise we may be able to start an app after calling Close.
+	if isDone(m.done) {
+		return 0, ErrClosed
+	}
+
+	if _, ok := m.procs[conf.AppName]; ok {
+		return 0, ErrAppAlreadyStarted
+	}
+
+	// Ensure proc key is unique (just in case - this is probably not necessary).
+	for {
+		if _, ok := m.procsByKey[conf.ProcKey]; ok {
+			conf.EnsureKey()
+			continue
+		}
+		break
+	}
+
+	disc, ok := m.discF.AppUpdater(conf)
+	if !ok {
+		log.WithField("appName", conf.AppName).
+			Debug("No app discovery associated with app.")
+	}
+
+	proc := NewProc(m.mLog, conf, disc, m, conf.AppName)
+	m.procs[conf.AppName] = proc
+	m.procsByKey[conf.ProcKey] = proc
+
 	delete(m.errors, conf.AppName)
 	return appcommon.ProcID(proc.cmd.Process.Pid), nil
 }

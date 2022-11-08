@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
@@ -44,6 +45,7 @@ type API interface {
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
+	ReserveApp(procConf appcommon.ProcConfig) (appcommon.ProcID, error)
 	StopApp(appName string) error
 	StartVPNClient(pk cipher.PubKey) error
 	StopVPNClient(appName string) error
@@ -378,6 +380,16 @@ func (v *Visor) StartApp(appName string) error {
 		return v.appL.StartApp(appName, nil, envs)
 	}
 	return ErrProcNotAvailable
+}
+
+// ReserveApp implements API.
+func (v *Visor) ReserveApp(procConf appcommon.ProcConfig) (appcommon.ProcID, error) {
+	// check process manager availability
+	if v.procM != nil {
+		return v.appL.ReserveApp(procConf)
+	}
+	var procID appcommon.ProcID
+	return procID, ErrProcNotAvailable
 }
 
 // StopApp implements API.
