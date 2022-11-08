@@ -242,10 +242,10 @@ func (r *RPC) StartApp(name *string, _ *struct{}) (err error) {
 	return r.visor.StartApp(*name)
 }
 
-// ReserveApp reserves a App with provided proc config.
-func (r *RPC) ReserveApp(procConf *appcommon.ProcConfig, reply *appcommon.ProcID) (err error) {
-	defer rpcutil.LogCall(r.log, "ReserveApp", procConf)(reply, &err)
-	procID, err := r.visor.ReserveApp(*procConf)
+// RegisterApp reserves a App with provided proc config.
+func (r *RPC) RegisterApp(procConf *appcommon.ProcConfig, reply *appcommon.ProcID) (err error) {
+	defer rpcutil.LogCall(r.log, "RegisterApp", procConf)(reply, &err)
+	procID, err := r.visor.RegisterApp(*procConf)
 	*reply = procID
 	return err
 }

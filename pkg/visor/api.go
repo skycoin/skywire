@@ -45,7 +45,7 @@ type API interface {
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
-	ReserveApp(procConf appcommon.ProcConfig) (appcommon.ProcID, error)
+	RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcID, error)
 	StopApp(appName string) error
 	StartVPNClient(pk cipher.PubKey) error
 	StopVPNClient(appName string) error
@@ -382,11 +382,11 @@ func (v *Visor) StartApp(appName string) error {
 	return ErrProcNotAvailable
 }
 
-// ReserveApp implements API.
-func (v *Visor) ReserveApp(procConf appcommon.ProcConfig) (appcommon.ProcID, error) {
+// RegisterApp implements API.
+func (v *Visor) RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcID, error) {
 	// check process manager availability
 	if v.procM != nil {
-		return v.appL.ReserveApp(procConf)
+		return v.appL.RegisterApp(procConf)
 	}
 	var procID appcommon.ProcID
 	return procID, ErrProcNotAvailable
