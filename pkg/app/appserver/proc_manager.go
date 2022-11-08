@@ -37,7 +37,7 @@ var (
 type ProcManager interface {
 	io.Closer
 	Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
-	Reserve(conf appcommon.ProcConfig) (appcommon.ProcID, error)
+	Register(conf appcommon.ProcConfig) (appcommon.ProcKey, error)
 	ProcByName(appName string) (*Proc, bool)
 	SetError(appName, status string) error
 	ErrorByName(appName string) (string, bool)
@@ -218,8 +218,8 @@ func (m *procManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 	return appcommon.ProcID(proc.cmd.Process.Pid), nil
 }
 
-// Reserve reserves a proc slot for an external app.
-func (m *procManager) Reserve(conf appcommon.ProcConfig) (appcommon.ProcID, error) {
+// Register registers a proc for an external app.
+func (m *procManager) Register(conf appcommon.ProcConfig) (appcommon.ProcKey, error) {
 	m.mx.Lock()
 	defer m.mx.Unlock()
 
@@ -228,11 +228,11 @@ func (m *procManager) Reserve(conf appcommon.ProcConfig) (appcommon.ProcID, erro
 	// isDone should be called within the protection of a mutex.
 	// Otherwise we may be able to start an app after calling Close.
 	if isDone(m.done) {
-		return 0, ErrClosed
+		return appcommon.ProcKey{}, ErrClosed
 	}
 
 	if _, ok := m.procs[conf.AppName]; ok {
-		return 0, ErrAppAlreadyStarted
+		return appcommon.ProcKey{}, ErrAppAlreadyStarted
 	}
 
 	// Ensure proc key is unique (just in case - this is probably not necessary).
@@ -255,7 +255,7 @@ func (m *procManager) Reserve(conf appcommon.ProcConfig) (appcommon.ProcID, erro
 	m.procsByKey[conf.ProcKey] = proc
 
 	delete(m.errors, conf.AppName)
-	return appcommon.ProcID(proc.cmd.Process.Pid), nil
+	return proc.conf.ProcKey, nil
 }
 
 func (m *procManager) ProcByName(appName string) (*Proc, bool) {
