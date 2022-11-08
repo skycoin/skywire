@@ -47,8 +47,14 @@ func dialServer(ctx context.Context, appCl *app.Client, hostAddr routing.Addr) (
 	return conn, nil
 }
 
+var serverAddr = flag.String("addr", "", "PubKey and port of the server to connect to")
+var procAddr = flag.String("proc", "localhost:5505", "proc server address to connect to")
+
+// TODO verify the flags
 func main() {
-	appCl := app.NewClient(nil)
+	flag.Parse()
+
+	appCl := app.NewClient(nil, procAddr)
 	defer appCl.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -65,8 +71,6 @@ func main() {
 		signal.Notify(osSigs, sig)
 	}
 
-	var serverAddr = flag.String("addr", "", "PubKey and port of the server to connect to")
-	flag.Parse()
 	var hostAddr routing.Addr
 	if err := hostAddr.Set(*serverAddr); err != nil {
 		print(fmt.Sprintf("invalid host address: %v\n", err))

@@ -22,11 +22,11 @@ import (
 
 const (
 	netType              = appnet.TypeSkynet
-	port    routing.Port = 2
+	port    routing.Port = 45
 )
 
 func main() {
-	appCl := app.NewClient(nil)
+	appCl := app.NewClient(nil, nil)
 	defer appCl.Close()
 
 	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
