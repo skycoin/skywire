@@ -40,11 +40,14 @@ Documentation on skywire-cli interface as well as available flags for skywire-vi
 
 Apps are not executed by the user, but hosted by the visor process
 
+* [API](docs/skywire_app_api.md)
 * [skychat](cmd/apps/skychat/README.md)
 * [skysocks](cmd/apps/skysocks/README.md)
 * [skysocks-client](cmd/apps/skysocks-client/README.md)
 * [vpn-client](cmd/apps/vpn-client/README.md)
 * [vpn-server](cmd/apps/vpn-server/README.md)
+* [example-server-app](example/example-server-app/README.md)
+* [example-client-app](example/example-client-app/README.md)
 
 further documentation can be found in the [skywire wiki](https://github.com/skycoin/skywire/wiki)
 
