@@ -147,7 +147,9 @@ var registerAppCmd = &cobra.Command{
 		if err != nil {
 			os.Exit(1)
 		}
-
+		if appName == "" {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("required flag not specified"))
+		}
 		// Ensure the existence of directories.
 		err = ensureDir(&localPath)
 		internal.Catch(cmd.Flags(), err)
