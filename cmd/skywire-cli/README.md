@@ -235,13 +235,13 @@ Flags:
   -k, --os string            (linux / mac / win) paths (default "linux")
   -l, --publicip             allow display node ip in services
   -n, --stdout               write config to stdout
+  -m, --example-apps         add example apps to the config
   -o, --out string           output config: skywire-config.json
   -p, --pkg                  use path for package: /opt/skywire
   -u, --user                 use paths for user space: /home/d0mo
   -q, --publicrpc            allow rpc requests from LAN
   -r, --regen                re-generate existing config & retain keys
   -s, --sk cipher.SecKey     a random key is generated if unspecified
-
  (default 0000000000000000000000000000000000000000000000000000000000000000)
   -t, --testenv              use test deployment conf.skywire.dev
   -v, --servevpn             enable vpn server
