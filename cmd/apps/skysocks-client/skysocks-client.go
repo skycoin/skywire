@@ -51,7 +51,7 @@ func dialServer(ctx context.Context, appCl *app.Client, pk cipher.PubKey) (net.C
 }
 
 func main() {
-	appCl := app.NewClient(nil, nil, nil)
+	appCl := app.NewClient(nil)
 	defer appCl.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())

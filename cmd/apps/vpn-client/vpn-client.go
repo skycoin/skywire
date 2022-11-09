@@ -65,7 +65,7 @@ func main() {
 		}
 	})
 
-	appCl := app.NewClient(eventSub, nil, nil)
+	appCl := app.NewClient(eventSub)
 	defer appCl.Close()
 
 	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {

@@ -52,7 +52,7 @@ var (
 var embededFiles embed.FS
 
 func main() {
-	appCl = app.NewClient(nil, nil, nil)
+	appCl = app.NewClient(nil)
 	defer appCl.Close()
 
 	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {

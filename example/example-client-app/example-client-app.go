@@ -1,6 +1,6 @@
-// /* cmd/apps/skysocks-client/skysocks-client.go
+// /* example/example-client-app/example-client-app.go
 /*
-proxy client app for skywire visor
+example client app for skywire visor
 */
 package main
 
@@ -14,6 +14,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
@@ -64,7 +66,16 @@ func main() {
 		}
 	}
 
-	appCl := app.NewClient(nil, procAddr, &pKey)
+	procConfig := appcommon.ProcConfig{
+		AppSrvAddr: *procAddr,
+		ProcKey:    pKey,
+	}
+	log := logrus.New()
+	appCl, err := app.NewClientFromConfig(log, procConfig, nil)
+	if err != nil {
+		print(fmt.Sprintf("Failed get new app client: %v\n", err))
+		os.Exit(1)
+	}
 	defer appCl.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())

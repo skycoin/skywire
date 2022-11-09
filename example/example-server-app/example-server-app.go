@@ -1,6 +1,6 @@
-// /* cmd/apps/skysocks/skysocks.go
+// /* example/example-server-app/example-server-app.go
 /*
-proxy server app for skywire visor
+example server app for skywire visor
 */
 package main
 
@@ -17,16 +17,14 @@ import (
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
-	"github.com/skycoin/skywire/pkg/routing"
 )
 
 const (
-	netType              = appnet.TypeSkynet
-	port    routing.Port = 45
+	netType = appnet.TypeSkynet
 )
 
 func main() {
-	appCl := app.NewClient(nil, nil, nil)
+	appCl := app.NewClient(nil)
 	defer appCl.Close()
 
 	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
@@ -42,6 +40,7 @@ func main() {
 		signal.Notify(osSigs, sig)
 	}
 
+	port := appCl.Config().RoutingPort
 	l, err := appCl.Listen(netType, port)
 	if err != nil {
 		setAppError(appCl, err)
