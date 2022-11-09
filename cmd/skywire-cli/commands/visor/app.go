@@ -180,12 +180,14 @@ var deregisterAppCmd = &cobra.Command{
 		if err != nil {
 			os.Exit(1)
 		}
+		if procKey == "" {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("required flag not specified"))
+		}
+
 		var pKey appcommon.ProcKey
-		if procKey != "" {
-			err := pKey.UnmarshalText([]byte(procKey))
-			if err != nil {
-				internal.Catch(cmd.Flags(), fmt.Errorf("failed to read procKey: %v", err))
-			}
+		err = pKey.UnmarshalText([]byte(procKey))
+		if err != nil {
+			internal.Catch(cmd.Flags(), fmt.Errorf("failed to read procKey: %v", err))
 		}
 		err = rpcClient.DeregisterApp(pKey)
 		internal.Catch(cmd.Flags(), err)
