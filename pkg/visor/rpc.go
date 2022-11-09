@@ -611,6 +611,16 @@ func (r *RPC) RemoteVisors(_ *struct{}, out *[]string) (err error) {
 	return err
 }
 
+// Ports return list of all ports used by visor services and apps
+func (r *RPC) Ports(_ *struct{}, out *map[string]int) (err error) {
+	defer rpcutil.LogCall(r.log, "Ports", nil)(out, &err)
+	ports, err := r.visor.Ports()
+	if ports != nil {
+		*out = ports
+	}
+	return err
+}
+
 // IsDMSGClientReady return status of dmsg client
 func (r *RPC) IsDMSGClientReady(_ *struct{}, out *bool) (err error) {
 	defer rpcutil.LogCall(r.log, "IsDMSGClientReady", nil)(out, &err)

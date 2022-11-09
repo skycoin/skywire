@@ -62,6 +62,7 @@ type API interface {
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
 	VPNServers(version, country string) ([]servicedisc.Service, error)
 	RemoteVisors() ([]string, error)
+	Ports() (map[string]int, error)
 
 	TransportTypes() ([]string, error)
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
@@ -681,6 +682,13 @@ func (v *Visor) RemoteVisors() ([]string, error) {
 		visors = append(visors, conn.Addr.PK.String())
 	}
 	return visors, nil
+}
+
+// Ports return list of all ports used by visor services and apps
+func (v *Visor) Ports() (map[string]int, error) {
+	var ports = make(map[string]int)
+	ports["rpc"] = 22
+	return ports, nil
 }
 
 // TransportTypes implements API.

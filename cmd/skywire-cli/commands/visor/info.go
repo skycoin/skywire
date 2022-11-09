@@ -28,6 +28,7 @@ func init() {
 	pkCmd.Flags().StringVarP(&webPort, "prt", "x", "7998", "serve public key via http")
 	RootCmd.AddCommand(summaryCmd)
 	RootCmd.AddCommand(buildInfoCmd)
+	RootCmd.AddCommand(portsCmd)
 }
 
 var pkCmd = &cobra.Command{
@@ -126,6 +127,27 @@ var buildInfoCmd = &cobra.Command{
 		buildInfo := overview.BuildInfo
 		msg := fmt.Sprintf("Version %q built on %q against commit %q\n", buildInfo.Version, buildInfo.Date, buildInfo.Commit)
 		internal.PrintOutput(cmd.Flags(), buildInfo, msg)
+	},
+}
+
+var portsCmd = &cobra.Command{
+	Use:   "ports",
+	Short: "List of Ports",
+	Long:  "\n  List of all ports used by visor services and apps",
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		ports, err := rpcClient.Ports()
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
+		}
+		msg := "App/Service : Port\n"
+		for i, v := range ports {
+			msg += fmt.Sprintf("%s : %d\n", i, v)
+		}
+		internal.PrintOutput(cmd.Flags(), ports, msg)
 	},
 }
 
