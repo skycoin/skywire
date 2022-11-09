@@ -24,6 +24,8 @@ skywire command line interface
         * [visor app ls](#visor-app-ls)
         * [visor app start](#visor-app-start)
         * [visor app stop](#visor-app-stop)
+        * [visor app register](#visor-app-register)
+        * [visor app deregister](#visor-app-deregister)
         * [visor app log](#visor-app-log)
         * [visor app arg](#visor-app-arg)
           * [visor app arg autostart](#visor-app-arg-autostart)
@@ -141,6 +143,8 @@ A tree representation of the skywire-cli subcommands
   │ │ ├──ls
   │ │ ├──start
   │ │ ├──stop
+  │ │ ├──register
+  │ │ ├──deregister
   │ │ ├──log
   │ │ └─┬arg
   │ │   ├──autostart
@@ -237,7 +241,8 @@ Flags:
   -q, --publicrpc            allow rpc requests from LAN
   -r, --regen                re-generate existing config & retain keys
   -s, --sk cipher.SecKey     a random key is generated if unspecified
- (default 0000000000000000000000000000000000000000000000000000000000000000)
+
+ (default 0000000000000000000000000000000000000000000000000000000000000000)
   -t, --testenv              use test deployment conf.skywire.dev
   -v, --servevpn             enable vpn server
   -w, --hide                 dont print the config to the terminal
@@ -650,6 +655,41 @@ Global Flags:
 
 
 ```
+##### visor app register
+
+```
+
+  Register app
+
+Usage:
+  skywire-cli visor app register [flags] 
+
+Flags:
+  -a, --appname string     name of the app
+  -p, --localpath string   path of the local folder (default "./local")
+
+Global Flags:
+      --rpc string   RPC server address (default "localhost:3435")
+
+
+```
+##### visor app deregister
+
+```
+
+  Deregister app
+
+Usage:
+  skywire-cli visor app deregister [flags] 
+
+Flags:
+  -k, --procKey string   proc key of the app to deregister
+
+Global Flags:
+      --rpc string   RPC server address (default "localhost:3435")
+
+
+```
 
 ##### visor app log
 
@@ -657,7 +697,8 @@ Global Flags:
 
   Logs from app since RFC3339Nano-formatted timestamp.
 
-  "beginning" is a special timestamp to fetch all the logs
+
+  "beginning" is a special timestamp to fetch all the logs
 
 Usage:
   skywire-cli visor app log <name> <timestamp> [flags]
@@ -739,7 +780,8 @@ Global Flags:
 
   Set app passcode.
 
-  "remove" is a special arg to remove the passcode
+
+  "remove" is a special arg to remove the passcode
 
 Usage:
   skywire-cli visor app arg passcode <name> <passcode> [flags]
@@ -755,7 +797,8 @@ Global Flags:
 ```
 Set app network interface.
 
-  "remove" is a special arg to remove the netifc
+
+  "remove" is a special arg to remove the netifc
 
 Usage:
   skywire-cli visor app arg netifc <name> <interface> [flags]
@@ -787,8 +830,10 @@ Global Flags:
 
   Hypervisor
 
-  Access the hypervisor UI
-  View remote hypervisor public key
+
+  Access the hypervisor UI
+
+  View remote hypervisor public key
 
 Usage:
   skywire-cli visor hv [flags]
