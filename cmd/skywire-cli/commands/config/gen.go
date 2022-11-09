@@ -336,11 +336,6 @@ var genConfigCmd = &cobra.Command{
 					AutoStart: false,
 					Port:      routing.Port(skyenv.ExampleServerPort),
 				},
-				{
-					Name:      skyenv.ExampleClientName,
-					AutoStart: false,
-					Port:      routing.Port(skyenv.ExampleClientPort),
-				},
 			}
 			newConfLauncherApps := append(conf.Launcher.Apps, exampleApps...)
 			conf.Launcher.Apps = newConfLauncherApps
