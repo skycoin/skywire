@@ -1,34 +1,11 @@
-# Skywire Example client app
+# Skywire Example client app (External app)
 
-`example-client-app` app implements client for the `example-server-app` over skywire net.
+`example-client-app` app implements client for the `example-server-app` over skywire net and is a external app.
 
 It opens persistent `skywire` connection to the configured `example-server-app` and send a `hello` message and gets a response of `hi`.
 
 ## Configuration
 
-This app can be ran from skywire as well as an external app
-
-### Skywire App
-
-Additional arguments may be passed to the application via `args` array. These are:
-- `-addr` (required) - pubKey and port of the server to connect to (e.g. <pk>:<skywire-port>)
-- `-procAddr` - proc server address to connect to (default: localhost:5505) (not required if run from skywire)
-- `-procKey` - proc server address to connect to (not required if run from skywire)
-
-Full config of the client should look like this:
-```json5
-{
-  "app": "example-client-app",
-  "auto_start": false,
-  "port": 46,
-  "args": [
-    "-addr",
-    "03e9019b3caa021dbee1c23e6295c6034ab4623aec50802fcfdd19764568e2958d:45",
-  ]
-}
-```
-
-### External App
 The app takes the following flags
 - `-addr` (required) - pubKey and port of the server to connect to (e.g. <pk>:<skywire-port>)
 - `-procAddr` - proc server address to connect to (default: localhost:5505)
@@ -36,18 +13,6 @@ The app takes the following flags
 
 ## Running app
 
-### Skywire App
-Compile app binaries, update config with `example-client-app` and start a visor:
-
-```sh
-$ make build-example
-$ ./skywire-cli config gen -irm
-$ ./skywire-visor skywire-config.json
-```
-
-Start the app from either cli or hypervisor UI
-
-### External App
 Compile app binary and start a visor:
 
 ```sh

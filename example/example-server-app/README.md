@@ -1,4 +1,4 @@
-# Skywire Example server app
+# Skywire Example server app (Skywire visor app)
 
 `example-server-app` app implements server for the `example-client-app` over skywire net.
 
