@@ -689,6 +689,9 @@ func (v *Visor) Ports() (map[string]string, error) {
 	ctx := context.Background()
 	var ports = make(map[string]string)
 
+	if v.conf.Hypervisor != nil {
+		ports["hypervisor"] = fmt.Sprint(strings.Split(v.conf.Hypervisor.HTTPAddr, ":")[1])
+	}
 	ports["dmsg_pty"] = fmt.Sprint(skyenv.DmsgPtyPort)
 	ports["dmsg_ctrl"] = fmt.Sprint(skyenv.DmsgCtrlPort)
 	ports["dmsg_setup_node"] = fmt.Sprint(skyenv.DmsgSetupPort)
