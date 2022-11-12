@@ -612,7 +612,7 @@ func (r *RPC) RemoteVisors(_ *struct{}, out *[]string) (err error) {
 }
 
 // Ports return list of all ports used by visor services and apps
-func (r *RPC) Ports(_ *struct{}, out *map[string]int) (err error) {
+func (r *RPC) Ports(_ *struct{}, out *map[string]string) (err error) {
 	defer rpcutil.LogCall(r.log, "Ports", nil)(out, &err)
 	ports, err := r.visor.Ports()
 	if ports != nil {

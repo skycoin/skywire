@@ -62,7 +62,7 @@ type API interface {
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
 	VPNServers(version, country string) ([]servicedisc.Service, error)
 	RemoteVisors() ([]string, error)
-	Ports() (map[string]int, error)
+	Ports() (map[string]string, error)
 
 	TransportTypes() ([]string, error)
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
@@ -685,9 +685,48 @@ func (v *Visor) RemoteVisors() ([]string, error) {
 }
 
 // Ports return list of all ports used by visor services and apps
-func (v *Visor) Ports() (map[string]int, error) {
-	var ports = make(map[string]int)
-	ports["rpc"] = 22
+func (v *Visor) Ports() (map[string]string, error) {
+	ctx := context.Background()
+	var ports = make(map[string]string)
+
+	ports["dmsg_pty"] = fmt.Sprint(skyenv.DmsgPtyPort)
+	ports["dmsg_ctrl"] = fmt.Sprint(skyenv.DmsgCtrlPort)
+	ports["dmsg_setup_node"] = fmt.Sprint(skyenv.DmsgSetupPort)
+	ports["dmsg_hypervisor"] = fmt.Sprint(skyenv.DmsgHypervisorPort)
+	ports["dmsg_transport_setup"] = fmt.Sprint(skyenv.DmsgTransportSetupPort)
+	ports["dmsg_htttp_setup"] = fmt.Sprint(skyenv.DmsgHTTPPort)
+	ports["dmsg_await_setup"] = fmt.Sprint(skyenv.DmsgAwaitSetupPort)
+	ports["stcp_addr"] = fmt.Sprint(strings.Split(skyenv.STCPAddr, ":")[1])
+	ports["skychat"] = fmt.Sprint(skyenv.SkychatPort)
+	ports["skychat_addr"] = fmt.Sprint(strings.Split(skyenv.SkychatAddr, ":")[1])
+	ports["skysocks"] = fmt.Sprint(skyenv.SkysocksPort)
+	ports["skysocks_client"] = fmt.Sprint(skyenv.SkysocksClientPort)
+	ports["skysocks_client_addr"] = fmt.Sprint(strings.Split(skyenv.SkysocksClientAddr, ":")[1])
+	ports["vpn_server"] = fmt.Sprint(skyenv.VPNServerPort)
+	ports["vpn_client"] = fmt.Sprint(skyenv.VPNClientPort)
+
+	if v.arClient != nil {
+		sudphPort := v.arClient.Addresses(ctx)
+		if sudphPort != "" {
+			ports["sudph"] = sudphPort
+		}
+	}
+	if v.stunClient != nil {
+		if v.stunClient.PublicIP != nil {
+			ports["public_visor"] = fmt.Sprint(v.stunClient.PublicIP.Port())
+		}
+	}
+	if v.dmsgC != nil {
+		dmsgSessions := v.dmsgC.AllSessions()
+		for i, session := range dmsgSessions {
+			ports[fmt.Sprintf("dmsg_session_%d", i)] = strings.Split(session.LocalTCPAddr().String(), ":")[1]
+		}
+
+		dmsgStreams := v.dmsgC.AllStreams()
+		for i, stream := range dmsgStreams {
+			ports[fmt.Sprintf("dmsg_stream_%d", i)] = strings.Split(stream.LocalAddr().String(), ":")[1]
+		}
+	}
 	return ports, nil
 }
 

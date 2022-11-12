@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -143,10 +144,21 @@ var portsCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 		}
-		msg := "App/Service : Port\n"
-		for i, v := range ports {
-			msg += fmt.Sprintf("%s : %d\n", i, v)
+		msg := "+---------------------------------+\n"
+		msg += fmt.Sprintf("| %-21s | %7s |\n", "App/Service", "Port")
+		msg += "|---------------------------------|\n"
+
+		portsName := make([]string, 0, len(ports))
+		for portName := range ports {
+			portsName = append(portsName, portName)
 		}
+		sort.Strings(portsName)
+
+		for _, portName := range portsName {
+			msg += fmt.Sprintf("| %-21s | %7s |\n", portName, ports[portName])
+		}
+
+		msg += "+---------------------------------+\n"
 		internal.PrintOutput(cmd.Flags(), ports, msg)
 	},
 }
