@@ -97,7 +97,7 @@ var vpnURLCmd = &cobra.Command{
 			}
 			overview, err := rpcClient.Overview()
 			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect; is skywire running?: %v", err))
+				internal.PrintFatalRPCError(cmd.Flags(), err)
 			}
 			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", overview.PubKey.Hex())
 		}
@@ -112,13 +112,14 @@ var vpnURLCmd = &cobra.Command{
 	},
 }
 
+
 var vpnListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List public VPN servers",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
 		if isUnFiltered {
 			ver = ""
@@ -126,7 +127,7 @@ var vpnListCmd = &cobra.Command{
 		}
 		servers, err := rpcClient.VPNServers(ver, country)
 		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), err)
+			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
 		if len(servers) == 0 {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("No VPN Servers found"))

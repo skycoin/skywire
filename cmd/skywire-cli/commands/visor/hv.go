@@ -18,6 +18,7 @@ func init() {
 	RootCmd.AddCommand(hvCmd)
 	hvCmd.AddCommand(hvuiCmd)
 	hvCmd.AddCommand(hvpkCmd)
+//	hvCmd.AddCommand(portCmd)
 	hvpkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
 	hvpkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
 	hvpkCmd.Flags().BoolVarP(&web, "http", "w", false, "serve public key via http")
@@ -67,7 +68,7 @@ var hvpkCmd = &cobra.Command{
 			}
 			overview, err := rpcClient.Overview()
 			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
+				internal.PrintFatalRPCError(cmd.Flags(), err)
 			}
 			hypervisors = overview.Hypervisors
 		}
@@ -82,12 +83,43 @@ var chvpkCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
 		overview, err := rpcClient.Overview()
 		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
+			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
 		internal.PrintOutput(cmd.Flags(), overview.ConnectedHypervisor, fmt.Sprintf("%v\n", overview.ConnectedHypervisor))
 	},
 }
+/*
+var portCmd = &cobra.Command{
+	Use:   "port",
+	Short: "",
+	Long:  "",
+	Run: func(cmd *cobra.Command, _ []string) {
+//func HypervisorPort() string {
+rpcClient, err := clirpc.Client(cmd.Flags())
+if err != nil {
+	os.Exit(1)
+}
+ports, err := rpcClient.Ports()
+if err != nil {
+	internal.PrintFatalRPCError(cmd.Flags(), err)
+}
+var msg string
+portsName := make([]string, 0, len(ports))
+for portName := range ports {
+	portsName = append(portsName, portName)
+}
+sort.Strings(portsName)
+
+for _, portName := range portsName {
+	msg += fmt.Sprintf("| %-21s | %7s |\n", portName, ports[portName])
+}
+
+msg += "+---------------------------------+\n"
+internal.PrintOutput(cmd.Flags(), ports, msg)
+},
+}
+*/

@@ -54,7 +54,7 @@ var pkCmd = &cobra.Command{
 			}
 			overview, err := rpcClient.Overview()
 			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
+				internal.PrintFatalRPCError(cmd.Flags(), err)
 			}
 			pk = overview.PubKey.String() + "\n"
 			if web {
@@ -79,7 +79,7 @@ var summaryCmd = &cobra.Command{
 		}
 		summary, err := rpcClient.Summary()
 		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
+			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
 		msg := fmt.Sprintf(".:: Visor Summary ::.\nPublic key: %q\nSymmetric NAT: %t\nIP: %s\nDMSG Server: %q\nPing: %q\nVisor Version: %s\nSkybian Version: %s\nUptime Tracker: %s\nTime Online: %f seconds\nBuild Tag: %s\n",
 			summary.Overview.PubKey, summary.Overview.IsSymmetricNAT, summary.Overview.LocalIP, summary.DmsgStats.ServerPK, summary.DmsgStats.RoundTrip, summary.Overview.BuildInfo.Version, summary.SkybianBuildVersion,
@@ -123,7 +123,7 @@ var buildInfoCmd = &cobra.Command{
 		}
 		overview, err := rpcClient.Overview()
 		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
+			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
 		buildInfo := overview.BuildInfo
 		msg := fmt.Sprintf("Version %q built on %q against commit %q\n", buildInfo.Version, buildInfo.Date, buildInfo.Commit)
@@ -142,7 +142,7 @@ var portsCmd = &cobra.Command{
 		}
 		ports, err := rpcClient.Ports()
 		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
+			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
 		msg := "+---------------------------------+\n"
 		msg += fmt.Sprintf("| %-21s | %7s |\n", "App/Service", "Port")
