@@ -89,13 +89,18 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	cmd.Env = append(os.Environ(), envs...)
 	cmd.Dir = conf.ProcWorkDir
 
-	appLog, appLogDB := appcommon.NewProcLogger(conf, mLog)
-	cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").WriterLevel(logrus.DebugLevel)
+	var appLogDB appcommon.LogStore
+	var appLog *logging.MasterLogger
+	var stderr io.ReadCloser
+	if conf.LogDBLoc != "" {
+		appLog, appLogDB = appcommon.NewProcLogger(conf, mLog)
+		cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").WriterLevel(logrus.DebugLevel)
 
-	// we read the Stderr pipe in order to filter some false positive app errors
-	errorLog := appLog.WithField("_module", moduleName).WithField("func", "(STDERR)")
-	stderr, _ := cmd.StderrPipe() //nolint:errcheck
-	printStdErr(stderr, errorLog)
+		// we read the Stderr pipe in order to filter some false positive app errors
+		errorLog := appLog.WithField("_module", moduleName).WithField("func", "(STDERR)")
+		stderr, _ = cmd.StderrPipe() //nolint:errcheck
+		printStdErr(stderr, errorLog)
+	}
 
 	p := &Proc{
 		disc:      disc,
