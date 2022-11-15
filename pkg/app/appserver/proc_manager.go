@@ -17,7 +17,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appevent"
 )
 
-//go:generate mockery -name ProcManager -case underscore -inpkg
+//go:generate mockery --name ProcManager --case underscore --inpackage
 
 const (
 	// ProcStartTimeout represents the duration in which a proc should have started and connected with the app server.
