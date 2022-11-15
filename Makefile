@@ -123,7 +123,7 @@ install-system-linux: build # Workaround for debugging linux package installatio
 
 install-generate: ## Installs required execs for go generate.
 	${OPTS} go install github.com/mjibson/esc
-	${OPTS} go install github.com/vektra/mockery/cmd/mockery
+	${OPTS} go install github.com/vektra/mockery/v2@latest
 
 generate: ## Generate mocks and config README's
 	go generate ./...
