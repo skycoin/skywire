@@ -6,11 +6,13 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -18,12 +20,10 @@ func init() {
 	RootCmd.AddCommand(hvCmd)
 	hvCmd.AddCommand(hvuiCmd)
 	hvCmd.AddCommand(hvpkCmd)
-//	hvCmd.AddCommand(portCmd)
 	hvpkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
 	hvpkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
 	hvpkCmd.Flags().BoolVarP(&web, "http", "w", false, "serve public key via http")
 	hvCmd.AddCommand(chvpkCmd)
-
 }
 
 var hvCmd = &cobra.Command{
@@ -36,9 +36,8 @@ var hvuiCmd = &cobra.Command{
 	Use:   "ui",
 	Short: "open Hypervisor UI in default browser",
 	Long:  "\n  open Hypervisor UI in default browser",
-	Run: func(_ *cobra.Command, _ []string) {
-		//TODO: get the actual port from config instead of using default value here
-		if err := webbrowser.Open("http://127.0.0.1:8000/"); err != nil {
+	Run: func(cmd *cobra.Command, _ []string) {
+		if err := webbrowser.Open(fmt.Sprintf("http://127.0.0.1%s/", HypervisorPort(cmd.Flags()))); err != nil {
 			logger.Fatal("Failed to open hypervisor UI in browser:", err)
 		}
 	},
@@ -50,11 +49,9 @@ var hvpkCmd = &cobra.Command{
 	Long:  "\n  Public key of remote hypervisor(s) set in config",
 	Run: func(cmd *cobra.Command, _ []string) {
 		var hypervisors []cipher.PubKey
-
 		if pkg {
 			path = visorconfig.Pkgpath
 		}
-
 		if path != "" {
 			conf, err := visorconfig.ReadFile(path)
 			if err != nil {
@@ -92,34 +89,16 @@ var chvpkCmd = &cobra.Command{
 		internal.PrintOutput(cmd.Flags(), overview.ConnectedHypervisor, fmt.Sprintf("%v\n", overview.ConnectedHypervisor))
 	},
 }
-/*
-var portCmd = &cobra.Command{
-	Use:   "port",
-	Short: "",
-	Long:  "",
-	Run: func(cmd *cobra.Command, _ []string) {
-//func HypervisorPort() string {
-rpcClient, err := clirpc.Client(cmd.Flags())
-if err != nil {
-	os.Exit(1)
-}
-ports, err := rpcClient.Ports()
-if err != nil {
-	internal.PrintFatalRPCError(cmd.Flags(), err)
-}
-var msg string
-portsName := make([]string, 0, len(ports))
-for portName := range ports {
-	portsName = append(portsName, portName)
-}
-sort.Strings(portsName)
 
-for _, portName := range portsName {
-	msg += fmt.Sprintf("| %-21s | %7s |\n", portName, ports[portName])
+// HypervisorPort returns the port of the hypervisor; either from the running visor or the default value
+func HypervisorPort(cmdFlags *pflag.FlagSet) string {
+	rpcClient, err := clirpc.Client(cmdFlags)
+	if err != nil {
+		return hypervisorconfig.HTTPAddr()
+	}
+	ports, err := rpcClient.Ports()
+	if err != nil {
+		return hypervisorconfig.HTTPAddr()
+	}
+	return fmt.Sprintf(":%s", ports["hypervisor"])
 }
-
-msg += "+---------------------------------+\n"
-internal.PrintOutput(cmd.Flags(), ports, msg)
-},
-}
-*/
