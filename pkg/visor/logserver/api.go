@@ -48,7 +48,7 @@ func New(log *logging.Logger, tpLogPath, localPath, customPath string, printLog 
 	r.Handle("/*", http.StripPrefix("/", fsTP))
 
 	fsLocal := http.FileServer(http.Dir(localPath))
-	r.Handle("/"+skyenv.SurveyFile, http.StripPrefix("/", fsLocal))
+	r.Handle("/"+skyenv.NodeInfo, http.StripPrefix("/", fsLocal))
 
 	r.Handle("/"+skyenv.RewardFile, http.StripPrefix("/", fsLocal))
 

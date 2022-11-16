@@ -264,7 +264,7 @@ func runVisor(conf *visorconfig.V1) {
 		conf = initConfig(log, confPath)
 	}
 	//check for valid reward address set as prerequisite for generating the system survey
-	rewardAddressBytes, err := os.ReadFile(skyenv.PackageConfig().LocalPath + "/" + skyenv.RewardFile) //nolint
+	rewardAddressBytes, err := os.ReadFile(conf.LocalPath + "/" + skyenv.RewardFile) //nolint
 	if err == nil {
 		//remove any newline from rewardAddress string
 		rewardAddress := strings.TrimSuffix(string(rewardAddressBytes), "\n")
@@ -287,26 +287,26 @@ func runVisor(conf *visorconfig.V1) {
 			if err != nil {
 				log.WithError(err).Error("Could not marshal json.")
 			}
-			err = os.WriteFile(conf.LocalPath+"/"+skyenv.SurveyFile, s, 0644) //nolint
+			err = os.WriteFile(conf.LocalPath+"/"+skyenv.NodeInfo, s, 0644) //nolint
 			if err != nil {
 				log.WithError(err).Error("Failed to write system hardware survey to file.")
 			}
-			f, err := os.ReadFile(filepath.Clean(conf.LocalPath + "/" + skyenv.SurveyFile))
+			f, err := os.ReadFile(filepath.Clean(conf.LocalPath + "/" + skyenv.NodeInfo))
 			if err != nil {
 				log.WithError(err).Error("Failed to write system hardware survey to file.")
 			}
 			srvySha256Byte32 := sha256.Sum256([]byte(f))
-			err = os.WriteFile(conf.LocalPath+"/"+skyenv.SurveySha256, srvySha256Byte32[:], 0644) //nolint
+			err = os.WriteFile(conf.LocalPath+"/"+skyenv.NodeInfoSha256, srvySha256Byte32[:], 0644) //nolint
 			if err != nil {
 				log.WithError(err).Error("Failed to write system hardware survey to file.")
 			}
 		}
 	} else {
-		err := os.Remove(skyenv.PackageConfig().LocalPath + "/" + skyenv.SurveyFile)
+		err := os.Remove(skyenv.PackageConfig().LocalPath + "/" + skyenv.NodeInfo)
 		if err == nil {
 			log.Debug("removed hadware survey for visor not seeking rewards")
 		}
-		err = os.Remove(skyenv.PackageConfig().LocalPath + "/" + skyenv.SurveySha256)
+		err = os.Remove(skyenv.PackageConfig().LocalPath + "/" + skyenv.NodeInfoSha256)
 		if err == nil {
 			log.Debug("removed hadware survey checksum file")
 		}
