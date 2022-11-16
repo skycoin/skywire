@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sync"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
@@ -59,35 +60,35 @@ func main() {
 	httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
 
 	// Get visors data
+	var wg sync.WaitGroup
 	for _, v := range uptimes {
-		var infoErr, shaErr error
+		wg.Add(1)
+		go func(key string, wg *sync.WaitGroup) {
+			defer wg.Done()
+			var infoErr, shaErr error
 
-		if err := os.Mkdir(v.PubKey, 0750); err != nil {
-			log.Panicf("Unable to create directory for visor %s", v.PubKey)
-		}
-		if err := os.Chdir(v.PubKey); err != nil {
-			log.Panicf("Unable to change directory to %s", v.PubKey)
-		}
-
-		infoErr = download(ctx, log, httpC, "node-info.json", v.PubKey)
-		shaErr = download(ctx, log, httpC, "node-info.sha", v.PubKey)
-
-		if err := os.Chdir(".."); err != nil {
-			log.Panic("Unable to change directory to root")
-		}
-
-		if shaErr != nil || infoErr != nil {
-			if err := os.RemoveAll(v.PubKey); err != nil {
-				log.Warnf("Unable to remove directory %s", v.PubKey)
+			if err := os.Mkdir(key, 0750); err != nil {
+				log.Panicf("Unable to create directory for visor %s", key)
 			}
-		}
+
+			infoErr = download(ctx, log, httpC, "node-info.json", key)
+			shaErr = download(ctx, log, httpC, "node-info.sha", key)
+
+			if shaErr != nil || infoErr != nil {
+				if err := os.RemoveAll(key); err != nil {
+					log.Warnf("Unable to remove directory %s", key)
+				}
+			}
+		}(v.PubKey, &wg)
 	}
+
+	wg.Wait()
 }
 
 func download(ctx context.Context, log *logging.Logger, httpC http.Client, fileName, pubkey string) error {
 	target := fmt.Sprintf("dmsg://%s:80/%s", pubkey, fileName)
-	file, _ := os.Create(fileName) //nolint
-	defer file.Close()             //nolint
+	file, _ := os.Create(pubkey + "/" + fileName) //nolint
+	defer file.Close()                            //nolint
 
 	if err := dmsgget.Download(ctx, log, &httpC, file, target); err != nil {
 		log.WithError(err).Errorf("The %s for visor %s not available", fileName, pubkey)
