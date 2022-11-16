@@ -11,10 +11,12 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 
 	"github.com/skycoin/dmsg/pkg/dmsgget"
+	"github.com/skycoin/dmsg/pkg/dmsghttp"
 )
 
 func main() {
@@ -46,6 +48,16 @@ func main() {
 		log.WithError(err).Panic("Unable to get data from uptime tracker.")
 	}
 
+	// Create dmsg http client
+	pk, sk, _ := genKeys("") //nolint
+	dmsgC, closeDmsg, err := dg.StartDmsg(ctx, log, pk, sk)
+	if err != nil {
+		log.WithError(err).Panic(err)
+	}
+	defer closeDmsg()
+
+	httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
+
 	// Get visors data
 	for _, v := range uptimes {
 		var infoErr, shaErr error
@@ -57,15 +69,8 @@ func main() {
 			log.Panicf("Unable to change directory to %s", v.PubKey)
 		}
 
-		nodeInfo := []string{fmt.Sprintf("dmsg://%s:80/node-info.json", v.PubKey)}
-		if infoErr = dg.Run(ctx, log, "", nodeInfo); infoErr != nil {
-			log.WithError(infoErr).Errorf("node-info.json for visor %s not available", v.PubKey)
-		}
-
-		nodeInfoSha := []string{fmt.Sprintf("dmsg://%s:80/node-info.sha", v.PubKey)}
-		if shaErr = dg.Run(ctx, log, "", nodeInfoSha); shaErr != nil {
-			log.WithError(shaErr).Errorf("node-info.sha for visor %s not available", v.PubKey)
-		}
+		infoErr = download(ctx, dg, log, httpC, "node-info.json", v.PubKey)
+		shaErr = download(ctx, dg, log, httpC, "node-info.sha", v.PubKey)
 
 		if err := os.Chdir(".."); err != nil {
 			log.Panic("Unable to change directory to root")
@@ -77,6 +82,18 @@ func main() {
 			}
 		}
 	}
+}
+
+func download(ctx context.Context, dg *dmsgget.DmsgGet, log *logging.Logger, httpC http.Client, fileName, pubkey string) error {
+	target := fmt.Sprintf("dmsg://%s:80/%s", pubkey, fileName)
+	file, _ := os.Create(fileName) //nolint
+	defer file.Close()             //nolint
+
+	if err := dg.Download(ctx, log, &httpC, file, target); err != nil {
+		log.WithError(err).Errorf("The %s for visor %s not available", fileName, pubkey)
+		return err
+	}
+	return nil
 }
 
 func getUptimes(log *logging.Logger) ([]VisorUptimeResponse, error) {
@@ -110,4 +127,16 @@ type VisorUptimeResponse struct { //nolint
 	Downtime   float64 `json:"downtime"`
 	Percentage float64 `json:"percentage"`
 	Online     bool    `json:"online"`
+}
+
+func genKeys(skStr string) (pk cipher.PubKey, sk cipher.SecKey, err error) {
+	if skStr == "" {
+		pk, sk = cipher.GenerateKeyPair()
+		return
+	}
+	if err = sk.Set(skStr); err != nil {
+		return
+	}
+	pk, err = sk.PubKey()
+	return
 }
