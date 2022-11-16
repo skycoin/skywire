@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
@@ -73,6 +74,8 @@ func main() {
 
 			infoErr = download(ctx, log, httpC, "node-info.json", key)
 			shaErr = download(ctx, log, httpC, "node-info.sha", key)
+			yesterday := time.Now().AddDate(0, 0, -1).UTC().Format("2006-01-02")
+			download(ctx, log, httpC, "transport_logs/"+yesterday+".csv", key) //nolint
 
 			if shaErr != nil || infoErr != nil {
 				if err := os.RemoveAll(key); err != nil {
