@@ -69,8 +69,8 @@ func main() {
 			log.Panicf("Unable to change directory to %s", v.PubKey)
 		}
 
-		infoErr = download(ctx, dg, log, httpC, "node-info.json", v.PubKey)
-		shaErr = download(ctx, dg, log, httpC, "node-info.sha", v.PubKey)
+		infoErr = download(ctx, log, httpC, "node-info.json", v.PubKey)
+		shaErr = download(ctx, log, httpC, "node-info.sha", v.PubKey)
 
 		if err := os.Chdir(".."); err != nil {
 			log.Panic("Unable to change directory to root")
@@ -84,12 +84,12 @@ func main() {
 	}
 }
 
-func download(ctx context.Context, dg *dmsgget.DmsgGet, log *logging.Logger, httpC http.Client, fileName, pubkey string) error {
+func download(ctx context.Context, log *logging.Logger, httpC http.Client, fileName, pubkey string) error {
 	target := fmt.Sprintf("dmsg://%s:80/%s", pubkey, fileName)
 	file, _ := os.Create(fileName) //nolint
 	defer file.Close()             //nolint
 
-	if err := dg.Download(ctx, log, &httpC, file, target); err != nil {
+	if err := dmsgget.Download(ctx, log, &httpC, file, target); err != nil {
 		log.WithError(err).Errorf("The %s for visor %s not available", fileName, pubkey)
 		return err
 	}
