@@ -15,6 +15,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	clicompletion "github.com/skycoin/skywire/cmd/skywire-cli/commands/completion"
 	cliconfig "github.com/skycoin/skywire/cmd/skywire-cli/commands/config"
+	clidmsgget "github.com/skycoin/skywire/cmd/skywire-cli/commands/dmsgget"
 	clidmsgpty "github.com/skycoin/skywire/cmd/skywire-cli/commands/dmsgpty"
 	climdisc "github.com/skycoin/skywire/cmd/skywire-cli/commands/mdisc"
 	clireward "github.com/skycoin/skywire/cmd/skywire-cli/commands/reward"
@@ -174,6 +175,7 @@ func init() {
 		clirtfind.RootCmd,
 		climdisc.RootCmd,
 		clicompletion.RootCmd,
+		clidmsgget.RootCmd,
 		treeCmd,
 		docCmd,
 	)
