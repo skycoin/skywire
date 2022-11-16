@@ -72,10 +72,11 @@ func main() {
 				log.Panicf("Unable to create directory for visor %s", key)
 			}
 
-			infoErr = download(ctx, log, httpC, "node-info.json", key)
-			shaErr = download(ctx, log, httpC, "node-info.sha", key)
+			infoErr = download(ctx, log, httpC, "node-info.json", "node-info.json", key)
+			shaErr = download(ctx, log, httpC, "node-info.sha", "node-info.sha", key)
 			yesterday := time.Now().AddDate(0, 0, -1).UTC().Format("2006-01-02")
-			download(ctx, log, httpC, "transport_logs/"+yesterday+".csv", key) //nolint
+			fmt.Println(yesterday)
+			download(ctx, log, httpC, "transport_logs/"+yesterday+".csv", yesterday+".csv", key) //nolint
 
 			if shaErr != nil || infoErr != nil {
 				if err := os.RemoveAll(key); err != nil {
@@ -88,8 +89,8 @@ func main() {
 	wg.Wait()
 }
 
-func download(ctx context.Context, log *logging.Logger, httpC http.Client, fileName, pubkey string) error {
-	target := fmt.Sprintf("dmsg://%s:80/%s", pubkey, fileName)
+func download(ctx context.Context, log *logging.Logger, httpC http.Client, targetPath, fileName, pubkey string) error {
+	target := fmt.Sprintf("dmsg://%s:80/%s", pubkey, targetPath)
 	file, _ := os.Create(pubkey + "/" + fileName) //nolint
 	defer file.Close()                            //nolint
 
