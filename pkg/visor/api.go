@@ -959,19 +959,24 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) error
 
 	connApp := appnet.Addr{
 		Net:    appnet.TypeSkynet,
-		PubKey: v.conf.PK,
+		PubKey: remotePK,
 		Port:   routing.Port(skyenv.SkyConnServerPort),
 	}
 	conn, err := appnet.Dial(connApp)
 	if err != nil {
 		return err
 	}
-	helloMsg := "hello"
-	_, err = conn.Write([]byte(helloMsg))
+	wrappedConn, err := appnet.WrapConn(conn)
 	if err != nil {
 		return err
 	}
-	go handleClientConn(v.log, conn)
+
+	helloMsg := "hello"
+	_, err = wrappedConn.Write([]byte(helloMsg))
+	if err != nil {
+		return err
+	}
+	go handleClientConn(v.log, wrappedConn)
 
 	return nil
 }
