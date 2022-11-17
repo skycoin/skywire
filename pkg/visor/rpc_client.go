@@ -474,6 +474,16 @@ func (rc *rpcClient) IsDMSGClientReady() (bool, error) {
 	return out, err
 }
 
+// Connect ....
+func (rc *rpcClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) error {
+	err := rc.Call("Connect", &ConnectIn{
+		RemotePK:   remotePK,
+		RemotePort: remotePort,
+		LocalPort:  localPort,
+	}, &struct{}{})
+	return err
+}
+
 // MockRPCClient mocks API.
 type mockRPCClient struct {
 	startedAt time.Time
@@ -1070,4 +1080,9 @@ func (mc *mockRPCClient) RemoteVisors() ([]string, error) {
 // IsDMSGClientReady implements API.
 func (mc *mockRPCClient) IsDMSGClientReady() (bool, error) {
 	return false, nil
+}
+
+// Connect implements API.
+func (mc *mockRPCClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) error {
+	return nil
 }

@@ -634,3 +634,18 @@ func (r *RPC) IsDMSGClientReady(_ *struct{}, out *bool) (err error) {
 	*out = status
 	return err
 }
+
+// ConnectIn is input for Connect.
+type ConnectIn struct {
+	RemotePK   cipher.PubKey
+	RemotePort int
+	LocalPort  int
+}
+
+// Connect ...
+func (r *RPC) Connect(in *ConnectIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "Connect", in)(nil, &err)
+
+	err = r.visor.Connect(in.RemotePK, in.RemotePort, in.LocalPort)
+	return err
+}
