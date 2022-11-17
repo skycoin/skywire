@@ -602,7 +602,7 @@ func initSkywireConnect(ctx context.Context, v *Visor, log *logging.Logger) erro
 				return
 			}
 
-			rAddr := conn.RemoteAddr().(appnet.Addr)
+			rAddr := conn.RemoteAddr().(routing.Addr)
 			log.Debug("Accepted sky connect conn on %s from %s\n", conn.LocalAddr(), rAddr.PubKey)
 			handleServerConn(log, wrappedConn)
 		}
