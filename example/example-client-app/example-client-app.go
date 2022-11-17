@@ -101,7 +101,7 @@ func main() {
 
 	conn, err := dialServer(ctx, appCl, hostAddr)
 	if err != nil {
-		print(fmt.Sprintf("Failed to dial to a server: %v\n", err))
+		print(fmt.Sprintf("Failed to dial to example-server-app: %v\n", err))
 		setAppErr(appCl, err)
 		os.Exit(1)
 	}

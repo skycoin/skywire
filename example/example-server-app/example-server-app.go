@@ -49,7 +49,7 @@ func main() {
 	}
 
 	setAppStatus(appCl, appserver.AppDetailedStatusRunning)
-	fmt.Println("Starting serving test server")
+	fmt.Println("Starting serving example-server-app")
 	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
 
 	go func() {
@@ -59,16 +59,16 @@ func main() {
 	}()
 
 	for {
-		fmt.Println("Accepting skychat conn...")
+		fmt.Println("Accepting example-server-app conn...")
 		conn, err := l.Accept()
 		if err != nil {
 			print(fmt.Sprintf("Failed to accept conn: %v\n", err))
 			return
 		}
-		fmt.Println("Accepted skychat conn")
+		fmt.Println("Accepted example-server-app conn")
 
 		rAddr := conn.RemoteAddr().(appnet.Addr)
-		fmt.Printf("Accepted test-client conn on %s from %s\n", conn.LocalAddr(), rAddr.PubKey)
+		fmt.Printf("Accepted example-client-app conn on %s from %s\n", conn.LocalAddr(), rAddr.PubKey)
 		handleConn(conn)
 	}
 }
