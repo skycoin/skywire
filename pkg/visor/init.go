@@ -595,9 +595,16 @@ func initSkywireConnect(ctx context.Context, v *Visor, log *logging.Logger) erro
 			}
 			log.Debug("Accepted sky connect conn")
 
+			log.Debug("Wrapping conn...")
+			wrappedConn, err := appnet.WrapConn(conn)
+			if err != nil {
+				log.WithError(err).Error("Failed to wrap conn")
+				return
+			}
+
 			rAddr := conn.RemoteAddr().(appnet.Addr)
 			log.Debug("Accepted sky connect conn on %s from %s\n", conn.LocalAddr(), rAddr.PubKey)
-			handleServerConn(log, conn)
+			handleServerConn(log, wrappedConn)
 		}
 	}()
 
