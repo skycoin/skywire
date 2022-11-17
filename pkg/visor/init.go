@@ -159,7 +159,7 @@ func registerModules(logger *logging.MasterLogger) {
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
 	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl, &dmsgHTTPLogServer, &dmsgTrackers)
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
-	skyC = maker("sky_connect", initSkywireConnect, &dmsgC, &tr)
+	skyC = maker("sky_connect", initSkywireConnect, &dmsgC, &tr, &launch)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
 		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyC)
 
@@ -591,6 +591,7 @@ func initSkywireConnect(ctx context.Context, v *Visor, log *logging.Logger) erro
 			conn, err := l.Accept()
 			if err != nil {
 				log.WithError(err).Error("Failed to accept conn")
+				return
 			}
 			log.Debug("Accepted sky connect conn")
 
