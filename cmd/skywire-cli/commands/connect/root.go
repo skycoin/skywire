@@ -22,8 +22,10 @@ func init() {
 	RootCmd.PersistentFlags().IntVarP(&localPort, "localport", "l", 0, "local port for server to run on")
 }
 
-// RootCmd contains commands that interact with the skywire-visor
-var RootCmd = &cobra.Command{
+// RootCmd is connectCmd
+var RootCmd = connectCmd
+
+var connectCmd = &cobra.Command{
 	Use:   "connect <pubkey>",
 	Short: "Skywire connect",
 	Args:  cobra.MinimumNArgs(1),
