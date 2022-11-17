@@ -81,6 +81,8 @@ const (
 	ExampleServerPort uint16 = 45
 	ExampleClientName        = "example-client-app"
 	ExampleClientPort uint16 = 46
+	SkyConnServerName        = "sky-conn"
+	SkyConnServerPort uint16 = 47
 )
 
 // RPC constants.

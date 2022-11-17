@@ -4,8 +4,10 @@ package visor
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -23,6 +25,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
@@ -96,6 +99,8 @@ type API interface {
 	SetLogRotationInterval(visorconfig.Duration) error
 
 	IsDMSGClientReady() (bool, error)
+
+	Connect(remotePK cipher.PubKey, remotePort, localPort int) error
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -947,4 +952,44 @@ func (v *Visor) IsDMSGClientReady() (bool, error) {
 		}
 	}
 	return false, errors.New("dmsg client is not ready")
+}
+
+// Connect implements API.
+func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) error {
+
+	connApp := appnet.Addr{
+		Net:    appnet.TypeSkynet,
+		PubKey: v.conf.PK,
+		Port:   routing.Port(skyenv.SkyConnServerPort),
+	}
+	conn, err := appnet.Dial(connApp)
+	if err != nil {
+		return err
+	}
+	helloMsg := "hello"
+	_, err = conn.Write([]byte(helloMsg))
+	if err != nil {
+		return err
+	}
+	go handleClientConn(v.log, conn)
+
+	return nil
+}
+
+func handleClientConn(log *logging.Logger, conn net.Conn) {
+	rAddr := conn.RemoteAddr().(appnet.Addr)
+	for {
+		buf := make([]byte, 32*1024)
+		n, err := conn.Read(buf)
+		if err != nil {
+			log.WithError(err).Error("Failed to read packet")
+			return
+		}
+
+		servMsg, err := json.Marshal(map[string]string{"sender": rAddr.PubKey.Hex(), "message": string(buf[:n])})
+		if err != nil {
+			log.WithError(err).Error("Failed to marshal json")
+		}
+		log.Errorf("Received: %s\n", servMsg)
+	}
 }
