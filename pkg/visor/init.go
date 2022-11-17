@@ -32,11 +32,13 @@ import (
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/setup/setupclient"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -118,6 +120,8 @@ var (
 	dmsgHTTP vinit.Module
 	// Dmsg trackers module
 	dmsgTrackers vinit.Module
+	// Skywire Connect module
+	skyC vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 )
@@ -155,8 +159,9 @@ func registerModules(logger *logging.MasterLogger) {
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
 	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl, &dmsgHTTPLogServer, &dmsgTrackers)
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
+	skyC = maker("sky_connect", initSkywireConnect, &dmsgC, &tr)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyC)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -555,6 +560,74 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 		return nil
 	})
 	return nil
+}
+
+func initSkywireConnect(ctx context.Context, v *Visor, log *logging.Logger) error {
+	ctx, cancel := context.WithCancel(ctx)
+	// waiting for at least one transport to initialize
+	<-v.tpM.Ready()
+	connApp := appnet.Addr{
+		Net:    appnet.TypeSkynet,
+		PubKey: v.conf.PK,
+		Port:   routing.Port(skyenv.SkyConnServerPort),
+	}
+	l, err := appnet.ListenContext(ctx, connApp)
+	if err != nil {
+		cancel()
+		return err
+	}
+
+	v.pushCloseStack("skywire_connect", func() error {
+		cancel()
+		if cErr := l.Close(); cErr != nil {
+			log.WithError(cErr).Error("Error closing listener.")
+		}
+		return nil
+	})
+
+	go func() {
+		for {
+			log.Debug("Accepting sky connect conn...")
+			conn, err := l.Accept()
+			if err != nil {
+				log.WithError(err).Error("Failed to accept conn")
+			}
+			log.Debug("Accepted sky connect conn")
+
+			rAddr := conn.RemoteAddr().(appnet.Addr)
+			log.Debug("Accepted sky connect conn on %s from %s\n", conn.LocalAddr(), rAddr.PubKey)
+			handleServerConn(log, conn)
+		}
+	}()
+
+	return nil
+}
+
+func handleServerConn(log *logging.Logger, conn net.Conn) {
+	rAddr := conn.RemoteAddr().(appnet.Addr)
+	for {
+		buf := make([]byte, 32*1024)
+		n, err := conn.Read(buf)
+		if err != nil {
+			log.WithError(err).Error("Failed to read packet")
+			return
+		}
+
+		clientMsg, err := json.Marshal(map[string]string{"sender": rAddr.PubKey.Hex(), "message": string(buf[:n])})
+		if err != nil {
+			log.WithError(err).Error("Failed to marshal json")
+		}
+		log.Debug("Received: %s\n", clientMsg)
+		if string(buf[:n]) == "hello" {
+			helloRsp := "hi"
+			_, err = conn.Write([]byte(helloRsp))
+			if err != nil {
+				log.WithError(err).Error("error sending data")
+				return
+			}
+			log.Debug("Sent hello response")
+		}
+	}
 }
 
 // getRouteSetupHooks aka autotransport
