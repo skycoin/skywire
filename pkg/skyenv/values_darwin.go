@@ -29,7 +29,7 @@ const (
 )
 
 func SkywireConfig() string {
-	return SkyenvFilePath + "/" + ConfigJSON
+	return SkywirePath + "/" + ConfigJSON
 }
 
 func SkyEnvs() string {

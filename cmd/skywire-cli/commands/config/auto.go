@@ -12,7 +12,7 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+//	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 const (
@@ -46,7 +46,7 @@ var autoConfigCmd = &cobra.Command{
 				cmds = `call `+ skyenv.SkyEnvs()
 				_, _ = script.Exec(cmds).Stdout() // noliint:errcheck
 			} else {
-				cmds = `source `+ skyenv.SkyEnvs()
+				cmds = `bash -c "source `+ skyenv.SkyEnvs() + `"`
 				_, _ = script.Exec(cmds).Stdout() // noliint:errcheck
 			}
 		}
@@ -60,7 +60,6 @@ var autoConfigCmd = &cobra.Command{
 			if skyenv.OS != "win" {
 				//root permissions required on linux
 				euid, _ := script.Exec(`bash -c "echo -e ${EUID}"`).String()
-				fmt.Printf("%s", euid)
 				if euid != "0\n" {
 					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("root permissions required"))
 				}
@@ -93,92 +92,99 @@ var autoConfigCmd = &cobra.Command{
 			}
 		}
 
-		_, err = os.Stat(skyenv.SkywireConfig())
-		if err == nil  {
-			if vconf, err := visorconfig.ReadFile(skyenv.SkywireConfig()); err != nil {
-				if vconf.Hypervisor != nil {
+//		_, err = os.Stat(skyenv.SkywireConfig())
+//		if err == nil  {
+
+//			if vconf, err := visorconfig.ReadFile(skyenv.SkywireConfig()); err != nil {
+//				fmt.Printf("test")
+//				if vconf.Hypervisor != nil {
 					isHypervisor = true
-				}
-			}
-		}
+//				}
+//			}
+//		}
 
 		// retain remote hypervisors by default
 		isRetainHypervisors = true
 		 // #check for argument - remote pk, 0, or 1
 		 // # 0 as argument drops any remote hypervisors which were set in the configuration
 		 // # & triggers the creation of the local hyperisor configuration
-		 var argsEvaluated bool
-		 if len(args) > 0{
-
-		if args[0] == "0" {
-			argsEvaluated = true
-			isRetainHypervisors = false
-			isHypervisor = true
-		}
-		// # 1 as argument drops remote hypervisors and does not create the local hv config
-		if args[0] == "1" {
-			argsEvaluated = true
-			isRetainHypervisors = false
-			isHypervisor = false
-		}
-	} else {
-		//no argument
-			argsEvaluated = true
-			isRetainHypervisors = false
-			isHypervisor = false
-		}
+		 if len(args) > 0 {
+			 if args[0] == "0" {
+				 isRetainHypervisors = false
+				 isHypervisor = true
+			 }
+			 // # 1 as argument drops remote hypervisors and does not create the local hv config
+			 if args[0] == "1" {
+				 isRetainHypervisors = false
+				 isHypervisor = false
+			 }
 		// # validate public key provided as argument
 		var pk cipher.PubKey
-		if !argsEvaluated {
+		if args[0] != "0" && args[0] != "1" && args[0] != "" && args[0] != " " && args[0] != "\n" {
 			internal.Catch(cmd.Flags(), pk.Set(args[0]))
 			hypervisorPKs = pk.String()
 			isRetainHypervisors = false
 			isHypervisor = false
 		}
+	}
 		//# show config gen command used
 		// defaults
 		// -b --bestproto dmsg or direct based on location
 		// -e auth enable authorization for hypervisor
 		// -p pkg package defaults
-		cmds = fmt.Sprintf(`%sskywire-cli %sconfig gen -bepr`, cyan, yellow)
+		var cmdslc []string
+		confgen := fmt.Sprintf(`%sskywire-cli %sconfig gen`, cyan, yellow)
+		cmdslc = append(cmdslc, fmt.Sprintf(` -b`))
+		cmdslc = append(cmdslc, fmt.Sprintf(` -e`))
+		cmdslc = append(cmdslc, fmt.Sprintf(` -p`))
+		cmdslc = append(cmdslc, fmt.Sprintf(` -r`))
 		if isHypervisor {
-			cmds += `i`
+			cmdslc = append(cmdslc, fmt.Sprintf(` -i`))
 		}
 		// retain hypervisors when regenerating config
 		if isRetainHypervisors {
-			cmds += `x`
+			cmdslc = append(cmdslc, fmt.Sprintf(` -x`))
 		}
 		// remote hypervisor public key
 		if hypervisorPKs != "" {
-			cmds += ` -j ` + hypervisorPKs
+			cmdslc = append(cmdslc, fmt.Sprintf(` -j %s`, hypervisorPKs))
 		}
 		// visor appears in the service discovery for service type visor
 		if os.Getenv("VISORISPUBLIC") == "1" {
-			cmds += ` --public`
+		cmdslc = append(cmdslc, fmt.Sprintf(` --public`))
 		}
 		// disable autoconnect to public visors
 		if os.Getenv("NOAUTOCONNECT") == "1" {
-			cmds += ` --autoconn`
+		cmdslc = append(cmdslc, fmt.Sprintf(` --autoconn`))
 		}
 		// default to auto start vpn server
 		if os.Getenv("VPNSERVER") == "1" {
-			cmds += ` --servevpn`
+		cmdslc = append(cmdslc, fmt.Sprintf(` --servevpn`))
 		}
 		// #use test deployment instead of production with env TESTENV=1
-		if os.Getenv("TESTENV") != "1" {
-			cmds += ` --testenv`
+		if os.Getenv("TESTENV") == "1" {
+		cmdslc = append(cmdslc, fmt.Sprintf(` --testenv`))
 		}
-		fmt.Printf("%s", mesg3(fmt.Sprintf(`Generating skywire config with command:\n` + cmds + `%s\n`, nc)))
+		fmt.Printf("%s", mesg2("Configuring skywire"))
+		fmt.Printf("%s", mesg3(fmt.Sprintf("Generating skywire config with command:\n	%s%s%s", confgen, strings.Join(cmdslc, ""), nc)))
 		// hide the output from config gen
 		isHide = true
+		//genconfigcmd := genConfigCmd
+		//genconfigcmd.SetArgs(cmdslc)
 		//##generate visor configuration##
-		genConfigCmd.Execute()
+		//genconfigcmd.Execute()
+		genconfigcmd := "skywire-cli config gen " + strings.Join(cmdslc, "") + " -w"
+		genconfigcmd1 := "echo \"" + genconfigcmd + "\"" + genconfigcmd + " >> /dev/null 2>&1 ; [[ ${?} != 0 ]] && " + genconfigcmd
+		genconfigcmd1 = `bash -c '` + genconfigcmd1 + `'`
+
+		_, _ = script.Exec(genconfigcmd1).Stdout()
+
 		fmt.Printf("%s", mesg3(fmt.Sprintf("%sSkywire%s configuration updated\nconfig path: %s/opt/skywire/skywire.json%s", blue, nc, purple, nc)))
 		if skyenv.OS == "linux" {
 			_, err := os.Stat("/etc/skywire-config.json")
 			if err != nil  {
 				fmt.Printf("%s", mesg2("backing up configuration to /etc/skywire-config.json"))
-				cmds = `cp `+ skyenv.SkywireConfig() + ` /etc/` + skyenv.ConfigName
+				cmds = `bash -c ' set -x ; cp `+ skyenv.SkywireConfig() + ` /etc/` + skyenv.ConfigName + "'"
 				_, _ = script.Exec(cmds).Stdout()
 			}
 		}
@@ -188,14 +194,13 @@ var autoConfigCmd = &cobra.Command{
 			now="--now"
 		}
 
-		fmt.Printf("%s", mesg2("Configuring skywire"))
 		var svc string
 		svc = "skywire"
-		cmds = fmt.Sprintf("systemctl enable %s %s", now, svc)
+		cmds = fmt.Sprintf(`bash -c 'systemctl enable %s %s'`, now, svc)
 		//start the service on ${SKYBIAN} == "true"
 		if os.Getenv("SKYBIAN") == "true" {
 			fmt.Printf("%s", mesg3(fmt.Sprintf("Enabling %s service%s..\n %s", svc, strings.Replace(now, "--", " and starting", -1), cmds)))
-			cmds += `  2> /dev/null`
+			cmds += `  2> /dev/null'`
 			_, _ = script.Exec(cmds).Stdout()
 		}
 		if os.Getenv("DMSGPTYTERM") == "1" {
@@ -210,38 +215,46 @@ var autoConfigCmd = &cobra.Command{
 			}
 		}
 		//#restart the service
-		cmds = fmt.Sprintf(`systemctl is-active --quiet %s && %s && systemctl restart %s 2> /dev/null`, svc, fmt.Sprintf("printf '%s'", mesg3(fmt.Sprintf("Restarting %s.service...", svc))), svc)
+		cmds = fmt.Sprintf(`bash -c 'systemctl is-active --quiet %s && %s && systemctl restart %s 2> /dev/null'`, svc, fmt.Sprintf("printf \"%s\"", mesg3(fmt.Sprintf("Restarting %s.service...", svc))), svc)
 		script.Exec(cmds).Stdout()
-		cmds = fmt.Sprintf(`if ! systemctl is-active --quiet %s >/dev/null; then %s; fi`, svc, mesg2(fmt.Sprintf("Start the %s service with:\n			%ssystemctl start %s%s;	exit 0", svc, red, svc, nc)))
-		script.Exec(cmds).Stdout()
+		cmds = fmt.Sprintf(`bash -c 'if ! systemctl is-active --quiet %s >/dev/null; then printf "%s" ; exit 1 ; fi'`, svc, mesg2(fmt.Sprintf("Start the %s service with:\n	%ssystemctl start %s%s", svc, red, svc, nc)))
+		//fmt.Printf(cmds)
+		_, err = script.Exec(cmds).Stdout()
+		if err != nil  {
+			os.Exit(0)
+		}
+
 		cmds = fmt.Sprintf(`bash -c "skywire-cli visor pk -p | tail -n1"`)
-		publickey, err := script.Exec(cmds).Stdout()
+		publickey, err := script.Exec(cmds).String()
 		if err != nil  {
 			os.Exit(1)
 		}
-		fmt.Printf("%s", mesg2(fmt.Sprintf("Visor Public Key:\n		%s%s%s", green, publickey, nc)))
+		fmt.Printf("%s", mesg2(fmt.Sprintf("Visor Public Key:\n%s%s%s", green, publickey, nc)))
 		if isHypervisor {
-			cmds = fmt.Sprintf(`bash -c "[[ $(ps -o comm= -p $PPID) != 'sshd' ]] && echo 'true'"`)
+			cmds = fmt.Sprintf(`bash -c "[[ $(ps -o comm= -p $PPID) != 'sshd' ]] && printf 'true'"`)
 			if sshd, err := script.Exec(cmds).String(); err == nil {
-				if sshd == "true" {
+				if sshd == "true" { //when this command is run in ssh session its pointless to print the interface on localhost
 					fmt.Printf("%s", mesg2(fmt.Sprintf("Starting now on:\n%shttp://127.0.0.1:8000%s", red, nc)))
 				}
 			}
 			cmds = fmt.Sprintf(`bash -c "skywire-cli vpn url -p"`)
-			if vpnurl, err := script.Exec(cmds).Stdout(); err == nil {
-				fmt.Printf("%s", mesg2(fmt.Sprintf("Use the vpn:\n%s%s%s", red, vpnurl, nc)))
+			if vpnurl, err := script.Exec(cmds).String(); err == nil {
+				fmt.Printf("%s", mesg2(fmt.Sprintf("Use the vpn:\n%s%s%s", red, strings.TrimSuffix(vpnurl, "\n"), nc)))
 			}
 			hpvurl := "Access hypervisor UI from local network here:"
-			cmds = fmt.Sprintf(`bash -c "ip addr show | grep -w inet | grep -v 127.0.0.1 | awk '{ print $2}' | cut -d "/" -f 1"`)
-			if lanips, err := script.Exec(cmds).String(); err == nil {
-				cmds = fmt.Sprintf(`bash -c "_hpvurl=%s ; _lanips=%s ; for _lanip in _lanips ; do  _hpvurl+=\"\n${_yellow}http://${_lanip}:8000${_nc}\" ; done ; echo ${_hvpurl}"`, hpvurl, lanips)
-				if hpvurl, err := script.Exec(cmds).String(); err == nil {
-					fmt.Printf("%s", mesg2(fmt.Sprintf("%s",hpvurl)))
-			}
-		}
+			cmds = fmt.Sprintf(`bash -c "ip addr show | grep -w inet | grep -v 127.0.0.1 | awk '{ print $2}' | cut -d \"/\" -f 1"`)
+			lanips, _ := script.Exec(cmds).String()//; err == nil {
+				lanip := strings.Split(lanips, "\n")
+				for _, i := range lanip {
+					if i != "" {
+						hpvurl += fmt.Sprintf("\n%shttp://%s:8000%s", yellow, i, nc)
+					}
+				}
+				fmt.Printf("%s", mesg2(fmt.Sprintf("%s",hpvurl)))
+				fmt.Printf("%s", mesg2(fmt.Sprintf("support:\n%shttps://t.me/skywire%s", blue, nc)))
 			fmt.Printf("%s", mesg2("run the following command on OTHER NODES to set this one as the hypervisor:"))
-		    fmt.Printf("%s", fmt.Sprintf("%sskywire-cli config auto %s%s%s", cyan, yellow, publickey, nc))
-		    fmt.Printf("%s", mesg2(fmt.Sprintf("to see this text again run: %sskywire-cli config auto%s", cyan, nc)))
+		    fmt.Printf("%s", fmt.Sprintf("%sskywire-cli config auto %s%s%s\n", cyan, yellow, publickey, nc))
+		    fmt.Printf("%s", mesg2(fmt.Sprintf("to see this text again run: %sskywire-cli config auto%s\n", cyan, nc)))
 		} else {
 		  	fmt.Printf("%s", mesg2(fmt.Sprintf("%sSkywire%s starting in visor mode", blue, nc)))
 		    fmt.Printf("%s", mesg2(fmt.Sprintf("Visor Public Key: %s%s%s", green, publickey, nc)))
