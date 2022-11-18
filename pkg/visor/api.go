@@ -972,7 +972,11 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) error
 		return err
 	}
 
-	clientMsg, err := json.Marshal(map[string]string{"port": fmt.Sprint(remotePort)})
+	cMsg := clientMsg{
+		Port: remotePort,
+	}
+
+	clientMsg, err := json.Marshal(cMsg)
 	if err != nil {
 		return err
 	}

@@ -620,16 +620,14 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn) {
 			log.WithError(err).Error("Failed to read packet")
 			return
 		}
-		clientMsg := struct {
-			Port int `json:"port,omitempty"`
-		}{}
-		err = json.Unmarshal(buf[:n], &clientMsg)
+		var cMsg clientMsg
+		err = json.Unmarshal(buf[:n], &cMsg)
 		if err != nil {
 			log.WithError(err).Error("Failed to marshal json")
 		}
-		log.Debugf("Received: %v", clientMsg)
+		log.Debugf("Received: %v", cMsg)
 
-		localConn, err := net.Dial("tcp", "localhost:"+fmt.Sprint(clientMsg.Port))
+		localConn, err := net.Dial("tcp", "localhost:"+fmt.Sprint(cMsg.Port))
 		if err != nil {
 			log.WithError(err).Error("Failed to Listen on port %v")
 		}
@@ -655,6 +653,10 @@ func closeConn(log *logging.Logger, conn net.Conn) {
 	if err := conn.Close(); err != nil {
 		log.WithError(err).Errorf("Error closing client %s connection", conn.RemoteAddr())
 	}
+}
+
+type clientMsg struct {
+	Port int `json:"port"`
 }
 
 // getRouteSetupHooks aka autotransport
