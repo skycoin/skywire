@@ -602,8 +602,8 @@ func initSkywireConnect(ctx context.Context, v *Visor, log *logging.Logger) erro
 				return
 			}
 
-			rAddr := conn.RemoteAddr().(routing.Addr)
-			log.Debug("Accepted sky connect conn on %s from %s\n", conn.LocalAddr(), rAddr.PubKey)
+			rAddr := wrappedConn.RemoteAddr().(appnet.Addr)
+			log.Debugf("Accepted sky connect conn on %s from %s", wrappedConn.LocalAddr(), rAddr.PubKey)
 			handleServerConn(log, wrappedConn)
 		}
 	}()
@@ -629,7 +629,7 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn) {
 
 		localConn, err := net.Dial("tcp", "localhost:"+fmt.Sprint(cMsg.Port))
 		if err != nil {
-			log.WithError(err).Error("Failed to Listen on port %v")
+			log.WithError(err).Errorf("Failed to Listen on port %v", cMsg.Port)
 		}
 
 		// go routines to initiate bi-directional communication for local server with the
