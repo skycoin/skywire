@@ -611,30 +611,49 @@ func initSkywireConnect(ctx context.Context, v *Visor, log *logging.Logger) erro
 	return nil
 }
 
-func handleServerConn(log *logging.Logger, conn net.Conn) {
-	rAddr := conn.RemoteAddr().(appnet.Addr)
+func handleServerConn(log *logging.Logger, remoteConn net.Conn) {
+	// rAddr := conn.RemoteAddr().(appnet.Addr)
 	for {
 		buf := make([]byte, 32*1024)
-		n, err := conn.Read(buf)
+		n, err := remoteConn.Read(buf)
 		if err != nil {
 			log.WithError(err).Error("Failed to read packet")
 			return
 		}
-
-		clientMsg, err := json.Marshal(map[string]string{"sender": rAddr.PubKey.Hex(), "message": string(buf[:n])})
+		clientMsg := struct {
+			Port int `json:"port,omitempty"`
+		}{}
+		err = json.Unmarshal(buf[:n], &clientMsg)
 		if err != nil {
 			log.WithError(err).Error("Failed to marshal json")
 		}
-		log.Debug("Received: %s\n", clientMsg)
-		if string(buf[:n]) == "hello" {
-			helloRsp := "hi"
-			_, err = conn.Write([]byte(helloRsp))
-			if err != nil {
-				log.WithError(err).Error("error sending data")
-				return
-			}
-			log.Debug("Sent hello response")
+		log.Debugf("Received: %v", clientMsg)
+
+		localConn, err := net.Dial("tcp", "localhost:"+fmt.Sprint(clientMsg.Port))
+		if err != nil {
+			log.WithError(err).Error("Failed to Listen on port %v")
 		}
+
+		// go routines to initiate bi-directional communication for local server with the
+		// remote server
+		go forward(log, remoteConn, localConn)
+		go forward(log, localConn, remoteConn)
+	}
+}
+
+func forward(log *logging.Logger, src, dest net.Conn) {
+	defer closeConn(log, src)
+	defer closeConn(log, dest)
+	if _, err := io.Copy(src, dest); err != nil {
+		if err.Error() != io.EOF.Error() {
+			log.WithError(err).Errorf("Error resending traffic")
+		}
+	}
+}
+
+func closeConn(log *logging.Logger, conn net.Conn) {
+	if err := conn.Close(); err != nil {
+		log.WithError(err).Errorf("Error closing client %s connection", conn.RemoteAddr())
 	}
 }
 
