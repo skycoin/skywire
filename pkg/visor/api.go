@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -966,35 +967,34 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) error
 	if err != nil {
 		return err
 	}
-	wrappedConn, err := appnet.WrapConn(conn)
+	remoteConn, err := appnet.WrapConn(conn)
 	if err != nil {
 		return err
 	}
 
-	helloMsg := "hello"
-	_, err = wrappedConn.Write([]byte(helloMsg))
+	clientMsg, err := json.Marshal(map[string]string{"port": fmt.Sprint(remotePort)})
 	if err != nil {
 		return err
 	}
-	go handleClientConn(v.log, wrappedConn)
+	_, err = remoteConn.Write([]byte(clientMsg))
+	if err != nil {
+		return err
+	}
+
+	ln, err := net.Listen("tcp", "localhost:"+fmt.Sprint(localPort))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	localConn, err := ln.Accept()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// go routines to initiate bi-directional communication for local server with the
+	// remote server
+	go forward(v.log, remoteConn, localConn)
+	go forward(v.log, localConn, remoteConn)
 
 	return nil
-}
-
-func handleClientConn(log *logging.Logger, conn net.Conn) {
-	rAddr := conn.RemoteAddr().(appnet.Addr)
-	for {
-		buf := make([]byte, 32*1024)
-		n, err := conn.Read(buf)
-		if err != nil {
-			log.WithError(err).Error("Failed to read packet")
-			return
-		}
-
-		servMsg, err := json.Marshal(map[string]string{"sender": rAddr.PubKey.Hex(), "message": string(buf[:n])})
-		if err != nil {
-			log.WithError(err).Error("Failed to marshal json")
-		}
-		log.Errorf("Received: %s\n", servMsg)
-	}
 }
