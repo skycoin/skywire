@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -987,18 +986,18 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) error
 
 	ln, err := net.Listen("tcp", "localhost:"+fmt.Sprint(localPort))
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	localConn, err := ln.Accept()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	// go routines to initiate bi-directional communication for local server with the
 	// remote server
 	go forward(v.log, remoteConn, localConn)
 	go forward(v.log, localConn, remoteConn)
-
+	v.log.Error("end")
 	return nil
 }
