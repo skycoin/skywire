@@ -29,10 +29,13 @@ const (
 var (
 	isStartedWithSystemd bool
 	cmds string
+	isRunScript bool
 )
 
 func init() {
 	RootCmd.AddCommand(autoConfigCmd)
+	autoConfigCmd.Flags().BoolVarP(&isRunScript, "script", "s", false, "run the skywire-autoconfig script")
+
 }
 
 var autoConfigCmd = &cobra.Command{
@@ -40,6 +43,7 @@ var autoConfigCmd = &cobra.Command{
 	Short: "Automatically generate or update a config",
 	Long: "\n  Automatically generate or update a config\n\n  A substituite for the package-level config management scripts\n  golang adaptation of skywire-autoconfig.sh\n\n 0 as argument drops any remote hypervisors which were set in the configuration\n 1 as argument drops remote hypervisors and does not create the local hv config\n <public-key> as argument sets the remote hypervisor",
 	PreRun: func(cmd *cobra.Command, _ []string) {
+//		if !isRunScript {
 		// source the skyenv file
 		if _, err := os.Stat(skyenv.SkyEnvs()); err == nil {
 			if skyenv.OS == "win" {
@@ -69,9 +73,15 @@ var autoConfigCmd = &cobra.Command{
 					}
 			}
 		}
+	//}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		if skyenv.OS == "linux" {
+//not working currently
+//			if isRunScript {
+//				_, _ = script.Exec(skywireautoconfig).Stdout()
+//				os.Exit(0)
+//			}
 			// if the command is run in the DMSGPTY terminal, the process will be interrupted before the command can complete
 			// similarly, if this command is run as a child process of the systemd service, it will be killed by systemd before it completes
 			// DMSGPTYTERM=1 is exported by the dmsgpty terminal and can be detected by this process
@@ -266,7 +276,7 @@ var autoConfigCmd = &cobra.Command{
 			return fmt.Sprintf("%s ->%s%s %s%s\n", cyan, nc, bold, s, nc)
 		}
 		func mesg3(s string) string {
-			return fmt.Sprintf("%s -->%s%s %s%s\n", blue, nc, bold, s, nc)
+			return fmt.Sprintf("%s -->%s %s%s\n", blue, nc, s, nc)
 		}
 		func errmsg1(s string) string {
 			return fmt.Sprintf("%s>>> Error:%s%s %s%s\n", red, nc, bold, s, nc)
