@@ -30,11 +30,14 @@ var (
 	isStartedWithSystemd bool
 	cmds string
 	isRunScript bool
+	isEnvs bool
 )
 
 func init() {
 	RootCmd.AddCommand(autoConfigCmd)
-	autoConfigCmd.Flags().BoolVarP(&isRunScript, "script", "s", false, "run the skywire-autoconfig script")
+	//not working currently
+	//	autoConfigCmd.Flags().BoolVarP(&isRunScript, "script", "s", false, "run the skywire-autoconfig script")
+		autoConfigCmd.Flags().BoolVarP(&isEnvs, "envs", "n", false, "show the environmntal variable settings")
 
 }
 
@@ -43,7 +46,19 @@ var autoConfigCmd = &cobra.Command{
 	Short: "Automatically generate or update a config",
 	Long: "\n  Automatically generate or update a config\n\n  A substituite for the package-level config management scripts\n  golang adaptation of skywire-autoconfig.sh\n\n 0 as argument drops any remote hypervisors which were set in the configuration\n 1 as argument drops remote hypervisors and does not create the local hv config\n <public-key> as argument sets the remote hypervisor",
 	PreRun: func(cmd *cobra.Command, _ []string) {
-//		if !isRunScript {
+		if isEnvs {
+			fmt.Printf("\n")
+			fmt.Printf("Env file to source\n					%s\n", skyenv.SkyEnvs())
+			fmt.Printf("Detect if this command is run as root\nRoot permissions required\n					EUID=0\n")
+			fmt.Printf("Disable Autoconfig\n					NOAUTOCONFIG=true\n")
+			fmt.Printf("Command was run in dmsgpty terminal\nDo not restart services\n					DMSGPTYTERM=1\n")
+			fmt.Printf("Start the systemd service\n					SKYBIAN=true\n")
+			fmt.Printf("Use --public flag for config gen\nOther Visors will automatically\nestablish transports to this visor\n					VISORISPUBLIC=1\n")
+			fmt.Printf("Use --servevpn flag for config gen\nAutostart vpn server for this visor\n					VPNSERVER=1\n")
+			fmt.Printf("Use --testenv flag for config gen\nUse test deployment\n					TESTENV=1\n")
+			os.Exit(0)
+		}
+		//		if !isRunScript {
 		// source the skyenv file
 		if _, err := os.Stat(skyenv.SkyEnvs()); err == nil {
 			if skyenv.OS == "win" {
