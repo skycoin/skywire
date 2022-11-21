@@ -22,16 +22,18 @@ const (
 
 	//TODO: @mrpalide set this correctly for macos. it shouldn't be in the installed path
 
-	// SkyenvFilePath is the path tothe SkyenvFile
+	// SkyenvFilePath is the path to the SkyenvFile
 	SkyenvFilePath = "/Library/Application Support/Skywire"
 	// SkyenvFile contains environmental variables which are detected by `skywire-autoconfig` / `skywire-cli config auto` to set default or persistent values
 	SkyenvFile = "skyenv.sh"
 )
 
+// SkywireConfig returns the full path to the package config
 func SkywireConfig() string {
 	return SkywirePath + "/" + ConfigJSON
 }
 
+// SkyEnvs returns the full path to the environmental variable file
 func SkyEnvs() string {
 	return SkyenvFilePath + "/" + SkyenvFile
 }

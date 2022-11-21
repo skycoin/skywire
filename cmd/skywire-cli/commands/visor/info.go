@@ -21,16 +21,16 @@ var webPort string
 var pk string
 
 func init() {
-	RootCmd.AddCommand(PkCmd)
-	PkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
-	PkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
-	PkCmd.Flags().BoolVarP(&web, "http", "w", false, "serve public key via http")
-	PkCmd.Flags().StringVarP(&webPort, "prt", "x", "7998", "serve public key via http")
+	RootCmd.AddCommand(pkCmd)
+	pkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
+	pkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
+	pkCmd.Flags().BoolVarP(&web, "http", "w", false, "serve public key via http")
+	pkCmd.Flags().StringVarP(&webPort, "prt", "x", "7998", "serve public key via http")
 	RootCmd.AddCommand(summaryCmd)
 	RootCmd.AddCommand(buildInfoCmd)
 }
 
-var PkCmd = &cobra.Command{
+var pkCmd = &cobra.Command{
 	Use:   "pk",
 	Short: "Public key of the visor",
 	Long:  "\n  Public key of the visor",
