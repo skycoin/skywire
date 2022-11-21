@@ -604,7 +604,7 @@ func initSkywireConnect(ctx context.Context, v *Visor, log *logging.Logger) erro
 
 			rAddr := wrappedConn.RemoteAddr().(appnet.Addr)
 			log.Debugf("Accepted sky connect conn on %s from %s", wrappedConn.LocalAddr(), rAddr.PubKey)
-			handleServerConn(log, wrappedConn)
+			go handleServerConn(log, wrappedConn)
 		}
 	}()
 
@@ -612,31 +612,42 @@ func initSkywireConnect(ctx context.Context, v *Visor, log *logging.Logger) erro
 }
 
 func handleServerConn(log *logging.Logger, remoteConn net.Conn) {
-	// rAddr := conn.RemoteAddr().(appnet.Addr)
-	for {
-		buf := make([]byte, 32*1024)
-		n, err := remoteConn.Read(buf)
-		if err != nil {
-			log.WithError(err).Error("Failed to read packet")
-			return
-		}
-		var cMsg clientMsg
-		err = json.Unmarshal(buf[:n], &cMsg)
-		if err != nil {
-			log.WithError(err).Error("Failed to marshal json")
-		}
-		log.Debugf("Received: %v", cMsg)
-
-		localConn, err := net.Dial("tcp", "localhost:"+fmt.Sprint(cMsg.Port))
-		if err != nil {
-			log.WithError(err).Errorf("Failed to Listen on port %v", cMsg.Port)
-		}
-
-		// go routines to initiate bi-directional communication for local server with the
-		// remote server
-		go forward(log, remoteConn, localConn)
-		go forward(log, localConn, remoteConn)
+	buf := make([]byte, 32*1024)
+	n, err := remoteConn.Read(buf)
+	if err != nil {
+		log.WithError(err).Error("Failed to read packet")
+		return
 	}
+	var cMsg clientMsg
+	err = json.Unmarshal(buf[:n], &cMsg)
+	if err != nil {
+		log.WithError(err).Error("Failed to marshal json")
+	}
+	log.Debugf("Received: %v", cMsg)
+
+	sMsg := serverMsg{}
+
+	clientMsg, err := json.Marshal(sMsg)
+	if err != nil {
+		log.WithError(err).Error("Failed to unmarshal json")
+	}
+	_, err = remoteConn.Write([]byte(clientMsg))
+	if err != nil {
+		log.WithError(err).Error("Failed write server msg")
+	}
+	log.Debugf("Msg sent %s", clientMsg)
+
+	fwd := fmt.Sprintf("localhost:%v", cMsg.Port)
+	log.Debugf("Forwarding %s", fwd)
+	localConn, err := net.Dial("tcp", fwd)
+	if err != nil {
+		log.WithError(err).Errorf("Failed to dial port %v", cMsg.Port)
+	}
+
+	// go routines to initiate bi-directional communication for local server with the
+	// remote server
+	go forward(log, localConn, remoteConn)
+	go forward(log, remoteConn, localConn)
 }
 
 func forward(log *logging.Logger, src, dest net.Conn) {
@@ -657,6 +668,10 @@ func closeConn(log *logging.Logger, conn net.Conn) {
 
 type clientMsg struct {
 	Port int `json:"port"`
+}
+
+type serverMsg struct {
+	Error error `json:"error,omitempty"`
 }
 
 // getRouteSetupHooks aka autotransport

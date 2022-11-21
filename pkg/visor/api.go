@@ -957,6 +957,12 @@ func (v *Visor) IsDMSGClientReady() (bool, error) {
 // Connect implements API.
 func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) error {
 
+	loc := fmt.Sprintf("localhost:%v", localPort)
+	ln, err := net.Listen("tcp", loc)
+	if err != nil {
+		return err
+	}
+	v.log.Debugf("Serving on %s", loc)
 	connApp := appnet.Addr{
 		Net:    appnet.TypeSkynet,
 		PubKey: remotePK,
@@ -983,21 +989,33 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) error
 	if err != nil {
 		return err
 	}
+	v.log.Debugf("Msg sent %s", clientMsg)
 
-	ln, err := net.Listen("tcp", "localhost:"+fmt.Sprint(localPort))
+	buf := make([]byte, 32*1024)
+	n, err := remoteConn.Read(buf)
 	if err != nil {
 		return err
 	}
-
-	localConn, err := ln.Accept()
+	var sMsg serverMsg
+	err = json.Unmarshal(buf[:n], &sMsg)
 	if err != nil {
 		return err
 	}
+	v.log.Debugf("Received: %v", sMsg)
 
-	// go routines to initiate bi-directional communication for local server with the
-	// remote server
-	go forward(v.log, remoteConn, localConn)
-	go forward(v.log, localConn, remoteConn)
-	v.log.Error("end")
+	go func() {
+		for {
+			localConn, err := ln.Accept()
+			if err != nil {
+				v.log.Error(err)
+			}
+
+			// go routines to initiate bi-directional communication for local server with the
+			// remote server
+			go forward(v.log, remoteConn, localConn)
+			go forward(v.log, localConn, remoteConn)
+		}
+	}()
+
 	return nil
 }
