@@ -651,8 +651,8 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn) {
 }
 
 func forward(log *logging.Logger, src, dest net.Conn) {
-	defer closeConn(log, src)
-	defer closeConn(log, dest)
+	// defer closeConn(log, src)
+	// defer closeConn(log, dest)
 	if _, err := io.Copy(src, dest); err != nil {
 		if err.Error() != io.EOF.Error() {
 			log.WithError(err).Errorf("Error resending traffic")
