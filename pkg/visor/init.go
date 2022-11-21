@@ -658,6 +658,7 @@ func forward(log *logging.Logger, src, dest net.Conn) {
 			log.WithError(err).Errorf("Error resending traffic")
 		}
 	}
+	log.Error("end copy")
 }
 
 func closeConn(log *logging.Logger, conn net.Conn) {
