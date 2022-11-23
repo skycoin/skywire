@@ -989,12 +989,16 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) error
 	if err != nil {
 		return err
 	}
-	var sMsg serverMsg
-	err = json.Unmarshal(buf[:n], &sMsg)
+	var sReply serverReply
+	err = json.Unmarshal(buf[:n], &sReply)
 	if err != nil {
 		return err
 	}
-	v.log.Debugf("Received: %v", sMsg)
+	v.log.Debugf("Received: %v", sReply)
+
+	if sReply.Error != nil {
+		return sReply.Error
+	}
 
 	appnet.ServeProxy(v.log, remoteConn, localPort)
 	return nil

@@ -618,36 +618,56 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn) {
 		log.WithError(err).Error("Failed to read packet")
 		return
 	}
+
 	var cMsg clientMsg
 	err = json.Unmarshal(buf[:n], &cMsg)
 	if err != nil {
 		log.WithError(err).Error("Failed to marshal json")
+		sendError(log, remoteConn, err)
+		return
 	}
 	log.Debugf("Received: %v", cMsg)
 
-	sMsg := serverMsg{}
-
-	clientMsg, err := json.Marshal(sMsg)
-	if err != nil {
-		log.WithError(err).Error("Failed to unmarshal json")
-	}
-	_, err = remoteConn.Write([]byte(clientMsg))
-	if err != nil {
-		log.WithError(err).Error("Failed write server msg")
-	}
-	log.Debugf("Msg sent %s", clientMsg)
-
 	fwd := fmt.Sprintf("localhost:%v", cMsg.Port)
-	log.Debugf("Forwarding %s", fwd)
 	localConn, err := net.Dial("tcp", fwd)
 	if err != nil {
 		log.WithError(err).Errorf("Failed to dial port %v", cMsg.Port)
+		sendError(log, remoteConn, fmt.Errorf("Failed to dial port %v err=%v", cMsg.Port, err))
+		return
 	}
+
+	log.Debugf("Forwarding %s", fwd)
+
+	// send nil error to indicate to the remote connection that everything is ok
+	sendError(log, remoteConn, nil)
 
 	// go routines to initiate bi-directional communication for local server with the
 	// remote server
 	go forward(log, localConn, remoteConn, "one")
 	go forward(log, remoteConn, localConn, "two")
+}
+
+func sendError(log *logging.Logger, remoteConn net.Conn, err error) {
+
+	sReply := serverReply{
+		Error: err,
+	}
+
+	srvReply, err := json.Marshal(sReply)
+	if err != nil {
+		log.WithError(err).Error("Failed to unmarshal json")
+	}
+
+	_, err = remoteConn.Write([]byte(srvReply))
+	if err != nil {
+		log.WithError(err).Error("Failed write server msg")
+	}
+
+	log.Debugf("Server reply sent %s", srvReply)
+	// close conn if we send an error
+	if err != nil {
+		closeConn(log, remoteConn)
+	}
 }
 
 func forward(log *logging.Logger, src, dest net.Conn, test string) {
@@ -671,7 +691,7 @@ type clientMsg struct {
 	Port int `json:"port"`
 }
 
-type serverMsg struct {
+type serverReply struct {
 	Error error `json:"error,omitempty"`
 }
 
