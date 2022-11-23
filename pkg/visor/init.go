@@ -646,19 +646,19 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn) {
 
 	// go routines to initiate bi-directional communication for local server with the
 	// remote server
-	go forward(log, localConn, remoteConn)
-	go forward(log, remoteConn, localConn)
+	go forward(log, localConn, remoteConn, "one")
+	go forward(log, remoteConn, localConn, "two")
 }
 
-func forward(log *logging.Logger, src, dest net.Conn) {
-	// defer closeConn(log, src)
-	// defer closeConn(log, dest)
+func forward(log *logging.Logger, src, dest net.Conn, test string) {
+	defer closeConn(log, src)
+	defer closeConn(log, dest)
 	if _, err := io.Copy(src, dest); err != nil {
 		if err.Error() != io.EOF.Error() {
 			log.WithError(err).Errorf("Error resending traffic")
 		}
 	}
-	log.Error("end copy")
+	log.Errorf("end copy: %v", test)
 }
 
 func closeConn(log *logging.Logger, conn net.Conn) {
