@@ -23,8 +23,8 @@ import (
 )
 
 const (
-	netType              = appnet.TypeSkynet
-	port    routing.Port = 3
+	netType = appnet.TypeSkynet
+	port    = routing.Port(3)
 )
 
 func main() {
