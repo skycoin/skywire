@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -957,12 +956,6 @@ func (v *Visor) IsDMSGClientReady() (bool, error) {
 // Connect implements API.
 func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) error {
 
-	loc := fmt.Sprintf("localhost:%v", localPort)
-	ln, err := net.Listen("tcp", loc)
-	if err != nil {
-		return err
-	}
-	v.log.Debugf("Serving on %s", loc)
 	connApp := appnet.Addr{
 		Net:    appnet.TypeSkynet,
 		PubKey: remotePK,
@@ -1003,19 +996,6 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) error
 	}
 	v.log.Debugf("Received: %v", sMsg)
 
-	go func() {
-		for {
-			localConn, err := ln.Accept()
-			if err != nil {
-				v.log.Error(err)
-			}
-
-			// go routines to initiate bi-directional communication for local server with the
-			// remote server
-			go forward(v.log, remoteConn, localConn)
-			go forward(v.log, localConn, remoteConn)
-		}
-	}()
-
+	appnet.ServeProxy(v.log, remoteConn, localPort)
 	return nil
 }
