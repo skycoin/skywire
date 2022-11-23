@@ -11,30 +11,6 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
-var passthruRequestHeaderKeys = []string{
-	"Accept",
-	"Accept-Encoding",
-	"Accept-Language",
-	"Cache-Control",
-	"Cookie",
-	"Referer",
-	"User-Agent",
-}
-
-var passthruResponseHeaderKeys = []string{
-	"Content-Encoding",
-	"Content-Language",
-	"Content-Type",
-	"Cache-Control",
-	"Date",
-	"Etag",
-	"Expires",
-	"Last-Modified",
-	"Location",
-	"Server",
-	"Vary",
-}
-
 // ServeProxy serves a HTTP forward proxy that accepts all requests and forwards them directly to the remote server over the specified net.Conn.
 // The remoteConn is not closed here explicitly, so it should be handled outside.
 func ServeProxy(log *logging.Logger, remoteConn net.Conn, localPort int) {
@@ -61,26 +37,9 @@ func ServeProxy(log *logging.Logger, remoteConn net.Conn, localPort int) {
 
 func handleFunc(remoteConn net.Conn, log *logging.Logger) func(w http.ResponseWriter, req *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Construct filtered header to send to remote server
-		hh := http.Header{}
-		for _, hk := range passthruRequestHeaderKeys {
-			if hv, ok := r.Header[hk]; ok {
-				hh[hk] = hv
-			}
-		}
-
-		// Construct request to send to remote server
-		rr := http.Request{
-			Method:        r.Method,
-			URL:           r.URL,
-			Header:        hh,
-			Body:          r.Body,
-			ContentLength: r.ContentLength,
-			Close:         r.Close,
-		}
 		client := http.Client{Transport: MakeHTTPTransport(remoteConn, log)}
 		// Forward request to remote server
-		resp, err := client.Transport.RoundTrip(&rr)
+		resp, err := client.Transport.RoundTrip(r)
 		if err != nil {
 			http.Error(w, "Could not reach remote server", 500)
 			return
@@ -92,13 +51,6 @@ func handleFunc(remoteConn net.Conn, log *logging.Logger) func(w http.ResponseWr
 			}
 		}()
 
-		// Transfer filtered header from remote server -> client
-		respH := w.Header()
-		for _, hk := range passthruResponseHeaderKeys {
-			if hv, ok := resp.Header[hk]; ok {
-				respH[hk] = hv
-			}
-		}
 		w.WriteHeader(resp.StatusCode)
 
 		// Transfer response from remote server -> client
