@@ -647,11 +647,12 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn) {
 	go forward(log, remoteConn, localConn, "two")
 }
 
-func sendError(log *logging.Logger, remoteConn net.Conn, err error) {
+func sendError(log *logging.Logger, remoteConn net.Conn, sendErr error) {
 	var sReply serverReply
-	if err != nil {
+	if sendErr != nil {
+		sErr := sendErr.Error()
 		sReply = serverReply{
-			Error: err,
+			Error: &sErr,
 		}
 	}
 
@@ -667,7 +668,7 @@ func sendError(log *logging.Logger, remoteConn net.Conn, err error) {
 
 	log.Debugf("Server reply sent %s", srvReply)
 	// close conn if we send an error
-	if err != nil {
+	if sendErr != nil {
 		closeConn(log, remoteConn)
 	}
 }
@@ -694,7 +695,7 @@ type clientMsg struct {
 }
 
 type serverReply struct {
-	Error error `json:"error,omitempty"`
+	Error *string `json:"error,omitempty"`
 }
 
 // getRouteSetupHooks aka autotransport

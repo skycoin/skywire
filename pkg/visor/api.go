@@ -997,7 +997,9 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) error
 	v.log.Debugf("Received: %v", sReply)
 
 	if sReply.Error != nil {
-		return sReply.Error
+		sErr := sReply.Error
+		v.log.WithError(fmt.Errorf(*sErr)).Error("Server closed with error")
+		return fmt.Errorf(*sErr)
 	}
 
 	appnet.ServeProxy(v.log, remoteConn, localPort)
