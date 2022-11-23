@@ -648,9 +648,11 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn) {
 }
 
 func sendError(log *logging.Logger, remoteConn net.Conn, err error) {
-
-	sReply := serverReply{
-		Error: err,
+	var sReply serverReply
+	if err != nil {
+		sReply = serverReply{
+			Error: err,
+		}
 	}
 
 	srvReply, err := json.Marshal(sReply)
