@@ -12,11 +12,10 @@ import (
 )
 
 // ServeProxy serves a HTTP forward proxy that accepts all requests and forwards them directly to the remote server over the specified net.Conn.
-// The remoteConn is not closed here explicitly, so it should be handled outside.
 func ServeProxy(log *logging.Logger, remoteConn net.Conn, localPort int) {
-
-	handler := http.DefaultServeMux
-	handler.HandleFunc("/", handleFunc(remoteConn, log))
+	closeChan := make(chan struct{})
+	handler := http.NewServeMux()
+	handler.HandleFunc("/", handleFunc(remoteConn, log, closeChan))
 
 	srv := &http.Server{
 		Addr:           fmt.Sprintf(":%v", localPort),
@@ -32,16 +31,28 @@ func ServeProxy(log *logging.Logger, remoteConn net.Conn, localPort int) {
 			log.WithError(err).Error("Error listening and serving app proxy.")
 		}
 	}()
+	go func() {
+		<-closeChan
+		err := srv.Close()
+		if err != nil {
+			log.Error(err)
+		}
+		err = remoteConn.Close()
+		if err != nil {
+			log.Error(err)
+		}
+	}()
 	log.Debugf("Serving on localhost:%v", localPort)
 }
 
-func handleFunc(remoteConn net.Conn, log *logging.Logger) func(w http.ResponseWriter, req *http.Request) {
+func handleFunc(remoteConn net.Conn, log *logging.Logger, closeChan chan struct{}) func(w http.ResponseWriter, req *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		client := http.Client{Transport: MakeHTTPTransport(remoteConn, log)}
 		// Forward request to remote server
 		resp, err := client.Transport.RoundTrip(r)
 		if err != nil {
 			http.Error(w, "Could not reach remote server", 500)
+			close(closeChan)
 			return
 		}
 
