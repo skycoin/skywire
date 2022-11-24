@@ -144,9 +144,9 @@ var portsCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
-		msg := "+---------------------------------+\n"
-		msg += fmt.Sprintf("| %-21s | %7s |\n", "App/Service", "Port")
-		msg += "|---------------------------------|\n"
+		msg := "+------------------------------------------+\n"
+		msg += fmt.Sprintf("| %-21s | %-6s | %-7s |\n", "App/Service", "Type", "Port")
+		msg += "|------------------------------------------|\n"
 
 		portsName := make([]string, 0, len(ports))
 		for portName := range ports {
@@ -155,10 +155,10 @@ var portsCmd = &cobra.Command{
 		sort.Strings(portsName)
 
 		for _, portName := range portsName {
-			msg += fmt.Sprintf("| %-21s | %7s |\n", portName, ports[portName])
+			msg += fmt.Sprintf("| %-21s | %-6s | %7s |\n", portName, "skynet", ports[portName])
 		}
 
-		msg += "+---------------------------------+\n"
+		msg += "+------------------------------------------+\n"
 		internal.PrintOutput(cmd.Flags(), ports, msg)
 	},
 }
