@@ -696,7 +696,7 @@ func (v *Visor) Ports() (map[string]PortDetail, error) {
 	var ports = make(map[string]PortDetail)
 
 	if v.conf.Hypervisor != nil {
-		ports["hypervisor"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.Hypervisor.HTTPAddr, ":")[1]), Type: "TCP/IP"}
+		ports["hypervisor"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.Hypervisor.HTTPAddr, ":")[1]), Type: "TCP"}
 	}
 
 	ports["dmsg_pty"] = PortDetail{Port: fmt.Sprint(skyenv.DmsgPtyPort)}
@@ -707,26 +707,23 @@ func (v *Visor) Ports() (map[string]PortDetail, error) {
 	ports["dmsg_htttp_setup"] = PortDetail{Port: fmt.Sprint(skyenv.DmsgHTTPPort)}
 	ports["dmsg_await_setup"] = PortDetail{Port: fmt.Sprint(skyenv.DmsgAwaitSetupPort)}
 
-	ports["stcp_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(skyenv.STCPAddr, ":")[1]), Type: "TCP/IP"}
-
-	ports["skychat_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(skyenv.SkychatAddr, ":")[1]), Type: "TCP/IP"}
-	ports["skysocks_client_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(skyenv.SkysocksClientAddr, ":")[1]), Type: "TCP/IP"}
+	ports["stcp_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(skyenv.STCPAddr, ":")[1]), Type: "TCP"}
 
 	if v.arClient != nil {
 		sudphPort := v.arClient.Addresses(ctx)
 		if sudphPort != "" {
-			ports["sudph"] = PortDetail{Port: sudphPort, Type: "TCP/IP"}
+			ports["sudph"] = PortDetail{Port: sudphPort, Type: "UDP"}
 		}
 	}
 	if v.stunClient != nil {
 		if v.stunClient.PublicIP != nil {
-			ports["public_visor"] = PortDetail{Port: fmt.Sprint(v.stunClient.PublicIP.Port()), Type: "TCP/IP"}
+			ports["public_visor"] = PortDetail{Port: fmt.Sprint(v.stunClient.PublicIP.Port()), Type: "TCP"}
 		}
 	}
 	if v.dmsgC != nil {
 		dmsgSessions := v.dmsgC.AllSessions()
 		for i, session := range dmsgSessions {
-			ports[fmt.Sprintf("dmsg_session_%d", i)] = PortDetail{Port: strings.Split(session.LocalTCPAddr().String(), ":")[1]}
+			ports[fmt.Sprintf("dmsg_session_%d", i)] = PortDetail{Port: strings.Split(session.LocalTCPAddr().String(), ":")[1], Type: "TCP"}
 		}
 
 		dmsgStreams := v.dmsgC.AllStreams()
@@ -740,6 +737,13 @@ func (v *Visor) Ports() (map[string]PortDetail, error) {
 			port, err := v.procM.GetAppPort(app.Name)
 			if err == nil {
 				ports[app.Name] = PortDetail{Port: fmt.Sprint(port), Type: "SKYNET"}
+
+				switch app.Name {
+				case "skysocks_client":
+					ports["skysocks_client_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(skyenv.SkysocksClientAddr, ":")[1]), Type: "TCP"}
+				case "skychat":
+					ports["skychat_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(skyenv.SkychatAddr, ":")[1]), Type: "TCP"}
+				}
 			}
 		}
 	}
