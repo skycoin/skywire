@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -955,7 +956,10 @@ func (v *Visor) IsDMSGClientReady() (bool, error) {
 
 // Connect implements API.
 func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) error {
-
+	ok := isPortAvailable(v.log, localPort)
+	if !ok {
+		return fmt.Errorf(":%v local port already in use", localPort)
+	}
 	connApp := appnet.Addr{
 		Net:    appnet.TypeSkynet,
 		PubKey: remotePK,
@@ -1004,4 +1008,17 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) error
 
 	appnet.ServeProxy(v.log, remoteConn, localPort)
 	return nil
+}
+
+func isPortAvailable(log *logging.Logger, port int) bool {
+	timeout := time.Second
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf(":%v", port), timeout)
+	if err != nil {
+		return true
+	}
+	if conn != nil {
+		defer closeConn(log, conn)
+		return false
+	}
+	return true
 }
