@@ -10,6 +10,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/dmsgc"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
@@ -95,6 +96,20 @@ func (v1 *V1) Flush() error {
 	defer v1.mu.Unlock()
 
 	return v1.Common.flush(v1)
+}
+
+// Reload reloads the config from file (if exists).
+func (v1 *V1) Reload() error {
+	if skyenv.VisorConfigFile == StdinName {
+		return nil
+	}
+	v1.mu.Lock()
+	v1, err := ReadFile(skyenv.VisorConfigFile)
+	if err != nil {
+		return err
+	}
+	v1.mu.Unlock()
+	return v1.flush(v1)
 }
 
 // UpdateAppAutostart modifies a single app's autostart value within the config and also the given appserver.

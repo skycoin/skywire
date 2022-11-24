@@ -34,19 +34,30 @@ import (
 
 // API represents visor API.
 type API interface {
+	//visor
 	Overview() (*Overview, error)
 	Summary() (*Summary, error)
-
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
+	Restart() error
+	Reload() error
+	Shutdown() error
+	Exec(command string) ([]byte, error)
+	RuntimeLogs() (string, error)
+	RemoteVisors() ([]string, error)
+	GetLogRotationInterval() (visorconfig.Duration, error)
+	SetLogRotationInterval(visorconfig.Duration) error
+	IsDMSGClientReady() (bool, error)
+
+	//reward setting
 	SetRewardAddress(string) (string, error)
 	GetRewardAddress() (string, error)
+
+	//app controls
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
 	StopApp(appName string) error
-	StartVPNClient(pk cipher.PubKey) error
-	StopVPNClient(appName string) error
 	SetAppDetailedStatus(appName, state string) error
 	SetAppError(appName, stateErr string) error
 	RestartApp(appName string) error
@@ -60,39 +71,32 @@ type API interface {
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
-	VPNServers(version, country string) ([]servicedisc.Service, error)
-	RemoteVisors() ([]string, error)
 
+	//vpn controls
+	StartVPNClient(pk cipher.PubKey) error
+	StopVPNClient(appName string) error
+	VPNServers(version, country string) ([]servicedisc.Service, error)
+
+	//transports
 	TransportTypes() ([]string, error)
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
 	Transport(tid uuid.UUID) (*TransportSummary, error)
 	AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*TransportSummary, error)
 	RemoveTransport(tid uuid.UUID) error
 	SetPublicAutoconnect(pAc bool) error
-
+	GetPersistentTransports() ([]transport.PersistentTransports, error)
+	SetPersistentTransports([]transport.PersistentTransports) error
+	//transport discovery
 	DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error)
 	DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error)
 
+	//routing
 	RoutingRules() ([]routing.Rule, error)
 	RoutingRule(key routing.RouteID) (routing.Rule, error)
 	SaveRoutingRule(rule routing.Rule) error
 	RemoveRoutingRule(key routing.RouteID) error
-
 	RouteGroups() ([]RouteGroupInfo, error)
-
-	Restart() error
-	Shutdown() error
-	Exec(command string) ([]byte, error)
-	RuntimeLogs() (string, error)
-
 	SetMinHops(uint16) error
-
-	GetPersistentTransports() ([]transport.PersistentTransports, error)
-	SetPersistentTransports([]transport.PersistentTransports) error
-	GetLogRotationInterval() (visorconfig.Duration, error)
-	SetLogRotationInterval(visorconfig.Duration) error
-
-	IsDMSGClientReady() (bool, error)
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -843,6 +847,15 @@ func (v *Visor) Restart() error {
 	}
 
 	return v.restartCtx.Restart()
+}
+
+// Reload implements API.
+func (v *Visor) Reload() error {
+	if v.restartCtx == nil {
+		return ErrMalformedRestartContext
+	}
+
+	return v.conf.Reload()
 }
 
 // Shutdown implements API.

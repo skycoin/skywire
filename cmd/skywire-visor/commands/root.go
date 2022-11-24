@@ -523,6 +523,7 @@ func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 { /
 		if err != nil {
 			log.WithError(err).Fatal("Failed to read config file.")
 		}
+		confPath = filepath.Clean(confPath)
 		r = bytes.NewReader(f)
 	}
 
@@ -544,6 +545,7 @@ func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 { /
 		conf.Hypervisor = nil
 	}
 
+	skyenv.VisorConfigFile = confPath
 	return conf
 }
 

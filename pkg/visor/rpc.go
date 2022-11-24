@@ -539,6 +539,14 @@ func (r *RPC) Restart(_ *struct{}, _ *struct{}) (err error) {
 	return r.visor.Restart()
 }
 
+// Reload reloads the config - without restarting the visor
+func (r *RPC) Reload(_ *struct{}, _ *struct{}) (err error) {
+	// @evanlinjin: do not defer this log statement, as the underlying visor.Logger will get closed.
+	rpcutil.LogCall(r.log, "Reload", nil)(nil, nil)
+
+	return r.visor.Reload()
+}
+
 // Shutdown shuts down visor.
 func (r *RPC) Shutdown(_ *struct{}, _ *struct{}) (err error) {
 	// @evanlinjin: do not defer this log statement, as the underlying visor.Logger will get closed.

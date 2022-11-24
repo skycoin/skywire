@@ -295,3 +295,6 @@ const SurveySha256 string = "system.sha"
 
 // RewardFile is the name of the file containing skycoin rewards address and privacy setting
 const RewardFile string = "reward.txt"
+
+// VisorConfigFile will contain the path to the visor's config or `stdin` to denote that the config was read from STDIN
+var VisorConfigFile string

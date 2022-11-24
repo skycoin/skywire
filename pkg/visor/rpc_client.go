@@ -381,6 +381,11 @@ func (rc *rpcClient) Restart() error {
 	return rc.Call("Restart", &struct{}{}, &struct{}{})
 }
 
+// Reload calls Reload.
+func (rc *rpcClient) Reload() error {
+	return rc.Call("Reload", &struct{}{}, &struct{}{})
+}
+
 // Shutdown calls Shutdown.
 func (rc *rpcClient) Shutdown() error {
 	return rc.Call("Shutdown", &struct{}{}, &struct{}{})
@@ -991,6 +996,11 @@ func (mc *mockRPCClient) RouteGroups() ([]RouteGroupInfo, error) {
 
 // Restart implements API.
 func (mc *mockRPCClient) Restart() error {
+	return nil
+}
+
+// Reload implements API.
+func (mc *mockRPCClient) Reload() error {
 	return nil
 }
 
