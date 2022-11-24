@@ -104,12 +104,12 @@ func (v1 *V1) Reload() error {
 		return nil
 	}
 	v1.mu.Lock()
-	v1, err := ReadFile(skyenv.VisorConfigFile)
+	v2, err := ReadFile(skyenv.VisorConfigFile)
 	if err != nil {
 		return err
 	}
 	v1.mu.Unlock()
-	return v1.flush(v1)
+	return v1.flush(v2)
 }
 
 // UpdateAppAutostart modifies a single app's autostart value within the config and also the given appserver.
