@@ -699,7 +699,7 @@ func (v *Visor) Ports() (map[string]PortDetail, error) {
 		ports["hypervisor"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.Hypervisor.HTTPAddr, ":")[1]), Type: "TCP"}
 	}
 
-	ports["dmsg_pty"] = PortDetail{Port: fmt.Sprint(skyenv.DmsgPtyPort)}
+	ports["dmsg_pty"] = PortDetail{Port: fmt.Sprint(v.conf.Dmsgpty.DmsgPort), Type: "DMSG"}
 
 	ports["stcp_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(skyenv.STCPAddr, ":")[1]), Type: "TCP"}
 
