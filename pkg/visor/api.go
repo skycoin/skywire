@@ -1005,8 +1005,8 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) error
 		v.log.WithError(fmt.Errorf(*sErr)).Error("Server closed with error")
 		return fmt.Errorf(*sErr)
 	}
-
-	appnet.ServeProxy(v.log, remoteConn, localPort)
+	proxy := appnet.NewProxy(v.log, remoteConn, localPort)
+	proxy.Serve()
 	return nil
 }
 

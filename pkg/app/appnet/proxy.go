@@ -6,13 +6,47 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sync"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
-// ServeProxy serves a HTTP forward proxy that accepts all requests and forwards them directly to the remote server over the specified net.Conn.
-func ServeProxy(log *logging.Logger, remoteConn net.Conn, localPort int) {
+// nolint: gochecknoglobals
+var (
+	proxies   = make(map[uuid.UUID]*Proxy)
+	proxiesMu sync.Mutex
+)
+
+// AddProxy ...
+func AddProxy(proxy *Proxy) {
+	proxiesMu.Lock()
+	defer proxiesMu.Unlock()
+	proxies[proxy.ID] = proxy
+}
+
+// GetProxy ...
+func GetProxy(id uuid.UUID) *Proxy {
+	proxiesMu.Lock()
+	defer proxiesMu.Unlock()
+
+	return proxies[id]
+}
+
+// Proxy ...
+type Proxy struct {
+	ID         uuid.UUID
+	remoteConn net.Conn
+	srv        *http.Server
+	localPort  int
+	closeChan  chan struct{}
+	log        *logging.Logger
+}
+
+// NewProxy ...
+func NewProxy(log *logging.Logger, remoteConn net.Conn, localPort int) *Proxy {
 	closeChan := make(chan struct{})
 	handler := http.NewServeMux()
 	handler.HandleFunc("/", handleFunc(remoteConn, log, closeChan))
@@ -24,25 +58,38 @@ func ServeProxy(log *logging.Logger, remoteConn net.Conn, localPort int) {
 		WriteTimeout:   10 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
+	proxy := &Proxy{
+		ID:         uuid.New(),
+		remoteConn: remoteConn,
+		srv:        srv,
+		localPort:  localPort,
+		closeChan:  closeChan,
+		log:        log,
+	}
+	AddProxy(proxy)
+	return proxy
+}
 
+// Serve serves a HTTP forward proxy that accepts all requests and forwards them directly to the remote server over the specified net.Conn.
+func (p *Proxy) Serve() {
 	go func() {
-		err := srv.ListenAndServe()
+		err := p.srv.ListenAndServe()
 		if err != nil {
-			log.WithError(err).Error("Error listening and serving app proxy.")
+			p.log.WithError(err).Error("Error listening and serving app proxy.")
 		}
 	}()
 	go func() {
-		<-closeChan
-		err := srv.Close()
+		<-p.closeChan
+		err := p.srv.Close()
 		if err != nil {
-			log.Error(err)
+			p.log.Error(err)
 		}
-		err = remoteConn.Close()
+		err = p.remoteConn.Close()
 		if err != nil {
-			log.Error(err)
+			p.log.Error(err)
 		}
 	}()
-	log.Debugf("Serving on localhost:%v", localPort)
+	p.log.Debugf("Serving on localhost:%v", p.localPort)
 }
 
 func handleFunc(remoteConn net.Conn, log *logging.Logger, closeChan chan struct{}) func(w http.ResponseWriter, req *http.Request) {
