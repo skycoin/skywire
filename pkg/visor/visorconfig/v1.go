@@ -103,11 +103,30 @@ func (v1 *V1) Reload() error {
 	if skyenv.VisorConfigFile == StdinName {
 		return nil
 	}
-	v1.mu.Lock()
 	v2, err := ReadFile(skyenv.VisorConfigFile)
 	if err != nil {
 		return err
 	}
+	v1.mu.Lock()
+	v1.Common = v2.Common
+	v1.Dmsg = v2.Dmsg
+	v1.Dmsgpty =	v2.Dmsgpty
+	v1.STCP =	v2.STCP
+	v1.Transport =	v2.Transport
+	v1.Routing =	v2.Routing
+	v1.UptimeTracker =	v2.UptimeTracker
+	v1.Launcher =	v2.Launcher
+	v1.Hypervisors =	v2.Hypervisors
+	v1.CLIAddr =	v2.CLIAddr
+	v1.LogLevel =	v2.LogLevel
+	v1.LocalPath =	v2.LocalPath
+	v1.CustomDmsgHTTPPath =	v2.CustomDmsgHTTPPath
+	v1.StunServers =	v2.StunServers
+	v1.ShutdownTimeout =	v2.ShutdownTimeout
+	v1.RestartCheckDelay =	v2.RestartCheckDelay
+	v1.IsPublic =	v2.IsPublic
+	v1.PersistentTransports =	v2.PersistentTransports
+	v1.Hypervisor =	v2.Hypervisor
 	v1.mu.Unlock()
 	return v1.flush(v2)
 }
