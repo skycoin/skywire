@@ -155,7 +155,7 @@ var portsCmd = &cobra.Command{
 		sort.Strings(portsName)
 
 		for _, portName := range portsName {
-			msg += fmt.Sprintf("| %-21s | %-6s | %7s |\n", portName, "skynet", ports[portName])
+			msg += fmt.Sprintf("| %-21s | %-6s | %7s |\n", portName, ports[portName].Type, ports[portName].Port)
 		}
 
 		msg += "+------------------------------------------+\n"

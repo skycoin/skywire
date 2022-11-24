@@ -62,7 +62,7 @@ type API interface {
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
 	VPNServers(version, country string) ([]servicedisc.Service, error)
 	RemoteVisors() ([]string, error)
-	Ports() (map[string]string, error)
+	Ports() (map[string]PortDetail, error)
 
 	TransportTypes() ([]string, error)
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
@@ -684,50 +684,60 @@ func (v *Visor) RemoteVisors() ([]string, error) {
 	return visors, nil
 }
 
+// PortDetail type of port details
+type PortDetail struct {
+	Port string
+	Type string
+}
+
 // Ports return list of all ports used by visor services and apps
-func (v *Visor) Ports() (map[string]string, error) {
+func (v *Visor) Ports() (map[string]PortDetail, error) {
 	ctx := context.Background()
-	var ports = make(map[string]string)
+	var ports = make(map[string]PortDetail)
 
 	if v.conf.Hypervisor != nil {
-		ports["hypervisor"] = fmt.Sprint(strings.Split(v.conf.Hypervisor.HTTPAddr, ":")[1])
+		ports["hypervisor"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.Hypervisor.HTTPAddr, ":")[1])}
 	}
-	ports["dmsg_pty"] = fmt.Sprint(skyenv.DmsgPtyPort)
-	ports["dmsg_ctrl"] = fmt.Sprint(skyenv.DmsgCtrlPort)
-	ports["dmsg_setup_node"] = fmt.Sprint(skyenv.DmsgSetupPort)
-	ports["dmsg_hypervisor"] = fmt.Sprint(skyenv.DmsgHypervisorPort)
-	ports["dmsg_transport_setup"] = fmt.Sprint(skyenv.DmsgTransportSetupPort)
-	ports["dmsg_htttp_setup"] = fmt.Sprint(skyenv.DmsgHTTPPort)
-	ports["dmsg_await_setup"] = fmt.Sprint(skyenv.DmsgAwaitSetupPort)
-	ports["stcp_addr"] = fmt.Sprint(strings.Split(skyenv.STCPAddr, ":")[1])
-	ports["skychat"] = fmt.Sprint(skyenv.SkychatPort)
-	ports["skychat_addr"] = fmt.Sprint(strings.Split(skyenv.SkychatAddr, ":")[1])
-	ports["skysocks"] = fmt.Sprint(skyenv.SkysocksPort)
-	ports["skysocks_client"] = fmt.Sprint(skyenv.SkysocksClientPort)
-	ports["skysocks_client_addr"] = fmt.Sprint(strings.Split(skyenv.SkysocksClientAddr, ":")[1])
-	ports["vpn_server"] = fmt.Sprint(skyenv.VPNServerPort)
-	ports["vpn_client"] = fmt.Sprint(skyenv.VPNClientPort)
+	ports["dmsg_pty"] = PortDetail{Port: fmt.Sprint(skyenv.DmsgPtyPort)}
+	ports["dmsg_ctrl"] = PortDetail{Port: fmt.Sprint(skyenv.DmsgCtrlPort)}
+	ports["dmsg_setup_node"] = PortDetail{Port: fmt.Sprint(skyenv.DmsgSetupPort)}
+	ports["dmsg_hypervisor"] = PortDetail{Port: fmt.Sprint(skyenv.DmsgHypervisorPort)}
+	ports["dmsg_transport_setup"] = PortDetail{Port: fmt.Sprint(skyenv.DmsgTransportSetupPort)}
+	ports["dmsg_htttp_setup"] = PortDetail{Port: fmt.Sprint(skyenv.DmsgHTTPPort)}
+	ports["dmsg_await_setup"] = PortDetail{Port: fmt.Sprint(skyenv.DmsgAwaitSetupPort)}
+	ports["stcp_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(skyenv.STCPAddr, ":")[1])}
+	ports["skychat_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(skyenv.SkychatAddr, ":")[1])}
+	ports["skysocks_client_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(skyenv.SkysocksClientAddr, ":")[1])}
 
 	if v.arClient != nil {
 		sudphPort := v.arClient.Addresses(ctx)
 		if sudphPort != "" {
-			ports["sudph"] = sudphPort
+			ports["sudph"] = PortDetail{Port: sudphPort}
 		}
 	}
 	if v.stunClient != nil {
 		if v.stunClient.PublicIP != nil {
-			ports["public_visor"] = fmt.Sprint(v.stunClient.PublicIP.Port())
+			ports["public_visor"] = PortDetail{Port: fmt.Sprint(v.stunClient.PublicIP.Port())}
 		}
 	}
 	if v.dmsgC != nil {
 		dmsgSessions := v.dmsgC.AllSessions()
 		for i, session := range dmsgSessions {
-			ports[fmt.Sprintf("dmsg_session_%d", i)] = strings.Split(session.LocalTCPAddr().String(), ":")[1]
+			ports[fmt.Sprintf("dmsg_session_%d", i)] = PortDetail{Port: strings.Split(session.LocalTCPAddr().String(), ":")[1]}
 		}
 
 		dmsgStreams := v.dmsgC.AllStreams()
 		for i, stream := range dmsgStreams {
-			ports[fmt.Sprintf("dmsg_stream_%d", i)] = strings.Split(stream.LocalAddr().String(), ":")[1]
+			ports[fmt.Sprintf("dmsg_stream_%d", i)] = PortDetail{Port: strings.Split(stream.LocalAddr().String(), ":")[1]}
+		}
+	}
+	if v.procM != nil {
+		apps, _ := v.Apps() //nolint
+		for _, app := range apps {
+			port, err := v.procM.GetAppPort(app.Name)
+			if err == nil {
+				ports[app.Name] = PortDetail{Port: fmt.Sprint(port)}
+			}
 		}
 	}
 	return ports, nil
