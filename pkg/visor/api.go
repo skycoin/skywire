@@ -100,7 +100,7 @@ type API interface {
 
 	IsDMSGClientReady() (bool, error)
 
-	Connect(remotePK cipher.PubKey, remotePort, localPort int) error
+	Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -955,10 +955,10 @@ func (v *Visor) IsDMSGClientReady() (bool, error) {
 }
 
 // Connect implements API.
-func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) error {
+func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
 	ok := isPortAvailable(v.log, localPort)
 	if !ok {
-		return fmt.Errorf(":%v local port already in use", localPort)
+		return uuid.UUID{}, fmt.Errorf(":%v local port already in use", localPort)
 	}
 	connApp := appnet.Addr{
 		Net:    appnet.TypeSkynet,
@@ -967,11 +967,11 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) error
 	}
 	conn, err := appnet.Dial(connApp)
 	if err != nil {
-		return err
+		return uuid.UUID{}, err
 	}
 	remoteConn, err := appnet.WrapConn(conn)
 	if err != nil {
-		return err
+		return uuid.UUID{}, err
 	}
 
 	cMsg := clientMsg{
@@ -980,34 +980,34 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) error
 
 	clientMsg, err := json.Marshal(cMsg)
 	if err != nil {
-		return err
+		return uuid.UUID{}, err
 	}
 	_, err = remoteConn.Write([]byte(clientMsg))
 	if err != nil {
-		return err
+		return uuid.UUID{}, err
 	}
 	v.log.Debugf("Msg sent %s", clientMsg)
 
 	buf := make([]byte, 32*1024)
 	n, err := remoteConn.Read(buf)
 	if err != nil {
-		return err
+		return uuid.UUID{}, err
 	}
 	var sReply serverReply
 	err = json.Unmarshal(buf[:n], &sReply)
 	if err != nil {
-		return err
+		return uuid.UUID{}, err
 	}
 	v.log.Debugf("Received: %v", sReply)
 
 	if sReply.Error != nil {
 		sErr := sReply.Error
 		v.log.WithError(fmt.Errorf(*sErr)).Error("Server closed with error")
-		return fmt.Errorf(*sErr)
+		return uuid.UUID{}, fmt.Errorf(*sErr)
 	}
 	proxy := appnet.NewProxy(v.log, remoteConn, localPort)
 	proxy.Serve()
-	return nil
+	return proxy.ID, nil
 }
 
 func isPortAvailable(log *logging.Logger, port int) bool {

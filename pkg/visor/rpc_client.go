@@ -475,13 +475,14 @@ func (rc *rpcClient) IsDMSGClientReady() (bool, error) {
 }
 
 // Connect ....
-func (rc *rpcClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) error {
+func (rc *rpcClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
+	var out uuid.UUID
 	err := rc.Call("Connect", &ConnectIn{
 		RemotePK:   remotePK,
 		RemotePort: remotePort,
 		LocalPort:  localPort,
-	}, &struct{}{})
-	return err
+	}, &out)
+	return out, err
 }
 
 // MockRPCClient mocks API.
@@ -1083,6 +1084,6 @@ func (mc *mockRPCClient) IsDMSGClientReady() (bool, error) {
 }
 
 // Connect implements API.
-func (mc *mockRPCClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) error {
-	return nil
+func (mc *mockRPCClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
+	return uuid.UUID{}, nil
 }

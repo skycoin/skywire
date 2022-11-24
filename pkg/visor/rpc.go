@@ -643,9 +643,10 @@ type ConnectIn struct {
 }
 
 // Connect ...
-func (r *RPC) Connect(in *ConnectIn, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "Connect", in)(nil, &err)
+func (r *RPC) Connect(in *ConnectIn, out *uuid.UUID) (err error) {
+	defer rpcutil.LogCall(r.log, "Connect", in)(out, &err)
 
-	err = r.visor.Connect(in.RemotePK, in.RemotePort, in.LocalPort)
+	id, err := r.visor.Connect(in.RemotePK, in.RemotePort, in.LocalPort)
+	*out = id
 	return err
 }

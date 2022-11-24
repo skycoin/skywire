@@ -47,7 +47,8 @@ var connectCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		err = rpcClient.Connect(remotePK, remotePort, localPort)
+		id, err := rpcClient.Connect(remotePK, remotePort, localPort)
 		internal.Catch(cmd.Flags(), err)
+		internal.PrintOutput(cmd.Flags(), id, fmt.Sprintln(id))
 	},
 }
