@@ -700,12 +700,6 @@ func (v *Visor) Ports() (map[string]PortDetail, error) {
 	}
 
 	ports["dmsg_pty"] = PortDetail{Port: fmt.Sprint(skyenv.DmsgPtyPort)}
-	ports["dmsg_ctrl"] = PortDetail{Port: fmt.Sprint(skyenv.DmsgCtrlPort)}
-	ports["dmsg_setup_node"] = PortDetail{Port: fmt.Sprint(skyenv.DmsgSetupPort)}
-	ports["dmsg_hypervisor"] = PortDetail{Port: fmt.Sprint(skyenv.DmsgHypervisorPort)}
-	ports["dmsg_transport_setup"] = PortDetail{Port: fmt.Sprint(skyenv.DmsgTransportSetupPort)}
-	ports["dmsg_htttp_setup"] = PortDetail{Port: fmt.Sprint(skyenv.DmsgHTTPPort)}
-	ports["dmsg_await_setup"] = PortDetail{Port: fmt.Sprint(skyenv.DmsgAwaitSetupPort)}
 
 	ports["stcp_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(skyenv.STCPAddr, ":")[1]), Type: "TCP"}
 
@@ -728,7 +722,7 @@ func (v *Visor) Ports() (map[string]PortDetail, error) {
 
 		dmsgStreams := v.dmsgC.AllStreams()
 		for i, stream := range dmsgStreams {
-			ports[fmt.Sprintf("dmsg_stream_%d", i)] = PortDetail{Port: strings.Split(stream.LocalAddr().String(), ":")[1]}
+			ports[fmt.Sprintf("dmsg_stream_%d", i)] = PortDetail{Port: strings.Split(stream.LocalAddr().String(), ":")[1], Type: "DMSG"}
 		}
 	}
 	if v.procM != nil {
