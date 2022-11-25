@@ -39,6 +39,7 @@ func GetProxy(id uuid.UUID) *Proxy {
 type Proxy struct {
 	ID         uuid.UUID
 	remoteConn net.Conn
+	closeOnce  sync.Once
 	srv        *http.Server
 	localPort  int
 	closeChan  chan struct{}
@@ -80,16 +81,21 @@ func (p *Proxy) Serve() {
 	}()
 	go func() {
 		<-p.closeChan
-		err := p.srv.Close()
-		if err != nil {
-			p.log.Error(err)
-		}
-		err = p.remoteConn.Close()
+		err := p.Close()
 		if err != nil {
 			p.log.Error(err)
 		}
 	}()
 	p.log.Debugf("Serving on localhost:%v", p.localPort)
+}
+
+// Close closes the server and remote connection.
+func (p *Proxy) Close() (err error) {
+	p.closeOnce.Do(func() {
+		err = p.srv.Close()
+		err = p.remoteConn.Close()
+	})
+	return err
 }
 
 func handleFunc(remoteConn net.Conn, log *logging.Logger, closeChan chan struct{}) func(w http.ResponseWriter, req *http.Request) {

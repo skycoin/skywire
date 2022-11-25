@@ -101,6 +101,7 @@ type API interface {
 	IsDMSGClientReady() (bool, error)
 
 	Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
+	Disconnect(id uuid.UUID) error
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -1008,6 +1009,12 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid
 	proxy := appnet.NewProxy(v.log, remoteConn, localPort)
 	proxy.Serve()
 	return proxy.ID, nil
+}
+
+// Disconnect implements API.
+func (v *Visor) Disconnect(id uuid.UUID) error {
+	proxy := appnet.GetProxy(id)
+	return proxy.Close()
 }
 
 func isPortAvailable(log *logging.Logger, port int) bool {

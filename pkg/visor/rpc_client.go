@@ -485,6 +485,12 @@ func (rc *rpcClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) 
 	return out, err
 }
 
+// Disconnect ....
+func (rc *rpcClient) Disconnect(id uuid.UUID) error {
+	err := rc.Call("Disconnect", &id, &struct{}{})
+	return err
+}
+
 // MockRPCClient mocks API.
 type mockRPCClient struct {
 	startedAt time.Time
@@ -1086,4 +1092,9 @@ func (mc *mockRPCClient) IsDMSGClientReady() (bool, error) {
 // Connect implements API.
 func (mc *mockRPCClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
 	return uuid.UUID{}, nil
+}
+
+// Disconnect implements API.
+func (mc *mockRPCClient) Disconnect(id uuid.UUID) error {
+	return nil
 }

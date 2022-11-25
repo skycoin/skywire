@@ -588,14 +588,14 @@ func (r *RPC) GetPersistentTransports(_ *struct{}, out *[]transport.PersistentTr
 
 // SetPersistentTransports sets persistent_transports in visor's routing config
 func (r *RPC) SetPersistentTransports(pTs *[]transport.PersistentTransports, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "SetPersistentTransports", *pTs)
+	defer rpcutil.LogCall(r.log, "SetPersistentTransports", *pTs)(nil, &err)
 	err = r.visor.SetPersistentTransports(*pTs)
 	return err
 }
 
 // SetPublicAutoconnect sets public_autoconnect in visor's routing config
 func (r *RPC) SetPublicAutoconnect(pAc *bool, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "SetPublicAutoconnect", *pAc)
+	defer rpcutil.LogCall(r.log, "SetPublicAutoconnect", *pAc)(nil, &err)
 	err = r.visor.SetPublicAutoconnect(*pAc)
 	return err
 }
@@ -648,5 +648,12 @@ func (r *RPC) Connect(in *ConnectIn, out *uuid.UUID) (err error) {
 
 	id, err := r.visor.Connect(in.RemotePK, in.RemotePort, in.LocalPort)
 	*out = id
+	return err
+}
+
+// Disconnect ...
+func (r *RPC) Disconnect(id *uuid.UUID, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "Disconnect", id)(nil, &err)
+	err = r.visor.Disconnect(*id)
 	return err
 }
