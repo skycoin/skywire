@@ -2,6 +2,7 @@
 package appnet
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -35,19 +36,35 @@ func GetProxy(id uuid.UUID) *Proxy {
 	return proxies[id]
 }
 
+// GetAllProxies ...
+func GetAllProxies() map[uuid.UUID]*Proxy {
+	proxiesMu.Lock()
+	defer proxiesMu.Unlock()
+
+	return proxies
+}
+
+// RemoveProxy ...
+func RemoveProxy(id uuid.UUID) {
+	proxiesMu.Lock()
+	defer proxiesMu.Unlock()
+	delete(proxies, id)
+}
+
 // Proxy ...
 type Proxy struct {
-	ID         uuid.UUID
+	ID         uuid.UUID `json:"id"`
 	remoteConn net.Conn
 	closeOnce  sync.Once
 	srv        *http.Server
-	localPort  int
+	LocalPort  int `json:"local_port"`
+	RemotePort int `json:"remote_port"`
 	closeChan  chan struct{}
 	log        *logging.Logger
 }
 
 // NewProxy ...
-func NewProxy(log *logging.Logger, remoteConn net.Conn, localPort int) *Proxy {
+func NewProxy(log *logging.Logger, remoteConn net.Conn, remotePort, localPort int) *Proxy {
 	closeChan := make(chan struct{})
 	handler := http.NewServeMux()
 	handler.HandleFunc("/", handleFunc(remoteConn, log, closeChan))
@@ -63,7 +80,8 @@ func NewProxy(log *logging.Logger, remoteConn net.Conn, localPort int) *Proxy {
 		ID:         uuid.New(),
 		remoteConn: remoteConn,
 		srv:        srv,
-		localPort:  localPort,
+		LocalPort:  localPort,
+		RemotePort: remotePort,
 		closeChan:  closeChan,
 		log:        log,
 	}
@@ -76,7 +94,10 @@ func (p *Proxy) Serve() {
 	go func() {
 		err := p.srv.ListenAndServe()
 		if err != nil {
-			p.log.WithError(err).Error("Error listening and serving app proxy.")
+			// don't print error if local server is closed
+			if !errors.Is(err, http.ErrServerClosed) {
+				p.log.WithError(err).Error("Error listening and serving app proxy.")
+			}
 		}
 	}()
 	go func() {
@@ -86,7 +107,7 @@ func (p *Proxy) Serve() {
 			p.log.Error(err)
 		}
 	}()
-	p.log.Debugf("Serving on localhost:%v", p.localPort)
+	p.log.Debugf("Serving on localhost:%v", p.LocalPort)
 }
 
 // Close closes the server and remote connection.
@@ -94,6 +115,7 @@ func (p *Proxy) Close() (err error) {
 	p.closeOnce.Do(func() {
 		err = p.srv.Close()
 		err = p.remoteConn.Close()
+		RemoveProxy(p.ID)
 	})
 	return err
 }

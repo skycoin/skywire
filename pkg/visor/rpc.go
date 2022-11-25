@@ -12,6 +12,7 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
@@ -655,5 +656,13 @@ func (r *RPC) Connect(in *ConnectIn, out *uuid.UUID) (err error) {
 func (r *RPC) Disconnect(id *uuid.UUID, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "Disconnect", id)(nil, &err)
 	err = r.visor.Disconnect(*id)
+	return err
+}
+
+// List ...
+func (r *RPC) List(_ *struct{}, out *map[uuid.UUID]*appnet.Proxy) (err error) {
+	defer rpcutil.LogCall(r.log, "List", nil)(out, &err)
+	proxies, err := r.visor.List()
+	*out = proxies
 	return err
 }

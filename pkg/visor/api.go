@@ -102,6 +102,7 @@ type API interface {
 
 	Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
 	Disconnect(id uuid.UUID) error
+	List() (map[uuid.UUID]*appnet.Proxy, error)
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -1006,7 +1007,7 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid
 		v.log.WithError(fmt.Errorf(*sErr)).Error("Server closed with error")
 		return uuid.UUID{}, fmt.Errorf(*sErr)
 	}
-	proxy := appnet.NewProxy(v.log, remoteConn, localPort)
+	proxy := appnet.NewProxy(v.log, remoteConn, remotePort, localPort)
 	proxy.Serve()
 	return proxy.ID, nil
 }
@@ -1015,6 +1016,11 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid
 func (v *Visor) Disconnect(id uuid.UUID) error {
 	proxy := appnet.GetProxy(id)
 	return proxy.Close()
+}
+
+// List implements API.
+func (v *Visor) List() (map[uuid.UUID]*appnet.Proxy, error) {
+	return appnet.GetAllProxies(), nil
 }
 
 func isPortAvailable(log *logging.Logger, port int) bool {

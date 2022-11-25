@@ -2,8 +2,11 @@
 package connect
 
 import (
+	"bytes"
 	"fmt"
 	"os"
+	"strconv"
+	"text/tabwriter"
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -23,6 +26,7 @@ func init() {
 	connectCmd.PersistentFlags().IntVarP(&localPort, "localport", "l", 0, "local port for server to run on")
 	RootCmd.AddCommand(connectCmd)
 	RootCmd.AddCommand(disconnectCmd)
+	RootCmd.AddCommand(lsCmd)
 }
 
 // RootCmd contains commands that interact with the skyproxy
@@ -75,5 +79,34 @@ var disconnectCmd = &cobra.Command{
 		err = rpcClient.Disconnect(id)
 		internal.Catch(cmd.Flags(), err)
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+	},
+}
+
+var lsCmd = &cobra.Command{
+	Use:   "ls",
+	Short: "Skywire connect",
+	Args:  cobra.MinimumNArgs(0),
+	Run: func(cmd *cobra.Command, args []string) {
+
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+
+		proxies, err := rpcClient.List()
+		internal.Catch(cmd.Flags(), err)
+
+		var b bytes.Buffer
+		w := tabwriter.NewWriter(&b, 0, 0, 3, ' ', tabwriter.TabIndent)
+		_, err = fmt.Fprintln(w, "id\tlocal_port\tremote_port")
+		internal.Catch(cmd.Flags(), err)
+
+		for _, proxy := range proxies {
+			_, err = fmt.Fprintf(w, "%s\t%s\t%s\n", proxy.ID, strconv.Itoa(int(proxy.LocalPort)),
+				strconv.Itoa(int(proxy.RemotePort)))
+			internal.Catch(cmd.Flags(), err)
+		}
+		internal.Catch(cmd.Flags(), w.Flush())
+		internal.PrintOutput(cmd.Flags(), proxies, b.String())
 	},
 }

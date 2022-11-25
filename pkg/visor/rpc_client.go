@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -489,6 +490,13 @@ func (rc *rpcClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) 
 func (rc *rpcClient) Disconnect(id uuid.UUID) error {
 	err := rc.Call("Disconnect", &id, &struct{}{})
 	return err
+}
+
+// List ....
+func (rc *rpcClient) List() (map[uuid.UUID]*appnet.Proxy, error) {
+	var out map[uuid.UUID]*appnet.Proxy
+	err := rc.Call("List", &struct{}{}, &out)
+	return out, err
 }
 
 // MockRPCClient mocks API.
@@ -1097,4 +1105,9 @@ func (mc *mockRPCClient) Connect(remotePK cipher.PubKey, remotePort, localPort i
 // Disconnect implements API.
 func (mc *mockRPCClient) Disconnect(id uuid.UUID) error {
 	return nil
+}
+
+// List implements API.
+func (mc *mockRPCClient) List() (map[uuid.UUID]*appnet.Proxy, error) {
+	return nil, nil
 }
