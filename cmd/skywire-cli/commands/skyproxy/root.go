@@ -32,12 +32,12 @@ func init() {
 // RootCmd contains commands that interact with the skyproxy
 var RootCmd = &cobra.Command{
 	Use:   "skyproxy",
-	Short: "Query the Skywire Visor",
+	Short: "Control skyproxy",
 }
 
 var connectCmd = &cobra.Command{
 	Use:   "connect <pubkey>",
-	Short: "Skywire connect",
+	Short: "Connect to a server running on a remote visor machine",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 
@@ -49,7 +49,7 @@ var connectCmd = &cobra.Command{
 		}
 
 		if localPort == 0 {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("required flag -localPort not specified"))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("required flag -localport not specified"))
 		}
 
 		rpcClient, err := clirpc.Client(cmd.Flags())
@@ -65,7 +65,7 @@ var connectCmd = &cobra.Command{
 
 var disconnectCmd = &cobra.Command{
 	Use:   "disconnect <id>",
-	Short: "Skywire connect",
+	Short: "Disconnect from the server running on a remote visor machine",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		id, err := uuid.Parse(args[0])
@@ -84,7 +84,7 @@ var disconnectCmd = &cobra.Command{
 
 var lsCmd = &cobra.Command{
 	Use:   "ls",
-	Short: "Skywire connect",
+	Short: "List all ongoing skyproxy connections",
 	Args:  cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 
