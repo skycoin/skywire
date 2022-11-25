@@ -21,14 +21,14 @@ var (
 	proxiesMu sync.Mutex
 )
 
-// AddProxy ...
+// AddProxy adds Proxy to with it's ID
 func AddProxy(proxy *Proxy) {
 	proxiesMu.Lock()
 	defer proxiesMu.Unlock()
 	proxies[proxy.ID] = proxy
 }
 
-// GetProxy ...
+// GetProxy get's a proxy by ID
 func GetProxy(id uuid.UUID) *Proxy {
 	proxiesMu.Lock()
 	defer proxiesMu.Unlock()
@@ -36,7 +36,7 @@ func GetProxy(id uuid.UUID) *Proxy {
 	return proxies[id]
 }
 
-// GetAllProxies ...
+// GetAllProxies gets all proxies
 func GetAllProxies() map[uuid.UUID]*Proxy {
 	proxiesMu.Lock()
 	defer proxiesMu.Unlock()
@@ -44,7 +44,7 @@ func GetAllProxies() map[uuid.UUID]*Proxy {
 	return proxies
 }
 
-// RemoveProxy ...
+// RemoveProxy removes a proxy by ID
 func RemoveProxy(id uuid.UUID) {
 	proxiesMu.Lock()
 	defer proxiesMu.Unlock()

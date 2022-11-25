@@ -475,7 +475,7 @@ func (rc *rpcClient) IsDMSGClientReady() (bool, error) {
 	return out, err
 }
 
-// Connect ....
+// Connect calls Connect.
 func (rc *rpcClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
 	var out uuid.UUID
 	err := rc.Call("Connect", &ConnectIn{
@@ -486,13 +486,13 @@ func (rc *rpcClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) 
 	return out, err
 }
 
-// Disconnect ....
+// Disconnect calls Disconnect.
 func (rc *rpcClient) Disconnect(id uuid.UUID) error {
 	err := rc.Call("Disconnect", &id, &struct{}{})
 	return err
 }
 
-// List ....
+// List calls List.
 func (rc *rpcClient) List() (map[uuid.UUID]*appnet.Proxy, error) {
 	var out map[uuid.UUID]*appnet.Proxy
 	err := rc.Call("List", &struct{}{}, &out)

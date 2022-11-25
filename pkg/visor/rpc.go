@@ -643,7 +643,7 @@ type ConnectIn struct {
 	LocalPort  int
 }
 
-// Connect ...
+// Connect creates a connection with the remote visor to listen on the remote port and serve that on the local port
 func (r *RPC) Connect(in *ConnectIn, out *uuid.UUID) (err error) {
 	defer rpcutil.LogCall(r.log, "Connect", in)(out, &err)
 
@@ -652,14 +652,14 @@ func (r *RPC) Connect(in *ConnectIn, out *uuid.UUID) (err error) {
 	return err
 }
 
-// Disconnect ...
+// Disconnect breaks the connection with the given id
 func (r *RPC) Disconnect(id *uuid.UUID, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "Disconnect", id)(nil, &err)
 	err = r.visor.Disconnect(*id)
 	return err
 }
 
-// List ...
+// List returns all the ongoing skyproxy connections
 func (r *RPC) List(_ *struct{}, out *map[uuid.UUID]*appnet.Proxy) (err error) {
 	defer rpcutil.LogCall(r.log, "List", nil)(out, &err)
 	proxies, err := r.visor.List()
