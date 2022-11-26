@@ -855,7 +855,16 @@ func (v *Visor) Reload() error {
 		return ErrMalformedRestartContext
 	}
 
-	return v.conf.Reload()
+	v1, err := visorconfig.Reload()
+	if err != nil {
+		return err
+	}
+	defer RunVisor(v1)
+	err = v.Close()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // Shutdown implements API.

@@ -5,14 +5,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 	"time"
 
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
@@ -21,6 +24,8 @@ import (
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/syslog"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
@@ -116,12 +121,12 @@ func (v *Visor) MasterLogger() *logging.MasterLogger {
 }
 
 // NewVisor constructs new Visor.
-func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Context, autoPeer bool, autoPeerIP string) (*Visor, bool) {
+func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 
 	v := &Visor{
 		log:                  conf.MasterLogger().PackageLogger("visor"),
 		conf:                 conf,
-		restartCtx:           restartCtx,
+		restartCtx:           skyenv.RestartCtx,
 		initLock:             new(sync.RWMutex),
 		isServicesHealthy:    newInternalHealthInfo(),
 		dtmReady:             make(chan struct{}),
@@ -180,9 +185,9 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Con
 	if !v.processRuntimeErrs() {
 		return nil, false
 	}
-	if autoPeer {
+	if skyenv.IsAutoPeer {
 		v.autoPeer = true
-		v.autoPeerIP = autoPeerIP
+		v.autoPeerIP = skyenv.AutoPeerIP
 	}
 	log.Info("Startup complete.")
 	return v, true
@@ -208,6 +213,106 @@ func (v *Visor) isStunReady() bool {
 	default:
 		return false
 	}
+}
+
+// RunVisor runs the visor
+func RunVisor(conf *visorconfig.V1) {
+	log := initLogger()
+	store, hook := logstore.MakeStore(skyenv.RuntimeLogMaxEntries)
+	log.AddHook(hook)
+	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
+	vis, ok := NewVisor(ctx, conf)
+	if !ok {
+		select {
+		case <-ctx.Done():
+			log.Info("Visor closed early.")
+		default:
+			log.Errorln("Failed to start visor.")
+		}
+		return
+	}
+	skyenv.StopVisorWg.Add(1)
+	defer skyenv.StopVisorWg.Done()
+	skyenv.StopVisorFn = func() {
+		if err := vis.Close(); err != nil {
+			log.WithError(err).Error("Visor closed with error.")
+		}
+		cancel()
+		skyenv.StopVisorWg.Wait()
+	}
+	vis.SetLogstore(store)
+
+	if skyenv.LaunchBrowser {
+		runBrowser(log, conf)
+		skyenv.LaunchBrowser = false
+	}
+	// Wait.
+	<-ctx.Done()
+
+	skyenv.StopVisorFn()
+}
+
+func initLogger() *logging.MasterLogger {
+	mLog := logging.NewMasterLogger()
+	if skyenv.SyslogAddr != "" {
+		hook, err := syslog.SetupHook(skyenv.SyslogAddr, skyenv.LogTag)
+		if err != nil {
+			mLog.WithError(err).Error("Failed to connect to the syslog daemon.")
+		} else {
+			mLog.AddHook(hook)
+			mLog.Out = io.Discard
+		}
+	}
+	return mLog
+}
+
+// runBrowser opens the hypervisor interface in the browser
+func runBrowser(mLog *logging.MasterLogger, conf *visorconfig.V1) {
+	log := mLog.PackageLogger("visor:launch-browser")
+
+	if conf.Hypervisor == nil {
+		log.Errorln("Hypervisor not started - cannot start browser with a regular visor")
+		return
+	}
+	addr := conf.Hypervisor.HTTPAddr
+	if addr[0] == ':' {
+		addr = "localhost" + addr
+	}
+	if addr[:4] != "http" {
+		if conf.Hypervisor.EnableTLS {
+			addr = "https://" + addr
+		} else {
+			addr = "http://" + addr
+		}
+	}
+	go func() {
+		if !isHvRunning(addr, 5) {
+			log.Error("Cannot open hypervisor in browser: status check failed")
+			return
+		}
+		if err := webbrowser.Open(addr); err != nil {
+			log.WithError(err).Error("webbrowser.Open failed")
+		}
+	}()
+}
+
+func isHvRunning(addr string, retries int) bool {
+	url := addr + "/api/ping"
+	for i := 0; i < retries; i++ {
+		time.Sleep(500 * time.Millisecond)
+		resp, err := http.Get(url) // nolint: gosec
+		if err != nil {
+			continue
+		}
+		err = resp.Body.Close()
+		if err != nil {
+			continue
+		}
+		if resp.StatusCode < 400 {
+			return true
+		}
+	}
+	return false
 }
 
 // Close safely stops spawned Apps and Visor.

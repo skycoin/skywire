@@ -3,7 +3,6 @@ package commands
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"embed"
 	"encoding/json"
@@ -17,7 +16,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/bitfield/script"
@@ -25,14 +23,11 @@ import (
 	"github.com/pkg/profile"
 	coincipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
-	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
-	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/syslog"
 	pathutil "github.com/skycoin/skywire/pkg/util/pathutil"
@@ -43,16 +38,9 @@ import (
 )
 
 var uiAssets fs.FS
-var restartCtx = restart.CaptureContext()
-
-const (
-	runtimeLogMaxEntries = 300
-)
 
 var (
 	logger               = logging.MustGetLogger("skywire-visor")
-	tag                  string
-	syslogAddr           string
 	logLvl               string
 	pprofMode            string
 	pprofAddr            string
@@ -63,16 +51,11 @@ var (
 	noHypervisorUI       bool
 	remoteHypervisorPKs  string
 	disableHypervisorPKs bool
-	isAutoPeer           bool
-	autoPeerIP           string
-	stopVisorFn          func()
-	stopVisorWg          sync.WaitGroup
 	completion           string
 	hiddenflags          []string
 	all                  bool
 	pkg                  bool
 	usr                  bool
-	runAsSystray         bool
 	localIPs             []net.IP //  nolint:unused
 	// root indicates process is run with root permissions
 	root bool // nolint:unused
@@ -110,7 +93,7 @@ func init() {
 			rootCmd.Flags().BoolVarP(&usr, "user", "u", false, "use config at: $HOME/"+skyenv.ConfigName)
 		}
 	}
-	rootCmd.Flags().BoolVar(&runAsSystray, "systray", false, "run as systray")
+	rootCmd.Flags().BoolVar(&skyenv.RunAsSystray, "systray", false, "run as systray")
 	rootCmd.Flags().BoolVarP(&hypervisorUI, "hvui", "i", false, "run as hypervisor \u001b[0m*")
 	rootCmd.Flags().BoolVarP(&noHypervisorUI, "nohvui", "x", false, "disable hypervisor \u001b[0m*")
 	hiddenflags = append(hiddenflags, "nohvui")
@@ -119,13 +102,13 @@ func init() {
 	rootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors \u001b[0m*")
 	hiddenflags = append(hiddenflags, "xhv")
 	if os.Getenv("SKYBIAN") == "true" {
-		rootCmd.Flags().StringVarP(&autoPeerIP, "hvip", "l", trimStringFromDot(localIPs[0].String())+".2:7998", "set hypervisor by ip")
+		rootCmd.Flags().StringVarP(&skyenv.AutoPeerIP, "hvip", "l", trimStringFromDot(localIPs[0].String())+".2:7998", "set hypervisor by ip")
 		hiddenflags = append(hiddenflags, "hvip")
 		isDefaultAutopeer := false
 		if os.Getenv("AUTOPEER") == "1" {
 			isDefaultAutopeer = true
 		}
-		rootCmd.Flags().BoolVarP(&isAutoPeer, "autopeer", "m", isDefaultAutopeer, "enable autopeering")
+		rootCmd.Flags().BoolVarP(&skyenv.IsAutoPeer, "autopeer", "m", isDefaultAutopeer, "enable autopeering")
 		hiddenflags = append(hiddenflags, "autopeer")
 	}
 	rootCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "", "[ debug | warn | error | fatal | panic | trace ] \u001b[0m*")
@@ -134,9 +117,9 @@ func init() {
 	hiddenflags = append(hiddenflags, "pprofmode")
 	rootCmd.Flags().StringVarP(&pprofAddr, "pprofaddr", "r", "localhost:6060", "pprof http port")
 	hiddenflags = append(hiddenflags, "pprofaddr")
-	rootCmd.Flags().StringVarP(&tag, "tag", "t", "skywire", "logging tag")
-	hiddenflags = append(hiddenflags, "tag")
-	rootCmd.Flags().StringVarP(&syslogAddr, "syslog", "y", "", "syslog server address. E.g. localhost:514")
+	rootCmd.Flags().StringVarP(&skyenv.LogTag, "skyenv.LogTag", "t", "skywire", "logging skyenv.LogTag")
+	hiddenflags = append(hiddenflags, "skyenv.LogTag")
+	rootCmd.Flags().StringVarP(&skyenv.SyslogAddr, "syslog", "y", "", "syslog server address. E.g. localhost:514")
 	hiddenflags = append(hiddenflags, "syslog")
 	rootCmd.Flags().StringVarP(&completion, "completion", "z", "", "[ bash | zsh | fish | powershell ]")
 	hiddenflags = append(hiddenflags, "completion")
@@ -203,7 +186,7 @@ var rootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 		//log for initial checks
-		mLog := initLogger(tag, syslogAddr)
+		mLog := initLogger()
 		log := mLog.PackageLogger("pre-run")
 
 		if !stdin {
@@ -242,7 +225,7 @@ var rootCmd = &cobra.Command{
 		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
-		if runAsSystray {
+		if skyenv.RunAsSystray {
 			runAppSystray()
 		} else {
 			runApp()
@@ -252,12 +235,12 @@ var rootCmd = &cobra.Command{
 }
 
 func runVisor(conf *visorconfig.V1) {
-	var ok bool
-	log := initLogger(tag, syslogAddr)
-	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
+	//var ok bool
+	log := initLogger()
+	_, hook := logstore.MakeStore(skyenv.RuntimeLogMaxEntries)
 	log.AddHook(hook)
 
-	stopPProf := initPProf(log, tag, pprofMode, pprofAddr)
+	stopPProf := initPProf(log, pprofMode, pprofAddr)
 	defer stopPProf()
 
 	if conf == nil {
@@ -352,20 +335,20 @@ func runVisor(conf *visorconfig.V1) {
 		}
 	}
 	//autopeering should only happen when there is no local or remote hypervisor set in the config.
-	if isAutoPeer && conf.Hypervisor != nil {
+	if skyenv.IsAutoPeer && conf.Hypervisor != nil {
 		log.Info("Local hypervisor running, disabling autopeer")
-		isAutoPeer = false
+		skyenv.IsAutoPeer = false
 	}
 
-	if isAutoPeer && len(conf.Hypervisors) > 0 {
+	if skyenv.IsAutoPeer && len(conf.Hypervisors) > 0 {
 		log.Info("%d Remote hypervisor(s) set in config; disabling autopeer", len(conf.Hypervisors))
 		log.Info(conf.Hypervisors)
-		isAutoPeer = false
+		skyenv.IsAutoPeer = false
 	}
 
-	if isAutoPeer {
-		log.Info("Autopeer: ", isAutoPeer)
-		hvkey, err := visor.FetchHvPk(autoPeerIP)
+	if skyenv.IsAutoPeer {
+		log.Info("Autopeer: ", skyenv.IsAutoPeer)
+		hvkey, err := visor.FetchHvPk(skyenv.AutoPeerIP)
 		if err != nil {
 			log.WithError(err).Error("Failure autopeering - unable to obtain hypervisor public key")
 		} else {
@@ -392,36 +375,8 @@ func runVisor(conf *visorconfig.V1) {
 		}
 	}
 
-	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
-	vis, ok := visor.NewVisor(ctx, conf, restartCtx, isAutoPeer, autoPeerIP)
-	if !ok {
-		select {
-		case <-ctx.Done():
-			log.Info("Visor closed early.")
-		default:
-			log.Errorln("Failed to start visor.")
-		}
-		if runAsSystray {
-			quitSystray()
-		}
-		return
-	}
-	if runAsSystray {
-		setStopFunctionSystray(log, cancel, vis.Close)
-	} else {
-		setStopFunction(log, cancel, vis.Close)
-	}
+	visor.RunVisor(conf)
 
-	vis.SetLogstore(store)
-
-	if launchBrowser {
-		runBrowser(log, conf)
-	}
-
-	// Wait.
-	<-ctx.Done()
-
-	stopVisorFn()
 }
 
 // Execute executes root CLI command.
@@ -451,10 +406,10 @@ func Execute(ui embed.FS) {
 	}
 }
 
-func initLogger(tag string, syslogAddr string) *logging.MasterLogger {
+func initLogger() *logging.MasterLogger {
 	mLog := logging.NewMasterLogger()
-	if syslogAddr != "" {
-		hook, err := syslog.SetupHook(syslogAddr, tag)
+	if skyenv.SyslogAddr != "" {
+		hook, err := syslog.SetupHook(skyenv.SyslogAddr, skyenv.LogTag)
 		if err != nil {
 			mLog.WithError(err).Error("Failed to connect to the syslog daemon.")
 		} else {
@@ -465,7 +420,7 @@ func initLogger(tag string, syslogAddr string) *logging.MasterLogger {
 	return mLog
 }
 
-func initPProf(log *logging.MasterLogger, tag string, profMode string, profAddr string) (stop func()) {
+func initPProf(log *logging.MasterLogger, profMode string, profAddr string) (stop func()) {
 	var optFunc func(*profile.Profile)
 
 	switch profMode {
@@ -497,7 +452,7 @@ func initPProf(log *logging.MasterLogger, tag string, profMode string, profAddr 
 	}
 
 	if optFunc != nil {
-		stop = profile.Start(profile.ProfilePath("./logs/"+tag), optFunc).Stop
+		stop = profile.Start(profile.ProfilePath("./logs/"+skyenv.LogTag), optFunc).Stop
 	}
 
 	if stop == nil {
@@ -547,55 +502,6 @@ func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 { /
 
 	skyenv.VisorConfigFile = confPath
 	return conf
-}
-
-// runBrowser opens the hypervisor interface in the browser
-func runBrowser(mLog *logging.MasterLogger, conf *visorconfig.V1) {
-	log := mLog.PackageLogger("visor:launch-browser")
-
-	if conf.Hypervisor == nil {
-		log.Errorln("Hypervisor not started - cannot start browser with a regular visor")
-		return
-	}
-	addr := conf.Hypervisor.HTTPAddr
-	if addr[0] == ':' {
-		addr = "localhost" + addr
-	}
-	if addr[:4] != "http" {
-		if conf.Hypervisor.EnableTLS {
-			addr = "https://" + addr
-		} else {
-			addr = "http://" + addr
-		}
-	}
-	go func() {
-		if !isHvRunning(addr, 5) {
-			log.Error("Cannot open hypervisor in browser: status check failed")
-			return
-		}
-		if err := webbrowser.Open(addr); err != nil {
-			log.WithError(err).Error("webbrowser.Open failed")
-		}
-	}()
-}
-
-func isHvRunning(addr string, retries int) bool {
-	url := addr + "/api/ping"
-	for i := 0; i < retries; i++ {
-		time.Sleep(500 * time.Millisecond)
-		resp, err := http.Get(url) // nolint: gosec
-		if err != nil {
-			continue
-		}
-		err = resp.Body.Close()
-		if err != nil {
-			continue
-		}
-		if resp.StatusCode < 400 {
-			return true
-		}
-	}
-	return false
 }
 
 func logBuildInfo(mLog *logging.MasterLogger) {
