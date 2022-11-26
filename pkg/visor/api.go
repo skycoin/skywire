@@ -862,7 +862,7 @@ func (v *Visor) Reload() error {
 	defer RunVisor(v1)
 	err = v.Close()
 	if err != nil {
-		return err
+		os.Exit(1)
 	}
 	return nil
 }
