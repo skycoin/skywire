@@ -13,8 +13,6 @@ import (
 var (
 	// ErrNoSuchNetworker is being returned when there's no suitable networker.
 	ErrNoSuchNetworker = errors.New("no such networker")
-	// ErrNetworkerAlreadyExists is being returned when there's already one with such Network type.
-	ErrNetworkerAlreadyExists = errors.New("networker already exists")
 )
 
 // nolint: gochecknoglobals
@@ -27,10 +25,6 @@ var (
 func AddNetworker(t Type, n Networker) error {
 	networkersMx.Lock()
 	defer networkersMx.Unlock()
-
-	if _, ok := networkers[t]; ok {
-		return ErrNetworkerAlreadyExists
-	}
 
 	networkers[t] = n
 

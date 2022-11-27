@@ -859,11 +859,11 @@ func (v *Visor) Reload() error {
 	if err != nil {
 		return err
 	}
-	defer RunVisor(v1)
 	err = v.Close()
 	if err != nil {
 		os.Exit(1)
 	}
+	go RunVisor(v1)
 	return nil
 }
 
