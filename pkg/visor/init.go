@@ -3,6 +3,7 @@ package visor
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,6 +26,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsgget"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
+	coincipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
@@ -48,6 +51,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	"github.com/skycoin/skywire/pkg/utclient"
 	"github.com/skycoin/skywire/pkg/util/osutil"
+	"github.com/skycoin/skywire/pkg/util/pathutil"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -114,6 +118,8 @@ var (
 	dmsgCtrl vinit.Module
 	// Dmsg http log server module
 	dmsgHTTPLogServer vinit.Module
+	// System survey module
+	systemSurvey vinit.Module
 	// Dmsg http module
 	dmsgHTTP vinit.Module
 	// Dmsg trackers module
@@ -143,6 +149,7 @@ func registerModules(logger *logging.MasterLogger) {
 	dmsgC = maker("dmsg", initDmsg, &ebc, &dmsgHTTP)
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &dmsgC, &tr)
 	dmsgHTTPLogServer = maker("dmsghttp_logserver", initDmsgHTTPLogServer, &dmsgC, &tr)
+	systemSurvey = maker("system_survey", initSystemSurvey, &dmsgHTTPLogServer)
 	dmsgTrackers = maker("dmsg_trackers", initDmsgTrackers, &dmsgC)
 
 	pty = maker("dmsg_pty", initDmsgpty, &dmsgC)
@@ -153,7 +160,7 @@ func registerModules(logger *logging.MasterLogger) {
 	ut = maker("uptime_tracker", initUptimeTracker, &dmsgHTTP)
 	pv = maker("public_autoconnect", initPublicAutoconnect, &tr, &disc)
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
-	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl, &dmsgHTTPLogServer, &dmsgTrackers)
+	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl, &dmsgHTTPLogServer, &systemSurvey, &dmsgTrackers)
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
 		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC)
@@ -404,6 +411,67 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 		return nil
 	})
 
+	return nil
+}
+
+func initSystemSurvey(ctx context.Context, v *Visor, log *logging.Logger) error {
+
+	if skyenv.IsRoot() {
+		//check for valid reward address set as prerequisite for generating the system survey
+		rewardAddressBytes, err := os.ReadFile(skyenv.PackageConfig().LocalPath + "/" + skyenv.RewardFile) //nolint
+		if err == nil {
+			//remove any newline from rewardAddress string
+			rewardAddress := strings.TrimSuffix(string(rewardAddressBytes), "\n")
+			//validate the skycoin address
+			cAddr, err := coincipher.DecodeBase58Address(rewardAddress)
+			if err != nil {
+				log.WithError(err).Error("Invalid skycoin reward address.")
+				return err
+			}
+			log.Info("Skycoin reward address: ", cAddr.String())
+			//generate the system survey
+			pathutil.EnsureDir(v.conf.LocalPath) //nolint
+			survey, err := skyenv.SystemSurvey()
+			if err != nil {
+				log.WithError(err).Error("Could not read system info.")
+				return err
+			}
+			survey.PubKey = v.conf.PK
+			survey.SkycoinAddress = cAddr.String()
+			// Print results.
+			s, err := json.MarshalIndent(survey, "", "\t")
+			if err != nil {
+				log.WithError(err).Error("Could not marshal json.")
+				return err
+			}
+			err = os.WriteFile(v.conf.LocalPath+"/"+skyenv.SurveyFile, s, 0644) //nolint
+			if err != nil {
+				log.WithError(err).Error("Failed to write system hardware survey to file.")
+				return err
+			}
+			log.Info("Generating system survey")
+			f, err := os.ReadFile(filepath.Clean(v.conf.LocalPath + "/" + skyenv.SurveyFile))
+			if err != nil {
+				log.WithError(err).Error("Failed to write system hardware survey to file.")
+				return err
+			}
+			srvySha256Byte32 := sha256.Sum256([]byte(f))
+			err = os.WriteFile(v.conf.LocalPath+"/"+skyenv.SurveySha256, srvySha256Byte32[:], 0644) //nolint
+			if err != nil {
+				log.WithError(err).Error("Failed to write system hardware survey to file.")
+				return err
+			}
+		} else {
+			err := os.Remove(skyenv.PackageConfig().LocalPath + "/" + skyenv.SurveyFile)
+			if err == nil {
+				log.Debug("Removed hadware survey for visor not seeking rewards")
+			}
+			err = os.Remove(skyenv.PackageConfig().LocalPath + "/" + skyenv.SurveySha256)
+			if err == nil {
+				log.Debug("Removed hadware survey checksum file")
+			}
+		}
+	}
 	return nil
 }
 
