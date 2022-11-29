@@ -120,8 +120,8 @@ var (
 	dmsgHTTP vinit.Module
 	// Dmsg trackers module
 	dmsgTrackers vinit.Module
-	// Skywire Connect module
-	skyC vinit.Module
+	// Skywire Proxy module
+	skyP vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 )
@@ -159,9 +159,9 @@ func registerModules(logger *logging.MasterLogger) {
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
 	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl, &dmsgHTTPLogServer, &dmsgTrackers)
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
-	skyC = maker("sky_connect", initSkywireConnect, &dmsgC, &tr, &launch)
+	skyP = maker("sky_proxy", initSkywireProxy, &dmsgC, &tr, &launch)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyC)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyP)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -562,14 +562,14 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 	return nil
 }
 
-func initSkywireConnect(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initSkywireProxy(ctx context.Context, v *Visor, log *logging.Logger) error {
 	ctx, cancel := context.WithCancel(ctx)
 	// waiting for at least one transport to initialize
 	<-v.tpM.Ready()
 	connApp := appnet.Addr{
 		Net:    appnet.TypeSkynet,
 		PubKey: v.conf.PK,
-		Port:   routing.Port(skyenv.SkyConnServerPort),
+		Port:   routing.Port(skyenv.SkyProxyServerPort),
 	}
 	l, err := appnet.ListenContext(ctx, connApp)
 	if err != nil {
@@ -577,7 +577,7 @@ func initSkywireConnect(ctx context.Context, v *Visor, log *logging.Logger) erro
 		return err
 	}
 
-	v.pushCloseStack("skywire_connect", func() error {
+	v.pushCloseStack("skywire_proxy", func() error {
 		cancel()
 		if cErr := l.Close(); cErr != nil {
 			log.WithError(cErr).Error("Error closing listener.")
@@ -587,13 +587,13 @@ func initSkywireConnect(ctx context.Context, v *Visor, log *logging.Logger) erro
 
 	go func() {
 		for {
-			log.Debug("Accepting sky connect conn...")
+			log.Debug("Accepting sky proxy conn...")
 			conn, err := l.Accept()
 			if err != nil {
 				log.WithError(err).Error("Failed to accept conn")
 				return
 			}
-			log.Debug("Accepted sky connect conn")
+			log.Debug("Accepted sky proxy conn")
 
 			log.Debug("Wrapping conn...")
 			wrappedConn, err := appnet.WrapConn(conn)
@@ -603,7 +603,7 @@ func initSkywireConnect(ctx context.Context, v *Visor, log *logging.Logger) erro
 			}
 
 			rAddr := wrappedConn.RemoteAddr().(appnet.Addr)
-			log.Debugf("Accepted sky connect conn on %s from %s", wrappedConn.LocalAddr(), rAddr.PubKey)
+			log.Debugf("Accepted sky proxy conn on %s from %s", wrappedConn.LocalAddr(), rAddr.PubKey)
 			go handleServerConn(log, wrappedConn)
 		}
 	}()

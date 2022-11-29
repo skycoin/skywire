@@ -77,12 +77,12 @@ const (
 	// TODO(darkrengarius): this one's not needed for the app to run but lack of it causes errors
 	VPNClientPort uint16 = 43
 
-	ExampleServerName        = "example-server-app"
-	ExampleServerPort uint16 = 45
-	ExampleClientName        = "example-client-app"
-	ExampleClientPort uint16 = 46
-	SkyConnServerName        = "sky-conn"
-	SkyConnServerPort uint16 = 47
+	ExampleServerName         = "example-server-app"
+	ExampleServerPort  uint16 = 45
+	ExampleClientName         = "example-client-app"
+	ExampleClientPort  uint16 = 46
+	SkyProxyServerName        = "sky-proxy"
+	SkyProxyServerPort uint16 = 47
 )
 
 // RPC constants.

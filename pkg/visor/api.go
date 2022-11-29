@@ -965,7 +965,7 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid
 	connApp := appnet.Addr{
 		Net:    appnet.TypeSkynet,
 		PubKey: remotePK,
-		Port:   routing.Port(skyenv.SkyConnServerPort),
+		Port:   routing.Port(skyenv.SkyProxyServerPort),
 	}
 	conn, err := appnet.Dial(connApp)
 	if err != nil {
