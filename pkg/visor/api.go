@@ -802,8 +802,8 @@ func (v *Visor) RoutingRules() ([]routing.Rule, error) {
 func (v *Visor) TestRouting(pk cipher.PubKey) (string, error) {
 	addr := appnet.Addr{
 		Net:    appnet.TypeSkynet,
-		PubKey: pk,
-		Port:   1,
+		PubKey: v.conf.PK,
+		Port:   routing.Port(skyenv.SkyPingPort),
 	}
 
 	var err error
@@ -812,9 +812,10 @@ func (v *Visor) TestRouting(pk cipher.PubKey) (string, error) {
 	ctx := context.TODO()
 	var r = netutil.NewRetrier(v.log, 2*time.Second, netutil.DefaultMaxBackoff, 5, 2)
 	err = r.Do(ctx, func() error {
-		conn, err = appnet.Dial(addr)
+		conn, err = appnet.Ping(pk, addr)
 		return err
 	})
+	v.log.Error("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz")
 	if err != nil {
 		return "", err
 	}
@@ -823,19 +824,23 @@ func (v *Visor) TestRouting(pk cipher.PubKey) (string, error) {
 		err = conn.Close()
 	}()
 
-	skywireConn, isSkywireConn := conn.(*appnet.SkywireConn)
-	if !isSkywireConn {
-		return "", fmt.Errorf("Can't get such info from this conn")
-	}
-
+	// skywireConn, isSkywireConn := conn.(*appnet.SkywireConn)
+	// if !isSkywireConn {
+	// 	return "", fmt.Errorf("Can't get such info from this conn")
+	// }
+	// msh := "asdasdasdasdsa"
+	// _, err = skywireConn.Write([]byte(msh))
+	// if err != nil {
+	// 	return "", err
+	// }
 	var latency time.Duration
-	err = r.Do(ctx, func() error {
-		latency = skywireConn.Latency()
-		if latency.String() != "0s" {
-			return nil
-		}
-		return fmt.Errorf("unable to retrieve latency")
-	})
+	// err = r.Do(ctx, func() error {
+	// 	latency = skywireConn.Latency()
+	// 	if latency.String() != "0s" {
+	// 		return nil
+	// 	}
+	// 	return fmt.Errorf("unable to retrieve latency")
+	// })
 	return fmt.Sprint(latency), nil
 }
 
