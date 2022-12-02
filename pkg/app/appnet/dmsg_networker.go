@@ -6,6 +6,8 @@ import (
 	"net"
 
 	"github.com/skycoin/dmsg/pkg/dmsg"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
 // DmsgNetworker implements `Networker` for dmsg network.
@@ -22,6 +24,11 @@ func NewDMSGNetworker(dmsgC *dmsg.Client) Networker {
 
 // Dial dials remote `addr` via dmsg network.
 func (n *DmsgNetworker) Dial(addr Addr) (net.Conn, error) {
+	return n.DialContext(context.Background(), addr)
+}
+
+// Ping dials remote `addr` via dmsg network.
+func (n *DmsgNetworker) Ping(pk cipher.PubKey, addr Addr) (net.Conn, error) {
 	return n.DialContext(context.Background(), addr)
 }
 
