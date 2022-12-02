@@ -32,11 +32,13 @@ import (
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/setup/setupclient"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -561,29 +563,63 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 }
 
 func initPing(ctx context.Context, v *Visor, log *logging.Logger) error {
-	// ctx, cancel := context.WithCancel(ctx)
-	// To remove the block set by NewTransportListener if dmsg is not initialized
-	// go func() {
-	// 	ts, err := ts.NewTransportListener(ctx, v.conf, v.dmsgC, v.tpM, v.MasterLogger())
-	// 	if err != nil {
-	// 		log.Warn(err)
-	// 		cancel()
-	// 	}
-	// 	select {
-	// 	case <-ctx.Done():
-	// 	default:
-	// 		go ts.Serve(ctx)
-	// 	}
-	// }()
-
+	ctx, cancel := context.WithCancel(ctx)
 	// waiting for at least one transport to initialize
 	<-v.tpM.Ready()
 
-	// v.pushCloseStack("transport_setup.rpc", func() error {
-	// 	cancel()
-	// 	return nil
-	// })
+	connApp := appnet.Addr{
+		Net:    appnet.TypeSkynet,
+		PubKey: v.conf.PK,
+		Port:   routing.Port(skyenv.SkyPingPort),
+	}
+	l, err := appnet.ListenContext(ctx, connApp)
+	if err != nil {
+		cancel()
+		return err
+	}
+
+	v.pushCloseStack("skywire_proxy", func() error {
+		cancel()
+		if cErr := l.Close(); cErr != nil {
+			log.WithError(cErr).Error("Error closing listener.")
+		}
+		return nil
+	})
+
+	go func() {
+		for {
+			log.Debug("Accepting sky proxy conn...")
+			conn, err := l.Accept()
+			if err != nil {
+				log.WithError(err).Error("Failed to accept conn")
+				return
+			}
+			log.Debug("Accepted sky proxy conn")
+			log.Error("11111111111111111111111111111111111111111111111111")
+
+			log.Debug("Wrapping conn...")
+			wrappedConn, err := appnet.WrapConn(conn)
+			if err != nil {
+				log.WithError(err).Error("Failed to wrap conn")
+				return
+			}
+
+			rAddr := wrappedConn.RemoteAddr().(appnet.Addr)
+			log.Debugf("Accepted sky proxy conn on %s from %s", wrappedConn.LocalAddr(), rAddr.PubKey)
+			go handleServerConn(log, wrappedConn)
+		}
+	}()
 	return nil
+}
+
+func handleServerConn(log *logging.Logger, remoteConn net.Conn) {
+	buf := make([]byte, 32*1024)
+	n, err := remoteConn.Read(buf)
+	if err != nil {
+		log.WithError(err).Error("Failed to read packet")
+		return
+	}
+	log.Debugf("Received: %s", buf[:n])
 }
 
 // getRouteSetupHooks aka autotransport
