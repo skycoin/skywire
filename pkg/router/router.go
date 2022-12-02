@@ -25,7 +25,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
-//go:generate mockery -name Router -case underscore -inpkg
+//go:generate mockery --name Router --case underscore --inpackage
 
 const (
 	// DefaultRouteKeepAlive is the default expiration interval for routes
@@ -126,6 +126,7 @@ type Router interface {
 	// - Save to routing.Table and internal RouteGroup map.
 	// - Return RouteGroup if successful.
 	DialRoutes(ctx context.Context, rPK cipher.PubKey, lPort, rPort routing.Port, opts *DialOptions) (net.Conn, error)
+	PingRoute(ctx context.Context, rPK cipher.PubKey, lPort, rPort routing.Port, opts *DialOptions) (net.Conn, error)
 
 	// AcceptRoutes should block until we receive an AddRules packet from SetupNode
 	// that contains ConsumeRule(s) or ForwardRule(s).
@@ -292,7 +293,7 @@ func (r *router) DialRoutes(
 		Initiator: true,
 	}
 
-	nrg, err := r.saveRouteGroupRules(rules, nsConf)
+	nrg, err := r.saveRouteGroupRules(rules, nsConf, "one")
 	if err != nil {
 		return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
 	}
@@ -300,6 +301,89 @@ func (r *router) DialRoutes(
 	nrg.rg.startOffServiceLoops()
 
 	r.logger.Debugf("Created new routes to %s on port %d", rPK, lPort)
+
+	return nrg, nil
+}
+
+// PingRoute dials to a given visor of 'rPK'.
+// 'lPort'/'rPort' specifies the local/remote ports respectively.
+// A nil 'opts' input results in a value of '1' for all DialOptions fields.
+// A single call to DialRoutes should perform the following:
+// - Find routes via RouteFinder (in one call).
+// - Setup routes via SetupNode (in one call).
+// - Save to routing.Table and internal RouteGroup map.
+// - Return RouteGroup if successful.
+func (r *router) PingRoute(
+	ctx context.Context,
+	rPK cipher.PubKey,
+	lPort, rPort routing.Port,
+	opts *DialOptions,
+) (net.Conn, error) {
+
+	if rPK.Null() {
+		err := ErrRemoteEmptyPK
+		r.logger.WithError(err).Error("Failed to dial routes.")
+		return nil, fmt.Errorf("failed to dial routes: %w", err)
+	}
+
+	r.logger.Errorf("lPort :%v", lPort)
+	r.logger.Errorf("rPort :%v", rPort)
+	lPK := r.conf.PubKey
+	forwardDesc := routing.NewRouteDescriptor(lPK, lPK, lPort, rPort)
+
+	r.routeSetupHookMu.Lock()
+	defer r.routeSetupHookMu.Unlock()
+	if len(r.routeSetupHooks) != 0 {
+		for _, rsf := range r.routeSetupHooks {
+			if err := rsf(rPK, r.tm); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	// check if transports are available
+	ok := r.checkIfTransportAvailable()
+	if !ok {
+		return nil, ErrNoTransportFound
+	}
+	forwardPath, reversePath, err := r.fetchPingRoute(lPK, rPK, opts)
+	if err != nil {
+		return nil, fmt.Errorf("route finder: %w", err)
+	}
+
+	req := routing.BidirectionalRoute{
+		Desc:      forwardDesc,
+		KeepAlive: DefaultRouteKeepAlive,
+		Forward:   forwardPath,
+		Reverse:   reversePath,
+	}
+
+	rules, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.dmsgC, r.conf.SetupNodes, req)
+	if err != nil {
+		r.logger.WithError(err).Error("Error dialing route group")
+		return nil, err
+	}
+
+	if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
+		r.logger.WithError(err).Error("Error saving routing rules")
+		return nil, err
+	}
+
+	nsConf := noise.Config{
+		LocalPK:   r.conf.PubKey,
+		LocalSK:   r.conf.SecKey,
+		RemotePK:  rPK,
+		Initiator: true,
+	}
+
+	nrg, err := r.saveRouteGroupRules(rules, nsConf, "two")
+	if err != nil {
+		return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
+	}
+
+	nrg.rg.startOffServiceLoops()
+
+	r.logger.Debugf("Created new routes to %s on port %d", lPK, lPort)
 
 	return nrg, nil
 }
@@ -343,7 +427,7 @@ func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, error) {
 		Initiator: false,
 	}
 
-	nrg, err := r.saveRouteGroupRules(rules, nsConf)
+	nrg, err := r.saveRouteGroupRules(rules, nsConf, "three")
 	if err != nil {
 		return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
 	}
@@ -413,7 +497,7 @@ func (r *router) serveSetup() {
 	}
 }
 
-func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Config) (*NoiseRouteGroup, error) {
+func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Config, test string) (*NoiseRouteGroup, error) {
 	r.logger.Debugf("Saving route group rules with desc: %s", &rules.Desc)
 
 	// When route group is wrapped with noise, it's put into `nrgs`. but before that,
@@ -433,7 +517,7 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 	// we need to close currently existing wrapped rg if there's one
 	nrg, ok := r.rgsNs[rules.Desc]
 
-	r.logger.Debugf("Creating new route group rule with desc: %s", &rules.Desc)
+	r.logger.Warnf("Creating new route group rule with desc: %s", &rules.Desc)
 	rg := NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc, r.mLogger)
 	rg.appendRules(rules.Forward, rules.Reverse, r.tm.Transport(rules.Forward.NextTransportID()))
 	// we put raw rg so it can be accessible to the router when handshake packets come in
@@ -494,7 +578,7 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 		// wrapping rg with noise
 		wrappedRG, err := network.EncryptConn(nsConf, rg)
 		if err != nil {
-			r.logger.WithError(err).Errorf("Failed to wrap route group (%s): %v, closing...", &rules.Desc, err)
+			r.logger.WithError(err).Errorf("Failed to wrap route group (%s): %v, closing... %v", &rules.Desc, err, test)
 			if err := rg.Close(); err != nil {
 				r.logger.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
 			}
@@ -987,6 +1071,44 @@ fetchRoutesAgain:
 	paths, err := r.conf.RouteFinder.FindRoutes(ctx, []routing.PathEdges{forward, backward},
 		&rfclient.RouteOptions{MinHops: r.conf.MinHops, MaxHops: r.conf.MaxHops})
 
+	if err == rfclient.ErrTransportNotFound {
+		return nil, nil, err
+	}
+
+	if err != nil {
+		select {
+		case <-timer.C:
+			return nil, nil, err
+		default:
+			time.Sleep(retryInterval)
+			goto fetchRoutesAgain
+		}
+	}
+
+	r.logger.Debugf("Found routes Forward: %s. Reverse %s", paths[forward], paths[backward])
+
+	return paths[forward][0], paths[backward][0], nil
+}
+
+func (r *router) fetchPingRoute(src, pingKey cipher.PubKey, opts *DialOptions) (fwd, rev []routing.Hop, err error) {
+	// TODO: use opts
+	if opts == nil {
+		opts = DefaultDialOptions() // nolint
+	}
+
+	r.logger.Debugf("Requesting new routes from %s to %s", src, src)
+
+	timer := time.NewTimer(retryDuration)
+	defer timer.Stop()
+
+	forward := [2]cipher.PubKey{src, src}
+	backward := [2]cipher.PubKey{src, src}
+
+fetchRoutesAgain:
+	ctx := context.Background()
+
+	paths, err := r.conf.RouteFinder.FindRoutes(ctx, []routing.PathEdges{forward, backward},
+		&rfclient.RouteOptions{MinHops: 0, MaxHops: 2})
 	if err == rfclient.ErrTransportNotFound {
 		return nil, nil, err
 	}
