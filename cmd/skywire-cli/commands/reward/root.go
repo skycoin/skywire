@@ -148,12 +148,13 @@ var rewardCmd = &cobra.Command{
 		}
 		rewardaddress, err := client.SetRewardAddress(rewardAddress)
 		if err != nil {
-			internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
+			internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))      //nolint
 			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(cAddr.String()), 0644)) //nolint
 			readRewardFile(cmd.Flags())
 			return
 		}
-		internal.PrintOutput(cmd.Flags(), rewardaddress, rewardaddress)
+		output := fmt.Sprintf("Reward address:\n  %s\n", rewardaddress)
+		internal.PrintOutput(cmd.Flags(), output, output)
 	},
 }
 

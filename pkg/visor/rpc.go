@@ -96,16 +96,18 @@ func (r *RPC) Uptime(_ *struct{}, out *float64) (err error) {
 */
 
 // SetRewardAddress sets the reward address and privacy setting in reward.txt
-func (r *RPC) SetRewardAddress(p string, out string) (err error) {
+func (r *RPC) SetRewardAddress(p string, out *string) (err error) {
 	defer rpcutil.LogCall(r.log, "SetRewardAddress", p)(out, &err)
-	_, err = r.visor.SetRewardAddress(p)
+	p, err = r.visor.SetRewardAddress(p)
+	*out = p
 	return err
 }
 
 // GetRewardAddress reads the reward address from reward.txt
-func (r *RPC) GetRewardAddress(_ *struct{}, out string) (err error) {
+func (r *RPC) GetRewardAddress(_ *struct{}, out *string) (err error) {
 	defer rpcutil.LogCall(r.log, "GetRewardAddress", nil)(out, &err)
-	_, err = r.visor.GetRewardAddress()
+	p, err := r.visor.GetRewardAddress()
+	*out = p
 	return err
 }
 
