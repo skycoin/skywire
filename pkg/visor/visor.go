@@ -232,7 +232,7 @@ func RunVisor(conf *visorconfig.V1) {
 		return
 	}
 	skyenv.StopVisorWg.Add(1)
-	defer skyenv.StopVisorWg.Done()
+
 	skyenv.StopVisorFn = func() {
 		if err := vis.Close(); err != nil {
 			log.WithError(err).Error("Visor closed with error.")
@@ -248,7 +248,7 @@ func RunVisor(conf *visorconfig.V1) {
 	}
 	// Wait.
 	<-ctx.Done()
-
+	skyenv.StopVisorWg.Done()
 	skyenv.StopVisorFn()
 }
 
