@@ -321,7 +321,7 @@ func (v *Visor) SetRewardAddress(p string) (string, error) {
 	path := v.conf.LocalPath + "/" + skyenv.RewardFile
 	err := os.WriteFile(path, []byte(p), 0644) //nolint
 	if err != nil {
-		return p, fmt.Errorf("Failed to write config to file. err=%v", err)
+		return p, fmt.Errorf("failed to write config to file. err=%v", err)
 	}
 	return p, nil
 }
@@ -331,7 +331,7 @@ func (v *Visor) GetRewardAddress() (string, error) {
 	path := v.conf.LocalPath + "/" + skyenv.RewardFile
 	rConfig, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
-		return "", fmt.Errorf("Failed to read config file. err=%v", err)
+		return "", fmt.Errorf("failed to read config file. err=%v", err)
 	}
 	return string(rConfig), nil
 }

@@ -1324,7 +1324,7 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 		// get delegated servers and add them to the client entry
 		servers, err := v.dClient.AvailableServers(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("Error getting AvailableServers: %w", err)
+			return nil, fmt.Errorf("error getting AvailableServers: %w", err)
 		}
 
 		for _, server := range servers {
@@ -1340,7 +1340,7 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 
 		err = v.dClient.PostEntry(ctx, clientEntry)
 		if err != nil {
-			return nil, fmt.Errorf("Error saving clientEntry: %w", err)
+			return nil, fmt.Errorf("error saving clientEntry: %w", err)
 		}
 		return v.dmsgHTTP, nil
 	}

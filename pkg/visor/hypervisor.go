@@ -21,6 +21,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
+	coincipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -33,6 +34,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
+	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/pkg/visor/usermanager"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -267,8 +269,8 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Put("/visors/{pk}/persistent-transports", hv.putPersistentTransports())
 				r.Get("/visors/{pk}/log/rotation", hv.getLogRotationInterval())
 				r.Put("/visors/{pk}/log/rotation", hv.putLogRotationInterval())
-				//r.Get("/visors/{pk}/privacy", hv.getPrivacy())
-				//r.Put("/visors/{pk}/privacy", hv.putPrivacy())
+				r.Get("/visors/{pk}/reward", hv.getRewardAddress())
+				r.Put("/visors/{pk}/reward", hv.putRewardAddres())
 
 			})
 		})
@@ -1268,42 +1270,42 @@ func (hv *Hypervisor) getLogRotationInterval() http.HandlerFunc {
 	})
 }
 
-//func (hv *Hypervisor) putPrivacy() http.HandlerFunc {
-//	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-//		var reqBody *privacyconfig.Privacy
-//
-//		if err := httputil.ReadJSON(r, &reqBody); err != nil {
-//			if err != io.EOF {
-//				hv.log(r).Warnf("putPersistentTransports request: %v", err)
-//			}
-//			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
-//			return
-//		}
-//
-//		_, err := coincipher.DecodeBase58Address(reqBody.RewardAddress)
-//		if err != nil {
-//			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-//			return
-//		}
-//		pConf, err := ctx.API.SetPrivacy(reqBody)
-//		if err != nil {
-//			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-//			return
-//		}
-//		httputil.WriteJSON(w, r, http.StatusOK, pConf)
-//	})
-//}
+func (hv *Hypervisor) putRewardAddres() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var reqBody *rewardconfig.Reward
 
-//func (hv *Hypervisor) getPrivacy() http.HandlerFunc {
-//	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-//		pts, err := ctx.API.GetPrivacy()
-//		if err != nil {
-//			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-//			return
-//		}
-//		httputil.WriteJSON(w, r, http.StatusOK, pts)
-//	})
-//}
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("putRewardAddres request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+
+		_, err := coincipher.DecodeBase58Address(reqBody.RewardAddress)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		pConf, err := ctx.API.SetRewardAddress(reqBody.RewardAddress)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, pConf)
+	})
+}
+
+func (hv *Hypervisor) getRewardAddress() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		pts, err := ctx.API.GetRewardAddress()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, pts)
+	})
+}
 
 /*
 	<<< Helper functions >>>
