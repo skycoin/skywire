@@ -108,3 +108,7 @@ func (_m *MockAPIClient) Resolve(ctx context.Context, netType string, pk cipher.
 
 	return r0, r1
 }
+
+func (_m *MockAPIClient) Addresses(ctx context.Context) (string, error) {
+	return "", nil
+}

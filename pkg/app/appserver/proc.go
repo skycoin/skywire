@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
@@ -67,6 +68,9 @@ type Proc struct {
 
 	errMx sync.RWMutex
 	err   string
+
+	portMx sync.RWMutex
+	port   routing.Port
 
 	cmdStderr io.ReadCloser
 
@@ -373,6 +377,21 @@ func (p *Proc) SetError(appErr string) {
 	defer p.errMx.Unlock()
 
 	p.err = appErr
+}
+
+// SetAppPort sets the proc's connection port
+func (p *Proc) SetAppPort(port routing.Port) {
+	p.portMx.Lock()
+	defer p.portMx.Unlock()
+	p.port = port
+}
+
+// GetAppPort gets the proc's connection port
+func (p *Proc) GetAppPort() routing.Port {
+	p.portMx.Lock()
+	defer p.portMx.Unlock()
+
+	return p.port
 }
 
 // Error gets proc's error.
