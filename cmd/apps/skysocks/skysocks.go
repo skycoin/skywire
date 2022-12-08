@@ -23,8 +23,8 @@ import (
 )
 
 const (
-	netType              = appnet.TypeSkynet
-	port    routing.Port = 3
+	netType = appnet.TypeSkynet
+	port    = routing.Port(3)
 )
 
 func main() {
@@ -51,6 +51,8 @@ func main() {
 		print(fmt.Sprintf("Error listening network %v on port %d: %v\n", netType, port, err))
 		os.Exit(1)
 	}
+
+	setAppPort(appCl, port)
 
 	fmt.Println("Starting serving proxy server")
 
@@ -92,5 +94,11 @@ func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
 func setAppError(appCl *app.Client, appErr error) {
 	if err := appCl.SetError(appErr.Error()); err != nil {
 		print(fmt.Sprintf("Failed to set error %v: %v\n", appErr, err))
+	}
+}
+
+func setAppPort(appCl *app.Client, port routing.Port) {
+	if err := appCl.SetAppPort(port); err != nil {
+		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
 	}
 }

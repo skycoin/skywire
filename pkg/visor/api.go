@@ -62,6 +62,7 @@ type API interface {
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
 	VPNServers(version, country string) ([]servicedisc.Service, error)
 	RemoteVisors() ([]string, error)
+	Ports() (map[string]PortDetail, error)
 
 	TransportTypes() ([]string, error)
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
@@ -681,6 +682,67 @@ func (v *Visor) RemoteVisors() ([]string, error) {
 		visors = append(visors, conn.Addr.PK.String())
 	}
 	return visors, nil
+}
+
+// PortDetail type of port details
+type PortDetail struct {
+	Port string
+	Type string
+}
+
+// Ports return list of all ports used by visor services and apps
+func (v *Visor) Ports() (map[string]PortDetail, error) {
+	ctx := context.Background()
+	var ports = make(map[string]PortDetail)
+
+	if v.conf.Hypervisor != nil {
+		ports["hypervisor"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.Hypervisor.HTTPAddr, ":")[1]), Type: "TCP"}
+	}
+
+	ports["dmsg_pty"] = PortDetail{Port: fmt.Sprint(v.conf.Dmsgpty.DmsgPort), Type: "DMSG"}
+	ports["cli_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.CLIAddr, ":")[1]), Type: "TCP"}
+	ports["proc_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.Launcher.ServerAddr, ":")[1]), Type: "TCP"}
+	ports["stcp_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.STCP.ListeningAddress, ":")[1]), Type: "TCP"}
+
+	if v.arClient != nil {
+		sudphPort := v.arClient.Addresses(ctx)
+		if sudphPort != "" {
+			ports["sudph"] = PortDetail{Port: sudphPort, Type: "UDP"}
+		}
+	}
+	if v.stunClient != nil {
+		if v.stunClient.PublicIP != nil {
+			ports["public_visor"] = PortDetail{Port: fmt.Sprint(v.stunClient.PublicIP.Port()), Type: "TCP"}
+		}
+	}
+	if v.dmsgC != nil {
+		dmsgSessions := v.dmsgC.AllSessions()
+		for i, session := range dmsgSessions {
+			ports[fmt.Sprintf("dmsg_session_%d", i)] = PortDetail{Port: strings.Split(session.LocalTCPAddr().String(), ":")[1], Type: "TCP"}
+		}
+
+		dmsgStreams := v.dmsgC.AllStreams()
+		for i, stream := range dmsgStreams {
+			ports[fmt.Sprintf("dmsg_stream_%d", i)] = PortDetail{Port: strings.Split(stream.LocalAddr().String(), ":")[1], Type: "DMSG"}
+		}
+	}
+	if v.procM != nil {
+		apps, _ := v.Apps() //nolint
+		for _, app := range apps {
+			port, err := v.procM.GetAppPort(app.Name)
+			if err == nil {
+				ports[app.Name] = PortDetail{Port: fmt.Sprint(port), Type: "SKYNET"}
+
+				switch app.Name {
+				case "skysocks_client":
+					ports["skysocks_client_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(skyenv.SkysocksClientAddr, ":")[1]), Type: "TCP"}
+				case "skychat":
+					ports["skychat_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(skyenv.SkychatAddr, ":")[1]), Type: "TCP"}
+				}
+			}
+		}
+	}
+	return ports, nil
 }
 
 // TransportTypes implements API.

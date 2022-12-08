@@ -99,6 +99,13 @@ func (r *RPCIngressGateway) SetError(appErr *string, _ *struct{}) (err error) {
 	return nil
 }
 
+// SetAppPort sets the connection port of an app (vpn-client in this instance)
+func (r *RPCIngressGateway) SetAppPort(port routing.Port, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppPort", port)(nil, &err)
+	r.proc.SetAppPort(port)
+	return nil
+}
+
 // DialResp contains response parameters for `Dial`.
 type DialResp struct {
 	ConnID    uint16

@@ -24,6 +24,11 @@ const (
 	blockKeyLen      = 32
 )
 
+// HTTPAddr returns the httpAddr
+func HTTPAddr() string {
+	return httpAddr
+}
+
 // Key allows a byte slice to be marshaled or unmarshaled from a hex string.
 type Key []byte
 
