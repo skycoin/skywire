@@ -455,6 +455,13 @@ func (rc *rpcClient) RemoteVisors() ([]string, error) {
 	return output, nil
 }
 
+// Ports calls Ports.
+func (rc *rpcClient) Ports() (map[string]PortDetail, error) {
+	output := map[string]PortDetail{}
+	rc.Call("Ports", &struct{}{}, &output) // nolint
+	return output, nil
+}
+
 // IsDMSGClientReady return availability of dsmg client
 func (rc *rpcClient) IsDMSGClientReady() (bool, error) {
 	var out bool
@@ -1043,6 +1050,11 @@ func (mc *mockRPCClient) VPNServers(_, _ string) ([]servicedisc.Service, error) 
 // RemoteVisors implements API
 func (mc *mockRPCClient) RemoteVisors() ([]string, error) {
 	return []string{}, nil
+}
+
+// Ports implements API
+func (mc *mockRPCClient) Ports() (map[string]PortDetail, error) {
+	return map[string]PortDetail{}, nil
 }
 
 // IsDMSGClientReady implements API.
