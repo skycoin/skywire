@@ -1120,6 +1120,32 @@ fetchRoutesAgain:
 		}
 	}
 
+	var hopTo, hopFrom bool
+	// check if the remote pk is present in both the hops
+	// [
+	// 	{
+	// 		"TpID":"<tp-id>",
+	// 		"From":"<local-pk>",
+	// 		"To":"<remote-pk>"
+	// 	},
+	// 	{
+	// 		"TpID":"<tp-id>",
+	// 		"From":"<remote-pk>",
+	// 		"To":"<local-pk>"
+	// 	}
+	// ]
+	for _, hop := range paths[forward][0] {
+		if hop.To == pingKey {
+			hopTo = true
+		}
+		if hop.From == pingKey {
+			hopFrom = true
+		}
+	}
+	if !hopTo && hopFrom {
+		return nil, nil, fmt.Errorf("Unable to fetch route with a hop from %v", pingKey)
+	}
+
 	r.logger.Debugf("Found routes Forward: %s. Reverse %s", paths[forward], paths[backward])
 
 	return paths[forward][0], paths[backward][0], nil
