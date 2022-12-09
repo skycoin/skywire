@@ -815,7 +815,6 @@ func (v *Visor) TestRouting(pk cipher.PubKey) (string, error) {
 		conn, err = appnet.Ping(pk, addr)
 		return err
 	})
-	v.log.Error("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz")
 	if err != nil {
 		return "", err
 	}
@@ -824,15 +823,15 @@ func (v *Visor) TestRouting(pk cipher.PubKey) (string, error) {
 		err = conn.Close()
 	}()
 
-	// skywireConn, isSkywireConn := conn.(*appnet.SkywireConn)
-	// if !isSkywireConn {
-	// 	return "", fmt.Errorf("Can't get such info from this conn")
-	// }
-	// msh := "asdasdasdasdsa"
-	// _, err = skywireConn.Write([]byte(msh))
-	// if err != nil {
-	// 	return "", err
-	// }
+	skywireConn, isSkywireConn := conn.(*appnet.SkywireConn)
+	if !isSkywireConn {
+		return "", fmt.Errorf("Can't get such info from this conn")
+	}
+	msh := "asdasdasdasdsa"
+	_, err = skywireConn.Write([]byte(msh))
+	if err != nil {
+		return "", err
+	}
 	var latency time.Duration
 	// err = r.Do(ctx, func() error {
 	// 	latency = skywireConn.Latency()

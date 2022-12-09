@@ -85,7 +85,6 @@ func (r *SkywireNetworker) Ping(pk cipher.PubKey, addr Addr) (net.Conn, error) {
 			freePort()
 		}
 	}()
-	r.log.Error("11111111111111111111111")
 	conn, err := r.r.PingRoute(ctx, pk, routing.Port(localPort), addr.Port, router.DefaultDialOptions())
 	if err != nil {
 		return nil, err

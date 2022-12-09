@@ -595,7 +595,6 @@ func initPing(ctx context.Context, v *Visor, log *logging.Logger) error {
 				return
 			}
 			log.Debug("Accepted sky proxy conn")
-			log.Error("11111111111111111111111111111111111111111111111111")
 
 			log.Debug("Wrapping conn...")
 			wrappedConn, err := appnet.WrapConn(conn)

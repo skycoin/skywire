@@ -650,7 +650,6 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 		return rg.handleDataPacket(packet)
 	case routing.HandshakePacket:
 		rg.handshakeProcessedOnce.Do(func() {
-			rg.logger.Warnf("HandshakePacket here")
 			// first packet is handshake packet, so we're communicating with the new visor
 			rg.encrypt = true
 			if packet.Payload()[0] == 0 {
