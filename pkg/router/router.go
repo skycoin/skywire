@@ -326,8 +326,6 @@ func (r *router) PingRoute(
 		return nil, fmt.Errorf("failed to dial routes: %w", err)
 	}
 
-	r.logger.Errorf("lPort :%v", lPort)
-	r.logger.Errorf("rPort :%v", rPort)
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, lPK, lPort, rPort)
 
@@ -372,7 +370,7 @@ func (r *router) PingRoute(
 	nsConf := noise.Config{
 		LocalPK:   r.conf.PubKey,
 		LocalSK:   r.conf.SecKey,
-		RemotePK:  rPK,
+		RemotePK:  r.conf.PubKey,
 		Initiator: true,
 	}
 
