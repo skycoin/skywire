@@ -78,12 +78,13 @@ var (
 	root bool // nolint:unused
 	// visorBuildInfo holds information about the build
 	visorBuildInfo *buildinfo.Info
+	dmsgServer     string
 )
 
 func init() {
 	root = skyenv.IsRoot()
-
-	localIPs, err := netutil.DefaultNetworkInterfaceIPs()
+	var err error
+	localIPs, err = netutil.DefaultNetworkInterfaceIPs()
 	if err != nil {
 		logger.WithError(err).Warn("Could not determine network interface IP address")
 		if len(localIPs) == 0 {
@@ -140,6 +141,8 @@ func init() {
 	hiddenflags = append(hiddenflags, "syslog")
 	rootCmd.Flags().StringVarP(&completion, "completion", "z", "", "[ bash | zsh | fish | powershell ]")
 	hiddenflags = append(hiddenflags, "completion")
+	rootCmd.Flags().StringVar(&dmsgServer, "dmsg-server", "", "selected dmsg server by user public key")
+	hiddenflags = append(hiddenflags, "dmsg-server")
 	rootCmd.Flags().BoolVar(&all, "all", false, "show all flags")
 
 	for _, j := range hiddenflags {
@@ -393,7 +396,7 @@ func runVisor(conf *visorconfig.V1) {
 	}
 
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
-	vis, ok := visor.NewVisor(ctx, conf, restartCtx, isAutoPeer, autoPeerIP)
+	vis, ok := visor.NewVisor(ctx, conf, restartCtx, isAutoPeer, autoPeerIP, dmsgServer)
 	if !ok {
 		select {
 		case <-ctx.Done():
