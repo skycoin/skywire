@@ -572,6 +572,7 @@ func initPing(ctx context.Context, v *Visor, log *logging.Logger) error {
 		PubKey: v.conf.PK,
 		Port:   routing.Port(skyenv.SkyPingPort),
 	}
+
 	l, err := appnet.ListenContext(ctx, connApp)
 	if err != nil {
 		cancel()

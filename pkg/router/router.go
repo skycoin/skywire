@@ -293,7 +293,7 @@ func (r *router) DialRoutes(
 		Initiator: true,
 	}
 
-	nrg, err := r.saveRouteGroupRules(rules, nsConf, "one")
+	nrg, err := r.saveRouteGroupRules(rules, nsConf)
 	if err != nil {
 		return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
 	}
@@ -374,7 +374,7 @@ func (r *router) PingRoute(
 		Initiator: true,
 	}
 
-	nrg, err := r.saveRouteGroupRules(rules, nsConf, "two")
+	nrg, err := r.saveRouteGroupRules(rules, nsConf)
 	if err != nil {
 		return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
 	}
@@ -425,7 +425,7 @@ func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, error) {
 		Initiator: false,
 	}
 
-	nrg, err := r.saveRouteGroupRules(rules, nsConf, "three")
+	nrg, err := r.saveRouteGroupRules(rules, nsConf)
 	if err != nil {
 		return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
 	}
@@ -495,7 +495,7 @@ func (r *router) serveSetup() {
 	}
 }
 
-func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Config, test string) (*NoiseRouteGroup, error) {
+func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Config) (*NoiseRouteGroup, error) {
 	r.logger.Debugf("Saving route group rules with desc: %s", &rules.Desc)
 
 	// When route group is wrapped with noise, it's put into `nrgs`. but before that,
@@ -575,7 +575,7 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 		// wrapping rg with noise
 		wrappedRG, err := network.EncryptConn(nsConf, rg)
 		if err != nil {
-			r.logger.WithError(err).Errorf("Failed to wrap route group (%s): %v, closing... %v", &rules.Desc, err, test)
+			r.logger.WithError(err).Errorf("Failed to wrap route group (%s): %v, closing...", &rules.Desc, err)
 			if err := rg.Close(); err != nil {
 				r.logger.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
 			}
