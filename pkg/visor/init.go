@@ -295,12 +295,11 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 		return err
 	}
 	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg, httpC, v.MasterLogger())
-
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		dmsgC.Serve(context.Background())
+		dmsgC.Serve(ctx)
 	}()
 
 	v.pushCloseStack("dmsg", func() error {
