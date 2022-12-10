@@ -144,7 +144,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Con
 	v.runtimeErrors = make(chan error)
 	ctx = context.WithValue(ctx, runtimeErrsKey, v.runtimeErrors)
 	if dmsgServer != "" {
-		ctx = context.WithValue(ctx, "dmsgServer", dmsgServer)
+		ctx = context.WithValue(ctx, "dmsgServer", dmsgServer) //nolint
 	}
 	registerModules(v.MasterLogger())
 	var mainModule visorinit.Module
