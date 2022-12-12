@@ -807,6 +807,8 @@ func (v *Visor) DialPing(pk cipher.PubKey) error {
 	if pk == v.conf.PK {
 		return fmt.Errorf("Visor cannot ping itself")
 	}
+	// waiting for at least one transport to initialize
+	<-v.tpM.Ready()
 	addr := appnet.Addr{
 		Net:    appnet.TypeSkynet,
 		PubKey: v.conf.PK,
