@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -95,13 +94,8 @@ type Visor struct {
 	remoteVisors         map[cipher.PubKey]Conn // remote hypervisors the visor is attempting to connect to
 	connectedHypervisors map[cipher.PubKey]bool // remote hypervisors the visor is currently connected to
 
-	pingConns map[cipher.PubKey]ping
-	connMx    *sync.RWMutex
-}
-
-type ping struct {
-	conn    net.Conn
-	latency chan string
+	pingConns  map[cipher.PubKey]ping
+	pingConnMx *sync.Mutex
 }
 
 // todo: consider moving module closing to the module system
@@ -136,6 +130,8 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Con
 		dtmReady:             make(chan struct{}),
 		stunReady:            make(chan struct{}),
 		connectedHypervisors: make(map[cipher.PubKey]bool),
+		pingConns:            make(map[cipher.PubKey]ping),
+		pingConnMx:           new(sync.Mutex),
 	}
 	v.isServicesHealthy.init()
 

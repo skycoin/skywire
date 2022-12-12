@@ -4,6 +4,7 @@ package visor
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -827,31 +828,41 @@ func (v *Visor) DialPing(pk cipher.PubKey) error {
 		return fmt.Errorf("Can't get such info from this conn")
 	}
 
-	v.connMx.Lock()
+	v.pingConnMx.Lock()
 	v.pingConns[pk] = ping{
-		conn: skywireConn,
+		conn:    skywireConn,
+		latency: make(chan string),
 	}
-	v.connMx.Unlock()
+	v.pingConnMx.Unlock()
 	return nil
 }
 
 // Ping implements API.
 func (v *Visor) Ping(pk cipher.PubKey) (string, error) {
-	v.connMx.Lock()
-	defer v.connMx.Unlock()
+	v.pingConnMx.Lock()
+	defer v.pingConnMx.Unlock()
+
 	skywireConn := v.pingConns[pk].conn
-	msh := "asdasdasdasdsa"
-	_, err := skywireConn.Write([]byte(msh))
+	msg := PingMsg{
+		Timestamp: time.Now(),
+		PingPk:    pk,
+	}
+	b, err := json.Marshal(msg)
 	if err != nil {
 		return "", err
 	}
-	return "test", nil
+	_, err = skywireConn.Write(b)
+	if err != nil {
+		return "", err
+	}
+	latency := <-v.pingConns[pk].latency
+	return latency, nil
 }
 
 // StopPing implements API.
 func (v *Visor) StopPing(pk cipher.PubKey) error {
-	v.connMx.Lock()
-	defer v.connMx.Unlock()
+	v.pingConnMx.Lock()
+	defer v.pingConnMx.Unlock()
 
 	skywireConn := v.pingConns[pk].conn
 	err := skywireConn.Close()
