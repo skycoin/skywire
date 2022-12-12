@@ -155,16 +155,36 @@ func (ce *Client) Serve(ctx context.Context) {
 		if isClosed(ce.done) {
 			return
 		}
-
+		var entries []*disc.Entry
+		var err error
 		ce.log.Debug("Discovering dmsg servers...")
-		entries, err := ce.discoverServers(cancellabelCtx)
-		if err != nil {
-			ce.log.WithError(err).Warn("Failed to discover dmsg servers.")
-			if err == context.Canceled || err == context.DeadlineExceeded {
-				return
+		if ctx.Value("dmsgServer") != nil {
+			entries, err = ce.discoverServers(cancellabelCtx, true)
+			if err != nil {
+				ce.log.WithError(err).Warn("Failed to discover dmsg servers.")
+				if err == context.Canceled || err == context.DeadlineExceeded {
+					return
+				}
+				ce.serveWait()
+				continue
 			}
-			ce.serveWait()
-			continue
+
+			for ind, entry := range entries {
+				if entry.Static.Hex() == ctx.Value("dmsgServer").(string) {
+					entries = entries[ind : ind+1]
+				}
+			}
+		} else {
+			entries, err = ce.discoverServers(cancellabelCtx, false)
+
+			if err != nil {
+				ce.log.WithError(err).Warn("Failed to discover dmsg servers.")
+				if err == context.Canceled || err == context.DeadlineExceeded {
+					return
+				}
+				ce.serveWait()
+				continue
+			}
 		}
 		if len(entries) == 0 {
 			ce.log.Warnf("No entries found. Retrying after %s...", ce.bo.String())
@@ -228,9 +248,13 @@ func (ce *Client) Ready() <-chan struct{} {
 	return ce.ready
 }
 
-func (ce *Client) discoverServers(ctx context.Context) (entries []*disc.Entry, err error) {
+func (ce *Client) discoverServers(ctx context.Context, all bool) (entries []*disc.Entry, err error) {
 	err = netutil.NewDefaultRetrier(ce.log).Do(ctx, func() error {
-		entries, err = ce.dc.AvailableServers(ctx)
+		if all {
+			entries, err = ce.dc.AllServers(ctx)
+		} else {
+			entries, err = ce.dc.AvailableServers(ctx)
+		}
 		return err
 	})
 	return entries, err
