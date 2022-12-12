@@ -592,7 +592,9 @@ func initPing(ctx context.Context, v *Visor, log *logging.Logger) error {
 			log.Debug("Accepting sky proxy conn...")
 			conn, err := l.Accept()
 			if err != nil {
-				log.WithError(err).Error("Failed to accept conn")
+				if !errors.Is(err, appnet.ErrConnClosed) {
+					log.WithError(err).Error("Failed to accept ping conn")
+				}
 				return
 			}
 			log.Debug("Accepted sky proxy conn")
