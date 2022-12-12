@@ -105,7 +105,7 @@ func (dg *DmsgGet) Run(ctx context.Context, log *logging.Logger, skStr string, a
 		}
 	}()
 
-	dmsgC, closeDmsg, err := dg.startDmsg(ctx, log, pk, sk)
+	dmsgC, closeDmsg, err := dg.StartDmsg(ctx, log, pk, sk)
 	if err != nil {
 		return fmt.Errorf("failed to start dmsg: %w", err)
 	}
@@ -192,7 +192,8 @@ func parseOutputFile(name string, urlPath string) (*os.File, error) {
 	return nil, os.ErrExist
 }
 
-func (dg *DmsgGet) startDmsg(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey) (dmsgC *dmsg.Client, stop func(), err error) {
+// StartDmsg create dsmg client instance
+func (dg *DmsgGet) StartDmsg(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey) (dmsgC *dmsg.Client, stop func(), err error) {
 	dmsgC = dmsg.NewClient(pk, sk, disc.NewHTTP(dg.dmsgF.Disc, &http.Client{}, log), &dmsg.Config{MinSessions: dg.dmsgF.Sessions})
 	go dmsgC.Serve(context.Background())
 
