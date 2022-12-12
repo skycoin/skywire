@@ -809,6 +809,7 @@ func (v *Visor) DialPing(pk cipher.PubKey) error {
 	}
 	// waiting for at least one transport to initialize
 	<-v.tpM.Ready()
+
 	addr := appnet.Addr{
 		Net:    appnet.TypeSkynet,
 		PubKey: v.conf.PK,
