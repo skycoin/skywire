@@ -606,30 +606,34 @@ func initPing(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 			rAddr := wrappedConn.RemoteAddr().(appnet.Addr)
 			log.Debugf("Accepted sky proxy conn on %s from %s", wrappedConn.LocalAddr(), rAddr.PubKey)
-			go handleServerConn(log, wrappedConn, v)
+			go handlePingConn(log, wrappedConn, v)
 		}
 	}()
 	return nil
 }
 
-func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
-	buf := make([]byte, 32*1024)
-	n, err := remoteConn.Read(buf)
-	if err != nil {
-		log.WithError(err).Error("Failed to read packet")
-		return
-	}
-	var msg PingMsg
-	err = json.Unmarshal(buf[:n], &msg)
-	if err != nil {
-		log.WithError(err).Error("Failed to read packet")
-		return
-	}
-	now := time.Now()
-	diff := now.Sub(msg.Timestamp)
-	v.pingConns[msg.PingPk].latency <- fmt.Sprint(diff)
+func handlePingConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
+	for {
+		buf := make([]byte, 32*1024)
+		n, err := remoteConn.Read(buf)
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				log.WithError(err).Error("Failed to read packet")
+			}
+			return
+		}
+		var msg PingMsg
+		err = json.Unmarshal(buf[:n], &msg)
+		if err != nil {
+			log.WithError(err).Error("Failed to unmarshal json")
+			return
+		}
+		now := time.Now()
+		diff := now.Sub(msg.Timestamp)
+		v.pingConns[msg.PingPk].latency <- fmt.Sprint(diff)
 
-	log.Debugf("Received: %s", buf[:n])
+		log.Debugf("Received: %s", buf[:n])
+	}
 }
 
 // getRouteSetupHooks aka autotransport
