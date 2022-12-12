@@ -22,9 +22,13 @@ var testCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		pk := internal.ParsePK(cmd.Flags(), "pk", args[0])
 
-		latency, err := clirpc.Client(cmd.Flags()).TestRouting(pk)
+		err := clirpc.Client(cmd.Flags()).DialPing(pk)
+		internal.Catch(cmd.Flags(), err)
+		latency, err := clirpc.Client(cmd.Flags()).Ping(pk)
 		internal.Catch(cmd.Flags(), err)
 		internal.PrintOutput(cmd.Flags(), latency, fmt.Sprintf(latency+"\n"))
+		err = clirpc.Client(cmd.Flags()).StopPing(pk)
+		internal.Catch(cmd.Flags(), err)
 
 	},
 }

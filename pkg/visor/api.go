@@ -79,7 +79,6 @@ type API interface {
 	RoutingRule(key routing.RouteID) (routing.Rule, error)
 	SaveRoutingRule(rule routing.Rule) error
 	RemoveRoutingRule(key routing.RouteID) error
-	TestRouting(pk cipher.PubKey) (string, error)
 
 	RouteGroups() ([]RouteGroupInfo, error)
 
@@ -96,6 +95,10 @@ type API interface {
 	SetLogRotationInterval(visorconfig.Duration) error
 
 	IsDMSGClientReady() (bool, error)
+
+	DialPing(pk cipher.PubKey) error
+	Ping(pk cipher.PubKey) (string, error)
+	StopPing(pk cipher.PubKey) error
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -798,8 +801,8 @@ func (v *Visor) RoutingRules() ([]routing.Rule, error) {
 	return v.router.Rules(), nil
 }
 
-// TestRouting implements API.
-func (v *Visor) TestRouting(pk cipher.PubKey) (string, error) {
+// DialPing implements API.
+func (v *Visor) DialPing(pk cipher.PubKey) error {
 	addr := appnet.Addr{
 		Net:    appnet.TypeSkynet,
 		PubKey: v.conf.PK,
@@ -816,31 +819,47 @@ func (v *Visor) TestRouting(pk cipher.PubKey) (string, error) {
 		return err
 	})
 	if err != nil {
-		return "", err
+		return err
 	}
-
-	defer func() {
-		err = conn.Close()
-	}()
 
 	skywireConn, isSkywireConn := conn.(*appnet.SkywireConn)
 	if !isSkywireConn {
-		return "", fmt.Errorf("Can't get such info from this conn")
+		return fmt.Errorf("Can't get such info from this conn")
 	}
+
+	v.connMx.Lock()
+	v.pingConns[pk] = ping{
+		conn: skywireConn,
+	}
+	v.connMx.Unlock()
+	return nil
+}
+
+// Ping implements API.
+func (v *Visor) Ping(pk cipher.PubKey) (string, error) {
+	v.connMx.Lock()
+	defer v.connMx.Unlock()
+	skywireConn := v.pingConns[pk].conn
 	msh := "asdasdasdasdsa"
-	_, err = skywireConn.Write([]byte(msh))
+	_, err := skywireConn.Write([]byte(msh))
 	if err != nil {
 		return "", err
 	}
-	var latency time.Duration
-	// err = r.Do(ctx, func() error {
-	// 	latency = skywireConn.Latency()
-	// 	if latency.String() != "0s" {
-	// 		return nil
-	// 	}
-	// 	return fmt.Errorf("unable to retrieve latency")
-	// })
-	return fmt.Sprint(latency), nil
+	return "test", nil
+}
+
+// StopPing implements API.
+func (v *Visor) StopPing(pk cipher.PubKey) error {
+	v.connMx.Lock()
+	defer v.connMx.Unlock()
+
+	skywireConn := v.pingConns[pk].conn
+	err := skywireConn.Close()
+	if err != nil {
+		return err
+	}
+	delete(v.pingConns, pk)
+	return nil
 }
 
 // RoutingRule implements API.

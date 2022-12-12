@@ -493,14 +493,6 @@ func (r *RPC) RoutingRules(_ *struct{}, out *[]routing.Rule) (err error) {
 	return err
 }
 
-// TestRouting obtains all routing rules of the RoutingTable.
-func (r *RPC) TestRouting(pk *cipher.PubKey, out *string) (err error) {
-	defer rpcutil.LogCall(r.log, "TestRouting", pk)(out, &err)
-
-	*out, err = r.visor.TestRouting(*pk)
-	return err
-}
-
 // RoutingRule obtains a routing rule of given RouteID.
 func (r *RPC) RoutingRule(key *routing.RouteID, rule *routing.Rule) (err error) {
 	defer rpcutil.LogCall(r.log, "RoutingRule", key)(rule, &err)
@@ -635,4 +627,26 @@ func (r *RPC) IsDMSGClientReady(_ *struct{}, out *bool) (err error) {
 	status, err := r.visor.IsDMSGClientReady()
 	*out = status
 	return err
+}
+
+// DialPing dials to the ping module using the provided pk as a hop.
+func (r *RPC) DialPing(pk *cipher.PubKey, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DialPing", pk)(nil, &err)
+
+	return r.visor.DialPing(*pk)
+}
+
+// Ping pings the connected route via DialPing.
+func (r *RPC) Ping(pk *cipher.PubKey, out *string) (err error) {
+	defer rpcutil.LogCall(r.log, "Ping", pk)(out, &err)
+
+	*out, err = r.visor.Ping(*pk)
+	return err
+}
+
+// StopPing stops the ping conn.
+func (r *RPC) StopPing(pk *cipher.PubKey, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StopPing", pk)(nil, &err)
+
+	return r.visor.StopPing(*pk)
 }

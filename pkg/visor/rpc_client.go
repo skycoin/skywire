@@ -353,13 +353,6 @@ func (rc *rpcClient) RoutingRules() ([]routing.Rule, error) {
 	return entries, err
 }
 
-// TestRouting calls RoutingRules.
-func (rc *rpcClient) TestRouting(pk cipher.PubKey) (string, error) {
-	var latency string
-	err := rc.Call("TestRouting", &pk, &latency)
-	return latency, err
-}
-
 // RoutingRule calls RoutingRule.
 func (rc *rpcClient) RoutingRule(key routing.RouteID) (routing.Rule, error) {
 	var rule routing.Rule
@@ -468,6 +461,23 @@ func (rc *rpcClient) IsDMSGClientReady() (bool, error) {
 	var out bool
 	err := rc.Call("IsDMSGClientReady", &struct{}{}, &out)
 	return out, err
+}
+
+// DialPing calls DialPing.
+func (rc *rpcClient) DialPing(pk cipher.PubKey) error {
+	return rc.Call("DialPing", &pk, &struct{}{})
+}
+
+// Ping calls Ping.
+func (rc *rpcClient) Ping(pk cipher.PubKey) (string, error) {
+	var latency string
+	err := rc.Call("Ping", &pk, &latency)
+	return latency, err
+}
+
+// StopPing calls StopPing.
+func (rc *rpcClient) StopPing(pk cipher.PubKey) error {
+	return rc.Call("StopPing", &pk, &struct{}{})
 }
 
 // MockRPCClient mocks API.
@@ -957,11 +967,6 @@ func (mc *mockRPCClient) RoutingRules() ([]routing.Rule, error) {
 	return mc.rt.AllRules(), nil
 }
 
-// RoutingRules implements API.
-func (mc *mockRPCClient) TestRouting(_ cipher.PubKey) (string, error) {
-	return "", nil
-}
-
 // RoutingRule implements API.
 func (mc *mockRPCClient) RoutingRule(key routing.RouteID) (routing.Rule, error) {
 	return mc.rt.Rule(key)
@@ -1061,4 +1066,19 @@ func (mc *mockRPCClient) RemoteVisors() ([]string, error) {
 // IsDMSGClientReady implements API.
 func (mc *mockRPCClient) IsDMSGClientReady() (bool, error) {
 	return false, nil
+}
+
+// DialPing implements API.
+func (mc *mockRPCClient) DialPing(_ cipher.PubKey) error {
+	return nil
+}
+
+// Ping implements API.
+func (mc *mockRPCClient) Ping(_ cipher.PubKey) (string, error) {
+	return "", nil
+}
+
+// StopPing implements API.
+func (mc *mockRPCClient) StopPing(_ cipher.PubKey) error {
+	return nil
 }

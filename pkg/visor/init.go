@@ -121,7 +121,7 @@ var (
 	// Dmsg trackers module
 	dmsgTrackers vinit.Module
 	// Ping module
-	ping vinit.Module
+	pi vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 )
@@ -159,9 +159,9 @@ func registerModules(logger *logging.MasterLogger) {
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
 	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl, &dmsgHTTPLogServer, &dmsgTrackers)
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
-	ping = maker("ping", initPing, &dmsgC, &tm)
+	pi = maker("ping", initPing, &dmsgC, &tm)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &ping)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &pi)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }

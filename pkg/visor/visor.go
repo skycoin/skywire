@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -93,6 +94,14 @@ type Visor struct {
 	autoPeerIP           string                 // autoPeerCmd is the command string used to return the public key of the hypervisor
 	remoteVisors         map[cipher.PubKey]Conn // remote hypervisors the visor is attempting to connect to
 	connectedHypervisors map[cipher.PubKey]bool // remote hypervisors the visor is currently connected to
+
+	pingConns map[cipher.PubKey]ping
+	connMx    *sync.RWMutex
+}
+
+type ping struct {
+	conn    net.Conn
+	latency chan string
 }
 
 // todo: consider moving module closing to the module system
