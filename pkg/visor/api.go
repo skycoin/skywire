@@ -854,16 +854,16 @@ func (v *Visor) Reload() error {
 	if v.restartCtx == nil {
 		return ErrMalformedRestartContext
 	}
-
 	v1, err := visorconfig.Reload()
 	if err != nil {
 		return err
 	}
+	oldUIAssets := v.uiAssets
 	err = v.Close()
 	if err != nil {
 		os.Exit(1)
 	}
-	go RunVisor(v1)
+	go RunVisor(v1, oldUIAssets)
 	return nil
 }
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"sync"
 	"time"
@@ -98,6 +99,8 @@ type Visor struct {
 	autoPeerIP           string                 // autoPeerCmd is the command string used to return the public key of the hypervisor
 	remoteVisors         map[cipher.PubKey]Conn // remote hypervisors the visor is attempting to connect to
 	connectedHypervisors map[cipher.PubKey]bool // remote hypervisors the visor is currently connected to
+
+	uiAssets fs.FS
 }
 
 // todo: consider moving module closing to the module system
@@ -216,11 +219,14 @@ func (v *Visor) isStunReady() bool {
 }
 
 // RunVisor runs the visor
-func RunVisor(conf *visorconfig.V1) {
+func RunVisor(conf *visorconfig.V1, uiAssets fs.FS) {
 	log := initLogger()
 	store, hook := logstore.MakeStore(skyenv.RuntimeLogMaxEntries)
 	log.AddHook(hook)
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
+	if conf.Hypervisor != nil {
+		conf.Hypervisor.UIAssets = uiAssets
+	}
 	vis, ok := NewVisor(ctx, conf)
 	if !ok {
 		select {
@@ -239,7 +245,7 @@ func RunVisor(conf *visorconfig.V1) {
 		cancel()
 	}
 	vis.SetLogstore(store)
-
+	vis.uiAssets = uiAssets
 	if skyenv.LaunchBrowser {
 		runBrowser(log, conf)
 		skyenv.LaunchBrowser = false

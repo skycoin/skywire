@@ -324,7 +324,7 @@ func runVisor(conf *visorconfig.V1) {
 		}
 	}
 
-	visor.RunVisor(conf)
+	visor.RunVisor(conf, uiAssets)
 
 }
 
