@@ -1,3 +1,4 @@
+// Package appserver pkg/app/appserver/proc_manager.go
 package appserver
 
 import (
@@ -14,6 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 //go:generate mockery -name ProcManager -case underscore -inpkg
@@ -45,6 +47,7 @@ type ProcManager interface {
 	Stats(appName string) (AppStats, error)
 	SetDetailedStatus(appName, status string) error
 	DetailedStatus(appName string) (string, error)
+	GetAppPort(appName string) (routing.Port, error)
 	ConnectionsSummary(appName string) ([]ConnectionSummary, error)
 	Addr() net.Addr
 }
@@ -329,6 +332,16 @@ func (m *procManager) SetError(appName, appErr string) error {
 	m.errors[appName] = appErr
 
 	return nil
+}
+
+// GetAppPort gets port of the app `appName`.
+func (m *procManager) GetAppPort(appName string) (routing.Port, error) {
+	p, err := m.get(appName)
+	if err != nil {
+		return routing.Port(0), err
+	}
+
+	return p.GetAppPort(), nil
 }
 
 // ConnectionsSummary gets connections info for the app `appName`.

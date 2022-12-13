@@ -1,3 +1,4 @@
+// /* cmd/apps/skychat/skychat.go
 /*
 skychat app for skywire visor
 */
@@ -116,6 +117,8 @@ func listenLoop() {
 		setAppError(appCl, err)
 		return
 	}
+
+	setAppPort(appCl, port)
 
 	for {
 		fmt.Println("Accepting skychat conn...")
@@ -277,5 +280,11 @@ func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
 func setAppError(appCl *app.Client, appErr error) {
 	if err := appCl.SetError(appErr.Error()); err != nil {
 		print(fmt.Sprintf("Failed to set error %v: %v\n", appErr, err))
+	}
+}
+
+func setAppPort(appCl *app.Client, port routing.Port) {
+	if err := appCl.SetAppPort(port); err != nil {
+		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
 	}
 }

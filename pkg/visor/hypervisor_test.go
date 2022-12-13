@@ -1,3 +1,4 @@
+// Package visor pkg/visor/hypervisor_test.go
 package visor
 
 import (

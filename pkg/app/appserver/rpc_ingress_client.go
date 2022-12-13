@@ -1,3 +1,4 @@
+// Package appserver pkg/app/appserver/rpc_ingress_client.go
 package appserver
 
 import (
@@ -17,6 +18,7 @@ type RPCIngressClient interface {
 	SetDetailedStatus(status string) error
 	SetConnectionDuration(dur int64) error
 	SetError(appErr string) error
+	SetAppPort(appPort routing.Port) error
 	Dial(remote appnet.Addr) (connID uint16, localPort routing.Port, err error)
 	Listen(local appnet.Addr) (uint16, error)
 	Accept(lisID uint16) (connID uint16, remote appnet.Addr, err error)
@@ -56,6 +58,11 @@ func (c *rpcIngressClient) SetConnectionDuration(dur int64) error {
 // SetError sets error of an app.
 func (c *rpcIngressClient) SetError(appErr string) error {
 	return c.rpc.Call(c.formatMethod("SetError"), &appErr, nil)
+}
+
+// SetAppPort sets port of an app.
+func (c *rpcIngressClient) SetAppPort(port routing.Port) error {
+	return c.rpc.Call(c.formatMethod("SetAppPort"), &port, nil)
 }
 
 // RPCErr is used to preserve the type of the errors we return via RPC

@@ -1,3 +1,4 @@
+// Package appevent pkg/app/appevent/subscriber.go
 package appevent
 
 import (

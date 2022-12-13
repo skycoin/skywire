@@ -1,3 +1,4 @@
+// Package cliconfig cmd/skywire-cli/commands/config/update.go
 package cliconfig
 
 import (
@@ -31,17 +32,17 @@ func init() {
 	updateCmd.Flags().SortFlags = false
 	updateCmd.Flags().BoolVarP(&isUpdateEndpoints, "endpoints", "a", false, "update server endpoints")
 	updateCmd.Flags().StringVar(&logLevel, "log-level", "", "level of logging in config")
-	updateCmd.Flags().StringVarP(&serviceConfURL, "url", "b", "", "service config URL: "+svcconf)
-	updateCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", false, "use test deployment: "+testconf)
+	updateCmd.Flags().StringVarP(&serviceConfURL, "url", "b", "", "service config URL: "+svcConf)
+	updateCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", false, "use test deployment: "+testConf)
 	updateCmd.Flags().StringVar(&setPublicAutoconnect, "public-autoconn", "", "change public autoconnect configuration")
 	updateCmd.Flags().IntVar(&minHops, "set-minhop", -1, "change min hops value")
 	updateCmd.PersistentFlags().StringVarP(&input, "input", "i", "", "path of input config file.")
-	uhiddenflags = append(uhiddenflags, "input")
+	uHiddenFlags = append(uHiddenFlags, "input")
 	updateCmd.PersistentFlags().StringVarP(&output, "output", "o", "", "config file to output")
 	if isRoot {
-		if _, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.Configjson); err == nil {
-			updateCmd.PersistentFlags().BoolVarP(&isPkg, "pkg", "p", false, "update package config "+skyenv.SkywirePath+"/"+skyenv.Configjson)
-			uhiddenflags = append(uhiddenflags, "pkg")
+		if _, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.ConfigJSON); err == nil {
+			updateCmd.PersistentFlags().BoolVarP(&isPkg, "pkg", "p", false, "update package config "+skyenv.SkywirePath+"/"+skyenv.ConfigJSON)
+			uHiddenFlags = append(uHiddenFlags, "pkg")
 		}
 	}
 	if !isRoot {
@@ -50,7 +51,7 @@ func init() {
 		}
 	}
 
-	for _, j := range uhiddenflags {
+	for _, j := range uHiddenFlags {
 		updateCmd.Flags().MarkHidden(j) //nolint
 	}
 
@@ -91,9 +92,9 @@ var updateCmd = &cobra.Command{
 	PreRun: func(_ *cobra.Command, _ []string) {
 		if isUpdateEndpoints && (serviceConfURL == "") {
 			if !isTestEnv {
-				serviceConfURL = svcconf
+				serviceConfURL = svcConf
 			} else {
-				serviceConfURL = testconf
+				serviceConfURL = testConf
 			}
 		}
 		setDefaults()
@@ -106,7 +107,7 @@ var updateCmd = &cobra.Command{
 		conf = initUpdate()
 		if isUpdateEndpoints {
 			if isTestEnv {
-				serviceConfURL = testconf
+				serviceConfURL = testConf
 			}
 			mLog := logging.NewMasterLogger()
 			mLog.SetLevel(logrus.InfoLevel)
@@ -241,8 +242,8 @@ func setDefaults() {
 		output = input
 	}
 	if isPkg {
-		output = skyenv.SkywirePath + "/" + skyenv.Configjson
-		input = skyenv.SkywirePath + "/" + skyenv.Configjson
+		output = skyenv.SkywirePath + "/" + skyenv.ConfigJSON
+		input = skyenv.SkywirePath + "/" + skyenv.ConfigJSON
 	}
 	if isUsr {
 		output = skyenv.HomePath() + "/" + skyenv.ConfigName

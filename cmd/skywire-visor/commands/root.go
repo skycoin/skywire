@@ -1,8 +1,10 @@
+// Package commands cmd/skywire-visor/commands/root.go
 package commands
 
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -21,6 +23,7 @@ import (
 	"github.com/bitfield/script"
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/pkg/profile"
+	coincipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
 	"github.com/toqueteos/webbrowser"
 
@@ -32,6 +35,7 @@ import (
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/syslog"
+	pathutil "github.com/skycoin/skywire/pkg/util/pathutil"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
@@ -49,6 +53,7 @@ var (
 	logger               = logging.MustGetLogger("skywire-visor")
 	tag                  string
 	syslogAddr           string
+	logLvl               string
 	pprofMode            string
 	pprofAddr            string
 	confPath             string
@@ -67,17 +72,19 @@ var (
 	all                  bool
 	pkg                  bool
 	usr                  bool
+	runAsSystray         bool
 	localIPs             []net.IP //  nolint:unused
 	// root indicates process is run with root permissions
 	root bool // nolint:unused
 	// visorBuildInfo holds information about the build
 	visorBuildInfo *buildinfo.Info
+	dmsgServer     string
 )
 
 func init() {
 	root = skyenv.IsRoot()
-
-	localIPs, err := netutil.DefaultNetworkInterfaceIPs()
+	var err error
+	localIPs, err = netutil.DefaultNetworkInterfaceIPs()
 	if err != nil {
 		logger.WithError(err).Warn("Could not determine network interface IP address")
 		if len(localIPs) == 0 {
@@ -86,17 +93,31 @@ func init() {
 	}
 
 	rootCmd.Flags().SortFlags = false
-
+	//the default is not set to fix the aesthetic of the help command
 	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use (default): "+skyenv.ConfigName)
 	if ((skyenv.OS == "linux") && !root) || ((skyenv.OS == "mac") && !root) || (skyenv.OS == "win") {
 		rootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
 	}
-	rootCmd.Flags().BoolVarP(&hypervisorUI, "hvui", "i", false, "run as hypervisor")
-	rootCmd.Flags().BoolVarP(&noHypervisorUI, "nohvui", "x", false, "disable hypervisor")
+	rootCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
+	hiddenflags = append(hiddenflags, "stdin")
+	if root {
+		if _, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.ConfigJSON); err == nil {
+			rootCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "use package config "+skyenv.SkywirePath+"/"+skyenv.ConfigJSON)
+			hiddenflags = append(hiddenflags, "pkg")
+		}
+	}
+	if !root {
+		if _, err := os.Stat(skyenv.HomePath() + "/" + skyenv.ConfigName); err == nil {
+			rootCmd.Flags().BoolVarP(&usr, "user", "u", false, "use config at: $HOME/"+skyenv.ConfigName)
+		}
+	}
+	rootCmd.Flags().BoolVar(&runAsSystray, "systray", false, "run as systray")
+	rootCmd.Flags().BoolVarP(&hypervisorUI, "hvui", "i", false, "run as hypervisor \u001b[0m*")
+	rootCmd.Flags().BoolVarP(&noHypervisorUI, "nohvui", "x", false, "disable hypervisor \u001b[0m*")
 	hiddenflags = append(hiddenflags, "nohvui")
-	rootCmd.Flags().StringVarP(&remoteHypervisorPKs, "hv", "j", "", "add remote hypervisor PKs at runtime")
+	rootCmd.Flags().StringVarP(&remoteHypervisorPKs, "hv", "j", "", "add remote hypervisor \u001b[0m*")
 	hiddenflags = append(hiddenflags, "hv")
-	rootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors set in config file")
+	rootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors \u001b[0m*")
 	hiddenflags = append(hiddenflags, "xhv")
 	if os.Getenv("SKYBIAN") == "true" {
 		rootCmd.Flags().StringVarP(&autoPeerIP, "hvip", "l", trimStringFromDot(localIPs[0].String())+".2:7998", "set hypervisor by ip")
@@ -108,20 +129,9 @@ func init() {
 		rootCmd.Flags().BoolVarP(&isAutoPeer, "autopeer", "m", isDefaultAutopeer, "enable autopeering")
 		hiddenflags = append(hiddenflags, "autopeer")
 	}
-	rootCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
-	hiddenflags = append(hiddenflags, "stdin")
-	if root {
-		if _, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.Configjson); err == nil {
-			rootCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "use package config "+skyenv.SkywirePath+"/"+skyenv.Configjson)
-			hiddenflags = append(hiddenflags, "pkg")
-		}
-	}
-	if !root {
-		if _, err := os.Stat(skyenv.HomePath() + "/" + skyenv.ConfigName); err == nil {
-			rootCmd.Flags().BoolVarP(&usr, "user", "u", false, "use config at: $HOME/"+skyenv.ConfigName)
-		}
-	}
-	rootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "q", "", "pprof mode: cpu, mem, mutex, block, trace, http")
+	rootCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "", "[ debug | warn | error | fatal | panic | trace ] \u001b[0m*")
+	hiddenflags = append(hiddenflags, "loglvl")
+	rootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "q", "", "[ cpu | mem | mutex | block | trace | http ]")
 	hiddenflags = append(hiddenflags, "pprofmode")
 	rootCmd.Flags().StringVarP(&pprofAddr, "pprofaddr", "r", "localhost:6060", "pprof http port")
 	hiddenflags = append(hiddenflags, "pprofaddr")
@@ -131,6 +141,8 @@ func init() {
 	hiddenflags = append(hiddenflags, "syslog")
 	rootCmd.Flags().StringVarP(&completion, "completion", "z", "", "[ bash | zsh | fish | powershell ]")
 	hiddenflags = append(hiddenflags, "completion")
+	rootCmd.Flags().StringVar(&dmsgServer, "dmsg-server", "", "selected dmsg server by user public key")
+	hiddenflags = append(hiddenflags, "dmsg-server")
 	rootCmd.Flags().BoolVar(&all, "all", false, "show all flags")
 
 	for _, j := range hiddenflags {
@@ -159,8 +171,10 @@ var rootCmd = &cobra.Command{
 				f := cmd.Flags().Lookup(j) //nolint
 				f.Hidden = false
 			}
-			cmd.Flags().MarkHidden("all") //nolint
-			cmd.Help()                    //nolint
+			cmd.Flags().MarkHidden("all")  //nolint
+			cmd.Flags().MarkHidden("help") //nolint
+			cmd.Help()                     //nolint
+			fmt.Println("                            * \u001b[94moverrides config file\u001b[0m")
 			os.Exit(0)
 		}
 		// -z --completion
@@ -203,7 +217,7 @@ var rootCmd = &cobra.Command{
 			}
 			//use package config
 			if pkg {
-				confPath = skyenv.SkywirePath + "/" + skyenv.Configjson
+				confPath = skyenv.SkywirePath + "/" + skyenv.ConfigJSON
 			}
 			if usr {
 				confPath = skyenv.HomePath() + "/" + skyenv.ConfigName
@@ -231,7 +245,11 @@ var rootCmd = &cobra.Command{
 		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
-		runApp()
+		if runAsSystray {
+			runAppSystray()
+		} else {
+			runApp()
+		}
 	},
 	Version: buildinfo.Version(),
 }
@@ -248,19 +266,54 @@ func runVisor(conf *visorconfig.V1) {
 	if conf == nil {
 		conf = initConfig(log, confPath)
 	}
-
-	survey := skyenv.SystemSurvey()
-	survey.PubKey = conf.PK
-	// Print results.
-	s, err := json.MarshalIndent(survey, "", "\t")
-	if err != nil {
-		log.WithError(err).Error("Could not marshal json.")
+	//check for valid reward address set as prerequisite for generating the system survey
+	rewardAddressBytes, err := os.ReadFile(skyenv.PackageConfig().LocalPath + "/" + skyenv.RewardFile) //nolint
+	if err == nil {
+		//remove any newline from rewardAddress string
+		rewardAddress := strings.TrimSuffix(string(rewardAddressBytes), "\n")
+		//validate the skycoin address
+		cAddr, err := coincipher.DecodeBase58Address(rewardAddress)
+		if err != nil {
+			log.WithError(err).Error("Invalid skycoin reward address.")
+		} else {
+			log.Info("Skycoin reward address: ", cAddr.String())
+			//generate the system survey
+			pathutil.EnsureDir(conf.LocalPath) //nolint
+			survey, err := skyenv.SystemSurvey()
+			if err != nil {
+				log.WithError(err).Error("Could not read system info.")
+			}
+			survey.PubKey = conf.PK
+			survey.SkycoinAddress = cAddr.String()
+			// Print results.
+			s, err := json.MarshalIndent(survey, "", "\t")
+			if err != nil {
+				log.WithError(err).Error("Could not marshal json.")
+			}
+			err = os.WriteFile(conf.LocalPath+"/"+skyenv.SurveyFile, s, 0644) //nolint
+			if err != nil {
+				log.WithError(err).Error("Failed to write system hardware survey to file.")
+			}
+			f, err := os.ReadFile(filepath.Clean(conf.LocalPath + "/" + skyenv.SurveyFile))
+			if err != nil {
+				log.WithError(err).Error("Failed to write system hardware survey to file.")
+			}
+			srvySha256Byte32 := sha256.Sum256([]byte(f))
+			err = os.WriteFile(conf.LocalPath+"/"+skyenv.SurveySha256, srvySha256Byte32[:], 0644) //nolint
+			if err != nil {
+				log.WithError(err).Error("Failed to write system hardware survey to file.")
+			}
+		}
+	} else {
+		err := os.Remove(skyenv.PackageConfig().LocalPath + "/" + skyenv.SurveyFile)
+		if err == nil {
+			log.Debug("removed hadware survey for visor not seeking rewards")
+		}
+		err = os.Remove(skyenv.PackageConfig().LocalPath + "/" + skyenv.SurveySha256)
+		if err == nil {
+			log.Debug("removed hadware survey checksum file")
+		}
 	}
-	err = os.WriteFile(conf.LocalPath+"/"+skyenv.SurveyFile, s, 0644) //nolint
-	if err != nil {
-		log.WithError(err).Error("Failed to write system hardware survey to file.")
-	}
-
 	if skyenv.OS == "linux" {
 		//warn about creating files & directories as root in non root-owned dir
 		if _, err := exec.LookPath("stat"); err == nil {
@@ -331,9 +384,19 @@ func runVisor(conf *visorconfig.V1) {
 			}
 		}
 	}
+	if logLvl != "" {
+		//validate & set log level
+		_, err := logging.LevelFromString(logLvl)
+		if err != nil {
+			log.WithError(err).Error("Invalid log level specified: ", logLvl)
+		} else {
+			conf.LogLevel = logLvl
+			log.Info("setting log level to: ", logLvl)
+		}
+	}
 
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
-	vis, ok := visor.NewVisor(ctx, conf, restartCtx, isAutoPeer, autoPeerIP)
+	vis, ok := visor.NewVisor(ctx, conf, restartCtx, isAutoPeer, autoPeerIP, dmsgServer)
 	if !ok {
 		select {
 		case <-ctx.Done():
@@ -341,11 +404,16 @@ func runVisor(conf *visorconfig.V1) {
 		default:
 			log.Errorln("Failed to start visor.")
 		}
-		quitSystray()
+		if runAsSystray {
+			quitSystray()
+		}
 		return
 	}
-
-	setStopFunction(log, cancel, vis.Close)
+	if runAsSystray {
+		setStopFunctionSystray(log, cancel, vis.Close)
+	} else {
+		setStopFunction(log, cancel, vis.Close)
+	}
 
 	vis.SetLogstore(store)
 

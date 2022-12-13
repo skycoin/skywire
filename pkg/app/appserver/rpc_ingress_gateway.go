@@ -1,3 +1,4 @@
+// Package appserver pkg/app/appserver/rpc_ingress_gateway.go
 package appserver
 
 import (
@@ -95,6 +96,13 @@ func (r *RPCIngressGateway) SetConnectionDuration(dur int64, _ *struct{}) (err e
 func (r *RPCIngressGateway) SetError(appErr *string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetError", appErr)(nil, &err)
 	r.proc.SetError(*appErr)
+	return nil
+}
+
+// SetAppPort sets the connection port of an app (vpn-client in this instance)
+func (r *RPCIngressGateway) SetAppPort(port routing.Port, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppPort", port)(nil, &err)
+	r.proc.SetAppPort(port)
 	return nil
 }
 

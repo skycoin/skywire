@@ -1,3 +1,4 @@
+// Package router pkg/router/rpc_gateway.go
 package router
 
 import (

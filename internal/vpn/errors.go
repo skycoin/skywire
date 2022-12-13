@@ -1,3 +1,4 @@
+// Package vpn internal/vpn/errors.go
 package vpn
 
 import (

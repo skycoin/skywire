@@ -1,10 +1,10 @@
+// Package visor pkg/visor/rpc_client.go
 package visor
 
 import (
 	"context"
 	"encoding/binary"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -122,23 +122,19 @@ func (rc *rpcClient) Uptime() (float64, error) {
 	return out, err
 }
 
-// SetPrivacy implements API.
-func (rc *rpcClient) SetPrivacy(p skyenv.Privacy) (string, error) {
-	err := rc.Call("SetPrivacy", &p, &struct{}{})
+// SetRewardAddress implements API.
+func (rc *rpcClient) SetRewardAddress(r string) (rConfig string, err error) {
+	err = rc.Call("SetRewardAddress", &r, &rConfig)
 	if err != nil {
 		return "", err
 	}
-	q, err := json.Marshal(p)
-	if err != nil {
-		return "", err
-	}
-	return string(q), err
+	return rConfig, err
 }
 
-// GetPrivacy implements API.
-func (rc *rpcClient) GetPrivacy() (p string, err error) {
-	err = rc.Call("GetPrivacy", &struct{}{}, &p)
-	return p, err
+// GetRewardAddress implements API.
+func (rc *rpcClient) GetRewardAddress() (rConfig string, err error) {
+	err = rc.Call("GetRewardAddress", &struct{}{}, &rConfig)
+	return rConfig, err
 }
 
 // Apps calls Apps.
@@ -467,6 +463,20 @@ func (rc *rpcClient) RemoteVisors() ([]string, error) {
 	return output, nil
 }
 
+// Ports calls Ports.
+func (rc *rpcClient) Ports() (map[string]PortDetail, error) {
+	output := map[string]PortDetail{}
+	rc.Call("Ports", &struct{}{}, &output) // nolint
+	return output, nil
+}
+
+// IsDMSGClientReady return availability of dsmg client
+func (rc *rpcClient) IsDMSGClientReady() (bool, error) {
+	var out bool
+	err := rc.Call("IsDMSGClientReady", &struct{}{}, &out)
+	return out, err
+}
+
 // MockRPCClient mocks API.
 type mockRPCClient struct {
 	startedAt time.Time
@@ -494,7 +504,7 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, AP
 			Local:  localPK,
 			Remote: remotePK,
 			Type:   types[r.Int()%len(types)],
-			Log:    new(transport.LogEntry),
+			Log:    transport.NewLogEntry(),
 		}
 		log.Infof("tp[%2d]: %v", i, tps[i])
 	}
@@ -650,14 +660,14 @@ func (mc *mockRPCClient) Uptime() (float64, error) {
 	return time.Since(mc.startedAt).Seconds(), nil
 }
 
-// SetPrivacy implements API
-func (mc *mockRPCClient) SetPrivacy(p skyenv.Privacy) (string, error) {
+// SetRewardAddress implements API
+func (mc *mockRPCClient) SetRewardAddress(p string) (string, error) {
 	return "", nil
 }
 
-// GetPrivacy implements API.
-func (mc *mockRPCClient) GetPrivacy() (p string, err error) {
-	return p, nil
+// GetRewardAddress implements API.
+func (mc *mockRPCClient) GetRewardAddress() (string, error) {
+	return "", nil
 }
 
 // Apps implements API.
@@ -930,7 +940,7 @@ func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ tim
 		Local:  mc.o.PubKey,
 		Remote: remote,
 		Type:   network.Type(tpType),
-		Log:    new(transport.LogEntry),
+		Log:    transport.NewLogEntry(),
 	}
 	return summary, mc.do(true, func() error {
 		mc.o.Transports = append(mc.o.Transports, summary)
@@ -1063,4 +1073,14 @@ func (mc *mockRPCClient) VPNServers(_, _ string) ([]servicedisc.Service, error) 
 // RemoteVisors implements API
 func (mc *mockRPCClient) RemoteVisors() ([]string, error) {
 	return []string{}, nil
+}
+
+// Ports implements API
+func (mc *mockRPCClient) Ports() (map[string]PortDetail, error) {
+	return map[string]PortDetail{}, nil
+}
+
+// IsDMSGClientReady implements API.
+func (mc *mockRPCClient) IsDMSGClientReady() (bool, error) {
+	return false, nil
 }

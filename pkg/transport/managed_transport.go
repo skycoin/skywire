@@ -1,3 +1,4 @@
+// Package transport pkg/transport/managed_transport.go
 package transport
 
 import (
@@ -57,6 +58,7 @@ type ManagedTransport struct {
 	rPK        cipher.PubKey
 	Entry      Entry
 	LogEntry   *LogEntry
+	logMx      sync.Mutex
 	logUpdates uint32
 
 	dc DiscoveryClient
@@ -80,6 +82,8 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 	if conf.mlog != nil {
 		log = conf.mlog.PackageLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6]))
 	}
+	entry := MakeEntry(aPK, bPK, conf.client.Type(), conf.TransportLabel)
+	logEntry := MakeLogEntry(conf.LS, entry.ID, log)
 
 	mt := &ManagedTransport{
 		log:         log,
@@ -87,8 +91,8 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 		dc:          conf.DC,
 		ls:          conf.LS,
 		client:      conf.client,
-		Entry:       MakeEntry(aPK, bPK, conf.client.Type(), conf.TransportLabel),
-		LogEntry:    new(LogEntry),
+		Entry:       entry,
+		LogEntry:    logEntry,
 		transportCh: make(chan struct{}, 1),
 		done:        make(chan struct{}),
 		timeout:     conf.InactiveTimeout,
@@ -423,11 +427,17 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 */
 
 func (mt *ManagedTransport) logSent(b uint64) {
+	mt.logMx.Lock()
+	defer mt.logMx.Unlock()
+
 	mt.LogEntry.AddSent(b)
 	atomic.AddUint32(&mt.logUpdates, 1)
 }
 
 func (mt *ManagedTransport) logRecv(b uint64) {
+	mt.logMx.Lock()
+	defer mt.logMx.Unlock()
+
 	mt.LogEntry.AddRecv(b)
 	atomic.AddUint32(&mt.logUpdates, 1)
 }
@@ -447,6 +457,10 @@ func (mt *ManagedTransport) recordLog() {
 	if !mt.logMod() {
 		return
 	}
+
+	mt.logMx.Lock()
+	defer mt.logMx.Unlock()
+
 	if err := mt.ls.Record(mt.Entry.ID, mt.LogEntry); err != nil {
 		mt.log.WithError(err).Warn("Failed to record log entry.")
 	}

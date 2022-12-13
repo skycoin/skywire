@@ -1,3 +1,4 @@
+// Package visorconfig pkg/visor/visorconfig/config.go
 package visorconfig
 
 import (
@@ -68,6 +69,11 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		Discovery:         services.TransportDiscovery, //utilenv.TpDiscAddr,
 		AddressResolver:   services.AddressResolver,    //utilenv.AddressResolverAddr,
 		PublicAutoconnect: skyenv.PublicAutoconnect,
+		LogStore: &LogStore{
+			Type:             FileLogStore,
+			Location:         skyenv.LocalPath + "/" + skyenv.TpLogStore,
+			RotationInterval: DefaultLogRotationInterval,
+		},
 	}
 	conf.Routing = &Routing{
 		RouteFinder:        services.RouteFinder, //utilenv.RouteFinderAddr,
@@ -75,10 +81,11 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		RouteFinderTimeout: DefaultTimeout,
 	}
 	conf.Launcher = &Launcher{
-		ServiceDisc: services.ServiceDiscovery, //utilenv.ServiceDiscAddr,
-		Apps:        nil,
-		ServerAddr:  skyenv.AppSrvAddr,
-		BinPath:     skyenv.AppBinPath,
+		ServiceDisc:   services.ServiceDiscovery, //utilenv.ServiceDiscAddr,
+		Apps:          nil,
+		ServerAddr:    skyenv.AppSrvAddr,
+		BinPath:       skyenv.AppBinPath,
+		DisplayNodeIP: false,
 	}
 	conf.UptimeTracker = &UptimeTracker{
 		Addr: services.UptimeTracker, //utilenv.UptimeTrackerAddr,
@@ -86,10 +93,10 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	conf.CLIAddr = skyenv.RPCAddr
 	conf.LogLevel = skyenv.LogLevel
 	conf.LocalPath = skyenv.LocalPath
+	conf.CustomDmsgHTTPPath = skyenv.LocalPath + "/" + skyenv.Custom
 	conf.StunServers = services.StunServers //utilenv.GetStunServers()
 	conf.ShutdownTimeout = DefaultTimeout
 	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
-	conf.LogRotationInterval = DefaultTimeout
 
 	conf.Dmsgpty = &Dmsgpty{
 		DmsgPort: skyenv.DmsgPtyPort,
@@ -196,7 +203,9 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 	if pkgEnv {
 		pkgConfig := skyenv.PackageConfig()
 		conf.LocalPath = pkgConfig.LocalPath
+		conf.CustomDmsgHTTPPath = pkgConfig.LocalPath + "/" + skyenv.Custom
 		conf.Launcher.BinPath = pkgConfig.Launcher.BinPath
+		conf.Transport.LogStore.Location = pkgConfig.LocalPath + "/" + skyenv.TpLogStore
 		if conf.Hypervisor != nil {
 			conf.Hypervisor.EnableAuth = pkgConfig.Hypervisor.EnableAuth
 			conf.Hypervisor.DBPath = pkgConfig.Hypervisor.DbPath
@@ -205,7 +214,9 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 	if usrEnv {
 		usrConfig := skyenv.UserConfig()
 		conf.LocalPath = usrConfig.LocalPath
+		conf.CustomDmsgHTTPPath = usrConfig.LocalPath + "/" + skyenv.Custom
 		conf.Launcher.BinPath = usrConfig.Launcher.BinPath
+		conf.Transport.LogStore.Location = usrConfig.LocalPath + "/" + skyenv.TpLogStore
 		if conf.Hypervisor != nil {
 			conf.Hypervisor.EnableAuth = usrConfig.Hypervisor.EnableAuth
 			conf.Hypervisor.DBPath = usrConfig.Hypervisor.DbPath

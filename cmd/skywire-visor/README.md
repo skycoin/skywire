@@ -29,6 +29,7 @@ _Note: flags for autopeering are only available with the environmental variable 
 ```
 $ skywire-visor --help
 
+
 	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
 	└─┐├┴┐└┬┘││││├┬┘├┤
 	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘
@@ -39,12 +40,15 @@ Usage:
 Flags:
   -c, --config string   config file to use (default): skywire-config.json
   -b, --browser         open hypervisor ui in default web browser
-  -i, --hvui            run as hypervisor
+      --systray         run as systray
+  -i, --hvui            run as hypervisor *
       --all             show all flags
   -h, --help            help for skywire-visor
   -v, --version         version for skywire-visor
 
+
   $ skywire-visor --all
+
 
   	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
   	└─┐├┴┐└┬┘││││├┬┘├┤
@@ -56,19 +60,20 @@ Flags:
   Flags:
     -c, --config string       config file to use (default): skywire-config.json
     -b, --browser             open hypervisor ui in default web browser
-    -i, --hvui                run as hypervisor
-    -j, --hv string           add remote hypervisor PKs at runtime
-    -k, --xhv                 disable remote hypervisors set in config file
-    -l, --hvip string         set hypervisor by ip (default "192.168.2.2:7998")
-    -m, --autopeer            enable autopeering
     -n, --stdin               read config from stdin
-    -q, --pprofmode string    pprof mode: cpu, mem, mutex, block, trace, http
+        --systray             run as systray
+    -i, --hvui                run as hypervisor *
+    -x, --nohvui              disable hypervisor *
+    -j, --hv string           add remote hypervisor *
+    -k, --xhv                 disable remote hypervisors *
+    -s, --loglvl string       [ debug | warn | error | fatal | panic | trace ] *
+    -q, --pprofmode string    [ cpu | mem | mutex | block | trace | http ]
     -r, --pprofaddr string    pprof http port (default "localhost:6060")
     -t, --tag string          logging tag (default "skywire")
     -y, --syslog string       syslog server address. E.g. localhost:514
     -z, --completion string   [ bash | zsh | fish | powershell ]
-    -h, --help                help for skywire-visor
     -v, --version             version for skywire-visor
+                              * overrides config file
 ```
 
 ### Skywire visor flags

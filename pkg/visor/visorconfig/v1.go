@@ -1,3 +1,4 @@
+// Package visorconfig pkg/visor/visorconfig/v1.go
 package visorconfig
 
 import (
@@ -32,10 +33,10 @@ type V1 struct {
 
 	LogLevel             string                           `json:"log_level"`
 	LocalPath            string                           `json:"local_path"`
+	CustomDmsgHTTPPath   string                           `json:"custom_dmsg_http_path"`
 	StunServers          []string                         `json:"stun_servers"`
 	ShutdownTimeout      Duration                         `json:"shutdown_timeout,omitempty"`    // time value, examples: 10s, 1m, etc
 	RestartCheckDelay    Duration                         `json:"restart_check_delay,omitempty"` // time value, examples: 10s, 1m, etc
-	LogRotationInterval  Duration                         `json:"log_rotation_interval"`         // time value, examples: 10s, 1m, etc
 	IsPublic             bool                             `json:"is_public"`
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 
@@ -55,13 +56,15 @@ type Transport struct {
 	AddressResolver   string          `json:"address_resolver"`
 	PublicAutoconnect bool            `json:"public_autoconnect"`
 	TransportSetup    []cipher.PubKey `json:"transport_setup_nodes"`
+	LogStore          *LogStore       `json:"log_store"`
 }
 
 // LogStore configures a LogStore.
 type LogStore struct {
 	// Type defines the log store type. Valid values: file, memory.
-	Type     string `json:"type"`
-	Location string `json:"location"`
+	Type             string   `json:"type"`
+	Location         string   `json:"location"`
+	RotationInterval Duration `json:"rotation_interval"` // time value, examples: 10s, 1m, 1h etc
 }
 
 // Routing configures routing.
@@ -79,10 +82,11 @@ type UptimeTracker struct {
 
 // Launcher configures the app appserver.
 type Launcher struct {
-	ServiceDisc string                `json:"service_discovery"`
-	Apps        []appserver.AppConfig `json:"apps"`
-	ServerAddr  string                `json:"server_addr"`
-	BinPath     string                `json:"bin_path"`
+	ServiceDisc   string                `json:"service_discovery"`
+	Apps          []appserver.AppConfig `json:"apps"`
+	ServerAddr    string                `json:"server_addr"`
+	BinPath       string                `json:"bin_path"`
+	DisplayNodeIP bool                  `json:"display_node_ip"`
 }
 
 // Flush flushes the config to file (if specified).
@@ -115,9 +119,10 @@ func (v1 *V1) UpdateAppAutostart(launch *launcher.Launcher, appName string, auto
 	}
 
 	launch.ResetConfig(launcher.Config{
-		VisorPK:    v1.PK,
-		Apps:       conf.Apps,
-		ServerAddr: conf.ServerAddr,
+		VisorPK:       v1.PK,
+		Apps:          conf.Apps,
+		ServerAddr:    conf.ServerAddr,
+		DisplayNodeIP: conf.DisplayNodeIP,
 	})
 	return v1.flush(v1)
 }
@@ -145,9 +150,10 @@ func (v1 *V1) UpdateAppArg(launch *launcher.Launcher, appName, argName string, v
 	}
 
 	launch.ResetConfig(launcher.Config{
-		VisorPK:    v1.PK,
-		Apps:       conf.Apps,
-		ServerAddr: conf.ServerAddr,
+		VisorPK:       v1.PK,
+		Apps:          conf.Apps,
+		ServerAddr:    conf.ServerAddr,
+		DisplayNodeIP: conf.DisplayNodeIP,
 	})
 
 	return v1.flush(v1)
@@ -181,7 +187,7 @@ func (v1 *V1) GetPersistentTransports() ([]transport.PersistentTransports, error
 // UpdateLogRotationInterval updates log_rotation_interval in config
 func (v1 *V1) UpdateLogRotationInterval(d Duration) error {
 	v1.mu.Lock()
-	v1.LogRotationInterval = d
+	v1.Transport.LogStore.RotationInterval = d
 	v1.mu.Unlock()
 
 	return v1.flush(v1)
@@ -191,7 +197,7 @@ func (v1 *V1) UpdateLogRotationInterval(d Duration) error {
 func (v1 *V1) GetLogRotationInterval() (Duration, error) {
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
-	return v1.LogRotationInterval, nil
+	return v1.Transport.LogStore.RotationInterval, nil
 }
 
 // UpdatePublicAutoconnect updates public_autoconnect in config

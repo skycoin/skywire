@@ -1,3 +1,4 @@
+// Package vpn internal/vpn/client_config.go
 package vpn
 
 import "github.com/skycoin/skywire-utilities/pkg/cipher"

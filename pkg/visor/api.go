@@ -1,3 +1,4 @@
+// Package visor pkg/visor/api.go
 package visor
 
 import (
@@ -8,11 +9,11 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"time"
 
-	"github.com/bitfield/script"
 	"github.com/ccding/go-stun/stun"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
@@ -38,8 +39,8 @@ type API interface {
 
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
-	SetPrivacy(skyenv.Privacy) (string, error)
-	GetPrivacy() (string, error)
+	SetRewardAddress(string) (string, error)
+	GetRewardAddress() (string, error)
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
@@ -62,6 +63,7 @@ type API interface {
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
 	VPNServers(version, country string) ([]servicedisc.Service, error)
 	RemoteVisors() ([]string, error)
+	Ports() (map[string]PortDetail, error)
 
 	TransportTypes() ([]string, error)
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
@@ -91,6 +93,8 @@ type API interface {
 	SetPersistentTransports([]transport.PersistentTransports) error
 	GetLogRotationInterval() (visorconfig.Duration, error)
 	SetLogRotationInterval(visorconfig.Duration) error
+
+	IsDMSGClientReady() (bool, error)
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -310,33 +314,24 @@ func (v *Visor) Uptime() (float64, error) {
 	return time.Since(v.startedAt).Seconds(), nil
 }
 
-// SetPrivacy implements API.
-func (v *Visor) SetPrivacy(p skyenv.Privacy) (string, error) {
-	/*
-		skywire-cli config priv set <address> [flags]
-		Flags:
-		-a, --address string   reward address (default "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6")
-		-o, --out string       output config: /opt/skywire/local/privacy.json
-		-i, --publicip         display node ip
-	*/
-	clicmd := `skywire-cli config priv set `
-	//Set flags for node privacy and reward address based on input
-	if p.DisplayNodeIP {
-		clicmd = clicmd + ` -i `
+// SetRewardAddress implements API.
+func (v *Visor) SetRewardAddress(p string) (string, error) {
+	path := v.conf.LocalPath + "/" + skyenv.RewardFile
+	err := os.WriteFile(path, []byte(p), 0644) //nolint
+	if err != nil {
+		return p, fmt.Errorf("Failed to write config to file. err=%v", err)
 	}
-	if p.RewardAddress != "" {
-		clicmd = clicmd + ` -a ` + p.RewardAddress
-	}
-	//use the currently configured local_path this visor is using
-	clicmd = clicmd + ` -o ` + strings.Join([]string{v.conf.LocalPath, skyenv.PrivFile}, "/")
-
-	return script.Exec(clicmd).String()
+	return p, nil
 }
 
-// GetPrivacy implements API.
-func (v *Visor) GetPrivacy() (p string, err error) {
-	clicmd := `skywire-cli config priv get -o ` + strings.Join([]string{v.conf.LocalPath, skyenv.PrivFile}, "/") + ` --json`
-	return script.Exec(clicmd).String()
+// GetRewardAddress implements API.
+func (v *Visor) GetRewardAddress() (string, error) {
+	path := v.conf.LocalPath + "/" + skyenv.RewardFile
+	rConfig, err := os.ReadFile(filepath.Clean(path))
+	if err != nil {
+		return "", fmt.Errorf("Failed to read config file. err=%v", err)
+	}
+	return string(rConfig), nil
 }
 
 // Apps implements API.
@@ -697,11 +692,12 @@ func (v *Visor) VPNServers(version, country string) ([]servicedisc.Service, erro
 	vLog.SetLevel(logrus.InfoLevel)
 
 	sdClient := servicedisc.NewClient(log, vLog, servicedisc.Config{
-		Type:     servicedisc.ServiceTypeVPN,
-		PK:       v.conf.PK,
-		SK:       v.conf.SK,
-		DiscAddr: v.conf.Launcher.ServiceDisc,
-	}, &http.Client{Timeout: time.Duration(1) * time.Second}, "")
+		Type:          servicedisc.ServiceTypeVPN,
+		PK:            v.conf.PK,
+		SK:            v.conf.SK,
+		DiscAddr:      v.conf.Launcher.ServiceDisc,
+		DisplayNodeIP: v.conf.Launcher.DisplayNodeIP,
+	}, &http.Client{Timeout: time.Duration(20) * time.Second}, "")
 	vpnServers, err := sdClient.Services(context.Background(), 0, version, country)
 	if err != nil {
 		v.log.Error("Error getting public vpn servers: ", err)
@@ -717,6 +713,67 @@ func (v *Visor) RemoteVisors() ([]string, error) {
 		visors = append(visors, conn.Addr.PK.String())
 	}
 	return visors, nil
+}
+
+// PortDetail type of port details
+type PortDetail struct {
+	Port string
+	Type string
+}
+
+// Ports return list of all ports used by visor services and apps
+func (v *Visor) Ports() (map[string]PortDetail, error) {
+	ctx := context.Background()
+	var ports = make(map[string]PortDetail)
+
+	if v.conf.Hypervisor != nil {
+		ports["hypervisor"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.Hypervisor.HTTPAddr, ":")[1]), Type: "TCP"}
+	}
+
+	ports["dmsg_pty"] = PortDetail{Port: fmt.Sprint(v.conf.Dmsgpty.DmsgPort), Type: "DMSG"}
+	ports["cli_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.CLIAddr, ":")[1]), Type: "TCP"}
+	ports["proc_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.Launcher.ServerAddr, ":")[1]), Type: "TCP"}
+	ports["stcp_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.STCP.ListeningAddress, ":")[1]), Type: "TCP"}
+
+	if v.arClient != nil {
+		sudphPort := v.arClient.Addresses(ctx)
+		if sudphPort != "" {
+			ports["sudph"] = PortDetail{Port: sudphPort, Type: "UDP"}
+		}
+	}
+	if v.stunClient != nil {
+		if v.stunClient.PublicIP != nil {
+			ports["public_visor"] = PortDetail{Port: fmt.Sprint(v.stunClient.PublicIP.Port()), Type: "TCP"}
+		}
+	}
+	if v.dmsgC != nil {
+		dmsgSessions := v.dmsgC.AllSessions()
+		for i, session := range dmsgSessions {
+			ports[fmt.Sprintf("dmsg_session_%d", i)] = PortDetail{Port: strings.Split(session.LocalTCPAddr().String(), ":")[1], Type: "TCP"}
+		}
+
+		dmsgStreams := v.dmsgC.AllStreams()
+		for i, stream := range dmsgStreams {
+			ports[fmt.Sprintf("dmsg_stream_%d", i)] = PortDetail{Port: strings.Split(stream.LocalAddr().String(), ":")[1], Type: "DMSG"}
+		}
+	}
+	if v.procM != nil {
+		apps, _ := v.Apps() //nolint
+		for _, app := range apps {
+			port, err := v.procM.GetAppPort(app.Name)
+			if err == nil {
+				ports[app.Name] = PortDetail{Port: fmt.Sprint(port), Type: "SKYNET"}
+
+				switch app.Name {
+				case "skysocks_client":
+					ports["skysocks_client_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(skyenv.SkysocksClientAddr, ":")[1]), Type: "TCP"}
+				case "skychat":
+					ports["skychat_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(skyenv.SkychatAddr, ":")[1]), Type: "TCP"}
+				}
+			}
+		}
+	}
+	return ports, nil
 }
 
 // TransportTypes implements API.
@@ -951,4 +1008,15 @@ func (v *Visor) GetVPNClientAddress() string {
 		}
 	}
 	return ""
+}
+
+// IsDMSGClientReady return availability of dsmg client
+func (v *Visor) IsDMSGClientReady() (bool, error) {
+	if v.isDTMReady() {
+		dmsgTracker, _ := v.dtm.Get(v.conf.PK) //nolint
+		if dmsgTracker.ServerPK.Hex()[:5] != "00000" {
+			return true, nil
+		}
+	}
+	return false, errors.New("dmsg client is not ready")
 }

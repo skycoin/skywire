@@ -1,3 +1,4 @@
+// Package routerclient pkg/router/routerclient/client_test.go
 package routerclient
 
 import (

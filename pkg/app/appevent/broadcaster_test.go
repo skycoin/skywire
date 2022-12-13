@@ -1,3 +1,4 @@
+// Package appevent pkg/app/appevent/broadcaster_test.go
 package appevent
 
 import (

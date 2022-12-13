@@ -1,10 +1,13 @@
+// Package clivpn cmd/skywire-cli/commands/vpn/vvpn.go
 package clivpn
 
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/toqueteos/webbrowser"
@@ -12,12 +15,15 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 func init() {
+	RootCmd.PersistentFlags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
 	RootCmd.AddCommand(
 		vpnListCmd,
 		vpnUICmd,
@@ -53,14 +59,17 @@ var vpnUICmd = &cobra.Command{
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to read in config: %v", err))
 			}
-			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", conf.PK.Hex())
+			url = fmt.Sprintf("http://127.0.0.1%s/#/vpn/%s/", clivisor.HypervisorPort(cmd.Flags()), conf.PK.Hex())
 		} else {
-			client := clirpc.Client(cmd.Flags())
-			overview, err := client.Overview()
+			rpcClient, err := clirpc.Client(cmd.Flags())
+			if err != nil {
+				os.Exit(1)
+			}
+			overview, err := rpcClient.Overview()
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect; is skywire running?: %v", err))
 			}
-			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", overview.PubKey.Hex())
+			url = fmt.Sprintf("http://127.0.0.1%s/#/vpn/%s/", clivisor.HypervisorPort(cmd.Flags()), overview.PubKey.Hex())
 		}
 		if err := webbrowser.Open(url); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to open VPN UI in browser:: %v", err))
@@ -81,14 +90,17 @@ var vpnURLCmd = &cobra.Command{
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to read in config: %v", err))
 			}
-			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", conf.PK.Hex())
+			url = fmt.Sprintf("http://127.0.0.1%s/#/vpn/%s/", clivisor.HypervisorPort(cmd.Flags()), conf.PK.Hex())
 		} else {
-			client := clirpc.Client(cmd.Flags())
-			overview, err := client.Overview()
+			rpcClient, err := clirpc.Client(cmd.Flags())
 			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect; is skywire running?: %v", err))
+				os.Exit(1)
 			}
-			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", overview.PubKey.Hex())
+			overview, err := rpcClient.Overview()
+			if err != nil {
+				internal.PrintFatalRPCError(cmd.Flags(), err)
+			}
+			url = fmt.Sprintf("http://127.0.0.1%s/#/vpn/%s/", clivisor.HypervisorPort(cmd.Flags()), overview.PubKey.Hex())
 		}
 
 		output := struct {
@@ -105,14 +117,17 @@ var vpnListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List public VPN servers",
 	Run: func(cmd *cobra.Command, _ []string) {
-		client := clirpc.Client(cmd.Flags())
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalRPCError(cmd.Flags(), err)
+		}
 		if isUnFiltered {
 			ver = ""
 			country = ""
 		}
-		servers, err := client.VPNServers(ver, country)
+		servers, err := rpcClient.VPNServers(ver, country)
 		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), err)
+			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
 		if len(servers) == 0 {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("No VPN Servers found"))
@@ -143,8 +158,47 @@ var vpnStartCmd = &cobra.Command{
 
 		var pk cipher.PubKey
 		internal.Catch(cmd.Flags(), pk.Set(args[0]))
-		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).StartVPNClient(pk))
-		internal.PrintOutput(cmd.Flags(), "OK", fmt.Sprintln("OK"))
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		internal.Catch(cmd.Flags(), rpcClient.StartVPNClient(pk))
+		internal.PrintOutput(cmd.Flags(), nil, "Starting.")
+		startProcess := true
+		for startProcess {
+			time.Sleep(time.Second * 1)
+			internal.PrintOutput(cmd.Flags(), nil, ".")
+			states, err := rpcClient.Apps()
+			internal.Catch(cmd.Flags(), err)
+
+			type output struct {
+				CurrentIP string `json:"current_ip,omitempty"`
+				AppError  string `json:"app_error,omitempty"`
+			}
+
+			for _, state := range states {
+				if state.Name == "vpn-client" {
+					if state.Status == appserver.AppStatusRunning {
+						startProcess = false
+						internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintln("\nRunning!"))
+						ip, err := visor.GetIP()
+						out := output{
+							CurrentIP: ip,
+						}
+						if err == nil {
+							internal.PrintOutput(cmd.Flags(), out, fmt.Sprintf("Your current IP: %s\n", ip))
+						}
+					}
+					if state.Status == appserver.AppStatusErrored {
+						startProcess = false
+						out := output{
+							AppError: state.DetailedStatus,
+						}
+						internal.PrintOutput(cmd.Flags(), out, fmt.Sprintln("\nError! > "+state.DetailedStatus))
+					}
+				}
+			}
+		}
 	},
 }
 
@@ -152,7 +206,11 @@ var vpnStopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "stop the vpn",
 	Run: func(cmd *cobra.Command, _ []string) {
-		internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).StopVPNClient("vpn-client"))
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		internal.Catch(cmd.Flags(), rpcClient.StopVPNClient("vpn-client"))
 		internal.PrintOutput(cmd.Flags(), "OK", fmt.Sprintln("OK"))
 	},
 }
@@ -161,7 +219,11 @@ var vpnStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "vpn status",
 	Run: func(cmd *cobra.Command, _ []string) {
-		states, err := clirpc.Client(cmd.Flags()).Apps()
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		states, err := rpcClient.Apps()
 		internal.Catch(cmd.Flags(), err)
 
 		var b bytes.Buffer

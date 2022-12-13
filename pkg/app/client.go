@@ -1,3 +1,4 @@
+// Package app pkg/app/client.go
 package app
 
 import (
@@ -76,6 +77,11 @@ func (c *Client) SetConnectionDuration(dur int64) error {
 // SetError sets app error within the visor.
 func (c *Client) SetError(appErr string) error {
 	return c.rpcC.SetError(appErr)
+}
+
+// SetAppPort sets app port within the visor.
+func (c *Client) SetAppPort(appPort routing.Port) error {
+	return c.rpcC.SetAppPort(appPort)
 }
 
 // Dial dials the remote visor using `remote`.

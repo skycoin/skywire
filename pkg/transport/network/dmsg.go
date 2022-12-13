@@ -1,3 +1,4 @@
+// Package network pkg/transport/network/dmsg.go
 package network
 
 import (

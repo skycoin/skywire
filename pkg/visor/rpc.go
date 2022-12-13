@@ -1,3 +1,4 @@
+// Package visor pkg/visor/rpc.go
 package visor
 
 import (
@@ -13,7 +14,6 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
@@ -92,22 +92,20 @@ func (r *RPC) Uptime(_ *struct{}, out *float64) (err error) {
 }
 
 /*
-	<<< SKYCOIN REWARD ADDRESS AND PRIVACY SETTING >>>
+	<<< SKYCOIN REWARD ADDRESS SETTING >>>
 */
 
-// SetPrivacy sets the reward address and privacy setting in privacy.json
-func (r *RPC) SetPrivacy(p skyenv.Privacy, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "SetPrivacy", p)(nil, &err)
-	_, err = r.visor.SetPrivacy(p)
+// SetRewardAddress sets the reward address and privacy setting in reward.txt
+func (r *RPC) SetRewardAddress(p string, out string) (err error) {
+	defer rpcutil.LogCall(r.log, "SetRewardAddress", p)(out, &err)
+	_, err = r.visor.SetRewardAddress(p)
 	return err
 }
 
-// GetPrivacy reads the reward address and privacy setting from privacy.json
-func (r *RPC) GetPrivacy(_ *struct{}, p *string) (err error) {
-	defer rpcutil.LogCall(r.log, "GetPrivacy", nil)(p, &err)
-	var q string
-	q, err = r.visor.GetPrivacy()
-	*p = q
+// GetRewardAddress reads the reward address from reward.txt
+func (r *RPC) GetRewardAddress(_ *struct{}, out string) (err error) {
+	defer rpcutil.LogCall(r.log, "GetRewardAddress", nil)(out, &err)
+	_, err = r.visor.GetRewardAddress()
 	return err
 }
 
@@ -117,7 +115,7 @@ func (r *RPC) GetPrivacy(_ *struct{}, p *string) (err error) {
 
 // AppLogsRequest represents a LogSince method request
 type AppLogsRequest struct {
-	// TimeStamp should be time.RFC3339Nano formated
+	// TimeStamp should be time.RFC3339Nano formatted
 	TimeStamp time.Time `json:"time_stamp"`
 	// AppName should match the app name in visor config
 	AppName string `json:"app_name"`
@@ -214,6 +212,16 @@ func (r *RPC) SetAppError(in *SetAppErrorIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppError", in)(nil, &err)
 
 	return r.visor.SetAppError(in.AppName, in.Err)
+}
+
+// App returns App registered on the Visor.
+func (r *RPC) App(appName *string, reply *appserver.AppState) (err error) {
+	defer rpcutil.LogCall(r.log, "App", nil)(reply, &err)
+
+	app, err := r.visor.App(*appName)
+	*reply = *app
+
+	return err
 }
 
 // Apps returns list of Apps registered on the Visor.
@@ -606,5 +614,24 @@ func (r *RPC) RemoteVisors(_ *struct{}, out *[]string) (err error) {
 	if remoteVisors != nil {
 		*out = remoteVisors
 	}
+	return err
+}
+
+// Ports return list of all ports used by visor services and apps
+func (r *RPC) Ports(_ *struct{}, out *map[string]PortDetail) (err error) {
+	defer rpcutil.LogCall(r.log, "Ports", nil)(out, &err)
+	ports, err := r.visor.Ports()
+	if ports != nil {
+		*out = ports
+	}
+	return err
+}
+
+// IsDMSGClientReady return status of dmsg client
+func (r *RPC) IsDMSGClientReady(_ *struct{}, out *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "IsDMSGClientReady", nil)(out, &err)
+
+	status, err := r.visor.IsDMSGClientReady()
+	*out = status
 	return err
 }
