@@ -498,12 +498,13 @@ func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 		log.Info("SUDPH transport wont be available under dmsghttp")
 		return nil
 	}
-
-	switch v.stunClient.NATType {
-	case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
-		log.Warnf("SUDPH transport wont be available as visor is under %v", v.stunClient.NATType.String())
-	default:
-		v.tpM.InitClient(ctx, network.SUDPH)
+	if v.stunClient != nil {
+		switch v.stunClient.NATType {
+		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
+			log.Warnf("SUDPH transport wont be available as visor is under %v", v.stunClient.NATType.String())
+		default:
+			v.tpM.InitClient(ctx, network.SUDPH)
+		}
 	}
 	return nil
 }
