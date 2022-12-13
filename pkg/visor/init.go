@@ -1200,14 +1200,15 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 		WithField("tls", conf.EnableTLS).
 		Info("Serving hypervisor...")
 
+	handler := hv.HTTPHandler()
+	srv := &http.Server{ //nolint gosec
+		Addr:         conf.HTTPAddr,
+		Handler:      handler,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+
 	go func() {
-		handler := hv.HTTPHandler()
-		srv := &http.Server{ //nolint gosec
-			Addr:         conf.HTTPAddr,
-			Handler:      handler,
-			ReadTimeout:  5 * time.Second,
-			WriteTimeout: 10 * time.Second,
-		}
 		if conf.EnableTLS {
 			err = srv.ListenAndServeTLS(conf.TLSCertFile, conf.TLSKeyFile)
 		} else {
@@ -1215,13 +1216,13 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 		}
 
 		if err != nil {
-			v.log.WithError(err).Fatal("Hypervisor exited with error.")
+			v.log.WithError(err).Error("Hypervisor exited with error.")
 		}
-
 		cancel()
 	}()
 
 	v.pushCloseStack("hypervisor", func() error {
+		srv.Shutdown(ctx) //nolint
 		cancel()
 		return err
 	})
