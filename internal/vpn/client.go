@@ -53,6 +53,8 @@ type Client struct {
 	tunCreated bool
 
 	connectedDuration int64
+
+	defaultSystemDNS string //nolint
 }
 
 // NewClient creates VPN client instance.
@@ -323,6 +325,8 @@ func (c *Client) closeTUN() error {
 	}
 
 	c.tunCreated = false
+
+	c.RevertDNS()
 
 	return c.tun.Close()
 }

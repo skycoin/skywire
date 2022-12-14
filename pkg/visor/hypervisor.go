@@ -602,6 +602,7 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 			Status     *int           `json:"status,omitempty"`
 			Passcode   *string        `json:"passcode,omitempty"`
 			NetIfc     *string        `json:"netifc,omitempty"`
+			DNSAddr    *string        `json:"dns,omitempty"`
 			PK         *cipher.PubKey `json:"pk,omitempty"`
 		}
 
@@ -661,6 +662,13 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 
 		if reqBody.NetIfc != nil {
 			if err := ctx.API.SetAppNetworkInterface(ctx.App.Name, *reqBody.NetIfc); err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		if reqBody.DNSAddr != nil {
+			if err := ctx.API.SetAppDNS(ctx.App.Name, *reqBody.DNSAddr); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
 			}

@@ -85,6 +85,7 @@ export class VpnClientAppData {
     * Time the VPN has been connected, as returned by the backend. Undefined if the vpn is not connected.
     */
    connectionDuration: number;
+   dns: string;
 }
 
 /**
@@ -683,7 +684,7 @@ export class VpnClientService {
       // Get the min hops value.
       vpnClientData.minHops = nodeInfo.min_hops ? nodeInfo.min_hops : 0;
 
-      // Get the data transmission data, is the app is running.
+      // Get the data transmission data, if the app is running.
       if (vpnClientData && vpnClientData.running) {
         const o = new RequestOptions();
         o.vpnKeyForAuth = this.nodeKey;
@@ -785,6 +786,10 @@ export class VpnClientService {
 
         if (appData.args[i].toLowerCase().includes('-killswitch')) {
           vpnClientData.killswitch = (appData.args[i] as string).toLowerCase().includes('true');
+        }
+
+        if (appData.args[i].toLowerCase().includes('-dns')) {
+          vpnClientData.dns = appData.args[i + 1];
         }
       }
     }
