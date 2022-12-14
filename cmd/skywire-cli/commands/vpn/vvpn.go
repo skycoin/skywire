@@ -15,6 +15,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/visor"
@@ -58,7 +59,7 @@ var vpnUICmd = &cobra.Command{
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to read in config: %v", err))
 			}
-			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", conf.PK.Hex())
+			url = fmt.Sprintf("http://127.0.0.1%s/#/vpn/%s/", clivisor.HypervisorPort(cmd.Flags()), conf.PK.Hex())
 		} else {
 			rpcClient, err := clirpc.Client(cmd.Flags())
 			if err != nil {
@@ -68,7 +69,7 @@ var vpnUICmd = &cobra.Command{
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect; is skywire running?: %v", err))
 			}
-			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", overview.PubKey.Hex())
+			url = fmt.Sprintf("http://127.0.0.1%s/#/vpn/%s/", clivisor.HypervisorPort(cmd.Flags()), overview.PubKey.Hex())
 		}
 		if err := webbrowser.Open(url); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to open VPN UI in browser:: %v", err))
@@ -89,7 +90,7 @@ var vpnURLCmd = &cobra.Command{
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to read in config: %v", err))
 			}
-			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", conf.PK.Hex())
+			url = fmt.Sprintf("http://127.0.0.1%s/#/vpn/%s/", clivisor.HypervisorPort(cmd.Flags()), conf.PK.Hex())
 		} else {
 			rpcClient, err := clirpc.Client(cmd.Flags())
 			if err != nil {
@@ -97,9 +98,9 @@ var vpnURLCmd = &cobra.Command{
 			}
 			overview, err := rpcClient.Overview()
 			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect; is skywire running?: %v", err))
+				internal.PrintFatalRPCError(cmd.Flags(), err)
 			}
-			url = fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s/", overview.PubKey.Hex())
+			url = fmt.Sprintf("http://127.0.0.1%s/#/vpn/%s/", clivisor.HypervisorPort(cmd.Flags()), overview.PubKey.Hex())
 		}
 
 		output := struct {
@@ -118,7 +119,7 @@ var vpnListCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
 		if isUnFiltered {
 			ver = ""
@@ -126,7 +127,7 @@ var vpnListCmd = &cobra.Command{
 		}
 		servers, err := rpcClient.VPNServers(ver, country)
 		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), err)
+			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
 		if len(servers) == 0 {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("No VPN Servers found"))
