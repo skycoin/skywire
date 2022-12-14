@@ -96,6 +96,7 @@ import { VpnErrorComponent } from './components/vpn/pages/vpn-error/vpn-error.co
 import { VpnServerNameComponent } from './components/vpn/layout/vpn-server-name/vpn-server-name.component';
 import { EnterVpnServerPasswordComponent } from './components/vpn/pages/vpn-server-list/enter-vpn-server-password/enter-vpn-server-password.component';
 import { UpdateAllComponent } from './components/layout/update-all/update-all.component';
+import { VpnDnsConfigComponent } from './components/vpn/layout/vpn-dns-config/vpn-dns-config.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
   disabled: true,
@@ -168,6 +169,7 @@ const globalRippleConfig: RippleGlobalOptions = {
     VpnServerNameComponent,
     EnterVpnServerPasswordComponent,
     UpdateAllComponent,
+    VpnDnsConfigComponent,
   ],
   imports: [
     BrowserModule,

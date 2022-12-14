@@ -95,6 +95,18 @@
             {{ backendData.vpnClientAppData.minHops }}
           </td>
         </tr>
+        <!-- Dns. -->
+        <tr class="selectable" (click)="changeDns()">
+          <td class="data-column">
+            <div>
+              {{ 'vpn.settings-page.dns' | translate }}
+              <mat-icon [inline]="true" class="help-icon" [matTooltip]="'vpn.settings-page.dns-info' | translate">help</mat-icon>
+            </div>
+          </td>
+          <td class="data-column">
+            {{ backendData.vpnClientAppData.dns ? backendData.vpnClientAppData.dns : ('vpn.settings-page.setting-none' | translate) }}
+          </td>
+        </tr>
       </table>
     </div></div>
   </div></div>
