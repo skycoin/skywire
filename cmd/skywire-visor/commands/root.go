@@ -62,14 +62,6 @@ var (
 func init() {
 	root = skyenv.IsRoot()
 
-	localIPs, err := netutil.DefaultNetworkInterfaceIPs()
-	if err != nil {
-		logger.WithError(err).Warn("Could not determine network interface IP address")
-		if len(localIPs) == 0 {
-			localIPs = append(localIPs, net.ParseIP("192.168.0.1"))
-		}
-	}
-
 	rootCmd.Flags().SortFlags = false
 	//the default is not set to fix the aesthetic of the help command
 	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use (default): "+skyenv.ConfigName)
@@ -78,6 +70,7 @@ func init() {
 	}
 	rootCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
 	hiddenflags = append(hiddenflags, "stdin")
+	//only show flags for configs which exist
 	if root {
 		if _, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.ConfigJSON); err == nil {
 			rootCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "use package config "+skyenv.SkywirePath+"/"+skyenv.ConfigJSON)
@@ -98,14 +91,7 @@ func init() {
 	rootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors \u001b[0m*")
 	hiddenflags = append(hiddenflags, "xhv")
 	if os.Getenv("SKYBIAN") == "true" {
-		rootCmd.Flags().StringVarP(&skyenv.AutoPeerIP, "hvip", "l", trimStringFromDot(localIPs[0].String())+".2:7998", "set hypervisor by ip")
-		hiddenflags = append(hiddenflags, "hvip")
-		isDefaultAutopeer := false
-		if os.Getenv("AUTOPEER") == "1" {
-			isDefaultAutopeer = true
-		}
-		rootCmd.Flags().BoolVarP(&skyenv.IsAutoPeer, "autopeer", "m", isDefaultAutopeer, "enable autopeering")
-		hiddenflags = append(hiddenflags, "autopeer")
+		initAutoPeerFlags()
 	}
 	rootCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "", "[ debug | warn | error | fatal | panic | trace ] \u001b[0m*")
 	hiddenflags = append(hiddenflags, "loglvl")
@@ -113,8 +99,8 @@ func init() {
 	hiddenflags = append(hiddenflags, "pprofmode")
 	rootCmd.Flags().StringVarP(&pprofAddr, "pprofaddr", "r", "localhost:6060", "pprof http port")
 	hiddenflags = append(hiddenflags, "pprofaddr")
-	rootCmd.Flags().StringVarP(&skyenv.LogTag, "skyenv.LogTag", "t", "skywire", "logging skyenv.LogTag")
-	hiddenflags = append(hiddenflags, "skyenv.LogTag")
+	rootCmd.Flags().StringVarP(&skyenv.LogTag, "logtag", "t", "skywire", "logging tag")
+	hiddenflags = append(hiddenflags, "logtag")
 	rootCmd.Flags().StringVarP(&skyenv.SyslogAddr, "syslog", "y", "", "syslog server address. E.g. localhost:514")
 	hiddenflags = append(hiddenflags, "syslog")
 	rootCmd.Flags().StringVarP(&completion, "completion", "z", "", "[ bash | zsh | fish | powershell ]")
@@ -125,7 +111,23 @@ func init() {
 		rootCmd.Flags().MarkHidden(j) //nolint
 	}
 }
-
+func initAutoPeerFlags() {
+	localIPs, err := netutil.DefaultNetworkInterfaceIPs()
+	if err != nil {
+		logger.WithError(err).Warn("Could not determine network interface IP address")
+		if len(localIPs) == 0 {
+			localIPs = append(localIPs, net.ParseIP("192.168.0.1"))
+		}
+	}
+	rootCmd.Flags().StringVarP(&skyenv.AutoPeerIP, "hvip", "l", trimStringFromDot(localIPs[0].String())+".2:7998", "set hypervisor by ip")
+	hiddenflags = append(hiddenflags, "hvip")
+	isDefaultAutopeer := false
+	if os.Getenv("AUTOPEER") == "1" {
+		isDefaultAutopeer = true
+	}
+	rootCmd.Flags().BoolVarP(&skyenv.IsAutoPeer, "autopeer", "m", isDefaultAutopeer, "enable autopeering")
+	hiddenflags = append(hiddenflags, "autopeer")
+}
 func trimStringFromDot(s string) string {
 	if idx := strings.LastIndex(s, "."); idx != -1 {
 		return s[:idx]
@@ -154,33 +156,7 @@ var rootCmd = &cobra.Command{
 			os.Exit(0)
 		}
 		// -z --completion
-		switch completion {
-		case "bash":
-			err := cmd.Root().GenBashCompletion(os.Stdout)
-			if err != nil {
-				panic(err)
-			}
-		case "zsh":
-			err := cmd.Root().GenZshCompletion(os.Stdout)
-			if err != nil {
-				panic(err)
-			}
-		case "fish":
-			err := cmd.Root().GenFishCompletion(os.Stdout, true)
-			if err != nil {
-				panic(err)
-			}
-		case "powershell":
-			err := cmd.Root().GenPowerShellCompletion(os.Stdout)
-			if err != nil {
-				panic(err)
-			}
-		}
-		//error on unrecognized
-		if (completion != "bash") && (completion != "zsh") && (completion != "fish") && (completion != "") {
-			fmt.Println("Invalid completion specified:", completion)
-			os.Exit(1)
-		}
+		genCompletion(cmd)
 		//log for initial checks
 		mLog := initLogger()
 		log := mLog.PackageLogger("pre-run")
@@ -459,4 +435,35 @@ func logBuildInfo(mLog *logging.MasterLogger) {
 	if visorBuildInfo.Version != "unknown" {
 		log.WithField(" version", visorBuildInfo.Version).WithField("built on", visorBuildInfo.Date).WithField("commit", visorBuildInfo.Commit).Info()
 	}
+}
+
+func genCompletion(cmd *cobra.Command) {
+	switch completion {
+	case "bash":
+		err := cmd.Root().GenBashCompletion(os.Stdout)
+		if err != nil {
+			panic(err)
+		}
+	case "zsh":
+		err := cmd.Root().GenZshCompletion(os.Stdout)
+		if err != nil {
+			panic(err)
+		}
+	case "fish":
+		err := cmd.Root().GenFishCompletion(os.Stdout, true)
+		if err != nil {
+			panic(err)
+		}
+	case "powershell":
+		err := cmd.Root().GenPowerShellCompletion(os.Stdout)
+		if err != nil {
+			panic(err)
+		}
+	}
+	//error on unrecognized
+	if (completion != "bash") && (completion != "zsh") && (completion != "fish") && (completion != "") {
+		fmt.Println("Invalid completion specified:", completion)
+		os.Exit(1)
+	}
+
 }
