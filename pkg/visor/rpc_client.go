@@ -28,7 +28,6 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/cipherutil"
-	"github.com/skycoin/skywire/pkg/visor/privacyconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -123,19 +122,19 @@ func (rc *rpcClient) Uptime() (float64, error) {
 	return out, err
 }
 
-// SetPrivacy implements API.
-func (rc *rpcClient) SetPrivacy(p *privacyconfig.Privacy) (pConfig *privacyconfig.Privacy, err error) {
-	err = rc.Call("SetPrivacy", &p, &pConfig)
+// SetRewardAddress implements API.
+func (rc *rpcClient) SetRewardAddress(r string) (rConfig string, err error) {
+	err = rc.Call("SetRewardAddress", &r, &rConfig)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return pConfig, err
+	return rConfig, err
 }
 
-// GetPrivacy implements API.
-func (rc *rpcClient) GetPrivacy() (pConfig *privacyconfig.Privacy, err error) {
-	err = rc.Call("GetPrivacy", &struct{}{}, &pConfig)
-	return pConfig, err
+// GetRewardAddress implements API.
+func (rc *rpcClient) GetRewardAddress() (rConfig string, err error) {
+	err = rc.Call("GetRewardAddress", &struct{}{}, &rConfig)
+	return rConfig, err
 }
 
 // Apps calls Apps.
@@ -238,6 +237,14 @@ func (rc *rpcClient) SetAppSecure(appName string, isSecure bool) error {
 	return rc.Call("SetAppSecure", &SetAppBoolIn{
 		AppName: appName,
 		Val:     isSecure,
+	}, &struct{}{})
+}
+
+// SetAppDNS implements API.
+func (rc *rpcClient) SetAppDNS(appName string, dnsAddr string) error {
+	return rc.Call("SetAppDNS", &SetAppStringIn{
+		AppName: appName,
+		Val:     dnsAddr,
 	}, &struct{}{})
 }
 
@@ -456,6 +463,13 @@ func (rc *rpcClient) RemoteVisors() ([]string, error) {
 	return output, nil
 }
 
+// Ports calls Ports.
+func (rc *rpcClient) Ports() (map[string]PortDetail, error) {
+	output := map[string]PortDetail{}
+	rc.Call("Ports", &struct{}{}, &output) // nolint
+	return output, nil
+}
+
 // IsDMSGClientReady return availability of dsmg client
 func (rc *rpcClient) IsDMSGClientReady() (bool, error) {
 	var out bool
@@ -646,14 +660,14 @@ func (mc *mockRPCClient) Uptime() (float64, error) {
 	return time.Since(mc.startedAt).Seconds(), nil
 }
 
-// SetPrivacy implements API
-func (mc *mockRPCClient) SetPrivacy(p *privacyconfig.Privacy) (*privacyconfig.Privacy, error) {
-	return nil, nil
+// SetRewardAddress implements API
+func (mc *mockRPCClient) SetRewardAddress(p string) (string, error) {
+	return "", nil
 }
 
-// GetPrivacy implements API.
-func (mc *mockRPCClient) GetPrivacy() (*privacyconfig.Privacy, error) {
-	return nil, nil
+// GetRewardAddress implements API.
+func (mc *mockRPCClient) GetRewardAddress() (string, error) {
+	return "", nil
 }
 
 // Apps implements API.
@@ -814,6 +828,21 @@ func (mc *mockRPCClient) SetAppKillswitch(appName string, killswitch bool) error
 func (mc *mockRPCClient) SetAppSecure(appName string, isSecure bool) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks"
+
+		for i := range mc.o.Apps {
+			if mc.o.Apps[i].Name == socksName {
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", socksName)
+	})
+}
+
+// SetAppDNS implements API.
+func (mc *mockRPCClient) SetAppDNS(string, string) error {
+	return mc.do(true, func() error {
+		const socksName = "vpn-client"
 
 		for i := range mc.o.Apps {
 			if mc.o.Apps[i].Name == socksName {
@@ -1044,6 +1073,11 @@ func (mc *mockRPCClient) VPNServers(_, _ string) ([]servicedisc.Service, error) 
 // RemoteVisors implements API
 func (mc *mockRPCClient) RemoteVisors() ([]string, error) {
 	return []string{}, nil
+}
+
+// Ports implements API
+func (mc *mockRPCClient) Ports() (map[string]PortDetail, error) {
+	return map[string]PortDetail{}, nil
 }
 
 // IsDMSGClientReady implements API.

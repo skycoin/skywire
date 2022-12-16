@@ -3,6 +3,7 @@ package clivisor
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -19,7 +20,11 @@ var shutdownCmd = &cobra.Command{
 	Short: "Stop a running visor",
 	Long:  "\n  Stop a running visor",
 	Run: func(cmd *cobra.Command, args []string) {
-		clirpc.Client(cmd.Flags()).Shutdown() //nolint
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		rpcClient.Shutdown() //nolint
 		fmt.Println("Visor was shut down")
 		internal.PrintOutput(cmd.Flags(), "Visor was shut down", fmt.Sprintln("Visor was shut down"))
 	},

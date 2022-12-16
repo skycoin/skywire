@@ -23,8 +23,32 @@ func (c *Client) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 		return err
 	}
 	defer c.releaseSysPrivileges()
+	if c.cfg.DNSAddr != "" {
+		c.SetupDNS()
+	}
+	fmt.Println(c.defaultSystemDNS)
 	return osutil.Run("ifconfig", ifcName, ip, gateway, "mtu", strconv.Itoa(mtu), "netmask", netmask, "up")
+}
 
+// SetupDNS trying to set DNS server
+func (c *Client) SetupDNS() {
+	defaultDNSByte, _ := osutil.RunWithResult("networksetup", "-getdnsservers", "Wi-Fi") //nolint
+	c.defaultSystemDNS = string(defaultDNSByte)
+
+	err := osutil.Run("networksetup", "-setdnsservers", "Wi-Fi", c.cfg.DNSAddr)
+	if err != nil {
+		fmt.Printf("Failed to setup DNS. Continue with machine default DNS setting: %s\n", err)
+	} else {
+		fmt.Printf("DNS setup successful: %s\n", c.cfg.DNSAddr)
+	}
+}
+
+// RevertDNS trying to revert DNS values same as before starting vpn-client if it changed
+func (c *Client) RevertDNS() {
+	if c.cfg.DNSAddr != "" {
+		osutil.Run("networksetup", "-setdnsservers", "Wi-Fi", c.defaultSystemDNS) //nolint
+		fmt.Printf("System DNS value revert back to %s\n", c.defaultSystemDNS)
+	}
 }
 
 // ChangeRoute changes current route to `ipCIDR` to go through the `gateway`
