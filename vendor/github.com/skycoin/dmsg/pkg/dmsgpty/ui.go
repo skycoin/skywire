@@ -12,9 +12,10 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"nhooyr.io/websocket"
+
 	"github.com/skycoin/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"nhooyr.io/websocket"
 )
 
 const (

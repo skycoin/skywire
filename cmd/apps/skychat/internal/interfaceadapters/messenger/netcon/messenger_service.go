@@ -16,16 +16,18 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/info"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/message"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/user"
+	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/util"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 )
 
 // MessengerService provides a netcon implementation of the Service
 type MessengerService struct {
-	ctx      context.Context
-	ns       notification.Service
-	cliRepo  client.Repository
-	usrRepo  user.Repository
-	chatRepo chat.Repository
+	ctx       context.Context
+	ns        notification.Service
+	cliRepo   client.Repository
+	usrRepo   user.Repository
+	visorRepo chat.Repository
+	errs      chan error
 }
 
 // NewMessengerService constructor for MessengerService
@@ -39,39 +41,42 @@ func NewMessengerService(ns notification.Service, cR client.Repository, uR user.
 	ms.ns = ns
 	ms.cliRepo = cR
 	ms.usrRepo = uR
-	ms.chatRepo = chR
+	ms.visorRepo = chR
+
+	ms.errs = make(chan error, 1)
 
 	return &ms
 }
 
-// Handle handles the chat connection and incoming messanges
-func (ms MessengerService) Handle(pk cipher.PubKey) error {
-	var err error
+// Handle handles the visor connection and incoming messages
+func (ms MessengerService) Handle(pk cipher.PubKey) {
+	errs := ms.errs
 
-	c, err := ms.chatRepo.GetByPK(pk)
+	pCli, err := ms.cliRepo.GetClient()
 	if err != nil {
-		ch := chat.NewUndefinedChat(pk)
-		ms.chatRepo.Add(ch) //nolint:errcheck
-		c = &ch
-		fmt.Printf("New skychat added: %s\n", pk)
+		errs <- err
+		return
 	}
 
-	conn := c.GetConnection()
-	if conn == nil {
-		fmt.Printf("Error, no connection\n")
-		conn, err = ms.Dial(pk)
-		if err != nil {
-			return err
-		}
-	}
+	conn := pCli.GetConns()[pk]
+
+	localPK := pCli.GetAppClient().Config().VisorPK
 
 	for {
+		//read packets
 		buf := make([]byte, 32*1024)
 		n, err := conn.Read(buf)
 		if err != nil {
 			fmt.Println("Failed to read packet:", err)
-			c.DeleteConnection()
-			return err
+			//close and delete connection
+			//TODO: close connection
+			err2 := pCli.DeleteConn(conn.RemoteAddr().(appnet.Addr).PubKey)
+			if err2 != nil {
+				errs <- err2
+				return
+			}
+			errs <- err
+			return
 		}
 
 		//unmarshal the received bytes to a message.Message
@@ -80,149 +85,62 @@ func (ms MessengerService) Handle(pk cipher.PubKey) error {
 		err = json.Unmarshal(buf[:n], &m)
 		if err != nil {
 			fmt.Printf("Failed to unmarshal json message: %v", err)
-		}
-
-		//TODO: first message has to be a request message, if not block and delete
-		//--> if we don't handle this it would be possible to send something else than request message via another
-		// app and bypass the blacklist
-
-		//TODO: think about how to handle this
-		//If the received message has status MsgSTatusInitial it was just send and we have to send it back to let the
-		//peer know that we received it.
-		//if m.GetStatus() == message.MsgStatusInitial {
-		//	m.SetStatus(message.MsgStatusReceived)
-		//	ms.sendMessage(pk, m)
-		//}
-		//notify that a new message has been received
-		//save message to chatrepo
-		//TODO: make NewReceivedTextMessage
-		//! Can also be a message of the remote that the own send message has been received
-
-		//get the current chat so when updating nothing gets overwritten
-		c, _ := ms.chatRepo.GetByPK(pk)
-
-		switch m.GetMessageType() {
-		case message.ConnMsgType:
-			c.AddMessage(m)
-			ms.chatRepo.Update(*c)
-			err := ms.handleConnMsgType(m)
-			if err != nil {
-				fmt.Println(err)
-			}
-		case message.InfoMsgType:
-			jm := message.JSONMessage{}
-			err = json.Unmarshal(buf[:n], &jm)
-			if err != nil {
-				fmt.Printf("Failed to unmarshal json message: %v", err)
-			}
-			m = message.NewMessage(jm)
-			c.AddMessage(m)
-			ms.chatRepo.Update(*c)
-
-			err = ms.handleInfoMsgType(c, m)
-			if err != nil {
-				fmt.Println(err)
-			}
-		case message.TxtMsgType:
-			jm := message.JSONMessage{}
-			err = json.Unmarshal(buf[:n], &jm)
-			if err != nil {
-				fmt.Printf("Failed to unmarshal json message: %v", err)
-			}
-			m = message.NewMessage(jm)
-			c.AddMessage(m)
-			ms.chatRepo.Update(*c)
-			err := ms.handleTextMsgType(c, m)
-			if err != nil {
-				fmt.Println(err)
-			}
-		case message.CmdMsgType:
-			//not allowed, only for servers/groups
-		default:
-			fmt.Printf("Incorrect data received")
-		}
-	}
-}
-
-// handleConnMsgType handles an incoming connection message and either accepts it and sends back the own info as message
-// or if the public key is in the blacklist rejects the chat request.
-func (ms MessengerService) handleConnMsgType(m message.Message) error {
-	usr, err := ms.usrRepo.GetUser()
-	if err != nil {
-		fmt.Printf("Error getting user from repository: %s", err)
-		return err
-	}
-
-	switch m.MsgSubtype {
-	case message.ConnMsgTypeRequest:
-		//check if sender is in blacklist, if not so send info message back, else reject chat
-		if !usr.GetSettings().InBlacklist(m.Sender) {
-			//notify about the new chat initiated by the user
-			an := notification.NewChatNotification(m.Sender)
-			ms.ns.Notify(an)
-
-			msg := message.NewChatAcceptMessage(usr.GetInfo().GetPK())
-			ms.sendMessage(m.Sender, msg)
-
-			ms.SendInfoMessage(m.Sender, *usr.GetInfo())
-
-			//n := notification.NewMsgNotification(m.Sender, m)
-			//ms.ns.Notify(n)
 		} else {
-			msg := message.NewChatRejectMessage(usr.GetInfo().GetPK())
-			ms.sendMessage(m.Sender, msg)
-			ms.chatRepo.Delete(m.Sender)
+			//unmarshal the received bytes to a message.JSONMessage{}
+			buf := make([]byte, 32*1024)
+			n, err := conn.Read(buf)
+			if err != nil {
+				fmt.Println("Failed to read packet:", err)
+				continue
+			}
+			jm := message.JSONMessage{}
+			err = json.Unmarshal(buf[:n], &jm)
+			if err != nil {
+				fmt.Printf("Failed to unmarshal json jsonMessage: %v", err)
+				continue
+			}
+			m = message.NewMessage(jm)
 
-			//TODO: notify about a rejected chat request cause of blacklist
-			return fmt.Errorf("pk in blacklist")
+			//handle messages in dependency of destination
+			if m.GetDestinationVisor() == localPK {
+				if m.GetDestinationServer() == localPK {
+					err = ms.handleP2PMessage(m)
+				} else {
+					err = ms.handleLocalServerMessage(m)
+				}
+				if err != nil {
+					fmt.Println(err)
+					continue
+				}
+			} else {
+				err = ms.handleRemoteServerMessage(m)
+				if err != nil {
+					fmt.Println(err)
+					continue
+				}
+
+			}
 		}
-	case message.ConnMsgTypeAccept:
-		ms.SendInfoMessage(m.Sender, *usr.GetInfo())
-
-	case message.ConnMsgTypeReject:
-		//ms.chatRepo.Delete(m.Sender)
-
-		n := notification.NewMsgNotification(m.Sender, m)
-		ms.ns.Notify(n)
-		return fmt.Errorf("peer rejected chat")
 
 	}
-
-	return nil
 }
 
-//TODO: document what function does
-func (ms MessengerService) handleInfoMsgType(c *chat.Chat, m message.Message) error {
-	//save info in chat info
-	//unmarshal the received message bytes to info.Info
-	i := info.Info{}
-	err := json.Unmarshal(m.Message, &i)
-	if err != nil {
-		fmt.Printf("Failed to unmarshal json message: %v", err)
-	}
-	c.Info = i
-	ms.chatRepo.Update(*c)
-
-	//notify about new info message
-	n := notification.NewMsgNotification(c.GetPK(), m)
-	ms.ns.Notify(n)
-
-	return nil
-}
-
-//TODO: document what function does
-func (ms MessengerService) handleTextMsgType(c *chat.Chat, m message.Message) error {
-
-	n := notification.NewMsgNotification(c.GetPK(), message.NewTextMessage(m.Sender, m.Message))
-	ms.ns.Notify(n)
-
-	return nil
-}
+//TODO: think about how to handle this
+//If the received message has status MsgSTatusInitial it was just send and we have to send it back to let the
+//peer know that we received it.
+//if m.GetStatus() == message.MsgStatusInitial {
+//	m.SetStatus(message.MsgStatusReceived)
+//	ms.sendMessage(pk, m)
+//}
+//notify that a new message has been received
+//save message to chatrepo
+//TODO: make NewReceivedTextMessage
+//! Can also be a message of the remote that the own send message has been received
 
 // Dial dials the remote chat
 func (ms MessengerService) Dial(pk cipher.PubKey) (net.Conn, error) {
 
-	c, err := ms.chatRepo.GetByPK(pk)
+	c, err := ms.visorRepo.GetByPK(pk)
 	if err != nil {
 		//Should not happen as before dial chats get added to repo
 		return nil, err
@@ -235,11 +153,12 @@ func (ms MessengerService) Dial(pk cipher.PubKey) (net.Conn, error) {
 	}
 
 	conn := c.GetConnection()
-	if conn != nil {
+	/*if conn != nil {
 		//TODO: maybe delete old connection and reconnect?
 		//TODO: or skip dialing if connection alive
 		//pCli.GetAppClient().Close()
-	}
+
+	}*/
 
 	addr := appnet.Addr{
 		Net:    pCli.GetNetType(),
@@ -258,7 +177,10 @@ func (ms MessengerService) Dial(pk cipher.PubKey) (net.Conn, error) {
 		//TODO: notify that dialing is happening?
 		conn, err = pCli.GetAppClient().Dial(addr)
 		//could not find a valid connection to a chat, so delete it.
-		ms.chatRepo.Delete(c.PK)
+		err2 := ms.visorRepo.Delete(c.PK)
+		if err2 != nil {
+			return err2
+		}
 		return err
 	})
 
@@ -267,28 +189,36 @@ func (ms MessengerService) Dial(pk cipher.PubKey) (net.Conn, error) {
 	}
 
 	c.SetConnection(conn)
-	ms.chatRepo.Update(*c)
+	err = ms.visorRepo.Set(*c)
+	if err != nil {
+		return nil, err
+	}
 	return conn, nil
 }
 
-// sendMessage sends a message to the given chat
-func (ms MessengerService) sendMessage(pk cipher.PubKey, m message.Message) error {
-	c, err := ms.chatRepo.GetByPK(pk)
+// sendMessage sends a message to the given route
+func (ms MessengerService) sendMessage(dest util.PKRoute, m message.Message) error {
+	v, err := ms.visorRepo.GetByPK(dest.Visor)
 	if err != nil {
-		ch := chat.NewUndefinedChat(pk)
-		ms.chatRepo.Add(ch)
-		c = &ch
-		fmt.Printf("New skychat added: %s\n", pk)
+		ch := chat.NewUndefinedVisor(dest.Visor)
+		err2 := ms.visorRepo.Add(ch)
+		if err2 != nil {
+			return err2
+		}
+		v = &ch
+		fmt.Printf("New skychat added: %s\n", dest.Visor)
 	}
+
+	m.Dest = dest
 
 	bytes, err := json.Marshal(m)
 	if err != nil {
 		fmt.Printf("Failed to marshal json: %v", err)
 	}
 
-	conn := c.GetConnection()
+	conn := v.GetConnection()
 	if conn == nil {
-		conn, err = ms.Dial(pk)
+		conn, err = ms.Dial(dest.Visor)
 		if err != nil {
 			return err
 		}
@@ -299,15 +229,56 @@ func (ms MessengerService) sendMessage(pk cipher.PubKey, m message.Message) erro
 		return err
 	}
 
-	c, _ = ms.chatRepo.GetByPK(pk)
-	c.AddMessage(m)
-	ms.chatRepo.Update(*c)
+	v, err = ms.visorRepo.GetByPK(dest.Visor)
+	if err != nil {
+		return err
+	}
+	v.AddMessage(m)
+	err = ms.visorRepo.Set(*v)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
 
-// SendChatRequestMessage sends a chat request message to request a chat
-func (ms MessengerService) SendChatRequestMessage(pk cipher.PubKey) error {
+// sendMessageNirvana sends a message to the given route without saving it somewhere
+func (ms MessengerService) sendMessageNirvana(route util.PKRoute, m message.Message) error {
+
+	pCli, err := ms.cliRepo.GetClient()
+	if err != nil {
+		return err
+	}
+
+	m.Dest = route
+
+	bytes, err := json.Marshal(m)
+	if err != nil {
+		fmt.Printf("Failed to marshal json: %v", err)
+	}
+
+	conn := pCli.GetConns()[route.Visor]
+	if conn == nil {
+		conn, err = ms.Dial(route.Visor)
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err = conn.Write(bytes)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// SendRouteRequestMessage sends a request message to join the specified route
+// if route.Visor == route.Server -> P2P request
+// if route.Visor + (route.Server == nil) -> P2P request
+// if route.Visor + route.Server -> ServerJoinRequest
+// if route.Visor + route.Server + route.Room -> RoomRequest
+func (ms MessengerService) SendRouteRequestMessage(route util.PKRoute) error {
 
 	usr, err := ms.usrRepo.GetUser()
 	if err != nil {
@@ -315,27 +286,34 @@ func (ms MessengerService) SendChatRequestMessage(pk cipher.PubKey) error {
 		return err
 	}
 
-	m := message.NewChatRequestMessage(usr.GetInfo().GetPK())
+	m := message.NewRouteRequestMessage(usr.GetInfo().GetPK(), route)
 
-	err = ms.sendMessage(pk, m)
+	err = ms.sendMessage(route, m)
 	if err != nil {
 		return err
 	}
 
 	//TODO: think about putting this notification in add_chat use case
-	//notify about the added chat
-	an := notification.NewAddChatNotification(pk)
-	ms.ns.Notify(an)
+	//notify about the added route
+	an := notification.NewAddRouteNotification(route)
+	err = ms.ns.Notify(an)
+	if err != nil {
+		return err
+	}
 
 	//notify about sent chat request message
-	n := notification.NewMsgNotification(pk, m)
-	ms.ns.Notify(n)
+	n := notification.NewMsgNotification(route, m)
+	err = ms.ns.Notify(n)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
 
-// SendTextMessage sends a text message to the given chat
-func (ms MessengerService) SendTextMessage(pk cipher.PubKey, msg []byte) error {
+// SendTextMessage sends a text message to the given route
+//[]: root and destination!!
+func (ms MessengerService) SendTextMessage(route util.PKRoute, msg []byte) error {
 	fmt.Println("MessengerService - SendTextMessage")
 
 	usr, err := ms.usrRepo.GetUser()
@@ -344,50 +322,96 @@ func (ms MessengerService) SendTextMessage(pk cipher.PubKey, msg []byte) error {
 		return err
 	}
 
-	m := message.NewTextMessage(usr.GetInfo().GetPK(), msg)
+	m := message.NewTextMessage(usr.GetInfo().GetPK(), route, msg)
 
-	err = ms.sendMessage(pk, m)
+	if m.Dest.Visor == usr.GetInfo().GetPK() {
+		err = ms.sendMessageToLocalRoute(m)
+		if err != nil {
+			return err
+		}
+	} else {
+		err = ms.sendMessageToRemoteRoute(m)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// sendMessageToRemoteRoute sends the given message to a remote route
+func (ms MessengerService) sendMessageToRemoteRoute(msg message.Message) error {
+	err := ms.sendMessage(msg.Dest, msg)
 	if err != nil {
 		return err
 	}
 
 	//notify about sent text message
-	n := notification.NewMsgNotification(pk, m)
-	ms.ns.Notify(n)
+	n := notification.NewMsgNotification(msg.Dest, msg)
+	err = ms.ns.Notify(n)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
 
-// SendInfoMessage sends a info message to the given chat
-func (ms MessengerService) SendInfoMessage(pk cipher.PubKey, info info.Info) error {
-	fmt.Println("MessengerService - SendInfoMessage")
+// sendMessageToLocalRoute handles the message as a message received from a server
+func (ms MessengerService) sendMessageToLocalRoute(msg message.Message) error {
+	err := ms.handleLocalServerMessage(msg)
+	if err != nil {
+		return err
+	}
+	//notification is handled inside handleServerMessage
 
+	return nil
+}
+
+// SendInfoMessage sends an info message to the given chat and notifies about sent message
+func (ms MessengerService) SendInfoMessage(root util.PKRoute, dest util.PKRoute, info info.Info) error {
 	bytes, err := json.Marshal(info)
 	if err != nil {
 		fmt.Printf("Failed to marshal json: %v", err)
 	}
 
-	usr, err := ms.usrRepo.GetUser()
-	if err != nil {
-		fmt.Printf("Error getting user from repository: %s", err)
-		return err
-	}
+	m := message.NewChatInfoMessage(root, dest, bytes)
 
-	m := message.NewChatInfoMessage(usr.GetInfo().GetPK(), bytes)
-
-	err = ms.sendMessage(pk, m)
+	err = ms.sendMessage(dest, m)
 	if err != nil {
 		return err
 	}
 
 	//notify about sent info message
-	n := notification.NewMsgNotification(pk, m)
-	ms.ns.Notify(n)
+	n := notification.NewMsgNotification(dest, m)
+	err = ms.ns.Notify(n)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
 
-// Listen is used to listen for new incoming chats and pass them to the connection_handle routine
+// SendChatAcceptMessage sends an accept-message from the root to the destination
+func (ms MessengerService) SendChatAcceptMessage(root util.PKRoute, dest util.PKRoute) error {
+	m := message.NewChatAcceptMessage(root, dest)
+	err := ms.sendMessage(dest, m)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// SendChatRejectMessage sends an reject-message from the root to the destination
+func (ms MessengerService) SendChatRejectMessage(root util.PKRoute, dest util.PKRoute) error {
+	m := message.NewChatRejectMessage(root, dest)
+	err := ms.sendMessageNirvana(dest, m)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Listen is used to listen for new incoming connections and pass them to the connection_handle routine
 func (ms MessengerService) Listen() {
 	pCli, err := ms.cliRepo.GetClient()
 	if err != nil {
@@ -412,17 +436,21 @@ func (ms MessengerService) Listen() {
 
 		fmt.Printf("Accepted skychat conn on %s from %s\n", conn.LocalAddr(), raddr.PubKey)
 
-		//check if the remote addr already is a saved chat
-		c, err := ms.chatRepo.GetByPK(raddr.PubKey)
+		//add connection to active connections of client
+		err = pCli.AddConn(raddr.PubKey, conn)
 		if err != nil {
-			ch := chat.NewUndefinedChat(raddr.PubKey)
-			ms.chatRepo.Add(ch)
-			c = &ch
-			fmt.Printf("New skychat added: %s\n", raddr.PubKey)
+			fmt.Println(err)
 		}
-		c.SetConnection(conn)
-		ms.chatRepo.Update(*c)
+		err = ms.cliRepo.SetClient(*pCli)
+		if err != nil {
+			fmt.Println(err)
+		}
 
 		go ms.Handle(raddr.PubKey)
+
+		if err := <-ms.errs; err != nil {
+			fmt.Printf("Error in go handle function: %s ", err)
+		}
+
 	}
 }

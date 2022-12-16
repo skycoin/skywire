@@ -4,6 +4,7 @@ package commands
 import (
 	"errors"
 
+	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/messenger"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/info"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/user"
 )
@@ -21,12 +22,13 @@ type SetInfoRequestHandler interface {
 }
 
 type setInfoRequestHandler struct {
-	usrRepo user.Repository
+	messengerService messenger.Service
+	usrRepo          user.Repository
 }
 
 // NewSetInfoRequestHandler Initializes an SetInfoHandler
-func NewSetInfoRequestHandler(usrRepo user.Repository) SetInfoRequestHandler {
-	return setInfoRequestHandler{usrRepo: usrRepo}
+func NewSetInfoRequestHandler(messengerService messenger.Service, usrRepo user.Repository) SetInfoRequestHandler {
+	return setInfoRequestHandler{messengerService: messengerService, usrRepo: usrRepo}
 }
 
 // Handle Handles the SetInfoRequest
@@ -41,7 +43,7 @@ func (h setInfoRequestHandler) Handle(req SetInfoRequest) error {
 
 	pUsr.SetInfo(i)
 
-	//TODO:Send info to peers that the info was updated
+	//TODO:Send info to peers and servers that the info was updated
 
 	return h.usrRepo.SetUser(pUsr)
 }

@@ -31,7 +31,6 @@ func (h setSettingsRequestHandler) Handle(req SetSettingsRequest) error {
 
 	pUsr, err := h.usrRepo.GetUser()
 	if err != nil {
-		//TODO: implement error
 		//TODO:(ersonp) check if something else needs to be done/closed on returning an error
 		return err
 	}

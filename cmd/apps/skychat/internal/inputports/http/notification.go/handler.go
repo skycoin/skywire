@@ -23,7 +23,7 @@ func (c Handler) SubscribeNotifications(w http.ResponseWriter, r *http.Request) 
 
 	f, ok := w.(http.Flusher)
 	if !ok {
-		http.Error(w, "Streaming unsupported!", http.StatusBadRequest)
+		http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
 		return
 	}
 
@@ -31,6 +31,12 @@ func (c Handler) SubscribeNotifications(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Transfer-Encoding", "chunked")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	c.ns.InitChannel()
+	defer func() {
+		c.ns.DeferChannel()
+	}()
 
 	for {
 		select {

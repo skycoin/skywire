@@ -15,16 +15,16 @@ type UserRepo struct {
 
 // NewUserRepo Constructor
 func NewUserRepo(pk cipher.PubKey) *UserRepo {
-	uR := UserRepo{}
+	r := UserRepo{}
 
 	var err error
-	uR.user, err = uR.NewUser()
-	uR.user.GetInfo().SetPK(pk)
+	r.user, err = r.NewUser()
+	r.user.GetInfo().SetPK(pk)
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	return &uR
+	return &r
 }
 
 // NewUser fills repo with a new user, if none has been set

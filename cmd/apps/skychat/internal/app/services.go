@@ -19,9 +19,9 @@ type Services struct {
 }
 
 // NewServices Bootstraps Application Layer dependencies
-func NewServices(cliRepo client.Repository, usrRepo user.Repository, chatRepo chat.Repository, notifyService notification.Service, ms messenger.Service) Services {
+func NewServices(cliRepo client.Repository, usrRepo user.Repository, visorRepo chat.Repository, notifyService notification.Service, ms messenger.Service) Services {
 	return Services{
 		NotificationService: notifyService,
-		ChatServices:        chatservices.NewServices(cliRepo, chatRepo, ms),
-		UserServices:        userservices.NewServices(usrRepo, chatRepo)}
+		ChatServices:        chatservices.NewServices(cliRepo, visorRepo, usrRepo, ms, notifyService),
+		UserServices:        userservices.NewServices(usrRepo, ms)}
 }

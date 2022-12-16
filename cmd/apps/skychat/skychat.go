@@ -19,7 +19,7 @@ func main() {
 	flag.Parse()
 
 	interfaceAdapterServices := interfaceadapters.NewServices()
-	appServices := app.NewServices(interfaceAdapterServices.ClientRepository, interfaceAdapterServices.UserRepository, interfaceAdapterServices.ChatRepository, interfaceAdapterServices.NotificationService, interfaceAdapterServices.MessengerService)
+	appServices := app.NewServices(interfaceAdapterServices.ClientRepository, interfaceAdapterServices.UserRepository, interfaceAdapterServices.VisorRepository, interfaceAdapterServices.NotificationService, interfaceAdapterServices.MessengerService)
 	inputPortsServices := inputports.NewServices(appServices)
 
 	//appclient listen

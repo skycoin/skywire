@@ -16,11 +16,11 @@ type ClientRepo struct {
 
 // NewClientRepo Constructor
 func NewClientRepo() *ClientRepo {
-	cR := ClientRepo{}
+	r := ClientRepo{}
 
-	cR.client, _ = cR.New() //nolint
+	r.client, _ = r.New() //nolint
 
-	return &cR
+	return &r
 }
 
 // New fills repo with a new client, if none has been set

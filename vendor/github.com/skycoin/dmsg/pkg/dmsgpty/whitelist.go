@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	jsoniter "github.com/json-iterator/go"
+
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 

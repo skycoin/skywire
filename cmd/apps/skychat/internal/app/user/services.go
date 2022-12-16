@@ -2,20 +2,24 @@
 package userservices
 
 import (
+	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/messenger"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/user/commands"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/user/queries"
-	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/chat"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/user"
 )
 
 // Queries Contains all available query handlers of this app
 type Queries struct {
+	GetUserPeerBookHandler queries.GetUserPeerbookRequestHandler
 	GetUserInfoHandler     queries.GetUserInfoRequestHandler
 	GetUserSettingsHandler queries.GetUserSettingsRequestHandler
 }
 
 // Commands Contains all available command handlers of this app
 type Commands struct {
+	AddPeerHandler     commands.AddPeerRequestHandler
+	DeletePeerHandler  commands.DeletePeerRequestHandler
+	SetPeerHandler     commands.SetPeerRequestHandler
 	SetInfoHandler     commands.SetInfoRequestHandler
 	SetSettingsHandler commands.SetSettingsRequestHandler
 }
@@ -27,15 +31,19 @@ type UserServices struct {
 }
 
 // NewServices Bootstraps Application Layer dependencies
-func NewServices(cliRepo user.Repository, chatRepo chat.Repository) UserServices {
+func NewServices(usrRepo user.Repository, ms messenger.Service) UserServices {
 	return UserServices{
 		Queries: Queries{
-			GetUserInfoHandler:     queries.NewGetUserInfoRequestHandler(cliRepo),
-			GetUserSettingsHandler: queries.NewGetUserSettingsRequestHandler(cliRepo),
+			GetUserPeerBookHandler: queries.NewGetUserPeerbookRequestHandler(usrRepo),
+			GetUserInfoHandler:     queries.NewGetUserInfoRequestHandler(usrRepo),
+			GetUserSettingsHandler: queries.NewGetUserSettingsRequestHandler(usrRepo),
 		},
 		Commands: Commands{
-			SetInfoHandler:     commands.NewSetInfoRequestHandler(cliRepo),
-			SetSettingsHandler: commands.NewSetSettingsRequestHandler(cliRepo),
+			AddPeerHandler:     commands.NewAddPeerRequestHandler(usrRepo),
+			DeletePeerHandler:  commands.NewDeletePeerRequestHandler(usrRepo),
+			SetPeerHandler:     commands.NewSetPeerRequestHandler(usrRepo),
+			SetInfoHandler:     commands.NewSetInfoRequestHandler(ms, usrRepo),
+			SetSettingsHandler: commands.NewSetSettingsRequestHandler(usrRepo),
 		},
 	}
 }

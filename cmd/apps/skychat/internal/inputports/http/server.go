@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/mux"
 
@@ -32,8 +33,10 @@ func NewServer(appServices app.Services) *Server {
 	httpServer := &Server{appServices: appServices}
 	httpServer.router = mux.NewRouter()
 	httpServer.router.Handle("/", http.FileServer(getFileSystem()))
-	//TODO: add router to favicon.ico instead of html base64 string
-	//TODO: could not get it to work with go embed but it should work withit
+	httpServer.router.Handle("/favicon.ico", http.FileServer(getFileSystem()))
+	httpServer.router.Handle("/index.js", http.FileServer(getFileSystem()))
+	httpServer.router.Handle("/stylesheet.css", http.FileServer(getFileSystem()))
+
 	httpServer.AddChatHTTPRoutes()
 	httpServer.AddUserHTTPRoutes()
 	httpServer.AddNotificationHTTPRoutes()
@@ -46,13 +49,22 @@ func NewServer(appServices app.Services) *Server {
 func (httpServer *Server) AddChatHTTPRoutes() {
 	const chatsHTTPRoutePath = "/chats"
 	//Queries
-	httpServer.router.HandleFunc(chatsHTTPRoutePath, chat.NewHandler(httpServer.appServices.ChatServices).GetAll).Methods("GET")
-	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/{"+chat.GetChatPKURLParam+"}", chat.NewHandler(httpServer.appServices.ChatServices).GetByPK).Methods("GET")
+	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.GetAllMessagesFromRoomByRouteURLParam, chat.NewHandler(httpServer.appServices.ChatServices).GetAllMessagesFromRoomByRoute).Methods("GET")
+	httpServer.router.HandleFunc(chatsHTTPRoutePath, chat.NewHandler(httpServer.appServices.ChatServices).GetAllVisors).Methods("GET")
+	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.GetRoomByRouteURLParam, chat.NewHandler(httpServer.appServices.ChatServices).GetRoomByRoute).Methods("GET")
+	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.GetServerByRouteURLParam, chat.NewHandler(httpServer.appServices.ChatServices).GetServerByRoute).Methods("GET")
+	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/{"+chat.GetVisorByPKURLParam+"}", chat.NewHandler(httpServer.appServices.ChatServices).GetVisorByPK).Methods("GET")
 
 	//Commands
-	httpServer.router.HandleFunc(chatsHTTPRoutePath, chat.NewHandler(httpServer.appServices.ChatServices).Add).Methods("POST")
-	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/sendmessage", chat.NewHandler(httpServer.appServices.ChatServices).SendTextMessage).Methods("POST")
-	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/{"+chat.DeleteChatPKURLParam+"}", chat.NewHandler(httpServer.appServices.ChatServices).Delete).Methods("DELETE")
+	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.AddLocalRoomURLParam, chat.NewHandler(httpServer.appServices.ChatServices).AddLocalRoom).Methods("POST")
+	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.AddLocalServerURLParam, chat.NewHandler(httpServer.appServices.ChatServices).AddLocalServer).Methods("POST")
+	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.AddRemoteRouteURLParam, chat.NewHandler(httpServer.appServices.ChatServices).AddRemoteRoute).Methods("POST")
+	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.DeleteLocalRoomByRouteURLParam, chat.NewHandler(httpServer.appServices.ChatServices).DeleteLocalRoomByRoute).Methods("POST")
+	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.DeleteLocalServerByRouteURLParam, chat.NewHandler(httpServer.appServices.ChatServices).DeleteLocalServerByRoute).Methods("POST")
+	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/{"+chat.DeleteVisorByPKURLParam+"}", chat.NewHandler(httpServer.appServices.ChatServices).DeleteVisorByPK).Methods("DELETE")
+	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.LeaveRemoteRoomByRouteURLParam, chat.NewHandler(httpServer.appServices.ChatServices).LeaveRemoteRoomByRoute).Methods("POST")
+	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.LeaveRemoteServerByRouteURLParam, chat.NewHandler(httpServer.appServices.ChatServices).LeaveRemoteServerByRoute).Methods("POST")
+	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.SendTextMessagePKURLParam, chat.NewHandler(httpServer.appServices.ChatServices).SendTextMessage).Methods("POST")
 
 }
 
@@ -62,10 +74,15 @@ func (httpServer *Server) AddUserHTTPRoutes() {
 	//Queries
 	httpServer.router.HandleFunc(userHTTPRoutePath+"/"+user.GetInfoURLParam, user.NewHandler(httpServer.appServices.UserServices).GetInfo).Methods("GET")
 	httpServer.router.HandleFunc(userHTTPRoutePath+"/"+user.GetSettingsURLParam, user.NewHandler(httpServer.appServices.UserServices).GetSettings).Methods("GET")
+	httpServer.router.HandleFunc(userHTTPRoutePath+"/"+user.GetPeerbookURLParam, user.NewHandler(httpServer.appServices.UserServices).GetPeerbook).Methods("GET")
 
 	//Commands
 	httpServer.router.HandleFunc(userHTTPRoutePath+"/"+user.SetInfoURLParam, user.NewHandler(httpServer.appServices.UserServices).SetInfo).Methods("PUT")
 	httpServer.router.HandleFunc(userHTTPRoutePath+"/"+user.SetSettingsURLParam, user.NewHandler(httpServer.appServices.UserServices).SetSettings).Methods("PUT")
+	httpServer.router.HandleFunc(userHTTPRoutePath+"/"+user.AddPeerURLParam, user.NewHandler(httpServer.appServices.UserServices).AddPeer).Methods("PUT")
+	httpServer.router.HandleFunc(userHTTPRoutePath+"/"+user.SetPeerURLParam, user.NewHandler(httpServer.appServices.UserServices).SetPeer).Methods("PUT")
+	httpServer.router.HandleFunc(userHTTPRoutePath+"/{"+user.DeletePeerURLParam+"}", user.NewHandler(httpServer.appServices.UserServices).DeletePeer).Methods("DELETE")
+
 }
 
 // AddNotificationHTTPRoutes adds the sse route
@@ -78,7 +95,13 @@ func (httpServer *Server) AddNotificationHTTPRoutes() {
 // ListenAndServe Starts listening for requests
 func (httpServer *Server) ListenAndServe(addr *string) {
 	fmt.Println("Serving HTTP on", *addr)
-	log.Fatal(http.ListenAndServe(*addr, nil))
+	srv := &http.Server{
+		Addr:         *addr,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+
+	log.Fatal(srv.ListenAndServe())
 
 }
 

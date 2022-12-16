@@ -2,12 +2,13 @@
 package queries
 
 import (
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/user"
 )
 
 // GetUserSettingsResult is the result of the GetUserSettingsRequest Query
 type GetUserSettingsResult struct {
-	Blacklist []string
+	Blacklist []cipher.PubKey
 }
 
 // GetUserSettingsRequestHandler Contains the dependencies of the Handler
@@ -32,15 +33,7 @@ func (h getUserSettingsRequestHandler) Handle() (*GetUserSettingsResult, error) 
 	if usr != nil && err == nil {
 		s := usr.GetSettings()
 
-		var blacklist []string
-		for _, element := range s.GetBlacklist() {
-			blacklist = append(blacklist, element.Hex())
-		}
-		if blacklist == nil {
-			blacklist = []string{""}
-		}
-
-		result = &GetUserSettingsResult{Blacklist: blacklist}
+		result = &GetUserSettingsResult{Blacklist: s.GetBlacklist()}
 	}
 
 	return result, nil

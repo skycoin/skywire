@@ -11,6 +11,7 @@ import (
 	"time"
 
 	jsoniter "github.com/json-iterator/go"
+
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 )

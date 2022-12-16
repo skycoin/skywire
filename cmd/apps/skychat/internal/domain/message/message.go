@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/util"
 )
 
 // types of messages
@@ -49,7 +50,8 @@ type Message struct {
 	ID         int64         //an identifier for p2p chats and groups, Id is set by the receiver/server
 	Origin     cipher.PubKey //the originator of the Message
 	Time       time.Time     //the utc+0 timestamp of the Message
-	Sender     cipher.PubKey //from who the Message was received (e.g. peer/group)
+	Root       util.PKRoute  //the root from where the Message was received (e.g. peer/group)
+	Dest       util.PKRoute  //the destination where the message should be sent.
 	MsgType    int           //see const above
 	MsgSubtype int           //see const above
 	Message    []byte        //the actual Message
@@ -62,7 +64,8 @@ type JSONMessage struct {
 	ID         int64         `json:"Id"`
 	Origin     cipher.PubKey `json:"Origin"`
 	Time       time.Time     `json:"Time"`
-	Sender     cipher.PubKey `json:"Sender"`
+	Root       util.PKRoute  `json:"Root"`
+	Dest       util.PKRoute  `json:"Dest"`
 	MsgType    int           `json:"Msgtype"`
 	MsgSubtype int           `json:"MsgSubtype"`
 	Message    string        `json:"Message"`
@@ -76,7 +79,8 @@ func NewJSONMessage(m Message) JSONMessage {
 		m.ID,
 		m.Origin,
 		m.Time,
-		m.Sender,
+		m.Root,
+		m.Dest,
 		m.MsgType,
 		m.MsgSubtype,
 		string(m.Message),
@@ -91,7 +95,8 @@ func NewMessage(m JSONMessage) Message {
 		m.ID,
 		m.Origin,
 		m.Time,
-		m.Sender,
+		m.Root,
+		m.Dest,
 		m.MsgType,
 		m.MsgSubtype,
 		[]byte(m.Message),
@@ -106,10 +111,11 @@ func (m Message) MarshalJSON() ([]byte, error) {
 }
 
 // NewTextMessage returns a Message
-func NewTextMessage(pk cipher.PubKey, msg []byte) Message {
+func NewTextMessage(pkOrigin cipher.PubKey, routeDestination util.PKRoute, msg []byte) Message {
 	m := Message{}
-	m.Origin = pk
-	m.Sender = pk
+	m.Origin = pkOrigin
+	m.Root = util.NewVisorOnlyRoute(pkOrigin)
+	m.Dest = routeDestination
 	m.MsgType = TxtMsgType
 	m.MsgSubtype = 0
 	m.Message = msg
@@ -118,11 +124,12 @@ func NewTextMessage(pk cipher.PubKey, msg []byte) Message {
 	return m
 }
 
-// NewChatRequestMessage returns a request Message
-func NewChatRequestMessage(pk cipher.PubKey) Message {
+// NewRouteRequestMessage returns a request Message
+func NewRouteRequestMessage(pkOrigin cipher.PubKey, routeDestination util.PKRoute) Message {
 	m := Message{}
-	m.Origin = pk
-	m.Sender = pk
+	m.Origin = pkOrigin
+	m.Root = util.NewVisorOnlyRoute(pkOrigin)
+	m.Dest = routeDestination
 	m.MsgType = ConnMsgType
 	m.MsgSubtype = ConnMsgTypeRequest
 	m.Status = MsgStatusInitial
@@ -130,11 +137,14 @@ func NewChatRequestMessage(pk cipher.PubKey) Message {
 	return m
 }
 
-// NewChatAcceptMessage returns a chat accepted message
-func NewChatAcceptMessage(pk cipher.PubKey) Message {
+/* NewChatAcceptMessage returns a chat accepted message
+pk is the users pk to set the messages root
+*/
+func NewChatAcceptMessage(root util.PKRoute, dest util.PKRoute) Message {
 	m := Message{}
-	m.Origin = pk
-	m.Sender = pk
+	m.Origin = root.Visor
+	m.Root = root
+	m.Dest = dest
 	m.MsgType = ConnMsgType
 	m.MsgSubtype = ConnMsgTypeAccept
 	m.Status = MsgStatusInitial
@@ -143,10 +153,11 @@ func NewChatAcceptMessage(pk cipher.PubKey) Message {
 }
 
 // NewChatRejectMessage returns new chat rejected message
-func NewChatRejectMessage(pk cipher.PubKey) Message {
+func NewChatRejectMessage(root util.PKRoute, dest util.PKRoute) Message {
 	m := Message{}
-	m.Origin = pk
-	m.Sender = pk
+	m.Origin = root.Visor
+	m.Root = root
+	m.Dest = dest
 	m.MsgType = ConnMsgType
 	m.MsgSubtype = ConnMsgTypeReject
 	m.Status = MsgStatusInitial
@@ -155,10 +166,11 @@ func NewChatRejectMessage(pk cipher.PubKey) Message {
 }
 
 // NewChatInfoMessage returns new chat info
-func NewChatInfoMessage(pk cipher.PubKey, info []byte) Message {
+func NewChatInfoMessage(root util.PKRoute, dest util.PKRoute, info []byte) Message {
 	m := Message{}
-	m.Origin = pk
-	m.Sender = pk
+	m.Origin = root.Visor
+	m.Root = root
+	m.Dest = dest
 	m.MsgType = InfoMsgType
 	m.Message = info
 	m.Status = MsgStatusInitial
@@ -181,9 +193,24 @@ func (m *Message) GetTime() time.Time {
 	return m.Time
 }
 
-// GetSender returns the sender public key
-func (m *Message) GetSender() cipher.PubKey {
-	return m.Sender
+// GetRootVisor returns the root visor public key
+func (m *Message) GetRootVisor() cipher.PubKey {
+	return m.Root.Visor
+}
+
+// GetDestinationVisor returns the destination visor
+func (m *Message) GetDestinationVisor() cipher.PubKey {
+	return m.Dest.Visor
+}
+
+// GetDestinationServer returns the destination server
+func (m *Message) GetDestinationServer() cipher.PubKey {
+	return m.Dest.Server
+}
+
+// GetDestinationRoom returns the destination server
+func (m *Message) GetDestinationRoom() cipher.PubKey {
+	return m.Dest.Room
 }
 
 // GetMessageType returns the message type integer

@@ -6,9 +6,13 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/gorilla/mux"
+
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	userservices "github.com/skycoin/skywire/cmd/apps/skychat/internal/app/user"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/user/commands"
+	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/info"
+	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/peer"
 )
 
 // Handler User http request handler
@@ -21,58 +25,77 @@ func NewHandler(app userservices.UserServices) *Handler {
 	return &Handler{userServices: app}
 }
 
-// GetSettingsURLParam contains the parameter identifier to be parsed by the handler
-const GetSettingsURLParam = "settings"
+// AddPeerURLParam contains the parameter identifier to be parsed by the handler
+const AddPeerURLParam = "addPeer"
 
-// GetSettings Returns the settings of the user
-func (c Handler) GetSettings(w http.ResponseWriter, r *http.Request) {
-	settings, err := c.userServices.Queries.GetUserSettingsHandler.Handle()
-	if err == nil && settings == nil {
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprint(w, "Not Found")
-		return
-	}
-
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(w, err.Error())
-		return
-	}
-	err = json.NewEncoder(w).Encode(settings)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(w, err.Error())
-		return
-	}
+// AddPeerRequestModel represents the  request model of AddPeer
+type AddPeerRequestModel struct {
+	//Info (from peer)
+	PK    string `json:"pk"`
+	Alias string `json:"alias"`
+	Desc  string `json:"desc"`
+	Img   string `json:"img"`
+	//Alias
+	Custom string `json:"custom"`
 }
 
-// GetInfoURLParam contains the parameter identifier to be parsed by the handler
-const GetInfoURLParam = "info"
+// AddPeer adds the given peer with the provided data
+func (c Handler) AddPeer(w http.ResponseWriter, r *http.Request) {
 
-// GetInfo Returns the info of the user
-func (c Handler) GetInfo(w http.ResponseWriter, r *http.Request) {
-	info, err := c.userServices.Queries.GetUserInfoHandler.Handle()
-	if err == nil && info == nil {
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprint(w, "Not Found")
+	var reqPeerToSet AddPeerRequestModel
+	decodeErr := json.NewDecoder(r.Body).Decode(&reqPeerToSet)
+	if decodeErr != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, decodeErr)
 		return
 	}
 
+	var pk cipher.PubKey
+	err := pk.Set(reqPeerToSet.PK)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprint(w, err.Error())
 		return
 	}
-	err = json.NewEncoder(w).Encode(info)
+
+	info := info.NewInfo(pk, reqPeerToSet.Alias, reqPeerToSet.Desc, reqPeerToSet.Img)
+
+	peerAddCommand := commands.AddPeerRequest{Info: info, Alias: reqPeerToSet.Custom}
+
+	err = c.userServices.Commands.AddPeerHandler.Handle(peerAddCommand)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprint(w, err.Error())
-		return
 	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// DeletePeerURLParam contains the parameter identifier to be parsed by the handler
+const DeletePeerURLParam = "deletePeer"
+
+// DeletePeer deletes the provided peer
+func (c Handler) DeletePeer(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	pk := cipher.PubKey{}
+	err := pk.Set(vars[DeletePeerURLParam])
+	if err != nil {
+		fmt.Println("could not convert pubkey")
+	}
+
+	peerDeleteCommand := commands.DeletePeerRequest{PK: pk}
+
+	err = c.userServices.Commands.DeletePeerHandler.Handle(peerDeleteCommand)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 // SetInfoURLParam contains the parameter identifier to be parsed by the handler
-const SetInfoURLParam = "info"
+const SetInfoURLParam = "setInfo"
 
 // SetInfoRequestModel represents the  request model of Update
 type SetInfoRequestModel struct {
@@ -106,8 +129,56 @@ func (c Handler) SetInfo(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// SetPeerURLParam contains the parameter identifier to be parsed by the handler
+const SetPeerURLParam = "setPeer"
+
+// SetPeerRequestModel represents the  request model of SetPeer
+type SetPeerRequestModel struct {
+	//Info (from peer)
+	PK    string `json:"pk"`
+	Alias string `json:"alias"`
+	Desc  string `json:"desc"`
+	Img   string `json:"img"`
+	//Alias
+	Custom string `json:"custom"`
+}
+
+// SetPeer updates the peer with the provided data
+func (c Handler) SetPeer(w http.ResponseWriter, r *http.Request) {
+
+	var reqPeerToSet SetPeerRequestModel
+	decodeErr := json.NewDecoder(r.Body).Decode(&reqPeerToSet)
+	if decodeErr != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, decodeErr)
+		return
+	}
+
+	var pk cipher.PubKey
+	err := pk.Set(reqPeerToSet.PK)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
+		return
+	}
+
+	info := info.NewInfo(pk, reqPeerToSet.Alias, reqPeerToSet.Desc, reqPeerToSet.Img)
+
+	peer := *peer.NewPeer(info, reqPeerToSet.Custom)
+
+	peerSetCommand := commands.SetPeerRequest{Peer: peer}
+
+	err = c.userServices.Commands.SetPeerHandler.Handle(peerSetCommand)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 // SetSettingsURLParam contains the parameter identifier to be parsed by the handler
-const SetSettingsURLParam = "settings"
+const SetSettingsURLParam = "setSettings"
 
 // SetSettingsRequestModel represents the  request model of SetSettings
 type SetSettingsRequestModel struct {
@@ -142,4 +213,79 @@ func (c Handler) SetSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+// GetInfoURLParam contains the parameter identifier to be parsed by the handler
+const GetInfoURLParam = "getInfo"
+
+// GetInfo Returns the info of the user
+func (c Handler) GetInfo(w http.ResponseWriter, r *http.Request) {
+	info, err := c.userServices.Queries.GetUserInfoHandler.Handle()
+	if err == nil && info == nil {
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprint(w, "Not Found")
+		return
+	}
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
+		return
+	}
+	err = json.NewEncoder(w).Encode(info)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
+		return
+	}
+}
+
+// GetPeerbookURLParam contains the parameter identifier to be parsed by the handler
+const GetPeerbookURLParam = "getPeerbook"
+
+// GetPeerbook returns the peerbook of the user
+func (c Handler) GetPeerbook(w http.ResponseWriter, r *http.Request) {
+	info, err := c.userServices.Queries.GetUserPeerBookHandler.Handle()
+	if err == nil && info == nil {
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprint(w, "Not Found")
+		return
+	}
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
+		return
+	}
+	err = json.NewEncoder(w).Encode(info)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
+		return
+	}
+}
+
+// GetSettingsURLParam contains the parameter identifier to be parsed by the handler
+const GetSettingsURLParam = "getSettings"
+
+// GetSettings Returns the settings of the user
+func (c Handler) GetSettings(w http.ResponseWriter, r *http.Request) {
+	settings, err := c.userServices.Queries.GetUserSettingsHandler.Handle()
+	if err == nil && settings == nil {
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprint(w, "Not Found")
+		return
+	}
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
+		return
+	}
+	err = json.NewEncoder(w).Encode(settings)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
+		return
+	}
 }

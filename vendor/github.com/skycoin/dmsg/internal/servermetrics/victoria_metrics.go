@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/VictoriaMetrics/metrics"
+
 	"github.com/skycoin/skywire-utilities/pkg/metricsutil"
 )
 

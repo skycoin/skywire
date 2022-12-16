@@ -16,7 +16,7 @@ import (
 type Services struct {
 	ClientRepository    client.Repository
 	UserRepository      user.Repository
-	ChatRepository      chat.Repository
+	VisorRepository     chat.Repository
 	MessengerService    messenger.Service
 	NotificationService notification.Service
 }
@@ -26,14 +26,15 @@ func NewServices() Services {
 	cliRepo := memory.NewClientRepo()
 	cli, _ := cliRepo.GetClient() //nolint
 	usrRepo := memory.NewUserRepo(cli.GetAppClient().Config().VisorPK)
-	chtRepo := memory.NewChatRepo() //memory.NewDummyChatRepo(cli.GetAppClient().Config().VisorPK)
+	vsrRepo := memory.NewVisorRepo()
 	ns := channel.NewNotificationService()
+	ms := netcon.NewMessengerService(ns, cliRepo, usrRepo, vsrRepo)
 
 	return Services{
 		ClientRepository:    cliRepo,
 		UserRepository:      usrRepo,
-		ChatRepository:      chtRepo,
-		MessengerService:    netcon.NewMessengerService(ns, cliRepo, usrRepo, chtRepo),
+		VisorRepository:     vsrRepo,
+		MessengerService:    ms,
 		NotificationService: ns,
 	}
 }

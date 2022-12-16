@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/info"
+	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/peer"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/settings"
 )
 
@@ -12,6 +13,7 @@ import (
 type User struct {
 	info     info.Info         // the info of the local user
 	settings settings.Settings // the settings of the local user
+	peerbook peer.Peerbook     // the contactsbook of the local user
 }
 
 // GetInfo gets the user info
@@ -24,7 +26,12 @@ func (u *User) GetSettings() *settings.Settings {
 	return &u.settings
 }
 
-// SetInfo sets the chat info
+// GetPeerbook returns the peerbook
+func (u *User) GetPeerbook() *peer.Peerbook {
+	return &u.peerbook
+}
+
+// SetInfo sets the user's info
 func (u *User) SetInfo(i info.Info) {
 	u.info = i
 }
@@ -32,6 +39,11 @@ func (u *User) SetInfo(i info.Info) {
 // SetSettings applies settings
 func (u *User) SetSettings(s settings.Settings) {
 	u.settings = s
+}
+
+// SetPeerbook sets the peerbook
+func (u *User) SetPeerbook(p peer.Peerbook) {
+	u.peerbook = p
 }
 
 // NewDefaultUser returns *User

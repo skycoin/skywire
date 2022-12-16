@@ -2,14 +2,16 @@
 package commands
 
 import (
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/messenger"
+	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/util"
 )
 
 // SendTextMessageRequest of SendTextMessageRequestHandler
+// To send a message as p2p message the route must fulfill: PubKey of visor = PubKey of server or only the visor PubKey is defined in route
+// Else you have to define the complete route
 type SendTextMessageRequest struct {
-	Pk  cipher.PubKey
-	Msg []byte
+	Route util.PKRoute
+	Msg   []byte
 }
 
 // SendTextMessageRequestHandler struct that allows handling SendTextMessageRequest
@@ -27,9 +29,8 @@ func NewSendTextMessageRequestHandler(messengerService messenger.Service) SendTe
 }
 
 // Handle Handles the AddCragRequest
-func (h sendTextMessageRequestHandler) Handle(req SendTextMessageRequest) error {
-
-	err := h.messengerService.SendTextMessage(req.Pk, req.Msg)
+func (h sendTextMessageRequestHandler) Handle(command SendTextMessageRequest) error {
+	err := h.messengerService.SendTextMessage(command.Route, command.Msg)
 	if err != nil {
 		return err
 	}

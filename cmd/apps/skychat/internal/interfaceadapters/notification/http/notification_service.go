@@ -15,13 +15,13 @@ type NotificationService struct {
 // NewNotificationService constructor for NotificationService
 func NewNotificationService() *NotificationService {
 	n := NotificationService{}
-	n.notifCh = make(chan string)
+	//n.notifCh = make(chan string)
 
 	return &n
 }
 
 // Notify sends out the notifications to the channel
-func (ns NotificationService) Notify(notification notification.Notification) error {
+func (ns *NotificationService) Notify(notification notification.Notification) error {
 	jsonNotification, err := json.Marshal(notification)
 	if err != nil {
 		return err
@@ -31,7 +31,18 @@ func (ns NotificationService) Notify(notification notification.Notification) err
 	return nil
 }
 
+//TODO:
+func (ns *NotificationService) InitChannel() {
+	ns.notifCh = make(chan string)
+}
+
 // GetChannel returns the channel of the notification service
-func (ns NotificationService) GetChannel() chan string {
+func (ns *NotificationService) GetChannel() chan string {
 	return ns.notifCh
+}
+
+//TODO:
+func (ns *NotificationService) DeferChannel() {
+	close(ns.notifCh)
+	ns.notifCh = nil
 }
