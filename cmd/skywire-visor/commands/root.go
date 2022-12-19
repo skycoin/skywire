@@ -161,7 +161,9 @@ var rootCmd = &cobra.Command{
 		mLog := initLogger()
 		log := mLog.PackageLogger("pre-run")
 
-		if !stdin {
+		if stdin {
+			confPath = visorconfig.StdinName
+			} else {
 			//error on multiple configs from flags
 			if (pkg && usr) || ((pkg || usr) && (confPath != "")) {
 				fmt.Println("Error: multiple configs specified")
@@ -188,8 +190,6 @@ var rootCmd = &cobra.Command{
 				log.WithError(err).Fatal("config file not found")
 				os.Exit(1)
 			}
-		} else {
-			confPath = visorconfig.StdinName
 		}
 		logBuildInfo(mLog)
 		if launchBrowser {
