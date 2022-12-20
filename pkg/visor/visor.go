@@ -94,8 +94,9 @@ type Visor struct {
 	remoteVisors         map[cipher.PubKey]Conn // remote hypervisors the visor is attempting to connect to
 	connectedHypervisors map[cipher.PubKey]bool // remote hypervisors the visor is currently connected to
 
-	pingConns  map[cipher.PubKey]ping
-	pingConnMx *sync.Mutex
+	pingConns    map[cipher.PubKey]ping
+	pingConnMx   *sync.Mutex
+	pingPcktSize int
 }
 
 // todo: consider moving module closing to the module system

@@ -630,17 +630,17 @@ func (r *RPC) IsDMSGClientReady(_ *struct{}, out *bool) (err error) {
 }
 
 // DialPing dials to the ping module using the provided pk as a hop.
-func (r *RPC) DialPing(pk *cipher.PubKey, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "DialPing", pk)(nil, &err)
+func (r *RPC) DialPing(conf PingConfig, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DialPing", conf)(nil, &err)
 
-	return r.visor.DialPing(*pk)
+	return r.visor.DialPing(conf)
 }
 
 // Ping pings the connected route via DialPing.
-func (r *RPC) Ping(pk *cipher.PubKey, out *string) (err error) {
-	defer rpcutil.LogCall(r.log, "Ping", pk)(out, &err)
+func (r *RPC) Ping(conf PingConfig, out *[]string) (err error) {
+	defer rpcutil.LogCall(r.log, "Ping", conf)(out, &err)
 
-	*out, err = r.visor.Ping(*pk)
+	*out, err = r.visor.Ping(conf)
 	return err
 }
 

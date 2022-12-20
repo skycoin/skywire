@@ -464,15 +464,15 @@ func (rc *rpcClient) IsDMSGClientReady() (bool, error) {
 }
 
 // DialPing calls DialPing.
-func (rc *rpcClient) DialPing(pk cipher.PubKey) error {
-	return rc.Call("DialPing", &pk, &struct{}{})
+func (rc *rpcClient) DialPing(conf PingConfig) error {
+	return rc.Call("DialPing", &conf, &struct{}{})
 }
 
 // Ping calls Ping.
-func (rc *rpcClient) Ping(pk cipher.PubKey) (string, error) {
-	var latency string
-	err := rc.Call("Ping", &pk, &latency)
-	return latency, err
+func (rc *rpcClient) Ping(conf PingConfig) ([]string, error) {
+	var latencies []string
+	err := rc.Call("Ping", &conf, &latencies)
+	return latencies, err
 }
 
 // StopPing calls StopPing.
@@ -1069,13 +1069,13 @@ func (mc *mockRPCClient) IsDMSGClientReady() (bool, error) {
 }
 
 // DialPing implements API.
-func (mc *mockRPCClient) DialPing(_ cipher.PubKey) error {
+func (mc *mockRPCClient) DialPing(_ PingConfig) error {
 	return nil
 }
 
 // Ping implements API.
-func (mc *mockRPCClient) Ping(_ cipher.PubKey) (string, error) {
-	return "", nil
+func (mc *mockRPCClient) Ping(_ PingConfig) ([]string, error) {
+	return []string{}, nil
 }
 
 // StopPing implements API.

@@ -17,4 +17,5 @@ type ping struct {
 type PingMsg struct {
 	Timestamp time.Time
 	PingPk    cipher.PubKey
+	Data      []byte
 }

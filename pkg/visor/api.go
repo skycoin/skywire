@@ -97,8 +97,8 @@ type API interface {
 
 	IsDMSGClientReady() (bool, error)
 
-	DialPing(pk cipher.PubKey) error
-	Ping(pk cipher.PubKey) (string, error)
+	DialPing(config PingConfig) error
+	Ping(config PingConfig) ([]string, error)
 	StopPing(pk cipher.PubKey) error
 }
 
@@ -802,11 +802,19 @@ func (v *Visor) RoutingRules() ([]routing.Rule, error) {
 	return v.router.Rules(), nil
 }
 
+// PingConfig use as configuration for ping command
+type PingConfig struct {
+	PK       cipher.PubKey
+	Tries    int
+	PcktSize int
+}
+
 // DialPing implements API.
-func (v *Visor) DialPing(pk cipher.PubKey) error {
-	if pk == v.conf.PK {
+func (v *Visor) DialPing(conf PingConfig) error {
+	if conf.PK == v.conf.PK {
 		return fmt.Errorf("Visor cannot ping itself")
 	}
+	v.pingPcktSize = conf.PcktSize
 	// waiting for at least one transport to initialize
 	<-v.tpM.Ready()
 
@@ -822,7 +830,7 @@ func (v *Visor) DialPing(pk cipher.PubKey) error {
 	ctx := context.TODO()
 	var r = netutil.NewRetrier(v.log, 2*time.Second, netutil.DefaultMaxBackoff, 5, 2)
 	err = r.Do(ctx, func() error {
-		conn, err = appnet.Ping(pk, addr)
+		conn, err = appnet.Ping(conf.PK, addr)
 		return err
 	})
 	if err != nil {
@@ -833,9 +841,8 @@ func (v *Visor) DialPing(pk cipher.PubKey) error {
 	if !isSkywireConn {
 		return fmt.Errorf("Can't get such info from this conn")
 	}
-
 	v.pingConnMx.Lock()
-	v.pingConns[pk] = ping{
+	v.pingConns[conf.PK] = ping{
 		conn:    skywireConn,
 		latency: make(chan string),
 	}
@@ -844,25 +851,31 @@ func (v *Visor) DialPing(pk cipher.PubKey) error {
 }
 
 // Ping implements API.
-func (v *Visor) Ping(pk cipher.PubKey) (string, error) {
+func (v *Visor) Ping(conf PingConfig) ([]string, error) {
 	v.pingConnMx.Lock()
 	defer v.pingConnMx.Unlock()
-
-	skywireConn := v.pingConns[pk].conn
-	msg := PingMsg{
-		Timestamp: time.Now(),
-		PingPk:    pk,
+	latencies := []string{}
+	// TODO (Mohammed): Arbitrary data size not work, should solve it later
+	// data := make([]byte, conf.PcktSize*1024)
+	data := make([]byte, 2*1024)
+	for i := 1; i <= conf.Tries; i++ {
+		skywireConn := v.pingConns[conf.PK].conn
+		msg := PingMsg{
+			Timestamp: time.Now(),
+			PingPk:    conf.PK,
+			Data:      data,
+		}
+		b, err := json.Marshal(msg)
+		if err != nil {
+			return latencies, err
+		}
+		_, err = skywireConn.Write(b)
+		if err != nil {
+			return latencies, err
+		}
+		latencies = append(latencies, <-v.pingConns[conf.PK].latency)
 	}
-	b, err := json.Marshal(msg)
-	if err != nil {
-		return "", err
-	}
-	_, err = skywireConn.Write(b)
-	if err != nil {
-		return "", err
-	}
-	latency := <-v.pingConns[pk].latency
-	return latency, nil
+	return latencies, nil
 }
 
 // StopPing implements API.

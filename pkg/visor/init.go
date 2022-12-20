@@ -598,7 +598,6 @@ func initPing(ctx context.Context, v *Visor, log *logging.Logger) error {
 				return
 			}
 			log.Debug("Accepted sky proxy conn")
-
 			log.Debug("Wrapping conn...")
 			wrappedConn, err := appnet.WrapConn(conn)
 			if err != nil {
@@ -616,7 +615,7 @@ func initPing(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 func handlePingConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 	for {
-		buf := make([]byte, 32*1024)
+		buf := make([]byte, (32+v.pingPcktSize)*1024)
 		n, err := remoteConn.Read(buf)
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
