@@ -1031,7 +1031,7 @@ func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
 		}
 		latencies, err := v.Ping(conf)
 		if err != nil {
-			v.StopPing(conf.PK) //nolint
+			go v.StopPing(conf.PK) //nolint
 			return result, err
 		}
 		var max, min, mean, sumLatency time.Duration
