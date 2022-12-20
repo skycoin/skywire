@@ -3,6 +3,7 @@ package clivisor
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -28,16 +29,20 @@ var pingCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		pk := internal.ParsePK(cmd.Flags(), "pk", args[0])
 		pingConfig := visor.PingConfig{PK: pk, Tries: tries, PcktSize: pcktSize}
-		err := clirpc.Client(cmd.Flags()).DialPing(pingConfig)
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		err = rpcClient.DialPing(pingConfig)
 		internal.Catch(cmd.Flags(), err)
 
-		latencies, err := clirpc.Client(cmd.Flags()).Ping(pingConfig)
+		latencies, err := rpcClient.Ping(pingConfig)
 		internal.Catch(cmd.Flags(), err)
 
 		for _, latency := range latencies {
 			internal.PrintOutput(cmd.Flags(), latency, fmt.Sprintf(latency+"\n"))
 		}
-		err = clirpc.Client(cmd.Flags()).StopPing(pk)
+		err = rpcClient.StopPing(pk)
 		internal.Catch(cmd.Flags(), err)
 	},
 }
