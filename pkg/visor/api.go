@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -31,7 +32,6 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
-	"github.com/skycoin/skywire/pkg/visor/privacyconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -42,8 +42,8 @@ type API interface {
 
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
-	SetPrivacy(*privacyconfig.Privacy) (*privacyconfig.Privacy, error)
-	GetPrivacy() (*privacyconfig.Privacy, error)
+	SetRewardAddress(string) (string, error)
+	GetRewardAddress() (string, error)
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
@@ -59,12 +59,14 @@ type API interface {
 	SetAppSecure(appName string, isSecure bool) error
 	SetAppKillswitch(appName string, killswitch bool) error
 	SetAppNetworkInterface(appName string, netifc string) error
+	SetAppDNS(appName string, dnsaddr string) error
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
 	VPNServers(version, country string) ([]servicedisc.Service, error)
 	RemoteVisors() ([]string, error)
+	Ports() (map[string]PortDetail, error)
 
 	TransportTypes() ([]string, error)
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
@@ -319,24 +321,24 @@ func (v *Visor) Uptime() (float64, error) {
 	return time.Since(v.startedAt).Seconds(), nil
 }
 
-// SetPrivacy implements API.
-func (v *Visor) SetPrivacy(p *privacyconfig.Privacy) (*privacyconfig.Privacy, error) {
-	path := v.conf.LocalPath + "/" + skyenv.PrivFile
-	pConfig, err := privacyconfig.SetReward(p, path)
+// SetRewardAddress implements API.
+func (v *Visor) SetRewardAddress(p string) (string, error) {
+	path := v.conf.LocalPath + "/" + skyenv.RewardFile
+	err := os.WriteFile(path, []byte(p), 0644) //nolint
 	if err != nil {
-		return nil, err
+		return p, fmt.Errorf("Failed to write config to file. err=%v", err)
 	}
-	return pConfig, nil
+	return p, nil
 }
 
-// GetPrivacy implements API.
-func (v *Visor) GetPrivacy() (*privacyconfig.Privacy, error) {
-	path := v.conf.LocalPath + "/" + skyenv.PrivFile
-	pConfig, err := privacyconfig.GetReward(path)
+// GetRewardAddress implements API.
+func (v *Visor) GetRewardAddress() (string, error) {
+	path := v.conf.LocalPath + "/" + skyenv.RewardFile
+	rConfig, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
-		return nil, err
+		return "", fmt.Errorf("Failed to read config file. err=%v", err)
 	}
-	return pConfig, nil
+	return string(rConfig), nil
 }
 
 // Apps implements API.
@@ -616,6 +618,36 @@ func (v *Visor) SetAppPK(appName string, pk cipher.PubKey) error {
 	return nil
 }
 
+// SetAppDNS implements API.
+func (v *Visor) SetAppDNS(appName string, dnsAddr string) error {
+	allowedToChangePK := func(appName string) bool {
+		allowedApps := map[string]struct{}{
+			skyenv.VPNClientName: {},
+		}
+
+		_, ok := allowedApps[appName]
+		return ok
+	}
+
+	if !allowedToChangePK(appName) {
+		return fmt.Errorf("app %s is not allowed to change DNS Address", appName)
+	}
+
+	v.log.Infof("Changing %s DNS Address to %q", appName, dnsAddr)
+
+	const (
+		pkArgName = "-dns"
+	)
+
+	if err := v.conf.UpdateAppArg(v.appL, appName, pkArgName, dnsAddr); err != nil {
+		return err
+	}
+
+	v.log.Infof("Updated %v DNS Address", appName)
+
+	return nil
+}
+
 // LogsSince implements API.
 func (v *Visor) LogsSince(timestamp time.Time, appName string) ([]string, error) {
 	proc, ok := v.procM.ProcByName(appName)
@@ -688,6 +720,67 @@ func (v *Visor) RemoteVisors() ([]string, error) {
 		visors = append(visors, conn.Addr.PK.String())
 	}
 	return visors, nil
+}
+
+// PortDetail type of port details
+type PortDetail struct {
+	Port string
+	Type string
+}
+
+// Ports return list of all ports used by visor services and apps
+func (v *Visor) Ports() (map[string]PortDetail, error) {
+	ctx := context.Background()
+	var ports = make(map[string]PortDetail)
+
+	if v.conf.Hypervisor != nil {
+		ports["hypervisor"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.Hypervisor.HTTPAddr, ":")[1]), Type: "TCP"}
+	}
+
+	ports["dmsg_pty"] = PortDetail{Port: fmt.Sprint(v.conf.Dmsgpty.DmsgPort), Type: "DMSG"}
+	ports["cli_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.CLIAddr, ":")[1]), Type: "TCP"}
+	ports["proc_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.Launcher.ServerAddr, ":")[1]), Type: "TCP"}
+	ports["stcp_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.STCP.ListeningAddress, ":")[1]), Type: "TCP"}
+
+	if v.arClient != nil {
+		sudphPort := v.arClient.Addresses(ctx)
+		if sudphPort != "" {
+			ports["sudph"] = PortDetail{Port: sudphPort, Type: "UDP"}
+		}
+	}
+	if v.stunClient != nil {
+		if v.stunClient.PublicIP != nil {
+			ports["public_visor"] = PortDetail{Port: fmt.Sprint(v.stunClient.PublicIP.Port()), Type: "TCP"}
+		}
+	}
+	if v.dmsgC != nil {
+		dmsgSessions := v.dmsgC.AllSessions()
+		for i, session := range dmsgSessions {
+			ports[fmt.Sprintf("dmsg_session_%d", i)] = PortDetail{Port: strings.Split(session.LocalTCPAddr().String(), ":")[1], Type: "TCP"}
+		}
+
+		dmsgStreams := v.dmsgC.AllStreams()
+		for i, stream := range dmsgStreams {
+			ports[fmt.Sprintf("dmsg_stream_%d", i)] = PortDetail{Port: strings.Split(stream.LocalAddr().String(), ":")[1], Type: "DMSG"}
+		}
+	}
+	if v.procM != nil {
+		apps, _ := v.Apps() //nolint
+		for _, app := range apps {
+			port, err := v.procM.GetAppPort(app.Name)
+			if err == nil {
+				ports[app.Name] = PortDetail{Port: fmt.Sprint(port), Type: "SKYNET"}
+
+				switch app.Name {
+				case "skysocks_client":
+					ports["skysocks_client_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(skyenv.SkysocksClientAddr, ":")[1]), Type: "TCP"}
+				case "skychat":
+					ports["skychat_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(skyenv.SkychatAddr, ":")[1]), Type: "TCP"}
+				}
+			}
+		}
+	}
+	return ports, nil
 }
 
 // TransportTypes implements API.

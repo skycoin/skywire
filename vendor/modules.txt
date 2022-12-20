@@ -1,3 +1,11 @@
+# atomicgo.dev/cursor v0.1.1
+## explicit; go 1.15
+atomicgo.dev/cursor
+# atomicgo.dev/keyboard v0.2.8
+## explicit; go 1.15
+atomicgo.dev/keyboard
+atomicgo.dev/keyboard/internal
+atomicgo.dev/keyboard/keys
 # bitbucket.org/creachadair/shell v0.0.7
 ## explicit; go 1.16
 bitbucket.org/creachadair/shell
@@ -33,6 +41,9 @@ github.com/blang/semver/v4
 # github.com/ccding/go-stun/stun v0.0.0-20200514191101-4dc67bcdb029
 ## explicit; go 1.14
 github.com/ccding/go-stun/stun
+# github.com/containerd/console v1.0.3
+## explicit; go 1.13
+github.com/containerd/console
 # github.com/creack/pty v1.1.15
 ## explicit; go 1.13
 github.com/creack/pty
@@ -67,6 +78,9 @@ github.com/godbus/dbus/v5/prop
 # github.com/google/uuid v1.1.2
 ## explicit
 github.com/google/uuid
+# github.com/gookit/color v1.5.2
+## explicit; go 1.16
+github.com/gookit/color
 # github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1
 ## explicit
 github.com/gopherjs/gopherjs/js
@@ -128,12 +142,18 @@ github.com/konsorten/go-windows-terminal-sequences
 github.com/lib/pq
 github.com/lib/pq/oid
 github.com/lib/pq/scram
+# github.com/lithammer/fuzzysearch v1.1.5
+## explicit; go 1.15
+github.com/lithammer/fuzzysearch/fuzzy
 # github.com/mattn/go-colorable v0.1.12
 ## explicit; go 1.13
 github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.14
 ## explicit; go 1.12
 github.com/mattn/go-isatty
+# github.com/mattn/go-runewidth v0.0.13
+## explicit; go 1.9
+github.com/mattn/go-runewidth
 # github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
 ## explicit
 github.com/mgutz/ansi
@@ -170,6 +190,14 @@ github.com/pkg/profile
 # github.com/pmezard/go-difflib v1.0.0
 ## explicit
 github.com/pmezard/go-difflib/difflib
+# github.com/pterm/pterm v0.12.49
+## explicit; go 1.18
+github.com/pterm/pterm
+github.com/pterm/pterm/internal
+github.com/pterm/pterm/putils
+# github.com/rivo/uniseg v0.2.0
+## explicit; go 1.12
+github.com/rivo/uniseg
 # github.com/shirou/gopsutil/v3 v3.21.4
 ## explicit; go 1.15
 github.com/shirou/gopsutil/v3/cpu
@@ -181,7 +209,7 @@ github.com/shirou/gopsutil/v3/process
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v0.0.0-20221007110410-643ca4fc9f82
+# github.com/skycoin/dmsg v0.0.0-20221210172640-25f2ccd24123
 ## explicit; go 1.16
 github.com/skycoin/dmsg/internal/servermetrics
 github.com/skycoin/dmsg/pkg/direct
@@ -233,10 +261,10 @@ github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.5
 ## explicit; go 1.12
 github.com/spf13/pflag
-# github.com/stretchr/objx v0.1.1
-## explicit
+# github.com/stretchr/objx v0.4.0
+## explicit; go 1.12
 github.com/stretchr/objx
-# github.com/stretchr/testify v1.7.0
+# github.com/stretchr/testify v1.8.0
 ## explicit; go 1.13
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/mock
@@ -271,11 +299,18 @@ github.com/valyala/fastrand
 # github.com/valyala/histogram v1.2.0
 ## explicit; go 1.12
 github.com/valyala/histogram
+# github.com/xo/terminfo v0.0.0-20210125001918-ca9a967f8778
+## explicit; go 1.15
+github.com/xo/terminfo
 # github.com/xtaci/kcp-go v5.4.20+incompatible
 ## explicit
 github.com/xtaci/kcp-go
 # github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37
 ## explicit; go 1.13
+# github.com/zcalusic/sysinfo v0.9.5
+## explicit; go 1.17
+github.com/zcalusic/sysinfo
+github.com/zcalusic/sysinfo/cpuid
 # go.etcd.io/bbolt v1.3.6
 ## explicit; go 1.12
 go.etcd.io/bbolt
@@ -312,7 +347,7 @@ golang.org/x/net/ipv4
 golang.org/x/net/ipv6
 golang.org/x/net/nettest
 golang.org/x/net/proxy
-# golang.org/x/sys v0.0.0-20220627191245-f75cf1eec38b
+# golang.org/x/sys v0.0.0-20220704084225-05e143d24a9e
 ## explicit; go 1.17
 golang.org/x/sys/cpu
 golang.org/x/sys/execabs
@@ -324,6 +359,17 @@ golang.org/x/sys/windows/registry
 # golang.org/x/term v0.0.0-20210927222741-03fcf44c2211
 ## explicit; go 1.17
 golang.org/x/term
+# golang.org/x/text v0.3.7
+## explicit; go 1.17
+golang.org/x/text/cases
+golang.org/x/text/internal
+golang.org/x/text/internal/language
+golang.org/x/text/internal/language/compact
+golang.org/x/text/internal/tag
+golang.org/x/text/language
+golang.org/x/text/runes
+golang.org/x/text/transform
+golang.org/x/text/unicode/norm
 # golang.org/x/tools v0.1.5
 ## explicit; go 1.17
 golang.org/x/tools/go/gcexportdata
@@ -350,7 +396,7 @@ golang.zx2c4.com/wireguard/tun/wintun/memmod
 # gopkg.in/yaml.v2 v2.4.0
 ## explicit; go 1.15
 gopkg.in/yaml.v2
-# gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
+# gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
 # howett.net/plist v1.0.0

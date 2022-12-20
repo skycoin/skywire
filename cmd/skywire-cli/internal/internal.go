@@ -42,6 +42,27 @@ func PrintFatalError(cmdFlags *pflag.FlagSet, err error) {
 	log.Fatal(err)
 }
 
+// PrintFatalRPCError prints errors for skywire-cli commands packages
+func PrintFatalRPCError(cmdFlags *pflag.FlagSet, err error) {
+	PrintFatalError(cmdFlags, fmt.Errorf("Failed to connect; is skywire running?: %v", err))
+}
+
+// PrintError prints errors for skywire-cli commands packages
+func PrintError(cmdFlags *pflag.FlagSet, err error) {
+	isJSON, _ := cmdFlags.GetBool(JSONString) //nolint:errcheck
+	if isJSON {
+		errJSON := CLIOutput{
+			Err: err.Error(),
+		}
+		b, err := json.MarshalIndent(errJSON, "", "  ")
+		if err != nil {
+			fmt.Println(err)
+		}
+		fmt.Print(string(b) + "\n")
+	}
+	log.Error(err)
+}
+
 // ParsePK parses a public key
 func ParsePK(cmdFlags *pflag.FlagSet, name, v string) cipher.PubKey {
 	var pk cipher.PubKey

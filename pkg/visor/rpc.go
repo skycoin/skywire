@@ -17,7 +17,6 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
-	"github.com/skycoin/skywire/pkg/visor/privacyconfig"
 )
 
 const (
@@ -93,28 +92,20 @@ func (r *RPC) Uptime(_ *struct{}, out *float64) (err error) {
 }
 
 /*
-	<<< SKYCOIN REWARD ADDRESS AND PRIVACY SETTING >>>
+	<<< SKYCOIN REWARD ADDRESS SETTING >>>
 */
 
-// SetPrivacy sets the reward address and privacy setting in privacy.json
-func (r *RPC) SetPrivacy(p *privacyconfig.Privacy, out *privacyconfig.Privacy) (err error) {
-	defer rpcutil.LogCall(r.log, "SetPrivacy", p)(out, &err)
-
-	pConfig, err := r.visor.SetPrivacy(p)
-	if pConfig != nil {
-		*out = *pConfig
-	}
-
+// SetRewardAddress sets the reward address and privacy setting in reward.txt
+func (r *RPC) SetRewardAddress(p string, out string) (err error) {
+	defer rpcutil.LogCall(r.log, "SetRewardAddress", p)(out, &err)
+	_, err = r.visor.SetRewardAddress(p)
 	return err
 }
 
-// GetPrivacy reads the reward address and privacy setting from privacy.json
-func (r *RPC) GetPrivacy(_ *struct{}, out *privacyconfig.Privacy) (err error) {
-	defer rpcutil.LogCall(r.log, "GetPrivacy", nil)(out, &err)
-	pConfig, err := r.visor.GetPrivacy()
-	if pConfig != nil {
-		*out = *pConfig
-	}
+// GetRewardAddress reads the reward address from reward.txt
+func (r *RPC) GetRewardAddress(_ *struct{}, out string) (err error) {
+	defer rpcutil.LogCall(r.log, "GetRewardAddress", nil)(out, &err)
+	_, err = r.visor.GetRewardAddress()
 	return err
 }
 
@@ -327,6 +318,12 @@ type SetAppPKIn struct {
 type SetAppBoolIn struct {
 	AppName string
 	Val     bool
+}
+
+// SetAppStringIn is input for SetApp string flags
+type SetAppStringIn struct {
+	AppName string
+	Val     string
 }
 
 // SetAppPK sets PK for the app.
@@ -616,6 +613,16 @@ func (r *RPC) RemoteVisors(_ *struct{}, out *[]string) (err error) {
 	remoteVisors, err := r.visor.RemoteVisors()
 	if remoteVisors != nil {
 		*out = remoteVisors
+	}
+	return err
+}
+
+// Ports return list of all ports used by visor services and apps
+func (r *RPC) Ports(_ *struct{}, out *map[string]PortDetail) (err error) {
+	defer rpcutil.LogCall(r.log, "Ports", nil)(out, &err)
+	ports, err := r.visor.Ports()
+	if ports != nil {
+		*out = ports
 	}
 	return err
 }
