@@ -1,7 +1,7 @@
 //go:build linux
 // +build linux
 
-package gui
+package visor
 
 import (
 	"os"

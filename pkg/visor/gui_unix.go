@@ -1,7 +1,7 @@
 //go:build !windows
 // +build !windows
 
-package gui
+package visor
 
 import (
 	"github.com/skycoin/skywire/pkg/util/osutil"

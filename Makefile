@@ -175,9 +175,7 @@ tidy: ## Tidies and vendors dependencies.
 	${OPTS} go mod tidy -v
 
 format: tidy ## Formats the code. Must have goimports and goimports-reviser installed (use make install-linters).
-	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg
-	${OPTS} goimports -w -local ${PROJECT_BASE} ./cmd
-	${OPTS} goimports -w -local ${PROJECT_BASE} ./internal
+	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg & ${OPTS} goimports -w -local ${PROJECT_BASE} ./cmd &	${OPTS} goimports -w -local ${PROJECT_BASE} ./internal
 	find . -type f -name '*.go' -not -path "./.git/*" -not -path "./vendor/*"  -exec goimports-reviser -project-name ${PROJECT_BASE} {} \;
 
 format-windows: tidy ## Formats the code. Must have goimports and goimports-reviser installed (use make install-linters).

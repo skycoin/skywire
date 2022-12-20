@@ -126,6 +126,8 @@ var (
 	dmsgTrackers vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
+	// config initialization
+//	visorConfig vinit.Module
 )
 
 // register all modules: instantiate modules with correct names and dependencies, wrap init
@@ -136,6 +138,7 @@ func registerModules(logger *logging.MasterLogger) {
 	maker := func(name string, f initFn, deps ...*vinit.Module) vinit.Module {
 		return vinit.MakeModule(name, withInitCtx(f), logger, deps...)
 	}
+	//	visorConfig = maker("visor_config", initVisorConfig)
 	dmsgHTTP = maker("dmsg_http", initDmsgHTTP)
 	ebc = maker("event_broadcaster", initEventBroadcaster)
 	ar = maker("address_resolver", initAddressResolver, &dmsgHTTP)
@@ -169,6 +172,19 @@ func registerModules(logger *logging.MasterLogger) {
 }
 
 type initFn func(context.Context, *Visor, *logging.Logger) error
+
+/*
+func initVisorConfig(ctx context.Context, v *Visor, log *logging.Logger) error {
+	const ebcTimeout = time.Second
+	ebc := appevent.NewBroadcaster(log, ebcTimeout)
+	v.pushCloseStack("event_broadcaster", ebc.Close)
+
+	v.initLock.Lock()
+	v.ebc = ebc
+	v.initLock.Unlock()
+	return nil
+}
+*/
 
 func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error {
 	var keys cipher.PubKeys

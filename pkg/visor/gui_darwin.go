@@ -1,7 +1,7 @@
 //go:build darwin
 // +build darwin
 
-package gui
+package visor
 
 import (
 	"os"

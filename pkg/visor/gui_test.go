@@ -1,5 +1,5 @@
-// Package gui internal/gui/gui_test.go
-package gui
+// Package visor pkg/visor/gui_test.go
+package visor
 
 import (
 	"testing"
@@ -8,7 +8,7 @@ import (
 )
 
 func TestReadEmbeddedIcon(t *testing.T) {
-	b, err := ReadSysTrayIcon()
+	b, err := readSysTrayIcon()
 	require.NoError(t, err)
 	require.NotEqual(t, 0, len(b))
 }

@@ -1,9 +1,8 @@
-// Package gui internal/gui/gui.go
-package gui
+// Package visor pkg/visor/gui.go
+package visor
 
 import (
 	"context"
-	"embed"
 	"fmt"
 	"io"
 	"net"
@@ -27,14 +26,13 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+	"github.com/skycoin/skywire/static/icons"
 )
 
 // TODO @alexadhy : Show VPN status, list all vpn servers, quick dial
 
-//go:embed icons/*
-var iconFS embed.FS
+var iconFS = &icons.Assets
 
 var log = logging.NewMasterLogger()
 
@@ -42,7 +40,7 @@ var (
 	stopVisorFnMx sync.Mutex
 	stopVisorFn   func()
 	closeDmsgDC   func()
-	rpcC          visor.API
+	rpcC          API
 	vpnLastStatus int
 )
 
@@ -61,13 +59,13 @@ var (
 	vpnStatusMx     sync.Mutex
 )
 
-// GetOnGUIReady creates func to run on GUI startup.
-func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
+// getOnGUIReady creates func to run on GUI startup.
+func getOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 	doneCh := make(chan bool, 1)
 	logger := logging.NewMasterLogger()
 	logger.SetLevel(logrus.InfoLevel)
 
-	httpC := getHTTPClient(context.Background(), conf, logger)
+	httpC := getSystrayHTTPClient(context.Background(), conf, logger)
 
 	if isRoot() {
 		return func() {
@@ -91,12 +89,12 @@ func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 	}
 }
 
-// OnGUIQuit is executed on GUI exit.
-func OnGUIQuit() {
+// onGUIQuit is executed on GUI exit.
+func onGUIQuit() {
 }
 
-// ReadSysTrayIcon reads system tray icon.
-func ReadSysTrayIcon() (contents []byte, err error) {
+// readSysTrayIcon reads system tray icon.
+func readSysTrayIcon() (contents []byte, err error) {
 	contents, err = iconFS.ReadFile(iconName)
 
 	if err != nil {
@@ -106,7 +104,7 @@ func ReadSysTrayIcon() (contents []byte, err error) {
 	return contents, err
 }
 
-// SetStopVisorFn sets function to stop running visor.
+// SetStopVisorFn sets function to stop running
 func SetStopVisorFn(fn func()) {
 	stopVisorFnMx.Lock()
 	stopVisorFn = fn
@@ -175,7 +173,7 @@ func initUIBtns(vc *visorconfig.V1) {
 
 func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, logger *logging.MasterLogger) {
 	rpcLogger := logger.PackageLogger("systray:rpc_client")
-	rpcC = rpcClient(conf, rpcLogger)
+	rpcC = rpcClientSystray(conf, rpcLogger)
 
 	mVPNClient = systray.AddMenuItem("VPN", "VPN Client Submenu")
 	// VPN Status
@@ -193,7 +191,7 @@ func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, logger *log
 	go serversBtn(mVPNServers, rpcC)
 }
 
-func vpnStatusBtn(rpcClient visor.API) {
+func vpnStatusBtn(rpcClient API) {
 	for {
 		vpnStatusMx.Lock()
 		stats, _ := rpcClient.GetAppConnectionsSummary(skyenv.VPNClientName) //nolint
@@ -227,7 +225,7 @@ func vpnStatusBtn(rpcClient visor.API) {
 	}
 }
 
-func serversBtn(servers []*systray.MenuItem, rpcClient visor.API) {
+func serversBtn(servers []*systray.MenuItem, rpcClient API) {
 	btnChannel := make(chan int)
 	for index, server := range servers {
 		go func(chn chan int, server *systray.MenuItem, index int) {
@@ -264,7 +262,7 @@ func serversBtn(servers []*systray.MenuItem, rpcClient visor.API) {
 	}
 }
 
-func handleVPNButton(rpcClient visor.API) {
+func handleVPNButton(rpcClient API) {
 	stats, _ := rpcClient.GetAppConnectionsSummary(skyenv.VPNClientName) //nolint
 	if len(stats) == 1 {
 		rpcClient.StopApp(skyenv.VPNClientName) //nolint
@@ -315,7 +313,7 @@ func getAvailPublicVPNServers(conf *visorconfig.V1, httpC *http.Client, logger *
 	return serverAddrs
 }
 
-func getHTTPClient(ctx context.Context, conf *visorconfig.V1, logger *logging.MasterLogger) *http.Client {
+func getSystrayHTTPClient(ctx context.Context, conf *visorconfig.V1, logger *logging.MasterLogger) *http.Client {
 	var serviceURL dmsgget.URL
 	serviceURL.Fill(conf.Launcher.ServiceDisc) //nolint
 	if serviceURL.Scheme == "dmsg" {
@@ -512,7 +510,7 @@ func getVPNAddr(conf *visorconfig.V1) string {
 	return hvAddr + "/#/vpn/" + conf.PK.Hex() + "/status"
 }
 
-func rpcClient(conf *visorconfig.V1, logger *logging.Logger) visor.API {
+func rpcClientSystray(conf *visorconfig.V1, logger *logging.Logger) API {
 	var conn net.Conn
 	var err error
 	var rpcConnected bool
@@ -527,5 +525,5 @@ func rpcClient(conf *visorconfig.V1, logger *logging.Logger) visor.API {
 		time.Sleep(2 * time.Second)
 	}
 	logger.Info("RPC Connection established")
-	return visor.NewRPCClient(logger, conn, visor.RPCPrefix, 0)
+	return NewRPCClient(logger, conn, RPCPrefix, 0)
 }

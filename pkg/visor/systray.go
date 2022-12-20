@@ -1,7 +1,5 @@
-//go:build exclude
-
-// Package commands cmd/skywire-visor/commands/systray.go
-package commands
+// Package visor pkg/visor/systray.go
+package visor
 
 import (
 	"context"
@@ -14,7 +12,7 @@ import (
 
 func runAppSystray() {
 	l := logging.NewMasterLogger()
-	sysTrayIcon, err := gui.ReadSysTrayIcon()
+	sysTrayIcon, err := readSysTrayIcon()
 	if err != nil {
 		l.WithError(err).Fatalln("Failed to read system tray icon")
 	}
@@ -26,7 +24,7 @@ func runAppSystray() {
 		systray.Quit()
 	}()
 
-	systray.Run(gui.GetOnGUIReady(sysTrayIcon, conf), gui.OnGUIQuit)
+	systray.Run(getOnGUIReady(sysTrayIcon, conf), onGUIQuit)
 
 }
 
@@ -42,7 +40,7 @@ func setStopFunctionSystray(log *logging.MasterLogger, cancel context.CancelFunc
 		skyenv.StopVisorWg.Wait()
 	}
 
-	gui.SetStopVisorFn(func() {
+	SetStopVisorFn(func() {
 		skyenv.StopVisorFn()
 	})
 }
