@@ -10,7 +10,7 @@ import (
 
 type ping struct {
 	conn    net.Conn
-	latency chan string
+	latency chan time.Duration
 }
 
 // PingMsg ...

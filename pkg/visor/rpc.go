@@ -644,7 +644,7 @@ func (r *RPC) DialPing(conf PingConfig, _ *struct{}) (err error) {
 }
 
 // Ping pings the connected route via DialPing.
-func (r *RPC) Ping(conf PingConfig, out *[]string) (err error) {
+func (r *RPC) Ping(conf PingConfig, out *[]time.Duration) (err error) {
 	defer rpcutil.LogCall(r.log, "Ping", conf)(out, &err)
 
 	*out, err = r.visor.Ping(conf)
@@ -656,4 +656,12 @@ func (r *RPC) StopPing(pk *cipher.PubKey, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StopPing", pk)(nil, &err)
 
 	return r.visor.StopPing(*pk)
+}
+
+// TestVisor trying to test viosr by pinging to public visor.
+func (r *RPC) TestVisor(conf PingConfig, out *[]TestResult) (err error) {
+	defer rpcutil.LogCall(r.log, "TestVisor", conf)(out, &err)
+
+	*out, err = r.visor.TestVisor(conf)
+	return err
 }

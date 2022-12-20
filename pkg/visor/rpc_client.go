@@ -483,8 +483,8 @@ func (rc *rpcClient) DialPing(conf PingConfig) error {
 }
 
 // Ping calls Ping.
-func (rc *rpcClient) Ping(conf PingConfig) ([]string, error) {
-	var latencies []string
+func (rc *rpcClient) Ping(conf PingConfig) ([]time.Duration, error) {
+	var latencies []time.Duration
 	err := rc.Call("Ping", &conf, &latencies)
 	return latencies, err
 }
@@ -492,6 +492,13 @@ func (rc *rpcClient) Ping(conf PingConfig) ([]string, error) {
 // StopPing calls StopPing.
 func (rc *rpcClient) StopPing(pk cipher.PubKey) error {
 	return rc.Call("StopPing", &pk, &struct{}{})
+}
+
+// TestVisor calls TestVisor.
+func (rc *rpcClient) TestVisor(conf PingConfig) ([]TestResult, error) {
+	var results []TestResult
+	err := rc.Call("TestVisor", &conf, &results)
+	return results, err
 }
 
 // MockRPCClient mocks API.
@@ -1108,11 +1115,16 @@ func (mc *mockRPCClient) DialPing(_ PingConfig) error {
 }
 
 // Ping implements API.
-func (mc *mockRPCClient) Ping(_ PingConfig) ([]string, error) {
-	return []string{}, nil
+func (mc *mockRPCClient) Ping(_ PingConfig) ([]time.Duration, error) {
+	return []time.Duration{}, nil
 }
 
 // StopPing implements API.
 func (mc *mockRPCClient) StopPing(_ cipher.PubKey) error {
 	return nil
+}
+
+// TestVisor implements API.
+func (mc *mockRPCClient) TestVisor(_ PingConfig) ([]TestResult, error) {
+	return []TestResult{}, nil
 }

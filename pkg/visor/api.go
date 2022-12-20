@@ -100,8 +100,10 @@ type API interface {
 	IsDMSGClientReady() (bool, error)
 
 	DialPing(config PingConfig) error
-	Ping(config PingConfig) ([]string, error)
+	Ping(config PingConfig) ([]time.Duration, error)
 	StopPing(pk cipher.PubKey) error
+
+	TestVisor(config PingConfig) ([]TestResult, error)
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -713,6 +715,27 @@ func (v *Visor) VPNServers(version, country string) ([]servicedisc.Service, erro
 	return vpnServers, nil
 }
 
+// PublicVisors gets available public public visors from service discovery URL
+func (v *Visor) PublicVisors(version, country string) ([]servicedisc.Service, error) {
+	log := logging.MustGetLogger("public_visors")
+	vLog := logging.NewMasterLogger()
+	vLog.SetLevel(logrus.InfoLevel)
+
+	sdClient := servicedisc.NewClient(log, vLog, servicedisc.Config{
+		Type:          servicedisc.ServiceTypeVisor,
+		PK:            v.conf.PK,
+		SK:            v.conf.SK,
+		DiscAddr:      v.conf.Launcher.ServiceDisc,
+		DisplayNodeIP: v.conf.Launcher.DisplayNodeIP,
+	}, &http.Client{Timeout: time.Duration(20) * time.Second}, "")
+	publicVisors, err := sdClient.Services(context.Background(), 0, version, country)
+	if err != nil {
+		v.log.Error("Error getting public vpn servers: ", err)
+		return nil, err
+	}
+	return publicVisors, nil
+}
+
 // RemoteVisors return list of connected remote visors
 func (v *Visor) RemoteVisors() ([]string, error) {
 	var visors []string
@@ -937,17 +960,17 @@ func (v *Visor) DialPing(conf PingConfig) error {
 	v.pingConnMx.Lock()
 	v.pingConns[conf.PK] = ping{
 		conn:    skywireConn,
-		latency: make(chan string),
+		latency: make(chan time.Duration),
 	}
 	v.pingConnMx.Unlock()
 	return nil
 }
 
 // Ping implements API.
-func (v *Visor) Ping(conf PingConfig) ([]string, error) {
+func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
 	v.pingConnMx.Lock()
 	defer v.pingConnMx.Unlock()
-	latencies := []string{}
+	latencies := []time.Duration{}
 	// TODO (Mohammed): Arbitrary data size not work, should solve it later
 	// data := make([]byte, conf.PcktSize*1024)
 	data := make([]byte, 2*1024)
@@ -983,6 +1006,50 @@ func (v *Visor) StopPing(pk cipher.PubKey) error {
 	}
 	delete(v.pingConns, pk)
 	return nil
+}
+
+// TestResult type of test result
+type TestResult struct {
+	PK   string
+	Max  string
+	Min  string
+	Mean string
+}
+
+// TestVisor trying to test visor
+func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
+	result := []TestResult{}
+	publicVisors, err := v.PublicVisors("", "")
+	if err != nil {
+		return result, err
+	}
+	for _, publicVisor := range publicVisors {
+		conf.PK = publicVisor.Addr.PubKey()
+		err := v.DialPing(conf)
+		if err != nil {
+			return result, err
+		}
+		latencies, err := v.Ping(conf)
+		if err != nil {
+			v.StopPing(conf.PK) //nolint
+			return result, err
+		}
+		var max, min, mean, sumLatency time.Duration
+		min = time.Duration(10000000000)
+		for _, latency := range latencies {
+			if latency > max {
+				max = latency
+			}
+			if latency < min {
+				min = latency
+			}
+			sumLatency += latency
+		}
+		mean = sumLatency / time.Duration(len(latencies))
+		result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(max), Min: fmt.Sprint(min), Mean: fmt.Sprint(mean)})
+		v.StopPing(conf.PK) //nolint
+	}
+	return result, nil
 }
 
 // RoutingRule implements API.

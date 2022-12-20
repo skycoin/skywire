@@ -630,7 +630,7 @@ func handlePingConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 		}
 		now := time.Now()
 		diff := now.Sub(msg.Timestamp)
-		v.pingConns[msg.PingPk].latency <- fmt.Sprint(diff)
+		v.pingConns[msg.PingPk].latency <- diff
 
 		log.Debugf("Received: %s", buf[:n])
 	}

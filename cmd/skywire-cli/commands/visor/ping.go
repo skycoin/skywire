@@ -19,6 +19,9 @@ func init() {
 	RootCmd.AddCommand(pingCmd)
 	pingCmd.Flags().IntVarP(&tries, "tries", "t", 1, "Number of pings")
 	pingCmd.Flags().IntVarP(&pcktSize, "size", "s", 32, "Size of packet, in KB, default is 32KB")
+	RootCmd.AddCommand(testCmd)
+	testCmd.Flags().IntVarP(&tries, "tries", "t", 1, "Number of tests per public visors")
+	testCmd.Flags().IntVarP(&pcktSize, "size", "s", 32, "Size of packet, in KB, default is 32KB")
 }
 
 var pingCmd = &cobra.Command{
@@ -40,9 +43,27 @@ var pingCmd = &cobra.Command{
 		internal.Catch(cmd.Flags(), err)
 
 		for _, latency := range latencies {
-			internal.PrintOutput(cmd.Flags(), latency, fmt.Sprintf(latency+"\n"))
+			internal.PrintOutput(cmd.Flags(), fmt.Sprint(latency), fmt.Sprintf(fmt.Sprint(latency)+"\n"))
 		}
 		err = rpcClient.StopPing(pk)
 		internal.Catch(cmd.Flags(), err)
+	},
+}
+
+var testCmd = &cobra.Command{
+	Use:   "test",
+	Short: "Test the visor with public visors on network",
+	Long:  "\n	Creates a route with public visors as a hop and returns latency on the conn",
+	Run: func(cmd *cobra.Command, args []string) {
+		pingConfig := visor.PingConfig{Tries: tries, PcktSize: pcktSize}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		results, err := rpcClient.TestVisor(pingConfig)
+		internal.Catch(cmd.Flags(), err)
+		for i, result := range results {
+			internal.PrintOutput(cmd.Flags(), result, fmt.Sprintf("Test No. %d\nPK: %s\nMax: %s\nMin: %s\nMean: %s\n\n", i+1, result.PK, result.Max, result.Min, result.Mean))
+		}
 	},
 }
