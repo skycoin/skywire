@@ -25,7 +25,6 @@ import (
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/syslog"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -52,6 +51,7 @@ const (
 	// moduleShutdownTimeout is the timeout given to a module to shutdown cleanly.
 	// Otherwise the shutdown logic will continue and report a timeout error.
 	moduleShutdownTimeout = time.Second * 4
+	runtimeLogMaxEntries = 300
 )
 
 // Visor provides messaging runtime for Apps by setting up all
@@ -129,7 +129,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	v := &Visor{
 		log:                  conf.MasterLogger().PackageLogger("visor"),
 		conf:                 conf,
-		restartCtx:           skyenv.RestartCtx,
+		restartCtx:           restartCtx,
 		initLock:             new(sync.RWMutex),
 		isServicesHealthy:    newInternalHealthInfo(),
 		dtmReady:             make(chan struct{}),
@@ -188,9 +188,9 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	if !v.processRuntimeErrs() {
 		return nil, false
 	}
-	if skyenv.IsAutoPeer {
+	if isAutoPeer {
 		v.autoPeer = true
-		v.autoPeerIP = skyenv.AutoPeerIP
+		v.autoPeerIP = autoPeerIP
 	}
 	log.Info("Startup complete.")
 	return v, true
@@ -221,7 +221,7 @@ func (v *Visor) isStunReady() bool {
 // RunVisor runs the visor
 func RunVisor(conf *visorconfig.V1, uiAssets fs.FS) {
 	log := initLogger()
-	store, hook := logstore.MakeStore(skyenv.RuntimeLogMaxEntries)
+	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
 	log.AddHook(hook)
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 	if conf.Hypervisor != nil {
@@ -238,7 +238,7 @@ func RunVisor(conf *visorconfig.V1, uiAssets fs.FS) {
 		return
 	}
 
-	skyenv.StopVisorFn = func() {
+	stopVisorFn = func() {
 		if err := vis.Close(); err != nil {
 			log.WithError(err).Error("Visor closed with error.")
 		}
@@ -246,19 +246,19 @@ func RunVisor(conf *visorconfig.V1, uiAssets fs.FS) {
 	}
 	vis.SetLogstore(store)
 	vis.uiAssets = uiAssets
-	if skyenv.LaunchBrowser {
+	if launchBrowser {
 		runBrowser(log, conf)
-		skyenv.LaunchBrowser = false
+		launchBrowser = false
 	}
 	// Wait.
 	<-ctx.Done()
-	skyenv.StopVisorFn()
+	stopVisorFn()
 }
 
 func initLogger() *logging.MasterLogger {
 	mLog := logging.NewMasterLogger()
-	if skyenv.SyslogAddr != "" {
-		hook, err := syslog.SetupHook(skyenv.SyslogAddr, skyenv.LogTag)
+	if syslogAddr != "" {
+		hook, err := syslog.SetupHook(syslogAddr, logTag)
 		if err != nil {
 			mLog.WithError(err).Error("Failed to connect to the syslog daemon.")
 		} else {

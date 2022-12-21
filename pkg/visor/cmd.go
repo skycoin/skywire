@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bitfield/script"
@@ -28,18 +29,26 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+	"github.com/skycoin/skywire/pkg/restart"
+
 )
 
 var uiAssets fs.FS
 
 var (
+	visorConfigFile string
+	restartCtx = restart.CaptureContext()
+	isAutoPeer bool
+	autoPeerIP string
+	stopVisorWg sync.WaitGroup
+	launchBrowser bool
+	syslogAddr string
 	logger               = logging.MustGetLogger("skywire-visor")
 	logLvl               string
 	pprofMode            string
 	pprofAddr            string
 	confPath             string
 	stdin                bool
-	launchBrowser        bool
 	hypervisorUI         bool
 	noHypervisorUI       bool
 	remoteHypervisorPKs  string
@@ -107,7 +116,7 @@ func init() {
 	hiddenflags = append(hiddenflags, "pprofaddr")
 	RootCmd.Flags().StringVarP(&logTag, "logtag", "t", "skywire", "logging tag")
 	hiddenflags = append(hiddenflags, "logtag")
-	RootCmd.Flags().StringVarP(&skyenv.SyslogAddr, "syslog", "y", "", "syslog server address. E.g. localhost:514")
+	RootCmd.Flags().StringVarP(&syslogAddr, "syslog", "y", "", "syslog server address. E.g. localhost:514")
 	hiddenflags = append(hiddenflags, "syslog")
 	RootCmd.Flags().StringVarP(&completion, "completion", "z", "", "[ bash | zsh | fish | powershell ]")
 	hiddenflags = append(hiddenflags, "completion")
@@ -125,13 +134,13 @@ func initAutoPeerFlags() {
 			localIPs = append(localIPs, net.ParseIP("192.168.0.1"))
 		}
 	}
-	RootCmd.Flags().StringVarP(&skyenv.AutoPeerIP, "hvip", "l", trimStringFromDot(localIPs[0].String())+".2:7998", "set hypervisor by ip")
+	RootCmd.Flags().StringVarP(&autoPeerIP, "hvip", "l", trimStringFromDot(localIPs[0].String())+".2:7998", "set hypervisor by ip")
 	hiddenflags = append(hiddenflags, "hvip")
 	isDefaultAutopeer := false
 	if os.Getenv("AUTOPEER") == "1" {
 		isDefaultAutopeer = true
 	}
-	RootCmd.Flags().BoolVarP(&skyenv.IsAutoPeer, "autopeer", "m", isDefaultAutopeer, "enable autopeering")
+	RootCmd.Flags().BoolVarP(&isAutoPeer, "autopeer", "m", isDefaultAutopeer, "enable autopeering")
 	hiddenflags = append(hiddenflags, "autopeer")
 }
 func trimStringFromDot(s string) string {
@@ -249,7 +258,7 @@ var RootCmd = &cobra.Command{
 func runVisor(conf *visorconfig.V1) {
 	//var ok bool
 	log := initLogger()
-	_, hook := logstore.MakeStore(skyenv.RuntimeLogMaxEntries)
+	_, hook := logstore.MakeStore(runtimeLogMaxEntries)
 	log.AddHook(hook)
 
 	stopPProf := initPProf(log, pprofMode, pprofAddr)
@@ -276,20 +285,20 @@ func runVisor(conf *visorconfig.V1) {
 		}
 	}
 	//autopeering should only happen when there is no local or remote hypervisor set in the config.
-	if skyenv.IsAutoPeer && conf.Hypervisor != nil {
+	if isAutoPeer && conf.Hypervisor != nil {
 		log.Info("Local hypervisor running, disabling autopeer")
-		skyenv.IsAutoPeer = false
+		isAutoPeer = false
 	}
 
-	if skyenv.IsAutoPeer && len(conf.Hypervisors) > 0 {
+	if isAutoPeer && len(conf.Hypervisors) > 0 {
 		log.Info("%d Remote hypervisor(s) set in config; disabling autopeer", len(conf.Hypervisors))
 		log.Info(conf.Hypervisors)
-		skyenv.IsAutoPeer = false
+		isAutoPeer = false
 	}
 
-	if skyenv.IsAutoPeer {
-		log.Info("Autopeer: ", skyenv.IsAutoPeer)
-		hvkey, err := FetchHvPk(skyenv.AutoPeerIP)
+	if isAutoPeer {
+		log.Info("Autopeer: ", isAutoPeer)
+		hvkey, err := FetchHvPk(autoPeerIP)
 		if err != nil {
 			log.WithError(err).Error("Failure autopeering - unable to obtain hypervisor public key")
 		} else {
@@ -352,7 +361,7 @@ func initPProf(log *logging.MasterLogger, profMode string, profAddr string) (sto
 	}
 
 	if optFunc != nil {
-		stop = profile.Start(profile.ProfilePath("./logs/"+skyenv.LogTag), optFunc).Stop
+		stop = profile.Start(profile.ProfilePath("./logs/"+logTag), optFunc).Stop
 	}
 
 	if stop == nil {

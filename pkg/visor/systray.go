@@ -7,7 +7,6 @@ import (
 	"github.com/skycoin/systray"
 
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 func runAppSystray() {
@@ -29,19 +28,19 @@ func runAppSystray() {
 }
 
 func setStopFunctionSystray(log *logging.MasterLogger, cancel context.CancelFunc, fn func() error) { //nolint:unused
-	skyenv.StopVisorWg.Add(1)
-	defer skyenv.StopVisorWg.Done()
+	stopVisorWg.Add(1)
+	defer stopVisorWg.Done()
 
-	skyenv.StopVisorFn = func() {
+	stopVisorFn = func() {
 		if err := fn(); err != nil {
 			log.WithError(err).Error("Visor closed with error.")
 		}
 		cancel()
-		skyenv.StopVisorWg.Wait()
+		stopVisorWg.Wait()
 	}
 
 	SetStopVisorFn(func() {
-		skyenv.StopVisorFn()
+		stopVisorFn()
 	})
 }
 
@@ -55,14 +54,14 @@ func runApp() {
 
 // setStopFunction sets the stop function
 func setStopFunction(log *logging.MasterLogger, cancel context.CancelFunc, fn func() error) { //nolint:unused
-	skyenv.StopVisorWg.Add(1)
-	defer skyenv.StopVisorWg.Done()
+	stopVisorWg.Add(1)
+	defer stopVisorWg.Done()
 
-	skyenv.StopVisorFn = func() {
+	stopVisorFn = func() {
 		if err := fn(); err != nil {
 			log.WithError(err).Error("Visor closed with error.")
 		}
 		cancel()
-		skyenv.StopVisorWg.Wait()
+		stopVisorWg.Wait()
 	}
 }

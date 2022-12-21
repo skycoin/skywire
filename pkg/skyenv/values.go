@@ -11,7 +11,6 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/bitfield/script"
@@ -19,7 +18,6 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/restart"
 )
 
 const (
@@ -301,36 +299,4 @@ const RewardFile string = "reward.txt"
 var (
 	// VisorConfigFile will contain the path to the visor's config or `stdin` to denote that the config was read from STDIN
 	VisorConfigFile string
-
-	// RestartCtx context of visor restart
-	RestartCtx = restart.CaptureContext()
-
-	// IsAutoPeer enables the autopeering to the hypervisor if no remote or local hypervisors are configured
-	IsAutoPeer bool
-
-	// AutoPeerIP is the IP address which the visor will autopeer to if autopeering is enabled
-	AutoPeerIP string
-
-	// RunAsSystray starts the visor with integrated systray
-	RunAsSystray bool
-
-	// StopVisorFn defines the function to stop the visor
-	StopVisorFn func()
-
-	// StopVisorWg is sync.WaitGroup
-	StopVisorWg sync.WaitGroup
-
-	// LaunchBrowser determines if the browser should be opened to the hypervisor UI
-	LaunchBrowser bool
-
-	// LogTag logging tag for visor
-	LogTag string
-
-	// SyslogAddr is the address for the syslog
-	SyslogAddr string
-)
-
-const (
-	// RuntimeLogMaxEntries sets the maximum entries for runtime logs
-	RuntimeLogMaxEntries = 300
 )
