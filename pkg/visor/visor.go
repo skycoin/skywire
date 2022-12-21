@@ -51,7 +51,7 @@ const (
 	// moduleShutdownTimeout is the timeout given to a module to shutdown cleanly.
 	// Otherwise the shutdown logic will continue and report a timeout error.
 	moduleShutdownTimeout = time.Second * 4
-	runtimeLogMaxEntries = 300
+	runtimeLogMaxEntries  = 300
 )
 
 // Visor provides messaging runtime for Apps by setting up all

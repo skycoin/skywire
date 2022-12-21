@@ -25,24 +25,22 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
-	"github.com/skycoin/skywire/pkg/restart"
-
 )
 
 var uiAssets fs.FS
 
 var (
-	visorConfigFile string
-	restartCtx = restart.CaptureContext()
-	isAutoPeer bool
-	autoPeerIP string
-	stopVisorWg sync.WaitGroup
-	launchBrowser bool
-	syslogAddr string
+	restartCtx           = restart.CaptureContext()
+	isAutoPeer           bool
+	autoPeerIP           string
+	stopVisorWg          sync.WaitGroup //nolint:unused
+	launchBrowser        bool
+	syslogAddr           string
 	logger               = logging.MustGetLogger("skywire-visor")
 	logLvl               string
 	pprofMode            string
