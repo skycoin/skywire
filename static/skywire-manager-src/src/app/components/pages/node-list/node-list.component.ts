@@ -1,6 +1,6 @@
 import { Component, OnDestroy, OnInit, NgZone } from '@angular/core';
 import { Subscription, of, timer, Observable } from 'rxjs';
-import { MatDialog } from '@angular/material/dialog';
+import { MatLegacyDialog as MatDialog } from '@angular/material/legacy-dialog';
 import { Router, ActivatedRoute } from '@angular/router';
 import { catchError, mergeMap } from 'rxjs/operators';
 import { TranslateService } from '@ngx-translate/core';

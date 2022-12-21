@@ -2,11 +2,20 @@
 @import "@angular/material/theming";
 @import "assets/scss/variables";
 
-$general-typography: mat.define-typography-config(
+$general-typography: mat.define-legacy-typography-config(
   $font-family: $skywire-font-family
 );
 
-@include mat.core($general-typography);
+// TODO(v15): As of v15 mat.legacy-core no longer includes default typography styles.
+//  The following line adds:
+//    1. Default typography styles for all components
+//    2. Styles for typography hierarchy classes (e.g. .mat-headline-1)
+//  If you specify typography styles for the components you use elsewhere, you should delete this line.
+//  If you don't need the default component typographies but still want the hierarchy styles,
+//  you can delete this line and instead use:
+//    `@include mat.legacy-typography-hierarchy($general-typography);`
+@include mat.all-legacy-component-typographies($general-typography);
+@include mat.legacy-core();
 
 $mat-skywire-primary: (
   100: $blue-medium,
@@ -27,9 +36,14 @@ $mat-skywire-accent: (
 $skywire-primary: mat.define-palette($mat-skywire-primary, 500, 100, 500);
 $skywire-accent: mat.define-palette($mat-skywire-accent, 500, 500, 500);
 
-$skywire-theme: mat.define-light-theme($skywire-primary, $skywire-accent);
+$skywire-theme: mat.define-light-theme((
+  color: (
+    primary: $skywire-primary,
+    accent: $skywire-accent,
+  ),
+));
 
-@include mat.all-component-themes($skywire-theme);
+@include mat.all-legacy-component-themes($skywire-theme);
 
 $mat-white-primary: (
   100: white,
@@ -43,8 +57,14 @@ $mat-white-primary: (
 );
 
 $white-primary: mat.define-palette($mat-white-primary);
-$white-theme: mat.define-light-theme($white-primary, $skywire-accent);
+
+$white-theme: mat.define-light-theme((
+  color: (
+    primary: $white-primary,
+    accent: $skywire-accent,
+  ),
+));
 
 .white-theme {
-  @include mat.all-component-colors($white-theme);
+  @include mat.all-legacy-component-colors($white-theme);
 }
