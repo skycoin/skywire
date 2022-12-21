@@ -2,6 +2,8 @@
 package visor
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -628,23 +630,53 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn) {
 	}
 	log.Debugf("Received: %v", cMsg)
 
-	fwd := fmt.Sprintf("localhost:%v", cMsg.Port)
-	localConn, err := net.Dial("tcp", fwd)
-	if err != nil {
+	lHost := fmt.Sprintf("localhost:%v", cMsg.Port)
+	ok := isPortAvailable(log, cMsg.Port)
+	if ok {
 		log.WithError(err).Errorf("Failed to dial port %v", cMsg.Port)
-		sendError(log, remoteConn, fmt.Errorf("Failed to dial port %v err=%v", cMsg.Port, err))
+		sendError(log, remoteConn, fmt.Errorf("Failed to dial port %v", cMsg.Port))
 		return
 	}
 
-	log.Debugf("Forwarding %s", fwd)
+	log.Debugf("Forwarding %s", lHost)
 
 	// send nil error to indicate to the remote connection that everything is ok
 	sendError(log, remoteConn, nil)
 
-	// go routines to initiate bi-directional communication for local server with the
-	// remote server
-	go forward(log, localConn, remoteConn, "one")
-	go forward(log, remoteConn, localConn, "two")
+	go forward(log, remoteConn, lHost)
+}
+
+// forward reads a http.Request from the remote conn of the requesting visor forwards that request
+// to the requested local server and forwards the http.Response from the local server to the requesting
+// visor via the remote conn
+func forward(log *logging.Logger, remoteConn net.Conn, lHost string) {
+	for {
+		buf := make([]byte, 32*1024)
+		n, err := remoteConn.Read(buf)
+		if err != nil {
+			log.WithError(err).Error("Failed to read packet")
+			return
+		}
+		req, err := http.ReadRequest(bufio.NewReader(bytes.NewBuffer(buf[:n])))
+		if err != nil {
+			log.WithError(err).Error("Failed to ReadRequest")
+			return
+		}
+		req.RequestURI = ""
+		req.URL.Scheme = "http"
+		req.URL.Host = lHost
+		client := http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.WithError(err).Error("Failed to Do req")
+			return
+		}
+		err = resp.Write(remoteConn)
+		if err != nil {
+			log.WithError(err).Error("Failed to Write")
+			return
+		}
+	}
 }
 
 func sendError(log *logging.Logger, remoteConn net.Conn, sendErr error) {
@@ -671,17 +703,6 @@ func sendError(log *logging.Logger, remoteConn net.Conn, sendErr error) {
 	if sendErr != nil {
 		closeConn(log, remoteConn)
 	}
-}
-
-func forward(log *logging.Logger, src, dest net.Conn, test string) {
-	defer closeConn(log, src)
-	defer closeConn(log, dest)
-	if _, err := io.Copy(src, dest); err != nil {
-		if err.Error() != io.EOF.Error() {
-			log.WithError(err).Errorf("Error resending traffic")
-		}
-	}
-	log.Errorf("end copy: %v", test)
 }
 
 func closeConn(log *logging.Logger, conn net.Conn) {
