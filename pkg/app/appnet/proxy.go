@@ -53,12 +53,12 @@ func RemoveProxy(id uuid.UUID) {
 
 // Proxy ...
 type Proxy struct {
-	ID         uuid.UUID `json:"id"`
+	ID         uuid.UUID
+	LocalPort  int
+	RemotePort int
 	remoteConn net.Conn
 	closeOnce  sync.Once
 	srv        *http.Server
-	LocalPort  int `json:"local_port"`
-	RemotePort int `json:"remote_port"`
 	closeChan  chan struct{}
 	log        *logging.Logger
 }
@@ -66,8 +66,10 @@ type Proxy struct {
 // NewProxy ...
 func NewProxy(log *logging.Logger, remoteConn net.Conn, remotePort, localPort int) *Proxy {
 	closeChan := make(chan struct{})
+	var once sync.Once
 	handler := http.NewServeMux()
-	handler.HandleFunc("/", handleFunc(remoteConn, log, closeChan))
+	var lock sync.Mutex
+	handler.HandleFunc("/", handleFunc(remoteConn, log, closeChan, once, &lock))
 
 	srv := &http.Server{
 		Addr:           fmt.Sprintf(":%v", localPort),
@@ -120,14 +122,32 @@ func (p *Proxy) Close() (err error) {
 	return err
 }
 
-func handleFunc(remoteConn net.Conn, log *logging.Logger, closeChan chan struct{}) func(w http.ResponseWriter, req *http.Request) {
+func isClosed(c chan struct{}) bool {
+	select {
+	case <-c:
+		return true
+	default:
+		return false
+	}
+}
+
+func handleFunc(remoteConn net.Conn, log *logging.Logger, closeChan chan struct{}, once sync.Once, lock *sync.Mutex) func(w http.ResponseWriter, req *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		lock.Lock()
+		defer lock.Unlock()
+
+		if isClosed(closeChan) {
+			return
+		}
 		client := http.Client{Transport: MakeHTTPTransport(remoteConn, log)}
 		// Forward request to remote server
 		resp, err := client.Transport.RoundTrip(r)
 		if err != nil {
 			http.Error(w, "Could not reach remote server", 500)
-			close(closeChan)
+			log.WithError(err).Errorf("Could not reach remote server %v", resp)
+			once.Do(func() {
+				close(closeChan)
+			})
 			return
 		}
 
