@@ -863,7 +863,7 @@ func (v *Visor) Reload() error {
 	if err != nil {
 		os.Exit(1)
 	}
-	go RunVisor(v1, oldUIAssets)
+	go run(v1, oldUIAssets)
 	return nil
 }
 

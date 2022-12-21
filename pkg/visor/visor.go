@@ -123,8 +123,8 @@ func (v *Visor) MasterLogger() *logging.MasterLogger {
 	return v.conf.MasterLogger()
 }
 
-// NewVisor constructs new Visor.
-func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
+// newVisor constructs new Visor.
+func newVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 
 	v := &Visor{
 		log:                  conf.MasterLogger().PackageLogger("visor"),
@@ -219,7 +219,7 @@ func (v *Visor) isStunReady() bool {
 }
 
 // RunVisor runs the visor
-func RunVisor(conf *visorconfig.V1, uiAssets fs.FS) {
+func run(conf *visorconfig.V1, uiAssets fs.FS) {
 	log := initLogger()
 	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
 	log.AddHook(hook)
@@ -227,7 +227,7 @@ func RunVisor(conf *visorconfig.V1, uiAssets fs.FS) {
 	if conf.Hypervisor != nil {
 		conf.Hypervisor.UIAssets = uiAssets
 	}
-	vis, ok := NewVisor(ctx, conf)
+	vis, ok := newVisor(ctx, conf)
 	if !ok {
 		select {
 		case <-ctx.Done():
