@@ -61,7 +61,7 @@ endif
 STATIC_OPTS?= $(OPTS) CC=musl-gcc
 MANAGER_UI_DIR = static/skywire-manager-src
 GO_BUILDER_VERSION=v1.17
-MANAGER_UI_BUILT_DIR=cmd/skywire-visor/static
+MANAGER_UI_BUILT_DIR=pkg/visor/static
 
 TEST_OPTS:=-cover -timeout=5m -mod=vendor
 

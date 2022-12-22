@@ -27,11 +27,14 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/skyenv"
+//	"github.com/skycoin/skywire/cmd/skywire-visor/static"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
-
+//go:embed static
+//go:embed static
+var ui embed.FS
 var uiAssets fs.FS
 
 var (
@@ -68,13 +71,6 @@ var (
 func init() {
 	root = skyenv.IsRoot()
 
-	var ui embed.FS
-	uiFS, err := fs.Sub(ui, "static")
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	uiAssets = uiFS
 	RootCmd.Flags().SortFlags = false
 	//the default is not set to fix the aesthetic of the help command
 	RootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use (default): "+skyenv.ConfigName)
@@ -261,6 +257,14 @@ func runVisor(conf *visorconfig.V1) {
 
 	stopPProf := initPProf(log, pprofMode, pprofAddr)
 	defer stopPProf()
+
+	uiFS, err := fs.Sub(ui, "static")
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	uiAssets = uiFS
+
 
 	if conf == nil {
 		conf = initConfig(log, confPath)
