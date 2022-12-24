@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/util/osutil"
 )
@@ -52,6 +53,12 @@ func (c *Client) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 			fmt.Printf("error setting dns for interface: %s", err)
 		}
 	}
+
+	// TODO (mrpalide): due to nmcli functionality, we should wait for reload network manager after use it for set DNS, then add routes
+	// if we skip this stop here for a little (5) seconds, we lost all routes that will add by ip command
+	// also we should fix it later, when nmcli guys add --preserved-external-ip flag due to this command:
+	// https://gitlab.freedesktop.org/NetworkManager/NetworkManager/-/issues/1167#note_1690288
+	time.Sleep(5 * time.Second)
 
 	if err := c.AddRoute(ip, gateway); err != nil {
 		return fmt.Errorf("error setting gateway for interface: %w", err)
