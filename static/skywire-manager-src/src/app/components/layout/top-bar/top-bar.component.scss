@@ -1,7 +1,7 @@
 @use 'sass:math';
 
 @import 'variables';
-@import "~bootstrap/scss/functions";
+@import "bootstrap/scss/functions";
 @import "bootstrap_overrides";
 
 $top-bar-height: 56px;
@@ -16,7 +16,6 @@ $top-bar-height: 56px;
   border-bottom: 1px solid $separator;
   padding-bottom: 10px;
   margin-bottom: -5px;
-  height: 100px;
   display: flex;
 
   .main-area {
@@ -210,6 +209,7 @@ $top-bar-height: 56px;
           top: 1px;
           user-select: none;
           width: auto;
+          line-height: 1;
         }
 
         .state-icon {

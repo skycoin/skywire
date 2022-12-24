@@ -182,8 +182,7 @@ const routes: Routes = [
 
 @NgModule({
   imports: [RouterModule.forRoot(routes, {
-    useHash: true,
-    relativeLinkResolution: 'legacy'
+    useHash: true
 })],
   exports: [RouterModule],
 })

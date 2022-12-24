@@ -5,7 +5,7 @@
  */
 
 import { Component, Inject, OnDestroy, AfterViewInit, ChangeDetectorRef } from '@angular/core';
-import { MatDialogRef, MAT_DIALOG_DATA, MatDialog, MatDialogConfig } from '@angular/material/dialog';
+import { MatLegacyDialogRef as MatDialogRef, MAT_LEGACY_DIALOG_DATA as MAT_DIALOG_DATA, MatLegacyDialog as MatDialog, MatLegacyDialogConfig as MatDialogConfig } from '@angular/material/legacy-dialog';
 import { TranslateService } from '@ngx-translate/core';
 import { Subscription, forkJoin, interval } from 'rxjs';
 

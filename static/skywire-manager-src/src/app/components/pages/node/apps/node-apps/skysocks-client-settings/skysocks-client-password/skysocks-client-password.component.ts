@@ -1,5 +1,5 @@
 import { Component, ViewChild, ElementRef, OnInit } from '@angular/core';
-import { MatDialogRef, MatDialogConfig, MatDialog } from '@angular/material/dialog';
+import { MatLegacyDialogRef as MatDialogRef, MatLegacyDialogConfig as MatDialogConfig, MatLegacyDialog as MatDialog } from '@angular/material/legacy-dialog';
 import { UntypedFormGroup, UntypedFormBuilder } from '@angular/forms';
 
 import { AppConfig } from 'src/app/app.config';
