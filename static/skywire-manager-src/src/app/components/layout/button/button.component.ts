@@ -1,5 +1,5 @@
 import { Component, EventEmitter, Input, Output, ViewChild, OnDestroy } from '@angular/core';
-import { MatButton } from '@angular/material/button';
+import { MatLegacyButton as MatButton } from '@angular/material/legacy-button';
 
 enum ButtonStates {
   Normal, Error, Loading

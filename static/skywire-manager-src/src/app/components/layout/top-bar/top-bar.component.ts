@@ -1,7 +1,7 @@
 import { Component, Input, Output, EventEmitter, OnInit, OnDestroy } from '@angular/core';
 import { of, Subscription } from 'rxjs';
 import { delay } from 'rxjs/operators';
-import { MatDialog } from '@angular/material/dialog';
+import { MatLegacyDialog as MatDialog } from '@angular/material/legacy-dialog';
 import { Router } from '@angular/router';
 
 import { LanguageService, LanguageData } from 'src/app/services/language.service';

@@ -66,6 +66,11 @@ button:focus {
   min-width: 40px !important;
 }
 
+.mat-checkbox-layout .mat-checkbox-label {
+  line-height: 1 !important;
+  margin-bottom: 4px;
+}
+
 .grey-button-background:hover {
   background-color: rgba(0,0,0,0.05) !important;
 }

@@ -1,6 +1,6 @@
 import { Component, ElementRef, Inject, OnDestroy, ViewChild, Renderer2, HostListener, AfterViewInit } from '@angular/core';
 import { Subscription } from 'rxjs';
-import { MAT_DIALOG_DATA, MatDialogRef, MatDialog, MatDialogConfig } from '@angular/material/dialog';
+import { MAT_LEGACY_DIALOG_DATA as MAT_DIALOG_DATA, MatLegacyDialogRef as MatDialogRef, MatLegacyDialog as MatDialog, MatLegacyDialogConfig as MatDialogConfig } from '@angular/material/legacy-dialog';
 import { TranslateService } from '@ngx-translate/core';
 
 import { ApiService } from '../../../../../services/api.service';

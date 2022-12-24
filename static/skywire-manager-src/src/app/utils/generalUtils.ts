@@ -1,4 +1,4 @@
-import { MatDialogRef, MatDialogConfig, MatDialog } from '@angular/material/dialog';
+import { MatLegacyDialogRef as MatDialogRef, MatLegacyDialogConfig as MatDialogConfig, MatLegacyDialog as MatDialog } from '@angular/material/legacy-dialog';
 
 import { ConfirmationComponent, ConfirmationData } from '../components/layout/confirmation/confirmation.component';
 import { AppConfig } from '../app.config';
@@ -63,7 +63,7 @@ export default class GeneralUtils {
 
     return true;
   }
-  
+
   /**
    * Validates an IPv4 address.
    */
