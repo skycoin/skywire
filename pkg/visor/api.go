@@ -25,7 +25,6 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
@@ -318,7 +317,7 @@ func (v *Visor) Uptime() (float64, error) {
 
 // SetRewardAddress implements API.
 func (v *Visor) SetRewardAddress(p string) (string, error) {
-	path := v.conf.LocalPath + "/" + skyenv.RewardFile
+	path := v.conf.LocalPath + "/" + visorconfig.RewardFile
 	err := os.WriteFile(path, []byte(p), 0644) //nolint
 	if err != nil {
 		return p, fmt.Errorf("failed to write config to file. err=%v", err)
@@ -328,7 +327,7 @@ func (v *Visor) SetRewardAddress(p string) (string, error) {
 
 // GetRewardAddress implements API.
 func (v *Visor) GetRewardAddress() (string, error) {
-	path := v.conf.LocalPath + "/" + skyenv.RewardFile
+	path := v.conf.LocalPath + "/" + visorconfig.RewardFile
 	rConfig, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return "", fmt.Errorf("failed to read config file. err=%v", err)
@@ -359,7 +358,7 @@ func (v *Visor) SkybianBuildVersion() string {
 func (v *Visor) StartApp(appName string) error {
 	var envs []string
 	var err error
-	if appName == skyenv.VPNClientName {
+	if appName == visorconfig.VPNClientName {
 		// todo: can we use some kind of app start hook that will be used for both autostart
 		// and start? Reason: this is also called in init for autostart
 
@@ -407,7 +406,7 @@ func (v *Visor) StartVPNClient(pk cipher.PubKey) error {
 	}
 
 	for index, app := range v.conf.Launcher.Apps {
-		if app.Name == skyenv.VPNClientName {
+		if app.Name == visorconfig.VPNClientName {
 			// we set the args in memory and pass it in `v.appL.StartApp`
 			// unlike the api method `StartApp` where `nil` is passed in `v.appL.StartApp` as args
 			// but the args are set in the config
@@ -424,7 +423,7 @@ func (v *Visor) StartVPNClient(pk cipher.PubKey) error {
 
 			// check process manager availability
 			if v.procM != nil {
-				return v.appL.StartApp(skyenv.VPNClientName, v.conf.Launcher.Apps[index].Args, envs)
+				return v.appL.StartApp(visorconfig.VPNClientName, v.conf.Launcher.Apps[index].Args, envs)
 			}
 			return ErrProcNotAvailable
 		}
@@ -491,9 +490,9 @@ func (v *Visor) SetAutoStart(appName string, autoStart bool) error {
 func (v *Visor) SetAppPassword(appName, password string) error {
 	allowedToChangePassword := func(appName string) bool {
 		allowedApps := map[string]struct{}{
-			skyenv.SkysocksName:  {},
-			skyenv.VPNClientName: {},
-			skyenv.VPNServerName: {},
+			visorconfig.SkysocksName:  {},
+			visorconfig.VPNClientName: {},
+			visorconfig.VPNServerName: {},
 		}
 
 		_, ok := allowedApps[appName]
@@ -521,7 +520,7 @@ func (v *Visor) SetAppPassword(appName, password string) error {
 
 // SetAppNetworkInterface implements API.
 func (v *Visor) SetAppNetworkInterface(appName, netifc string) error {
-	if skyenv.VPNServerName != appName {
+	if visorconfig.VPNServerName != appName {
 		return fmt.Errorf("app %s is not allowed to set network interface", appName)
 	}
 
@@ -542,7 +541,7 @@ func (v *Visor) SetAppNetworkInterface(appName, netifc string) error {
 
 // SetAppKillswitch implements API.
 func (v *Visor) SetAppKillswitch(appName string, killswitch bool) error {
-	if appName != skyenv.VPNClientName {
+	if appName != visorconfig.VPNClientName {
 		return fmt.Errorf("app %s is not allowed to set killswitch", appName)
 	}
 
@@ -563,7 +562,7 @@ func (v *Visor) SetAppKillswitch(appName string, killswitch bool) error {
 
 // SetAppSecure implements API.
 func (v *Visor) SetAppSecure(appName string, isSecure bool) error {
-	if appName != skyenv.VPNServerName {
+	if appName != visorconfig.VPNServerName {
 		return fmt.Errorf("app %s is not allowed to change 'secure' parameter", appName)
 	}
 
@@ -586,8 +585,8 @@ func (v *Visor) SetAppSecure(appName string, isSecure bool) error {
 func (v *Visor) SetAppPK(appName string, pk cipher.PubKey) error {
 	allowedToChangePK := func(appName string) bool {
 		allowedApps := map[string]struct{}{
-			skyenv.SkysocksClientName: {},
-			skyenv.VPNClientName:      {},
+			visorconfig.SkysocksClientName: {},
+			visorconfig.VPNClientName:      {},
 		}
 
 		_, ok := allowedApps[appName]
@@ -858,12 +857,11 @@ func (v *Visor) Reload() error {
 	if err != nil {
 		return err
 	}
-	oldUIAssets := v.uiAssets
 	err = v.Close()
 	if err != nil {
 		os.Exit(1)
 	}
-	go run(v1, oldUIAssets)
+	go run(v1)
 	return nil
 }
 
@@ -928,7 +926,7 @@ func (v *Visor) SetPublicAutoconnect(pAc bool) error {
 // GetVPNClientAddress get PK address of server set on vpn-client
 func (v *Visor) GetVPNClientAddress() string {
 	for _, v := range v.conf.Launcher.Apps {
-		if v.Name == skyenv.VPNClientName {
+		if v.Name == visorconfig.VPNClientName {
 			for index := range v.Args {
 				if v.Args[index] == "-srv" {
 					return v.Args[index+1]

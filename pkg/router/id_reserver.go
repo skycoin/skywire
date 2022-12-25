@@ -1,5 +1,5 @@
 // Package setup pkg/setup/id_reserver.go
-package setup
+package router
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"sync"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/router/routerclient"
+	"github.com/skycoin/skywire/pkg/setup"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
@@ -38,12 +38,12 @@ type IDReserver interface {
 	TotalIDs() int
 
 	// Client returns a router client of given public key.
-	Client(pk cipher.PubKey) *routerclient.Client
+	Client(pk cipher.PubKey) *Client
 }
 
 type idReserver struct {
 	total int                                 // the total number of route IDs we reserve from the routers
-	rcM   routerclient.Map                    // map of router clients
+	rcM   Map                    // map of router clients
 	rec   map[cipher.PubKey]uint8             // this records the number of expected rules per visor PK
 	ids   map[cipher.PubKey][]routing.RouteID // this records the obtained rules per visor PK
 	mx    sync.Mutex
@@ -72,7 +72,7 @@ func NewIDReserver(ctx context.Context, dialer network.Dialer, paths [][]routing
 	for pk := range rec {
 		pks = append(pks, pk)
 	}
-	clients, err := routerclient.MakeMap(ctx, dialer, pks)
+	clients, err := MakeMap(ctx, dialer, pks)
 	if err != nil {
 		return nil, fmt.Errorf("a dial attempt failed with: %v", err)
 	}
@@ -129,7 +129,7 @@ func (idr *idReserver) TotalIDs() int {
 	return idr.total
 }
 
-func (idr *idReserver) Client(pk cipher.PubKey) *routerclient.Client {
+func (idr *idReserver) Client(pk cipher.PubKey) *Client {
 	return idr.rcM[pk]
 }
 

@@ -11,9 +11,7 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // TransportListener provides an rpc service over dmsg to perform skycoin transport setup
@@ -25,13 +23,13 @@ type TransportListener struct {
 }
 
 // NewTransportListener makes a TransportListener from configuration
-func NewTransportListener(ctx context.Context, conf *visorconfig.V1, dmsgC *dmsg.Client, tm *transport.Manager, masterLogger *logging.MasterLogger) (*TransportListener, error) {
+func NewTransportListener(ctx context.Context, pk cipher.PubKey, tsnodes []cipher.PubKey, dmsgC *dmsg.Client, tm *transport.Manager, masterLogger *logging.MasterLogger) (*TransportListener, error) {
 	log := masterLogger.PackageLogger("transport_setup")
-	log.WithField("local_pk", conf.PK).Debug("Connecting to the dmsg network.")
+	log.WithField("local_pk", pk).Debug("Connecting to the dmsg network.")
 
 	select {
 	case <-dmsgC.Ready():
-		log.WithField("local_pk", conf.PK).Debug("Connected!")
+		log.WithField("local_pk", pk).Debug("Connected!")
 		tl := &TransportListener{
 			dmsgC:   dmsgC,
 			log:     log,
@@ -46,7 +44,7 @@ func NewTransportListener(ctx context.Context, conf *visorconfig.V1, dmsgC *dmsg
 
 // Serve transport setup rpc to trusted nodes over dmsg
 func (ts *TransportListener) Serve(ctx context.Context) {
-	ts.log.WithField("dmsg_port", skyenv.DmsgTransportSetupPort).Debug("starting listener")
+	ts.log.WithField("dmsg_port", skyenv..DmsgTransportSetupPort).Debug("starting listener")
 	lis, err := ts.dmsgC.Listen(skyenv.DmsgTransportSetupPort)
 	if err != nil {
 		ts.log.WithError(err).Error("failed to listen")
@@ -58,7 +56,7 @@ func (ts *TransportListener) Serve(ctx context.Context) {
 		}
 	}()
 
-	ts.log.WithField("dmsg_port", skyenv.DmsgTransportSetupPort).Debug("Accepting dmsg streams.")
+	ts.log.WithField("dmsg_port", skyenv..DmsgTransportSetupPort).Debug("Accepting dmsg streams.")
 	for {
 		conn, err := lis.AcceptStream()
 		if err != nil {

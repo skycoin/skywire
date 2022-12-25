@@ -7,13 +7,9 @@ import (
 	"sync"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/app/appserver"
-	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/dmsgc"
-	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
-	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig/appconfig"
 )
 
 // V1 is visor config
@@ -39,9 +35,15 @@ type V1 struct {
 	ShutdownTimeout      Duration                         `json:"shutdown_timeout,omitempty"`    // time value, examples: 10s, 1m, etc
 	RestartCheckDelay    Duration                         `json:"restart_check_delay,omitempty"` // time value, examples: 10s, 1m, etc
 	IsPublic             bool                             `json:"is_public"`
-	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
+	PersistentTransports []PersistentTransports `json:"persistent_transports"`
 
-	Hypervisor *hypervisorconfig.Config `json:"hypervisor,omitempty"`
+	Hypervisor *HypervisorConfig `json:"hypervisor,omitempty"`
+}
+
+// PersistentTransports is a persistent transports description
+type PersistentTransports struct {
+	PK      cipher.PubKey `json:"pk"`
+	NetType network.Type  `json:"type"`
 }
 
 // Dmsgpty configures the dmsgpty-host.
@@ -81,10 +83,10 @@ type UptimeTracker struct {
 	Addr string `json:"addr"`
 }
 
-// Launcher configures the app appserver.
+// Launcher configures the app
 type Launcher struct {
 	ServiceDisc   string                `json:"service_discovery"`
-	Apps          []appserver.AppConfig `json:"apps"`
+	Apps          []appconfig.AppConfig `json:"apps"`
 	ServerAddr    string                `json:"server_addr"`
 	BinPath       string                `json:"bin_path"`
 	DisplayNodeIP bool                  `json:"display_node_ip"`
@@ -100,15 +102,16 @@ func (v1 *V1) Flush() error {
 
 // Reload reloads the config from file (if exists).
 func Reload() (*V1, error) {
-	if skyenv.VisorConfigFile == StdinName {
+	if VisorConfigFile == Stdin {
 		return nil, nil
 	}
-	return ReadFile(skyenv.VisorConfigFile)
+	return ReadFile(VisorConfigFile)
 }
 
-// UpdateAppAutostart modifies a single app's autostart value within the config and also the given appserver.
+// UpdateAppAutostart modifies a single app's autostart value within the config and also the given
+//
 // The updated config gets flushed to file if there are any changes.
-func (v1 *V1) UpdateAppAutostart(launch *launcher.Launcher, appName string, autoStart bool) error {
+func (v1 *V1) UpdateAppAutostart(launch *appconfig.AppLauncher, appName string, autoStart bool) error {
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
 
@@ -127,7 +130,7 @@ func (v1 *V1) UpdateAppAutostart(launch *launcher.Launcher, appName string, auto
 		return nil
 	}
 
-	launch.ResetConfig(launcher.Config{
+	launch.ResetConfig(appconfig.AppLauncherConfig{
 		VisorPK:       v1.PK,
 		Apps:          conf.Apps,
 		ServerAddr:    conf.ServerAddr,
@@ -136,9 +139,9 @@ func (v1 *V1) UpdateAppAutostart(launch *launcher.Launcher, appName string, auto
 	return v1.flush(v1)
 }
 
-// UpdateAppArg updates the cli flag of the specified app config and also within the appserver.
+// UpdateAppArg updates the cli flag of the specified app config and also within the
 // The updated config gets flushed to file if there are any changes.
-func (v1 *V1) UpdateAppArg(launch *launcher.Launcher, appName, argName string, value interface{}) error {
+func (v1 *V1) UpdateAppArg(launch *appconfig.AppLauncher, appName, argName string, value interface{}) error {
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
 
@@ -158,7 +161,7 @@ func (v1 *V1) UpdateAppArg(launch *launcher.Launcher, appName, argName string, v
 		return nil
 	}
 
-	launch.ResetConfig(launcher.Config{
+	launch.ResetConfig(appconfig.AppLauncherConfig{
 		VisorPK:       v1.PK,
 		Apps:          conf.Apps,
 		ServerAddr:    conf.ServerAddr,
@@ -178,7 +181,7 @@ func (v1 *V1) UpdateMinHops(hops uint16) error {
 }
 
 // UpdatePersistentTransports updates persistent_transports in config
-func (v1 *V1) UpdatePersistentTransports(pTps []transport.PersistentTransports) error {
+func (v1 *V1) UpdatePersistentTransports(pTps []PersistentTransports) error {
 	v1.mu.Lock()
 	v1.PersistentTransports = pTps
 	v1.mu.Unlock()
@@ -187,7 +190,7 @@ func (v1 *V1) UpdatePersistentTransports(pTps []transport.PersistentTransports) 
 }
 
 // GetPersistentTransports gets persistent_transports from config
-func (v1 *V1) GetPersistentTransports() ([]transport.PersistentTransports, error) {
+func (v1 *V1) GetPersistentTransports() ([]PersistentTransports, error) {
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
 	return v1.PersistentTransports, nil
@@ -196,7 +199,7 @@ func (v1 *V1) GetPersistentTransports() ([]transport.PersistentTransports, error
 // UpdateLogRotationInterval updates log_rotation_interval in config
 func (v1 *V1) UpdateLogRotationInterval(d Duration) error {
 	v1.mu.Lock()
-	v1.Transport.LogStore.RotationInterval = d
+	v1.LogStore.RotationInterval = d
 	v1.mu.Unlock()
 
 	return v1.flush(v1)
@@ -206,19 +209,19 @@ func (v1 *V1) UpdateLogRotationInterval(d Duration) error {
 func (v1 *V1) GetLogRotationInterval() (Duration, error) {
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
-	return v1.Transport.LogStore.RotationInterval, nil
+	return v1.LogStore.RotationInterval, nil
 }
 
 // UpdatePublicAutoconnect updates public_autoconnect in config
 func (v1 *V1) UpdatePublicAutoconnect(pAc bool) error {
 	v1.mu.Lock()
-	v1.Transport.PublicAutoconnect = pAc
+	v1.PublicAutoconnect = pAc
 	v1.mu.Unlock()
 
 	return v1.flush(v1)
 }
 
-// updateStringArg updates the cli non-boolean flag of the specified app config and also within the appserver.
+// updateStringArg updates the cli non-boolean flag of the specified app config and also within the
 // It removes argName from app args if value is an empty string.
 // The updated config gets flushed to file if there are any changes.
 func updateStringArg(conf *Launcher, appName, argName, value string) bool {
@@ -260,7 +263,7 @@ func updateStringArg(conf *Launcher, appName, argName, value string) bool {
 	return configChanged
 }
 
-// updateBoolArg updates the cli boolean flag of the specified app config and also within the appserver.
+// updateBoolArg updates the cli boolean flag of the specified app config and also within the
 // All flag names and values are formatted as "-name=value" to allow arbitrary values with respect to different
 // possible default values.
 // The updated config gets flushed to file if there are any changes.

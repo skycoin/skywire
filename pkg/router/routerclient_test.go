@@ -1,5 +1,5 @@
-// Package routerclient pkg/router/routerclient/client_test.go
-package routerclient
+// Package routerclient pkg/router/routerclient_test.go
+package router
 
 import (
 	"context"
@@ -13,13 +13,12 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/internal/testhelpers"
-	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
 func TestClient_Close(t *testing.T) {
 	t.Run("ok", func(t *testing.T) {
-		r := &router.MockRouter{}
+		r := &MockRouter{}
 		_, _, cleanup := prepRPCServerAndClient(t, r)
 		cleanup()
 	})
@@ -45,7 +44,7 @@ func TestClient_AddEdgeRules(t *testing.T) {
 		Reverse: routing.Rule{1, 1, 1},
 	}
 
-	r := &router.MockRouter{}
+	r := &MockRouter{}
 	r.On("IntroduceRules", rules).Return(testhelpers.NoErr)
 	r.On("SaveRoutingRules", rules.Forward, rules.Reverse).Return(testhelpers.NoErr)
 
@@ -63,7 +62,7 @@ func TestClient_AddIntermediaryRules(t *testing.T) {
 	rulesIfc := []interface{}{rule1, rule2}
 	rules := []routing.Rule{rule1, rule2}
 
-	r := &router.MockRouter{}
+	r := &MockRouter{}
 	r.On("SaveRoutingRules", rulesIfc...).Return(testhelpers.NoErr)
 
 	_, cl, cleanup := prepRPCServerAndClient(t, r)
@@ -78,7 +77,7 @@ func TestClient_ReserveIDs(t *testing.T) {
 	n := uint8(5)
 	ids := []routing.RouteID{1, 2, 3, 4, 5}
 
-	r := &router.MockRouter{}
+	r := &MockRouter{}
 	r.On("ReserveKeys", int(n)).Return(ids, testhelpers.NoErr)
 
 	_, cl, cleanup := prepRPCServerAndClient(t, r)
@@ -90,12 +89,12 @@ func TestClient_ReserveIDs(t *testing.T) {
 }
 
 // nolint:unparam
-func prepRPCServerAndClient(t *testing.T, r router.Router) (s *rpc.Server, cl *Client, cleanup func()) {
+func prepRPCServerAndClient(t *testing.T, r Router) (s *rpc.Server, cl *Client, cleanup func()) {
 	l, err := nettest.NewLocalListener("tcp")
 	require.NoError(t, err)
 	mlog := logging.NewMasterLogger()
 	s = rpc.NewServer()
-	require.NoError(t, s.Register(router.NewRPCGateway(r, mlog)))
+	require.NoError(t, s.Register(NewRPCGateway(r, mlog)))
 	go s.Accept(l)
 
 	conn, err := net.Dial("tcp", l.Addr().String())

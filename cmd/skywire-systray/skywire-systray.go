@@ -18,7 +18,7 @@ import (
 	"github.com/skycoin/systray"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorcp"
 )
 
 var (

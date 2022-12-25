@@ -30,10 +30,8 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
-	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/pkg/visor/usermanager"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -58,7 +56,7 @@ type Conn struct {
 
 // Hypervisor manages visors.
 type Hypervisor struct {
-	c            hypervisorconfig.Config
+	c            visorconfig.HypervisorConfig
 	visor        *Visor
 	remoteVisors map[cipher.PubKey]Conn // connected remote visors to hypervisor
 	dmsgC        *dmsg.Client
@@ -69,7 +67,7 @@ type Hypervisor struct {
 }
 
 // New creates a new Hypervisor.
-func New(config hypervisorconfig.Config, visor *Visor, dmsgC *dmsg.Client) (*Hypervisor, error) {
+func New(config visorconfig.HypervisorConfig, visor *Visor, dmsgC *dmsg.Client) (*Hypervisor, error) {
 	config.Cookies.TLS = config.EnableTLS
 
 	boltUserDB, err := usermanager.NewBoltUserStore(config.DBPath)
@@ -134,7 +132,7 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 		visorConn := &Conn{
 			Addr:  addr,
 			SrvPK: conn.ServerPK(),
-			API:   NewRPCClient(log, conn, RPCPrefix, skyenv.RPCTimeout),
+			API:   NewRPCClient(log, conn, RPCPrefix, visorconfig.RPCTimeout),
 			PtyUI: setupDmsgPtyUI(hv.dmsgC, addr.PK),
 		}
 		if hv.visor.isDTMReady() {
@@ -688,7 +686,7 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 					return
 				}
 				appStatus := appserver.AppDetailedStatusStarting
-				if ctx.App.Name == skyenv.VPNClientName {
+				if ctx.App.Name == visorconfig.VPNClientName {
 					appStatus = appserver.AppDetailedStatusVPNConnecting
 				}
 				if err := ctx.API.SetAppDetailedStatus(ctx.App.Name, appStatus); err != nil {
@@ -1515,7 +1513,7 @@ type dmsgPtyUI struct {
 }
 
 func setupDmsgPtyUI(dmsgC *dmsg.Client, visorPK cipher.PubKey) *dmsgPtyUI {
-	ptyDialer := dmsgpty.DmsgUIDialer(dmsgC, dmsg.Addr{PK: visorPK, Port: skyenv.DmsgPtyPort})
+	ptyDialer := dmsgpty.DmsgUIDialer(dmsgC, dmsg.Addr{PK: visorPK, Port: visorconfig.DmsgPtyPort})
 	return &dmsgPtyUI{
 		PtyUI: dmsgpty.NewUI(ptyDialer, dmsgpty.DefaultUIConfig()),
 	}
@@ -1524,7 +1522,7 @@ func setupDmsgPtyUI(dmsgC *dmsg.Client, visorPK cipher.PubKey) *dmsgPtyUI {
 func (hv *Hypervisor) getPty() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		customCommand := make(map[string][]string)
-		customCommand["update"] = skyenv.UpdateCommand()
+		customCommand["update"] = visorconfig.UpdateCommand()
 		ctx.PtyUI.PtyUI.Handler(customCommand)(w, r)
 	})
 }

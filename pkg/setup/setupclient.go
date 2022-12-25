@@ -1,5 +1,5 @@
-// Package setupclient client.go
-package setupclient
+// Package setup setupclient.go
+package setup
 
 import (
 	"context"

@@ -25,7 +25,6 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/servicedisc"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/static/icons"
 )
@@ -194,7 +193,7 @@ func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, logger *log
 func vpnStatusBtn(rpcClient API) {
 	for {
 		vpnStatusMx.Lock()
-		stats, _ := rpcClient.GetAppConnectionsSummary(skyenv.VPNClientName) //nolint
+		stats, _ := rpcClient.GetAppConnectionsSummary(visorconfig.VPNClientName) //nolint
 		if len(stats) == 1 {
 			if stats[0].IsAlive {
 				if vpnLastStatus != 1 {
@@ -253,24 +252,24 @@ func serversBtn(servers []*systray.MenuItem, rpcClient API) {
 			continue
 		}
 
-		rpcClient.StopApp(skyenv.VPNClientName)      //nolint
-		rpcClient.SetAppPK(skyenv.VPNClientName, pk) //nolint
+		rpcClient.StopApp(visorconfig.VPNClientName)      //nolint
+		rpcClient.SetAppPK(visorconfig.VPNClientName, pk) //nolint
 		vpnStatusMx.Lock()
 		vpnLastStatus = 3
 		vpnStatusMx.Unlock()
-		rpcClient.StartApp(skyenv.VPNClientName) //nolint
+		rpcClient.StartApp(visorconfig.VPNClientName) //nolint
 	}
 }
 
 func handleVPNButton(rpcClient API) {
-	stats, _ := rpcClient.GetAppConnectionsSummary(skyenv.VPNClientName) //nolint
+	stats, _ := rpcClient.GetAppConnectionsSummary(visorconfig.VPNClientName) //nolint
 	if len(stats) == 1 {
-		rpcClient.StopApp(skyenv.VPNClientName) //nolint
+		rpcClient.StopApp(visorconfig.VPNClientName) //nolint
 	} else {
 		vpnStatusMx.Lock()
 		vpnLastStatus = 3
 		vpnStatusMx.Unlock()
-		rpcClient.StartApp(skyenv.VPNClientName) //nolint
+		rpcClient.StartApp(visorconfig.VPNClientName) //nolint
 	}
 }
 
@@ -493,7 +492,7 @@ func getHVAddr(conf *visorconfig.V1) string {
 func isVPNExists(vc *visorconfig.V1) bool {
 	status := false
 	for _, app := range vc.Launcher.Apps {
-		if app.Name == skyenv.VPNClientName {
+		if app.Name == visorconfig.VPNClientName {
 			status = true
 		}
 	}

@@ -11,7 +11,7 @@ import (
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/servicedisc"
-	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // Factory creates appdisc.Updater instances based on the app name.
@@ -81,11 +81,11 @@ func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
 	}
 
 	switch conf.AppName {
-	case skyenv.VPNServerName:
+	case visorconfig.VPNServerName:
 		return &serviceUpdater{
 			client: servicedisc.NewClient(log, f.MLog, getServiceDiscConf(conf, servicedisc.ServiceTypeVPN), f.Client, f.ClientPublicIP),
 		}, true
-	case skyenv.SkysocksName:
+	case visorconfig.SkysocksName:
 		return &serviceUpdater{
 			client: servicedisc.NewClient(log, f.MLog, getServiceDiscConf(conf, servicedisc.ServiceTypeSkysocks), f.Client, f.ClientPublicIP),
 		}, true

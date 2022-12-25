@@ -22,7 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appnet"
-	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var (
@@ -286,7 +286,7 @@ func (p *Proc) Stop() error {
 		} else {
 			p.ipcServerWg.Wait()
 			if p.ipcServer != nil {
-				if err := p.ipcServer.Write(skyenv.IPCShutdownMessageType, []byte("")); err != nil {
+				if err := p.ipcServer.Write(visorconfig.IPCShutdownMessageType, []byte("")); err != nil {
 					return err
 				}
 			}

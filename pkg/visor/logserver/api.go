@@ -13,7 +13,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // API register all the API endpoints.
@@ -48,9 +48,9 @@ func New(log *logging.Logger, tpLogPath, localPath, customPath string, printLog 
 	r.Handle("/*", http.StripPrefix("/", fsTP))
 
 	fsLocal := http.FileServer(http.Dir(localPath))
-	r.Handle("/"+skyenv.SurveyFile, http.StripPrefix("/", fsLocal))
+	r.Handle("/"+visorconfig.SurveyFile, http.StripPrefix("/", fsLocal))
 
-	r.Handle("/"+skyenv.RewardFile, http.StripPrefix("/", fsLocal))
+	r.Handle("/"+visorconfig.RewardFile, http.StripPrefix("/", fsLocal))
 
 	fsCustom := http.FileServer(http.Dir(customPath))
 	r.Handle("/*", http.StripPrefix("/", fsCustom))

@@ -1,7 +1,7 @@
 //go:build windows
 // +build windows
 
-package skyenv
+package visorconfig
 
 import (
 	"runtime"

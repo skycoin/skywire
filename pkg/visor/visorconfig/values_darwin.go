@@ -1,7 +1,7 @@
 //go:build darwin
 // +build darwin
 
-package skyenv
+package visorconfig
 
 import (
 	"runtime"

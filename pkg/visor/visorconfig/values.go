@@ -1,5 +1,5 @@
-// Package skyenv defines variables and constants for different operating systems
-package skyenv
+// Package visorconfig defines variables and constants for different operating systems
+package visorconfig
 
 import (
 	"encoding/json"
@@ -18,124 +18,110 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 const (
-	// ConfigName is the default config name. Updated by setting config file path.
-	ConfigName = "skywire-config.json"
+//config file constants
+// ConfigName is the default config name. Updated by setting config file path.
+ConfigName = "skywire-config.json"
+// DMSGHTTPName is the default dmsghttp config name
+DMSGHTTPName = "dmsghttp-config.json"
 
-	// DMSGHTTPName is the default dmsghttp config name
-	DMSGHTTPName = "dmsghttp-config.json"
-)
-
-// Constants for skywire root directories.
 // Dmsg port constants.
 // TODO(evanlinjin): Define these properly. These are currently random.
-const (
-	DmsgCtrlPort           uint16 = 7                        // Listening port for dmsgctrl protocol (similar to TCP Echo Protocol).
-	DmsgSetupPort          uint16 = 36                       // Listening port of a setup node.
-	DmsgHypervisorPort     uint16 = 46                       // Listening port of a hypervisor for incoming RPC visor connections over dmsg.
-	DmsgTransportSetupPort uint16 = 47                       // Listening port for transport setup RPC over dmsg.
-	DmsgHTTPPort           uint16 = dmsg.DefaultDmsgHTTPPort // Listening port for dmsghttp logserver.
-	DmsgAwaitSetupPort     uint16 = 136                      // Listening port of a visor for setup operations.
-)
+DmsgCtrlPort           uint16 = 7                        // Listening port for dmsgctrl protocol (similar to TCP Echo Protocol).
+DmsgSetupPort          uint16 = 36                       // Listening port of a setup node.
+DmsgHypervisorPort     uint16 = 46                       // Listening port of a hypervisor for incoming RPC visor connections over dmsg.
+DmsgTransportSetupPort uint16 = 47                       // Listening port for transport setup RPC over dmsg.
+DmsgHTTPPort           uint16 = dmsg.DefaultDmsgHTTPPort // Listening port for dmsghttp logserver.
+DmsgAwaitSetupPort     uint16 = 136                      // Listening port of a visor for setup operations.
 
 // Transport port constants.
-const (
-	TransportPort     uint16 = 45 // Listening port of a visor for incoming transports.
-	PublicAutoconnect        = true
-)
+TransportPort     uint16 = 45 // Listening port of a visor for incoming transports.
+PublicAutoconnect        = true
 
 // Dmsgpty constants.
-const (
-	DmsgPtyPort   uint16 = 22
-	DmsgPtyCLINet        = "unix"
-)
+DmsgPtyPort   uint16 = 22
+DmsgPtyCLINet        = "unix"
 
 // Skywire-TCP constants.
-const (
-	STCPAddr = ":7777"
-)
+STCPAddr = ":7777"
 
 // Default skywire app constants.
-const (
-	SkychatName        = "skychat"
-	SkychatPort uint16 = 1
-	SkychatAddr        = ":8001"
+SkychatName        = "skychat"
+SkychatPort uint16 = 1
+SkychatAddr        = ":8001"
 
-	SkysocksName        = "skysocks"
-	SkysocksPort uint16 = 3
+SkysocksName        = "skysocks"
+SkysocksPort uint16 = 3
 
-	SkysocksClientName        = "skysocks-client"
-	SkysocksClientPort uint16 = 13
-	SkysocksClientAddr        = ":1080"
+SkysocksClientName        = "skysocks-client"
+SkysocksClientPort uint16 = 13
+SkysocksClientAddr        = ":1080"
 
-	VPNServerName        = "vpn-server"
-	VPNServerPort uint16 = 44
+VPNServerName        = "vpn-server"
+VPNServerPort uint16 = 44
 
-	VPNClientName = "vpn-client"
-	// TODO(darkrengarius): this one's not needed for the app to run but lack of it causes errors
-	VPNClientPort uint16 = 43
-)
+VPNClientName = "vpn-client"
+
+// TODO(darkrengarius): this one's not needed for the app to run but lack of it causes errors
+VPNClientPort uint16 = 43
 
 // RPC constants.
-const (
-	RPCAddr             = "localhost:3435"
-	RPCTimeout          = 20 * time.Second
-	TransportRPCTimeout = 1 * time.Minute
-	UpdateRPCTimeout    = 6 * time.Hour // update requires huge timeout
-)
+RPCAddr             = "localhost:3435"
+RPCTimeout          = 20 * time.Second
+TransportRPCTimeout = 1 * time.Minute
+UpdateRPCTimeout    = 6 * time.Hour // update requires huge timeout
 
 // Default skywire app server and discovery constants
-const (
-	AppSrvAddr                = "localhost:5505"
-	ServiceDiscUpdateInterval = time.Minute
-	AppBinPath                = "./apps"
-	LogLevel                  = "info"
-)
+AppSrvAddr                = "localhost:5505"
+ServiceDiscUpdateInterval = time.Minute
+AppBinPath                = "./apps"
+LogLevel                  = "info"
 
 // Routing constants
-const (
-	TpLogStore = "transport_logs"
-	Custom     = "custom"
-)
+TpLogStore = "transport_logs"
+Custom     = "custom"
 
 // Local constants
-const (
-	LocalPath = "./local"
-)
+LocalPath = "./local"
 
 // Default hypervisor constants
-const (
-	HypervisorDB      = ".skycoin/hypervisor/users.db"
-	EnableAuth        = false
-	PackageEnableAuth = true
-	EnableTLS         = false
-	TLSKey            = "./ssl/key.pem"
-	TLSCert           = "./ssl/cert.pem"
-)
+HypervisorDB      = ".skycoin/hypervisor/users.db"
+EnableAuth        = false
+PackageEnableAuth = true
+EnableTLS         = false
+TLSKey            = "./ssl/key.pem"
+TLSCert           = "./ssl/cert.pem"
 
-const (
-	// IPCShutdownMessageType sends IPC shutdown message type
-	IPCShutdownMessageType = 68
-)
+// IPCShutdownMessageType sends IPC shutdown message type
+IPCShutdownMessageType = 68
 
-const (
-	//IsPublic advertises the visor in the service discovery
-	IsPublic = false
+//IsPublic advertises the visor in the service discovery
+IsPublic = false
+
+// SurveyFile is the name of the survey file
+SurveyFile string = "system.json"
+
+// SurveySha256 is the name of the survey checksum file
+SurveySha256 string = "system.sha"
+
+// RewardFile is the name of the file containing skycoin rewards address and privacy setting
+RewardFile string = "reward.txt"
 )
 
 // PkgConfig struct contains paths specific to the linux packages
 type PkgConfig struct {
-	Launcher   `json:"launcher"`
+	LauncherBinPath   `json:"launcher"`
 	LocalPath  string `json:"local_path"`
 	Hypervisor `json:"hypervisor"`
 	//		TLSCertFile string `json:"tls_cert_file"`
 	//		TLSKeyFile  string `json:"tls_key_file"`
 }
 
-// Launcher struct contains the BinPath specific to the linux packages
-type Launcher struct {
+// Launcher struct contains the BinPath specific to the installation
+type LauncherBinPath struct {
 	BinPath string `json:"bin_path"`
 }
 
@@ -286,15 +272,6 @@ func IPSkycoinFetch() (ipskycoin *IPSkycoin) {
 	}
 	return ipskycoin
 }
-
-// SurveyFile is the name of the survey file
-const SurveyFile string = "system.json"
-
-// SurveySha256 is the name of the survey checksum file
-const SurveySha256 string = "system.sha"
-
-// RewardFile is the name of the file containing skycoin rewards address and privacy setting
-const RewardFile string = "reward.txt"
 
 var (
 	// VisorConfigFile will contain the path to the visor's config or `stdin` to denote that the config was read from STDIN

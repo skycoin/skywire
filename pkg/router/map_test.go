@@ -1,5 +1,5 @@
-// Package routerclient pkg/router/routerclient/map_test.go
-package routerclient
+// Package router pkg/router/map_test.go
+package router
 
 import (
 	"context"

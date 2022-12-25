@@ -19,7 +19,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/setup/setupclient"
+	"github.com/skycoin/skywire/pkg/setup"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -67,7 +67,7 @@ type Config struct {
 	SecKey           cipher.SecKey
 	TransportManager *transport.Manager
 	RouteFinder      rfclient.Client
-	RouteGroupDialer setupclient.RouteGroupDialer
+	RouteGroupDialer setup.RouteGroupDialer
 	SetupNodes       []cipher.PubKey
 	RulesGCInterval  time.Duration
 	MinHops          uint16
@@ -81,7 +81,7 @@ func (c *Config) SetDefaults() {
 	}
 
 	if c.RouteGroupDialer == nil {
-		c.RouteGroupDialer = setupclient.NewSetupNodeDialer()
+		c.RouteGroupDialer = setup.NewSetupNodeDialer()
 	}
 
 	if c.RulesGCInterval <= 0 {

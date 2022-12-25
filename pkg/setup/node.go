@@ -14,10 +14,9 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/router/routerclient"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/setup/setupmetrics"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/setup/setupmetrics"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
@@ -91,7 +90,7 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 			Ctx:     ctx,
 			Conn:    conn,
 			ReqPK:   conn.RemoteAddr().(dmsg.Addr).PK,
-			Dialer:  routerclient.WrapDmsgClient(sn.dmsgC),
+			Dialer:  WrapDmsgClient(sn.dmsgC),
 			Timeout: timeout,
 		}
 		rpcS := rpc.NewServer()
@@ -100,6 +99,24 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 		}
 		go rpcS.ServeConn(conn)
 	}
+}
+
+
+// WrapDmsgClient wraps a dmsg client to implement snet.Dialer
+func WrapDmsgClient(dmsgC *dmsg.Client) network.Dialer {
+	return &dmsgClientDialer{Client: dmsgC}
+}
+
+type dmsgClientDialer struct {
+	*dmsg.Client
+}
+
+func (w *dmsgClientDialer) Dial(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error) {
+	return w.Client.Dial(ctx, dmsg.Addr{PK: remote, Port: port})
+}
+
+func (w *dmsgClientDialer) Type() string {
+	return string(network.DMSG)
 }
 
 // CreateRouteGroup creates a route group by communicating with routers used within the bidirectional route.

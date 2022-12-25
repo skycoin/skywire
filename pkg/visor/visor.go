@@ -8,7 +8,9 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"os"
 	"sync"
+	"strings"
 	"time"
 
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
@@ -153,11 +155,11 @@ func newVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	ctx = context.WithValue(ctx, runtimeErrsKey, v.runtimeErrors)
 	registerModules(v.MasterLogger())
 	var mainModule visorinit.Module
-	if v.conf.Hypervisor == nil {
-		mainModule = vis
-	} else {
+//	if v.conf.Hypervisor == nil {
+//		mainModule = vis
+//	} else {
 		mainModule = hv
-	}
+//	}
 	// run Transport module in a non blocking mode
 	go tm.InitConcurrent(ctx)
 	mainModule.InitConcurrent(ctx)
@@ -219,11 +221,84 @@ func (v *Visor) isStunReady() bool {
 }
 
 // RunVisor runs the visor
-func run(conf *visorconfig.V1, uiAssets fs.FS) {
+func run(conf *visorconfig.V1) {
 	log := initLogger()
 	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
 	log.AddHook(hook)
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
+	//initialize the ui
+	uiFS, err := fs.Sub(ui, "static")
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	uiAssets = uiFS
+
+	stopPProf := initPProf(log, pprofMode, pprofAddr)
+	defer stopPProf()
+
+	if conf == nil {
+		conf = initConfig(log, confPath)
+	}
+
+	if disableHypervisorPKs {
+		conf.Hypervisors = []cipher.PubKey{}
+	}
+
+	pubkey := cipher.PubKey{}
+	if remoteHypervisorPKs != "" {
+		hypervisorPKsSlice := strings.Split(remoteHypervisorPKs, ",")
+		for _, pubkeyString := range hypervisorPKsSlice {
+			if err := pubkey.Set(pubkeyString); err != nil {
+				log.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
+				continue
+			}
+			log.Infof("%s PK added as remote hypervisor PK", pubkeyString)
+			conf.Hypervisors = append(conf.Hypervisors, pubkey)
+		}
+	}
+	//autopeering should only happen when there is no local or remote hypervisor set in the config.
+	if isAutoPeer && conf.Hypervisor != nil {
+		log.Info("Local hypervisor running, disabling autopeer")
+		isAutoPeer = false
+	}
+
+	if isAutoPeer && len(conf.Hypervisors) > 0 {
+		log.Info("%d Remote hypervisor(s) set in config; disabling autopeer", len(conf.Hypervisors))
+		log.Info(conf.Hypervisors)
+		isAutoPeer = false
+	}
+
+	if isAutoPeer {
+		log.Info("Autopeer: ", isAutoPeer)
+		hvkey, err := FetchHvPk(autoPeerIP)
+		if err != nil {
+			log.WithError(err).Error("Failure autopeering - unable to obtain hypervisor public key")
+		} else {
+			hvkey = strings.TrimSpace(hvkey)
+			hypervisorPKsSlice := strings.Split(hvkey, ",")
+			for _, pubkeyString := range hypervisorPKsSlice {
+				if err := pubkey.Set(pubkeyString); err != nil {
+					log.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
+					continue
+				}
+				log.Infof("%s PK added as remote hypervisor PK", pubkeyString)
+				conf.Hypervisors = append(conf.Hypervisors, pubkey)
+			}
+		}
+	}
+	if logLvl != "" {
+		//validate & set log level
+		_, err := logging.LevelFromString(logLvl)
+		if err != nil {
+			log.WithError(err).Error("Invalid log level specified: ", logLvl)
+		} else {
+			conf.LogLevel = logLvl
+			log.Info("setting log level to: ", logLvl)
+		}
+	}
+
+
 	if conf.Hypervisor != nil {
 		conf.Hypervisor.UIAssets = uiAssets
 	}
@@ -364,6 +439,7 @@ func (v *Visor) Close() error {
 	}
 	v.processRuntimeErrs()
 	log.Info("Shutdown complete. Goodbye!")
+	v = nil
 	return nil
 }
 

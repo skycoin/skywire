@@ -11,7 +11,6 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -48,7 +47,7 @@ var autoConfigCmd = &cobra.Command{
 	PreRun: func(cmd *cobra.Command, _ []string) {
 		if isEnvs {
 			fmt.Printf("\n")
-			fmt.Printf("Env file to source\n					%s\n", skyenv.SkyEnvs())
+			fmt.Printf("Env file to source\n					%s\n", visorconfig.visorconfigs())
 			fmt.Printf("Detect if this command is run as root\nRoot permissions required\n					EUID=0\n")
 			fmt.Printf("Disable Autoconfig\n					NOAUTOCONFIG=true\n")
 			fmt.Printf("Command was run in dmsgpty terminal\nDo not restart services\n					DMSGPTYTERM=1\n")
@@ -58,13 +57,13 @@ var autoConfigCmd = &cobra.Command{
 			fmt.Printf("Use --testenv flag for config gen\nUse test deployment\n					TESTENV=1\n")
 			os.Exit(0)
 		}
-		// source or call the skyenv file ; ignore errors as the file is not required to exist
-		if _, err := os.Stat(skyenv.SkyEnvs()); err == nil {
-			if skyenv.OS == "win" {
-				cmds = `call ` + skyenv.SkyEnvs() //nolint:errcheck
+		// source or call the visorconfig file ; ignore errors as the file is not required to exist
+		if _, err := os.Stat(visorconfig.visorconfigs()); err == nil {
+			if visorconfig.OS == "win" {
+				cmds = `call ` + visorconfig.visorconfigs() //nolint:errcheck
 				_, _ = script.Exec(cmds).Stdout() //nolint:errcheck
 			} else {
-				cmds = `bash -c "source ` + skyenv.SkyEnvs() + `"`
+				cmds = `bash -c "source ` + visorconfig.visorconfigs() + `"`
 				_, _ = script.Exec(cmds).Stdout() //nolint:errcheck
 			}
 		}
@@ -78,7 +77,7 @@ var autoConfigCmd = &cobra.Command{
 				os.Exit(0)
 			}
 		}
-		if skyenv.OS != "win" {
+		if visorconfig.OS != "win" {
 			//root permissions required on linux ; package postinstall uses root permissions
 			if euid, err := script.Exec(`bash -c "echo -e ${EUID}"`).String(); err == nil {
 				if euid != "0\n" {
@@ -96,7 +95,7 @@ var autoConfigCmd = &cobra.Command{
 		}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		if skyenv.OS == "linux" {
+		if visorconfig.OS == "linux" {
 			//not working currently
 			//			if isRunScript {
 			//				_, _ = script.Exec(skywireautoconfig).Stdout()
@@ -115,20 +114,20 @@ var autoConfigCmd = &cobra.Command{
 			_, _ = script.Exec(`bash -c "systemctl is-active --quiet skywire-autoconfig && systemctl disable skywire-autoconfig 2> /dev/null"`).Stdout() //nolint:errcheck
 		}
 		//create by default the local hypervisor config if no config exists ; retain any hypervisor config which exists
-		_, err := os.Stat(skyenv.SkywireConfig())
+		_, err := os.Stat(visorconfig.SkywireConfig())
 		if err != nil {
 			// if no config exists, attempt to import config from /etc/skywire-config.json ; previous location of the config
-			_, err := os.Stat(` /etc/` + skyenv.ConfigName)
+			_, err := os.Stat(` /etc/` + visorconfig.ConfigName)
 			if err == nil {
 				fmt.Printf("%s", warnmsg1("Importing configuration from /etc/skywire-config.json"))
-				_, _ = script.Exec(`cp ` + ` /etc/` + skyenv.ConfigName + " " + skyenv.SkywireConfig()).Stdout() //nolint:errcheck
+				_, _ = script.Exec(`cp ` + ` /etc/` + visorconfig.ConfigName + " " + visorconfig.SkywireConfig()).Stdout() //nolint:errcheck
 			}
 		}
 
 		//retain any existing local hypervisor configuration
-		_, err = os.Stat(skyenv.SkywireConfig())
+		_, err = os.Stat(visorconfig.SkywireConfig())
 		if err == nil {
-			if vconf, err := visorconfig.ReadFile(skyenv.SkywireConfig()); err == nil {
+			if vconf, err := visorconfig.ReadFile(visorconfig.SkywireConfig()); err == nil {
 				fmt.Printf("test")
 				if vconf.Hypervisor != nil {
 					isHypervisor = true
@@ -224,12 +223,12 @@ var autoConfigCmd = &cobra.Command{
 		_, _ = script.Exec(genconfigcmd1).Stdout() //nolint:errcheck
 
 		fmt.Printf("%s", mesg3(fmt.Sprintf("%sSkywire%s configuration updated\nconfig path: %s/opt/skywire/skywire.json%s", blue, nc, purple, nc)))
-		if skyenv.OS == "linux" {
+		if visorconfig.OS == "linux" {
 			//back up config if no backup config exists
 			_, err := os.Stat("/etc/skywire-config.json")
 			if err != nil {
 				fmt.Printf("%s", mesg2("backing up configuration to /etc/skywire-config.json"))
-				cmds = `bash -c ' set -x ; cp ` + skyenv.SkywireConfig() + ` /etc/` + skyenv.ConfigName + "'"
+				cmds = `bash -c ' set -x ; cp ` + visorconfig.SkywireConfig() + ` /etc/` + visorconfig.ConfigName + "'"
 				_, _ = script.Exec(cmds).Stdout() //nolint:errcheck
 			}
 		}
@@ -330,8 +329,8 @@ func errmsg2(s string) string { //nolint:unused
 const skywireautoconfig string = `#!/bin/bash
 #/opt/skywire/scripts/skywire-autoconfig
 #skywire autoconfiguration script for debian & archlinux packages
-#source the skyenv file if it exists - provided by the skybian package or the user
-[[ -f /etc/profile.d/skyenv.sh ]] && source /etc/profile.d/skyenv.sh
+#source the visorconfig file if it exists - provided by the skybian package or the user
+[[ -f /etc/profile.d/visorconfig.sh ]] && source /etc/profile.d/visorconfig.sh
 #set NOAUTOCONFIG=true to avoid running the script in the postinstall
 if [[ ${NOAUTOCONFIG} == true ]]; then
   #unset the env

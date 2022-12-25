@@ -1,5 +1,5 @@
-// Package routerclient client.go
-package routerclient
+// Package router routerclient.go
+package router
 
 import (
 	"context"

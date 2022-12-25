@@ -24,7 +24,6 @@ import (
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/cipherutil"
@@ -72,9 +71,9 @@ func (rc *rpcClient) Call(method string, args, reply interface{}) error {
 
 	switch method {
 	case "AddTransport":
-		timeout = skyenv.TransportRPCTimeout
+		timeout = visorconfig.TransportRPCTimeout
 	case "Update":
-		timeout = skyenv.UpdateRPCTimeout
+		timeout = visorconfig.UpdateRPCTimeout
 	}
 
 	if timeout != 0 {

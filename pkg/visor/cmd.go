@@ -22,14 +22,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/restart"
-	"github.com/skycoin/skywire/pkg/skyenv"
-//	"github.com/skycoin/skywire/cmd/skywire-visor/static"
-	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
-	"github.com/skycoin/skywire/pkg/visor/logstore"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 //go:embed static
@@ -69,26 +64,27 @@ var (
 )
 
 func init() {
-	root = skyenv.IsRoot()
 
+
+	root = visorconfig.IsRoot()
 	RootCmd.Flags().SortFlags = false
 	//the default is not set to fix the aesthetic of the help command
-	RootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use (default): "+skyenv.ConfigName)
-	if ((skyenv.OS == "linux") && !root) || ((skyenv.OS == "mac") && !root) || (skyenv.OS == "win") {
+	RootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use (default): "+visorconfig.ConfigName)
+	if ((visorconfig.OS == "linux") && !root) || ((visorconfig.OS == "mac") && !root) || (visorconfig.OS == "win") {
 		RootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
 	}
 	RootCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
 	hiddenflags = append(hiddenflags, "stdin")
 	//only show flags for configs which exist
 	if root {
-		if _, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.ConfigJSON); err == nil {
-			RootCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "use package config "+skyenv.SkywirePath+"/"+skyenv.ConfigJSON)
+		if _, err := os.Stat(visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON); err == nil {
+			RootCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "use package config "+visorconfig.SkywirePath+"/"+visorconfig.ConfigJSON)
 			hiddenflags = append(hiddenflags, "pkg")
 		}
 	}
 	if !root {
-		if _, err := os.Stat(skyenv.HomePath() + "/" + skyenv.ConfigName); err == nil {
-			RootCmd.Flags().BoolVarP(&usr, "user", "u", false, "use config at: $HOME/"+skyenv.ConfigName)
+		if _, err := os.Stat(visorconfig.HomePath() + "/" + visorconfig.ConfigName); err == nil {
+			RootCmd.Flags().BoolVarP(&usr, "user", "u", false, "use config at: $HOME/"+visorconfig.ConfigName)
 		}
 	}
 	RootCmd.Flags().BoolVar(&runAsSystray, "systray", false, "run as systray")
@@ -172,7 +168,7 @@ var RootCmd = &cobra.Command{
 		log := mLog.PackageLogger("pre-run")
 
 		if stdin {
-			confPath = visorconfig.StdinName
+			confPath = visorconfig.Stdin
 		} else {
 			//error on multiple configs from flags
 			if (pkg && usr) || ((pkg || usr) && (confPath != "")) {
@@ -181,15 +177,15 @@ var RootCmd = &cobra.Command{
 			}
 			//use package config /opt/skywire/skywire.json
 			if pkg {
-				confPath = skyenv.SkywirePath + "/" + skyenv.ConfigJSON
+				confPath = visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON
 			}
 			//userspace config in $HOME/.skywire/skywire-config.json
 			if usr {
-				confPath = skyenv.HomePath() + "/" + skyenv.ConfigName
+				confPath = visorconfig.HomePath() + "/" + visorconfig.ConfigName
 			}
 			if confPath == "" {
 				//default config in current dir ./skywire-config.json
-				confPath = skyenv.ConfigName
+				confPath = visorconfig.ConfigName
 			}
 			//enforce .json extension
 			if !strings.HasSuffix(confPath, ".json") {
@@ -207,7 +203,7 @@ var RootCmd = &cobra.Command{
 			hypervisorUI = true
 		}
 		//warn about creating files & directories as root in non root-owned dir
-		if skyenv.OS == "linux" {
+		if visorconfig.OS == "linux" {
 			//`stat` command on linux will give file ownership whereas os.Stat() does not
 			if _, err := exec.LookPath("stat"); err == nil {
 				c, _ := filepath.Split(confPath)
@@ -231,7 +227,7 @@ var RootCmd = &cobra.Command{
 			}
 		}
 		if runAsSystray {
-			if skyenv.OS == "linux" {
+			if visorconfig.OS == "linux" {
 				if root {
 					log.Warn("Systray cannot start in userspace when visor is run as root")
 				}
@@ -250,84 +246,8 @@ var RootCmd = &cobra.Command{
 }
 
 func runVisor(conf *visorconfig.V1) {
-	//var ok bool
-	log := initLogger()
-	_, hook := logstore.MakeStore(runtimeLogMaxEntries)
-	log.AddHook(hook)
 
-	stopPProf := initPProf(log, pprofMode, pprofAddr)
-	defer stopPProf()
-
-	uiFS, err := fs.Sub(ui, "static")
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	uiAssets = uiFS
-
-
-	if conf == nil {
-		conf = initConfig(log, confPath)
-	}
-
-	if disableHypervisorPKs {
-		conf.Hypervisors = []cipher.PubKey{}
-	}
-
-	pubkey := cipher.PubKey{}
-	if remoteHypervisorPKs != "" {
-		hypervisorPKsSlice := strings.Split(remoteHypervisorPKs, ",")
-		for _, pubkeyString := range hypervisorPKsSlice {
-			if err := pubkey.Set(pubkeyString); err != nil {
-				log.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
-				continue
-			}
-			log.Infof("%s PK added as remote hypervisor PK", pubkeyString)
-			conf.Hypervisors = append(conf.Hypervisors, pubkey)
-		}
-	}
-	//autopeering should only happen when there is no local or remote hypervisor set in the config.
-	if isAutoPeer && conf.Hypervisor != nil {
-		log.Info("Local hypervisor running, disabling autopeer")
-		isAutoPeer = false
-	}
-
-	if isAutoPeer && len(conf.Hypervisors) > 0 {
-		log.Info("%d Remote hypervisor(s) set in config; disabling autopeer", len(conf.Hypervisors))
-		log.Info(conf.Hypervisors)
-		isAutoPeer = false
-	}
-
-	if isAutoPeer {
-		log.Info("Autopeer: ", isAutoPeer)
-		hvkey, err := FetchHvPk(autoPeerIP)
-		if err != nil {
-			log.WithError(err).Error("Failure autopeering - unable to obtain hypervisor public key")
-		} else {
-			hvkey = strings.TrimSpace(hvkey)
-			hypervisorPKsSlice := strings.Split(hvkey, ",")
-			for _, pubkeyString := range hypervisorPKsSlice {
-				if err := pubkey.Set(pubkeyString); err != nil {
-					log.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
-					continue
-				}
-				log.Infof("%s PK added as remote hypervisor PK", pubkeyString)
-				conf.Hypervisors = append(conf.Hypervisors, pubkey)
-			}
-		}
-	}
-	if logLvl != "" {
-		//validate & set log level
-		_, err := logging.LevelFromString(logLvl)
-		if err != nil {
-			log.WithError(err).Error("Invalid log level specified: ", logLvl)
-		} else {
-			conf.LogLevel = logLvl
-			log.Info("setting log level to: ", logLvl)
-		}
-	}
-
-	run(conf, uiAssets)
+	run(conf)
 
 }
 
@@ -378,7 +298,7 @@ func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 { /
 	var r io.Reader
 
 	switch confPath {
-	case visorconfig.StdinName:
+	case visorconfig.Stdin:
 		log.Info("Reading config from STDIN.")
 		r = os.Stdin
 	case "":
@@ -401,7 +321,7 @@ func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 { /
 		log.Fatalf("failed to start skywire - config version is incompatible")
 	}
 	if hypervisorUI {
-		config := hypervisorconfig.GenerateWorkDirConfig(false)
+		config := visorconfig.GenerateWorkDirConfig(false)
 		conf.Hypervisor = &config
 	}
 	if conf.Hypervisor != nil {
@@ -411,7 +331,7 @@ func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 { /
 		conf.Hypervisor = nil
 	}
 
-	skyenv.VisorConfigFile = confPath
+	visorconfig.VisorConfigFile = confPath
 	return conf
 }
 

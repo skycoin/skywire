@@ -1,5 +1,5 @@
-// Package hypervisorconfig config.go
-package hypervisorconfig
+// Package visorconfig pkg/visor/visorconfig/hypervisorconfig.go
+package visorconfig
 
 import (
 	"encoding/hex"
@@ -13,7 +13,6 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/util/pathutil"
 )
 
@@ -45,8 +44,8 @@ func (hk *Key) UnmarshalText(text []byte) error {
 	return err
 }
 
-// Config configures the hypervisor.
-type Config struct {
+// HypervisorConfig configures the hypervisor.
+type HypervisorConfig struct {
 	UIAssets      fs.FS         `json:"-"`
 	PK            cipher.PubKey `json:"-"`
 	SK            cipher.SecKey `json:"-"`
@@ -82,7 +81,7 @@ func GenerateWorkDirConfig(testenv bool) Config {
 // GenerateHomeConfig generates a config with default values and uses db from user's home folder.
 func GenerateHomeConfig(testenv bool) Config {
 	c := MakeConfig(testenv)
-	c.DBPath = filepath.Join(pathutil.HomeDir(), skyenv.HypervisorDB)
+	c.DBPath = filepath.Join(pathutil.HomeDir(), visorconfig.HypervisorDB)
 	return c
 }
 
@@ -115,16 +114,16 @@ func (c *Config) FillDefaults(testEnv bool) {
 		}
 	}
 	if c.DmsgPort == 0 {
-		c.DmsgPort = skyenv.DmsgHypervisorPort
+		c.DmsgPort = visorconfig.DmsgHypervisorPort
 	}
 	if c.HTTPAddr == "" {
 		c.HTTPAddr = httpAddr
 	}
 	c.Cookies.FillDefaults()
-	c.EnableAuth = skyenv.EnableAuth
-	c.EnableTLS = skyenv.EnableTLS
-	c.TLSCertFile = skyenv.TLSCert
-	c.TLSKeyFile = skyenv.TLSKey
+	c.EnableAuth = visorconfig.EnableAuth
+	c.EnableTLS = visorconfig.EnableTLS
+	c.TLSCertFile = visorconfig.TLSCert
+	c.TLSKeyFile = visorconfig.TLSKey
 
 }
 

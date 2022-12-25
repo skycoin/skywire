@@ -1,5 +1,5 @@
-// Package routerclient pkg/router/routerclient/dmsg_wrapper.go
-package routerclient
+// Package router pkg/router/dmsg_wrapper.go
+package router
 
 import (
 	"context"

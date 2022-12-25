@@ -21,6 +21,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/pkg/util/pathutil"
 )
 
@@ -34,25 +35,6 @@ var (
 	ErrAppNotRunning = errors.New("app not running")
 )
 
-// Config configures the launcher.
-type Config struct {
-	VisorPK       cipher.PubKey
-	Apps          []appserver.AppConfig
-	ServerAddr    string
-	BinPath       string
-	LocalPath     string
-	DisplayNodeIP bool
-}
-
-// Launcher is responsible for launching and keeping track of app states.
-type Launcher struct {
-	conf  Config
-	log   logrus.FieldLogger
-	r     router.Router
-	procM appserver.ProcManager
-	apps  map[string]appserver.AppConfig
-	mx    sync.Mutex
-}
 
 // NewLauncher creates a new launcher.
 func NewLauncher(log logrus.FieldLogger, conf Config, dmsgC *dmsg.Client, r router.Router, procM appserver.ProcManager) (*Launcher, error) {

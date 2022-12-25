@@ -1,5 +1,5 @@
-// Package setupclient pkg/setup/setupclient/wrappers.go
-package setupclient
+// Package setup pkg/setup/wrappers.go
+package setup
 
 import (
 	"context"
