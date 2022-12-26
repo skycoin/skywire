@@ -9,7 +9,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/transport/network"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig/appconfig"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 )
 
 // V1 is visor config
@@ -111,7 +111,7 @@ func Reload() (*V1, error) {
 // UpdateAppAutostart modifies a single app's autostart value within the config and also the given
 //
 // The updated config gets flushed to file if there are any changes.
-func (v1 *V1) UpdateAppAutostart(launch *appconfig.AppLauncher, appName string, autoStart bool) error {
+func (v1 *V1) UpdateAppAutostart(launch *AppLauncher, appName string, autoStart bool) error {
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
 
@@ -141,7 +141,7 @@ func (v1 *V1) UpdateAppAutostart(launch *appconfig.AppLauncher, appName string, 
 
 // UpdateAppArg updates the cli flag of the specified app config and also within the
 // The updated config gets flushed to file if there are any changes.
-func (v1 *V1) UpdateAppArg(launch *appconfig.AppLauncher, appName, argName string, value interface{}) error {
+func (v1 *V1) UpdateAppArg(launch *appserver.AppLauncher, appName, argName string, value interface{}) error {
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
 

@@ -8,7 +8,6 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
-	"github.com/skycoin/skywire/pkg/setup"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 

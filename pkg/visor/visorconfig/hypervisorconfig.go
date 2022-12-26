@@ -61,14 +61,14 @@ type HypervisorConfig struct {
 }
 
 // MakeConfig returns hypervisor config.
-func MakeConfig(testenv bool) Config {
+func MakeConfig(testenv bool) HypervisorConfig {
 	var c Config
 	c.FillDefaults(testenv)
 	return c
 }
 
 // GenerateWorkDirConfig generates a config with default values and uses db from current working directory.
-func GenerateWorkDirConfig(testenv bool) Config {
+func GenerateWorkDirConfig(testenv bool) HypervisorConfig {
 	dir, err := os.Getwd()
 	if err != nil {
 		log.Fatalf("failed to generate WD config: %s", dir)
@@ -79,21 +79,21 @@ func GenerateWorkDirConfig(testenv bool) Config {
 }
 
 // GenerateHomeConfig generates a config with default values and uses db from user's home folder.
-func GenerateHomeConfig(testenv bool) Config {
+func GenerateHomeConfig(testenv bool) HypervisorConfig {
 	c := MakeConfig(testenv)
 	c.DBPath = filepath.Join(pathutil.HomeDir(), visorconfig.HypervisorDB)
 	return c
 }
 
 // GenerateLocalConfig generates a config with default values and uses db from shared folder.
-func GenerateLocalConfig(testenv bool) Config {
+func GenerateLocalConfig(testenv bool) HypervisorConfig {
 	c := MakeConfig(testenv)
 	c.DBPath = "/usr/local/skycoin/hypervisor/users.db"
 	return c
 }
 
 // FillDefaults fills the config with default values.
-func (c *Config) FillDefaults(testEnv bool) {
+func (c *HypervisorConfig) FillDefaults(testEnv bool) {
 	if c.PK.Null() || c.SK.Null() {
 		c.PK, c.SK = cipher.GenerateKeyPair()
 	}
@@ -128,7 +128,7 @@ func (c *Config) FillDefaults(testEnv bool) {
 }
 
 // Parse parses the file in path, and decodes to the config.
-func (c *Config) Parse(path string) error {
+func (c *HypervisorConfig) Parse(path string) error {
 	var err error
 	if path, err = filepath.Abs(path); err != nil {
 		return err

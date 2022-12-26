@@ -12,6 +12,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 // TransportListener provides an rpc service over dmsg to perform skycoin transport setup
@@ -34,7 +35,7 @@ func NewTransportListener(ctx context.Context, pk cipher.PubKey, tsnodes []ciphe
 			dmsgC:   dmsgC,
 			log:     log,
 			tm:      tm,
-			tsNodes: conf.Transport.TransportSetup,
+			tsNodes: tsnodes,
 		}
 		return tl, nil
 	case <-ctx.Done():
@@ -44,7 +45,7 @@ func NewTransportListener(ctx context.Context, pk cipher.PubKey, tsnodes []ciphe
 
 // Serve transport setup rpc to trusted nodes over dmsg
 func (ts *TransportListener) Serve(ctx context.Context) {
-	ts.log.WithField("dmsg_port", skyenv..DmsgTransportSetupPort).Debug("starting listener")
+	ts.log.WithField("dmsg_port", skyenv.DmsgTransportSetupPort).Debug("starting listener")
 	lis, err := ts.dmsgC.Listen(skyenv.DmsgTransportSetupPort)
 	if err != nil {
 		ts.log.WithError(err).Error("failed to listen")
@@ -56,7 +57,7 @@ func (ts *TransportListener) Serve(ctx context.Context) {
 		}
 	}()
 
-	ts.log.WithField("dmsg_port", skyenv..DmsgTransportSetupPort).Debug("Accepting dmsg streams.")
+	ts.log.WithField("dmsg_port", skyenv.DmsgTransportSetupPort).Debug("Accepting dmsg streams.")
 	for {
 		conn, err := lis.AcceptStream()
 		if err != nil {

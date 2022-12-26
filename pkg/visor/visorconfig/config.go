@@ -17,6 +17,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig/appconfig"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
@@ -217,8 +218,8 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 // makeDefaultLauncherAppsConfig creates default launcher config for apps,
 // for package based installation in other platform (Darwin, Windows) it only includes
 // the shipped apps for that platforms
-func makeDefaultLauncherAppsConfig() []AppConfig {
-	defaultConfig := []AppConfig{
+func makeDefaultLauncherAppsConfig() []appconfig.AppConfig {
+	defaultConfig := []appconfig.AppConfig{
 		{
 			Name:      VPNClientName,
 			AutoStart: false,

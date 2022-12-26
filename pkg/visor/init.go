@@ -41,7 +41,6 @@ import (
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/servicedisc"
-	"github.com/skycoin/skywire/pkg/setup"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
@@ -748,7 +747,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		SecKey:           v.conf.SK,
 		TransportManager: v.tpM,
 		RouteFinder:      rfClient,
-		RouteGroupDialer: setup.NewSetupNodeDialer(),
+		RouteGroupDialer: router.NewSetupNodeDialer(),
 		SetupNodes:       conf.SetupNodes,
 		RulesGCInterval:  0, // TODO
 		MinHops:          v.conf.Routing.MinHops,
