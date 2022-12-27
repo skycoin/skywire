@@ -4,8 +4,11 @@ package visor
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -22,6 +25,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
@@ -95,6 +99,12 @@ type API interface {
 	SetLogRotationInterval(visorconfig.Duration) error
 
 	IsDMSGClientReady() (bool, error)
+
+	DialPing(config PingConfig) error
+	Ping(config PingConfig) ([]time.Duration, error)
+	StopPing(pk cipher.PubKey) error
+
+	TestVisor(config PingConfig) ([]TestResult, error)
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -706,6 +716,27 @@ func (v *Visor) VPNServers(version, country string) ([]servicedisc.Service, erro
 	return vpnServers, nil
 }
 
+// PublicVisors gets available public public visors from service discovery URL
+func (v *Visor) PublicVisors(version, country string) ([]servicedisc.Service, error) {
+	log := logging.MustGetLogger("public_visors")
+	vLog := logging.NewMasterLogger()
+	vLog.SetLevel(logrus.InfoLevel)
+
+	sdClient := servicedisc.NewClient(log, vLog, servicedisc.Config{
+		Type:          servicedisc.ServiceTypeVisor,
+		PK:            v.conf.PK,
+		SK:            v.conf.SK,
+		DiscAddr:      v.conf.Launcher.ServiceDisc,
+		DisplayNodeIP: v.conf.Launcher.DisplayNodeIP,
+	}, &http.Client{Timeout: time.Duration(20) * time.Second}, "")
+	publicVisors, err := sdClient.Services(context.Background(), 0, version, country)
+	if err != nil {
+		v.log.Error("Error getting public vpn servers: ", err)
+		return nil, err
+	}
+	return publicVisors, nil
+}
+
 // RemoteVisors return list of connected remote visors
 func (v *Visor) RemoteVisors() ([]string, error) {
 	var visors []string
@@ -886,6 +917,157 @@ func (v *Visor) DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error) {
 // RoutingRules implements API.
 func (v *Visor) RoutingRules() ([]routing.Rule, error) {
 	return v.router.Rules(), nil
+}
+
+// PingConfig use as configuration for ping command
+type PingConfig struct {
+	PK       cipher.PubKey
+	Tries    int
+	PcktSize int
+}
+
+// DialPing implements API.
+func (v *Visor) DialPing(conf PingConfig) error {
+	if conf.PK == v.conf.PK {
+		return fmt.Errorf("Visor cannot ping itself")
+	}
+	v.pingPcktSize = conf.PcktSize
+	// waiting for at least one transport to initialize
+	<-v.tpM.Ready()
+
+	addr := appnet.Addr{
+		Net:    appnet.TypeSkynet,
+		PubKey: v.conf.PK,
+		Port:   routing.Port(skyenv.SkyPingPort),
+	}
+
+	var err error
+	var conn net.Conn
+
+	ctx := context.TODO()
+	var r = netutil.NewRetrier(v.log, 2*time.Second, netutil.DefaultMaxBackoff, 5, 2)
+	err = r.Do(ctx, func() error {
+		conn, err = appnet.Ping(conf.PK, addr)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+
+	skywireConn, isSkywireConn := conn.(*appnet.SkywireConn)
+	if !isSkywireConn {
+		return fmt.Errorf("Can't get such info from this conn")
+	}
+	v.pingConnMx.Lock()
+	v.pingConns[conf.PK] = ping{
+		conn:    skywireConn,
+		latency: make(chan time.Duration),
+	}
+	v.pingConnMx.Unlock()
+	return nil
+}
+
+// Ping implements API.
+func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
+	v.pingConnMx.Lock()
+	defer v.pingConnMx.Unlock()
+	latencies := []time.Duration{}
+	data := make([]byte, conf.PcktSize*1024)
+	for i := 1; i <= conf.Tries; i++ {
+		skywireConn := v.pingConns[conf.PK].conn
+		msg := PingMsg{
+			Timestamp: time.Now(),
+			PingPk:    conf.PK,
+			Data:      data,
+		}
+		ping, err := json.Marshal(msg)
+		if err != nil {
+			return latencies, err
+		}
+		pingSizeMsg := PingSizeMsg{
+			Size: len(ping),
+		}
+		size, err := json.Marshal(pingSizeMsg)
+		if err != nil {
+			return latencies, err
+		}
+		_, err = skywireConn.Write(size)
+		if err != nil {
+			return latencies, err
+		}
+
+		buf := make([]byte, 32*1024)
+		_, err = skywireConn.Read(buf)
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				return latencies, err
+			}
+		}
+		_, err = skywireConn.Write(ping)
+		if err != nil {
+			return latencies, err
+		}
+		latencies = append(latencies, <-v.pingConns[conf.PK].latency)
+	}
+	return latencies, nil
+}
+
+// StopPing implements API.
+func (v *Visor) StopPing(pk cipher.PubKey) error {
+	v.pingConnMx.Lock()
+	defer v.pingConnMx.Unlock()
+
+	skywireConn := v.pingConns[pk].conn
+	err := skywireConn.Close()
+	if err != nil {
+		return err
+	}
+	delete(v.pingConns, pk)
+	return nil
+}
+
+// TestResult type of test result
+type TestResult struct {
+	PK   string
+	Max  string
+	Min  string
+	Mean string
+}
+
+// TestVisor trying to test visor
+func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
+	result := []TestResult{}
+	publicVisors, err := v.PublicVisors("", "")
+	if err != nil {
+		return result, err
+	}
+	for _, publicVisor := range publicVisors {
+		conf.PK = publicVisor.Addr.PubKey()
+		err := v.DialPing(conf)
+		if err != nil {
+			return result, err
+		}
+		latencies, err := v.Ping(conf)
+		if err != nil {
+			go v.StopPing(conf.PK) //nolint
+			return result, err
+		}
+		var max, min, mean, sumLatency time.Duration
+		min = time.Duration(10000000000)
+		for _, latency := range latencies {
+			if latency > max {
+				max = latency
+			}
+			if latency < min {
+				min = latency
+			}
+			sumLatency += latency
+		}
+		mean = sumLatency / time.Duration(len(latencies))
+		result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(max), Min: fmt.Sprint(min), Mean: fmt.Sprint(mean)})
+		v.StopPing(conf.PK) //nolint
+	}
+	return result, nil
 }
 
 // RoutingRule implements API.

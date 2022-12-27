@@ -12,6 +12,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -20,6 +21,8 @@ import (
 var (
 	// ErrPortAlreadyBound is being returned when the desired port is already bound to.
 	ErrPortAlreadyBound = errors.New("port already bound")
+	// ErrConnClosed is being returned when we listen on a closed conn.
+	ErrConnClosed = errors.New("listening on closed connection")
 )
 
 // SkywireNetworker implements `Networker` for skynet.
@@ -59,6 +62,32 @@ func (r *SkywireNetworker) DialContext(ctx context.Context, addr Addr) (conn net
 	}()
 
 	conn, err = r.r.DialRoutes(ctx, addr.PubKey, routing.Port(localPort), addr.Port, router.DefaultDialOptions())
+	if err != nil {
+		return nil, err
+	}
+
+	return &SkywireConn{
+		Conn:     conn,
+		nrg:      conn.(*router.NoiseRouteGroup),
+		freePort: freePort,
+	}, nil
+}
+
+// Ping dials remote `addr` via `skynet` with context.
+func (r *SkywireNetworker) Ping(pk cipher.PubKey, addr Addr) (net.Conn, error) {
+	ctx := context.Background()
+	localPort, freePort, err := r.porter.ReserveEphemeral(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// ensure ports are freed on error.
+	defer func() {
+		if err != nil {
+			freePort()
+		}
+	}()
+	conn, err := r.r.PingRoute(ctx, pk, routing.Port(localPort), addr.Port, router.DefaultDialOptions())
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +210,7 @@ type skywireListener struct {
 func (l *skywireListener) Accept() (net.Conn, error) {
 	conn, ok := <-l.connsCh
 	if !ok {
-		return nil, errors.New("listening on closed connection")
+		return nil, ErrConnClosed
 	}
 
 	return &SkywireConn{
