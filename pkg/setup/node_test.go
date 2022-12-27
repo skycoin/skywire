@@ -349,7 +349,7 @@ func randPKs(n int) []cipher.PubKey {
 func randRulesMap(pks []cipher.PubKey) RulesMap {
 	rules := make(RulesMap, len(pks))
 	for _, pk := range pks {
-		rules[pk] = randIntermediaryRules(2)
+		rules[pk.String()] = randIntermediaryRules(2)
 	}
 	return rules
 }
