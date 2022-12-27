@@ -622,8 +622,31 @@ func handlePingConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 			}
 			return
 		}
+		var size PingSizeMsg
+		err = json.Unmarshal(buf[:n], &size)
+		if err != nil {
+			log.WithError(err).Error("Failed to unmarshal json")
+			return
+		}
+
+		_, err = remoteConn.Write([]byte("ok"))
+		if err != nil {
+			log.WithError(err).Error("Failed to write message")
+			return
+		}
+		var ping []byte
+		for len(ping) != size.Size {
+			n, err = remoteConn.Read(buf)
+			if err != nil {
+				if !errors.Is(err, io.EOF) {
+					log.WithError(err).Error("Failed to read packet")
+				}
+				return
+			}
+			ping = append(ping, buf[:n]...)
+		}
 		var msg PingMsg
-		err = json.Unmarshal(buf[:n], &msg)
+		err = json.Unmarshal(ping, &msg)
 		if err != nil {
 			log.WithError(err).Error("Failed to unmarshal json")
 			return

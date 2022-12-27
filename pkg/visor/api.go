@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -971,9 +972,6 @@ func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
 	v.pingConnMx.Lock()
 	defer v.pingConnMx.Unlock()
 	latencies := []time.Duration{}
-	if conf.PcktSize > 2 {
-		conf.PcktSize = 2
-	}
 	data := make([]byte, conf.PcktSize*1024)
 	for i := 1; i <= conf.Tries; i++ {
 		skywireConn := v.pingConns[conf.PK].conn
@@ -982,11 +980,30 @@ func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
 			PingPk:    conf.PK,
 			Data:      data,
 		}
-		b, err := json.Marshal(msg)
+		ping, err := json.Marshal(msg)
 		if err != nil {
 			return latencies, err
 		}
-		_, err = skywireConn.Write(b)
+		pingSizeMsg := PingSizeMsg{
+			Size: len(ping),
+		}
+		size, err := json.Marshal(pingSizeMsg)
+		if err != nil {
+			return latencies, err
+		}
+		_, err = skywireConn.Write(size)
+		if err != nil {
+			return latencies, err
+		}
+
+		buf := make([]byte, 32*1024)
+		_, err = skywireConn.Read(buf)
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				return latencies, err
+			}
+		}
+		_, err = skywireConn.Write(ping)
 		if err != nil {
 			return latencies, err
 		}
