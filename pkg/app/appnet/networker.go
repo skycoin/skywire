@@ -6,9 +6,11 @@ import (
 	"errors"
 	"net"
 	"sync"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
-//go:generate mockery -name Networker -case underscore -inpkg
+//go:generate mockery --name Networker --case underscore --inpackage
 
 var (
 	// ErrNoSuchNetworker is being returned when there's no suitable networker.
@@ -63,6 +65,7 @@ func ClearNetworkers() {
 // Networker defines basic network operations, such as Dial/Listen.
 type Networker interface {
 	Dial(addr Addr) (net.Conn, error)
+	Ping(pk cipher.PubKey, addr Addr) (net.Conn, error)
 	DialContext(ctx context.Context, addr Addr) (net.Conn, error)
 	Listen(addr Addr) (net.Listener, error)
 	ListenContext(ctx context.Context, addr Addr) (net.Listener, error)
@@ -71,6 +74,15 @@ type Networker interface {
 // Dial dials the remote `addr`.
 func Dial(addr Addr) (net.Conn, error) {
 	return DialContext(context.Background(), addr)
+}
+
+// Ping dials the remote `addr`.
+func Ping(pk cipher.PubKey, addr Addr) (net.Conn, error) {
+	n, err := ResolveNetworker(addr.Net)
+	if err != nil {
+		return nil, err
+	}
+	return n.Ping(pk, addr)
 }
 
 // DialContext dials the remote `addr` with the context.

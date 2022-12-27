@@ -31,8 +31,8 @@ func (s *networkStats) SetLatency(latency uint32) {
 
 func (s *networkStats) Latency() time.Duration {
 	latencyMs := atomic.LoadUint32(&s.latency)
-
-	return time.Duration(latencyMs)
+	// the latency is store in uint32 of millisecond but time.Duration takes nanosecond
+	return time.Duration(latencyMs * uint32(time.Millisecond.Nanoseconds()))
 }
 
 func (s *networkStats) SetUploadSpeed(speed uint32) {

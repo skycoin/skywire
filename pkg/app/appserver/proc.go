@@ -445,10 +445,10 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 			})
 			return true
 		}
-
 		summaries = append(summaries, ConnectionSummary{
-			IsAlive:            skywireConn.IsAlive(),
-			Latency:            skywireConn.Latency(),
+			IsAlive: skywireConn.IsAlive(),
+			// Latency in summary is expected to be in ms and not ns so we change the base to ms
+			Latency:            time.Duration(skywireConn.Latency().Milliseconds()),
 			UploadSpeed:        skywireConn.UploadSpeed(),
 			DownloadSpeed:      skywireConn.DownloadSpeed(),
 			BandwidthSent:      skywireConn.BandwidthSent(),

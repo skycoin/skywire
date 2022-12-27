@@ -432,7 +432,7 @@ func (conn *Conn) inWorker() {
 		case TypeSignal:
 			conn.handleSignal(sequence, msg)
 		case TypeMethodCall:
-			go conn.handleCall(msg)
+conn.handleCall(msg)
 		}
 
 	}
