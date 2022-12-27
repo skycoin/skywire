@@ -13,9 +13,14 @@ type ping struct {
 	latency chan time.Duration
 }
 
-// PingMsg ...
+// PingMsg is used to calculate the ping to a remote visor
 type PingMsg struct {
 	Timestamp time.Time
 	PingPk    cipher.PubKey
 	Data      []byte
+}
+
+// PingSizeMsg contains the size of the PingMsg to be sent
+type PingSizeMsg struct {
+	Size int
 }
