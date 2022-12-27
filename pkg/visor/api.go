@@ -971,9 +971,10 @@ func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
 	v.pingConnMx.Lock()
 	defer v.pingConnMx.Unlock()
 	latencies := []time.Duration{}
-	// TODO (Mohammed): Arbitrary data size not work, should solve it later
-	// data := make([]byte, conf.PcktSize*1024)
-	data := make([]byte, 2*1024)
+	if conf.PcktSize > 2 {
+		conf.PcktSize = 2
+	}
+	data := make([]byte, conf.PcktSize*1024)
 	for i := 1; i <= conf.Tries; i++ {
 		skywireConn := v.pingConns[conf.PK].conn
 		msg := PingMsg{
