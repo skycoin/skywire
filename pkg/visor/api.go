@@ -946,7 +946,7 @@ func (v *Visor) DialPing(conf PingConfig) error {
 	var conn net.Conn
 
 	ctx := context.TODO()
-	var r = netutil.NewRetrier(v.log, 2*time.Second, netutil.DefaultMaxBackoff, 5, 2)
+	var r = netutil.NewRetrier(v.log, 2*time.Second, netutil.DefaultMaxBackoff, 1, 2)
 	err = r.Do(ctx, func() error {
 		conn, err = appnet.Ping(conf.PK, addr)
 		return err
@@ -1052,7 +1052,7 @@ func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
 	}
 
 	for _, publicVisor := range publicVisors {
-		if publicVisor == conf.PK.Hex() {
+		if publicVisor == v.conf.PK.Hex() {
 			continue
 		}
 
@@ -1061,12 +1061,14 @@ func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
 		}
 		err := v.DialPing(conf)
 		if err != nil {
-			return result, err
+			result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(0), Min: fmt.Sprint(0), Mean: fmt.Sprint(0)})
+			continue
 		}
 		latencies, err := v.Ping(conf)
 		if err != nil {
 			go v.StopPing(conf.PK) //nolint
-			return result, err
+			result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(0), Min: fmt.Sprint(0), Mean: fmt.Sprint(0)})
+			continue
 		}
 		var max, min, mean, sumLatency time.Duration
 		min = time.Duration(10000000000)
