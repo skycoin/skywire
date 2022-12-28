@@ -100,6 +100,9 @@ type API interface {
 
 	IsDMSGClientReady() (bool, error)
 
+	RegisterHTTPPort(localPort int) error
+	DeregisterHTTPPort(localPort int) error
+	ListHTTPPorts() ([]int, error)
 	Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
 	Disconnect(id uuid.UUID) error
 	List() (map[uuid.UUID]*appnet.Proxy, error)
@@ -954,6 +957,43 @@ func (v *Visor) IsDMSGClientReady() (bool, error) {
 		}
 	}
 	return false, errors.New("dmsg client is not ready")
+}
+
+// RegisterHTTPPort implements API.
+func (v *Visor) RegisterHTTPPort(localPort int) error {
+	v.allowedMX.Lock()
+	defer v.allowedMX.Unlock()
+	ok := isPortAvailable(v.log, localPort)
+	if ok {
+		return fmt.Errorf("No connection on local port :%v", localPort)
+	}
+	v.allowedPorts = append(v.allowedPorts, localPort)
+	return nil
+}
+
+// DeregisterHTTPPort implements API.
+func (v *Visor) DeregisterHTTPPort(localPort int) error {
+	v.allowedMX.Lock()
+	defer v.allowedMX.Unlock()
+	ok := isPortAvailable(v.log, localPort)
+	if !ok {
+		return fmt.Errorf("Connection still active on local port :%v", localPort)
+	}
+	var newPorts []int
+	for _, port := range v.allowedPorts {
+		if port != localPort {
+			newPorts = append(newPorts, port)
+		}
+	}
+	v.allowedPorts = newPorts
+	return nil
+}
+
+// ListHTTPPorts implements API.
+func (v *Visor) ListHTTPPorts() ([]int, error) {
+	v.allowedMX.Lock()
+	defer v.allowedMX.Unlock()
+	return v.allowedPorts, nil
 }
 
 // Connect implements API.

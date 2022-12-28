@@ -499,6 +499,24 @@ func (rc *rpcClient) List() (map[uuid.UUID]*appnet.Proxy, error) {
 	return out, err
 }
 
+// RegisterHTTPPort calls RegisterHTTPPort.
+func (rc *rpcClient) RegisterHTTPPort(localPort int) error {
+	return rc.Call("RegisterHTTPPort", &localPort, &struct{}{})
+}
+
+// DeregisterHTTPPort calls DeregisterHTTPPort.
+func (rc *rpcClient) DeregisterHTTPPort(localPort int) error {
+	err := rc.Call("DeregisterHTTPPort", &localPort, &struct{}{})
+	return err
+}
+
+// ListHTTPPorts calls ListHTTPPorts.
+func (rc *rpcClient) ListHTTPPorts() ([]int, error) {
+	var out []int
+	err := rc.Call("ListHTTPPorts", &struct{}{}, &out)
+	return out, err
+}
+
 // MockRPCClient mocks API.
 type mockRPCClient struct {
 	startedAt time.Time
@@ -1109,5 +1127,20 @@ func (mc *mockRPCClient) Disconnect(id uuid.UUID) error {
 
 // List implements API.
 func (mc *mockRPCClient) List() (map[uuid.UUID]*appnet.Proxy, error) {
+	return nil, nil
+}
+
+// RegisterHTTPPort implements API.
+func (mc *mockRPCClient) RegisterHTTPPort(localPort int) error {
+	return nil
+}
+
+// DeregisterHTTPPort implements API.
+func (mc *mockRPCClient) DeregisterHTTPPort(localPort int) error {
+	return nil
+}
+
+// ListHTTPPorts implements API.
+func (mc *mockRPCClient) ListHTTPPorts() ([]int, error) {
 	return nil, nil
 }

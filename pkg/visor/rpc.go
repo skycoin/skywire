@@ -636,6 +636,26 @@ func (r *RPC) IsDMSGClientReady(_ *struct{}, out *bool) (err error) {
 	return err
 }
 
+// RegisterHTTPPort registers the local port to be accessed by remote visors
+func (r *RPC) RegisterHTTPPort(port *int, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "RegisterHTTPPort", port)(nil, &err)
+	return r.visor.RegisterHTTPPort(*port)
+}
+
+// DeregisterHTTPPort deregisters the local port that can be accessed by remote visors
+func (r *RPC) DeregisterHTTPPort(port *int, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DeregisterHTTPPort", port)(nil, &err)
+	return r.visor.DeregisterHTTPPort(*port)
+}
+
+// ListHTTPPorts lists all the local por that can be accessed by remote visors
+func (r *RPC) ListHTTPPorts(_ *struct{}, out *[]int) (err error) {
+	defer rpcutil.LogCall(r.log, "ListHTTPPorts", nil)(out, &err)
+	ports, err := r.visor.ListHTTPPorts()
+	*out = ports
+	return err
+}
+
 // ConnectIn is input for Connect.
 type ConnectIn struct {
 	RemotePK   cipher.PubKey
