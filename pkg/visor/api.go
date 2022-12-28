@@ -921,9 +921,10 @@ func (v *Visor) RoutingRules() ([]routing.Rule, error) {
 
 // PingConfig use as configuration for ping command
 type PingConfig struct {
-	PK       cipher.PubKey
-	Tries    int
-	PcktSize int
+	PK          cipher.PubKey
+	Tries       int
+	PcktSize    int
+	PubVisCount int
 }
 
 // DialPing implements API.
@@ -1037,12 +1038,23 @@ type TestResult struct {
 // TestVisor trying to test visor
 func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
 	result := []TestResult{}
-	publicVisors, err := v.PublicVisors("", "")
+	if v.dClient == nil {
+		return result, errors.New("dClient not available")
+	}
+
+	publicVisors, err := v.dClient.AllEntries(context.TODO())
 	if err != nil {
 		return result, err
 	}
+
+	if conf.PubVisCount < len(publicVisors) {
+		publicVisors = publicVisors[:conf.PubVisCount+1]
+	}
+
 	for _, publicVisor := range publicVisors {
-		conf.PK = publicVisor.Addr.PubKey()
+		if err := conf.PK.UnmarshalText([]byte(publicVisor)); err != nil {
+			continue
+		}
 		err := v.DialPing(conf)
 		if err != nil {
 			return result, err
