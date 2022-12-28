@@ -1029,10 +1029,11 @@ func (v *Visor) StopPing(pk cipher.PubKey) error {
 
 // TestResult type of test result
 type TestResult struct {
-	PK   string
-	Max  string
-	Min  string
-	Mean string
+	PK     string
+	Max    string
+	Min    string
+	Mean   string
+	Status string
 }
 
 // TestVisor trying to test visor
@@ -1061,13 +1062,13 @@ func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
 		}
 		err := v.DialPing(conf)
 		if err != nil {
-			result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(0), Min: fmt.Sprint(0), Mean: fmt.Sprint(0)})
+			result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(0), Min: fmt.Sprint(0), Mean: fmt.Sprint(0), Status: "Failed"})
 			continue
 		}
 		latencies, err := v.Ping(conf)
 		if err != nil {
 			go v.StopPing(conf.PK) //nolint
-			result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(0), Min: fmt.Sprint(0), Mean: fmt.Sprint(0)})
+			result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(0), Min: fmt.Sprint(0), Mean: fmt.Sprint(0), Status: "Failed"})
 			continue
 		}
 		var max, min, mean, sumLatency time.Duration
@@ -1082,7 +1083,7 @@ func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
 			sumLatency += latency
 		}
 		mean = sumLatency / time.Duration(len(latencies))
-		result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(max), Min: fmt.Sprint(min), Mean: fmt.Sprint(mean)})
+		result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(max), Min: fmt.Sprint(min), Mean: fmt.Sprint(mean), Status: "Success"})
 		v.StopPing(conf.PK) //nolint
 	}
 	return result, nil

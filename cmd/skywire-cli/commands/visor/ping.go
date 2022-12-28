@@ -67,7 +67,7 @@ var testCmd = &cobra.Command{
 		results, err := rpcClient.TestVisor(pingConfig)
 		internal.Catch(cmd.Flags(), err)
 		for i, result := range results {
-			internal.PrintOutput(cmd.Flags(), result, fmt.Sprintf("Test No. %d\nPK: %s\nMax: %s\nMin: %s\nMean: %s\n\n", i+1, result.PK, result.Max, result.Min, result.Mean))
+			internal.PrintOutput(cmd.Flags(), result, fmt.Sprintf("Test No. %d\nPK: %s\nMax: %s\nMin: %s\nMean: %s\nStatus: %s\n\n", i+1, result.PK, result.Max, result.Min, result.Mean, result.Status))
 		}
 	},
 }
