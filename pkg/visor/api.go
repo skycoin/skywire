@@ -1038,11 +1038,11 @@ type TestResult struct {
 // TestVisor trying to test visor
 func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
 	result := []TestResult{}
-	if v.dClient == nil {
-		return result, errors.New("dClient not available")
+	if v.dmsgC == nil {
+		return result, errors.New("dmsgC is not available")
 	}
 
-	publicVisors, err := v.dClient.AllEntries(context.TODO())
+	publicVisors, err := v.dmsgC.AllEntries()
 	if err != nil {
 		return result, err
 	}
