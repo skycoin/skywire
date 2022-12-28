@@ -1052,6 +1052,10 @@ func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
 	}
 
 	for _, publicVisor := range publicVisors {
+		if publicVisor == conf.PK.Hex() {
+			continue
+		}
+
 		if err := conf.PK.UnmarshalText([]byte(publicVisor)); err != nil {
 			continue
 		}
