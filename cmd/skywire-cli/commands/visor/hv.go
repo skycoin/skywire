@@ -51,7 +51,7 @@ var hvpkCmd = &cobra.Command{
 		var hypervisors []cipher.PubKey
 
 		if pkg {
-			path = visorconfig.Pkgpath
+			path = visorconfig.SkywireConfig()
 		}
 
 		if path != "" {

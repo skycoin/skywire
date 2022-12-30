@@ -1,6 +1,6 @@
 module github.com/skycoin/skywire
 
-go 1.17
+go 1.18
 
 require (
 	github.com/AudriusButkevicius/pfilter v0.0.0-20210515103320-4b4b86609d51

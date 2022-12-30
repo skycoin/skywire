@@ -47,7 +47,7 @@ var autoConfigCmd = &cobra.Command{
 	PreRun: func(cmd *cobra.Command, _ []string) {
 		if isEnvs {
 			fmt.Printf("\n")
-			fmt.Printf("Env file to source\n					%s\n", visorconfig.visorconfigs())
+			fmt.Printf("Env file to source\n					%s\n", visorconfig.SkyEnvs())
 			fmt.Printf("Detect if this command is run as root\nRoot permissions required\n					EUID=0\n")
 			fmt.Printf("Disable Autoconfig\n					NOAUTOCONFIG=true\n")
 			fmt.Printf("Command was run in dmsgpty terminal\nDo not restart services\n					DMSGPTYTERM=1\n")
@@ -58,12 +58,12 @@ var autoConfigCmd = &cobra.Command{
 			os.Exit(0)
 		}
 		// source or call the visorconfig file ; ignore errors as the file is not required to exist
-		if _, err := os.Stat(visorconfig.visorconfigs()); err == nil {
+		if _, err := os.Stat(visorconfig.SkyEnvs()); err == nil {
 			if visorconfig.OS == "win" {
-				cmds = `call ` + visorconfig.visorconfigs() //nolint:errcheck
-				_, _ = script.Exec(cmds).Stdout() //nolint:errcheck
+				cmds = `call ` + visorconfig.SkyEnvs() //nolint:errcheck
+				_, _ = script.Exec(cmds).Stdout()      //nolint:errcheck
 			} else {
-				cmds = `bash -c "source ` + visorconfig.visorconfigs() + `"`
+				cmds = `bash -c "source ` + visorconfig.SkyEnvs() + `"`
 				_, _ = script.Exec(cmds).Stdout() //nolint:errcheck
 			}
 		}

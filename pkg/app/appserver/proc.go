@@ -22,8 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appnet"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig/appconfig"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 var (
@@ -287,7 +286,7 @@ func (p *Proc) Stop() error {
 		} else {
 			p.ipcServerWg.Wait()
 			if p.ipcServer != nil {
-				if err := p.ipcServer.Write(visorconfig.IPCShutdownMessageType, []byte("")); err != nil {
+				if err := p.ipcServer.Write(skyenv.IPCShutdownMessageType, []byte("")); err != nil {
 					return err
 				}
 			}
@@ -442,15 +441,4 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 	})
 
 	return summaries
-}
-
-
-// AppLauncher is responsible for launching and keeping track of app states.
-type AppLauncher struct {
-	conf  appconfig.AppLauncherConfig
-	log   logrus.FieldLogger
-	r     router.Router
-	procM ProcManager
-	apps  map[string]AppConfig
-	mx    sync.Mutex
 }

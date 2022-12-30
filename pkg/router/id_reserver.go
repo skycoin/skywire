@@ -42,7 +42,7 @@ type IDReserver interface {
 
 type idReserver struct {
 	total int                                 // the total number of route IDs we reserve from the routers
-	rcM   Map                    // map of router clients
+	rcM   Map                                 // map of router clients
 	rec   map[cipher.PubKey]uint8             // this records the number of expected rules per visor PK
 	ids   map[cipher.PubKey][]routing.RouteID // this records the obtained rules per visor PK
 	mx    sync.Mutex

@@ -16,7 +16,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig/appconfig"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -117,7 +117,7 @@ var genConfigCmd = &cobra.Command{
 			confPath = output
 		}
 
-		if output == visorconfig.StdoutName {
+		if output == visorconfig.Stdout {
 			isStdout = true
 			isForce = false
 		}
@@ -173,7 +173,7 @@ var genConfigCmd = &cobra.Command{
 		if !isStdout && isOutUnset {
 			if isPkgEnv {
 				configName = visorconfig.ConfigJSON
-				confPath = SkywireConfig()
+				confPath = visorconfig.SkywireConfig()
 				output = confPath
 			}
 			if isUsrEnv {
@@ -316,7 +316,7 @@ var genConfigCmd = &cobra.Command{
 			for _, app := range apps {
 				appsSlice[app] = true
 			}
-			var newConfLauncherApps []appconfig.AppConfig
+			var newConfLauncherApps []appserver.AppConfig
 			for _, app := range conf.Launcher.Apps {
 				if _, ok := appsSlice[app.Name]; !ok {
 					newConfLauncherApps = append(newConfLauncherApps, app)

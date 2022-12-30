@@ -29,7 +29,7 @@ var (
 		Err: rfclient.ErrTransportNotFound.Error(),
 	}
 	errErrSetupNode = appserver.RPCErr{
-		Err: setup.ErrSetupNode.Error(),
+		Err: router.ErrSetupNode.Error(),
 	}
 	errErrServerOffline = appserver.RPCErr{
 		Err: appnet.ErrServiceOffline(visorconfig.VPNServerPort).Error(),

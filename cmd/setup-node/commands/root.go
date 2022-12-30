@@ -16,8 +16,8 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/metricsutil"
-	"github.com/skycoin/skywire/pkg/setup"
-	"github.com/skycoin/skywire/pkg/setup/setupmetrics"
+	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/syslog"
 )
 
@@ -78,7 +78,7 @@ var rootCmd = &cobra.Command{
 			rdr = bufio.NewReader(os.Stdin)
 		}
 
-		conf := &setup.Config{}
+		conf := &router.SetupConfig{}
 
 		raw, err := io.ReadAll(rdr)
 		if err != nil {
@@ -91,7 +91,7 @@ var rootCmd = &cobra.Command{
 
 		log.Infof("Config: %#v", conf)
 
-		sn, err := setup.NewNode(conf)
+		sn, err := router.NewSetupNode(conf)
 		if err != nil {
 			log.Fatal("Failed to create a setup node: ", err)
 		}

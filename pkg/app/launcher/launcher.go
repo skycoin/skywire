@@ -21,7 +21,6 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/router"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/pkg/util/pathutil"
 )
 
@@ -35,10 +34,48 @@ var (
 	ErrAppNotRunning = errors.New("app not running")
 )
 
+// AppLauncher is responsible for launching and keeping track of app states.
+type AppLauncher struct {
+	conf  AppLauncherConfig
+	log   logrus.FieldLogger
+	r     router.Router
+	procM appserver.ProcManager
+	apps  map[string]appserver.AppConfig
+	mx    sync.Mutex
+}
+
+// AppLauncherConfig configures the launcher.
+type AppLauncherConfig struct {
+	VisorPK       cipher.PubKey
+	Apps          []appserver.AppConfig
+	ServerAddr    string
+	BinPath       string
+	LocalPath     string
+	DisplayNodeIP bool
+}
+
+// ResetConfig resets the launcher config.
+func (l *AppLauncher) ResetConfig(conf AppLauncherConfig) {
+	l.mx.Lock()
+	defer l.mx.Unlock()
+
+	apps := make(map[string]appserver.AppConfig, len(conf.Apps))
+	for _, ac := range conf.Apps {
+		apps[ac.Name] = ac
+	}
+	l.apps = apps
+
+	// we shouldn't change directories of apps, it causes
+	// all kinds of troubles and also doesn't make sense.
+	// So, just changing individual fields
+	l.conf.VisorPK = conf.VisorPK
+	l.conf.Apps = conf.Apps
+	l.conf.ServerAddr = conf.ServerAddr
+}
 
 // NewLauncher creates a new launcher.
-func NewLauncher(log logrus.FieldLogger, conf Config, dmsgC *dmsg.Client, r router.Router, procM appserver.ProcManager) (*Launcher, error) {
-	launcher := &Launcher{
+func NewLauncher(log logrus.FieldLogger, conf AppLauncherConfig, dmsgC *dmsg.Client, r router.Router, procM appserver.ProcManager) (*AppLauncher, error) {
+	launcher := &AppLauncher{
 		conf:  conf,
 		log:   log,
 		r:     r,
@@ -79,25 +116,6 @@ func NewLauncher(log logrus.FieldLogger, conf Config, dmsgC *dmsg.Client, r rout
 	return launcher, nil
 }
 
-// ResetConfig resets the launcher config.
-func (l *Launcher) ResetConfig(conf Config) {
-	l.mx.Lock()
-	defer l.mx.Unlock()
-
-	apps := make(map[string]appserver.AppConfig, len(conf.Apps))
-	for _, ac := range conf.Apps {
-		apps[ac.Name] = ac
-	}
-	l.apps = apps
-
-	// we shouldn't change directories of apps, it causes
-	// all kinds of troubles and also doesn't make sense.
-	// So, just changing individual fields
-	l.conf.VisorPK = conf.VisorPK
-	l.conf.Apps = conf.Apps
-	l.conf.ServerAddr = conf.ServerAddr
-}
-
 // EnvMaker makes a list of environment variables with their values set
 // It is used to let other code to decide how environment variables should be built
 type EnvMaker func() ([]string, error)
@@ -106,7 +124,7 @@ type EnvMaker func() ([]string, error)
 type EnvMap map[string]EnvMaker
 
 // AutoStart auto-starts marked apps.
-func (l *Launcher) AutoStart(envMap EnvMap) error {
+func (l *AppLauncher) AutoStart(envMap EnvMap) error {
 	if envMap == nil {
 		envMap = make(EnvMap)
 	}
@@ -140,7 +158,7 @@ func (l *Launcher) AutoStart(envMap EnvMap) error {
 }
 
 // AppState returns a single app state of given name.
-func (l *Launcher) AppState(name string) (*appserver.AppState, bool) {
+func (l *AppLauncher) AppState(name string) (*appserver.AppState, bool) {
 	l.mx.Lock()
 	defer l.mx.Unlock()
 
@@ -175,7 +193,7 @@ func (l *Launcher) AppState(name string) (*appserver.AppState, bool) {
 }
 
 // AppStates returns list of AppStates for all registered apps.
-func (l *Launcher) AppStates() []*appserver.AppState {
+func (l *AppLauncher) AppStates() []*appserver.AppState {
 	var states []*appserver.AppState
 	for _, app := range l.apps {
 		state, _ := l.AppState(app.Name)
@@ -186,14 +204,14 @@ func (l *Launcher) AppStates() []*appserver.AppState {
 
 // StartApp starts cmd with given args and env.
 // If 'args' is nil, default args will be used.
-func (l *Launcher) StartApp(cmd string, args, envs []string) error {
+func (l *AppLauncher) StartApp(cmd string, args, envs []string) error {
 	l.mx.Lock()
 	defer l.mx.Unlock()
 
 	return l.startApp(cmd, args, envs)
 }
 
-func (l *Launcher) startApp(cmd string, args, envs []string) error {
+func (l *AppLauncher) startApp(cmd string, args, envs []string) error {
 	log := l.log.WithField("func", "StartApp").WithField("cmd", cmd)
 
 	// Obtain associated app config.
@@ -224,7 +242,7 @@ func (l *Launcher) startApp(cmd string, args, envs []string) error {
 }
 
 // StopApp stops running app.
-func (l *Launcher) StopApp(name string) (*appserver.Proc, error) {
+func (l *AppLauncher) StopApp(name string) (*appserver.Proc, error) {
 	log := l.log.WithField("func", "StopApp").WithField("app_name", name)
 
 	proc, ok := l.procM.ProcByName(name)
@@ -241,7 +259,7 @@ func (l *Launcher) StopApp(name string) (*appserver.Proc, error) {
 }
 
 // RestartApp restarts a running app.
-func (l *Launcher) RestartApp(name string) error {
+func (l *AppLauncher) RestartApp(name string) error {
 	l.log.WithField("func", "RestartApp").WithField("app_name", name).
 		Info("Restarting app...")
 
@@ -258,7 +276,7 @@ func (l *Launcher) RestartApp(name string) error {
 	return nil
 }
 
-func makeProcConfig(lc Config, ac appserver.AppConfig, envs []string) (appcommon.ProcConfig, error) {
+func makeProcConfig(lc AppLauncherConfig, ac appserver.AppConfig, envs []string) (appcommon.ProcConfig, error) {
 	procConf := appcommon.ProcConfig{
 		AppName:     ac.Name,
 		AppSrvAddr:  lc.ServerAddr,
@@ -293,11 +311,11 @@ func ensureDir(path *string) error {
 	<<< PID management >>>
 */
 
-func (l *Launcher) pidFile() (*os.File, error) {
+func (l *AppLauncher) pidFile() (*os.File, error) {
 	return os.OpenFile(filepath.Join(l.conf.LocalPath, appsPIDFileName), os.O_RDWR|os.O_CREATE, 0606) //nolint:gosec
 }
 
-func (l *Launcher) persistPID(appName string, pid appcommon.ProcID) error {
+func (l *AppLauncher) persistPID(appName string, pid appcommon.ProcID) error {
 	log := l.log.
 		WithField("func", "persistPID").
 		WithField("app_name", appName).
@@ -322,7 +340,7 @@ func (l *Launcher) persistPID(appName string, pid appcommon.ProcID) error {
 	return nil
 }
 
-func (l *Launcher) killHangingProcesses() error {
+func (l *AppLauncher) killHangingProcesses() error {
 	log := l.log.WithField("func", "killHangingProcesses")
 
 	pidF, err := l.pidFile()
@@ -359,7 +377,7 @@ func (l *Launcher) killHangingProcesses() error {
 	return nil
 }
 
-func (l *Launcher) killHangingProc(appName string, pid int) {
+func (l *AppLauncher) killHangingProc(appName string, pid int) {
 	log := l.log.WithField("app_name", appName).WithField("pid", pid)
 
 	p, err := os.FindProcess(pid)

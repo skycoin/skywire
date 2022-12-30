@@ -9,8 +9,8 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
-	"sync"
 	"strings"
+	"sync"
 	"time"
 
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
@@ -88,7 +88,7 @@ type Visor struct {
 	rfClient rfclient.Client
 
 	procM       appserver.ProcManager // proc manager
-	appL        *launcher.Launcher    // app launcher
+	appL        *launcher.AppLauncher // app launcher
 	serviceDisc appdisc.Factory
 	initLock    *sync.RWMutex
 	// when module is failed it pushes its error to this channel
@@ -155,11 +155,11 @@ func newVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	ctx = context.WithValue(ctx, runtimeErrsKey, v.runtimeErrors)
 	registerModules(v.MasterLogger())
 	var mainModule visorinit.Module
-//	if v.conf.Hypervisor == nil {
-//		mainModule = vis
-//	} else {
-		mainModule = hv
-//	}
+	//	if v.conf.Hypervisor == nil {
+	//		mainModule = vis
+	//	} else {
+	mainModule = hv
+	//	}
 	// run Transport module in a non blocking mode
 	go tm.InitConcurrent(ctx)
 	mainModule.InitConcurrent(ctx)
@@ -297,7 +297,6 @@ func run(conf *visorconfig.V1) {
 			log.Info("setting log level to: ", logLvl)
 		}
 	}
-
 
 	if conf.Hypervisor != nil {
 		conf.Hypervisor.UIAssets = uiAssets

@@ -27,6 +27,7 @@ import (
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
+
 //go:embed static
 //go:embed static
 var ui embed.FS
@@ -64,7 +65,6 @@ var (
 )
 
 func init() {
-
 
 	root = visorconfig.IsRoot()
 	RootCmd.Flags().SortFlags = false

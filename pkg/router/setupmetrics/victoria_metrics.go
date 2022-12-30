@@ -1,4 +1,4 @@
-// Package setupmetrics pkg/setup/setupmetrics/victoria_metrics.go
+// Package setupmetrics pkg/router/setupmetrics/victoria_metrics.go
 package setupmetrics
 
 import (

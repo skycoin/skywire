@@ -793,7 +793,7 @@ func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.pushCloseStack("launcher.proc_manager", procM.Close)
 
 	// Prepare launcher.
-	launchConf := launcher.Config{
+	launchConf := launcher.AppLauncherConfig{
 		VisorPK:       v.conf.PK,
 		Apps:          conf.Apps,
 		ServerAddr:    conf.ServerAddr,
@@ -1194,9 +1194,9 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 }
 
 func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
-if v.conf.Hypervisor == nil {
-	return nil
-}
+	if v.conf.Hypervisor == nil {
+		return nil
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 
 	conf := *v.conf.Hypervisor

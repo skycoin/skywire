@@ -41,10 +41,8 @@ func SkyEnvs() string {
 // PackageConfig contains installation paths (for mac)
 func PackageConfig() PkgConfig {
 	pkgConfig := PkgConfig{
-		Launcher: Launcher{
-			BinPath: "/Applications/Skywire.app/Contents/MacOS/apps",
-		},
-		LocalPath: "/Library/Application Support/Skywire/local",
+		LauncherBinPath: "/Applications/Skywire.app/Contents/MacOS/apps",
+		LocalPath:       "/Library/Application Support/Skywire/local",
 		Hypervisor: Hypervisor{
 			DbPath:     "/Library/Application Support/Skywire/users.db",
 			EnableAuth: true,
@@ -56,10 +54,8 @@ func PackageConfig() PkgConfig {
 // UserConfig contains installation paths (for mac)
 func UserConfig() PkgConfig {
 	usrConfig := PkgConfig{
-		Launcher: Launcher{
-			BinPath: "/Applications/Skywire.app/Contents/MacOS/apps",
-		},
-		LocalPath: HomePath() + "/.skywire/local",
+		LauncherBinPath: "/Applications/Skywire.app/Contents/MacOS/apps",
+		LocalPath:       HomePath() + "/.skywire/local",
 		Hypervisor: Hypervisor{
 			DbPath:     HomePath() + "/.skywire/users.db",
 			EnableAuth: true,

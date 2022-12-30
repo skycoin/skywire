@@ -23,7 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 const (
@@ -214,12 +214,12 @@ func (c *Client) ListenIPC(client *ipc.Client) {
 	for {
 		m, err := client.Read()
 		if err != nil {
-			print(fmt.Sprintf("%s IPC received error: %v\n", visorconfig.VPNClientName, err))
+			print(fmt.Sprintf("%s IPC received error: %v\n", skyenv.VPNClientName, err))
 		}
 
 		if m != nil {
-			if m.MsgType == visorconfig.IPCShutdownMessageType {
-				fmt.Println("Stopping " + visorconfig.VPNClientName + " via IPC")
+			if m.MsgType == skyenv.IPCShutdownMessageType {
+				fmt.Println("Stopping " + skyenv.VPNClientName + " via IPC")
 				break
 			}
 		}
@@ -683,7 +683,7 @@ func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error)
 	var sHello ServerHello
 	if err := ReadJSONWithTimeout(conn, &sHello, handshakeTimeout); err != nil {
 		fmt.Printf("error reading server hello: %v\n", err)
-		if strings.Contains(err.Error(), appnet.ErrServiceOffline(visorconfig.VPNServerPort).Error()) {
+		if strings.Contains(err.Error(), appnet.ErrServiceOffline(skyenv.VPNServerPort).Error()) {
 			err = appserver.RPCErr{
 				Err: err.Error(),
 			}
@@ -703,7 +703,7 @@ func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error)
 func (c *Client) dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
 	const (
 		netType = appnet.TypeSkynet
-		vpnPort = routing.Port(visorconfig.VPNServerPort)
+		vpnPort = routing.Port(skyenv.VPNServerPort)
 	)
 
 	var conn net.Conn

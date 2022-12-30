@@ -1,4 +1,4 @@
-// Package visorconfig pkg/visor/visorconfig/hypervisorconfig.go
+// Package visorconfig pkg/visor/visorconfig/hypergo
 package visorconfig
 
 import (
@@ -62,7 +62,7 @@ type HypervisorConfig struct {
 
 // MakeConfig returns hypervisor config.
 func MakeConfig(testenv bool) HypervisorConfig {
-	var c Config
+	var c HypervisorConfig
 	c.FillDefaults(testenv)
 	return c
 }
@@ -81,7 +81,7 @@ func GenerateWorkDirConfig(testenv bool) HypervisorConfig {
 // GenerateHomeConfig generates a config with default values and uses db from user's home folder.
 func GenerateHomeConfig(testenv bool) HypervisorConfig {
 	c := MakeConfig(testenv)
-	c.DBPath = filepath.Join(pathutil.HomeDir(), visorconfig.HypervisorDB)
+	c.DBPath = filepath.Join(pathutil.HomeDir(), HypervisorDB)
 	return c
 }
 
@@ -114,16 +114,16 @@ func (c *HypervisorConfig) FillDefaults(testEnv bool) {
 		}
 	}
 	if c.DmsgPort == 0 {
-		c.DmsgPort = visorconfig.DmsgHypervisorPort
+		c.DmsgPort = DmsgHypervisorPort
 	}
 	if c.HTTPAddr == "" {
 		c.HTTPAddr = httpAddr
 	}
 	c.Cookies.FillDefaults()
-	c.EnableAuth = visorconfig.EnableAuth
-	c.EnableTLS = visorconfig.EnableTLS
-	c.TLSCertFile = visorconfig.TLSCert
-	c.TLSKeyFile = visorconfig.TLSKey
+	c.EnableAuth = EnableAuth
+	c.EnableTLS = EnableTLS
+	c.TLSCertFile = TLSCert
+	c.TLSKeyFile = TLSKey
 
 }
 

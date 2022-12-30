@@ -6,14 +6,11 @@ package main
 
 import (
 	"fmt"
-//	"embed"
+
 	cc "github.com/ivanpirog/coloredcobra"
 
 	"github.com/skycoin/skywire/pkg/visor"
-//	"github.com/skycoin/skywire/cmd/skywire-visor/static"
 )
-
-
 
 func main() {
 	cc.Init(&cc.Config{

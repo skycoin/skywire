@@ -7,9 +7,10 @@ import (
 	"sync"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/dmsgc"
-	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/dmsgc"
+	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 // V1 is visor config
@@ -35,15 +36,9 @@ type V1 struct {
 	ShutdownTimeout      Duration                         `json:"shutdown_timeout,omitempty"`    // time value, examples: 10s, 1m, etc
 	RestartCheckDelay    Duration                         `json:"restart_check_delay,omitempty"` // time value, examples: 10s, 1m, etc
 	IsPublic             bool                             `json:"is_public"`
-	PersistentTransports []PersistentTransports `json:"persistent_transports"`
+	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 
 	Hypervisor *HypervisorConfig `json:"hypervisor,omitempty"`
-}
-
-// PersistentTransports is a persistent transports description
-type PersistentTransports struct {
-	PK      cipher.PubKey `json:"pk"`
-	NetType network.Type  `json:"type"`
 }
 
 // Dmsgpty configures the dmsgpty-host.
@@ -86,7 +81,7 @@ type UptimeTracker struct {
 // Launcher configures the app
 type Launcher struct {
 	ServiceDisc   string                `json:"service_discovery"`
-	Apps          []appconfig.AppConfig `json:"apps"`
+	Apps          []appserver.AppConfig `json:"apps"`
 	ServerAddr    string                `json:"server_addr"`
 	BinPath       string                `json:"bin_path"`
 	DisplayNodeIP bool                  `json:"display_node_ip"`
@@ -111,12 +106,11 @@ func Reload() (*V1, error) {
 // UpdateAppAutostart modifies a single app's autostart value within the config and also the given
 //
 // The updated config gets flushed to file if there are any changes.
-func (v1 *V1) UpdateAppAutostart(launch *AppLauncher, appName string, autoStart bool) error {
+func (v1 *V1) UpdateAppAutostart(appName string, autoStart bool) error {
+	//	func (v1 *V1) UpdateAppAutostart(launch *appserver.AppLauncherConfig, appName string, autoStart bool) error {
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
-
 	conf := v1.Launcher
-
 	changed := false
 	for i := range conf.Apps {
 		if conf.Apps[i].Name == appName {
@@ -125,23 +119,24 @@ func (v1 *V1) UpdateAppAutostart(launch *AppLauncher, appName string, autoStart 
 			break
 		}
 	}
-
 	if !changed {
 		return nil
 	}
-
-	launch.ResetConfig(appconfig.AppLauncherConfig{
-		VisorPK:       v1.PK,
-		Apps:          conf.Apps,
-		ServerAddr:    conf.ServerAddr,
-		DisplayNodeIP: conf.DisplayNodeIP,
-	})
+	/*
+		launch.ResetConfig(appserver.AppLauncherConfig{
+			VisorPK:       v1.PK,
+			Apps:          conf.Apps,
+			ServerAddr:    conf.ServerAddr,
+			DisplayNodeIP: conf.DisplayNodeIP,
+		})
+	*/
 	return v1.flush(v1)
 }
 
 // UpdateAppArg updates the cli flag of the specified app config and also within the
 // The updated config gets flushed to file if there are any changes.
-func (v1 *V1) UpdateAppArg(launch *appserver.AppLauncher, appName, argName string, value interface{}) error {
+func (v1 *V1) UpdateAppArg(appName, argName string, value interface{}) error {
+	//	func (v1 *V1) UpdateAppArg(launch *appserver.AppLauncher, appName, argName string, value interface{}) error {
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
 
@@ -160,14 +155,14 @@ func (v1 *V1) UpdateAppArg(launch *appserver.AppLauncher, appName, argName strin
 	if !configChanged {
 		return nil
 	}
-
-	launch.ResetConfig(appconfig.AppLauncherConfig{
-		VisorPK:       v1.PK,
-		Apps:          conf.Apps,
-		ServerAddr:    conf.ServerAddr,
-		DisplayNodeIP: conf.DisplayNodeIP,
-	})
-
+	/*
+		launch.ResetConfig(appserver.AppLauncherConfig{
+			VisorPK:       v1.PK,
+			Apps:          conf.Apps,
+			ServerAddr:    conf.ServerAddr,
+			DisplayNodeIP: conf.DisplayNodeIP,
+		})
+	*/
 	return v1.flush(v1)
 }
 
@@ -181,7 +176,7 @@ func (v1 *V1) UpdateMinHops(hops uint16) error {
 }
 
 // UpdatePersistentTransports updates persistent_transports in config
-func (v1 *V1) UpdatePersistentTransports(pTps []PersistentTransports) error {
+func (v1 *V1) UpdatePersistentTransports(pTps []transport.PersistentTransports) error {
 	v1.mu.Lock()
 	v1.PersistentTransports = pTps
 	v1.mu.Unlock()
@@ -190,7 +185,7 @@ func (v1 *V1) UpdatePersistentTransports(pTps []PersistentTransports) error {
 }
 
 // GetPersistentTransports gets persistent_transports from config
-func (v1 *V1) GetPersistentTransports() ([]PersistentTransports, error) {
+func (v1 *V1) GetPersistentTransports() ([]transport.PersistentTransports, error) {
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
 	return v1.PersistentTransports, nil
@@ -199,7 +194,7 @@ func (v1 *V1) GetPersistentTransports() ([]PersistentTransports, error) {
 // UpdateLogRotationInterval updates log_rotation_interval in config
 func (v1 *V1) UpdateLogRotationInterval(d Duration) error {
 	v1.mu.Lock()
-	v1.LogStore.RotationInterval = d
+	v1.Transport.LogStore.RotationInterval = d
 	v1.mu.Unlock()
 
 	return v1.flush(v1)
@@ -209,13 +204,13 @@ func (v1 *V1) UpdateLogRotationInterval(d Duration) error {
 func (v1 *V1) GetLogRotationInterval() (Duration, error) {
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
-	return v1.LogStore.RotationInterval, nil
+	return v1.Transport.LogStore.RotationInterval, nil
 }
 
 // UpdatePublicAutoconnect updates public_autoconnect in config
 func (v1 *V1) UpdatePublicAutoconnect(pAc bool) error {
 	v1.mu.Lock()
-	v1.PublicAutoconnect = pAc
+	v1.Transport.PublicAutoconnect = pAc
 	v1.mu.Unlock()
 
 	return v1.flush(v1)

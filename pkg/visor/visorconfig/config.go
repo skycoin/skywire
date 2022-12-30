@@ -14,10 +14,10 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig/appconfig"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
@@ -34,7 +34,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 				TransportDiscovery: utilenv.TpDiscAddr,
 				AddressResolver:    utilenv.AddressResolverAddr,
 				RouteFinder:        utilenv.RouteFinderAddr,
-				SetupNodes:         []cipher.PubKey{utilenv.MustPK(utilenv.SetupPK)},
+				SetupNodes:         []cipher.PubKey{MustPK(utilenv.SetupPK)},
 				UptimeTracker:      utilenv.UptimeTrackerAddr,
 				ServiceDiscovery:   utilenv.ServiceDiscAddr,
 				StunServers:        utilenv.GetStunServers(),
@@ -45,7 +45,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 				TransportDiscovery: utilenv.TestTpDiscAddr,
 				AddressResolver:    utilenv.TestAddressResolverAddr,
 				RouteFinder:        utilenv.TestRouteFinderAddr,
-				SetupNodes:         []cipher.PubKey{utilenv.MustPK(utilenv.TestSetupPK)},
+				SetupNodes:         []cipher.PubKey{MustPK(utilenv.TestSetupPK)},
 				UptimeTracker:      utilenv.TestUptimeTrackerAddr,
 				ServiceDiscovery:   utilenv.TestServiceDiscAddr,
 				StunServers:        utilenv.GetStunServers(),
@@ -193,7 +193,7 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 		pkgConfig := PackageConfig()
 		conf.LocalPath = pkgConfig.LocalPath
 		conf.CustomDmsgHTTPPath = pkgConfig.LocalPath + "/" + Custom
-		conf.Launcher.BinPath = pkgConfig.Launcher.BinPath
+		conf.Launcher.BinPath = pkgConfig.LauncherBinPath
 		conf.Transport.LogStore.Location = pkgConfig.LocalPath + "/" + TpLogStore
 		if conf.Hypervisor != nil {
 			conf.Hypervisor.EnableAuth = pkgConfig.Hypervisor.EnableAuth
@@ -204,7 +204,7 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 		usrConfig := UserConfig()
 		conf.LocalPath = usrConfig.LocalPath
 		conf.CustomDmsgHTTPPath = usrConfig.LocalPath + "/" + Custom
-		conf.Launcher.BinPath = usrConfig.Launcher.BinPath
+		conf.Launcher.BinPath = usrConfig.LauncherBinPath
 		conf.Transport.LogStore.Location = usrConfig.LocalPath + "/" + TpLogStore
 		if conf.Hypervisor != nil {
 			conf.Hypervisor.EnableAuth = usrConfig.Hypervisor.EnableAuth
@@ -218,8 +218,8 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 // makeDefaultLauncherAppsConfig creates default launcher config for apps,
 // for package based installation in other platform (Darwin, Windows) it only includes
 // the shipped apps for that platforms
-func makeDefaultLauncherAppsConfig() []appconfig.AppConfig {
-	defaultConfig := []appconfig.AppConfig{
+func makeDefaultLauncherAppsConfig() []appserver.AppConfig {
+	defaultConfig := []appserver.AppConfig{
 		{
 			Name:      VPNClientName,
 			AutoStart: false,

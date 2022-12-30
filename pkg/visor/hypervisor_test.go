@@ -16,8 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 	"github.com/skycoin/skywire/pkg/visor/usermanager"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // nolint: gosec
@@ -29,7 +29,7 @@ const (
 )
 
 func TestNewNode(t *testing.T) {
-	config := hypervisorconfig.MakeConfig(false)
+	config := visorconfig.MakeConfig(false)
 	config.EnableAuth = true
 	config.FillDefaults(false)
 
@@ -62,7 +62,7 @@ func TestNewNode(t *testing.T) {
 	})
 }
 
-func makeStartNode(t *testing.T, config hypervisorconfig.Config) (string, *http.Client, func()) {
+func makeStartNode(t *testing.T, config visorconfig.Config) (string, *http.Client, func()) {
 	// nolint: gomnd
 	defaultMockConfig := MockConfig{
 		Visors:            5,
@@ -131,7 +131,7 @@ func testCase(t *testing.T, addr string, client *http.Client, tc TestCase, testT
 	}
 }
 
-func testNodeNoAccessWithoutLogin(t *testing.T, config hypervisorconfig.Config) {
+func testNodeNoAccessWithoutLogin(t *testing.T, config visorconfig.Config) {
 	addr, client, stop := makeStartNode(t, config)
 	defer stop()
 
@@ -156,7 +156,7 @@ func testNodeNoAccessWithoutLogin(t *testing.T, config hypervisorconfig.Config) 
 	})
 }
 
-func testNodeOnlyAdminAccountAllowed(t *testing.T, config hypervisorconfig.Config) {
+func testNodeOnlyAdminAccountAllowed(t *testing.T, config visorconfig.Config) {
 	addr, client, stop := makeStartNode(t, config)
 	defer stop()
 
@@ -186,7 +186,7 @@ func testNodeOnlyAdminAccountAllowed(t *testing.T, config hypervisorconfig.Confi
 	})
 }
 
-func testNodeCannotLoginTwice(t *testing.T, config hypervisorconfig.Config) {
+func testNodeCannotLoginTwice(t *testing.T, config visorconfig.Config) {
 	addr, client, stop := makeStartNode(t, config)
 	defer stop()
 
@@ -227,7 +227,7 @@ func testNodeCannotLoginTwice(t *testing.T, config hypervisorconfig.Config) {
 	})
 }
 
-func testNodeAccessAfterLogin(t *testing.T, config hypervisorconfig.Config) {
+func testNodeAccessAfterLogin(t *testing.T, config visorconfig.Config) {
 	addr, client, stop := makeStartNode(t, config)
 	defer stop()
 
@@ -267,7 +267,7 @@ func testNodeAccessAfterLogin(t *testing.T, config hypervisorconfig.Config) {
 	})
 }
 
-func testNodeNoAccessAfterLogout(t *testing.T, config hypervisorconfig.Config) {
+func testNodeNoAccessAfterLogout(t *testing.T, config visorconfig.Config) {
 	addr, client, stop := makeStartNode(t, config)
 	defer stop()
 
@@ -335,7 +335,7 @@ func testNodeNoAccessAfterLogout(t *testing.T, config hypervisorconfig.Config) {
 // - Login with old password (should fail).
 // - Login with new password (should succeed).
 // nolint: funlen
-func testNodeChangePassword(t *testing.T, config hypervisorconfig.Config) {
+func testNodeChangePassword(t *testing.T, config visorconfig.Config) {
 	addr, client, stop := makeStartNode(t, config)
 	defer stop()
 
