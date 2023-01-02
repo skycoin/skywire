@@ -1075,3 +1075,16 @@ func isPortAvailable(log *logging.Logger, port int) bool {
 	}
 	return true
 }
+
+func isPortRegistered(port int, v *Visor) bool {
+	ports, err := v.ListHTTPPorts()
+	if err != nil {
+		return false
+	}
+	for _, p := range ports {
+		if p == port {
+			return true
+		}
+	}
+	return false
+}

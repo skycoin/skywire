@@ -606,14 +606,14 @@ func initSkywireProxy(ctx context.Context, v *Visor, log *logging.Logger) error 
 
 			rAddr := wrappedConn.RemoteAddr().(appnet.Addr)
 			log.Debugf("Accepted sky proxy conn on %s from %s", wrappedConn.LocalAddr(), rAddr.PubKey)
-			go handleServerConn(log, wrappedConn)
+			go handleServerConn(log, wrappedConn, v)
 		}
 	}()
 
 	return nil
 }
 
-func handleServerConn(log *logging.Logger, remoteConn net.Conn) {
+func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 	buf := make([]byte, 32*1024)
 	n, err := remoteConn.Read(buf)
 	if err != nil {
@@ -631,9 +631,16 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn) {
 	log.Debugf("Received: %v", cMsg)
 
 	lHost := fmt.Sprintf("localhost:%v", cMsg.Port)
-	ok := isPortAvailable(log, cMsg.Port)
+	ok := isPortRegistered(cMsg.Port, v)
+	if !ok {
+		log.Errorf("Port :%v not registered", cMsg.Port)
+		sendError(log, remoteConn, fmt.Errorf("Port :%v not registered", cMsg.Port))
+		return
+	}
+
+	ok = isPortAvailable(log, cMsg.Port)
 	if ok {
-		log.WithError(err).Errorf("Failed to dial port %v", cMsg.Port)
+		log.Errorf("Failed to dial port %v", cMsg.Port)
 		sendError(log, remoteConn, fmt.Errorf("Failed to dial port %v", cMsg.Port))
 		return
 	}
