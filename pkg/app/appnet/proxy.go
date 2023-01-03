@@ -156,9 +156,12 @@ func handleFunc(remoteConn net.Conn, log *logging.Logger, closeChan chan struct{
 				log.WithError(err).Errorln("Failed to close proxy response body")
 			}
 		}()
-
+		for key, value := range resp.Header {
+			for _, v := range value {
+				w.Header().Set(key, v)
+			}
+		}
 		w.WriteHeader(resp.StatusCode)
-
 		// Transfer response from remote server -> client
 		if resp.ContentLength > 0 {
 			if _, err := io.CopyN(w, resp.Body, resp.ContentLength); err != nil {
