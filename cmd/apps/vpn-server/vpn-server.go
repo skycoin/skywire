@@ -17,12 +17,12 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 const (
 	netType = appnet.TypeSkynet
-	vpnPort = routing.Port(visorconfig.VPNServerPort)
+	vpnPort = routing.Port(skyenv.VPNServerPort)
 )
 
 var (

@@ -67,7 +67,7 @@ type Hypervisor struct {
 }
 
 // New creates a new Hypervisor.
-func New(config visorconfig.HypervisorConfig, visor *Visor, dmsgC *dmsg.Client) (*Hypervisor, error) {
+func NewHypervisor(config visorconfig.HypervisorConfig, visor *Visor, dmsgC *dmsg.Client) (*Hypervisor, error) {
 	config.Cookies.TLS = config.EnableTLS
 
 	boltUserDB, err := usermanager.NewBoltUserStore(config.DBPath)

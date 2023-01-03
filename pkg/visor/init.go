@@ -1205,7 +1205,7 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	conf.DmsgDiscovery = v.conf.Dmsg.Discovery
 
 	// Prepare hypervisor.
-	hv, err := New(conf, v, v.dmsgC)
+	hv, err := NewHypervisor(conf, v, v.dmsgC)
 	if err != nil {
 		v.log.Fatalln("Failed to start hypervisor:", err)
 	}

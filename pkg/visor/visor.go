@@ -125,9 +125,25 @@ func (v *Visor) MasterLogger() *logging.MasterLogger {
 	return v.conf.MasterLogger()
 }
 
+func reload(v *Visor) error {
+	if confPath == visorconfig.Stdin {
+		v.log.Error("Cannot reload visor ; config was piped via stdin")
+		return nil
+	}
+	if err := v.Close(); err != nil {
+		v.log.WithError(err).Error("Visor closed with error.")
+		return err
+	}
+	v = nil
+	return nil
+}
+
 // newVisor constructs new Visor.
 func newVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
-
+	if conf == nil {
+		initConfig(initLogger())
+	}
+	conf.MasterLogger().PackageLogger("visor")
 	v := &Visor{
 		log:                  conf.MasterLogger().PackageLogger("visor"),
 		conf:                 conf,
@@ -238,7 +254,7 @@ func run(conf *visorconfig.V1) {
 	defer stopPProf()
 
 	if conf == nil {
-		conf = initConfig(log, confPath)
+		conf = initConfig(log)
 	}
 
 	if disableHypervisorPKs {

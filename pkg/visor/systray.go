@@ -16,7 +16,7 @@ func runAppSystray() {
 		l.WithError(err).Fatalln("Failed to read system tray icon")
 	}
 
-	conf := initConfig(l, confPath)
+	conf := initConfig(l)
 
 	go func() {
 		runVisor(conf)

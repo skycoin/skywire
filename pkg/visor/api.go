@@ -847,15 +847,10 @@ func (v *Visor) Reload() error {
 	if v.restartCtx == nil {
 		return ErrMalformedRestartContext
 	}
-	v1, err := visorconfig.Reload()
+	err := reload(v)
 	if err != nil {
 		return err
 	}
-	err = v.Close()
-	if err != nil {
-		os.Exit(1)
-	}
-	go run(v1)
 	return nil
 }
 

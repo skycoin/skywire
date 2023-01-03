@@ -91,7 +91,7 @@ var rootCmd = &cobra.Command{
 
 		log.Infof("Config: %#v", conf)
 
-		sn, err := router.NewSetupNode(conf)
+		sn, err := router.NewNode(conf)
 		if err != nil {
 			log.Fatal("Failed to create a setup node: ", err)
 		}

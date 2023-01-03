@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
@@ -223,28 +224,28 @@ func makeDefaultLauncherAppsConfig() []appserver.AppConfig {
 		{
 			Name:      VPNClientName,
 			AutoStart: false,
-			Port:      routing.Port(VPNClientPort),
+			Port:      routing.Port(skyenv.VPNClientPort),
 		},
 		{
 			Name:      SkychatName,
 			AutoStart: true,
-			Port:      routing.Port(SkychatPort),
+			Port:      routing.Port(skyenv.SkychatPort),
 			Args:      []string{"-addr", SkychatAddr},
 		},
 		{
 			Name:      SkysocksName,
 			AutoStart: true,
-			Port:      routing.Port(SkysocksPort),
+			Port:      routing.Port(skyenv.SkysocksPort),
 		},
 		{
 			Name:      SkysocksClientName,
 			AutoStart: false,
-			Port:      routing.Port(SkysocksClientPort),
+			Port:      routing.Port(skyenv.SkysocksClientPort),
 		},
 		{
 			Name:      VPNServerName,
 			AutoStart: false,
-			Port:      routing.Port(VPNServerPort),
+			Port:      routing.Port(skyenv.VPNServerPort),
 		},
 	}
 	return defaultConfig
