@@ -49,7 +49,7 @@ require (
 	github.com/jaypipes/ghw v0.9.0
 	github.com/lib/pq v1.10.7
 	github.com/pterm/pterm v0.12.49
-	github.com/skycoin/dmsg v1.3.0-rc1.0.20230105091948-3046bfc90fc0
+	github.com/skycoin/dmsg v1.3.0-rc1.0.20230105101327-c8f2541c3de8
 	github.com/skycoin/skywire-utilities v0.0.0-20220812192633-7137eb730383
 	github.com/skycoin/systray v1.10.1-0.20220630135132-48d2a1fb85d8
 	github.com/spf13/pflag v1.0.5

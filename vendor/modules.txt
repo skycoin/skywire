@@ -209,7 +209,7 @@ github.com/shirou/gopsutil/v3/process
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v1.3.0-rc1.0.20230105091948-3046bfc90fc0
+# github.com/skycoin/dmsg v1.3.0-rc1.0.20230105101327-c8f2541c3de8
 ## explicit; go 1.16
 github.com/skycoin/dmsg/internal/servermetrics
 github.com/skycoin/dmsg/pkg/direct

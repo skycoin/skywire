@@ -1043,7 +1043,7 @@ func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
 		return result, errors.New("dmsgC is not available")
 	}
 
-	publicVisors, err := v.dmsgC.AllEntries()
+	publicVisors, err := v.dmsgC.AllEntries(context.TODO())
 	if err != nil {
 		return result, err
 	}
