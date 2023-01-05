@@ -125,6 +125,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Con
 		conf:                 conf,
 		restartCtx:           restartCtx,
 		initLock:             new(sync.RWMutex),
+		allowedMX:            new(sync.RWMutex),
 		isServicesHealthy:    newInternalHealthInfo(),
 		dtmReady:             make(chan struct{}),
 		stunReady:            make(chan struct{}),
