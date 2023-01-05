@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 - add `--systray` flag to run visor as systray
+- add tag `withoutsystray` to build skywire-visor without systray library
+- add `build-static-wos` for build static without systray skywire-visor
 
 ### Changed
 - remove `make build-systray` and `make build-windows-systray`, and just keep `make build` and `make build-windows`
