@@ -24,15 +24,89 @@ var (
 func init() {
 	connectCmd.PersistentFlags().IntVarP(&remotePort, "remoteport", "r", 0, "remote port on visor to read from")
 	connectCmd.PersistentFlags().IntVarP(&localPort, "localport", "l", 0, "local port for server to run on")
-	RootCmd.AddCommand(connectCmd)
-	RootCmd.AddCommand(disconnectCmd)
-	RootCmd.AddCommand(lsCmd)
+	registerCmd.PersistentFlags().IntVarP(&localPort, "localport", "l", 0, "local port of the external http app")
+	deregisterCmd.PersistentFlags().IntVarP(&localPort, "localport", "l", 0, "local port of the external http app")
+	RootCmd.AddCommand(
+		registerCmd,
+		deregisterCmd,
+		lsPortsCmd,
+		connectCmd,
+		disconnectCmd,
+		lsCmd,
+	)
 }
 
 // RootCmd contains commands that interact with the skyproxy
 var RootCmd = &cobra.Command{
 	Use:   "skyproxy",
 	Short: "Control skyproxy",
+}
+
+var registerCmd = &cobra.Command{
+	Use:   "register",
+	Short: "Register a local port to be accessed by remote visors",
+	Args:  cobra.MinimumNArgs(0),
+	Run: func(cmd *cobra.Command, args []string) {
+
+		if localPort == 0 {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("required flag -localport not specified"))
+		}
+
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+
+		err = rpcClient.RegisterHTTPPort(localPort)
+		internal.Catch(cmd.Flags(), err)
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+
+	},
+}
+
+var deregisterCmd = &cobra.Command{
+	Use:   "deregister",
+	Short: "deregister a local port to be accessed by remote visors",
+	Args:  cobra.MinimumNArgs(0),
+	Run: func(cmd *cobra.Command, args []string) {
+
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+
+		err = rpcClient.DeregisterHTTPPort(localPort)
+		internal.Catch(cmd.Flags(), err)
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+	},
+}
+
+var lsPortsCmd = &cobra.Command{
+	Use:   "ls-ports",
+	Short: "List all registered ports",
+	Args:  cobra.MinimumNArgs(0),
+	Run: func(cmd *cobra.Command, args []string) {
+
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+
+		ports, err := rpcClient.ListHTTPPorts()
+		internal.Catch(cmd.Flags(), err)
+
+		var b bytes.Buffer
+		w := tabwriter.NewWriter(&b, 0, 0, 2, ' ', tabwriter.TabIndent)
+		_, err = fmt.Fprintln(w, "id\tlocal_port")
+		internal.Catch(cmd.Flags(), err)
+
+		for id, port := range ports {
+			_, err = fmt.Fprintf(w, "%v\t%v\n", id, port)
+			internal.Catch(cmd.Flags(), err)
+		}
+		internal.Catch(cmd.Flags(), w.Flush())
+		internal.PrintOutput(cmd.Flags(), ports, b.String())
+	},
 }
 
 var connectCmd = &cobra.Command{
