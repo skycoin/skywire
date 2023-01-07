@@ -1,3 +1,4 @@
+// Package dmsg pkg/dmsg/const.go
 package dmsg
 
 import "time"

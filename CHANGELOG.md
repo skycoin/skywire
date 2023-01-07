@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 - add `--systray` flag to run visor as systray
+- add `test` and `ping` command to `skywire-cli` as `skywire-cli visor ping <pk>` and `skywire-cli visor test`
 
 ### Changed
 - remove `make build-systray` and `make build-windows-systray`, and just keep `make build` and `make build-windows`

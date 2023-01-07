@@ -921,9 +921,10 @@ func (v *Visor) RoutingRules() ([]routing.Rule, error) {
 
 // PingConfig use as configuration for ping command
 type PingConfig struct {
-	PK       cipher.PubKey
-	Tries    int
-	PcktSize int
+	PK          cipher.PubKey
+	Tries       int
+	PcktSize    int
+	PubVisCount int
 }
 
 // DialPing implements API.
@@ -945,7 +946,7 @@ func (v *Visor) DialPing(conf PingConfig) error {
 	var conn net.Conn
 
 	ctx := context.TODO()
-	var r = netutil.NewRetrier(v.log, 2*time.Second, netutil.DefaultMaxBackoff, 5, 2)
+	var r = netutil.NewRetrier(v.log, 2*time.Second, netutil.DefaultMaxBackoff, 1, 2)
 	err = r.Do(ctx, func() error {
 		conn, err = appnet.Ping(conf.PK, addr)
 		return err
@@ -1028,29 +1029,47 @@ func (v *Visor) StopPing(pk cipher.PubKey) error {
 
 // TestResult type of test result
 type TestResult struct {
-	PK   string
-	Max  string
-	Min  string
-	Mean string
+	PK     string
+	Max    string
+	Min    string
+	Mean   string
+	Status string
 }
 
 // TestVisor trying to test visor
 func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
 	result := []TestResult{}
-	publicVisors, err := v.PublicVisors("", "")
+	if v.dmsgC == nil {
+		return result, errors.New("dmsgC is not available")
+	}
+
+	publicVisors, err := v.dmsgC.AllEntries(context.TODO())
 	if err != nil {
 		return result, err
 	}
+
+	if conf.PubVisCount < len(publicVisors) {
+		publicVisors = publicVisors[:conf.PubVisCount+1]
+	}
+
 	for _, publicVisor := range publicVisors {
-		conf.PK = publicVisor.Addr.PubKey()
+		if publicVisor == v.conf.PK.Hex() {
+			continue
+		}
+
+		if err := conf.PK.UnmarshalText([]byte(publicVisor)); err != nil {
+			continue
+		}
 		err := v.DialPing(conf)
 		if err != nil {
-			return result, err
+			result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(0), Min: fmt.Sprint(0), Mean: fmt.Sprint(0), Status: "Failed"})
+			continue
 		}
 		latencies, err := v.Ping(conf)
 		if err != nil {
 			go v.StopPing(conf.PK) //nolint
-			return result, err
+			result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(0), Min: fmt.Sprint(0), Mean: fmt.Sprint(0), Status: "Failed"})
+			continue
 		}
 		var max, min, mean, sumLatency time.Duration
 		min = time.Duration(10000000000)
@@ -1064,7 +1083,7 @@ func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
 			sumLatency += latency
 		}
 		mean = sumLatency / time.Duration(len(latencies))
-		result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(max), Min: fmt.Sprint(min), Mean: fmt.Sprint(mean)})
+		result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(max), Min: fmt.Sprint(min), Mean: fmt.Sprint(mean), Status: "Success"})
 		v.StopPing(conf.PK) //nolint
 	}
 	return result, nil
