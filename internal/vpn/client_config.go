@@ -8,4 +8,5 @@ type ClientConfig struct {
 	Passcode   string
 	Killswitch bool
 	ServerPK   cipher.PubKey
+	DNSAddr    string
 }

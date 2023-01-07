@@ -9,5 +9,6 @@
   mat-icon {
     font-size: $font-size-mini-plus;
     user-select: none;
+    flex-shrink: 0;
   }
 }

@@ -240,6 +240,14 @@ func (rc *rpcClient) SetAppSecure(appName string, isSecure bool) error {
 	}, &struct{}{})
 }
 
+// SetAppDNS implements API.
+func (rc *rpcClient) SetAppDNS(appName string, dnsAddr string) error {
+	return rc.Call("SetAppDNS", &SetAppStringIn{
+		AppName: appName,
+		Val:     dnsAddr,
+	}, &struct{}{})
+}
+
 // LogsSince calls LogsSince
 func (rc *rpcClient) LogsSince(timestamp time.Time, appName string) ([]string, error) {
 	res := make([]string, 0)
@@ -467,6 +475,30 @@ func (rc *rpcClient) IsDMSGClientReady() (bool, error) {
 	var out bool
 	err := rc.Call("IsDMSGClientReady", &struct{}{}, &out)
 	return out, err
+}
+
+// DialPing calls DialPing.
+func (rc *rpcClient) DialPing(conf PingConfig) error {
+	return rc.Call("DialPing", &conf, &struct{}{})
+}
+
+// Ping calls Ping.
+func (rc *rpcClient) Ping(conf PingConfig) ([]time.Duration, error) {
+	var latencies []time.Duration
+	err := rc.Call("Ping", &conf, &latencies)
+	return latencies, err
+}
+
+// StopPing calls StopPing.
+func (rc *rpcClient) StopPing(pk cipher.PubKey) error {
+	return rc.Call("StopPing", &pk, &struct{}{})
+}
+
+// TestVisor calls TestVisor.
+func (rc *rpcClient) TestVisor(conf PingConfig) ([]TestResult, error) {
+	var results []TestResult
+	err := rc.Call("TestVisor", &conf, &results)
+	return results, err
 }
 
 // MockRPCClient mocks API.
@@ -831,6 +863,21 @@ func (mc *mockRPCClient) SetAppSecure(appName string, isSecure bool) error {
 	})
 }
 
+// SetAppDNS implements API.
+func (mc *mockRPCClient) SetAppDNS(string, string) error {
+	return mc.do(true, func() error {
+		const socksName = "vpn-client"
+
+		for i := range mc.o.Apps {
+			if mc.o.Apps[i].Name == socksName {
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", socksName)
+	})
+}
+
 // LogsSince implements API. Manually set (*mockRPPClient).logS before calling this function
 func (mc *mockRPCClient) LogsSince(timestamp time.Time, _ string) ([]string, error) {
 	return mc.logS.LogsSince(timestamp)
@@ -1060,4 +1107,24 @@ func (mc *mockRPCClient) Ports() (map[string]PortDetail, error) {
 // IsDMSGClientReady implements API.
 func (mc *mockRPCClient) IsDMSGClientReady() (bool, error) {
 	return false, nil
+}
+
+// DialPing implements API.
+func (mc *mockRPCClient) DialPing(_ PingConfig) error {
+	return nil
+}
+
+// Ping implements API.
+func (mc *mockRPCClient) Ping(_ PingConfig) ([]time.Duration, error) {
+	return []time.Duration{}, nil
+}
+
+// StopPing implements API.
+func (mc *mockRPCClient) StopPing(_ cipher.PubKey) error {
+	return nil
+}
+
+// TestVisor implements API.
+func (mc *mockRPCClient) TestVisor(_ PingConfig) ([]TestResult, error) {
+	return []TestResult{}, nil
 }

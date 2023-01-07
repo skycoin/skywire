@@ -320,6 +320,12 @@ type SetAppBoolIn struct {
 	Val     bool
 }
 
+// SetAppStringIn is input for SetApp string flags
+type SetAppStringIn struct {
+	AppName string
+	Val     string
+}
+
 // SetAppPK sets PK for the app.
 func (r *RPC) SetAppPK(in *SetAppPKIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppPK", in)(nil, &err)
@@ -627,5 +633,35 @@ func (r *RPC) IsDMSGClientReady(_ *struct{}, out *bool) (err error) {
 
 	status, err := r.visor.IsDMSGClientReady()
 	*out = status
+	return err
+}
+
+// DialPing dials to the ping module using the provided pk as a hop.
+func (r *RPC) DialPing(conf PingConfig, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DialPing", conf)(nil, &err)
+
+	return r.visor.DialPing(conf)
+}
+
+// Ping pings the connected route via DialPing.
+func (r *RPC) Ping(conf PingConfig, out *[]time.Duration) (err error) {
+	defer rpcutil.LogCall(r.log, "Ping", conf)(out, &err)
+
+	*out, err = r.visor.Ping(conf)
+	return err
+}
+
+// StopPing stops the ping conn.
+func (r *RPC) StopPing(pk *cipher.PubKey, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StopPing", pk)(nil, &err)
+
+	return r.visor.StopPing(*pk)
+}
+
+// TestVisor trying to test viosr by pinging to public visor.
+func (r *RPC) TestVisor(conf PingConfig, out *[]TestResult) (err error) {
+	defer rpcutil.LogCall(r.log, "TestVisor", conf)(out, &err)
+
+	*out, err = r.visor.TestVisor(conf)
 	return err
 }

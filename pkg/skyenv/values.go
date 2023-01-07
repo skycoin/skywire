@@ -63,6 +63,9 @@ const (
 	SkychatPort uint16 = 1
 	SkychatAddr        = ":8001"
 
+	PingTestName        = "pingtest"
+	PingTestPort uint16 = 2
+
 	SkysocksName        = "skysocks"
 	SkysocksPort uint16 = 3
 
@@ -76,6 +79,9 @@ const (
 	VPNClientName = "vpn-client"
 	// TODO(darkrengarius): this one's not needed for the app to run but lack of it causes errors
 	VPNClientPort uint16 = 43
+
+	SkyPingName        = "sky-ping"
+	SkyPingPort uint16 = 48
 )
 
 // RPC constants.

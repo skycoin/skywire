@@ -1,3 +1,6 @@
+//go:build !withoutsystray
+// +build !withoutsystray
+
 // Package commands cmd/skywire-visor/commands/systray.go
 package commands
 
@@ -65,4 +68,8 @@ func setStopFunction(log *logging.MasterLogger, cancel context.CancelFunc, fn fu
 		cancel()
 		stopVisorWg.Wait()
 	}
+}
+
+func quit() {
+
 }

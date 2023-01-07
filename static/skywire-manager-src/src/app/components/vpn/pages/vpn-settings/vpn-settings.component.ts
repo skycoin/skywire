@@ -1,7 +1,7 @@
 import { Component, OnDestroy, ViewChild } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { ActivatedRoute } from '@angular/router';
-import { MatDialog } from '@angular/material/dialog';
+import { MatLegacyDialog as MatDialog } from '@angular/material/legacy-dialog';
 
 import { VpnHelpers } from '../../vpn-helpers';
 import { BackendState, VpnClientService, VpnServiceStates } from 'src/app/services/vpn-client.service';
@@ -13,6 +13,7 @@ import GeneralUtils from 'src/app/utils/generalUtils';
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
 import { TopBarComponent } from 'src/app/components/layout/top-bar/top-bar.component';
 import { RouterConfigComponent, RouterConfigParams } from 'src/app/components/pages/node/node-info/node-info-content/router-config/router-config.component';
+import { VpnDnsConfigComponent, VpnDnsConfigParams } from '../../layout/vpn-dns-config/vpn-dns-config.component';
 
 /**
  * Options that VpnSettingsComponent might be changing asynchronously.
@@ -238,5 +239,13 @@ export class VpnSettingsComponent implements OnDestroy {
   changeHops() {
     const params: RouterConfigParams = {nodePk: this.currentLocalPk, minHops: this.backendData.vpnClientAppData.minHops};
     RouterConfigComponent.openDialog(this.dialog, params).afterClosed().subscribe();
+  }
+
+  /**
+   * Opens the modal window for changing the dns configuration.
+   */
+   changeDns() {
+    const params: VpnDnsConfigParams = {nodePk: this.currentLocalPk, ip: this.backendData.vpnClientAppData.dns};
+    VpnDnsConfigComponent.openDialog(this.dialog, params).afterClosed().subscribe();
   }
 }
