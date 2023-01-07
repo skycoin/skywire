@@ -1,3 +1,4 @@
+// Package dmsgpty pkg/dmsgpty/rpc_util.go
 package dmsgpty
 
 import (

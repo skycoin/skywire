@@ -1,3 +1,4 @@
+// Package dmsgpty pkg/dmsgpty/pty_gateway.go
 package dmsgpty
 
 // WinSize wraps around pty.Winsize and *windows.Coord
