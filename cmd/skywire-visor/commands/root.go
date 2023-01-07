@@ -406,6 +406,8 @@ func runVisor(conf *visorconfig.V1) {
 		}
 		if runAsSystray {
 			quitSystray()
+		} else {
+			quit()
 		}
 		return
 	}

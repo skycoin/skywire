@@ -108,6 +108,8 @@ build-windows-appveyor: host-apps-windows-appveyor bin-windows-appveyor ## Insta
 
 build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
+build-static-wos: host-apps-static bin-static-wos ## Build apps and binaries. `go build` with ${OPTS}
+
 installer: mac-installer ## Builds MacOS installer for skywire-visor
 
 install-system-linux: build # Workaround for debugging linux package installation
@@ -260,6 +262,12 @@ bin-windows-appveyor: ## Build `skywire-visor`, `skywire-cli`
 # Static Bin
 bin-static: ## Build `skywire-visor`, `skywire-cli`
 	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-visor ./cmd/skywire-visor
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-cli  ./cmd/skywire-cli
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./setup-node ./cmd/setup-node
+
+# Static Bin without Systray
+bin-static-wos: ## Build `skywire-visor`, `skywire-cli`
+	${STATIC_OPTS} go build -tags withoutsystray -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-visor ./cmd/skywire-visor
 	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-cli  ./cmd/skywire-cli
 	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./setup-node ./cmd/setup-node
 
