@@ -1,3 +1,4 @@
+// Package dmsgpty pkg/dmsgpty/pty_client.go
 package dmsgpty
 
 import (

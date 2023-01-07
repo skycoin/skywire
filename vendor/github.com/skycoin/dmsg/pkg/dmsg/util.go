@@ -1,3 +1,4 @@
+// Package dmsg pkg/dmsg/util.go
 package dmsg
 
 import (

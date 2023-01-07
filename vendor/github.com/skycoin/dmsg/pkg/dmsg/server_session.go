@@ -1,3 +1,4 @@
+// Package dmsg pkg/dmsg/server_session.go
 package dmsg
 
 import (

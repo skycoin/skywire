@@ -1,3 +1,4 @@
+// Package dmsgget pkg/dmsgget/url.go
 package dmsgget
 
 import (

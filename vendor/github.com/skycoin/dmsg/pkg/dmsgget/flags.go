@@ -1,3 +1,4 @@
+// Package dmsgget pkg/dmsgget/flags.go
 package dmsgget
 
 import (

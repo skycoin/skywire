@@ -1,3 +1,4 @@
+// Package direct pkg/direct/entries.go
 package direct
 
 import (

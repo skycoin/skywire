@@ -1,6 +1,7 @@
 //go:build windows
 // +build windows
 
+// Package dmsgpty pkg/dmsgpty/ui_windows.go
 package dmsgpty
 
 import "golang.org/x/sys/windows"
