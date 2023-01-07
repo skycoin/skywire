@@ -463,6 +463,15 @@ func (ce *Client) AllStreams() (out []*Stream) {
 	return out
 }
 
+// AllEntries returns all the entries registered in discovery
+func (ce *Client) AllEntries(ctx context.Context) (entries []string, err error) {
+	err = netutil.NewDefaultRetrier(ce.log).Do(ctx, func() error {
+		entries, err = ce.dc.AllEntries(ctx)
+		return err
+	})
+	return entries, err
+}
+
 // ConnectionsSummary associates connected clients, and the servers that connect such clients.
 // Key: Client PK, Value: Slice of Server PKs
 type ConnectionsSummary map[cipher.PubKey][]cipher.PubKey

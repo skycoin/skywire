@@ -1,3 +1,4 @@
+// Package dmsgpty pkg/dmsgpty/host_mux.go
 package dmsgpty
 
 import (

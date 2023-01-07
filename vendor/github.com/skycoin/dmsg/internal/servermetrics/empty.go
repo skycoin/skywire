@@ -1,3 +1,4 @@
+// Package servermetrics internal/servermetrics/empty.go
 package servermetrics
 
 // NewEmpty constructs new empty metrics.

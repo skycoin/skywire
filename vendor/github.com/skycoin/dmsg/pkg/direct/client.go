@@ -92,3 +92,13 @@ func (c *directClient) AllServers(ctx context.Context) (entries []*disc.Entry, e
 	}
 	return entries, nil
 }
+
+// AllEntries return list of all entries of directClient
+func (c *directClient) AllEntries(ctx context.Context) (entries []string, err error) {
+	c.mx.RLock()
+	defer c.mx.RUnlock()
+	for _, entry := range c.entries {
+		entries = append(entries, entry.Static.Hex())
+	}
+	return entries, nil
+}

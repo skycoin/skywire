@@ -1,3 +1,4 @@
+// Package noise pkg/noise/read_write.go
 package noise
 
 import (

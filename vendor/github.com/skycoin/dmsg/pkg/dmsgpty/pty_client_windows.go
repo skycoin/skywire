@@ -1,6 +1,7 @@
 //go:build windows
 // +build windows
 
+// Package dmsgpty pkg/dmsgpty/pty_client_windows.go
 package dmsgpty
 
 import (

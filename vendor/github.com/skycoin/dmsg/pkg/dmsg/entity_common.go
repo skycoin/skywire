@@ -1,3 +1,4 @@
+// Package dmsg pkg/dmsg/entity_common.go
 package dmsg
 
 import (

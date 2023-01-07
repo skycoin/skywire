@@ -1,3 +1,4 @@
+// Package noise pkg/noise/dh.go
 package noise
 
 import (

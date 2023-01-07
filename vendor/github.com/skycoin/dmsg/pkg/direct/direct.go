@@ -1,3 +1,4 @@
+// Package direct pkg/direct/direct.go
 package direct
 
 import (

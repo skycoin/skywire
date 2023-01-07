@@ -1,3 +1,4 @@
+// Package dmsgpty pkg/dmsgpty/ui.go
 package dmsgpty
 
 import (

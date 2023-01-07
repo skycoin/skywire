@@ -1,3 +1,4 @@
+// Package noise pkg/noise/net.go
 package noise
 
 import (

@@ -1,3 +1,4 @@
+// Package disc pkg/disc/entry.go
 package disc
 
 import (

@@ -1,3 +1,4 @@
+// Package dmsgget pkg/dmsgget/progress_writer.go
 package dmsgget
 
 import (

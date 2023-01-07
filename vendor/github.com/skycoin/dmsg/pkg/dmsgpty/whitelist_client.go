@@ -1,3 +1,4 @@
+// Package dmsgpty pkg/dmsgpty/whitelist_client.go
 package dmsgpty
 
 import (

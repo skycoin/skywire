@@ -1,3 +1,4 @@
+// Package servermetrics internal/servermetrics/victoria_metrics.go
 package servermetrics
 
 import (
