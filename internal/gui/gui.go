@@ -1,3 +1,6 @@
+//go:build !withoutsystray
+// +build !withoutsystray
+
 // Package gui internal/gui/gui.go
 package gui
 

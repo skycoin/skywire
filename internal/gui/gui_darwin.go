@@ -1,5 +1,5 @@
-//go:build darwin
-// +build darwin
+//go:build darwin && !withoutsystray
+// +build darwin,!withoutsystray
 
 package gui
 
