@@ -395,7 +395,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 		}
 	}()
 
-	log.WithField("dmsg_addr", fmt.Sprintf("dmsg://%v", lis.Addr().String())).
+	logger.WithField("dmsg_addr", fmt.Sprintf("dmsg://%v", lis.Addr().String())).
 		Debug("Serving...")
 	srv := &http.Server{
 		ReadHeaderTimeout: 2 * time.Second,
@@ -416,7 +416,6 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 			logger.WithError(err).Error("Logserver exited with error.")
 		}
 	}()
-
 	v.pushCloseStack("dmsghttp.logserver", func() error {
 		if err := srv.Close(); err != nil {
 			return err
@@ -1195,6 +1194,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 
 func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	if v.conf.Hypervisor == nil {
+		v.log.Error("hypervisor config = nil")
 		return nil
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1241,7 +1241,7 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 		if err != nil {
 			v.log.WithError(err).Error("Hypervisor exited with error.")
 		}
-		cancel()
+//		cancel()
 	}()
 
 	v.pushCloseStack("hypervisor", func() error {

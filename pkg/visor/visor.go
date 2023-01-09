@@ -4,6 +4,7 @@ package visor
 import (
 	"context"
 	"errors"
+	"embed"
 	"fmt"
 	"io"
 	"io/fs"
@@ -37,6 +38,7 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorinit"
 )
 
+
 var (
 	// ErrAppProcNotRunning represents lookup error for App related calls.
 	ErrAppProcNotRunning = errors.New("no process of given app is running")
@@ -54,6 +56,8 @@ const (
 	moduleShutdownTimeout = time.Second * 4
 	runtimeLogMaxEntries  = 300
 )
+
+var uiAssets = initUI()
 
 var mLog = initLogger()
 
@@ -102,8 +106,7 @@ type Visor struct {
 	autoPeerIP           string                 // autoPeerCmd is the command string used to return the public key of the hypervisor
 	remoteVisors         map[cipher.PubKey]Conn // remote hypervisors the visor is attempting to connect to
 	connectedHypervisors map[cipher.PubKey]bool // remote hypervisors the visor is currently connected to
-
-	uiAssets fs.FS
+	err error
 }
 
 // todo: consider moving module closing to the module system
@@ -137,6 +140,87 @@ func reload(v *Visor) error {
 	}
 	v = nil
 	return run(nil)
+}
+
+// RunVisor runs the visor
+func run(conf *visorconfig.V1) error {
+	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
+	mLog.AddHook(hook)
+
+	stopPProf := initPProf(mLog, pprofMode, pprofAddr)
+	defer stopPProf()
+
+	if conf == nil {
+		conf = initConfig()
+	}
+
+	if disableHypervisorPKs {
+		conf.Hypervisors = []cipher.PubKey{}
+	}
+
+	pubkey := cipher.PubKey{}
+	if remoteHypervisorPKs != "" {
+		hypervisorPKsSlice := strings.Split(remoteHypervisorPKs, ",")
+		for _, pubkeyString := range hypervisorPKsSlice {
+			if err := pubkey.Set(pubkeyString); err != nil {
+				mLog.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
+				continue
+			}
+			mLog.Infof("%s PK added as remote hypervisor PK", pubkeyString)
+			conf.Hypervisors = append(conf.Hypervisors, pubkey)
+		}
+	}
+
+	if isAutoPeer {
+		conf = initAutopeer(conf)
+	}
+
+	if logLvl != "" {
+		//validate & set log level
+		_, err := logging.LevelFromString(logLvl)
+		if err != nil {
+			mLog.WithError(err).Error("Invalid log level specified: ", logLvl)
+		} else {
+			conf.LogLevel = logLvl
+			mLog.Info("setting log level to: ", logLvl)
+		}
+	}
+
+	if conf.Hypervisor != nil {
+		conf.Hypervisor.UIAssets = *uiAssets
+	}
+
+	ctx, cancel := cmdutil.SignalContext(context.Background(), mLog)
+	vis, ok := newVisor(ctx, conf)
+	if !ok {
+		select {
+		case <-ctx.Done():
+			mLog.Info("Visor closed early.")
+		default:
+			return fmt.Errorf("Failed to start visor.")
+		}
+		return nil
+	}
+
+	stopVisorFn = func() {
+		if err := vis.Close(); err != nil {
+			mLog.WithError(err).Error("Visor closed with error.")
+		}
+		cancel()
+	}
+	vis.SetLogstore(store)
+//	vis.uiAssets = uiAssets
+	if launchBrowser {
+		if conf.Hypervisor == nil {
+			mLog.Errorln("Hypervisor not started - hypervisor UI unavailable")
+		}
+		runBrowser(conf.Hypervisor.HTTPAddr, conf.Hypervisor.EnableTLS)
+		launchBrowser = false
+	}
+	// Wait.
+	<-ctx.Done()
+	stopVisorFn()
+	return nil
 }
 
 // newVisor constructs new Visor.
@@ -237,119 +321,34 @@ func (v *Visor) isStunReady() bool {
 	}
 }
 
-// RunVisor runs the visor
-func run(conf *visorconfig.V1) error {
-	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
-	mLog.AddHook(hook)
-	//initialize the ui
-	uiFS, err := fs.Sub(ui, "static")
-	if err != nil {
-		mLog.WithError(err).Error("frontend not found")
-		return err
-	}
-	uiAssets = uiFS
 
-	stopPProf := initPProf(mLog, pprofMode, pprofAddr)
-	defer stopPProf()
-
-	if conf == nil {
-		conf = initConfig()
-	}
-
-	if disableHypervisorPKs {
-		conf.Hypervisors = []cipher.PubKey{}
-	}
-
-	pubkey := cipher.PubKey{}
-	if remoteHypervisorPKs != "" {
-		hypervisorPKsSlice := strings.Split(remoteHypervisorPKs, ",")
-		for _, pubkeyString := range hypervisorPKsSlice {
-			if err := pubkey.Set(pubkeyString); err != nil {
-				mLog.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
-				continue
-			}
-			mLog.Infof("%s PK added as remote hypervisor PK", pubkeyString)
-			conf.Hypervisors = append(conf.Hypervisors, pubkey)
-		}
-	}
-
-	if isAutoPeer {
-		conf, err = initAutopeer(conf)
-		if err != nil {
-			mLog.WithError(err).Error("error autopeering")
-		}
-	}
-
-	if logLvl != "" {
-		//validate & set log level
-		_, err := logging.LevelFromString(logLvl)
-		if err != nil {
-			mLog.WithError(err).Error("Invalid log level specified: ", logLvl)
-		} else {
-			conf.LogLevel = logLvl
-			mLog.Info("setting log level to: ", logLvl)
-		}
-	}
-
-	if conf.Hypervisor != nil {
-		conf.Hypervisor.UIAssets = uiAssets
-	}
-
-	ctx, cancel := cmdutil.SignalContext(context.Background(), mLog)
-	vis, ok := newVisor(ctx, conf)
-	if !ok {
-		select {
-		case <-ctx.Done():
-			mLog.Info("Visor closed early.")
-		default:
-			return fmt.Errorf("Failed to start visor.")
-		}
-		return nil
-	}
-
-	stopVisorFn = func() {
-		if err := vis.Close(); err != nil {
-			mLog.WithError(err).Error("Visor closed with error.")
-		}
-		cancel()
-	}
-	vis.SetLogstore(store)
-	vis.uiAssets = uiAssets
-	if launchBrowser {
-		runBrowser(conf)
-		launchBrowser = false
-	}
-	// Wait.
-	<-ctx.Done()
-	stopVisorFn()
-	return nil
-}
-
-func initAutopeer(conf *visorconfig.V1) (*visorconfig.V1, error) {
+func initAutopeer(conf *visorconfig.V1) *visorconfig.V1 {
 	log := mLog.PackageLogger("visor:autopeer")
 
 	if !isAutoPeer {
-		return conf, fmt.Errorf("erroneous initialization")
+		log.WithError(fmt.Errorf("erroneous initialization")).Error("error autopeering")
+		return conf
 	}
 	//autopeering should only happen when there is no local or remote hypervisor set in the config.
 	//and hence can be disabled by setting these. the visor may still be invoked with autopeering flag.
 	if conf.Hypervisor != nil {
 		isAutoPeer = false
 		log.Info("Local hypervisor running, disabling autopeer")
-		return conf, nil
+		return conf
 	}
 
 	if len(conf.Hypervisors) > 0 {
 		isAutoPeer = false
 		log.Info("%d Remote hypervisor(s) set in config; disabling autopeer", len(conf.Hypervisors))
 		log.Info(conf.Hypervisors)
-		return conf, nil
+		return conf
 	}
 
 	log.Info("Autopeer: ", isAutoPeer)
 	hvkey, err := FetchHvPk(autoPeerIP)
 	if err != nil {
-		return conf, fmt.Errorf("Failure autopeering - unable to obtain hypervisor public key")
+		log.WithError(err).Error("error autopeering")
+ 		return conf
 	} else {
 		pubkey := cipher.PubKey{}
 		hvkey = strings.TrimSpace(hvkey)
@@ -363,7 +362,8 @@ func initAutopeer(conf *visorconfig.V1) (*visorconfig.V1, error) {
 			conf.Hypervisors = append(conf.Hypervisors, pubkey)
 		}
 	}
-	return conf, nil
+
+	return conf
 }
 
 func initLogger() *logging.MasterLogger {
@@ -381,19 +381,16 @@ func initLogger() *logging.MasterLogger {
 }
 
 // runBrowser opens the hypervisor interface in the browser
-func runBrowser(conf *visorconfig.V1) {
+func runBrowser(httpAddr string, enableTLS bool) {
 	log := mLog.PackageLogger("visor:launch-browser")
 
-	if conf.Hypervisor == nil {
-		log.Errorln("Hypervisor not started - cannot start browser with a regular visor")
-		return
-	}
-	addr := conf.Hypervisor.HTTPAddr
+
+	addr := httpAddr
 	if addr[0] == ':' {
 		addr = "localhost" + addr
 	}
 	if addr[:4] != "http" {
-		if conf.Hypervisor.EnableTLS {
+		if enableTLS {
 			addr = "https://" + addr
 		} else {
 			addr = "http://" + addr
@@ -495,4 +492,19 @@ func (v *Visor) SetLogstore(store logstore.Store) {
 // tpDiscClient is a convenience function to obtain transport discovery client.
 func (v *Visor) tpDiscClient() transport.DiscoveryClient {
 	return v.tpM.Conf.DiscoveryClient
+}
+
+
+
+//go:embed static
+var ui embed.FS
+func initUI() *fs.FS {
+	//initialize the ui
+	uiFS, err := fs.Sub(ui, "static")
+	if err != nil {
+		mLog.WithError(err).Error("frontend not found")
+//		return err
+	}
+	return &uiFS
+
 }

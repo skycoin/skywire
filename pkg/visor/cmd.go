@@ -3,10 +3,8 @@ package visor
 
 import (
 	"bytes"
-	"embed"
 	"fmt"
 	"io"
-	"io/fs"
 	"net"
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
@@ -24,11 +22,6 @@ import (
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
-
-//go:embed static
-//go:embed static
-var ui embed.FS
-var uiAssets fs.FS
 
 var (
 	restartCtx           = restart.CaptureContext()
@@ -285,16 +278,6 @@ var RootCmd = &cobra.Command{
 	Version: buildinfo.Version(),
 }
 
-func runVisor(conf *visorconfig.V1) {
-
-	err := run(conf)
-	if err != nil {
-		log := mLog.PackageLogger("run")
-		log.WithError(err).Fatal("a fatal error occured")
-	}
-
-}
-
 func initConfig() *visorconfig.V1 { //nolint
 	log := mLog.PackageLogger("visor:config")
 
@@ -328,7 +311,10 @@ func initConfig() *visorconfig.V1 { //nolint
 		conf.Hypervisor = &config
 	}
 	if conf.Hypervisor != nil {
-		conf.Hypervisor.UIAssets = uiAssets
+		if *uiAssets == nil {
+			log.Fatalf("missing embedded assets for hypervisor ui")
+		}
+		conf.Hypervisor.UIAssets = *uiAssets
 	}
 	if noHypervisorUI {
 		conf.Hypervisor = nil
