@@ -32,6 +32,8 @@ var uiAssets fs.FS
 
 var (
 	restartCtx           = restart.CaptureContext()
+	pkgconfigexists      bool
+	userconfigexists     bool
 	isAutoPeer           bool
 	autoPeerIP           string
 	stopVisorWg          sync.WaitGroup //nolint:unused
@@ -73,17 +75,42 @@ func init() {
 	RootCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
 	hiddenflags = append(hiddenflags, "stdin")
 	//only show flags for configs which exist
-	if root {
-		if _, err := os.Stat(visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON); err == nil {
-			RootCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "use package config "+visorconfig.SkywirePath+"/"+visorconfig.ConfigJSON)
-			hiddenflags = append(hiddenflags, "pkg")
-		}
+
+	if _, err := os.Stat(visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON); err == nil {
+		pkgconfigexists = true
 	}
-	if !root {
-		if _, err := os.Stat(visorconfig.HomePath() + "/" + visorconfig.ConfigName); err == nil {
-			RootCmd.Flags().BoolVarP(&usr, "user", "u", false, "use config at: $HOME/"+visorconfig.ConfigName)
-		}
+	if _, err := os.Stat(visorconfig.HomePath() + "/" + visorconfig.ConfigName); err == nil {
+		userconfigexists = true
 	}
+	if root && pkgconfigexists {
+		RootCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "use package config "+visorconfig.SkywirePath+"/"+visorconfig.ConfigJSON)
+	}
+	if !root && userconfigexists {
+		RootCmd.Flags().BoolVarP(&usr, "user", "u", false, "use config at: $HOME/"+visorconfig.ConfigName)
+	}
+	var reason string
+	if RootCmd.Flags().Lookup("user") == nil {
+		if !userconfigexists {
+			reason = "does not exist"
+		} else {
+			if root {
+				reason = "unusable with current permissions"
+			}
+		}
+		RootCmd.Flags().BoolVarP(&usr, "user", "u", false, "u̶s̶e̶r̶s̶p̶a̶c̶e̶ ̶c̶o̶n̶f̶i̶g̶ "+reason)
+	}
+	if RootCmd.Flags().Lookup("pkg") == nil {
+		if !pkgconfigexists {
+			reason = "does not exist"
+		} else {
+			if !root {
+				reason = "requires root permissions"
+			}
+		}
+		RootCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "p̶a̶c̶k̶a̶g̶e̶ ̶c̶o̶n̶f̶i̶g̶ "+reason)
+	}
+	hiddenflags = append(hiddenflags, "pkg")
+	hiddenflags = append(hiddenflags, "user")
 	RootCmd.Flags().BoolVar(&runAsSystray, "systray", false, "run as systray")
 	RootCmd.Flags().BoolVarP(&hypervisorUI, "hvui", "i", false, "run as hypervisor \u001b[0m*")
 	RootCmd.Flags().BoolVarP(&noHypervisorUI, "nohvui", "x", false, "disable hypervisor \u001b[0m*")
@@ -92,9 +119,7 @@ func init() {
 	hiddenflags = append(hiddenflags, "hv")
 	RootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors \u001b[0m*")
 	hiddenflags = append(hiddenflags, "xhv")
-	if os.Getenv("SKYBIAN") == "true" {
-		initAutoPeerFlags()
-	}
+	initAutoPeerFlags()
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "", "[ debug | warn | error | fatal | panic | trace ] \u001b[0m*")
 	hiddenflags = append(hiddenflags, "loglvl")
 	RootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "q", "", "[ cpu | mem | mutex | block | trace | http ]")
@@ -112,6 +137,8 @@ func init() {
 	for _, j := range hiddenflags {
 		RootCmd.Flags().MarkHidden(j) //nolint
 	}
+	RootCmd.SetUsageTemplate(help)
+
 }
 func initAutoPeerFlags() {
 	localIPs, err := netutil.DefaultNetworkInterfaceIPs()
@@ -127,7 +154,7 @@ func initAutoPeerFlags() {
 	if os.Getenv("AUTOPEER") == "1" {
 		isDefaultAutopeer = true
 	}
-	RootCmd.Flags().BoolVarP(&isAutoPeer, "autopeer", "m", isDefaultAutopeer, "enable autopeering")
+	RootCmd.Flags().BoolVarP(&isAutoPeer, "autopeer", "m", isDefaultAutopeer, "enable autopeering to remote hypervisor")
 	hiddenflags = append(hiddenflags, "autopeer")
 }
 func trimStringFromDot(s string) string {
@@ -155,22 +182,39 @@ var RootCmd = &cobra.Command{
 			cmd.Flags().MarkHidden("all")  //nolint
 			cmd.Flags().MarkHidden("help") //nolint
 			cmd.Help()                     //nolint
-			fmt.Println("                            * \u001b[94moverrides config file\u001b[0m")
+			fmt.Println("\033[F                            * \u001b[94moverrides config file\u001b[0m")
 			os.Exit(0)
 		}
 		// -z --completion
 		genCompletion(cmd)
 		//log for initial checks
-		mLog := initLogger()
 		log := mLog.PackageLogger("pre-run")
 
 		if stdin {
 			confPath = visorconfig.Stdin
 		} else {
+
+			//enforce conditions for pkg and user flags
+			if pkg {
+				if !root {
+					log.Fatal("root permissions required to use the specified config")
+				}
+				if !pkgconfigexists {
+					log.Fatal("config not found")
+				}
+			}
+			if usr {
+				if root {
+					log.Fatal("cannot use specified config as root")
+				}
+				if !userconfigexists {
+					log.Fatal("config not found")
+				}
+			}
+
 			//error on multiple configs from flags
 			if (pkg && usr) || ((pkg || usr) && (confPath != "")) {
-				fmt.Println("Error: multiple configs specified")
-				os.Exit(1)
+				log.Fatal("Error: multiple configs specified")
 			}
 			//use package config /opt/skywire/skywire.json
 			if pkg {
@@ -192,7 +236,6 @@ var RootCmd = &cobra.Command{
 			if _, err := os.Stat(confPath); err != nil {
 				//fail here on no config
 				log.WithError(err).Fatal("config file not found")
-				os.Exit(1)
 			}
 		}
 		logBuildInfo(mLog)
@@ -246,14 +289,13 @@ func runVisor(conf *visorconfig.V1) {
 
 	err := run(conf)
 	if err != nil {
-		mLog := initLogger()
 		log := mLog.PackageLogger("run")
 		log.WithError(err).Fatal("a fatal error occured")
 	}
 
 }
 
-func initConfig(mLog *logging.MasterLogger) *visorconfig.V1 { //nolint
+func initConfig() *visorconfig.V1 { //nolint
 	log := mLog.PackageLogger("visor:config")
 
 	var r io.Reader
@@ -295,3 +337,12 @@ func initConfig(mLog *logging.MasterLogger) *visorconfig.V1 { //nolint
 	visorconfig.VisorConfigFile = confPath
 	return conf
 }
+
+const help = "{{.UseLine}}{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}" +
+	"{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}" +
+	"Available Commands:{{range .Commands}}{{if (or .IsAvailableCommand)}}" +
+	"{{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}" +
+	"Flags:\r\n" +
+	"{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}\r\n\r\n" +
+	"Global Flags:\r\n" +
+	"{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}\r\n\r\n"

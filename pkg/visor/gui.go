@@ -33,8 +33,6 @@ import (
 
 var iconFS = &icons.Assets
 
-var log = logging.NewMasterLogger()
-
 var (
 	stopVisorFnMx sync.Mutex
 	stopVisorFn   func()
@@ -278,12 +276,12 @@ func handleVPNLinkButton(conf *visorconfig.V1) {
 
 	if vpnAddr == "" {
 		mVPNLink.Disable()
-		log.Error("empty vpn URL address")
+		mLog.Error("empty vpn URL address")
 		return // do nothing
 	}
 
 	if err := webbrowser.Open(vpnAddr); err != nil {
-		log.WithError(err).Error("failed to open link")
+		mLog.WithError(err).Error("failed to open link")
 	}
 }
 
@@ -295,7 +293,7 @@ func getAvailPublicVPNServers(conf *visorconfig.V1, httpC *http.Client, logger *
 		SK:       conf.SK,
 		DiscAddr: conf.Launcher.ServiceDisc,
 	}
-	sdClient := servicedisc.NewClient(log, log, svrConfig, httpC, "")
+	sdClient := servicedisc.NewClient(mLog, mLog, svrConfig, httpC, "")
 	vpnServers, err := sdClient.Services(context.Background(), 0, "", "")
 	if err != nil {
 		logger.Error("Error getting vpn servers: ", err)
@@ -402,7 +400,7 @@ func handleRootInteraction(doneCh chan<- bool) {
 
 func handleOpenHypervisor(conf *visorconfig.V1) {
 	if err := openHypervisor(conf); err != nil {
-		log.WithError(err).Errorln("Failed to open hypervisor")
+		mLog.WithError(err).Errorln("Failed to open hypervisor")
 	}
 }
 
@@ -421,7 +419,7 @@ func handleUninstall() {
 
 		if err := platformExecUninstall(); err != nil {
 			mUninstall.Enable()
-			log.WithError(err).Errorln("Failed to run deinstaller")
+			mLog.WithError(err).Errorln("Failed to run deinstaller")
 			return
 		}
 		systray.Quit()
@@ -448,12 +446,12 @@ func isHypervisorRunning(addr string) bool {
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Errorln("Failed to close hypervisor response body")
+			mLog.WithError(err).Errorln("Failed to close hypervisor response body")
 		}
 	}()
 
 	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
-		log.WithError(err).Errorln("Failed to discard hypervisor response body")
+		mLog.WithError(err).Errorln("Failed to discard hypervisor response body")
 	}
 
 	return true
@@ -465,7 +463,7 @@ func openHypervisor(conf *visorconfig.V1) error {
 		return nil
 	}
 
-	log.Infof("Opening hypervisor at %s", hvAddr)
+	mLog.Infof("Opening hypervisor at %s", hvAddr)
 
 	if err := webbrowser.Open(hvAddr); err != nil {
 		return fmt.Errorf("failed to open link: %w", err)

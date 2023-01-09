@@ -55,6 +55,8 @@ const (
 	runtimeLogMaxEntries  = 300
 )
 
+var mLog = initLogger()
+
 // Visor provides messaging runtime for Apps by setting up all
 // necessary connections and performing messaging gateway functions.
 type Visor struct {
@@ -140,7 +142,7 @@ func reload(v *Visor) error {
 // newVisor constructs new Visor.
 func newVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	if conf == nil {
-		initConfig(initLogger())
+		initConfig()
 	}
 	conf.MasterLogger().PackageLogger("visor")
 	v := &Visor{
@@ -237,23 +239,21 @@ func (v *Visor) isStunReady() bool {
 
 // RunVisor runs the visor
 func run(conf *visorconfig.V1) error {
-	log := initLogger()
 	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
-	log.AddHook(hook)
-	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
+	mLog.AddHook(hook)
 	//initialize the ui
 	uiFS, err := fs.Sub(ui, "static")
 	if err != nil {
-		log.WithError(err).Error("frontend not found")
+		mLog.WithError(err).Error("frontend not found")
 		return err
 	}
 	uiAssets = uiFS
 
-	stopPProf := initPProf(log, pprofMode, pprofAddr)
+	stopPProf := initPProf(mLog, pprofMode, pprofAddr)
 	defer stopPProf()
 
 	if conf == nil {
-		conf = initConfig(log)
+		conf = initConfig()
 	}
 
 	if disableHypervisorPKs {
@@ -265,18 +265,18 @@ func run(conf *visorconfig.V1) error {
 		hypervisorPKsSlice := strings.Split(remoteHypervisorPKs, ",")
 		for _, pubkeyString := range hypervisorPKsSlice {
 			if err := pubkey.Set(pubkeyString); err != nil {
-				log.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
+				mLog.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
 				continue
 			}
-			log.Infof("%s PK added as remote hypervisor PK", pubkeyString)
+			mLog.Infof("%s PK added as remote hypervisor PK", pubkeyString)
 			conf.Hypervisors = append(conf.Hypervisors, pubkey)
 		}
 	}
 
 	if isAutoPeer {
-		conf, err = initAutopeer(conf, log)
+		conf, err = initAutopeer(conf)
 		if err != nil {
-			log.WithError(err).Error("error autopeering")
+			mLog.WithError(err).Error("error autopeering")
 		}
 	}
 
@@ -284,10 +284,10 @@ func run(conf *visorconfig.V1) error {
 		//validate & set log level
 		_, err := logging.LevelFromString(logLvl)
 		if err != nil {
-			log.WithError(err).Error("Invalid log level specified: ", logLvl)
+			mLog.WithError(err).Error("Invalid log level specified: ", logLvl)
 		} else {
 			conf.LogLevel = logLvl
-			log.Info("setting log level to: ", logLvl)
+			mLog.Info("setting log level to: ", logLvl)
 		}
 	}
 
@@ -295,11 +295,12 @@ func run(conf *visorconfig.V1) error {
 		conf.Hypervisor.UIAssets = uiAssets
 	}
 
+	ctx, cancel := cmdutil.SignalContext(context.Background(), mLog)
 	vis, ok := newVisor(ctx, conf)
 	if !ok {
 		select {
 		case <-ctx.Done():
-			log.Info("Visor closed early.")
+			mLog.Info("Visor closed early.")
 		default:
 			return fmt.Errorf("Failed to start visor.")
 		}
@@ -308,14 +309,14 @@ func run(conf *visorconfig.V1) error {
 
 	stopVisorFn = func() {
 		if err := vis.Close(); err != nil {
-			log.WithError(err).Error("Visor closed with error.")
+			mLog.WithError(err).Error("Visor closed with error.")
 		}
 		cancel()
 	}
 	vis.SetLogstore(store)
 	vis.uiAssets = uiAssets
 	if launchBrowser {
-		runBrowser(log, conf)
+		runBrowser(conf)
 		launchBrowser = false
 	}
 	// Wait.
@@ -324,7 +325,9 @@ func run(conf *visorconfig.V1) error {
 	return nil
 }
 
-func initAutopeer(conf *visorconfig.V1, log *logging.MasterLogger) (*visorconfig.V1, error) {
+func initAutopeer(conf *visorconfig.V1) (*visorconfig.V1, error) {
+	log := mLog.PackageLogger("visor:autopeer")
+
 	if !isAutoPeer {
 		return conf, fmt.Errorf("erroneous initialization")
 	}
@@ -378,7 +381,7 @@ func initLogger() *logging.MasterLogger {
 }
 
 // runBrowser opens the hypervisor interface in the browser
-func runBrowser(mLog *logging.MasterLogger, conf *visorconfig.V1) {
+func runBrowser(conf *visorconfig.V1) {
 	log := mLog.PackageLogger("visor:launch-browser")
 
 	if conf.Hypervisor == nil {
