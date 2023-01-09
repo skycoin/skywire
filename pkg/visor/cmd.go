@@ -338,7 +338,7 @@ func initConfig() *visorconfig.V1 { //nolint
 	return conf
 }
 
-const help = "{{.UseLine}}{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}" +
+const help = "{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}" +
 	"{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}" +
 	"Available Commands:{{range .Commands}}{{if (or .IsAvailableCommand)}}" +
 	"{{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}" +
