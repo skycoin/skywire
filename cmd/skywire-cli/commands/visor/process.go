@@ -91,6 +91,7 @@ func main() {
 var reloadCmd = &cobra.Command{
 	Use:   "reload",
 	Short: "reload visor",
+	Hidden: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
