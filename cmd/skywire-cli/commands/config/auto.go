@@ -1,4 +1,6 @@
 // Package cliconfig cmd/skywire-cli/commands/config/auto.go
+//go:build linux
+// +build linux
 package cliconfig
 
 import (
@@ -27,15 +29,16 @@ const (
 
 var (
 	isStartedWithSystemd bool
+	startService bool
 	cmds                 string
-	//	isRunScript          bool
+	isRunScript          bool
 	isEnvs bool
+	skyenvFileExists	bool
 )
 
 func init() {
 	RootCmd.AddCommand(autoConfigCmd)
-	//not working currently
-	//	autoConfigCmd.Flags().BoolVarP(&isRunScript, "script", "s", false, "run the skywire-autoconfig script")
+	autoConfigCmd.Flags().BoolVarP(&isRunScript, "script", "s", false, "run the skywire-autoconfig script")
 	autoConfigCmd.Flags().BoolVarP(&isEnvs, "envs", "n", false, "show the environmntal variable settings")
 
 }
@@ -47,7 +50,7 @@ var autoConfigCmd = &cobra.Command{
 	PreRun: func(cmd *cobra.Command, _ []string) {
 		if isEnvs {
 			fmt.Printf("\n")
-			fmt.Printf("Env file to source\n					%s\n", visorconfig.SkyEnvs())
+			fmt.Printf("Env file to source\n					%s\n", visorconfig.SkyEnvs()) // /etc/profile.d/skyenv.sh
 			fmt.Printf("Detect if this command is run as root\nRoot permissions required\n					EUID=0\n")
 			fmt.Printf("Disable Autoconfig\n					NOAUTOCONFIG=true\n")
 			fmt.Printf("Command was run in dmsgpty terminal\nDo not restart services\n					DMSGPTYTERM=1\n")
@@ -59,13 +62,9 @@ var autoConfigCmd = &cobra.Command{
 		}
 		// source or call the visorconfig file ; ignore errors as the file is not required to exist
 		if _, err := os.Stat(visorconfig.SkyEnvs()); err == nil {
-			if visorconfig.OS == "win" {
-				cmds = `call ` + visorconfig.SkyEnvs() //nolint:errcheck
-				_, _ = script.Exec(cmds).Stdout()      //nolint:errcheck
-			} else {
+			skyenvFileExists=true
 				cmds = `bash -c "source ` + visorconfig.SkyEnvs() + `"`
 				_, _ = script.Exec(cmds).Stdout() //nolint:errcheck
-			}
 		}
 		//in some cases this command may be called automatically
 		//in the instance this is undesirable, NOAUTOCONFIG=true exits immediately
@@ -77,30 +76,36 @@ var autoConfigCmd = &cobra.Command{
 				os.Exit(0)
 			}
 		}
-		if visorconfig.OS != "win" {
-			//root permissions required on linux ; package postinstall uses root permissions
-			if euid, err := script.Exec(`bash -c "echo -e ${EUID}"`).String(); err == nil {
-				if euid != "0\n" {
-					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("root permissions required"))
-				}
-			} else {
-				internal.PrintError(cmd.Flags(), fmt.Errorf("error checking permissions"))
+		//root permissions required on linux ; package postinstall uses root permissions
+		if euid, err := script.Exec(`bash -c "echo -e ${EUID}"`).String(); err == nil {
+			if euid != "0\n" {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("root permissions required"))
 			}
-			//check the current state of the systemd service
-			if s, err := script.Exec(`bash -c "[[ $(ps -eo pid,comm,cgroup | grep skywire) == *'system.slice'* ]] && printf 'true'"`).String(); err == nil {
-				if s == "true" { //skywire is currently running via sytemd
-					isStartedWithSystemd = true
-				}
+		} else {
+			internal.PrintError(cmd.Flags(), fmt.Errorf("error checking permissions"))
+		}
+		//check the current state of the systemd service
+		if s, err := script.Exec(`bash -c "[[ $(ps -eo pid,comm,cgroup | grep skywire) == *'system.slice'* ]] && printf 'true'"`).String(); err == nil {
+			if s == "true" { //skywire is currently running via sytemd
+				isStartedWithSystemd = true
 			}
 		}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		if visorconfig.OS == "linux" {
-			//not working currently
-			//			if isRunScript {
-			//				_, _ = script.Exec(skywireautoconfig).Stdout()
-			//				os.Exit(0)
-			//			}
+			if isRunScript {
+				err := os.WriteFile("/tmp/skywire-autoconfig", []byte(skywireautoconfig), 0755)
+				if err != nil {
+					fmt.Printf("%v", err)
+					os.Exit(1)
+				}
+				cmd := `bash -c "/tmp/skywire-autoconfig"`
+				_, err = script.Exec(cmd).Stdout()
+				if err != nil {
+					fmt.Printf("%v", err)
+				}
+				os.Remove("/tmp/skywire-autoconfig")
+				os.Exit(0)
+			}
 			//
 			// if the command is run in the DMSGPTY terminal, the process will be interrupted before the command can complete
 			// similarly, if this command is run as a child process of the systemd service, it will be killed by systemd before it completes!
@@ -112,7 +117,6 @@ var autoConfigCmd = &cobra.Command{
 			}
 			//disable the skywire-autoconfig service which runs on skybian firstboot
 			_, _ = script.Exec(`bash -c "systemctl is-active --quiet skywire-autoconfig && systemctl disable skywire-autoconfig 2> /dev/null"`).Stdout() //nolint:errcheck
-		}
 		//create by default the local hypervisor config if no config exists ; retain any hypervisor config which exists
 		_, err := os.Stat(visorconfig.SkywireConfig())
 		if err != nil {
@@ -128,7 +132,6 @@ var autoConfigCmd = &cobra.Command{
 		_, err = os.Stat(visorconfig.SkywireConfig())
 		if err == nil {
 			if vconf, err := visorconfig.ReadFile(visorconfig.SkywireConfig()); err == nil {
-				fmt.Printf("test")
 				if vconf.Hypervisor != nil {
 					isHypervisor = true
 				}
@@ -171,35 +174,58 @@ var autoConfigCmd = &cobra.Command{
 		// -r --regen retain keys / update config
 		var cmdslc []string
 		confgen := fmt.Sprintf(`%sskywire-cli %sconfig gen`, cyan, yellow)
-		cmdslc = append(cmdslc, ` -b`)
-		cmdslc = append(cmdslc, ` -e`)
-		cmdslc = append(cmdslc, ` -p`)
-		cmdslc = append(cmdslc, ` -r`)
-		if isHypervisor {
-			cmdslc = append(cmdslc, ` -i`)
-		}
+		cmdslc = append(cmdslc, ` -bepr`)
+//		cmdslc = append(cmdslc, ` -e`)
+//		cmdslc = append(cmdslc, ` -p`)
+//		cmdslc = append(cmdslc, ` -r`)
 		// retain hypervisors when regenerating config
 		if isRetainHypervisors {
 			cmdslc = append(cmdslc, ` -x`)
+		}
+		if isHypervisor {
+			cmdslc = append(cmdslc, ` -i`)
 		}
 		// remote hypervisor public key
 		if hypervisorPKs != "" {
 			cmdslc = append(cmdslc, fmt.Sprintf(` -j %s`, hypervisorPKs))
 		}
+
+		var res string
+
 		// visor appears in the service discovery for service type visor
-		if os.Getenv("VISORISPUBLIC") == "1" {
-			cmdslc = append(cmdslc, ` --public`)
+		if skyenvFileExists {
+			cmds = `bash -c "source ` + visorconfig.SkyEnvs() + ` ; printf ${VISORISPUBLIC}"`
+			res, _ = script.Exec(cmds).String() //nolint:errcheck
 		}
+		if os.Getenv("VISORISPUBLIC") == "1" || res == "1" {
+			cmdslc = append(cmdslc, ` --public`)
+			res = ""
+		}
+
 		// disable autoconnect to public visors
-		if os.Getenv("NOAUTOCONNECT") == "1" {
+		if skyenvFileExists {
+			cmds = `bash -c "source ` + visorconfig.SkyEnvs() + ` ; printf ${NOAUTOCONNECT}"`
+			res, _ = script.Exec(cmds).String() //nolint:errcheck
+		}
+		if os.Getenv("NOAUTOCONNECT") == "1" || res == "1" {
 			cmdslc = append(cmdslc, ` --autoconn`)
+			res = ""
 		}
 		// default to auto start vpn server
-		if os.Getenv("VPNSERVER") == "1" {
+		if skyenvFileExists {
+			cmds = `bash -c "source ` + visorconfig.SkyEnvs() + ` ; printf ${VPNSERVER}"`
+			res, _ = script.Exec(cmds).String() //nolint:errcheck
+		}
+		if os.Getenv("VPNSERVER") == "1" || res == "1" {
 			cmdslc = append(cmdslc, ` --servevpn`)
+			res = ""
 		}
 		// #use test deployment instead of production with env TESTENV=1
-		if os.Getenv("TESTENV") == "1" {
+		if skyenvFileExists {
+			cmds = `bash -c "source ` + visorconfig.SkyEnvs() + ` ; printf ${TESTENV}"`
+			res, _ = script.Exec(cmds).String() //nolint:errcheck
+		}
+		if os.Getenv("TESTENV") == "1" || res == "1" {
 			cmdslc = append(cmdslc, ` --testenv`)
 		}
 		fmt.Printf("%s", mesg2("Configuring skywire"))
@@ -219,7 +245,6 @@ var autoConfigCmd = &cobra.Command{
 		genconfigcmd1 := "echo \"" + genconfigcmd + "\"" + genconfigcmd + " >> /dev/null 2>&1 ; [[ ${?} != 0 ]] && " + genconfigcmd
 		genconfigcmd1 = `bash -c '` + genconfigcmd1 + `'`
 
-		// TODO: adapt for windows
 		_, _ = script.Exec(genconfigcmd1).Stdout() //nolint:errcheck
 
 		fmt.Printf("%s", mesg3(fmt.Sprintf("%sSkywire%s configuration updated\nconfig path: %s/opt/skywire/skywire.json%s", blue, nc, purple, nc)))
@@ -241,11 +266,17 @@ var autoConfigCmd = &cobra.Command{
 
 		svc := "skywire"
 		//start the service on ${SKYBIAN} == "true"
-		if os.Getenv("SKYBIAN") == "true" {
+		if skyenvFileExists {
+			cmds = `bash -c "source ` + visorconfig.SkyEnvs() + ` ; printf ${SKYBIAN}"`
+			res, _ = script.Exec(cmds).String() //nolint:errcheck
+		}
+		if os.Getenv("SKYBIAN") == "true" || res == "true" {
+			startService=true
+			now = "--now"
 			cmds = fmt.Sprintf(`bash -c 'systemctl enable %s %s'`, now, svc)
-			fmt.Printf("%s", mesg3(fmt.Sprintf("Enabling %s service%s..\n %s", svc, strings.Replace(now, "--", " and starting", -1), cmds)))
+			fmt.Printf("%s", mesg3(fmt.Sprintf("Enabling %s service%s..\n %s", svc, strings.Replace(now, "--", " and starting ", -1), cmds)))
 			cmds += `  2> /dev/null'`
-			_, _ = script.Exec(cmds).Stdout() //nolint:errcheck
+			_, _ = script.Exec(`bash -c 'systemctl enable --now skywire'`).Stdout() //nolint:errcheck
 		}
 		if os.Getenv("DMSGPTYTERM") == "1" {
 			if !isStartedWithSystemd {
@@ -258,14 +289,17 @@ var autoConfigCmd = &cobra.Command{
 				os.Exit(0)
 			}
 		}
-		//#restart the service
-		cmds = fmt.Sprintf(`bash -c 'systemctl is-active --quiet %s && %s && systemctl restart %s 2> /dev/null'`, svc, fmt.Sprintf("printf \"%s\"", mesg3(fmt.Sprintf("Restarting %s.service...", svc))), svc)
-		_, _ = script.Exec(cmds).Stdout() //nolint:errcheck
-		cmds = fmt.Sprintf(`bash -c 'if ! systemctl is-active --quiet %s >/dev/null; then printf "%s" ; exit 1 ; fi'`, svc, mesg2(fmt.Sprintf("Start the %s service with:\n	%ssystemctl start %s%s", svc, red, svc, nc)))
-		//fmt.Printf(cmds)
-		_, err = script.Exec(cmds).Stdout()
-		if err != nil {
-			os.Exit(0)
+
+		// restart if the visor was not already running via systemd and we did not just start it
+		if !isStartedWithSystemd && !startService {
+			//#restart the service
+			cmds = fmt.Sprintf(`bash -c 'systemctl is-active --quiet %s && %s && systemctl restart %s 2> /dev/null'`, svc, fmt.Sprintf("printf \"%s\"", mesg3(fmt.Sprintf("Restarting %s.service...", svc))), svc)
+			_, _ = script.Exec(cmds).Stdout() //nolint:errcheck
+			cmds = fmt.Sprintf(`bash -c 'if ! systemctl is-active --quiet %s >/dev/null; then printf "%s" ; exit 1 ; fi'`, svc, mesg2(fmt.Sprintf("Start the %s service with:\n	%ssystemctl start %s%s", svc, red, svc, nc)))
+			_, err = script.Exec(cmds).Stdout()
+			if err != nil {
+				os.Exit(0)
+			}
 		}
 		//get the visor public key from the config.
 		cmds = `bash -c "skywire-cli visor pk -p | tail -n1"`
@@ -281,10 +315,13 @@ var autoConfigCmd = &cobra.Command{
 					fmt.Printf("%s", mesg2(fmt.Sprintf("Starting now on:\n%shttp://127.0.0.1:8000%s", red, nc)))
 				}
 			}
-			cmds = `bash -c "skywire-cli vpn url -p"`
-			if vpnurl, err := script.Exec(cmds).String(); err == nil {
-				fmt.Printf("%s", mesg2(fmt.Sprintf("Use the vpn:\n%s%s%s", red, strings.TrimSuffix(vpnurl, "\n"), nc)))
-			}
+			//needs fix output format for skywire-cli vpn url -p
+//			cmds = `bash -c "skywire-cli vpn url -p  | tail -n1"`
+//			if vpnurl, err := script.Exec(cmds).String(); err == nil {
+//				fmt.Printf("%s", mesg2(fmt.Sprintf("Use the vpn:\n%s%s%s", red, strings.TrimSuffix(vpnurl, "\n"), nc)))
+//			}
+//workaround
+			fmt.Printf("%s", mesg2(fmt.Sprintf("Use the vpn:\n%shttp://127.0.0.1:8000/#/vpn/%s%s", red, publickey, nc)))
 			hpvurl := "Access hypervisor UI from local network here:"
 			cmds = `bash -c "ip addr show | grep -w inet | grep -v 127.0.0.1 | awk '{ print $2}' | cut -d \"/\" -f 1"`
 			if lanips, err := script.Exec(cmds).String(); err == nil {
@@ -324,13 +361,12 @@ func errmsg2(s string) string { //nolint:unused
 	return fmt.Sprintf("%s>>> FATAL:%s%s %s%s\n", red, nc, bold, s, nc)
 }
 
-/*
 // the current skyire-autoconfig script which this command emulates
 const skywireautoconfig string = `#!/bin/bash
 #/opt/skywire/scripts/skywire-autoconfig
 #skywire autoconfiguration script for debian & archlinux packages
-#source the visorconfig file if it exists - provided by the skybian package or the user
-[[ -f /etc/profile.d/visorconfig.sh ]] && source /etc/profile.d/visorconfig.sh
+#source the skyenv file if it exists - provided by the skybian package or the user
+[[ -f /etc/profile.d/skyenv.sh ]] && source /etc/profile.d/skyenv.sh
 #set NOAUTOCONFIG=true to avoid running the script in the postinstall
 if [[ ${NOAUTOCONFIG} == true ]]; then
   #unset the env
@@ -526,7 +562,7 @@ ${_green}${_pubkey}${_nc}"
 if [[ $_is_hypervisor == "-i" ]]; then
 	if [[ $(ps -o comm= -p $PPID) != "sshd" ]]; then
 		_msg2 "Starting now on:\n${_red}http://127.0.0.1:8000${_nc}"
-		_vpnurl=$(skywire-cli vpn url -p)
+		_vpnurl=$(skywire-cli vpn url -p | tail -n1)
 		_msg2 "Use the vpn:\n${_red}${_vpnurl}${_nc}"
 	fi
 	_hpvurl="Access hypervisor UI from local network here:"
@@ -547,4 +583,3 @@ else
     _welcome
 fi
 `
-*/

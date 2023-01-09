@@ -256,11 +256,13 @@ func newVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	ctx = context.WithValue(ctx, runtimeErrsKey, v.runtimeErrors)
 	registerModules(v.MasterLogger())
 	var mainModule visorinit.Module
-	//	if v.conf.Hypervisor == nil {
-	//		mainModule = vis
-	//	} else {
+		if v.conf.Hypervisor == nil {
+			mainModule = vis
+		} else {
+			log.Info("main module set to hypervisor")
+
 	mainModule = hv
-	//	}
+		}
 	// run Transport module in a non blocking mode
 	go tm.InitConcurrent(ctx)
 	mainModule.InitConcurrent(ctx)
