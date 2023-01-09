@@ -8,7 +8,6 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -135,7 +134,7 @@ func reload(v *Visor) error {
 		return err
 	}
 	v = nil
-	return nil
+	return run(nil)
 }
 
 // newVisor constructs new Visor.
@@ -237,7 +236,7 @@ func (v *Visor) isStunReady() bool {
 }
 
 // RunVisor runs the visor
-func run(conf *visorconfig.V1) {
+func run(conf *visorconfig.V1) error {
 	log := initLogger()
 	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
 	log.AddHook(hook)
@@ -245,8 +244,8 @@ func run(conf *visorconfig.V1) {
 	//initialize the ui
 	uiFS, err := fs.Sub(ui, "static")
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		log.WithError(err).Error("frontend not found")
+		return err
 	}
 	uiAssets = uiFS
 
@@ -273,36 +272,14 @@ func run(conf *visorconfig.V1) {
 			conf.Hypervisors = append(conf.Hypervisors, pubkey)
 		}
 	}
-	//autopeering should only happen when there is no local or remote hypervisor set in the config.
-	if isAutoPeer && conf.Hypervisor != nil {
-		log.Info("Local hypervisor running, disabling autopeer")
-		isAutoPeer = false
-	}
-
-	if isAutoPeer && len(conf.Hypervisors) > 0 {
-		log.Info("%d Remote hypervisor(s) set in config; disabling autopeer", len(conf.Hypervisors))
-		log.Info(conf.Hypervisors)
-		isAutoPeer = false
-	}
 
 	if isAutoPeer {
-		log.Info("Autopeer: ", isAutoPeer)
-		hvkey, err := FetchHvPk(autoPeerIP)
+		conf, err = initAutopeer(conf, log)
 		if err != nil {
-			log.WithError(err).Error("Failure autopeering - unable to obtain hypervisor public key")
-		} else {
-			hvkey = strings.TrimSpace(hvkey)
-			hypervisorPKsSlice := strings.Split(hvkey, ",")
-			for _, pubkeyString := range hypervisorPKsSlice {
-				if err := pubkey.Set(pubkeyString); err != nil {
-					log.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
-					continue
-				}
-				log.Infof("%s PK added as remote hypervisor PK", pubkeyString)
-				conf.Hypervisors = append(conf.Hypervisors, pubkey)
-			}
+			log.WithError(err).Error("error autopeering")
 		}
 	}
+
 	if logLvl != "" {
 		//validate & set log level
 		_, err := logging.LevelFromString(logLvl)
@@ -317,15 +294,16 @@ func run(conf *visorconfig.V1) {
 	if conf.Hypervisor != nil {
 		conf.Hypervisor.UIAssets = uiAssets
 	}
+
 	vis, ok := newVisor(ctx, conf)
 	if !ok {
 		select {
 		case <-ctx.Done():
 			log.Info("Visor closed early.")
 		default:
-			log.Errorln("Failed to start visor.")
+			return fmt.Errorf("Failed to start visor.")
 		}
-		return
+		return nil
 	}
 
 	stopVisorFn = func() {
@@ -343,6 +321,46 @@ func run(conf *visorconfig.V1) {
 	// Wait.
 	<-ctx.Done()
 	stopVisorFn()
+	return nil
+}
+
+func initAutopeer(conf *visorconfig.V1, log *logging.MasterLogger) (*visorconfig.V1, error) {
+	if !isAutoPeer {
+		return conf, fmt.Errorf("erroneous initialization")
+	}
+	//autopeering should only happen when there is no local or remote hypervisor set in the config.
+	//and hence can be disabled by setting these. the visor may still be invoked with autopeering flag.
+	if conf.Hypervisor != nil {
+		isAutoPeer = false
+		log.Info("Local hypervisor running, disabling autopeer")
+		return conf, nil
+	}
+
+	if len(conf.Hypervisors) > 0 {
+		isAutoPeer = false
+		log.Info("%d Remote hypervisor(s) set in config; disabling autopeer", len(conf.Hypervisors))
+		log.Info(conf.Hypervisors)
+		return conf, nil
+	}
+
+	log.Info("Autopeer: ", isAutoPeer)
+	hvkey, err := FetchHvPk(autoPeerIP)
+	if err != nil {
+		return conf, fmt.Errorf("Failure autopeering - unable to obtain hypervisor public key")
+	} else {
+		pubkey := cipher.PubKey{}
+		hvkey = strings.TrimSpace(hvkey)
+		hypervisorPKsSlice := strings.Split(hvkey, ",")
+		for _, pubkeyString := range hypervisorPKsSlice {
+			if err := pubkey.Set(pubkeyString); err != nil {
+				log.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
+				continue
+			}
+			log.Infof("%s PK added as remote hypervisor PK", pubkeyString)
+			conf.Hypervisors = append(conf.Hypervisors, pubkey)
+		}
+	}
+	return conf, nil
 }
 
 func initLogger() *logging.MasterLogger {
@@ -413,7 +431,6 @@ func (v *Visor) Close() error {
 	if v == nil {
 		return nil
 	}
-
 	// todo: with timout: wait for the module to initialize,
 	// then try to stop it
 	// don't need waitgroups this way because modules are concurrent anyway

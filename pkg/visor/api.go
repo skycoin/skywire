@@ -847,11 +847,7 @@ func (v *Visor) Reload() error {
 	if v.restartCtx == nil {
 		return ErrMalformedRestartContext
 	}
-	err := reload(v)
-	if err != nil {
-		return err
-	}
-	return nil
+	return reload(v)
 }
 
 // Shutdown implements API.

@@ -244,7 +244,12 @@ var RootCmd = &cobra.Command{
 
 func runVisor(conf *visorconfig.V1) {
 
-	run(conf)
+	err := run(conf)
+	if err != nil {
+		mLog := initLogger()
+		log := mLog.PackageLogger("run")
+		log.WithError(err).Fatal("a fatal error occured")
+	}
 
 }
 

@@ -2,15 +2,19 @@
 package clivisor
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/user"
+	"time"
 
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"golang.org/x/sync/errgroup"
+
 )
 
 var sourcerun bool
@@ -72,6 +76,20 @@ var restartCmd = &cobra.Command{
 	},
 }
 
+
+func gort(ctx context.Context, fn func() error) error {
+	errs, ctx := errgroup.WithContext(ctx)
+	errs.Go(func() error {
+		return fn()
+	})
+	// Wait for completion and return the first error (if any)
+	return errs.Wait()
+}
+
+func main() {
+fmt.Println()
+}
+
 var reloadCmd = &cobra.Command{
 	Use:   "reload",
 	Short: "reload visor",
@@ -80,11 +98,18 @@ var reloadCmd = &cobra.Command{
 		if err != nil {
 			os.Exit(1)
 		}
-		err = rpcClient.Reload()
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error reloading visor"))
-		}
-		internal.PrintOutput(cmd.Flags(), "Visor reloaded", fmt.Sprintln("Visor reloaded"))
+
+go func() {
+	err = gort(context.Background(), rpcClient.Reload)
+	if err != nil {
+		internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error reloading visor"))
+	}
+}()
+select {
+ case <-time.After(1 * time.Second):
+	 internal.PrintOutput(cmd.Flags(), "Visor reloaded", fmt.Sprintln("Visor reloaded"))
+ }
+
 	},
 }
 
@@ -101,7 +126,6 @@ var shutdownCmd = &cobra.Command{
 			os.Exit(1)
 		}
 		rpcClient.Shutdown() //nolint
-		fmt.Println("Visor was shut down")
 		internal.PrintOutput(cmd.Flags(), "Visor was shut down", fmt.Sprintln("Visor was shut down"))
 	},
 }

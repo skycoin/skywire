@@ -54,6 +54,7 @@ require (
 	github.com/skycoin/systray v1.10.1-0.20220630135132-48d2a1fb85d8
 	github.com/spf13/pflag v1.0.5
 	github.com/zcalusic/sysinfo v0.9.5
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	periph.io/x/periph v3.6.8+incompatible
 )
 
