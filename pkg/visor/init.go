@@ -592,7 +592,9 @@ func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) 
 			log.Debug("Accepting sky forwarding conn...")
 			conn, err := l.Accept()
 			if err != nil {
-				log.WithError(err).Error("Failed to accept conn")
+				if !errors.Is(appnet.ErrClosedConn, err) {
+					log.WithError(err).Error("Failed to accept conn")
+				}
 				return
 			}
 			log.Debug("Accepted sky forwarding conn")

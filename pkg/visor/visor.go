@@ -16,6 +16,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/restart"
@@ -227,6 +228,15 @@ func (v *Visor) Close() error {
 
 	log := v.MasterLogger().PackageLogger("visor:shutdown")
 	log.Info("Begin shutdown.")
+
+	// Cleanly close ongoing forward conns
+	for _, forwardConn := range appnet.GetAllForwardConns() {
+		err := forwardConn.Close()
+		if err != nil {
+			log.WithError(err).Warn("Forward conn stopped with unexpected result.")
+			continue
+		}
+	}
 
 	for i := len(v.closeStack) - 1; i >= 0; i-- {
 		cl := v.closeStack[i]
