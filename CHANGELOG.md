@@ -7,10 +7,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## 1.3.0
 
 ### Added
-- add `--systray` flag to run visor as systray
-- add tag `withoutsystray` to build skywire-visor without systray library
-- add `build-static-wos` for build static without systray skywire-visor
-- add `test` and `ping` command to `skywire-cli` as `skywire-cli visor ping <pk>` and `skywire-cli visor test`
+- `--systray` flag to run visor as systray
+- tag `withoutsystray` to build skywire-visor without systray library
+- `build-static-wos` for build static without systray skywire-visor
+- `test` and `ping` command to `skywire-cli` as `skywire-cli visor ping <pk>` and `skywire-cli visor test`
+- `skyfwd` command to `skywire-cli` [#1409](https://github.com/skycoin/skywire/pull/1409)
 
 ### Changed
 - remove `make build-systray` and `make build-windows-systray`, and just keep `make build` and `make build-windows`
