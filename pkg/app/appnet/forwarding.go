@@ -1,4 +1,4 @@
-// Package appnet pkg/app/appnet/http_transport.go
+// Package appnet pkg/app/appnet/forwarding.go
 package appnet
 
 import (
@@ -17,42 +17,42 @@ import (
 
 // nolint: gochecknoglobals
 var (
-	proxies   = make(map[uuid.UUID]*Proxy)
-	proxiesMu sync.Mutex
+	forwardConns   = make(map[uuid.UUID]*ForwardConn)
+	forwardConnsMu sync.Mutex
 )
 
-// AddProxy adds Proxy to with it's ID
-func AddProxy(proxy *Proxy) {
-	proxiesMu.Lock()
-	defer proxiesMu.Unlock()
-	proxies[proxy.ID] = proxy
+// AddForwarding adds ForwardConn to with it's ID
+func AddForwarding(fwd *ForwardConn) {
+	forwardConnsMu.Lock()
+	defer forwardConnsMu.Unlock()
+	forwardConns[fwd.ID] = fwd
 }
 
-// GetProxy get's a proxy by ID
-func GetProxy(id uuid.UUID) *Proxy {
-	proxiesMu.Lock()
-	defer proxiesMu.Unlock()
+// GetForwardConn get's a ForwardConn by ID
+func GetForwardConn(id uuid.UUID) *ForwardConn {
+	forwardConnsMu.Lock()
+	defer forwardConnsMu.Unlock()
 
-	return proxies[id]
+	return forwardConns[id]
 }
 
-// GetAllProxies gets all proxies
-func GetAllProxies() map[uuid.UUID]*Proxy {
-	proxiesMu.Lock()
-	defer proxiesMu.Unlock()
+// GetAllForwardConns gets all ForwardConns
+func GetAllForwardConns() map[uuid.UUID]*ForwardConn {
+	forwardConnsMu.Lock()
+	defer forwardConnsMu.Unlock()
 
-	return proxies
+	return forwardConns
 }
 
-// RemoveProxy removes a proxy by ID
-func RemoveProxy(id uuid.UUID) {
-	proxiesMu.Lock()
-	defer proxiesMu.Unlock()
-	delete(proxies, id)
+// RemoveForwardConn removes a ForwardConn by ID
+func RemoveForwardConn(id uuid.UUID) {
+	forwardConnsMu.Lock()
+	defer forwardConnsMu.Unlock()
+	delete(forwardConns, id)
 }
 
-// Proxy ...
-type Proxy struct {
+// ForwardConn ...
+type ForwardConn struct {
 	ID         uuid.UUID
 	LocalPort  int
 	RemotePort int
@@ -63,8 +63,8 @@ type Proxy struct {
 	log        *logging.Logger
 }
 
-// NewProxy ...
-func NewProxy(log *logging.Logger, remoteConn net.Conn, remotePort, localPort int) *Proxy {
+// NewForwardConn creates a new forwarding conn
+func NewForwardConn(log *logging.Logger, remoteConn net.Conn, remotePort, localPort int) *ForwardConn {
 	closeChan := make(chan struct{})
 	var once sync.Once
 	handler := http.NewServeMux()
@@ -78,7 +78,7 @@ func NewProxy(log *logging.Logger, remoteConn net.Conn, remotePort, localPort in
 		WriteTimeout:   10 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
-	proxy := &Proxy{
+	fwdConn := &ForwardConn{
 		ID:         uuid.New(),
 		remoteConn: remoteConn,
 		srv:        srv,
@@ -87,37 +87,37 @@ func NewProxy(log *logging.Logger, remoteConn net.Conn, remotePort, localPort in
 		closeChan:  closeChan,
 		log:        log,
 	}
-	AddProxy(proxy)
-	return proxy
+	AddForwarding(fwdConn)
+	return fwdConn
 }
 
-// Serve serves a HTTP forward proxy that accepts all requests and forwards them directly to the remote server over the specified net.Conn.
-func (p *Proxy) Serve() {
+// Serve serves a HTTP forward conn that accepts all requests and forwards them directly to the remote server over the specified net.Conn.
+func (f *ForwardConn) Serve() {
 	go func() {
-		err := p.srv.ListenAndServe()
+		err := f.srv.ListenAndServe()
 		if err != nil {
 			// don't print error if local server is closed
 			if !errors.Is(err, http.ErrServerClosed) {
-				p.log.WithError(err).Error("Error listening and serving app proxy.")
+				f.log.WithError(err).Error("Error listening and serving app forwarding.")
 			}
 		}
 	}()
 	go func() {
-		<-p.closeChan
-		err := p.Close()
+		<-f.closeChan
+		err := f.Close()
 		if err != nil {
-			p.log.Error(err)
+			f.log.Error(err)
 		}
 	}()
-	p.log.Debugf("Serving on localhost:%v", p.LocalPort)
+	f.log.Debugf("Serving on localhost:%v", f.LocalPort)
 }
 
 // Close closes the server and remote connection.
-func (p *Proxy) Close() (err error) {
-	p.closeOnce.Do(func() {
-		err = p.srv.Close()
-		err = p.remoteConn.Close()
-		RemoveProxy(p.ID)
+func (f *ForwardConn) Close() (err error) {
+	f.closeOnce.Do(func() {
+		err = f.srv.Close()
+		err = f.remoteConn.Close()
+		RemoveForwardConn(f.ID)
 	})
 	return err
 }
@@ -153,7 +153,7 @@ func handleFunc(remoteConn net.Conn, log *logging.Logger, closeChan chan struct{
 
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
-				log.WithError(err).Errorln("Failed to close proxy response body")
+				log.WithError(err).Errorln("Failed to close forwarding response body")
 			}
 		}()
 		for key, value := range resp.Header {

@@ -493,8 +493,8 @@ func (rc *rpcClient) Disconnect(id uuid.UUID) error {
 }
 
 // List calls List.
-func (rc *rpcClient) List() (map[uuid.UUID]*appnet.Proxy, error) {
-	var out map[uuid.UUID]*appnet.Proxy
+func (rc *rpcClient) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
+	var out map[uuid.UUID]*appnet.ForwardConn
 	err := rc.Call("List", &struct{}{}, &out)
 	return out, err
 }
@@ -1126,7 +1126,7 @@ func (mc *mockRPCClient) Disconnect(id uuid.UUID) error {
 }
 
 // List implements API.
-func (mc *mockRPCClient) List() (map[uuid.UUID]*appnet.Proxy, error) {
+func (mc *mockRPCClient) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
 	return nil, nil
 }
 
