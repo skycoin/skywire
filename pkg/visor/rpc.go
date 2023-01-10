@@ -679,7 +679,7 @@ func (r *RPC) Disconnect(id *uuid.UUID, _ *struct{}) (err error) {
 	return err
 }
 
-// List returns all the ongoing skyproxy connections
+// List returns all the ongoing skyforwarding connections
 func (r *RPC) List(_ *struct{}, out *map[uuid.UUID]*appnet.Proxy) (err error) {
 	defer rpcutil.LogCall(r.log, "List", nil)(out, &err)
 	proxies, err := r.visor.List()

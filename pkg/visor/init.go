@@ -571,7 +571,7 @@ func initSkywireProxy(ctx context.Context, v *Visor, log *logging.Logger) error 
 	connApp := appnet.Addr{
 		Net:    appnet.TypeSkynet,
 		PubKey: v.conf.PK,
-		Port:   routing.Port(skyenv.SkyProxyServerPort),
+		Port:   routing.Port(skyenv.SkyForwardingServerPort),
 	}
 	l, err := appnet.ListenContext(ctx, connApp)
 	if err != nil {
@@ -579,7 +579,7 @@ func initSkywireProxy(ctx context.Context, v *Visor, log *logging.Logger) error 
 		return err
 	}
 
-	v.pushCloseStack("skywire_proxy", func() error {
+	v.pushCloseStack("sky_forwarding", func() error {
 		cancel()
 		if cErr := l.Close(); cErr != nil {
 			log.WithError(cErr).Error("Error closing listener.")
@@ -589,13 +589,13 @@ func initSkywireProxy(ctx context.Context, v *Visor, log *logging.Logger) error 
 
 	go func() {
 		for {
-			log.Debug("Accepting sky proxy conn...")
+			log.Debug("Accepting sky forwarding conn...")
 			conn, err := l.Accept()
 			if err != nil {
 				log.WithError(err).Error("Failed to accept conn")
 				return
 			}
-			log.Debug("Accepted sky proxy conn")
+			log.Debug("Accepted sky forwarding conn")
 
 			log.Debug("Wrapping conn...")
 			wrappedConn, err := appnet.WrapConn(conn)
@@ -605,7 +605,7 @@ func initSkywireProxy(ctx context.Context, v *Visor, log *logging.Logger) error 
 			}
 
 			rAddr := wrappedConn.RemoteAddr().(appnet.Addr)
-			log.Debugf("Accepted sky proxy conn on %s from %s", wrappedConn.LocalAddr(), rAddr.PubKey)
+			log.Debugf("Accepted sky forwarding conn on %s from %s", wrappedConn.LocalAddr(), rAddr.PubKey)
 			go handleServerConn(log, wrappedConn, v)
 		}
 	}()

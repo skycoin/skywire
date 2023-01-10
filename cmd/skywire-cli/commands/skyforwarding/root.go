@@ -1,5 +1,5 @@
-// Package connect root.go
-package connect
+// Package skyforwarding root.go
+package skyforwarding
 
 import (
 	"bytes"
@@ -36,10 +36,10 @@ func init() {
 	)
 }
 
-// RootCmd contains commands that interact with the skyproxy
+// RootCmd contains commands that interact with the skyforwarding
 var RootCmd = &cobra.Command{
-	Use:   "skyproxy",
-	Short: "Control skyproxy",
+	Use:   "skyforwarding",
+	Short: "Control skyforwarding",
 }
 
 var registerCmd = &cobra.Command{
@@ -158,7 +158,7 @@ var disconnectCmd = &cobra.Command{
 
 var lsCmd = &cobra.Command{
 	Use:   "ls",
-	Short: "List all ongoing skyproxy connections",
+	Short: "List all ongoing skyforwarding connections",
 	Args:  cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 
