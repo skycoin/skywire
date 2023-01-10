@@ -41,6 +41,9 @@ skywire command line interface
       * [visor pk](#visor-pk)
       * [visor info](#visor-info)
       * [visor ver](#visor-ver)
+      * [visor ports](#visor-ports)
+      * [visor ping](#visor-ping)
+      * [visor test](#visor-test)
       * [visor route](#visor-route)
         * [visor route ls\-rules](#visor-route-ls-rules)
         * [visor route rule](#visor-route-rule)
@@ -167,7 +170,10 @@ A tree representation of the skywire-cli subcommands
   │ │ └──pk
   │ ├──pk
   │ ├──info
-  │ ├──ver
+  │ ├──ver  
+  │ ├──ports
+  │ ├──ping
+  │ ├──test
   │ ├─┬route
   │ │ ├──ls-rules
   │ │ ├──rule
@@ -962,6 +968,52 @@ Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
 
 
+```
+
+#### visor ports
+
+```
+List of all ports used by visor services and apps
+
+Usage:
+  skywire-cli visor ports [flags] 
+
+Global Flags:
+      --rpc string   RPC server address (default "localhost:3435"
+
+```
+
+#### visor ping
+
+```
+Creates a route with the provided pk as a hop and returns latency on the conn
+
+Usage:
+  skywire-cli visor ping <pk> [flags] 
+
+Flags:
+  -s, --size int    Size of packet, in KB, default is 2KB (default 2)
+  -t, --tries int   Number of tries (default 1)
+
+Global Flags:
+      --rpc string   RPC server address (default "localhost:3435")
+```
+
+#### visor test
+
+```
+Creates a route with public visors as a hop and returns latency on the conn
+
+Usage:
+  skywire-cli visor test [flags] 
+
+Flags:
+  -c, --count int   Count of Public Visors for using in test. (default 2)
+  -s, --size int    Size of packet, in KB, default is 2KB (default 2)
+  -t, --tries int   Number of tries per public visors (default 1)
+
+Global Flags:
+      --rpc string   RPC server address (default "localhost:3435")
 ```
 
 #### visor route
