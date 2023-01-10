@@ -122,8 +122,8 @@ var (
 	dmsgHTTP vinit.Module
 	// Dmsg trackers module
 	dmsgTrackers vinit.Module
-	// Skywire Proxy module
-	skyP vinit.Module
+	// Skywire Forwarding conn module
+	skyFwd vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 )
@@ -161,9 +161,9 @@ func registerModules(logger *logging.MasterLogger) {
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
 	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl, &dmsgHTTPLogServer, &dmsgTrackers)
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
-	skyP = maker("sky_proxy", initSkywireProxy, &dmsgC, &tr, &launch)
+	skyFwd = maker("sky_forward_conn", initSkywireForwardConn, &dmsgC, &dmsgCtrl, &tr, &launch)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyP)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -564,7 +564,7 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 	return nil
 }
 
-func initSkywireProxy(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) error {
 	ctx, cancel := context.WithCancel(ctx)
 	// waiting for at least one transport to initialize
 	<-v.tpM.Ready()
