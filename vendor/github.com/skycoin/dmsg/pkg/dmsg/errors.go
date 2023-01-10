@@ -1,3 +1,4 @@
+// Package dmsg pkg/dmsg/errors.go
 package dmsg
 
 import (

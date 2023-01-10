@@ -124,6 +124,8 @@ var (
 	dmsgTrackers vinit.Module
 	// Skywire Forwarding conn module
 	skyFwd vinit.Module
+	// Ping module
+	pi vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 )
@@ -159,11 +161,12 @@ func registerModules(logger *logging.MasterLogger) {
 	ut = maker("uptime_tracker", initUptimeTracker, &dmsgHTTP)
 	pv = maker("public_autoconnect", initPublicAutoconnect, &tr, &disc)
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
-	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl, &dmsgHTTPLogServer, &dmsgTrackers)
+	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl, &dmsgHTTPLogServer, &dmsgTrackers, &launch)
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
 	skyFwd = maker("sky_forward_conn", initSkywireForwardConn, &dmsgC, &dmsgCtrl, &tr, &launch)
+	pi = maker("ping", initPing, &dmsgC, &tm)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -302,12 +305,11 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 		return err
 	}
 	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg, httpC, v.MasterLogger())
-
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		dmsgC.Serve(context.Background())
+		dmsgC.Serve(ctx)
 	}()
 
 	v.pushCloseStack("dmsg", func() error {
@@ -734,6 +736,104 @@ type clientMsg struct {
 
 type serverReply struct {
 	Error *string `json:"error,omitempty"`
+}
+
+func initPing(ctx context.Context, v *Visor, log *logging.Logger) error {
+	ctx, cancel := context.WithCancel(ctx)
+	// waiting for at least one transport to initialize
+	<-v.tpM.Ready()
+
+	connApp := appnet.Addr{
+		Net:    appnet.TypeSkynet,
+		PubKey: v.conf.PK,
+		Port:   routing.Port(skyenv.SkyPingPort),
+	}
+
+	l, err := appnet.ListenContext(ctx, connApp)
+	if err != nil {
+		cancel()
+		return err
+	}
+
+	v.pushCloseStack("skywire_proxy", func() error {
+		cancel()
+		if cErr := l.Close(); cErr != nil {
+			log.WithError(cErr).Error("Error closing listener.")
+		}
+		return nil
+	})
+
+	go func() {
+		for {
+			log.Debug("Accepting sky proxy conn...")
+			conn, err := l.Accept()
+			if err != nil {
+				if !errors.Is(err, appnet.ErrClosedConn) {
+					log.WithError(err).Error("Failed to accept ping conn")
+				}
+				return
+			}
+			log.Debug("Accepted sky proxy conn")
+			log.Debug("Wrapping conn...")
+			wrappedConn, err := appnet.WrapConn(conn)
+			if err != nil {
+				log.WithError(err).Error("Failed to wrap conn")
+				return
+			}
+
+			rAddr := wrappedConn.RemoteAddr().(appnet.Addr)
+			log.Debugf("Accepted sky proxy conn on %s from %s", wrappedConn.LocalAddr(), rAddr.PubKey)
+			go handlePingConn(log, wrappedConn, v)
+		}
+	}()
+	return nil
+}
+
+func handlePingConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
+	for {
+		buf := make([]byte, (32+v.pingPcktSize)*1024)
+		n, err := remoteConn.Read(buf)
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				log.WithError(err).Error("Failed to read packet")
+			}
+			return
+		}
+		var size PingSizeMsg
+		err = json.Unmarshal(buf[:n], &size)
+		if err != nil {
+			log.WithError(err).Error("Failed to unmarshal json")
+			return
+		}
+
+		_, err = remoteConn.Write([]byte("ok"))
+		if err != nil {
+			log.WithError(err).Error("Failed to write message")
+			return
+		}
+		var ping []byte
+		for len(ping) != size.Size {
+			n, err = remoteConn.Read(buf)
+			if err != nil {
+				if !errors.Is(err, io.EOF) {
+					log.WithError(err).Error("Failed to read packet")
+				}
+				return
+			}
+			ping = append(ping, buf[:n]...)
+		}
+		var msg PingMsg
+		err = json.Unmarshal(ping, &msg)
+		if err != nil {
+			log.WithError(err).Error("Failed to unmarshal json")
+			return
+		}
+		now := time.Now()
+		diff := now.Sub(msg.Timestamp)
+		v.pingConns[msg.PingPk].latency <- diff
+
+		log.Debugf("Received: %s", buf[:n])
+	}
 }
 
 // getRouteSetupHooks aka autotransport

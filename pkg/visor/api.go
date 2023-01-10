@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -62,12 +63,14 @@ type API interface {
 	SetAppSecure(appName string, isSecure bool) error
 	SetAppKillswitch(appName string, killswitch bool) error
 	SetAppNetworkInterface(appName string, netifc string) error
+	SetAppDNS(appName string, dnsaddr string) error
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
 	VPNServers(version, country string) ([]servicedisc.Service, error)
 	RemoteVisors() ([]string, error)
+	Ports() (map[string]PortDetail, error)
 
 	TransportTypes() ([]string, error)
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
@@ -106,6 +109,11 @@ type API interface {
 	Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
 	Disconnect(id uuid.UUID) error
 	List() (map[uuid.UUID]*appnet.ForwardConn, error)
+	DialPing(config PingConfig) error
+	Ping(config PingConfig) ([]time.Duration, error)
+	StopPing(pk cipher.PubKey) error
+
+	TestVisor(config PingConfig) ([]TestResult, error)
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -640,6 +648,36 @@ func (v *Visor) SetAppPK(appName string, pk cipher.PubKey) error {
 	return nil
 }
 
+// SetAppDNS implements API.
+func (v *Visor) SetAppDNS(appName string, dnsAddr string) error {
+	allowedToChangePK := func(appName string) bool {
+		allowedApps := map[string]struct{}{
+			skyenv.VPNClientName: {},
+		}
+
+		_, ok := allowedApps[appName]
+		return ok
+	}
+
+	if !allowedToChangePK(appName) {
+		return fmt.Errorf("app %s is not allowed to change DNS Address", appName)
+	}
+
+	v.log.Infof("Changing %s DNS Address to %q", appName, dnsAddr)
+
+	const (
+		pkArgName = "-dns"
+	)
+
+	if err := v.conf.UpdateAppArg(v.appL, appName, pkArgName, dnsAddr); err != nil {
+		return err
+	}
+
+	v.log.Infof("Updated %v DNS Address", appName)
+
+	return nil
+}
+
 // LogsSince implements API.
 func (v *Visor) LogsSince(timestamp time.Time, appName string) ([]string, error) {
 	proc, ok := v.procM.ProcByName(appName)
@@ -705,6 +743,27 @@ func (v *Visor) VPNServers(version, country string) ([]servicedisc.Service, erro
 	return vpnServers, nil
 }
 
+// PublicVisors gets available public public visors from service discovery URL
+func (v *Visor) PublicVisors(version, country string) ([]servicedisc.Service, error) {
+	log := logging.MustGetLogger("public_visors")
+	vLog := logging.NewMasterLogger()
+	vLog.SetLevel(logrus.InfoLevel)
+
+	sdClient := servicedisc.NewClient(log, vLog, servicedisc.Config{
+		Type:          servicedisc.ServiceTypeVisor,
+		PK:            v.conf.PK,
+		SK:            v.conf.SK,
+		DiscAddr:      v.conf.Launcher.ServiceDisc,
+		DisplayNodeIP: v.conf.Launcher.DisplayNodeIP,
+	}, &http.Client{Timeout: time.Duration(20) * time.Second}, "")
+	publicVisors, err := sdClient.Services(context.Background(), 0, version, country)
+	if err != nil {
+		v.log.Error("Error getting public vpn servers: ", err)
+		return nil, err
+	}
+	return publicVisors, nil
+}
+
 // RemoteVisors return list of connected remote visors
 func (v *Visor) RemoteVisors() ([]string, error) {
 	var visors []string
@@ -712,6 +771,67 @@ func (v *Visor) RemoteVisors() ([]string, error) {
 		visors = append(visors, conn.Addr.PK.String())
 	}
 	return visors, nil
+}
+
+// PortDetail type of port details
+type PortDetail struct {
+	Port string
+	Type string
+}
+
+// Ports return list of all ports used by visor services and apps
+func (v *Visor) Ports() (map[string]PortDetail, error) {
+	ctx := context.Background()
+	var ports = make(map[string]PortDetail)
+
+	if v.conf.Hypervisor != nil {
+		ports["hypervisor"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.Hypervisor.HTTPAddr, ":")[1]), Type: "TCP"}
+	}
+
+	ports["dmsg_pty"] = PortDetail{Port: fmt.Sprint(v.conf.Dmsgpty.DmsgPort), Type: "DMSG"}
+	ports["cli_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.CLIAddr, ":")[1]), Type: "TCP"}
+	ports["proc_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.Launcher.ServerAddr, ":")[1]), Type: "TCP"}
+	ports["stcp_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.STCP.ListeningAddress, ":")[1]), Type: "TCP"}
+
+	if v.arClient != nil {
+		sudphPort := v.arClient.Addresses(ctx)
+		if sudphPort != "" {
+			ports["sudph"] = PortDetail{Port: sudphPort, Type: "UDP"}
+		}
+	}
+	if v.stunClient != nil {
+		if v.stunClient.PublicIP != nil {
+			ports["public_visor"] = PortDetail{Port: fmt.Sprint(v.stunClient.PublicIP.Port()), Type: "TCP"}
+		}
+	}
+	if v.dmsgC != nil {
+		dmsgSessions := v.dmsgC.AllSessions()
+		for i, session := range dmsgSessions {
+			ports[fmt.Sprintf("dmsg_session_%d", i)] = PortDetail{Port: strings.Split(session.LocalTCPAddr().String(), ":")[1], Type: "TCP"}
+		}
+
+		dmsgStreams := v.dmsgC.AllStreams()
+		for i, stream := range dmsgStreams {
+			ports[fmt.Sprintf("dmsg_stream_%d", i)] = PortDetail{Port: strings.Split(stream.LocalAddr().String(), ":")[1], Type: "DMSG"}
+		}
+	}
+	if v.procM != nil {
+		apps, _ := v.Apps() //nolint
+		for _, app := range apps {
+			port, err := v.procM.GetAppPort(app.Name)
+			if err == nil {
+				ports[app.Name] = PortDetail{Port: fmt.Sprint(port), Type: "SKYNET"}
+
+				switch app.Name {
+				case "skysocks_client":
+					ports["skysocks_client_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(skyenv.SkysocksClientAddr, ":")[1]), Type: "TCP"}
+				case "skychat":
+					ports["skychat_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(skyenv.SkychatAddr, ":")[1]), Type: "TCP"}
+				}
+			}
+		}
+	}
+	return ports, nil
 }
 
 // TransportTypes implements API.
@@ -824,6 +944,176 @@ func (v *Visor) DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error) {
 // RoutingRules implements API.
 func (v *Visor) RoutingRules() ([]routing.Rule, error) {
 	return v.router.Rules(), nil
+}
+
+// PingConfig use as configuration for ping command
+type PingConfig struct {
+	PK          cipher.PubKey
+	Tries       int
+	PcktSize    int
+	PubVisCount int
+}
+
+// DialPing implements API.
+func (v *Visor) DialPing(conf PingConfig) error {
+	if conf.PK == v.conf.PK {
+		return fmt.Errorf("Visor cannot ping itself")
+	}
+	v.pingPcktSize = conf.PcktSize
+	// waiting for at least one transport to initialize
+	<-v.tpM.Ready()
+
+	addr := appnet.Addr{
+		Net:    appnet.TypeSkynet,
+		PubKey: v.conf.PK,
+		Port:   routing.Port(skyenv.SkyPingPort),
+	}
+
+	var err error
+	var conn net.Conn
+
+	ctx := context.TODO()
+	var r = netutil.NewRetrier(v.log, 2*time.Second, netutil.DefaultMaxBackoff, 1, 2)
+	err = r.Do(ctx, func() error {
+		conn, err = appnet.Ping(conf.PK, addr)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+
+	skywireConn, isSkywireConn := conn.(*appnet.SkywireConn)
+	if !isSkywireConn {
+		return fmt.Errorf("Can't get such info from this conn")
+	}
+	v.pingConnMx.Lock()
+	v.pingConns[conf.PK] = ping{
+		conn:    skywireConn,
+		latency: make(chan time.Duration),
+	}
+	v.pingConnMx.Unlock()
+	return nil
+}
+
+// Ping implements API.
+func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
+	v.pingConnMx.Lock()
+	defer v.pingConnMx.Unlock()
+	latencies := []time.Duration{}
+	data := make([]byte, conf.PcktSize*1024)
+	for i := 1; i <= conf.Tries; i++ {
+		skywireConn := v.pingConns[conf.PK].conn
+		msg := PingMsg{
+			Timestamp: time.Now(),
+			PingPk:    conf.PK,
+			Data:      data,
+		}
+		ping, err := json.Marshal(msg)
+		if err != nil {
+			return latencies, err
+		}
+		pingSizeMsg := PingSizeMsg{
+			Size: len(ping),
+		}
+		size, err := json.Marshal(pingSizeMsg)
+		if err != nil {
+			return latencies, err
+		}
+		_, err = skywireConn.Write(size)
+		if err != nil {
+			return latencies, err
+		}
+
+		buf := make([]byte, 32*1024)
+		_, err = skywireConn.Read(buf)
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				return latencies, err
+			}
+		}
+		_, err = skywireConn.Write(ping)
+		if err != nil {
+			return latencies, err
+		}
+		latencies = append(latencies, <-v.pingConns[conf.PK].latency)
+	}
+	return latencies, nil
+}
+
+// StopPing implements API.
+func (v *Visor) StopPing(pk cipher.PubKey) error {
+	v.pingConnMx.Lock()
+	defer v.pingConnMx.Unlock()
+
+	skywireConn := v.pingConns[pk].conn
+	err := skywireConn.Close()
+	if err != nil {
+		return err
+	}
+	delete(v.pingConns, pk)
+	return nil
+}
+
+// TestResult type of test result
+type TestResult struct {
+	PK     string
+	Max    string
+	Min    string
+	Mean   string
+	Status string
+}
+
+// TestVisor trying to test visor
+func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
+	result := []TestResult{}
+	if v.dmsgC == nil {
+		return result, errors.New("dmsgC is not available")
+	}
+
+	publicVisors, err := v.dmsgC.AllEntries(context.TODO())
+	if err != nil {
+		return result, err
+	}
+
+	if conf.PubVisCount < len(publicVisors) {
+		publicVisors = publicVisors[:conf.PubVisCount+1]
+	}
+
+	for _, publicVisor := range publicVisors {
+		if publicVisor == v.conf.PK.Hex() {
+			continue
+		}
+
+		if err := conf.PK.UnmarshalText([]byte(publicVisor)); err != nil {
+			continue
+		}
+		err := v.DialPing(conf)
+		if err != nil {
+			result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(0), Min: fmt.Sprint(0), Mean: fmt.Sprint(0), Status: "Failed"})
+			continue
+		}
+		latencies, err := v.Ping(conf)
+		if err != nil {
+			go v.StopPing(conf.PK) //nolint
+			result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(0), Min: fmt.Sprint(0), Mean: fmt.Sprint(0), Status: "Failed"})
+			continue
+		}
+		var max, min, mean, sumLatency time.Duration
+		min = time.Duration(10000000000)
+		for _, latency := range latencies {
+			if latency > max {
+				max = latency
+			}
+			if latency < min {
+				min = latency
+			}
+			sumLatency += latency
+		}
+		mean = sumLatency / time.Duration(len(latencies))
+		result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(max), Min: fmt.Sprint(min), Mean: fmt.Sprint(mean), Status: "Success"})
+		v.StopPing(conf.PK) //nolint
+	}
+	return result, nil
 }
 
 // RoutingRule implements API.

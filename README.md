@@ -89,8 +89,6 @@ yay --mflags " -p git.PKGBUILD " -S skywire
 
 ## Dependencies
 
-The systray app requires other build and runtime dependencies and further steps to compile. These are listed in [/docs/systray-builds.md](/docs/systray-builds.md)
-
 ### Runtime Deps
 
 * ` glibc` or `libc6` _unless statically compiled_
@@ -175,29 +173,29 @@ Note that `make install-system-linux` will place the binaries into the system wh
 #to install directly into the system, use "/"
 _pkgdir="/"
 
-#use the appropriate systemd unit installation path for your linux distribution
+#use the appropriate systemd unit installation path for your linux distribution (i.e./etc/systemd/system on .deb distros
 _systemddir="usr/lib/systemd/system"
 
 #the base path where skywire is installed
-_skydir="opt/skywire"
+_dir="opt/skywire"
 
 #application binaries ; started by the visor process
-_skyapps="${_skydir}/apps"
+_apps="${_dir}/apps"
 
 #main binaries go here
-_skybin="${_skydir}/bin"
+_bin="${_dir}/bin"
 
 #scripts included
-_skyscripts="${_skydir}/scripts"
+_scripts="${_dir}/scripts"
 
 #create the directories
 mkdir -p "${_pkgdir}/usr/bin"
-mkdir -p "${_pkgdir}/${_skydir}/bin"
-mkdir -p "${_pkgdir}/${_skydir}/apps"
-mkdir -p "${_pkgdir}/${_skydir}/scripts"
+mkdir -p "${_pkgdir}/${_dir}/bin"
+mkdir -p "${_pkgdir}/${_dir}/apps"
+mkdir -p "${_pkgdir}/${_dir}/scripts"
 mkdir -p "${_pkgdir}/${_systemddir}"
 #the local folder is otherwise produced by the visor on startup
-mkdir -p "${_pkgdir}/${_skydir}/local"
+mkdir -p "${_pkgdir}/${_dir}/local"
 
 # instal binaries - assumes nothing else was already in your GOBIN
  install -Dm755 "${GOBIN}"/* "${_pkgdir}/${_skybin}/"

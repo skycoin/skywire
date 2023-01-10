@@ -336,6 +336,12 @@ type SetAppBoolIn struct {
 	Val     bool
 }
 
+// SetAppStringIn is input for SetApp string flags
+type SetAppStringIn struct {
+	AppName string
+	Val     string
+}
+
 // SetAppPK sets PK for the app.
 func (r *RPC) SetAppPK(in *SetAppPKIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppPK", in)(nil, &err)
@@ -627,6 +633,16 @@ func (r *RPC) RemoteVisors(_ *struct{}, out *[]string) (err error) {
 	return err
 }
 
+// Ports return list of all ports used by visor services and apps
+func (r *RPC) Ports(_ *struct{}, out *map[string]PortDetail) (err error) {
+	defer rpcutil.LogCall(r.log, "Ports", nil)(out, &err)
+	ports, err := r.visor.Ports()
+	if ports != nil {
+		*out = ports
+	}
+	return err
+}
+
 // IsDMSGClientReady return status of dmsg client
 func (r *RPC) IsDMSGClientReady(_ *struct{}, out *bool) (err error) {
 	defer rpcutil.LogCall(r.log, "IsDMSGClientReady", nil)(out, &err)
@@ -684,5 +700,35 @@ func (r *RPC) List(_ *struct{}, out *map[uuid.UUID]*appnet.ForwardConn) (err err
 	defer rpcutil.LogCall(r.log, "List", nil)(out, &err)
 	proxies, err := r.visor.List()
 	*out = proxies
+	return err
+}
+
+// DialPing dials to the ping module using the provided pk as a hop.
+func (r *RPC) DialPing(conf PingConfig, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DialPing", conf)(nil, &err)
+
+	return r.visor.DialPing(conf)
+}
+
+// Ping pings the connected route via DialPing.
+func (r *RPC) Ping(conf PingConfig, out *[]time.Duration) (err error) {
+	defer rpcutil.LogCall(r.log, "Ping", conf)(out, &err)
+
+	*out, err = r.visor.Ping(conf)
+	return err
+}
+
+// StopPing stops the ping conn.
+func (r *RPC) StopPing(pk *cipher.PubKey, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StopPing", pk)(nil, &err)
+
+	return r.visor.StopPing(*pk)
+}
+
+// TestVisor trying to test viosr by pinging to public visor.
+func (r *RPC) TestVisor(conf PingConfig, out *[]TestResult) (err error) {
+	defer rpcutil.LogCall(r.log, "TestVisor", conf)(out, &err)
+
+	*out, err = r.visor.TestVisor(conf)
 	return err
 }

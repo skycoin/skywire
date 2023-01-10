@@ -42,6 +42,11 @@ func PrintFatalError(cmdFlags *pflag.FlagSet, err error) {
 	log.Fatal(err)
 }
 
+// PrintFatalRPCError prints errors for skywire-cli commands packages
+func PrintFatalRPCError(cmdFlags *pflag.FlagSet, err error) {
+	PrintFatalError(cmdFlags, fmt.Errorf("Failed to connect; is skywire running?: %v", err))
+}
+
 // PrintError prints errors for skywire-cli commands packages
 func PrintError(cmdFlags *pflag.FlagSet, err error) {
 	isJSON, _ := cmdFlags.GetBool(JSONString) //nolint:errcheck

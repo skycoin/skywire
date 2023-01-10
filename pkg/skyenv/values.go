@@ -63,6 +63,9 @@ const (
 	SkychatPort uint16 = 1
 	SkychatAddr        = ":8001"
 
+	PingTestName        = "pingtest"
+	PingTestPort uint16 = 2
+
 	SkysocksName        = "skysocks"
 	SkysocksPort uint16 = 3
 
@@ -83,6 +86,8 @@ const (
 	ExampleClientPort       uint16 = 46
 	SkyForwardingServerName        = "sky-forwarding"
 	SkyForwardingServerPort uint16 = 47
+	SkyPingName                    = "sky-ping"
+	SkyPingPort             uint16 = 48
 )
 
 // RPC constants.

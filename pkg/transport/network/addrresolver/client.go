@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -58,6 +59,7 @@ type APIClient interface {
 	BindSUDPH(filter *pfilter.PacketFilter, handshake Handshake) (<-chan RemoteVisor, error)
 	Resolve(ctx context.Context, netType string, pk cipher.PubKey) (VisorData, error)
 	Transports(ctx context.Context) (map[cipher.PubKey][]string, error)
+	Addresses(ctx context.Context) string
 	Close() error
 }
 
@@ -207,6 +209,13 @@ type BindRequest struct {
 type LocalAddresses struct {
 	Port      string   `json:"port"`
 	Addresses []string `json:"addresses"`
+}
+
+func (c *httpClient) Addresses(ctx context.Context) string {
+	if c.sudphConn != nil {
+		return strings.Split(c.sudphConn.LocalAddr().String(), ":")[3]
+	}
+	return ""
 }
 
 // BindSTCPR binds client PK to IP:port on address resolver.
