@@ -65,6 +65,13 @@ skywire command line interface
       * [vpn start](#vpn-start)
       * [vpn stop](#vpn-stop)
       * [vpn status](#vpn-status)
+    * [skyfwd](#skyfwd)
+      * [skyfwd register](#skyfwd-register)
+      * [skyfwd deregister](#skyfwd-deregister)
+      * [skyfwd ls-ports](#skyfwd-ls-ports)
+      * [skyfwd connect](#skyfwd-connect)
+      * [skyfwd disconnect](#skyfwd-disconnect)
+      * [skyfwd ls](#skyfwd-ls)
     * [reward](#reward)
     * [survey](#survey)
     * [rtfind](#rtfind)
@@ -92,6 +99,7 @@ Available Commands:
   dmsgpty                 Interact with remote visors
   visor                   Query the Skywire Visor
   vpn                     controls for VPN client
+  skyfwd                  Control skyforwarding
   reward                  skycoin reward address
   survey                  system survey
   rtfind                  Query the Route Finder
@@ -184,6 +192,13 @@ A tree representation of the skywire-cli subcommands
   │ ├──start
   │ ├──stop
   │ └──status
+  ├─┬skyfwd
+  │ ├──register
+  │ ├──deregister
+  │ ├──ls-ports
+  │ ├──connect
+  │ ├──disconnect
+  │ └──ls
   ├──reward
   ├──survey
   ├──rtfind
@@ -1425,6 +1440,91 @@ Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
 
 
+```
+
+### skyfwd
+
+```
+Control skyforwarding
+
+Usage:
+  skywire-cli skyfwd 
+
+Available Commands:
+  register     Register a local port to be accessed by remote visors
+  deregister   deregister a local port to be accessed by remote visors
+  ls-ports     List all registered ports
+  connect      Connect to a server running on a remote visor machine
+  disconnect   Disconnect from the server running on a remote visor machine
+  ls           List all ongoing skyforwarding connections
+
+```
+
+#### skyfwd register
+
+```
+Register a local port to be accessed by remote visors
+
+Usage:
+  skywire-cli skyfwd register [flags] 
+
+Flags:
+  -l, --localport int   local port of the external http app
+
+```
+
+#### skyfwd deregister
+
+```
+deregister a local port to be accessed by remote visors
+
+Usage:
+  skywire-cli skyfwd deregister [flags] 
+
+Flags:
+  -l, --localport int   local port of the external http app
+
+```
+
+#### skyfwd ls-ports
+
+```
+List all registered ports
+
+Usage:
+  skywire-cli skyfwd ls-ports
+```
+
+#### skyfwd connect
+
+```
+Connect to a server running on a remote visor machine
+
+Usage:
+  skywire-cli skyfwd connect <pubkey> [flags] 
+
+Flags:
+  -l, --localport int    local port for server to run on
+  -r, --remoteport int   remote port on visor to read from
+
+```
+
+#### skyfwd disconnect
+
+```
+Disconnect from the server running on a remote visor machine
+
+Usage:
+  skywire-cli skyfwd disconnect <id>
+```
+
+#### skyfwd ls
+
+```
+List all ongoing skyforwarding connections
+
+Usage:
+  skywire-cli skyfwd ls 
 ```
 
 ### reward
