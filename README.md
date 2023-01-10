@@ -463,6 +463,12 @@ If you are interested in running the Skywire VPN as either a client or a server,
 - [Setup the Skywire VPN server](https://github.com/skycoin/skywire/wiki/Skywire-VPN-Server)
 - [Package Installation Guide](https://github.com/skycoin/skywire/wiki/Skywire-Package-Installation)
 
+### Using Skywire forwarding for publishing http server over skynet
+
+The skywire-cli subcommand `skywire-cli skyfwd` is used to register and connect to http servers over the skynet
+
+- [skywire forwarding](docs/skywire_forwarding.md)
+
 ## Creating a GitHub release
 
 To maintain actual `skywire-visor` state on users' Skywire nodes we have a mechanism for updating `skywire-visor`
