@@ -599,6 +599,14 @@ func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) 
 			}
 			log.Debug("Accepted sky forwarding conn")
 
+			v.pushCloseStack("sky_forwarding", func() error {
+				cancel()
+				if cErr := conn.Close(); cErr != nil {
+					log.WithError(cErr).Error("Error closing conn.")
+				}
+				return nil
+			})
+
 			log.Debug("Wrapping conn...")
 			wrappedConn, err := appnet.WrapConn(conn)
 			if err != nil {
