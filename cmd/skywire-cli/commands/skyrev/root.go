@@ -18,9 +18,9 @@ import (
 
 var (
 	remotePort int
-	remotePk string
+	remotePk   string
 	localPort  int
-	lsPorts bool
+	lsPorts    bool
 	disconnect string
 )
 
@@ -36,7 +36,7 @@ func init() {
 var RootCmd = &cobra.Command{
 	Use:   "skyrev <port>",
 	Short: "reverse proxy skyfwd",
-	Long: "connect or disconnect from remote ports",
+	Long:  "connect or disconnect from remote ports",
 	//Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 
@@ -56,7 +56,7 @@ var RootCmd = &cobra.Command{
 
 			for _, forwardConn := range forwardConns {
 				_, err = fmt.Fprintf(w, "%s\t%s\t%s\n", forwardConn.ID, strconv.Itoa(int(forwardConn.LocalPort)),
-				strconv.Itoa(int(forwardConn.RemotePort)))
+					strconv.Itoa(int(forwardConn.RemotePort)))
 				internal.Catch(cmd.Flags(), err)
 			}
 			internal.Catch(cmd.Flags(), w.Flush())
@@ -71,10 +71,10 @@ var RootCmd = &cobra.Command{
 			internal.Catch(cmd.Flags(), err)
 			internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 			os.Exit(0)
-			}
+		}
 
 		if len(args) == 0 && remotePk == "" {
-			cmd.Help()                    //nolint
+			cmd.Help() //nolint
 			os.Exit(0)
 		}
 

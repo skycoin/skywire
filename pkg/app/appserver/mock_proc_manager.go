@@ -3,8 +3,9 @@
 package appserver
 
 import (
-	appcommon "github.com/skycoin/skywire/pkg/app/appcommon"
 	mock "github.com/stretchr/testify/mock"
+
+	appcommon "github.com/skycoin/skywire/pkg/app/appcommon"
 
 	net "net"
 )

@@ -15,9 +15,9 @@ import (
 )
 
 var (
-	portNo int
+	portNo     int
 	deregister bool
-	lsPorts	bool
+	lsPorts    bool
 )
 
 func init() {
@@ -31,9 +31,8 @@ func init() {
 var RootCmd = &cobra.Command{
 	Use:   "skyfwd <port>",
 	Short: "Control skyforwarding",
-	Long: "Control skyforwarding\n forward local ports over skywire",
+	Long:  "Control skyforwarding\n forward local ports over skywire",
 	Run: func(cmd *cobra.Command, args []string) {
-
 
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -57,7 +56,7 @@ var RootCmd = &cobra.Command{
 		}
 
 		if len(args) == 0 && portNo == 0 {
-			cmd.Help()                    //nolint
+			cmd.Help() //nolint
 			os.Exit(0)
 		}
 
@@ -86,5 +85,4 @@ var RootCmd = &cobra.Command{
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 
 	},
-
 }
