@@ -88,7 +88,7 @@ var treeCmd = &cobra.Command{
 	},
 }
 
-	//for toc generation use: https://github.com/ekalinin/github-markdown-toc.go
+// for toc generation use: https://github.com/ekalinin/github-markdown-toc.go
 var docCmd = &cobra.Command{
 	Use:   "doc",
 	Short: "generate markdown docs",
@@ -148,7 +148,7 @@ var docCmd = &cobra.Command{
 				k.Help() //nolint
 				fmt.Printf("\n```\n")
 				if k.Name() == "gen" {
-					fmt.Printf("\n##### Example for package / msi\n", )
+					fmt.Printf("\n##### Example for package / msi\n")
 					fmt.Printf("\n```\n")
 					fmt.Printf("$ skywire-cli config gen -bpirxn --version 1.3.0\n")
 					_, _ = script.Exec(`go run cmd/skywire-cli/skywire-cli.go config gen -n`).Stdout() //nolint
