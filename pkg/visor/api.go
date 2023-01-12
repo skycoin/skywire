@@ -1268,10 +1268,6 @@ func (v *Visor) RegisterHTTPPort(localPort int) error {
 func (v *Visor) DeregisterHTTPPort(localPort int) error {
 	v.allowedMX.Lock()
 	defer v.allowedMX.Unlock()
-	ok := isPortAvailable(v.log, localPort)
-	if !ok {
-		return fmt.Errorf("Connection still active on local port :%v", localPort)
-	}
 	if !v.allowedPorts[localPort] {
 		return fmt.Errorf("Port :%v not registered", localPort)
 	}
