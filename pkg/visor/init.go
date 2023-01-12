@@ -689,8 +689,6 @@ func forward(log *logging.Logger, remoteConn net.Conn, lHost string) {
 		resp, err := client.Do(req)
 		if err != nil {
 			log.WithError(err).Error("Failed to Do req")
-			sendError(log, remoteConn, err)
-			return
 		}
 		err = resp.Write(remoteConn)
 		if err != nil {
