@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -154,6 +155,18 @@ func (rc *rpcClient) App(appName string) (*appserver.AppState, error) {
 // StartApp calls StartApp.
 func (rc *rpcClient) StartApp(appName string) error {
 	return rc.Call("StartApp", &appName, &struct{}{})
+}
+
+// RegisterApp calls RegisterApp.
+func (rc *rpcClient) RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error) {
+	var procKey appcommon.ProcKey
+	err := rc.Call("RegisterApp", procConf, &procKey)
+	return procKey, err
+}
+
+// DeregisterApp calls DeregisterApp.
+func (rc *rpcClient) DeregisterApp(procKey appcommon.ProcKey) error {
+	return rc.Call("DeregisterApp", procKey, &struct{}{})
 }
 
 // StopApp calls StopApp.
@@ -477,6 +490,48 @@ func (rc *rpcClient) IsDMSGClientReady() (bool, error) {
 	return out, err
 }
 
+// Connect calls Connect.
+func (rc *rpcClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
+	var out uuid.UUID
+	err := rc.Call("Connect", &ConnectIn{
+		RemotePK:   remotePK,
+		RemotePort: remotePort,
+		LocalPort:  localPort,
+	}, &out)
+	return out, err
+}
+
+// Disconnect calls Disconnect.
+func (rc *rpcClient) Disconnect(id uuid.UUID) error {
+	err := rc.Call("Disconnect", &id, &struct{}{})
+	return err
+}
+
+// List calls List.
+func (rc *rpcClient) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
+	var out map[uuid.UUID]*appnet.ForwardConn
+	err := rc.Call("List", &struct{}{}, &out)
+	return out, err
+}
+
+// RegisterHTTPPort calls RegisterHTTPPort.
+func (rc *rpcClient) RegisterHTTPPort(localPort int) error {
+	return rc.Call("RegisterHTTPPort", &localPort, &struct{}{})
+}
+
+// DeregisterHTTPPort calls DeregisterHTTPPort.
+func (rc *rpcClient) DeregisterHTTPPort(localPort int) error {
+	err := rc.Call("DeregisterHTTPPort", &localPort, &struct{}{})
+	return err
+}
+
+// ListHTTPPorts calls ListHTTPPorts.
+func (rc *rpcClient) ListHTTPPorts() ([]int, error) {
+	var out []int
+	err := rc.Call("ListHTTPPorts", &struct{}{}, &out)
+	return out, err
+}
+
 // DialPing calls DialPing.
 func (rc *rpcClient) DialPing(conf PingConfig) error {
 	return rc.Call("DialPing", &conf, &struct{}{})
@@ -724,6 +779,16 @@ func (mc *mockRPCClient) App(appName string) (*appserver.AppState, error) {
 
 // StartApp implements API.
 func (*mockRPCClient) StartApp(string) error {
+	return nil
+}
+
+// RegisterApp implements API.
+func (*mockRPCClient) RegisterApp(appcommon.ProcConfig) (appcommon.ProcKey, error) {
+	return appcommon.ProcKey{}, nil
+}
+
+// DeregisterApp implements API.
+func (*mockRPCClient) DeregisterApp(appcommon.ProcKey) error {
 	return nil
 }
 
@@ -1107,6 +1172,36 @@ func (mc *mockRPCClient) Ports() (map[string]PortDetail, error) {
 // IsDMSGClientReady implements API.
 func (mc *mockRPCClient) IsDMSGClientReady() (bool, error) {
 	return false, nil
+}
+
+// Connect implements API.
+func (mc *mockRPCClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
+	return uuid.UUID{}, nil
+}
+
+// Disconnect implements API.
+func (mc *mockRPCClient) Disconnect(id uuid.UUID) error {
+	return nil
+}
+
+// List implements API.
+func (mc *mockRPCClient) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
+	return nil, nil
+}
+
+// RegisterHTTPPort implements API.
+func (mc *mockRPCClient) RegisterHTTPPort(localPort int) error {
+	return nil
+}
+
+// DeregisterHTTPPort implements API.
+func (mc *mockRPCClient) DeregisterHTTPPort(localPort int) error {
+	return nil
+}
+
+// ListHTTPPorts implements API.
+func (mc *mockRPCClient) ListHTTPPorts() ([]int, error) {
+	return nil, nil
 }
 
 // DialPing implements API.

@@ -6,6 +6,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	appcommon "github.com/skycoin/skywire/pkg/app/appcommon"
 )
 
 func TestProcManager_ProcByName(t *testing.T) {
@@ -125,5 +128,38 @@ func TestProcManager_DetailedStatus(t *testing.T) {
 
 	nonExistingAppName := "none"
 	_, err = m.DetailedStatus(nonExistingAppName)
+	require.Equal(t, errNoSuchApp, err)
+}
+
+func TestProcManager_RegisterAndDeregister(t *testing.T) {
+	mI, err := NewProcManager(nil, nil, nil, ":0")
+	require.NoError(t, err)
+
+	m, ok := mI.(*procManager)
+	require.True(t, ok)
+
+	appName := "app"
+
+	procConfig := appcommon.ProcConfig{
+		AppName:     appName,
+		AppSrvAddr:  "",
+		ProcKey:     appcommon.RandProcKey(),
+		ProcArgs:    nil,
+		ProcWorkDir: "",
+		VisorPK:     cipher.PubKey{},
+		RoutingPort: 0,
+		BinaryLoc:   "",
+	}
+
+	procKey, err := m.Register(procConfig)
+	require.NoError(t, err)
+
+	_, err = m.DetailedStatus(appName)
+	require.NoError(t, err)
+
+	err = m.Deregister(procKey)
+	require.NoError(t, err)
+
+	_, err = m.DetailedStatus(appName)
 	require.Equal(t, errNoSuchApp, err)
 }

@@ -198,7 +198,6 @@ func (_m *MockRPCIngressClient) SetError(appErr string) error {
 	return r0
 }
 
-
 // SetDetailedStatus provides a mock function with given fields: status
 func (_m *MockRPCIngressClient) SetAppPort(port routing.Port) error {
 	ret := _m.Called(port)

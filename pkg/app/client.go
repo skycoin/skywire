@@ -90,7 +90,6 @@ func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	conn := &Conn{
 		id:  connID,
 		rpc: c.rpcC,
