@@ -88,12 +88,19 @@ var treeCmd = &cobra.Command{
 	},
 }
 
+	//for toc generation use: https://github.com/ekalinin/github-markdown-toc.go
 var docCmd = &cobra.Command{
 	Use:   "doc",
-	Short: "gnerate markdown docs",
+	Short: "generate markdown docs",
 	Long: `generate markdown docs
 
-	UNHIDEFLAGS=1 skywire-cli doc`,
+	UNHIDEFLAGS=1 go run cmd/skywire-cli/skywire-cli.go doc
+
+	UNHIDEFLAGS=1 go run cmd/skywire-cli/skywire-cli.go doc > cmd/skywire-cli/README1.md
+
+	generate toc:
+
+	cat cmd/skywire-cli/README1.md | gh-md-toc`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
@@ -119,7 +126,7 @@ var docCmd = &cobra.Command{
 		fmt.Printf("\n## %s\n", "subcommand tree")
 		fmt.Printf("\n%s\n", "A tree representation of the skywire-cli subcommands")
 		fmt.Printf("\n```\n")
-		//_, _ = script.Exec(`go run cmd/skywire-cli/skywire-cli.go tree`).Stdout() //nolint
+		_, _ = script.Exec(`go run cmd/skywire-cli/skywire-cli.go tree`).Stdout() //nolint
 		fmt.Printf("\n```\n")
 
 		var use string
@@ -141,8 +148,9 @@ var docCmd = &cobra.Command{
 				k.Help() //nolint
 				fmt.Printf("\n```\n")
 				if k.Name() == "gen" {
+					fmt.Printf("\n##### Example for package / msi\n", )
 					fmt.Printf("\n```\n")
-					fmt.Printf("$ skywire-cli config gen -bpirxn\n")
+					fmt.Printf("$ skywire-cli config gen -bpirxn --version 1.3.0\n")
 					_, _ = script.Exec(`go run cmd/skywire-cli/skywire-cli.go config gen -n`).Stdout() //nolint
 					fmt.Printf("\n```\n")
 				}
