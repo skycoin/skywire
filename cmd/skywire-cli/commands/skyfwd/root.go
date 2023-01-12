@@ -22,16 +22,17 @@ var (
 
 func init() {
 	RootCmd.PersistentFlags().IntVarP(&portNo, "port", "p", 0, "local port of the external (http) app")
-	RootCmd.PersistentFlags().BoolVarP(&deregister, "deregister", "d", false, "deregister")
+	RootCmd.PersistentFlags().BoolVarP(&deregister, "deregister", "d", false, "deregister local port of the external (http) app")
 	RootCmd.PersistentFlags().BoolVarP(&lsPorts, "ls", "l", false, "list registered local ports")
 
 }
 
 // RootCmd contains commands that interact with the skyforwarding
 var RootCmd = &cobra.Command{
-	Use:   "skyfwd <port>",
+	Use:   "skyfwd",
 	Short: "Control skyforwarding",
 	Long:  "Control skyforwarding\n forward local ports over skywire",
+	Args:  cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 
 		rpcClient, err := clirpc.Client(cmd.Flags())
