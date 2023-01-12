@@ -16,6 +16,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/restart"
@@ -93,6 +94,8 @@ type Visor struct {
 	autoPeerIP           string                 // autoPeerCmd is the command string used to return the public key of the hypervisor
 	remoteVisors         map[cipher.PubKey]Conn // remote hypervisors the visor is attempting to connect to
 	connectedHypervisors map[cipher.PubKey]bool // remote hypervisors the visor is currently connected to
+	allowedPorts         map[int]bool
+	allowedMX            *sync.RWMutex
 
 	pingConns    map[cipher.PubKey]ping
 	pingConnMx   *sync.Mutex
@@ -127,12 +130,14 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Con
 		conf:                 conf,
 		restartCtx:           restartCtx,
 		initLock:             new(sync.RWMutex),
+		allowedMX:            new(sync.RWMutex),
 		isServicesHealthy:    newInternalHealthInfo(),
 		dtmReady:             make(chan struct{}),
 		stunReady:            make(chan struct{}),
 		connectedHypervisors: make(map[cipher.PubKey]bool),
 		pingConns:            make(map[cipher.PubKey]ping),
 		pingConnMx:           new(sync.Mutex),
+		allowedPorts:         make(map[int]bool),
 	}
 	v.isServicesHealthy.init()
 
@@ -233,6 +238,15 @@ func (v *Visor) Close() error {
 
 	log := v.MasterLogger().PackageLogger("visor:shutdown")
 	log.Info("Begin shutdown.")
+
+	// Cleanly close ongoing forward conns
+	for _, forwardConn := range appnet.GetAllForwardConns() {
+		err := forwardConn.Close()
+		if err != nil {
+			log.WithError(err).Warn("Forward conn stopped with unexpected result.")
+			continue
+		}
+	}
 
 	for i := len(v.closeStack) - 1; i >= 0; i-- {
 		cl := v.closeStack[i]

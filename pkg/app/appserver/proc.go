@@ -93,13 +93,18 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	cmd.Env = append(os.Environ(), envs...)
 	cmd.Dir = conf.ProcWorkDir
 
-	appLog, appLogDB := appcommon.NewProcLogger(conf, mLog)
-	cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").WriterLevel(logrus.DebugLevel)
+	var appLogDB appcommon.LogStore
+	var appLog *logging.MasterLogger
+	var stderr io.ReadCloser
+	if conf.LogDBLoc != "" {
+		appLog, appLogDB = appcommon.NewProcLogger(conf, mLog)
+		cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").WriterLevel(logrus.DebugLevel)
 
-	// we read the Stderr pipe in order to filter some false positive app errors
-	errorLog := appLog.WithField("_module", moduleName).WithField("func", "(STDERR)")
-	stderr, _ := cmd.StderrPipe() //nolint:errcheck
-	printStdErr(stderr, errorLog)
+		// we read the Stderr pipe in order to filter some false positive app errors
+		errorLog := appLog.WithField("_module", moduleName).WithField("func", "(STDERR)")
+		stderr, _ = cmd.StderrPipe() //nolint:errcheck
+		printStdErr(stderr, errorLog)
+	}
 
 	p := &Proc{
 		disc:      disc,
@@ -163,7 +168,9 @@ func (p *Proc) InjectConn(conn net.Conn) bool {
 	return ok
 }
 
-func (p *Proc) awaitConn() bool {
+// AwaitConn waits for the connection.
+func (p *Proc) AwaitConn() bool {
+	<-p.connCh
 	rpcS := rpc.NewServer()
 	if err := rpcS.RegisterName(p.conf.ProcKey.String(), p.rpcGW); err != nil {
 		panic(err)
@@ -233,7 +240,7 @@ func (p *Proc) Start() error {
 		// here, the connection is established, so we're not blocked by awaiting it anymore,
 		// execution may be continued as usual.
 
-		if ok := p.awaitConn(); !ok {
+		if ok := p.AwaitConn(); !ok {
 			_ = p.cmd.Process.Kill() //nolint:errcheck
 			p.waitMx.Unlock()
 			return
