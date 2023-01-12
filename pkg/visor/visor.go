@@ -94,7 +94,7 @@ type Visor struct {
 	autoPeerIP           string                 // autoPeerCmd is the command string used to return the public key of the hypervisor
 	remoteVisors         map[cipher.PubKey]Conn // remote hypervisors the visor is attempting to connect to
 	connectedHypervisors map[cipher.PubKey]bool // remote hypervisors the visor is currently connected to
-	allowedPorts         []int
+	allowedPorts         map[int]bool
 	allowedMX            *sync.RWMutex
 
 	pingConns    map[cipher.PubKey]ping
@@ -137,6 +137,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Con
 		connectedHypervisors: make(map[cipher.PubKey]bool),
 		pingConns:            make(map[cipher.PubKey]ping),
 		pingConnMx:           new(sync.Mutex),
+		allowedPorts:         make(map[int]bool),
 	}
 	v.isServicesHealthy.init()
 

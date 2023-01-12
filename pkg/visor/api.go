@@ -1257,7 +1257,10 @@ func (v *Visor) RegisterHTTPPort(localPort int) error {
 	if ok {
 		return fmt.Errorf("No connection on local port :%v", localPort)
 	}
-	v.allowedPorts = append(v.allowedPorts, localPort)
+	if v.allowedPorts[localPort] {
+		return fmt.Errorf("Port :%v already registered", localPort)
+	}
+	v.allowedPorts[localPort] = true
 	return nil
 }
 
@@ -1269,13 +1272,10 @@ func (v *Visor) DeregisterHTTPPort(localPort int) error {
 	if !ok {
 		return fmt.Errorf("Connection still active on local port :%v", localPort)
 	}
-	var newPorts []int
-	for _, port := range v.allowedPorts {
-		if port != localPort {
-			newPorts = append(newPorts, port)
-		}
+	if !v.allowedPorts[localPort] {
+		return fmt.Errorf("Port :%v not registered", localPort)
 	}
-	v.allowedPorts = newPorts
+	delete(v.allowedPorts, localPort)
 	return nil
 }
 
@@ -1283,7 +1283,11 @@ func (v *Visor) DeregisterHTTPPort(localPort int) error {
 func (v *Visor) ListHTTPPorts() ([]int, error) {
 	v.allowedMX.Lock()
 	defer v.allowedMX.Unlock()
-	return v.allowedPorts, nil
+	keys := make([]int, 0, len(v.allowedPorts))
+	for k := range v.allowedPorts {
+		keys = append(keys, k)
+	}
+	return keys, nil
 }
 
 // Connect implements API.
