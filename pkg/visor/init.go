@@ -674,6 +674,7 @@ func forward(log *logging.Logger, remoteConn net.Conn, lHost string) {
 		n, err := remoteConn.Read(buf)
 		if err != nil {
 			log.WithError(err).Error("Failed to read packet")
+			sendError(log, remoteConn, err)
 			return
 		}
 		req, err := http.ReadRequest(bufio.NewReader(bytes.NewBuffer(buf[:n])))
@@ -688,11 +689,13 @@ func forward(log *logging.Logger, remoteConn net.Conn, lHost string) {
 		resp, err := client.Do(req)
 		if err != nil {
 			log.WithError(err).Error("Failed to Do req")
+			sendError(log, remoteConn, err)
 			return
 		}
 		err = resp.Write(remoteConn)
 		if err != nil {
 			log.WithError(err).Error("Failed to Write")
+			sendError(log, remoteConn, err)
 			return
 		}
 	}
