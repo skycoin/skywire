@@ -755,7 +755,7 @@ func initPing(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	v.pushCloseStack("skywire_proxy", func() error {
+	v.pushCloseStack("skywire_ping", func() error {
 		cancel()
 		if cErr := l.Close(); cErr != nil {
 			log.WithError(cErr).Error("Error closing listener.")
@@ -765,7 +765,7 @@ func initPing(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	go func() {
 		for {
-			log.Debug("Accepting sky proxy conn...")
+			log.Debug("Accepting sky ping conn...")
 			conn, err := l.Accept()
 			if err != nil {
 				if !errors.Is(err, appnet.ErrClosedConn) {
@@ -773,7 +773,7 @@ func initPing(ctx context.Context, v *Visor, log *logging.Logger) error {
 				}
 				return
 			}
-			log.Debug("Accepted sky proxy conn")
+			log.Debug("Accepted sky ping conn")
 			log.Debug("Wrapping conn...")
 			wrappedConn, err := appnet.WrapConn(conn)
 			if err != nil {
@@ -782,7 +782,7 @@ func initPing(ctx context.Context, v *Visor, log *logging.Logger) error {
 			}
 
 			rAddr := wrappedConn.RemoteAddr().(appnet.Addr)
-			log.Debugf("Accepted sky proxy conn on %s from %s", wrappedConn.LocalAddr(), rAddr.PubKey)
+			log.Debugf("Accepted sky ping conn on %s from %s", wrappedConn.LocalAddr(), rAddr.PubKey)
 			go handlePingConn(log, wrappedConn, v)
 		}
 	}()
