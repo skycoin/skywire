@@ -29,7 +29,7 @@ func init() {
 
 // RootCmd contains commands that interact with the skyforwarding
 var RootCmd = &cobra.Command{
-	Use:   "skyfwd",
+	Use:   "fwd",
 	Short: "Control skyforwarding",
 	Long:  "Control skyforwarding\n forward local ports over skywire",
 	Args:  cobra.MinimumNArgs(0),

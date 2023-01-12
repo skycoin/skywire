@@ -34,7 +34,7 @@ func init() {
 
 // RootCmd contains commands that interact with the skyforwarding
 var RootCmd = &cobra.Command{
-	Use:   "skyrev",
+	Use:   "rev",
 	Short: "reverse proxy skyfwd",
 	Long:  "connect or disconnect from remote ports",
 	Args:  cobra.MinimumNArgs(0),
