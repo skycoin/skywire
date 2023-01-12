@@ -21,8 +21,8 @@ import (
 var (
 	// ErrPortAlreadyBound is being returned when the desired port is already bound to.
 	ErrPortAlreadyBound = errors.New("port already bound")
-	// ErrConnClosed is being returned when we listen on a closed conn.
-	ErrConnClosed = errors.New("listening on closed connection")
+	// ErrClosedConn is being returned when we are listening on a closed connection.
+	ErrClosedConn = errors.New("listening on closed connection")
 )
 
 // SkywireNetworker implements `Networker` for skynet.
@@ -210,7 +210,7 @@ type skywireListener struct {
 func (l *skywireListener) Accept() (net.Conn, error) {
 	conn, ok := <-l.connsCh
 	if !ok {
-		return nil, ErrConnClosed
+		return nil, ErrClosedConn
 	}
 
 	return &SkywireConn{

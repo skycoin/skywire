@@ -17,6 +17,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -47,6 +48,8 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "os")
 	genConfigCmd.Flags().BoolVarP(&isDisplayNodeIP, "publicip", "l", false, "allow display node ip in services")
 	gHiddenFlags = append(gHiddenFlags, "publicip")
+	genConfigCmd.Flags().BoolVarP(&addExampleApps, "example-apps", "m", false, "add example apps to the config")
+	gHiddenFlags = append(gHiddenFlags, "example-apps")
 	genConfigCmd.Flags().BoolVarP(&isStdout, "stdout", "n", false, "write config to stdout")
 	gHiddenFlags = append(gHiddenFlags, "stdout")
 	genConfigCmd.Flags().StringVarP(&output, "out", "o", "", "output config: "+skyenv.ConfigName)
@@ -60,10 +63,6 @@ func init() {
 		pText = "use mac installation path: "
 	}
 	genConfigCmd.Flags().BoolVarP(&isPkgEnv, "pkg", "p", false, pText+skyenv.SkywirePath)
-	homepath := skyenv.HomePath()
-	if homepath != "" {
-		genConfigCmd.Flags().BoolVarP(&isUsrEnv, "user", "u", false, "use paths for user space: "+homepath)
-	}
 	genConfigCmd.Flags().BoolVarP(&isPublicRPC, "publicrpc", "q", false, "allow rpc requests from LAN")
 	gHiddenFlags = append(gHiddenFlags, "publicrpc")
 	genConfigCmd.Flags().BoolVarP(&isRegen, "regen", "r", false, "re-generate existing config & retain keys")
@@ -71,6 +70,10 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "sk")
 	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", false, "use test deployment "+testConf)
 	gHiddenFlags = append(gHiddenFlags, "testenv")
+	homepath := skyenv.HomePath()
+	if homepath != "" {
+		genConfigCmd.Flags().BoolVarP(&isUsrEnv, "user", "u", false, "use paths for user space: "+homepath)
+	}
 	genConfigCmd.Flags().BoolVarP(&isVpnServerEnable, "servevpn", "v", false, "enable vpn server")
 	gHiddenFlags = append(gHiddenFlags, "servevpn")
 	genConfigCmd.Flags().BoolVarP(&isHide, "hide", "w", false, "dont print the config to the terminal")
@@ -325,6 +328,19 @@ var genConfigCmd = &cobra.Command{
 			}
 			conf.Launcher.Apps = newConfLauncherApps
 		}
+
+		if addExampleApps {
+			exampleApps := []appserver.AppConfig{
+				{
+					Name:      skyenv.ExampleServerName,
+					AutoStart: false,
+					Port:      routing.Port(skyenv.ExampleServerPort),
+				},
+			}
+			newConfLauncherApps := append(conf.Launcher.Apps, exampleApps...)
+			conf.Launcher.Apps = newConfLauncherApps
+		}
+
 		// Set EnableAuth true  hypervisor UI by --enable-auth flag
 		if isHypervisor {
 			// Make false EnableAuth hypervisor UI by --disable-auth flag

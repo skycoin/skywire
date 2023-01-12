@@ -110,6 +110,8 @@ build-static: host-apps-static bin-static ## Build apps and binaries. `go build`
 
 build-static-wos: host-apps-static bin-static-wos ## Build apps and binaries. `go build` with ${OPTS}
 
+build-example: host-apps example-apps bin ## Build apps, example apps and binaries. `go build` with ${OPTS}
+
 installer: mac-installer ## Builds MacOS installer for skywire-visor
 
 install-system-linux: build # Workaround for debugging linux package installation
@@ -123,7 +125,7 @@ install-system-linux: build # Workaround for debugging linux package installatio
 
 install-generate: ## Installs required execs for go generate.
 	${OPTS} go install github.com/mjibson/esc
-	${OPTS} go install github.com/vektra/mockery/cmd/mockery
+	${OPTS} go install github.com/vektra/mockery/v2@latest
 
 generate: ## Generate mocks and config README's
 	go generate ./...
@@ -205,6 +207,10 @@ host-apps: ## Build app
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skysocks-client
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/vpn-server
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/vpn-client
+
+example-apps: ## Build example apps
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./example/example-client-app
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./example/example-server-app
 
 host-apps-windows:
 	powershell -Command new-item .\apps -itemtype directory -force

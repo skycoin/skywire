@@ -8,6 +8,7 @@ skywire command line interface
   * [subcommand tree](#subcommand-tree)
     * [config](#config)
       * [config gen](#config-gen)
+        * [Example for package / msi](#example-for-package--msi)
       * [config update](#config-update)
         * [config update hv](#config-update-hv)
         * [config update sc](#config-update-sc)
@@ -24,6 +25,8 @@ skywire command line interface
         * [visor app ls](#visor-app-ls)
         * [visor app start](#visor-app-start)
         * [visor app stop](#visor-app-stop)
+        * [visor app register](#visor-app-register)
+        * [visor app deregister](#visor-app-deregister)
         * [visor app log](#visor-app-log)
         * [visor app arg](#visor-app-arg)
           * [visor app arg autostart](#visor-app-arg-autostart)
@@ -39,6 +42,9 @@ skywire command line interface
       * [visor pk](#visor-pk)
       * [visor info](#visor-info)
       * [visor ver](#visor-ver)
+      * [visor ports](#visor-ports)
+      * [visor ping](#visor-ping)
+      * [visor test](#visor-test)
       * [visor route](#visor-route)
         * [visor route ls\-rules](#visor-route-ls-rules)
         * [visor route rule](#visor-route-rule)
@@ -63,6 +69,8 @@ skywire command line interface
       * [vpn start](#vpn-start)
       * [vpn stop](#vpn-stop)
       * [vpn status](#vpn-status)
+    * [fwd](#fwd)
+    * [rev](#rev)
     * [reward](#reward)
     * [survey](#survey)
     * [rtfind](#rtfind)
@@ -72,6 +80,7 @@ skywire command line interface
     * [completion](#completion)
     * [tree](#tree)
     * [doc](#doc)
+
 
 
 ## skywire-cli
@@ -90,13 +99,15 @@ Available Commands:
   dmsgpty                 Interact with remote visors
   visor                   Query the Skywire Visor
   vpn                     controls for VPN client
+  fwd                     Control skyforwarding
+  rev                     reverse proxy skyfwd
   reward                  skycoin reward address
   survey                  system survey
   rtfind                  Query the Route Finder
   mdisc                   Query remote DMSG Discovery
   completion              Generate completion script
   tree                    subcommand tree
-  doc                     gnerate markdown docs
+  doc                     generate markdown docs
 
 
 ```
@@ -141,6 +152,8 @@ A tree representation of the skywire-cli subcommands
   │ │ ├──ls
   │ │ ├──start
   │ │ ├──stop
+  │ │ ├──register
+  │ │ ├──deregister
   │ │ ├──log
   │ │ └─┬arg
   │ │   ├──autostart
@@ -156,6 +169,9 @@ A tree representation of the skywire-cli subcommands
   │ ├──pk
   │ ├──info
   │ ├──ver
+  │ ├──ports
+  │ ├──ping
+  │ ├──test
   │ ├─┬route
   │ │ ├──ls-rules
   │ │ ├──rule
@@ -180,6 +196,8 @@ A tree representation of the skywire-cli subcommands
   │ ├──start
   │ ├──stop
   │ └──status
+  ├──fwd
+  ├──rev
   ├──reward
   ├──survey
   ├──rtfind
@@ -192,7 +210,6 @@ A tree representation of the skywire-cli subcommands
   └──
 
 ```
-
 
 ### config
 
@@ -230,15 +247,17 @@ Flags:
   -j, --hvpks string         list of public keys to use as hypervisor
   -k, --os string            (linux / mac / win) paths (default "linux")
   -l, --publicip             allow display node ip in services
+  -m, --example-apps         add example apps to the config
   -n, --stdout               write config to stdout
   -o, --out string           output config: skywire-config.json
   -p, --pkg                  use path for package: /opt/skywire
-  -u, --user                 use paths for user space: /home/d0mo
   -q, --publicrpc            allow rpc requests from LAN
   -r, --regen                re-generate existing config & retain keys
   -s, --sk cipher.SecKey     a random key is generated if unspecified
- (default 0000000000000000000000000000000000000000000000000000000000000000)
+
+ (default 0000000000000000000000000000000000000000000000000000000000000000)
   -t, --testenv              use test deployment conf.skywire.dev
+  -u, --user                 use paths for user space: /home/d0mo
   -v, --servevpn             enable vpn server
   -w, --hide                 dont print the config to the terminal
   -x, --retainhv             retain existing hypervisors with regen
@@ -251,12 +270,14 @@ Flags:
 
 ```
 
+##### Example for package / msi
+
 ```
-$ skywire-cli config gen -bpirxn
+$ skywire-cli config gen -bpirxn --version 1.3.0
 {
-	"version": "v1.2.0",
-	"sk": "5fc3b007a6324239066ba84cb05ce7a4af0ff39f0a14cf881c81e629a4138b88",
-	"pk": "03959334da0e30d2b1987318af159768fe7b32373c1c575212367bc23ce432f29c",
+	"version": "fatal: No names found, cannot describe anything.\n",
+	"sk": "8111629add1de63c18f43dc052a76a4cdc948c978bf7847bd2ccb8e61f30a7f7",
+	"pk": "03643894e84e55e7d7915b7f971b090e582261609c9188066983c70c5d92a0b4ae",
 	"dmsg": {
 		"discovery": "http://dmsgd.skywire.skycoin.com",
 		"sessions_count": 1,
@@ -295,37 +316,7 @@ $ skywire-cli config gen -bpirxn
 	},
 	"launcher": {
 		"service_discovery": "http://sd.skycoin.com",
-		"apps": [
-			{
-				"name": "vpn-client",
-				"auto_start": false,
-				"port": 43
-			},
-			{
-				"name": "skychat",
-				"args": [
-					"-addr",
-					":8001"
-				],
-				"auto_start": true,
-				"port": 1
-			},
-			{
-				"name": "skysocks",
-				"auto_start": true,
-				"port": 3
-			},
-			{
-				"name": "skysocks-client",
-				"auto_start": false,
-				"port": 13
-			},
-			{
-				"name": "vpn-server",
-				"auto_start": false,
-				"port": 44
-			}
-		],
+		"apps": null,
 		"server_addr": "localhost:5505",
 		"bin_path": "./apps",
 		"display_node_ip": false
@@ -573,6 +564,9 @@ Available Commands:
   pk                      Public key of the visor
   info                    Summary of visor info
   ver                     Version and build info
+  ports                   List of Ports
+  ping                    Ping the visor with given pk
+  test                    Test the visor with public visors on network
   route                   View and set rules
   halt                    Stop a running visor
   start                   Start a visor
@@ -597,6 +591,8 @@ Available Commands:
   ls                      List apps
   start                   Launch app
   stop                    Halt app
+  register                Register app
+  deregister              Deregister app
   log                     Logs from app
   arg                     App args
 
@@ -651,13 +647,51 @@ Global Flags:
 
 ```
 
+##### visor app register
+
+```
+
+  Register app
+
+Usage:
+  skywire-cli visor app register [flags]
+
+Flags:
+  -a, --appname string     name of the app
+  -p, --localpath string   path of the local folder (default "./local")
+
+Global Flags:
+      --rpc string   RPC server address (default "localhost:3435")
+
+
+```
+
+##### visor app deregister
+
+```
+
+  Deregister app
+
+Usage:
+  skywire-cli visor app deregister [flags]
+
+Flags:
+  -k, --procKey string   proc key of the app to deregister
+
+Global Flags:
+      --rpc string   RPC server address (default "localhost:3435")
+
+
+```
+
 ##### visor app log
 
 ```
 
   Logs from app since RFC3339Nano-formatted timestamp.
 
-  "beginning" is a special timestamp to fetch all the logs
+
+  "beginning" is a special timestamp to fetch all the logs
 
 Usage:
   skywire-cli visor app log <name> <timestamp> [flags]
@@ -739,7 +773,8 @@ Global Flags:
 
   Set app passcode.
 
-  "remove" is a special arg to remove the passcode
+
+  "remove" is a special arg to remove the passcode
 
 Usage:
   skywire-cli visor app arg passcode <name> <passcode> [flags]
@@ -755,7 +790,8 @@ Global Flags:
 ```
 Set app network interface.
 
-  "remove" is a special arg to remove the netifc
+
+  "remove" is a special arg to remove the netifc
 
 Usage:
   skywire-cli visor app arg netifc <name> <interface> [flags]
@@ -787,8 +823,10 @@ Global Flags:
 
   Hypervisor
 
-  Access the hypervisor UI
-  View remote hypervisor public key
+
+  Access the hypervisor UI
+
+  View remote hypervisor public key
 
 Usage:
   skywire-cli visor hv [flags]
@@ -897,6 +935,60 @@ Global Flags:
 
 Usage:
   skywire-cli visor ver [flags]
+
+Global Flags:
+      --rpc string   RPC server address (default "localhost:3435")
+
+
+```
+
+#### visor ports
+
+```
+
+  List of all ports used by visor services and apps
+
+Usage:
+  skywire-cli visor ports [flags]
+
+Global Flags:
+      --rpc string   RPC server address (default "localhost:3435")
+
+
+```
+
+#### visor ping
+
+```
+
+	Creates a route with the provided pk as a hop and returns latency on the conn
+
+Usage:
+  skywire-cli visor ping <pk> [flags]
+
+Flags:
+  -s, --size int    Size of packet, in KB, default is 2KB (default 2)
+  -t, --tries int   Number of tries (default 1)
+
+Global Flags:
+      --rpc string   RPC server address (default "localhost:3435")
+
+
+```
+
+#### visor test
+
+```
+
+	Creates a route with public visors as a hop and returns latency on the conn
+
+Usage:
+  skywire-cli visor test [flags]
+
+Flags:
+  -c, --count int   Count of Public Visors for using in test. (default 2)
+  -s, --size int    Size of packet, in KB, default is 2KB (default 2)
+  -t, --tries int   Number of tries per public visors (default 1)
 
 Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -1382,17 +1474,47 @@ Global Flags:
 
 ```
 
+### fwd
+
+```
+Control skyforwarding
+ forward local ports over skywire
+
+Usage:
+  skywire-cli fwd [flags]
+
+Flags:
+  -d, --deregister   deregister local port of the external (http) app
+  -l, --ls           list registered local ports
+  -p, --port int     local port of the external (http) app
+
+
+```
+
+### rev
+
+```
+connect or disconnect from remote ports
+
+Usage:
+  skywire-cli rev [flags]
+
+Flags:
+  -l, --ls            list configured connections
+  -k, --pk string     remote public key to connect to
+  -p, --port int      local port to reverse proxy
+  -r, --remote int    remote port to read from
+  -d, --stop string   disconnect from specified <id>
+
+
+```
+
 ### reward
 
 ```
 
-	reward address setting
-
-	Sets the skycoin reward address for the visor.
-	The config is written to the root of the default local directory
-
-	this config is served via dmsghttp along with transport logs
-	and the system hardware survey for automating reward distribution
+    skycoin reward address set to:
+    2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6
 
 Usage:
   skywire-cli reward <address> || [flags]
@@ -1420,16 +1542,17 @@ Flags:
 ```
 {
 	"public_key": "000000000000000000000000000000000000000000000000000000000000000000",
+	"skycoin_address": "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6",
 	"go_os": "linux",
 	"go_arch": "amd64",
 	"zcalusic_sysinfo": {
 		"sysinfo": {
 			"version": "0.9.5",
-			"timestamp": "2022-11-06T15:20:05.362595094-06:00"
+			"timestamp": "2023-01-12T09:49:16.860941383-06:00"
 		},
 		"node": {
-			"hostname": "mainframe",
-			"machineid": "42830379b8ff476696287310f5a62b25",
+			"hostname": "node",
+			"machineid": "0de8bf5b7b2d4637ac44c3de851fb93c",
 			"timezone": "America/Chicago"
 		},
 		"os": {
@@ -1438,39 +1561,36 @@ Flags:
 			"architecture": "amd64"
 		},
 		"kernel": {
-			"release": "6.0.2-arch1-1",
-			"version": "#1 SMP PREEMPT_DYNAMIC Sat, 15 Oct 2022 14:00:49 +0000",
+			"release": "6.1.1-arch1-1",
+			"version": "#1 SMP PREEMPT_DYNAMIC Wed, 21 Dec 2022 22:27:55 +0000",
 			"architecture": "x86_64"
 		},
 		"product": {
-			"name": "System Product Name",
-			"vendor": "System manufacturer",
-			"version": "System Version",
-			"serial": "System Serial Number"
+			"name": "OptiPlex 7010",
+			"vendor": "Dell Inc.",
+			"version": "01",
+			"serial": "C060HX1"
 		},
 		"board": {
-			"name": "P8Z77-V LK",
-			"vendor": "ASUSTeK COMPUTER INC.",
-			"version": "Rev X.0x",
-			"serial": "130106735703073",
-			"assettag": "To be filled by O.E.M."
+			"name": "0MN1TX",
+			"vendor": "Dell Inc.",
+			"version": "A00",
+			"serial": "/C060HX1/CN7220035300C5/"
 		},
 		"chassis": {
-			"type": 3,
-			"vendor": "Chassis Manufacture",
-			"version": "Chassis Version",
-			"serial": "Chassis Serial Number",
-			"assettag": "Asset-1234567890"
+			"type": 16,
+			"vendor": "Dell Inc.",
+			"serial": "C060HX1"
 		},
 		"bios": {
-			"vendor": "American Megatrends Inc.",
-			"version": "1402",
-			"date": "03/21/2014"
+			"vendor": "Dell Inc.",
+			"version": "A25",
+			"date": "05/10/2017"
 		},
 		"cpu": {
 			"vendor": "GenuineIntel",
-			"model": "Intel(R) Core(TM) i7-3770K CPU @ 3.50GHz",
-			"speed": 3511,
+			"model": "Intel(R) Core(TM) i7-3770S CPU @ 3.10GHz",
+			"speed": 3100,
 			"cache": 8192,
 			"cpus": 1,
 			"cores": 4,
@@ -1478,62 +1598,25 @@ Flags:
 		},
 		"memory": {
 			"type": "DDR3",
-			"speed": 1333,
-			"size": 32768
+			"speed": 1600,
+			"size": 16384
 		},
 		"storage": [
-			{
-				"name": "nvme0n1",
-				"model": "SPCC M.2 PCIe SSD",
-				"serial": "2A1407950FDE00144440",
-				"size": 512
-			},
 			{
 				"name": "sda",
 				"driver": "sd",
 				"vendor": "ATA",
 				"model": "JAJS600M128C",
-				"serial": "30040655310",
+				"serial": "30040655357",
 				"size": 128
-			},
-			{
-				"name": "sdb",
-				"driver": "sd",
-				"vendor": "ATA",
-				"model": "WDC WD10EURX-61U",
-				"serial": "WD-WCC4J1FTPZKE",
-				"size": 1000
-			},
-			{
-				"name": "sdc",
-				"driver": "sd",
-				"vendor": "ATA",
-				"model": "SanDisk SDSSDA12",
-				"serial": "174470463509",
-				"size": 120
-			},
-			{
-				"name": "sdd",
-				"driver": "sd",
-				"vendor": "ATA",
-				"model": "WDC WD20EVDS-63T",
-				"serial": "WD-WCAVY3707401",
-				"size": 2000
-			},
-			{
-				"name": "sde",
-				"driver": "sd",
-				"vendor": "Generic",
-				"model": "STORAGE DEVICE",
-				"serial": "000000001532"
 			}
 		],
 		"network": [
 			{
-				"name": "enp3s0",
-				"driver": "r8169",
-				"macaddress": "60:a4:4c:5e:97:68",
-				"port": "tp/mii",
+				"name": "eno1",
+				"driver": "e1000e",
+				"macaddress": "b8:ca:3a:8c:70:23",
+				"port": "tp",
 				"speed": 1000
 			}
 		]
@@ -1592,7 +1675,7 @@ Flags:
 		},
 		{
 			"ifindex": 2,
-			"ifname": "enp3s0",
+			"ifname": "eno1",
 			"flags": [
 				"BROADCAST",
 				"MULTICAST",
@@ -1605,21 +1688,21 @@ Flags:
 			"group": "default",
 			"txqlen": 1000,
 			"link_type": "ether",
-			"address": "60:a4:4c:5e:97:68",
+			"address": "b8:ca:3a:8c:70:23",
 			"broadcast": "ff:ff:ff:ff:ff:ff",
 			"addr_info": [
 				{
 					"family": "inet",
-					"local": "192.168.2.130",
+					"local": "192.168.1.57",
 					"prefixlen": 24,
 					"scope": "global",
-					"label": "enp3s0",
-					"valid_life_time": 62314,
-					"preferred_life_time": 62314
+					"label": "eno1",
+					"valid_life_time": 81925,
+					"preferred_life_time": 81925
 				},
 				{
 					"family": "inet6",
-					"local": "fe80::a1b:9c1b:5864:f12b",
+					"local": "fe80::419b:25f0:b69a:b34c",
 					"prefixlen": 64,
 					"scope": "link",
 					"valid_life_time": 4294967295,
@@ -1629,32 +1712,8 @@ Flags:
 		}
 	],
 	"ghw_blockinfo": {
-		"total_size_bytes": 3760783810560,
+		"total_size_bytes": 128035676160,
 		"disks": [
-			{
-				"name": "nvme0n1",
-				"size_bytes": 512110190592,
-				"physical_block_size_bytes": 512,
-				"drive_type": "ssd",
-				"removable": false,
-				"storage_controller": "nvme",
-				"bus_path": "pci-0000:01:00.0-nvme-1",
-				"vendor": "unknown",
-				"model": "SPCC M.2 PCIe SSD",
-				"serial_number": "2A1407950FDE00144440",
-				"wwn": "nvme.1987-3241313430373935304644453030313434343430-53504343204d2e32205043496520535344-00000001",
-				"partitions": [
-					{
-						"name": "nvme0n1p1",
-						"label": "unknown",
-						"mount_point": "/mnt/nvme0n1p1",
-						"size_bytes": 512104884224,
-						"type": "ext4",
-						"read_only": false,
-						"uuid": "06f46744-01"
-					}
-				]
-			},
 			{
 				"name": "sda",
 				"size_bytes": 128035676160,
@@ -1665,8 +1724,8 @@ Flags:
 				"bus_path": "pci-0000:00:1f.2-ata-1.0",
 				"vendor": "ATA",
 				"model": "JAJS600M128C",
-				"serial_number": "30040655310",
-				"wwn": "0x5000000000002e39",
+				"serial_number": "30040655357",
+				"wwn": "0x5000000000003244",
 				"partitions": [
 					{
 						"name": "sda1",
@@ -1675,106 +1734,31 @@ Flags:
 						"size_bytes": 128033659904,
 						"type": "ext4",
 						"read_only": false,
-						"uuid": "72295fef-01"
+						"uuid": "514fad51-01"
 					}
 				]
-			},
-			{
-				"name": "sdb",
-				"size_bytes": 1000204886016,
-				"physical_block_size_bytes": 4096,
-				"drive_type": "hdd",
-				"removable": false,
-				"storage_controller": "scsi",
-				"bus_path": "pci-0000:00:1f.2-ata-2.0",
-				"vendor": "ATA",
-				"model": "WDC_WD10EURX-61UY4Y0",
-				"serial_number": "WD-WCC4J1FTPZKE",
-				"wwn": "0x50014ee262644326",
-				"partitions": []
-			},
-			{
-				"name": "sdc",
-				"size_bytes": 120034123776,
-				"physical_block_size_bytes": 512,
-				"drive_type": "ssd",
-				"removable": false,
-				"storage_controller": "scsi",
-				"bus_path": "pci-0000:00:1f.2-ata-3.0",
-				"vendor": "ATA",
-				"model": "SanDisk_SDSSDA120G",
-				"serial_number": "174470463509",
-				"wwn": "0x5001b444a9bb77cd",
-				"partitions": [
-					{
-						"name": "sdc1",
-						"label": "unknown",
-						"mount_point": "/boot1",
-						"size_bytes": 536870912,
-						"type": "ext4",
-						"read_only": false,
-						"uuid": "570655b4-01"
-					},
-					{
-						"name": "sdc2",
-						"label": "files",
-						"mount_point": "/home1",
-						"size_bytes": 119495720960,
-						"type": "ext4",
-						"read_only": false,
-						"uuid": "570655b4-02"
-					}
-				]
-			},
-			{
-				"name": "sdd",
-				"size_bytes": 2000398934016,
-				"physical_block_size_bytes": 512,
-				"drive_type": "hdd",
-				"removable": false,
-				"storage_controller": "scsi",
-				"bus_path": "pci-0000:00:1f.2-ata-5.0",
-				"vendor": "ATA",
-				"model": "WDC_WD20EVDS-63T3B0",
-				"serial_number": "WD-WCAVY3707401",
-				"wwn": "0x50014ee20473d45a",
-				"partitions": []
-			},
-			{
-				"name": "sde",
-				"size_bytes": 0,
-				"physical_block_size_bytes": 512,
-				"drive_type": "hdd",
-				"removable": true,
-				"storage_controller": "scsi",
-				"bus_path": "pci-0000:00:14.0-usb-0:4:1.0-scsi-0:0:0:0",
-				"vendor": "Generic",
-				"model": "STORAGE_DEVICE",
-				"serial_number": "000000001532",
-				"wwn": "unknown",
-				"partitions": []
 			}
 		]
 	},
 	"ghw_productinfo": {
-		"family": "To be filled by O.E.M.",
-		"name": "System Product Name",
-		"vendor": "System manufacturer",
-		"serial_number": "System Serial Number",
-		"uuid": "306d1ca0-d7da-11dd-b04f-60a44c5e9768",
-		"sku": "SKU",
-		"version": "System Version"
+		"family": "",
+		"name": "OptiPlex 7010",
+		"vendor": "Dell Inc.",
+		"serial_number": "C060HX1",
+		"uuid": "4c4c4544-0030-3610-8030-c3c04f485831",
+		"sku": "OptiPlex 7010",
+		"version": "01"
 	},
 	"ghw_memoryinfo": {
-		"total_physical_bytes": 34091302912,
-		"total_usable_bytes": 33333571584,
+		"total_physical_bytes": 17179869184,
+		"total_usable_bytes": 16657915904,
 		"supported_page_sizes": [
 			2097152
 		],
 		"modules": null
 	},
-	"uuid": "978ddf7d-950a-4046-bf40-fcab8ad3d3b1",
-	"skywire_version": "v1.2.0"
+	"uuid": "69573fd2-59c9-4cb2-ba77-7ad93f1b4bfa",
+	"skywire_version": "fatal: No names found, cannot describe anything.\n"
 }
 ```
 
@@ -1868,7 +1852,13 @@ Usage:
 ```
 generate markdown docs
 
-	UNHIDEFLAGS=1 skywire-cli doc
+	UNHIDEFLAGS=1 go run cmd/skywire-cli/skywire-cli.go doc
+
+	UNHIDEFLAGS=1 go run cmd/skywire-cli/skywire-cli.go doc > cmd/skywire-cli/README1.md
+
+	generate toc:
+
+	cat cmd/skywire-cli/README1.md | gh-md-toc
 
 Usage:
   skywire-cli doc

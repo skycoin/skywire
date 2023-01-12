@@ -25,6 +25,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -48,6 +49,8 @@ type API interface {
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
+	RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error)
+	DeregisterApp(procKey appcommon.ProcKey) error
 	StopApp(appName string) error
 	StartVPNClient(pk cipher.PubKey) error
 	StopVPNClient(appName string) error
@@ -100,6 +103,12 @@ type API interface {
 
 	IsDMSGClientReady() (bool, error)
 
+	RegisterHTTPPort(localPort int) error
+	DeregisterHTTPPort(localPort int) error
+	ListHTTPPorts() ([]int, error)
+	Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
+	Disconnect(id uuid.UUID) error
+	List() (map[uuid.UUID]*appnet.ForwardConn, error)
 	DialPing(config PingConfig) error
 	Ping(config PingConfig) ([]time.Duration, error)
 	StopPing(pk cipher.PubKey) error
@@ -388,6 +397,24 @@ func (v *Visor) StartApp(appName string) error {
 	// check process manager availability
 	if v.procM != nil {
 		return v.appL.StartApp(appName, nil, envs)
+	}
+	return ErrProcNotAvailable
+}
+
+// RegisterApp implements API.
+func (v *Visor) RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error) {
+	// check process manager availability
+	if v.procM != nil {
+		return v.appL.RegisterApp(procConf)
+	}
+	return appcommon.ProcKey{}, ErrProcNotAvailable
+}
+
+// DeregisterApp implements API.
+func (v *Visor) DeregisterApp(procKey appcommon.ProcKey) error {
+	// check process manager availability
+	if v.procM != nil {
+		return v.appL.DeregisterApp(procKey)
 	}
 	return ErrProcNotAvailable
 }
@@ -1220,4 +1247,134 @@ func (v *Visor) IsDMSGClientReady() (bool, error) {
 		}
 	}
 	return false, errors.New("dmsg client is not ready")
+}
+
+// RegisterHTTPPort implements API.
+func (v *Visor) RegisterHTTPPort(localPort int) error {
+	v.allowedMX.Lock()
+	defer v.allowedMX.Unlock()
+	ok := isPortAvailable(v.log, localPort)
+	if ok {
+		return fmt.Errorf("No connection on local port :%v", localPort)
+	}
+	if v.allowedPorts[localPort] {
+		return fmt.Errorf("Port :%v already registered", localPort)
+	}
+	v.allowedPorts[localPort] = true
+	return nil
+}
+
+// DeregisterHTTPPort implements API.
+func (v *Visor) DeregisterHTTPPort(localPort int) error {
+	v.allowedMX.Lock()
+	defer v.allowedMX.Unlock()
+	if !v.allowedPorts[localPort] {
+		return fmt.Errorf("Port :%v not registered", localPort)
+	}
+	delete(v.allowedPorts, localPort)
+	return nil
+}
+
+// ListHTTPPorts implements API.
+func (v *Visor) ListHTTPPorts() ([]int, error) {
+	v.allowedMX.Lock()
+	defer v.allowedMX.Unlock()
+	keys := make([]int, 0, len(v.allowedPorts))
+	for k := range v.allowedPorts {
+		keys = append(keys, k)
+	}
+	return keys, nil
+}
+
+// Connect implements API.
+func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
+	ok := isPortAvailable(v.log, localPort)
+	if !ok {
+		return uuid.UUID{}, fmt.Errorf(":%v local port already in use", localPort)
+	}
+	connApp := appnet.Addr{
+		Net:    appnet.TypeSkynet,
+		PubKey: remotePK,
+		Port:   routing.Port(skyenv.SkyForwardingServerPort),
+	}
+	conn, err := appnet.Dial(connApp)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+	remoteConn, err := appnet.WrapConn(conn)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+
+	cMsg := clientMsg{
+		Port: remotePort,
+	}
+
+	clientMsg, err := json.Marshal(cMsg)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+	_, err = remoteConn.Write([]byte(clientMsg))
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+	v.log.Debugf("Msg sent %s", clientMsg)
+
+	buf := make([]byte, 32*1024)
+	n, err := remoteConn.Read(buf)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+	var sReply serverReply
+	err = json.Unmarshal(buf[:n], &sReply)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+	v.log.Debugf("Received: %v", sReply)
+
+	if sReply.Error != nil {
+		sErr := sReply.Error
+		v.log.WithError(fmt.Errorf(*sErr)).Error("Server closed with error")
+		return uuid.UUID{}, fmt.Errorf(*sErr)
+	}
+	forwardConn := appnet.NewForwardConn(v.log, remoteConn, remotePort, localPort)
+	forwardConn.Serve()
+	return forwardConn.ID, nil
+}
+
+// Disconnect implements API.
+func (v *Visor) Disconnect(id uuid.UUID) error {
+	forwardConn := appnet.GetForwardConn(id)
+	return forwardConn.Close()
+}
+
+// List implements API.
+func (v *Visor) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
+	return appnet.GetAllForwardConns(), nil
+}
+
+func isPortAvailable(log *logging.Logger, port int) bool {
+	timeout := time.Second
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf(":%v", port), timeout)
+	if err != nil {
+		return true
+	}
+	if conn != nil {
+		defer closeConn(log, conn)
+		return false
+	}
+	return true
+}
+
+func isPortRegistered(port int, v *Visor) bool {
+	ports, err := v.ListHTTPPorts()
+	if err != nil {
+		return false
+	}
+	for _, p := range ports {
+		if p == port {
+			return true
+		}
+	}
+	return false
 }
