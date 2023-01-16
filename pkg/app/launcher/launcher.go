@@ -211,6 +211,22 @@ func (l *AppLauncher) StartApp(cmd string, args, envs []string) error {
 	return l.startApp(cmd, args, envs)
 }
 
+// RegisterApp registers a proc for an external app to use.
+func (l *AppLauncher) RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error) {
+	l.mx.Lock()
+	defer l.mx.Unlock()
+
+	return l.procM.Register(procConf)
+}
+
+// DeregisterApp de registers the proc used by an external.
+func (l *AppLauncher) DeregisterApp(procKey appcommon.ProcKey) error {
+	l.mx.Lock()
+	defer l.mx.Unlock()
+
+	return l.procM.Deregister(procKey)
+}
+
 func (l *AppLauncher) startApp(cmd string, args, envs []string) error {
 	log := l.log.WithField("func", "StartApp").WithField("cmd", cmd)
 

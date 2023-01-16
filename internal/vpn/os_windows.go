@@ -12,6 +12,7 @@ import (
 const (
 	tunSetupCMDFmt    = "netsh interface ip set address name=\"%s\" source=static addr=%s mask=%s gateway=%s"
 	tunMTUSetupCMDFmt = "netsh interface ipv4 set subinterface \"%s\" mtu=%d"
+	tunDNSCMDFmt      = "netsh interface ip set dns \"%s\" static %s"
 	modifyRouteCMDFmt = "route %s %s mask %s %s"
 )
 
@@ -32,7 +33,29 @@ func (c *Client) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 		return fmt.Errorf("error running command %s: %w", mtuSetupCmd, err)
 	}
 
+	if c.cfg.DNSAddr != "" {
+		c.SetupDNS()
+	}
+
 	return nil
+}
+
+// SetupDNS trying to set DNS server
+func (c *Client) SetupDNS() {
+	dnsSetupCmd := fmt.Sprintf(tunDNSCMDFmt, c.tun.Name(), c.cfg.DNSAddr)
+	if _, err := osutil.RunWithResult("cmd", "/C", dnsSetupCmd); err != nil {
+		fmt.Printf("Failed to setup DNS. Continue with machine default DNS setting: %s\n", err)
+	} else {
+		fmt.Printf("DNS setup successful: %s\n", c.cfg.DNSAddr)
+	}
+}
+
+// RevertDNS trying to revert DNS values same as before starting vpn-client if it changed
+func (c *Client) RevertDNS() {
+	if c.cfg.DNSAddr != "" {
+		dnsRevertCmd := fmt.Sprintf(tunDNSCMDFmt, c.tun.Name(), "none")
+		osutil.RunWithResult("cmd", "/C", dnsRevertCmd) //nolint
+	}
 }
 
 // ChangeRoute changes current route to `ipCIDR` to go through the `gateway`

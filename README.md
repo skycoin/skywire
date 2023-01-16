@@ -40,11 +40,14 @@ Documentation on skywire-cli interface as well as available flags for skywire-vi
 
 Apps are not executed by the user, but hosted by the visor process
 
+* [API](docs/skywire_app_api.md)
 * [skychat](cmd/apps/skychat/README.md)
 * [skysocks](cmd/apps/skysocks/README.md)
 * [skysocks-client](cmd/apps/skysocks-client/README.md)
 * [vpn-client](cmd/apps/vpn-client/README.md)
 * [vpn-server](cmd/apps/vpn-server/README.md)
+* [example-server-app](example/example-server-app/README.md)
+* [example-client-app](example/example-client-app/README.md)
 
 further documentation can be found in the [skywire wiki](https://github.com/skycoin/skywire/wiki)
 
@@ -85,8 +88,6 @@ yay --mflags " -p git.PKGBUILD " -S skywire
 ```
 
 ## Dependencies
-
-The systray app requires other build and runtime dependencies and further steps to compile. These are listed in [/docs/systray-builds.md](/docs/systray-builds.md)
 
 ### Runtime Deps
 
@@ -172,29 +173,29 @@ Note that `make install-system-linux` will place the binaries into the system wh
 #to install directly into the system, use "/"
 _pkgdir="/"
 
-#use the appropriate systemd unit installation path for your linux distribution
+#use the appropriate systemd unit installation path for your linux distribution (i.e./etc/systemd/system on .deb distros
 _systemddir="usr/lib/systemd/system"
 
 #the base path where skywire is installed
-_skydir="opt/skywire"
+_dir="opt/skywire"
 
 #application binaries ; started by the visor process
-_skyapps="${_skydir}/apps"
+_apps="${_dir}/apps"
 
 #main binaries go here
-_skybin="${_skydir}/bin"
+_bin="${_dir}/bin"
 
 #scripts included
-_skyscripts="${_skydir}/scripts"
+_scripts="${_dir}/scripts"
 
 #create the directories
 mkdir -p "${_pkgdir}/usr/bin"
-mkdir -p "${_pkgdir}/${_skydir}/bin"
-mkdir -p "${_pkgdir}/${_skydir}/apps"
-mkdir -p "${_pkgdir}/${_skydir}/scripts"
+mkdir -p "${_pkgdir}/${_dir}/bin"
+mkdir -p "${_pkgdir}/${_dir}/apps"
+mkdir -p "${_pkgdir}/${_dir}/scripts"
 mkdir -p "${_pkgdir}/${_systemddir}"
 #the local folder is otherwise produced by the visor on startup
-mkdir -p "${_pkgdir}/${_skydir}/local"
+mkdir -p "${_pkgdir}/${_dir}/local"
 
 # instal binaries - assumes nothing else was already in your GOBIN
  install -Dm755 "${GOBIN}"/* "${_pkgdir}/${_skybin}/"
@@ -459,6 +460,12 @@ If you are interested in running the Skywire VPN as either a client or a server,
 - [Setup the Skywire VPN](https://github.com/skycoin/skywire/wiki/Skywire-VPN-Client)
 - [Setup the Skywire VPN server](https://github.com/skycoin/skywire/wiki/Skywire-VPN-Server)
 - [Package Installation Guide](https://github.com/skycoin/skywire/wiki/Skywire-Package-Installation)
+
+### Using Skywire forwarding for publishing http server over skynet
+
+The skywire-cli subcommand `skywire-cli skyfwd` is used to register and connect to http servers over the skynet
+
+- [skywire forwarding](docs/skywire_forwarding.md)
 
 ## Creating a GitHub release
 

@@ -79,6 +79,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+	setAppPort(appCl, socksPort)
 	for {
 		conn, err := dialServer(ctx, appCl, pk)
 		if err != nil {
@@ -121,5 +122,11 @@ func setAppErr(appCl *app.Client, err error) {
 func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
 	if err := appCl.SetDetailedStatus(string(status)); err != nil {
 		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
+	}
+}
+
+func setAppPort(appCl *app.Client, port routing.Port) {
+	if err := appCl.SetAppPort(port); err != nil {
+		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
 	}
 }

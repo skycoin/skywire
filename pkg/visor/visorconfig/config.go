@@ -39,6 +39,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 				UptimeTracker:      utilenv.UptimeTrackerAddr,
 				ServiceDiscovery:   utilenv.ServiceDiscAddr,
 				StunServers:        utilenv.GetStunServers(),
+				DNSServer:          utilenv.DNSServer,
 			}
 		} else {
 			services = &Services{
@@ -50,6 +51,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 				UptimeTracker:      utilenv.TestUptimeTrackerAddr,
 				ServiceDiscovery:   utilenv.TestServiceDiscAddr,
 				StunServers:        utilenv.GetStunServers(),
+				DNSServer:          utilenv.DNSServer,
 			}
 		}
 	}
@@ -145,6 +147,13 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 	}
 	var dmsgHTTPServersList *DmsgHTTPServers
 
+	dnsServer := utilenv.DNSServer
+	if services != nil {
+		if services.DNSServer != "" {
+			dnsServer = services.DNSServer
+		}
+	}
+
 	if dmsgHTTP {
 		dmsgHTTPPath := DMSGHTTPName
 		if pkgEnv {
@@ -162,7 +171,7 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 	// Actual config generation.
 	conf := MakeBaseConfig(cc, testEnv, dmsgHTTP, services, dmsgHTTPServersList)
 
-	conf.Launcher.Apps = makeDefaultLauncherAppsConfig()
+	conf.Launcher.Apps = makeDefaultLauncherAppsConfig(dnsServer)
 
 	conf.Hypervisors = make([]cipher.PubKey, 0)
 
@@ -219,12 +228,13 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 // makeDefaultLauncherAppsConfig creates default launcher config for apps,
 // for package based installation in other platform (Darwin, Windows) it only includes
 // the shipped apps for that platforms
-func makeDefaultLauncherAppsConfig() []appserver.AppConfig {
+func makeDefaultLauncherAppsConfig(dnsServer string) []appserver.AppConfig {
 	defaultConfig := []appserver.AppConfig{
 		{
 			Name:      VPNClientName,
 			AutoStart: false,
 			Port:      routing.Port(skyenv.VPNClientPort),
+			Args:      []string{"-dns", dnsServer},
 		},
 		{
 			Name:      SkychatName,

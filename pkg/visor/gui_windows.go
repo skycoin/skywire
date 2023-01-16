@@ -1,5 +1,5 @@
-//go:build windows
-// +build windows
+//go:build windows && !withoutsystray
+// +build windows,!withoutsystray
 
 package visor
 

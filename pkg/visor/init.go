@@ -2,6 +2,8 @@
 package visor
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -35,11 +37,13 @@ import (
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -122,6 +126,10 @@ var (
 	dmsgHTTP vinit.Module
 	// Dmsg trackers module
 	dmsgTrackers vinit.Module
+	// Skywire Forwarding conn module
+	skyFwd vinit.Module
+	// Ping module
+	pi vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 	// config initialization
@@ -161,10 +169,12 @@ func registerModules(logger *logging.MasterLogger) {
 	ut = maker("uptime_tracker", initUptimeTracker, &dmsgHTTP)
 	pv = maker("public_autoconnect", initPublicAutoconnect, &tr, &disc)
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
-	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl, &dmsgHTTPLogServer, &systemSurvey, &dmsgTrackers)
+	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl, &dmsgHTTPLogServer, &dmsgTrackers, &launch)
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
+	skyFwd = maker("sky_forward_conn", initSkywireForwardConn, &dmsgC, &dmsgCtrl, &tr, &launch)
+	pi = maker("ping", initPing, &dmsgC, &tm)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &systemSurvey)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -316,12 +326,11 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 		return err
 	}
 	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg, httpC, v.MasterLogger())
-
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		dmsgC.Serve(context.Background())
+		dmsgC.Serve(ctx)
 	}()
 
 	v.pushCloseStack("dmsg", func() error {
@@ -637,6 +646,280 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 		return nil
 	})
 	return nil
+}
+
+func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) error {
+	ctx, cancel := context.WithCancel(ctx)
+	// waiting for at least one transport to initialize
+	<-v.tpM.Ready()
+	connApp := appnet.Addr{
+		Net:    appnet.TypeSkynet,
+		PubKey: v.conf.PK,
+		Port:   routing.Port(skyenv.SkyForwardingServerPort),
+	}
+	l, err := appnet.ListenContext(ctx, connApp)
+	if err != nil {
+		cancel()
+		return err
+	}
+
+	v.pushCloseStack("sky_forwarding", func() error {
+		cancel()
+		if cErr := l.Close(); cErr != nil {
+			log.WithError(cErr).Error("Error closing listener.")
+		}
+		return nil
+	})
+
+	go func() {
+		for {
+			log.Debug("Accepting sky forwarding conn...")
+			conn, err := l.Accept()
+			if err != nil {
+				if !errors.Is(appnet.ErrClosedConn, err) {
+					log.WithError(err).Error("Failed to accept conn")
+				}
+				return
+			}
+			log.Debug("Accepted sky forwarding conn")
+
+			v.pushCloseStack("sky_forwarding", func() error {
+				cancel()
+				if cErr := conn.Close(); cErr != nil {
+					log.WithError(cErr).Error("Error closing conn.")
+				}
+				return nil
+			})
+
+			log.Debug("Wrapping conn...")
+			wrappedConn, err := appnet.WrapConn(conn)
+			if err != nil {
+				log.WithError(err).Error("Failed to wrap conn")
+				return
+			}
+
+			rAddr := wrappedConn.RemoteAddr().(appnet.Addr)
+			log.Debugf("Accepted sky forwarding conn on %s from %s", wrappedConn.LocalAddr(), rAddr.PubKey)
+			go handleServerConn(log, wrappedConn, v)
+		}
+	}()
+
+	return nil
+}
+
+func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
+	buf := make([]byte, 32*1024)
+	n, err := remoteConn.Read(buf)
+	if err != nil {
+		log.WithError(err).Error("Failed to read packet")
+		return
+	}
+
+	var cMsg clientMsg
+	err = json.Unmarshal(buf[:n], &cMsg)
+	if err != nil {
+		log.WithError(err).Error("Failed to marshal json")
+		sendError(log, remoteConn, err)
+		return
+	}
+	log.Debugf("Received: %v", cMsg)
+
+	lHost := fmt.Sprintf("localhost:%v", cMsg.Port)
+	ok := isPortRegistered(cMsg.Port, v)
+	if !ok {
+		log.Errorf("Port :%v not registered", cMsg.Port)
+		sendError(log, remoteConn, fmt.Errorf("Port :%v not registered", cMsg.Port))
+		return
+	}
+
+	ok = isPortAvailable(log, cMsg.Port)
+	if ok {
+		log.Errorf("Failed to dial port %v", cMsg.Port)
+		sendError(log, remoteConn, fmt.Errorf("Failed to dial port %v", cMsg.Port))
+		return
+	}
+
+	log.Debugf("Forwarding %s", lHost)
+
+	// send nil error to indicate to the remote connection that everything is ok
+	sendError(log, remoteConn, nil)
+
+	go forward(log, remoteConn, lHost)
+}
+
+// forward reads a http.Request from the remote conn of the requesting visor forwards that request
+// to the requested local server and forwards the http.Response from the local server to the requesting
+// visor via the remote conn
+func forward(log *logging.Logger, remoteConn net.Conn, lHost string) {
+	for {
+		buf := make([]byte, 32*1024)
+		n, err := remoteConn.Read(buf)
+		if err != nil {
+			log.WithError(err).Error("Failed to read packet")
+			closeConn(log, remoteConn)
+			return
+		}
+		req, err := http.ReadRequest(bufio.NewReader(bytes.NewBuffer(buf[:n])))
+		if err != nil {
+			log.WithError(err).Error("Failed to ReadRequest")
+			closeConn(log, remoteConn)
+			return
+		}
+		req.RequestURI = ""
+		req.URL.Scheme = "http"
+		req.URL.Host = lHost
+		client := http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.WithError(err).Error("Failed to Do req")
+			closeConn(log, remoteConn)
+			return
+		}
+		err = resp.Write(remoteConn)
+		if err != nil {
+			log.WithError(err).Error("Failed to Write")
+			closeConn(log, remoteConn)
+			return
+		}
+	}
+}
+
+func sendError(log *logging.Logger, remoteConn net.Conn, sendErr error) {
+	var sReply serverReply
+	if sendErr != nil {
+		sErr := sendErr.Error()
+		sReply = serverReply{
+			Error: &sErr,
+		}
+	}
+
+	srvReply, err := json.Marshal(sReply)
+	if err != nil {
+		log.WithError(err).Error("Failed to unmarshal json")
+	}
+
+	_, err = remoteConn.Write([]byte(srvReply))
+	if err != nil {
+		log.WithError(err).Error("Failed write server msg")
+	}
+
+	log.Debugf("Server reply sent %s", srvReply)
+	// close conn if we send an error
+	if sendErr != nil {
+		closeConn(log, remoteConn)
+	}
+}
+
+func closeConn(log *logging.Logger, conn net.Conn) {
+	if err := conn.Close(); err != nil {
+		log.WithError(err).Errorf("Error closing client %s connection", conn.RemoteAddr())
+	}
+}
+
+type clientMsg struct {
+	Port int `json:"port"`
+}
+
+type serverReply struct {
+	Error *string `json:"error,omitempty"`
+}
+
+func initPing(ctx context.Context, v *Visor, log *logging.Logger) error {
+	ctx, cancel := context.WithCancel(ctx)
+	// waiting for at least one transport to initialize
+	<-v.tpM.Ready()
+
+	connApp := appnet.Addr{
+		Net:    appnet.TypeSkynet,
+		PubKey: v.conf.PK,
+		Port:   routing.Port(skyenv.SkyPingPort),
+	}
+
+	l, err := appnet.ListenContext(ctx, connApp)
+	if err != nil {
+		cancel()
+		return err
+	}
+
+	v.pushCloseStack("skywire_ping", func() error {
+		cancel()
+		if cErr := l.Close(); cErr != nil {
+			log.WithError(cErr).Error("Error closing listener.")
+		}
+		return nil
+	})
+
+	go func() {
+		for {
+			log.Debug("Accepting sky ping conn...")
+			conn, err := l.Accept()
+			if err != nil {
+				if !errors.Is(err, appnet.ErrClosedConn) {
+					log.WithError(err).Error("Failed to accept ping conn")
+				}
+				return
+			}
+			log.Debug("Accepted sky ping conn")
+			log.Debug("Wrapping conn...")
+			wrappedConn, err := appnet.WrapConn(conn)
+			if err != nil {
+				log.WithError(err).Error("Failed to wrap conn")
+				return
+			}
+
+			rAddr := wrappedConn.RemoteAddr().(appnet.Addr)
+			log.Debugf("Accepted sky ping conn on %s from %s", wrappedConn.LocalAddr(), rAddr.PubKey)
+			go handlePingConn(log, wrappedConn, v)
+		}
+	}()
+	return nil
+}
+
+func handlePingConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
+	for {
+		buf := make([]byte, (32+v.pingPcktSize)*1024)
+		n, err := remoteConn.Read(buf)
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				log.WithError(err).Error("Failed to read packet")
+			}
+			return
+		}
+		var size PingSizeMsg
+		err = json.Unmarshal(buf[:n], &size)
+		if err != nil {
+			log.WithError(err).Error("Failed to unmarshal json")
+			return
+		}
+
+		_, err = remoteConn.Write([]byte("ok"))
+		if err != nil {
+			log.WithError(err).Error("Failed to write message")
+			return
+		}
+		var ping []byte
+		for len(ping) != size.Size {
+			n, err = remoteConn.Read(buf)
+			if err != nil {
+				if !errors.Is(err, io.EOF) {
+					log.WithError(err).Error("Failed to read packet")
+				}
+				return
+			}
+			ping = append(ping, buf[:n]...)
+		}
+		var msg PingMsg
+		err = json.Unmarshal(ping, &msg)
+		if err != nil {
+			log.WithError(err).Error("Failed to unmarshal json")
+			return
+		}
+		now := time.Now()
+		diff := now.Sub(msg.Timestamp)
+		v.pingConns[msg.PingPk].latency <- diff
+
+		log.Debugf("Received: %s", buf[:n])
+	}
 }
 
 // getRouteSetupHooks aka autotransport

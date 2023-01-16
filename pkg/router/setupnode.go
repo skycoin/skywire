@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/rpc"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -127,8 +128,8 @@ func CreateRouteGroup(ctx context.Context, dialer network.Dialer, biRt routing.B
 
 	// Generate forward and reverse routes.
 	fwdRt, revRt := biRt.ForwardAndReverse()
-	srcPK := biRt.Desc.SrcPK()
-	dstPK := biRt.Desc.DstPK()
+	srcPK := biRt.Desc.Src()
+	dstPK := biRt.Desc.Dst()
 
 	// Generate routing rules (for edge and intermediary routers) that are to be sent.
 	// Rules are grouped by rule type [FWD, REV, INTER].
@@ -136,8 +137,8 @@ func CreateRouteGroup(ctx context.Context, dialer network.Dialer, biRt routing.B
 	if err != nil {
 		return routing.EdgeRules{}, err
 	}
-	initEdge := routing.EdgeRules{Desc: revRt.Desc, Forward: fwdRules[srcPK][0], Reverse: revRules[srcPK][0]}
-	respEdge := routing.EdgeRules{Desc: fwdRt.Desc, Forward: fwdRules[dstPK][0], Reverse: revRules[dstPK][0]}
+	initEdge := routing.EdgeRules{Desc: revRt.Desc, Forward: fwdRules[srcPK.String()][0], Reverse: revRules[srcPK.String()][0]}
+	respEdge := routing.EdgeRules{Desc: fwdRt.Desc, Forward: fwdRules[dstPK.String()][0], Reverse: revRules[dstPK.String()][0]}
 
 	log.Infof("Generated routing rules:\nInitiating edge: %v\nResponding edge: %v\nIntermediaries: %v",
 		initEdge.String(), respEdge.String(), interRules.String())
@@ -201,8 +202,8 @@ func GenerateRules(idR IDReserver, routes []routing.Route) (fwdRules, revRules, 
 		}
 
 		desc := route.Desc
-		srcPK := desc.SrcPK()
-		dstPK := desc.DstPK()
+		srcAddr := desc.Src()
+		dstAddr := desc.Dst()
 		srcPort := desc.SrcPort()
 		dstPort := desc.DstPort()
 
@@ -214,19 +215,30 @@ func GenerateRules(idR IDReserver, routes []routing.Route) (fwdRules, revRules, 
 				return nil, nil, nil, ErrNoKey
 			}
 
+			var port routing.Port
+			if desc.DstPK() == hop.From {
+				port = dstPort
+			}
+			if desc.SrcPK() == hop.From {
+				port = srcPort
+			}
+			addr := routing.Addr{
+				PubKey: hop.From,
+				Port:   port,
+			}
 			if i == 0 {
-				rule := routing.ForwardRule(route.KeepAlive, rID, nxtRID, hop.TpID, srcPK, dstPK, srcPort, dstPort)
-				fwdRules[hop.From] = append(fwdRules[hop.From], rule)
+				rule := routing.ForwardRule(route.KeepAlive, rID, nxtRID, hop.TpID, srcAddr.PubKey, dstAddr.PubKey, srcPort, dstPort)
+				fwdRules[addr.String()] = append(fwdRules[addr.String()], rule)
 			} else {
 				rule := routing.IntermediaryForwardRule(route.KeepAlive, rID, nxtRID, hop.TpID)
-				interRules[hop.From] = append(interRules[hop.From], rule)
+				interRules[addr.String()] = append(interRules[addr.String()], rule)
 			}
 
 			rID = nxtRID
 		}
 
-		rule := routing.ConsumeRule(route.KeepAlive, rID, srcPK, dstPK, srcPort, dstPort)
-		revRules[dstPK] = append(revRules[dstPK], rule)
+		rule := routing.ConsumeRule(route.KeepAlive, rID, srcAddr.PubKey, dstAddr.PubKey, srcPort, dstPort)
+		revRules[dstAddr.String()] = append(revRules[dstAddr.String()], rule)
 	}
 
 	return fwdRules, revRules, interRules, nil
@@ -247,7 +259,13 @@ func BroadcastIntermediaryRules(ctx context.Context, log logrus.FieldLogger, rtI
 	errCh := make(chan error, len(interRules))
 	defer close(errCh)
 
-	for pk, rules := range interRules {
+	for addr, rules := range interRules {
+		var pk cipher.PubKey
+		stringPK := strings.Split(addr, ":")
+		err = pk.Set(stringPK[0])
+		if err != nil {
+			return err
+		}
 		go func(pk cipher.PubKey, rules []routing.Rule) {
 			_, err := rtIDR.Client(pk).AddIntermediaryRules(ctx, rules)
 			if err != nil {

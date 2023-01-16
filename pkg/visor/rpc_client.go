@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -155,6 +156,18 @@ func (rc *rpcClient) StartApp(appName string) error {
 	return rc.Call("StartApp", &appName, &struct{}{})
 }
 
+// RegisterApp calls RegisterApp.
+func (rc *rpcClient) RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error) {
+	var procKey appcommon.ProcKey
+	err := rc.Call("RegisterApp", procConf, &procKey)
+	return procKey, err
+}
+
+// DeregisterApp calls DeregisterApp.
+func (rc *rpcClient) DeregisterApp(procKey appcommon.ProcKey) error {
+	return rc.Call("DeregisterApp", procKey, &struct{}{})
+}
+
 // StopApp calls StopApp.
 func (rc *rpcClient) StopApp(appName string) error {
 	return rc.Call("StopApp", &appName, &struct{}{})
@@ -236,6 +249,14 @@ func (rc *rpcClient) SetAppSecure(appName string, isSecure bool) error {
 	return rc.Call("SetAppSecure", &SetAppBoolIn{
 		AppName: appName,
 		Val:     isSecure,
+	}, &struct{}{})
+}
+
+// SetAppDNS implements API.
+func (rc *rpcClient) SetAppDNS(appName string, dnsAddr string) error {
+	return rc.Call("SetAppDNS", &SetAppStringIn{
+		AppName: appName,
+		Val:     dnsAddr,
 	}, &struct{}{})
 }
 
@@ -459,11 +480,84 @@ func (rc *rpcClient) RemoteVisors() ([]string, error) {
 	return output, nil
 }
 
+// Ports calls Ports.
+func (rc *rpcClient) Ports() (map[string]PortDetail, error) {
+	output := map[string]PortDetail{}
+	rc.Call("Ports", &struct{}{}, &output) // nolint
+	return output, nil
+}
+
 // IsDMSGClientReady return availability of dsmg client
 func (rc *rpcClient) IsDMSGClientReady() (bool, error) {
 	var out bool
 	err := rc.Call("IsDMSGClientReady", &struct{}{}, &out)
 	return out, err
+}
+
+// Connect calls Connect.
+func (rc *rpcClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
+	var out uuid.UUID
+	err := rc.Call("Connect", &ConnectIn{
+		RemotePK:   remotePK,
+		RemotePort: remotePort,
+		LocalPort:  localPort,
+	}, &out)
+	return out, err
+}
+
+// Disconnect calls Disconnect.
+func (rc *rpcClient) Disconnect(id uuid.UUID) error {
+	err := rc.Call("Disconnect", &id, &struct{}{})
+	return err
+}
+
+// List calls List.
+func (rc *rpcClient) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
+	var out map[uuid.UUID]*appnet.ForwardConn
+	err := rc.Call("List", &struct{}{}, &out)
+	return out, err
+}
+
+// RegisterHTTPPort calls RegisterHTTPPort.
+func (rc *rpcClient) RegisterHTTPPort(localPort int) error {
+	return rc.Call("RegisterHTTPPort", &localPort, &struct{}{})
+}
+
+// DeregisterHTTPPort calls DeregisterHTTPPort.
+func (rc *rpcClient) DeregisterHTTPPort(localPort int) error {
+	err := rc.Call("DeregisterHTTPPort", &localPort, &struct{}{})
+	return err
+}
+
+// ListHTTPPorts calls ListHTTPPorts.
+func (rc *rpcClient) ListHTTPPorts() ([]int, error) {
+	var out []int
+	err := rc.Call("ListHTTPPorts", &struct{}{}, &out)
+	return out, err
+}
+
+// DialPing calls DialPing.
+func (rc *rpcClient) DialPing(conf PingConfig) error {
+	return rc.Call("DialPing", &conf, &struct{}{})
+}
+
+// Ping calls Ping.
+func (rc *rpcClient) Ping(conf PingConfig) ([]time.Duration, error) {
+	var latencies []time.Duration
+	err := rc.Call("Ping", &conf, &latencies)
+	return latencies, err
+}
+
+// StopPing calls StopPing.
+func (rc *rpcClient) StopPing(pk cipher.PubKey) error {
+	return rc.Call("StopPing", &pk, &struct{}{})
+}
+
+// TestVisor calls TestVisor.
+func (rc *rpcClient) TestVisor(conf PingConfig) ([]TestResult, error) {
+	var results []TestResult
+	err := rc.Call("TestVisor", &conf, &results)
+	return results, err
 }
 
 // MockRPCClient mocks API.
@@ -692,6 +786,16 @@ func (*mockRPCClient) StartApp(string) error {
 	return nil
 }
 
+// RegisterApp implements API.
+func (*mockRPCClient) RegisterApp(appcommon.ProcConfig) (appcommon.ProcKey, error) {
+	return appcommon.ProcKey{}, nil
+}
+
+// DeregisterApp implements API.
+func (*mockRPCClient) DeregisterApp(appcommon.ProcKey) error {
+	return nil
+}
+
 // StopApp implements API.
 func (*mockRPCClient) StopApp(string) error {
 	return nil
@@ -817,6 +921,21 @@ func (mc *mockRPCClient) SetAppKillswitch(appName string, killswitch bool) error
 func (mc *mockRPCClient) SetAppSecure(appName string, isSecure bool) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks"
+
+		for i := range mc.o.Apps {
+			if mc.o.Apps[i].Name == socksName {
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", socksName)
+	})
+}
+
+// SetAppDNS implements API.
+func (mc *mockRPCClient) SetAppDNS(string, string) error {
+	return mc.do(true, func() error {
+		const socksName = "vpn-client"
 
 		for i := range mc.o.Apps {
 			if mc.o.Apps[i].Name == socksName {
@@ -1054,7 +1173,62 @@ func (mc *mockRPCClient) RemoteVisors() ([]string, error) {
 	return []string{}, nil
 }
 
+// Ports implements API
+func (mc *mockRPCClient) Ports() (map[string]PortDetail, error) {
+	return map[string]PortDetail{}, nil
+}
+
 // IsDMSGClientReady implements API.
 func (mc *mockRPCClient) IsDMSGClientReady() (bool, error) {
 	return false, nil
+}
+
+// Connect implements API.
+func (mc *mockRPCClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
+	return uuid.UUID{}, nil
+}
+
+// Disconnect implements API.
+func (mc *mockRPCClient) Disconnect(id uuid.UUID) error {
+	return nil
+}
+
+// List implements API.
+func (mc *mockRPCClient) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
+	return nil, nil
+}
+
+// RegisterHTTPPort implements API.
+func (mc *mockRPCClient) RegisterHTTPPort(localPort int) error {
+	return nil
+}
+
+// DeregisterHTTPPort implements API.
+func (mc *mockRPCClient) DeregisterHTTPPort(localPort int) error {
+	return nil
+}
+
+// ListHTTPPorts implements API.
+func (mc *mockRPCClient) ListHTTPPorts() ([]int, error) {
+	return nil, nil
+}
+
+// DialPing implements API.
+func (mc *mockRPCClient) DialPing(_ PingConfig) error {
+	return nil
+}
+
+// Ping implements API.
+func (mc *mockRPCClient) Ping(_ PingConfig) ([]time.Duration, error) {
+	return []time.Duration{}, nil
+}
+
+// StopPing implements API.
+func (mc *mockRPCClient) StopPing(_ cipher.PubKey) error {
+	return nil
+}
+
+// TestVisor implements API.
+func (mc *mockRPCClient) TestVisor(_ PingConfig) ([]TestResult, error) {
+	return []TestResult{}, nil
 }

@@ -198,6 +198,20 @@ func (_m *MockRPCIngressClient) SetError(appErr string) error {
 	return r0
 }
 
+// SetDetailedStatus provides a mock function with given fields: status
+func (_m *MockRPCIngressClient) SetAppPort(port routing.Port) error {
+	ret := _m.Called(port)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(routing.Port) error); ok {
+		r0 = rf(port)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // SetReadDeadline provides a mock function with given fields: connID, d
 func (_m *MockRPCIngressClient) SetReadDeadline(connID uint16, d time.Time) error {
 	ret := _m.Called(connID, d)

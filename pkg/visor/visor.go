@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/restart"
@@ -107,6 +108,12 @@ type Visor struct {
 	remoteVisors         map[cipher.PubKey]Conn // remote hypervisors the visor is attempting to connect to
 	connectedHypervisors map[cipher.PubKey]bool // remote hypervisors the visor is currently connected to
 	err error
+	allowedPorts         map[int]bool
+	allowedMX            *sync.RWMutex
+
+	pingConns    map[cipher.PubKey]ping
+	pingConnMx   *sync.Mutex
+	pingPcktSize int
 }
 
 // todo: consider moving module closing to the module system
@@ -129,6 +136,7 @@ func (v *Visor) MasterLogger() *logging.MasterLogger {
 	return v.conf.MasterLogger()
 }
 
+<<<<<<< HEAD
 func reload(v *Visor) error {
 	if confPath == visorconfig.Stdin {
 		v.log.Error("Cannot reload visor ; config was piped via stdin")
@@ -141,6 +149,10 @@ func reload(v *Visor) error {
 	v = nil
 	return run(nil)
 }
+=======
+// NewVisor constructs new Visor.
+func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Context, autoPeer bool, autoPeerIP string, dmsgServer string) (*Visor, bool) {
+>>>>>>> develop
 
 // RunVisor runs the visor
 func run(conf *visorconfig.V1) error {
@@ -234,10 +246,14 @@ func newVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		conf:                 conf,
 		restartCtx:           restartCtx,
 		initLock:             new(sync.RWMutex),
+		allowedMX:            new(sync.RWMutex),
 		isServicesHealthy:    newInternalHealthInfo(),
 		dtmReady:             make(chan struct{}),
 		stunReady:            make(chan struct{}),
 		connectedHypervisors: make(map[cipher.PubKey]bool),
+		pingConns:            make(map[cipher.PubKey]ping),
+		pingConnMx:           new(sync.Mutex),
+		allowedPorts:         make(map[int]bool),
 	}
 	v.isServicesHealthy.init()
 
@@ -254,6 +270,9 @@ func newVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	ctx = context.WithValue(ctx, visorKey, v)
 	v.runtimeErrors = make(chan error)
 	ctx = context.WithValue(ctx, runtimeErrsKey, v.runtimeErrors)
+	if dmsgServer != "" {
+		ctx = context.WithValue(ctx, "dmsgServer", dmsgServer) //nolint
+	}
 	registerModules(v.MasterLogger())
 	var mainModule visorinit.Module
 		if v.conf.Hypervisor == nil {
@@ -441,6 +460,15 @@ func (v *Visor) Close() error {
 
 	log := v.MasterLogger().PackageLogger("visor:shutdown")
 	log.Info("Begin shutdown.")
+
+	// Cleanly close ongoing forward conns
+	for _, forwardConn := range appnet.GetAllForwardConns() {
+		err := forwardConn.Close()
+		if err != nil {
+			log.WithError(err).Warn("Forward conn stopped with unexpected result.")
+			continue
+		}
+	}
 
 	for i := len(v.closeStack) - 1; i >= 0; i-- {
 		cl := v.closeStack[i]

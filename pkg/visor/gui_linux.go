@@ -1,5 +1,5 @@
-//go:build linux
-// +build linux
+//go:build linux && !withoutsystray
+// +build linux,!withoutsystray
 
 package visor
 
