@@ -299,11 +299,11 @@ func IPSkycoinFetch() (ipskycoin *IPSkycoin) {
 	return ipskycoin
 }
 
-// SurveyFile is the name of the survey file
-const SurveyFile string = "system.json"
+// NodeInfo is the name of the survey file
+const NodeInfo string = "node-info.json"
 
-// SurveySha256 is the name of the survey checksum file
-const SurveySha256 string = "system.sha"
+// NodeInfoSha256 is the name of the survey checksum file
+const NodeInfoSha256 string = "node-info.sha"
 
 // RewardFile is the name of the file containing skycoin rewards address and privacy setting
 const RewardFile string = "reward.txt"
