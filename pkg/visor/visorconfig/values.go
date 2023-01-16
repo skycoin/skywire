@@ -114,13 +114,13 @@ var (
 	// IsPublic advertises the visor in the service discovery
 	IsPublic = skyenv.IsPublic
 
-	// SurveyFile is the name of the survey file
-	SurveyFile = skyenv.SurveyFile
+	// NodeInfo is the name of the survey file
+	NodeInfo = skyenv.NodeInfo
 
-	// SurveySha256 is the name of the survey checksum file
-	SurveySha256 = skyenv.SurveySha256
+	// NodeInfoSha256 is the name of the survey checksum file
+	NodeInfoSha256 = skyenv.NodeInfoSha256
 
-	// RewardFile is the name of the file containing skycoin rewards address and privacy setting
+	// RewardFile is the name of the file containing skycoin reward address
 	RewardFile = skyenv.RewardFile
 )
 

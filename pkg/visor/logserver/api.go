@@ -48,9 +48,10 @@ func New(log *logging.Logger, tpLogPath, localPath, customPath string, printLog 
 	r.Handle("/*", http.StripPrefix("/", fsTP))
 
 	fsLocal := http.FileServer(http.Dir(localPath))
-	r.Handle("/"+visorconfig.SurveyFile, http.StripPrefix("/", fsLocal))
-
-	r.Handle("/"+visorconfig.RewardFile, http.StripPrefix("/", fsLocal))
+	r.Handle("/"+skyenv.NodeInfo, http.StripPrefix("/", fsLocal))
+	r.Handle("/"+skyenv.NodeInfoSha256, http.StripPrefix("/", fsLocal))
+	r.Handle("/"+skyenv.RewardFile, http.StripPrefix("/", fsLocal))
+	r.Handle("/transport_logs/*", http.StripPrefix("/", fsLocal))
 
 	fsCustom := http.FileServer(http.Dir(customPath))
 	r.Handle("/*", http.StripPrefix("/", fsCustom))

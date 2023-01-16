@@ -92,17 +92,18 @@ const (
 	// IsPublic advertises the visor in the service discovery
 	IsPublic = false
 
-	// SurveyFile is the name of the survey file
-	SurveyFile string = "system.json"
-
-	// SurveySha256 is the name of the survey checksum file
-	SurveySha256 string = "system.sha"
-
 	// RewardFile is the name of the file containing skycoin rewards address and privacy setting
 	RewardFile string = "reward.txt"
+
+	// NodeInfo is the name of the survey file
+	NodeInfo string = "node-info.json"
+
+	// NodeInfoSha256 is the name of the survey checksum file
+	NodeInfoSha256 string = "node-info.sha"
 )
 
-// PkgConfig struct contains paths specific to the linux packages
+
+// PkgConfig struct contains paths specific to the installation
 type PkgConfig struct {
 	LauncherBinPath `json:"launcher"`
 	LocalPath       string `json:"local_path"`
@@ -116,7 +117,7 @@ type LauncherBinPath struct {
 	BinPath string `json:"bin_path"`
 }
 
-// Hypervisor struct contains Hypervisor paths specific to the linux packages
+// Hypervisor struct contains Hypervisor paths specific to the installation
 type Hypervisor struct {
 	DbPath     string `json:"db_path"`
 	EnableAuth bool   `json:"enable_auth"`
