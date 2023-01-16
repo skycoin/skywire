@@ -1,3 +1,6 @@
+//go:build !withoutsystray
+// +build !withoutsystray
+
 // Package visor pkg/visor/systray.go
 package visor
 

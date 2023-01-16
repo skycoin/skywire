@@ -12,7 +12,6 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
-	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -94,11 +93,11 @@ var chvpkCmd = &cobra.Command{
 func HypervisorPort(cmdFlags *pflag.FlagSet) string {
 	rpcClient, err := clirpc.Client(cmdFlags)
 	if err != nil {
-		return hypervisorconfig.HTTPAddr()
+		return visorconfig.HTTPAddr()
 	}
 	ports, err := rpcClient.Ports()
 	if err != nil {
-		return hypervisorconfig.HTTPAddr()
+		return visorconfig.HTTPAddr()
 	}
 	return fmt.Sprintf(":%s", ports["hypervisor"])
 }

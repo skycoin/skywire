@@ -136,7 +136,7 @@ func (v *Visor) MasterLogger() *logging.MasterLogger {
 	return v.conf.MasterLogger()
 }
 
-<<<<<<< HEAD
+
 func reload(v *Visor) error {
 	if confPath == visorconfig.Stdin {
 		v.log.Error("Cannot reload visor ; config was piped via stdin")
@@ -149,10 +149,6 @@ func reload(v *Visor) error {
 	v = nil
 	return run(nil)
 }
-=======
-// NewVisor constructs new Visor.
-func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Context, autoPeer bool, autoPeerIP string, dmsgServer string) (*Visor, bool) {
->>>>>>> develop
 
 // RunVisor runs the visor
 func run(conf *visorconfig.V1) error {
