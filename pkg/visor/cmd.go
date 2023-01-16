@@ -54,6 +54,7 @@ var (
 	root bool // nolint:unused
 	// visorBuildInfo holds information about the build
 	visorBuildInfo *buildinfo.Info
+	dmsgServer     string
 )
 
 func init() {
@@ -65,6 +66,8 @@ func init() {
 	if ((visorconfig.OS == "linux") && !root) || ((visorconfig.OS == "mac") && !root) || (visorconfig.OS == "win") {
 		RootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
 	}
+	RootCmd.Flags().StringVar(&dmsgServer, "dmsg-server", "", "use specified dmsg server public key")
+	hiddenflags = append(hiddenflags, "dmsg-server")
 	RootCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
 	hiddenflags = append(hiddenflags, "stdin")
 	//only show flags for configs which exist

@@ -3,8 +3,8 @@ package visor
 
 import (
 	"context"
-	"errors"
 	"embed"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -38,7 +38,6 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorinit"
 )
-
 
 var (
 	// ErrAppProcNotRunning represents lookup error for App related calls.
@@ -107,7 +106,7 @@ type Visor struct {
 	autoPeerIP           string                 // autoPeerCmd is the command string used to return the public key of the hypervisor
 	remoteVisors         map[cipher.PubKey]Conn // remote hypervisors the visor is attempting to connect to
 	connectedHypervisors map[cipher.PubKey]bool // remote hypervisors the visor is currently connected to
-	err error
+	err                  error
 	allowedPorts         map[int]bool
 	allowedMX            *sync.RWMutex
 
@@ -135,7 +134,6 @@ func (v *Visor) pushCloseStack(src string, fn closeFn) {
 func (v *Visor) MasterLogger() *logging.MasterLogger {
 	return v.conf.MasterLogger()
 }
-
 
 func reload(v *Visor) error {
 	if confPath == visorconfig.Stdin {
@@ -217,7 +215,7 @@ func run(conf *visorconfig.V1) error {
 		cancel()
 	}
 	vis.SetLogstore(store)
-//	vis.uiAssets = uiAssets
+	//	vis.uiAssets = uiAssets
 	if launchBrowser {
 		if conf.Hypervisor == nil {
 			mLog.Errorln("Hypervisor not started - hypervisor UI unavailable")
@@ -271,13 +269,13 @@ func newVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	}
 	registerModules(v.MasterLogger())
 	var mainModule visorinit.Module
-		if v.conf.Hypervisor == nil {
-			mainModule = vis
-		} else {
-			log.Info("main module set to hypervisor")
+	if v.conf.Hypervisor == nil {
+		mainModule = vis
+	} else {
+		log.Info("main module set to hypervisor")
 
-	mainModule = hv
-		}
+		mainModule = hv
+	}
 	// run Transport module in a non blocking mode
 	go tm.InitConcurrent(ctx)
 	mainModule.InitConcurrent(ctx)
@@ -338,7 +336,6 @@ func (v *Visor) isStunReady() bool {
 	}
 }
 
-
 func initAutopeer(conf *visorconfig.V1) *visorconfig.V1 {
 	log := mLog.PackageLogger("visor:autopeer")
 
@@ -365,7 +362,7 @@ func initAutopeer(conf *visorconfig.V1) *visorconfig.V1 {
 	hvkey, err := FetchHvPk(autoPeerIP)
 	if err != nil {
 		log.WithError(err).Error("error autopeering")
- 		return conf
+		return conf
 	} else {
 		pubkey := cipher.PubKey{}
 		hvkey = strings.TrimSpace(hvkey)
@@ -400,7 +397,6 @@ func initLogger() *logging.MasterLogger {
 // runBrowser opens the hypervisor interface in the browser
 func runBrowser(httpAddr string, enableTLS bool) {
 	log := mLog.PackageLogger("visor:launch-browser")
-
 
 	addr := httpAddr
 	if addr[0] == ':' {
@@ -520,16 +516,15 @@ func (v *Visor) tpDiscClient() transport.DiscoveryClient {
 	return v.tpM.Conf.DiscoveryClient
 }
 
-
-
 //go:embed static
 var ui embed.FS
+
 func initUI() *fs.FS {
 	//initialize the ui
 	uiFS, err := fs.Sub(ui, "static")
 	if err != nil {
 		mLog.WithError(err).Error("frontend not found")
-//		return err
+		//		return err
 	}
 	return &uiFS
 

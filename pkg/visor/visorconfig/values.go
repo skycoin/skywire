@@ -53,7 +53,7 @@ var (
 	SkychatPort = skyenv.SkychatPort
 	SkychatAddr = skyenv.SkychatAddr
 
-	PingTestName        = skyenv.PingTestName
+	PingTestName = skyenv.PingTestName
 	PingTestPort = skyenv.PingTestPort
 
 	SkysocksName = skyenv.SkysocksName
@@ -71,15 +71,14 @@ var (
 	// TODO(darkrengarius): this one's not needed for the app to run but lack of it causes errors
 	VPNClientPort = skyenv.VPNClientPort
 
-	ExampleServerName              = skyenv.ExampleServerName
-	ExampleServerPort              = skyenv.ExampleServerPort
-	ExampleClientName              = skyenv.ExampleClientName
-	ExampleClientPort              = skyenv.ExampleClientPort
-	SkyForwardingServerName        = skyenv.SkyForwardingServerName
+	ExampleServerName       = skyenv.ExampleServerName
+	ExampleServerPort       = skyenv.ExampleServerPort
+	ExampleClientName       = skyenv.ExampleClientName
+	ExampleClientPort       = skyenv.ExampleClientPort
+	SkyForwardingServerName = skyenv.SkyForwardingServerName
 	SkyForwardingServerPort = skyenv.SkyForwardingServerPort
-	SkyPingName                    = skyenv.SkyPingName
-	SkyPingPort                    = skyenv.SkyPingPort
-
+	SkyPingName             = skyenv.SkyPingName
+	SkyPingPort             = skyenv.SkyPingPort
 
 	// RPC constants.
 	RPCAddr             = skyenv.RPCAddr

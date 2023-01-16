@@ -1,6 +1,7 @@
-// Package cliconfig cmd/skywire-cli/commands/config/auto.go
 //go:build linux
 // +build linux
+
+// Package cliconfig cmd/skywire-cli/commands/config/auto.go
 package cliconfig
 
 import (
@@ -29,11 +30,11 @@ const (
 
 var (
 	isStartedWithSystemd bool
-	startService bool
+	startService         bool
 	cmds                 string
 	isRunScript          bool
-	isEnvs bool
-	skyenvFileExists	bool
+	isEnvs               bool
+	skyenvFileExists     bool
 )
 
 func init() {
@@ -62,9 +63,9 @@ var autoConfigCmd = &cobra.Command{
 		}
 		// source or call the visorconfig file ; ignore errors as the file is not required to exist
 		if _, err := os.Stat(visorconfig.SkyEnvs()); err == nil {
-			skyenvFileExists=true
-				cmds = `bash -c "source ` + visorconfig.SkyEnvs() + `"`
-				_, _ = script.Exec(cmds).Stdout() //nolint:errcheck
+			skyenvFileExists = true
+			cmds = `bash -c "source ` + visorconfig.SkyEnvs() + `"`
+			_, _ = script.Exec(cmds).Stdout() //nolint:errcheck
 		}
 		//in some cases this command may be called automatically
 		//in the instance this is undesirable, NOAUTOCONFIG=true exits immediately
@@ -92,31 +93,31 @@ var autoConfigCmd = &cobra.Command{
 		}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-			if isRunScript {
-				err := os.WriteFile("/tmp/skywire-autoconfig", []byte(skywireautoconfig), 0755)
-				if err != nil {
-					fmt.Printf("%v", err)
-					os.Exit(1)
-				}
-				cmd := `bash -c "/tmp/skywire-autoconfig"`
-				_, err = script.Exec(cmd).Stdout()
-				if err != nil {
-					fmt.Printf("%v", err)
-				}
-				os.Remove("/tmp/skywire-autoconfig")
-				os.Exit(0)
+		if isRunScript {
+			err := os.WriteFile("/tmp/skywire-autoconfig", []byte(skywireautoconfig), 0755)
+			if err != nil {
+				fmt.Printf("%v", err)
+				os.Exit(1)
 			}
-			//
-			// if the command is run in the DMSGPTY terminal, the process will be interrupted before the command can complete
-			// similarly, if this command is run as a child process of the systemd service, it will be killed by systemd before it completes!
-			// DMSGPTYTERM=1 is exported by the dmsgpty terminal to avoid stopping the services
-			if os.Getenv("DMSGPTYTERM") != "1" && isStartedWithSystemd {
-				//halt any running instance of defunct systemd services no longer provided by the package / installation
-				_, _ = script.Exec(`bash -c "systemctl is-active --quiet skywire-visor && systemctl disable --now skywire-visor 2> /dev/null"`).Stdout()           //nolint:errcheck
-				_, _ = script.Exec(`bash -c "systemctl is-active --quiet skywire-hypervisor && systemctl disable --now skywire-hypervisor 2> /dev/null"`).Stdout() //nolint:errcheck
+			cmd := `bash -c "/tmp/skywire-autoconfig"`
+			_, err = script.Exec(cmd).Stdout()
+			if err != nil {
+				fmt.Printf("%v", err)
 			}
-			//disable the skywire-autoconfig service which runs on skybian firstboot
-			_, _ = script.Exec(`bash -c "systemctl is-active --quiet skywire-autoconfig && systemctl disable skywire-autoconfig 2> /dev/null"`).Stdout() //nolint:errcheck
+			os.Remove("/tmp/skywire-autoconfig")
+			os.Exit(0)
+		}
+		//
+		// if the command is run in the DMSGPTY terminal, the process will be interrupted before the command can complete
+		// similarly, if this command is run as a child process of the systemd service, it will be killed by systemd before it completes!
+		// DMSGPTYTERM=1 is exported by the dmsgpty terminal to avoid stopping the services
+		if os.Getenv("DMSGPTYTERM") != "1" && isStartedWithSystemd {
+			//halt any running instance of defunct systemd services no longer provided by the package / installation
+			_, _ = script.Exec(`bash -c "systemctl is-active --quiet skywire-visor && systemctl disable --now skywire-visor 2> /dev/null"`).Stdout()           //nolint:errcheck
+			_, _ = script.Exec(`bash -c "systemctl is-active --quiet skywire-hypervisor && systemctl disable --now skywire-hypervisor 2> /dev/null"`).Stdout() //nolint:errcheck
+		}
+		//disable the skywire-autoconfig service which runs on skybian firstboot
+		_, _ = script.Exec(`bash -c "systemctl is-active --quiet skywire-autoconfig && systemctl disable skywire-autoconfig 2> /dev/null"`).Stdout() //nolint:errcheck
 		//create by default the local hypervisor config if no config exists ; retain any hypervisor config which exists
 		_, err := os.Stat(visorconfig.SkywireConfig())
 		if err != nil {
@@ -175,9 +176,9 @@ var autoConfigCmd = &cobra.Command{
 		var cmdslc []string
 		confgen := fmt.Sprintf(`%sskywire-cli %sconfig gen`, cyan, yellow)
 		cmdslc = append(cmdslc, ` -bepr`)
-//		cmdslc = append(cmdslc, ` -e`)
-//		cmdslc = append(cmdslc, ` -p`)
-//		cmdslc = append(cmdslc, ` -r`)
+		//		cmdslc = append(cmdslc, ` -e`)
+		//		cmdslc = append(cmdslc, ` -p`)
+		//		cmdslc = append(cmdslc, ` -r`)
 		// retain hypervisors when regenerating config
 		if isRetainHypervisors {
 			cmdslc = append(cmdslc, ` -x`)
@@ -271,7 +272,7 @@ var autoConfigCmd = &cobra.Command{
 			res, _ = script.Exec(cmds).String() //nolint:errcheck
 		}
 		if os.Getenv("SKYBIAN") == "true" || res == "true" {
-			startService=true
+			startService = true
 			now = "--now"
 			cmds = fmt.Sprintf(`bash -c 'systemctl enable %s %s'`, now, svc)
 			fmt.Printf("%s", mesg3(fmt.Sprintf("Enabling %s service%s..\n %s", svc, strings.Replace(now, "--", " and starting ", -1), cmds)))
@@ -316,11 +317,11 @@ var autoConfigCmd = &cobra.Command{
 				}
 			}
 			//needs fix output format for skywire-cli vpn url -p
-//			cmds = `bash -c "skywire-cli vpn url -p  | tail -n1"`
-//			if vpnurl, err := script.Exec(cmds).String(); err == nil {
-//				fmt.Printf("%s", mesg2(fmt.Sprintf("Use the vpn:\n%s%s%s", red, strings.TrimSuffix(vpnurl, "\n"), nc)))
-//			}
-//workaround
+			//			cmds = `bash -c "skywire-cli vpn url -p  | tail -n1"`
+			//			if vpnurl, err := script.Exec(cmds).String(); err == nil {
+			//				fmt.Printf("%s", mesg2(fmt.Sprintf("Use the vpn:\n%s%s%s", red, strings.TrimSuffix(vpnurl, "\n"), nc)))
+			//			}
+			//workaround
 			fmt.Printf("%s", mesg2(fmt.Sprintf("Use the vpn:\n%shttp://127.0.0.1:8000/#/vpn/%s%s", red, publickey, nc)))
 			hpvurl := "Access hypervisor UI from local network here:"
 			cmds = `bash -c "ip addr show | grep -w inet | grep -v 127.0.0.1 | awk '{ print $2}' | cut -d \"/\" -f 1"`

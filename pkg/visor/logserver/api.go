@@ -13,7 +13,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 // API register all the API endpoints.

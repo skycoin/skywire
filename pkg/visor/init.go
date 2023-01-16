@@ -45,6 +45,7 @@ import (
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
@@ -466,29 +467,29 @@ func initSystemSurvey(ctx context.Context, v *Visor, log *logging.Logger) error 
 				log.WithError(err).Error("Could not marshal json.")
 				return err
 			}
-			err = os.WriteFile(v.conf.LocalPath+"/"+visorconfig.SurveyFile, s, 0644) //nolint
+			err = os.WriteFile(v.conf.LocalPath+"/"+visorconfig.NodeInfo, s, 0644) //nolint
 			if err != nil {
 				log.WithError(err).Error("Failed to write system hardware survey to file.")
 				return err
 			}
 			log.Info("Generating system survey")
-			f, err := os.ReadFile(filepath.Clean(v.conf.LocalPath + "/" + visorconfig.SurveyFile))
+			f, err := os.ReadFile(filepath.Clean(v.conf.LocalPath + "/" + visorconfig.NodeInfo))
 			if err != nil {
 				log.WithError(err).Error("Failed to write system hardware survey to file.")
 				return err
 			}
 			srvySha256Byte32 := sha256.Sum256([]byte(f))
-			err = os.WriteFile(v.conf.LocalPath+"/"+visorconfig.SurveySha256, srvySha256Byte32[:], 0644) //nolint
+			err = os.WriteFile(v.conf.LocalPath+"/"+visorconfig.NodeInfoSha256, srvySha256Byte32[:], 0644) //nolint
 			if err != nil {
 				log.WithError(err).Error("Failed to write system hardware survey to file.")
 				return err
 			}
 		} else {
-			err := os.Remove(visorconfig.PackageConfig().LocalPath + "/" + visorconfig.SurveyFile)
+			err := os.Remove(visorconfig.PackageConfig().LocalPath + "/" + visorconfig.NodeInfo)
 			if err == nil {
 				log.Debug("Removed hadware survey for visor not seeking rewards")
 			}
-			err = os.Remove(visorconfig.PackageConfig().LocalPath + "/" + visorconfig.SurveySha256)
+			err = os.Remove(visorconfig.PackageConfig().LocalPath + "/" + visorconfig.NodeInfoSha256)
 			if err == nil {
 				log.Debug("Removed hadware survey checksum file")
 			}
@@ -1524,7 +1525,7 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 		if err != nil {
 			v.log.WithError(err).Error("Hypervisor exited with error.")
 		}
-//		cancel()
+		//		cancel()
 	}()
 
 	v.pushCloseStack("hypervisor", func() error {

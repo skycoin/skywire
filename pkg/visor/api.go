@@ -30,6 +30,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
@@ -52,6 +53,7 @@ type API interface {
 	GetLogRotationInterval() (visorconfig.Duration, error)
 	SetLogRotationInterval(visorconfig.Duration) error
 	IsDMSGClientReady() (bool, error)
+	Ports() (map[string]PortDetail, error)
 
 	//reward setting
 	SetRewardAddress(string) (string, error)
@@ -78,9 +80,6 @@ type API interface {
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
-	VPNServers(version, country string) ([]servicedisc.Service, error)
-	RemoteVisors() ([]string, error)
-	Ports() (map[string]PortDetail, error)
 
 	//vpn controls
 	StartVPNClient(pk cipher.PubKey) error
@@ -107,13 +106,6 @@ type API interface {
 	RemoveRoutingRule(key routing.RouteID) error
 	RouteGroups() ([]RouteGroupInfo, error)
 	SetMinHops(uint16) error
-
-	GetPersistentTransports() ([]transport.PersistentTransports, error)
-	SetPersistentTransports([]transport.PersistentTransports) error
-	GetLogRotationInterval() (visorconfig.Duration, error)
-	SetLogRotationInterval(visorconfig.Duration) error
-
-	IsDMSGClientReady() (bool, error)
 
 	RegisterHTTPPort(localPort int) error
 	DeregisterHTTPPort(localPort int) error
@@ -675,7 +667,7 @@ func (v *Visor) SetAppDNS(appName string, dnsAddr string) error {
 		pkArgName = "-dns"
 	)
 
-	if err := v.conf.UpdateAppArg(v.appL, appName, pkArgName, dnsAddr); err != nil {
+	if err := v.conf.UpdateAppArg(appName, pkArgName, dnsAddr); err != nil {
 		return err
 	}
 
