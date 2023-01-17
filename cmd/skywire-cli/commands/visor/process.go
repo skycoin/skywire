@@ -76,16 +76,12 @@ var restartCmd = &cobra.Command{
 }
 
 func gort(ctx context.Context, fn func() error) error {
-	errs, ctx := errgroup.WithContext(ctx)
+	errs, _ := errgroup.WithContext(ctx)
 	errs.Go(func() error {
 		return fn()
 	})
 	// Wait for completion and return the first error (if any)
 	return errs.Wait()
-}
-
-func main() {
-	fmt.Println()
 }
 
 var reloadCmd = &cobra.Command{
@@ -104,10 +100,9 @@ var reloadCmd = &cobra.Command{
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error reloading visor"))
 			}
 		}()
-		select {
-		case <-time.After(1 * time.Second):
-			internal.PrintOutput(cmd.Flags(), "Visor reloaded", fmt.Sprintln("Visor reloaded"))
-		}
+
+		<-time.After(1 * time.Second)
+		internal.PrintOutput(cmd.Flags(), "Visor reloaded", fmt.Sprintln("Visor reloaded"))
 
 	},
 }

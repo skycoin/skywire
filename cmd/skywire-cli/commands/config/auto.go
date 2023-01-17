@@ -94,7 +94,7 @@ var autoConfigCmd = &cobra.Command{
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		if isRunScript {
-			err := os.WriteFile("/tmp/skywire-autoconfig", []byte(skywireautoconfig), 0755)
+			err := os.WriteFile("/tmp/skywire-autoconfig", []byte(skywireautoconfig), 0755) //nolint
 			if err != nil {
 				fmt.Printf("%v", err)
 				os.Exit(1)
@@ -104,7 +104,7 @@ var autoConfigCmd = &cobra.Command{
 			if err != nil {
 				fmt.Printf("%v", err)
 			}
-			os.Remove("/tmp/skywire-autoconfig")
+			os.Remove("/tmp/skywire-autoconfig") //nolint
 			os.Exit(0)
 		}
 		//
@@ -261,9 +261,6 @@ var autoConfigCmd = &cobra.Command{
 
 		// #check if >>this script<< is a child process of the systemd service i.e.:  run in dmsgpty terminal
 		var now string
-		if isStartedWithSystemd {
-			now = "--now"
-		}
 
 		svc := "skywire"
 		//start the service on ${SKYBIAN} == "true"

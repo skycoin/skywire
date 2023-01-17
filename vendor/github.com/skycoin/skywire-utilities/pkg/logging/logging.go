@@ -6,7 +6,6 @@ package logging
 import (
 	"errors"
 	"io"
-	"io/ioutil"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -82,5 +81,5 @@ func SetOutputTo(w io.Writer) {
 
 // Disable disables the logger completely
 func Disable() {
-	log.Out = ioutil.Discard
+	log.Out = io.Discard
 }

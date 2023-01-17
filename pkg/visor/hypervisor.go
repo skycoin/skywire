@@ -66,7 +66,7 @@ type Hypervisor struct {
 	logger       *logging.Logger
 }
 
-// New creates a new Hypervisor.
+// NewHypervisor creates a new Hypervisor.
 func NewHypervisor(config visorconfig.HypervisorConfig, visor *Visor, dmsgC *dmsg.Client) (*Hypervisor, error) {
 	config.Cookies.TLS = config.EnableTLS
 

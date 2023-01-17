@@ -18,7 +18,7 @@ var (
 	sk                     cipher.SecKey
 	output                 string
 	confPath               string
-	configName             string
+	configName             string //nolint Note: configName used, but golangci-lint marked it unused in wrong
 	isStdout               bool
 	isRegen                bool
 	isRetainHypervisors    bool

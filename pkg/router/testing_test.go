@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
@@ -30,7 +29,7 @@ func newMockDialer(t *testing.T, gateways map[cipher.PubKey]interface{}) network
 		})
 
 		rpcS := rpc.NewServer()
-		require.NoError(t, rpcS.RegisterName(router.RPCName, gw))
+		require.NoError(t, rpcS.RegisterName(RPCName, gw))
 		go rpcS.ServeConn(connS)
 
 		return connC
@@ -95,11 +94,11 @@ func newMockReserver(t *testing.T, gateways map[cipher.PubKey]interface{}) IDRes
 		})
 
 		rpcS := rpc.NewServer()
-		require.NoError(t, rpcS.RegisterName(router.RPCName, gw))
+		require.NoError(t, rpcS.RegisterName(RPCName, gw))
 		go rpcS.ServeConn(connS)
 
 		pkRaw, _ := pk.(cipher.PubKey)
-		rc := router.NewClientFromRaw(connC, pkRaw)
+		rc := NewClientFromRaw(connC, pkRaw)
 		rtIDR.On("Client", pk).Return(rc)
 		rtIDR.On("PopID", mock.Anything).Return(routing.RouteID(1), true)
 	}

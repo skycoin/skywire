@@ -21,7 +21,7 @@ func runAppSystray() {
 	go func() {
 		err := run(conf)
 		if err != nil {
-			mLog.WithError(err).Fatal("a fatal error occured")
+			mLog.WithError(err).Fatal("a fatal error occurred")
 		}
 		systray.Quit()
 	}()
@@ -54,7 +54,7 @@ func quitSystray() { //nolint:unused
 func runApp() {
 	err := run(nil)
 	if err != nil {
-		mLog.WithError(err).Fatal("a fatal error occured")
+		mLog.WithError(err).Fatal("a fatal error occurred")
 	}
 
 }

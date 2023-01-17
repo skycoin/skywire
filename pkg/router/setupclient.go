@@ -28,7 +28,7 @@ type SetupClient struct {
 	rpc        *rpc.Client
 }
 
-// NewClient creates a new SetupClient.
+// NewSetupClient creates a new SetupClient.
 func NewSetupClient(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, setupNodes []cipher.PubKey) (*SetupClient, error) {
 	client := &SetupClient{
 		log:        log,

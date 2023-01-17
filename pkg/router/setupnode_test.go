@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"os"
 	"strconv"
 	"sync"
 	"testing"
@@ -17,26 +16,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
 )
-
-func TestMain(m *testing.M) {
-	loggingLevel, ok := os.LookupEnv("TEST_LOGGING_LEVEL")
-	if ok {
-		lvl, err := logging.LevelFromString(loggingLevel)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		logging.SetLevel(lvl)
-	} else {
-		logging.Disable()
-	}
-
-	os.Exit(m.Run())
-}
 
 func TestCreateRouteGroup(t *testing.T) {
 	pkA, _ := cipher.GenerateKeyPair()

@@ -74,10 +74,6 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "sk")
 	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", false, "use test deployment "+testConf)
 	gHiddenFlags = append(gHiddenFlags, "testenv")
-	homepath := skyenv.HomePath()
-	if homepath != "" {
-		genConfigCmd.Flags().BoolVarP(&isUsrEnv, "user", "u", false, "use paths for user space: "+homepath)
-	}
 	genConfigCmd.Flags().BoolVarP(&isVpnServerEnable, "servevpn", "v", false, "enable vpn server")
 	gHiddenFlags = append(gHiddenFlags, "servevpn")
 	genConfigCmd.Flags().BoolVarP(&isHide, "hide", "w", false, "dont print the config to the terminal")

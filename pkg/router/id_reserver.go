@@ -1,4 +1,4 @@
-// Package setup pkg/setup/id_reserver.go
+// Package router pkg/router/id_reserver.go
 package router
 
 import (

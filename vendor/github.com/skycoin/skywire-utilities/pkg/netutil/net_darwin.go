@@ -1,6 +1,7 @@
 //go:build darwin
 // +build darwin
 
+// Package netutil pkg/netutil/net_darwin.go
 package netutil
 
 import (

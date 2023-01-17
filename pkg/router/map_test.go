@@ -18,7 +18,6 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
@@ -52,7 +51,7 @@ func TestMakeMap(t *testing.T) {
 			dialer := newTestDialer(total)
 
 			// Arrange: successful mock router
-			okayR := new(router.MockRouter)
+			okayR := new(MockRouter)
 			okayR.On("ReserveKeys", mock.Anything).Return([]routing.RouteID{}, nil)
 
 			// Arrange: serve router gateways (via single mock router)
@@ -100,14 +99,14 @@ func TestMakeMap(t *testing.T) {
 }
 
 // serves a router over RPC and returns the bound TCP address
-func serveRouterRPC(t *testing.T, r router.Router) (addr string) {
+func serveRouterRPC(t *testing.T, r Router) (addr string) {
 	l, err := nettest.NewLocalListener("tcp")
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, l.Close()) })
 
 	mlog := logging.NewMasterLogger()
 	rpcS := rpc.NewServer()
-	require.NoError(t, rpcS.Register(router.NewRPCGateway(r, mlog)))
+	require.NoError(t, rpcS.Register(NewRPCGateway(r, mlog)))
 	go rpcS.Accept(l)
 
 	return l.Addr().String()

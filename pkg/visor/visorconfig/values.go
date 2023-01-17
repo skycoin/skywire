@@ -23,6 +23,7 @@ import (
 
 var (
 	// config file constants
+
 	// ConfigName is the default config name. Updated by setting config file path.
 	ConfigName = skyenv.ConfigName
 	// DMSGHTTPName is the default dmsghttp config name
@@ -30,82 +31,93 @@ var (
 
 	// Dmsg port constants.
 	// TODO(evanlinjin): Define these properly. These are currently random.
-	DmsgCtrlPort           = skyenv.DmsgCtrlPort           // Listening port for dmsgctrl protocol (similar to TCP Echo Protocol).
-	DmsgSetupPort          = skyenv.DmsgSetupPort          // Listening port of a setup node.
-	DmsgHypervisorPort     = skyenv.DmsgHypervisorPort     // Listening port of a hypervisor for incoming RPC visor connections over dmsg.
-	DmsgTransportSetupPort = skyenv.DmsgTransportSetupPort // Listening port for transport setup RPC over dmsg.
-	DmsgHTTPPort           = dmsg.DefaultDmsgHTTPPort      // Listening port for dmsghttp logserver.
-	DmsgAwaitSetupPort     = skyenv.DmsgAwaitSetupPort     // Listening port of a visor for setup operations.
+
+	DmsgCtrlPort           = skyenv.DmsgCtrlPort           // DmsgCtrlPort Listening port for dmsgctrl protocol (similar to TCP Echo Protocol).
+	DmsgSetupPort          = skyenv.DmsgSetupPort          // DmsgSetupPort Listening port of a setup node.
+	DmsgHypervisorPort     = skyenv.DmsgHypervisorPort     // DmsgHypervisorPort Listening port of a hypervisor for incoming RPC visor connections over dmsg.
+	DmsgTransportSetupPort = skyenv.DmsgTransportSetupPort // DmsgTransportSetupPort Listening port for transport setup RPC over dmsg.
+	DmsgHTTPPort           = dmsg.DefaultDmsgHTTPPort      // DmsgHTTPPort Listening port for dmsghttp logserver.
+	DmsgAwaitSetupPort     = skyenv.DmsgAwaitSetupPort     // DmsgAwaitSetupPort Listening port of a visor for setup operations.
 
 	// Transport port constants.
-	TransportPort     = skyenv.TransportPort // Listening port of a visor for incoming transports.
-	PublicAutoconnect = skyenv.PublicAutoconnect
+
+	TransportPort     = skyenv.TransportPort     // TransportPort Listening port of a visor for incoming transports.
+	PublicAutoconnect = skyenv.PublicAutoconnect // PublicAutoconnect ...
 
 	// Dmsgpty constants.
-	DmsgPtyPort   = skyenv.DmsgPtyPort
-	DmsgPtyCLINet = skyenv.DmsgPtyCLINet
+
+	DmsgPtyPort   = skyenv.DmsgPtyPort   // DmsgPtyPort ...
+	DmsgPtyCLINet = skyenv.DmsgPtyCLINet // DmsgPtyCLINet ...
 
 	// Skywire-TCP constants.
-	STCPAddr = skyenv.STCPAddr
+
+	STCPAddr = skyenv.STCPAddr // STCPAddr ...
 
 	// Default skywire app constants.
-	SkychatName = skyenv.SkychatName
-	SkychatPort = skyenv.SkychatPort
-	SkychatAddr = skyenv.SkychatAddr
 
-	PingTestName = skyenv.PingTestName
-	PingTestPort = skyenv.PingTestPort
+	SkychatName = skyenv.SkychatName // SkychatName ...
+	SkychatPort = skyenv.SkychatPort // SkychatPort ...
+	SkychatAddr = skyenv.SkychatAddr // SkychatAddr ...
 
-	SkysocksName = skyenv.SkysocksName
-	SkysocksPort = skyenv.SkysocksPort
+	PingTestName = skyenv.PingTestName // PingTestName ...
+	PingTestPort = skyenv.PingTestPort // PingTestPort ...
 
-	SkysocksClientName = skyenv.SkysocksClientName
-	SkysocksClientPort = skyenv.SkysocksClientPort
-	SkysocksClientAddr = skyenv.SkysocksClientAddr
+	SkysocksName = skyenv.SkysocksName // SkysocksName ...
+	SkysocksPort = skyenv.SkysocksPort // SkysocksPort ...
 
-	VPNServerName = skyenv.VPNServerName
-	VPNServerPort = skyenv.VPNServerPort
+	SkysocksClientName = skyenv.SkysocksClientName // SkysocksClientName ...
+	SkysocksClientPort = skyenv.SkysocksClientPort // SkysocksClientPort ...
+	SkysocksClientAddr = skyenv.SkysocksClientAddr // SkysocksClientAddr ...
 
-	VPNClientName = skyenv.VPNClientName
+	VPNServerName = skyenv.VPNServerName // VPNServerName ...
+	VPNServerPort = skyenv.VPNServerPort // VPNServerPort ...
+
+	VPNClientName = skyenv.VPNClientName // VPNClientName ...
 
 	// TODO(darkrengarius): this one's not needed for the app to run but lack of it causes errors
-	VPNClientPort = skyenv.VPNClientPort
 
-	ExampleServerName       = skyenv.ExampleServerName
-	ExampleServerPort       = skyenv.ExampleServerPort
-	ExampleClientName       = skyenv.ExampleClientName
-	ExampleClientPort       = skyenv.ExampleClientPort
-	SkyForwardingServerName = skyenv.SkyForwardingServerName
-	SkyForwardingServerPort = skyenv.SkyForwardingServerPort
-	SkyPingName             = skyenv.SkyPingName
-	SkyPingPort             = skyenv.SkyPingPort
+	VPNClientPort = skyenv.VPNClientPort // VPNClientPort ...
+
+	ExampleServerName       = skyenv.ExampleServerName       // ExampleServerName ...
+	ExampleServerPort       = skyenv.ExampleServerPort       // ExampleServerPort ...
+	ExampleClientName       = skyenv.ExampleClientName       // ExampleClientName ...
+	ExampleClientPort       = skyenv.ExampleClientPort       // ExampleClientPort ...
+	SkyForwardingServerName = skyenv.SkyForwardingServerName // SkyForwardingServerName ...
+	SkyForwardingServerPort = skyenv.SkyForwardingServerPort // SkyForwardingServerPort ...
+	SkyPingName             = skyenv.SkyPingName             // SkyPingName ...
+	SkyPingPort             = skyenv.SkyPingPort             // SkyPingPort ...
 
 	// RPC constants.
-	RPCAddr             = skyenv.RPCAddr
-	RPCTimeout          = skyenv.RPCTimeout
-	TransportRPCTimeout = skyenv.TransportRPCTimeout
-	UpdateRPCTimeout    = skyenv.UpdateRPCTimeout
+
+	RPCAddr             = skyenv.RPCAddr             // RPCAddr ...
+	RPCTimeout          = skyenv.RPCTimeout          // RPCTimeout ...
+	TransportRPCTimeout = skyenv.TransportRPCTimeout // TransportRPCTimeout ...
+	UpdateRPCTimeout    = skyenv.UpdateRPCTimeout    // UpdateRPCTimeout ...
 
 	// Default skywire app server and discovery constants
-	AppSrvAddr                = skyenv.AppSrvAddr
-	ServiceDiscUpdateInterval = skyenv.ServiceDiscUpdateInterval
-	AppBinPath                = skyenv.AppBinPath
-	LogLevel                  = skyenv.LogLevel
+
+	AppSrvAddr                = skyenv.AppSrvAddr                // AppSrvAddr ...
+	ServiceDiscUpdateInterval = skyenv.ServiceDiscUpdateInterval // ServiceDiscUpdateInterval ...
+	AppBinPath                = skyenv.AppBinPath                // AppBinPath ...
+	LogLevel                  = skyenv.LogLevel                  // LogLevel ...
 
 	// Routing constants
-	TpLogStore = skyenv.TpLogStore
-	Custom     = skyenv.Custom
+
+	TpLogStore = skyenv.TpLogStore // TpLogStore ...
+	Custom     = skyenv.Custom     // Custom ...
 
 	// Local constants
-	LocalPath = skyenv.LocalPath
+
+	LocalPath = skyenv.LocalPath // LocalPath ...
 
 	// Default hypervisor constants
-	HypervisorDB      = skyenv.HypervisorDB
-	EnableAuth        = skyenv.EnableAuth
-	PackageEnableAuth = skyenv.PackageEnableAuth
-	EnableTLS         = skyenv.EnableTLS
-	TLSKey            = skyenv.TLSKey
-	TLSCert           = skyenv.TLSCert
+
+	HypervisorDB      = skyenv.HypervisorDB      // HypervisorDB ...
+	EnableAuth        = skyenv.EnableAuth        // EnableAuth ...
+	PackageEnableAuth = skyenv.PackageEnableAuth // PackageEnableAuth ...
+	EnableTLS         = skyenv.EnableTLS         // EnableTLS ...
+	TLSKey            = skyenv.TLSKey            // TLSKey ...
+	TLSCert           = skyenv.TLSCert           // TLSCert ...
 
 	// IPCShutdownMessageType sends IPC shutdown message type
 	IPCShutdownMessageType = skyenv.IPCShutdownMessageType
@@ -132,7 +144,7 @@ type PkgConfig struct {
 	//		TLSKeyFile  string `json:"tls_key_file"`
 }
 
-// Launcher struct contains the BinPath specific to the installation
+// LauncherBinPath struct contains the BinPath specific to the installation
 type LauncherBinPath struct {
 	BinPath string `json:"bin_path"`
 }

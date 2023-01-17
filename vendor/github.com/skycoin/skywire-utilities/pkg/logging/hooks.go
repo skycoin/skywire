@@ -1,3 +1,4 @@
+// Package logging pkg/logging/hooks.go
 package logging
 
 import (

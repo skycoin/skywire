@@ -106,7 +106,6 @@ type Visor struct {
 	autoPeerIP           string                 // autoPeerCmd is the command string used to return the public key of the hypervisor
 	remoteVisors         map[cipher.PubKey]Conn // remote hypervisors the visor is attempting to connect to
 	connectedHypervisors map[cipher.PubKey]bool // remote hypervisors the visor is currently connected to
-	err                  error
 	allowedPorts         map[int]bool
 	allowedMX            *sync.RWMutex
 
@@ -203,14 +202,14 @@ func run(conf *visorconfig.V1) error {
 		case <-ctx.Done():
 			mLog.Info("Visor closed early.")
 		default:
-			return fmt.Errorf("Failed to start visor.")
+			return fmt.Errorf("Failed to start visor.") //nolint
 		}
 		return nil
 	}
 
 	stopVisorFn = func() {
 		if err := vis.Close(); err != nil {
-			mLog.WithError(err).Error("Visor closed with error.")
+			mLog.WithError(err).Error("Visor closed with error.") //nolint
 		}
 		cancel()
 	}
@@ -232,9 +231,8 @@ func run(conf *visorconfig.V1) error {
 // newVisor constructs new Visor.
 func newVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	if conf == nil {
-		initConfig()
+		conf = initConfig()
 	}
-	conf.MasterLogger().PackageLogger("visor")
 	v := &Visor{
 		log:                  conf.MasterLogger().PackageLogger("visor"),
 		conf:                 conf,
@@ -363,18 +361,18 @@ func initAutopeer(conf *visorconfig.V1) *visorconfig.V1 {
 	if err != nil {
 		log.WithError(err).Error("error autopeering")
 		return conf
-	} else {
-		pubkey := cipher.PubKey{}
-		hvkey = strings.TrimSpace(hvkey)
-		hypervisorPKsSlice := strings.Split(hvkey, ",")
-		for _, pubkeyString := range hypervisorPKsSlice {
-			if err := pubkey.Set(pubkeyString); err != nil {
-				log.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
-				continue
-			}
-			log.Infof("%s PK added as remote hypervisor PK", pubkeyString)
-			conf.Hypervisors = append(conf.Hypervisors, pubkey)
+	}
+
+	pubkey := cipher.PubKey{}
+	hvkey = strings.TrimSpace(hvkey)
+	hypervisorPKsSlice := strings.Split(hvkey, ",")
+	for _, pubkeyString := range hypervisorPKsSlice {
+		if err := pubkey.Set(pubkeyString); err != nil {
+			log.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
+			continue
 		}
+		log.Infof("%s PK added as remote hypervisor PK", pubkeyString)
+		conf.Hypervisors = append(conf.Hypervisors, pubkey)
 	}
 
 	return conf

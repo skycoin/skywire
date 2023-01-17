@@ -1,3 +1,4 @@
+// Package cmdutil pkg/cmdutil/cmd_name.go
 package cmdutil
 
 import (
