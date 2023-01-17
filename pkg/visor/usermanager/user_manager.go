@@ -15,7 +15,7 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 const (
@@ -52,7 +52,7 @@ type Session struct {
 // UserManager manages the users and sessions.
 type UserManager struct {
 	log      *logging.Logger
-	c        hypervisorconfig.CookieConfig
+	c        visorconfig.CookieConfig
 	db       UserStore
 	sessions map[uuid.UUID]Session
 	crypto   *securecookie.SecureCookie
@@ -60,7 +60,7 @@ type UserManager struct {
 }
 
 // NewUserManager creates a new UserManager.
-func NewUserManager(mLog *logging.MasterLogger, users UserStore, config hypervisorconfig.CookieConfig) *UserManager {
+func NewUserManager(mLog *logging.MasterLogger, users UserStore, config visorconfig.CookieConfig) *UserManager {
 	return &UserManager{
 		log:      mLog.PackageLogger("user_manager"),
 		db:       users,

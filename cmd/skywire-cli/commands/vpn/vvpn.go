@@ -52,7 +52,7 @@ var vpnUICmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		var url string
 		if isPkg {
-			path = visorconfig.Pkgpath
+			path = visorconfig.SkywireConfig()
 		}
 		if path != "" {
 			conf, err := visorconfig.ReadFile(path)
@@ -83,7 +83,7 @@ var vpnURLCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		var url string
 		if isPkg {
-			path = visorconfig.Pkgpath
+			path = visorconfig.SkywireConfig()
 		}
 		if path != "" {
 			conf, err := visorconfig.ReadFile(path)

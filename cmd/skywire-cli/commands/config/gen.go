@@ -44,7 +44,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "disableapps")
 	genConfigCmd.Flags().BoolVarP(&isHypervisor, "ishv", "i", false, "local hypervisor configuration")
 	genConfigCmd.Flags().StringVarP(&hypervisorPKs, "hvpks", "j", "", "list of public keys to use as hypervisor")
-	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", skyenv.OS, "(linux / mac / win) paths")
+	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", visorconfig.OS, "(linux / mac / win) paths")
 	gHiddenFlags = append(gHiddenFlags, "os")
 	genConfigCmd.Flags().BoolVarP(&isDisplayNodeIP, "publicip", "l", false, "allow display node ip in services")
 	gHiddenFlags = append(gHiddenFlags, "publicip")
@@ -52,17 +52,21 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "example-apps")
 	genConfigCmd.Flags().BoolVarP(&isStdout, "stdout", "n", false, "write config to stdout")
 	gHiddenFlags = append(gHiddenFlags, "stdout")
-	genConfigCmd.Flags().StringVarP(&output, "out", "o", "", "output config: "+skyenv.ConfigName)
-	if skyenv.OS == "win" {
+	genConfigCmd.Flags().StringVarP(&output, "out", "o", "", "output config: "+visorconfig.ConfigName)
+	if visorconfig.OS == "win" {
 		pText = "use .msi installation path: "
 	}
-	if skyenv.OS == "linux" {
+	if visorconfig.OS == "linux" {
 		pText = "use path for package: "
 	}
-	if skyenv.OS == "mac" {
+	if visorconfig.OS == "mac" {
 		pText = "use mac installation path: "
 	}
-	genConfigCmd.Flags().BoolVarP(&isPkgEnv, "pkg", "p", false, pText+skyenv.SkywirePath)
+	genConfigCmd.Flags().BoolVarP(&isPkgEnv, "pkg", "p", false, pText+visorconfig.SkywirePath)
+	homepath := visorconfig.HomePath()
+	if homepath != "" {
+		genConfigCmd.Flags().BoolVarP(&isUsrEnv, "user", "u", false, "use paths for user space: "+homepath)
+	}
 	genConfigCmd.Flags().BoolVarP(&isPublicRPC, "publicrpc", "q", false, "allow rpc requests from LAN")
 	gHiddenFlags = append(gHiddenFlags, "publicrpc")
 	genConfigCmd.Flags().BoolVarP(&isRegen, "regen", "r", false, "re-generate existing config & retain keys")
@@ -70,10 +74,6 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "sk")
 	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", false, "use test deployment "+testConf)
 	gHiddenFlags = append(gHiddenFlags, "testenv")
-	homepath := skyenv.HomePath()
-	if homepath != "" {
-		genConfigCmd.Flags().BoolVarP(&isUsrEnv, "user", "u", false, "use paths for user space: "+homepath)
-	}
 	genConfigCmd.Flags().BoolVarP(&isVpnServerEnable, "servevpn", "v", false, "enable vpn server")
 	gHiddenFlags = append(gHiddenFlags, "servevpn")
 	genConfigCmd.Flags().BoolVarP(&isHide, "hide", "w", false, "dont print the config to the terminal")
@@ -115,13 +115,13 @@ var genConfigCmd = &cobra.Command{
 		//set default output filename
 		if output == "" {
 			isOutUnset = true
-			confPath = skyenv.ConfigName
+			confPath = visorconfig.ConfigName
 			output = confPath
 		} else {
 			confPath = output
 		}
 
-		if output == visorconfig.StdoutName {
+		if output == visorconfig.Stdout {
 			isStdout = true
 			isForce = false
 		}
@@ -146,9 +146,9 @@ var genConfigCmd = &cobra.Command{
 		}
 		var err error
 		if isDmsgHTTP {
-			dmsgHTTPPath := skyenv.DMSGHTTPName
+			dmsgHTTPPath := visorconfig.DMSGHTTPName
 			if isPkgEnv {
-				dmsgHTTPPath = skyenv.SkywirePath + "/" + skyenv.DMSGHTTPName
+				dmsgHTTPPath = visorconfig.SkywirePath + "/" + visorconfig.DMSGHTTPName
 			}
 			if _, err := os.Stat(dmsgHTTPPath); err == nil {
 				if !isStdout {
@@ -175,13 +175,13 @@ var genConfigCmd = &cobra.Command{
 		}
 		// skywire-cli config gen -p
 		if !isStdout && isOutUnset {
-			if isPkgEnv && (selectedOS == "linux") {
-				configName = skyenv.ConfigJSON
-				confPath = skyenv.SkywirePath + "/" + configName
+			if isPkgEnv {
+				configName = visorconfig.ConfigJSON
+				confPath = visorconfig.SkywireConfig()
 				output = confPath
 			}
 			if isUsrEnv {
-				confPath = skyenv.HomePath() + "/" + skyenv.ConfigName
+				confPath = visorconfig.HomePath() + "/" + visorconfig.ConfigName
 				output = confPath
 			}
 		}
@@ -194,7 +194,7 @@ var genConfigCmd = &cobra.Command{
 		}
 		//don't write file with stdout
 		if !isStdout {
-			if skyenv.OS == "linux" {
+			if visorconfig.OS == "linux" {
 				//warn when writing config as root to non root owned dir & fail on the reverse instance
 				if _, err = exec.LookPath("stat"); err == nil {
 					confPath1, _ := filepath.Split(confPath)
@@ -273,7 +273,7 @@ var genConfigCmd = &cobra.Command{
 		if (!isStdout) || (!isMatch) {
 			//binaries have .exe extension on windows
 			var exe string
-			if skyenv.OS == "win" {
+			if visorconfig.OS == "win" {
 				exe = ".exe"
 			}
 			// Disable apps not found at bin_path with above exceptions for go run and stdout

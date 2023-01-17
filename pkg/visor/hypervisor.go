@@ -21,6 +21,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
+	coincipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -29,10 +30,9 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
-	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
+	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/pkg/visor/usermanager"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -56,7 +56,7 @@ type Conn struct {
 
 // Hypervisor manages visors.
 type Hypervisor struct {
-	c            hypervisorconfig.Config
+	c            visorconfig.HypervisorConfig
 	visor        *Visor
 	remoteVisors map[cipher.PubKey]Conn // connected remote visors to hypervisor
 	dmsgC        *dmsg.Client
@@ -66,8 +66,8 @@ type Hypervisor struct {
 	logger       *logging.Logger
 }
 
-// New creates a new Hypervisor.
-func New(config hypervisorconfig.Config, visor *Visor, dmsgC *dmsg.Client) (*Hypervisor, error) {
+// NewHypervisor creates a new Hypervisor.
+func NewHypervisor(config visorconfig.HypervisorConfig, visor *Visor, dmsgC *dmsg.Client) (*Hypervisor, error) {
 	config.Cookies.TLS = config.EnableTLS
 
 	boltUserDB, err := usermanager.NewBoltUserStore(config.DBPath)
@@ -132,7 +132,7 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 		visorConn := &Conn{
 			Addr:  addr,
 			SrvPK: conn.ServerPK(),
-			API:   NewRPCClient(log, conn, RPCPrefix, skyenv.RPCTimeout),
+			API:   NewRPCClient(log, conn, RPCPrefix, visorconfig.RPCTimeout),
 			PtyUI: setupDmsgPtyUI(hv.dmsgC, addr.PK),
 		}
 		if hv.visor.isDTMReady() {
@@ -267,8 +267,8 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Put("/visors/{pk}/persistent-transports", hv.putPersistentTransports())
 				r.Get("/visors/{pk}/log/rotation", hv.getLogRotationInterval())
 				r.Put("/visors/{pk}/log/rotation", hv.putLogRotationInterval())
-				//r.Get("/visors/{pk}/privacy", hv.getPrivacy())
-				//r.Put("/visors/{pk}/privacy", hv.putPrivacy())
+				r.Get("/visors/{pk}/reward", hv.getRewardAddress())
+				r.Put("/visors/{pk}/reward", hv.putRewardAddres())
 
 			})
 		})
@@ -694,7 +694,7 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 					return
 				}
 				appStatus := appserver.AppDetailedStatusStarting
-				if ctx.App.Name == skyenv.VPNClientName {
+				if ctx.App.Name == visorconfig.VPNClientName {
 					appStatus = appserver.AppDetailedStatusVPNConnecting
 				}
 				if err := ctx.API.SetAppDetailedStatus(ctx.App.Name, appStatus); err != nil {
@@ -1276,42 +1276,42 @@ func (hv *Hypervisor) getLogRotationInterval() http.HandlerFunc {
 	})
 }
 
-//func (hv *Hypervisor) putPrivacy() http.HandlerFunc {
-//	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-//		var reqBody *privacyconfig.Privacy
-//
-//		if err := httputil.ReadJSON(r, &reqBody); err != nil {
-//			if err != io.EOF {
-//				hv.log(r).Warnf("putPersistentTransports request: %v", err)
-//			}
-//			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
-//			return
-//		}
-//
-//		_, err := coincipher.DecodeBase58Address(reqBody.RewardAddress)
-//		if err != nil {
-//			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-//			return
-//		}
-//		pConf, err := ctx.API.SetPrivacy(reqBody)
-//		if err != nil {
-//			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-//			return
-//		}
-//		httputil.WriteJSON(w, r, http.StatusOK, pConf)
-//	})
-//}
+func (hv *Hypervisor) putRewardAddres() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var reqBody *rewardconfig.Reward
 
-//func (hv *Hypervisor) getPrivacy() http.HandlerFunc {
-//	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-//		pts, err := ctx.API.GetPrivacy()
-//		if err != nil {
-//			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-//			return
-//		}
-//		httputil.WriteJSON(w, r, http.StatusOK, pts)
-//	})
-//}
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("putRewardAddres request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+
+		_, err := coincipher.DecodeBase58Address(reqBody.RewardAddress)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		pConf, err := ctx.API.SetRewardAddress(reqBody.RewardAddress)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, pConf)
+	})
+}
+
+func (hv *Hypervisor) getRewardAddress() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		pts, err := ctx.API.GetRewardAddress()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, pts)
+	})
+}
 
 /*
 	<<< Helper functions >>>
@@ -1521,7 +1521,7 @@ type dmsgPtyUI struct {
 }
 
 func setupDmsgPtyUI(dmsgC *dmsg.Client, visorPK cipher.PubKey) *dmsgPtyUI {
-	ptyDialer := dmsgpty.DmsgUIDialer(dmsgC, dmsg.Addr{PK: visorPK, Port: skyenv.DmsgPtyPort})
+	ptyDialer := dmsgpty.DmsgUIDialer(dmsgC, dmsg.Addr{PK: visorPK, Port: visorconfig.DmsgPtyPort})
 	return &dmsgPtyUI{
 		PtyUI: dmsgpty.NewUI(ptyDialer, dmsgpty.DefaultUIConfig()),
 	}
@@ -1530,7 +1530,7 @@ func setupDmsgPtyUI(dmsgC *dmsg.Client, visorPK cipher.PubKey) *dmsgPtyUI {
 func (hv *Hypervisor) getPty() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		customCommand := make(map[string][]string)
-		customCommand["update"] = skyenv.UpdateCommand()
+		customCommand["update"] = visorconfig.UpdateCommand()
 		ctx.PtyUI.PtyUI.Handler(customCommand)(w, r)
 	})
 }

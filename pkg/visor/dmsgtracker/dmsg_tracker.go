@@ -13,7 +13,7 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // Default values for DmsgTrackerManager
@@ -37,7 +37,7 @@ type DmsgTracker struct {
 
 // newDmsgTracker creates a new DmsgTracker.
 func newDmsgTracker(ctx context.Context, dmsgC *dmsg.Client, pk cipher.PubKey) (dt *DmsgTracker, err error) {
-	conn, err := dmsgC.DialStream(ctx, dmsg.Addr{PK: pk, Port: skyenv.DmsgCtrlPort})
+	conn, err := dmsgC.DialStream(ctx, dmsg.Addr{PK: pk, Port: visorconfig.DmsgCtrlPort})
 	if err != nil {
 		return nil, err
 	}

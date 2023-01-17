@@ -18,7 +18,7 @@ import (
 	"github.com/skycoin/systray"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var (
@@ -248,7 +248,7 @@ func onReady() {
 					ToggleOn()
 				}
 			case <-mShutdown.ClickedCh:
-				if skyenv.OS == "linux" {
+				if visorconfig.OS == "linux" {
 					_, _ = script.Exec(`systemctl disable --now skywire`).Stdout() //nolint:errcheck
 					ToggleOff()
 				} else {
@@ -424,7 +424,7 @@ func ToggleOff() {
 	mShutdown.Hide()
 
 	mStart.Show()
-	if skyenv.OS == "linux" {
+	if visorconfig.OS == "linux" {
 		mAutoconfig.Show()
 	}
 	mQuit.Show()

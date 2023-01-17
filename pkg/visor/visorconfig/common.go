@@ -8,14 +8,13 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 const (
-	// StdinName is the path name used to identify STDIN.
-	StdinName = "STDIN"
-	// StdoutName is the path name used to identify STDOUT.
-	StdoutName = "STDOUT"
+	// Stdin read config from STDIN.
+	Stdin = "STDIN"
+	// Stdout write config to STDOUT.
+	Stdout = "STDOUT"
 )
 
 var (
@@ -42,7 +41,7 @@ func NewCommon(log *logging.MasterLogger, confPath string, sk *cipher.SecKey) (*
 	c := new(Common)
 	c.log = log
 	c.path = confPath
-	c.Version = skyenv.Version()
+	c.Version = Version()
 	if sk != nil {
 		c.SK = *sk
 		if err := c.ensureKeys(); err != nil {
@@ -81,7 +80,7 @@ func (c *Common) flush(v interface{}) (err error) {
 	switch c.path {
 	case "":
 		return ErrNoConfigPath
-	case StdinName:
+	case Stdin:
 		return nil
 	}
 
