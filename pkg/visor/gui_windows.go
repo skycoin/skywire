@@ -10,7 +10,7 @@ import (
 	"github.com/skycoin/skywire/pkg/util/osutil"
 )
 
-const iconName = "icons/icon.ico"
+const iconName = "icon.ico"
 
 func localDataPath() string {
 	return os.Getenv("LOCALDATA")
