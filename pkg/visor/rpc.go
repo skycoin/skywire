@@ -98,16 +98,18 @@ func (r *RPC) Uptime(_ *struct{}, out *float64) (err error) {
 */
 
 // SetRewardAddress sets the reward address and privacy setting in reward.txt
-func (r *RPC) SetRewardAddress(p string, out string) (err error) {
+func (r *RPC) SetRewardAddress(p string, out *string) (err error) {
 	defer rpcutil.LogCall(r.log, "SetRewardAddress", p)(out, &err)
-	_, err = r.visor.SetRewardAddress(p)
+	p, err = r.visor.SetRewardAddress(p)
+	*out = p
 	return err
 }
 
 // GetRewardAddress reads the reward address from reward.txt
-func (r *RPC) GetRewardAddress(_ *struct{}, out string) (err error) {
+func (r *RPC) GetRewardAddress(_ *struct{}, out *string) (err error) {
 	defer rpcutil.LogCall(r.log, "GetRewardAddress", nil)(out, &err)
-	_, err = r.visor.GetRewardAddress()
+	p, err := r.visor.GetRewardAddress()
+	*out = p
 	return err
 }
 
@@ -559,6 +561,14 @@ func (r *RPC) Restart(_ *struct{}, _ *struct{}) (err error) {
 	rpcutil.LogCall(r.log, "Restart", nil)(nil, nil)
 
 	return r.visor.Restart()
+}
+
+// Reload reloads the config - without restarting the visor
+func (r *RPC) Reload(_ *struct{}, _ *struct{}) (err error) {
+	// @evanlinjin: do not defer this log statement, as the underlying visor.Logger will get closed.
+	rpcutil.LogCall(r.log, "Reload", nil)(nil, nil)
+
+	return r.visor.Reload()
 }
 
 // Shutdown shuts down visor.

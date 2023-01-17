@@ -1,10 +1,10 @@
+// Package cmdutil pkg/cmdutil/service_flags.go
 package cmdutil
 
 import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 	"unicode"
@@ -48,10 +48,10 @@ type ServiceFlags struct {
 
 // Init initiates the service flags.
 // The following are performed:
-// 	* Ensure 'defaultTag' is provided and valid.
-// 	* Set "library" defaults.
-// 	* Set "exec" defaults - provided by 'defaultTag' and 'defaultConf'.
-// 	* Add flags to 'rootCmd'.
+//   - Ensure 'defaultTag' is provided and valid.
+//   - Set "library" defaults.
+//   - Set "exec" defaults - provided by 'defaultTag' and 'defaultConf'.
+//   - Add flags to 'rootCmd'.
 func (sf *ServiceFlags) Init(rootCmd *cobra.Command, defaultTag, defaultConf string) {
 	if err := ValidTag(defaultTag); err != nil {
 		panic(err)
@@ -148,7 +148,7 @@ func (sf *ServiceFlags) ParseConfig(args []string, checkArgs bool, v interface{}
 		}
 	}()
 
-	b, err := ioutil.ReadAll(r)
+	b, err := io.ReadAll(r)
 	if err != nil {
 		return fmt.Errorf("failed to read from config source: %w", err)
 	}
@@ -169,7 +169,7 @@ func (sf *ServiceFlags) ParseConfig(args []string, checkArgs bool, v interface{}
 func (sf *ServiceFlags) obtainConfigReader(args []string, checkArgs bool, genDefaultFunc func() (io.ReadCloser, error)) (io.ReadCloser, error) {
 	switch {
 	case sf.Stdin || strings.ToLower(sf.Config) == stdinConfig:
-		stdin := ioutil.NopCloser(os.Stdin) // ensure stdin is not closed
+		stdin := io.NopCloser(os.Stdin) // ensure stdin is not closed
 		return stdin, nil
 
 	case checkArgs:

@@ -12,11 +12,11 @@ import (
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
-	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var (
-	rewardFile           string = skyenv.PackageConfig().LocalPath + "/" + skyenv.RewardFile
+	rewardFile           string = visorconfig.PackageConfig().LocalPath + "/" + visorconfig.RewardFile
 	rewardAddress        string
 	defaultRewardAddress string
 	output               string
@@ -105,7 +105,7 @@ var rewardCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		//set default output file
 		if output == "" {
-			output = skyenv.PackageConfig().LocalPath + "/" + skyenv.RewardFile
+			output = visorconfig.PackageConfig().LocalPath + "/" + visorconfig.RewardFile
 		}
 		if isDeleteFile {
 			err := os.Remove(output)
@@ -148,12 +148,13 @@ var rewardCmd = &cobra.Command{
 		}
 		rewardaddress, err := client.SetRewardAddress(rewardAddress)
 		if err != nil {
-			internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
+			internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))      //nolint
 			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(cAddr.String()), 0644)) //nolint
 			readRewardFile(cmd.Flags())
 			return
 		}
-		internal.PrintOutput(cmd.Flags(), rewardaddress, rewardaddress)
+		output := fmt.Sprintf("Reward address:\n  %s\n", rewardaddress)
+		internal.PrintOutput(cmd.Flags(), output, output)
 	},
 }
 

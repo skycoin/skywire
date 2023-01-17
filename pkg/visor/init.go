@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,6 +28,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsgget"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
+	coincipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
@@ -42,7 +45,6 @@ import (
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
-	"github.com/skycoin/skywire/pkg/setup/setupclient"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -52,6 +54,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	"github.com/skycoin/skywire/pkg/utclient"
 	"github.com/skycoin/skywire/pkg/util/osutil"
+	"github.com/skycoin/skywire/pkg/util/pathutil"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -118,6 +121,8 @@ var (
 	dmsgCtrl vinit.Module
 	// Dmsg http log server module
 	dmsgHTTPLogServer vinit.Module
+	// System survey module
+	systemSurvey vinit.Module
 	// Dmsg http module
 	dmsgHTTP vinit.Module
 	// Dmsg trackers module
@@ -128,6 +133,8 @@ var (
 	pi vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
+	// config initialization
+//	visorConfig vinit.Module
 )
 
 // register all modules: instantiate modules with correct names and dependencies, wrap init
@@ -138,6 +145,7 @@ func registerModules(logger *logging.MasterLogger) {
 	maker := func(name string, f initFn, deps ...*vinit.Module) vinit.Module {
 		return vinit.MakeModule(name, withInitCtx(f), logger, deps...)
 	}
+	//	visorConfig = maker("visor_config", initVisorConfig)
 	dmsgHTTP = maker("dmsg_http", initDmsgHTTP)
 	ebc = maker("event_broadcaster", initEventBroadcaster)
 	ar = maker("address_resolver", initAddressResolver, &dmsgHTTP)
@@ -151,6 +159,7 @@ func registerModules(logger *logging.MasterLogger) {
 	dmsgC = maker("dmsg", initDmsg, &ebc, &dmsgHTTP)
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &dmsgC, &tr)
 	dmsgHTTPLogServer = maker("dmsghttp_logserver", initDmsgHTTPLogServer, &dmsgC, &tr)
+	systemSurvey = maker("system_survey", initSystemSurvey, &dmsgHTTPLogServer)
 	dmsgTrackers = maker("dmsg_trackers", initDmsgTrackers, &dmsgC)
 
 	pty = maker("dmsg_pty", initDmsgpty, &dmsgC)
@@ -166,12 +175,25 @@ func registerModules(logger *logging.MasterLogger) {
 	skyFwd = maker("sky_forward_conn", initSkywireForwardConn, &dmsgC, &dmsgCtrl, &tr, &launch)
 	pi = maker("ping", initPing, &dmsgC, &tm)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &systemSurvey)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
 
 type initFn func(context.Context, *Visor, *logging.Logger) error
+
+/*
+func initVisorConfig(ctx context.Context, v *Visor, log *logging.Logger) error {
+	const ebcTimeout = time.Second
+	ebc := appevent.NewBroadcaster(log, ebcTimeout)
+	v.pushCloseStack("event_broadcaster", ebc.Close)
+
+	v.initLock.Lock()
+	v.ebc = ebc
+	v.initLock.Unlock()
+	return nil
+}
+*/
 
 func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error {
 	var keys cipher.PubKeys
@@ -348,7 +370,7 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 		v.tpM.InitDmsgClient(ctx, dmsgC)
 	}
 	// dmsgctrl setup
-	cl, err := dmsgC.Listen(skyenv.DmsgCtrlPort)
+	cl, err := dmsgC.Listen(visorconfig.DmsgCtrlPort)
 	if err != nil {
 		return err
 	}
@@ -372,7 +394,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 
 	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.CustomDmsgHTTPPath, printLog)
 
-	lis, err := dmsgC.Listen(skyenv.DmsgHTTPPort)
+	lis, err := dmsgC.Listen(visorconfig.DmsgHTTPPort)
 	if err != nil {
 		return err
 	}
@@ -383,7 +405,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 		}
 	}()
 
-	log.WithField("dmsg_addr", fmt.Sprintf("dmsg://%v", lis.Addr().String())).
+	logger.WithField("dmsg_addr", fmt.Sprintf("dmsg://%v", lis.Addr().String())).
 		Debug("Serving...")
 	srv := &http.Server{
 		ReadHeaderTimeout: 2 * time.Second,
@@ -404,7 +426,6 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 			logger.WithError(err).Error("Logserver exited with error.")
 		}
 	}()
-
 	v.pushCloseStack("dmsghttp.logserver", func() error {
 		if err := srv.Close(); err != nil {
 			return err
@@ -413,6 +434,67 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 		return nil
 	})
 
+	return nil
+}
+
+func initSystemSurvey(ctx context.Context, v *Visor, log *logging.Logger) error {
+
+	if visorconfig.IsRoot() {
+		//check for valid reward address set as prerequisite for generating the system survey
+		rewardAddressBytes, err := os.ReadFile(visorconfig.PackageConfig().LocalPath + "/" + visorconfig.RewardFile) //nolint
+		if err == nil {
+			//remove any newline from rewardAddress string
+			rewardAddress := strings.TrimSuffix(string(rewardAddressBytes), "\n")
+			//validate the skycoin address
+			cAddr, err := coincipher.DecodeBase58Address(rewardAddress)
+			if err != nil {
+				log.WithError(err).Error("Invalid skycoin reward address.")
+				return err
+			}
+			log.Info("Skycoin reward address: ", cAddr.String())
+			//generate the system survey
+			pathutil.EnsureDir(v.conf.LocalPath) //nolint
+			survey, err := visorconfig.SystemSurvey()
+			if err != nil {
+				log.WithError(err).Error("Could not read system info.")
+				return err
+			}
+			survey.PubKey = v.conf.PK
+			survey.SkycoinAddress = cAddr.String()
+			// Print results.
+			s, err := json.MarshalIndent(survey, "", "\t")
+			if err != nil {
+				log.WithError(err).Error("Could not marshal json.")
+				return err
+			}
+			err = os.WriteFile(v.conf.LocalPath+"/"+visorconfig.NodeInfo, s, 0644) //nolint
+			if err != nil {
+				log.WithError(err).Error("Failed to write system hardware survey to file.")
+				return err
+			}
+			log.Info("Generating system survey")
+			f, err := os.ReadFile(filepath.Clean(v.conf.LocalPath + "/" + visorconfig.NodeInfo))
+			if err != nil {
+				log.WithError(err).Error("Failed to write system hardware survey to file.")
+				return err
+			}
+			srvySha256Byte32 := sha256.Sum256([]byte(f))
+			err = os.WriteFile(v.conf.LocalPath+"/"+visorconfig.NodeInfoSha256, srvySha256Byte32[:], 0644) //nolint
+			if err != nil {
+				log.WithError(err).Error("Failed to write system hardware survey to file.")
+				return err
+			}
+		} else {
+			err := os.Remove(visorconfig.PackageConfig().LocalPath + "/" + visorconfig.NodeInfo)
+			if err == nil {
+				log.Debug("Removed hadware survey for visor not seeking rewards")
+			}
+			err = os.Remove(visorconfig.PackageConfig().LocalPath + "/" + visorconfig.NodeInfoSha256)
+			if err == nil {
+				log.Debug("Removed hadware survey checksum file")
+			}
+		}
+	}
 	return nil
 }
 
@@ -439,12 +521,13 @@ func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 		log.Info("SUDPH transport wont be available under dmsghttp")
 		return nil
 	}
-
-	switch v.stunClient.NATType {
-	case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
-		log.Warnf("SUDPH transport wont be available as visor is under %v", v.stunClient.NATType.String())
-	default:
-		v.tpM.InitClient(ctx, network.SUDPH)
+	if v.stunClient != nil {
+		switch v.stunClient.NATType {
+		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
+			log.Warnf("SUDPH transport wont be available as visor is under %v", v.stunClient.NATType.String())
+		default:
+			v.tpM.InitClient(ctx, network.SUDPH)
+		}
 	}
 	return nil
 }
@@ -544,7 +627,7 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 	ctx, cancel := context.WithCancel(ctx)
 	// To remove the block set by NewTransportListener if dmsg is not initialized
 	go func() {
-		ts, err := ts.NewTransportListener(ctx, v.conf, v.dmsgC, v.tpM, v.MasterLogger())
+		ts, err := ts.NewTransportListener(ctx, v.conf.PK, v.conf.Transport.TransportSetup, v.dmsgC, v.tpM, v.MasterLogger())
 		if err != nil {
 			log.Warn(err)
 			cancel()
@@ -947,7 +1030,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		SecKey:           v.conf.SK,
 		TransportManager: v.tpM,
 		RouteFinder:      rfClient,
-		RouteGroupDialer: setupclient.NewSetupNodeDialer(),
+		RouteGroupDialer: router.NewSetupNodeDialer(),
 		SetupNodes:       conf.SetupNodes,
 		RulesGCInterval:  0, // TODO
 		MinHops:          v.conf.Routing.MinHops,
@@ -993,7 +1076,7 @@ func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.pushCloseStack("launcher.proc_manager", procM.Close)
 
 	// Prepare launcher.
-	launchConf := launcher.Config{
+	launchConf := launcher.AppLauncherConfig{
 		VisorPK:       v.conf.PK,
 		Apps:          conf.Apps,
 		ServerAddr:    conf.ServerAddr,
@@ -1011,8 +1094,8 @@ func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	err = launch.AutoStart(launcher.EnvMap{
-		skyenv.VPNClientName: vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.STCPRRemoteAddrs()),
-		skyenv.VPNServerName: vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, nil),
+		visorconfig.VPNClientName: vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.STCPRRemoteAddrs()),
+		visorconfig.VPNServerName: vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, nil),
 	})
 
 	if err != nil {
@@ -1114,6 +1197,7 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error {
+
 	hvErrs := make(map[cipher.PubKey]chan error, len(v.conf.Hypervisors))
 	for _, hv := range v.conf.Hypervisors {
 		hvErrs[hv] = make(chan error, 1)
@@ -1122,7 +1206,7 @@ func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error {
 	for hvPK, hvErrs := range hvErrs {
 		log := v.MasterLogger().PackageLogger("hypervisor_client").WithField("hypervisor_pk", hvPK)
 
-		addr := dmsg.Addr{PK: hvPK, Port: skyenv.DmsgHypervisorPort}
+		addr := dmsg.Addr{PK: hvPK, Port: visorconfig.DmsgHypervisorPort}
 		rpcS, err := newRPCServer(v, addr.PK.String()[:shortHashLen])
 		if err != nil {
 			err := fmt.Errorf("failed to start RPC server for hypervisor %s: %w", hvPK, err)
@@ -1393,7 +1477,10 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 }
 
 func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
-
+	if v.conf.Hypervisor == nil {
+		v.log.Error("hypervisor config = nil")
+		return nil
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 
 	conf := *v.conf.Hypervisor
@@ -1402,7 +1489,7 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	conf.DmsgDiscovery = v.conf.Dmsg.Discovery
 
 	// Prepare hypervisor.
-	hv, err := New(conf, v, v.dmsgC)
+	hv, err := NewHypervisor(conf, v, v.dmsgC)
 	if err != nil {
 		v.log.Fatalln("Failed to start hypervisor:", err)
 	}
@@ -1410,18 +1497,25 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	hv.serveDmsg(ctx, v.log)
 
 	// Serve HTTP(s).
+
 	v.log.WithField("addr", conf.HTTPAddr).
 		WithField("tls", conf.EnableTLS).
 		Info("Serving hypervisor...")
+	tls := ""
+	if conf.EnableTLS {
+		tls = "s"
+	}
+	v.log.Info(fmt.Sprintf("Hypervisor UI: http%s://127.0.0.1%s", tls, conf.HTTPAddr))
+
+	handler := hv.HTTPHandler()
+	srv := &http.Server{ //nolint gosec
+		Addr:         conf.HTTPAddr,
+		Handler:      handler,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
 
 	go func() {
-		handler := hv.HTTPHandler()
-		srv := &http.Server{ //nolint gosec
-			Addr:         conf.HTTPAddr,
-			Handler:      handler,
-			ReadTimeout:  5 * time.Second,
-			WriteTimeout: 10 * time.Second,
-		}
 		if conf.EnableTLS {
 			err = srv.ListenAndServeTLS(conf.TLSCertFile, conf.TLSKeyFile)
 		} else {
@@ -1429,13 +1523,13 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 		}
 
 		if err != nil {
-			v.log.WithError(err).Fatal("Hypervisor exited with error.")
+			v.log.WithError(err).Error("Hypervisor exited with error.")
 		}
-
-		cancel()
+		//		cancel()
 	}()
 
 	v.pushCloseStack("hypervisor", func() error {
+		srv.Shutdown(ctx) //nolint
 		cancel()
 		return err
 	})
@@ -1539,7 +1633,7 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 		// get delegated servers and add them to the client entry
 		servers, err := v.dClient.AvailableServers(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("Error getting AvailableServers: %w", err)
+			return nil, fmt.Errorf("error getting AvailableServers: %w", err)
 		}
 
 		for _, server := range servers {
@@ -1555,7 +1649,7 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 
 		err = v.dClient.PostEntry(ctx, clientEntry)
 		if err != nil {
-			return nil, fmt.Errorf("Error saving clientEntry: %w", err)
+			return nil, fmt.Errorf("error saving clientEntry: %w", err)
 		}
 		return v.dmsgHTTP, nil
 	}

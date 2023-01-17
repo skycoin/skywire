@@ -9,7 +9,6 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -19,7 +18,7 @@ var (
 	sk                     cipher.SecKey
 	output                 string
 	confPath               string
-	configName             string
+	configName             string //nolint Note: configName used, but golangci-lint marked it unused in wrong
 	isStdout               bool
 	isRegen                bool
 	isRetainHypervisors    bool
@@ -44,9 +43,9 @@ var (
 	isAll                  bool
 	isOutUnset             bool
 	ver                    string
-	isRoot                 = skyenv.IsRoot()
-	svcConf                = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")     //skyenv.DefaultServiceConfAddr
-	testConf               = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "") //skyenv.DefaultServiceConfAddr
+	isRoot                 = visorconfig.IsRoot()
+	svcConf                = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")     //visorconfig.DefaultServiceConfAddr
+	testConf               = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "") //visorconfig.DefaultServiceConfAddr
 	gHiddenFlags           []string
 	uHiddenFlags           []string
 	binPath                string

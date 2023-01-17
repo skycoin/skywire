@@ -22,7 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 const (
@@ -61,7 +61,7 @@ func main() {
 		print(fmt.Sprintf("Failed to output build info: %v\n", err))
 	}
 
-	var addr = flag.String("addr", skyenv.SkysocksClientAddr, "Client address to listen on")
+	var addr = flag.String("addr", visorconfig.SkysocksClientAddr, "Client address to listen on")
 	var serverPK = flag.String("srv", "", "PubKey of the server to connect to")
 	flag.Parse()
 

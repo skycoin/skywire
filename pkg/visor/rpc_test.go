@@ -17,7 +17,7 @@ import (
 )
 
 func baseConfig(t *testing.T) *visorconfig.V1 {
-	cc, err := visorconfig.NewCommon(nil, visorconfig.StdinName, nil)
+	cc, err := visorconfig.NewCommon(nil, visorconfig.Stdin, nil)
 	var services *visorconfig.Services
 	require.NoError(t, err)
 	return visorconfig.MakeBaseConfig(cc, false, true, services, nil)

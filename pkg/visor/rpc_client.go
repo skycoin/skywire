@@ -25,7 +25,6 @@ import (
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/cipherutil"
@@ -73,9 +72,9 @@ func (rc *rpcClient) Call(method string, args, reply interface{}) error {
 
 	switch method {
 	case "AddTransport":
-		timeout = skyenv.TransportRPCTimeout
+		timeout = visorconfig.TransportRPCTimeout
 	case "Update":
-		timeout = skyenv.UpdateRPCTimeout
+		timeout = visorconfig.UpdateRPCTimeout
 	}
 
 	if timeout != 0 {
@@ -400,6 +399,11 @@ func (rc *rpcClient) RouteGroups() ([]RouteGroupInfo, error) {
 // Restart calls Restart.
 func (rc *rpcClient) Restart() error {
 	return rc.Call("Restart", &struct{}{}, &struct{}{})
+}
+
+// Reload calls Reload.
+func (rc *rpcClient) Reload() error {
+	return rc.Call("Reload", &struct{}{}, &struct{}{})
 }
 
 // Shutdown calls Shutdown.
@@ -1110,6 +1114,11 @@ func (mc *mockRPCClient) RouteGroups() ([]RouteGroupInfo, error) {
 
 // Restart implements API.
 func (mc *mockRPCClient) Restart() error {
+	return nil
+}
+
+// Reload implements API.
+func (mc *mockRPCClient) Reload() error {
 	return nil
 }
 

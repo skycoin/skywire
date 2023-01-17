@@ -1,6 +1,7 @@
 //go:build windows
 // +build windows
 
+// Package netutil pkg/netutil/net_windows.go
 package netutil
 
 import (

@@ -39,21 +39,33 @@ import (
 
 // API represents visor API.
 type API interface {
+	//visor
 	Overview() (*Overview, error)
 	Summary() (*Summary, error)
-
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
+	Restart() error
+	Reload() error
+	Shutdown() error
+	Exec(command string) ([]byte, error)
+	RuntimeLogs() (string, error)
+	RemoteVisors() ([]string, error)
+	GetLogRotationInterval() (visorconfig.Duration, error)
+	SetLogRotationInterval(visorconfig.Duration) error
+	IsDMSGClientReady() (bool, error)
+	Ports() (map[string]PortDetail, error)
+
+	//reward setting
 	SetRewardAddress(string) (string, error)
 	GetRewardAddress() (string, error)
+
+	//app controls
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
 	RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error)
 	DeregisterApp(procKey appcommon.ProcKey) error
 	StopApp(appName string) error
-	StartVPNClient(pk cipher.PubKey) error
-	StopVPNClient(appName string) error
 	SetAppDetailedStatus(appName, state string) error
 	SetAppError(appName, stateErr string) error
 	RestartApp(appName string) error
@@ -68,40 +80,32 @@ type API interface {
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
-	VPNServers(version, country string) ([]servicedisc.Service, error)
-	RemoteVisors() ([]string, error)
-	Ports() (map[string]PortDetail, error)
 
+	//vpn controls
+	StartVPNClient(pk cipher.PubKey) error
+	StopVPNClient(appName string) error
+	VPNServers(version, country string) ([]servicedisc.Service, error)
+
+	//transports
 	TransportTypes() ([]string, error)
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
 	Transport(tid uuid.UUID) (*TransportSummary, error)
 	AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*TransportSummary, error)
 	RemoveTransport(tid uuid.UUID) error
 	SetPublicAutoconnect(pAc bool) error
-
+	GetPersistentTransports() ([]transport.PersistentTransports, error)
+	SetPersistentTransports([]transport.PersistentTransports) error
+	//transport discovery
 	DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error)
 	DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error)
 
+	//routing
 	RoutingRules() ([]routing.Rule, error)
 	RoutingRule(key routing.RouteID) (routing.Rule, error)
 	SaveRoutingRule(rule routing.Rule) error
 	RemoveRoutingRule(key routing.RouteID) error
-
 	RouteGroups() ([]RouteGroupInfo, error)
-
-	Restart() error
-	Shutdown() error
-	Exec(command string) ([]byte, error)
-	RuntimeLogs() (string, error)
-
 	SetMinHops(uint16) error
-
-	GetPersistentTransports() ([]transport.PersistentTransports, error)
-	SetPersistentTransports([]transport.PersistentTransports) error
-	GetLogRotationInterval() (visorconfig.Duration, error)
-	SetLogRotationInterval(visorconfig.Duration) error
-
-	IsDMSGClientReady() (bool, error)
 
 	RegisterHTTPPort(localPort int) error
 	DeregisterHTTPPort(localPort int) error
@@ -335,20 +339,20 @@ func (v *Visor) Uptime() (float64, error) {
 
 // SetRewardAddress implements API.
 func (v *Visor) SetRewardAddress(p string) (string, error) {
-	path := v.conf.LocalPath + "/" + skyenv.RewardFile
+	path := v.conf.LocalPath + "/" + visorconfig.RewardFile
 	err := os.WriteFile(path, []byte(p), 0644) //nolint
 	if err != nil {
-		return p, fmt.Errorf("Failed to write config to file. err=%v", err)
+		return p, fmt.Errorf("failed to write config to file. err=%v", err)
 	}
 	return p, nil
 }
 
 // GetRewardAddress implements API.
 func (v *Visor) GetRewardAddress() (string, error) {
-	path := v.conf.LocalPath + "/" + skyenv.RewardFile
+	path := v.conf.LocalPath + "/" + visorconfig.RewardFile
 	rConfig, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
-		return "", fmt.Errorf("Failed to read config file. err=%v", err)
+		return "", fmt.Errorf("failed to read config file. err=%v", err)
 	}
 	return string(rConfig), nil
 }
@@ -376,7 +380,7 @@ func (v *Visor) SkybianBuildVersion() string {
 func (v *Visor) StartApp(appName string) error {
 	var envs []string
 	var err error
-	if appName == skyenv.VPNClientName {
+	if appName == visorconfig.VPNClientName {
 		// todo: can we use some kind of app start hook that will be used for both autostart
 		// and start? Reason: this is also called in init for autostart
 
@@ -442,7 +446,7 @@ func (v *Visor) StartVPNClient(pk cipher.PubKey) error {
 	}
 
 	for index, app := range v.conf.Launcher.Apps {
-		if app.Name == skyenv.VPNClientName {
+		if app.Name == visorconfig.VPNClientName {
 			// we set the args in memory and pass it in `v.appL.StartApp`
 			// unlike the api method `StartApp` where `nil` is passed in `v.appL.StartApp` as args
 			// but the args are set in the config
@@ -459,7 +463,7 @@ func (v *Visor) StartVPNClient(pk cipher.PubKey) error {
 
 			// check process manager availability
 			if v.procM != nil {
-				return v.appL.StartApp(skyenv.VPNClientName, v.conf.Launcher.Apps[index].Args, envs)
+				return v.appL.StartApp(visorconfig.VPNClientName, v.conf.Launcher.Apps[index].Args, envs)
 			}
 			return ErrProcNotAvailable
 		}
@@ -519,16 +523,16 @@ func (v *Visor) SetAutoStart(appName string, autoStart bool) error {
 	}
 
 	v.log.Infof("Saving auto start = %v for app %v to config", autoStart, appName)
-	return v.conf.UpdateAppAutostart(v.appL, appName, autoStart)
+	return v.conf.UpdateAppAutostart(appName, autoStart)
 }
 
 // SetAppPassword implements API.
 func (v *Visor) SetAppPassword(appName, password string) error {
 	allowedToChangePassword := func(appName string) bool {
 		allowedApps := map[string]struct{}{
-			skyenv.SkysocksName:  {},
-			skyenv.VPNClientName: {},
-			skyenv.VPNServerName: {},
+			visorconfig.SkysocksName:  {},
+			visorconfig.VPNClientName: {},
+			visorconfig.VPNServerName: {},
 		}
 
 		_, ok := allowedApps[appName]
@@ -544,8 +548,7 @@ func (v *Visor) SetAppPassword(appName, password string) error {
 	const (
 		passcodeArgName = "-passcode"
 	)
-
-	if err := v.conf.UpdateAppArg(v.appL, appName, passcodeArgName, password); err != nil {
+	if err := v.conf.UpdateAppArg(appName, passcodeArgName, password); err != nil {
 		return err
 	}
 
@@ -556,7 +559,7 @@ func (v *Visor) SetAppPassword(appName, password string) error {
 
 // SetAppNetworkInterface implements API.
 func (v *Visor) SetAppNetworkInterface(appName, netifc string) error {
-	if skyenv.VPNServerName != appName {
+	if visorconfig.VPNServerName != appName {
 		return fmt.Errorf("app %s is not allowed to set network interface", appName)
 	}
 
@@ -565,8 +568,7 @@ func (v *Visor) SetAppNetworkInterface(appName, netifc string) error {
 	const (
 		netifcArgName = "--netifc"
 	)
-
-	if err := v.conf.UpdateAppArg(v.appL, appName, netifcArgName, netifc); err != nil {
+	if err := v.conf.UpdateAppArg(appName, netifcArgName, netifc); err != nil {
 		return err
 	}
 
@@ -577,7 +579,7 @@ func (v *Visor) SetAppNetworkInterface(appName, netifc string) error {
 
 // SetAppKillswitch implements API.
 func (v *Visor) SetAppKillswitch(appName string, killswitch bool) error {
-	if appName != skyenv.VPNClientName {
+	if appName != visorconfig.VPNClientName {
 		return fmt.Errorf("app %s is not allowed to set killswitch", appName)
 	}
 
@@ -586,8 +588,7 @@ func (v *Visor) SetAppKillswitch(appName string, killswitch bool) error {
 	const (
 		killSwitchArg = "--killswitch"
 	)
-
-	if err := v.conf.UpdateAppArg(v.appL, appName, killSwitchArg, killswitch); err != nil {
+	if err := v.conf.UpdateAppArg(appName, killSwitchArg, killswitch); err != nil {
 		return err
 	}
 
@@ -598,7 +599,7 @@ func (v *Visor) SetAppKillswitch(appName string, killswitch bool) error {
 
 // SetAppSecure implements API.
 func (v *Visor) SetAppSecure(appName string, isSecure bool) error {
-	if appName != skyenv.VPNServerName {
+	if appName != visorconfig.VPNServerName {
 		return fmt.Errorf("app %s is not allowed to change 'secure' parameter", appName)
 	}
 
@@ -607,11 +608,9 @@ func (v *Visor) SetAppSecure(appName string, isSecure bool) error {
 	const (
 		secureArgName = "--secure"
 	)
-
-	if err := v.conf.UpdateAppArg(v.appL, appName, secureArgName, isSecure); err != nil {
+	if err := v.conf.UpdateAppArg(appName, secureArgName, isSecure); err != nil {
 		return err
 	}
-
 	v.log.Infof("Updated %v secure state", appName)
 
 	return nil
@@ -621,8 +620,8 @@ func (v *Visor) SetAppSecure(appName string, isSecure bool) error {
 func (v *Visor) SetAppPK(appName string, pk cipher.PubKey) error {
 	allowedToChangePK := func(appName string) bool {
 		allowedApps := map[string]struct{}{
-			skyenv.SkysocksClientName: {},
-			skyenv.VPNClientName:      {},
+			visorconfig.SkysocksClientName: {},
+			visorconfig.VPNClientName:      {},
 		}
 
 		_, ok := allowedApps[appName]
@@ -638,8 +637,7 @@ func (v *Visor) SetAppPK(appName string, pk cipher.PubKey) error {
 	const (
 		pkArgName = "-srv"
 	)
-
-	if err := v.conf.UpdateAppArg(v.appL, appName, pkArgName, pk.String()); err != nil {
+	if err := v.conf.UpdateAppArg(appName, pkArgName, pk.String()); err != nil {
 		return err
 	}
 
@@ -669,7 +667,7 @@ func (v *Visor) SetAppDNS(appName string, dnsAddr string) error {
 		pkArgName = "-dns"
 	)
 
-	if err := v.conf.UpdateAppArg(v.appL, appName, pkArgName, dnsAddr); err != nil {
+	if err := v.conf.UpdateAppArg(appName, pkArgName, dnsAddr); err != nil {
 		return err
 	}
 
@@ -1166,6 +1164,14 @@ func (v *Visor) Restart() error {
 	return v.restartCtx.Restart()
 }
 
+// Reload implements API.
+func (v *Visor) Reload() error {
+	if v.restartCtx == nil {
+		return ErrMalformedRestartContext
+	}
+	return reload(v)
+}
+
 // Shutdown implements API.
 func (v *Visor) Shutdown() error {
 	if v.restartCtx == nil {
@@ -1227,7 +1233,7 @@ func (v *Visor) SetPublicAutoconnect(pAc bool) error {
 // GetVPNClientAddress get PK address of server set on vpn-client
 func (v *Visor) GetVPNClientAddress() string {
 	for _, v := range v.conf.Launcher.Apps {
-		if v.Name == skyenv.VPNClientName {
+		if v.Name == visorconfig.VPNClientName {
 			for index := range v.Args {
 				if v.Args[index] == "-srv" {
 					return v.Args[index+1]

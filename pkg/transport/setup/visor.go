@@ -13,7 +13,6 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // TransportListener provides an rpc service over dmsg to perform skycoin transport setup
@@ -25,18 +24,18 @@ type TransportListener struct {
 }
 
 // NewTransportListener makes a TransportListener from configuration
-func NewTransportListener(ctx context.Context, conf *visorconfig.V1, dmsgC *dmsg.Client, tm *transport.Manager, masterLogger *logging.MasterLogger) (*TransportListener, error) {
+func NewTransportListener(ctx context.Context, pk cipher.PubKey, tsnodes []cipher.PubKey, dmsgC *dmsg.Client, tm *transport.Manager, masterLogger *logging.MasterLogger) (*TransportListener, error) {
 	log := masterLogger.PackageLogger("transport_setup")
-	log.WithField("local_pk", conf.PK).Debug("Connecting to the dmsg network.")
+	log.WithField("local_pk", pk).Debug("Connecting to the dmsg network.")
 
 	select {
 	case <-dmsgC.Ready():
-		log.WithField("local_pk", conf.PK).Debug("Connected!")
+		log.WithField("local_pk", pk).Debug("Connected!")
 		tl := &TransportListener{
 			dmsgC:   dmsgC,
 			log:     log,
 			tm:      tm,
-			tsNodes: conf.Transport.TransportSetup,
+			tsNodes: tsnodes,
 		}
 		return tl, nil
 	case <-ctx.Done():
