@@ -19,7 +19,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 const (
@@ -57,7 +57,7 @@ func main() {
 	fmt.Println("Starting serving proxy server")
 
 	if runtime.GOOS == "windows" {
-		ipcClient, err := ipc.StartClient(skyenv.VPNClientName, nil)
+		ipcClient, err := ipc.StartClient(visorconfig.VPNClientName, nil)
 		if err != nil {
 			setAppError(appCl, err)
 			print(fmt.Sprintf("Error creating ipc server for VPN client: %v\n", err))

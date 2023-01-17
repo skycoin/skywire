@@ -1,3 +1,4 @@
+// Package metricsutil pkg/metricsutil/http.go
 package metricsutil
 
 import (
@@ -33,6 +34,6 @@ func ServeHTTPMetrics(log logrus.FieldLogger, addr string) {
 
 	log.WithField("addr", addr).Info("Serving metrics.")
 	go func() {
-		log.Fatal(http.ListenAndServe(addr, r))
+		log.Fatal(http.ListenAndServe(addr, r)) //nolint
 	}()
 }

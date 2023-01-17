@@ -1,3 +1,4 @@
+// Package buildinfo pkg/buildinfo/buildinfo.go
 package buildinfo
 
 import (

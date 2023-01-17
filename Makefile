@@ -61,7 +61,7 @@ endif
 STATIC_OPTS?= $(OPTS) CC=musl-gcc
 MANAGER_UI_DIR = static/skywire-manager-src
 GO_BUILDER_VERSION=v1.17
-MANAGER_UI_BUILT_DIR=cmd/skywire-visor/static
+MANAGER_UI_BUILT_DIR=pkg/visor/static
 
 TEST_OPTS:=-cover -timeout=5m -mod=vendor
 
@@ -179,9 +179,7 @@ tidy: ## Tidies and vendors dependencies.
 	${OPTS} go mod tidy -v
 
 format: tidy ## Formats the code. Must have goimports and goimports-reviser installed (use make install-linters).
-	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg
-	${OPTS} goimports -w -local ${PROJECT_BASE} ./cmd
-	${OPTS} goimports -w -local ${PROJECT_BASE} ./internal
+	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg & ${OPTS} goimports -w -local ${PROJECT_BASE} ./cmd &	${OPTS} goimports -w -local ${PROJECT_BASE} ./internal
 	find . -type f -name '*.go' -not -path "./.git/*" -not -path "./vendor/*"  -exec goimports-reviser -project-name ${PROJECT_BASE} {} \;
 
 format-windows: tidy ## Formats the code. Must have goimports and goimports-reviser installed (use make install-linters).

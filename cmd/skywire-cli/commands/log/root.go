@@ -13,11 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/spf13/cobra"
-
 	"github.com/skycoin/dmsg/pkg/dmsgget"
-
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
+	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"

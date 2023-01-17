@@ -3,7 +3,6 @@ package router
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"testing"
 

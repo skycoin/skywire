@@ -1,6 +1,7 @@
 //go:build linux
 // +build linux
 
+// Package netutil pkg/netutil/net_linux.go
 package netutil
 
 import (

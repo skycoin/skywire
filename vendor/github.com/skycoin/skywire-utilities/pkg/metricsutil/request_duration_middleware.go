@@ -1,3 +1,4 @@
+// Package metricsutil pkg/metricsutil/request_duration_middleware.go
 package metricsutil
 
 import (

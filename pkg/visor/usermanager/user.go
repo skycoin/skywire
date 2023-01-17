@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"time"
 	"unicode"
 
 	"go.etcd.io/bbolt"
@@ -17,7 +16,6 @@ import (
 )
 
 const (
-	boltTimeout        = 10 * time.Second
 	boltUserBucketName = "users"
 	passwordSaltLen    = 16
 	minPasswordLen     = 6
@@ -115,7 +113,7 @@ func NewBoltUserStore(path string) (*BoltUserStore, error) {
 		return nil, err
 	}
 
-	db, err := bbolt.Open(path, os.FileMode(ownerRW), &bbolt.Options{Timeout: boltTimeout})
+	db, err := bbolt.Open(path, os.FileMode(ownerRW), &bbolt.Options{})
 	if err != nil {
 		return nil, err
 	}

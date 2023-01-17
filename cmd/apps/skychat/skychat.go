@@ -28,7 +28,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 const (
@@ -69,7 +69,7 @@ func main() {
 	go listenLoop()
 
 	if runtime.GOOS == "windows" {
-		ipcClient, err := ipc.StartClient(skyenv.SkychatName, nil)
+		ipcClient, err := ipc.StartClient(visorconfig.SkychatName, nil)
 		if err != nil {
 			print(fmt.Sprintf("Error creating ipc server for skychat client: %v\n", err))
 			setAppError(appCl, err)
@@ -261,10 +261,10 @@ func handleIPCSignal(client *ipc.Client) {
 	for {
 		m, err := client.Read()
 		if err != nil {
-			fmt.Printf("%s IPC received error: %v", skyenv.SkychatName, err)
+			fmt.Printf("%s IPC received error: %v", visorconfig.SkychatName, err)
 		}
-		if m.MsgType == skyenv.IPCShutdownMessageType {
-			fmt.Println("Stopping " + skyenv.SkychatName + " via IPC")
+		if m.MsgType == visorconfig.IPCShutdownMessageType {
+			fmt.Println("Stopping " + visorconfig.SkychatName + " via IPC")
 			break
 		}
 	}
