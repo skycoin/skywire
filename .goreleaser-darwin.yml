@@ -22,6 +22,8 @@ builds:
     goarch:
       - arm64
       - amd64
+    env:
+      - CGO_ENABLED=1
     main: ./cmd/skywire-visor/
     ldflags: -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}
 
