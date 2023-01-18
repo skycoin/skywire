@@ -20,10 +20,9 @@ builds:
     goos:
       - darwin
     goarch:
-      - arm64
       - amd64
     env:
-      - CGO_ENABLED=0
+      - CGO_ENABLED=1
     main: ./cmd/skywire-visor/
     ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}
 
@@ -32,10 +31,7 @@ builds:
     goos:
       - darwin
     goarch:
-      - arm64
       - amd64
-    env:
-      - CGO_ENABLED=0
     main: ./cmd/skywire-cli/
     ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
@@ -44,10 +40,7 @@ builds:
     goos:
       - darwin
     goarch:
-      - arm64
       - amd64
-    env:
-      - CGO_ENABLED=0
     main: ./cmd/apps/skychat/
     ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
@@ -56,10 +49,7 @@ builds:
     goos:
       - darwin
     goarch:
-      - arm64
       - amd64
-    env:
-      - CGO_ENABLED=0
     main: ./cmd/apps/skysocks/
     ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
@@ -68,10 +58,7 @@ builds:
     goos:
       - darwin
     goarch:
-      - arm64
       - amd64
-    env:
-      - CGO_ENABLED=0
     main: ./cmd/apps/skysocks-client/
     ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
@@ -80,10 +67,61 @@ builds:
     goos:
       - darwin
     goarch:
-      - arm64
       - amd64
-    env:
-      - CGO_ENABLED=0
+    main: ./cmd/apps/vpn-client/
+    ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
+  
+  - id: skywire-visor-arm64
+    binary: skywire-visor
+    goos:
+      - darwin
+    goarch:
+      - arm64
+    main: ./cmd/skywire-visor/
+    ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}
+
+  - id: skywire-cli-arm64
+    binary: skywire-cli
+    goos:
+      - darwin
+    goarch:
+      - arm64
+    main: ./cmd/skywire-cli/
+    ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
+
+  - id: skychat-arm64
+    binary: apps/skychat
+    goos:
+      - darwin
+    goarch:
+      - arm64
+    main: ./cmd/apps/skychat/
+    ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
+
+  - id: skysocks-arm64
+    binary: apps/skysocks
+    goos:
+      - darwin
+    goarch:
+      - arm64
+    main: ./cmd/apps/skysocks/
+    ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
+
+  - id: skysocks-client-arm64
+    binary: apps/skysocks-client
+    goos:
+      - darwin
+    goarch:
+      - arm64
+    main: ./cmd/apps/skysocks-client/
+    ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
+
+  - id: vpn-client-arm64
+    binary: apps/vpn-client
+    goos:
+      - darwin
+    goarch:
+      - arm64
     main: ./cmd/apps/vpn-client/
     ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
@@ -101,6 +139,21 @@ archives:
       - skysocks-client
       - skychat
       - vpn-client
+    allow_different_binary_count: true
+  
+  - id: archive-arm64
+    format: tar.gz
+    wrap_in_directory: false
+    name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
+    files:
+      - dmsghttp-config.json
+    builds:
+      - skywire-visor-arm64
+      - skywire-cli-arm64
+      - skysocks-arm64
+      - skysocks-client-arm64
+      - skychat-arm64
+      - vpn-client-arm64
     allow_different_binary_count: true
 
 checksum:
