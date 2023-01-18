@@ -15,6 +15,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/skycoin/systray"
+
 	"github.com/gen2brain/dlgs"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/direct"
@@ -22,7 +24,6 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsgget"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
-	"github.com/skycoin/systray"
 	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
