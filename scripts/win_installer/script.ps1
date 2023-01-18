@@ -48,12 +48,12 @@ function BuildInstaller($arch)
         $response = $request.GetResponse()
         $realTagUrl = $response.ResponseUri.OriginalString
         $version = $realTagUrl.split('/')[-1].Trim('v')
-        $fileName = "skywire-systray-v$version-windows-$arch"
+        $fileName = "skywire-v$version-windows-$arch"
         $msiName = "skywire-installer-v$version-windows-$arch"
         $downloadURL = "https://github.com/skycoin/skywire/releases/download/v$version/$filename.zip"
         Invoke-WebRequest $downloadURL -o archive.zip -ErrorAction Stop
     } else {
-        $fileName = "skywire-systray-$version-windows-$arch"
+        $fileName = "skywire-v$version-windows-$arch"
         $msiName = "skywire-installer-$version-windows-$arch"
         $downloadURL = "https://github.com/skycoin/skywire/releases/download/$version/$filename.zip"
         Invoke-WebRequest $downloadURL -o archive.zip
