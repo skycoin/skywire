@@ -53,7 +53,7 @@ function BuildInstaller($arch)
         $downloadURL = "https://github.com/skycoin/skywire/releases/download/v$version/$filename.zip"
         Invoke-WebRequest $downloadURL -o archive.zip -ErrorAction Stop
     } else {
-        $fileName = "skywire-v$version-windows-$arch"
+        $fileName = "skywire-$version-windows-$arch"
         $msiName = "skywire-installer-$version-windows-$arch"
         $downloadURL = "https://github.com/skycoin/skywire/releases/download/$version/$filename.zip"
         Invoke-WebRequest $downloadURL -o archive.zip
