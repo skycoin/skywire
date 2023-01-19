@@ -58,6 +58,7 @@ type API interface {
 	//reward setting
 	SetRewardAddress(string) (string, error)
 	GetRewardAddress() (string, error)
+	DeleteRewardAddress() error
 
 	//app controls
 	App(appName string) (*appserver.AppState, error)
@@ -373,6 +374,17 @@ func (v *Visor) GetRewardAddress() (string, error) {
 		return "", fmt.Errorf("failed to read config file. err=%v", err)
 	}
 	return string(rConfig), nil
+}
+
+// DeleteRewardAddress implements API.
+func (v *Visor) DeleteRewardAddress() error {
+
+	path := v.conf.LocalPath + "/" + visorconfig.RewardFile
+	err := os.Remove(path)
+	if err != nil {
+		return fmt.Errorf("Error deleting file. err=%v", err)
+	}
+	return nil
 }
 
 // Apps implements API.

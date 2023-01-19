@@ -32,7 +32,7 @@ func init() {
 var pingCmd = &cobra.Command{
 	Use:   "ping <pk>",
 	Short: "Ping the visor with given pk",
-	Long:  "\n	Creates a route with the provided pk as a hop and returns latency on the conn",
+	Long:  "\n  Creates a route with the provided pk as a hop and returns latency on the conn",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		pk := internal.ParsePK(cmd.Flags(), "pk", args[0])
@@ -58,7 +58,7 @@ var pingCmd = &cobra.Command{
 var testCmd = &cobra.Command{
 	Use:   "test",
 	Short: "Test the visor with public visors on network",
-	Long:  "\n	Creates a route with public visors as a hop and returns latency on the conn",
+	Long:  "\n  Creates a route with public visors as a hop and returns latency on the conn",
 	Run: func(cmd *cobra.Command, args []string) {
 		pingConfig := visor.PingConfig{Tries: tries, PcktSize: pcktSize, PubVisCount: pubVisCount}
 		rpcClient, err := clirpc.Client(cmd.Flags())
