@@ -31,7 +31,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "url")
 	genConfigCmd.Flags().StringVar(&logLevel, "log-level", "info", "level of logging in config")
 	gHiddenFlags = append(gHiddenFlags, "log-level")
-	genConfigCmd.Flags().BoolVarP(&isBestProtocol, "bestproto", "b", false, "best protocol (dmsg | direct) based on location")
+	genConfigCmd.Flags().BoolVarP(&isBestProtocol, "bestproto", "b", false, "best protocol (dmsg | direct) based on location") //this will also disable public autoconnect based on location
 	genConfigCmd.Flags().BoolVarP(&isDisableAuth, "noauth", "c", false, "disable authentication for hypervisor UI")
 	gHiddenFlags = append(gHiddenFlags, "noauth")
 	genConfigCmd.Flags().BoolVarP(&isDmsgHTTP, "dmsghttp", "d", false, "use dmsg connection to skywire services")
@@ -80,7 +80,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "hide")
 	genConfigCmd.Flags().BoolVarP(&isRetainHypervisors, "retainhv", "x", false, "retain existing hypervisors with regen")
 	gHiddenFlags = append(gHiddenFlags, "retainhv")
-	genConfigCmd.Flags().BoolVarP(&isPublicAutoConn, "autoconn", "y", false, "disable autoconnect to public visors")
+	genConfigCmd.Flags().BoolVarP(&isDisablePublicAutoConn, "autoconn", "y", false, "disable autoconnect to public visors")
 	gHiddenFlags = append(gHiddenFlags, "hide")
 	genConfigCmd.Flags().BoolVarP(&isPublic, "public", "z", false, "publicize visor in service discovery")
 	gHiddenFlags = append(gHiddenFlags, "public")
@@ -247,7 +247,9 @@ var genConfigCmd = &cobra.Command{
 
 		//determine best protocol
 		if isBestProtocol && netutil.LocalProtocol() {
+			isDisablePublicAutoConn = true
 			isDmsgHTTP = true
+
 		}
 
 		//create the conf
@@ -372,7 +374,7 @@ var genConfigCmd = &cobra.Command{
 		if ver != "" {
 			conf.Common.Version = ver
 		}
-		if isPublicAutoConn {
+		if isDisablePublicAutoConn {
 			conf.Transport.PublicAutoconnect = false
 		}
 		if isPublic {
