@@ -215,6 +215,7 @@ type Summary struct {
 	MinHops              uint16                           `json:"min_hops"`
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 	SkybianBuildVersion  string                           `json:"skybian_build_version"`
+	RewardAddress        string                           `json:"reward_address"`
 	BuildTag             string                           `json:"build_tag"`
 	PublicAutoconnect    bool                             `json:"public_autoconnect"`
 }
@@ -266,6 +267,11 @@ func (v *Visor) Summary() (*Summary, error) {
 		dmsgStatValue = &dmsgTracker
 	}
 
+	rewardAddress, err := v.GetRewardAddress()
+	if err != nil {
+		return nil, fmt.Errorf("reward_address")
+	}
+
 	summary := &Summary{
 		Overview:             overview,
 		Health:               health,
@@ -275,6 +281,7 @@ func (v *Visor) Summary() (*Summary, error) {
 		PersistentTransports: pts,
 		SkybianBuildVersion:  skybianBuildVersion,
 		BuildTag:             BuildTag,
+		RewardAddress:        rewardAddress,
 		PublicAutoconnect:    v.conf.Transport.PublicAutoconnect,
 		DmsgStats:            dmsgStatValue,
 	}
