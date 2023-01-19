@@ -58,6 +58,7 @@ type API interface {
 	//reward setting
 	SetRewardAddress(string) (string, error)
 	GetRewardAddress() (string, error)
+	DeleteRewardAddress() error
 
 	//app controls
 	App(appName string) (*appserver.AppState, error)
@@ -215,6 +216,7 @@ type Summary struct {
 	MinHops              uint16                           `json:"min_hops"`
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 	SkybianBuildVersion  string                           `json:"skybian_build_version"`
+	RewardAddress        string                           `json:"reward_address"`
 	BuildTag             string                           `json:"build_tag"`
 	PublicAutoconnect    bool                             `json:"public_autoconnect"`
 }
@@ -266,6 +268,11 @@ func (v *Visor) Summary() (*Summary, error) {
 		dmsgStatValue = &dmsgTracker
 	}
 
+	rewardAddress, err := v.GetRewardAddress()
+	if err != nil {
+		v.log.Warn(err)
+	}
+
 	summary := &Summary{
 		Overview:             overview,
 		Health:               health,
@@ -275,6 +282,7 @@ func (v *Visor) Summary() (*Summary, error) {
 		PersistentTransports: pts,
 		SkybianBuildVersion:  skybianBuildVersion,
 		BuildTag:             BuildTag,
+		RewardAddress:        rewardAddress,
 		PublicAutoconnect:    v.conf.Transport.PublicAutoconnect,
 		DmsgStats:            dmsgStatValue,
 	}
@@ -350,11 +358,33 @@ func (v *Visor) SetRewardAddress(p string) (string, error) {
 // GetRewardAddress implements API.
 func (v *Visor) GetRewardAddress() (string, error) {
 	path := v.conf.LocalPath + "/" + visorconfig.RewardFile
+	_, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		file, err := os.Create(filepath.Clean(path))
+		if err != nil {
+			return "", fmt.Errorf("failed to create config file. err=%v", err)
+		}
+		err = file.Close()
+		if err != nil {
+			return "", fmt.Errorf("failed to close config file. err=%v", err)
+		}
+	}
 	rConfig, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return "", fmt.Errorf("failed to read config file. err=%v", err)
 	}
 	return string(rConfig), nil
+}
+
+// DeleteRewardAddress implements API.
+func (v *Visor) DeleteRewardAddress() error {
+
+	path := v.conf.LocalPath + "/" + visorconfig.RewardFile
+	err := os.Remove(path)
+	if err != nil {
+		return fmt.Errorf("Error deleting file. err=%v", err)
+	}
+	return nil
 }
 
 // Apps implements API.
