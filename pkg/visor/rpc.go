@@ -113,6 +113,12 @@ func (r *RPC) GetRewardAddress(_ *struct{}, out *string) (err error) {
 	return err
 }
 
+// DeleteRewardAddress deletes the reward.txt
+func (r *RPC) DeleteRewardAddress(_ *struct{}, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DeleteRewardAddress", nil)(nil, &err)
+	return r.visor.DeleteRewardAddress()
+}
+
 /*
 	<<< APP LOGS >>>
 */
