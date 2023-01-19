@@ -268,8 +268,8 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/log/rotation", hv.getLogRotationInterval())
 				r.Put("/visors/{pk}/log/rotation", hv.putLogRotationInterval())
 				r.Get("/visors/{pk}/reward", hv.getRewardAddress())
-				r.Put("/visors/{pk}/reward", hv.putRewardAddres())
-
+				r.Put("/visors/{pk}/reward", hv.putRewardAddress())
+				r.Delete("/visors/{pk}/reward", hv.deleteRewardAddress())
 			})
 		})
 
@@ -1276,13 +1276,24 @@ func (hv *Hypervisor) getLogRotationInterval() http.HandlerFunc {
 	})
 }
 
-func (hv *Hypervisor) putRewardAddres() http.HandlerFunc {
+func (hv *Hypervisor) getRewardAddress() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		pts, err := ctx.API.GetRewardAddress()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, pts)
+	})
+}
+
+func (hv *Hypervisor) putRewardAddress() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		var reqBody *rewardconfig.Reward
 
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
 			if err != io.EOF {
-				hv.log(r).Warnf("putRewardAddres request: %v", err)
+				hv.log(r).Warnf("putRewardAddress request: %v", err)
 			}
 			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
 			return
@@ -1302,14 +1313,14 @@ func (hv *Hypervisor) putRewardAddres() http.HandlerFunc {
 	})
 }
 
-func (hv *Hypervisor) getRewardAddress() http.HandlerFunc {
+func (hv *Hypervisor) deleteRewardAddress() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		pts, err := ctx.API.GetRewardAddress()
+		err := ctx.API.DeleteRewardAddress()
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
-		httputil.WriteJSON(w, r, http.StatusOK, pts)
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
 	})
 }
 

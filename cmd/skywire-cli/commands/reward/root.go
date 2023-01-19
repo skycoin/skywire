@@ -107,12 +107,6 @@ var rewardCmd = &cobra.Command{
 		if output == "" {
 			output = visorconfig.PackageConfig().LocalPath + "/" + visorconfig.RewardFile
 		}
-		if isDeleteFile {
-			err := os.Remove(output)
-			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error deleting file. err=%v", err))
-			}
-		}
 		//print reward address and exit
 		if isRead {
 			dat, err := os.ReadFile(output) //nolint
@@ -146,14 +140,23 @@ var rewardCmd = &cobra.Command{
 			readRewardFile(cmd.Flags())
 			return
 		}
-		rewardaddress, err := client.SetRewardAddress(rewardAddress)
+
+		if isDeleteFile {
+			err := client.DeleteRewardAddress()
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+			return
+		}
+
+		rwdAdd, err := client.SetRewardAddress(rewardAddress)
 		if err != nil {
 			internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))      //nolint
 			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(cAddr.String()), 0644)) //nolint
 			readRewardFile(cmd.Flags())
 			return
 		}
-		output := fmt.Sprintf("Reward address:\n  %s\n", rewardaddress)
+		output := fmt.Sprintf("Reward address:\n  %s\n", rwdAdd)
 		internal.PrintOutput(cmd.Flags(), output, output)
 	},
 }

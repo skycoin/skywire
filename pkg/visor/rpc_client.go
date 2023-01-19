@@ -137,6 +137,11 @@ func (rc *rpcClient) GetRewardAddress() (rConfig string, err error) {
 	return rConfig, err
 }
 
+// DeleteRewardAddress implements API.
+func (rc *rpcClient) DeleteRewardAddress() (err error) {
+	return rc.Call("DeleteRewardAddress", &struct{}{}, &struct{}{})
+}
+
 // Apps calls Apps.
 func (rc *rpcClient) Apps() ([]*appserver.AppState, error) {
 	states := make([]*appserver.AppState, 0)
@@ -751,6 +756,11 @@ func (mc *mockRPCClient) SetRewardAddress(p string) (string, error) {
 // GetRewardAddress implements API.
 func (mc *mockRPCClient) GetRewardAddress() (string, error) {
 	return "", nil
+}
+
+// DeleteRewardAddress implements API.
+func (mc *mockRPCClient) DeleteRewardAddress() error {
+	return nil
 }
 
 // Apps implements API.
