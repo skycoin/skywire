@@ -350,6 +350,17 @@ func (v *Visor) SetRewardAddress(p string) (string, error) {
 // GetRewardAddress implements API.
 func (v *Visor) GetRewardAddress() (string, error) {
 	path := v.conf.LocalPath + "/" + visorconfig.RewardFile
+	_, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		file, err := os.Create(filepath.Clean(path))
+		if err != nil {
+			return "", fmt.Errorf("failed to create config file. err=%v", err)
+		}
+		err = file.Close()
+		if err != nil {
+			return "", fmt.Errorf("failed to close config file. err=%v", err)
+		}
+	}
 	rConfig, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return "", fmt.Errorf("failed to read config file. err=%v", err)
