@@ -270,7 +270,7 @@ func (v *Visor) Summary() (*Summary, error) {
 
 	rewardAddress, err := v.GetRewardAddress()
 	if err != nil {
-		return nil, fmt.Errorf("reward_address")
+		v.log.Warn(err)
 	}
 
 	summary := &Summary{
