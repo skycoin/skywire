@@ -6,15 +6,50 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## 1.3.0
 
-### Added
-- `--systray` flag to run visor as systray
-- tag `withoutsystray` to build skywire-visor without systray library
-- `build-static-wos` for build static without systray skywire-visor
-- `test` and `ping` command to `skywire-cli` as `skywire-cli visor ping <pk>` and `skywire-cli visor test`
-- `skyfwd` command to `skywire-cli` [#1409](https://github.com/skycoin/skywire/pull/1409)
-
-### Changed
-- remove `make build-systray` and `make build-windows-systray`, and just keep `make build` and `make build-windows`
+-   Add changelog generation script [#1439](https://github.com/skycoin/skywire/pull/1439)
+-   Fix GetRewardAddress API  [#1438](https://github.com/skycoin/skywire/pull/1438)
+-   fix release issues  [#1432](https://github.com/skycoin/skywire/pull/1432) [#1434](https://github.com/skycoin/skywire/pull/1434) [#1433](https://github.com/skycoin/skywire/pull/1433)
+-   built tag for non-systray skywire-visor  [#1429](https://github.com/skycoin/skywire/pull/1429)
+-   visor test subcommand  [#1428](https://github.com/skycoin/skywire/pull/1428)
+-   Update to Angular 15  [#1426](https://github.com/skycoin/skywire/pull/1426)
+-   Hot fix on DNS  [#1425](https://github.com/skycoin/skywire/pull/1425)
+-   update dmsg@develop  [#1423](https://github.com/skycoin/skywire/pull/1423)
+-   Selected DMSG Server  [#1422](https://github.com/skycoin/skywire/pull/1422)
+-   Integrated Autoconfig  [#1417](https://github.com/skycoin/skywire/pull/1417)
+-   Update Angular to v14.2.11  [#1416](https://github.com/skycoin/skywire/pull/1416)
+-   skywire-cli log collecting command  [#1414](https://github.com/skycoin/skywire/pull/1414)
+-   App/Services showing ports subcommand `skywire-cli visor ports`  [#1412](https://github.com/skycoin/skywire/pull/1412)
+-   skywire app example  [#1409](https://github.com/skycoin/skywire/pull/1409)
+-   `skywire-cli doc` command & cli documentation update  [#1408](https://github.com/skycoin/skywire/pull/1408)
+-   fixing skywire-cli reward freezing issue  [#1407](https://github.com/skycoin/skywire/pull/1407)
+-   Improve readme documentation  [#1406](https://github.com/skycoin/skywire/pull/1406)
+-   Add cli command visor ping and test  [#1405](https://github.com/skycoin/skywire/pull/1405)
+-   build ui  [#1403](https://github.com/skycoin/skywire/pull/1403)
+-   fix `make format check` errors  [#1401](https://github.com/skycoin/skywire/pull/1401)
+-   Fix control visor apps from hv  [#1399](https://github.com/skycoin/skywire/pull/1399)
+-   Bug fixes for the UI  [#1398](https://github.com/skycoin/skywire/pull/1398)
+-   run as systray flag `--systray`  [#1396](https://github.com/skycoin/skywire/pull/1396)
+-   fix panic and datarace  [#1394](https://github.com/skycoin/skywire/pull/1394)
+-   Printing new IP after connecting to VPN in CLI  [#1393](https://github.com/skycoin/skywire/pull/1393)
+-   Add display node ip field to the main config  [#1392](https://github.com/skycoin/skywire/pull/1392)
+-   re-implement setting reward address  [#1391](https://github.com/skycoin/skywire/pull/1391)
+-   skywire-cli terminal user interface improvements  [#1390](https://github.com/skycoin/skywire/pull/1390)
+-   improve `skywire-cli vpn` subcommand  [#1389](https://github.com/skycoin/skywire/pull/1389)
+-   Fix transport logging  [#1386](https://github.com/skycoin/skywire/pull/1386)
+-   fix cli config priv flags  [#1384](https://github.com/skycoin/skywire/pull/1384)
+-   Add param customCommand for PtyUI.Handler  [#1383](https://github.com/skycoin/skywire/pull/1383)
+-   add Info field to Service struct  [#1382](https://github.com/skycoin/skywire/pull/1382)
+-   Add DNS to TUN, in VPN-Client  [#1381](https://github.com/skycoin/skywire/pull/1381)
+-   Improve systray VPN button initialization  [#1380](https://github.com/skycoin/skywire/pull/1380)
+-   fix privacyjson  [#1379](https://github.com/skycoin/skywire/pull/1379)
+-   Update transport file logging  [#1376](https://github.com/skycoin/skywire/pull/1376)
+-   Update LocalIPs field in model Service  [#1375](https://github.com/skycoin/skywire/pull/1375)
+-   expose dmsghttp server  [#1374](https://github.com/skycoin/skywire/pull/1374)
+-   Fix negative waitgroup  [#1372](https://github.com/skycoin/skywire/pull/1372)
+-   `skywire-cli config priv` subcommand  [#1369](https://github.com/skycoin/skywire/pull/1369)
+-   fix absence of git in makefile  [#1368](https://github.com/skycoin/skywire/pull/1368)
+-   Fix rpc error in cli for json  [#1367](https://github.com/skycoin/skywire/pull/1367)
+-   Fix StartVPNCient logic  [#1366](https://github.com/skycoin/skywire/pull/1366)
 
 ## 1.2.0
 
