@@ -12,11 +12,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/systray"
-
 	"github.com/bitfield/script"
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/systray"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
