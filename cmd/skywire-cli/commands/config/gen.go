@@ -80,7 +80,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "hide")
 	genConfigCmd.Flags().BoolVarP(&isRetainHypervisors, "retainhv", "x", false, "retain existing hypervisors with regen")
 	gHiddenFlags = append(gHiddenFlags, "retainhv")
-	genConfigCmd.Flags().BoolVarP(&isDisablePublicAutoConn, "autoconn", "y", false, "disable autoconnect to public visors")
+	genConfigCmd.Flags().BoolVarP(&disablePublicAutoConn, "autoconn", "y", false, "disable autoconnect to public visors")
 	gHiddenFlags = append(gHiddenFlags, "hide")
 	genConfigCmd.Flags().BoolVarP(&isPublic, "public", "z", false, "publicize visor in service discovery")
 	gHiddenFlags = append(gHiddenFlags, "public")
@@ -247,7 +247,7 @@ var genConfigCmd = &cobra.Command{
 
 		//determine best protocol
 		if isBestProtocol && netutil.LocalProtocol() {
-			isDisablePublicAutoConn = true
+			disablePublicAutoConn = true
 			isDmsgHTTP = true
 
 		}
@@ -374,7 +374,7 @@ var genConfigCmd = &cobra.Command{
 		if ver != "" {
 			conf.Common.Version = ver
 		}
-		if isDisablePublicAutoConn {
+		if disablePublicAutoConn {
 			conf.Transport.PublicAutoconnect = false
 		}
 		if isPublic {

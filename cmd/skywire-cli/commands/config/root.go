@@ -73,7 +73,7 @@ var (
 	conf                   *visorconfig.V1
 	isUsr                  bool
 	isPublic               bool
-	isPublicAutoConn       bool
+	disablePublicAutoConn  bool
 	isDisplayNodeIP        bool
 	addExampleApps         bool
 )
