@@ -6,6 +6,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## 1.3.0
 
+-   disable public autoconnect logic for `config gen -b` [#1440](https://github.com/skycoin/skywire/pull/1440)
 -   Add changelog generation script [#1439](https://github.com/skycoin/skywire/pull/1439)
 -   Fix GetRewardAddress API  [#1438](https://github.com/skycoin/skywire/pull/1438)
 -   fix release issues  [#1432](https://github.com/skycoin/skywire/pull/1432) [#1434](https://github.com/skycoin/skywire/pull/1434) [#1433](https://github.com/skycoin/skywire/pull/1433)
