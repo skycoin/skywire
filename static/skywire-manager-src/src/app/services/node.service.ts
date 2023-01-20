@@ -482,6 +482,7 @@ export class NodeService {
           node.version = response.overview.build_info.version;
           node.autoconnectTransports = response.public_autoconnect;
           node.buildTag = response.build_tag ? response.build_tag : '';
+          node.rewardsAddress = response.reward_address;
 
           // Ip.
           if (response.overview && response.overview.local_ip && (response.overview.local_ip as string).trim()) {
@@ -599,6 +600,7 @@ export class NodeService {
         node.isSymmeticNat = response.overview.is_symmetic_nat;
         node.publicIp = response.overview.public_ip;
         node.autoconnectTransports = response.public_autoconnect;
+        node.rewardsAddress = response.reward_address;
 
         // Ip.
         if (response.overview.local_ip && (response.overview.local_ip as string).trim()) {
@@ -731,6 +733,31 @@ export class NodeService {
         return node;
       })
     );
+  }
+
+  /**
+   * Sets the rewards address of the node.
+   */
+  setRewardsAddress(nodeKey: string, address: string) {
+    const data = {
+      reward_address: address,
+    };
+
+    return this.apiService.put(`visors/${nodeKey}/reward`, data);
+  }
+
+  /**
+   * Gets the rewards address of the node.
+   */
+  getRewardsAddress(nodeKey: string) {
+    return this.apiService.get(`visors/${nodeKey}/reward`);
+  }
+
+  /**
+   * Removes the rewards address of the node.
+   */
+  deleteRewardsAddress(nodeKey: string) {
+    return this.apiService.delete(`visors/${nodeKey}/reward`);
   }
 
   /**

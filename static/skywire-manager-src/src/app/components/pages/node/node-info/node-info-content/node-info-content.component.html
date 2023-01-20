@@ -59,6 +59,29 @@
     </span>
   </div>
   <div class="separator"></div>
+  <!-- Rewards info section. -->
+  <div class="d-flex flex-column">
+    <span class="section-title">{{ 'node.details.rewards-info.title' | translate }}</span>
+    <span class="info-line">
+      <span class="title">{{ 'node.details.rewards-info.rewards-address' | translate }}&nbsp;</span>
+      <app-copy-to-clipboard-text text="{{ node.rewardsAddress }}" *ngIf="node.rewardsAddress"></app-copy-to-clipboard-text>
+      <ng-container *ngIf="!node.rewardsAddress">
+        {{ 'node.details.rewards-info.not-registered' | translate }}
+        <mat-icon [inline]="true" [matTooltip]="'node.details.rewards-info.not-registered-info' | translate">info</mat-icon>
+      </ng-container>
+    </span>
+    <div class="config-button-container">
+      <app-button color="primary" (action)="changeRewardsAddressConfig()" [forDarkBackground]="true">
+        <ng-container *ngIf="node.rewardsAddress">
+          {{ 'node.details.rewards-info.change-address-button' | translate }}
+        </ng-container>
+        <ng-container *ngIf="!node.rewardsAddress">
+          {{ 'node.details.rewards-info.set-address-button' | translate }}
+        </ng-container>
+      </app-button>
+    </div>
+  </div>
+  <div class="separator"></div>
   <!-- Transports info section. -->
   <div class="d-flex flex-column">
     <span class="section-title">{{ 'node.details.transports-info.title' | translate }}</span>

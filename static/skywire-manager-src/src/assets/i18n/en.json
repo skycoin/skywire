@@ -125,6 +125,14 @@
           "weeks": "{{ time }} weeks"
         }
       },
+      "rewards-info": {
+        "title": "Rewards Info",
+        "rewards-address": "Rewards address:",
+        "not-registered": "Not registered",
+        "not-registered-info": "You have not specified a Skycoin address for receiving rewards for this visor. If you want to register for receiving rewards, press the \"Set address\" button and set a Skycoin address.",
+        "set-address-button": "Set address",
+        "change-address-button": "Change address"
+      },
       "transports-info": {
         "title": "Transports Info",
         "autoconnect": "Autoconnect:",
@@ -160,6 +168,15 @@
     "error-load": "An error occurred while refreshing the data. Retrying..."
   },
 
+  "rewards-address-config": {
+    "title": "Rewards Address Configuration",
+    "info": "Here you can set to which Skycoin address you want the rewards to be sent. If you leave the address empty, the registration will be deleted and the visor will not receive rewards.",
+    "address": "Address",
+    "save-config-button": "Save configuration",
+    "done": "Changes saved.",
+    "empty-warning": "The address in empty, so the registration will be deleted and no rewards will be received. Do you really want to continue?"
+  },
+
   "router-config": {
     "title": "Router Configuration",
     "info": "Here you can configure how many hops the connections must pass through other Skywire visors before reaching the final destination. NOTE: the changes will not affect the existing routes.",
@@ -171,6 +188,7 @@
   "nodes": {
     "title": "Visor list",
     "dmsg-title": "DMSG",
+    "modify-rewards-all": "Change rewards address",
     "update-all": "Update all online visors",
     "hypervisor": "Hypervisor",
     "state": "State",
@@ -196,6 +214,7 @@
     "deleted-singular": "1 offline visor removed.",
     "deleted-plural": "{{ number }} offline visors removed.",
     "no-visors-to-update": "There are no visors to update.",
+    "no-visors-to-modify": "There are no visors to modify.",
     "filter-dialog": {
       "online": "The visor must be",
       "label": "The label must contain",
@@ -208,6 +227,22 @@
         "offline": "Offline"
       }
     }
+  },
+
+  "bulk-rewards": {
+    "title": "Change rewards address",
+    "info": "Enter the Skycoin address where you want to receive the rewards. The address will be set on all the selected visors. If you leave the address empty, the registration will be deleted and the visors will not receive rewards. You can also set the rewards address of each node individually using the option on the visor details page.",
+    "address": "New address",
+    "select-visors": "Visors to alter:",
+    "current-address": "Current address:",
+    "not-registered": "None (not registered on the rewards program).",
+    "checking": "Checking...",
+    "error-checking": "Error checking:",
+    "processing": "Processing...",
+    "error-processing": "Error making the change:",
+    "done": "Change done.",
+    "perform-changes": "Perform changes",
+    "empty-warning": "The address in empty, so the registration will be deleted and no rewards will be received. Do you really want to continue?"
   },
 
   "edit-label": {

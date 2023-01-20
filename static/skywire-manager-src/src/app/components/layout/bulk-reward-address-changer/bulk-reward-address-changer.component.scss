@@ -1,0 +1,57 @@
+@import 'variables';
+
+.text-container {
+  word-break: break-word;
+}
+
+mat-form-field {
+  margin-top: 10px;
+}
+
+.list-container {
+  font-size: 14px;
+  margin: 10px;
+  color: $blue-medium;
+  word-break: break-word;
+
+  .element-margin {
+    margin: 15px 0;
+  }
+
+  .list-element {
+    display: flex;
+
+    .left-area {
+      width: 12px;
+      flex-grow: 0;
+      flex-shrink: 0;
+    }
+
+    .right-area {
+      flex-grow: 1;
+    }
+
+    .contents {
+      white-space: normal;
+      line-height: 1.2;
+    }
+
+    .address {
+      font-size: 12px;
+      color: $light-gray;
+
+      .address-label {
+        opacity: 0.7;
+      }
+    }
+  }
+}
+
+.buttons {
+  margin-top: 15px;
+  text-align: right;
+
+  app-button {
+    margin-left: 5px;
+  }
+}
