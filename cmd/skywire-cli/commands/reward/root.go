@@ -110,7 +110,7 @@ var rewardCmd = &cobra.Command{
 		if isDeleteFile {
 			_, err := os.Stat(output)
 			if err != nil {
-				out1 := fmt.Sprintf("reward file does not exist - reward address not set\n")
+				out1 := "reward file does not exist - reward address not set\n"
 				internal.PrintOutput(cmd.Flags(), out1, out1)
 				os.Exit(0)
 			}

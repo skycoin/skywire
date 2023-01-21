@@ -341,10 +341,10 @@ var autoConfigCmd = &cobra.Command{
 				cmds = `bash -c "skywire-cli reward -r"`
 				res, err = script.Exec(cmds).String()
 				if err != nil {
-					fmt.Printf("%s", fmt.Sprintf("set skycoin reward address:\n"))
-					fmt.Printf("%s", fmt.Sprintf("%sskywire-cli reward %s<skycoin-address>%s\n", cyan, yellow, publickey, nc))
+					fmt.Printf("set skycoin reward address:\n")
+					fmt.Printf("%s", fmt.Sprintf("%sskywire-cli reward %s<skycoin-address>%s\n", cyan, yellow, nc))
 				} else {
-					fmt.Printf("%s", fmt.Sprintf("skycoin reward address:\n"))
+					fmt.Printf("skycoin reward address:\n")
 					fmt.Printf("%s", fmt.Sprintf("%s%s%s\n", cyan, res, nc))
 				}
 				fmt.Printf("%s", mesg2(fmt.Sprintf("to see this text again run: %sskywire-cli config auto%s\n", cyan, nc)))
