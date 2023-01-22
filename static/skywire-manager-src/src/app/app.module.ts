@@ -97,6 +97,8 @@ import { VpnServerNameComponent } from './components/vpn/layout/vpn-server-name/
 import { EnterVpnServerPasswordComponent } from './components/vpn/pages/vpn-server-list/enter-vpn-server-password/enter-vpn-server-password.component';
 import { UpdateAllComponent } from './components/layout/update-all/update-all.component';
 import { VpnDnsConfigComponent } from './components/vpn/layout/vpn-dns-config/vpn-dns-config.component';
+import { RewardsAddressComponent } from './components/pages/node/node-info/node-info-content/rewards-address-config/rewards-address-config.component';
+import { BulkRewardAddressChangerComponent } from './components/layout/bulk-reward-address-changer/bulk-reward-address-changer.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
   disabled: true,
@@ -170,6 +172,8 @@ const globalRippleConfig: RippleGlobalOptions = {
     EnterVpnServerPasswordComponent,
     UpdateAllComponent,
     VpnDnsConfigComponent,
+    RewardsAddressComponent,
+    BulkRewardAddressChangerComponent,
   ],
   imports: [
     BrowserModule,

@@ -5,11 +5,11 @@
   [matTooltipClass]="{ 'tooltip-word-break': true }"
 >
   <ng-container *ngIf="!shortSimple">
-    <app-truncated-text [short]="short" [showTooltip]="false" [shortTextLength]="shortTextLength" [text]="text"></app-truncated-text>
-    &nbsp;<mat-icon [inline]="true">filter_none</mat-icon>
+    <app-truncated-text class="text-margin" [short]="short" [showTooltip]="false" [shortTextLength]="shortTextLength" [text]="text"></app-truncated-text>
+    <mat-icon [inline]="true">filter_none</mat-icon>
   </ng-container>
   <div *ngIf="shortSimple" class="d-flex">
-    <div class="single-line">{{text}}</div>
-    &nbsp;<mat-icon [inline]="true">filter_none</mat-icon>
+    <div class="single-line text-margin">{{text}}</div>
+    <mat-icon [inline]="true">filter_none</mat-icon>
   </div>
 </div>
