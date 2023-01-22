@@ -8,7 +8,9 @@
 .list-container {
   font-size: 14px;
   margin: 10px;
+  color: $blue-medium;
   word-break: break-word;
+  line-height: 1.2;
 
   .list-element {
     display: flex;
@@ -22,8 +24,6 @@
       min-width: 0;
 
       .name {
-        font-size: $font-size-base;
-        line-height: 1.5;
         display: block;
         white-space: nowrap;
         overflow: hidden;
@@ -38,8 +38,7 @@
 
       .version {
         font-size: $font-size-mini;
-        line-height: 1.5;
-        color: $blue-medium;
+        color: $light-gray;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;

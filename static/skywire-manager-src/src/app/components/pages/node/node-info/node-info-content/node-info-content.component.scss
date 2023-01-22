@@ -7,12 +7,31 @@
 }
 
 .info-line {
-  word-break: break-all;
+  word-break: break-word;
   margin-top: 7px;
+
+  .text-with-right-margin {
+    margin-right: 5px;
+  }
+
+  .text-with-small-right-margin {
+    margin-right: 3px;
+  }
+
+  .link-icon {
+    font-size: 20px;
+    line-height: 1;
+    color: white !important;
+    cursor: pointer;
+  }
+
+  .edit-icon {
+    display: inline !important;
+  }
 
   mat-icon {
     position: relative;
-    top: 2px;
+    top: 3px;
     user-select: none;
   }
 
