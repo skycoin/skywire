@@ -1,4 +1,4 @@
-import { Component, Inject, OnDestroy, AfterViewInit, ViewChild } from '@angular/core';
+import { Component, Inject, OnDestroy, ViewChild } from '@angular/core';
 import { MatLegacyDialogRef as MatDialogRef, MAT_LEGACY_DIALOG_DATA as MAT_DIALOG_DATA, MatLegacyDialog as MatDialog, MatLegacyDialogConfig as MatDialogConfig } from '@angular/material/legacy-dialog';
 import { Subscription, of, Observable } from 'rxjs';
 
@@ -42,7 +42,7 @@ interface NodeToEditCompleteData extends NodeToEditData {
   templateUrl: './bulk-reward-address-changer.component.html',
   styleUrls: ['./bulk-reward-address-changer.component.scss'],
 })
-export class BulkRewardAddressChangerComponent implements AfterViewInit, OnDestroy {
+export class BulkRewardAddressChangerComponent implements OnDestroy {
   @ViewChild('button') button: ButtonComponent;
 
   // If the process for changing the addresses has already started.
@@ -92,6 +92,8 @@ export class BulkRewardAddressChangerComponent implements AfterViewInit, OnDestr
       });
       (this.form.get('nodes') as FormArray).push(nodeFormData);
     });
+
+    this.startChecking();
   }
 
   formValid(): boolean {
@@ -111,10 +113,6 @@ export class BulkRewardAddressChangerComponent implements AfterViewInit, OnDestr
     }
 
     return true;
-  }
-
-  ngAfterViewInit() {
-    this.startChecking();
   }
 
   /**

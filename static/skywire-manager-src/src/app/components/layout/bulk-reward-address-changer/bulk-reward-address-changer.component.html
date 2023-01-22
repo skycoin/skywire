@@ -2,7 +2,10 @@
   <form [formGroup]="form">
     <!-- Info. -->
     <div class="text-container">
-      {{ 'bulk-rewards.info' | translate }}
+      <span>{{ 'bulk-rewards.info' | translate }} </span>
+      <a href="https://github.com/skycoin/skywire/blob/master/mainnet_rules.md" target="_blank" rel="noreferrer nofollow noopener">
+        {{'bulk-rewards.more-info-link' | translate}}
+      </a>
     </div>
 
     <!-- Address field. -->

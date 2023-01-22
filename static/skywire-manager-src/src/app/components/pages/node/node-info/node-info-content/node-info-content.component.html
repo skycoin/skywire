@@ -3,50 +3,50 @@
   <div class="d-flex flex-column">
     <span class="section-title">{{ 'node.details.node-info.title' | translate }}</span>
     <span class="info-line">
-      <span class="title">{{ 'node.details.node-info.label' | translate }}</span>
+      <span class="title">{{ 'node.details.node-info.label' | translate }} </span>
       <span class="highlight-internal-icon" (click)="showEditLabelDialog()">
-        {{ node.label }}
-        <mat-icon [inline]="true">edit</mat-icon>
+        <span class="text-with-small-right-margin">{{ node.label }}</span>
+        <mat-icon class="edit-icon" [inline]="true">edit</mat-icon>
       </span>
     </span>
     <span class="info-line">
-      <span class="title">{{ 'node.details.node-info.public-key' | translate }}&nbsp;</span>
+      <span class="title">{{ 'node.details.node-info.public-key' | translate }} </span>
       <app-copy-to-clipboard-text text="{{ node.localPk }}"></app-copy-to-clipboard-text>
     </span>
     <span class="info-line">
-      <span class="title">{{ 'node.details.node-info.symmetic-nat' | translate }}&nbsp;</span>
+      <span class="title">{{ 'node.details.node-info.symmetic-nat' | translate }} </span>
       {{ (node.isSymmeticNat ? 'common.yes' : 'common.no') | translate }}
     </span>
     <span class="info-line" *ngIf="!node.isSymmeticNat">
-      <span class="title">{{ 'node.details.node-info.public-ip' | translate }}&nbsp;</span>
+      <span class="title">{{ 'node.details.node-info.public-ip' | translate }} </span>
       <app-copy-to-clipboard-text text="{{ node.publicIp }}"></app-copy-to-clipboard-text>
     </span>
     <span class="info-line" *ngIf="node.ip">
-      <span class="title">{{ 'node.details.node-info.ip' | translate }}&nbsp;</span>
+      <span class="title">{{ 'node.details.node-info.ip' | translate }} </span>
       <app-copy-to-clipboard-text text="{{ node.ip }}"></app-copy-to-clipboard-text>
     </span>
     <span class="info-line">
-      <span class="title">{{ 'node.details.node-info.dmsg-server' | translate }}&nbsp;</span>
+      <span class="title">{{ 'node.details.node-info.dmsg-server' | translate }} </span>
       <app-copy-to-clipboard-text text="{{ node.dmsgServerPk }}"></app-copy-to-clipboard-text>
     </span>
     <span class="info-line">
-      <span class="title">{{ 'node.details.node-info.ping' | translate }}&nbsp;</span>
+      <span class="title">{{ 'node.details.node-info.ping' | translate }} </span>
       {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
     </span>
     <span class="info-line">
-      <span class="title">{{ 'node.details.node-info.node-version' | translate }}</span>
+      <span class="title">{{ 'node.details.node-info.node-version' | translate }} </span>
       {{ node.version ? node.version : ('common.unknown' | translate) }}
     </span>
     <span class="info-line">
-      <span class="title">{{ 'node.details.node-info.build-type' | translate }}</span>
+      <span class="title">{{ 'node.details.node-info.build-type' | translate }} </span>
       {{ node.buildTag ? node.buildTag : ('node.details.node-info.unknown-build' | translate) }}
     </span>
     <span class="info-line" *ngIf="node.skybianBuildVersion">
-      <span class="title">{{ 'node.details.node-info.skybian-version' | translate }}</span>
+      <span class="title">{{ 'node.details.node-info.skybian-version' | translate }} </span>
       {{ node.skybianBuildVersion }}
     </span>
     <span class="info-line">
-      <span class="title">{{ 'node.details.node-info.time.title' | translate }}</span>
+      <span class="title">{{ 'node.details.node-info.time.title' | translate }} </span>
       {{ ('node.details.node-info.time.' + timeOnline.translationVarName) | translate:{time: timeOnline.elapsedTime} }}
 
       <mat-icon
@@ -63,8 +63,15 @@
   <div class="d-flex flex-column">
     <span class="section-title">{{ 'node.details.rewards-info.title' | translate }}</span>
     <span class="info-line">
-      <span class="title">{{ 'node.details.rewards-info.rewards-address' | translate }}&nbsp;</span>
-      <app-copy-to-clipboard-text text="{{ node.rewardsAddress }}" *ngIf="node.rewardsAddress"></app-copy-to-clipboard-text>
+      <span class="title">{{ 'node.details.rewards-info.rewards-address' | translate }} </span>
+      <ng-container *ngIf="node.rewardsAddress">
+        <app-copy-to-clipboard-text class="text-with-right-margin" text="{{ node.rewardsAddress }}"></app-copy-to-clipboard-text> 
+        <a [href]="'https://explorer.skycoin.com/app/address/' + node.rewardsAddress" target="_blank" rel="noreferrer nofollow noopener">
+          <mat-icon [inline]="true" class="link-icon transparent-button" [matTooltip]="'node.details.rewards-info.open-in-explorer' | translate">
+            open_in_browser
+          </mat-icon>
+        </a>
+      </ng-container>
       <ng-container *ngIf="!node.rewardsAddress">
         {{ 'node.details.rewards-info.not-registered' | translate }}
         <mat-icon [inline]="true" [matTooltip]="'node.details.rewards-info.not-registered-info' | translate">info</mat-icon>
@@ -86,7 +93,7 @@
   <div class="d-flex flex-column">
     <span class="section-title">{{ 'node.details.transports-info.title' | translate }}</span>
     <span class="info-line">
-      <span class="title">{{ 'node.details.transports-info.autoconnect' | translate }}</span>
+      <span class="title">{{ 'node.details.transports-info.autoconnect' | translate }} </span>
       {{ ('node.details.transports-info.' + (node.autoconnectTransports ? 'enabled' : 'disabled')) | translate }}
       <mat-icon [inline]="true" [matTooltip]="'node.details.transports-info.autoconnect-info' | translate">info</mat-icon>
     </span>
@@ -101,7 +108,7 @@
   <div class="d-flex flex-column">
     <span class="section-title">{{ 'node.details.router-info.title' | translate }}</span>
     <span class="info-line">
-      <span class="title">{{ 'node.details.router-info.min-hops' | translate }}</span>
+      <span class="title">{{ 'node.details.router-info.min-hops' | translate }} </span>
       {{ node.minHops }}
     </span>
     <div class="config-button-container">
@@ -113,7 +120,7 @@
   <div class="separator"></div>
   <!-- Health info section. -->
   <div class="d-flex flex-column">
-    <span class="section-title">{{ 'node.details.node-health.title' | translate }}</span>
+    <span class="section-title">{{ 'node.details.node-health.title' | translate }} </span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-health.uptime-tracker' | translate }}</span>
       <i [class]="nodeHealthClass"></i>

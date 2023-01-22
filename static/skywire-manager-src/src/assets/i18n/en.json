@@ -126,10 +126,11 @@
         }
       },
       "rewards-info": {
-        "title": "Rewards Info",
-        "rewards-address": "Rewards address:",
+        "title": "Reward Info",
+        "rewards-address": "Reward address:",
         "not-registered": "Not registered",
-        "not-registered-info": "You have not specified a Skycoin address for receiving rewards for this visor. If you want to register for receiving rewards, press the \"Set address\" button and set a Skycoin address.",
+        "not-registered-info": "You have not specified a Skycoin address for receiving rewards for this visor. If you want to register the visor for receiving rewards, press the \"Set address\" button and set a Skycoin address.",
+        "open-in-explorer": "Open in blockchain explorer",
         "set-address-button": "Set address",
         "change-address-button": "Change address"
       },
@@ -169,8 +170,9 @@
   },
 
   "rewards-address-config": {
-    "title": "Rewards Address Configuration",
+    "title": "Reward Address Configuration",
     "info": "Here you can set to which Skycoin address you want the rewards to be sent. If you leave the address empty, the registration will be deleted and the visor will not receive rewards.",
+    "more-info-link": "(More info about the reward system)",
     "address": "Address",
     "save-config-button": "Save configuration",
     "done": "Changes saved.",
@@ -230,19 +232,20 @@
   },
 
   "bulk-rewards": {
-    "title": "Change rewards address",
-    "info": "Enter the Skycoin address where you want to receive the rewards. The address will be set on all the selected visors. If you leave the address empty, the registration will be deleted and the visors will not receive rewards. You can also set the rewards address of each node individually using the option on the visor details page.",
+    "title": "Change reward address",
+    "info": "Enter the Skycoin address where you want to receive the rewards. The address will be set on all the selected visors. If you leave the address empty, the registration will be deleted and the visors will not receive rewards. You can also set the reward address of each node individually using the option on the visor details page.",
+    "more-info-link": "(More info about the reward system)",
     "address": "New address",
     "select-visors": "Visors to alter:",
     "current-address": "Current address:",
-    "not-registered": "None (not registered on the rewards program).",
+    "not-registered": "None (not registered on the reward program).",
     "checking": "Checking...",
     "error-checking": "Error checking:",
     "processing": "Processing...",
     "error-processing": "Error making the change:",
     "done": "Change done.",
     "perform-changes": "Perform changes",
-    "empty-warning": "The address in empty, so the registration will be deleted and no rewards will be received. Do you really want to continue?"
+    "empty-warning": "The address in empty, so the registrations will be deleted and no rewards will be received. Do you really want to continue?"
   },
 
   "edit-label": {
