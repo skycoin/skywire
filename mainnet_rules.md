@@ -2,9 +2,13 @@
 
 # Skywire Reward Eligibility Rules
 
+* We are transitioning to new system for rewards, deprecating the skywire whitelist
+* The rules in this article may change at any time, depending on if there are problems
+* We will attempt to address any issues reported via [@skywire](https://t.me/skywire) Telegram channel
+
 #### Table of Contents
 * [Introduction](#introduction)
-* [Rules & Requirements](#rules-&-requirements)
+* [Rules & Requirements](#rules--requirements)
 * [Rewards](#rewards)
   * [How it works](#how-it-works)
   * [Reward Tiers](#reward-tiers)
@@ -12,14 +16,14 @@
 
 ## Introduction
 
-<div align="center"><em> Disclaimer: The rewards in this post are subject to change. Updates to this article will be followed by a notification via the <a href="https://t.me/SkywirePSA">official Skywire PSA channel</a> on Telegram.</em>
+<div align="center"><em> Updates to this article will be followed by a notification via the <a href="https://t.me/SkywirePSA">official Skywire PSA channel</a> on Telegram.</em>
 </div>
+<br>
 
 All information about rewards will be published here. Please ask for clarification in the [@skywire](https://t.me/skywire) Telegram channel if some things appear to not be covered. Join [@SkywirePSA](https://t.me/SkywirePSA) for public service announcements (PSA) regarding the skywire network.
 
 Reward notifications will happen via the skychat app, which is included with the skywire release (PENDING IMPLEMENTATION)
 
-***
 
 ## Rules & Requirements
 
@@ -28,7 +32,7 @@ Reward notifications will happen via the skychat app, which is included with the
 * A valid skycoin address must be set for the visor
 * The visor must be running on approved [hardware](#hardware)
 * the visor responds to intermittent pings (i.e. it's possible to establish transports to that visor)
-***
+
 
 ## Rewards
 
@@ -44,19 +48,31 @@ The skycoin address to be rewarded can be set from the cli:
 skywire-cli reward <skycoin-address>
 ```
 
+![image](https://user-images.githubusercontent.com/36607567/213941582-f57213b8-2acd-4c9a-a2c0-9089a8c2604e.png)
+
+
 or via the hypervisor UI.
+
+![image](https://user-images.githubusercontent.com/36607567/213941478-34c81493-9c3c-40c2-ac22-e33e3683a16f.png)
+
+the example above shows the genesis address for the skycoin blockchain. **Please do not use the genesis address.**
 
 ### How it works
 
-The skycoin reward address is set per the visor via the cli or the hypervisor, in a text file contained in the "local" folder (local_path in the skywire config file). This address is written into the system survey and served, along with transport logs, via dmsghttp.
+The skycoin reward address is set per the visor via the cli or the hypervisor, in a text file contained in the "local" folder (local_path in the skywire config file). This address is written into the [system survey](https://github.com/skycoin/skywire/tree/develop/cmd/skywire-cli#survey) and served, along with transport logs, via dmsghttp.
 
-This survey will be fetched on a daily basis, along with the transport logs, and checked to verify hardware requirements, etc. The transport logs from both ends of any given transport are compared and verified.
+This survey will be fetched on a daily basis with [`dmsgget`](https://github.com/skycoin/dmsg/tree/develop/cmd/dmsgget), along with the transport logs, and checked to verify hardware and other requirements, etc. The transport logs from both ends of any given transport are compared and verified.
 
 ### Reward tiers
 
-There are three tiers for rewards. The lowest tier is distributed to all nodes which meet the basic requirements. Other tiers are based on bandwidth which was processed by the visor. If the visor processed **any** verifiable bandwidth, according to the transport logs, the visor will gain the rewards of the second tier plus the lowest tier. If the visor processed above the average amount of bandwidth, it will receive first tier rewards, in addition to the lowest tier.
+There are three tiers for rewards.
 
-***
+* **TIER 3** The lowest tier is distributed to all nodes which meet the basic requirements.
+
+Other tiers are based on bandwidth which was handled by the visor. Meaning the logs from each end of the transport were fetched and agree
+ 
+* **TIER 2** If the visor processed **any** verifiable bandwidth, the visor will have earned the rewards of the second tier plus those of the lowest tier.
+* **TIER 1** If the visor processed above the average amount of bandwidth, it will receive first tier rewards, in addition to the lowest tier.
 
 ## Hardware
 
