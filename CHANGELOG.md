@@ -6,6 +6,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## 1.3.0
 
+-   add hypervisor UI integration for managing the reward address [#1442](https://github.com/skycoin/skywire/pull/1442)
 -   update mainnet rules for collecting rewards under the new system [#1443](https://github.com/skycoin/skywire/pull/1443)
 -   omit all language differentiating types of miners (official, DIY) from mainnet_rules.md [#1443](https://github.com/skycoin/skywire/pull/1443)
 -   omit references to the whitelist, which will be deprecated, from mainnet_rules.md [#1443](https://github.com/skycoin/skywire/pull/1443)
