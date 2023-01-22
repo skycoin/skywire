@@ -6,6 +6,7 @@
 * [Introduction](#introduction)
 * [Rules & Requirements](#rules-&-requirements)
 * [Rewards](#rewards)
+  * [How it works](#how-it-works)
   * [Reward Tiers](#reward-tiers)
 * [Hardware](#hardware)
 
@@ -26,7 +27,7 @@ Reward notifications will happen via the skychat app, which is included with the
 * 75% uptime is required to be eligible to receive rewards
 * A valid skycoin address must be set for the visor
 * The visor must be running on approved [hardware](#hardware)
-
+* the visor responds to intermittent pings (i.e. it's possible to establish transports to that visor)
 ***
 
 ## Rewards
@@ -44,6 +45,12 @@ skywire-cli reward <skycoin-address>
 ```
 
 or via the hypervisor UI.
+
+### How it works
+
+The skycoin reward address is set per the visor via the cli or the hypervisor, in a text file contained in the "local" folder (local_path in the skywire config file). This address is written into the system survey and served, along with transport logs, via dmsghttp.
+
+This survey will be fetched on a daily basis, along with the transport logs, and checked to verify hardware requirements, etc. The transport logs from both ends of any given transport are compared and verified.
 
 ### Reward tiers
 
