@@ -1,0 +1,28 @@
+<app-dialog [headline]="'rewards-address-config.title' | translate" [dialog]="dialogRef" [disableDismiss]="disableDismiss">
+  <div class="info-container">
+    <span>{{'rewards-address-config.info' | translate}} </span>
+    <a href="https://github.com/skycoin/skywire/blob/master/mainnet_rules.md" target="_blank" rel="noreferrer nofollow noopener">
+      {{'rewards-address-config.more-info-link' | translate}}
+    </a>
+  </div>
+  <form [formGroup]="form" [ngClass]="{'element-disabled' : disableDismiss}">
+    <mat-form-field>
+      <input
+        #firstInput
+        [placeholder]="'rewards-address-config.address' | translate"
+        formControlName="address"
+        maxlength="40"
+        matInput
+      >
+    </mat-form-field>
+  </form>
+  <app-button
+    #button
+    class="float-right"
+    color="primary"
+    (action)="startSaving()"
+    [disabled]="!form.valid"
+  >
+    {{ 'rewards-address-config.save-config-button' | translate }}
+  </app-button>
+</app-dialog>

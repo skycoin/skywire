@@ -20,6 +20,7 @@ export class Node {
   buildTag: string;
   skybianBuildVersion?: string;
   autoconnectTransports: boolean;
+  rewardsAddress: string;
 }
 
 export interface Application {

@@ -125,6 +125,15 @@
           "weeks": "{{ time }} semanas"
         }
       },
+      "rewards-info": {
+        "title": "Información de Recompensas",
+        "rewards-address": "Dirección de recompensas:",
+        "not-registered": "No registrado",
+        "not-registered-info": "No ha especificado una dirección de Skycoin para recibir recompensas para este visor. Si quiere registrar el visor para recibir recompensas, presione el botón \"Establecer dirección\" e introduzca la una dirección de Skycoin.",
+        "open-in-explorer": "Abrir en el explorador de blockchain",
+        "set-address-button": "Establecer dirección",
+        "change-address-button": "Cambiar dirección"
+      },
       "transports-info": {
         "title": "Información de Transportes",
         "autoconnect": "Autoconectar:",
@@ -164,6 +173,16 @@
     "error-load": "Hubo un error al intentar refrescar los datos. Reintentando..."
   },
 
+  "rewards-address-config": {
+    "title": "Configuración de dirección de recompensas",
+    "info": "Aquí usted puede establecer la dirección de Skycoin a la que quiere que se envíen las recompensas. Si deja la dirección vacía, el registro será eliminado y el visor no recibirá recompensas.",
+    "more-info-link": "(Más información acerca del sistema de recompensas)",
+    "address": "Dirección ",
+    "save-config-button": "Guardar configuración",
+    "done": "Cambios guardados.",
+    "empty-warning": "La dirección está vacía, así que el registro será eliminado y no recibirá recompensas. ¿Realmente desea continuar?"
+  },
+
   "router-config": {
     "title": "Configuración del Enrutador",
     "info": "Aquí podrá configurar cuantos saltos la conexión deberá realizar a través de otros visores de Skywire antes de alcanzar el destino final. NOTA: los cambios no afectarán a las rutas ya existentes.",
@@ -175,6 +194,7 @@
   "nodes": {
     "title": "Lista de visores",
     "dmsg-title": "DMSG",
+    "modify-rewards-all": "Cambiar dirección de recompensas",
     "update-all": "Actualizar todos los visores online",
     "hypervisor": "Hypervisor",
     "state": "Estado",
@@ -200,6 +220,7 @@
     "deleted-singular": "1 visor offline removido.",
     "deleted-plural": "{{ number }} visores offline removidos.",
     "no-visors-to-update": "No hay visores para actualizar.",
+    "no-visors-to-modify": "No hay visores para modificar.",
     "filter-dialog": {
       "online": "El visor debe estar",
       "label": "La etiqueta debe contener",
@@ -212,6 +233,23 @@
         "offline": "Offline"
       }
     }
+  },
+
+  "bulk-rewards": {
+    "title": "Cambiar dirección de recompensas",
+    "info": "Introduzca la dirección de Skycoin donde desea recibir las recompensas. La dirección será establecida en todos los visores seleccionados. Si deja la dirección vacía, el registro será eliminado y los visores no recibirán recompensas. También puede colocar la dirección de recompensas de cada visor individualmente usando la opción en la pantalla de detalles del visor.",
+    "more-info-link": "(Más información acerca del sistema de recompensas)",
+    "address": "Nueva dirección",
+    "select-visors": "Visores a modificar:",
+    "current-address": "Dirección actual:",
+    "not-registered": "Ninguna (no registrado para recompensas).",
+    "checking": "Consultando...",
+    "error-checking": "Error consultando:",
+    "processing": "Procesando...",
+    "error-processing": "Error realizando el cambio:",
+    "done": "Cambio realizado.",
+    "perform-changes": "Aplicar cambios",
+    "empty-warning": "La dirección está vacía, así que los registros serán eliminados y no recibirá recompensas. ¿Realmente desea continuar?"
   },
 
   "edit-label": {
