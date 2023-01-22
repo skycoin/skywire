@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## 1.3.0
 
+-   update mainnet rules for collecting rewards under the new system [#1443](https://github.com/skycoin/skywire/pull/1443)
+-   omit all language differentiating types of miners (official, DIY) from mainnet_rules.md [#1443](https://github.com/skycoin/skywire/pull/1443)
+-   omit references to the whitelist, which will be deprecated, from mainnet_rules.md [#1443](https://github.com/skycoin/skywire/pull/1443)
+-   add description of reward tiers to mainnet_rules.md [#1443](https://github.com/skycoin/skywire/pull/1443)
+-   add description of how the new reward system will work to mainnet_rules.md [#1443](https://github.com/skycoin/skywire/pull/1443)
+-   Increment minimum required skywire version for rewards to 1.3.0 in mainnet_rules.md [#1443](https://github.com/skycoin/skywire/pull/1443)
 -   Fix delete reward file [#1441](https://github.com/skycoin/skywire/pull/1441)
 -   Show reward address on autoconfig [#1441](https://github.com/skycoin/skywire/pull/1441)
 -   disable public autoconnect logic for `config gen -b` [#1440](https://github.com/skycoin/skywire/pull/1440)
