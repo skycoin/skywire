@@ -107,6 +107,36 @@ var rewardCmd = &cobra.Command{
 		if output == "" {
 			output = visorconfig.PackageConfig().LocalPath + "/" + visorconfig.RewardFile
 		}
+		if isDeleteFile {
+			_, err := os.Stat(output)
+			if err != nil {
+				out1 := "reward file does not exist - reward address not set\n"
+				internal.PrintOutput(cmd.Flags(), out1, out1)
+				os.Exit(0)
+			}
+		}
+		//using the rpc of the running visor avoids needing sudo permissions
+		client, clienterr := clirpc.Client(cmd.Flags())
+		if clienterr != nil {
+			internal.PrintError(cmd.Flags(), clienterr)
+		}
+
+		if isDeleteFile {
+			if clienterr == nil {
+				err := client.DeleteRewardAddress()
+				if err != nil {
+					internal.PrintError(cmd.Flags(), err)
+				}
+			}
+			if clienterr != nil {
+				err := os.Remove(rewardFile)
+				if err != nil {
+					internal.PrintError(cmd.Flags(), err)
+				}
+			}
+			os.Exit(1)
+			return
+		}
 		//print reward address and exit
 		if isRead {
 			dat, err := os.ReadFile(output) //nolint
@@ -133,31 +163,27 @@ var rewardCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid address specified: %v", err))
 		}
+
 		//using the rpc of the running visor avoids needing sudo permissions
-		client, err := clirpc.Client(cmd.Flags())
-		if err != nil {
+		if clienterr != nil {
 			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(cAddr.String()), 0644)) //nolint
 			readRewardFile(cmd.Flags())
 			return
 		}
 
-		if isDeleteFile {
-			err := client.DeleteRewardAddress()
+		if clienterr == nil {
+			rwdAdd, err := client.SetRewardAddress(rewardAddress)
 			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), err)
+				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err)) //nolint
+				return
 			}
-			return
+			output := fmt.Sprintf("Reward address:\n  %s\n", rwdAdd)
+			internal.PrintOutput(cmd.Flags(), output, output)
 		}
-
-		rwdAdd, err := client.SetRewardAddress(rewardAddress)
-		if err != nil {
-			internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))      //nolint
+		if clienterr != nil {
 			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(cAddr.String()), 0644)) //nolint
 			readRewardFile(cmd.Flags())
-			return
 		}
-		output := fmt.Sprintf("Reward address:\n  %s\n", rwdAdd)
-		internal.PrintOutput(cmd.Flags(), output, output)
 	},
 }
 
