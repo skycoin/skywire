@@ -1522,14 +1522,14 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 			err = srv.ListenAndServe()
 		}
 
-		if err != nil {
+		// don't print error if local server is closed
+		if !errors.Is(err, http.ErrServerClosed) {
 			v.log.WithError(err).Error("Hypervisor exited with error.")
 		}
-		//		cancel()
 	}()
 
 	v.pushCloseStack("hypervisor", func() error {
-		srv.Shutdown(ctx) //nolint
+		err := srv.Shutdown(ctx) //nolint
 		cancel()
 		return err
 	})
