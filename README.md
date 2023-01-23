@@ -307,13 +307,13 @@ output tree
 ```
 ├──skywire-cli
 └─┬skywire-visor
- └─┬apps
-  ├──skychat
-  ├──skysocks
-  ├──skysocks-client
-  ├──vpn-client
-  ├──vpn-server
-  └──skychat
+  └─┬apps
+   ├──skychat
+   ├──skysocks
+   ├──skysocks-client
+   ├──vpn-client
+   ├──vpn-server
+   └──skychat
 ```
 
 install these executables to the `GOPATH`
@@ -344,14 +344,14 @@ Running from source as outlined here does not write the config to disk or explic
 ```
 ├──skywire-config.json
 └─┬local
- ├──skychat
- ├──skysocks
- ├──apps-pid.txt
- ├──skychat_log.db
- ├──reward.txt
- ├──node-info.json
- └─┬transport_logs
-  └──2022-11-12.csv
+  ├──skychat
+  ├──skysocks
+  ├──apps-pid.txt
+  ├──skychat_log.db
+  ├──reward.txt
+  ├──node-info.json
+  └─┬transport_logs
+   └──2022-11-12.csv
 ```
 
 Some of these files are served via the [dmsghttp logserver](https://github.com/skycoin/skywire/wiki/DMSGHTTP-logserver)
