@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## 1.3.0
 
+-   change transport_logs folder to 755 permissions & various similar fixes  [#1447](https://github.com/skycoin/skywire/pull/1447)
+-   Fix warn logs  [#1446](https://github.com/skycoin/skywire/pull/1446)
+-   move survey generation to its own goroutine  [#1445](https://github.com/skycoin/skywire/pull/1445)
+-   rebuild UI  [#1444](https://github.com/skycoin/skywire/pull/1444)
 -   add hypervisor UI integration for managing the reward address [#1442](https://github.com/skycoin/skywire/pull/1442)
 -   update mainnet rules for collecting rewards under the new system [#1443](https://github.com/skycoin/skywire/pull/1443)
 -   omit all language differentiating types of miners (official, DIY) from mainnet_rules.md [#1443](https://github.com/skycoin/skywire/pull/1443)
