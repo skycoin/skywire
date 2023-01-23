@@ -1,23 +1,28 @@
-# Skywire forwarding
+# Proxy Ports Over Skywire
 
-## Register http server for forwarding
-In order to for other visors to connect to the http server we need to register it via either the CLI or directly via the RPC.
+## `skywire-cli fwd`
+
+To forward ports over skywire, register the port via the CLI
 
 ### CLI
 CLI can be used if you do not want to make any changes to the code of the http server or if it is written in another language.
+
 - Register
-    `skywire-cli skyfwd register -l <local-port>`
+    `skywire-cli fwd -p <local-port>`
     Register a local port to be accessed by remote visors
+
 - deregister
-    `skywire-cli skyfwd deregister -l <local-port>`
+    `skywire-cli fwd -d <local-port>`
     Deregister a local port to be accessed by remote visors
+
 - ls-ports
-    `skywire-cli skyfwd ls-ports`
+    `skywire-cli fwd -l`
     List all registered ports
 
 ### RPC
-RPC can be used to register and deregister within the http server code so that the process is automatic.
-First create a RPC client conn to the local visor 
+
+RPC can be used for integration with applications to register and deregister within the http server code so that the process is automatic. First create a RPC client conn to the local visor
+
 ```
 func client() (visor.API, error) {
 	const rpcDialTimeout = time.Second * 5
@@ -38,15 +43,20 @@ err = rpcClient.DeregisterHTTPPort(port)
 
 
 ## Connect to the forwarded server
-In order to connect to a server forwarded by a remote visor use the CLI.
+
+Connect to a server forwarded by a remote visor.
 
 ### CLI
+
 - connect
-    `skywire-cli skyfwd connect <remote-pk> -l <local-port> -r <remote-port>`
-    Connect to a server running on a remote visor machine. The http server will then be forwarded to the specified local port. 
+    `skywire-cli rev <remote-pk> -p <local-port> -r <remote-port>`
+    Connect to a server running on a remote visor machine.
+    The http server is proxied to the specified local port.
+
 - disconnect
-    `skywire-cli skyfwd disconnect <id>`
+    `skywire-cli rev -d <id>`
     Disconnect from the server running on a remote visor machine
+
 - ls
-    `skywire-cli skyfwd ls`
-    List all ongoing skyforwarding connections
+    `skywire-cli rev -l`
+    List all configured connections
