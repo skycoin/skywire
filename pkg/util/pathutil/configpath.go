@@ -148,7 +148,7 @@ func WriteJSONConfig(conf interface{}, output string, replace bool) {
 		log.Fatalf("file %s already exists, stopping as 'replace,r' flag is not set", output)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(output), 0755); err != nil { /* nosec */
+	if err := os.MkdirAll(filepath.Dir(output), 0755); err != nil { // #nosec
 		log.WithError(err).Fatalln("failed to create output directory")
 	}
 

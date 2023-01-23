@@ -1,10 +1,10 @@
-// Package dmsgpty pkg/dmsgpty/whitelist.go
 package dmsgpty
 
 import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	jsoniter "github.com/json-iterator/go"
+
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
@@ -37,7 +38,7 @@ func NewConfigWhitelist(confPath string) (Whitelist, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = os.MkdirAll(filepath.Dir(confPath), 0755); err != nil { /* nosec */
+	if err = os.MkdirAll(filepath.Dir(confPath), 0750); err != nil {
 		return nil, err
 	}
 
@@ -170,8 +171,8 @@ func (w *configWhitelist) open() error {
 		}
 	}
 
-	// read file
-	file, err := os.ReadFile(w.confPath)
+	// read file using ioutil
+	file, err := ioutil.ReadFile(w.confPath)
 	if err != nil {
 		return err
 	}
@@ -199,7 +200,7 @@ func updateFile(confPath string) error {
 		return err
 	}
 	// write to config file
-	err = os.WriteFile(confPath, b, 0600)
+	err = ioutil.WriteFile(confPath, b, 0600)
 	if err != nil {
 		return err
 	}

@@ -317,7 +317,7 @@ func ensureDir(path *string) error {
 	if _, err := os.Stat(*path); !os.IsNotExist(err) {
 		return nil
 	}
-	if err := os.MkdirAll(*path, 0755); err != nil { /* nosec */
+	if err := os.MkdirAll(*path, 0755); err != nil { // #nosec
 		return fmt.Errorf("failed to create dir: %s", err)
 	}
 	return nil

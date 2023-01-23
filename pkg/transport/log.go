@@ -180,7 +180,7 @@ type fileTransportLogStore struct {
 
 // FileTransportLogStore implements file TransportLogStore.
 func FileTransportLogStore(ctx context.Context, dir string, rInterval time.Duration, log *logging.Logger) (LogStore, error) {
-	if err := os.MkdirAll(dir, 0755); err != nil { /* nosec */
+	if err := os.MkdirAll(dir, 0755); err != nil { // #nosec
 		return nil, err
 	}
 
