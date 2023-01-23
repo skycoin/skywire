@@ -3,7 +3,7 @@
 ## Type of apps
 Skywire apps can be used in two ways.
 1. As a Skywire Visor App
-2. As a External App
+2. As an External App
 
 ### Skywire Visor App
 A skywire visor app is started, stopped, monitored and controlled via the skywire visor. The app is controlled via the interface `Proc` which requires a `PROC_CONFIG` env variable that the app reads to
@@ -104,9 +104,9 @@ The params are
             ProcKey:    pKey,
         }
     ```
-    and pass it 
+    and pass it
     - `procAddr`
-        This is required and can be read form a flag in the app. This address is set in the visor config under `launcher/server_addr`. 
+        This is required and can be read form a flag in the app. This address is set in the visor config under `launcher/server_addr`.
         The app needs this to create a connection to the visor.
     - `procKey *appcommon.ProcKey`
         This is required and can be read form a flag in the app. The app needs to be registered to the visor first so that a RPC gateway will await for a connection from the app.
@@ -136,7 +136,7 @@ The app client has the following methods.
     ```
     the type of network to use (dmsg or skynet),
     the public key of the remote visor and
-    the dmsg or skynet port to connect to on the remote visor. 
+    the dmsg or skynet port to connect to on the remote visor.
     It returns a `conn net.Conn` that can be used to read and write to the connected dmsg/skynet app on the remote visor.
 - `Listen`
     Listen listens on the specified `port` for the incoming connections.
