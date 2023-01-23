@@ -307,13 +307,13 @@ output tree
 ```
 ├──skywire-cli
 └─┬skywire-visor
-	└─┬apps
-		├──skychat
-		├──skysocks
-		├──skysocks-client
-		├──vpn-client
-		├──vpn-server
-		└──skychat
+ └─┬apps
+  ├──skychat
+  ├──skysocks
+  ├──skysocks-client
+  ├──vpn-client
+  ├──vpn-server
+  └──skychat
 ```
 
 install these executables to the `GOPATH`
@@ -344,14 +344,14 @@ Running from source as outlined here does not write the config to disk or explic
 ```
 ├──skywire-config.json
 └─┬local
- 	├──skychat
- 	├──skysocks
- 	├──apps-pid.txt
-  	├──skychat_log.db
- 	├──reward.txt
- 	├──node-info.json
-  	└─┬transport_logs
-		└──2022-11-12.csv
+ ├──skychat
+ ├──skysocks
+ ├──apps-pid.txt
+ ├──skychat_log.db
+ ├──reward.txt
+ ├──node-info.json
+ └─┬transport_logs
+  └──2022-11-12.csv
 ```
 
 Some of these files are served via the [dmsghttp logserver](https://github.com/skycoin/skywire/wiki/DMSGHTTP-logserver)
@@ -415,7 +415,7 @@ docker run --rm -v <YOUR_CONFIG_DIR>:/opt/skywire \
   skycoin/skywire:test skywire-cli config update hypervisor-pks <public-key>
 ```
 
-Or from docker image:
+Or from docker image:/* #nosec */
 
 ```
 docker run --rm -v <YOUR_CONFIG_DIR>:/opt/skywire \
@@ -449,9 +449,11 @@ docker run --rm -p 8000:8000 --name=skywire skycoin/skywire:test skywire-visor
 `skywire-visor` can be run on Windows. The setup requires additional setup steps that are specified
 in [the docs](docs/windows-setup.md).
 
-### Using Skywire connection for apps
+### Using Skywire forwarding for publishing http server over skynet
 
-to be documented
+The skywire-cli subcommand `skywire-cli fwd` is used to register and connect to http servers over the skynet
+
+- [skywire forwarding](docs/skywire_forwarding.md)
 
 ### Using the Skywire VPN
 
@@ -461,11 +463,6 @@ If you are interested in running the Skywire VPN as either a client or a server,
 - [Setup the Skywire VPN server](https://github.com/skycoin/skywire/wiki/Skywire-VPN-Server)
 - [Package Installation Guide](https://github.com/skycoin/skywire/wiki/Skywire-Package-Installation)
 
-### Using Skywire forwarding for publishing http server over skynet
-
-The skywire-cli subcommand `skywire-cli skyfwd` is used to register and connect to http servers over the skynet
-
-- [skywire forwarding](docs/skywire_forwarding.md)
 
 ## Creating a GitHub release
 
@@ -483,6 +480,6 @@ use [goreleaser](https://goreleaser.com) for creating them.
 6. Create a `git` tag with desired release version and release name: `git tag -a 0.1.0 -m "First release"`,
    where `0.1.0` is release version and `First release` is release name.
 5. Push the created tag to the repository: `git push origin 0.1.0`, where `0.1.0` is release version.
-6. [Issue a personal GitHub access token.](https://github.com/settings/tokens)
-7. Run `GITHUB_TOKEN=your_token make github-release`
+6. [ ̶I̶s̶s̶u̶e̶ ̶a̶ ̶p̶e̶r̶s̶o̶n̶a̶l̶ ̶G̶i̶t̶H̶u̶b̶ ̶a̶c̶c̶e̶s̶s̶ ̶t̶o̶k̶e̶n̶.̶](https://github.com/settings/tokens)
+7.  ̶R̶u̶n̶ ̶`̶G̶I̶T̶H̶U̶B̶_̶T̶O̶K̶E̶N̶=̶y̶o̶u̶r̶_̶t̶o̶k̶e̶n̶ ̶m̶a̶k̶e̶ ̶g̶i̶t̶h̶u̶b̶-̶r̶e̶l̶e̶a̶s̶e̶`̶
 8. [Check the created GitHub release.](https://github.com/skycoin/skywire/releases/)
