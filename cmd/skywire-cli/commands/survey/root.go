@@ -22,7 +22,6 @@ var (
 func init() {
 	surveyCmd.Flags().SortFlags = false
 	surveyCmd.Flags().BoolVarP(&isCksum, "sha", "s", false, "generate checksum of system survey")
-
 }
 
 // RootCmd is surveyCmd
