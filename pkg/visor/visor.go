@@ -196,7 +196,7 @@ func run(conf *visorconfig.V1) error {
 	}
 
 	ctx, cancel := cmdutil.SignalContext(context.Background(), mLog)
-	vis, ok := newVisor(ctx, conf)
+	vis, ok := NewVisor(ctx, conf)
 	if !ok {
 		select {
 		case <-ctx.Done():
@@ -228,8 +228,8 @@ func run(conf *visorconfig.V1) error {
 	return nil
 }
 
-// newVisor constructs new Visor.
-func newVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
+// NewVisor constructs new Visor.
+func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	if conf == nil {
 		conf = initConfig()
 	}
