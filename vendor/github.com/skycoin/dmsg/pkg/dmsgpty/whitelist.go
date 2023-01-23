@@ -37,7 +37,7 @@ func NewConfigWhitelist(confPath string) (Whitelist, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = os.MkdirAll(filepath.Dir(confPath), 0750); err != nil {
+	if err = os.MkdirAll(filepath.Dir(confPath), 0755); err != nil {
 		return nil, err
 	}
 
