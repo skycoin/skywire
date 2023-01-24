@@ -239,7 +239,7 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
    * If true, all the ways provided by default by the UI for closing the modal window are disabled.
    */
   get disableDismiss(): boolean {
-    return this.button && this.settingsButton ? (this.button.isLoading || this.settingsButton.isLoading) : false;
+    return (this.button && this.button.isLoading) || (this.settingsButton && this.settingsButton.isLoading);
   }
 
   // Validates an IPv4 address.
@@ -613,7 +613,9 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
     }
 
     this.button.showLoading(false);
-    this.settingsButton.showLoading(false);
+    if (this.settingsButton) {
+      this.settingsButton.showLoading(false);
+    }
     this.working = true;
 
     const data = { pk: publicKey };
@@ -674,13 +676,17 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
     // Allow to continue using the component.
     this.working = false;
     this.button.reset(false);
-    this.settingsButton.reset(false);
+    if (this.settingsButton) {
+      this.settingsButton.reset(false);
+    }
   }
 
   private onServerDataChangeError(err: OperationError) {
     this.working = false;
     this.button.showError(false);
-    this.settingsButton.reset(false);
+    if (this.settingsButton) {
+      this.settingsButton.reset(false);
+    }
     err = processServiceError(err);
 
     this.snackbarService.showError(err);
