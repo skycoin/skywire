@@ -87,6 +87,10 @@ type API interface {
 	StopVPNClient(appName string) error
 	VPNServers(version, country string) ([]servicedisc.Service, error)
 
+	//skysocks-client controls
+	StartSkysocksClient(pk string) error
+	StopSkysocksClient() error
+
 	//transports
 	TransportTypes() ([]string, error)
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
@@ -511,6 +515,61 @@ func (v *Visor) StopVPNClient(appName string) error {
 	return ErrProcNotAvailable
 }
 
+// StartSkysocksClient implements API.
+func (v *Visor) StartSkysocksClient(serverKey string) error {
+	var envs []string
+	if v.tpM == nil {
+		return ErrTrpMangerNotAvailable
+	}
+
+	if len(v.conf.Launcher.Apps) == 0 {
+		return errors.New("no skysocks-client app configuration found")
+	}
+
+	for index, app := range v.conf.Launcher.Apps {
+		if app.Name == visorconfig.SkysocksClientName {
+			if v.GetSkysocksClientAddress() == "" && serverKey == "" {
+				return errors.New("Skysocks server pub key is missing")
+			}
+
+			if serverKey != "" {
+				var pk cipher.PubKey
+				if err := pk.Set(serverKey); err != nil {
+					return err
+				}
+				v.SetAppPK(visorconfig.SkysocksClientName, pk) //nolint
+				// we set the args in memory and pass it in `v.appL.StartApp`
+				// unlike the api method `StartApp` where `nil` is passed in `v.appL.StartApp` as args
+				// but the args are set in the config
+				v.conf.Launcher.Apps[index].Args = []string{"-srv", pk.Hex()}
+			} else {
+				var pk cipher.PubKey
+				if err := pk.Set(v.GetSkysocksClientAddress()); err != nil {
+					return err
+				}
+				v.conf.Launcher.Apps[index].Args = []string{"-srv", pk.Hex()}
+			}
+
+			// check process manager availability
+			if v.procM != nil {
+				return v.appL.StartApp(visorconfig.SkysocksClientName, v.conf.Launcher.Apps[index].Args, envs)
+			}
+			return ErrProcNotAvailable
+		}
+	}
+	return errors.New("no skysocks-client app configuration found")
+}
+
+// StopSkysocksClient implements API.
+func (v *Visor) StopSkysocksClient() error {
+	// check process manager availability
+	if v.procM != nil {
+		_, err := v.appL.StopApp(visorconfig.SkysocksClientName) //nolint:errcheck
+		return err
+	}
+	return ErrProcNotAvailable
+}
+
 // SetAppDetailedStatus implements API.
 func (v *Visor) SetAppDetailedStatus(appName, status string) error {
 	proc, ok := v.procM.ProcByName(appName)
@@ -553,7 +612,7 @@ func (v *Visor) SetAutoStart(appName string, autoStart bool) error {
 	}
 
 	v.log.Infof("Saving auto start = %v for app %v to config", autoStart, appName)
-	return v.conf.UpdateAppAutostart(appName, autoStart)
+	return v.conf.UpdateAppAutostart(v.appL, appName, autoStart)
 }
 
 // SetAppPassword implements API.
@@ -578,7 +637,7 @@ func (v *Visor) SetAppPassword(appName, password string) error {
 	const (
 		passcodeArgName = "-passcode"
 	)
-	if err := v.conf.UpdateAppArg(appName, passcodeArgName, password); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, passcodeArgName, password); err != nil {
 		return err
 	}
 
@@ -598,7 +657,7 @@ func (v *Visor) SetAppNetworkInterface(appName, netifc string) error {
 	const (
 		netifcArgName = "--netifc"
 	)
-	if err := v.conf.UpdateAppArg(appName, netifcArgName, netifc); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, netifcArgName, netifc); err != nil {
 		return err
 	}
 
@@ -618,7 +677,7 @@ func (v *Visor) SetAppKillswitch(appName string, killswitch bool) error {
 	const (
 		killSwitchArg = "--killswitch"
 	)
-	if err := v.conf.UpdateAppArg(appName, killSwitchArg, killswitch); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, killSwitchArg, killswitch); err != nil {
 		return err
 	}
 
@@ -638,7 +697,7 @@ func (v *Visor) SetAppSecure(appName string, isSecure bool) error {
 	const (
 		secureArgName = "--secure"
 	)
-	if err := v.conf.UpdateAppArg(appName, secureArgName, isSecure); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, secureArgName, isSecure); err != nil {
 		return err
 	}
 	v.log.Infof("Updated %v secure state", appName)
@@ -667,7 +726,7 @@ func (v *Visor) SetAppPK(appName string, pk cipher.PubKey) error {
 	const (
 		pkArgName = "-srv"
 	)
-	if err := v.conf.UpdateAppArg(appName, pkArgName, pk.String()); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, pkArgName, pk.String()); err != nil {
 		return err
 	}
 
@@ -697,7 +756,7 @@ func (v *Visor) SetAppDNS(appName string, dnsAddr string) error {
 		pkArgName = "-dns"
 	)
 
-	if err := v.conf.UpdateAppArg(appName, pkArgName, dnsAddr); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, pkArgName, dnsAddr); err != nil {
 		return err
 	}
 
@@ -1264,6 +1323,20 @@ func (v *Visor) SetPublicAutoconnect(pAc bool) error {
 func (v *Visor) GetVPNClientAddress() string {
 	for _, v := range v.conf.Launcher.Apps {
 		if v.Name == visorconfig.VPNClientName {
+			for index := range v.Args {
+				if v.Args[index] == "-srv" {
+					return v.Args[index+1]
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// GetSkysocksClientAddress get PK address of server set on skysocks-client
+func (v *Visor) GetSkysocksClientAddress() string {
+	for _, v := range v.conf.Launcher.Apps {
+		if v.Name == visorconfig.SkysocksClientAddr {
 			for index := range v.Args {
 				if v.Args[index] == "-srv" {
 					return v.Args[index+1]
