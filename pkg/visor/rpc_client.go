@@ -195,7 +195,7 @@ func (rc *rpcClient) StartSkysocksClient(pk string) error {
 
 // StopSkysocksClient calls StopSkysocksClient.
 func (rc *rpcClient) StopSkysocksClient() error {
-	return rc.Call("StopSkysocksClient", nil, &struct{}{})
+	return rc.Call("StopSkysocksClient", &struct{}{}, &struct{}{})
 }
 
 // SetAppDetailedStatus sets app's detailed state.

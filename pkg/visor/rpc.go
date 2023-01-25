@@ -288,14 +288,14 @@ func (r *RPC) StopVPNClient(name *string, _ *struct{}) (err error) {
 
 // StartSkysocksClient starts SkysocksClient App
 func (r *RPC) StartSkysocksClient(pk string, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "StartApp", pk)(nil, &err)
+	defer rpcutil.LogCall(r.log, "StartSkysocksClient", pk)(nil, &err)
 
 	return r.visor.StartSkysocksClient(pk)
 }
 
-// StopSkysocksClient stops VPNClient App
+// StopSkysocksClient stops SkysocksClient App
 func (r *RPC) StopSkysocksClient(_ *struct{}, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "StopVPNClient", nil)(nil, &err)
+	defer rpcutil.LogCall(r.log, "StopSkysocksClient", nil)(nil, &err)
 
 	return r.visor.StopSkysocksClient()
 }

@@ -537,7 +537,7 @@ func (v *Visor) StartSkysocksClient(serverKey string) error {
 				if err := pk.Set(serverKey); err != nil {
 					return err
 				}
-				v.SetAppPK("skysocks-cli", pk) //nolint
+				v.SetAppPK(visorconfig.SkysocksClientName, pk) //nolint
 				// we set the args in memory and pass it in `v.appL.StartApp`
 				// unlike the api method `StartApp` where `nil` is passed in `v.appL.StartApp` as args
 				// but the args are set in the config
@@ -564,7 +564,7 @@ func (v *Visor) StartSkysocksClient(serverKey string) error {
 func (v *Visor) StopSkysocksClient() error {
 	// check process manager availability
 	if v.procM != nil {
-		_, err := v.appL.StopApp("skysocks-client") //nolint:errcheck
+		_, err := v.appL.StopApp(visorconfig.SkysocksClientName) //nolint:errcheck
 		return err
 	}
 	return ErrProcNotAvailable
