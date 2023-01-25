@@ -286,6 +286,20 @@ func (r *RPC) StopVPNClient(name *string, _ *struct{}) (err error) {
 	return r.visor.StopVPNClient(*name)
 }
 
+// StartSkysocksClient starts SkysocksClient App
+func (r *RPC) StartSkysocksClient(pk string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StartApp", pk)(nil, &err)
+
+	return r.visor.StartSkysocksClient(pk)
+}
+
+// StopSkysocksClient stops VPNClient App
+func (r *RPC) StopSkysocksClient(_ *struct{}, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StopVPNClient", nil)(nil, &err)
+
+	return r.visor.StopSkysocksClient()
+}
+
 // RestartApp restarts App with provided name.
 func (r *RPC) RestartApp(name *string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "RestartApp", name)(nil, &err)

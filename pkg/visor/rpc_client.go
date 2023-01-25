@@ -188,6 +188,16 @@ func (rc *rpcClient) StopVPNClient(appName string) error {
 	return rc.Call("StopVPNClient", &appName, &struct{}{})
 }
 
+// StartSkysocksClient calls StartSkysocksClient.
+func (rc *rpcClient) StartSkysocksClient(pk string) error {
+	return rc.Call("StartSkysocksClient", pk, &struct{}{})
+}
+
+// StopSkysocksClient calls StopSkysocksClient.
+func (rc *rpcClient) StopSkysocksClient() error {
+	return rc.Call("StopSkysocksClient", nil, &struct{}{})
+}
+
 // SetAppDetailedStatus sets app's detailed state.
 func (rc *rpcClient) SetAppDetailedStatus(appName, status string) error {
 	return rc.Call("SetAppDetailedStatus", &SetAppStatusIn{
@@ -818,6 +828,16 @@ func (*mockRPCClient) StartVPNClient(cipher.PubKey) error {
 
 // StopVPNClient implements API.
 func (*mockRPCClient) StopVPNClient(string) error {
+	return nil
+}
+
+// StartSkysocksClient implements API.
+func (*mockRPCClient) StartSkysocksClient(string) error {
+	return nil
+}
+
+// StopSkysocksClient implements API.
+func (*mockRPCClient) StopSkysocksClient() error {
 	return nil
 }
 
