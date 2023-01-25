@@ -15,6 +15,8 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 )
 
+var pk string
+
 func init() {
 	RootCmd.PersistentFlags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
 	RootCmd.AddCommand(
@@ -22,20 +24,17 @@ func init() {
 		skysockscStopCmd,
 		skysockscStatusCmd,
 	)
+	skysockscStartCmd.Flags().StringVar(&pk, "pk", "", "skysocks server public key")
 }
 
 var skysockscStartCmd = &cobra.Command{
-	Use:   "start <public-key>",
-	Short: "start the skysocks-client for <public-key>",
+	Use:   "start",
+	Short: "start the skysocks-client",
 	Args:  cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			os.Exit(1)
-		}
-		var pk string
-		if len(args) > 0 {
-			pk = args[0]
 		}
 		internal.Catch(cmd.Flags(), rpcClient.StartSkysocksClient(pk))
 		internal.PrintOutput(cmd.Flags(), nil, "Starting.")
