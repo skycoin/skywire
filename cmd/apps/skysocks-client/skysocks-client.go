@@ -33,6 +33,7 @@ const (
 var r = netutil.NewRetrier(nil, time.Second, netutil.DefaultMaxBackoff, 0, 1)
 
 func dialServer(ctx context.Context, appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
+	appCl.SetDetailedStatus(appserver.AppDetailedStatusStarting) //nolint
 	var conn net.Conn
 	err := r.Do(ctx, func() error {
 		var err error
@@ -89,7 +90,6 @@ func main() {
 		}
 
 		fmt.Printf("Connected to %v\n", pk)
-
 		client, err := skysocks.NewClient(conn, appCl)
 		if err != nil {
 			print(fmt.Sprintf("Failed to create a new client: %v\n", err))
@@ -98,6 +98,7 @@ func main() {
 		}
 
 		fmt.Printf("Serving proxy client %v\n", *addr)
+		setAppStatus(appCl, appserver.AppDetailedStatusRunning)
 
 		if err := client.ListenAndServe(*addr); err != nil {
 			print(fmt.Sprintf("Error serving proxy client: %v\n", err))

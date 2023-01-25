@@ -12,7 +12,6 @@ import (
 	"github.com/skycoin/yamux"
 
 	"github.com/skycoin/skywire/pkg/app"
-	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
@@ -61,9 +60,6 @@ func (c *Client) ListenAndServe(addr string) error {
 	fmt.Printf("Listening skysocks client on %s", addr)
 
 	c.listener = l
-	if c.appCl != nil {
-		c.setAppStatus(appserver.AppDetailedStatusRunning)
-	}
 
 	for {
 		select {
@@ -172,12 +168,6 @@ func (c *Client) ListenIPC(client *ipc.Client) {
 			print(fmt.Sprintf("Error closing skysocks-client: %v\n", err))
 		}
 	})
-}
-
-func (c *Client) setAppStatus(status appserver.AppDetailedStatus) {
-	if err := c.appCl.SetDetailedStatus(string(status)); err != nil {
-		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
-	}
 }
 
 func (c *Client) setAppError(appErr error) {
