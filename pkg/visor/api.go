@@ -612,7 +612,7 @@ func (v *Visor) SetAutoStart(appName string, autoStart bool) error {
 	}
 
 	v.log.Infof("Saving auto start = %v for app %v to config", autoStart, appName)
-	return v.conf.UpdateAppAutostart(appName, autoStart)
+	return v.conf.UpdateAppAutostart(v.appL, appName, autoStart)
 }
 
 // SetAppPassword implements API.
@@ -637,7 +637,7 @@ func (v *Visor) SetAppPassword(appName, password string) error {
 	const (
 		passcodeArgName = "-passcode"
 	)
-	if err := v.conf.UpdateAppArg(appName, passcodeArgName, password); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, passcodeArgName, password); err != nil {
 		return err
 	}
 
@@ -657,7 +657,7 @@ func (v *Visor) SetAppNetworkInterface(appName, netifc string) error {
 	const (
 		netifcArgName = "--netifc"
 	)
-	if err := v.conf.UpdateAppArg(appName, netifcArgName, netifc); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, netifcArgName, netifc); err != nil {
 		return err
 	}
 
@@ -677,7 +677,7 @@ func (v *Visor) SetAppKillswitch(appName string, killswitch bool) error {
 	const (
 		killSwitchArg = "--killswitch"
 	)
-	if err := v.conf.UpdateAppArg(appName, killSwitchArg, killswitch); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, killSwitchArg, killswitch); err != nil {
 		return err
 	}
 
@@ -697,7 +697,7 @@ func (v *Visor) SetAppSecure(appName string, isSecure bool) error {
 	const (
 		secureArgName = "--secure"
 	)
-	if err := v.conf.UpdateAppArg(appName, secureArgName, isSecure); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, secureArgName, isSecure); err != nil {
 		return err
 	}
 	v.log.Infof("Updated %v secure state", appName)
@@ -726,7 +726,7 @@ func (v *Visor) SetAppPK(appName string, pk cipher.PubKey) error {
 	const (
 		pkArgName = "-srv"
 	)
-	if err := v.conf.UpdateAppArg(appName, pkArgName, pk.String()); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, pkArgName, pk.String()); err != nil {
 		return err
 	}
 
@@ -756,7 +756,7 @@ func (v *Visor) SetAppDNS(appName string, dnsAddr string) error {
 		pkArgName = "-dns"
 	)
 
-	if err := v.conf.UpdateAppArg(appName, pkArgName, dnsAddr); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, pkArgName, dnsAddr); err != nil {
 		return err
 	}
 
