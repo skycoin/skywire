@@ -1,0 +1,24 @@
+name: Deploy
+# only trigger on pull request closed events
+on:
+  pull_request:
+    branches:
+      - develop
+      - master
+    types: [ closed ]
+
+jobs:
+  deploy:
+    # this job will only run if the PR has been merged
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: deploy to docker
+      run: |
+        chmod +x ./ci_scripts/docker-push.sh
+        ./ci_scripts/docker-push.sh -t ${GITHUB_REF##*/} -p
+      shell: bash
+      env:
+        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
