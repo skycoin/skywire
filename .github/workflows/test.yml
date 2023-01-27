@@ -22,7 +22,6 @@ jobs:
   
   darwin:
     runs-on: macos-latest
-    needs: linux
     steps:
       - uses: actions/setup-go@v3
         with:
@@ -42,7 +41,6 @@ jobs:
   
   windows:
     runs-on: windows-latest
-    needs: linux
     steps:
       - uses: actions/setup-go@v3
         with:
