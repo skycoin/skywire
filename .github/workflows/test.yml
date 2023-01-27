@@ -56,6 +56,6 @@ jobs:
       - name: Testing
         run:  |
           set GO111MODULE=on
-          make check-windows
+          make test-windows
       - name: Build
         run: make build-windows
