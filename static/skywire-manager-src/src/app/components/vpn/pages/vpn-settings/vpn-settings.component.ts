@@ -1,7 +1,7 @@
 import { Component, OnDestroy, ViewChild } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { ActivatedRoute } from '@angular/router';
-import { MatLegacyDialog as MatDialog } from '@angular/material/legacy-dialog';
+import { MatDialog } from '@angular/material/dialog';
 
 import { VpnHelpers } from '../../vpn-helpers';
 import { BackendState, VpnClientService, VpnServiceStates } from 'src/app/services/vpn-client.service';

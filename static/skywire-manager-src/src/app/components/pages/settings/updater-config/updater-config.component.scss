@@ -1,6 +1,10 @@
 @import "variables";
 @import "bootstrap_overrides";
 
+.help-icon {
+  display: inline;
+}
+
 mat-form-field {
   margin-right: 32px;
 }

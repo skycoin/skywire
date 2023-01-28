@@ -1,12 +1,12 @@
 <app-dialog [headline]="'apps.log.filter.title' | translate" [dialog]="dialogRef">
   <form [formGroup]="form">
     <mat-form-field>
-      <mat-select
-        formControlName="filter"
-        [placeholder]="'apps.log.filter.filter' | translate"
-      >
-        <mat-option *ngFor="let filter of filters" [value]="filter.days">{{ filter.text | translate }}</mat-option>
-      </mat-select>
+      <div class="field-container">
+        <label class="field-label" for="remoteKey">{{ 'apps.log.filter.filter' | translate }}</label>
+        <mat-select formControlName="filter">
+          <mat-option *ngFor="let filter of filters" [value]="filter.days">{{ filter.text | translate }}</mat-option>
+        </mat-select>
+      </div>
     </mat-form-field>
   </form>
 </app-dialog>

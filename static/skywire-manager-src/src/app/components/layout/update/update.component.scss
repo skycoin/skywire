@@ -59,12 +59,6 @@
     color: $blue-medium;
   }
 
-  ::ng-deep {
-    .mat-progress-bar-fill::after {
-      background-color: $blue-medium !important;
-    }
-  }
-
   .details {
     font-size: $font-size-mini;
     text-align: right;

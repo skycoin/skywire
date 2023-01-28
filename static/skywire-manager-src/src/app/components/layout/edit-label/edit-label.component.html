@@ -1,7 +1,10 @@
 <app-dialog [headline]="'labeled-element.edit-label' | translate" [dialog]="dialogRef">
   <form [formGroup]="form">
     <mat-form-field>
-      <input #firstInput [placeholder]="'edit-label.label' | translate" formControlName="label" maxlength="66" matInput>
+      <div class="field-container">
+        <label class="field-label" for="remoteKey">{{ 'edit-label.label' | translate }}</label>
+        <input #firstInput formControlName="label" maxlength="66" matInput>
+      </div>
     </mat-form-field>
   </form>
   <app-button class="float-right" color="primary" (action)="save()">{{ 'common.save' | translate }}</app-button>

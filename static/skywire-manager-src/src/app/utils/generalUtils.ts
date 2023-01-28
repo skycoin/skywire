@@ -1,4 +1,4 @@
-import { MatLegacyDialogRef as MatDialogRef, MatLegacyDialogConfig as MatDialogConfig, MatLegacyDialog as MatDialog } from '@angular/material/legacy-dialog';
+import { MatDialogRef, MatDialogConfig, MatDialog } from '@angular/material/dialog';
 
 import { ConfirmationComponent, ConfirmationData } from '../components/layout/confirmation/confirmation.component';
 import { AppConfig } from '../app.config';

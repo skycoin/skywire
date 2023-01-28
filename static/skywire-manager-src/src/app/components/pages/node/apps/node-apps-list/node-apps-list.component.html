@@ -113,7 +113,7 @@
       <td>
         <button
           (click)="changeAppAutostart(app)"
-          mat-icon-button
+          mat-button
           [matTooltip]="(app.autostart ? 'apps.apps-list.disable-autostart' : 'apps.apps-list.enable-autostart') | translate"
           class="big-action-button transparent-button"
         >
@@ -123,7 +123,7 @@
       <td class="actions">
         <a [href]="getLink(app)" target="_blank" rel="noreferrer nofollow noopener" class="skychat-link" *ngIf="getLink(app)">
           <button
-            mat-icon-button
+            mat-button
             [matTooltip]="'apps.open' | translate"
             class="big-action-button transparent-button"
           >
@@ -132,7 +132,7 @@
         </a>
         <button
           (click)="config(app)"
-          mat-icon-button
+          mat-button
           [matTooltip]="'apps.settings' | translate"
           class="big-action-button transparent-button"
           *ngIf="appsWithConfig.has(app.name)"
@@ -141,7 +141,7 @@
         </button>
         <button
           (click)="viewLogs(app)"
-          mat-icon-button
+          mat-button
           [matTooltip]="'apps.view-logs' | translate"
           class="big-action-button transparent-button"
         >
@@ -149,7 +149,7 @@
         </button>
         <button
           (click)="changeAppState(app)"
-          mat-icon-button
+          mat-button
           [matTooltip]="('apps.' + (app.status === 0 || app.status === 2 ? 'start-app' : 'stop-app')) | translate"
           class="big-action-button transparent-button"
         >
