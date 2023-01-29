@@ -101,9 +101,9 @@ type Visor struct {
 	// produced by concurrent parts of modules
 	runtimeErrors chan error
 
-	isServicesHealthy    *internalHealthInfo
-	autoPeer             bool                   // autoPeer=true tells the visor to query the http endpoint of the hypervisor on the local network for the hypervisor's public key when connectio to the hypervisor is lost
-	autoPeerIP           string                 // autoPeerCmd is the command string used to return the public key of the hypervisor
+	isServicesHealthy *internalHealthInfo
+	//	autoPeer             bool                   // autoPeer=true tells the visor to query the http endpoint of the hypervisor on the local network for the hypervisor's public key when connectio to the hypervisor is lost
+	//	autoPeerIP           string                 // autoPeerCmd is the command string used to return the public key of the hypervisor
 	remoteVisors         map[cipher.PubKey]Conn // remote hypervisors the visor is attempting to connect to
 	connectedHypervisors map[cipher.PubKey]bool // remote hypervisors the visor is currently connected to
 	allowedPorts         map[int]bool
@@ -176,9 +176,9 @@ func run(conf *visorconfig.V1) error {
 		}
 	}
 
-	if isAutoPeer {
-		conf = initAutopeer(conf)
-	}
+	//	if isAutoPeer {
+	//		conf = initAutopeer(conf)
+	//	}
 
 	if logLvl != "" {
 		//validate & set log level
@@ -304,10 +304,10 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	if !v.processRuntimeErrs() {
 		return nil, false
 	}
-	if isAutoPeer {
-		v.autoPeer = true
-		v.autoPeerIP = autoPeerIP
-	}
+	//	if isAutoPeer {
+	//		v.autoPeer = true
+	//		v.autoPeerIP = autoPeerIP
+	//	}
 	log.Info("Startup complete.")
 	return v, true
 }
@@ -334,6 +334,7 @@ func (v *Visor) isStunReady() bool {
 	}
 }
 
+/*
 func initAutopeer(conf *visorconfig.V1) *visorconfig.V1 {
 	log := mLog.PackageLogger("visor:autopeer")
 
@@ -377,6 +378,7 @@ func initAutopeer(conf *visorconfig.V1) *visorconfig.V1 {
 
 	return conf
 }
+*/
 
 func initLogger() *logging.MasterLogger {
 	mLog := logging.NewMasterLogger()
