@@ -1,9 +1,13 @@
 // Dropdown menus.
-.mat-menu-panel {
+.mat-mdc-menu-panel {
   border-radius: $mat-dialog-radius !important;
   max-width: none !important;
 }
 
-.mat-menu-item {
+.mat-mdc-menu-item {
   width: auto !important;
+
+  mat-icon {
+    opacity: 0.5;
+  }
 }
