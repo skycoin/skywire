@@ -18,17 +18,16 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var (
-	restartCtx           = restart.CaptureContext()
-	pkgconfigexists      bool
-	userconfigexists     bool
-	isAutoPeer           bool
-	autoPeerIP           string
+	restartCtx       = restart.CaptureContext()
+	pkgconfigexists  bool
+	userconfigexists bool
+	//	isAutoPeer           bool
+	//	autoPeerIP           string
 	stopVisorWg          sync.WaitGroup //nolint:unused
 	launchBrowser        bool
 	syslogAddr           string
@@ -115,7 +114,7 @@ func init() {
 	hiddenflags = append(hiddenflags, "hv")
 	RootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors \u001b[0m*")
 	hiddenflags = append(hiddenflags, "xhv")
-	initAutoPeerFlags()
+	//	initAutoPeerFlags()
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "", "[ debug | warn | error | fatal | panic | trace ] \u001b[0m*")
 	hiddenflags = append(hiddenflags, "loglvl")
 	RootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "q", "", "[ cpu | mem | mutex | block | trace | http ]")
@@ -136,6 +135,9 @@ func init() {
 	RootCmd.SetUsageTemplate(help)
 
 }
+
+//omit due to possible panic
+/*
 func initAutoPeerFlags() {
 	localIPs, err := netutil.DefaultNetworkInterfaceIPs()
 	if err != nil {
@@ -159,7 +161,7 @@ func trimStringFromDot(s string) string {
 	}
 	return s
 }
-
+*/
 // RootCmd contains the help command & invocation flags
 var RootCmd = &cobra.Command{
 	Use:   "skywire-visor",
