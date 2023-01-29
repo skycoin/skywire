@@ -5,20 +5,20 @@ mat-form-field {
 // White form fields, to be shown with the dark background.
 .white-form-field {
   color: $white;
-
-  .mat-select-value-text, .mat-form-field-label, .mat-select-value, .mat-select-arrow {
+  
+  .mat-mdc-select-value, .mat-mdc-select-arrow {
     color: $white !important;
   }
 
-   .mat-form-field-underline {
-    background-color: scale-color($white, $alpha: -50%) !important;
+  .mdc-line-ripple::before {
+    border-bottom-color: scale-color($white, $alpha: -50%) !important;
   }
 
-  .mat-form-field-ripple {
-    background-color: $white !important;
+  input {
+    color: $white !important;
   }
 
-  .mat-input-element {
+  .mat-mdc-input-element {
     caret-color: $white;
   }
 }

@@ -92,9 +92,11 @@
         [ngClass]="{'mouse-disabled' : disableMouse, 'grey-button-background' : !disableMouse}"
         (click)="openTabSelector()"
       >
-        <mat-icon [inline]="true">{{ tabsData[selectedTabIndex].icon }}</mat-icon>
-        <span>{{ tabsData[selectedTabIndex].label | translate }}</span>
-        <mat-icon [inline]="true">keyboard_arrow_down</mat-icon>
+        <div class="d-flex">
+          <mat-icon [inline]="true">{{ tabsData[selectedTabIndex].icon }}</mat-icon>
+          <span>{{ tabsData[selectedTabIndex].label | translate }}</span>
+          <mat-icon [inline]="true">keyboard_arrow_down</mat-icon>
+        </div>
       </button>
     </div>
     <div class="blank-space"></div>
@@ -114,7 +116,9 @@
         class="menu-button subtle-transparent-button d-none d-lg-block"
         [matMenuTriggerFor]="menu"
       >
-        <mat-icon [inline]="true">menu</mat-icon>
+        <div class="icon-container">
+          <mat-icon [inline]="true">menu</mat-icon>
+        </div>
       </button>
     </div>
   </div></div>

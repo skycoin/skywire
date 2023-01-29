@@ -1,7 +1,10 @@
 <app-dialog [headline]="'vpn.dns-config.title' | translate">
     <form [formGroup]="form">
       <mat-form-field>
-        <input #firstInput [placeholder]="'vpn.dns-config.ip' | translate" formControlName="ip" maxlength="15" matInput>
+        <div class="field-container">
+          <label class="field-label" for="remoteKey">{{ 'vpn.dns-config.ip' | translate }}</label>
+          <input #firstInput formControlName="ip" maxlength="15" matInput>
+        </div>
       </mat-form-field>
     </form>
     <app-button #button class="float-right" color="primary" (action)="save()" [disabled]="!form.valid">

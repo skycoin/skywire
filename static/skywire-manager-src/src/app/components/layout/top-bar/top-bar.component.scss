@@ -16,6 +16,7 @@ $top-bar-height: 56px;
   border-bottom: 1px solid $separator;
   padding-bottom: 10px;
   margin-bottom: -5px;
+  height: 100px;
   display: flex;
 
   .main-area {
@@ -118,14 +119,14 @@ $top-bar-height: 56px;
         min-width: 0px !important;
         background-color: $white;
         border-radius: 100%;
-        padding: 0;
+        padding: 0 !important;
         line-height: normal;
         color: #929292;
         font-size: 20px;
-        
-        ::ng-deep .mat-button-wrapper {
+
+        .icon-container {
           display: flex;
-          justify-content: center;
+          place-content: center;
         }
       }
     }
