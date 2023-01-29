@@ -1,15 +1,19 @@
 // Modal windows.
-mat-dialog-container.mat-dialog-container {
+.mat-mdc-dialog-surface {
   border-radius: $mat-dialog-radius !important;
+  background-image: url('/assets/img/modal-background-pattern.png') !important;
+  box-shadow: inset 0 0 100px 0 rgba(255, 255, 255, 0.5), 5px 5px 15px 0 rgba(0, 0, 0, 1) !important;
+  background-color: $modal-background !important;
+  overflow: hidden;
   padding: $mat-dialog-padding !important;
-
-  background-image: url('/assets/img/modal-background-pattern.png');
-  box-shadow: inset 0 0 100px 0 rgba(255, 255, 255, 0.5), 5px 5px 15px 0 rgba(0, 0, 0, 1);
-  background-color: $modal-background;
 }
 
-.mat-dialog-content {
-  margin-bottom: -$mat-dialog-padding !important;
+.mat-mdc-dialog-content {
+  font-family: $skywire-font-family !important;
+  margin: (0px) (-$mat-dialog-padding) (-$mat-dialog-padding) (-$mat-dialog-padding) !important;
+  padding: $mat-dialog-padding !important;
+  color: $black !important;
+  line-height: 1.5 !important;
 }
 
 app-dialog {
@@ -41,6 +45,12 @@ app-dialog {
     }
   }
 }
+.options-list-button-container:first-of-type {
+  margin-top: -$mat-dialog-padding !important;
+}
+.options-list-button-container:last-of-type {
+  margin-bottom: -$mat-dialog-padding !important;
+}
 
 // Global styles for the modal windows that display the details of something.
 .info-dialog {
@@ -53,6 +63,7 @@ app-dialog {
     font-size: $font-size-base;
     margin-top: 25px;
     color: $blue-medium;
+    display: flex;
 
     mat-icon {
       margin-right: 5px;
