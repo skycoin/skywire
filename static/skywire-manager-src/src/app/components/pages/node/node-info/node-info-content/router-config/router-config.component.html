@@ -3,13 +3,15 @@
   <div class="info-container">{{'router-config.info' | translate}}</div>
   <form [formGroup]="form" [ngClass]="{'element-disabled' : disableDismiss}">
     <mat-form-field>
-      <input
-        #firstInput
-        [placeholder]="'router-config.min-hops' | translate"
-        formControlName="min"
-        maxlength="3"
-        matInput
-      >
+      <div class="field-container">
+        <label class="field-label" for="remoteKey">{{ 'router-config.min-hops' | translate }}</label>
+        <input
+          #firstInput
+          formControlName="min"
+          maxlength="3"
+          matInput
+        >
+      </div>
     </mat-form-field>
   </form>
   <app-button

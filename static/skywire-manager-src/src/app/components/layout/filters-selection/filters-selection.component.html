@@ -3,39 +3,40 @@
     <!-- Form fields. -->
     <ng-container *ngFor="let fieldParams of data.filterPropertiesList">
       <mat-form-field>
-        <!-- Text input. -->
-        <input
-          *ngIf="fieldParams.type === filterFieldTypes.TextInput"
-          [formControlName]="fieldParams.keyNameInFiltersObject"
-          [maxlength]="fieldParams.maxlength"
-          [placeholder]="fieldParams.filterName | translate"
-          matInput
-        >
-        <!-- Select. -->
-        <mat-select
-          *ngIf="fieldParams.type === filterFieldTypes.Select"
-          [formControlName]="fieldParams.keyNameInFiltersObject"
-          [placeholder]="fieldParams.filterName | translate"
-        >
-          <mat-option *ngFor="let option of fieldParams.printableLabelsForValues" [value]="option.value">
-            <!-- Option image. -->
-            <div
-              *ngIf="fieldParams.printableLabelGeneralSettings && option.image"
-              class="image-container"
-              [style]="
-                'background-image: url(\'' + fieldParams.printableLabelGeneralSettings.defaultImage + '\'); ' +
-                'width: ' + fieldParams.printableLabelGeneralSettings.imageWidth + 'px; ' +
-                'height: ' + fieldParams.printableLabelGeneralSettings.imageHeight + 'px;'"
-            >
+        <div class="field-container">
+          <label class="field-label" for="remoteKey">{{ fieldParams.filterName | translate }}</label>
+          <!-- Text input. -->
+          <input
+            *ngIf="fieldParams.type === filterFieldTypes.TextInput"
+            [formControlName]="fieldParams.keyNameInFiltersObject"
+            [maxlength]="fieldParams.maxlength"
+            matInput
+          >
+          <!-- Select. -->
+          <mat-select
+            *ngIf="fieldParams.type === filterFieldTypes.Select"
+            [formControlName]="fieldParams.keyNameInFiltersObject"
+          >
+            <mat-option *ngFor="let option of fieldParams.printableLabelsForValues" [value]="option.value">
+              <!-- Option image. -->
               <div
-                class="image"
-                [style]="'background-image: url(\'' + option.image + '\');'">
+                *ngIf="fieldParams.printableLabelGeneralSettings && option.image"
+                class="image-container"
+                [style]="
+                  'background-image: url(\'' + fieldParams.printableLabelGeneralSettings.defaultImage + '\'); ' +
+                  'width: ' + fieldParams.printableLabelGeneralSettings.imageWidth + 'px; ' +
+                  'height: ' + fieldParams.printableLabelGeneralSettings.imageHeight + 'px;'"
+              >
+                <div
+                  class="image"
+                  [style]="'background-image: url(\'' + option.image + '\');'">
+                </div>
               </div>
-            </div>
-            <!-- Option text. -->
-            {{ option.label | translate }}
-          </mat-option>
-        </mat-select>
+              <!-- Option text. -->
+              {{ option.label | translate }}
+            </mat-option>
+          </mat-select>
+        </div>
       </mat-form-field>
     </ng-container>
   </form>

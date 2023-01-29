@@ -117,7 +117,7 @@
         <button
           *ngIf="transport.isPersistent"
           (click)="changeIfPersistent([transport], false)"
-          mat-icon-button
+          mat-button
           [matTooltip]="'transports.persistent-transport-button-tooltip' | translate"
           class="action-button subtle-transparent-button"
         >
@@ -126,7 +126,7 @@
         <button
           *ngIf="!transport.isPersistent"
           (click)="changeIfPersistent([transport], true)"
-          mat-icon-button
+          mat-button
           [matTooltip]="'transports.non-persistent-transport-button-tooltip' | translate"
           class="action-button subtle-transparent-button"
         >
@@ -173,7 +173,7 @@
         <button
           *ngIf="!transport.notFound"
           (click)="details(transport)"
-          mat-icon-button
+          mat-button
           [matTooltip]="'transports.details.title' | translate"
           class="action-button transparent-button"
         >
@@ -182,7 +182,7 @@
         <button
           *ngIf="!transport.notFound"
           (click)="delete(transport)"
-          mat-icon-button
+          mat-button
           [matTooltip]="'transports.delete' | translate"
           class="action-button transparent-button"
         >

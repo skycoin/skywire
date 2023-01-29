@@ -6,7 +6,9 @@
   [ngClass]="{'for-dark-background': forDarkBackground}"
   #button2
 >
-  <mat-spinner *ngIf="state === buttonStates.Loading" [diameter]="loadingSize"></mat-spinner>
-  <mat-icon *ngIf="state === buttonStates.Error">error_outline</mat-icon>
-  <ng-content></ng-content>
+  <div class="d-flex">
+    <mat-spinner *ngIf="state === buttonStates.Loading" [diameter]="loadingSize"></mat-spinner>
+    <mat-icon *ngIf="state === buttonStates.Error">error_outline</mat-icon>
+    <ng-content></ng-content>
+  </div>
 </button>

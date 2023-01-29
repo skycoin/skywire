@@ -2,10 +2,29 @@
 @import "@angular/material/theming";
 @import "assets/scss/variables";
 
-$general-typography: mat.define-legacy-typography-config(
+// Skywire UI theme typographies.
+$custom-body-1-level-typography: mat.define-typography-level(
+  $font-weight: 400,
+  $font-size: $font-size-sm,
+  $line-height: 1,
+  $letter-spacing: normal,
+);
+$custom-buttom-level-typography: mat.define-typography-level(
+  $font-family: $skywire-font-family,
+  $font-size: $font-size-sm,
+  $letter-spacing: normal,
+);
+$general-typography: mat.define-typography-config(
+  $font-family: $skywire-font-family,
+  $body-1: $custom-body-1-level-typography,
+  $subtitle-1: $custom-body-1-level-typography,
+  $button: $custom-buttom-level-typography,
+);
+/*
+$general-typography: mat.define-typography-config(
   $font-family: $skywire-font-family
 );
-
+*/
 // TODO(v15): As of v15 mat.legacy-core no longer includes default typography styles.
 //  The following line adds:
 //    1. Default typography styles for all components
@@ -14,8 +33,8 @@ $general-typography: mat.define-legacy-typography-config(
 //  If you don't need the default component typographies but still want the hierarchy styles,
 //  you can delete this line and instead use:
 //    `@include mat.legacy-typography-hierarchy($general-typography);`
-@include mat.all-legacy-component-typographies($general-typography);
-@include mat.legacy-core();
+@include mat.all-component-typographies($general-typography);
+@include mat.core();
 
 $mat-skywire-primary: (
   100: $blue-medium,
@@ -43,7 +62,7 @@ $skywire-theme: mat.define-light-theme((
   ),
 ));
 
-@include mat.all-legacy-component-themes($skywire-theme);
+@include mat.all-component-themes($skywire-theme);
 
 $mat-white-primary: (
   100: white,
@@ -66,5 +85,5 @@ $white-theme: mat.define-light-theme((
 ));
 
 .white-theme {
-  @include mat.all-legacy-component-colors($white-theme);
+  @include mat.all-component-colors($white-theme);
 }

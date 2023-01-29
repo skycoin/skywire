@@ -1,16 +1,15 @@
 @import "variables";
 
+.help-icon {
+  display: inline;
+}
+
 mat-form-field {
   margin-right: 32px;
 }
 
 mat-form-field ::ng-deep {
-  .mat-form-field-wrapper {
-    padding-bottom: 0 !important;
-  }
-
-  .mat-form-field-underline {
-    bottom: 0 !important;
+  .mat-mdc-form-field-bottom-align {
+    margin-bottom: 0px !important;
   }
 }
-

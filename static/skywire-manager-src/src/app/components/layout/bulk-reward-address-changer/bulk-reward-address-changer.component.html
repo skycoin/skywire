@@ -10,13 +10,15 @@
 
     <!-- Address field. -->
     <mat-form-field>
-      <input
-        [ngClass]="{'element-disabled' : processingStarted}"
-        [placeholder]="'rewards-address-config.address' | translate"
-        formControlName="address"
-        maxlength="40"
-        matInput
-      >
+      <div class="field-container">
+        <label class="field-label" for="remoteKey">{{ 'rewards-address-config.address' | translate }}</label>
+        <input
+          [ngClass]="{'element-disabled' : processingStarted}"
+          formControlName="address"
+          maxlength="40"
+          matInput
+        >
+      </div>
     </mat-form-field>
 
     <div class="text-container">

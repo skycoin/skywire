@@ -147,7 +147,7 @@
           <td class="actions">
             <button
               (click)="$event.stopPropagation(); $event.preventDefault(); copyToClipboard(node);"
-              mat-icon-button
+              mat-button
               [matTooltip]="(showDmsgInfo ? 'nodes.copy-data' : 'nodes.copy-key') | translate"
               class="big-action-button transparent-button"
             >
@@ -155,7 +155,7 @@
             </button>
             <button
               (click)="$event.stopPropagation(); $event.preventDefault(); showEditLabelDialog(node);"
-              mat-icon-button
+              mat-button
               [matTooltip]="'labeled-element.edit-label' | translate"
               class="big-action-button transparent-button"
             >
@@ -163,7 +163,7 @@
             </button>
             <button
               *ngIf="node.online"
-              mat-icon-button
+              mat-button
               [matTooltip]="'nodes.view-node' | translate"
               class="big-action-button transparent-button"
             >
@@ -172,7 +172,7 @@
             <button
               *ngIf="!node.online"
               (click)="$event.stopPropagation(); $event.preventDefault(); deleteNode(node);"
-              mat-icon-button
+              mat-button
               [matTooltip]="'nodes.delete-node' | translate"
               class="big-action-button transparent-button"
             >

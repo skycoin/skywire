@@ -5,38 +5,44 @@
 >
   <form [formGroup]="form">
     <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
-      <input
-        id="password"
-        type="password"
-        formControlName="password"
-        maxlength="100"
-        [placeholder]="'apps.vpn-socks-server-settings.new-password' | translate"
-        #firstInput
-        matInput
-      >
+      <div class="field-container">
+        <label class="field-label" for="remoteKey">{{ 'apps.vpn-socks-server-settings.new-password' | translate }}</label>
+        <input
+          id="password"
+          type="password"
+          formControlName="password"
+          maxlength="100"
+          #firstInput
+          matInput
+        >
+      </div>
     </mat-form-field>
     <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
-      <input
-        id="passwordConfirmation"
-        type="password"
-        formControlName="passwordConfirmation"
-        maxlength="100"
-        [placeholder]="'apps.vpn-socks-server-settings.repeat-password' | translate"
-        #firstInput
-        matInput
-      >
+      <div class="field-container">
+        <label class="field-label" for="remoteKey">{{ 'apps.vpn-socks-server-settings.repeat-password' | translate }}</label>
+        <input
+          id="passwordConfirmation"
+          type="password"
+          formControlName="passwordConfirmation"
+          maxlength="100"
+          #firstInput
+          matInput
+        >
+      </div>
       <mat-error>
-        {{ 'apps.vpn-socks-server-settings.passwords-not-match' | translate }}
+        <span>{{ 'apps.vpn-socks-server-settings.passwords-not-match' | translate }}</span>
       </mat-error>
     </mat-form-field>
     <mat-form-field *ngIf="configuringVpn" [ngClass]="{'element-disabled' : disableDismiss}">
-      <input
-        id="netifc"
-        type="text"
-        formControlName="netifc"
-        [placeholder]="'apps.vpn-socks-server-settings.netifc' | translate"
-        matInput
-      >
+      <div class="field-container">
+        <label class="field-label" for="remoteKey">{{ 'apps.vpn-socks-server-settings.netifc' | translate }}</label>
+        <input
+          id="netifc"
+          type="text"
+          formControlName="netifc"
+          matInput
+        >
+      </div>
     </mat-form-field>
     <div class="main-theme settings-option" *ngIf="configuringVpn">
       <mat-checkbox

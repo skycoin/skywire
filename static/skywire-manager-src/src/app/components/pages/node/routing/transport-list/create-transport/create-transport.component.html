@@ -2,41 +2,45 @@
   <app-loading-indicator [showWhite]="false" *ngIf="!types"></app-loading-indicator>
   <form [formGroup]="form" *ngIf="types">
     <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
-      <input
-        formControlName="remoteKey"
-        maxlength="66"
-        [placeholder]="'transports.dialog.remote-key' | translate"
-        #firstInput
-        matInput
-      >
+      <div class="field-container">
+        <label class="field-label" for="remoteKey">{{ 'transports.dialog.remote-key' | translate }}</label>
+        <input
+          formControlName="remoteKey"
+          maxlength="66"
+          #firstInput
+          matInput
+        >
+      </div>
       <mat-error>
         <ng-container *ngIf="!this.form.get('remoteKey').hasError('pattern');else hexError">
-          {{ 'transports.dialog.errors.remote-key-length-error' | translate }}
+          <span>{{ 'transports.dialog.errors.remote-key-length-error' | translate }}</span>
         </ng-container>
       </mat-error>
       <ng-template #hexError>
-        {{ 'transports.dialog.errors.remote-key-chars-error' | translate }}
+        <span>{{ 'transports.dialog.errors.remote-key-chars-error' | translate }}</span>
       </ng-template>
     </mat-form-field>
 
     <mat-form-field  [ngClass]="{'element-disabled' : disableDismiss}">
-      <input
-        formControlName="label"
-        maxlength="66"
-        [placeholder]="'transports.dialog.label' | translate"
-        matInput
-      >
+      <div class="field-container">
+        <label class="field-label" for="remoteKey">{{ 'transports.dialog.label' | translate }}</label>
+        <input
+          formControlName="label"
+          maxlength="66"
+          matInput
+        >
+      </div>
     </mat-form-field>
 
     <mat-form-field  [ngClass]="{'element-disabled' : disableDismiss}">
-      <mat-select
-        formControlName="type"
-        [placeholder]="'transports.dialog.transport-type' | translate"
-      >
-        <mat-option *ngFor="let type of types" [value]="type">{{ type }}</mat-option>
-      </mat-select>
+      <div class="field-container">
+        <label class="field-label" for="remoteKey">{{ 'transports.dialog.transport-type' | translate }}</label>
+        <mat-select formControlName="type">
+          <mat-option *ngFor="let type of types" [value]="type">{{ type }}</mat-option>
+        </mat-select>
+      </div>
       <mat-error>
-        {{ 'transports.dialog.errors.transport-type-error' | translate }}
+        <span>{{ 'transports.dialog.errors.transport-type-error' | translate }}</span>
       </mat-error>
     </mat-form-field>
 
