@@ -31,7 +31,7 @@ var (
 	stopVisorWg          sync.WaitGroup //nolint:unused
 	launchBrowser        bool
 	syslogAddr           string
-	logger               = logging.MustGetLogger("skywire-visor")
+	logger               = logging.MustGetLogger("skywire-visor") //nolint:unused
 	logLvl               string
 	pprofMode            string
 	pprofAddr            string
@@ -162,6 +162,7 @@ func trimStringFromDot(s string) string {
 	return s
 }
 */
+
 // RootCmd contains the help command & invocation flags
 var RootCmd = &cobra.Command{
 	Use:   "skywire-visor",
