@@ -16,6 +16,11 @@
     }
   }
 
+  .internal-container {
+    display: flex;
+    align-items: center;
+  }
+
   .icon {
     font-size: 16px;
     margin-right: 5px;

@@ -7,13 +7,15 @@
   </div>
   <form [formGroup]="form" [ngClass]="{'element-disabled' : disableDismiss}">
     <mat-form-field>
-      <input
-        #firstInput
-        [placeholder]="'rewards-address-config.address' | translate"
-        formControlName="address"
-        maxlength="40"
-        matInput
-      >
+      <div class="field-container">
+        <label class="field-label" for="remoteKey">{{ 'rewards-address-config.address' | translate }}</label>
+        <input
+          #firstInput
+          formControlName="address"
+          maxlength="40"
+          matInput
+        >
+      </div>
     </mat-form-field>
   </form>
   <app-button

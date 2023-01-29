@@ -1,6 +1,6 @@
 @import "variables";
 
-.mat-dialog-content {
+.mat-mdc-dialog-content {
   padding: 0;
   margin-bottom: -$mat-dialog-padding;
   background: black;
@@ -8,8 +8,6 @@
 }
 
 .wrapper {
-  padding: 20px;
-
   div {
     word-break: break-all;
   }

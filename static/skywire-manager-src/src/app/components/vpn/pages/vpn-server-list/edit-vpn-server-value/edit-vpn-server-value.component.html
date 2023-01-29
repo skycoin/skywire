@@ -2,13 +2,15 @@
   <form [formGroup]="form">
     <!-- Value field. -->
     <mat-form-field>
-      <input
-        formControlName="value"
-        maxlength="100"
-        [placeholder]="('vpn.server-options.edit-value.' + (data.editName ? 'name' : 'note' ) + '-label') | translate"
-        #firstInput
-        matInput
-      >
+      <div class="field-container">
+        <label class="field-label" for="remoteKey">{{ ('vpn.server-options.edit-value.' + (data.editName ? 'name' : 'note' ) + '-label') | translate }}</label>
+        <input
+          formControlName="value"
+          maxlength="100"
+          #firstInput
+          matInput
+        >
+      </div>
     </mat-form-field>
   </form>
 

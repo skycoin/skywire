@@ -5,11 +5,13 @@
   [ngClass]="{'grey-button-background' : !showLoading}"
   [matTooltip]="showAlert ? ('refresh-button.error-tooltip' | translate:{time: refeshRate}) : ''"
 >
-  <mat-spinner *ngIf="showLoading" class="icon d-none d-md-inline-block" [diameter]="14"></mat-spinner>
-  <mat-spinner *ngIf="showLoading" class="icon d-md-none" [diameter]="18"></mat-spinner>
-  <ng-container *ngIf="!showLoading">
-    <mat-icon *ngIf="!showAlert" class="icon" [inline]="true">refresh</mat-icon>
-    <mat-icon *ngIf="showAlert" class="icon alert" [inline]="true">warning</mat-icon>
-  </ng-container>
-  <span class="d-none d-md-inline" *ngIf="elapsedTime">{{ ('refresh-button.' + elapsedTime.translationVarName) | translate:{time: elapsedTime.elapsedTime} }}</span>
+  <div class="internal-container">
+    <mat-spinner *ngIf="showLoading" class="icon d-none d-md-inline-block" [diameter]="14"></mat-spinner>
+    <mat-spinner *ngIf="showLoading" class="icon d-md-none" [diameter]="18"></mat-spinner>
+    <ng-container *ngIf="!showLoading">
+      <mat-icon *ngIf="!showAlert" class="icon" [inline]="true">refresh</mat-icon>
+      <mat-icon *ngIf="showAlert" class="icon alert" [inline]="true">warning</mat-icon>
+    </ng-container>
+    <span class="d-none d-md-inline" *ngIf="elapsedTime">{{ ('refresh-button.' + elapsedTime.translationVarName) | translate:{time: elapsedTime.elapsedTime} }}</span>
+  </div>
 </button>

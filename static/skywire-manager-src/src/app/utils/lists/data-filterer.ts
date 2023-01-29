@@ -1,4 +1,4 @@
-import { MatLegacyDialog as MatDialog } from '@angular/material/legacy-dialog';
+import { MatDialog } from '@angular/material/dialog';
 import { Subject, Observable, Subscription } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
 

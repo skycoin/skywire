@@ -57,21 +57,30 @@ $responsive-table-colors: (
     // Column used for the check boxes.
     .selection-col {
       width: 30px;
+      padding-top: 0;
+      padding-bottom: 0;
       
-      .mat-checkbox {
+      .mat-mdc-checkbox {
         vertical-align: super;
       }
     }
 
     .action-button {
-      width: 28px;
-      height: 28px;
+      width: 28px !important;
+      height: 28px !important;
       line-height: 16px;
       font-size: 16px;
       margin-right: 5px;
+      padding: 0 !important;
+      color: white !important;
+      min-width: 0 !important;
 
       &:last-child {
         margin-right: 0;
+      }
+
+      .mat-icon {
+        margin-right: 0px !important;
       }
     }
 
@@ -100,8 +109,8 @@ $responsive-table-colors: (
       >label {
         margin-bottom: 0;
       }
-    
-      .mat-checkbox-background, .mat-checkbox-frame {
+
+      .mdc-checkbox__background {
         box-sizing: border-box;
         width: 18px;
         height: 18px;
@@ -110,9 +119,14 @@ $responsive-table-colors: (
         border-width: 2px;
         border-color: rgba(0, 0, 0, 0.5);
       }
-    
-      .mat-ripple-element {
-        background-color: rgba(255, 255, 255, 0.10) !important;
+
+      .mdc-checkbox__native-control:enabled:checked~.mdc-checkbox__background {
+        background-color: rgba(0, 0, 0, 0.3) !important;
+        border-color: rgba(0, 0, 0, 0.5) !important;
+      }
+
+      svg {
+        color: white !important;
       }
     }
 
@@ -127,18 +141,6 @@ $responsive-table-colors: (
         width: 50px;
         flex-shrink: 0;
         margin-left: -20px;
-
-        mat-checkbox {
-          >label {
-            width: 50px;
-            height: 50px;
-            padding-left: 20px;
-        
-            .mat-checkbox-inner-container {
-              margin: 0 !important;
-            }
-          }
-        }
       }
     
       // Content area.
