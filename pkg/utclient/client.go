@@ -80,8 +80,7 @@ func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, erro
 
 // UpdateVisorUptime updates visor uptime.
 func (c *httpClient) UpdateVisorUptime(ctx context.Context, version string) error {
-	ctx = context.WithValue(ctx, "version", version) //nolint
-	resp, err := c.Get(ctx, "/v4/update")
+	resp, err := c.Get(ctx, fmt.Sprintf("/v4/update?version=%s", version))
 	if err != nil {
 		return err
 	}
