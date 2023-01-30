@@ -76,7 +76,7 @@ func TestUpdateVisorUptime(t *testing.T) {
 	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, ip, masterLogger)
 	require.NoError(t, err)
 
-	err = c.UpdateVisorUptime(context.TODO())
+	err = c.UpdateVisorUptime(context.TODO(), "")
 	require.NoError(t, err)
 
 	assert.Equal(t, "/v4/update", <-urlCh)
