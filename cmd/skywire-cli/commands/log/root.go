@@ -25,11 +25,13 @@ import (
 var (
 	env      string
 	duration int
+	minv     string
 )
 
 func init() {
 	logCmd.Flags().SortFlags = false
 	logCmd.Flags().StringVarP(&env, "env", "e", "prod", "selecting env to fetch uptimes, default is prod")
+	logCmd.Flags().StringVar(&minv, "minv", "v1.3.4", "minimum version for get logs, default is 1.3.4")
 	logCmd.Flags().IntVarP(&duration, "duration", "d", 1, "count of days before today to fetch logs")
 }
 
@@ -68,9 +70,9 @@ var logCmd = &cobra.Command{
 			os.Exit(1)
 		}()
 		// Fetch visors data from uptime tracker
-		endpoint := "https://ut.skywire.skycoin.com/uptimes"
+		endpoint := "https://ut.skywire.skycoin.com/uptimes?v=v2"
 		if env == "test" {
-			endpoint = "https://ut.skywire.dev/uptimes"
+			endpoint = "https://ut.skywire.dev/uptimes?v=v2"
 		}
 		uptimes, err := getUptimes(endpoint, log)
 		if err != nil {
@@ -90,6 +92,9 @@ var logCmd = &cobra.Command{
 		// Get visors data
 		var wg sync.WaitGroup
 		for _, v := range uptimes {
+			if v.Version < minv {
+				continue
+			}
 			wg.Add(1)
 			go func(key string, wg *sync.WaitGroup) {
 				defer wg.Done()
@@ -160,11 +165,12 @@ func getUptimes(endpoint string, log *logging.Logger) ([]VisorUptimeResponse, er
 }
 
 type VisorUptimeResponse struct { //nolint
-	PubKey     string  `json:"key"`
-	Uptime     float64 `json:"uptime"`
-	Downtime   float64 `json:"downtime"`
-	Percentage float64 `json:"percentage"`
-	Online     bool    `json:"online"`
+	PubKey     string  `json:"pk"`
+	Uptime     float64 `json:"up"`
+	Downtime   float64 `json:"down"`
+	Percentage float64 `json:"pct"`
+	Online     bool    `json:"on"`
+	Version    string  `json:"version"`
 }
 
 func genKeys(skStr string) (pk cipher.PubKey, sk cipher.SecKey, err error) {
