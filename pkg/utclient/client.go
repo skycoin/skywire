@@ -18,7 +18,7 @@ import (
 
 // APIClient implements uptime tracker API client.
 type APIClient interface {
-	UpdateVisorUptime(context.Context) error
+	UpdateVisorUptime(context.Context, string) error
 }
 
 // httpClient implements Client for uptime tracker API.
@@ -79,8 +79,8 @@ func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, erro
 }
 
 // UpdateVisorUptime updates visor uptime.
-func (c *httpClient) UpdateVisorUptime(ctx context.Context) error {
-	resp, err := c.Get(ctx, "/v4/update")
+func (c *httpClient) UpdateVisorUptime(ctx context.Context, version string) error {
+	resp, err := c.Get(ctx, fmt.Sprintf("/v4/update?version=%s", version))
 	if err != nil {
 		return err
 	}
