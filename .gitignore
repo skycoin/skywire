@@ -61,3 +61,7 @@ skywire.msi
 /scripts/win_installer/build/
 goreleaser*
 gh*
+/musl-data
+releaseChangelog.md
+goreleaser.zip
+/goreleaser
