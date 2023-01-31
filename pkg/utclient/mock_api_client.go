@@ -35,7 +35,7 @@ func (_m *MockAPIClient) Health(ctx context.Context) (int, error) {
 }
 
 // UpdateVisorUptime provides a mock function with given fields: _a0
-func (_m *MockAPIClient) UpdateVisorUptime(_a0 context.Context) error {
+func (_m *MockAPIClient) UpdateVisorUptime(_a0 context.Context, version string) error {
 	ret := _m.Called(_a0)
 
 	var r0 error
