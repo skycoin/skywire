@@ -21,8 +21,8 @@ type GetRoomByRouteResult struct {
 	Info    info.Info         // P2P: send // Server: only send when room isVisible
 	Msgs    []message.Message // P2P: send // Server: only send to members when room isVisible
 
-	IsVisible bool  //setting to make room visible for all server-members
-	Type      int64 //roomType --> board,chat,voice
+	IsVisible bool //setting to make room visible for all server-members
+	Type      int  //roomType --> board,chat,voice
 
 	Members   map[cipher.PubKey]peer.Peer // all members
 	Mods      map[cipher.PubKey]bool      // all moderators (can mute and unmute members, can 'delete' messages, can add pks to blacklist)
@@ -55,19 +55,29 @@ func (h getRoomByRouteRequestHandler) Handle(query GetRoomByRouteRequest) (GetRo
 		return result, err
 	}
 
-	server, err := visor.GetServerByPK(query.Route.Server)
+	if query.Route.Visor == query.Route.Server {
+		p2p, err := visor.GetP2P()
+		if err != nil {
+			return result, err
+		}
 
-	if err != nil {
-		return result, err
+		result = GetRoomByRouteResult{PKRoute: p2p.PKRoute, Info: p2p.Info, Msgs: p2p.Msgs, IsVisible: p2p.IsVisible, Type: p2p.Type, Members: p2p.Members, Mods: p2p.Mods, Muted: p2p.Muted, Blacklist: p2p.Blacklist, Whitelist: p2p.Whitelist}
+
+	} else {
+
+		server, err := visor.GetServerByPK(query.Route.Server)
+
+		if err != nil {
+			return result, err
+		}
+
+		room, err := server.GetRoomByPK(query.Route.Room)
+
+		if err != nil {
+			return result, err
+		}
+
+		result = GetRoomByRouteResult{PKRoute: room.PKRoute, Info: room.Info, Msgs: room.Msgs, IsVisible: room.IsVisible, Type: room.Type, Members: room.Members, Mods: room.Mods, Muted: room.Muted, Blacklist: server.Blacklist, Whitelist: server.Whitelist}
 	}
-
-	room, err := server.GetRoomByPK(query.Route.Room)
-
-	if err != nil {
-		return result, err
-	}
-
-	result = GetRoomByRouteResult{PKRoute: room.PKRoute, Info: room.Info, Msgs: room.Msgs, IsVisible: room.IsVisible, Type: room.Type, Members: room.Members, Mods: room.Mods, Muted: room.Muted, Blacklist: server.Blacklist, Whitelist: server.Whitelist}
-
 	return result, nil
 }

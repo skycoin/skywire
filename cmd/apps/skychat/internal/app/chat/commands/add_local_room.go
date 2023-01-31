@@ -14,7 +14,7 @@ import (
 type AddLocalRoomRequest struct {
 	Route util.PKRoute
 	Info  info.Info
-	Type  int64
+	Type  int
 }
 
 // AddLocalRoomRequestHandler struct that allows handling AddLocalRoomRequest
@@ -60,7 +60,7 @@ func (h addLocalRoomRequestHandler) Handle(command AddLocalRoomRequest) error {
 
 	//setup user as peer for room membership
 	p := peer.NewPeer(*usr.GetInfo(), usr.GetInfo().Alias)
-	//Add user as member
+	//Add user as member to room
 	err = r.AddMember(*p)
 	if err != nil {
 		return err

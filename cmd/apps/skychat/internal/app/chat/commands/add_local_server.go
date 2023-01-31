@@ -67,9 +67,16 @@ func (h addLocalServerRequestHandler) Handle(command AddLocalServerRequest) erro
 	roomRoute := util.NewLocalRoomRoute(server.PKRoute.Visor, server.PKRoute.Server, roomBoolMap)
 	r := chat.NewLocalRoom(roomRoute, command.Info, chat.DefaultRoomType)
 
-	//setup user as peer for room membership
+	//setup user as peer for memberships
 	p := peer.NewPeer(*usr.GetInfo(), usr.GetInfo().Alias)
-	//Add user as member
+
+	//Add user as member from server
+	//TODO: maybe also add user as server admin as we are sending all commands to the local server instance like it is a message from remote to only handle message from one point?
+	err = server.AddMember(*p)
+	if err != nil {
+		return err
+	}
+	//Add user as member from room
 	err = r.AddMember(*p)
 	if err != nil {
 		return err

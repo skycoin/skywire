@@ -13,36 +13,21 @@ import (
 
 // handleRemoteServerMessage handles all messages from a remote server/room
 func (ms MessengerService) handleRemoteServerMessage(m message.Message) error {
+	fmt.Println("handleRemoteServerMessage")
+
+	pkroute := util.NewRoomRoute(m.GetRootVisor(), m.GetRootServer(), m.GetRootRoom())
+
 	//TODO: check if we are member -> if not ignore message
 
-	visor, err := ms.visorRepo.GetByPK(m.Dest.Visor)
+	visor, err := ms.visorRepo.GetByPK(m.Root.Visor)
 	if err != nil {
 		return err
 	}
-	server, err := visor.GetServerByPK(m.Dest.Server)
-	if err != nil {
-		return err
-	}
-	r, err := server.GetRoomByPK(m.Dest.Room)
-	if err != nil {
-		return err
-	}
-
-	//save room as local variable
-	room := *r
 
 	switch m.GetMessageType() {
 	case message.ConnMsgType:
-		//add the message to the room and update server, visor & repository
-		room.AddMessage(m)
-		err = server.SetRoom(room)
-		if err != nil {
-			return err
-		}
-		err = visor.SetServer(*server)
-		if err != nil {
-			return err
-		}
+		//add the message to the visor and update repository
+		visor.AddMessage(pkroute, m)
 		err = ms.visorRepo.Set(*visor)
 		if err != nil {
 			return err
@@ -53,16 +38,8 @@ func (ms MessengerService) handleRemoteServerMessage(m message.Message) error {
 			fmt.Println(err)
 		}
 	case message.InfoMsgType:
-		//add the message to the room and update server, visor & repository
-		room.AddMessage(m)
-		err = server.SetRoom(room)
-		if err != nil {
-			return err
-		}
-		err = visor.SetServer(*server)
-		if err != nil {
-			return err
-		}
+		//add the message to the visor and update repository
+		visor.AddMessage(pkroute, m)
 		err = ms.visorRepo.Set(*visor)
 		if err != nil {
 			return err
@@ -73,16 +50,8 @@ func (ms MessengerService) handleRemoteServerMessage(m message.Message) error {
 			fmt.Println(err)
 		}
 	case message.TxtMsgType:
-		//add the message to the room and update server, visor & repository
-		room.AddMessage(m)
-		err = server.SetRoom(room)
-		if err != nil {
-			return err
-		}
-		err = visor.SetServer(*server)
-		if err != nil {
-			return err
-		}
+		//add the message to the visor and update repository
+		visor.AddMessage(pkroute, m)
 		err = ms.visorRepo.Set(*visor)
 		if err != nil {
 			return err
@@ -103,6 +72,9 @@ func (ms MessengerService) handleRemoteServerMessage(m message.Message) error {
 
 // handleRemoteRoomConnMsgType handles all messages of type ConnMsgtype of remote servers
 func (ms MessengerService) handleRemoteRoomConnMsgType(m message.Message) error {
+	fmt.Println("handleRemoteRoomConnMsgType")
+
+	pkroute := util.NewRoomRoute(m.GetRootVisor(), m.GetRootServer(), m.GetRootRoom())
 
 	//Get user to get the info
 	user, err := ms.usrRepo.GetUser()
@@ -110,10 +82,10 @@ func (ms MessengerService) handleRemoteRoomConnMsgType(m message.Message) error 
 		return err
 	}
 
-	//the root route of this server (== the Destination of the message)
-	root := m.Dest
+	//the root route of this user
+	root := util.NewP2PRoute(user.GetInfo().GetPK())
 	//the destination route of a message to send back to the root
-	dest := m.Root
+	dest := pkroute
 
 	switch m.MsgSubtype {
 	case message.ConnMsgTypeAccept:
@@ -124,7 +96,7 @@ func (ms MessengerService) handleRemoteRoomConnMsgType(m message.Message) error 
 			return err
 		}
 		//as the remote route has accepted the chat request we now can send our info
-		err = ms.SendInfoMessage(root, dest, *user.GetInfo())
+		err = ms.SendInfoMessage(pkroute, root, dest, *user.GetInfo())
 		if err != nil {
 			return err
 		}
@@ -147,26 +119,52 @@ func (ms MessengerService) handleRemoteRoomConnMsgType(m message.Message) error 
 
 // handleRemoteRoomInfoMsgType handles messages of type info of peers
 func (ms MessengerService) handleRemoteRoomInfoMsgType(v *chat.Visor, m message.Message) error {
+	fmt.Println("handleRemoteRoomInfoMsgType")
 	//unmarshal the received message bytes to info.Info
 	i := info.Info{}
 	err := json.Unmarshal(m.Message, &i)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal json message: %v", err)
 	}
-	s, err := v.GetServerByPK(m.GetDestinationServer())
+	fmt.Println("---------------------------------------------------------------------------------------------------")
+	fmt.Printf("InfoMessage: \n")
+	fmt.Printf("Pk:		%s \n", i.Pk.Hex())
+	fmt.Printf("Alias:	%s \n", i.Alias)
+	fmt.Printf("Desc:	%s \n", i.Desc)
+	fmt.Printf("Img:	%s \n", i.Img)
+	fmt.Println("---------------------------------------------------------------------------------------------------")
+
+	//TODO: ?? Put something like SetRoomInfo into visor as method so only a call of visor.SetRoomInfo etc. is needed everywhere and not getting server and then getting room??
+	//get server from visor
+	s, err := v.GetServerByPK(m.GetRootServer())
 	if err != nil {
 		return err
 	}
 
-	//update the info of the member in the server and all rooms
-	s.SetMemberInfo(i)
+	//get room from server
+	r, err := s.GetRoomByPK(m.GetRootRoom())
+	if err != nil {
+		return err
+	}
+
+	//update the info of the remote server
+	r.SetInfo(i) //TODO: return error?
+	err = s.SetRoom(*r)
+	if err != nil {
+		return err
+	}
+	err = v.SetServer(*s)
+	if err != nil {
+		return err
+	}
+
 	err = ms.visorRepo.Set(*v)
 	if err != nil {
 		return err
 	}
 
 	//notify about new info message
-	n := notification.NewMsgNotification(util.NewP2PRoute(v.GetPK()), m)
+	n := notification.NewMsgNotification(m.Root, m)
 	err = ms.ns.Notify(n)
 	if err != nil {
 		return err
@@ -177,6 +175,12 @@ func (ms MessengerService) handleRemoteRoomInfoMsgType(v *chat.Visor, m message.
 
 // handleRemoteRoomTextMstType handles messages of type text of the remote chat
 func (ms MessengerService) handleRemoteRoomTextMsgType(c *chat.Visor, m message.Message) error {
+	fmt.Println("handleRemoteRoomTextMsgType")
+
+	fmt.Println("---------------------------------------------------------------------------------------------------")
+	fmt.Printf("TextMessage: \n")
+	fmt.Printf("Text:	%s \n", m.Message)
+	fmt.Println("---------------------------------------------------------------------------------------------------")
 
 	//notify about a new TextMessage
 	n := notification.NewMsgNotification(util.NewP2PRoute(c.GetPK()), message.NewTextMessage(m.Root.Visor, m.Dest, m.Message))

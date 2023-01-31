@@ -3,6 +3,7 @@ package message
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -23,16 +24,31 @@ const (
 	CmdMsgType
 )
 
-// subtypes of connMsgType
+// subtypes of ConnMsgType
 const (
-	// ErrConnMsg is used to handle connection errors message
+	// ErrConnMsg is used to handle connection error messages
 	ErrConnMsg = iota
-	// ConnMsgTypeRequest is used handle connection message of type Request
+	// ConnMsgTypeRequest is used to handle connection message of type Request
 	ConnMsgTypeRequest
-	// ConnMsgTypeAccept is used handle connection message of type Accept
+	// ConnMsgTypeAccept is used to handle connection message of type Accept
 	ConnMsgTypeAccept
-	// ConnMsgTypeReject is used handle connection message of type Reject
+	// ConnMsgTypeReject is used to handle connection message of type Reject
 	ConnMsgTypeReject
+	// ConnMsgTypeLeave is used to handle connection message of type Leave
+	ConnMsgTypeLeave
+)
+
+// subtypes of InfoMsgType
+const (
+	//ErrInfoMsgType is used to handle info error messages
+	ErrInfoMsgType = iota
+	//InfoMsgTypeUser is used to handle the info of a single user or server
+	InfoMsgTypeUser
+	//InfoMsgTypeServerMembers is used to update the list of members of a server
+	InfoMsgTypeServerMembers
+	//InfoMsgTypeRoomMembers is used to update the list of members of a room
+	InfoMsgTypeRoomMembers
+	//TODO: Admins, Moderators, Muted, Blacklist, Whitelist, Rooms from Server that are visible
 )
 
 // types of messageStatus
@@ -45,23 +61,55 @@ const (
 	MsgStatusReceived
 )
 
+// types fo CmdMsgType
+const (
+	// ErrCmdMsg is used to handle command error messages
+	ErrCmdMsg = iota
+	// CmdMsgTypeAddRoom is used to add a room
+	CmdMsgTypeAddRoom
+	// CmdMsgTypeDeleteRoom is used to delete a room
+	CmdMsgTypeDeleteRoom
+	/*CmdMsgTypeMutePeer
+	CmdMsgTypeUnmutePeer
+	CmdMsgTypeBanPeer
+	CmdMsgTypeUnbanPeer
+	CmdMsgTypeHireAdmin
+	CmdMsgTypeFireAdmin
+	CmdMsgTypeHireModerator
+	CmdMsgTypeFireModerator*/
+)
+
 // Message defines a message
 type Message struct {
-	ID         int64         //an identifier for p2p chats and groups, Id is set by the receiver/server
-	Origin     cipher.PubKey //the originator of the Message
-	Time       time.Time     //the utc+0 timestamp of the Message
-	Root       util.PKRoute  //the root from where the Message was received (e.g. peer/group)
-	Dest       util.PKRoute  //the destination where the message should be sent.
-	MsgType    int           //see const above
-	MsgSubtype int           //see const above
-	Message    []byte        //the actual Message
-	Status     int           //"Sent" or "Received"
-	Seen       bool          //flag to save whether the Message was read or not by the receiver (only for local notifications) -> online feedback will be implemented in future versions
+	ID         int           `json:"Id"`         //an identifier for p2p chats and groups, Id is set by the receiver/server
+	Origin     cipher.PubKey `json:"Origin"`     //the originator of the Message
+	Time       time.Time     `json:"Time"`       //the utc+0 timestamp of the Message
+	Root       util.PKRoute  `json:"Root"`       //the root from where the Message was received (e.g. peer/group)
+	Dest       util.PKRoute  `json:"Dest"`       //the destination where the message should be sent.
+	MsgType    int           `json:"Msgtype"`    //see const above
+	MsgSubtype int           `json:"MsgSubtype"` //see const above
+	Message    []byte        `json:"Message"`    //the actual Message
+	Status     int           `json:"Status"`     //"Sent" or "Received"
+	Seen       bool          `json:"Seen"`       //flag to save whether the Message was read or not by the receiver (only for local notifications) -> online feedback will be implemented in future versions
+}
+
+// RAWMessage defines a raw json message
+type RAWMessage struct {
+	ID         int             `json:"Id"`
+	Origin     cipher.PubKey   `json:"Origin"`
+	Time       time.Time       `json:"Time"`
+	Root       util.PKRoute    `json:"Root"`
+	Dest       util.PKRoute    `json:"Dest"`
+	MsgType    int             `json:"Msgtype"`
+	MsgSubtype int             `json:"MsgSubtype"`
+	Message    json.RawMessage `json:"Message"`
+	Status     int             `json:"Status"`
+	Seen       bool            `json:"Seen"`
 }
 
 // JSONMessage defines a json message
 type JSONMessage struct {
-	ID         int64         `json:"Id"`
+	ID         int           `json:"Id"`
 	Origin     cipher.PubKey `json:"Origin"`
 	Time       time.Time     `json:"Time"`
 	Root       util.PKRoute  `json:"Root"`
@@ -89,8 +137,38 @@ func NewJSONMessage(m Message) JSONMessage {
 	}
 }
 
+// NewRAWMessage return a RAWMessage from a message
+func NewRAWMessage(m Message) RAWMessage {
+
+	bytes, err := json.Marshal(m.Message)
+	if err != nil {
+		fmt.Printf("Failed to marshal json: %v", err)
+	}
+
+	return RAWMessage{
+		m.ID,
+		m.Origin,
+		m.Time,
+		m.Root,
+		m.Dest,
+		m.MsgType,
+		m.MsgSubtype,
+		bytes,
+		m.Status,
+		m.Seen,
+	}
+}
+
 // NewMessage returns a message from a JSONMessage
-func NewMessage(m JSONMessage) Message {
+func NewMessage(m RAWMessage) Message {
+
+	var data []byte
+	Source := (*json.RawMessage)(&m.Message)
+	err := json.Unmarshal(*Source, &data)
+	if err != nil {
+		fmt.Printf("%v", err)
+	}
+
 	return Message{
 		m.ID,
 		m.Origin,
@@ -99,7 +177,7 @@ func NewMessage(m JSONMessage) Message {
 		m.Dest,
 		m.MsgType,
 		m.MsgSubtype,
-		[]byte(m.Message),
+		data,
 		m.Status,
 		m.Seen,
 	}
@@ -114,7 +192,7 @@ func (m Message) MarshalJSON() ([]byte, error) {
 func NewTextMessage(pkOrigin cipher.PubKey, routeDestination util.PKRoute, msg []byte) Message {
 	m := Message{}
 	m.Origin = pkOrigin
-	m.Root = util.NewVisorOnlyRoute(pkOrigin)
+	m.Root = util.NewP2PRoute(pkOrigin)
 	m.Dest = routeDestination
 	m.MsgType = TxtMsgType
 	m.MsgSubtype = 0
@@ -128,10 +206,11 @@ func NewTextMessage(pkOrigin cipher.PubKey, routeDestination util.PKRoute, msg [
 func NewRouteRequestMessage(pkOrigin cipher.PubKey, routeDestination util.PKRoute) Message {
 	m := Message{}
 	m.Origin = pkOrigin
-	m.Root = util.NewVisorOnlyRoute(pkOrigin)
+	m.Root = util.NewP2PRoute(pkOrigin)
 	m.Dest = routeDestination
 	m.MsgType = ConnMsgType
 	m.MsgSubtype = ConnMsgTypeRequest
+	m.Message = []byte("Chat Request")
 	m.Status = MsgStatusInitial
 	m.Time = time.Now()
 	return m
@@ -148,6 +227,7 @@ func NewChatAcceptMessage(root util.PKRoute, dest util.PKRoute) Message {
 	m.MsgType = ConnMsgType
 	m.MsgSubtype = ConnMsgTypeAccept
 	m.Status = MsgStatusInitial
+	m.Message = []byte("Chat Accepted")
 	m.Time = time.Now()
 	return m
 }
@@ -160,6 +240,21 @@ func NewChatRejectMessage(root util.PKRoute, dest util.PKRoute) Message {
 	m.Dest = dest
 	m.MsgType = ConnMsgType
 	m.MsgSubtype = ConnMsgTypeReject
+	m.Message = []byte("Chat Rejected")
+	m.Status = MsgStatusInitial
+	m.Time = time.Now()
+	return m
+}
+
+// NewChatLeaveMessage returns new chat leave message
+func NewChatLeaveMessage(root util.PKRoute, dest util.PKRoute) Message {
+	m := Message{}
+	m.Origin = root.Visor
+	m.Root = root
+	m.Dest = dest
+	m.MsgType = ConnMsgType
+	m.MsgSubtype = ConnMsgTypeLeave
+	m.Message = []byte("Chat Left")
 	m.Status = MsgStatusInitial
 	m.Time = time.Now()
 	return m
@@ -178,8 +273,36 @@ func NewChatInfoMessage(root util.PKRoute, dest util.PKRoute, info []byte) Messa
 	return m
 }
 
+// NewAddRoomMessage returns a Message
+func NewAddRoomMessage(root util.PKRoute, dest util.PKRoute, info []byte) Message {
+	m := Message{}
+	m.Origin = root.Visor
+	m.Root = root
+	m.Dest = dest
+	m.MsgType = CmdMsgType
+	m.MsgSubtype = CmdMsgTypeAddRoom
+	m.Message = info
+	m.Status = MsgStatusInitial
+	m.Time = time.Now()
+	return m
+}
+
+// NewDeleteRoomMessage returns a Message
+func NewDeleteRoomMessage(root util.PKRoute, dest util.PKRoute) Message {
+	m := Message{}
+	m.Origin = root.Visor
+	m.Root = root
+	m.Dest = dest
+	m.MsgType = CmdMsgType
+	m.MsgSubtype = CmdMsgTypeDeleteRoom
+	m.Message = []byte("Room Deleted")
+	m.Status = MsgStatusInitial
+	m.Time = time.Now()
+	return m
+}
+
 // GetID returns message ID
-func (m *Message) GetID() int64 {
+func (m *Message) GetID() int {
 	return m.ID
 }
 
@@ -196,6 +319,16 @@ func (m *Message) GetTime() time.Time {
 // GetRootVisor returns the root visor public key
 func (m *Message) GetRootVisor() cipher.PubKey {
 	return m.Root.Visor
+}
+
+// GetRootServer returns the root server public key
+func (m *Message) GetRootServer() cipher.PubKey {
+	return m.Root.Server
+}
+
+// GetRootRoom returns the root room public key
+func (m *Message) GetRootRoom() cipher.PubKey {
+	return m.Root.Room
 }
 
 // GetDestinationVisor returns the destination visor

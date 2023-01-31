@@ -261,7 +261,7 @@ html {
 
 /*Stolen from https://codepen.io/danimerida2000/pen/wVXegX */
 .showLeft {
-  text-shadow: white !important;
+ /* text-shadow: white !important; */
   color: black !important;
   padding: 10px;
 }

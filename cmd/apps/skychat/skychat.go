@@ -36,7 +36,7 @@ func main() {
 // cd ..
 // mingw32-make build-windows
 // .\skywire-cli.exe config gen -i -r -o .\skywire-config.json
-// .\skywire-visor.exe -c .\skywire-config.json
+// .\skywire-visor.exe -c .\skywire-config.json --loglvl debug
 
 /*
 

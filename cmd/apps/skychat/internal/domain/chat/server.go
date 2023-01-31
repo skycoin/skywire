@@ -31,9 +31,10 @@ type Server struct {
 }
 
 // AddMessage adds a message to the server
-func (s *Server) AddMessage(m message.Message) {
-	r := s.Rooms[m.Dest.Room]
+func (s *Server) AddMessage(pkroute util.PKRoute, m message.Message) {
+	r := s.Rooms[pkroute.Room]
 	r.AddMessage(m)
+	s.Rooms[pkroute.Room] = r
 }
 
 // GetPKRoute returns the PKRoute
@@ -110,10 +111,12 @@ func (s *Server) GetAllRoomsBoolMap() map[cipher.PubKey]bool {
 func (s *Server) AddMember(peer peer.Peer) error {
 	_, err := s.GetMemberByPK(peer.GetPK())
 	if err != nil {
-		return fmt.Errorf("peer already member of server")
+		s.Members[peer.GetPK()] = peer
+		return nil
+
 	}
-	s.Members[peer.GetPK()] = peer
-	return nil
+	return fmt.Errorf("peer already member of server")
+
 }
 
 // DeleteMember deletes the member with the given pk
@@ -123,7 +126,8 @@ func (s *Server) DeleteMember(pk cipher.PubKey) error {
 		delete(s.Members, pk)
 		return nil
 	}
-	return fmt.Errorf("member does not exist") //? handle as error?
+	delete(s.Members, pk)
+	return nil
 }
 
 // GetMemberByPK returns the the member mapped by pk if available and returns err if no member with given pk exists
@@ -152,27 +156,28 @@ func (s *Server) GetAllMembers() map[cipher.PubKey]peer.Peer {
 // SetMemberInfo sets the given info of the member inside the server and all rooms
 func (s *Server) SetMemberInfo(i info.Info) error {
 	//set member info in server
-	member, err := s.GetMemberByPK(i.GetPK())
+	sMember, err := s.GetMemberByPK(i.GetPK())
 	if err != nil {
 		return err
 	}
-	member.SetInfo(i)
-	err = s.SetMember(*member)
+	sMember.SetInfo(i)
+	err = s.SetMember(*sMember)
 	if err != nil {
 		return err
 	}
 
-	//set member info in rooms
+	//set info in rooms if the pk is member
 	for _, room := range s.Rooms {
-		room.GetMemberByPK(i.GetPK())
+		rMember, err := room.GetMemberByPK(i.GetPK())
+		if err != nil {
+			continue
+		}
+		rMember.SetInfo(i)
+		err = room.SetMember(*rMember)
 		if err != nil {
 			return err
 		}
-		member.SetInfo(i)
-		err = room.SetMember(*member)
-		if err != nil {
-			return err
-		}
+		s.SetRoom(room)
 	}
 
 	return nil
@@ -341,4 +346,23 @@ func NewServer(route util.PKRoute, info info.Info, members map[cipher.PubKey]pee
 	s.Rooms = rooms
 
 	return &s
+}
+
+// NewDefaultServer returns a default server
+func NewDefaultServer(route util.PKRoute) Server {
+	s := Server{}
+	s.PKRoute = route
+	s.Info = info.NewDefaultInfo()
+
+	s.Members = make(map[cipher.PubKey]peer.Peer)
+	s.Admins = make(map[cipher.PubKey]bool)
+	s.Muted = make(map[cipher.PubKey]bool)
+	s.Blacklist = make(map[cipher.PubKey]bool)
+	s.Whitelist = make(map[cipher.PubKey]bool)
+	s.Rooms = make(map[cipher.PubKey]Room)
+	s.Conns = make(map[cipher.PubKey]net.Conn)
+
+	s.AddRoom(NewDefaultRemoteRoom(route))
+
+	return s
 }

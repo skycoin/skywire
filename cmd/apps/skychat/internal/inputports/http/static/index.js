@@ -409,9 +409,9 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
     }
 
     addAddRemote(c){
-      document.getElementById('addRemote').innerHTML +=
-        `<a href="#" class="${c.inAddRemote ? 'active' : ''} " onclick="app._showAddRemote(); return false;">
-        <div>Add Remote Server and Rooms</div>
+      document.getElementById('joinRemote').innerHTML +=
+        `<a href="#" class="${c.inJoinRemote ? 'active' : ''} " onclick="app._showAddRemote(); return false;">
+        <div>Join Remote Server and Rooms</div>
         </a>`;
     }
 
@@ -432,6 +432,23 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
         </a>`;
     }
 
+    _getRoomPrefix(r){
+      let prefix = ""
+      if (r.route.visor == r.route.room) {
+        //P2P
+        prefix = "P2P"
+      } else {
+        //GroupChat / Room
+        prefix = "G"
+      }
+
+      if (r.route.visor == this.user.info.pk){
+        //Hosted on localhost
+        prefix += String.fromCharCode(0x2302)
+      }
+      return prefix
+    }
+
     _addChat(r) {
       if (!this.chats.includes(r)) {
         this.chats.push(r);
@@ -440,10 +457,7 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
 
       let lastMsg = this.getLastMessageFromRoute(r.route)
 
-      let local = ""
-      if (r.route.visor == this.user.info.pk){
-        local = String.fromCharCode(0x2302)
-      }
+      let prefix = this._getRoomPrefix(r)
 
       document.getElementById('chatList').innerHTML +=
         `<div id="chat_${r.pk}">
@@ -451,7 +465,7 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
             <img class="small-profile-picture" src="data:image/png;base64,${r.info.img}" />
             <div class="text-container">
               <div class="alias">
-                ${local} ${r.info.alias}
+                ${prefix} ${r.info.alias}
               </div>
               <div class="pk">
                 ${r.pk}
@@ -475,17 +489,14 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
 
       let lastMsg = this.getLastMessageFromRoute(r.route)
 
-      let local = ""
-      if (r.route.visor == this.user.info.pk){
-        local = String.fromCharCode(0x2302)
-      }
+      let prefix = this._getRoomPrefix(r)
 
       document.getElementById('chat_'+ r.pk).innerHTML =
         `<li><a href="#" class="${r.pk === this.chat ? 'active' : ''} destination" onclick="app._selectChat('${r.pk}'); return false;">
           <img class="small-profile-picture" src="data:image/png;base64,${r.info.img}" />
           <div class="text-container">
             <div class="alias">
-              ${local} ${r.info.alias}
+              ${prefix} ${r.info.alias}
             </div>
             <div class="pk">
               ${r.pk}
@@ -593,12 +604,12 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
 
       document.getElementById('form').innerHTML +=
       `<div id="settingsContainer" class="settings-container" style="z-index:100; position: fixed;">
-      <div class="settings-close-button" onclick="app._hideInAddRemote();">X</div>
+      <div class="settings-close-button" onclick="app._hideInJoinRemote();">X</div>
       <div>To add a local Server or Group you have to insert the right Public Keys</div>
       <li>For new server you can leave server pk empty but have to give an info</li>
       <li>For a new group you have to give the PK of the server where you want to add the room to and an info</li>
       <div>ServerPK</div>
-         <form class="chat-form" onsubmit="app.addLocalRoute(this); return false;">
+         <form class="chat-form" onsubmit="app.addRoute(this); return false;">
          <input id="serverPkToAdd" type="text" placeholder="Enter Server PK" />
          <div>Info</div>
          <input id="alias" type="text" placeholder="Alias" />
@@ -617,7 +628,7 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
 
     _showAddRemote(){
 
-      this.user.inAddRemote = true;
+      this.user.inJoinRemote = true;
 
       //unselect chats in sidebar
       document.querySelectorAll('.destination').forEach(item => 
@@ -637,11 +648,11 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
 
       document.getElementById('form').innerHTML += 
       `<div id="settingsContainer" class="settings-container" style="z-index:100; position: fixed;">
-       <div class="settings-close-button" onclick="app._hideInAddRemote();">X</div>
-       <div>To add a remote P2P or Group you have to insert the right Public Keys</div>
-       <li>P2P: VisorPK</li>
+       <div class="settings-close-button" onclick="app._hideInJoinRemote();">X</div>
+       <div>To join a remote P2P or Group you have to insert the right Public Keys</div>
+       <li>P2P: VisorPK & ServerPK & RoomPK = RemotePK</li>
        <li>Group/Server: VisorPK & ServerPK & RoomPK</li>
-          <form class="chat-form" onsubmit="app.addRemoteRoute(this); return false;">
+          <form class="chat-form" onsubmit="app.joinRemoteRoute(this); return false;">
           <input id="visorPkToAdd" type="text" placeholder="Enter Visor PK" />
           <input id="serverPkToAdd" type="text" placeholder="Enter Server PK" />
           <input id="roomPkToAdd" type="text" placeholder="Enter Room PK" />
@@ -652,8 +663,8 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
         </div>`;
     }
 
-    _hideInAddRemote(){
-      this.user.inAddRemote = false;
+    _hideInJoinRemote(){
+      this.user.inJoinRemote = false;
       document.getElementById('form').innerHTML = 
       ``;
     }
@@ -665,7 +676,7 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
       switch(msg.type) {
         case 1:
           let connMsgOrigin
-          if (msg.sender == c.info.pk){
+          if (msg.origin == c.info.pk){
             connMsgOrigin = "user"
           } else {
             connMsgOrigin = "peer"
@@ -679,6 +690,9 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
           }
           else if (msg.subtype == 3){
             connMsg = "chat rejected"
+          }
+          else if (msg.subtype == 4){
+            connMsg = "remote deleted chat"
           }
           else {
             connMsg = "undefined chat type message"
@@ -734,7 +748,7 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
 
       this._hideSettings();
       this._hideInAddLocal();
-      this._hideInAddRemote();
+      this._hideInJoinRemote();
 
       this.chat = pk;
       document.querySelectorAll('.destination').forEach(item => {
@@ -770,9 +784,9 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
   /////////////////////////////////////////////////////////////
   //// GET
   //returns [Info] from [User]
-  getUserInfo(){
+  async getUserInfo(){
     return fetch('user/getInfo', { method: 'GET', body: null })
-      .then(res => {
+      .then(async res => {
         if (res.ok) {
           return res.json().then(i => {
             var info = new Info(i.Pk,i.Alias,i.Desc,i.Img);
@@ -784,10 +798,10 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
       });
   }
   //returns [Settings] from [User]
-  getUserSettings(){
+  async getUserSettings(){
 
   return fetch('user/getSettings', { method: 'GET', body: null })
-    .then(res => {
+    .then(async res => {
       if (res.ok) {
         return res.json().then(s => {
           var settings = new Settings(s.Blacklist);
@@ -810,6 +824,7 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
   fetch('user/setInfo', { method: 'PUT', body: JSON.stringify({ alias: info.alias, desc: info.desc, img: info.img}) })
     .then(res => {
       if (res.ok) {
+        res.text()
         this.getUserInfo().then(info => {
           this._updateUser(new User(info, this.user.settings));
         });
@@ -828,6 +843,7 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
   fetch('user/setSettings', { method: 'PUT', body: JSON.stringify({ blacklist: settings.blacklist}) })
     .then(res => {
       if (res.ok) {
+        res.text()
         this.getUserSettings().then(settings => {
           this._updateUser(new User(this.user.info, settings));
         });
@@ -902,7 +918,7 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
       }
 
       //returns an array of [Chat]
-      getChatAll(){
+      async getChatAll(){
 
         return fetch('chats', { method: 'GET', body: null })
           .then(res => {
@@ -910,13 +926,13 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
               return res.json().then(visors => {
 
                 var v_ = []
-                console.log(visors)
                 if (visors != null){
                   visors.forEach( v => {
                     console.log(v)
-                    if (v.P2P != null) {
+                    var p2p
+                    if (v.P2P != null && v.P2P.Type != 0) {
                       if (Object.keys(v.P2P).length){
-                        var p2p = this.getRoomHTTP(v.P2P)
+                        p2p = this.getRoomHTTP(v.P2P)
                       }
                     } else {
                       p2p = null
@@ -927,7 +943,7 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
                         s_.push(this.getServerHTTP(v.Server[s]))
                       })
                     }
-                    v_.push(new Visor(v.PK,p2p,s_))
+                    v_.push(new Visor(v.Pk,p2p,s_))
                   })
 
                   return this.getSortedChats(v_)
@@ -947,7 +963,7 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
         //for the first working skychat there is no sorting
         var cs = []
         Object.keys(visors).forEach(v => {
-          if (visors[v].pk != undefined){
+          if (visors[v].p2p != null){
             cs.push(visors[v].p2p)
           }
           Object.keys(visors[v].server).forEach(s => {
@@ -960,7 +976,7 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
       }
 
       //returns the [Room] with the given route
-      getRoomByRoute(route){
+      async getRoomByRoute(route){
         const visorpk = route.visor
         const serverpk = route.server
         const roompk = route.room
@@ -968,7 +984,7 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
         const params = new URLSearchParams({visor: visorpk, server: serverpk,room: roompk})
 
         return fetch('chats/'+ 'getRoom?' + params, { method: 'GET', body: null})
-          .then(res => {
+          .then( async res => {
             if (res.ok) {
               return res.json().then(r => {
                 console.log(r)
@@ -982,8 +998,8 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
 
       }
 //// POST
-      //adLocalRoute adds a new Server or Room in dependency on the given info
-      addLocalRoute(el){
+      //addRoute adds a new Server or Room in dependency on the given info
+      addRoute(el){
         const visorpk = this.user.info.pk
         const serverpk = this.processPk(el[0].value.trim());
         const alias = el[1].value.trim();
@@ -1010,19 +1026,19 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
             return;
           }
 
-          fetch('chats/' + "addLocalRoom", { method: 'POST', body: JSON.stringify({ visorpk: visorpk, serverpk: serverpk, alias: alias, desc: description, img: null, type:null}) })
+          fetch('chats/' + "sendAddRoomMessage", { method: 'POST', body: JSON.stringify({ visorpk: visorpk, serverpk: serverpk, alias: alias, desc: description, img: null, type:null}) })
           .then(res => {
             if (res.ok) {
-              res.text().then();
+              res.text()
             } else {
-              res.text().then(text => alert(`Failed to add local room: ${text}`));
+              res.text().then(text => alert(`Failed to add room: ${text}`));
             }
           }).catch(e => alert(e.message));   
         }else{
           fetch('chats/' + "addLocalServer", { method: 'POST', body: JSON.stringify({ visorpk: visorpk, alias: alias, desc: description, img: ""}) })
           .then(res => {
             if (res.ok) {
-              res.text().then();
+              res.text()
             } else {
               res.text().then(text => alert(`Failed to add local server: ${text}`));
             }
@@ -1032,7 +1048,7 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
 
       //tries to add the given route
       //returns nothing
-      addRemoteRoute(el) {
+      joinRemoteRoute(el) {
         const visorpk = this.processPk(el[0].value.trim());
         const serverpk = this.processPk(el[1].value.trim());
         const roompk = this.processPk(el[2].value.trim());
@@ -1088,10 +1104,10 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
 
         //TODO: Make if or switch case -> when visorpk is same as userpk and serverpk and roompk is empty then make new server with one room
         //and if visorpk and serverpk is defined but roompk is empty then add new room to server
-        fetch('chats/' + "addRemoteRoute", { method: 'POST', body: JSON.stringify({ visorpk: visorpk, serverpk: serverpk, roompk: roompk}) })
+        fetch('chats/' + "joinRemoteRoute", { method: 'POST', body: JSON.stringify({ visorpk: visorpk, serverpk: serverpk, roompk: roompk}) })
           .then(res => {
             if (res.ok) {
-              res.text().then();
+              res.text()
             } else {
               res.text().then(text => alert(`Failed to add chat: ${text}`));
             }
@@ -1117,7 +1133,7 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
         fetch('chats/' + "sendTxtMsg", { method: 'POST', body: JSON.stringify({ visorpk: visorpk, serverpk: serverpk, roompk: roompk, message: msg}) })
         .then(res => {
             if (res.ok) {
-              res.text().then();
+              res.text()
               el[0].value = '';
             } else {
               res.text().then(text => alert(`Failed to send message: ${text}`));
@@ -1172,20 +1188,22 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
 //// Subscribe
       notificationsSubscribe() {
         const source = new EventSource('/notifications');
-        source.onmessage = (event) => {
+        source.onmessage = async(event) => {
           const data = JSON.parse(event.data);
           console.log(data)
+          console.log("Notification DataType: " + data.type)
           const notifMessage = JSON.parse(data.message)
           let visorpk = notifMessage.visorpk
           let serverpk = notifMessage.serverpk
           let roompk = notifMessage.roompk
           let route = new Route(visorpk,serverpk,roompk)
 
+
             switch(data.type) {
               //NewAddRouteNotifyType
               case 1:
                 console.log("new add route notification")
-                this.getRoomByRoute(route).then(c => {
+                await this.getRoomByRoute(route).then(c => {
                   if (this.chats == null){
                     this.chats = []
                   }
@@ -1196,7 +1214,7 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
               //NewChatNotifType
               case 2:
                 console.log("new peer chat notification")
-                this.getRoomByRoute(route).then(chat => {
+                await this.getRoomByRoute(route).then(chat => {
                   if (this.chats == null){
                     this.chats = []
                   }
@@ -1208,14 +1226,18 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
                 //Fetch data of chat with new message from HTTP
 
                 console.log("new message notification") 
-                const message = JSON.parse(notifMessage.message)
-                visorpk = message.Dest.Visor
-                serverpk = message.Dest.Server
-                roompk = message.Dest.Room
-                route = new Route(visorpk,serverpk,roompk)
-                console.log(message)
+                //const message = JSON.parse(notifMessage.message)
+                //visorpk = message.Root.Visor
+                //serverpk = message.Root.Server
+                //roompk = message.Root.Room
+                //route = new Route(visorpk,serverpk,roompk)
+                //console.log(message)
 
-                this.getRoomByRoute(route).then(c => {
+                await this.getRoomByRoute(route).then(c => {
+                  if (this.chats == null){
+                    this.chats = []
+                    this._addChat(c)
+                  }
                   this._updateChat(c)
                 })
                 break;
@@ -1224,6 +1246,9 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
                 break;
             }            
           }
+        source.onerror = async(event) => {
+          console.error("EventSource failed:", event)
+        }
       };
 
 /////////////////////////////////////////////////////////////

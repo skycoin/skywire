@@ -3,6 +3,7 @@ package channel
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/notification"
 )
@@ -15,7 +16,6 @@ type NotificationService struct {
 // NewNotificationService constructor for NotificationService
 func NewNotificationService() *NotificationService {
 	n := NotificationService{}
-	//n.notifCh = make(chan string)
 
 	return &n
 }
@@ -26,12 +26,13 @@ func (ns *NotificationService) Notify(notification notification.Notification) er
 	if err != nil {
 		return err
 	}
-
+	fmt.Printf("Notify: \n")
+	fmt.Printf("%s \n", jsonNotification)
 	ns.GetChannel() <- string(jsonNotification)
 	return nil
 }
 
-//TODO:
+//InitChannel inits the channel with make
 func (ns *NotificationService) InitChannel() {
 	ns.notifCh = make(chan string)
 }
@@ -41,8 +42,9 @@ func (ns *NotificationService) GetChannel() chan string {
 	return ns.notifCh
 }
 
-//TODO:
+//Defer Channel includes all messages when the channel has to be deferred
 func (ns *NotificationService) DeferChannel() {
 	close(ns.notifCh)
 	ns.notifCh = nil
+	fmt.Println("SSE: client connection is closed")
 }

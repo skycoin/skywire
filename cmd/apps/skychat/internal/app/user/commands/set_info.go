@@ -44,6 +44,9 @@ func (h setInfoRequestHandler) Handle(req SetInfoRequest) error {
 	pUsr.SetInfo(i)
 
 	//TODO:Send info to peers and servers that the info was updated
+	//get all visors
+	//for each visor get all servers and p2p
+	//send info to them
 
 	return h.usrRepo.SetUser(pUsr)
 }

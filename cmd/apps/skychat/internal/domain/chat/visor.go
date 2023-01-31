@@ -2,16 +2,15 @@ package chat
 
 import (
 	"fmt"
-	"net"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/message"
+	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/util"
 )
 
 // Visor defines a remote or the local visor with all its servers
 type Visor struct {
-	PK   cipher.PubKey
-	Conn net.Conn
+	PK cipher.PubKey
 
 	//P2P or direct chat
 	P2P Room
@@ -23,11 +22,6 @@ type Visor struct {
 // GetPK gets the public key
 func (v *Visor) GetPK() cipher.PubKey {
 	return v.PK
-}
-
-// GetConnection returns net.Conn
-func (v *Visor) GetConnection() net.Conn {
-	return v.Conn
 }
 
 // GetP2P returns peer to peer Room
@@ -89,7 +83,7 @@ func (v *Visor) SetP2P(p2p Room) error {
 	if err != nil {
 		v.P2P = p2p
 	}
-	return fmt.Errorf("p2p does not exist in visor") //? should this be treaded as an error like now? -> or maybe even call AddP2P when p2p does not exist?
+	return fmt.Errorf("setp2p: p2p does not exist in visor") //? should this be treaded as an error like now? -> or maybe even call AddP2P when p2p does not exist?
 }
 
 // DeleteP2P removes the p2p-chat-room from the visor
@@ -99,7 +93,7 @@ func (v *Visor) DeleteP2P() error {
 	if err != nil {
 		v.P2P = Room{}
 	}
-	return fmt.Errorf("p2p does not exist in visor") //? should this be treaded as an error like now?
+	return fmt.Errorf("deletep2p: p2p does not exist in visor") //? should this be treaded as an error like now?
 }
 
 // GetAllServer returns all mapped server
@@ -124,24 +118,15 @@ func (v *Visor) GetServerByPK(pk cipher.PubKey) (*Server, error) {
 	return nil, fmt.Errorf("no server with pk %s found in visor %s", pk.Hex(), v.PK)
 }
 
-// SetConnection sets the connection type used
-func (v *Visor) SetConnection(conn net.Conn) {
-	v.Conn = conn
-}
-
-// DeleteConnection clears the connection
-func (v *Visor) DeleteConnection() {
-	v.Conn = nil
-}
-
 // AddMessage Adds the given message to the given visor depending on the destination of the message
-func (v *Visor) AddMessage(m message.Message) {
-	if m.Dest.Server == m.Dest.Visor {
+func (v *Visor) AddMessage(pkroute util.PKRoute, m message.Message) {
+	if pkroute.Server == pkroute.Visor {
 		v.P2P.AddMessage(m)
 		return
 	}
-	s := v.Server[m.Dest.Server]
-	s.AddMessage(m)
+	s := v.Server[pkroute.Server]
+	s.AddMessage(pkroute, m)
+	v.Server[pkroute.Server] = s
 }
 
 // Constructors
@@ -150,7 +135,6 @@ func (v *Visor) AddMessage(m message.Message) {
 func NewUndefinedVisor(pk cipher.PubKey) Visor {
 	v := Visor{}
 	v.PK = pk
-	v.Conn = nil
 	v.Server = make(map[cipher.PubKey]Server)
 
 	return v
@@ -160,7 +144,6 @@ func NewUndefinedVisor(pk cipher.PubKey) Visor {
 func NewVisor(pk cipher.PubKey, p2p Room, server map[cipher.PubKey]Server) Visor {
 	v := Visor{}
 	v.PK = pk
-	v.Conn = nil
 	v.P2P = p2p
 	v.Server = server
 	return v
@@ -170,9 +153,19 @@ func NewVisor(pk cipher.PubKey, p2p Room, server map[cipher.PubKey]Server) Visor
 func NewDefaultP2PVisor(pk cipher.PubKey) Visor {
 	v := Visor{}
 	v.PK = pk
-	v.Conn = nil
 	v.P2P = NewDefaultP2PRoom(pk)
 	v.Server = make(map[cipher.PubKey]Server)
+
+	return v
+}
+
+// NewDefaultVisor creates a new default visor
+func NewDefaultVisor(route util.PKRoute) Visor {
+	v := Visor{}
+	v.PK = route.Visor
+	v.Server = make(map[cipher.PubKey]Server)
+
+	v.AddServer(NewDefaultServer(route))
 
 	return v
 }

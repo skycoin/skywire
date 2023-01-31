@@ -37,17 +37,14 @@ func (r *UserRepo) NewUser() (user.User, error) {
 	if err != nil {
 		return user.User{}, err
 	}
-	fmt.Printf("New DefaultUser at %p\n", &r.user)
 	return r.user, nil
 }
 
 // GetUser returns the user
 func (r *UserRepo) GetUser() (*user.User, error) {
-	fmt.Printf("user-repo address %p", r)
 	if r.user.IsEmpty() {
 		return nil, fmt.Errorf("user not found")
 	}
-	fmt.Printf("Get User at %p", &r.user)
 	return &r.user, nil
 }
 

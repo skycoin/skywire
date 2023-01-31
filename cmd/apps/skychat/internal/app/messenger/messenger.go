@@ -13,5 +13,8 @@ type Service interface {
 	Listen()
 	SendTextMessage(route util.PKRoute, msg []byte) error
 	SendRouteRequestMessage(route util.PKRoute) error
-	SendInfoMessage(root util.PKRoute, dest util.PKRoute, info info.Info) error
+	SendInfoMessage(pkroute util.PKRoute, root util.PKRoute, dest util.PKRoute, info info.Info) error
+	SendChatLeaveMessage(pkroute util.PKRoute, root util.PKRoute, dest util.PKRoute) error
+	SendAddRoomMessage(route util.PKRoute, info info.Info) error
+	SendDeleteRoomMessage(route util.PKRoute) error
 }

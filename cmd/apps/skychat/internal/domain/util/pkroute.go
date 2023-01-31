@@ -24,6 +24,7 @@ func NewP2PRoute(visorpk cipher.PubKey) PKRoute {
 	pkr := PKRoute{}
 	pkr.Visor = visorpk
 	pkr.Server = visorpk
+	pkr.Room = visorpk
 	return pkr
 }
 

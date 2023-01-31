@@ -56,14 +56,12 @@ func (httpServer *Server) AddChatHTTPRoutes() {
 	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/{"+chat.GetVisorByPKURLParam+"}", chat.NewHandler(httpServer.appServices.ChatServices).GetVisorByPK).Methods("GET")
 
 	//Commands
-	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.AddLocalRoomURLParam, chat.NewHandler(httpServer.appServices.ChatServices).AddLocalRoom).Methods("POST")
 	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.AddLocalServerURLParam, chat.NewHandler(httpServer.appServices.ChatServices).AddLocalServer).Methods("POST")
-	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.AddRemoteRouteURLParam, chat.NewHandler(httpServer.appServices.ChatServices).AddRemoteRoute).Methods("POST")
-	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.DeleteLocalRoomByRouteURLParam, chat.NewHandler(httpServer.appServices.ChatServices).DeleteLocalRoomByRoute).Methods("POST")
-	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.DeleteLocalServerByRouteURLParam, chat.NewHandler(httpServer.appServices.ChatServices).DeleteLocalServerByRoute).Methods("POST")
+	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.JoinRemoteRouteURLParam, chat.NewHandler(httpServer.appServices.ChatServices).JoinRemoteRoute).Methods("POST")
 	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/{"+chat.DeleteVisorByPKURLParam+"}", chat.NewHandler(httpServer.appServices.ChatServices).DeleteVisorByPK).Methods("DELETE")
-	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.LeaveRemoteRoomByRouteURLParam, chat.NewHandler(httpServer.appServices.ChatServices).LeaveRemoteRoomByRoute).Methods("POST")
-	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.LeaveRemoteServerByRouteURLParam, chat.NewHandler(httpServer.appServices.ChatServices).LeaveRemoteServerByRoute).Methods("POST")
+	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.LeaveRemoteRouteURLParam, chat.NewHandler(httpServer.appServices.ChatServices).LeaveRemoteRoute).Methods("POST")
+	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.SendAddRoomMessageURLParam, chat.NewHandler(httpServer.appServices.ChatServices).SendAddRoomMessage).Methods("POST")
+	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.SendDeleteRoomMessageURLParam, chat.NewHandler(httpServer.appServices.ChatServices).SendDeleteRoomMessage).Methods("POST")
 	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.SendTextMessagePKURLParam, chat.NewHandler(httpServer.appServices.ChatServices).SendTextMessage).Methods("POST")
 
 }

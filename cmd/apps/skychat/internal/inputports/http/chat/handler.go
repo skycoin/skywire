@@ -28,88 +28,6 @@ func NewHandler(cs chatservices.ChatServices) *Handler {
 	return &Handler{chatServices: cs}
 }
 
-//[]: change to AddRoom -> as this also can be used to add a room at a remote server (when being admin)
-
-// AddLocalRoomURLParam contains the parameter identifier to be parsed by the handler
-const AddLocalRoomURLParam = "addLocalRoom"
-
-// AddLocalRoomRequestModel represents the request model expected for Add request
-type AddLocalRoomRequestModel struct {
-	//PKRoute
-	VisorPk  string `json:"visorpk"`
-	ServerPk string `json:"serverpk"`
-	//Info
-	Alias string `json:"alias"`
-	Desc  string `json:"desc"`
-	Img   string `json:"img"`
-	//Type
-	Type string `json:"type"`
-}
-
-// AddLocalRoom adds a room to the local visor/server
-func (c Handler) AddLocalRoom(w http.ResponseWriter, r *http.Request) {
-	var requestModel AddLocalRoomRequestModel
-	decodeErr := json.NewDecoder(r.Body).Decode(&requestModel)
-	if decodeErr != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprint(w, decodeErr.Error())
-		return
-	}
-
-	route := util.PKRoute{}
-
-	visorpk := cipher.PubKey{}
-	err := visorpk.Set(requestModel.VisorPk)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(w, err.Error())
-		return
-	}
-	route.Visor = visorpk
-	if requestModel.ServerPk != "" {
-		serverpk := cipher.PubKey{}
-		err = serverpk.Set(requestModel.ServerPk)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprint(w, err.Error())
-			return
-		}
-		route.Server = serverpk
-	}
-
-	info := info.Info{}
-	info.SetAlias(requestModel.Alias)
-	info.SetDescription(requestModel.Desc)
-	info.SetImg(requestModel.Img)
-
-	var roomType int64
-
-	if requestModel.Type != "" {
-		roomType, err = strconv.ParseInt(requestModel.Type, 10, 64)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprint(w, err.Error())
-			return
-		}
-	} else {
-		roomType = 1
-	}
-
-	err = c.chatServices.Commands.AddLocalRoomHandler.Handle(commands.AddLocalRoomRequest{
-		Route: route,
-		Info:  info,
-		Type:  roomType,
-	})
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(w, err.Error())
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-}
-
-//[]: change to AddServer -> as this also can be used to add a server at a remote visor (when being admin)
-
 // AddLocalServerURLParam contains the parameter identifier to be parsed by the handler
 const AddLocalServerURLParam = "addLocalServer"
 
@@ -161,50 +79,49 @@ func (c Handler) AddLocalServer(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// AddRemoteRouteURLParam contains the parameter identifier to be parsed by the handler
-const AddRemoteRouteURLParam = "addRemoteRoute"
+// JoinRemoteRouteURLParam contains the parameter identifier to be parsed by the handler
+const JoinRemoteRouteURLParam = "joinRemoteRoute"
 
-// AddRemoteRouteRequestModel represents the request model expected for Add request
-type AddRemoteRouteRequestModel struct {
+// JoinRemoteRouteRequestModel represents the request model expected for Join request
+type JoinRemoteRouteRequestModel struct {
 	VisorPk  string `json:"visorpk"`
 	ServerPk string `json:"serverpk"`
 	RoomPk   string `json:"roompk"`
 }
 
-// AddRemoteRoute adds the provided route
-func (c Handler) AddRemoteRoute(w http.ResponseWriter, r *http.Request) {
+// JoinRemoteRoute adds the provided route
+func (c Handler) JoinRemoteRoute(w http.ResponseWriter, r *http.Request) {
 	//fmt.Println(formatRequest(r))
-	var routeToAdd AddRemoteRouteRequestModel
-	decodeErr := json.NewDecoder(r.Body).Decode(&routeToAdd)
+	var routeToJoin JoinRemoteRouteRequestModel
+	decodeErr := json.NewDecoder(r.Body).Decode(&routeToJoin)
 	if decodeErr != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprint(w, decodeErr.Error())
 		return
 	}
-	fmt.Println("HTTPHandler - Add - Route: " + routeToAdd.VisorPk + "," + routeToAdd.ServerPk + "," + routeToAdd.RoomPk)
 
 	route := util.PKRoute{}
 
 	visorpk := cipher.PubKey{}
-	err := visorpk.Set(routeToAdd.VisorPk)
+	err := visorpk.Set(routeToJoin.VisorPk)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprint(w, err.Error())
 		return
 	}
 	route.Visor = visorpk
-	if routeToAdd.ServerPk != "" {
+	if routeToJoin.ServerPk != "" {
 		serverpk := cipher.PubKey{}
-		err = serverpk.Set(routeToAdd.ServerPk)
+		err = serverpk.Set(routeToJoin.ServerPk)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprint(w, err.Error())
 			return
 		}
 		route.Server = serverpk
-		if routeToAdd.RoomPk != "" {
+		if routeToJoin.RoomPk != "" {
 			roompk := cipher.PubKey{}
-			err = roompk.Set(routeToAdd.RoomPk)
+			err = roompk.Set(routeToJoin.RoomPk)
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				fmt.Fprint(w, err.Error())
@@ -214,7 +131,7 @@ func (c Handler) AddRemoteRoute(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	err = c.chatServices.Commands.AddRemoteRouteHandler.Handle(commands.AddRemoteRouteRequest{
+	err = c.chatServices.Commands.JoinRemoteRouteHandler.Handle(commands.JoinRemoteRouteRequest{
 		Route: route,
 	})
 	if err != nil {
@@ -225,19 +142,19 @@ func (c Handler) AddRemoteRoute(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// DeleteLocalRoomByRouteURLParam contains the parameter identifier to be parsed by the handler
-const DeleteLocalRoomByRouteURLParam = "deleteLocalRoom"
+// SendDeleteRoomMessageURLParam contains the parameter identifier to be parsed by the handler
+const SendDeleteRoomMessageURLParam = "sendDeleteRoomMessage"
 
-// DeleteLocalRoomByRouteRequestModel represents the request model expected for Delete request
-type DeleteLocalRoomByRouteRequestModel struct {
+// SendDeleteRoomMessageRequestModel represents the request model expected for Delete request
+type SendDeleteRoomMessageRequestModel struct {
 	VisorPk  string `json:"visorpk"`
 	ServerPk string `json:"serverpk"`
 	RoomPk   string `json:"roompk"`
 }
 
-// DeleteLocalRoomByRoute adds a room to the local visor/server
-func (c Handler) DeleteLocalRoomByRoute(w http.ResponseWriter, r *http.Request) {
-	var requestModel DeleteLocalRoomByRouteRequestModel
+// SendDeleteRoomMessage adds a room to the local visor/server
+func (c Handler) SendDeleteRoomMessage(w http.ResponseWriter, r *http.Request) {
+	var requestModel SendDeleteRoomMessageRequestModel
 	decodeErr := json.NewDecoder(r.Body).Decode(&requestModel)
 	if decodeErr != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -276,8 +193,93 @@ func (c Handler) DeleteLocalRoomByRoute(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	err = c.chatServices.Commands.DeleteLocalRoomHandler.Handle(commands.DeleteLocalRoomRequest{
+	err = c.chatServices.Commands.SendDeleteRoomMessageHandler.Handle(commands.SendDeleteRoomMessageRequest{
 		Route: route,
+	})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+// SendAddRoomMessageURLParam contains the parameter identifier to be parsed by the handler
+const SendAddRoomMessageURLParam = "sendAddRoomMessage"
+
+// SendAddRoomMessageRequestModel represents the request model expected for Delete request
+type SendAddRoomMessageRequestModel struct {
+	VisorPk  string `json:"visorpk"`
+	ServerPk string `json:"serverpk"`
+	RoomPk   string `json:"roompk"`
+
+	//Info
+	Alias string `json:"alias"`
+	Desc  string `json:"desc"`
+	Img   string `json:"img"`
+
+	//Type
+	Type string `json:"type"`
+}
+
+// SendAddRoomMessage adds a room to the local visor/server
+func (c Handler) SendAddRoomMessage(w http.ResponseWriter, r *http.Request) {
+	var requestModel SendAddRoomMessageRequestModel
+	decodeErr := json.NewDecoder(r.Body).Decode(&requestModel)
+	if decodeErr != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, decodeErr.Error())
+		return
+	}
+
+	route := util.PKRoute{}
+
+	visorpk := cipher.PubKey{}
+	err := visorpk.Set(requestModel.VisorPk)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
+		return
+	}
+	route.Visor = visorpk
+	serverpk := cipher.PubKey{}
+	err = serverpk.Set(requestModel.ServerPk)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
+		return
+	}
+	route.Server = serverpk
+	if requestModel.RoomPk != "" {
+		roompk := cipher.PubKey{}
+		err = roompk.Set(requestModel.RoomPk)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, err.Error())
+			return
+		}
+		route.Room = roompk
+	}
+
+	info := info.NewInfo(route.Room, requestModel.Alias, requestModel.Desc, requestModel.Img)
+
+	var roomType int
+
+	if requestModel.Type != "" {
+		roomType, err = strconv.Atoi(requestModel.Type)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, err.Error())
+			return
+		}
+	} else {
+		roomType = 1
+	}
+
+	err = c.chatServices.Commands.SendAddRoomMessageHandler.Handle(commands.SendAddRoomMessageRequest{
+		Route: route,
+		Info:  info,
+		Type:  roomType,
 	})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -360,19 +362,19 @@ func (c Handler) DeleteVisorByPK(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// LeaveRemoteRoomByRouteURLParam contains the parameter identifier to be parsed by the handler
-const LeaveRemoteRoomByRouteURLParam = "leaveRemoteRoom"
+// LeaveRemoteRouteURLParam contains the parameter identifier to be parsed by the handler
+const LeaveRemoteRouteURLParam = "leaveRemoteRoute"
 
-// LeaveRemoteRoomByRouteRequestModel represents the request model expected for Leave request
-type LeaveRemoteRoomByRouteRequestModel struct {
+// LeaveRemoteRouteRequestModel represents the request model expected for Leave request
+type LeaveRemoteRouteRequestModel struct {
 	VisorPk  string `json:"visorpk"`
 	ServerPk string `json:"serverpk"`
 	RoomPk   string `json:"roompk"`
 }
 
-// LeaveRemoteRoomByRoute adds a room to the local visor/server
-func (c Handler) LeaveRemoteRoomByRoute(w http.ResponseWriter, r *http.Request) {
-	var requestModel LeaveRemoteRoomByRouteRequestModel
+// LeaveRemoteRoute adds a room to the local visor/server
+func (c Handler) LeaveRemoteRoute(w http.ResponseWriter, r *http.Request) {
+	var requestModel LeaveRemoteRouteRequestModel
 	decodeErr := json.NewDecoder(r.Body).Decode(&requestModel)
 	if decodeErr != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -411,58 +413,7 @@ func (c Handler) LeaveRemoteRoomByRoute(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	err = c.chatServices.Commands.LeaveRemoteRoomHandler.Handle(commands.LeaveRemoteRoomRequest{
-		Route: route,
-	})
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(w, err.Error())
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-}
-
-// LeaveRemoteServerByRouteURLParam contains the parameter identifier to be parsed by the handler
-const LeaveRemoteServerByRouteURLParam = "leaveRemoteRoom"
-
-// LeaveRemoteServerByRouteRequestModel represents the request model expected for Leave request
-type LeaveRemoteServerByRouteRequestModel struct {
-	VisorPk  string `json:"visorpk"`
-	ServerPk string `json:"serverpk"`
-}
-
-// LeaveRemoteServerByRoute adds a room to the local visor/server
-func (c Handler) LeaveRemoteServerByRoute(w http.ResponseWriter, r *http.Request) {
-	var requestModel LeaveRemoteServerByRouteRequestModel
-	decodeErr := json.NewDecoder(r.Body).Decode(&requestModel)
-	if decodeErr != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprint(w, decodeErr.Error())
-		return
-	}
-
-	route := util.PKRoute{}
-
-	visorpk := cipher.PubKey{}
-	err := visorpk.Set(requestModel.VisorPk)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(w, err.Error())
-		return
-	}
-	route.Visor = visorpk
-	if requestModel.ServerPk != "" {
-		serverpk := cipher.PubKey{}
-		err = serverpk.Set(requestModel.ServerPk)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprint(w, err.Error())
-			return
-		}
-		route.Server = serverpk
-	}
-
-	err = c.chatServices.Commands.LeaveRemoteServerHandler.Handle(commands.LeaveRemoteServerRequest{
+	err = c.chatServices.Commands.LeaveRemoteRouteHandler.Handle(commands.LeaveRemoteRouteRequest{
 		Route: route,
 	})
 	if err != nil {

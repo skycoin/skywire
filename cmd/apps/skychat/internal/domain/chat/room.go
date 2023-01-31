@@ -43,8 +43,8 @@ type Room struct {
 	Msgs    []message.Message // P2P: send // Server: only send to members when room isVisible
 
 	//Server
-	IsVisible bool  //setting to make room visible for all server-members
-	Type      int64 //roomType --> board,chat,voice
+	IsVisible bool //setting to make room visible for all server-members
+	Type      int  //roomType --> board,chat,voice
 
 	//Private (only send to room members)
 	Members   map[cipher.PubKey]peer.Peer // all members
@@ -74,6 +74,7 @@ func (r *Room) GetInfo() info.Info {
 
 // AddMessage adds the given message to the messages
 func (r *Room) AddMessage(m message.Message) {
+	fmt.Printf("Added Message to route: %s \n", &r.PKRoute)
 	r.Msgs = append(r.Msgs, m)
 }
 
@@ -95,12 +96,12 @@ func (r *Room) SetIsVisible(isVisible bool) {
 }
 
 // GetType returns the room's type
-func (r *Room) GetType() int64 {
+func (r *Room) GetType() int {
 	return r.Type
 }
 
 // SetType sets the room's type
-func (r *Room) SetType(t int64) {
+func (r *Room) SetType(t int) {
 	r.Type = t
 }
 
@@ -266,6 +267,25 @@ func NewDefaultLocalRoom(roomRoute util.PKRoute) Room {
 	return r
 }
 
+// NewDefaultRemoteRoom returns a new default remote room
+func NewDefaultRemoteRoom(roomRoute util.PKRoute) Room {
+	r := Room{}
+	r.PKRoute = roomRoute
+	r.Info = info.NewDefaultInfo()
+	//Msgs
+	r.IsVisible = true
+	r.Type = ChatRoomType
+
+	r.Members = make(map[cipher.PubKey]peer.Peer)
+	r.Mods = make(map[cipher.PubKey]bool)
+	r.Muted = make(map[cipher.PubKey]bool)
+	r.Blacklist = make(map[cipher.PubKey]bool)
+	r.Whitelist = make(map[cipher.PubKey]bool)
+	r.Conns = make(map[cipher.PubKey]net.Conn)
+
+	return r
+}
+
 // NewDefaultP2PRoom returns a new default p2p room
 func NewDefaultP2PRoom(pk cipher.PubKey) Room {
 	r := Room{}
@@ -285,7 +305,7 @@ func NewDefaultP2PRoom(pk cipher.PubKey) Room {
 }
 
 // NewLocalRoom returns a new local room
-func NewLocalRoom(roomRoute util.PKRoute, i info.Info, t int64) Room {
+func NewLocalRoom(roomRoute util.PKRoute, i info.Info, t int) Room {
 	r := Room{}
 	r.PKRoute = roomRoute
 	r.Info = i

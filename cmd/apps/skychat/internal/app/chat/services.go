@@ -22,15 +22,15 @@ type Queries struct {
 
 // Commands Contains all available command handlers of this app
 type Commands struct {
-	AddLocalRoomHandler      commands.AddLocalRoomRequestHandler
-	AddLocalServerHandler    commands.AddLocalServerRequestHandler
-	AddRemoteRouteHandler    commands.AddRemoteRouteRequestHandler
-	DeleteLocalRoomHandler   commands.DeleteLocalRoomRequestHandler
-	DeleteLocalServerHandler commands.DeleteLocalServerRequestHandler
-	LeaveRemoteRoomHandler   commands.LeaveRemoteRoomRequestHandler
-	LeaveRemoteServerHandler commands.LeaveRemoteServerRequestHandler
-	DeleteRemoteVisorHandler commands.DeleteRemoteVisorRequestHandler
-	SendTextMessageHandler   commands.SendTextMessageRequestHandler
+	AddLocalRoomHandler          commands.AddLocalRoomRequestHandler
+	AddLocalServerHandler        commands.AddLocalServerRequestHandler
+	JoinRemoteRouteHandler       commands.JoinRemoteRouteRequestHandler
+	DeleteLocalServerHandler     commands.DeleteLocalServerRequestHandler
+	LeaveRemoteRouteHandler      commands.LeaveRemoteRouteRequestHandler
+	DeleteRemoteVisorHandler     commands.DeleteRemoteVisorRequestHandler
+	SendAddRoomMessageHandler    commands.SendAddRoomMessageRequestHandler
+	SendDeleteRoomMessageHandler commands.SendDeleteRoomMessageRequestHandler
+	SendTextMessageHandler       commands.SendTextMessageRequestHandler
 }
 
 // ChatServices Contains the grouped queries and commands of the app layer
@@ -50,15 +50,15 @@ func NewServices(cliRepo client.Repository, visorRepo chat.Repository, userRepo 
 			GetAllMessagesFromRoomHandler: queries.NewGetAllMessagesFromRoomRequestHandler(visorRepo),
 		},
 		Commands: Commands{
-			AddLocalRoomHandler:      commands.NewAddLocalRoomRequestHandler(visorRepo,userRepo, ns),
-			AddLocalServerHandler:    commands.NewAddLocalServerRequestHandler(visorRepo, userRepo, ns),
-			AddRemoteRouteHandler:    commands.NewAddRemoteRouteRequestHandler(visorRepo, ms),
-			DeleteLocalRoomHandler:   commands.NewDeleteLocalRoomRequestHandler(ms, visorRepo),
-			DeleteLocalServerHandler: commands.NewDeleteLocalServerRequestHandler(ms, visorRepo),
-			LeaveRemoteRoomHandler:   commands.NewLeaveRemoteRoomRequestHandler(ms, visorRepo),
-			LeaveRemoteServerHandler: commands.NewLeaveRemoteServerRequestHandler(ms, visorRepo),
-			DeleteRemoteVisorHandler: commands.NewDeleteRemoteVisorRequestHandler(cliRepo, visorRepo),
-			SendTextMessageHandler:   commands.NewSendTextMessageRequestHandler(ms),
+			AddLocalRoomHandler:          commands.NewAddLocalRoomRequestHandler(visorRepo, userRepo, ns),
+			AddLocalServerHandler:        commands.NewAddLocalServerRequestHandler(visorRepo, userRepo, ns),
+			JoinRemoteRouteHandler:       commands.NewJoinRemoteRouteRequestHandler(visorRepo, ms),
+			DeleteLocalServerHandler:     commands.NewDeleteLocalServerRequestHandler(ms, visorRepo),
+			LeaveRemoteRouteHandler:      commands.NewLeaveRemoteRouteRequestHandler(ms, visorRepo),
+			DeleteRemoteVisorHandler:     commands.NewDeleteRemoteVisorRequestHandler(cliRepo, visorRepo, ms),
+			SendAddRoomMessageHandler:    commands.NewSendAddRoomMessageRequestHandler(ms),
+			SendDeleteRoomMessageHandler: commands.NewSendDeleteRoomMessageRequestHandler(ms),
+			SendTextMessageHandler:       commands.NewSendTextMessageRequestHandler(ms),
 		},
 	}
 }
