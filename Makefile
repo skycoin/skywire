@@ -61,7 +61,7 @@ endif
 STATIC_OPTS?= $(OPTS) CC=musl-gcc
 MANAGER_UI_DIR = static/skywire-manager-src
 GO_BUILDER_VERSION=v1.17
-MANAGER_UI_BUILT_DIR=cmd/skywire-visor/static
+MANAGER_UI_BUILT_DIR=pkg/visor/static
 
 TEST_OPTS:=-cover -timeout=5m -mod=vendor
 
@@ -108,6 +108,10 @@ build-windows-appveyor: host-apps-windows-appveyor bin-windows-appveyor ## Insta
 
 build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
+build-static-wos: host-apps-static bin-static-wos ## Build apps and binaries. `go build` with ${OPTS}
+
+build-example: host-apps example-apps bin ## Build apps, example apps and binaries. `go build` with ${OPTS}
+
 installer: mac-installer ## Builds MacOS installer for skywire-visor
 
 install-system-linux: build # Workaround for debugging linux package installation
@@ -121,7 +125,7 @@ install-system-linux: build # Workaround for debugging linux package installatio
 
 install-generate: ## Installs required execs for go generate.
 	${OPTS} go install github.com/mjibson/esc
-	${OPTS} go install github.com/vektra/mockery/cmd/mockery
+	${OPTS} go install github.com/vektra/mockery/v2@latest
 
 generate: ## Generate mocks and config README's
 	go generate ./...
@@ -175,10 +179,8 @@ tidy: ## Tidies and vendors dependencies.
 	${OPTS} go mod tidy -v
 
 format: tidy ## Formats the code. Must have goimports and goimports-reviser installed (use make install-linters).
-	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg
-	${OPTS} goimports -w -local ${PROJECT_BASE} ./cmd
-	${OPTS} goimports -w -local ${PROJECT_BASE} ./internal
-	find . -type f -name '*.go' -not -path "./.git/*" -not -path "./vendor/*"  -exec goimports-reviser -project-name ${PROJECT_BASE} \;
+	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg & ${OPTS} goimports -w -local ${PROJECT_BASE} ./cmd &	${OPTS} goimports -w -local ${PROJECT_BASE} ./internal
+	find . -type f -name '*.go' -not -path "./.git/*" -not -path "./vendor/*"  -exec goimports-reviser -project-name ${PROJECT_BASE} {} \;
 
 format-windows: tidy ## Formats the code. Must have goimports and goimports-reviser installed (use make install-linters).
 	powershell 'Get-ChildItem -Directory | where Name -NotMatch vendor | % { Get-ChildItem $$_ -Recurse -Include *.go } | % {goimports -w -local ${PROJECT_BASE} $$_ }'
@@ -203,6 +205,10 @@ host-apps: ## Build app
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skysocks-client
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/vpn-server
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/vpn-client
+
+example-apps: ## Build example apps
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./example/example-client-app
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./example/example-server-app
 
 host-apps-windows:
 	powershell -Command new-item .\apps -itemtype directory -force
@@ -263,6 +269,12 @@ bin-static: ## Build `skywire-visor`, `skywire-cli`
 	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-cli  ./cmd/skywire-cli
 	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./setup-node ./cmd/setup-node
 
+# Static Bin without Systray
+bin-static-wos: ## Build `skywire-visor`, `skywire-cli`
+	${STATIC_OPTS} go build -tags withoutsystray -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-visor ./cmd/skywire-visor
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-cli  ./cmd/skywire-cli
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./setup-node ./cmd/setup-node
+
 build-deploy: host-apps-deploy ## Build for deployment Docker images
 	${OPTS} go build -tags netgo ${BUILD_OPTS_DEPLOY} -o /release/skywire-visor ./cmd/skywire-visor
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/skywire-cli ./cmd/skywire-cli
@@ -284,9 +296,6 @@ github-release-archlinux: github-prepare-release
 github-release-darwin:
 	goreleaser --rm-dist  --config .goreleaser-darwin.yml --skip-publish
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags))
-	$(eval $(shell echo ${GITHUB_TOKEN} > ../token))
-	$(eval export GITHUB_TOKEN=)
-	gh auth login --with-token < ../token
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-darwin-amd64.tar.gz
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-darwin-arm64.tar.gz
 	gh release download ${GITHUB_TAG} --repo skycoin/skywire --pattern 'checksums*'
@@ -296,24 +305,22 @@ github-release-darwin:
 github-release-windows:
 	.\goreleaser\goreleaser.exe --rm-dist  --config .goreleaser-windows.yml --skip-publish
 	$(eval GITHUB_TAG=$(shell powershell git describe --abbrev=0 --tags))
-	$(eval $(shell echo $(GITHUB_TOKEN) > ../token))
-	$(eval export GITHUB_TOKEN=)
-	cat ../token | ./gh/bin/gh.exe auth login --with-token
-	./gh/bin/gh.exe release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-windows-amd64.zip
-	./gh/bin/gh.exe release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-windows-386.zip
-	./gh/bin/gh.exe release download ${GITHUB_TAG} --repo skycoin/skywire --pattern 'checksums*'
+	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-windows-amd64.zip
+	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-windows-386.zip
+	gh release download ${GITHUB_TAG} --repo skycoin/skywire --pattern 'checksums*'
 	cat ./dist/checksums.txt >> ./checksums.txt
-	./gh/bin/gh.exe release upload --repo skycoin/skywire ${GITHUB_TAG} --clobber ./checksums.txt
+	gh release upload --repo skycoin/skywire ${GITHUB_TAG} --clobber ./checksums.txt
 
 dep-github-release:
-	wget -c https://more.musl.cc/10/x86_64-linux-musl/aarch64-linux-musl-cross.tgz -O ../aarch64-linux-musl-cross.tgz
-	tar -xzf ../aarch64-linux-musl-cross.tgz -C ../
-	wget -c https://more.musl.cc/10/x86_64-linux-musl/arm-linux-musleabi-cross.tgz -O ../arm-linux-musleabi-cross.tgz
-	tar -xzf ../arm-linux-musleabi-cross.tgz -C ../
-	wget -c https://more.musl.cc/10/x86_64-linux-musl/arm-linux-musleabihf-cross.tgz -O ../arm-linux-musleabihf-cross.tgz
-	tar -xzf ../arm-linux-musleabihf-cross.tgz -C ../
-	wget -c https://more.musl.cc/10/x86_64-linux-musl/x86_64-linux-musl-cross.tgz -O ../x86_64-linux-musl-cross.tgz
-	tar -xzf ../x86_64-linux-musl-cross.tgz -C ../
+	mkdir musl-data
+	wget -c https://more.musl.cc/10/x86_64-linux-musl/aarch64-linux-musl-cross.tgz -O aarch64-linux-musl-cross.tgz
+	tar -xzf aarch64-linux-musl-cross.tgz -C ./musl-data && rm aarch64-linux-musl-cross.tgz
+	wget -c https://more.musl.cc/10/x86_64-linux-musl/arm-linux-musleabi-cross.tgz -O arm-linux-musleabi-cross.tgz
+	tar -xzf arm-linux-musleabi-cross.tgz -C ./musl-data && rm arm-linux-musleabi-cross.tgz
+	wget -c https://more.musl.cc/10/x86_64-linux-musl/arm-linux-musleabihf-cross.tgz -O arm-linux-musleabihf-cross.tgz
+	tar -xzf arm-linux-musleabihf-cross.tgz -C ./musl-data && rm arm-linux-musleabihf-cross.tgz
+	wget -c https://more.musl.cc/10/x86_64-linux-musl/x86_64-linux-musl-cross.tgz -O x86_64-linux-musl-cross.tgz
+	tar -xzf x86_64-linux-musl-cross.tgz -C ./musl-data && rm x86_64-linux-musl-cross.tgz
 
 build-docker: ## Build docker image
 	./ci_scripts/docker-push.sh -t latest -b
@@ -423,8 +430,8 @@ win-installer:
 windows-installer-release:
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags))
 	make win-installer CUSTOM_VERSION=$(GITHUB_TAG)
-	./gh/bin/gh.exe release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-windows-amd64.msi
-	./gh/bin/gh.exe release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-windows-386.msi
+	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-windows-amd64.msi
+	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-windows-386.msi
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'

@@ -2,51 +2,59 @@
   <form [formGroup]="form">
     <!-- Public key. -->
     <mat-form-field>
-      <input
-        formControlName="pk"
-        maxlength="66"
-        [placeholder]="'vpn.server-list.add-server-dialog.pk-label' | translate"
-        #firstInput
-        matInput
-      >
+      <div class="field-container">
+        <label class="field-label" for="remoteKey">{{ 'vpn.server-list.add-server-dialog.pk-label' | translate }}</label>
+        <input
+          formControlName="pk"
+          maxlength="66"
+          #firstInput
+          matInput
+        >
+      </div>
       <mat-error>
         <ng-container *ngIf="!this.form.get('pk').hasError('pattern');else hexError">
-          {{ 'vpn.server-list.add-server-dialog.pk-length-error' | translate }}
+          <span>{{ 'vpn.server-list.add-server-dialog.pk-length-error' | translate }}</span>
         </ng-container>
       </mat-error>
       <ng-template #hexError>
-        {{ 'vpn.server-list.add-server-dialog.pk-chars-error' | translate }}
+        <span>{{ 'vpn.server-list.add-server-dialog.pk-chars-error' | translate }}</span>
       </ng-template>
     </mat-form-field>
 
     <!-- Password. -->
     <mat-form-field>
-      <input
-        formControlName="password"
-        [placeholder]="'vpn.server-list.add-server-dialog.password-label' | translate"
-        type="password"
-        matInput
-      >
+      <div class="field-container">
+        <label class="field-label" for="remoteKey">{{ 'vpn.server-list.add-server-dialog.password-label' | translate }}</label>
+        <input
+          formControlName="password"
+          type="password"
+          matInput
+        >
+      </div>
     </mat-form-field>
 
     <!-- Name. -->
     <mat-form-field>
-      <input
-        formControlName="name"
-        maxlength="100"
-        [placeholder]="'vpn.server-list.add-server-dialog.name-label' | translate"
-        matInput
-      >
+      <div class="field-container">
+        <label class="field-label" for="remoteKey">{{ 'vpn.server-list.add-server-dialog.name-label' | translate }}</label>
+        <input
+          formControlName="name"
+          maxlength="100"
+          matInput
+        >
+      </div>
     </mat-form-field>
 
     <!-- Note. -->
     <mat-form-field>
-      <input
-        formControlName="note"
-        maxlength="100"
-        [placeholder]="'vpn.server-list.add-server-dialog.note-label' | translate"
-        matInput
-      >
+      <div class="field-container">
+        <label class="field-label" for="remoteKey">{{ 'vpn.server-list.add-server-dialog.note-label' | translate }}</label>
+        <input
+          formControlName="note"
+          maxlength="100"
+          matInput
+        >
+      </div>
     </mat-form-field>
   </form>
 

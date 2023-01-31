@@ -1,3 +1,4 @@
+// Package geo pkg/geo/geo.go
 package geo
 
 import (

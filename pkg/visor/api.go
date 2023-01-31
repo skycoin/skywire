@@ -4,8 +4,11 @@ package visor
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -22,6 +25,8 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
@@ -34,19 +39,34 @@ import (
 
 // API represents visor API.
 type API interface {
+	//visor
 	Overview() (*Overview, error)
 	Summary() (*Summary, error)
-
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
+	Restart() error
+	Reload() error
+	Shutdown() error
+	Exec(command string) ([]byte, error)
+	RuntimeLogs() (string, error)
+	RemoteVisors() ([]string, error)
+	GetLogRotationInterval() (visorconfig.Duration, error)
+	SetLogRotationInterval(visorconfig.Duration) error
+	IsDMSGClientReady() (bool, error)
+	Ports() (map[string]PortDetail, error)
+
+	//reward setting
 	SetRewardAddress(string) (string, error)
 	GetRewardAddress() (string, error)
+	DeleteRewardAddress() error
+
+	//app controls
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
+	RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error)
+	DeregisterApp(procKey appcommon.ProcKey) error
 	StopApp(appName string) error
-	StartVPNClient(pk cipher.PubKey) error
-	StopVPNClient(appName string) error
 	SetAppDetailedStatus(appName, state string) error
 	SetAppError(appName, stateErr string) error
 	RestartApp(appName string) error
@@ -61,40 +81,48 @@ type API interface {
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
-	VPNServers(version, country string) ([]servicedisc.Service, error)
-	RemoteVisors() ([]string, error)
-	Ports() (map[string]PortDetail, error)
 
+	//vpn controls
+	StartVPNClient(pk cipher.PubKey) error
+	StopVPNClient(appName string) error
+	VPNServers(version, country string) ([]servicedisc.Service, error)
+
+	//skysocks-client controls
+	StartSkysocksClient(pk string) error
+	StopSkysocksClient() error
+
+	//transports
 	TransportTypes() ([]string, error)
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
 	Transport(tid uuid.UUID) (*TransportSummary, error)
 	AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*TransportSummary, error)
 	RemoveTransport(tid uuid.UUID) error
 	SetPublicAutoconnect(pAc bool) error
-
+	GetPersistentTransports() ([]transport.PersistentTransports, error)
+	SetPersistentTransports([]transport.PersistentTransports) error
+	//transport discovery
 	DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error)
 	DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error)
 
+	//routing
 	RoutingRules() ([]routing.Rule, error)
 	RoutingRule(key routing.RouteID) (routing.Rule, error)
 	SaveRoutingRule(rule routing.Rule) error
 	RemoveRoutingRule(key routing.RouteID) error
-
 	RouteGroups() ([]RouteGroupInfo, error)
-
-	Restart() error
-	Shutdown() error
-	Exec(command string) ([]byte, error)
-	RuntimeLogs() (string, error)
-
 	SetMinHops(uint16) error
 
-	GetPersistentTransports() ([]transport.PersistentTransports, error)
-	SetPersistentTransports([]transport.PersistentTransports) error
-	GetLogRotationInterval() (visorconfig.Duration, error)
-	SetLogRotationInterval(visorconfig.Duration) error
+	RegisterHTTPPort(localPort int) error
+	DeregisterHTTPPort(localPort int) error
+	ListHTTPPorts() ([]int, error)
+	Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
+	Disconnect(id uuid.UUID) error
+	List() (map[uuid.UUID]*appnet.ForwardConn, error)
+	DialPing(config PingConfig) error
+	Ping(config PingConfig) ([]time.Duration, error)
+	StopPing(pk cipher.PubKey) error
 
-	IsDMSGClientReady() (bool, error)
+	TestVisor(config PingConfig) ([]TestResult, error)
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -192,6 +220,7 @@ type Summary struct {
 	MinHops              uint16                           `json:"min_hops"`
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 	SkybianBuildVersion  string                           `json:"skybian_build_version"`
+	RewardAddress        string                           `json:"reward_address"`
 	BuildTag             string                           `json:"build_tag"`
 	PublicAutoconnect    bool                             `json:"public_autoconnect"`
 }
@@ -243,6 +272,11 @@ func (v *Visor) Summary() (*Summary, error) {
 		dmsgStatValue = &dmsgTracker
 	}
 
+	rewardAddress, err := v.GetRewardAddress()
+	if err != nil {
+		v.log.Warn(err)
+	}
+
 	summary := &Summary{
 		Overview:             overview,
 		Health:               health,
@@ -252,6 +286,7 @@ func (v *Visor) Summary() (*Summary, error) {
 		PersistentTransports: pts,
 		SkybianBuildVersion:  skybianBuildVersion,
 		BuildTag:             BuildTag,
+		RewardAddress:        rewardAddress,
 		PublicAutoconnect:    v.conf.Transport.PublicAutoconnect,
 		DmsgStats:            dmsgStatValue,
 	}
@@ -316,22 +351,44 @@ func (v *Visor) Uptime() (float64, error) {
 
 // SetRewardAddress implements API.
 func (v *Visor) SetRewardAddress(p string) (string, error) {
-	path := v.conf.LocalPath + "/" + skyenv.RewardFile
+	path := v.conf.LocalPath + "/" + visorconfig.RewardFile
 	err := os.WriteFile(path, []byte(p), 0644) //nolint
 	if err != nil {
-		return p, fmt.Errorf("Failed to write config to file. err=%v", err)
+		return p, fmt.Errorf("failed to write config to file. err=%v", err)
 	}
 	return p, nil
 }
 
 // GetRewardAddress implements API.
 func (v *Visor) GetRewardAddress() (string, error) {
-	path := v.conf.LocalPath + "/" + skyenv.RewardFile
+	path := v.conf.LocalPath + "/" + visorconfig.RewardFile
+	_, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		file, err := os.Create(filepath.Clean(path))
+		if err != nil {
+			return "", fmt.Errorf("failed to create config file. err=%v", err)
+		}
+		err = file.Close()
+		if err != nil {
+			return "", fmt.Errorf("failed to close config file. err=%v", err)
+		}
+	}
 	rConfig, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
-		return "", fmt.Errorf("Failed to read config file. err=%v", err)
+		return "", fmt.Errorf("failed to read config file. err=%v", err)
 	}
 	return string(rConfig), nil
+}
+
+// DeleteRewardAddress implements API.
+func (v *Visor) DeleteRewardAddress() error {
+
+	path := v.conf.LocalPath + "/" + visorconfig.RewardFile
+	err := os.Remove(path)
+	if err != nil {
+		return fmt.Errorf("Error deleting file. err=%v", err)
+	}
+	return nil
 }
 
 // Apps implements API.
@@ -357,7 +414,7 @@ func (v *Visor) SkybianBuildVersion() string {
 func (v *Visor) StartApp(appName string) error {
 	var envs []string
 	var err error
-	if appName == skyenv.VPNClientName {
+	if appName == visorconfig.VPNClientName {
 		// todo: can we use some kind of app start hook that will be used for both autostart
 		// and start? Reason: this is also called in init for autostart
 
@@ -378,6 +435,24 @@ func (v *Visor) StartApp(appName string) error {
 	// check process manager availability
 	if v.procM != nil {
 		return v.appL.StartApp(appName, nil, envs)
+	}
+	return ErrProcNotAvailable
+}
+
+// RegisterApp implements API.
+func (v *Visor) RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error) {
+	// check process manager availability
+	if v.procM != nil {
+		return v.appL.RegisterApp(procConf)
+	}
+	return appcommon.ProcKey{}, ErrProcNotAvailable
+}
+
+// DeregisterApp implements API.
+func (v *Visor) DeregisterApp(procKey appcommon.ProcKey) error {
+	// check process manager availability
+	if v.procM != nil {
+		return v.appL.DeregisterApp(procKey)
 	}
 	return ErrProcNotAvailable
 }
@@ -405,7 +480,7 @@ func (v *Visor) StartVPNClient(pk cipher.PubKey) error {
 	}
 
 	for index, app := range v.conf.Launcher.Apps {
-		if app.Name == skyenv.VPNClientName {
+		if app.Name == visorconfig.VPNClientName {
 			// we set the args in memory and pass it in `v.appL.StartApp`
 			// unlike the api method `StartApp` where `nil` is passed in `v.appL.StartApp` as args
 			// but the args are set in the config
@@ -422,7 +497,7 @@ func (v *Visor) StartVPNClient(pk cipher.PubKey) error {
 
 			// check process manager availability
 			if v.procM != nil {
-				return v.appL.StartApp(skyenv.VPNClientName, v.conf.Launcher.Apps[index].Args, envs)
+				return v.appL.StartApp(visorconfig.VPNClientName, v.conf.Launcher.Apps[index].Args, envs)
 			}
 			return ErrProcNotAvailable
 		}
@@ -435,6 +510,61 @@ func (v *Visor) StopVPNClient(appName string) error {
 	// check process manager availability
 	if v.procM != nil {
 		_, err := v.appL.StopApp(appName) //nolint:errcheck
+		return err
+	}
+	return ErrProcNotAvailable
+}
+
+// StartSkysocksClient implements API.
+func (v *Visor) StartSkysocksClient(serverKey string) error {
+	var envs []string
+	if v.tpM == nil {
+		return ErrTrpMangerNotAvailable
+	}
+
+	if len(v.conf.Launcher.Apps) == 0 {
+		return errors.New("no skysocks-client app configuration found")
+	}
+
+	for index, app := range v.conf.Launcher.Apps {
+		if app.Name == visorconfig.SkysocksClientName {
+			if v.GetSkysocksClientAddress() == "" && serverKey == "" {
+				return errors.New("Skysocks server pub key is missing")
+			}
+
+			if serverKey != "" {
+				var pk cipher.PubKey
+				if err := pk.Set(serverKey); err != nil {
+					return err
+				}
+				v.SetAppPK(visorconfig.SkysocksClientName, pk) //nolint
+				// we set the args in memory and pass it in `v.appL.StartApp`
+				// unlike the api method `StartApp` where `nil` is passed in `v.appL.StartApp` as args
+				// but the args are set in the config
+				v.conf.Launcher.Apps[index].Args = []string{"-srv", pk.Hex()}
+			} else {
+				var pk cipher.PubKey
+				if err := pk.Set(v.GetSkysocksClientAddress()); err != nil {
+					return err
+				}
+				v.conf.Launcher.Apps[index].Args = []string{"-srv", pk.Hex()}
+			}
+
+			// check process manager availability
+			if v.procM != nil {
+				return v.appL.StartApp(visorconfig.SkysocksClientName, v.conf.Launcher.Apps[index].Args, envs)
+			}
+			return ErrProcNotAvailable
+		}
+	}
+	return errors.New("no skysocks-client app configuration found")
+}
+
+// StopSkysocksClient implements API.
+func (v *Visor) StopSkysocksClient() error {
+	// check process manager availability
+	if v.procM != nil {
+		_, err := v.appL.StopApp(visorconfig.SkysocksClientName) //nolint:errcheck
 		return err
 	}
 	return ErrProcNotAvailable
@@ -489,9 +619,9 @@ func (v *Visor) SetAutoStart(appName string, autoStart bool) error {
 func (v *Visor) SetAppPassword(appName, password string) error {
 	allowedToChangePassword := func(appName string) bool {
 		allowedApps := map[string]struct{}{
-			skyenv.SkysocksName:  {},
-			skyenv.VPNClientName: {},
-			skyenv.VPNServerName: {},
+			visorconfig.SkysocksName:  {},
+			visorconfig.VPNClientName: {},
+			visorconfig.VPNServerName: {},
 		}
 
 		_, ok := allowedApps[appName]
@@ -507,7 +637,6 @@ func (v *Visor) SetAppPassword(appName, password string) error {
 	const (
 		passcodeArgName = "-passcode"
 	)
-
 	if err := v.conf.UpdateAppArg(v.appL, appName, passcodeArgName, password); err != nil {
 		return err
 	}
@@ -519,7 +648,7 @@ func (v *Visor) SetAppPassword(appName, password string) error {
 
 // SetAppNetworkInterface implements API.
 func (v *Visor) SetAppNetworkInterface(appName, netifc string) error {
-	if skyenv.VPNServerName != appName {
+	if visorconfig.VPNServerName != appName {
 		return fmt.Errorf("app %s is not allowed to set network interface", appName)
 	}
 
@@ -528,7 +657,6 @@ func (v *Visor) SetAppNetworkInterface(appName, netifc string) error {
 	const (
 		netifcArgName = "--netifc"
 	)
-
 	if err := v.conf.UpdateAppArg(v.appL, appName, netifcArgName, netifc); err != nil {
 		return err
 	}
@@ -540,7 +668,7 @@ func (v *Visor) SetAppNetworkInterface(appName, netifc string) error {
 
 // SetAppKillswitch implements API.
 func (v *Visor) SetAppKillswitch(appName string, killswitch bool) error {
-	if appName != skyenv.VPNClientName {
+	if appName != visorconfig.VPNClientName {
 		return fmt.Errorf("app %s is not allowed to set killswitch", appName)
 	}
 
@@ -549,7 +677,6 @@ func (v *Visor) SetAppKillswitch(appName string, killswitch bool) error {
 	const (
 		killSwitchArg = "--killswitch"
 	)
-
 	if err := v.conf.UpdateAppArg(v.appL, appName, killSwitchArg, killswitch); err != nil {
 		return err
 	}
@@ -561,7 +688,7 @@ func (v *Visor) SetAppKillswitch(appName string, killswitch bool) error {
 
 // SetAppSecure implements API.
 func (v *Visor) SetAppSecure(appName string, isSecure bool) error {
-	if appName != skyenv.VPNServerName {
+	if appName != visorconfig.VPNServerName {
 		return fmt.Errorf("app %s is not allowed to change 'secure' parameter", appName)
 	}
 
@@ -570,11 +697,9 @@ func (v *Visor) SetAppSecure(appName string, isSecure bool) error {
 	const (
 		secureArgName = "--secure"
 	)
-
 	if err := v.conf.UpdateAppArg(v.appL, appName, secureArgName, isSecure); err != nil {
 		return err
 	}
-
 	v.log.Infof("Updated %v secure state", appName)
 
 	return nil
@@ -584,8 +709,8 @@ func (v *Visor) SetAppSecure(appName string, isSecure bool) error {
 func (v *Visor) SetAppPK(appName string, pk cipher.PubKey) error {
 	allowedToChangePK := func(appName string) bool {
 		allowedApps := map[string]struct{}{
-			skyenv.SkysocksClientName: {},
-			skyenv.VPNClientName:      {},
+			visorconfig.SkysocksClientName: {},
+			visorconfig.VPNClientName:      {},
 		}
 
 		_, ok := allowedApps[appName]
@@ -601,7 +726,6 @@ func (v *Visor) SetAppPK(appName string, pk cipher.PubKey) error {
 	const (
 		pkArgName = "-srv"
 	)
-
 	if err := v.conf.UpdateAppArg(v.appL, appName, pkArgName, pk.String()); err != nil {
 		return err
 	}
@@ -704,6 +828,27 @@ func (v *Visor) VPNServers(version, country string) ([]servicedisc.Service, erro
 		return nil, err
 	}
 	return vpnServers, nil
+}
+
+// PublicVisors gets available public public visors from service discovery URL
+func (v *Visor) PublicVisors(version, country string) ([]servicedisc.Service, error) {
+	log := logging.MustGetLogger("public_visors")
+	vLog := logging.NewMasterLogger()
+	vLog.SetLevel(logrus.InfoLevel)
+
+	sdClient := servicedisc.NewClient(log, vLog, servicedisc.Config{
+		Type:          servicedisc.ServiceTypeVisor,
+		PK:            v.conf.PK,
+		SK:            v.conf.SK,
+		DiscAddr:      v.conf.Launcher.ServiceDisc,
+		DisplayNodeIP: v.conf.Launcher.DisplayNodeIP,
+	}, &http.Client{Timeout: time.Duration(20) * time.Second}, "")
+	publicVisors, err := sdClient.Services(context.Background(), 0, version, country)
+	if err != nil {
+		v.log.Error("Error getting public vpn servers: ", err)
+		return nil, err
+	}
+	return publicVisors, nil
 }
 
 // RemoteVisors return list of connected remote visors
@@ -888,6 +1033,176 @@ func (v *Visor) RoutingRules() ([]routing.Rule, error) {
 	return v.router.Rules(), nil
 }
 
+// PingConfig use as configuration for ping command
+type PingConfig struct {
+	PK          cipher.PubKey
+	Tries       int
+	PcktSize    int
+	PubVisCount int
+}
+
+// DialPing implements API.
+func (v *Visor) DialPing(conf PingConfig) error {
+	if conf.PK == v.conf.PK {
+		return fmt.Errorf("Visor cannot ping itself")
+	}
+	v.pingPcktSize = conf.PcktSize
+	// waiting for at least one transport to initialize
+	<-v.tpM.Ready()
+
+	addr := appnet.Addr{
+		Net:    appnet.TypeSkynet,
+		PubKey: v.conf.PK,
+		Port:   routing.Port(skyenv.SkyPingPort),
+	}
+
+	var err error
+	var conn net.Conn
+
+	ctx := context.TODO()
+	var r = netutil.NewRetrier(v.log, 2*time.Second, netutil.DefaultMaxBackoff, 1, 2)
+	err = r.Do(ctx, func() error {
+		conn, err = appnet.Ping(conf.PK, addr)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+
+	skywireConn, isSkywireConn := conn.(*appnet.SkywireConn)
+	if !isSkywireConn {
+		return fmt.Errorf("Can't get such info from this conn")
+	}
+	v.pingConnMx.Lock()
+	v.pingConns[conf.PK] = ping{
+		conn:    skywireConn,
+		latency: make(chan time.Duration),
+	}
+	v.pingConnMx.Unlock()
+	return nil
+}
+
+// Ping implements API.
+func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
+	v.pingConnMx.Lock()
+	defer v.pingConnMx.Unlock()
+	latencies := []time.Duration{}
+	data := make([]byte, conf.PcktSize*1024)
+	for i := 1; i <= conf.Tries; i++ {
+		skywireConn := v.pingConns[conf.PK].conn
+		msg := PingMsg{
+			Timestamp: time.Now(),
+			PingPk:    conf.PK,
+			Data:      data,
+		}
+		ping, err := json.Marshal(msg)
+		if err != nil {
+			return latencies, err
+		}
+		pingSizeMsg := PingSizeMsg{
+			Size: len(ping),
+		}
+		size, err := json.Marshal(pingSizeMsg)
+		if err != nil {
+			return latencies, err
+		}
+		_, err = skywireConn.Write(size)
+		if err != nil {
+			return latencies, err
+		}
+
+		buf := make([]byte, 32*1024)
+		_, err = skywireConn.Read(buf)
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				return latencies, err
+			}
+		}
+		_, err = skywireConn.Write(ping)
+		if err != nil {
+			return latencies, err
+		}
+		latencies = append(latencies, <-v.pingConns[conf.PK].latency)
+	}
+	return latencies, nil
+}
+
+// StopPing implements API.
+func (v *Visor) StopPing(pk cipher.PubKey) error {
+	v.pingConnMx.Lock()
+	defer v.pingConnMx.Unlock()
+
+	skywireConn := v.pingConns[pk].conn
+	err := skywireConn.Close()
+	if err != nil {
+		return err
+	}
+	delete(v.pingConns, pk)
+	return nil
+}
+
+// TestResult type of test result
+type TestResult struct {
+	PK     string
+	Max    string
+	Min    string
+	Mean   string
+	Status string
+}
+
+// TestVisor trying to test visor
+func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
+	result := []TestResult{}
+	if v.dmsgC == nil {
+		return result, errors.New("dmsgC is not available")
+	}
+
+	publicVisors, err := v.dmsgC.AllEntries(context.TODO())
+	if err != nil {
+		return result, err
+	}
+
+	if conf.PubVisCount < len(publicVisors) {
+		publicVisors = publicVisors[:conf.PubVisCount+1]
+	}
+
+	for _, publicVisor := range publicVisors {
+		if publicVisor == v.conf.PK.Hex() {
+			continue
+		}
+
+		if err := conf.PK.UnmarshalText([]byte(publicVisor)); err != nil {
+			continue
+		}
+		err := v.DialPing(conf)
+		if err != nil {
+			result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(0), Min: fmt.Sprint(0), Mean: fmt.Sprint(0), Status: "Failed"})
+			continue
+		}
+		latencies, err := v.Ping(conf)
+		if err != nil {
+			go v.StopPing(conf.PK) //nolint
+			result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(0), Min: fmt.Sprint(0), Mean: fmt.Sprint(0), Status: "Failed"})
+			continue
+		}
+		var max, min, mean, sumLatency time.Duration
+		min = time.Duration(10000000000)
+		for _, latency := range latencies {
+			if latency > max {
+				max = latency
+			}
+			if latency < min {
+				min = latency
+			}
+			sumLatency += latency
+		}
+		mean = sumLatency / time.Duration(len(latencies))
+		result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(max), Min: fmt.Sprint(min), Mean: fmt.Sprint(mean), Status: "Success"})
+		v.StopPing(conf.PK) //nolint
+	}
+	return result, nil
+}
+
 // RoutingRule implements API.
 func (v *Visor) RoutingRule(key routing.RouteID) (routing.Rule, error) {
 	return v.router.Rule(key)
@@ -936,6 +1251,14 @@ func (v *Visor) Restart() error {
 	}
 
 	return v.restartCtx.Restart()
+}
+
+// Reload implements API.
+func (v *Visor) Reload() error {
+	if v.restartCtx == nil {
+		return ErrMalformedRestartContext
+	}
+	return reload(v)
 }
 
 // Shutdown implements API.
@@ -999,7 +1322,21 @@ func (v *Visor) SetPublicAutoconnect(pAc bool) error {
 // GetVPNClientAddress get PK address of server set on vpn-client
 func (v *Visor) GetVPNClientAddress() string {
 	for _, v := range v.conf.Launcher.Apps {
-		if v.Name == skyenv.VPNClientName {
+		if v.Name == visorconfig.VPNClientName {
+			for index := range v.Args {
+				if v.Args[index] == "-srv" {
+					return v.Args[index+1]
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// GetSkysocksClientAddress get PK address of server set on skysocks-client
+func (v *Visor) GetSkysocksClientAddress() string {
+	for _, v := range v.conf.Launcher.Apps {
+		if v.Name == visorconfig.SkysocksClientAddr {
 			for index := range v.Args {
 				if v.Args[index] == "-srv" {
 					return v.Args[index+1]
@@ -1019,4 +1356,134 @@ func (v *Visor) IsDMSGClientReady() (bool, error) {
 		}
 	}
 	return false, errors.New("dmsg client is not ready")
+}
+
+// RegisterHTTPPort implements API.
+func (v *Visor) RegisterHTTPPort(localPort int) error {
+	v.allowedMX.Lock()
+	defer v.allowedMX.Unlock()
+	ok := isPortAvailable(v.log, localPort)
+	if ok {
+		return fmt.Errorf("No connection on local port :%v", localPort)
+	}
+	if v.allowedPorts[localPort] {
+		return fmt.Errorf("Port :%v already registered", localPort)
+	}
+	v.allowedPorts[localPort] = true
+	return nil
+}
+
+// DeregisterHTTPPort implements API.
+func (v *Visor) DeregisterHTTPPort(localPort int) error {
+	v.allowedMX.Lock()
+	defer v.allowedMX.Unlock()
+	if !v.allowedPorts[localPort] {
+		return fmt.Errorf("Port :%v not registered", localPort)
+	}
+	delete(v.allowedPorts, localPort)
+	return nil
+}
+
+// ListHTTPPorts implements API.
+func (v *Visor) ListHTTPPorts() ([]int, error) {
+	v.allowedMX.Lock()
+	defer v.allowedMX.Unlock()
+	keys := make([]int, 0, len(v.allowedPorts))
+	for k := range v.allowedPorts {
+		keys = append(keys, k)
+	}
+	return keys, nil
+}
+
+// Connect implements API.
+func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
+	ok := isPortAvailable(v.log, localPort)
+	if !ok {
+		return uuid.UUID{}, fmt.Errorf(":%v local port already in use", localPort)
+	}
+	connApp := appnet.Addr{
+		Net:    appnet.TypeSkynet,
+		PubKey: remotePK,
+		Port:   routing.Port(skyenv.SkyForwardingServerPort),
+	}
+	conn, err := appnet.Dial(connApp)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+	remoteConn, err := appnet.WrapConn(conn)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+
+	cMsg := clientMsg{
+		Port: remotePort,
+	}
+
+	clientMsg, err := json.Marshal(cMsg)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+	_, err = remoteConn.Write([]byte(clientMsg))
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+	v.log.Debugf("Msg sent %s", clientMsg)
+
+	buf := make([]byte, 32*1024)
+	n, err := remoteConn.Read(buf)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+	var sReply serverReply
+	err = json.Unmarshal(buf[:n], &sReply)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+	v.log.Debugf("Received: %v", sReply)
+
+	if sReply.Error != nil {
+		sErr := sReply.Error
+		v.log.WithError(fmt.Errorf(*sErr)).Error("Server closed with error")
+		return uuid.UUID{}, fmt.Errorf(*sErr)
+	}
+	forwardConn := appnet.NewForwardConn(v.log, remoteConn, remotePort, localPort)
+	forwardConn.Serve()
+	return forwardConn.ID, nil
+}
+
+// Disconnect implements API.
+func (v *Visor) Disconnect(id uuid.UUID) error {
+	forwardConn := appnet.GetForwardConn(id)
+	return forwardConn.Close()
+}
+
+// List implements API.
+func (v *Visor) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
+	return appnet.GetAllForwardConns(), nil
+}
+
+func isPortAvailable(log *logging.Logger, port int) bool {
+	timeout := time.Second
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf(":%v", port), timeout)
+	if err != nil {
+		return true
+	}
+	if conn != nil {
+		defer closeConn(log, conn)
+		return false
+	}
+	return true
+}
+
+func isPortRegistered(port int, v *Visor) bool {
+	ports, err := v.ListHTTPPorts()
+	if err != nil {
+		return false
+	}
+	for _, p := range ports {
+		if p == port {
+			return true
+		}
+	}
+	return false
 }

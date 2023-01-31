@@ -24,7 +24,7 @@ var pk string
 func init() {
 	RootCmd.AddCommand(pkCmd)
 	pkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
-	pkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
+	pkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from "+fmt.Sprintf("%s", visorconfig.PackageConfig())) //nolint
 	pkCmd.Flags().BoolVarP(&web, "http", "w", false, "serve public key via http")
 	pkCmd.Flags().StringVarP(&webPort, "prt", "x", "7998", "serve public key via http")
 	RootCmd.AddCommand(summaryCmd)
@@ -38,7 +38,7 @@ var pkCmd = &cobra.Command{
 	Long:  "\n  Public key of the visor",
 	Run: func(cmd *cobra.Command, _ []string) {
 		if pkg {
-			path = visorconfig.Pkgpath
+			path = visorconfig.SkywireConfig()
 		}
 		var outputPK string
 		if path != "" {

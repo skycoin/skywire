@@ -22,7 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 const (
@@ -33,6 +33,7 @@ const (
 var r = netutil.NewRetrier(nil, time.Second, netutil.DefaultMaxBackoff, 0, 1)
 
 func dialServer(ctx context.Context, appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
+	appCl.SetDetailedStatus(appserver.AppDetailedStatusStarting) //nolint
 	var conn net.Conn
 	err := r.Do(ctx, func() error {
 		var err error
@@ -61,7 +62,7 @@ func main() {
 		print(fmt.Sprintf("Failed to output build info: %v\n", err))
 	}
 
-	var addr = flag.String("addr", skyenv.SkysocksClientAddr, "Client address to listen on")
+	var addr = flag.String("addr", visorconfig.SkysocksClientAddr, "Client address to listen on")
 	var serverPK = flag.String("srv", "", "PubKey of the server to connect to")
 	flag.Parse()
 
@@ -89,7 +90,6 @@ func main() {
 		}
 
 		fmt.Printf("Connected to %v\n", pk)
-
 		client, err := skysocks.NewClient(conn, appCl)
 		if err != nil {
 			print(fmt.Sprintf("Failed to create a new client: %v\n", err))
@@ -98,6 +98,7 @@ func main() {
 		}
 
 		fmt.Printf("Serving proxy client %v\n", *addr)
+		setAppStatus(appCl, appserver.AppDetailedStatusRunning)
 
 		if err := client.ListenAndServe(*addr); err != nil {
 			print(fmt.Sprintf("Error serving proxy client: %v\n", err))

@@ -20,7 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var (
@@ -179,7 +179,7 @@ func main() {
 			vpnClient.Close()
 		}()
 	} else {
-		ipcClient, err := ipc.StartClient(skyenv.VPNClientName, nil)
+		ipcClient, err := ipc.StartClient(visorconfig.VPNClientName, nil)
 		if err != nil {
 			print(fmt.Sprintf("Error creating ipc server for VPN client: %v\n", err))
 			setAppErr(appCl, err)

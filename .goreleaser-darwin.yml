@@ -20,8 +20,8 @@ builds:
     goos:
       - darwin
     goarch:
-      - arm64
       - amd64
+      - arm64
     env:
       - CGO_ENABLED=1
     main: ./cmd/skywire-visor/
@@ -32,10 +32,10 @@ builds:
     goos:
       - darwin
     goarch:
-      - arm64
       - amd64
+      - arm64
     env:
-      - CGO_ENABLED=0
+      - CGO_ENABLED=1
     main: ./cmd/skywire-cli/
     ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
@@ -44,10 +44,8 @@ builds:
     goos:
       - darwin
     goarch:
-      - arm64
       - amd64
-    env:
-      - CGO_ENABLED=0
+      - arm64
     main: ./cmd/apps/skychat/
     ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
@@ -56,10 +54,8 @@ builds:
     goos:
       - darwin
     goarch:
-      - arm64
       - amd64
-    env:
-      - CGO_ENABLED=0
+      - arm64
     main: ./cmd/apps/skysocks/
     ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
@@ -68,10 +64,8 @@ builds:
     goos:
       - darwin
     goarch:
-      - arm64
       - amd64
-    env:
-      - CGO_ENABLED=0
+      - arm64
     main: ./cmd/apps/skysocks-client/
     ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
@@ -80,13 +74,11 @@ builds:
     goos:
       - darwin
     goarch:
-      - arm64
       - amd64
-    env:
-      - CGO_ENABLED=0
+      - arm64
     main: ./cmd/apps/vpn-client/
     ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
+  
 archives:
   - id: archive
     format: tar.gz
@@ -102,7 +94,7 @@ archives:
       - skychat
       - vpn-client
     allow_different_binary_count: true
-
+  
 checksum:
   name_template: 'checksums.txt'  
 snapshot:

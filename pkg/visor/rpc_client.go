@@ -20,11 +20,11 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/cipherutil"
@@ -72,9 +72,9 @@ func (rc *rpcClient) Call(method string, args, reply interface{}) error {
 
 	switch method {
 	case "AddTransport":
-		timeout = skyenv.TransportRPCTimeout
+		timeout = visorconfig.TransportRPCTimeout
 	case "Update":
-		timeout = skyenv.UpdateRPCTimeout
+		timeout = visorconfig.UpdateRPCTimeout
 	}
 
 	if timeout != 0 {
@@ -137,6 +137,11 @@ func (rc *rpcClient) GetRewardAddress() (rConfig string, err error) {
 	return rConfig, err
 }
 
+// DeleteRewardAddress implements API.
+func (rc *rpcClient) DeleteRewardAddress() (err error) {
+	return rc.Call("DeleteRewardAddress", &struct{}{}, &struct{}{})
+}
+
 // Apps calls Apps.
 func (rc *rpcClient) Apps() ([]*appserver.AppState, error) {
 	states := make([]*appserver.AppState, 0)
@@ -156,6 +161,18 @@ func (rc *rpcClient) StartApp(appName string) error {
 	return rc.Call("StartApp", &appName, &struct{}{})
 }
 
+// RegisterApp calls RegisterApp.
+func (rc *rpcClient) RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error) {
+	var procKey appcommon.ProcKey
+	err := rc.Call("RegisterApp", procConf, &procKey)
+	return procKey, err
+}
+
+// DeregisterApp calls DeregisterApp.
+func (rc *rpcClient) DeregisterApp(procKey appcommon.ProcKey) error {
+	return rc.Call("DeregisterApp", procKey, &struct{}{})
+}
+
 // StopApp calls StopApp.
 func (rc *rpcClient) StopApp(appName string) error {
 	return rc.Call("StopApp", &appName, &struct{}{})
@@ -169,6 +186,16 @@ func (rc *rpcClient) StartVPNClient(pk cipher.PubKey) error {
 // StopVPNClient calls StopVPNClient.
 func (rc *rpcClient) StopVPNClient(appName string) error {
 	return rc.Call("StopVPNClient", &appName, &struct{}{})
+}
+
+// StartSkysocksClient calls StartSkysocksClient.
+func (rc *rpcClient) StartSkysocksClient(pk string) error {
+	return rc.Call("StartSkysocksClient", pk, &struct{}{})
+}
+
+// StopSkysocksClient calls StopSkysocksClient.
+func (rc *rpcClient) StopSkysocksClient() error {
+	return rc.Call("StopSkysocksClient", &struct{}{}, &struct{}{})
 }
 
 // SetAppDetailedStatus sets app's detailed state.
@@ -389,6 +416,11 @@ func (rc *rpcClient) Restart() error {
 	return rc.Call("Restart", &struct{}{}, &struct{}{})
 }
 
+// Reload calls Reload.
+func (rc *rpcClient) Reload() error {
+	return rc.Call("Reload", &struct{}{}, &struct{}{})
+}
+
 // Shutdown calls Shutdown.
 func (rc *rpcClient) Shutdown() error {
 	return rc.Call("Shutdown", &struct{}{}, &struct{}{})
@@ -475,6 +507,72 @@ func (rc *rpcClient) IsDMSGClientReady() (bool, error) {
 	var out bool
 	err := rc.Call("IsDMSGClientReady", &struct{}{}, &out)
 	return out, err
+}
+
+// Connect calls Connect.
+func (rc *rpcClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
+	var out uuid.UUID
+	err := rc.Call("Connect", &ConnectIn{
+		RemotePK:   remotePK,
+		RemotePort: remotePort,
+		LocalPort:  localPort,
+	}, &out)
+	return out, err
+}
+
+// Disconnect calls Disconnect.
+func (rc *rpcClient) Disconnect(id uuid.UUID) error {
+	err := rc.Call("Disconnect", &id, &struct{}{})
+	return err
+}
+
+// List calls List.
+func (rc *rpcClient) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
+	var out map[uuid.UUID]*appnet.ForwardConn
+	err := rc.Call("List", &struct{}{}, &out)
+	return out, err
+}
+
+// RegisterHTTPPort calls RegisterHTTPPort.
+func (rc *rpcClient) RegisterHTTPPort(localPort int) error {
+	return rc.Call("RegisterHTTPPort", &localPort, &struct{}{})
+}
+
+// DeregisterHTTPPort calls DeregisterHTTPPort.
+func (rc *rpcClient) DeregisterHTTPPort(localPort int) error {
+	err := rc.Call("DeregisterHTTPPort", &localPort, &struct{}{})
+	return err
+}
+
+// ListHTTPPorts calls ListHTTPPorts.
+func (rc *rpcClient) ListHTTPPorts() ([]int, error) {
+	var out []int
+	err := rc.Call("ListHTTPPorts", &struct{}{}, &out)
+	return out, err
+}
+
+// DialPing calls DialPing.
+func (rc *rpcClient) DialPing(conf PingConfig) error {
+	return rc.Call("DialPing", &conf, &struct{}{})
+}
+
+// Ping calls Ping.
+func (rc *rpcClient) Ping(conf PingConfig) ([]time.Duration, error) {
+	var latencies []time.Duration
+	err := rc.Call("Ping", &conf, &latencies)
+	return latencies, err
+}
+
+// StopPing calls StopPing.
+func (rc *rpcClient) StopPing(pk cipher.PubKey) error {
+	return rc.Call("StopPing", &pk, &struct{}{})
+}
+
+// TestVisor calls TestVisor.
+func (rc *rpcClient) TestVisor(conf PingConfig) ([]TestResult, error) {
+	var results []TestResult
+	err := rc.Call("TestVisor", &conf, &results)
+	return results, err
 }
 
 // MockRPCClient mocks API.
@@ -670,6 +768,11 @@ func (mc *mockRPCClient) GetRewardAddress() (string, error) {
 	return "", nil
 }
 
+// DeleteRewardAddress implements API.
+func (mc *mockRPCClient) DeleteRewardAddress() error {
+	return nil
+}
+
 // Apps implements API.
 func (mc *mockRPCClient) Apps() ([]*appserver.AppState, error) {
 	var apps []*appserver.AppState
@@ -703,6 +806,16 @@ func (*mockRPCClient) StartApp(string) error {
 	return nil
 }
 
+// RegisterApp implements API.
+func (*mockRPCClient) RegisterApp(appcommon.ProcConfig) (appcommon.ProcKey, error) {
+	return appcommon.ProcKey{}, nil
+}
+
+// DeregisterApp implements API.
+func (*mockRPCClient) DeregisterApp(appcommon.ProcKey) error {
+	return nil
+}
+
 // StopApp implements API.
 func (*mockRPCClient) StopApp(string) error {
 	return nil
@@ -715,6 +828,16 @@ func (*mockRPCClient) StartVPNClient(cipher.PubKey) error {
 
 // StopVPNClient implements API.
 func (*mockRPCClient) StopVPNClient(string) error {
+	return nil
+}
+
+// StartSkysocksClient implements API.
+func (*mockRPCClient) StartSkysocksClient(string) error {
+	return nil
+}
+
+// StopSkysocksClient implements API.
+func (*mockRPCClient) StopSkysocksClient() error {
 	return nil
 }
 
@@ -1024,6 +1147,11 @@ func (mc *mockRPCClient) Restart() error {
 	return nil
 }
 
+// Reload implements API.
+func (mc *mockRPCClient) Reload() error {
+	return nil
+}
+
 // Shutdown implements API.
 func (mc *mockRPCClient) Shutdown() error {
 	return nil
@@ -1083,4 +1211,54 @@ func (mc *mockRPCClient) Ports() (map[string]PortDetail, error) {
 // IsDMSGClientReady implements API.
 func (mc *mockRPCClient) IsDMSGClientReady() (bool, error) {
 	return false, nil
+}
+
+// Connect implements API.
+func (mc *mockRPCClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
+	return uuid.UUID{}, nil
+}
+
+// Disconnect implements API.
+func (mc *mockRPCClient) Disconnect(id uuid.UUID) error {
+	return nil
+}
+
+// List implements API.
+func (mc *mockRPCClient) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
+	return nil, nil
+}
+
+// RegisterHTTPPort implements API.
+func (mc *mockRPCClient) RegisterHTTPPort(localPort int) error {
+	return nil
+}
+
+// DeregisterHTTPPort implements API.
+func (mc *mockRPCClient) DeregisterHTTPPort(localPort int) error {
+	return nil
+}
+
+// ListHTTPPorts implements API.
+func (mc *mockRPCClient) ListHTTPPorts() ([]int, error) {
+	return nil, nil
+}
+
+// DialPing implements API.
+func (mc *mockRPCClient) DialPing(_ PingConfig) error {
+	return nil
+}
+
+// Ping implements API.
+func (mc *mockRPCClient) Ping(_ PingConfig) ([]time.Duration, error) {
+	return []time.Duration{}, nil
+}
+
+// StopPing implements API.
+func (mc *mockRPCClient) StopPing(_ cipher.PubKey) error {
+	return nil
+}
+
+// TestVisor implements API.
+func (mc *mockRPCClient) TestVisor(_ PingConfig) ([]TestResult, error) {
+	return []TestResult{}, nil
 }

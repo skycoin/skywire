@@ -1,3 +1,4 @@
+// Package cipher pkg/cipher/ustils_pubkey.go
 package cipher
 
 // SamePubKeys returns true when the provided public key slices have the same keys.

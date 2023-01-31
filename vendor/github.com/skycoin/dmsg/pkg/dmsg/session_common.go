@@ -1,3 +1,4 @@
+// Package dmsg pkg/dmsg/session_common.go
 package dmsg
 
 import (

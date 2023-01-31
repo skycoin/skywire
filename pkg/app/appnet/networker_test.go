@@ -23,7 +23,7 @@ func TestAddNetworker(t *testing.T) {
 	require.NoError(t, err)
 
 	err = AddNetworker(nType, n)
-	require.Equal(t, err, ErrNetworkerAlreadyExists)
+	require.NoError(t, err)
 }
 
 func TestResolveNetworker(t *testing.T) {

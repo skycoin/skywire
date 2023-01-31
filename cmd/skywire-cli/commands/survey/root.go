@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
-	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var (
@@ -22,7 +22,6 @@ var (
 func init() {
 	surveyCmd.Flags().SortFlags = false
 	surveyCmd.Flags().BoolVarP(&isCksum, "sha", "s", false, "generate checksum of system survey")
-
 }
 
 // RootCmd is surveyCmd
@@ -34,7 +33,7 @@ var surveyCmd = &cobra.Command{
 	Short:                 "system survey",
 	Long:                  "print the system survey",
 	Run: func(cmd *cobra.Command, args []string) {
-		survey, err := skyenv.SystemSurvey()
+		survey, err := visorconfig.SystemSurvey()
 		if err != nil {
 			internal.Catch(cmd.Flags(), fmt.Errorf("Failed to generate system survey: %v", err))
 		}
@@ -51,7 +50,7 @@ var surveyCmd = &cobra.Command{
 		//				survey.PubKey = pk
 		//			}
 		//		}
-		skyaddr, err := os.ReadFile(skyenv.PackageConfig().LocalPath + "/" + skyenv.RewardFile) //nolint
+		skyaddr, err := os.ReadFile(visorconfig.PackageConfig().LocalPath + "/" + visorconfig.RewardFile) //nolint
 		if err == nil {
 			survey.SkycoinAddress = string(skyaddr)
 		}

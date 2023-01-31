@@ -1,3 +1,4 @@
+// Package dmsghttp pkg/dmsghttp/util.go
 package dmsghttp
 
 import (

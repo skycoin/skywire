@@ -1,3 +1,4 @@
+// Package dmsgpty pkg/dmsgpty/const.go
 package dmsgpty
 
 // Constants related to pty.

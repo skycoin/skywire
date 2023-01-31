@@ -11,6 +11,8 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
@@ -96,17 +98,25 @@ func (r *RPC) Uptime(_ *struct{}, out *float64) (err error) {
 */
 
 // SetRewardAddress sets the reward address and privacy setting in reward.txt
-func (r *RPC) SetRewardAddress(p string, out string) (err error) {
+func (r *RPC) SetRewardAddress(p string, out *string) (err error) {
 	defer rpcutil.LogCall(r.log, "SetRewardAddress", p)(out, &err)
-	_, err = r.visor.SetRewardAddress(p)
+	p, err = r.visor.SetRewardAddress(p)
+	*out = p
 	return err
 }
 
 // GetRewardAddress reads the reward address from reward.txt
-func (r *RPC) GetRewardAddress(_ *struct{}, out string) (err error) {
+func (r *RPC) GetRewardAddress(_ *struct{}, out *string) (err error) {
 	defer rpcutil.LogCall(r.log, "GetRewardAddress", nil)(out, &err)
-	_, err = r.visor.GetRewardAddress()
+	p, err := r.visor.GetRewardAddress()
+	*out = p
 	return err
+}
+
+// DeleteRewardAddress deletes the reward.txt
+func (r *RPC) DeleteRewardAddress(_ *struct{}, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DeleteRewardAddress", nil)(nil, &err)
+	return r.visor.DeleteRewardAddress()
 }
 
 /*
@@ -241,6 +251,20 @@ func (r *RPC) StartApp(name *string, _ *struct{}) (err error) {
 	return r.visor.StartApp(*name)
 }
 
+// RegisterApp registers a App with provided proc config.
+func (r *RPC) RegisterApp(procConf *appcommon.ProcConfig, reply *appcommon.ProcKey) (err error) {
+	defer rpcutil.LogCall(r.log, "RegisterApp", procConf)(reply, &err)
+	procKey, err := r.visor.RegisterApp(*procConf)
+	*reply = procKey
+	return err
+}
+
+// DeregisterApp de registers a App with provided proc key.
+func (r *RPC) DeregisterApp(procKey *appcommon.ProcKey, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DeregisterApp", procKey)(nil, &err)
+	return r.visor.DeregisterApp(*procKey)
+}
+
 // StopApp stops App with provided name.
 func (r *RPC) StopApp(name *string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StopApp", name)(nil, &err)
@@ -260,6 +284,20 @@ func (r *RPC) StopVPNClient(name *string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StopVPNClient", name)(nil, &err)
 
 	return r.visor.StopVPNClient(*name)
+}
+
+// StartSkysocksClient starts SkysocksClient App
+func (r *RPC) StartSkysocksClient(pk string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StartSkysocksClient", pk)(nil, &err)
+
+	return r.visor.StartSkysocksClient(pk)
+}
+
+// StopSkysocksClient stops SkysocksClient App
+func (r *RPC) StopSkysocksClient(_ *struct{}, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StopSkysocksClient", nil)(nil, &err)
+
+	return r.visor.StopSkysocksClient()
 }
 
 // RestartApp restarts App with provided name.
@@ -545,6 +583,14 @@ func (r *RPC) Restart(_ *struct{}, _ *struct{}) (err error) {
 	return r.visor.Restart()
 }
 
+// Reload reloads the config - without restarting the visor
+func (r *RPC) Reload(_ *struct{}, _ *struct{}) (err error) {
+	// @evanlinjin: do not defer this log statement, as the underlying visor.Logger will get closed.
+	rpcutil.LogCall(r.log, "Reload", nil)(nil, nil)
+
+	return r.visor.Reload()
+}
+
 // Shutdown shuts down visor.
 func (r *RPC) Shutdown(_ *struct{}, _ *struct{}) (err error) {
 	// @evanlinjin: do not defer this log statement, as the underlying visor.Logger will get closed.
@@ -579,14 +625,14 @@ func (r *RPC) GetPersistentTransports(_ *struct{}, out *[]transport.PersistentTr
 
 // SetPersistentTransports sets persistent_transports in visor's routing config
 func (r *RPC) SetPersistentTransports(pTs *[]transport.PersistentTransports, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "SetPersistentTransports", *pTs)
+	defer rpcutil.LogCall(r.log, "SetPersistentTransports", *pTs)(nil, &err)
 	err = r.visor.SetPersistentTransports(*pTs)
 	return err
 }
 
 // SetPublicAutoconnect sets public_autoconnect in visor's routing config
 func (r *RPC) SetPublicAutoconnect(pAc *bool, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "SetPublicAutoconnect", *pAc)
+	defer rpcutil.LogCall(r.log, "SetPublicAutoconnect", *pAc)(nil, &err)
 	err = r.visor.SetPublicAutoconnect(*pAc)
 	return err
 }
@@ -633,5 +679,86 @@ func (r *RPC) IsDMSGClientReady(_ *struct{}, out *bool) (err error) {
 
 	status, err := r.visor.IsDMSGClientReady()
 	*out = status
+	return err
+}
+
+// RegisterHTTPPort registers the local port to be accessed by remote visors
+func (r *RPC) RegisterHTTPPort(port *int, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "RegisterHTTPPort", port)(nil, &err)
+	return r.visor.RegisterHTTPPort(*port)
+}
+
+// DeregisterHTTPPort deregisters the local port that can be accessed by remote visors
+func (r *RPC) DeregisterHTTPPort(port *int, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DeregisterHTTPPort", port)(nil, &err)
+	return r.visor.DeregisterHTTPPort(*port)
+}
+
+// ListHTTPPorts lists all the local por that can be accessed by remote visors
+func (r *RPC) ListHTTPPorts(_ *struct{}, out *[]int) (err error) {
+	defer rpcutil.LogCall(r.log, "ListHTTPPorts", nil)(out, &err)
+	ports, err := r.visor.ListHTTPPorts()
+	*out = ports
+	return err
+}
+
+// ConnectIn is input for Connect.
+type ConnectIn struct {
+	RemotePK   cipher.PubKey
+	RemotePort int
+	LocalPort  int
+}
+
+// Connect creates a connection with the remote visor to listen on the remote port and serve that on the local port
+func (r *RPC) Connect(in *ConnectIn, out *uuid.UUID) (err error) {
+	defer rpcutil.LogCall(r.log, "Connect", in)(out, &err)
+
+	id, err := r.visor.Connect(in.RemotePK, in.RemotePort, in.LocalPort)
+	*out = id
+	return err
+}
+
+// Disconnect breaks the connection with the given id
+func (r *RPC) Disconnect(id *uuid.UUID, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "Disconnect", id)(nil, &err)
+	err = r.visor.Disconnect(*id)
+	return err
+}
+
+// List returns all the ongoing skyforwarding connections
+func (r *RPC) List(_ *struct{}, out *map[uuid.UUID]*appnet.ForwardConn) (err error) {
+	defer rpcutil.LogCall(r.log, "List", nil)(out, &err)
+	proxies, err := r.visor.List()
+	*out = proxies
+	return err
+}
+
+// DialPing dials to the ping module using the provided pk as a hop.
+func (r *RPC) DialPing(conf PingConfig, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DialPing", conf)(nil, &err)
+
+	return r.visor.DialPing(conf)
+}
+
+// Ping pings the connected route via DialPing.
+func (r *RPC) Ping(conf PingConfig, out *[]time.Duration) (err error) {
+	defer rpcutil.LogCall(r.log, "Ping", conf)(out, &err)
+
+	*out, err = r.visor.Ping(conf)
+	return err
+}
+
+// StopPing stops the ping conn.
+func (r *RPC) StopPing(pk *cipher.PubKey, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StopPing", pk)(nil, &err)
+
+	return r.visor.StopPing(*pk)
+}
+
+// TestVisor trying to test viosr by pinging to public visor.
+func (r *RPC) TestVisor(conf PingConfig, out *[]TestResult) (err error) {
+	defer rpcutil.LogCall(r.log, "TestVisor", conf)(out, &err)
+
+	*out, err = r.visor.TestVisor(conf)
 	return err
 }

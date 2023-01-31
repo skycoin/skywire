@@ -1,4 +1,4 @@
-// Package ioutil pkg/dmsghttp/examples_test.go
+// Package ioutil pkg/ioutil/buf_read.go
 package ioutil
 
 import (

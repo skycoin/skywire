@@ -1,3 +1,4 @@
+// Package skyenv pkg/skyenv/values.go
 package skyenv
 
 // Constants for new default services.
@@ -23,7 +24,7 @@ const (
 	TestUptimeTrackerAddr   = "http://ut.skywire.dev"
 	TestAddressResolverAddr = "http://ar.skywire.dev"
 	TestSetupPK             = "026c2a3e92d6253c5abd71a42628db6fca9dd9aa037ab6f4e3a31108558dfd87cf"
-	TestNetworkMonitorPK    = "0218905f5d9079bab0b62985a05bd162623b193e948e17e7b719133f2c60b92093"
+	TestNetworkMonitorPK    = "0218905f5d9079bab0b62985a05bd162623b193e948e17e7b719133f2c60b92093,0218905f5d9079bab0b62985a05bd162623b193e948e17e7b719133f2c60b92093,0394b6e4bdb50977658013089523cc77a9c3af8d1a1581855b496b9ae3126deea0"
 )
 
 // GetStunServers gives back default Stun Servers

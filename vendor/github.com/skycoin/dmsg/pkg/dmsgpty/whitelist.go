@@ -1,10 +1,10 @@
-// Package dmsgpty pkg/dmsgpty/whitelist.go
 package dmsgpty
 
 import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -171,8 +171,8 @@ func (w *configWhitelist) open() error {
 		}
 	}
 
-	// read file
-	file, err := os.ReadFile(w.confPath)
+	// read file using ioutil
+	file, err := ioutil.ReadFile(w.confPath)
 	if err != nil {
 		return err
 	}
@@ -200,7 +200,7 @@ func updateFile(confPath string) error {
 		return err
 	}
 	// write to config file
-	err = os.WriteFile(confPath, b, 0600)
+	err = ioutil.WriteFile(confPath, b, 0600)
 	if err != nil {
 		return err
 	}

@@ -16,9 +16,13 @@ import (
 	clicompletion "github.com/skycoin/skywire/cmd/skywire-cli/commands/completion"
 	cliconfig "github.com/skycoin/skywire/cmd/skywire-cli/commands/config"
 	clidmsgpty "github.com/skycoin/skywire/cmd/skywire-cli/commands/dmsgpty"
+	clilog "github.com/skycoin/skywire/cmd/skywire-cli/commands/log"
 	climdisc "github.com/skycoin/skywire/cmd/skywire-cli/commands/mdisc"
 	clireward "github.com/skycoin/skywire/cmd/skywire-cli/commands/reward"
 	clirtfind "github.com/skycoin/skywire/cmd/skywire-cli/commands/rtfind"
+	cliskyfwd "github.com/skycoin/skywire/cmd/skywire-cli/commands/skyfwd"
+	cliskyrev "github.com/skycoin/skywire/cmd/skywire-cli/commands/skyrev"
+	cliskysocksc "github.com/skycoin/skywire/cmd/skywire-cli/commands/skysocksc"
 	clisurvey "github.com/skycoin/skywire/cmd/skywire-cli/commands/survey"
 	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 	clivpn "github.com/skycoin/skywire/cmd/skywire-cli/commands/vpn"
@@ -86,12 +90,19 @@ var treeCmd = &cobra.Command{
 	},
 }
 
+// for toc generation use: https://github.com/ekalinin/github-markdown-toc.go
 var docCmd = &cobra.Command{
 	Use:   "doc",
-	Short: "gnerate markdown docs",
+	Short: "generate markdown docs",
 	Long: `generate markdown docs
 
-	UNHIDEFLAGS=1 skywire-cli doc`,
+	UNHIDEFLAGS=1 go run cmd/skywire-cli/skywire-cli.go doc
+
+	UNHIDEFLAGS=1 go run cmd/skywire-cli/skywire-cli.go doc > cmd/skywire-cli/README1.md
+
+	generate toc:
+
+	cat cmd/skywire-cli/README1.md | gh-md-toc`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
@@ -117,7 +128,7 @@ var docCmd = &cobra.Command{
 		fmt.Printf("\n## %s\n", "subcommand tree")
 		fmt.Printf("\n%s\n", "A tree representation of the skywire-cli subcommands")
 		fmt.Printf("\n```\n")
-		//_, _ = script.Exec(`go run cmd/skywire-cli/skywire-cli.go tree`).Stdout() //nolint
+		_, _ = script.Exec(`go run cmd/skywire-cli/skywire-cli.go tree`).Stdout() //nolint
 		fmt.Printf("\n```\n")
 
 		var use string
@@ -139,8 +150,9 @@ var docCmd = &cobra.Command{
 				k.Help() //nolint
 				fmt.Printf("\n```\n")
 				if k.Name() == "gen" {
+					fmt.Printf("\n##### Example for package / msi\n")
 					fmt.Printf("\n```\n")
-					fmt.Printf("$ skywire-cli config gen -bpirxn\n")
+					fmt.Printf("$ skywire-cli config gen -bpirxn --version 1.3.0\n")
 					_, _ = script.Exec(`go run cmd/skywire-cli/skywire-cli.go config gen -n`).Stdout() //nolint
 					fmt.Printf("\n```\n")
 				}
@@ -169,11 +181,15 @@ func init() {
 		clidmsgpty.RootCmd,
 		clivisor.RootCmd,
 		clivpn.RootCmd,
+		cliskyfwd.RootCmd,
+		cliskyrev.RootCmd,
 		clireward.RootCmd,
 		clisurvey.RootCmd,
 		clirtfind.RootCmd,
 		climdisc.RootCmd,
 		clicompletion.RootCmd,
+		clilog.RootCmd,
+		cliskysocksc.RootCmd,
 		treeCmd,
 		docCmd,
 	)

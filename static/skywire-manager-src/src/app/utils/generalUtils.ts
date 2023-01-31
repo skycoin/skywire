@@ -63,7 +63,7 @@ export default class GeneralUtils {
 
     return true;
   }
-  
+
   /**
    * Validates an IPv4 address.
    */

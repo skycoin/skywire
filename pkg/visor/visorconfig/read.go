@@ -9,9 +9,6 @@ import (
 	"os"
 )
 
-// Pkgpath is the path to the default skywire hypervisor config file
-const Pkgpath = "/opt/skywire/skywire.json"
-
 // Reader accepts io.Reader
 func Reader(r io.Reader, confPath string) (*V1, error) {
 	raw, err := io.ReadAll(r)

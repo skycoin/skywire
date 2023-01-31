@@ -14,6 +14,7 @@ import { TransportService } from 'src/app/services/transport.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { OperationError } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
+import { RewardsAddressComponent, RewardsAddressConfigParams } from './rewards-address-config/rewards-address-config.component';
 
 /**
  * Shows the basic info of a node.
@@ -74,6 +75,16 @@ export class NodeInfoContentComponent implements OnDestroy {
     }
 
     EditLabelComponent.openDialog(this.dialog, labelInfo).afterClosed().subscribe((changed: boolean) => {
+      if (changed) {
+        NodeComponent.refreshCurrentDisplayedData();
+      }
+    });
+  }
+
+  // Opens the modal window for changing the rewards address.
+  changeRewardsAddressConfig() {
+    const params: RewardsAddressConfigParams = {nodePk: this.node.localPk, currentAddress: this.node.rewardsAddress};
+    RewardsAddressComponent.openDialog(this.dialog, params).afterClosed().subscribe((changed: boolean) => {
       if (changed) {
         NodeComponent.refreshCurrentDisplayedData();
       }

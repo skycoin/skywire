@@ -1,6 +1,7 @@
 //go:build !windows
 // +build !windows
 
+// Package dmsgpty pkg/dmsgpty/const_unix.go
 package dmsgpty
 
 import (

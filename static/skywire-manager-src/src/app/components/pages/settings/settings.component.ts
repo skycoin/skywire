@@ -8,7 +8,6 @@ import { TabButtonData, MenuOptionData } from '../../layout/top-bar/top-bar.comp
 import { AuthService, AuthStates } from '../../../services/auth.service';
 import { SnackbarService } from '../../../services/snackbar.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
-import { UpdaterStorageKeys } from 'src/app/services/node.service';
 
 /**
  * Page with the general settings of the app.
@@ -58,14 +57,8 @@ export class SettingsComponent implements OnInit, OnDestroy {
       }
     ];
 
-    // Options for the menu shown in the top bar.
-    this.options = [
-      {
-        name: 'common.logout',
-        actionName: 'logout',
-        icon: 'power_settings_new'
-      }
-    ];
+    // Configure the options menu shown in the top bar.
+    this.updateOptionsMenu();
   }
 
   ngOnInit() {
@@ -89,6 +82,8 @@ export class SettingsComponent implements OnInit, OnDestroy {
       result => {
         this.authChecked = true;
         this.authActive = result === AuthStates.Logged;
+
+        this.updateOptionsMenu();
       },
       () => {
         // Retry after a small delay.
@@ -99,6 +94,23 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.authSubscription.unsubscribe();
+  }
+
+  /**
+   * Configures the options menu shown in the top bar.
+   */
+  private updateOptionsMenu() {
+    this.options = [];
+
+    if (this.authActive) {
+      this.options = [
+        {
+          name: 'common.logout',
+          actionName: 'logout',
+          icon: 'power_settings_new'
+        }
+      ];
+    }
   }
 
   /**

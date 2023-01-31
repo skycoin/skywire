@@ -21,6 +21,7 @@ import { LabeledElementTextComponent } from '../../layout/labeled-element-text/l
 import { SortingModes, SortingColumn, DataSorter } from 'src/app/utils/lists/data-sorter';
 import { DataFilterer } from 'src/app/utils/lists/data-filterer';
 import { NodeData, UpdateAllComponent } from '../../layout/update-all/update-all.component';
+import { BulkRewardAddressChangerComponent, BulkRewardAddressParams, NodeToEditData } from '../../layout/bulk-reward-address-changer/bulk-reward-address-changer.component';
 
 /**
  * Page for showing the node list.
@@ -238,6 +239,12 @@ export class NodeListComponent implements OnInit, OnDestroy {
     this.options = [];
 
     this.options.push({
+      name: 'nodes.modify-rewards-all',
+      actionName: 'modifyRewardsAll',
+      icon: 'edit'
+    });
+
+    this.options.push({
       name: 'nodes.update-all',
       actionName: 'updateAll',
       icon: 'get_app'
@@ -294,6 +301,8 @@ export class NodeListComponent implements OnInit, OnDestroy {
       this.logout();
     } else if (actionName === 'updateAll') {
       this.updateAll();
+    } else if (actionName === 'modifyRewardsAll') {
+      this.changeRewardsToAll();
     }
   }
 
@@ -479,6 +488,30 @@ export class NodeListComponent implements OnInit, OnDestroy {
     });
 
     UpdateAllComponent.openDialog(this.dialog, updatableNodes, nonUpdatableNodes);
+  }
+
+  // Opens the modal window for changing the rewards address of all online nodes.
+  changeRewardsToAll() {
+    if (!this.dataSource || this.dataSource.length === 0) {
+      this.snackbarService.showError('nodes.no-visors-to-modify');
+
+      return;
+    }
+
+    const nodesToModify: NodeToEditData[] = [];
+    this.dataSource.forEach(node => {
+      if (node.online) {
+        const nodeData: NodeToEditData = {
+          key: node.localPk,
+          label: node.label,
+        };
+        nodesToModify.push(nodeData);
+      }
+    });
+
+    const params: BulkRewardAddressParams = { nodes: nodesToModify };
+
+    BulkRewardAddressChangerComponent.openDialog(this.dialog, params);
   }
 
   /**

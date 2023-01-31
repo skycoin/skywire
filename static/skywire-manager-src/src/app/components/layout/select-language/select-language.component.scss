@@ -12,11 +12,16 @@ $label-background: rgba(255, 255, 255, 0.25);
 
   button {
     width: 118px;
+    height: auto !important;
     margin: 20px;
     font-size: $font-size-mini;
     line-height: unset;
-    padding: 0;
+    padding: 0 !important;
     color: unset;
+
+    ::ng-deep .mdc-button__label {
+      width: 100%;
+    }
 
     @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
       & {
@@ -41,6 +46,7 @@ $label-background: rgba(255, 255, 255, 0.25);
     }
 
     .label {
+      color: $black !important;
       background-color: $label-background;
       padding: 4px 10px;
       @extend .single-line;

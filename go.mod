@@ -1,6 +1,6 @@
 module github.com/skycoin/skywire
 
-go 1.17
+go 1.18
 
 require (
 	github.com/AudriusButkevicius/pfilter v0.0.0-20210515103320-4b4b86609d51
@@ -50,11 +50,12 @@ require (
 	github.com/jaypipes/ghw v0.9.0
 	github.com/lib/pq v1.10.7
 	github.com/pterm/pterm v0.12.49
-	github.com/skycoin/dmsg v0.0.0-20221210172640-25f2ccd24123
-	github.com/skycoin/skywire-utilities v0.0.0-20220812192633-7137eb730383
-	github.com/skycoin/systray v1.10.1-0.20220630135132-48d2a1fb85d8
+	github.com/skycoin/dmsg v1.3.0-rc1.0.20230105101327-c8f2541c3de8
+	github.com/skycoin/skywire-utilities v0.0.0-20230110132024-c5536ba8e22c
+	github.com/skycoin/systray v1.10.0
 	github.com/spf13/pflag v1.0.5
 	github.com/zcalusic/sysinfo v0.9.5
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	periph.io/x/periph v3.6.8+incompatible
 )
 
@@ -90,7 +91,6 @@ require (
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6 // indirect
 	github.com/stretchr/objx v0.4.0 // indirect
-	github.com/tevino/abool v1.2.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.4 // indirect
 	github.com/tklauser/numcpus v0.2.1 // indirect
 	github.com/valyala/fastrand v1.1.0 // indirect

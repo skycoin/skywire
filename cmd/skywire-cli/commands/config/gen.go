@@ -17,6 +17,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -30,7 +31,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "url")
 	genConfigCmd.Flags().StringVar(&logLevel, "log-level", "info", "level of logging in config")
 	gHiddenFlags = append(gHiddenFlags, "log-level")
-	genConfigCmd.Flags().BoolVarP(&isBestProtocol, "bestproto", "b", false, "best protocol (dmsg | direct) based on location")
+	genConfigCmd.Flags().BoolVarP(&isBestProtocol, "bestproto", "b", false, "best protocol (dmsg | direct) based on location") //this will also disable public autoconnect based on location
 	genConfigCmd.Flags().BoolVarP(&isDisableAuth, "noauth", "c", false, "disable authentication for hypervisor UI")
 	gHiddenFlags = append(gHiddenFlags, "noauth")
 	genConfigCmd.Flags().BoolVarP(&isDmsgHTTP, "dmsghttp", "d", false, "use dmsg connection to skywire services")
@@ -43,24 +44,26 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "disableapps")
 	genConfigCmd.Flags().BoolVarP(&isHypervisor, "ishv", "i", false, "local hypervisor configuration")
 	genConfigCmd.Flags().StringVarP(&hypervisorPKs, "hvpks", "j", "", "list of public keys to use as hypervisor")
-	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", skyenv.OS, "(linux / mac / win) paths")
+	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", visorconfig.OS, "(linux / mac / win) paths")
 	gHiddenFlags = append(gHiddenFlags, "os")
 	genConfigCmd.Flags().BoolVarP(&isDisplayNodeIP, "publicip", "l", false, "allow display node ip in services")
 	gHiddenFlags = append(gHiddenFlags, "publicip")
+	genConfigCmd.Flags().BoolVarP(&addExampleApps, "example-apps", "m", false, "add example apps to the config")
+	gHiddenFlags = append(gHiddenFlags, "example-apps")
 	genConfigCmd.Flags().BoolVarP(&isStdout, "stdout", "n", false, "write config to stdout")
 	gHiddenFlags = append(gHiddenFlags, "stdout")
-	genConfigCmd.Flags().StringVarP(&output, "out", "o", "", "output config: "+skyenv.ConfigName)
-	if skyenv.OS == "win" {
+	genConfigCmd.Flags().StringVarP(&output, "out", "o", "", "output config: "+visorconfig.ConfigName)
+	if visorconfig.OS == "win" {
 		pText = "use .msi installation path: "
 	}
-	if skyenv.OS == "linux" {
+	if visorconfig.OS == "linux" {
 		pText = "use path for package: "
 	}
-	if skyenv.OS == "mac" {
+	if visorconfig.OS == "mac" {
 		pText = "use mac installation path: "
 	}
-	genConfigCmd.Flags().BoolVarP(&isPkgEnv, "pkg", "p", false, pText+skyenv.SkywirePath)
-	homepath := skyenv.HomePath()
+	genConfigCmd.Flags().BoolVarP(&isPkgEnv, "pkg", "p", false, pText+visorconfig.SkywirePath)
+	homepath := visorconfig.HomePath()
 	if homepath != "" {
 		genConfigCmd.Flags().BoolVarP(&isUsrEnv, "user", "u", false, "use paths for user space: "+homepath)
 	}
@@ -77,7 +80,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "hide")
 	genConfigCmd.Flags().BoolVarP(&isRetainHypervisors, "retainhv", "x", false, "retain existing hypervisors with regen")
 	gHiddenFlags = append(gHiddenFlags, "retainhv")
-	genConfigCmd.Flags().BoolVarP(&isPublicAutoConn, "autoconn", "y", false, "disable autoconnect to public visors")
+	genConfigCmd.Flags().BoolVarP(&disablePublicAutoConn, "autoconn", "y", false, "disable autoconnect to public visors")
 	gHiddenFlags = append(gHiddenFlags, "hide")
 	genConfigCmd.Flags().BoolVarP(&isPublic, "public", "z", false, "publicize visor in service discovery")
 	gHiddenFlags = append(gHiddenFlags, "public")
@@ -112,13 +115,13 @@ var genConfigCmd = &cobra.Command{
 		//set default output filename
 		if output == "" {
 			isOutUnset = true
-			confPath = skyenv.ConfigName
+			confPath = visorconfig.ConfigName
 			output = confPath
 		} else {
 			confPath = output
 		}
 
-		if output == visorconfig.StdoutName {
+		if output == visorconfig.Stdout {
 			isStdout = true
 			isForce = false
 		}
@@ -143,9 +146,9 @@ var genConfigCmd = &cobra.Command{
 		}
 		var err error
 		if isDmsgHTTP {
-			dmsgHTTPPath := skyenv.DMSGHTTPName
+			dmsgHTTPPath := visorconfig.DMSGHTTPName
 			if isPkgEnv {
-				dmsgHTTPPath = skyenv.SkywirePath + "/" + skyenv.DMSGHTTPName
+				dmsgHTTPPath = visorconfig.SkywirePath + "/" + visorconfig.DMSGHTTPName
 			}
 			if _, err := os.Stat(dmsgHTTPPath); err == nil {
 				if !isStdout {
@@ -172,13 +175,13 @@ var genConfigCmd = &cobra.Command{
 		}
 		// skywire-cli config gen -p
 		if !isStdout && isOutUnset {
-			if isPkgEnv && (selectedOS == "linux") {
-				configName = skyenv.ConfigJSON
-				confPath = skyenv.SkywirePath + "/" + configName
+			if isPkgEnv {
+				configName = visorconfig.ConfigJSON
+				confPath = visorconfig.SkywireConfig()
 				output = confPath
 			}
 			if isUsrEnv {
-				confPath = skyenv.HomePath() + "/" + skyenv.ConfigName
+				confPath = visorconfig.HomePath() + "/" + visorconfig.ConfigName
 				output = confPath
 			}
 		}
@@ -191,7 +194,7 @@ var genConfigCmd = &cobra.Command{
 		}
 		//don't write file with stdout
 		if !isStdout {
-			if skyenv.OS == "linux" {
+			if visorconfig.OS == "linux" {
 				//warn when writing config as root to non root owned dir & fail on the reverse instance
 				if _, err = exec.LookPath("stat"); err == nil {
 					confPath1, _ := filepath.Split(confPath)
@@ -244,7 +247,9 @@ var genConfigCmd = &cobra.Command{
 
 		//determine best protocol
 		if isBestProtocol && netutil.LocalProtocol() {
+			disablePublicAutoConn = true
 			isDmsgHTTP = true
+
 		}
 
 		//create the conf
@@ -270,7 +275,7 @@ var genConfigCmd = &cobra.Command{
 		if (!isStdout) || (!isMatch) {
 			//binaries have .exe extension on windows
 			var exe string
-			if skyenv.OS == "win" {
+			if visorconfig.OS == "win" {
 				exe = ".exe"
 			}
 			// Disable apps not found at bin_path with above exceptions for go run and stdout
@@ -325,6 +330,19 @@ var genConfigCmd = &cobra.Command{
 			}
 			conf.Launcher.Apps = newConfLauncherApps
 		}
+
+		if addExampleApps {
+			exampleApps := []appserver.AppConfig{
+				{
+					Name:      skyenv.ExampleServerName,
+					AutoStart: false,
+					Port:      routing.Port(skyenv.ExampleServerPort),
+				},
+			}
+			newConfLauncherApps := append(conf.Launcher.Apps, exampleApps...)
+			conf.Launcher.Apps = newConfLauncherApps
+		}
+
 		// Set EnableAuth true  hypervisor UI by --enable-auth flag
 		if isHypervisor {
 			// Make false EnableAuth hypervisor UI by --disable-auth flag
@@ -356,7 +374,7 @@ var genConfigCmd = &cobra.Command{
 		if ver != "" {
 			conf.Common.Version = ver
 		}
-		if isPublicAutoConn {
+		if disablePublicAutoConn {
 			conf.Transport.PublicAutoconnect = false
 		}
 		if isPublic {

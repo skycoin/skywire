@@ -1,3 +1,4 @@
+// Package dmsgpty pkg/dmsgpty/host.go
 package dmsgpty
 
 import (
