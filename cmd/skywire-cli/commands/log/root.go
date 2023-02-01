@@ -46,14 +46,12 @@ var logCmd = &cobra.Command{
 		log := logging.MustGetLogger("log-collecting")
 
 		// Preparing directories
-		if _, err := os.ReadDir("log_collecting"); err == nil {
-			if err := os.RemoveAll("log_collecting"); err != nil {
-				log.Panic("Unable to remove old log_collecting directory")
+		if _, err := os.ReadDir("log_collecting"); err != nil {
+			if err := os.Mkdir("log_collecting", 0750); err != nil {
+				log.Panic("Unable to log_collecting directory")
 			}
 		}
-		if err := os.Mkdir("log_collecting", 0750); err != nil {
-			log.Panic("Unable to log_collecting directory")
-		}
+
 		if err := os.Chdir("log_collecting"); err != nil {
 			log.Panic("Unable to change directory to log_collecting")
 		}
@@ -70,7 +68,7 @@ var logCmd = &cobra.Command{
 			os.Exit(1)
 		}()
 		// Fetch visors data from uptime tracker
-		endpoint := "https://ut.skywire.skycoin.com/uptimes?v=v2"
+		endpoint := "https://run.mocky.io/v3/0dd37be5-c4d1-468b-9f7c-7ca57c0b6179"
 		if env == "test" {
 			endpoint = "https://ut.skywire.dev/uptimes?v=v2"
 		}
@@ -100,8 +98,10 @@ var logCmd = &cobra.Command{
 				defer wg.Done()
 				var infoErr, shaErr error
 
-				if err := os.Mkdir(key, 0750); err != nil {
-					log.Panicf("Unable to create directory for visor %s", key)
+				if _, err := os.ReadDir(key); err != nil {
+					if err := os.Mkdir(key, 0750); err != nil {
+						log.Panicf("Unable to create directory for visor %s", key)
+					}
 				}
 
 				infoErr = download(ctx, log, httpC, "node-info.json", "node-info.json", key)
