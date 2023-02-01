@@ -68,7 +68,7 @@ var logCmd = &cobra.Command{
 			os.Exit(1)
 		}()
 		// Fetch visors data from uptime tracker
-		endpoint := "https://run.mocky.io/v3/0dd37be5-c4d1-468b-9f7c-7ca57c0b6179"
+		endpoint := "https://ut.skywire.skycoin.com/uptimes?v=v2"
 		if env == "test" {
 			endpoint = "https://ut.skywire.dev/uptimes?v=v2"
 		}
