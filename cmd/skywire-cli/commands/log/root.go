@@ -23,14 +23,18 @@ import (
 )
 
 var (
-	env      string
-	duration int
+	env       string
+	duration  int
+	minv      string
+	allVisors bool
 )
 
 func init() {
 	logCmd.Flags().SortFlags = false
 	logCmd.Flags().StringVarP(&env, "env", "e", "prod", "selecting env to fetch uptimes, default is prod")
+	logCmd.Flags().StringVar(&minv, "minv", "v1.3.4", "minimum version for get logs, default is 1.3.4")
 	logCmd.Flags().IntVarP(&duration, "duration", "d", 1, "count of days before today to fetch logs")
+	logCmd.Flags().BoolVar(&allVisors, "all", false, "consider all visors, actually skip filtering on version")
 }
 
 // RootCmd is surveyCmd
@@ -44,14 +48,12 @@ var logCmd = &cobra.Command{
 		log := logging.MustGetLogger("log-collecting")
 
 		// Preparing directories
-		if _, err := os.ReadDir("log_collecting"); err == nil {
-			if err := os.RemoveAll("log_collecting"); err != nil {
-				log.Panic("Unable to remove old log_collecting directory")
+		if _, err := os.ReadDir("log_collecting"); err != nil {
+			if err := os.Mkdir("log_collecting", 0750); err != nil {
+				log.Panic("Unable to log_collecting directory")
 			}
 		}
-		if err := os.Mkdir("log_collecting", 0750); err != nil {
-			log.Panic("Unable to log_collecting directory")
-		}
+
 		if err := os.Chdir("log_collecting"); err != nil {
 			log.Panic("Unable to change directory to log_collecting")
 		}
@@ -68,9 +70,9 @@ var logCmd = &cobra.Command{
 			os.Exit(1)
 		}()
 		// Fetch visors data from uptime tracker
-		endpoint := "https://ut.skywire.skycoin.com/uptimes"
+		endpoint := "https://ut.skywire.skycoin.com/uptimes?v=v2"
 		if env == "test" {
-			endpoint = "https://ut.skywire.dev/uptimes"
+			endpoint = "https://ut.skywire.dev/uptimes?v=v2"
 		}
 		uptimes, err := getUptimes(endpoint, log)
 		if err != nil {
@@ -90,13 +92,18 @@ var logCmd = &cobra.Command{
 		// Get visors data
 		var wg sync.WaitGroup
 		for _, v := range uptimes {
+			if !allVisors && v.Version < minv {
+				continue
+			}
 			wg.Add(1)
 			go func(key string, wg *sync.WaitGroup) {
 				defer wg.Done()
 				var infoErr, shaErr error
 
-				if err := os.Mkdir(key, 0750); err != nil {
-					log.Panicf("Unable to create directory for visor %s", key)
+				if _, err := os.ReadDir(key); err != nil {
+					if err := os.Mkdir(key, 0750); err != nil {
+						log.Panicf("Unable to create directory for visor %s", key)
+					}
 				}
 
 				infoErr = download(ctx, log, httpC, "node-info.json", "node-info.json", key)
@@ -160,11 +167,12 @@ func getUptimes(endpoint string, log *logging.Logger) ([]VisorUptimeResponse, er
 }
 
 type VisorUptimeResponse struct { //nolint
-	PubKey     string  `json:"key"`
-	Uptime     float64 `json:"uptime"`
-	Downtime   float64 `json:"downtime"`
-	Percentage float64 `json:"percentage"`
-	Online     bool    `json:"online"`
+	PubKey     string  `json:"pk"`
+	Uptime     float64 `json:"up"`
+	Downtime   float64 `json:"down"`
+	Percentage float64 `json:"pct"`
+	Online     bool    `json:"on"`
+	Version    string  `json:"version"`
 }
 
 func genKeys(skStr string) (pk cipher.PubKey, sk cipher.SecKey, err error) {
