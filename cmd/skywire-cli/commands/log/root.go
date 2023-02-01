@@ -23,9 +23,10 @@ import (
 )
 
 var (
-	env      string
-	duration int
-	minv     string
+	env       string
+	duration  int
+	minv      string
+	allVisors bool
 )
 
 func init() {
@@ -33,6 +34,7 @@ func init() {
 	logCmd.Flags().StringVarP(&env, "env", "e", "prod", "selecting env to fetch uptimes, default is prod")
 	logCmd.Flags().StringVar(&minv, "minv", "v1.3.4", "minimum version for get logs, default is 1.3.4")
 	logCmd.Flags().IntVarP(&duration, "duration", "d", 1, "count of days before today to fetch logs")
+	logCmd.Flags().BoolVar(&allVisors, "all", false, "consider all visors, actually skip filtering on version")
 }
 
 // RootCmd is surveyCmd
@@ -90,7 +92,7 @@ var logCmd = &cobra.Command{
 		// Get visors data
 		var wg sync.WaitGroup
 		for _, v := range uptimes {
-			if v.Version < minv {
+			if !allVisors && v.Version < minv {
 				continue
 			}
 			wg.Add(1)
