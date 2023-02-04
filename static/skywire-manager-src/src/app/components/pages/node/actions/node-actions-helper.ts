@@ -85,6 +85,8 @@ export class NodeActionsHelper {
       });
     }
 
+    // TODO: remove if the option will not be added again. Delete the translatable strings too.
+    /*
     if (this.canBeUpdated) {
       this.options.push({
         name: 'actions.menu.update',
@@ -92,6 +94,7 @@ export class NodeActionsHelper {
         icon: 'get_app',
       });
     }
+    */
   }
 
   /**
