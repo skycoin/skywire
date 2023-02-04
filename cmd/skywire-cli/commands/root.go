@@ -22,6 +22,7 @@ import (
 	clirtfind "github.com/skycoin/skywire/cmd/skywire-cli/commands/rtfind"
 	cliskyfwd "github.com/skycoin/skywire/cmd/skywire-cli/commands/skyfwd"
 	cliskyrev "github.com/skycoin/skywire/cmd/skywire-cli/commands/skyrev"
+	cliskysocksc "github.com/skycoin/skywire/cmd/skywire-cli/commands/skysocksc"
 	clisurvey "github.com/skycoin/skywire/cmd/skywire-cli/commands/survey"
 	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 	clivpn "github.com/skycoin/skywire/cmd/skywire-cli/commands/vpn"
@@ -188,6 +189,7 @@ func init() {
 		climdisc.RootCmd,
 		clicompletion.RootCmd,
 		clilog.RootCmd,
+		cliskysocksc.RootCmd,
 		treeCmd,
 		docCmd,
 	)

@@ -4,12 +4,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
+
 ## 1.3.0
 
+-   added `skywire-cli skysocksc` command ; cli interface for controlling skysocks [#1455](https://github.com/skycoin/skywire/pull/1455)
+-   add ServiceTypeProxy to servicedisc types [#1454](https://github.com/skycoin/skywire/pull/1454)
+-   rebuild UI  [#1453](https://github.com/skycoin/skywire/pull/1453) [#1450](https://github.com/skycoin/skywire/pull/1450) [#1444](https://github.com/skycoin/skywire/pull/1444)
+-   Fix for the skysocks UI  [#1452](https://github.com/skycoin/skywire/pull/1452)
+-   Update documentation  [#1448](https://github.com/skycoin/skywire/pull/1448)
 -   change transport_logs folder to 755 permissions & various similar fixes  [#1447](https://github.com/skycoin/skywire/pull/1447)
 -   Fix warn logs  [#1446](https://github.com/skycoin/skywire/pull/1446)
 -   move survey generation to its own goroutine  [#1445](https://github.com/skycoin/skywire/pull/1445)
--   rebuild UI  [#1444](https://github.com/skycoin/skywire/pull/1444)
 -   add hypervisor UI integration for managing the reward address [#1442](https://github.com/skycoin/skywire/pull/1442)
 -   update mainnet rules for collecting rewards under the new system [#1443](https://github.com/skycoin/skywire/pull/1443)
 -   omit all language differentiating types of miners (official, DIY) from mainnet_rules.md [#1443](https://github.com/skycoin/skywire/pull/1443)

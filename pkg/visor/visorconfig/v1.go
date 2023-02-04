@@ -8,6 +8,7 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -106,8 +107,8 @@ func Reload() (*V1, error) {
 // UpdateAppAutostart modifies a single app's autostart value within the config and also the given
 //
 // The updated config gets flushed to file if there are any changes.
-func (v1 *V1) UpdateAppAutostart(appName string, autoStart bool) error {
-	//	func (v1 *V1) UpdateAppAutostart(launch *appserver.AppLauncherConfig, appName string, autoStart bool) error {
+// func (v1 *V1) UpdateAppAutostart(appName string, autoStart bool) error {
+func (v1 *V1) UpdateAppAutostart(launch *launcher.AppLauncher, appName string, autoStart bool) error {
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
 	conf := v1.Launcher
@@ -122,21 +123,19 @@ func (v1 *V1) UpdateAppAutostart(appName string, autoStart bool) error {
 	if !changed {
 		return nil
 	}
-	/*
-		launch.ResetConfig(appserver.AppLauncherConfig{
-			VisorPK:       v1.PK,
-			Apps:          conf.Apps,
-			ServerAddr:    conf.ServerAddr,
-			DisplayNodeIP: conf.DisplayNodeIP,
-		})
-	*/
+	launch.ResetConfig(launcher.AppLauncherConfig{
+		VisorPK:       v1.PK,
+		Apps:          conf.Apps,
+		ServerAddr:    conf.ServerAddr,
+		DisplayNodeIP: conf.DisplayNodeIP,
+	})
 	return v1.flush(v1)
 }
 
 // UpdateAppArg updates the cli flag of the specified app config and also within the
 // The updated config gets flushed to file if there are any changes.
-func (v1 *V1) UpdateAppArg(appName, argName string, value interface{}) error {
-	//	func (v1 *V1) UpdateAppArg(launch *appserver.AppLauncher, appName, argName string, value interface{}) error {
+// func (v1 *V1) UpdateAppArg(appName, argName string, value interface{}) error {
+func (v1 *V1) UpdateAppArg(launch *launcher.AppLauncher, appName, argName string, value interface{}) error {
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
 
@@ -155,14 +154,12 @@ func (v1 *V1) UpdateAppArg(appName, argName string, value interface{}) error {
 	if !configChanged {
 		return nil
 	}
-	/*
-		launch.ResetConfig(appserver.AppLauncherConfig{
-			VisorPK:       v1.PK,
-			Apps:          conf.Apps,
-			ServerAddr:    conf.ServerAddr,
-			DisplayNodeIP: conf.DisplayNodeIP,
-		})
-	*/
+	launch.ResetConfig(launcher.AppLauncherConfig{
+		VisorPK:       v1.PK,
+		Apps:          conf.Apps,
+		ServerAddr:    conf.ServerAddr,
+		DisplayNodeIP: conf.DisplayNodeIP,
+	})
 	return v1.flush(v1)
 }
 

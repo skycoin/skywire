@@ -1220,15 +1220,16 @@ func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 		go func(hvErrs chan error) {
 			defer wg.Done()
-			var autoPeerIP string
-			if v.autoPeer {
-				autoPeerIP = v.autoPeerIP
-			} else {
-				autoPeerIP = ""
-			}
+			//			var autoPeerIP string
+			//			if v.autoPeer {
+			//				autoPeerIP = v.autoPeerIP
+			//			} else {
+			//				autoPeerIP = ""
+			//			}
 			defer delete(v.connectedHypervisors, hvPK)
 			v.connectedHypervisors[hvPK] = true
-			ServeRPCClient(ctx, log, autoPeerIP, v.dmsgC, rpcS, addr, hvErrs)
+			ServeRPCClient(ctx, log, v.dmsgC, rpcS, addr, hvErrs)
+			//			ServeRPCClient(ctx, log, autoPeerIP, v.dmsgC, rpcS, addr, hvErrs)
 
 		}(hvErrs)
 
@@ -1273,7 +1274,7 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 	go func() {
 		for range ticker.C {
 			c := context.Background()
-			if err := ut.UpdateVisorUptime(c); err != nil {
+			if err := ut.UpdateVisorUptime(c, v.conf.Version); err != nil {
 				v.isServicesHealthy.unset()
 				log.WithError(err).Warn("Failed to update visor uptime.")
 			} else {
