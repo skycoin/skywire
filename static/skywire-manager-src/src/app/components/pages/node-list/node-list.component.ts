@@ -244,12 +244,14 @@ export class NodeListComponent implements OnInit, OnDestroy {
       icon: 'edit'
     });
 
+    // TODO: remove if the option will not be added again. Delete the translatable strings too.
+    /*
     this.options.push({
       name: 'nodes.update-all',
       actionName: 'updateAll',
       icon: 'get_app'
     });
-
+    */
     if (this.canLogOut) {
       this.options.push({
         name: 'common.logout',
