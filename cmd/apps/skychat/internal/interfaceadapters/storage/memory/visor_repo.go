@@ -38,12 +38,6 @@ func (r *VisorRepo) GetByPK(pk cipher.PubKey) (*chat.Visor, error) {
 func (r *VisorRepo) GetAll() ([]chat.Visor, error) {
 	r.visorsMu.Lock()
 	defer r.visorsMu.Unlock()
-	// TODO(ersonp): code is unused; check for usage
-	// keys := make([]cipher.PubKey, 0)
-
-	// for key := range r.chats {
-	// 	keys = append(keys, key)
-	// }
 
 	var values []chat.Visor
 	for _, value := range r.visors {

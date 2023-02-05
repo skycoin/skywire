@@ -37,6 +37,26 @@ func (s *Server) AddMessage(pkroute util.PKRoute, m message.Message) {
 	s.Rooms[pkroute.Room] = r
 }
 
+// SetRouteInfo sets the info of the given room inside the server
+func (s *Server) SetRouteInfo(pkroute util.PKRoute, info info.Info) error {
+	if pkroute.Server == pkroute.Room {
+		s.SetInfo(info)
+	}
+
+	room, err := s.GetRoomByPK(pkroute.Room)
+	if err != nil {
+		return err
+	}
+	room.SetInfo(info)
+
+	err = s.SetRoom(*room)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // GetPKRoute returns the PKRoute
 func (s *Server) GetPKRoute() util.PKRoute {
 	return s.PKRoute
@@ -126,6 +146,7 @@ func (s *Server) DeleteMember(pk cipher.PubKey) error {
 		delete(s.Members, pk)
 		return nil
 	}
+	//TODO: also try to delete member from all rooms as he leaves the server
 	delete(s.Members, pk)
 	return nil
 }
@@ -177,7 +198,10 @@ func (s *Server) SetMemberInfo(i info.Info) error {
 		if err != nil {
 			return err
 		}
-		s.SetRoom(room)
+		err = s.SetRoom(room)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -229,7 +253,7 @@ func (s *Server) DeleteMuted(pk cipher.PubKey) error {
 }
 
 // GetAllMuted returns all muted members/peers
-func (s *Server) GetAllMuted(pk cipher.PubKey) map[cipher.PubKey]bool {
+func (s *Server) GetAllMuted() map[cipher.PubKey]bool {
 	return s.Muted
 }
 
@@ -362,7 +386,10 @@ func NewDefaultServer(route util.PKRoute) Server {
 	s.Rooms = make(map[cipher.PubKey]Room)
 	s.Conns = make(map[cipher.PubKey]net.Conn)
 
-	s.AddRoom(NewDefaultRemoteRoom(route))
+	err := s.AddRoom(NewDefaultRemoteRoom(route))
+	if err != nil {
+		fmt.Printf("Error in adding room: %s", err)
+	}
 
 	return s
 }

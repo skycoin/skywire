@@ -36,14 +36,16 @@ const (
 	ConnMsgTypeReject
 	// ConnMsgTypeLeave is used to handle connection message of type Leave
 	ConnMsgTypeLeave
+	// ConnMsgTypeDelete is used to handle connection message of type Delete
+	ConnMsgTypeDelete
 )
 
 // subtypes of InfoMsgType
 const (
 	//ErrInfoMsgType is used to handle info error messages
 	ErrInfoMsgType = iota
-	//InfoMsgTypeUser is used to handle the info of a single user or server
-	InfoMsgTypeUser
+	//InfoMsgTypeSingle is used to handle the info of a single user or server or room
+	InfoMsgTypeSingle
 	//InfoMsgTypeServerMembers is used to update the list of members of a server
 	InfoMsgTypeServerMembers
 	//InfoMsgTypeRoomMembers is used to update the list of members of a room

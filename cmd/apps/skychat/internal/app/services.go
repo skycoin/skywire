@@ -23,5 +23,5 @@ func NewServices(cliRepo client.Repository, usrRepo user.Repository, visorRepo c
 	return Services{
 		NotificationService: notifyService,
 		ChatServices:        chatservices.NewServices(cliRepo, visorRepo, usrRepo, ms, notifyService),
-		UserServices:        userservices.NewServices(usrRepo, ms)}
+		UserServices:        userservices.NewServices(usrRepo, ms, visorRepo)}
 }

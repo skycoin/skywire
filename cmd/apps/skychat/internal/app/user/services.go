@@ -5,6 +5,7 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/messenger"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/user/commands"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/user/queries"
+	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/chat"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/user"
 )
 
@@ -31,7 +32,7 @@ type UserServices struct {
 }
 
 // NewServices Bootstraps Application Layer dependencies
-func NewServices(usrRepo user.Repository, ms messenger.Service) UserServices {
+func NewServices(usrRepo user.Repository, ms messenger.Service, visorRepo chat.Repository) UserServices {
 	return UserServices{
 		Queries: Queries{
 			GetUserPeerBookHandler: queries.NewGetUserPeerbookRequestHandler(usrRepo),
@@ -42,7 +43,7 @@ func NewServices(usrRepo user.Repository, ms messenger.Service) UserServices {
 			AddPeerHandler:     commands.NewAddPeerRequestHandler(usrRepo),
 			DeletePeerHandler:  commands.NewDeletePeerRequestHandler(usrRepo),
 			SetPeerHandler:     commands.NewSetPeerRequestHandler(usrRepo),
-			SetInfoHandler:     commands.NewSetInfoRequestHandler(ms, usrRepo),
+			SetInfoHandler:     commands.NewSetInfoRequestHandler(ms, usrRepo, visorRepo),
 			SetSettingsHandler: commands.NewSetSettingsRequestHandler(usrRepo),
 		},
 	}

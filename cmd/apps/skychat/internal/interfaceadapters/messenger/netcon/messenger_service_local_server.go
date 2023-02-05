@@ -3,7 +3,7 @@ package netcon
 import (
 	"encoding/json"
 	"fmt"
-	"time"
+	"strconv"
 
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/notification"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/chat"
@@ -47,15 +47,15 @@ func (ms MessengerService) handleLocalServerMessage(m message.Message) error {
 	//the destination route of a message to send back to the root
 	dest := m.Root
 
-	//check if origin of message is a member or in blacklist of server //TODO: or not a member !! add always local as member
-	if _, ok := server.GetBlacklist()[m.Root.Visor]; ok {
+	//check if origin of message is in blacklist or not member of sever
+	_, isServerMember := server.GetAllMembers()[m.Root.Visor]
+	_, isInServerBlacklist := server.GetBlacklist()[m.Root.Visor]
+	if !isServerMember || isInServerBlacklist {
 		err = ms.SendChatRejectMessage(root, dest)
 		if err != nil {
-			//?:Maybe better continue than throwing an error as we don't care if the sending didnt work?
-			return err
+			return fmt.Errorf("error sending reject message: %s", err)
 		}
-		//? Maybe better continue and log the event?
-		return fmt.Errorf("Message rejected from " + m.Root.Visor.String())
+		return fmt.Errorf("message rejected from " + m.Root.Visor.String() + "isServerMember: " + strconv.FormatBool(isServerMember) + "isInServerBlacklist: " + strconv.FormatBool(isInServerBlacklist))
 	}
 
 	//handle Command Messages
@@ -68,18 +68,21 @@ func (ms MessengerService) handleLocalServerMessage(m message.Message) error {
 	}
 
 	//Check if room exists
-	r, err := server.GetRoomByPK(pkroute.Room)
+	room, err := server.GetRoomByPK(pkroute.Room)
 	if err != nil {
 		return err
 	}
 
-	//check if origin of message is member or in blacklist of room  //TODO: or not a member
-	if _, ok := r.GetBlacklist()[m.Root.Visor]; ok {
+	//check if origin of message is in blacklist or not member of room
+	_, isRoomMember := room.GetAllMembers()[m.Root.Visor]
+	_, isInRoomBlacklist := room.GetBlacklist()[m.Root.Visor]
+	if !isRoomMember || isInRoomBlacklist {
 		err = ms.SendChatRejectMessage(root, dest)
 		if err != nil {
-			return err
+			return fmt.Errorf("error sending reject message: %s", err)
 		}
-		return fmt.Errorf("Message rejected from " + m.Root.Visor.String())
+		return fmt.Errorf("message rejected from " + m.Root.Visor.String() + "isRoomMember: " + strconv.FormatBool(isRoomMember) + "isInRoomBlacklist: " + strconv.FormatBool(isInRoomBlacklist))
+
 	}
 
 	//now we can handle all other message-types
@@ -126,7 +129,7 @@ func (ms MessengerService) handleLocalServerConnMsgType(visor *chat.Visor, m mes
 	if err != nil {
 		return err
 	}
-	r, err := server.GetRoomByPK(m.Dest.Room)
+	room, err := server.GetRoomByPK(m.Dest.Room)
 	if err != nil {
 		return err
 	}
@@ -140,13 +143,16 @@ func (ms MessengerService) handleLocalServerConnMsgType(visor *chat.Visor, m mes
 	case message.ConnMsgTypeRequest:
 		//check if sender is in blacklist, if not send accept and info messages back, else send reject message
 		if _, ok := server.GetBlacklist()[m.Root.Visor]; !ok {
-			if _, ok2 := r.GetBlacklist()[m.Root.Visor]; !ok2 {
+			if _, ok2 := room.GetBlacklist()[m.Root.Visor]; !ok2 {
 
 				//add request message to room
-				r.AddMessage(m)
+				room.AddMessage(m)
 
 				//send request message to peers
-				ms.sendMessageToPeers(visor, m)
+				err = ms.sendMessageToPeers(visor, m)
+				if err != nil {
+					return err
+				}
 
 				//add remote peer to members so he is able to send other messages than connMsgType
 				info := info.NewDefaultInfo()
@@ -159,12 +165,12 @@ func (ms MessengerService) handleLocalServerConnMsgType(visor *chat.Visor, m mes
 					return err
 				}
 				//add remote peer to room
-				err = r.AddMember(*dummyPeer)
+				err = room.AddMember(*dummyPeer)
 				if err != nil {
 					return err
 				}
 				//update room inside server
-				err = server.SetRoom(*r)
+				err = server.SetRoom(*room)
 				if err != nil {
 					return err
 				}
@@ -192,12 +198,8 @@ func (ms MessengerService) handleLocalServerConnMsgType(visor *chat.Visor, m mes
 					return err
 				}
 
-				//!! FIXME
-				//This sleep is necessary, as it looks like the transport hangs up when sending two messages in a short time frame
-				time.Sleep(1 * time.Second)
-
 				//send the rooms info to the remote peer
-				err = ms.SendInfoMessage(pkroute, root, dest, r.GetInfo())
+				err = ms.SendInfoMessage(pkroute, root, dest, room.GetInfo())
 				if err != nil {
 					return err
 				}
@@ -219,6 +221,39 @@ func (ms MessengerService) handleLocalServerConnMsgType(visor *chat.Visor, m mes
 				return err
 			}
 			return fmt.Errorf("pk in server-blacklist rejected")
+		}
+	case message.ConnMsgTypeLeave:
+		// if pkroute defines room, remove from room membership
+		if pkroute.Server != pkroute.Room {
+			err = room.DeleteMember(m.Origin)
+			if err != nil {
+				return err
+			}
+			//update server with updated room
+			err = server.SetRoom(*room)
+			if err != nil {
+				return err
+			}
+
+			//TODO: send new member-list to members
+
+		} else {
+			// if pk route defines server, remove from server memberhsip (and all rooms membership in method included)
+			err = server.DeleteMember(m.Origin)
+			if err != nil {
+				return err
+			}
+
+			//TODO: for each room and the server: send new member-list to members
+		}
+		//update visor and respository
+		err = visor.SetServer(*server)
+		if err != nil {
+			return err
+		}
+		err = ms.visorRepo.Set(*visor)
+		if err != nil {
+			return err
 		}
 	default:
 		return fmt.Errorf("incorrect data received")
@@ -256,25 +291,28 @@ func (ms MessengerService) handleLocalServerCmdMsgType(visor *chat.Visor, m mess
 
 	switch m.MsgSubtype {
 	case message.CmdMsgTypeAddRoom:
-		//TODO: First check if origin of msg is admin
+		//First check if origin of msg is admin
+		if _, isAdmin := server.GetAllAdmin()[m.Root.Visor]; !isAdmin {
+			return fmt.Errorf("command not accepted, no admin")
+		}
 		// make a new route
 		rr := util.NewLocalRoomRoute(m.Dest.Visor, m.Dest.Server, server.GetAllRoomsBoolMap())
 
 		// setup room for repository
-		r := chat.NewLocalRoom(rr, i, chat.DefaultRoomType)
+		room := chat.NewLocalRoom(rr, i, chat.DefaultRoomType)
 
 		//setup user as peer for room membership
 		p := peer.NewPeer(*usr.GetInfo(), usr.GetInfo().Alias)
 		//Add user as member
-		err = r.AddMember(*p)
+		err = room.AddMember(*p)
 		if err != nil {
 			return err
 		}
 
-		//TODO:: if room is visible/public also add messengerService and send 'Room-Added' Message to Members of server
+		//TODO: if room is visible/public also add messengerService and send 'Room-Added' Message to Members of server
 
 		// add room to server, update visor and then update repository
-		err = server.AddRoom(r)
+		err = server.AddRoom(room)
 		if err != nil {
 			return err
 		}
@@ -296,10 +334,15 @@ func (ms MessengerService) handleLocalServerCmdMsgType(visor *chat.Visor, m mess
 		}
 		return nil
 	case message.CmdMsgTypeDeleteRoom:
-		//TODO: First check if origin of msg is admin
+		//First check if origin of msg is admin
+		if _, isAdmin := server.GetAllAdmin()[m.Root.Visor]; !isAdmin {
+			return fmt.Errorf("command not accepted, no admin")
+		}
 		//TODO: handle message
+		//send DeleteChatMessage to all members
+		//? do we have to differ between deleting the chat and stopping the service of forwarding and accepting any message?
 		return nil
-		//TODO: add other cmd messages
+		//[] add other cmd messages
 	default:
 		return fmt.Errorf("incorrect data received")
 	}
@@ -352,30 +395,46 @@ func (ms MessengerService) handleLocalServerInfoMsgType(v *chat.Visor, m message
 		return err
 	}
 
-	//TODO: send updated info of members to all members
+	//TODO: send updated info of member to all members
 
 	return nil
 }
 
 // handleLocalRoomTextMstType handles messages of type text of the p2p chat
-func (ms MessengerService) handleLocalRoomTextMsgType(v *chat.Visor, m message.Message) error {
+func (ms MessengerService) handleLocalRoomTextMsgType(visor *chat.Visor, m message.Message) error {
 	fmt.Println("handleLocalRoomTextMsgType")
 
 	pkroute := util.NewRoomRoute(m.GetDestinationVisor(), m.GetDestinationServer(), m.GetDestinationRoom())
 
-	//check if in muted of server
-	//TODO:
-	//check if in muted of room
-	//TODO:
-
-	//notify about a new TextMessage
-	n := notification.NewMsgNotification(pkroute, m)
-	err := ms.ns.Notify(n)
+	server, err := visor.GetServerByPK(m.Dest.Server)
 	if err != nil {
 		return err
 	}
 
-	err = ms.sendMessageToPeers(v, m)
+	room, err := server.GetRoomByPK(m.Dest.Room)
+	if err != nil {
+		return err
+	}
+
+	//notify about a new TextMessage
+	n := notification.NewMsgNotification(pkroute, m)
+	err = ms.ns.Notify(n)
+	if err != nil {
+		return err
+	}
+
+	//check if in muted in server
+	if _, ok := server.GetAllMuted()[m.Origin]; ok {
+		return nil
+	}
+
+	//check if in muted in room
+	if _, ok := room.GetAllMuted()[m.Origin]; ok {
+		return nil
+	}
+
+	//as the originator is not muted we send the message to the peers
+	err = ms.sendMessageToPeers(visor, m)
 	if err != nil {
 		return err
 	}
@@ -394,12 +453,12 @@ func (ms MessengerService) sendMessageToPeers(v *chat.Visor, m message.Message) 
 		return err
 	}
 
-	r, err := server.GetRoomByPK(m.Dest.Room)
+	room, err := server.GetRoomByPK(m.Dest.Room)
 	if err != nil {
 		return err
 	}
 
-	members := r.GetAllMembers()
+	members := room.GetAllMembers()
 
 	for _, peer := range members {
 
@@ -409,6 +468,7 @@ func (ms MessengerService) sendMessageToPeers(v *chat.Visor, m message.Message) 
 			m.Root = pkroute
 			m.Dest = util.NewP2PRoute(peer.GetPK())
 
+			//send message to the peer, but don't save it again in database
 			err := ms.sendMessage(pkroute, m, false)
 			if err != nil {
 				fmt.Printf("error sending group message to peer: %v", err)

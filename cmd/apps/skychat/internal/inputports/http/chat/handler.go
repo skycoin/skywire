@@ -33,8 +33,6 @@ const AddLocalServerURLParam = "addLocalServer"
 
 // AddLocalServerRequestModel represents the request model expected for Add request
 type AddLocalServerRequestModel struct {
-	//PKRoute
-	VisorPk string `json:"visorpk"`
 	//Info
 	Alias string `json:"alias"`
 	Desc  string `json:"desc"`
@@ -51,25 +49,13 @@ func (c Handler) AddLocalServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	route := util.PKRoute{}
-
-	visorpk := cipher.PubKey{}
-	err := visorpk.Set(requestModel.VisorPk)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(w, err.Error())
-		return
-	}
-	route.Visor = visorpk
-
 	info := info.Info{}
 	info.SetAlias(requestModel.Alias)
 	info.SetDescription(requestModel.Desc)
 	info.SetImg(requestModel.Img)
 
-	err = c.chatServices.Commands.AddLocalServerHandler.Handle(commands.AddLocalServerRequest{
-		Route: route,
-		Info:  info,
+	err := c.chatServices.Commands.AddLocalServerHandler.Handle(commands.AddLocalServerRequest{
+		Info: info,
 	})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -289,18 +275,19 @@ func (c Handler) SendAddRoomMessage(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// DeleteLocalServerByRouteURLParam contains the parameter identifier to be parsed by the handler
-const DeleteLocalServerByRouteURLParam = "deleteLocalServer"
+// DeleteLocalRouteURLParam contains the parameter identifier to be parsed by the handler
+const DeleteLocalRouteURLParam = "DeleteLocalRoute"
 
-// DeleteLocalServerByRouteRequestModel represents the request model expected for Delete request
-type DeleteLocalServerByRouteRequestModel struct {
+// DeleteLocalRouteRequestModel represents the request model expected for Delete request
+type DeleteLocalRouteRequestModel struct {
 	VisorPk  string `json:"visorpk"`
 	ServerPk string `json:"serverpk"`
+	RoomPk   string `json:"roompk"`
 }
 
-// DeleteLocalServerByRoute adds a room to the local visor/server
-func (c Handler) DeleteLocalServerByRoute(w http.ResponseWriter, r *http.Request) {
-	var requestModel DeleteLocalServerByRouteRequestModel
+// DeleteLocalRoute adds a room to the local visor/server
+func (c Handler) DeleteLocalRoute(w http.ResponseWriter, r *http.Request) {
+	var requestModel DeleteLocalRouteRequestModel
 	decodeErr := json.NewDecoder(r.Body).Decode(&requestModel)
 	if decodeErr != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -327,9 +314,20 @@ func (c Handler) DeleteLocalServerByRoute(w http.ResponseWriter, r *http.Request
 			return
 		}
 		route.Server = serverpk
+
+		if requestModel.RoomPk != "" {
+			roompk := cipher.PubKey{}
+			err = roompk.Set(requestModel.RoomPk)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprint(w, err.Error())
+				return
+			}
+			route.Room = roompk
+		}
 	}
 
-	err = c.chatServices.Commands.DeleteLocalServerHandler.Handle(commands.DeleteLocalServerRequest{
+	err = c.chatServices.Commands.DeleteLocalRouteHandler.Handle(commands.DeleteLocalRouteRequest{
 		Route: route,
 	})
 	if err != nil {
@@ -340,32 +338,10 @@ func (c Handler) DeleteLocalServerByRoute(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusOK)
 }
 
-// DeleteVisorByPKURLParam contains the parameter identifier to be parsed by the handler
-const DeleteVisorByPKURLParam = "deleteVisor"
-
-// DeleteVisorByPK Deletes the remote visor with the provided pk
-func (c Handler) DeleteVisorByPK(w http.ResponseWriter, r *http.Request) {
-	fmt.Println(formatRequest(r))
-	vars := mux.Vars(r)
-	fmt.Println(vars)
-	fmt.Println(vars[DeleteVisorByPKURLParam])
-	chatPK := cipher.PubKey{}
-	err := chatPK.Set(vars[DeleteVisorByPKURLParam])
-	if err != nil {
-		fmt.Println("could not convert pubkey")
-	}
-	fmt.Println(chatPK.Hex())
-	err = c.chatServices.Commands.DeleteRemoteVisorHandler.Handle(commands.DeleteRemoteVisorRequest{Pk: chatPK})
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprint(w, err.Error())
-	}
-}
-
 // LeaveRemoteRouteURLParam contains the parameter identifier to be parsed by the handler
 const LeaveRemoteRouteURLParam = "leaveRemoteRoute"
 
-// LeaveRemoteRouteRequestModel represents the request model expected for Leave request
+// LeaveRemoteRouteRequestModel represents the request model expected for Delete request
 type LeaveRemoteRouteRequestModel struct {
 	VisorPk  string `json:"visorpk"`
 	ServerPk string `json:"serverpk"`
@@ -401,6 +377,7 @@ func (c Handler) LeaveRemoteRoute(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		route.Server = serverpk
+
 		if requestModel.RoomPk != "" {
 			roompk := cipher.PubKey{}
 			err = roompk.Set(requestModel.RoomPk)
@@ -424,10 +401,8 @@ func (c Handler) LeaveRemoteRoute(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-//[]:rename to SendTextMessageURLParam
-
-// SendTextMessagePKURLParam contains the parameter identifier to be parsed by the handler
-const SendTextMessagePKURLParam = "sendTxtMsg"
+// SendTextMessageURLParam contains the parameter identifier to be parsed by the handler
+const SendTextMessageURLParam = "sendTxtMsg"
 
 // SendTextMessageRequestModel represents the request model expected for Add request
 type SendTextMessageRequestModel struct {

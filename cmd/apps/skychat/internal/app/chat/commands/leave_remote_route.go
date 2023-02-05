@@ -2,8 +2,11 @@
 package commands
 
 import (
+	"fmt"
+
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/messenger"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/chat"
+	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/user"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/util"
 )
 
@@ -18,66 +21,94 @@ type LeaveRemoteRouteRequestHandler interface {
 }
 
 type leaveRemoteRouteRequestHandler struct {
-	messengerService messenger.Service
-	visorRepo        chat.Repository
+	ms        messenger.Service
+	visorRepo chat.Repository
+	usrRepo   user.Repository
 }
 
 // NewLeaveRemoteRouteRequestHandler Handler constructor
-func NewLeaveRemoteRouteRequestHandler(messengerService messenger.Service, visorRepo chat.Repository) LeaveRemoteRouteRequestHandler {
-	return leaveRemoteRouteRequestHandler{messengerService: messengerService, visorRepo: visorRepo}
+func NewLeaveRemoteRouteRequestHandler(ms messenger.Service, visorRepo chat.Repository, usrRepo user.Repository) LeaveRemoteRouteRequestHandler {
+	return leaveRemoteRouteRequestHandler{ms: ms, visorRepo: visorRepo, usrRepo: usrRepo}
 }
 
 // Handle Handles the LeaveRemoteRouteRequest request
 func (h leaveRemoteRouteRequestHandler) Handle(command LeaveRemoteRouteRequest) error {
+	usr, err := h.usrRepo.GetUser()
+	if err != nil {
+		fmt.Printf("Error getting user from repository: %s", err)
+		return err
+	}
+
+	// Make sure that we don't leave a room of our own server
+	if command.Route.Visor == usr.GetInfo().GetPK() {
+		return fmt.Errorf("cannot leave route of own server")
+	}
+
 	// Check if visor exists
 	visor, err := h.visorRepo.GetByPK(command.Route.Visor)
 	if err != nil {
 		return err
 	}
+
+	// Check if handling p2p room
+	if command.Route.Server == command.Route.Room {
+		if !visor.P2PIsEmpty() {
+			err = h.ms.SendLeaveChatMessage(command.Route)
+			if err != nil {
+				return err
+			}
+			err = visor.DeleteP2P()
+			if err != nil {
+				return err
+			}
+		}
+
+		// Check if visor has servers, if not delete visor
+		if len(visor.GetAllServer()) == 0 {
+			return h.visorRepo.Delete(command.Route.Visor)
+		}
+
+		return h.visorRepo.Set(*visor)
+	}
+
 	// Check if server exists
 	server, err := visor.GetServerByPK(command.Route.Server)
 	if err != nil {
 		return err
 	}
 
-	//leave room if the request server and room are the same
-	if command.Route.Server == command.Route.Room {
-		// Check if room exists
-		_, err = server.GetRoomByPK(command.Route.Room)
-		if err != nil {
-			return err
-		}
+	// Check if room exists
+	_, err = server.GetRoomByPK(command.Route.Room)
+	if err != nil {
+		return err
+	}
 
-		//TODO: Send Leave-Room-Message
+	// Send LeaveChatMessage to remote server
+	err = h.ms.SendLeaveChatMessage(command.Route)
+	if err != nil {
+		return err
+	}
 
-		// Delete room from server
-		err = server.DeleteRoom(command.Route.Room)
-		if err != nil {
-			return err
-		}
+	// Delete room from server
+	err = server.DeleteRoom(command.Route.Room)
+	if err != nil {
+		return err
+	}
 
-		// Update visor with changed server
-		err = visor.SetServer(*server)
-		if err != nil {
-			return err
-		}
-
-		//TODO:check if this was the last room of the server, if so maybe also leave server
-
-		// Update repository with changed visor
-		return h.visorRepo.Set(*visor)
-	} else {
-
+	//check if this was the last room of the server
+	if len(server.GetAllRooms()) == 0 {
 		//TODO: Send Leave-Server-Message
-
-		// Delete server from visor
 		err = visor.DeleteServer(command.Route.Server)
 		if err != nil {
 			return err
 		}
-
-		// Update repository with changed visor
-		return h.visorRepo.Set(*visor)
 	}
 
+	// Check if visor has any other servers or p2p, if not delete visor
+	if len(visor.GetAllServer()) == 0 && visor.P2PIsEmpty() {
+		return h.visorRepo.Delete(command.Route.Visor)
+	}
+
+	// Update repository with changed visor
+	return h.visorRepo.Set(*visor)
 }

@@ -32,7 +32,7 @@ func (ns *NotificationService) Notify(notification notification.Notification) er
 	return nil
 }
 
-//InitChannel inits the channel with make
+// InitChannel inits the channel with make
 func (ns *NotificationService) InitChannel() {
 	ns.notifCh = make(chan string)
 }
@@ -42,7 +42,7 @@ func (ns *NotificationService) GetChannel() chan string {
 	return ns.notifCh
 }
 
-//Defer Channel includes all messages when the channel has to be deferred
+// DeferChannel includes all messages when the channel has to be deferred
 func (ns *NotificationService) DeferChannel() {
 	close(ns.notifCh)
 	ns.notifCh = nil

@@ -47,7 +47,7 @@ func (h getVisorByPKRequestHandler) Handle(query GetVisorByPKRequest) (GetVisorB
 		return GetVisorByPKResult{}, err
 	}
 
-	result = GetVisorByPKResult{Pk: visor.GetPK(), P2P: p2p, Server: visor.GetAllServer()}
+	result = GetVisorByPKResult{Pk: visor.GetPK(), P2P: *p2p, Server: visor.GetAllServer()}
 
 	return result, nil
 }

@@ -20,8 +20,8 @@ const (
 	//NewMsgNotifyType notifies about new message
 	NewMsgNotifyType
 	//DeleteChatNotifyType notifies about a deleted chat
-	//DeleteChatNotifyType
-	//TODO: add SentMsgNotifyType
+	DeleteChatNotifyType
+	//? add SentMsgNotifyType
 )
 
 // Notification provides a struct to send messages via the Service
@@ -32,13 +32,6 @@ type Notification struct {
 
 // NewMsgNotification notifies the user of a new message
 func NewMsgNotification(route util.PKRoute, msg message.Message) Notification {
-	/*Msg, err := json.Marshal(message.NewJSONMessage(msg))
-	if err != nil {
-		fmt.Printf("Failed to marshal json: %v", err)
-	}
-
-	clientMsg, err := json.Marshal(map[string]string{"visorpk": route.Visor.Hex(), "serverpk": route.Server.Hex(), "roompk": route.Room.Hex(), "message": string(Msg)})
-	*/
 	clientMsg, err := json.Marshal(map[string]string{"visorpk": route.Visor.Hex(), "serverpk": route.Server.Hex(), "roompk": route.Room.Hex()})
 
 	if err != nil {

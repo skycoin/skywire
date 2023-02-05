@@ -1035,7 +1035,7 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
             }
           }).catch(e => alert(e.message));   
         }else{
-          fetch('chats/' + "addLocalServer", { method: 'POST', body: JSON.stringify({ visorpk: visorpk, alias: alias, desc: description, img: ""}) })
+          fetch('chats/' + "addLocalServer", { method: 'POST', body: JSON.stringify({alias: alias, desc: description, img: ""}) })
           .then(res => {
             if (res.ok) {
               res.text()
@@ -1143,21 +1143,35 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
       }
 //// DELETE
 
-      //tries to delete the current selected [Chat]
-      deleteChat() {
+      //tries to delete the given route
+      leaveRemoteRoute() {  
         if (!this.chat) {
           return;
         }
-        
+
+        let route = null
+        Object.keys(this.chats).forEach(c => {
+          if (this.chats[c].pk == this.chat){
+            route = this.chats[c].route;
+          }
+        })
+
+        if (route == null){
+          return;
+        }
+
         const response = window.confirm("Are you sure you want to delete the chat?");
 
+        const visorpk = route.visor
+        const serverpk = route.server
+        const roompk = route.room
+
         if (response) {
-          
-          fetch('chats' + '/' + this.chat.toString() , { method: 'DELETE' })
+          fetch('chats' + '/leaveRemoteRoute', { method: 'POST', body: JSON.stringify({ visorpk: visorpk, serverpk: serverpk, roompk: roompk}) })
           .then(res => {
             if (res.ok) {
               res.text().then();
-              this.chats = this.chats.filter(v => v.pk != this.chat);
+              this.chats = this.chats.filter(v => v.pk != roompk);
               
               document.getElementById('messages').innerHTML = '';
               document.getElementById('chatButtonsContainer').classList.add('hidden');
@@ -1166,13 +1180,12 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
               
               const pkArea = item.getElementsByClassName('pk')[0];
 
-              if (pkArea.innerText === this.chat) {
+              if (pkArea.innerText === roompk) {
                 item.parentNode.removeChild(item);
               }});
               this.chat = null;
             } else {
-              //TODO: add visor-server-room pks to alert text
-              res.text().then(text => alert(`Failed to delete chat ${this.chat}: ${text}`));
+              res.text().then(text => alert(`Failed to leave chat:\n visor:\n${visorpk}\nserver:\n${serverpk}\nroom:\n${roompk}\nreason:\n${text}`));
             }
           })
 

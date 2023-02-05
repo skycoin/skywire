@@ -17,11 +17,14 @@ func (ms MessengerService) handleRemoteServerMessage(m message.Message) error {
 
 	pkroute := util.NewRoomRoute(m.GetRootVisor(), m.GetRootServer(), m.GetRootRoom())
 
-	//TODO: check if we are member -> if not ignore message
-
-	visor, err := ms.visorRepo.GetByPK(m.Root.Visor)
+	//check if we are member of remote server -> if not ignore message
+	visor, err := ms.visorRepo.GetByPK(pkroute.Visor)
 	if err != nil {
-		return err
+		return fmt.Errorf("message dumped: no member of remote, visor not even known")
+	}
+	_, err = visor.GetServerByPK(pkroute.Server)
+	if err != nil {
+		return fmt.Errorf("message dumped: no member of remote server")
 	}
 
 	switch m.GetMessageType() {
@@ -95,6 +98,7 @@ func (ms MessengerService) handleRemoteRoomConnMsgType(m message.Message) error 
 		if err != nil {
 			return err
 		}
+
 		//as the remote route has accepted the chat request we now can send our info
 		err = ms.SendInfoMessage(pkroute, root, dest, *user.GetInfo())
 		if err != nil {
@@ -102,14 +106,18 @@ func (ms MessengerService) handleRemoteRoomConnMsgType(m message.Message) error 
 		}
 
 	case message.ConnMsgTypeReject:
+		//notify that we send a reject message
 		n := notification.NewMsgNotification(m.Root, m)
 		err := ms.ns.Notify(n)
 		if err != nil {
 			return err
 		}
 		//? do we have to delete something here?
+		//? maybe we don't even have to notify the user, that a rejection happened?
 		return nil
-
+	case message.ConnMsgTypeDelete:
+		//? do we have to delete something here? --> maybe the peer wants to save the chat history and not delete it, therefore we would have to add some kind of flag or so, that
+		//? stops the user from sending any messages to the deleted chat/server
 	default:
 		return fmt.Errorf("incorrect data received")
 	}
@@ -120,6 +128,9 @@ func (ms MessengerService) handleRemoteRoomConnMsgType(m message.Message) error 
 // handleRemoteRoomInfoMsgType handles messages of type info of peers
 func (ms MessengerService) handleRemoteRoomInfoMsgType(v *chat.Visor, m message.Message) error {
 	fmt.Println("handleRemoteRoomInfoMsgType")
+
+	pkroute := util.NewRoomRoute(m.GetRootVisor(), m.GetRootServer(), m.GetRootRoom())
+
 	//unmarshal the received message bytes to info.Info
 	i := info.Info{}
 	err := json.Unmarshal(m.Message, &i)
@@ -134,26 +145,7 @@ func (ms MessengerService) handleRemoteRoomInfoMsgType(v *chat.Visor, m message.
 	fmt.Printf("Img:	%s \n", i.Img)
 	fmt.Println("---------------------------------------------------------------------------------------------------")
 
-	//TODO: ?? Put something like SetRoomInfo into visor as method so only a call of visor.SetRoomInfo etc. is needed everywhere and not getting server and then getting room??
-	//get server from visor
-	s, err := v.GetServerByPK(m.GetRootServer())
-	if err != nil {
-		return err
-	}
-
-	//get room from server
-	r, err := s.GetRoomByPK(m.GetRootRoom())
-	if err != nil {
-		return err
-	}
-
-	//update the info of the remote server
-	r.SetInfo(i) //TODO: return error?
-	err = s.SetRoom(*r)
-	if err != nil {
-		return err
-	}
-	err = v.SetServer(*s)
+	err = v.SetRouteInfo(pkroute, i)
 	if err != nil {
 		return err
 	}

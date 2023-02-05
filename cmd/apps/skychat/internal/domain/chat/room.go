@@ -18,11 +18,12 @@ const (
 	// ChatRoomType is used to define as chat room
 	ChatRoomType
 	// BoardRoomType is used to define as board
-	BoardRoomType
+	//BoardRoomType
 	// VoiceRoomType is used to define as voice chat
 	// VoiceRoom
 )
 
+// DefaultRoomType defines the default room type
 const DefaultRoomType = ChatRoomType
 
 // Room defines a room that can be of different types
@@ -30,6 +31,7 @@ const DefaultRoomType = ChatRoomType
 // A Server is always a part of a visor
 // So you can think of this hierarchial structure:
 //  (Visor (PublicKey1))
+//		-> P2P-Room
 //		-> Server1 (PublicKey1.1)
 //			-> Room1 (PublicKey1.1.1)
 //			-> Room2 (PublicKey1.1.2)
@@ -194,7 +196,7 @@ func (r *Room) DeleteMuted(pk cipher.PubKey) error {
 }
 
 // GetAllMuted returns all muted members/peers
-func (r *Room) GetAllMuted(pk cipher.PubKey) map[cipher.PubKey]bool {
+func (r *Room) GetAllMuted() map[cipher.PubKey]bool {
 	return r.Muted
 }
 

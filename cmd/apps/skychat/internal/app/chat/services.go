@@ -22,12 +22,10 @@ type Queries struct {
 
 // Commands Contains all available command handlers of this app
 type Commands struct {
-	AddLocalRoomHandler          commands.AddLocalRoomRequestHandler
 	AddLocalServerHandler        commands.AddLocalServerRequestHandler
 	JoinRemoteRouteHandler       commands.JoinRemoteRouteRequestHandler
-	DeleteLocalServerHandler     commands.DeleteLocalServerRequestHandler
+	DeleteLocalRouteHandler      commands.DeleteLocalRouteRequestHandler
 	LeaveRemoteRouteHandler      commands.LeaveRemoteRouteRequestHandler
-	DeleteRemoteVisorHandler     commands.DeleteRemoteVisorRequestHandler
 	SendAddRoomMessageHandler    commands.SendAddRoomMessageRequestHandler
 	SendDeleteRoomMessageHandler commands.SendDeleteRoomMessageRequestHandler
 	SendTextMessageHandler       commands.SendTextMessageRequestHandler
@@ -50,12 +48,10 @@ func NewServices(cliRepo client.Repository, visorRepo chat.Repository, userRepo 
 			GetAllMessagesFromRoomHandler: queries.NewGetAllMessagesFromRoomRequestHandler(visorRepo),
 		},
 		Commands: Commands{
-			AddLocalRoomHandler:          commands.NewAddLocalRoomRequestHandler(visorRepo, userRepo, ns),
 			AddLocalServerHandler:        commands.NewAddLocalServerRequestHandler(visorRepo, userRepo, ns),
 			JoinRemoteRouteHandler:       commands.NewJoinRemoteRouteRequestHandler(visorRepo, ms),
-			DeleteLocalServerHandler:     commands.NewDeleteLocalServerRequestHandler(ms, visorRepo),
-			LeaveRemoteRouteHandler:      commands.NewLeaveRemoteRouteRequestHandler(ms, visorRepo),
-			DeleteRemoteVisorHandler:     commands.NewDeleteRemoteVisorRequestHandler(cliRepo, visorRepo, ms),
+			DeleteLocalRouteHandler:      commands.NewDeleteLocalRouteRequestHandler(ms, visorRepo),
+			LeaveRemoteRouteHandler:      commands.NewLeaveRemoteRouteRequestHandler(ms, visorRepo, userRepo),
 			SendAddRoomMessageHandler:    commands.NewSendAddRoomMessageRequestHandler(ms),
 			SendDeleteRoomMessageHandler: commands.NewSendDeleteRoomMessageRequestHandler(ms),
 			SendTextMessageHandler:       commands.NewSendTextMessageRequestHandler(ms),

@@ -3,7 +3,6 @@ package netcon
 import (
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/notification"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/chat"
@@ -75,7 +74,7 @@ func (ms MessengerService) handleP2PMessage(m message.Message) error {
 			return err
 		}
 		//handle the message
-		err := ms.handleP2PTextMsgType(visor, m)
+		err := ms.handleP2PTextMsgType(m)
 		if err != nil {
 			return err
 		}
@@ -155,10 +154,6 @@ func (ms MessengerService) handleP2PConnMsgType(m message.Message) error {
 				return err
 			}
 
-			//!! FIXME
-			//This sleep is necessary, as it looks like the transport hangs up when sending two messages in a short time frame
-			time.Sleep(1 * time.Second)
-
 			//send the users info to the remote peer
 			err = ms.SendInfoMessage(pkroute, root, dest, *usr.GetInfo())
 			if err != nil {
@@ -171,7 +166,7 @@ func (ms MessengerService) handleP2PConnMsgType(m message.Message) error {
 			if err != nil {
 				return err
 			}
-			//TODO: !! we first have to check whether we don't have got servers of this visor saved
+			//TODO: !! we first have to check whether we don't have got any other servers of this visor saved
 			//deletes the visor from the repository
 			err = ms.visorRepo.Delete(pkroute.Visor)
 			if err != nil {
@@ -241,7 +236,10 @@ func (ms MessengerService) handleP2PInfoMsgType(v *chat.Visor, m message.Message
 	fmt.Println("---------------------------------------------------------------------------------------------------")
 
 	//update the info of the p2p
-	v.P2P.Info = i
+	err = v.SetRouteInfo(pkroute, i)
+	if err != nil {
+		return err
+	}
 	err = ms.visorRepo.Set(*v)
 	if err != nil {
 		return err
@@ -258,7 +256,7 @@ func (ms MessengerService) handleP2PInfoMsgType(v *chat.Visor, m message.Message
 }
 
 // handleP2PTextMstType handles messages of type text of the p2p chat
-func (ms MessengerService) handleP2PTextMsgType(c *chat.Visor, m message.Message) error {
+func (ms MessengerService) handleP2PTextMsgType(m message.Message) error {
 	fmt.Println("handleP2PTextMsgType")
 
 	pkroute := util.NewP2PRoute(m.Root.Visor)

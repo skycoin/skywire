@@ -12,8 +12,7 @@ import (
 
 // AddLocalServerRequest of AddLocalServerRequestHandler
 type AddLocalServerRequest struct {
-	Route util.PKRoute
-	Info  info.Info
+	Info info.Info
 }
 
 // AddLocalServerRequestHandler struct that allows handling AddLocalServerRequest
@@ -40,12 +39,11 @@ func (h addLocalServerRequestHandler) Handle(command AddLocalServerRequest) erro
 		return err
 	}
 
-	//TODO: Rewrite so the local visor pk must not be known from requester (-> use userRepo)
 	// Check if local visor exists, if not add the default local visor
 	visor := chat.Visor{}
-	pVisor, err := h.visorRepo.GetByPK(command.Route.Visor)
+	pVisor, err := h.visorRepo.GetByPK(usr.GetInfo().GetPK())
 	if err != nil {
-		visor = chat.NewUndefinedVisor(command.Route.Visor)
+		visor = chat.NewUndefinedVisor(usr.GetInfo().GetPK())
 		err = h.visorRepo.Add(visor)
 		if err != nil {
 			return err
@@ -71,8 +69,12 @@ func (h addLocalServerRequestHandler) Handle(command AddLocalServerRequest) erro
 	p := peer.NewPeer(*usr.GetInfo(), usr.GetInfo().Alias)
 
 	//Add user as member from server
-	//TODO: maybe also add user as server admin as we are sending all commands to the local server instance like it is a message from remote to only handle message from one point?
 	err = server.AddMember(*p)
+	if err != nil {
+		return err
+	}
+	//Add user as admin, otherwise we can't send admin command messages to our own server
+	err = server.AddAdmin(p.GetPK())
 	if err != nil {
 		return err
 	}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"time"
+	"unsafe"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
@@ -65,12 +66,13 @@ func (ms MessengerService) Handle(pk cipher.PubKey) {
 	for {
 
 		//read packets
-		buf := make([]byte, 32*1024)
+		buf := make([]byte, 32*1024*4)
 		n, err := conn.Read(buf)
+		fmt.Printf("Received %d bytes \n", n)
 		if err != nil {
 			fmt.Println("Failed to read packet:", err)
 			//close and delete connection
-			//TODO: close connection
+			//? close connection ?
 			err2 := pCli.DeleteConn(conn.RemoteAddr().(appnet.Addr).PubKey)
 			if err2 != nil {
 				errs <- err2
@@ -165,7 +167,8 @@ func (ms MessengerService) Dial(pk cipher.PubKey) (net.Conn, error) {
 	ms.ctx = ctx
 
 	err = r.Do(ms.ctx, func() error {
-		//TODO: notify that dialing is happening?
+		//? notify that dialing is happening?
+		//? How about not deleting the visor, but saving the failed dials as a message so the user can see that something is happening.
 		conn, err = pCli.GetAppClient().Dial(addr)
 		//could not find a valid connection to a chat, so delete it.
 		err2 := ms.visorRepo.Delete(pk)
@@ -213,11 +216,10 @@ func (ms MessengerService) sendMessage(pkroute util.PKRoute, m message.Message, 
 		fmt.Printf("New skychat added: %s\n", pkroute.String())
 	}
 
-	// if the message is a p2p message we have to check if the p2p room exists in the sever
+	// if the message is a p2p message we have to check if the p2p room exists in the server
 	if pkroute.Visor == pkroute.Server {
 		//maybe we already have a visor, but not yet a p2p-room so check if we have that.
-		_, err = v.GetP2P()
-		if err != nil {
+		if v.P2PIsEmpty() {
 			p2p := chat.NewDefaultP2PRoom(pkroute.Visor)
 			err = v.AddP2P(p2p)
 			if err != nil {
@@ -275,6 +277,8 @@ func (ms MessengerService) sendMessage(pkroute util.PKRoute, m message.Message, 
 	fmt.Printf("Message:		%s \n", string(m.Message))
 	fmt.Printf("Status:		%d \n", m.Status)
 	fmt.Printf("Seen:		%t \n", m.Seen)
+	fmt.Println("---------------------------------------------------------------------------------------------------")
+	fmt.Printf("Message Size: %T, %d\n", m, unsafe.Sizeof(m))
 	fmt.Println("---------------------------------------------------------------------------------------------------")
 
 	rm := message.NewRAWMessage(m)
@@ -488,6 +492,12 @@ func (ms MessengerService) sendMessageToLocalRoute(msg message.Message) error {
 
 // SendInfoMessage sends an info message to the given chat and notifies about sent message
 func (ms MessengerService) SendInfoMessage(pkroute util.PKRoute, root util.PKRoute, dest util.PKRoute, info info.Info) error {
+	usr, err := ms.usrRepo.GetUser()
+	if err != nil {
+		fmt.Printf("Error getting user from repository: %s", err)
+		return err
+	}
+
 	bytes, err := json.Marshal(info)
 	if err != nil {
 		fmt.Printf("Failed to marshal json: %v", err)
@@ -496,19 +506,20 @@ func (ms MessengerService) SendInfoMessage(pkroute util.PKRoute, root util.PKRou
 
 	m := message.NewChatInfoMessage(root, dest, bytes)
 
-	err = ms.sendMessage(pkroute, m, true)
-	if err != nil {
-		return err
-	}
-
-	//notify about sent info message
-	n := notification.NewMsgNotification(dest, m)
-	err = ms.ns.Notify(n)
-	if err != nil {
-		return err
+	if m.Dest.Visor == usr.GetInfo().GetPK() {
+		err = ms.sendMessageToLocalRoute(m)
+		if err != nil {
+			return err
+		}
+	} else {
+		err = ms.sendMessageToRemoteRoute(m)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
+
 }
 
 // SendChatAcceptMessage sends an accept-message from the root to the destination
@@ -531,10 +542,18 @@ func (ms MessengerService) SendChatRejectMessage(root util.PKRoute, dest util.PK
 	return nil
 }
 
-// SendChatLeaveMessage sends a leave-message from the root to the destination
-func (ms MessengerService) SendChatLeaveMessage(pkroute util.PKRoute, root util.PKRoute, dest util.PKRoute) error {
-	m := message.NewChatLeaveMessage(root, dest)
-	err := ms.sendMessage(pkroute, m, true)
+// SendLeaveChatMessage sends a leave-message from the root to the destination
+func (ms MessengerService) SendLeaveChatMessage(pkroute util.PKRoute) error {
+	usr, err := ms.usrRepo.GetUser()
+	if err != nil {
+		fmt.Printf("Error getting user from repository: %s", err)
+		return err
+	}
+
+	root := util.NewVisorOnlyRoute(usr.GetInfo().GetPK())
+
+	m := message.NewChatLeaveMessage(root, pkroute)
+	err = ms.sendMessage(pkroute, m, true)
 	if err != nil {
 		return err
 	}
@@ -553,6 +572,8 @@ func (ms MessengerService) Listen() {
 		fmt.Printf("Error listening network %v on port %d: %v\n", pCli.GetNetType(), pCli.GetPort(), err)
 		return
 	}
+
+	pCli.SetAppPort(pCli.GetAppClient(), pCli.GetPort())
 
 	go func() {
 		if err := <-ms.errs; err != nil {

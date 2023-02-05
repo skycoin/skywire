@@ -28,7 +28,7 @@ func NewSendAddRoomMessageRequestHandler(messengerService messenger.Service) Sen
 	return sendAddRoomMessageRequestHandler{messengerService: messengerService}
 }
 
-// Handle Handles the AddCragRequest
+// Handle handles the SendAddRoomMessageRequest
 func (h sendAddRoomMessageRequestHandler) Handle(command SendAddRoomMessageRequest) error {
 	err := h.messengerService.SendAddRoomMessage(command.Route, command.Info)
 	if err != nil {

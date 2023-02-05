@@ -36,11 +36,12 @@ func (h getAllVisorsRequestHandler) Handle() ([]GetAllVisorsResult, error) {
 	}
 	var result []GetAllVisorsResult
 	for _, visor := range res {
+
 		p2p, err := visor.GetP2P()
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, GetAllVisorsResult{Pk: visor.GetPK(), P2P: p2p, Server: visor.GetAllServer()})
+		result = append(result, GetAllVisorsResult{Pk: visor.GetPK(), P2P: *p2p, Server: visor.GetAllServer()})
 	}
 	return result, nil
 }

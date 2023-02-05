@@ -11,10 +11,14 @@ import (
 type Service interface {
 	Handle(pk cipher.PubKey)
 	Listen()
-	SendTextMessage(route util.PKRoute, msg []byte) error
+
+	//only used as client/p2p
 	SendRouteRequestMessage(route util.PKRoute) error
-	SendInfoMessage(pkroute util.PKRoute, root util.PKRoute, dest util.PKRoute, info info.Info) error
-	SendChatLeaveMessage(pkroute util.PKRoute, root util.PKRoute, dest util.PKRoute) error
-	SendAddRoomMessage(route util.PKRoute, info info.Info) error
+	SendLeaveChatMessage(pkroute util.PKRoute) error
+
+	//used as client/p2p and server
+	SendTextMessage(route util.PKRoute, msg []byte) error
 	SendDeleteRoomMessage(route util.PKRoute) error
+	SendAddRoomMessage(route util.PKRoute, info info.Info) error
+	SendInfoMessage(pkroute util.PKRoute, root util.PKRoute, dest util.PKRoute, info info.Info) error
 }

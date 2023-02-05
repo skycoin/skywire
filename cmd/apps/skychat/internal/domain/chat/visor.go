@@ -2,8 +2,10 @@ package chat
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/info"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/message"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/util"
 )
@@ -25,9 +27,14 @@ func (v *Visor) GetPK() cipher.PubKey {
 }
 
 // GetP2P returns peer to peer Room
-func (v *Visor) GetP2P() (Room, error) {
-	//TODO: check if p2p is empty
-	return v.P2P, nil
+// if the p2p is empty it returns an empty pointer
+func (v *Visor) GetP2P() (*Room, error) {
+	return &v.P2P, nil
+}
+
+// P2PIsEmpty returns a bool depending on if the visor has got a p2p
+func (v *Visor) P2PIsEmpty() bool {
+	return reflect.DeepEqual(v.P2P, Room{})
 }
 
 // AddServer adds the given server to the visor
@@ -129,6 +136,37 @@ func (v *Visor) AddMessage(pkroute util.PKRoute, m message.Message) {
 	v.Server[pkroute.Server] = s
 }
 
+// SetRouteInfo sets the info of the given route inside the visor
+func (v *Visor) SetRouteInfo(pkroute util.PKRoute, info info.Info) error {
+	if pkroute.Server == pkroute.Visor {
+		p2p, err := v.GetP2P()
+		if err != nil {
+			return err
+		}
+		p2p.SetInfo(info)
+		err = v.SetP2P(*p2p)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	server, err := v.GetServerByPK(pkroute.Server)
+	if err != nil {
+		return err
+	}
+	err = server.SetRouteInfo(pkroute, info)
+	if err != nil {
+		return err
+	}
+
+	err = v.SetServer(*server)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Constructors
 
 // NewUndefinedVisor creates undefined empty visor to a public key
@@ -165,7 +203,10 @@ func NewDefaultVisor(route util.PKRoute) Visor {
 	v.PK = route.Visor
 	v.Server = make(map[cipher.PubKey]Server)
 
-	v.AddServer(NewDefaultServer(route))
+	err := v.AddServer(NewDefaultServer(route))
+	if err != nil {
+		fmt.Printf("Error in adding server: %s", err)
+	}
 
 	return v
 }
