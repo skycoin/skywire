@@ -26,6 +26,7 @@
   "labeled-element": {
     "edit-label": "Edit label",
     "remove-label": "Remove label",
+    "go-to-settings": "Go to settings",
     "copy": "Copy",
     "remove-label-confirmation": "Do you really want to remove the label?",
     "unnamed-element": "Unnamed",
@@ -178,6 +179,7 @@
     "info": "Here you can set to which Skycoin address you want the rewards to be sent. If you leave the address empty, the registration will be deleted and the visor will not receive rewards.",
     "more-info-link": "(More info about the reward system)",
     "address": "Address",
+    "address-error": "Please enter a valid Skycoin address.",
     "save-config-button": "Save configuration",
     "done": "Changes saved.",
     "empty-warning": "The address in empty, so the registrations will be deleted and no rewards will be received. Do you really want to continue?"
@@ -187,6 +189,7 @@
     "title": "Router Configuration",
     "info": "Here you can configure how many hops the connections must pass through other Skywire visors before reaching the final destination.  NOTE: the changes will not affect the existing routes.",
     "min-hops": "Min hops",
+    "min-hops-error": "Please enter a valid number.",
     "save-config-button": "Save configuration",
     "done": "Changes saved."
   },
@@ -378,6 +381,7 @@
       "title": "Log",
       "empty": "There are no log messages for the selected time range.",
       "filter-button": "Only showing logs generated since:",
+      "view-all": "View all {{ totalLogs }} entries",
       "filter": {
         "title": "Filter",
         "filter": "Only show logs generated since",

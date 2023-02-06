@@ -1,7 +1,7 @@
 <div class="wrapper highlight-internal-icon"
   [matTooltip]="(!short ? 'labeled-element.tooltip' : 'labeled-element.tooltip-with-text') | translate:{ text: id }"
   [matTooltipClass]="{ 'tooltip-word-break': true }"
-  (click)="$event.stopPropagation(); processClick();"
+  (click)="$event.stopPropagation(); $event.preventDefault(); processClick();"
 >
   <span class="label">
     <!-- Label prefix. -->

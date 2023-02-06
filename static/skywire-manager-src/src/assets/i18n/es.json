@@ -26,6 +26,7 @@
   "labeled-element": {
     "edit-label": "Editar etiqueta",
     "remove-label": "Remover etiqueta",
+    "go-to-settings": "Ir a la configuración",
     "copy": "Copiar",
     "remove-label-confirmation": "¿Realmente desea eliminar la etiqueta?",
     "unnamed-element": "Sin nombre",
@@ -178,6 +179,7 @@
     "info": "Aquí usted puede establecer la dirección de Skycoin a la que quiere que se envíen las recompensas. Si deja la dirección vacía, el registro será eliminado y el visor no recibirá recompensas.",
     "more-info-link": "(Más información acerca del sistema de recompensas)",
     "address": "Dirección ",
+    "address-error": "Por favor, coloque una dirección Skycoin valida.",
     "save-config-button": "Guardar configuración",
     "done": "Cambios guardados.",
     "empty-warning": "La dirección está vacía, así que el registro será eliminado y no recibirá recompensas. ¿Realmente desea continuar?"
@@ -187,6 +189,7 @@
     "title": "Configuración del Enrutador",
     "info": "Aquí podrá configurar cuantos saltos la conexión deberá realizar a través de otros visores de Skywire antes de alcanzar el destino final. NOTA: los cambios no afectarán a las rutas ya existentes.",
     "min-hops": "Saltos mínimos",
+    "min-hops-error": "Por favor, coloque un número valido.",
     "save-config-button": "Guardar configuración",
     "done": "Cambios guardados."
   },
@@ -378,6 +381,7 @@
       "title": "Log",
       "empty": "No hay mensajes de log para el rango de fecha seleccionado.",
       "filter-button": "Mostrando sólo logs generados desde:",
+      "view-all": "Ver todas las {{ totalLogs }} entradas",
       "filter": {
         "title": "Filtro",
         "filter": "Mostrar sólo logs generados desde",
