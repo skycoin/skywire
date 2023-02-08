@@ -5,7 +5,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,7 +14,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 
@@ -28,7 +26,6 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsgget"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
-	coincipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
@@ -54,7 +51,6 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	"github.com/skycoin/skywire/pkg/utclient"
 	"github.com/skycoin/skywire/pkg/util/osutil"
-	"github.com/skycoin/skywire/pkg/util/pathutil"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -438,64 +434,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 }
 
 func initSystemSurvey(ctx context.Context, v *Visor, log *logging.Logger) error {
-	go func() {
-		if visorconfig.IsRoot() {
-			//check for valid reward address set as prerequisite for generating the system survey
-			rewardAddressBytes, err := os.ReadFile(visorconfig.PackageConfig().LocalPath + "/" + visorconfig.RewardFile) //nolint
-			if err == nil {
-				//remove any newline from rewardAddress string
-				rewardAddress := strings.TrimSuffix(string(rewardAddressBytes), "\n")
-				//validate the skycoin address
-				cAddr, err := coincipher.DecodeBase58Address(rewardAddress)
-				if err != nil {
-					log.WithError(err).Error("Invalid skycoin reward address.")
-					return
-				}
-				log.Info("Skycoin reward address: ", cAddr.String())
-				//generate the system survey
-				pathutil.EnsureDir(v.conf.LocalPath) //nolint
-				survey, err := visorconfig.SystemSurvey()
-				if err != nil {
-					log.WithError(err).Error("Could not read system info.")
-					return
-				}
-				survey.PubKey = v.conf.PK
-				survey.SkycoinAddress = cAddr.String()
-				// Print results.
-				s, err := json.MarshalIndent(survey, "", "\t")
-				if err != nil {
-					log.WithError(err).Error("Could not marshal json.")
-					return
-				}
-				err = os.WriteFile(v.conf.LocalPath+"/"+visorconfig.NodeInfo, s, 0644) //nolint
-				if err != nil {
-					log.WithError(err).Error("Failed to write system hardware survey to file.")
-					return
-				}
-				log.Info("Generating system survey")
-				f, err := os.ReadFile(filepath.Clean(v.conf.LocalPath + "/" + visorconfig.NodeInfo))
-				if err != nil {
-					log.WithError(err).Error("Failed to write system hardware survey to file.")
-					return
-				}
-				srvySha256Byte32 := sha256.Sum256([]byte(f))
-				err = os.WriteFile(v.conf.LocalPath+"/"+visorconfig.NodeInfoSha256, srvySha256Byte32[:], 0644) //nolint
-				if err != nil {
-					log.WithError(err).Error("Failed to write system hardware survey to file.")
-					return
-				}
-			} else {
-				err := os.Remove(visorconfig.PackageConfig().LocalPath + "/" + visorconfig.NodeInfo)
-				if err == nil {
-					log.Debug("Removed hadware survey for visor not seeking rewards")
-				}
-				err = os.Remove(visorconfig.PackageConfig().LocalPath + "/" + visorconfig.NodeInfoSha256)
-				if err == nil {
-					log.Debug("Removed hadware survey checksum file")
-				}
-			}
-		}
-	}()
+	go visorconfig.GenerateSurvey(v.conf, log)
 	return nil
 }
 
