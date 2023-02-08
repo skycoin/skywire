@@ -113,21 +113,27 @@ var logCmd = &cobra.Command{
 				defer httpC.CloseIdleConnections()
 				defer wg.Done()
 
+				deleteOnError := false
 				if _, err := os.ReadDir(key); err != nil {
 					if err := os.Mkdir(key, 0750); err != nil {
 						log.Panicf("Unable to create directory for visor %s", key)
 					}
+					deleteOnError = true
 				}
 
 				err = download(ctx, log, httpC, "node-info.json", "node-info.json", key)
 				if err != nil {
-					bulkFolders = append(bulkFolders, key)
+					if deleteOnError {
+						bulkFolders = append(bulkFolders, key)
+					}
 					return
 				}
 
 				err = download(ctx, log, httpC, "node-info.sha", "node-info.sha", key)
 				if err != nil {
-					bulkFolders = append(bulkFolders, key)
+					if deleteOnError {
+						bulkFolders = append(bulkFolders, key)
+					}
 					return
 				}
 
