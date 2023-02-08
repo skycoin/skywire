@@ -152,7 +152,7 @@ func run(conf *visorconfig.V1) error {
 	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
 	mLog.AddHook(hook)
 
-//commented out pending fixes for go 1.19
+	//commented out pending fixes for go 1.19
 	//stopPProf := initPProf(mLog, pprofMode, pprofAddr)
 	//defer stopPProf()
 
