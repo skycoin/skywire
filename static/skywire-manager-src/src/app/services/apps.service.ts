@@ -47,7 +47,14 @@ export class AppsService {
     const since = days !== -1 ? Date.now() - (days * 86400000) : 0;
     const sinceString = formatDate(since, 'yyyy-MM-ddTHH:mm:ssZZZZZ', 'en-US');
 
-    return this.apiService.get(`visors/${nodeKey}/apps/${encodeURIComponent(appName)}/logs?since=${sinceString}`
+    return this.apiService.get(this.getLogMessagesUrl(nodeKey, appName) + `?since=${sinceString}`
     ).pipe(map(response => response.logs));
+  }
+
+  /**
+   * Gets the partial URL for getting the logs of an app.
+   */
+  getLogMessagesUrl(nodeKey: string, appName: string) {
+    return `visors/${nodeKey}/apps/${encodeURIComponent(appName)}/logs`;
   }
 }
