@@ -27,6 +27,8 @@ var (
 	duration  int
 	minv      string
 	allVisors bool
+	batchSize int
+	utAddr    string
 )
 
 func init() {
@@ -35,6 +37,8 @@ func init() {
 	logCmd.Flags().StringVar(&minv, "minv", "v1.3.4", "minimum version for get logs, default is 1.3.4")
 	logCmd.Flags().IntVarP(&duration, "duration", "d", 1, "count of days before today to fetch logs")
 	logCmd.Flags().BoolVar(&allVisors, "all", false, "consider all visors, actually skip filtering on version")
+	logCmd.Flags().IntVar(&batchSize, "batchSize", 50, "number of visor in each batch, default is 50")
+	logCmd.Flags().StringVar(&utAddr, "ut", "", "custom uptime tracker url, usable for get specific(s) visors log data")
 }
 
 // RootCmd is surveyCmd
@@ -74,11 +78,13 @@ var logCmd = &cobra.Command{
 		if env == "test" {
 			endpoint = "https://ut.skywire.dev/uptimes?v=v2"
 		}
+		if utAddr != "" {
+			endpoint = utAddr
+		}
 		uptimes, err := getUptimes(endpoint, log)
 		if err != nil {
 			log.WithError(err).Panic("Unable to get data from uptime tracker.")
 		}
-
 		// Create dmsg http client
 		pk, sk, _ := genKeys("") //nolint
 		dmsgC, closeDmsg, err := dg.StartDmsg(ctx, log, pk, sk)
@@ -87,8 +93,14 @@ var logCmd = &cobra.Command{
 		}
 		defer closeDmsg()
 
-		httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
+		// Connect dmsgC to all servers
+		allServer := getAllDMSGServers()
+		for _, server := range allServer {
+			dmsgC.EnsureAndObtainSession(ctx, server.PK) //nolint
+		}
 
+		start := time.Now()
+		var bulkFolders []string
 		// Get visors data
 		var wg sync.WaitGroup
 		for _, v := range uptimes {
@@ -97,8 +109,9 @@ var logCmd = &cobra.Command{
 			}
 			wg.Add(1)
 			go func(key string, wg *sync.WaitGroup) {
+				httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC), Timeout: 10 * time.Second}
+				defer httpC.CloseIdleConnections()
 				defer wg.Done()
-				var infoErr, shaErr error
 
 				if _, err := os.ReadDir(key); err != nil {
 					if err := os.Mkdir(key, 0750); err != nil {
@@ -106,8 +119,18 @@ var logCmd = &cobra.Command{
 					}
 				}
 
-				infoErr = download(ctx, log, httpC, "node-info.json", "node-info.json", key)
-				shaErr = download(ctx, log, httpC, "node-info.sha", "node-info.sha", key)
+				err = download(ctx, log, httpC, "node-info.json", "node-info.json", key)
+				if err != nil {
+					bulkFolders = append(bulkFolders, key)
+					return
+				}
+
+				err = download(ctx, log, httpC, "node-info.sha", "node-info.sha", key)
+				if err != nil {
+					bulkFolders = append(bulkFolders, key)
+					return
+				}
+
 				if duration == 1 {
 					yesterday := time.Now().AddDate(0, 0, -1).UTC().Format("2006-01-02")
 					download(ctx, log, httpC, "transport_logs/"+yesterday+".csv", yesterday+".csv", key) //nolint
@@ -118,15 +141,21 @@ var logCmd = &cobra.Command{
 					}
 				}
 
-				if shaErr != nil || infoErr != nil {
-					if err := os.RemoveAll(key); err != nil {
-						log.Warnf("Unable to remove directory %s", key)
-					}
-				}
 			}(v.PubKey, &wg)
+			batchSize--
+			if batchSize == 0 {
+				time.Sleep(15 * time.Second)
+				batchSize = 50
+			}
 		}
 
 		wg.Wait()
+		for _, key := range bulkFolders {
+			if err := os.RemoveAll(key); err != nil {
+				log.Warnf("Unable to remove directory %s", key)
+			}
+		}
+		log.Infof("Process Duration: %s", time.Since(start))
 	},
 }
 
@@ -185,4 +214,28 @@ func genKeys(skStr string) (pk cipher.PubKey, sk cipher.SecKey, err error) {
 	}
 	pk, err = sk.PubKey()
 	return
+}
+
+func getAllDMSGServers() []dmsgServer {
+	var results []dmsgServer
+
+	response, err := http.Get("https://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers") //nolint
+	if err != nil {
+		return results
+	}
+
+	defer response.Body.Close() //nolint
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return results
+	}
+	err = json.Unmarshal(body, &results)
+	if err != nil {
+		return results
+	}
+	return results
+}
+
+type dmsgServer struct {
+	PK cipher.PubKey `json:"static"`
 }
