@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { of, Subscription } from 'rxjs';
-import { delay, flatMap } from 'rxjs/operators';
+import { delay, mergeMap } from 'rxjs/operators';
 
 import { TabButtonData, MenuOptionData } from '../../layout/top-bar/top-bar.component';
 import { AuthService, AuthStates } from '../../../services/auth.service';
@@ -77,7 +77,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       // Wait the delay.
       delay(delayMilliseconds),
       // Load the data. The node pk is obtained from the currently openned node page.
-      flatMap(() => this.authService.checkLogin())
+      mergeMap(() => this.authService.checkLogin())
     ).subscribe(
       result => {
         this.authChecked = true;

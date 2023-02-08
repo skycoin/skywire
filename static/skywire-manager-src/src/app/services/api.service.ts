@@ -40,7 +40,7 @@ export class ApiService {
    * with the dev server using the http protocol, because the dev server proxy uses it to
    * route the request to the appropiate url.
    */
-  private readonly apiPrefix = !environment.production && location.protocol.indexOf('http:') !== -1 ?
+  public readonly apiPrefix = !environment.production && location.protocol.indexOf('http:') !== -1 ?
     'http-api/' : 'api/';
 
   /**

@@ -40,3 +40,16 @@
     }
   }
 }
+
+.full-logs-button {
+  ::ng-deep button {
+    width: 100% !important;
+    display: block;
+    text-align: center;
+    margin-bottom: 15px;
+  }
+
+  .text-container {
+    width: 100%;
+  }
+}

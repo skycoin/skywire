@@ -8,6 +8,7 @@ import { ClipboardService } from 'src/app/services/clipboard.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { EditLabelComponent } from '../edit-label/edit-label.component';
 import GeneralUtils from 'src/app/utils/generalUtils';
+import { Router } from '@angular/router';
 
 /**
  * Represents the parts of a label.
@@ -142,6 +143,7 @@ export class LabeledElementTextComponent implements OnDestroy {
     private storageService: StorageService,
     private clipboardService: ClipboardService,
     private snackbarService: SnackbarService,
+    private router: Router,
   ) { }
 
   ngOnDestroy() {
@@ -168,6 +170,11 @@ export class LabeledElementTextComponent implements OnDestroy {
       });
     }
 
+    options.push({
+      icon: 'settings',
+      label: 'labeled-element.go-to-settings',
+    });
+
     // Show the options modal window.
     SelectOptionComponent.openDialog(this.dialog, options, 'common.options').afterClosed().subscribe((selectedOption: number) => {
       if (selectedOption === 1) {
@@ -175,18 +182,23 @@ export class LabeledElementTextComponent implements OnDestroy {
         if (this.clipboardService.copy(this.id)) {
           this.snackbarService.showDone('copy.copied');
         }
-      } else if (selectedOption === 3) {
-        // Ask for confirmation and remove the label.
-        const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'labeled-element.remove-label-confirmation');
+      } else if (selectedOption > 2) {
+        if (selectedOption === 3 && this.labelComponents.labelInfo) {
+          // Ask for confirmation and remove the label.
+          const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'labeled-element.remove-label-confirmation');
 
-        confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-          confirmationDialog.componentInstance.closeModal();
+          confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+            confirmationDialog.componentInstance.closeModal();
 
-          this.storageService.saveLabel(this.id, null, this.elementType);
-          this.snackbarService.showDone('edit-label.label-removed-warning');
+            this.storageService.saveLabel(this.id, null, this.elementType);
+            this.snackbarService.showDone('edit-label.label-removed-warning');
 
-          this.labelEdited.emit();
-        });
+            this.labelEdited.emit();
+          });
+        } else {
+          // Navigate to the settings page.
+          this.router.navigate(['/settings']);
+        }
       } else {
         // Params for the edit label modal window.
         if (selectedOption === 2) {

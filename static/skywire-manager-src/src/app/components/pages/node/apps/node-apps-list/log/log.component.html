@@ -6,12 +6,24 @@
     </div>
   </div>
   <mat-dialog-content #content>
+    <!-- Button for opening all the logs. -->
+    <a [href]="getLogsUrl()" target="_blank">
+      <app-button *ngIf="hasMoreLogMessages" class="full-logs-button" color="primary">
+        <div class="text-container">
+          {{ 'apps.log.view-all' | translate:{ totalLogs: totalLogs } }}
+        </div>
+      </app-button>
+    </a>
+
+    <!-- All entries. -->
     <div *ngFor="let message of logMessages" class="app-log-message">
       <span class="transparent">
         {{ message.time }}
       </span>
       {{ message.msg }}
     </div>
+
+    <!-- Msg if empty. -->
     <div class="app-log-empty mt-3" *ngIf="!loading && (!logMessages || logMessages.length === 0)">
       {{ 'apps.log.empty' | translate }}
     </div>

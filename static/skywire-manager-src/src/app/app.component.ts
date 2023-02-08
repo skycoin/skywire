@@ -2,7 +2,7 @@ import { Component } from '@angular/core';
 import { Router, NavigationEnd } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { of, Subscription } from 'rxjs';
-import { delay, flatMap } from 'rxjs/operators';
+import { delay, mergeMap } from 'rxjs/operators';
 
 import { StorageService } from './services/storage.service';
 import { SnackbarService } from './services/snackbar.service';
@@ -111,7 +111,7 @@ export class AppComponent {
     if (this.obtainPkSubscription) {
       this.obtainPkSubscription.unsubscribe();
     }
-    this.obtainPkSubscription = of(1).pipe(delay(delayMs), flatMap(() => this.apiService.get('about'))).subscribe(result => {
+    this.obtainPkSubscription = of(1).pipe(delay(delayMs), mergeMap(() => this.apiService.get('about'))).subscribe(result => {
       if (result.public_key) {
         this.finishStartup(result.public_key);
         this.hypervisorPkObtained = true;
