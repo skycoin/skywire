@@ -2,7 +2,7 @@ import { Component, OnInit, ViewChild, OnDestroy, ElementRef } from '@angular/co
 import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { MatDialogRef, MatDialog, MatDialogConfig } from '@angular/material/dialog';
 import { Subscription, of } from 'rxjs';
-import { delay, flatMap } from 'rxjs/operators';
+import { delay, mergeMap } from 'rxjs/operators';
 
 import { TransportService } from '../../../../../../services/transport.service';
 import { ButtonComponent } from '../../../../../layout/button/button.component';
@@ -224,7 +224,7 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
       // Wait the delay.
       delay(delayMilliseconds),
       // Load the data. The node pk is obtained from the currently openned node page.
-      flatMap(() => this.transportService.types(NodeComponent.getCurrentNodeKey()))
+      mergeMap(() => this.transportService.types(NodeComponent.getCurrentNodeKey()))
     ).subscribe(
       types => {
         // Sort the types and select dmsg as default, if posible.

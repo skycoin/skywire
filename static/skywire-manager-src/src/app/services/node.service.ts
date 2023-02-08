@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Observable, Subscription, BehaviorSubject, of } from 'rxjs';
-import { flatMap, map, delay, tap } from 'rxjs/operators';
+import { map, delay, tap, mergeMap } from 'rxjs/operators';
 import BigNumber from 'bignumber.js';
 
 import { StorageService } from './storage.service';
@@ -324,7 +324,7 @@ export class NodeService {
       tap(() => updatingSubject.next(true)),
       delay(120),
       // Load the data.
-      flatMap(() => operation))
+      mergeMap(() => operation))
     .subscribe(result => {
       updatingSubject.next(false);
 

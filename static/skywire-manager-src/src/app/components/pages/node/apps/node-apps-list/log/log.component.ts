@@ -1,7 +1,7 @@
 import { Component, Inject, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogConfig, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { Subscription, of } from 'rxjs';
-import { delay, flatMap } from 'rxjs/operators';
+import { delay, mergeMap } from 'rxjs/operators';
 
 import { AppsService } from '../../../../../../services/apps.service';
 import { Application } from '../../../../../../app.datatypes';
@@ -11,6 +11,7 @@ import { SnackbarService } from '../../../../../../services/snackbar.service';
 import { AppConfig } from 'src/app/app.config';
 import { OperationError } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
+import { ApiService } from 'src/app/services/api.service';
 
 /**
  * Represents a log entry.
@@ -38,7 +39,13 @@ interface LogMessage {
 export class LogComponent implements OnInit, OnDestroy {
   @ViewChild('content') content: ElementRef;
 
+  // Logs entries shown on the UI.
   logMessages: LogMessage[] = [];
+  // If not all logs entries ontained from the backend are being shown.
+  hasMoreLogMessages = false;
+  // How many log entries were obtained from the backend.
+  totalLogs = 0;
+
   loading = false;
   currentFilter: LogsFilter = {
     text: 'apps.log.filter.7-days',
@@ -70,6 +77,7 @@ export class LogComponent implements OnInit, OnDestroy {
     private appsService: AppsService,
     private dialog: MatDialog,
     private snackbarService: SnackbarService,
+    private apiService: ApiService,
   ) { }
 
   ngOnInit() {
@@ -92,6 +100,11 @@ export class LogComponent implements OnInit, OnDestroy {
     });
   }
 
+  // Returns the URL to get the full logs from the backend.
+  getLogsUrl(): string {
+    return '/' + this.apiService.apiPrefix + this.appsService.getLogMessagesUrl(NodeComponent.getCurrentNodeKey(), this.data.name);
+  }
+
   private loadData(delayMilliseconds: number) {
     this.removeSubscription();
 
@@ -100,7 +113,7 @@ export class LogComponent implements OnInit, OnDestroy {
       // Wait the delay.
       delay(delayMilliseconds),
       // Load the data. The node pk is obtained from the currently openned node page.
-      flatMap(() => this.appsService.getLogMessages(NodeComponent.getCurrentNodeKey(), this.data.name, this.currentFilter.days))
+      mergeMap(() => this.appsService.getLogMessages(NodeComponent.getCurrentNodeKey(), this.data.name, this.currentFilter.days))
     ).subscribe(
       (log) => this.onLogsReceived(log),
       (err: OperationError) => this.onLogsError(err)
@@ -119,22 +132,33 @@ export class LogComponent implements OnInit, OnDestroy {
     this.shouldShowError = true;
     this.snackbarService.closeCurrentIfTemporaryError();
 
+    let amount = 0;
+    this.hasMoreLogMessages = false;
+    this.totalLogs = logs.length;
+
     // Separate the date from the actual log msg and add the entry to the array that will populate the UI.
     logs.forEach(log => {
-      const dateStart = log.startsWith('[') ? 0 : -1;
-      const dateEnd = dateStart !== -1 ? log.indexOf(']') : -1;
+      // Limit how many entries to show.
+      if (amount < 5000) {
+        const dateStart = log.startsWith('[') ? 0 : -1;
+        const dateEnd = dateStart !== -1 ? log.indexOf(']') : -1;
 
-      if (dateStart !== -1 && dateEnd !== -1) {
-        this.logMessages.push({
-          time: log.substr(dateStart, dateEnd + 1),
-          msg: log.substr(dateEnd + 1),
-        });
+        if (dateStart !== -1 && dateEnd !== -1) {
+          this.logMessages.push({
+            time: log.substr(dateStart, dateEnd + 1),
+            msg: log.substr(dateEnd + 1),
+          });
+        } else {
+          this.logMessages.push({
+            time: '',
+            msg: log,
+          });
+        }
       } else {
-        this.logMessages.push({
-          time: '',
-          msg: log,
-        });
+        this.hasMoreLogMessages = true;
       }
+
+      amount += 1;
     });
 
     // Scroll to the bottom. Use a timer to wait for the UI to be updated.
