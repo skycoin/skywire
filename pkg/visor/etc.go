@@ -3,19 +3,19 @@ package visor
 
 import (
 	"fmt"
+	"net/http"
 	"os"
+	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
+	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/pkg/profile"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
-/*
-//	"net/http"
-//	"time"
-//	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
-//"github.com/pkg/profile" NOT WORKING WITH GO 1.19
+
 func initPProf(log *logging.MasterLogger, profMode string, profAddr string) (stop func()) {
 	var optFunc func(*profile.Profile)
 
@@ -56,7 +56,7 @@ func initPProf(log *logging.MasterLogger, profMode string, profAddr string) (sto
 	}
 	return stop
 }
-*/
+
 
 func logBuildInfo(mLog *logging.MasterLogger) {
 	log := mLog.PackageLogger("buildinfo")
