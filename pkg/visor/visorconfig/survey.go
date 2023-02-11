@@ -7,12 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ProtonMail/gopenpgp/v2/helper"
 	coincipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/util/pathutil"
-
-	"github.com/ProtonMail/gopenpgp/v2/helper"
 )
 
 // GenerateSurvey generate survey handler
