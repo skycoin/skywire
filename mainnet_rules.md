@@ -36,9 +36,15 @@ Reward notifications will happen via the skychat app, which is included with the
 
 ## Rewards
 
-**The new reward system requires Skywire >v1.3.0.**
+**The new reward system requires Skywire v1.3.4**
+
+Requirement established 2-11-2023
+
+Rewards Cutoff date for updating 4-1-2023
 
 The required minimal Skywire version will be incremented periodically.
+
+In the event of unrecoverable failure / loss of survey decryption keys & backup data, immediate updating to a new version will be required in order to continue receiving rewards.
 
 The rewards in the new system will be **paid daily or weekly**
 
@@ -63,6 +69,8 @@ The skycoin reward address is set per the visor via the cli or the hypervisor, i
 
 This survey will be fetched on a daily basis with [`dmsgget`](https://github.com/skycoin/dmsg/tree/develop/cmd/dmsgget), along with the transport logs, and checked to verify hardware and other requirements, etc. The transport logs from both ends of any given transport are compared and verified.
 
+The system survey is encrypted to the public key of the package maintainer, this key is present in the skywire github repository and is included with any future release
+
 ### Reward tiers
 
 There are three tiers for rewards.
@@ -70,7 +78,7 @@ There are three tiers for rewards.
 * **TIER 3** The lowest tier is distributed to all nodes which meet the basic requirements.
 
 Other tiers are based on bandwidth which was handled by the visor. Meaning the logs from each end of the transport were fetched and agree
- 
+
 * **TIER 2** If the visor processed **any** verifiable bandwidth, the visor will have earned the rewards of the second tier plus those of the lowest tier.
 * **TIER 1** If the visor processed above the average amount of bandwidth, it will receive first tier rewards, in addition to the lowest tier.
 
