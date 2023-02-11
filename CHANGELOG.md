@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
 ## 1.3.4
--   improve survey  [#1479](https://github.com/skycoin/skywire/pull/1479)
+-   Uncomment Profiler [#1480](https://github.com/skycoin/skywire/pull/1480)
+-   update changelog  [#1480](https://github.com/skycoin/skywire/pull/1480)
+-   update release pipeline to include skycoin.asc in release.  [#1480](https://github.com/skycoin/skywire/pull/1480)
+-   improve survey & encrypt to skycoin.asc  [#1479](https://github.com/skycoin/skywire/pull/1479)
 -   add key to repo for survey encryption  [#1478](https://github.com/skycoin/skywire/pull/1478)
 -   fix for go 1.19  [#1477](https://github.com/skycoin/skywire/pull/1477)
 -   rebuild ui  [#1476](https://github.com/skycoin/skywire/pull/1476)
