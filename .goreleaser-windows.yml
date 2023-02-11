@@ -58,6 +58,7 @@ archives:
     name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
     files:
       - dmsghttp-config.json
+      - skycoin.asc
     builds:
       - skywire-visor
       - skywire-cli
@@ -65,7 +66,7 @@ archives:
     allow_different_binary_count: true
 
 checksum:
-  name_template: 'checksums.txt'  
+  name_template: 'checksums.txt'
 snapshot:
   name_template: "{{ .Tag }}-next"
 changelog:
