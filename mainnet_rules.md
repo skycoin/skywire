@@ -44,7 +44,7 @@ Rewards Cutoff date for updating 4-1-2023
 
 The required minimal Skywire version will be incremented periodically.
 
-In the event of unrecoverable failure / loss of survey decryption keys & backup data, immediate updating to a new version will be required in order to continue receiving rewards.
+In the event of changes to the survey decryption key, it will be required to update in order to change the reward address
 
 The rewards in the new system will be **paid daily or weekly**
 
