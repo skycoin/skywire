@@ -2,8 +2,6 @@ name: Release
 # only trigger on pull request closed events
 on:
   push:
-    branches:
-      - develops
     tags:        
       - '*'  
 jobs:
