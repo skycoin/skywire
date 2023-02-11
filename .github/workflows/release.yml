@@ -12,10 +12,6 @@ jobs:
         with:
           go-version: 1.19.x
       - uses: actions/checkout@v3
-      # this added for skip make release on other branches and PRs
-      - name: Exit if not on develop branch
-        if: endsWith(github.ref, 'develop') == false
-        run: exit -1
       - name: Install Requirements
         run: |
           sudo apt update
