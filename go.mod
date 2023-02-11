@@ -30,15 +30,16 @@ require (
 	github.com/toqueteos/webbrowser v1.2.0
 	github.com/xtaci/kcp-go v5.4.20+incompatible
 	go.etcd.io/bbolt v1.3.6
-	golang.org/x/net v0.0.0-20211020060615-d418f374d309
-	golang.org/x/sys v0.0.0-20220704084225-05e143d24a9e
+	golang.org/x/net v0.0.0-20220722155237-a158d28d115b
+	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
-	golang.org/x/tools v0.1.5 // indirect
+	golang.org/x/tools v0.1.12 // indirect
 	golang.zx2c4.com/wireguard v0.0.0-20211012180210-dfd688b6aa7b
 	nhooyr.io/websocket v1.8.2 // indirect
 )
 
 require (
+	github.com/ProtonMail/gopenpgp/v2 v2.5.2
 	github.com/bitfield/script v0.19.0
 	github.com/blang/semver/v4 v4.0.0
 	github.com/go-chi/chi/v5 v5.0.8-0.20220103230436-7dbe9a0bd10f
@@ -53,7 +54,7 @@ require (
 	github.com/skycoin/systray v1.10.0
 	github.com/spf13/pflag v1.0.5
 	github.com/zcalusic/sysinfo v0.9.5
-	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+	golang.org/x/sync v0.0.0-20220819030929-7fc1605a5dde
 	periph.io/x/periph v3.6.8+incompatible
 )
 
@@ -64,7 +65,10 @@ require (
 	github.com/ActiveState/termtest/conpty v0.5.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20170929234023-d6e3b3328b78 // indirect
 	github.com/Microsoft/go-winio v0.4.16 // indirect
+	github.com/ProtonMail/go-crypto v0.0.0-20230124153114-0acdc8ae009b // indirect
+	github.com/ProtonMail/go-mime v0.0.0-20221031134845-8fd9bc37cf08 // indirect
 	github.com/StackExchange/wmi v1.2.1 // indirect
+	github.com/cloudflare/circl v1.1.0 // indirect
 	github.com/containerd/console v1.0.3 // indirect
 	github.com/creack/pty v1.1.15 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -96,9 +100,8 @@ require (
 	github.com/xo/terminfo v0.0.0-20210125001918-ca9a967f8778 // indirect
 	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519 // indirect
-	golang.org/x/mod v0.5.0 // indirect
+	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
 	golang.org/x/text v0.3.7 // indirect
-	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	howett.net/plist v1.0.0 // indirect
