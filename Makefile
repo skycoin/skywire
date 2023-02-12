@@ -296,20 +296,20 @@ github-release-archlinux: github-prepare-release
 github-release-darwin:
 	goreleaser --rm-dist  --config .goreleaser-darwin.yml --skip-publish
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags))
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-darwin-amd64.tar.gz
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-darwin-arm64.tar.gz
-	gh release download ${GITHUB_TAG} --repo skycoin/skywire --pattern 'checksums*'
+	gh release upload --repo mrpalide/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-darwin-amd64.tar.gz
+	gh release upload --repo mrpalide/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-darwin-arm64.tar.gz
+	gh release download ${GITHUB_TAG} --repo mrpalide/skywire --pattern 'checksums*'
 	cat ./dist/checksums.txt >> ./checksums.txt
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} --clobber ./checksums.txt
+	gh release upload --repo mrpalide/skywire ${GITHUB_TAG} --clobber ./checksums.txt
 
 github-release-windows:
 	.\goreleaser\goreleaser.exe --rm-dist  --config .goreleaser-windows.yml --skip-publish
 	$(eval GITHUB_TAG=$(shell powershell git describe --abbrev=0 --tags))
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-windows-amd64.zip
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-windows-386.zip
-	gh release download ${GITHUB_TAG} --repo skycoin/skywire --pattern 'checksums*'
+	gh release upload --repo mrpalide/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-windows-amd64.zip
+	gh release upload --repo mrpalide/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-windows-386.zip
+	gh release download ${GITHUB_TAG} --repo mrpalide/skywire --pattern 'checksums*'
 	cat ./dist/checksums.txt >> ./checksums.txt
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} --clobber ./checksums.txt
+	gh release upload --repo mrpalide/skywire ${GITHUB_TAG} --clobber ./checksums.txt
 
 dep-github-release:
 	mkdir musl-data
