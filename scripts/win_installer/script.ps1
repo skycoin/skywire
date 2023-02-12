@@ -43,19 +43,19 @@ function BuildInstaller($arch)
     InstallWix
     Write-Output "#       2. Fetching Archive from GitHub...               #"
     if ($version -eq "latest") {
-        $url = 'https://github.com/skycoin/skywire/releases/latest'
+        $url = 'https://github.com/mrpalide/skywire/releases/latest'
         $request = [System.Net.WebRequest]::Create($url)
         $response = $request.GetResponse()
         $realTagUrl = $response.ResponseUri.OriginalString
         $version = $realTagUrl.split('/')[-1].Trim('v')
         $fileName = "skywire-v$version-windows-$arch"
         $msiName = "skywire-installer-v$version-windows-$arch"
-        $downloadURL = "https://github.com/skycoin/skywire/releases/download/v$version/$filename.zip"
+        $downloadURL = "https://github.com/mrpalide/skywire/releases/download/v$version/$filename.zip"
         Invoke-WebRequest $downloadURL -o archive.zip -ErrorAction Stop
     } else {
         $fileName = "skywire-$version-windows-$arch"
         $msiName = "skywire-installer-$version-windows-$arch"
-        $downloadURL = "https://github.com/skycoin/skywire/releases/download/$version/$filename.zip"
+        $downloadURL = "https://github.com/mrpalide/skywire/releases/download/$version/$filename.zip"
         Invoke-WebRequest $downloadURL -o archive.zip
     }
 
