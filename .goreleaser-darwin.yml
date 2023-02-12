@@ -9,7 +9,7 @@ release:
     owner: mrpalide
     name: skywire
 
-  prerelease: true
+  #prerelease: true
 
 before:
   hooks:
