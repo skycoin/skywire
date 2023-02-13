@@ -356,6 +356,8 @@ func (v *Visor) SetRewardAddress(p string) (string, error) {
 	if err != nil {
 		return p, fmt.Errorf("failed to write config to file. err=%v", err)
 	}
+	// generate survey after set/update reward address
+	visorconfig.GenerateSurvey(v.conf, v.log)
 	return p, nil
 }
 

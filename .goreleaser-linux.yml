@@ -25,7 +25,7 @@ builds:
       - amd64
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
     main: ./cmd/skywire-visor/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
@@ -37,7 +37,7 @@ builds:
       - arm64
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
     main: ./cmd/skywire-visor/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
@@ -51,7 +51,7 @@ builds:
       - 6
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
     main: ./cmd/skywire-visor/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
@@ -65,7 +65,7 @@ builds:
       - 7
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
     main: ./cmd/skywire-visor/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
@@ -77,7 +77,7 @@ builds:
       - amd64
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
     main: ./cmd/skywire-cli/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
@@ -89,7 +89,7 @@ builds:
       - arm64
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
     main: ./cmd/skywire-cli/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
@@ -103,7 +103,7 @@ builds:
       - 6
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
     main: ./cmd/skywire-cli/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
@@ -117,7 +117,7 @@ builds:
       - 7
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
     main: ./cmd/skywire-cli/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
@@ -129,7 +129,7 @@ builds:
       - amd64
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
     main: ./cmd/apps/skychat/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
@@ -141,7 +141,7 @@ builds:
       - arm64
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
     main: ./cmd/apps/skychat/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
@@ -155,7 +155,7 @@ builds:
       - 6
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
     main: ./cmd/apps/skychat/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
@@ -169,7 +169,7 @@ builds:
       - 7
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
     main: ./cmd/apps/skychat/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
@@ -181,7 +181,7 @@ builds:
       - amd64
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
     main: ./cmd/apps/skysocks/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
@@ -193,7 +193,7 @@ builds:
       - arm64
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
     main: ./cmd/apps/skysocks/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
@@ -207,7 +207,7 @@ builds:
       - 6
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
     main: ./cmd/apps/skysocks/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
@@ -221,7 +221,7 @@ builds:
       - 7
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
     main: ./cmd/apps/skysocks/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
@@ -233,7 +233,7 @@ builds:
       - amd64
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
     main: ./cmd/apps/skysocks-client/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
@@ -245,7 +245,7 @@ builds:
       - arm64
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
     main: ./cmd/apps/skysocks-client/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
@@ -259,7 +259,7 @@ builds:
       - 6
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
     main: ./cmd/apps/skysocks-client/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
@@ -273,7 +273,7 @@ builds:
       - 7
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
     main: ./cmd/apps/skysocks-client/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
@@ -285,7 +285,7 @@ builds:
       - amd64
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
     main: ./cmd/apps/vpn-server/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
@@ -297,7 +297,7 @@ builds:
       - arm64
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
     main: ./cmd/apps/vpn-server/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
@@ -311,7 +311,7 @@ builds:
       - 6
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
     main: ./cmd/apps/vpn-server/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
@@ -325,7 +325,7 @@ builds:
       - 7
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
     main: ./cmd/apps/vpn-server/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
@@ -337,7 +337,7 @@ builds:
       - amd64
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
     main: ./cmd/apps/vpn-client/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
@@ -349,7 +349,7 @@ builds:
       - arm64
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
     main: ./cmd/apps/vpn-client/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
@@ -363,7 +363,7 @@ builds:
       - 6
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
     main: ./cmd/apps/vpn-client/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
@@ -377,7 +377,7 @@ builds:
       - 7
     env:
       - CGO_ENABLED=1
-      - CC=/home/appveyor/projects/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
+      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
     main: ./cmd/apps/vpn-client/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
@@ -388,6 +388,7 @@ archives:
     name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
     files:
       - dmsghttp-config.json
+      - skycoin.asc
     builds:
       - skywire-visor-amd64
       - skywire-cli-amd64
@@ -403,6 +404,7 @@ archives:
     name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
     files:
       - dmsghttp-config.json
+      - skycoin.asc
     builds:
       - skywire-visor-arm64
       - skywire-cli-arm64
@@ -418,6 +420,7 @@ archives:
     name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
     files:
       - dmsghttp-config.json
+      - skycoin.asc
     builds:
       - skywire-visor-arm
       - skywire-cli-arm
@@ -433,6 +436,7 @@ archives:
     name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}hf'
     files:
       - dmsghttp-config.json
+      - skycoin.asc
     builds:
       - skywire-visor-armhf
       - skywire-cli-armhf

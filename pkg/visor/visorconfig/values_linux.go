@@ -5,6 +5,7 @@ package visorconfig
 
 import (
 	"runtime"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jaypipes/ghw"
@@ -75,6 +76,7 @@ func UpdateCommand() []string {
 
 // Survey system hardware survey struct
 type Survey struct {
+	Timestamp      time.Time        `json:"timestamp"`
 	PubKey         cipher.PubKey    `json:"public_key,omitempty"`
 	SkycoinAddress string           `json:"skycoin_address,omitempty"`
 	GOOS           string           `json:"go_os,omitempty"`
@@ -106,6 +108,7 @@ func SystemSurvey() (Survey, error) {
 		return Survey{}, err
 	}
 	s := Survey{
+		Timestamp:      time.Now(),
 		IPInfo:         IPSkycoinFetch(),
 		IPAddr:         IPA(),
 		GOOS:           runtime.GOOS,

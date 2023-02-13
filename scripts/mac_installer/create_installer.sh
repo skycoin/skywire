@@ -75,6 +75,7 @@ function build_installer() {
   mv ./skywire-cli ${installer_package_dir}/Contents/MacOS/skywire-cli
   mv ./apps/vpn-client ${installer_package_dir}/Contents/MacOS/apps/vpn-client
   cp ./dmsghttp-config.json ${installer_package_dir}/Contents/MacOS/dmsghttp-config.json
+  cp ./skycoin.asc ${installer_package_dir}/Contents/MacOS/skycoin.asc
 
   cat <<EOF >${installer_package_dir}/Contents/MacOS/Skywire
 #!/bin/bash
