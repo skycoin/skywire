@@ -269,6 +269,7 @@ func NewChatInfoMessage(root util.PKRoute, dest util.PKRoute, info []byte) Messa
 	m.Root = root
 	m.Dest = dest
 	m.MsgType = InfoMsgType
+	m.MsgSubtype = InfoMsgTypeSingle
 	m.Message = info
 	m.Status = MsgStatusInitial
 	m.Time = time.Now()
@@ -298,6 +299,20 @@ func NewDeleteRoomMessage(root util.PKRoute, dest util.PKRoute) Message {
 	m.MsgType = CmdMsgType
 	m.MsgSubtype = CmdMsgTypeDeleteRoom
 	m.Message = []byte("Room Deleted")
+	m.Status = MsgStatusInitial
+	m.Time = time.Now()
+	return m
+}
+
+// NewRoomMembersMessage returns a Message of roomMembers
+func NewRoomMembersMessage(root util.PKRoute, dest util.PKRoute, members []byte) Message {
+	m := Message{}
+	m.Origin = root.Visor
+	m.Root = root
+	m.Dest = dest
+	m.MsgType = InfoMsgType
+	m.MsgSubtype = InfoMsgTypeRoomMembers
+	m.Message = members
 	m.Status = MsgStatusInitial
 	m.Time = time.Now()
 	return m

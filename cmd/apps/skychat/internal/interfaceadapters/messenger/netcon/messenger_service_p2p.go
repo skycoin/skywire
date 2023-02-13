@@ -206,8 +206,26 @@ func (ms MessengerService) handleP2PConnMsgType(m message.Message) error {
 		if err != nil {
 			return err
 		}
-	case message.ConnMsgTypeLeave:
-		return fmt.Errorf("commands are not allowed on p2p chats")
+	case message.ConnMsgTypeDelete, message.ConnMsgTypeLeave:
+		//get the visor
+		v, err := ms.visorRepo.GetByPK(pkroute.Visor)
+		if err != nil {
+			return err
+		}
+
+		//add request message to visor route
+		v.AddMessage(pkroute, m)
+		err = ms.visorRepo.Set(*v)
+		if err != nil {
+			return err
+		}
+
+		//notify that we received an accept message
+		n := notification.NewMsgNotification(pkroute, m)
+		err = ms.ns.Notify(n)
+		if err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("incorrect data received")
 	}

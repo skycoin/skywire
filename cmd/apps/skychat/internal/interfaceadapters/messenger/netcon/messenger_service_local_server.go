@@ -149,7 +149,7 @@ func (ms MessengerService) handleLocalServerConnMsgType(visor *chat.Visor, m mes
 				room.AddMessage(m)
 
 				//send request message to peers
-				err = ms.sendMessageToPeers(visor, m)
+				err = ms.sendMessageToPeers(visor, pkroute, m)
 				if err != nil {
 					return err
 				}
@@ -199,12 +199,26 @@ func (ms MessengerService) handleLocalServerConnMsgType(visor *chat.Visor, m mes
 				}
 
 				//send the rooms info to the remote peer
-				err = ms.SendInfoMessage(pkroute, root, dest, room.GetInfo())
+				err = ms.sendLocalRouteInfoToPeer(pkroute, dest, room.GetInfo())
 				if err != nil {
 					return err
 				}
 
-				//TODO: send new member-list to members
+				// send new member-list to members
+				members := room.GetAllMembers()
+
+				bytes, err := json.Marshal(members)
+				if err != nil {
+					fmt.Printf("Failed to marshal json: %v", err)
+					return err
+				}
+
+				msg := message.NewRoomMembersMessage(root, dest, bytes)
+
+				err = ms.sendMessageToPeers(visor, pkroute, msg)
+				if err != nil {
+					return err
+				}
 
 			} else {
 				//sends a chat-reject-message to the remote peer
@@ -222,7 +236,7 @@ func (ms MessengerService) handleLocalServerConnMsgType(visor *chat.Visor, m mes
 			}
 			return fmt.Errorf("pk in server-blacklist rejected")
 		}
-	case message.ConnMsgTypeLeave:
+	case message.ConnMsgTypeLeave, message.ConnMsgTypeDelete:
 		// if pkroute defines room, remove from room membership
 		if pkroute.Server != pkroute.Room {
 			err = room.DeleteMember(m.Origin)
@@ -235,7 +249,21 @@ func (ms MessengerService) handleLocalServerConnMsgType(visor *chat.Visor, m mes
 				return err
 			}
 
-			//TODO: send new member-list to members
+			// send new member-list to members
+			members := room.GetAllMembers()
+
+			bytes, err := json.Marshal(members)
+			if err != nil {
+				fmt.Printf("Failed to marshal json: %v", err)
+				return err
+			}
+
+			msg := message.NewRoomMembersMessage(root, dest, bytes)
+
+			err = ms.sendMessageToPeers(visor, pkroute, msg)
+			if err != nil {
+				return err
+			}
 
 		} else {
 			// if pk route defines server, remove from server memberhsip (and all rooms membership in method included)
@@ -282,7 +310,7 @@ func (ms MessengerService) handleLocalServerCmdMsgType(visor *chat.Visor, m mess
 		return err
 	}
 
-	//unmarshal the received message bytes to info.Info
+	//unmarshal the received message bytes to info.Info //FIXME: unmarshal to other thing than info
 	i := info.Info{}
 	err = json.Unmarshal(m.Message, &i)
 	if err != nil {
@@ -396,8 +424,39 @@ func (ms MessengerService) handleLocalServerInfoMsgType(v *chat.Visor, m message
 	}
 
 	//TODO: send updated info of member to all members
+	//FIXME: START: for the moment lets just update the whole list
+	server, err := v.GetServerByPK(m.Dest.Server)
+	if err != nil {
+		return err
+	}
+	room, err := server.GetRoomByPK(m.Dest.Room)
+	if err != nil {
+		return err
+	}
 
+	//the root route of this server (== the Destination of the message)
+	root := pkroute
+	//the destination route of a message to send back to the root
+	dest := m.Root
+	// send new member-list to members
+	members := room.GetAllMembers()
+
+	bytes, err := json.Marshal(members)
+	if err != nil {
+		fmt.Printf("Failed to marshal json: %v", err)
+		return err
+	}
+
+	msg := message.NewRoomMembersMessage(root, dest, bytes)
+
+	err = ms.sendMessageToPeers(v, pkroute, msg)
+	if err != nil {
+		return err
+
+	}
+	//FIXME: END
 	return nil
+
 }
 
 // handleLocalRoomTextMstType handles messages of type text of the p2p chat
@@ -434,7 +493,7 @@ func (ms MessengerService) handleLocalRoomTextMsgType(visor *chat.Visor, m messa
 	}
 
 	//as the originator is not muted we send the message to the peers
-	err = ms.sendMessageToPeers(visor, m)
+	err = ms.sendMessageToPeers(visor, pkroute, m)
 	if err != nil {
 		return err
 	}
@@ -443,17 +502,17 @@ func (ms MessengerService) handleLocalRoomTextMsgType(visor *chat.Visor, m messa
 }
 
 //
-func (ms MessengerService) sendMessageToPeers(v *chat.Visor, m message.Message) error {
+func (ms MessengerService) sendMessageToPeers(v *chat.Visor, pkroute util.PKRoute, m message.Message) error {
 	fmt.Println("sendMessageToPeers")
 
-	pkroute := util.NewRoomRoute(m.GetDestinationVisor(), m.GetDestinationServer(), m.GetDestinationRoom())
+	//pkroute := util.NewRoomRoute(m.GetDestinationVisor(), m.GetDestinationServer(), m.GetDestinationRoom())
 
-	server, err := v.GetServerByPK(m.Dest.Server)
+	server, err := v.GetServerByPK(pkroute.Server)
 	if err != nil {
 		return err
 	}
 
-	room, err := server.GetRoomByPK(m.Dest.Room)
+	room, err := server.GetRoomByPK(pkroute.Room)
 	if err != nil {
 		return err
 	}
@@ -476,5 +535,30 @@ func (ms MessengerService) sendMessageToPeers(v *chat.Visor, m message.Message) 
 			}
 		}
 	}
+	return nil
+}
+
+// sendLocalRouteInfoToPeer sends the given message to a remote route as server
+func (ms MessengerService) sendLocalRouteInfoToPeer(pkroute util.PKRoute, dest util.PKRoute, info info.Info) error {
+	bytes, err := json.Marshal(info)
+	if err != nil {
+		fmt.Printf("Failed to marshal json: %v", err)
+		return err
+	}
+
+	m := message.NewChatInfoMessage(pkroute, dest, bytes)
+
+	err = ms.sendMessage(pkroute, m, true)
+	if err != nil {
+		return err
+	}
+
+	//notify about sent text message
+	n := notification.NewMsgNotification(pkroute, m)
+	err = ms.ns.Notify(n)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }

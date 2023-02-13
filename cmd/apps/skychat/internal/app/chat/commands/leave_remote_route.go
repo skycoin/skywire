@@ -53,7 +53,7 @@ func (h leaveRemoteRouteRequestHandler) Handle(command LeaveRemoteRouteRequest) 
 	// Check if handling p2p room
 	if command.Route.Server == command.Route.Room {
 		if !visor.P2PIsEmpty() {
-			err = h.ms.SendLeaveChatMessage(command.Route)
+			err = h.ms.SendLeaveRouteMessage(command.Route)
 			if err != nil {
 				return err
 			}
@@ -84,7 +84,7 @@ func (h leaveRemoteRouteRequestHandler) Handle(command LeaveRemoteRouteRequest) 
 	}
 
 	// Send LeaveChatMessage to remote server
-	err = h.ms.SendLeaveChatMessage(command.Route)
+	err = h.ms.SendLeaveRouteMessage(command.Route)
 	if err != nil {
 		return err
 	}

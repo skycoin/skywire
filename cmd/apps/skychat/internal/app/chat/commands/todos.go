@@ -26,6 +26,7 @@ package commands
 //usecases--------------------------------------------
 
 //p2p-----------------------
+//make p2p room within own visor -> for informations from other apps or so?
 
 //server & rooms------------
 //TODO:send_hire_admin_message.go 		//maybe only allow this action from server-host

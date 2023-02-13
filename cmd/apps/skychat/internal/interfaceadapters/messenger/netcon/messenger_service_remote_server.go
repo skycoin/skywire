@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/notification"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/chat"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/info"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/message"
+	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/peer"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/util"
 )
 
@@ -117,7 +119,7 @@ func (ms MessengerService) handleRemoteRoomConnMsgType(m message.Message) error 
 		return nil
 	case message.ConnMsgTypeDelete:
 		//? do we have to delete something here? --> maybe the peer wants to save the chat history and not delete it, therefore we would have to add some kind of flag or so, that
-		//? stops the user from sending any messages to the deleted chat/server
+		//? stops the peers from sending any messages to the deleted chat/server
 	default:
 		return fmt.Errorf("incorrect data received")
 	}
@@ -131,37 +133,79 @@ func (ms MessengerService) handleRemoteRoomInfoMsgType(v *chat.Visor, m message.
 
 	pkroute := util.NewRoomRoute(m.GetRootVisor(), m.GetRootServer(), m.GetRootRoom())
 
-	//unmarshal the received message bytes to info.Info
-	i := info.Info{}
-	err := json.Unmarshal(m.Message, &i)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal json message: %v", err)
-	}
-	fmt.Println("---------------------------------------------------------------------------------------------------")
-	fmt.Printf("InfoMessage: \n")
-	fmt.Printf("Pk:		%s \n", i.Pk.Hex())
-	fmt.Printf("Alias:	%s \n", i.Alias)
-	fmt.Printf("Desc:	%s \n", i.Desc)
-	fmt.Printf("Img:	%s \n", i.Img)
-	fmt.Println("---------------------------------------------------------------------------------------------------")
+	switch m.MsgSubtype {
+	case message.InfoMsgTypeSingle:
 
-	err = v.SetRouteInfo(pkroute, i)
-	if err != nil {
-		return err
-	}
+		//unmarshal the received message bytes to info.Info
+		i := info.Info{}
+		err := json.Unmarshal(m.Message, &i)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal json message: %v", err)
+		}
+		fmt.Println("---------------------------------------------------------------------------------------------------")
+		fmt.Printf("InfoMessage: \n")
+		fmt.Printf("Pk:		%s \n", i.Pk.Hex())
+		fmt.Printf("Alias:	%s \n", i.Alias)
+		fmt.Printf("Desc:	%s \n", i.Desc)
+		fmt.Printf("Img:	%s \n", i.Img)
+		fmt.Println("---------------------------------------------------------------------------------------------------")
 
-	err = ms.visorRepo.Set(*v)
-	if err != nil {
-		return err
-	}
+		err = v.SetRouteInfo(pkroute, i)
+		if err != nil {
+			return err
+		}
 
-	//notify about new info message
-	n := notification.NewMsgNotification(m.Root, m)
-	err = ms.ns.Notify(n)
-	if err != nil {
-		return err
-	}
+		err = ms.visorRepo.Set(*v)
+		if err != nil {
+			return err
+		}
 
+		//notify about new info message
+		n := notification.NewMsgNotification(pkroute, m)
+		err = ms.ns.Notify(n)
+		if err != nil {
+			return err
+		}
+	case message.InfoMsgTypeRoomMembers:
+		//unmarshal the received message bytes to map[cipher.Pubkey]peer.Peer
+		members := map[cipher.PubKey]peer.Peer{}
+		err := json.Unmarshal(m.Message, &members)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal json message: %v", err)
+		}
+		server, err := v.GetServerByPK(pkroute.Server)
+		if err != nil {
+			return err
+		}
+		room, err := server.GetRoomByPK(pkroute.Room)
+		if err != nil {
+			return err
+		}
+		room.Members = members
+
+		err = server.SetRoom(*room)
+		if err != nil {
+			return err
+		}
+
+		err = v.SetServer(*server)
+		if err != nil {
+			return err
+		}
+
+		err = ms.visorRepo.Set(*v)
+		if err != nil {
+			return err
+		}
+
+		//notify about new info message
+		n := notification.NewMsgNotification(pkroute, m)
+		err = ms.ns.Notify(n)
+		if err != nil {
+			return err
+		}
+
+	}
 	return nil
 }
 

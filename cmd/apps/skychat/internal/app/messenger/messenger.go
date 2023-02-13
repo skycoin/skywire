@@ -14,7 +14,7 @@ type Service interface {
 
 	//only used as client/p2p
 	SendRouteRequestMessage(route util.PKRoute) error
-	SendLeaveChatMessage(pkroute util.PKRoute) error
+	SendLeaveRouteMessage(pkroute util.PKRoute) error
 
 	//used as client/p2p and server
 	SendTextMessage(route util.PKRoute, msg []byte) error

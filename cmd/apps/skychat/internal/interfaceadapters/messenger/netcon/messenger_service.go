@@ -459,7 +459,7 @@ func (ms MessengerService) SendDeleteRoomMessage(route util.PKRoute) error {
 	return nil
 }
 
-// sendMessageToRemoteRoute sends the given message to a remote route
+// sendMessageToRemoteRoute sends the given message to a remote route (as p2p and client)
 func (ms MessengerService) sendMessageToRemoteRoute(msg message.Message) error {
 	//if the message goes to p2p we save it in database, if not we wait for the remote server to send us our message
 	//this way we can see that the message was received by the remote server
@@ -479,7 +479,7 @@ func (ms MessengerService) sendMessageToRemoteRoute(msg message.Message) error {
 	return nil
 }
 
-// sendMessageToLocalRoute handles the message as a message received from a server
+// sendMessageToLocalRoute "sends" the message to local server, so local server handles it, as it was sent from a remote route (used for messages send from server host, but as client)
 func (ms MessengerService) sendMessageToLocalRoute(msg message.Message) error {
 	err := ms.handleLocalServerMessage(msg)
 	if err != nil {
@@ -506,12 +506,14 @@ func (ms MessengerService) SendInfoMessage(pkroute util.PKRoute, root util.PKRou
 
 	m := message.NewChatInfoMessage(root, dest, bytes)
 
+	//send info to local route (we as host are a member also and have to update our info inside the server)
 	if m.Dest.Visor == usr.GetInfo().GetPK() {
 		err = ms.sendMessageToLocalRoute(m)
 		if err != nil {
 			return err
 		}
-	} else {
+	} else if pkroute.Visor != usr.GetInfo().GetPK() {
+		//Send info to a remote route (as peer and as client)
 		err = ms.sendMessageToRemoteRoute(m)
 		if err != nil {
 			return err
@@ -542,8 +544,8 @@ func (ms MessengerService) SendChatRejectMessage(root util.PKRoute, dest util.PK
 	return nil
 }
 
-// SendLeaveChatMessage sends a leave-message from the root to the destination
-func (ms MessengerService) SendLeaveChatMessage(pkroute util.PKRoute) error {
+// SendLeaveRouteMessage sends a leave-message from the root to the destination
+func (ms MessengerService) SendLeaveRouteMessage(pkroute util.PKRoute) error {
 	usr, err := ms.usrRepo.GetUser()
 	if err != nil {
 		fmt.Printf("Error getting user from repository: %s", err)
