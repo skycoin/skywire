@@ -112,6 +112,8 @@ type Visor struct {
 	pingConns    map[cipher.PubKey]ping
 	pingConnMx   *sync.Mutex
 	pingPcktSize int
+
+	rawSurvey bool
 }
 
 // todo: consider moving module closing to the module system
@@ -246,6 +248,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		pingConns:            make(map[cipher.PubKey]ping),
 		pingConnMx:           new(sync.Mutex),
 		allowedPorts:         make(map[int]bool),
+		rawSurvey:            rawSurvey,
 	}
 	v.isServicesHealthy.init()
 
