@@ -15,7 +15,7 @@ import (
 )
 
 // GenerateSurvey generate survey handler
-func GenerateSurvey(conf *V1, log *logging.Logger) {
+func GenerateSurvey(conf *V1, log *logging.Logger, rawSurvey bool) {
 	if IsRoot() {
 		//check for valid reward address set as prerequisite for generating the system survey
 		rewardAddressBytes, err := os.ReadFile(PackageConfig().LocalPath + "/" + RewardFile) //nolint
@@ -45,21 +45,29 @@ func GenerateSurvey(conf *V1, log *logging.Logger) {
 				return
 			}
 
-			skycoinKeyPath := SkywirePath + "/" + SkycoinKeyName
-			skycoinKey, err := os.ReadFile(skycoinKeyPath)
-			if err != nil {
-				log.WithError(err).Error("Could not find skycoin key.")
-			}
-			skycoinKeyString := string(skycoinKey)
-			encryptedNodeInfo, err := helper.EncryptBinaryMessageArmored(skycoinKeyString, s)
-			if err != nil {
-				log.WithError(err).Error("Could not encrypt survey.")
-			}
+			if rawSurvey {
+				err = os.WriteFile(conf.LocalPath+"/"+NodeInfo, []byte(s), 0644) //nolint
+				if err != nil {
+					log.WithError(err).Error("Failed to write system hardware survey to file.")
+					return
+				}
+			} else {
+				skycoinKeyPath := SkywirePath + "/" + SkycoinKeyName
+				skycoinKey, err := os.ReadFile(skycoinKeyPath)
+				if err != nil {
+					log.WithError(err).Error("Could not find skycoin key.")
+				}
+				skycoinKeyString := string(skycoinKey)
+				encryptedNodeInfo, err := helper.EncryptBinaryMessageArmored(skycoinKeyString, s)
+				if err != nil {
+					log.WithError(err).Error("Could not encrypt survey.")
+				}
 
-			err = os.WriteFile(conf.LocalPath+"/"+NodeInfo, []byte(encryptedNodeInfo), 0644) //nolint
-			if err != nil {
-				log.WithError(err).Error("Failed to write system hardware survey to file.")
-				return
+				err = os.WriteFile(conf.LocalPath+"/"+NodeInfo, []byte(encryptedNodeInfo), 0644) //nolint
+				if err != nil {
+					log.WithError(err).Error("Failed to write system hardware survey to file.")
+					return
+				}
 			}
 			log.Info("Generating system survey")
 			f, err := os.ReadFile(filepath.Clean(conf.LocalPath + "/" + NodeInfo))
