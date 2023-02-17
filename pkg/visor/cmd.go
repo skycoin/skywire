@@ -54,6 +54,7 @@ var (
 	// visorBuildInfo holds information about the build
 	visorBuildInfo *buildinfo.Info
 	dmsgServer     string
+	rawSurvey      bool
 )
 
 func init() {
@@ -127,6 +128,8 @@ func init() {
 	hiddenflags = append(hiddenflags, "syslog")
 	RootCmd.Flags().StringVarP(&completion, "completion", "z", "", "[ bash | zsh | fish | powershell ]")
 	hiddenflags = append(hiddenflags, "completion")
+	RootCmd.Flags().BoolVar(&rawSurvey, "raw-survey", false, "survey will generate and store decrypted if pass this flag")
+	hiddenflags = append(hiddenflags, "raw-survey")
 	RootCmd.Flags().BoolVar(&all, "all", false, "show all flags")
 
 	for _, j := range hiddenflags {

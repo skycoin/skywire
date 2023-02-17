@@ -530,6 +530,12 @@ Each `ghw.Partition` struct contains these fields:
 
 * `ghw.Partition.Name` contains a string with the short name of the partition,
   e.g. "sda1"
+* `ghw.Partition.Label` contains the label for the partition itself. On Linux
+  systems, this is derived from the `ID_PART_ENTRY_NAME` udev entry for the
+  partition.
+* `ghw.Partition.FilesystemLabel` contains the label for the filesystem housed
+  on the partition. On Linux systems, this is derived from the `ID_FS_NAME`
+  udev entry for the partition.
 * `ghw.Partition.SizeBytes` contains the amount of storage the partition
   provides
 * `ghw.Partition.MountPoint` contains a string with the partition's mount
@@ -540,8 +546,10 @@ Each `ghw.Partition` struct contains these fields:
 * `ghw.Partition.Disk` is a pointer to the `ghw.Disk` object associated with
   the partition. This will be `nil` if the `ghw.Partition` struct was returned
   by the `ghw.DiskPartitions()` library function.
-* `ghw.Partition.UUID` is a string containing the volume UUID on Linux, the
-  partition UUID on MacOS and nothing on Windows.
+* `ghw.Partition.UUID` is a string containing the partition UUID on Linux, the
+  partition UUID on MacOS and nothing on Windows. On Linux
+  systems, this is derived from the `ID_PART_ENTRY_UUID` udev entry for the
+  partition.
 
 ```go
 package main

@@ -434,7 +434,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 }
 
 func initSystemSurvey(ctx context.Context, v *Visor, log *logging.Logger) error {
-	go visorconfig.GenerateSurvey(v.conf, log)
+	go visorconfig.GenerateSurvey(v.conf, log, v.rawSurvey)
 	return nil
 }
 
