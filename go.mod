@@ -46,7 +46,7 @@ require (
 	github.com/gocarina/gocsv v0.0.0-20220927221512-ad3251f9fa25
 	github.com/ivanpirog/coloredcobra v1.0.0
 	github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
-	github.com/jaypipes/ghw v0.9.0
+	github.com/jaypipes/ghw v0.10.0
 	github.com/lib/pq v1.10.7
 	github.com/pkg/profile v1.7.0
 	github.com/pterm/pterm v0.12.49
