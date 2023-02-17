@@ -23,6 +23,37 @@ github.com/Azure/go-ansiterm/winterm
 ## explicit; go 1.12
 github.com/Microsoft/go-winio
 github.com/Microsoft/go-winio/pkg/guid
+# github.com/ProtonMail/go-crypto v0.0.0-20230124153114-0acdc8ae009b
+## explicit; go 1.13
+github.com/ProtonMail/go-crypto/bitcurves
+github.com/ProtonMail/go-crypto/brainpool
+github.com/ProtonMail/go-crypto/eax
+github.com/ProtonMail/go-crypto/internal/byteutil
+github.com/ProtonMail/go-crypto/ocb
+github.com/ProtonMail/go-crypto/openpgp
+github.com/ProtonMail/go-crypto/openpgp/aes/keywrap
+github.com/ProtonMail/go-crypto/openpgp/armor
+github.com/ProtonMail/go-crypto/openpgp/clearsign
+github.com/ProtonMail/go-crypto/openpgp/ecdh
+github.com/ProtonMail/go-crypto/openpgp/ecdsa
+github.com/ProtonMail/go-crypto/openpgp/eddsa
+github.com/ProtonMail/go-crypto/openpgp/elgamal
+github.com/ProtonMail/go-crypto/openpgp/errors
+github.com/ProtonMail/go-crypto/openpgp/internal/algorithm
+github.com/ProtonMail/go-crypto/openpgp/internal/ecc
+github.com/ProtonMail/go-crypto/openpgp/internal/encoding
+github.com/ProtonMail/go-crypto/openpgp/packet
+github.com/ProtonMail/go-crypto/openpgp/s2k
+# github.com/ProtonMail/go-mime v0.0.0-20221031134845-8fd9bc37cf08
+## explicit; go 1.12
+github.com/ProtonMail/go-mime
+# github.com/ProtonMail/gopenpgp/v2 v2.5.2
+## explicit; go 1.15
+github.com/ProtonMail/gopenpgp/v2/armor
+github.com/ProtonMail/gopenpgp/v2/constants
+github.com/ProtonMail/gopenpgp/v2/crypto
+github.com/ProtonMail/gopenpgp/v2/helper
+github.com/ProtonMail/gopenpgp/v2/internal
 # github.com/StackExchange/wmi v1.2.1
 ## explicit; go 1.13
 github.com/StackExchange/wmi
@@ -41,6 +72,20 @@ github.com/blang/semver/v4
 # github.com/ccding/go-stun/stun v0.0.0-20200514191101-4dc67bcdb029
 ## explicit; go 1.14
 github.com/ccding/go-stun/stun
+# github.com/cloudflare/circl v1.1.0
+## explicit; go 1.15
+github.com/cloudflare/circl/dh/x25519
+github.com/cloudflare/circl/dh/x448
+github.com/cloudflare/circl/ecc/goldilocks
+github.com/cloudflare/circl/internal/conv
+github.com/cloudflare/circl/internal/sha3
+github.com/cloudflare/circl/math
+github.com/cloudflare/circl/math/fp25519
+github.com/cloudflare/circl/math/fp448
+github.com/cloudflare/circl/math/mlsbset
+github.com/cloudflare/circl/sign
+github.com/cloudflare/circl/sign/ed25519
+github.com/cloudflare/circl/sign/ed448
 # github.com/containerd/console v1.0.3
 ## explicit; go 1.13
 github.com/containerd/console
@@ -53,6 +98,9 @@ github.com/davecgh/go-spew/spew
 # github.com/fatih/color v1.13.0
 ## explicit; go 1.13
 github.com/fatih/color
+# github.com/felixge/fgprof v0.9.3
+## explicit; go 1.14
+github.com/felixge/fgprof
 # github.com/gen2brain/dlgs v0.0.0-20210911090025-cbd38e821b98
 ## explicit
 github.com/gen2brain/dlgs
@@ -75,6 +123,9 @@ github.com/gocarina/gocsv
 github.com/godbus/dbus/v5
 github.com/godbus/dbus/v5/introspect
 github.com/godbus/dbus/v5/prop
+# github.com/google/pprof v0.0.0-20211214055906-6f57359322fd
+## explicit; go 1.14
+github.com/google/pprof/profile
 # github.com/google/uuid v1.1.2
 ## explicit
 github.com/google/uuid
@@ -184,7 +235,7 @@ github.com/modern-go/reflect2
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
-# github.com/pkg/profile v1.5.0
+# github.com/pkg/profile v1.7.0
 ## explicit; go 1.13
 github.com/pkg/profile
 # github.com/pmezard/go-difflib v1.0.0
@@ -321,19 +372,21 @@ golang.org/x/crypto/chacha20
 golang.org/x/crypto/chacha20poly1305
 golang.org/x/crypto/curve25519
 golang.org/x/crypto/curve25519/internal/field
+golang.org/x/crypto/hkdf
 golang.org/x/crypto/internal/poly1305
 golang.org/x/crypto/internal/subtle
 golang.org/x/crypto/pbkdf2
 golang.org/x/crypto/salsa20
 golang.org/x/crypto/salsa20/salsa
+golang.org/x/crypto/sha3
 golang.org/x/crypto/ssh/terminal
 golang.org/x/crypto/tea
 golang.org/x/crypto/twofish
 golang.org/x/crypto/xtea
-# golang.org/x/mod v0.5.0
+# golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4
 ## explicit; go 1.17
 golang.org/x/mod/semver
-# golang.org/x/net v0.0.0-20211020060615-d418f374d309
+# golang.org/x/net v0.0.0-20220722155237-a158d28d115b
 ## explicit; go 1.17
 golang.org/x/net/bpf
 golang.org/x/net/context
@@ -344,10 +397,10 @@ golang.org/x/net/ipv4
 golang.org/x/net/ipv6
 golang.org/x/net/nettest
 golang.org/x/net/proxy
-# golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+# golang.org/x/sync v0.0.0-20220819030929-7fc1605a5dde
 ## explicit
 golang.org/x/sync/errgroup
-# golang.org/x/sys v0.0.0-20220704084225-05e143d24a9e
+# golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f
 ## explicit; go 1.17
 golang.org/x/sys/cpu
 golang.org/x/sys/execabs
@@ -362,19 +415,31 @@ golang.org/x/term
 # golang.org/x/text v0.3.7
 ## explicit; go 1.17
 golang.org/x/text/cases
+golang.org/x/text/encoding
+golang.org/x/text/encoding/charmap
+golang.org/x/text/encoding/htmlindex
+golang.org/x/text/encoding/internal
+golang.org/x/text/encoding/internal/identifier
+golang.org/x/text/encoding/japanese
+golang.org/x/text/encoding/korean
+golang.org/x/text/encoding/simplifiedchinese
+golang.org/x/text/encoding/traditionalchinese
+golang.org/x/text/encoding/unicode
 golang.org/x/text/internal
 golang.org/x/text/internal/language
 golang.org/x/text/internal/language/compact
 golang.org/x/text/internal/tag
+golang.org/x/text/internal/utf8internal
 golang.org/x/text/language
 golang.org/x/text/runes
 golang.org/x/text/transform
 golang.org/x/text/unicode/norm
-# golang.org/x/tools v0.1.5
-## explicit; go 1.17
+# golang.org/x/tools v0.1.12
+## explicit; go 1.18
 golang.org/x/tools/go/gcexportdata
 golang.org/x/tools/go/internal/gcimporter
 golang.org/x/tools/go/internal/packagesdriver
+golang.org/x/tools/go/internal/pkgbits
 golang.org/x/tools/go/packages
 golang.org/x/tools/internal/event
 golang.org/x/tools/internal/event/core
@@ -382,11 +447,8 @@ golang.org/x/tools/internal/event/keys
 golang.org/x/tools/internal/event/label
 golang.org/x/tools/internal/gocommand
 golang.org/x/tools/internal/packagesinternal
+golang.org/x/tools/internal/typeparams
 golang.org/x/tools/internal/typesinternal
-# golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
-## explicit; go 1.11
-golang.org/x/xerrors
-golang.org/x/xerrors/internal
 # golang.zx2c4.com/wireguard v0.0.0-20211012180210-dfd688b6aa7b
 ## explicit; go 1.17
 golang.zx2c4.com/wireguard/rwcancel

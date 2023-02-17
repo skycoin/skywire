@@ -10,6 +10,8 @@ const (
 	ConfigName = "skywire-config.json"
 	// DMSGHTTPName is the default dmsghttp config name
 	DMSGHTTPName = "dmsghttp-config.json"
+	// SkycoinKeyName is the default skycoin key file name
+	SkycoinKeyName = "skycoin.asc"
 
 	// Dmsg port constants.
 	// TODO(evanlinjin): Define these properly. These are currently random.

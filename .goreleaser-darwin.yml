@@ -9,7 +9,7 @@ release:
     owner: skycoin
     name: skywire
 
-  prerelease: true
+  #prerelease: true
 
 before:
   hooks:
@@ -78,7 +78,7 @@ builds:
       - arm64
     main: ./cmd/apps/vpn-client/
     ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-  
+
 archives:
   - id: archive
     format: tar.gz
@@ -86,6 +86,7 @@ archives:
     name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
     files:
       - dmsghttp-config.json
+      - skycoin.asc
     builds:
       - skywire-visor
       - skywire-cli
@@ -94,9 +95,9 @@ archives:
       - skychat
       - vpn-client
     allow_different_binary_count: true
-  
+
 checksum:
-  name_template: 'checksums.txt'  
+  name_template: 'checksums.txt'
 snapshot:
   name_template: "{{ .Tag }}-next"
 changelog:

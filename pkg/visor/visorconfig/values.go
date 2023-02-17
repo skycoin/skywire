@@ -29,6 +29,9 @@ var (
 	// DMSGHTTPName is the default dmsghttp config name
 	DMSGHTTPName = skyenv.DMSGHTTPName
 
+	// SkycoinKeyName is name of skycoin key file
+	SkycoinKeyName = skyenv.SkycoinKeyName
+
 	// Dmsg port constants.
 	// TODO(evanlinjin): Define these properly. These are currently random.
 
@@ -269,7 +272,7 @@ func IPSkycoinFetch() (ipskycoin *IPSkycoin) {
 
 	url := fmt.Sprint("http://", "ip.skycoin.com")
 	client := http.Client{
-		Timeout: time.Second * 2, // Timeout after 2 seconds
+		Timeout: time.Second * 15, // Timeout after 15 seconds
 	}
 	//create the http request
 	req, err := http.NewRequest(http.MethodGet, url, nil)
