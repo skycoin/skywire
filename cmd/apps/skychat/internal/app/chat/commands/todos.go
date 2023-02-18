@@ -6,17 +6,17 @@ package commands
 //TODO: Sending json that are bigger than one packet -> otherwise big lists and sending the image info won't work.
 //TODO: message statuses: sent, received(achieved by implementing the peer to send a 'received-message' back) to check whether the message really was received by the peer
 //TODO: database for user and visor repository
-//TODO: flags to setup if database or in-memory is used for repositories (data is lost when stoping app)
+//FUTUREFEATUE: flags to setup if database or in-memory is used for repositories (data is lost when stoping app)
 //--> maybe even a way on setting this up for each chat, so simultaneously persistent chats and "deleteable" chats are possible
 //--> how about "self-deleting-messages"? deletes itself after (1hour, 24hour, etc...)
 //TODO: cli-interface
 //with cli-interface a connection with the systray app would be possible -> notifications about new messages, incoming calls etc.
-//TODO: encrypted messages (encrypted sending and encrypted saving on local storage) --> Password for app required
+//FUTUREFEATUE: encrypted messages (encrypted sending and encrypted saving on local storage) --> Password for app required
 
 //general-future
-//TODO: voip-channels
-//TODO: video-streams
-//TODO: sending-fiber via chat, with notification about received payments -> also sending-fiber-requests
+//FUTUREFEATUE: voip-channels
+//FUTUREFEATUE: video-streams
+//FUTUREFEATUE: sending-fiber via chat, with notification about received payments -> also sending-fiber-requests
 
 //UI
 //TODO:Make UI more beautiful
@@ -36,8 +36,8 @@ package commands
 //TODO:send_fire_admin_message.go		//maybe only allow this action from server-host
 //TODO:send_hire_moderator_message.go
 //TODO:send_fire_moderator_message.go
-//TODO:send_mute_peer_message.go
-//TODO:send_unmute_peer_message.go
+//[x]send_mute_peer_message.go 			--> backend implemented, frontend missing
+//[x]:send_unmute_peer_message.go		--> backend implemented, frontend missing
 
 //TODO:send_add_room_message.go
 //TODO:send_delete_room_message.go

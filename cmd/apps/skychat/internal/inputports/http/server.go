@@ -68,6 +68,8 @@ func (httpServer *Server) AddChatHTTPRoutes() {
 	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.SendAddRoomMessageURLParam, chat.NewHandler(httpServer.appServices.ChatServices).SendAddRoomMessage).Methods("POST")
 	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.SendDeleteRoomMessageURLParam, chat.NewHandler(httpServer.appServices.ChatServices).SendDeleteRoomMessage).Methods("POST")
 	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.SendTextMessageURLParam, chat.NewHandler(httpServer.appServices.ChatServices).SendTextMessage).Methods("POST")
+	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.SendMutePeerMessageURLParam, chat.NewHandler(httpServer.appServices.ChatServices).SendMutePeerMessage).Methods("POST")
+	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.SendUnmutePeerMessageURLParam, chat.NewHandler(httpServer.appServices.ChatServices).SendUnmutePeerMessage).Methods("POST")
 
 }
 

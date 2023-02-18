@@ -181,6 +181,8 @@ func (ms MessengerService) handleRemoteRoomInfoMsgType(v *chat.Visor, m message.
 		if err != nil {
 			return err
 		}
+
+		//TODO: make method instead of direct access of variable
 		room.Members = members
 
 		err = server.SetRoom(*room)
@@ -204,7 +206,46 @@ func (ms MessengerService) handleRemoteRoomInfoMsgType(v *chat.Visor, m message.
 		if err != nil {
 			return err
 		}
+	case message.InfoMsgTypeRoomMuted:
+		//unmarshal the received message bytes to map[cipher.Pubkey]bool
+		muted := map[cipher.PubKey]bool{}
+		err := json.Unmarshal(m.Message, &muted)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal json message: %v", err)
+		}
+		server, err := v.GetServerByPK(pkroute.Server)
+		if err != nil {
+			return err
+		}
+		room, err := server.GetRoomByPK(pkroute.Room)
+		if err != nil {
+			return err
+		}
 
+		//TODO: make method instead of direct access of variable
+		room.Muted = muted
+
+		err = server.SetRoom(*room)
+		if err != nil {
+			return err
+		}
+
+		err = v.SetServer(*server)
+		if err != nil {
+			return err
+		}
+
+		err = ms.visorRepo.Set(*v)
+		if err != nil {
+			return err
+		}
+
+		//notify about new info message
+		n := notification.NewMsgNotification(pkroute, m)
+		err = ms.ns.Notify(n)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

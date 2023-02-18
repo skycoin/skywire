@@ -275,6 +275,152 @@ func (c Handler) SendAddRoomMessage(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// SendMutePeerMessageURLParam contains the parameter identifier to be parsed by the handler
+const SendMutePeerMessageURLParam = "sendMutePeerMessage"
+
+// SendMutePeerMessageRequestModel represents the request model expected for Delete request
+type SendMutePeerMessageRequestModel struct {
+	VisorPk  string `json:"visorpk"`
+	ServerPk string `json:"serverpk"`
+	RoomPk   string `json:"roompk"`
+
+	PeerPk string `json:"peerpk"`
+}
+
+// SendMutePeerMessage sends a mute message to the given route
+func (c Handler) SendMutePeerMessage(w http.ResponseWriter, r *http.Request) {
+	var requestModel SendMutePeerMessageRequestModel
+	decodeErr := json.NewDecoder(r.Body).Decode(&requestModel)
+	if decodeErr != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, decodeErr.Error())
+		return
+	}
+
+	route := util.PKRoute{}
+
+	visorpk := cipher.PubKey{}
+	err := visorpk.Set(requestModel.VisorPk)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
+		return
+	}
+	route.Visor = visorpk
+	if requestModel.ServerPk != "" {
+		serverpk := cipher.PubKey{}
+		err = serverpk.Set(requestModel.ServerPk)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, err.Error())
+			return
+		}
+		route.Server = serverpk
+		if requestModel.RoomPk != "" {
+			roompk := cipher.PubKey{}
+			err = roompk.Set(requestModel.RoomPk)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprint(w, err.Error())
+				return
+			}
+			route.Room = roompk
+		}
+	}
+
+	peerpk := cipher.PubKey{}
+	err = peerpk.Set(requestModel.PeerPk)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
+		return
+	}
+
+	err = c.chatServices.Commands.SendMutePeerMessageHandler.Handle(commands.SendMutePeerMessageRequest{
+		Route: route,
+		Pk:    peerpk,
+	})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+// SendMutePeerMessageURLParam contains the parameter identifier to be parsed by the handler
+const SendUnmutePeerMessageURLParam = "sendUnmutePeerMessage"
+
+// SendUnmutePeerMessageRequestModel represents the request model expected for Delete request
+type SendUnmutePeerMessageRequestModel struct {
+	VisorPk  string `json:"visorpk"`
+	ServerPk string `json:"serverpk"`
+	RoomPk   string `json:"roompk"`
+
+	PeerPk string `json:"peerpk"`
+}
+
+// SendUnmutePeerMessage sends an unmute message to the given route
+func (c Handler) SendUnmutePeerMessage(w http.ResponseWriter, r *http.Request) {
+	var requestModel SendUnmutePeerMessageRequestModel
+	decodeErr := json.NewDecoder(r.Body).Decode(&requestModel)
+	if decodeErr != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, decodeErr.Error())
+		return
+	}
+
+	route := util.PKRoute{}
+
+	visorpk := cipher.PubKey{}
+	err := visorpk.Set(requestModel.VisorPk)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
+		return
+	}
+	route.Visor = visorpk
+	if requestModel.ServerPk != "" {
+		serverpk := cipher.PubKey{}
+		err = serverpk.Set(requestModel.ServerPk)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, err.Error())
+			return
+		}
+		route.Server = serverpk
+		if requestModel.RoomPk != "" {
+			roompk := cipher.PubKey{}
+			err = roompk.Set(requestModel.RoomPk)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprint(w, err.Error())
+				return
+			}
+			route.Room = roompk
+		}
+	}
+
+	peerpk := cipher.PubKey{}
+	err = peerpk.Set(requestModel.PeerPk)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
+		return
+	}
+
+	err = c.chatServices.Commands.SendUnmutePeerMessageHandler.Handle(commands.SendUnmutePeerMessageRequest{
+		Route: route,
+		Pk:    peerpk,
+	})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
 // DeleteLocalRouteURLParam contains the parameter identifier to be parsed by the handler
 const DeleteLocalRouteURLParam = "DeleteLocalRoute"
 

@@ -388,7 +388,81 @@ func (ms MessengerService) handleLocalServerCmdMsgType(visor *chat.Visor, m mess
 		}
 
 		return nil
-		//[] add other cmd messages
+	case message.CmdMsgTypeMutePeer:
+		//check if room exists
+		room, err := server.GetRoomByPK(pkroute.Room)
+		if err != nil {
+			return err
+		}
+		//First check if origin of msg is either admin or moderator of room
+		_, isAdmin := server.GetAllAdmin()[m.Root.Visor]
+		_, isMod := room.GetAllMods()[m.Root.Visor]
+
+		if isAdmin || isMod {
+			//unmarshal the received message bytes to cipher.PubKey
+			pk := cipher.PubKey{}
+			err = json.Unmarshal(m.Message, &pk)
+			if err != nil {
+				return fmt.Errorf("failed to unmarshal json message: %v", err)
+			}
+			err = room.AddMuted(pk)
+			if err != nil {
+				return err
+			}
+
+			//send updated list of Muted to peers
+			muted := room.GetAllMuted()
+			bytes, err := json.Marshal(muted)
+			if err != nil {
+				fmt.Printf("Failed to marshal json: %v", err)
+				return err
+			}
+			msg := message.NewRoomMutedMessage(pkroute, pkroute, bytes)
+
+			err = ms.sendMessageToPeers(visor, pkroute, msg)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	case message.CmdMsgTypeUnmutePeer:
+		//check if room exists
+		room, err := server.GetRoomByPK(pkroute.Room)
+		if err != nil {
+			return err
+		}
+		//First check if origin of msg is either admin or moderator of room
+		_, isAdmin := server.GetAllAdmin()[m.Root.Visor]
+		_, isMod := room.GetAllMods()[m.Root.Visor]
+
+		if isAdmin || isMod {
+			//unmarshal the received message bytes to cipher.PubKey
+			pk := cipher.PubKey{}
+			err = json.Unmarshal(m.Message, &pk)
+			if err != nil {
+				return fmt.Errorf("failed to unmarshal json message: %v", err)
+			}
+			err = room.DeleteMuted(pk)
+			if err != nil {
+				return err
+			}
+
+			//send updated list of Muted to peers
+			muted := room.GetAllMuted()
+			bytes, err := json.Marshal(muted)
+			if err != nil {
+				fmt.Printf("Failed to marshal json: %v", err)
+				return err
+			}
+			msg := message.NewRoomMutedMessage(pkroute, pkroute, bytes)
+
+			err = ms.sendMessageToPeers(visor, pkroute, msg)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+		//FUTUREFEATURES: add other cmd messages
 	default:
 		return fmt.Errorf("incorrect data received")
 	}
@@ -498,12 +572,12 @@ func (ms MessengerService) handleLocalRoomTextMsgType(visor *chat.Visor, m messa
 		return err
 	}
 
-	//check if in muted in server
+	//check if muted in server
 	if _, ok := server.GetAllMuted()[m.Origin]; ok {
 		return nil
 	}
 
-	//check if in muted in room
+	//check if muted in room
 	if _, ok := room.GetAllMuted()[m.Origin]; ok {
 		return nil
 	}
@@ -517,7 +591,7 @@ func (ms MessengerService) handleLocalRoomTextMsgType(visor *chat.Visor, m messa
 	return nil
 }
 
-//sendMessageToPeers sends the given message to all peers of the given route
+// sendMessageToPeers sends the given message to all peers of the given route
 func (ms MessengerService) sendMessageToPeers(v *chat.Visor, pkroute util.PKRoute, m message.Message) error {
 	fmt.Println("sendMessageToPeers")
 

@@ -50,6 +50,8 @@ const (
 	InfoMsgTypeServerMembers
 	//InfoMsgTypeRoomMembers is used to update the list of members of a room
 	InfoMsgTypeRoomMembers
+	//InfoMsgTypeRoomMuted is used to update the list of muted of a room
+	InfoMsgTypeRoomMuted
 	//FUTUREFEATURES: Admins, Moderators, Muted, Blacklist, Whitelist, Rooms from Server that are visible
 )
 
@@ -71,9 +73,11 @@ const (
 	CmdMsgTypeAddRoom
 	// CmdMsgTypeDeleteRoom is used to delete a room
 	CmdMsgTypeDeleteRoom
-	/*CmdMsgTypeMutePeer
+	// CmdMsgTypeMutePeer is used to mute a peer
+	CmdMsgTypeMutePeer
+	// CmdMsgTypeUnmutePeer is used tu unmute a peer
 	CmdMsgTypeUnmutePeer
-	CmdMsgTypeBanPeer
+	/*CmdMsgTypeBanPeer
 	CmdMsgTypeUnbanPeer
 	CmdMsgTypeHireAdmin
 	CmdMsgTypeFireAdmin
@@ -218,7 +222,9 @@ func NewRouteRequestMessage(pkOrigin cipher.PubKey, routeDestination util.PKRout
 	return m
 }
 
-/* NewChatAcceptMessage returns a chat accepted message
+/*
+	NewChatAcceptMessage returns a chat accepted message
+
 pk is the users pk to set the messages root
 */
 func NewChatAcceptMessage(root util.PKRoute, dest util.PKRoute) Message {
@@ -327,6 +333,48 @@ func NewRoomMembersMessage(root util.PKRoute, dest util.PKRoute, members []byte)
 	m.MsgType = InfoMsgType
 	m.MsgSubtype = InfoMsgTypeRoomMembers
 	m.Message = members
+	m.Status = MsgStatusInitial
+	m.Time = time.Now()
+	return m
+}
+
+// NewRoomMutedMessage returns a Message of muted pks of room
+func NewRoomMutedMessage(root util.PKRoute, dest util.PKRoute, muted []byte) Message {
+	m := Message{}
+	m.Origin = root.Visor
+	m.Root = root
+	m.Dest = dest
+	m.MsgType = InfoMsgType
+	m.MsgSubtype = InfoMsgTypeRoomMuted
+	m.Message = muted
+	m.Status = MsgStatusInitial
+	m.Time = time.Now()
+	return m
+}
+
+// NewMutePeerMessage returns a Message to mute a peer
+func NewMutePeerMessage(root util.PKRoute, dest util.PKRoute, pk []byte) Message {
+	m := Message{}
+	m.Origin = root.Visor
+	m.Root = root
+	m.Dest = dest
+	m.MsgType = CmdMsgType
+	m.MsgSubtype = CmdMsgTypeMutePeer
+	m.Message = pk
+	m.Status = MsgStatusInitial
+	m.Time = time.Now()
+	return m
+}
+
+// NewUnmutePeerMessage returns a Message to mute a peer
+func NewUnmutePeerMessage(root util.PKRoute, dest util.PKRoute, pk []byte) Message {
+	m := Message{}
+	m.Origin = root.Visor
+	m.Root = root
+	m.Dest = dest
+	m.MsgType = CmdMsgType
+	m.MsgSubtype = CmdMsgTypeUnmutePeer
+	m.Message = pk
 	m.Status = MsgStatusInitial
 	m.Time = time.Now()
 	return m

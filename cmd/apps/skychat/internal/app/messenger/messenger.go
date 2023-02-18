@@ -24,4 +24,8 @@ type Service interface {
 
 	//used as server
 	SendRouteDeletedMessage(pkroute util.PKRoute) error
+
+	//used as client
+	SendMutePeerMessage(pkroute util.PKRoute, pk cipher.PubKey) error
+	SendUnmutePeerMessage(pkroute util.PKRoute, pk cipher.PubKey) error
 }

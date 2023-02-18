@@ -29,6 +29,8 @@ type Commands struct {
 	SendAddRoomMessageHandler    commands.SendAddRoomMessageRequestHandler
 	SendDeleteRoomMessageHandler commands.SendDeleteRoomMessageRequestHandler
 	SendTextMessageHandler       commands.SendTextMessageRequestHandler
+	SendMutePeerMessageHandler   commands.SendMutePeerMessageRequestHandler
+	SendUnmutePeerMessageHandler commands.SendUnmutePeerMessageRequestHandler
 }
 
 // ChatServices Contains the grouped queries and commands of the app layer
@@ -55,6 +57,8 @@ func NewServices(cliRepo client.Repository, visorRepo chat.Repository, userRepo 
 			SendAddRoomMessageHandler:    commands.NewSendAddRoomMessageRequestHandler(ms),
 			SendDeleteRoomMessageHandler: commands.NewSendDeleteRoomMessageRequestHandler(ms),
 			SendTextMessageHandler:       commands.NewSendTextMessageRequestHandler(ms),
+			SendMutePeerMessageHandler:   commands.NewSendMutePeerMessageRequestHandler(ms),
+			SendUnmutePeerMessageHandler: commands.NewSendUnmutePeerMessageRequestHandler(ms),
 		},
 	}
 }
