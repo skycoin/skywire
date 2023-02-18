@@ -150,8 +150,8 @@ github.com/ivanpirog/coloredcobra
 # github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
 ## explicit; go 1.15
 github.com/james-barrow/golang-ipc
-# github.com/jaypipes/ghw v0.9.0
-## explicit; go 1.15
+# github.com/jaypipes/ghw v0.10.0
+## explicit; go 1.18
 github.com/jaypipes/ghw
 github.com/jaypipes/ghw/pkg/baseboard
 github.com/jaypipes/ghw/pkg/bios
