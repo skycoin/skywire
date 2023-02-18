@@ -122,8 +122,7 @@ func (ms MessengerService) handleP2PConnMsgType(m message.Message) error {
 			}
 
 			//check if p2p already exists in repository
-			_, err = v.GetP2P()
-			if err != nil {
+			if v.P2PIsEmpty() {
 				//make new default p2p room and add it to the visor
 				fmt.Println("Make new P2P room")
 				p2p := chat.NewDefaultP2PRoom(pkroute.Visor)
@@ -166,8 +165,17 @@ func (ms MessengerService) handleP2PConnMsgType(m message.Message) error {
 			if err != nil {
 				return err
 			}
-			//TODO: !! we first have to check whether we don't have got any other servers of this visor saved
-			//deletes the visor from the repository
+
+			// we first have to check whether we don't have got any other servers of this visor saved
+			v, err := ms.visorRepo.GetByPK(pkroute.Visor)
+			if err != nil {
+				return err
+			}
+			if len(v.GetAllServer()) != 0 {
+				return nil
+			}
+
+			//deletes the visor from the repository if no other servers of the visor are saved
 			err = ms.visorRepo.Delete(pkroute.Visor)
 			if err != nil {
 				return err

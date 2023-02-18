@@ -3,6 +3,8 @@ package commands
 //-to-dos and brain-storming about the future of skychat
 
 //general
+//TODO: Sending json that are bigger than one packet -> otherwise big lists and sending the image info won't work.
+//TODO: message statuses: sent, received(achieved by implementing the peer to send a 'received-message' back) to check whether the message really was received by the peer
 //TODO: database for user and visor repository
 //TODO: flags to setup if database or in-memory is used for repositories (data is lost when stoping app)
 //--> maybe even a way on setting this up for each chat, so simultaneously persistent chats and "deleteable" chats are possible
@@ -29,6 +31,7 @@ package commands
 //make p2p room within own visor -> for informations from other apps or so?
 
 //server & rooms------------
+//TODO:send_set_route_info_message.go
 //TODO:send_hire_admin_message.go 		//maybe only allow this action from server-host
 //TODO:send_fire_admin_message.go		//maybe only allow this action from server-host
 //TODO:send_hire_moderator_message.go

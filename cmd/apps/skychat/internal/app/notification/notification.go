@@ -21,7 +21,7 @@ const (
 	NewMsgNotifyType
 	//DeleteChatNotifyType notifies about a deleted chat
 	DeleteChatNotifyType
-	//? add SentMsgNotifyType
+	//FUTUREFEATURE: add SentMsgNotifyType
 )
 
 // Notification provides a struct to send messages via the Service

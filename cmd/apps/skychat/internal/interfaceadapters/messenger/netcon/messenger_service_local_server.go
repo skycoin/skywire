@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/notification"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/chat"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/info"
@@ -239,6 +240,16 @@ func (ms MessengerService) handleLocalServerConnMsgType(visor *chat.Visor, m mes
 	case message.ConnMsgTypeLeave, message.ConnMsgTypeDelete:
 		// if pkroute defines room, remove from room membership
 		if pkroute.Server != pkroute.Room {
+			//add request message to room
+			room.AddMessage(m)
+
+			//send message to peers
+			err = ms.sendMessageToPeers(visor, pkroute, m)
+			if err != nil {
+				return err
+			}
+
+			//delete member from room
 			err = room.DeleteMember(m.Origin)
 			if err != nil {
 				return err
@@ -272,9 +283,9 @@ func (ms MessengerService) handleLocalServerConnMsgType(visor *chat.Visor, m mes
 				return err
 			}
 
-			//TODO: for each room and the server: send new member-list to members
+			//TODO: for each room and the server: send new member-list to members (where the peer was a member)
 		}
-		//update visor and respository
+		//update visor and repository
 		err = visor.SetServer(*server)
 		if err != nil {
 			return err
@@ -310,19 +321,20 @@ func (ms MessengerService) handleLocalServerCmdMsgType(visor *chat.Visor, m mess
 		return err
 	}
 
-	//unmarshal the received message bytes to info.Info //FIXME: unmarshal to other thing than info
-	i := info.Info{}
-	err = json.Unmarshal(m.Message, &i)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal json message: %v", err)
-	}
-
 	switch m.MsgSubtype {
 	case message.CmdMsgTypeAddRoom:
 		//First check if origin of msg is admin
 		if _, isAdmin := server.GetAllAdmin()[m.Root.Visor]; !isAdmin {
 			return fmt.Errorf("command not accepted, no admin")
 		}
+
+		//unmarshal the received message bytes to info.Info
+		i := info.Info{}
+		err = json.Unmarshal(m.Message, &i)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal json message: %v", err)
+		}
+
 		// make a new route
 		rr := util.NewLocalRoomRoute(m.Dest.Visor, m.Dest.Server, server.GetAllRoomsBoolMap())
 
@@ -337,7 +349,7 @@ func (ms MessengerService) handleLocalServerCmdMsgType(visor *chat.Visor, m mess
 			return err
 		}
 
-		//TODO: if room is visible/public also add messengerService and send 'Room-Added' Message to Members of server
+		//FUTUREFEATURE: if room is visible/public also add messengerService and send 'Room-Added' Message to Members of server
 
 		// add room to server, update visor and then update repository
 		err = server.AddRoom(room)
@@ -366,9 +378,15 @@ func (ms MessengerService) handleLocalServerCmdMsgType(visor *chat.Visor, m mess
 		if _, isAdmin := server.GetAllAdmin()[m.Root.Visor]; !isAdmin {
 			return fmt.Errorf("command not accepted, no admin")
 		}
-		//TODO: handle message
-		//send DeleteChatMessage to all members
-		//? do we have to differ between deleting the chat and stopping the service of forwarding and accepting any message?
+
+		//prepare NewRooomDeletedMessage and send it to all members
+		msg := message.NewRouteDeletedMessage(pkroute, pkroute)
+
+		err = ms.sendMessageToPeers(visor, pkroute, msg)
+		if err != nil {
+			return err
+		}
+
 		return nil
 		//[] add other cmd messages
 	default:
@@ -423,8 +441,7 @@ func (ms MessengerService) handleLocalServerInfoMsgType(v *chat.Visor, m message
 		return err
 	}
 
-	//TODO: send updated info of member to all members
-	//FIXME: START: for the moment lets just update the whole list
+	//FIXME: START: for the moment lets just update the whole list, but in the future only send the updated peer info to reduce sent data
 	server, err := v.GetServerByPK(m.Dest.Server)
 	if err != nil {
 		return err
@@ -452,7 +469,6 @@ func (ms MessengerService) handleLocalServerInfoMsgType(v *chat.Visor, m message
 	err = ms.sendMessageToPeers(v, pkroute, msg)
 	if err != nil {
 		return err
-
 	}
 	//FIXME: END
 	return nil
@@ -501,23 +517,30 @@ func (ms MessengerService) handleLocalRoomTextMsgType(visor *chat.Visor, m messa
 	return nil
 }
 
-//
+//sendMessageToPeers sends the given message to all peers of the given route
 func (ms MessengerService) sendMessageToPeers(v *chat.Visor, pkroute util.PKRoute, m message.Message) error {
 	fmt.Println("sendMessageToPeers")
-
-	//pkroute := util.NewRoomRoute(m.GetDestinationVisor(), m.GetDestinationServer(), m.GetDestinationRoom())
 
 	server, err := v.GetServerByPK(pkroute.Server)
 	if err != nil {
 		return err
 	}
 
-	room, err := server.GetRoomByPK(pkroute.Room)
-	if err != nil {
-		return err
+	var members map[cipher.PubKey]peer.Peer
+
+	if pkroute.Room != pkroute.Server {
+		room, err := server.GetRoomByPK(pkroute.Room)
+		if err != nil {
+			return err
+		}
+		members = room.GetAllMembers()
+	} else {
+		members = server.GetAllMembers()
 	}
 
-	members := room.GetAllMembers()
+	if len(members) == 0 {
+		fmt.Printf("No members to send message to")
+	}
 
 	for _, peer := range members {
 
@@ -560,5 +583,36 @@ func (ms MessengerService) sendLocalRouteInfoToPeer(pkroute util.PKRoute, dest u
 		return err
 	}
 
+	return nil
+}
+
+// SendRouteDeletedMessage sends a ConnMsgType to all members of route to inform them that the route got deleted by the server
+func (ms MessengerService) SendRouteDeletedMessage(pkroute util.PKRoute) error {
+	//Check if visor exists
+	visor, err := ms.visorRepo.GetByPK(pkroute.Visor)
+	if err != nil {
+		return err
+	}
+
+	//Check if server exists
+	server, err := visor.GetServerByPK(pkroute.Server)
+	if err != nil {
+		return err
+	}
+
+	if pkroute.Server != pkroute.Room {
+		//Check if room exists
+		_, err := server.GetRoomByPK(pkroute.Room)
+		if err != nil {
+			return err
+		}
+	}
+	//prepare NewRooomDeletedMessage and send it to all members
+	msg := message.NewRouteDeletedMessage(pkroute, pkroute)
+
+	err = ms.sendMessageToPeers(visor, pkroute, msg)
+	if err != nil {
+		return err
+	}
 	return nil
 }

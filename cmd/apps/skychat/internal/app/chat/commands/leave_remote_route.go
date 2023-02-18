@@ -97,7 +97,13 @@ func (h leaveRemoteRouteRequestHandler) Handle(command LeaveRemoteRouteRequest) 
 
 	//check if this was the last room of the server
 	if len(server.GetAllRooms()) == 0 {
-		//TODO: Send Leave-Server-Message
+		//Prepare ServerRoute
+		serverroute := util.NewServerRoute(command.Route.Server, command.Route.Server)
+		// Send LeaveChatMessage to remote server
+		err = h.ms.SendLeaveRouteMessage(serverroute)
+		if err != nil {
+			return err
+		}
 		err = visor.DeleteServer(command.Route.Server)
 		if err != nil {
 			return err

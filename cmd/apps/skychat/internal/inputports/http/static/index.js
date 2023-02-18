@@ -1236,16 +1236,8 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
                 break;
               //NewMsgNotifType
               case 3:
-                //Fetch data of chat with new message from HTTP
-
                 console.log("new message notification") 
-                //const message = JSON.parse(notifMessage.message)
-                //visorpk = message.Root.Visor
-                //serverpk = message.Root.Server
-                //roompk = message.Root.Room
-                //route = new Route(visorpk,serverpk,roompk)
-                //console.log(message)
-
+                 //Fetch data of chat with new message from HTTP
                 await this.getRoomByRoute(route).then(c => {
                   if (this.chats == null){
                     this.chats = []
@@ -1293,6 +1285,7 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
        return this.chats[this.getChatIndexFromRoute(route)].messages;
     }
 
+    //TODO: return fixed strings depending on type of last message (e.g. InfoType or so)
     //returns the last [Message] of the given pk/chat
     getLastMessageFromRoute(route){
       let arr = this.chats;

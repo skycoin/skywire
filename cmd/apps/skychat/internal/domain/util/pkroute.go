@@ -29,10 +29,12 @@ func NewP2PRoute(visorpk cipher.PubKey) PKRoute {
 }
 
 // NewServerRoute returns a new route of a server
+// This is achieved by setting Room == Server
 func NewServerRoute(visorpk cipher.PubKey, serverpk cipher.PubKey) PKRoute {
 	pkr := PKRoute{}
 	pkr.Visor = visorpk
 	pkr.Server = serverpk
+	pkr.Room = serverpk
 	return pkr
 }
 

@@ -41,26 +41,56 @@ func (h deleteLocalRouteRequestHandler) Handle(command DeleteLocalRouteRequest) 
 
 	// if this, then we want to delete the whole server
 	if command.Route.Server == command.Route.Room {
-		//TODO: Send Room-Delete-Message to Room members in every room?
-		//TODO: Send Server-Delete-Message to Server members
+		//Send Server-Delete-Message to Server members -> they then have to delete or disable the function to send new messages to the server
+		serverroute := util.NewServerRoute(command.Route.Visor, command.Route.Server)
+		err = h.messengerService.SendRouteDeletedMessage(serverroute)
+		if err != nil {
+			return err
+		}
+
+		//Delete server from visor
 		err = visor.DeleteServer(command.Route.Server)
 		if err != nil {
 			return err
 		}
+
+		//update visorrepository
 		return h.visorRepo.Set(*visor)
 	}
 
 	// Check if room exists
-	_, err = server.GetRoomByPK(command.Route.Room)
+	room, err := server.GetRoomByPK(command.Route.Room)
 	if err != nil {
 		return err
 	}
 
-	//TODO: Send Room-Delete-Message to Room members (and to server members, if room is public)
+	//Send Room-Deleted-Message to room members
+	err = h.messengerService.SendRouteDeletedMessage(command.Route)
+	if err != nil {
+		return err
+	}
+
+	//if room is public/visibile also send message to server members
+	if room.GetIsVisible() {
+		serverroute := util.NewServerRoute(command.Route.Visor, command.Route.Server)
+		err = h.messengerService.SendRouteDeletedMessage(serverroute)
+		if err != nil {
+			return err
+		}
+	}
+
+	//delete room from server
 	err = server.DeleteRoom(command.Route.Room)
 	if err != nil {
 		return err
 	}
 
+	//update visor
+	err = visor.SetServer(*server)
+	if err != nil {
+		return err
+	}
+
+	//update visorrepository
 	return h.visorRepo.Set(*visor)
 }

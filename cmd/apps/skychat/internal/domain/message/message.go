@@ -50,7 +50,7 @@ const (
 	InfoMsgTypeServerMembers
 	//InfoMsgTypeRoomMembers is used to update the list of members of a room
 	InfoMsgTypeRoomMembers
-	//TODO: Admins, Moderators, Muted, Blacklist, Whitelist, Rooms from Server that are visible
+	//FUTUREFEATURES: Admins, Moderators, Muted, Blacklist, Whitelist, Rooms from Server that are visible
 )
 
 // types of messageStatus
@@ -257,6 +257,20 @@ func NewChatLeaveMessage(root util.PKRoute, dest util.PKRoute) Message {
 	m.MsgType = ConnMsgType
 	m.MsgSubtype = ConnMsgTypeLeave
 	m.Message = []byte("Chat Left")
+	m.Status = MsgStatusInitial
+	m.Time = time.Now()
+	return m
+}
+
+// NewRouteDeletedMessage returns new message to info about deleted route
+func NewRouteDeletedMessage(route util.PKRoute, dest util.PKRoute) Message {
+	m := Message{}
+	m.Origin = route.Visor
+	m.Root = route
+	m.Dest = dest
+	m.MsgType = ConnMsgType
+	m.MsgSubtype = ConnMsgTypeDelete
+	m.Message = []byte("Chat Deleted")
 	m.Status = MsgStatusInitial
 	m.Time = time.Now()
 	return m

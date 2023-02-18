@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net"
 	"time"
-	"unsafe"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
@@ -278,7 +277,7 @@ func (ms MessengerService) sendMessage(pkroute util.PKRoute, m message.Message, 
 	fmt.Printf("Status:		%d \n", m.Status)
 	fmt.Printf("Seen:		%t \n", m.Seen)
 	fmt.Println("---------------------------------------------------------------------------------------------------")
-	fmt.Printf("Message Size: %T, %d\n", m, unsafe.Sizeof(m))
+	//fmt.Printf("Message Size: %T, %d\n", m, unsafe.Sizeof(m))
 	fmt.Println("---------------------------------------------------------------------------------------------------")
 
 	rm := message.NewRAWMessage(m)

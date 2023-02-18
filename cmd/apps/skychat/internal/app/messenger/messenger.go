@@ -21,4 +21,7 @@ type Service interface {
 	SendDeleteRoomMessage(route util.PKRoute) error
 	SendAddRoomMessage(route util.PKRoute, info info.Info) error
 	SendInfoMessage(pkroute util.PKRoute, root util.PKRoute, dest util.PKRoute, info info.Info) error
+
+	//used as server
+	SendRouteDeletedMessage(pkroute util.PKRoute) error
 }

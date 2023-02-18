@@ -146,7 +146,6 @@ func (s *Server) DeleteMember(pk cipher.PubKey) error {
 		delete(s.Members, pk)
 		return nil
 	}
-	//TODO: also try to delete member from all rooms as he leaves the server
 	delete(s.Members, pk)
 	return nil
 }

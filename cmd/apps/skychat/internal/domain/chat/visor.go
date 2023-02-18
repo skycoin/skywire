@@ -85,10 +85,10 @@ func (v *Visor) AddP2P(p2p Room) error {
 
 // SetP2P updates the p2p-chat of the visor
 func (v *Visor) SetP2P(p2p Room) error {
-	//check if room exists
-	_, err := v.GetP2P()
-	if err != nil {
+	//check if p2p exists
+	if !v.P2PIsEmpty() {
 		v.P2P = p2p
+		return nil
 	}
 	return fmt.Errorf("setp2p: p2p does not exist in visor") //? should this be treaded as an error like now? -> or maybe even call AddP2P when p2p does not exist?
 }
@@ -96,9 +96,9 @@ func (v *Visor) SetP2P(p2p Room) error {
 // DeleteP2P removes the p2p-chat-room from the visor
 func (v *Visor) DeleteP2P() error {
 	//check if p2p exists
-	_, err := v.GetP2P()
-	if err != nil {
+	if !v.P2PIsEmpty() {
 		v.P2P = Room{}
+		return nil
 	}
 	return fmt.Errorf("deletep2p: p2p does not exist in visor") //? should this be treaded as an error like now?
 }
