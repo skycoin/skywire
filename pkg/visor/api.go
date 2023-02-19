@@ -601,7 +601,7 @@ func (v *Visor) SetAppError(appName, appErr string) error {
 func (v *Visor) RestartApp(appName string) error {
 	if _, ok := v.procM.ProcByName(appName); ok { //nolint:errcheck
 		v.log.Infof("Updated %v password, restarting it", appName)
-		return v.appL.RestartApp(appName)
+		return v.appL.RestartApp(appName, appName)
 	}
 
 	return nil
