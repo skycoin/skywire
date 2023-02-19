@@ -275,6 +275,14 @@ func (rc *rpcClient) SetAppDNS(appName string, dnsAddr string) error {
 	}, &struct{}{})
 }
 
+// DoCustomSetting implements API.
+func (rc *rpcClient) DoCustomSetting(appName string, customSetting map[string]string) error {
+	return rc.Call("DoCustomSetting", &SetAppMapIn{
+		AppName: appName,
+		Val:     customSetting,
+	}, &struct{}{})
+}
+
 // LogsSince calls LogsSince
 func (rc *rpcClient) LogsSince(timestamp time.Time, appName string) ([]string, error) {
 	res := make([]string, 0)
@@ -974,6 +982,19 @@ func (mc *mockRPCClient) SetAppDNS(string, string) error {
 		}
 
 		return fmt.Errorf("app of name '%s' does not exist", socksName)
+	})
+}
+
+// DoCustomSetting implents API.
+func (mc *mockRPCClient) DoCustomSetting(appName string, customSetting map[string]string) error {
+	return mc.do(true, func() error {
+		for i := range mc.o.Apps {
+			if mc.o.Apps[i].Name == appName {
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", appName)
 	})
 }
 
