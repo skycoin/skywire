@@ -348,7 +348,7 @@ func (c Handler) SendMutePeerMessage(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// SendMutePeerMessageURLParam contains the parameter identifier to be parsed by the handler
+// SendUnmutePeerMessageURLParam contains the parameter identifier to be parsed by the handler
 const SendUnmutePeerMessageURLParam = "sendUnmutePeerMessage"
 
 // SendUnmutePeerMessageRequestModel represents the request model expected for Delete request

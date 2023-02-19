@@ -30,14 +30,15 @@ const DefaultRoomType = ChatRoomType
 // A Room always is a part of a server
 // A Server is always a part of a visor
 // So you can think of this hierarchial structure:
-//  (Visor (PublicKey1))
-//		-> P2P-Room
-//		-> Server1 (PublicKey1.1)
-//			-> Room1 (PublicKey1.1.1)
-//			-> Room2 (PublicKey1.1.2)
-//			-> Room3 (PublicKey1.1.2)
-// 		-> Server2 (PublicKey1.2)
-//			-> Room1 (PublicKey1.2.1)
+//
+//	 (Visor (PublicKey1))
+//			-> P2P-Room
+//			-> Server1 (PublicKey1.1)
+//				-> Room1 (PublicKey1.1.1)
+//				-> Room2 (PublicKey1.1.2)
+//				-> Room3 (PublicKey1.1.2)
+//			-> Server2 (PublicKey1.2)
+//				-> Room1 (PublicKey1.2.1)
 type Room struct {
 	//P2P & Server
 	PKRoute util.PKRoute      // P2P: send // Server: only send when room isVisible

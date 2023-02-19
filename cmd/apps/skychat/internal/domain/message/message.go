@@ -222,11 +222,8 @@ func NewRouteRequestMessage(pkOrigin cipher.PubKey, routeDestination util.PKRout
 	return m
 }
 
-/*
-	NewChatAcceptMessage returns a chat accepted message
-
-pk is the users pk to set the messages root
-*/
+// NewChatAcceptMessage returns a chat accepted message
+// pk is the users pk to set the messages root
 func NewChatAcceptMessage(root util.PKRoute, dest util.PKRoute) Message {
 	m := Message{}
 	m.Origin = root.Visor

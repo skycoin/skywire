@@ -40,7 +40,7 @@ func (h addLocalServerRequestHandler) Handle(command AddLocalServerRequest) erro
 	}
 
 	// Check if local visor exists, if not add the default local visor
-	visor := chat.Visor{}
+	var visor chat.Visor
 	pVisor, err := h.visorRepo.GetByPK(usr.GetInfo().GetPK())
 	if err != nil {
 		visor = chat.NewUndefinedVisor(usr.GetInfo().GetPK())

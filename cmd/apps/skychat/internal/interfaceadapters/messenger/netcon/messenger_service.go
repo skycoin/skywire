@@ -200,7 +200,7 @@ func (ms MessengerService) sendMessage(pkroute util.PKRoute, m message.Message, 
 	//check if visor exists
 	v, err := ms.visorRepo.GetByPK(pkroute.Visor)
 	if err != nil {
-		v2 := chat.Visor{}
+		var v2 chat.Visor
 		//visor doesn't exist so we add a new remote route
 		if pkroute.Visor == pkroute.Server { // --> P2P remote route
 			v2 = chat.NewDefaultP2PVisor(pkroute.Visor)
