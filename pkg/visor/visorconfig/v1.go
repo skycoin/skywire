@@ -163,6 +163,27 @@ func (v1 *V1) UpdateAppArg(launch *launcher.AppLauncher, appName, argName string
 	return v1.flush(v1)
 }
 
+// DeleteAppArg Delete entire of args of a custom app
+func (v1 *V1) DeleteAppArg(launch *launcher.AppLauncher, appName string) error {
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+
+	conf := v1.Launcher
+
+	configChanged := deleteAppArg(conf, appName)
+
+	if !configChanged {
+		return nil
+	}
+	launch.ResetConfig(launcher.AppLauncherConfig{
+		VisorPK:       v1.PK,
+		Apps:          conf.Apps,
+		ServerAddr:    conf.ServerAddr,
+		DisplayNodeIP: conf.DisplayNodeIP,
+	})
+	return v1.flush(v1)
+}
+
 // UpdateMinHops updates min_hops config
 func (v1 *V1) UpdateMinHops(hops uint16) error {
 	v1.mu.Lock()
@@ -323,6 +344,21 @@ func updateBoolArg(conf *Launcher, appName, argName string, value bool) bool {
 		break
 	}
 
+	return configChanged
+}
+
+// deleteAppArg delete all args of an app by its name
+func deleteAppArg(conf *Launcher, appName string) bool {
+	var configChanged bool
+	for i := range conf.Apps {
+		if conf.Apps[i].Name != appName {
+			continue
+		}
+
+		conf.Apps[i].Args = []string{}
+		configChanged = true
+		break
+	}
 	return configChanged
 }
 
