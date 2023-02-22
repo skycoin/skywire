@@ -267,6 +267,21 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
       return 'http://' + this.nodeIp + port;
     } else if (app.name.toLocaleLowerCase() === 'vpn-client' && this.nodePK) {
       return location.origin + '/#/vpn/' + this.nodePK + '/status';
+    } else if (!this.officialAppsList.has(app.name)) {
+      // Try to get the URL arg. If found, return the URL.
+      if (app.args) {
+        const urlArgsSet = new Set<string>(['url', '-url', 'addr', '-addr']);
+        let url: string = null;
+
+        for (let i = 0; i < app.args.length; i++) {
+          if (urlArgsSet.has((app.args[i] as string).toLowerCase()) && i + 1 < app.args.length) {
+            url = (app.args[i + 1] as string).trim();
+            break;
+          }
+        }
+
+        return url;
+      }
     }
 
     return null;
@@ -559,7 +574,6 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
    * Shows the appropriate modal window for configuring the app.
    */
   config(app: Application): void {
-    /*
     if (app.name === 'skysocks' || app.name === 'vpn-server') {
       SkysocksSettingsComponent.openDialog(this.dialog, app);
     } else if (app.name === 'skysocks-client' || app.name === 'vpn-client') {
@@ -569,8 +583,6 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     } else {
       UserAppSettingsComponent.openDialog(this.dialog, app);
     }
-    */
-    UserAppSettingsComponent.openDialog(this.dialog, app);
   }
 
   /**
