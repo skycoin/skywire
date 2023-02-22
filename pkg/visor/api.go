@@ -773,7 +773,10 @@ func (v *Visor) DoCustomSetting(appName string, customSetting map[string]string)
 
 	v.log.Infof("Changing %s Settings to %q", appName, customSetting)
 
-	v.conf.DeleteAppArg(v.appL, appName)
+	if err := v.conf.DeleteAppArg(v.appL, appName); err != nil {
+		v.log.Warn("An error occurs deleting old arguments.")
+		return err
+	}
 
 	for field, value := range customSetting {
 		if err := v.conf.UpdateAppArg(v.appL, appName, fmt.Sprintf("-%s", field), value); err != nil {
