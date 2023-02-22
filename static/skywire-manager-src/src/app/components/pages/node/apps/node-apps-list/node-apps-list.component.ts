@@ -270,7 +270,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     } else if (!this.officialAppsList.has(app.name)) {
       // Try to get the URL arg. If found, return the URL.
       if (app.args) {
-        const urlArgsSet = new Set<string>(['url', '-url', 'addr', '-addr']);
+        const urlArgsSet = new Set<string>(['url', '-url']);
         let url: string = null;
 
         for (let i = 0; i < app.args.length; i++) {
