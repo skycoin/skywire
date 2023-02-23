@@ -39,7 +39,7 @@ func init() {
 	logCmd.Flags().IntVarP(&duration, "duration", "d", 1, "count of days before today to fetch logs")
 	logCmd.Flags().BoolVar(&allVisors, "all", false, "consider all visors, actually skip filtering on version")
 	logCmd.Flags().IntVar(&batchSize, "batchSize", 50, "number of visor in each batch, default is 50")
-	logCmd.Flags().Int64Var(&maxFileSize, "filesize", 10, "maximum file size allowed to download during collecting logs, on KB")
+	logCmd.Flags().Int64Var(&maxFileSize, "maxfilesize", 30, "maximum file size allowed to download during collecting logs, on KB")
 	logCmd.Flags().StringVar(&utAddr, "ut", "", "custom uptime tracker url, usable for get specific(s) visors log data")
 }
 
