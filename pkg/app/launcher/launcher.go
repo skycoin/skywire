@@ -275,7 +275,7 @@ func (l *AppLauncher) StopApp(name string) (*appserver.Proc, error) {
 }
 
 // RestartApp restarts a running app.
-func (l *AppLauncher) RestartApp(name string) error {
+func (l *AppLauncher) RestartApp(name, binary string) error {
 	l.log.WithField("func", "RestartApp").WithField("app_name", name).
 		Info("Restarting app...")
 
@@ -285,7 +285,7 @@ func (l *AppLauncher) RestartApp(name string) error {
 	}
 
 	cmd := proc.Cmd()
-	if err := l.StartApp(name, nil, cmd.Env); err != nil {
+	if err := l.StartApp(binary, nil, cmd.Env); err != nil {
 		return fmt.Errorf("failed to start %s: %w", name, err)
 	}
 
@@ -302,7 +302,7 @@ func makeProcConfig(lc AppLauncherConfig, ac appserver.AppConfig, envs []string)
 		ProcWorkDir: filepath.Join(lc.LocalPath, ac.Name),
 		VisorPK:     lc.VisorPK,
 		RoutingPort: ac.Port,
-		BinaryLoc:   filepath.Join(lc.BinPath, ac.Name),
+		BinaryLoc:   filepath.Join(lc.BinPath, ac.Binary),
 		LogDBLoc:    filepath.Join(lc.LocalPath, ac.Name+"_log.db"),
 	}
 	err := ensureDir(&procConf.ProcWorkDir)

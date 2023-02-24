@@ -1,4 +1,4 @@
-import { Component, Input, OnDestroy } from '@angular/core';
+import { Component, Input, OnDestroy, OnInit } from '@angular/core';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { Observable, Subscription } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -22,22 +22,30 @@ import { SkysocksClientSettingsComponent } from '../node-apps/skysocks-client-se
 import { FilterProperties, FilterFieldTypes } from 'src/app/utils/filters';
 import { SortingColumn, SortingModes, DataSorter } from 'src/app/utils/lists/data-sorter';
 import { DataFilterer } from 'src/app/utils/lists/data-filterer';
+import { UserAppSettingsComponent } from '../node-apps/user-app-settings/user-app-settings.component';
 
 /**
- * Shows the list of applications of a node. I can be used to show a short preview, with just some
- * elements and a link for showing the rest: or the full list, with pagination controls.
+ * Shows the list of applications of a node. It shows official or user apps, not both at the
+ * same time. I can be used to show a short preview, with just some elements and a link for
+ * showing the rest, or the full list, with pagination controls. When adding to a component,
+ * the showOfficialApps property should be set first.
  */
 @Component({
   selector: 'app-node-app-list',
   templateUrl: './node-apps-list.component.html',
   styleUrls: ['./node-apps-list.component.scss']
 })
-export class NodeAppsListComponent implements OnDestroy {
+export class NodeAppsListComponent implements OnInit, OnDestroy {
   // Small text for identifying the list, needed for the helper objects.
-  private readonly listId = 'ap';
+  private readonly listIdForOfficialApps = 'op';
+  private readonly listIdForUserApps = 'up';
+
+  // Set with the names of the official apps.
+  private readonly officialAppsList = new Set<string>(['skychat', 'skysocks', 'skysocks-client', 'vpn-client', 'vpn-server']);
 
   @Input() nodePK: string;
   @Input() nodeIp: string;
+  @Input() showOfficialApps = true;
 
   // Vars with the data of the columns used for sorting the data.
   stateSortData = new SortingColumn(['status'], 'apps.apps-list.state', SortingModes.NumberReversed);
@@ -66,28 +74,43 @@ export class NodeAppsListComponent implements OnDestroy {
   @Input() set showShortList(val: boolean) {
     this.showShortList_ = val;
     // Sort the data.
-    this.dataSorter.setData(this.filteredApps);
+    if (this.dataSorter) {
+      this.dataSorter.setData(this.filteredApps);
+    }
   }
 
-  // List with the names of all the apps which can be configured directly on the manager.
-  appsWithConfig = new Map<string, boolean>([
-    ['skysocks', true],
-    ['skysocks-client', true],
-    ['vpn-client', true],
-    ['vpn-server', true],
-  ]);
+  // List with the names of all the apps which can not be configured directly on the manager.
+  appsWithoutConfig = new Set<string>(['skychat']);
 
+  // All apps the ode has.
   allApps: Application[];
+  // All apps the node has for the selected type (official apps or user apps).
+  allAppsForType: Application[];
   filteredApps: Application[];
   appsToShow: Application[];
   appsMap: Map<string, Application>;
   numberOfPages = 1;
   currentPage = 1;
-  // Used as a helper var, as the URL is read asynchronously.
+  // Used as a helper var, as the URL is readed asynchronously.
   currentPageInUrl = 1;
   @Input() set apps(val: Application[]) {
     this.allApps = val ? val : [];
-    this.dataFilterer.setData(this.allApps);
+
+    // Use only the apps for the selected type.
+    if (this.allApps) {
+      this.allAppsForType = [];
+      this.allApps.forEach(app => {
+        if (this.showOfficialApps && this.officialAppsList.has(app.name)) {
+          this.allAppsForType.push(app);
+        } else if (!this.showOfficialApps && !this.officialAppsList.has(app.name)) {
+          this.allAppsForType.push(app);
+        }
+      });
+
+      if (this.dataFilterer) {
+        this.dataFilterer.setData(this.allAppsForType);
+      }
+    }
   }
 
   // Array with the properties of the columns that can be used for filtering the data.
@@ -161,27 +184,12 @@ export class NodeAppsListComponent implements OnDestroy {
     private translateService: TranslateService,
     private storageService: StorageService,
   ) {
-    // Initialize the data sorter.
-    const sortableColumns: SortingColumn[] = [
-      this.stateSortData,
-      this.nameSortData,
-      this.portSortData,
-      this.autoStartSortData,
-    ];
-    this.dataSorter = new DataSorter(this.dialog, this.translateService, this.storageService, sortableColumns, 1, this.listId);
-    this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
-      // When this happens, the data in allApps has already been sorted.
-      this.recalculateElementsToShow();
-    });
-
-    this.dataFilterer = new DataFilterer(this.dialog, this.route, this.router, this.filterProperties, this.listId);
-    this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
-      this.filteredApps = data;
-      this.dataSorter.setData(this.filteredApps);
-    });
-
-    // Get the page requested in the URL.
+    // Get the page and type requested in the URL.
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
+      if (params.has('showOfficialApps')) {
+        this.showOfficialApps = params.get('showOfficialApps').toUpperCase() === 'true'.toUpperCase();
+      }
+
       if (params.has('page')) {
         let selectedPage = Number.parseInt(params.get('page'), 10);
         if (isNaN(selectedPage) || selectedPage < 1) {
@@ -193,6 +201,37 @@ export class NodeAppsListComponent implements OnDestroy {
         this.recalculateElementsToShow();
       }
     });
+  }
+
+  ngOnInit() {
+    const listIdToUse = this.showOfficialApps ? this.listIdForOfficialApps : this.listIdForUserApps;
+
+    // Initialize the data sorter.
+    const sortableColumns: SortingColumn[] = [
+      this.stateSortData,
+      this.nameSortData,
+      this.portSortData,
+      this.autoStartSortData,
+    ];
+    this.dataSorter = new DataSorter(this.dialog, this.translateService, this.storageService, sortableColumns, 1, listIdToUse);
+    this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
+      // When this happens, the data in allAppsForType has already been sorted.
+      this.recalculateElementsToShow();
+    });
+
+    if (this.dataSorter) {
+      this.dataSorter.setData(this.filteredApps);
+    }
+
+    this.dataFilterer = new DataFilterer(this.dialog, this.route, this.router, this.filterProperties, listIdToUse);
+    this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
+      this.filteredApps = data;
+      this.dataSorter.setData(this.filteredApps);
+    });
+
+    if (this.allAppsForType) {
+      this.dataFilterer.setData(this.allAppsForType);
+    }
   }
 
   ngOnDestroy() {
@@ -228,6 +267,21 @@ export class NodeAppsListComponent implements OnDestroy {
       return 'http://' + this.nodeIp + port;
     } else if (app.name.toLocaleLowerCase() === 'vpn-client' && this.nodePK) {
       return location.origin + '/#/vpn/' + this.nodePK + '/status';
+    } else if (!this.officialAppsList.has(app.name)) {
+      // Try to get the URL arg. If found, return the URL.
+      if (app.args) {
+        const urlArgsSet = new Set<string>(['url', '-url']);
+        let url: string = null;
+
+        for (let i = 0; i < app.args.length; i++) {
+          if (urlArgsSet.has((app.args[i] as string).toLowerCase()) && i + 1 < app.args.length) {
+            url = (app.args[i + 1] as string).trim();
+            break;
+          }
+        }
+
+        return url;
+      }
     }
 
     return null;
@@ -401,7 +455,7 @@ export class NodeAppsListComponent implements OnDestroy {
       }
     ];
 
-    if (this.appsWithConfig.has(app.name)) {
+    if (!this.appsWithoutConfig.has(app.name)) {
       options.push({
         icon: 'settings',
         label: 'apps.settings',
@@ -524,8 +578,10 @@ export class NodeAppsListComponent implements OnDestroy {
       SkysocksSettingsComponent.openDialog(this.dialog, app);
     } else if (app.name === 'skysocks-client' || app.name === 'vpn-client') {
       SkysocksClientSettingsComponent.openDialog(this.dialog, app);
-    } else {
+    } else if (app.name === 'skychat') {
       this.snackbarService.showError('apps.error');
+    } else {
+      UserAppSettingsComponent.openDialog(this.dialog, app);
     }
   }
 

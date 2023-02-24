@@ -391,13 +391,16 @@
     },
     "apps-list": {
       "title": "Applications",
+      "title-official": "Official Applications",
+      "title-user": "User Applications",
       "list-title": "Application list",
       "app-name": "Name",
       "port": "Port",
       "state": "State",
       "state-tooltip": "Current state",
       "auto-start": "Auto start",
-      "empty": "Visor doesn't have any applications.",
+      "empty-official": "This visor doesn't have any official applications.",
+      "empty-user": "This visor doesn't have any user applications.",
       "empty-with-filter": "No app matches the selected filtering criteria.",
       "disable-autostart": "Disable autostart",
       "enable-autostart": "Enable autostart",
@@ -423,6 +426,18 @@
           "disabled": "Disabled"
         }
       }
+    },
+    "user-app-settings": {
+      "title": "{{ name }} (Settings)",
+      "info": "Here you can edit the app settings as name-value pairs. Please check the application docs to see which settings and values are supported by this app.",
+      "name": "Name {{ number }}",
+      "value": "Value {{ number }}",
+      "remove": "Remove",
+      "add": "Add setting",
+      "save": "Save",
+      "invalid-confirmation": "One or more settings do not have a name and will be ignored. Do you want to continue?",
+      "empty-confirmation": "The settings list is empty. Do you really want to continue?",
+      "changes-made": "The changes have been made."
     },
     "vpn-socks-server-settings": {
       "socks-title": "Skysocks Settings",

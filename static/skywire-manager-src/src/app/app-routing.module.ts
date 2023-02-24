@@ -97,12 +97,7 @@ const routes: Routes = [
             component: AllRoutesComponent
           },
           {
-            path: 'apps-list',
-            redirectTo: 'apps-list/1',
-            pathMatch: 'full'
-          },
-          {
-            path: 'apps-list/:page',
+            path: 'apps-list/:showOfficialApps/:page',
             component: AllAppsComponent
           },
         ]
