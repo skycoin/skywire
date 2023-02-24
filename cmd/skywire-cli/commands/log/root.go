@@ -23,12 +23,13 @@ import (
 )
 
 var (
-	env       string
-	duration  int
-	minv      string
-	allVisors bool
-	batchSize int
-	utAddr    string
+	env         string
+	duration    int
+	minv        string
+	allVisors   bool
+	batchSize   int
+	maxFileSize int64
+	utAddr      string
 )
 
 func init() {
@@ -38,6 +39,7 @@ func init() {
 	logCmd.Flags().IntVarP(&duration, "duration", "d", 1, "count of days before today to fetch logs")
 	logCmd.Flags().BoolVar(&allVisors, "all", false, "consider all visors, actually skip filtering on version")
 	logCmd.Flags().IntVar(&batchSize, "batchSize", 50, "number of visor in each batch, default is 50")
+	logCmd.Flags().Int64Var(&maxFileSize, "maxfilesize", 30, "maximum file size allowed to download during collecting logs, on KB")
 	logCmd.Flags().StringVar(&utAddr, "ut", "", "custom uptime tracker url, usable for get specific(s) visors log data")
 }
 
@@ -121,7 +123,7 @@ var logCmd = &cobra.Command{
 					deleteOnError = true
 				}
 
-				err = download(ctx, log, httpC, "node-info.json", "node-info.json", key)
+				err = download(ctx, log, httpC, "node-info.json", "node-info.json", key, maxFileSize)
 				if err != nil {
 					if deleteOnError {
 						bulkFolders = append(bulkFolders, key)
@@ -129,7 +131,7 @@ var logCmd = &cobra.Command{
 					return
 				}
 
-				err = download(ctx, log, httpC, "node-info.sha", "node-info.sha", key)
+				err = download(ctx, log, httpC, "node-info.sha", "node-info.sha", key, maxFileSize)
 				if err != nil {
 					if deleteOnError {
 						bulkFolders = append(bulkFolders, key)
@@ -139,11 +141,11 @@ var logCmd = &cobra.Command{
 
 				if duration == 1 {
 					yesterday := time.Now().AddDate(0, 0, -1).UTC().Format("2006-01-02")
-					download(ctx, log, httpC, "transport_logs/"+yesterday+".csv", yesterday+".csv", key) //nolint
+					download(ctx, log, httpC, "transport_logs/"+yesterday+".csv", yesterday+".csv", key, maxFileSize) //nolint
 				} else {
 					for i := 1; i <= duration; i++ {
 						date := time.Now().AddDate(0, 0, -i).UTC().Format("2006-01-02")
-						download(ctx, log, httpC, "transport_logs/"+date+".csv", date+".csv", key) //nolint
+						download(ctx, log, httpC, "transport_logs/"+date+".csv", date+".csv", key, maxFileSize) //nolint
 					}
 				}
 
@@ -165,12 +167,12 @@ var logCmd = &cobra.Command{
 	},
 }
 
-func download(ctx context.Context, log *logging.Logger, httpC http.Client, targetPath, fileName, pubkey string) error {
+func download(ctx context.Context, log *logging.Logger, httpC http.Client, targetPath, fileName, pubkey string, maxSize int64) error {
 	target := fmt.Sprintf("dmsg://%s:80/%s", pubkey, targetPath)
 	file, _ := os.Create(pubkey + "/" + fileName) //nolint
 	defer file.Close()                            //nolint
 
-	if err := dmsgget.Download(ctx, log, &httpC, file, target); err != nil {
+	if err := dmsgget.Download(ctx, log, &httpC, file, target, maxSize); err != nil {
 		log.WithError(err).Errorf("The %s for visor %s not available", fileName, pubkey)
 		return err
 	}
