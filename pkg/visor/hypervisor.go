@@ -596,20 +596,21 @@ func (hv *Hypervisor) getAppStats() http.HandlerFunc {
 func (hv *Hypervisor) putApp() http.HandlerFunc {
 	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		type req struct {
-			AutoStart  *bool          `json:"autostart,omitempty"`
-			Killswitch *bool          `json:"killswitch,omitempty"`
-			Secure     *bool          `json:"secure,omitempty"`
-			Status     *int           `json:"status,omitempty"`
-			Passcode   *string        `json:"passcode,omitempty"`
-			NetIfc     *string        `json:"netifc,omitempty"`
-			DNSAddr    *string        `json:"dns,omitempty"`
-			PK         *cipher.PubKey `json:"pk,omitempty"`
+			AutoStart     *bool             `json:"autostart,omitempty"`
+			Killswitch    *bool             `json:"killswitch,omitempty"`
+			Secure        *bool             `json:"secure,omitempty"`
+			Status        *int              `json:"status,omitempty"`
+			Passcode      *string           `json:"passcode,omitempty"`
+			NetIfc        *string           `json:"netifc,omitempty"`
+			DNSAddr       *string           `json:"dns,omitempty"`
+			PK            *cipher.PubKey    `json:"pk,omitempty"`
+			CustomSetting map[string]string `json:"custom_setting,omitempty"`
 		}
 
 		shouldRestartApp := func(r req) bool {
 			// we restart the app if one of these fields was changed
 			return r.Killswitch != nil || r.Secure != nil || r.Passcode != nil ||
-				r.PK != nil || r.NetIfc != nil
+				r.PK != nil || r.NetIfc != nil || r.CustomSetting != nil
 		}
 
 		var reqBody req
@@ -669,6 +670,13 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 
 		if reqBody.DNSAddr != nil {
 			if err := ctx.API.SetAppDNS(ctx.App.Name, *reqBody.DNSAddr); err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		if reqBody.CustomSetting != nil {
+			if err := ctx.API.DoCustomSetting(ctx.App.Name, reqBody.CustomSetting); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
 			}

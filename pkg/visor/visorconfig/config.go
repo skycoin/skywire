@@ -232,28 +232,33 @@ func makeDefaultLauncherAppsConfig(dnsServer string) []appserver.AppConfig {
 	defaultConfig := []appserver.AppConfig{
 		{
 			Name:      VPNClientName,
+			Binary:    VPNClientName,
 			AutoStart: false,
 			Port:      routing.Port(skyenv.VPNClientPort),
 			Args:      []string{"-dns", dnsServer},
 		},
 		{
 			Name:      SkychatName,
+			Binary:    SkychatName,
 			AutoStart: true,
 			Port:      routing.Port(skyenv.SkychatPort),
 			Args:      []string{"-addr", SkychatAddr},
 		},
 		{
 			Name:      SkysocksName,
+			Binary:    SkysocksName,
 			AutoStart: true,
 			Port:      routing.Port(skyenv.SkysocksPort),
 		},
 		{
 			Name:      SkysocksClientName,
+			Binary:    SkysocksClientName,
 			AutoStart: false,
 			Port:      routing.Port(skyenv.SkysocksClientPort),
 		},
 		{
 			Name:      VPNServerName,
+			Binary:    VPNServerName,
 			AutoStart: false,
 			Port:      routing.Port(skyenv.VPNServerPort),
 		},
