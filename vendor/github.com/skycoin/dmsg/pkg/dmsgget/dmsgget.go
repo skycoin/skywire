@@ -120,7 +120,7 @@ func (dg *DmsgGet) Run(ctx context.Context, log *logging.Logger, skStr string, a
 			return fmt.Errorf("failed to reset file: %w", err)
 		}
 
-		if err := Download(ctx, log, &httpC, file, u.URL.String()); err != nil {
+		if err := Download(ctx, log, &httpC, file, u.URL.String(), 0); err != nil {
 			log.WithError(err).Error()
 			select {
 			case <-ctx.Done():
@@ -217,15 +217,19 @@ func (dg *DmsgGet) StartDmsg(ctx context.Context, log *logging.Logger, pk cipher
 }
 
 // Download downloads a file from the given URL into 'w'.
-func Download(ctx context.Context, log logrus.FieldLogger, httpC *http.Client, w io.Writer, urlStr string) error {
+func Download(ctx context.Context, log logrus.FieldLogger, httpC *http.Client, w io.Writer, urlStr string, maxSize int64) error {
 	req, err := http.NewRequest(http.MethodGet, urlStr, nil)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to formulate HTTP request.")
 	}
-
 	resp, err := httpC.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to connect to HTTP server: %w", err)
+	}
+	if maxSize > 0 {
+		if resp.ContentLength > maxSize*1024 {
+			return fmt.Errorf("requested file size is more than allowed size: %d KB > %d KB", (resp.ContentLength / 1024), maxSize)
+		}
 	}
 	n, err := CancellableCopy(ctx, w, resp.Body, resp.ContentLength)
 	if err != nil {
