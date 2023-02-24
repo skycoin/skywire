@@ -272,7 +272,7 @@ func IPSkycoinFetch() (ipskycoin *IPSkycoin) {
 
 	url := fmt.Sprint("http://", "ip.skycoin.com")
 	client := http.Client{
-		Timeout: time.Second * 15, // Timeout after 15 seconds
+		Timeout: time.Second * 45, // Timeout after 45 seconds
 	}
 	//create the http request
 	req, err := http.NewRequest(http.MethodGet, url, nil)

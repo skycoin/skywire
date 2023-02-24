@@ -107,6 +107,12 @@ func SystemSurvey() (Survey, error) {
 	if err != nil {
 		return Survey{}, err
 	}
+	for {
+		ipInfo := IPSkycoinFetch()
+		if ipInfo != nil {
+			break
+		}
+	}
 	s := Survey{
 		Timestamp:      time.Now(),
 		IPInfo:         IPSkycoinFetch(),

@@ -16,7 +16,7 @@ import (
 )
 
 // GenerateSurvey generate survey handler
-func GenerateSurvey(conf *V1, log *logging.Logger, rawSurvey bool) {
+func GenerateSurvey(conf *V1, log *logging.Logger, routine, rawSurvey bool) {
 	if IsRoot() {
 		for {
 			//check for valid reward address set as prerequisite for generating the system survey
@@ -92,6 +92,10 @@ func GenerateSurvey(conf *V1, log *logging.Logger, rawSurvey bool) {
 				if err == nil {
 					log.Debug("Removed hadware survey checksum file")
 				}
+			}
+			// break loop for generate each 24hours if just reward address chenged
+			if !routine {
+				break
 			}
 			time.Sleep(24 * time.Hour)
 		}
