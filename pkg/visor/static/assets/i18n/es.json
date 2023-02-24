@@ -395,13 +395,16 @@
     },
     "apps-list": {
       "title": "Aplicaciones",
+      "title-official": "Aplicaciones Oficiales",
+      "title-user": "Aplicaciones de Usuario",
       "list-title": "Lista de aplicaciones",
       "app-name": "Nombre",
       "port": "Puerto",
       "state": "Estado",
       "state-tooltip": "Estado actual",
       "auto-start": "Autoinicio",
-      "empty": "El visor no tiene ninguna aplicación.",
+      "empty-official": "El visor no tiene ninguna aplicación oficial.",
+      "empty-user": "El visor no tiene ninguna aplicación de usuario.",
       "empty-with-filter": "Ninguna app coincide con los criterios de filtrado seleccionados.",
       "disable-autostart": "Deshabilitar autoinicio",
       "enable-autostart": "Habilitar autoinicio",
@@ -427,6 +430,18 @@
           "disabled": "Desactivado"
         }
       }
+    },
+    "user-app-settings": {
+      "title": "{{ name }} (Configuración)",
+      "info": "Aquí puede editar la configuración de la app como pares nombre-valor. Por favor, revise la documentación de la aplicación para ver cuáles configuraciones y valores soporta esta app.",
+      "name": "Nombre {{ number }}",
+      "value": "Valor {{ number }}",
+      "remove": "Remover",
+      "add": "Agregar configuración",
+      "save": "Guardar",
+      "invalid-confirmation": "Una o más configuraciones no tienen nombre y serán ignoradas. ¿Desea continuar?",
+      "empty-confirmation": "La lista de configuración está vacía. ¿Realmente desea continuar?",
+      "changes-made": "Los cambios han sido realizados."
     },
     "vpn-socks-server-settings": {
       "socks-title": "Configuración de Skysocks",

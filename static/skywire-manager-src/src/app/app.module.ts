@@ -99,6 +99,7 @@ import { UpdateAllComponent } from './components/layout/update-all/update-all.co
 import { VpnDnsConfigComponent } from './components/vpn/layout/vpn-dns-config/vpn-dns-config.component';
 import { RewardsAddressComponent } from './components/pages/node/node-info/node-info-content/rewards-address-config/rewards-address-config.component';
 import { BulkRewardAddressChangerComponent } from './components/layout/bulk-reward-address-changer/bulk-reward-address-changer.component';
+import { UserAppSettingsComponent } from './components/pages/node/apps/node-apps/user-app-settings/user-app-settings.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
   disabled: true,
@@ -174,6 +175,7 @@ const globalRippleConfig: RippleGlobalOptions = {
     VpnDnsConfigComponent,
     RewardsAddressComponent,
     BulkRewardAddressChangerComponent,
+    UserAppSettingsComponent,
   ],
   imports: [
     BrowserModule,

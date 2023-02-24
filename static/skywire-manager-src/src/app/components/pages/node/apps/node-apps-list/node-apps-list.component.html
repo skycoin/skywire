@@ -1,7 +1,8 @@
 <!-- Header. -->
 <div class="generic-title-container mt-4.5 d-flex" [ngClass]="{'paginator-icons-fixer': !showShortList_ && numberOfPages > 1 && dataSource}">
   <div class="title">
-    <span *ngIf="showShortList_" class="uppercase">{{ 'apps.apps-list.title' | translate }}</span>
+    <span *ngIf="showShortList_ && showOfficialApps" class="uppercase">{{ 'apps.apps-list.title-official' | translate }}</span>
+    <span *ngIf="showShortList_ && !showOfficialApps" class="uppercase">{{ 'apps.apps-list.title-user' | translate }}</span>
     <div class="filter-label subtle-transparent-button cursor-pointer" (click)="dataFilterer.removeFilters()" *ngIf="dataFilterer.currentFiltersTexts && dataFilterer.currentFiltersTexts.length > 0">
       <div *ngFor="let filterTexts of dataFilterer.currentFiltersTexts" class="item">
         <span>{{ filterTexts.filterName | translate }}: </span>
@@ -18,7 +19,7 @@
         (click)="dataFilterer.changeFilters()"
         [matTooltip]="'filters.filter-action' | translate"
         class="small-icon"
-        *ngIf="allApps && allApps.length > 0"
+        *ngIf="allAppsForType && allAppsForType.length > 0"
       >filter_list</mat-icon>
       <mat-icon
         [matMenuTriggerFor]="selectionMenu"
@@ -50,7 +51,7 @@
       *ngIf="!showShortList_ && numberOfPages > 1 && dataSource"
       [currentPage]="currentPage"
       [numberOfPages]="numberOfPages"
-      [linkParts]="['/nodes', nodePK, 'apps-list']"
+      [linkParts]="['/nodes', nodePK, 'apps-list', showOfficialApps]"
       [queryParams]="dataFilterer.currentUrlQueryParams">
     </app-paginator>
   </div>
@@ -135,7 +136,7 @@
           mat-button
           [matTooltip]="'apps.settings' | translate"
           class="big-action-button transparent-button"
-          *ngIf="appsWithConfig.has(app.name)"
+          *ngIf="!appsWithoutConfig.has(app.name)"
         >
           <mat-icon [inline]="true">settings</mat-icon>
         </button>
@@ -239,7 +240,7 @@
   <!-- Link for accessing the full list. -->  
   <app-view-all-link
     [numberOfElements]="filteredApps.length"
-    [linkParts]="['/nodes', nodePK, 'apps-list']"
+    [linkParts]="['/nodes', nodePK, 'apps-list', showOfficialApps, '1']"
     [queryParams]="dataFilterer.currentUrlQueryParams"
     *ngIf="showShortList_ && numberOfPages > 1"
   ></app-view-all-link>
@@ -249,8 +250,9 @@
 <div class="rounded-elevated-box mt-3" *ngIf="!dataSource || dataSource.length === 0">
   <div class="box-internal-container">
     <mat-icon [inline]="true" class="alert-icon">warning</mat-icon>
-    <span class="font-sm" *ngIf="allApps.length === 0">{{ 'apps.apps-list.empty' | translate }}</span>
-    <span class="font-sm" *ngIf="allApps.length !== 0">{{ 'apps.apps-list.empty-with-filter' | translate }}</span>
+    <span class="font-sm" *ngIf="allAppsForType.length === 0 && showOfficialApps">{{ 'apps.apps-list.empty-official' | translate }}</span>
+    <span class="font-sm" *ngIf="allAppsForType.length === 0 && !showOfficialApps">{{ 'apps.apps-list.empty-user' | translate }}</span>
+    <span class="font-sm" *ngIf="allAppsForType.length !== 0">{{ 'apps.apps-list.empty-with-filter' | translate }}</span>
   </div>
 </div>
 
@@ -259,6 +261,6 @@
   *ngIf="!showShortList_ && numberOfPages > 1 && dataSource"
   [currentPage]="currentPage"
   [numberOfPages]="numberOfPages"
-  [linkParts]="['/nodes', nodePK, 'apps-list']"
+  [linkParts]="['/nodes', nodePK, 'apps-list', showOfficialApps]"
   [queryParams]="dataFilterer.currentUrlQueryParams">
 </app-paginator>

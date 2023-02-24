@@ -80,7 +80,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
-	setAppPort(appCl, socksPort)
+	setAppPort(appCl, appCl.Config().RoutingPort)
 	for {
 		conn, err := dialServer(ctx, appCl, pk)
 		if err != nil {
