@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.5
+-   log collection size limit | improve survey logic  [#1496](https://github.com/skycoin/skywire/pull/1496)
+-   Custom Apps  [#1495](https://github.com/skycoin/skywire/pull/1495)
+-   improve survey logic  [#1489](https://github.com/skycoin/skywire/pull/1489)
+
 ## 1.3.4
 -   Uncomment Profiler [#1480](https://github.com/skycoin/skywire/pull/1480)
 -   update changelog  [#1480](https://github.com/skycoin/skywire/pull/1480)
