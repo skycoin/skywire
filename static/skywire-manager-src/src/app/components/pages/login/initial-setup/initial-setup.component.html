@@ -1,3 +1,7 @@
-<app-dialog [headline]="'settings.password.initial-config.title' | translate" [dialog]="dialogRef">
-  <app-password [forInitialConfig]="true"></app-password>
+<app-dialog
+  [headline]="'settings.password.initial-config.title' | translate"
+  [dialog]="dialogRef"
+  [disableDismiss]="disableDismiss"
+>
+  <app-password [forInitialConfig]="true" (workingState)="disableDismiss=$event"></app-password>
 </app-dialog>

@@ -14,6 +14,11 @@ import { AppConfig } from 'src/app/app.config';
 export class InitialSetupComponent {
 
   /**
+   * If true, all the ways provided by default by the UI for closing the modal window are disabled.
+   */
+  disableDismiss = false;
+
+  /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
    */
   public static openDialog(dialog: MatDialog): MatDialogRef<InitialSetupComponent, any> {
