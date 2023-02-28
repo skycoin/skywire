@@ -104,6 +104,7 @@
           <button
             mat-button
             class="list-button grey-button-background w-100"
+            [ngClass]="{'element-disabled' : disableDismiss}"
             (click)="saveChanges(proxy.pk, null, false, proxy.location)"
           >
             <div class="button-content">
@@ -167,6 +168,7 @@
         <button
           mat-button
           class="list-button grey-button-background w-100 d-none d-md-inline"
+          [ngClass]="{'element-disabled' : disableDismiss}"
           (click)="useFromHistory(entry)"
         >
           <ng-container *ngTemplateOutlet="content"></ng-container>
@@ -192,6 +194,7 @@
         <button
           mat-button
           class="list-button grey-button-background w-100 d-md-none"
+          [ngClass]="{'element-disabled' : disableDismiss}"
           (click)="openHistoryOptions(entry)"
         >
           <ng-container *ngTemplateOutlet="content"></ng-container>
@@ -238,7 +241,7 @@
     <mat-tab [label]="'apps.vpn-socks-client-settings.settings-tab' | translate" *ngIf="configuringVpn">
       <form [formGroup]="settingsForm">
         <!-- DNS option. -->
-        <mat-form-field>
+        <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
           <div class="field-container">
             <label class="field-label" for="remoteKey">{{ 'apps.vpn-socks-client-settings.dns' | translate }}</label>
             <input
@@ -256,7 +259,7 @@
 
         <!-- Killswitch option. -->
         <div class="main-theme settings-option">
-          <mat-checkbox color="primary" formControlName="killswitch">
+          <mat-checkbox color="primary" formControlName="killswitch" [ngClass]="{'element-disabled' : disableDismiss}">
             {{ 'apps.vpn-socks-client-settings.killswitch-check' | translate }}
             <mat-icon [inline]="true" class="help-icon" [matTooltip]="'apps.vpn-socks-client-settings.killswitch-info' | translate">help</mat-icon>
           </mat-checkbox>
