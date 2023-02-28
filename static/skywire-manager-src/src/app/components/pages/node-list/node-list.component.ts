@@ -5,7 +5,7 @@ import { Router, ActivatedRoute } from '@angular/router';
 import { catchError, mergeMap } from 'rxjs/operators';
 import { TranslateService } from '@ngx-translate/core';
 
-import { NodeService, BackendData, KnownHealthStatuses } from '../../../services/node.service';
+import { NodeService, KnownHealthStatuses } from '../../../services/node.service';
 import { Node } from '../../../app.datatypes';
 import { AuthService, AuthStates } from '../../../services/auth.service';
 import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
@@ -22,6 +22,7 @@ import { SortingModes, SortingColumn, DataSorter } from 'src/app/utils/lists/dat
 import { DataFilterer } from 'src/app/utils/lists/data-filterer';
 import { NodeData, UpdateAllComponent } from '../../layout/update-all/update-all.component';
 import { BulkRewardAddressChangerComponent, BulkRewardAddressParams, NodeToEditData } from '../../layout/bulk-reward-address-changer/bulk-reward-address-changer.component';
+import { MultipleNodeDataService, MultipleNodesBackendData } from 'src/app/services/multiple-node-data.service';
 
 /**
  * Page for showing the node list.
@@ -129,6 +130,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
   constructor(
     private nodeService: NodeService,
+    private multipleNodeDataService: MultipleNodeDataService,
     private router: Router,
     private dialog: MatDialog,
     private authService: AuthService,
@@ -228,7 +230,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
     // Refresh the data after languaje changes, to ensure the labels used for filtering
     // are updated.
     this.languageSubscription = this.translateService.onLangChange.subscribe(() => {
-      this.nodeService.forceNodeListRefresh();
+      this.multipleNodeDataService.forceRefresh();
     });
   }
 
@@ -263,7 +265,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     // Load the data.
-    this.nodeService.startRequestingNodeList();
     this.startGettingData();
 
     // Procedure to keep updated the variable that indicates how long ago the data was updated.
@@ -276,7 +277,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.nodeService.stopRequestingNodeList();
     this.authVerificationSubscription.unsubscribe();
     this.dataSubscription.unsubscribe();
     this.updateTimeSubscription.unsubscribe();
@@ -358,21 +358,20 @@ export class NodeListComponent implements OnInit, OnDestroy {
       this.lastUpdateRequestedManually = true;
     }
 
-    this.nodeService.forceNodeListRefresh();
+    this.multipleNodeDataService.forceRefresh();
   }
 
   /**
    * Starts getting the data from the backend.
    */
   private startGettingData() {
-    // Detect when the service is updating the data.
-    this.dataSubscription = this.nodeService.updatingNodeList.subscribe(val => this.updating = val);
-
     this.ngZone.runOutsideAngular(() => {
       // Get the node list.
-      this.dataSubscription.add(this.nodeService.nodeList.subscribe((result: BackendData) => {
+      this.dataSubscription = this.multipleNodeDataService.startRequestingData().subscribe((result: MultipleNodesBackendData) => {
         this.ngZone.run(() => {
-          if (result) {
+          this.updating = result ? result.updating : true;
+
+          if (result && !result.updating) {
             // If the data was obtained.
             if (result.data && !result.error) {
               this.allNodes = result.data as Node[];
@@ -416,7 +415,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
             }
           }
         });
-      }));
+      });
     });
   }
 
