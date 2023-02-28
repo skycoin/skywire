@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -47,7 +46,6 @@ type API interface {
 	Restart() error
 	Reload() error
 	Shutdown() error
-	Exec(command string) ([]byte, error)
 	RuntimeLogs() (string, error)
 	RemoteVisors() ([]string, error)
 	GetLogRotationInterval() (visorconfig.Duration, error)
@@ -1292,14 +1290,6 @@ func (v *Visor) Shutdown() error {
 	}
 	defer os.Exit(0)
 	return v.Close()
-}
-
-// Exec implements API.
-// Exec executes a shell command. It returns combined stdout and stderr output and an error.
-func (v *Visor) Exec(command string) ([]byte, error) {
-	args := strings.Split(command, " ")
-	cmd := exec.Command(args[0], args[1:]...) // nolint: gosec
-	return cmd.CombinedOutput()
 }
 
 // RuntimeLogs returns visor runtime logs
