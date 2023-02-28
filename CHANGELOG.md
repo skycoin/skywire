@@ -10,11 +10,6 @@ updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 -   log collection size limit | improve survey logic  [#1496](https://github.com/skycoin/skywire/pull/1496)
 -   Custom Apps  [#1495](https://github.com/skycoin/skywire/pull/1495)
 -   improve survey logic  [#1489](https://github.com/skycoin/skywire/pull/1489)
--   fixing goreleaser issue  [#1486](https://github.com/skycoin/skywire/pull/1486)
--   fix release config  [#1485](https://github.com/skycoin/skywire/pull/1485)
--   fix release condition logic  [#1483](https://github.com/skycoin/skywire/pull/1483)
--   fix missing skycoin.asc  [#1482](https://github.com/skycoin/skywire/pull/1482)
--   go mod tidy ; go mod vendor ; update vendor dir  [#1481](https://github.com/skycoin/skywire/pull/1481)
 
 ## 1.3.4
 -   Uncomment Profiler [#1480](https://github.com/skycoin/skywire/pull/1480)
