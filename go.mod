@@ -48,7 +48,6 @@ require (
 	github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
 	github.com/jaypipes/ghw v0.10.0
 	github.com/lib/pq v1.10.7
-	github.com/pkg/profile v1.7.0
 	github.com/pterm/pterm v0.12.49
 	github.com/skycoin/dmsg v1.3.0-rc1.0.20230224131835-1c194ef9791e
 	github.com/skycoin/skywire-utilities v0.0.0-20230110132024-c5536ba8e22c
@@ -74,11 +73,9 @@ require (
 	github.com/creack/pty v1.1.15 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fatih/color v1.13.0 // indirect
-	github.com/felixge/fgprof v0.9.3 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
-	github.com/google/pprof v0.0.0-20211214055906-6f57359322fd // indirect
 	github.com/gookit/color v1.5.2 // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect

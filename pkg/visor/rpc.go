@@ -605,14 +605,6 @@ func (r *RPC) Shutdown(_ *struct{}, _ *struct{}) (err error) {
 	return r.visor.Shutdown()
 }
 
-// Exec executes a given command in cmd and writes its output to out.
-func (r *RPC) Exec(cmd *string, out *[]byte) (err error) {
-	defer rpcutil.LogCall(r.log, "Exec", cmd)(out, &err)
-
-	*out, err = r.visor.Exec(*cmd)
-	return err
-}
-
 // SetMinHops sets min_hops in visor's routing config
 func (r *RPC) SetMinHops(n *uint16, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetMinHops", *n)

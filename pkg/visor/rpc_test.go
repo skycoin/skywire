@@ -343,21 +343,6 @@ These tests have been commented out for the following reasons:
 //		})
 //	})
 //
-//	t.Run("Exec", func(t *testing.T) {
-//		command := "echo 1"
-//
-//		t.Run("RPCServer", func(t *testing.T) {
-//			var out []byte
-//			require.NoError(t, gateway.Exec(&command, &out))
-//			assert.Equal(t, []byte("1\net"), out)
-//		})
-//
-//		t.Run("API", func(t *testing.T) {
-//			out, err := client.Exec(command)
-//			require.NoError(t, err)
-//			assert.Equal(t, []byte("1\net"), out)
-//		})
-//	})
 //
 //	t.Run("Apps", func(t *testing.T) {
 //		test := func(t *testing.T, apps []*AppState) {
