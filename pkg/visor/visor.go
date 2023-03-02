@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rifflock/lfshook"
+	"github.com/sirupsen/logrus"
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/toqueteos/webbrowser"
@@ -235,6 +237,11 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	if conf == nil {
 		conf = initConfig()
 	}
+
+	if isStoreLog {
+		storeLog(conf)
+	}
+
 	v := &Visor{
 		log:                  conf.MasterLogger().PackageLogger("visor"),
 		conf:                 conf,
@@ -531,4 +538,34 @@ func initUI() *fs.FS {
 	}
 	return &uiFS
 
+}
+
+func storeLog(conf *visorconfig.V1) {
+	now := time.Now().Format("2006-01-02_15:04:05")
+	pathMap := lfshook.PathMap{
+		logrus.InfoLevel:  conf.LocalPath + "/log/" + now + ".log",
+		logrus.WarnLevel:  conf.LocalPath + "/log/" + now + ".log",
+		logrus.TraceLevel: conf.LocalPath + "/log/" + now + ".log",
+		logrus.ErrorLevel: conf.LocalPath + "/log/" + now + ".log",
+		logrus.DebugLevel: conf.LocalPath + "/log/" + now + ".log",
+		logrus.FatalLevel: conf.LocalPath + "/log/" + now + ".log",
+	}
+
+	conf.MasterLogger().Hooks.Add(lfshook.NewHook(
+		pathMap,
+		&logging.TextFormatter{
+			DisableColors:   true,
+			FullTimestamp:   true,
+			ForceFormatting: true,
+		},
+	))
+
+	mLog.Hooks.Add(lfshook.NewHook(
+		pathMap,
+		&logging.TextFormatter{
+			DisableColors:   true,
+			FullTimestamp:   true,
+			ForceFormatting: true,
+		},
+	))
 }

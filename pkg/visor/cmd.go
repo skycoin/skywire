@@ -55,6 +55,7 @@ var (
 	visorBuildInfo *buildinfo.Info
 	dmsgServer     string
 	rawSurvey      bool
+	isStoreLog     bool
 )
 
 func init() {
@@ -130,8 +131,9 @@ func init() {
 	hiddenflags = append(hiddenflags, "completion")
 	RootCmd.Flags().BoolVar(&rawSurvey, "raw-survey", false, "survey will generate and store decrypted if pass this flag")
 	hiddenflags = append(hiddenflags, "raw-survey")
+	RootCmd.Flags().BoolVarP(&isStoreLog, "store-log", "l", false, "store all logs to file")
+	hiddenflags = append(hiddenflags, "xhv")
 	RootCmd.Flags().BoolVar(&all, "all", false, "show all flags")
-
 	for _, j := range hiddenflags {
 		RootCmd.Flags().MarkHidden(j) //nolint
 	}

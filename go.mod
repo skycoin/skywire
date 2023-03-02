@@ -49,6 +49,7 @@ require (
 	github.com/jaypipes/ghw v0.10.0
 	github.com/lib/pq v1.10.7
 	github.com/pterm/pterm v0.12.49
+	github.com/rifflock/lfshook v0.0.0-20180920164130-b9218ef580f5
 	github.com/skycoin/dmsg v1.3.0-rc1.0.20230224131835-1c194ef9791e
 	github.com/skycoin/skywire-utilities v0.0.0-20230110132024-c5536ba8e22c
 	github.com/skycoin/systray v1.10.0
