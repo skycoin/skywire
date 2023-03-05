@@ -97,9 +97,10 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	var appLogDB appcommon.LogStore
 	var appLog *logging.MasterLogger
 	var stderr io.ReadCloser
+	procLogger := mLog
 	if conf.LogDBLoc != "" {
 		appLog, appLogDB = appcommon.NewProcLogger(conf, mLog)
-
+		procLogger = appLog
 		if logStorePath != "" {
 			storeLog(appLog, logStorePath, startedAt)
 		}
@@ -115,7 +116,7 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	p := &Proc{
 		disc:      disc,
 		conf:      conf,
-		log:       appLog.PackageLogger(moduleName),
+		log:       procLogger.PackageLogger(moduleName),
 		logDB:     appLogDB,
 		cmd:       cmd,
 		connCh:    make(chan struct{}, 1),
