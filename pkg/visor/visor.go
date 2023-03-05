@@ -163,6 +163,8 @@ func run(conf *visorconfig.V1) error {
 		conf = initConfig()
 	}
 
+	conf.MasterLogger().AddHook(hook)
+
 	if disableHypervisorPKs {
 		conf.Hypervisors = []cipher.PubKey{}
 	}
