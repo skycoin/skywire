@@ -46,6 +46,8 @@ var (
 	ErrProcNotAvailable = errors.New("no process manager available")
 	// ErrTrpMangerNotAvailable represents error for unavailable transport manager
 	ErrTrpMangerNotAvailable = errors.New("no transport manager available")
+	// ErrAppLauncherNotAvailable represents error for unavailable app launcher
+	ErrAppLauncherNotAvailable = errors.New("no app launcher available")
 )
 
 const (
