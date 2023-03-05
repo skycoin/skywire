@@ -116,6 +116,8 @@ type Visor struct {
 	pingPcktSize int
 
 	rawSurvey bool
+
+	logStorePath string
 }
 
 // todo: consider moving module closing to the module system
@@ -244,10 +246,6 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		setForceColor(conf)
 	}
 
-	if isStoreLog {
-		storeLog(conf)
-	}
-
 	v := &Visor{
 		log:                  conf.MasterLogger().PackageLogger("visor"),
 		conf:                 conf,
@@ -271,10 +269,14 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		v.conf.MasterLogger().SetLevel(logLvl)
 	}
 
+	v.startedAt = time.Now()
+	if isStoreLog {
+		storeLog(conf, v.startedAt)
+		v.logStorePath = conf.LocalPath
+	}
 	log := v.MasterLogger().PackageLogger("visor:startup")
 	log.WithField("public_key", conf.PK).
 		Info("Begin startup.")
-	v.startedAt = time.Now()
 	ctx = context.WithValue(ctx, visorKey, v)
 	v.runtimeErrors = make(chan error)
 	ctx = context.WithValue(ctx, runtimeErrsKey, v.runtimeErrors)
@@ -546,8 +548,8 @@ func initUI() *fs.FS {
 
 }
 
-func storeLog(conf *visorconfig.V1) {
-	now := time.Now().Format("2006-01-02_15:04:05")
+func storeLog(conf *visorconfig.V1, startedAt time.Time) {
+	now := startedAt.Format("2006-01-02_15:04:20")
 	pathMap := lfshook.PathMap{
 		logrus.InfoLevel:  conf.LocalPath + "/log/" + now + ".log",
 		logrus.WarnLevel:  conf.LocalPath + "/log/" + now + ".log",

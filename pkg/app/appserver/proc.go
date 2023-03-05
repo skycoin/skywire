@@ -16,6 +16,7 @@ import (
 	"time"
 
 	ipc "github.com/james-barrow/golang-ipc"
+	"github.com/rifflock/lfshook"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire-utilities/pkg/logging"
@@ -80,7 +81,7 @@ type Proc struct {
 
 // NewProc constructs `Proc`.
 func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc.Updater, m ProcManager,
-	appName string) *Proc {
+	appName, logStorePath string, startedAt time.Time) *Proc {
 	if mLog == nil {
 		mLog = logging.NewMasterLogger()
 	}
@@ -98,6 +99,11 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	var stderr io.ReadCloser
 	if conf.LogDBLoc != "" {
 		appLog, appLogDB = appcommon.NewProcLogger(conf, mLog)
+
+		if logStorePath != "" {
+			storeLog(appLog, logStorePath, startedAt)
+		}
+
 		cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").WriterLevel(logrus.DebugLevel)
 
 		// we read the Stderr pipe in order to filter some false positive app errors
@@ -109,7 +115,7 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	p := &Proc{
 		disc:      disc,
 		conf:      conf,
-		log:       mLog.PackageLogger(moduleName),
+		log:       appLog.PackageLogger(moduleName),
 		logDB:     appLogDB,
 		cmd:       cmd,
 		connCh:    make(chan struct{}, 1),
@@ -467,4 +473,25 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 	})
 
 	return summaries
+}
+
+func storeLog(log *logging.MasterLogger, localPath string, startedAt time.Time) {
+	now := startedAt.Format("2006-01-02_15:04:20")
+	pathMap := lfshook.PathMap{
+		logrus.InfoLevel:  localPath + "/log/" + now + ".log",
+		logrus.WarnLevel:  localPath + "/log/" + now + ".log",
+		logrus.TraceLevel: localPath + "/log/" + now + ".log",
+		logrus.ErrorLevel: localPath + "/log/" + now + ".log",
+		logrus.DebugLevel: localPath + "/log/" + now + ".log",
+		logrus.FatalLevel: localPath + "/log/" + now + ".log",
+	}
+
+	log.Hooks.Add(lfshook.NewHook(
+		pathMap,
+		&logging.TextFormatter{
+			DisableColors:   true,
+			FullTimestamp:   true,
+			ForceFormatting: true,
+		},
+	))
 }
