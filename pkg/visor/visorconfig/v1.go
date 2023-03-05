@@ -32,7 +32,7 @@ type V1 struct {
 
 	LogLevel             string                           `json:"log_level"`
 	LocalPath            string                           `json:"local_path"`
-	CustomDmsgHTTPPath   string                           `json:"custom_dmsg_http_path"`
+	DmsgHTTPServerPath   string                           `json:"dmsghttp_server_path"`
 	StunServers          []string                         `json:"stun_servers"`
 	ShutdownTimeout      Duration                         `json:"shutdown_timeout,omitempty"`    // time value, examples: 10s, 1m, etc
 	RestartCheckDelay    Duration                         `json:"restart_check_delay,omitempty"` // time value, examples: 10s, 1m, etc
