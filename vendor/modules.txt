@@ -226,6 +226,9 @@ github.com/modern-go/concurrent
 # github.com/modern-go/reflect2 v1.0.2
 ## explicit; go 1.12
 github.com/modern-go/reflect2
+# github.com/orandin/lumberjackrus v1.0.1
+## explicit
+github.com/orandin/lumberjackrus
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
@@ -237,9 +240,6 @@ github.com/pmezard/go-difflib/difflib
 github.com/pterm/pterm
 github.com/pterm/pterm/internal
 github.com/pterm/pterm/putils
-# github.com/rifflock/lfshook v0.0.0-20180920164130-b9218ef580f5
-## explicit
-github.com/rifflock/lfshook
 # github.com/rivo/uniseg v0.2.0
 ## explicit; go 1.12
 github.com/rivo/uniseg
@@ -449,6 +449,9 @@ golang.zx2c4.com/wireguard/rwcancel
 golang.zx2c4.com/wireguard/tun
 golang.zx2c4.com/wireguard/tun/wintun
 golang.zx2c4.com/wireguard/tun/wintun/memmod
+# gopkg.in/natefinch/lumberjack.v2 v2.2.1
+## explicit; go 1.13
+gopkg.in/natefinch/lumberjack.v2
 # gopkg.in/yaml.v2 v2.4.0
 ## explicit; go 1.15
 gopkg.in/yaml.v2

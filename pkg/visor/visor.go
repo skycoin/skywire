@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rifflock/lfshook"
+	"github.com/orandin/lumberjackrus"
 	"github.com/sirupsen/logrus"
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
@@ -549,32 +549,74 @@ func initUI() *fs.FS {
 }
 
 func storeLog(conf *visorconfig.V1) {
-	pathMap := lfshook.PathMap{
-		logrus.InfoLevel:  conf.LocalPath + "/log/skywire.log",
-		logrus.WarnLevel:  conf.LocalPath + "/log/skywire.log",
-		logrus.TraceLevel: conf.LocalPath + "/log/skywire.log",
-		logrus.ErrorLevel: conf.LocalPath + "/log/skywire.log",
-		logrus.DebugLevel: conf.LocalPath + "/log/skywire.log",
-		logrus.FatalLevel: conf.LocalPath + "/log/skywire.log",
-	}
-
-	conf.MasterLogger().Hooks.Add(lfshook.NewHook(
-		pathMap,
+	hook, _ := lumberjackrus.NewHook( //nolint
+		&lumberjackrus.LogFile{
+			Filename:   conf.LocalPath + "/log/skywire.log",
+			MaxSize:    1,
+			MaxBackups: 1,
+			MaxAge:     1,
+			Compress:   false,
+			LocalTime:  false,
+		},
+		logrus.TraceLevel,
 		&logging.TextFormatter{
 			DisableColors:   true,
 			FullTimestamp:   true,
 			ForceFormatting: true,
 		},
-	))
-
-	mLog.Hooks.Add(lfshook.NewHook(
-		pathMap,
-		&logging.TextFormatter{
-			DisableColors:   true,
-			FullTimestamp:   true,
-			ForceFormatting: true,
+		&lumberjackrus.LogFileOpts{
+			logrus.InfoLevel: &lumberjackrus.LogFile{
+				Filename:   conf.LocalPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.WarnLevel: &lumberjackrus.LogFile{
+				Filename:   conf.LocalPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.TraceLevel: &lumberjackrus.LogFile{
+				Filename:   conf.LocalPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.ErrorLevel: &lumberjackrus.LogFile{
+				Filename:   conf.LocalPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.DebugLevel: &lumberjackrus.LogFile{
+				Filename:   conf.LocalPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.FatalLevel: &lumberjackrus.LogFile{
+				Filename:   conf.LocalPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
 		},
-	))
+	)
+	mLog.Hooks.Add(hook)
+	conf.MasterLogger().Hooks.Add(hook)
 }
 
 func setForceColor(conf *visorconfig.V1) {

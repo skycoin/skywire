@@ -48,8 +48,8 @@ require (
 	github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
 	github.com/jaypipes/ghw v0.10.0
 	github.com/lib/pq v1.10.7
+	github.com/orandin/lumberjackrus v1.0.1
 	github.com/pterm/pterm v0.12.49
-	github.com/rifflock/lfshook v0.0.0-20180920164130-b9218ef580f5
 	github.com/skycoin/dmsg v1.3.0-rc1.0.20230224131835-1c194ef9791e
 	github.com/skycoin/skywire-utilities v0.0.0-20230305143044-e49e198efa1f
 	github.com/skycoin/systray v1.10.0
@@ -103,6 +103,7 @@ require (
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519 // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
 	golang.org/x/text v0.3.7 // indirect
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	howett.net/plist v1.0.0 // indirect

@@ -16,7 +16,7 @@ import (
 	"time"
 
 	ipc "github.com/james-barrow/golang-ipc"
-	"github.com/rifflock/lfshook"
+	"github.com/orandin/lumberjackrus"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire-utilities/pkg/logging"
@@ -477,21 +477,71 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 }
 
 func storeLog(log *logging.MasterLogger, localPath string) {
-	pathMap := lfshook.PathMap{
-		logrus.InfoLevel:  localPath + "/log/skywire.log",
-		logrus.WarnLevel:  localPath + "/log/skywire.log",
-		logrus.TraceLevel: localPath + "/log/skywire.log",
-		logrus.ErrorLevel: localPath + "/log/skywire.log",
-		logrus.DebugLevel: localPath + "/log/skywire.log",
-		logrus.FatalLevel: localPath + "/log/skywire.log",
-	}
-
-	log.Hooks.Add(lfshook.NewHook(
-		pathMap,
+	hook, _ := lumberjackrus.NewHook( //nolint
+		&lumberjackrus.LogFile{
+			Filename:   localPath + "/log/skywire.log",
+			MaxSize:    1,
+			MaxBackups: 1,
+			MaxAge:     1,
+			Compress:   false,
+			LocalTime:  false,
+		},
+		logrus.TraceLevel,
 		&logging.TextFormatter{
 			DisableColors:   true,
 			FullTimestamp:   true,
 			ForceFormatting: true,
 		},
-	))
+		&lumberjackrus.LogFileOpts{
+			logrus.InfoLevel: &lumberjackrus.LogFile{
+				Filename:   localPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.WarnLevel: &lumberjackrus.LogFile{
+				Filename:   localPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.TraceLevel: &lumberjackrus.LogFile{
+				Filename:   localPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.ErrorLevel: &lumberjackrus.LogFile{
+				Filename:   localPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.DebugLevel: &lumberjackrus.LogFile{
+				Filename:   localPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.FatalLevel: &lumberjackrus.LogFile{
+				Filename:   localPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+		},
+	)
+	log.Hooks.Add(hook)
 }
