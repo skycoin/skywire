@@ -56,6 +56,7 @@ var (
 	dmsgServer     string
 	rawSurvey      bool
 	isStoreLog     bool
+	isForceColor   bool
 )
 
 func init() {
@@ -132,7 +133,9 @@ func init() {
 	RootCmd.Flags().BoolVar(&rawSurvey, "raw-survey", false, "survey will generate and store decrypted if pass this flag")
 	hiddenflags = append(hiddenflags, "raw-survey")
 	RootCmd.Flags().BoolVarP(&isStoreLog, "store-log", "l", false, "store all logs to file")
-	hiddenflags = append(hiddenflags, "xhv")
+	hiddenflags = append(hiddenflags, "store-log")
+	RootCmd.Flags().BoolVar(&isForceColor, "force-color", false, "set force coler true in loggers")
+	hiddenflags = append(hiddenflags, "force-color")
 	RootCmd.Flags().BoolVar(&all, "all", false, "show all flags")
 	for _, j := range hiddenflags {
 		RootCmd.Flags().MarkHidden(j) //nolint

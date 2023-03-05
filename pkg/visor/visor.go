@@ -238,6 +238,10 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		conf = initConfig()
 	}
 
+	if isForceColor {
+		setForceColor(conf)
+	}
+
 	if isStoreLog {
 		storeLog(conf)
 	}
@@ -568,4 +572,24 @@ func storeLog(conf *visorconfig.V1) {
 			ForceFormatting: true,
 		},
 	))
+}
+
+func setForceColor(conf *visorconfig.V1) {
+	conf.MasterLogger().SetFormatter(&logging.TextFormatter{
+		FullTimestamp:      true,
+		AlwaysQuoteStrings: true,
+		QuoteEmptyFields:   true,
+		ForceFormatting:    true,
+		DisableColors:      false,
+		ForceColors:        true,
+	})
+
+	mLog.SetFormatter(&logging.TextFormatter{
+		FullTimestamp:      true,
+		AlwaysQuoteStrings: true,
+		QuoteEmptyFields:   true,
+		ForceFormatting:    true,
+		DisableColors:      false,
+		ForceColors:        true,
+	})
 }
