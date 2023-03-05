@@ -176,11 +176,16 @@ func (v *Visor) Overview() (*Overview, error) {
 		}
 	}
 
+	apps := []*appserver.AppState{}
+	if v.appL != nil {
+		apps = v.appL.AppStates()
+	}
+
 	overview := &Overview{
 		PubKey:          v.conf.PK,
 		BuildInfo:       buildinfo.Get(),
 		AppProtoVersion: supportedProtocolVersion,
-		Apps:            v.appL.AppStates(),
+		Apps:            apps,
 		Transports:      tSummaries,
 		RoutesCount:     v.router.RoutesCount(),
 		PublicIP:        publicIP,
