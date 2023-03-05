@@ -4,13 +4,11 @@ package router
 
 import (
 	context "context"
-
-	cipher "github.com/skycoin/skywire-utilities/pkg/cipher"
+	net "net"
 
 	mock "github.com/stretchr/testify/mock"
 
-	net "net"
-
+	cipher "github.com/skycoin/skywire-utilities/pkg/cipher"
 	routing "github.com/skycoin/skywire/pkg/routing"
 )
 
