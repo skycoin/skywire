@@ -271,7 +271,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 
 	v.startedAt = time.Now()
 	if isStoreLog {
-		storeLog(conf, v.startedAt)
+		storeLog(conf)
 		v.logStorePath = conf.LocalPath
 	}
 	log := v.MasterLogger().PackageLogger("visor:startup")
@@ -548,15 +548,14 @@ func initUI() *fs.FS {
 
 }
 
-func storeLog(conf *visorconfig.V1, startedAt time.Time) {
-	now := startedAt.Format("2006-01-02_15:04:20")
+func storeLog(conf *visorconfig.V1) {
 	pathMap := lfshook.PathMap{
-		logrus.InfoLevel:  conf.LocalPath + "/log/" + now + ".log",
-		logrus.WarnLevel:  conf.LocalPath + "/log/" + now + ".log",
-		logrus.TraceLevel: conf.LocalPath + "/log/" + now + ".log",
-		logrus.ErrorLevel: conf.LocalPath + "/log/" + now + ".log",
-		logrus.DebugLevel: conf.LocalPath + "/log/" + now + ".log",
-		logrus.FatalLevel: conf.LocalPath + "/log/" + now + ".log",
+		logrus.InfoLevel:  conf.LocalPath + "/log/skywire.log",
+		logrus.WarnLevel:  conf.LocalPath + "/log/skywire.log",
+		logrus.TraceLevel: conf.LocalPath + "/log/skywire.log",
+		logrus.ErrorLevel: conf.LocalPath + "/log/skywire.log",
+		logrus.DebugLevel: conf.LocalPath + "/log/skywire.log",
+		logrus.FatalLevel: conf.LocalPath + "/log/skywire.log",
 	}
 
 	conf.MasterLogger().Hooks.Add(lfshook.NewHook(

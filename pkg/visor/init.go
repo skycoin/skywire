@@ -1007,7 +1007,7 @@ func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Launcher
 
 	// Prepare proc manager.
-	procM, err := appserver.NewProcManager(v.MasterLogger(), &v.serviceDisc, v.ebc, conf.ServerAddr, v.logStorePath, v.startedAt)
+	procM, err := appserver.NewProcManager(v.MasterLogger(), &v.serviceDisc, v.ebc, conf.ServerAddr, v.conf.LocalPath)
 	if err != nil {
 		err := fmt.Errorf("failed to start proc_manager: %w", err)
 		return err

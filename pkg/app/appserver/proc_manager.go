@@ -74,12 +74,11 @@ type procManager struct {
 	mx   sync.RWMutex
 	done chan struct{}
 
-	logStorePath   string
-	visorStartedAt time.Time
+	logStorePath string
 }
 
 // NewProcManager constructs `ProcManager`.
-func NewProcManager(mLog *logging.MasterLogger, discF *appdisc.Factory, eb *appevent.Broadcaster, addr, logStorePath string, startedAt time.Time) (ProcManager, error) {
+func NewProcManager(mLog *logging.MasterLogger, discF *appdisc.Factory, eb *appevent.Broadcaster, addr, logStorePath string) (ProcManager, error) {
 	if mLog == nil {
 		mLog = logging.NewMasterLogger()
 	}
@@ -96,18 +95,17 @@ func NewProcManager(mLog *logging.MasterLogger, discF *appdisc.Factory, eb *appe
 	}
 
 	procM := &procManager{
-		mLog:           mLog,
-		log:            mLog.PackageLogger("proc_manager"),
-		lis:            lis,
-		conns:          make(map[string]net.Conn),
-		discF:          discF,
-		procs:          make(map[string]*Proc),
-		procsByKey:     make(map[appcommon.ProcKey]*Proc),
-		errors:         make(map[string]string),
-		eb:             eb,
-		done:           make(chan struct{}),
-		logStorePath:   logStorePath,
-		visorStartedAt: startedAt,
+		mLog:         mLog,
+		log:          mLog.PackageLogger("proc_manager"),
+		lis:          lis,
+		conns:        make(map[string]net.Conn),
+		discF:        discF,
+		procs:        make(map[string]*Proc),
+		procsByKey:   make(map[appcommon.ProcKey]*Proc),
+		errors:       make(map[string]string),
+		eb:           eb,
+		done:         make(chan struct{}),
+		logStorePath: logStorePath,
 	}
 
 	procM.connsWG.Add(1)
@@ -212,7 +210,7 @@ func (m *procManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 			Debug("No app discovery associated with app.")
 	}
 
-	proc := NewProc(nil, conf, disc, m, conf.AppName, m.logStorePath, m.visorStartedAt)
+	proc := NewProc(nil, conf, disc, m, conf.AppName, m.logStorePath)
 	m.procs[conf.AppName] = proc
 	m.procsByKey[conf.ProcKey] = proc
 
@@ -258,7 +256,7 @@ func (m *procManager) Register(conf appcommon.ProcConfig) (appcommon.ProcKey, er
 			Debug("No app discovery associated with app.")
 	}
 
-	proc := NewProc(nil, conf, disc, m, conf.AppName, m.logStorePath, m.visorStartedAt)
+	proc := NewProc(nil, conf, disc, m, conf.AppName, m.logStorePath)
 	m.procs[conf.AppName] = proc
 	m.procsByKey[conf.ProcKey] = proc
 	go func() {

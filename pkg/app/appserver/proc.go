@@ -81,7 +81,7 @@ type Proc struct {
 
 // NewProc constructs `Proc`.
 func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc.Updater, m ProcManager,
-	appName, logStorePath string, startedAt time.Time) *Proc {
+	appName, logStorePath string) *Proc {
 	if mLog == nil {
 		mLog = logging.NewMasterLogger()
 	}
@@ -102,7 +102,7 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 		appLog, appLogDB = appcommon.NewProcLogger(conf, mLog)
 		procLogger = appLog
 		if logStorePath != "" {
-			storeLog(appLog, logStorePath, startedAt)
+			storeLog(appLog, logStorePath)
 		}
 
 		cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").WriterLevel(logrus.DebugLevel)
@@ -476,15 +476,14 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 	return summaries
 }
 
-func storeLog(log *logging.MasterLogger, localPath string, startedAt time.Time) {
-	now := startedAt.Format("2006-01-02_15:04:20")
+func storeLog(log *logging.MasterLogger, localPath string) {
 	pathMap := lfshook.PathMap{
-		logrus.InfoLevel:  localPath + "/log/" + now + ".log",
-		logrus.WarnLevel:  localPath + "/log/" + now + ".log",
-		logrus.TraceLevel: localPath + "/log/" + now + ".log",
-		logrus.ErrorLevel: localPath + "/log/" + now + ".log",
-		logrus.DebugLevel: localPath + "/log/" + now + ".log",
-		logrus.FatalLevel: localPath + "/log/" + now + ".log",
+		logrus.InfoLevel:  localPath + "/log/skywire.log",
+		logrus.WarnLevel:  localPath + "/log/skywire.log",
+		logrus.TraceLevel: localPath + "/log/skywire.log",
+		logrus.ErrorLevel: localPath + "/log/skywire.log",
+		logrus.DebugLevel: localPath + "/log/skywire.log",
+		logrus.FatalLevel: localPath + "/log/skywire.log",
 	}
 
 	log.Hooks.Add(lfshook.NewHook(
