@@ -69,18 +69,6 @@ builds:
     main: ./cmd/skywire-visor/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
-  - id: skywire-visor-riscv32
-    binary: skywire-visor
-    goos:
-      - linux
-    goarch:
-      - riscv
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/riscv32-linux-musl-cross/bin/riscv32-linux-musl-gcc
-    main: ./cmd/skywire-visor/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
-
   - id: skywire-visor-riscv64
     binary: skywire-visor
     goos:
@@ -142,18 +130,6 @@ builds:
     env:
       - CGO_ENABLED=1
       - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
-    main: ./cmd/skywire-cli/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
-
-  - id: skywire-cli-riscv32
-    binary: skywire-cli
-    goos:
-      - linux
-    goarch:
-      - riscv
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/riscv32-linux-musl-cross/bin/riscv32-linux-musl-gcc
     main: ./cmd/skywire-cli/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
@@ -221,18 +197,6 @@ builds:
     main: ./cmd/apps/skychat/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
-  - id: skychat-riscv32
-    binary: skychat
-    goos:
-      - linux
-    goarch:
-      - riscv
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/riscv32-linux-musl-cross/bin/riscv32-linux-musl-gcc
-    main: ./cmd/apps/skychat/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
   - id: skychat-riscv64
     binary: skychat
     goos:
@@ -294,18 +258,6 @@ builds:
     env:
       - CGO_ENABLED=1
       - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
-    main: ./cmd/apps/skysocks/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: skysocks-riscv32
-    binary: skysocks
-    goos:
-      - linux
-    goarch:
-      - riscv
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/riscv32-linux-musl-cross/bin/riscv32-linux-musl-gcc
     main: ./cmd/apps/skysocks/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
@@ -373,18 +325,6 @@ builds:
     main: ./cmd/apps/skysocks-client/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
-  - id: skysocks-client-riscv32
-    binary: skysocks-client
-    goos:
-      - linux
-    goarch:
-      - riscv
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/riscv32-linux-musl-cross/bin/riscv32-linux-musl-gcc
-    main: ./cmd/apps/skysocks-client/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
   - id: skysocks-client-riscv64
     binary: skysocks-client
     goos:
@@ -449,18 +389,6 @@ builds:
     main: ./cmd/apps/vpn-server/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
-  - id: vpn-server-riscv32
-    binary: vpn-server
-    goos:
-      - linux
-    goarch:
-      - riscv
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/riscv32-linux-musl-cross/bin/riscv32-linux-musl-gcc
-    main: ./cmd/apps/vpn-server/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
   - id: vpn-server-riscv64
     binary: vpn-server
     goos:
@@ -522,18 +450,6 @@ builds:
     env:
       - CGO_ENABLED=1
       - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
-    main: ./cmd/apps/vpn-client/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: vpn-client-riscv32
-    binary: vpn-client
-    goos:
-      - linux
-    goarch:
-      - riscv
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/riscv32-linux-musl-cross/bin/riscv32-linux-musl-gcc
     main: ./cmd/apps/vpn-client/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
@@ -613,23 +529,7 @@ archives:
       - skychat-armhf
       - vpn-server-armhf
       - vpn-client-armhf
-  
-  - id: riscv32
-    format: tar.gz
-    wrap_in_directory: false
-    name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}hf'
-    files:
-      - dmsghttp-config.json
-      - skycoin.asc
-    builds:
-      - skywire-visor-riscv32
-      - skywire-cli-riscv32
-      - skysocks-riscv32
-      - skysocks-client-riscv32
-      - skychat-riscv32
-      - vpn-server-riscv32
-      - vpn-client-riscv32
-  
+
   - id: riscv64
     format: tar.gz
     wrap_in_directory: false
