@@ -321,6 +321,8 @@ dep-github-release:
 	tar -xzf arm-linux-musleabihf-cross.tgz -C ./musl-data && rm arm-linux-musleabihf-cross.tgz
 	wget -c https://more.musl.cc/10/x86_64-linux-musl/x86_64-linux-musl-cross.tgz -O x86_64-linux-musl-cross.tgz
 	tar -xzf x86_64-linux-musl-cross.tgz -C ./musl-data && rm x86_64-linux-musl-cross.tgz
+	wget -c https://more.musl.cc/10/x86_64-linux-musl/riscv64-linux-musl-cross.tgz -O riscv64-linux-musl-cross.tgz
+	tar -xzf riscv64-linux-musl-cross.tgz -C ./musl-data && rm riscv64-linux-musl-cross.tgz
 
 build-docker: ## Build docker image
 	./ci_scripts/docker-push.sh -t latest -b
