@@ -17,5 +17,5 @@ var (
 // RootCmd contains commands that interact with the skywire-visor
 var RootCmd = &cobra.Command{
 	Use:   "vpn",
-	Short: "controls for VPN client",
+	Short: "VPN client",
 }

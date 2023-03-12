@@ -36,9 +36,9 @@ func init() {
 	if version == "unknown" {
 		version = ""
 	}
-	vpnUICmd.Flags().BoolVarP(&isPkg, "pkg", "p", false, "use package config path")
+	vpnUICmd.Flags().BoolVarP(&isPkg, "pkg", "p", false, "use package config path: "+visorconfig.SkywirePath)
 	vpnUICmd.Flags().StringVarP(&path, "config", "c", "", "config path")
-	vpnURLCmd.Flags().BoolVarP(&isPkg, "pkg", "p", false, "use package config path")
+	vpnURLCmd.Flags().BoolVarP(&isPkg, "pkg", "p", false, "use package config path: "+visorconfig.SkywirePath)
 	vpnURLCmd.Flags().StringVarP(&path, "config", "c", "", "config path")
 	vpnListCmd.Flags().BoolVarP(&isUnFiltered, "nofilter", "n", false, "provide unfiltered results")
 	vpnListCmd.Flags().StringVarP(&ver, "ver", "v", version, "filter results by version")
