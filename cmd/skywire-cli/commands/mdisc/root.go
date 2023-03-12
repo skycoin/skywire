@@ -21,6 +21,7 @@ import (
 )
 
 var mdAddr string
+//var allEntries bool
 var masterLogger = logging.NewMasterLogger()
 var packageLogger = masterLogger.PackageLogger("mdisc:disc")
 
@@ -29,7 +30,8 @@ func init() {
 		entryCmd,
 		availableServersCmd,
 	)
-	entryCmd.PersistentFlags().StringVar(&mdAddr, "addr", utilenv.DmsgDiscAddr, "address of DMSG discovery server\n")
+	entryCmd.PersistentFlags().StringVarP(&mdAddr, "addr", "a", "", "DMSG discovery server address\n"+utilenv.DmsgDiscAddr)
+//	entryCmd.PersistentFlags().BoolVarP(&allEntries, "entries", "e", "", "get all entries")
 	availableServersCmd.PersistentFlags().StringVar(&mdAddr, "addr", utilenv.DmsgDiscAddr, "address of DMSG discovery server\n")
 	var helpflag bool
 	RootCmd.Flags().BoolVarP(&helpflag, "help", "h", false, "help for "+RootCmd.Use)
@@ -45,17 +47,30 @@ var RootCmd = &cobra.Command{
 var entryCmd = &cobra.Command{
 	Use:   "entry <visor-public-key>",
 	Short: "Fetch an entry",
-	Args:  cobra.MinimumNArgs(1),
+//	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		//print help on no args
+		if len(args) == 0 {
+			cmd.Help() //nolint
+		} else {
+			if mdAddr == "" {
+				mdAddr = utilenv.DmsgDiscAddr
+			}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
 		pk := internal.ParsePK(cmd.Flags(), "visor-public-key", args[0])
 
 		masterLogger.SetLevel(logrus.InfoLevel)
 
+//TODO: fetch all entries
+//		if allEntries {
+//			entries, err := disc.NewHTTP(mdAddr, &http.Client{}, packageLogger).AvailableServers(ctx)
+//		}
+
 		entry, err := disc.NewHTTP(mdAddr, &http.Client{}, packageLogger).Entry(ctx, pk)
 		internal.Catch(cmd.Flags(), err)
 		internal.PrintOutput(cmd.Flags(), entry, fmt.Sprintln(entry))
+	}
 	},
 }
 
