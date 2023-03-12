@@ -94,7 +94,7 @@ var proxyStopCmd = &cobra.Command{
 
 var proxyStatusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "proxy client status",
+	Short: "proxy client(s) status",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {

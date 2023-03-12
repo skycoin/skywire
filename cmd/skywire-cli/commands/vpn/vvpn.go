@@ -25,12 +25,12 @@ import (
 func init() {
 	RootCmd.PersistentFlags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
 	RootCmd.AddCommand(
-		vpnListCmd,
 		vpnUICmd,
 		vpnURLCmd,
 		vpnStartCmd,
 		vpnStopCmd,
 		vpnStatusCmd,
+		vpnListCmd,
 	)
 	version := buildinfo.Version()
 	if version == "unknown" {
