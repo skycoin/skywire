@@ -115,7 +115,7 @@ var vpnURLCmd = &cobra.Command{
 
 var vpnListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List public VPN servers",
+	Short: "List servers",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -130,23 +130,24 @@ var vpnListCmd = &cobra.Command{
 			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
 		if len(servers) == 0 {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("No VPN Servers found"))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("No Servers found"))
 		}
 		if isStats {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("%d VPN Servers", len(servers)))
-		}
+			internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d Servers\n", len(servers)), fmt.Sprintf("%d Servers\n", len(servers)))
+		} else {
 
-		var msg string
-		for _, i := range servers {
-			msg += strings.Replace(i.Addr.String(), ":44", "", 1)
-			if i.Geo != nil {
-				msg += fmt.Sprintf(" | %s\n", i.Geo.Country)
-			} else {
-				msg += "\n"
+			var msg string
+			for _, i := range servers {
+				msg += strings.Replace(i.Addr.String(), ":44", "", 1)
+				if i.Geo != nil {
+					msg += fmt.Sprintf(" | %s\n", i.Geo.Country)
+				} else {
+					msg += "\n"
+				}
 			}
-		}
 
-		internal.PrintOutput(cmd.Flags(), servers, msg)
+			internal.PrintOutput(cmd.Flags(), servers, msg)
+		}
 	},
 }
 

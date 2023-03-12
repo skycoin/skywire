@@ -489,7 +489,17 @@ type StatusMessage struct {
 // VPNServers calls VPNServers.
 func (rc *rpcClient) VPNServers(version, country string) ([]servicedisc.Service, error) {
 	output := []servicedisc.Service{}
-	err := rc.Call("VPNServers", &FilterVPNServersIn{ // nolint
+	err := rc.Call("VPNServers", &FilterServersIn{ // nolint
+		Version: version,
+		Country: country,
+	}, &output)
+	return output, err
+}
+
+// ProxyServers calls ProxyServers.
+func (rc *rpcClient) ProxyServers(version, country string) ([]servicedisc.Service, error) {
+	output := []servicedisc.Service{}
+	err := rc.Call("ProxyServers", &FilterServersIn{ // nolint
 		Version: version,
 		Country: country,
 	}, &output)
@@ -1216,6 +1226,11 @@ func (mc *mockRPCClient) GetLogRotationInterval() (visorconfig.Duration, error) 
 
 // VPNServers implements API
 func (mc *mockRPCClient) VPNServers(_, _ string) ([]servicedisc.Service, error) {
+	return []servicedisc.Service{}, nil
+}
+
+// ProxyServers implements API
+func (mc *mockRPCClient) ProxyServers(_, _ string) ([]servicedisc.Service, error) {
 	return []servicedisc.Service{}, nil
 }
 
