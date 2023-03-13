@@ -12,7 +12,7 @@
 .vscode/
 
 /skywire.json
-/apps/
+/build/
 /skywire/
 /local/*
 /local*/*
