@@ -30,8 +30,8 @@ Full config of the client should look like this:
 Compile app binary and start a visor:
 
 ```sh
-$ go build -o apps/vpn-client ./cmd/apps/vpn-client
-$ ./skywire-visor skywire-config.json
+$ go build -o ./build/apps/vpn-client ./cmd/apps/vpn-client
+$ ./build/skywire-visor skywire-config.json
 ```
 
 You should be able to see an additional hop with the `traceroute`-like utils:

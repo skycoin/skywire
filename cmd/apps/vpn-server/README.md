@@ -30,6 +30,6 @@ Full config of the server should look like this:
 Compile app binary and start a visor:
 
 ```sh
-$ go build -o apps/vpn-server ./cmd/apps/vpn-server
-$ ./skywire-visor skywire-config.json
+$ go build -o ./build/apps/vpn-server ./cmd/apps/vpn-server
+$ ./build/skywire-visor skywire-config.json
 ```

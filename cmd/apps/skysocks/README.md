@@ -47,10 +47,10 @@ Create 2 visor config files:
 Compile binaries and start 2 visors:
 
 ```sh
-$ go build -o apps/skysocks.v1.0 ./cmd/apps/skysocks
-$ go build -o apps/skysocks-client.v1.0 ./cmd/apps/skysocks-client
-$ ./skywire-visor skywire1.json
-$ ./skywire-visor skywire2.json
+$ go build -o ./build/apps/skysocks.v1.0 ./cmd/apps/skysocks
+$ go build -o ./build/apps/skysocks-client.v1.0 ./cmd/apps/skysocks-client
+$ ./build/skywire-visor skywire1.json
+$ ./build/skywire-visor skywire2.json
 ```
 
 You should be able to connect to a secondary visor via `curl`:
