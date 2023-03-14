@@ -245,7 +245,9 @@ host-apps-race: ## Build app
 	CGO_ENABLED=1${OPTS} go build ${BUILD_OPTS} -race -o ./build/apps/ ./cmd/apps/vpn-client
 
 # Bin
-bin: fix-systray-vendor ## Build `skywire-visor`, `skywire-cli`
+bin: fix-systray-vendor bin-fix unfix-systray-vendor
+
+bin-fix: ## Build `skywire-visor`, `skywire-cli`
 	${OPTS} go build ${BUILD_OPTS} -o ./build/ ./cmd/skywire-visor
 	${OPTS} go build ${BUILD_OPTS} -o ./build/ ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS} -o ./build/ ./cmd/setup-node
@@ -253,6 +255,11 @@ bin: fix-systray-vendor ## Build `skywire-visor`, `skywire-cli`
 fix-systray-vendor:
 	@if [ $(UNAME_S) = "Linux" ]; then\
 		sed -i '/go conn.handleCall(msg)/c\conn.handleCall(msg)' ./vendor/github.com/godbus/dbus/v5/conn.go ;\
+	fi
+
+unfix-systray-vendor:
+	@if [ $(UNAME_S) = "Linux" ]; then\
+		sed -i '/conn.handleCall(msg)/c\			go conn.handleCall(msg)' ./vendor/github.com/godbus/dbus/v5/conn.go ;\
 	fi
 
 bin-windows: ## Build `skywire-visor`, `skywire-cli`
