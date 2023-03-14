@@ -17,7 +17,8 @@ Compile app binary and start a visor:
 
 ```sh
 $ make build-example
-$ ./build/skywire-visor skywire-config.json
+$ cd ./build
+$ ./skywire-visor skywire-config.json
 ```
 
 Register app and generate proc key

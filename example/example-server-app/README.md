@@ -19,6 +19,7 @@ Compile app binaries, update config with `example-server-app` and start a visor:
 
 ```sh
 $ make build-example
-$ ./build/skywire-cli config gen -irm
-$ ./build/skywire-visor skywire-config.json
+$ cd ./build
+$ ./skywire-cli config gen -irm
+$ ./skywire-visor skywire-config.json
 ```

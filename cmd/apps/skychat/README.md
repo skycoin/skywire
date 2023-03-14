@@ -45,8 +45,9 @@ Compile binaries and start 2 visors:
 
 ```bash
 $ go build -o ./build/apps/skychat.v1.0 ./cmd/apps/skychat
-$ ./build/skywire-visor skywire1.json
-$ ./build/skywire-visor skywire2.json
+$ cd ./build
+$ ./skywire-visor skywire1.json
+$ ./skywire-visor skywire2.json
 ```
 
 Chat interface will be available on ports `8001` and `8002`.

@@ -31,7 +31,8 @@ Compile app binary and start a visor:
 
 ```sh
 $ go build -o ./build/apps/vpn-client ./cmd/apps/vpn-client
-$ ./build/skywire-visor skywire-config.json
+$ cd ./build
+$ ./skywire-visor skywire-config.json
 ```
 
 You should be able to see an additional hop with the `traceroute`-like utils:

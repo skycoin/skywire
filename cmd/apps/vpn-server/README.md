@@ -31,5 +31,6 @@ Compile app binary and start a visor:
 
 ```sh
 $ go build -o ./build/apps/vpn-server ./cmd/apps/vpn-server
-$ ./build/skywire-visor skywire-config.json
+$ cd ./build
+$ ./skywire-visor skywire-config.json
 ```

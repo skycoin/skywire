@@ -145,7 +145,8 @@ To run skywire from this point, first generate a config
 
 The visor can then be started with
 ```
-sudo ./build/skywire-visor
+cd ./build
+sudo ./skywire-visor
 ```
 
 __Note: root permissions are currently required for vpn client and server applications__
