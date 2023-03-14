@@ -115,13 +115,13 @@ build-example: host-apps example-apps bin ## Build apps, example apps and binari
 installer: mac-installer ## Builds MacOS installer for skywire-visor
 
 install-system-linux: build # Workaround for debugging linux package installation
-	sudo install -Dm755 /build/skywire-cli /opt/skywire/bin/
-	sudo install -Dm755 /build/skywire-visor /opt/skywire/bin/
-	sudo install -Dm755 /build/apps/vpn-server /opt/skywire/apps/
-	sudo install -Dm755 /build/apps/vpn-client /opt/skywire/apps/
-	sudo install -Dm755 /build/apps/skysocks-client /opt/skywire/apps/
-	sudo install -Dm755 /build/apps/skysocks /opt/skywire/apps/
-	sudo install -Dm755 /build/apps/skychat /opt/skywire/apps/
+	sudo install -Dm755 ./build/skywire-cli /opt/skywire/bin/
+	sudo install -Dm755 ./build/skywire-visor /opt/skywire/bin/
+	sudo install -Dm755 ./build/apps/vpn-server /opt/skywire/apps/
+	sudo install -Dm755 ./build/apps/vpn-client /opt/skywire/apps/
+	sudo install -Dm755 ./build/apps/skysocks-client /opt/skywire/apps/
+	sudo install -Dm755 ./build/apps/skysocks /opt/skywire/apps/
+	sudo install -Dm755 ./build/apps/skychat /opt/skywire/apps/
 
 install-generate: ## Installs required execs for go generate.
 	${OPTS} go install github.com/mjibson/esc
