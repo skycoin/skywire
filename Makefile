@@ -103,6 +103,10 @@ check-windows: lint-windows test-windows ## Run linters and tests on appveyor wi
 
 build: host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
+build1: BUILD_PATH = ./
+
+build1: build ## Install dependencies, build apps and binaries in root folder. `go build` with ${OPTS}
+
 build-windows: host-apps-windows bin-windows ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
 build-windows-appveyor: host-apps-windows-appveyor bin-windows-appveyor ## Install dependencies, build apps and binaries. `go build` with ${OPTS} for AppVeyor image
@@ -197,8 +201,8 @@ snapshot-clean: ## Cleans snapshot / release
 	rm -rf ./dist
 
 host-apps: ## Build app
-	test -d apps && rm -r apps || true
-	mkdir -p ./apps
+	test -d $(BUILD_PATH) && rm -r $(BUILD_PATH) || true
+	mkdir -p $(BUILD_PATH)apps
 	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)apps/ ./cmd/apps/skychat
 	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)apps/ ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)apps/ ./cmd/apps/skysocks-client
@@ -252,12 +256,6 @@ bin-fix: ## Build `skywire-visor`, `skywire-cli`
 	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH) ./cmd/skywire-visor
 	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH) ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH) ./cmd/setup-node
-
-# bin1 is the old bin rule where the binaries are written to the root folder
-bin1: bin-root-path fix-systray-vendor bin-fix unfix-systray-vendor
-
-bin-root-path:
-	BUILD_PATH := ./
 
 fix-systray-vendor:
 	@if [ $(UNAME_S) = "Linux" ]; then\
