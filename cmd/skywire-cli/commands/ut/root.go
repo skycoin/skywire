@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+	"os"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 
@@ -19,10 +20,15 @@ import (
 var pubkey cipher.PubKey
 var pk string
 var thisPk string
+var online bool
+var isStats      bool
+
 
 var minUT int
 func init() {
 	RootCmd.Flags().StringVarP(&pk, "pk", "k", "", "check uptime for the specified key")
+	RootCmd.Flags().BoolVarP(&online, "on", "o", false, "list currently online visors")
+	RootCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "count the number of results")
 	RootCmd.Flags().IntVarP(&minUT, "min", "n", 75, "list visors meeting minimum uptime")
 }
 
@@ -33,7 +39,6 @@ var RootCmd = &cobra.Command{
 	Short: "query uptime tracker",
 	Run: func(cmd *cobra.Command, _ []string) {
 		url := "http://ut.skywire.skycoin.com/uptimes?v=v2"
-
 		now := time.Now()
 		if pk != "" {
 			err := pubkey.Set(pk)
@@ -66,8 +71,6 @@ var RootCmd = &cobra.Command{
 			log.Fatal(readErr)
 		}
 
-		// startDate := time.Date(now.Year(), now.Month()-1, 1, 0, 0, 0, 0, now.Location()).Format("2006-01-02")
-		// endDate := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).Add(-1 * time.Second).Format("2006-01-02")
 		startDate := time.Date(now.Year(), now.Month(), -1, 0, 0, 0, 0, now.Location()).Format("2006-01-02")
 		endDate := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, now.Location()).Add(-1 * time.Second).Format("2006-01-02")
 		uptimes := Uptimes{}
@@ -75,11 +78,26 @@ var RootCmd = &cobra.Command{
 		if jsonErr != nil {
 			log.Fatal(jsonErr)
 		}
+		var msg []string
 		for _, j := range uptimes {
 			thisPk = j.Pk
-			selectedDaily(j.Daily, startDate, endDate)
+			if online {
+				if j.On {
+					msg = append(msg, fmt.Sprintf(thisPk+"\n"))
+				}
+			} else {
+				selectedDaily(j.Daily, startDate, endDate)
+			}
 		}
-
+		if online {
+			if isStats {
+				internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d visors online\n", len(msg)), fmt.Sprintf("%d visors online\n", len(msg)))
+				os.Exit(0)
+			}
+			for _, i := range msg {
+				internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%s", i), fmt.Sprintf("%s", i))
+		}
+		}
 	},
 }
 
@@ -100,6 +118,7 @@ func selectedDaily(data map[string]string, startDate, endDate string) {
 		}
 	}
 }
+
 
 type Uptimes []struct {
 	Pk    string            `json:"pk"`
