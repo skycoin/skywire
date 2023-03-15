@@ -166,6 +166,7 @@ func registerModules(logger *logging.MasterLogger) {
 	ut = maker("uptime_tracker", initUptimeTracker, &dmsgHTTP)
 	pv = maker("public_autoconnect", initPublicAutoconnect, &tr, &disc)
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
+	trs = maker("manager_server", initManagerServer, &dmsgC, &tr)
 	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl, &dmsgHTTPLogServer, &dmsgTrackers, &launch)
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
 	skyFwd = maker("sky_forward_conn", initSkywireForwardConn, &dmsgC, &dmsgCtrl, &tr, &launch)
@@ -567,7 +568,33 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 	ctx, cancel := context.WithCancel(ctx)
 	// To remove the block set by NewTransportListener if dmsg is not initialized
 	go func() {
-		ts, err := ts.NewTransportListener(ctx, v.conf.PK, v.conf.Transport.TransportSetup, v.dmsgC, v.tpM, v.MasterLogger())
+		ts, err := ts.NewTransportListener(ctx, v.conf.PK, v.conf.SK, v.conf.Transport.TransportSetup, v.dmsgC, v.tpM, v.MasterLogger())
+		if err != nil {
+			log.Warn(err)
+			cancel()
+		}
+		select {
+		case <-ctx.Done():
+		default:
+			go ts.Serve(ctx)
+		}
+	}()
+
+	// waiting for at least one transport to initialize
+	<-v.tpM.Ready()
+
+	v.pushCloseStack("transport_setup.rpc", func() error {
+		cancel()
+		return nil
+	})
+	return nil
+}
+
+func initManagerServer(ctx context.Context, v *Visor, log *logging.Logger) error {
+	ctx, cancel := context.WithCancel(ctx)
+	// To remove the block set by NewTransportListener if dmsg is not initialized
+	go func() {
+		ts, err := ts.NewTransportListener(ctx, v.conf.PK, v.conf.SK, v.conf.Transport.TransportSetup, v.dmsgC, v.tpM, v.MasterLogger())
 		if err != nil {
 			log.Warn(err)
 			cancel()
