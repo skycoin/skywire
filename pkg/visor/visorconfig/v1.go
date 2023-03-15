@@ -39,6 +39,7 @@ type V1 struct {
 	IsPublic             bool                             `json:"is_public"`
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 
+	Managers   *Managers         `json:"managers,omitempty"`
 	Hypervisor *HypervisorConfig `json:"hypervisor,omitempty"`
 }
 
@@ -86,6 +87,12 @@ type Launcher struct {
 	ServerAddr    string                `json:"server_addr"`
 	BinPath       string                `json:"bin_path"`
 	DisplayNodeIP bool                  `json:"display_node_ip"`
+}
+
+// Managers configures the Skywire Managers over DMSG.
+type Managers struct {
+	Skycoin cipher.PubKeys `json:"skycoin"`
+	User    cipher.PubKeys `json:"user"`
 }
 
 // Flush flushes the config to file (if specified).
