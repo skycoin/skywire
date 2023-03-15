@@ -8,16 +8,15 @@ import (
 	"strings"
 	"text/tabwriter"
 	"time"
+	"math/rand"
+	"github.com/skycoin/skywire/pkg/servicedisc"
 
 	"github.com/spf13/cobra"
-
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 )
-
-var pk string
 
 func init() {
 	RootCmd.PersistentFlags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
@@ -31,8 +30,10 @@ func init() {
 	if version == "unknown" {
 		version = ""
 	}
-	proxyStartCmd.Flags().StringVar(&pk, "pk", "", "skysocks server public key")
-	proxyListCmd.Flags().BoolVarP(&isUnFiltered, "nofilter", "n", false, "provide unfiltered results")
+	proxyStartCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
+	proxyListCmd.Flags().StringVarP(&pk, "pk", "k", "", "check proxy service discovery for public key")
+	proxyListCmd.Flags().IntVarP(&count, "num", "n", 0, "number of results to return")
+	proxyListCmd.Flags().BoolVarP(&isUnFiltered, "unfilter", "u", false, "provide unfiltered results")
 	proxyListCmd.Flags().StringVarP(&ver, "ver", "v", version, "filter results by version")
 	proxyListCmd.Flags().StringVarP(&country, "country", "c", "", "filter results by country")
 	proxyListCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the results")
@@ -41,13 +42,27 @@ func init() {
 var proxyStartCmd = &cobra.Command{
 	Use:   "start",
 	Short: "start the proxy client",
-	Args:  cobra.MinimumNArgs(0),
+//	Args:  cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
+		//check that a valid public key is provided
+		err := pubkey.Set(pk)
+		if err != nil {
+			if len(args) > 0 {
+				err := pubkey.Set(args[0])
+				if err != nil {
+					internal.PrintFatalError(cmd.Flags(), err)
+				}
+			} else {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
+			}
+		}
+		//connect to RPC
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			os.Exit(1)
 		}
-		internal.Catch(cmd.Flags(), rpcClient.StartSkysocksClient(pk))
+		//TODO: implement operational timeout
+		internal.Catch(cmd.Flags(), rpcClient.StartSkysocksClient(pubkey.String()))
 		internal.PrintOutput(cmd.Flags(), nil, "Starting.")
 		startProcess := true
 		for startProcess {
@@ -82,7 +97,7 @@ var proxyStartCmd = &cobra.Command{
 var proxyStopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "stop the proxy client",
-	Run: func(cmd *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			os.Exit(1)
@@ -95,7 +110,8 @@ var proxyStopCmd = &cobra.Command{
 var proxyStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "proxy client(s) status",
-	Run: func(cmd *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, args []string) {
+		//TODO: check status of multiple clients
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			os.Exit(1)
@@ -135,7 +151,14 @@ var proxyStatusCmd = &cobra.Command{
 var proxyListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List servers",
-	Run: func(cmd *cobra.Command, _ []string) {
+	Long: "List proxy servers from service discovery\n http://sd.skycoin.com/api/services?type=proxy\n http://sd.skycoin.com/api/services?type=vpn&country=US",
+	Run: func(cmd *cobra.Command, args []string) {
+		if pk != "" {
+			err := pubkey.Set(pk)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
+			}
+		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalRPCError(cmd.Flags(), err)
@@ -154,18 +177,48 @@ var proxyListCmd = &cobra.Command{
 		if isStats {
 			internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d Servers\n", len(servers)), fmt.Sprintf("%d Servers\n", len(servers)))
 		} else {
-
 			var msg string
-			for _, i := range servers {
-				msg += strings.Replace(i.Addr.String(), ":44", "", 1)
-				if i.Geo != nil {
-					msg += fmt.Sprintf(" | %s\n", i.Geo.Country)
-				} else {
-					msg += "\n"
-				}
-			}
-
+	    var results []string
+	    limit := len(servers)
+	    if count > 0 && count < limit {
+	        limit = count
+	    }
+	    if pk != "" {
+	        for _, server := range servers {
+	            if strings.Replace(server.Addr.String(), ":44", "", 1) == pk {
+	                results = append(results, server.Addr.String())
+	            }
+	        }
+	    } else {
+	        for _, server := range servers {
+	            results = append(results, server.Addr.String())
+	        }
+	    }
+	    rand.Shuffle(len(results), func(i, j int) {
+	        results[i], results[j] = results[j], results[i]
+	    })
+	    for i := 0; i < limit && i < len(results); i++ {
+	        msg += strings.Replace(results[i], ":44", "", 1)
+	        if server := findServerByPK(servers, results[i]); server != nil && server.Geo != nil {
+						if server.Geo.Country != "" {
+							msg += fmt.Sprintf(" | %s\n", server.Geo.Country)
+							} else {
+								msg += "\n"
+							}
+							} else {
+								msg += "\n"
+							}
+						}
 			internal.PrintOutput(cmd.Flags(), servers, msg)
 		}
 	},
+}
+
+func findServerByPK(servers []servicedisc.Service, addr string) *servicedisc.Service {
+    for _, server := range servers {
+        if server.Addr.String() == addr {
+            return &server
+        }
+    }
+    return nil
 }
