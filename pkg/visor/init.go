@@ -38,6 +38,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/dmsgc"
+	"github.com/skycoin/skywire/pkg/manager"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -568,7 +569,7 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 	ctx, cancel := context.WithCancel(ctx)
 	// To remove the block set by NewTransportListener if dmsg is not initialized
 	go func() {
-		ts, err := ts.NewTransportListener(ctx, v.conf.PK, v.conf.SK, v.conf.Transport.TransportSetup, v.dmsgC, v.tpM, v.MasterLogger())
+		ts, err := ts.NewTransportListener(ctx, v.conf.PK, v.conf.Transport.TransportSetup, v.dmsgC, v.tpM, v.MasterLogger())
 		if err != nil {
 			log.Warn(err)
 			cancel()
@@ -594,7 +595,7 @@ func initManagerServer(ctx context.Context, v *Visor, log *logging.Logger) error
 	ctx, cancel := context.WithCancel(ctx)
 	// To remove the block set by NewTransportListener if dmsg is not initialized
 	go func() {
-		ts, err := ts.NewTransportListener(ctx, v.conf.PK, v.conf.SK, v.conf.Transport.TransportSetup, v.dmsgC, v.tpM, v.MasterLogger())
+		m, err := manager.New(ctx, v.conf.PK, v.conf.SK, v.conf.Transport.TransportSetup, v.dmsgC, v.tpM, v.MasterLogger())
 		if err != nil {
 			log.Warn(err)
 			cancel()
@@ -602,14 +603,14 @@ func initManagerServer(ctx context.Context, v *Visor, log *logging.Logger) error
 		select {
 		case <-ctx.Done():
 		default:
-			go ts.Serve(ctx)
+			go m.ListenAndServe(ctx)
 		}
 	}()
 
 	// waiting for at least one transport to initialize
 	<-v.tpM.Ready()
 
-	v.pushCloseStack("transport_setup.rpc", func() error {
+	v.pushCloseStack("manager_server.rpc", func() error {
 		cancel()
 		return nil
 	})
