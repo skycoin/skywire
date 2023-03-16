@@ -69,6 +69,8 @@ github.com/bitfield/script
 # github.com/blang/semver/v4 v4.0.0
 ## explicit; go 1.14
 github.com/blang/semver/v4
+# github.com/boltdb/bolt v1.3.1
+## explicit
 # github.com/ccding/go-stun/stun v0.0.0-20200514191101-4dc67bcdb029
 ## explicit; go 1.14
 github.com/ccding/go-stun/stun
@@ -247,6 +249,8 @@ github.com/shirou/gopsutil/v3/internal/common
 github.com/shirou/gopsutil/v3/mem
 github.com/shirou/gopsutil/v3/net
 github.com/shirou/gopsutil/v3/process
+# github.com/shopspring/decimal v1.3.1
+## explicit; go 1.13
 # github.com/sirupsen/logrus v1.8.1
 ## explicit; go 1.13
 github.com/sirupsen/logrus
@@ -264,6 +268,8 @@ github.com/skycoin/dmsg/pkg/dmsgpty
 github.com/skycoin/dmsg/pkg/dmsgtest
 github.com/skycoin/dmsg/pkg/ioutil
 github.com/skycoin/dmsg/pkg/noise
+# github.com/skycoin/encodertest v0.0.0-20190217072920-14c2e31898b9
+## explicit
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 ## explicit
 github.com/skycoin/noise

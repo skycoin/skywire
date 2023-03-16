@@ -15,9 +15,9 @@ import (
 
 // RPC that exposes Management API methods to be used via RPC
 type RPC struct {
-	tm   *transport.Manager
-	log  *logging.Logger
-	ecdh []byte
+	tm        *transport.Manager
+	log       *logging.Logger
+	sharedSec []byte
 }
 
 // TransportRequest to perform an action over RPC

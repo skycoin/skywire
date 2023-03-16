@@ -88,12 +88,12 @@ func (ts *Manager) ListenAndServe(ctx context.Context) {
 			}
 		}
 
-		buff, err := skycipher.ECDH(skycipher.PubKey(remotePK), skycipher.SecKey(ts.localSK))
+		sharedSec, err := skycipher.ECDH(skycipher.PubKey(remotePK), skycipher.SecKey(ts.localSK))
 		if err != nil {
 			ts.log.WithError(err).Error("failed to created ECDH")
 		}
 
-		gw := &RPC{tm: ts.tm, log: ts.log, ecdh: buff}
+		gw := &RPC{tm: ts.tm, log: ts.log, sharedSec: sharedSec}
 		rpcS := rpc.NewServer()
 
 		if err := rpcS.Register(gw); err != nil {
