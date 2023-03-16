@@ -149,7 +149,7 @@ func (c *genericClient) acceptTransports(lis net.Listener) {
 	c.log.Debugf("listening on addr: %v", c.connListener.Addr())
 	for {
 		if err := c.acceptTransport(); err != nil {
-			if errors.Is(err, io.EOF) {
+			if errors.Is(err, io.EOF) || strings.Contains(err.Error(), "encrypt connection to") {
 				continue // likely it's a dummy connection from service discovery
 			}
 

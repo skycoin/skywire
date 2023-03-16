@@ -474,6 +474,11 @@ func (v *Visor) Close() error {
 		errCh := make(chan error, 1)
 		t := time.NewTimer(moduleShutdownTimeout)
 
+		// should keep transport.manager shutdown continue till all transports delete there
+		if cl.src == "transport.manager" {
+			t = time.NewTimer(2 * time.Hour)
+		}
+
 		log := v.MasterLogger().PackageLogger(fmt.Sprintf("visor:shutdown:%s", cl.src)).
 			WithField("func", fmt.Sprintf("[%d/%d]", i+1, len(v.closeStack)))
 		log.Debug("Shutting down module...")
