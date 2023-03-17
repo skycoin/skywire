@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/rpc"
 
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	skycipher "github.com/skycoin/skycoin/src/cipher"
@@ -65,6 +64,7 @@ func (m *Manager) ListenAndServe(ctx context.Context) {
 		}
 	}()
 
+	m.log.Error("Listening")
 	m.log.WithField("dmsg_port", skyenv.DmsgManagerRPCPort).Debug("Accepting dmsg streams.")
 	for {
 		conn, err := lis.AcceptStream()
@@ -78,6 +78,7 @@ func (m *Manager) ListenAndServe(ctx context.Context) {
 			break
 		}
 		remotePK := conn.RawRemoteAddr().PK
+		m.log.Errorf("got one %v", remotePK)
 		found := false
 		for _, trusted := range m.authNodes {
 			if trusted == remotePK {
@@ -102,12 +103,11 @@ func (m *Manager) ListenAndServe(ctx context.Context) {
 
 		mgmtAPI := NewManagementInterface(tpAPI)
 
-		gw := &RPC{mgmt: mgmtAPI, log: m.log, sharedSec: sharedSec}
-		rpcS := rpc.NewServer()
-
-		if err := rpcS.Register(gw); err != nil {
+		rpcS, err := newRPCServer(mgmtAPI, m.log, sharedSec)
+		if err != nil {
 			m.log.WithError(err).Error("failed to register rpc")
 		}
+
 		m.log.WithField("remote_conn", remotePK).Debug("Serving rpc")
 		go rpcS.ServeConn(conn)
 	}

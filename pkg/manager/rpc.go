@@ -2,6 +2,8 @@
 package manager
 
 import (
+	"fmt"
+	"net/rpc"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,11 +14,31 @@ import (
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
 )
 
+const (
+	// RPCPrefix is the prefix used with all RPC calls.
+	RPCPrefix = "app-manager"
+)
+
 // RPC that exposes Management API methods to be used via RPC
 type RPC struct {
 	mgmt      *ManagementInterface
 	log       *logging.Logger
 	sharedSec []byte
+}
+
+func newRPCServer(mgmt *ManagementInterface, log *logging.Logger, sharedSec []byte) (*rpc.Server, error) {
+	rpcS := rpc.NewServer()
+	rpcG := &RPC{
+		mgmt:      mgmt,
+		log:       log,
+		sharedSec: sharedSec,
+	}
+
+	if err := rpcS.RegisterName(RPCPrefix, rpcG); err != nil {
+		return nil, fmt.Errorf("failed to create visor RPC server: %w", err)
+	}
+
+	return rpcS, nil
 }
 
 // AddTransportIn is input for AddTransport.
@@ -48,7 +70,7 @@ func (r *RPC) RemoveTransport(tid *uuid.UUID, _ *struct{}) (err error) {
 // GetTransports returns all transports of this node that have been established by transport setup system
 func (r *RPC) GetTransports(_ *struct{}, out *[]*setup.TransportSummary) (err error) {
 	defer rpcutil.LogCall(r.log, "Transports", nil)(out, &err)
-
+	r.log.Error("suckla")
 	transports, err := r.mgmt.tpSetup.GetTransports()
 	*out = transports
 
