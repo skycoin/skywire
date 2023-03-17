@@ -596,7 +596,7 @@ func initManagerServer(ctx context.Context, v *Visor, log *logging.Logger) error
 	// To remove the block set by NewTransportListener if dmsg is not initialized
 	go func() {
 		authNodes := append(v.conf.Managers.Skycoin, v.conf.Managers.User...)
-		m, err := manager.New(ctx, v.conf.PK, v.conf.SK, authNodes, v.dmsgC, v.tpM, v.MasterLogger())
+		m, err := manager.New(ctx, v.conf.PK, v.conf.SK, authNodes, v.dmsgC, v.tpM, v.router, v.MasterLogger())
 		if err != nil {
 			log.Warn(err)
 			cancel()
