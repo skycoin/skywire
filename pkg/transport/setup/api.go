@@ -72,12 +72,14 @@ func (a *API) RemoveTransport(tid uuid.UUID) error {
 }
 
 // GetTransports returns all transports of this node that have been established by transport setup system
-func (a *API) GetTransports(_ struct{}) ([]*TransportSummary, error) {
+func (a *API) GetTransports() ([]*TransportSummary, error) {
 	tps := a.tpM.GetTransportsByLabel(transport.LabelSkycoin)
 	var res []*TransportSummary
 	for _, tp := range tps {
-		tSum := newTransportSummary(a.tpM, tp, false, a.router.SetupIsTrusted(tp.Remote()))
-		res = append(res, tSum)
+		if tp.Entry.Label == transport.LabelSkycoin {
+			tSum := newTransportSummary(a.tpM, tp, false, a.router.SetupIsTrusted(tp.Remote()))
+			res = append(res, tSum)
+		}
 	}
 	return res, nil
 }

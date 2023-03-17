@@ -12,8 +12,10 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/setup"
 )
 
 // Manager manages the authenticated RPC connections to the visor
@@ -21,12 +23,14 @@ type Manager struct {
 	dmsgC     *dmsg.Client
 	log       *logging.Logger
 	tm        *transport.Manager
+	router    router.Router
 	authNodes []cipher.PubKey
 	localSK   cipher.SecKey
 }
 
 // New makes a Manager from configuration
-func New(ctx context.Context, pk cipher.PubKey, sk cipher.SecKey, authNodes []cipher.PubKey, dmsgC *dmsg.Client, tm *transport.Manager, masterLogger *logging.MasterLogger) (*Manager, error) {
+func New(ctx context.Context, pk cipher.PubKey, sk cipher.SecKey, authNodes []cipher.PubKey, dmsgC *dmsg.Client, tm *transport.Manager, router router.Router,
+	masterLogger *logging.MasterLogger) (*Manager, error) {
 	log := masterLogger.PackageLogger("manager")
 	log.WithField("local_pk", pk).Debug("Connecting to the dmsg network.")
 
@@ -37,6 +41,7 @@ func New(ctx context.Context, pk cipher.PubKey, sk cipher.SecKey, authNodes []ci
 			dmsgC:     dmsgC,
 			log:       log,
 			tm:        tm,
+			router:    router,
 			authNodes: authNodes,
 			localSK:   sk,
 		}
@@ -93,7 +98,11 @@ func (m *Manager) ListenAndServe(ctx context.Context) {
 			m.log.WithError(err).Error("failed to created ECDH")
 		}
 
-		gw := &RPC{tm: m.tm, log: m.log, sharedSec: sharedSec}
+		tpAPI := setup.NewAPI(m.tm, m.log, m.router)
+
+		mgmtAPI := NewManagementInterface(tpAPI)
+
+		gw := &RPC{mgmt: mgmtAPI, log: m.log, sharedSec: sharedSec}
 		rpcS := rpc.NewServer()
 
 		if err := rpcS.Register(gw); err != nil {

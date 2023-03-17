@@ -2,99 +2,57 @@
 package manager
 
 import (
-	"context"
-	"errors"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/setup"
+	"github.com/skycoin/skywire/pkg/util/rpcutil"
 )
 
 // RPC that exposes Management API methods to be used via RPC
 type RPC struct {
-	tm        *transport.Manager
+	mgmt      *ManagementInterface
 	log       *logging.Logger
 	sharedSec []byte
 }
 
-// TransportRequest to perform an action over RPC
-type TransportRequest struct {
+// AddTransportIn is input for AddTransport.
+type AddTransportIn struct {
 	RemotePK cipher.PubKey
-	Type     network.Type
+	TpType   string
+	Timeout  time.Duration
 }
 
-// UUIDRequest contains id in UUID format
-type UUIDRequest struct {
-	ID uuid.UUID
-}
+// AddTransport creates a transport for the visor.
+func (r *RPC) AddTransport(in *AddTransportIn, out *setup.TransportSummary) (err error) {
+	defer rpcutil.LogCall(r.log, "AddTransport", in)(out, &err)
 
-// TransportResponse specifies an existing transport to remote node
-type TransportResponse struct {
-	ID     uuid.UUID
-	Local  cipher.PubKey
-	Remote cipher.PubKey
-	Type   network.Type
-}
-
-// BoolResponse is a simple boolean wrapped in structure for RPC responses
-type BoolResponse struct {
-	Result bool
-}
-
-// AddTransport specified by request
-func (r *RPC) AddTransport(req TransportRequest, res *TransportResponse) error {
-	// enc := EncodeToBytes(TransportRequest{})
-	// gw.chacha20poly1305.Encrypt(enc, gw.ecdh)
-
-	// cryptoType := skyCrypto.CryptoTypeScryptChacha20poly1305
-	ctx := context.Background()
-	r.log.WithField("PK", req.RemotePK).WithField("type", req.Type).Info("Adding transport")
-	tp, err := r.tm.SaveTransport(ctx, req.RemotePK, req.Type, transport.LabelSkycoin)
-	if err != nil {
-		r.log.WithError(err).Error("Cannot save transport")
-		return err
+	tp, err := r.mgmt.tpSetup.AddTransport(in.RemotePK, in.TpType, in.Timeout)
+	if tp != nil {
+		*out = *tp
 	}
-	res.ID = tp.Entry.ID
-	res.Local = r.tm.Local()
-	res.Remote = tp.Remote()
-	res.Type = tp.Type()
-	return nil
+
+	return err
 }
 
-// ErrIncorrectType is returned when transport was not created by transport setup
-var ErrIncorrectType = errors.New("transport was not created by skycoin")
+// RemoveTransport removes a Transport from the visor.
+func (r *RPC) RemoveTransport(tid *uuid.UUID, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "RemoveTransport", tid)(nil, &err)
 
-// RemoveTransport removes all transports that match given request
-func (r *RPC) RemoveTransport(req UUIDRequest, res *BoolResponse) error {
-	r.log.WithField("ID", req.ID).Debug("Removing transport")
-	tr, err := r.tm.GetTransportByID(req.ID)
-	if err != nil {
-		return err
-	}
-	if tr.Entry.Label != transport.LabelSkycoin {
-		return ErrIncorrectType
-	}
-	r.tm.DeleteTransport(req.ID)
-	res.Result = true
-	return nil
+	return r.mgmt.tpSetup.RemoveTransport(*tid)
 }
 
 // GetTransports returns all transports of this node that have been established by transport setup system
-func (r *RPC) GetTransports(_ struct{}, res *[]TransportResponse) error {
-	tps := r.tm.GetTransportsByLabel(transport.LabelSkycoin)
-	for _, tp := range tps {
-		tResp := TransportResponse{
-			ID:     tp.Entry.ID,
-			Local:  r.tm.Local(),
-			Remote: tp.Remote(),
-			Type:   tp.Type(),
-		}
-		*res = append(*res, tResp)
-	}
-	return nil
+func (r *RPC) GetTransports(_ *struct{}, out *[]*setup.TransportSummary) (err error) {
+	defer rpcutil.LogCall(r.log, "Transports", nil)(out, &err)
+
+	transports, err := r.mgmt.tpSetup.GetTransports()
+	*out = transports
+
+	return err
 }
 
 // func encodeToBytes(p interface{}) []byte {
