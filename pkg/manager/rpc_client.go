@@ -79,9 +79,9 @@ func (rc *RPCClient) RemoveTransport(tid uuid.UUID) error {
 	return rc.Call("RemoveTransport", &tid, &struct{}{})
 }
 
-// GetTransport calls GetTransport.
-func (rc *RPCClient) GetTransport() ([]*setup.TransportSummary, error) {
+// GetTransports calls GetTransports.
+func (rc *RPCClient) GetTransports() ([]*setup.TransportSummary, error) {
 	summary := make([]*setup.TransportSummary, 0)
-	err := rc.Call("Transport", &struct{}{}, &summary)
+	err := rc.Call("GetTransports", &struct{}{}, &summary)
 	return summary, err
 }
