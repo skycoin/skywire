@@ -16,10 +16,6 @@ var (
 )
 
 func init() {
-	RootCmd.PersistentFlags().StringVarP(&remotePK, "pk", "k", "", "remote public key to connect to")
-
-}
-func init() {
 	RootCmd.AddCommand(connCmd)
 	RootCmd.PersistentFlags().StringVarP(&remotePK, "pk", "k", "", "remote public key to connect to")
 }
@@ -31,7 +27,7 @@ var connCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 
-		_, err := clirpc.Client(cmd.Flags())
+		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			os.Exit(1)
 		}
@@ -40,6 +36,7 @@ var connCmd = &cobra.Command{
 
 		internal.Catch(cmd.Flags(), remotePK.Set(args[0]))
 
+		err = rpcClient.ConnectMgmt(remotePK)
 		internal.Catch(cmd.Flags(), err)
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 
