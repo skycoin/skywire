@@ -3,7 +3,6 @@ package setup
 
 import (
 	"context"
-	"errors"
 
 	"github.com/google/uuid"
 
@@ -58,9 +57,6 @@ func (gw *TransportGateway) AddTransport(req TransportRequest, res *TransportRes
 	res.Type = tp.Type()
 	return nil
 }
-
-// ErrIncorrectType is returned when transport was not created by transport setup
-var ErrIncorrectType = errors.New("transport was not created by skycoin")
 
 // RemoveTransport removes all transports that match given request
 func (gw *TransportGateway) RemoveTransport(req UUIDRequest, res *BoolResponse) error {
