@@ -383,6 +383,11 @@ var genConfigCmd = &cobra.Command{
 		if isDisplayNodeIP {
 			conf.Launcher.DisplayNodeIP = true
 		}
+
+		conf.Managers = &visorconfig.Managers{
+			Skycoin: cipher.PubKeys{},
+			User:    cipher.PubKeys{},
+		}
 		//don't write file with stdout
 		if !isStdout {
 			// Save config to file.
