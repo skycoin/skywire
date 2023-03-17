@@ -29,7 +29,7 @@ type RPCClient struct {
 // NewRPCClient creates a new API.
 func NewRPCClient(log logrus.FieldLogger, conn io.ReadWriteCloser, prefix string, timeout time.Duration) *RPCClient {
 	if log == nil {
-		log = logging.MustGetLogger("visor_rpc_client")
+		log = logging.MustGetLogger("manager_rpc_client")
 	}
 	return &RPCClient{
 		log:     log,
