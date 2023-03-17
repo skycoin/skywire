@@ -48,8 +48,8 @@ func New(ctx context.Context, pk cipher.PubKey, sk cipher.SecKey, authNodes []ci
 
 // ListenAndServe listens for a dmsg connection and serves Management API rpc to trusted nodes
 func (m *Manager) ListenAndServe(ctx context.Context) {
-	m.log.WithField("dmsg_port", skyenv.DmsgTransportSetupPort).Debug("starting listener")
-	lis, err := m.dmsgC.Listen(skyenv.DmsgTransportSetupPort)
+	m.log.WithField("dmsg_port", skyenv.DmsgManagerRPCPort).Debug("starting listener")
+	lis, err := m.dmsgC.Listen(skyenv.DmsgManagerRPCPort)
 	if err != nil {
 		m.log.WithError(err).Error("failed to listen")
 	}
@@ -60,7 +60,7 @@ func (m *Manager) ListenAndServe(ctx context.Context) {
 		}
 	}()
 
-	m.log.WithField("dmsg_port", skyenv.DmsgTransportSetupPort).Debug("Accepting dmsg streams.")
+	m.log.WithField("dmsg_port", skyenv.DmsgManagerRPCPort).Debug("Accepting dmsg streams.")
 	for {
 		conn, err := lis.AcceptStream()
 		if err != nil {
