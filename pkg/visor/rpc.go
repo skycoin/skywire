@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/setup"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
 )
 
@@ -776,9 +777,46 @@ func (r *RPC) DisconnectMgmt(pk *cipher.PubKey, _ *struct{}) (err error) {
 }
 
 // ListMgmt returns all ongoing connections to remote Management servers
-func (r *RPC) ListMgmt(_ *struct{}, out *[]cipher.PubKey) (err error) {
+func (r *RPC) ListMgmt(_ *struct{}, out *cipher.PubKeys) (err error) {
 	defer rpcutil.LogCall(r.log, "ListMgmt", nil)(out, &err)
 
 	*out, err = r.visor.ListMgmt()
+	return err
+}
+
+// AddMgmtTransportIn is input for AddMgmtTransport.
+type AddMgmtTransportIn struct {
+	MsPK     cipher.PubKey
+	RemotePK cipher.PubKey
+	TpType   string
+	Timeout  time.Duration
+}
+
+// AddMgmtTransport adds a transport to
+func (r *RPC) AddMgmtTransport(in *AddMgmtTransportIn, out *setup.TransportSummary) (err error) {
+	defer rpcutil.LogCall(r.log, "AddMgmtTransport", in)(out, &err)
+	tpSum, err := r.visor.AddMgmtTransport(in.MsPK, in.RemotePK, in.TpType, in.Timeout)
+	*out = *tpSum
+	return err
+}
+
+// RemoveMgmtTransportIn is input for RemoveMgmtTransport.
+type RemoveMgmtTransportIn struct {
+	RemotePK cipher.PubKey
+	Tid      uuid.UUID
+}
+
+// RemoveMgmtTransport disconnects from the remote Management server of the provided PK
+func (r *RPC) RemoveMgmtTransport(in *RemoveMgmtTransportIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "RemoveMgmtTransport", in)(nil, &err)
+
+	return r.visor.RemoveMgmtTransport(in.RemotePK, in.Tid)
+}
+
+// GetMgmtTransports returns all transports established via ManagerServer on the remote visor
+func (r *RPC) GetMgmtTransports(remote *cipher.PubKey, out *[]*setup.TransportSummary) (err error) {
+	defer rpcutil.LogCall(r.log, "GetMgmtTransports", nil)(remote, &err)
+
+	*out, err = r.visor.GetMgmtTransports(*remote)
 	return err
 }

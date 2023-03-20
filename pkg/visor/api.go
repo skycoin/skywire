@@ -27,11 +27,13 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/manager"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/setup"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -126,6 +128,9 @@ type API interface {
 	ConnectMgmt(remotePK cipher.PubKey) error
 	DisconnectMgmt(remotePK cipher.PubKey) error
 	ListMgmt() (cipher.PubKeys, error)
+	AddMgmtTransport(msPK, remotePK cipher.PubKey, tpType string, timeout time.Duration) (*setup.TransportSummary, error)
+	RemoveMgmtTransport(msPK cipher.PubKey, tid uuid.UUID) error
+	GetMgmtTransports(msPK cipher.PubKey) ([]*setup.TransportSummary, error)
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -1507,6 +1512,45 @@ func (v *Visor) DisconnectMgmt(remotePK cipher.PubKey) error {
 // ListMgmt implements API.
 func (v *Visor) ListMgmt() (cipher.PubKeys, error) {
 	return v.managementClient.List(), nil
+}
+
+// AddMgmtTransport implements API.
+func (v *Visor) AddMgmtTransport(msPK, remotePK cipher.PubKey, tpType string, timeout time.Duration) (*setup.TransportSummary, error) {
+	mRPC := v.managementClient.GetClient(msPK)
+	if mRPC == nil {
+		return nil, manager.ErrNotConnected
+	}
+	tpSum, err := mRPC.AddTransport(remotePK, tpType, timeout)
+	if err != nil {
+		return nil, err
+	}
+	return tpSum, nil
+}
+
+// RemoveMgmtTransport implements API.
+func (v *Visor) RemoveMgmtTransport(msPK cipher.PubKey, tid uuid.UUID) error {
+	mRPC := v.managementClient.GetClient(msPK)
+	if mRPC == nil {
+		return manager.ErrNotConnected
+	}
+	err := mRPC.RemoveTransport(tid)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// GetMgmtTransports implements API.
+func (v *Visor) GetMgmtTransports(msPK cipher.PubKey) ([]*setup.TransportSummary, error) {
+	mRPC := v.managementClient.GetClient(msPK)
+	if mRPC == nil {
+		return nil, manager.ErrNotConnected
+	}
+	tps, err := mRPC.GetTransports()
+	if err != nil {
+		return nil, err
+	}
+	return tps, nil
 }
 
 func isPortAvailable(log *logging.Logger, port int) bool {

@@ -33,6 +33,9 @@ func NewManagementClient(log *logging.Logger) *ManagementClient {
 // ErrAlreadyConnected is sent when a conn to the remote manager server is already available
 var ErrAlreadyConnected = errors.New("already connected to the manager server")
 
+// ErrNotConnected is sent when a conn to the remote manager server is not available
+var ErrNotConnected = errors.New("not connected to the manager server")
+
 // Connect attempts to connect the ManagerServer of the specified remote key
 func (mc *ManagementClient) Connect(remotePK cipher.PubKey) error {
 	client := mc.GetClient(remotePK)

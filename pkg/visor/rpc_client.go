@@ -27,6 +27,7 @@ import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/setup"
 	"github.com/skycoin/skywire/pkg/util/cipherutil"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -598,6 +599,34 @@ func (rc *rpcClient) ListMgmt() (cipher.PubKeys, error) {
 	var keys cipher.PubKeys
 	err := rc.Call("ListMgmt", &struct{}{}, &keys)
 	return keys, err
+}
+
+// AddMgmtTransport calls AddMgmtTransport.
+func (rc *rpcClient) AddMgmtTransport(msPK, remotePK cipher.PubKey, tpType string, timeout time.Duration) (*setup.TransportSummary, error) {
+	var summary setup.TransportSummary
+	err := rc.Call("AddMgmtTransport", &AddMgmtTransportIn{
+		MsPK:     msPK,
+		RemotePK: remotePK,
+		TpType:   tpType,
+		Timeout:  timeout,
+	}, &summary)
+	return &summary, err
+}
+
+// RemoveMgmtTransport calls RemoveMgmtTransport.
+func (rc *rpcClient) RemoveMgmtTransport(remotePK cipher.PubKey, tid uuid.UUID) error {
+	err := rc.Call("RemoveMgmtTransport", &RemoveMgmtTransportIn{
+		RemotePK: remotePK,
+		Tid:      tid,
+	}, &struct{}{})
+	return err
+}
+
+// GetMgmtTransports calls GetMgmtTransports.
+func (rc *rpcClient) GetMgmtTransports(remote cipher.PubKey) ([]*setup.TransportSummary, error) {
+	var tpSums []*setup.TransportSummary
+	err := rc.Call("GetMgmtTransports", &struct{}{}, &tpSums)
+	return tpSums, err
 }
 
 // MockRPCClient mocks API.
@@ -1313,5 +1342,20 @@ func (mc *mockRPCClient) DisconnectMgmt(remotePK cipher.PubKey) error {
 
 // ListMgmt implements API.
 func (mc *mockRPCClient) ListMgmt() (cipher.PubKeys, error) {
+	return nil, nil
+}
+
+// AddMgmtTransport implements API.
+func (mc *mockRPCClient) AddMgmtTransport(msPK, remotePK cipher.PubKey, tpType string, timeout time.Duration) (*setup.TransportSummary, error) {
+	return nil, nil
+}
+
+// RemoveMgmtTransport implements API.
+func (mc *mockRPCClient) RemoveMgmtTransport(remotePK cipher.PubKey, tid uuid.UUID) error {
+	return nil
+}
+
+// GetMgmtTransports implements API.
+func (mc *mockRPCClient) GetMgmtTransports(remotePK cipher.PubKey) ([]*setup.TransportSummary, error) {
 	return nil, nil
 }
