@@ -753,10 +753,32 @@ func (r *RPC) StopPing(pk *cipher.PubKey, _ *struct{}) (err error) {
 	return r.visor.StopPing(*pk)
 }
 
-// TestVisor trying to test viosr by pinging to public visor.
+// TestVisor trying to test visor by pinging to public visor.
 func (r *RPC) TestVisor(conf PingConfig, out *[]TestResult) (err error) {
 	defer rpcutil.LogCall(r.log, "TestVisor", conf)(out, &err)
 
 	*out, err = r.visor.TestVisor(conf)
+	return err
+}
+
+// ConnectMgmt attempts connection to the remote Management server of the provided PK
+func (r *RPC) ConnectMgmt(pk *cipher.PubKey, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "Connect", pk)(nil, &err)
+
+	return r.visor.ConnectMgmt(*pk)
+}
+
+// DisconnectMgmt disconnects from the remote Management server of the provided PK
+func (r *RPC) DisconnectMgmt(pk *cipher.PubKey, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DisconnectMgmt", pk)(nil, &err)
+
+	return r.visor.DisconnectMgmt(*pk)
+}
+
+// ListMgmt returns all ongoing connections to remote Management servers
+func (r *RPC) ListMgmt(_ *struct{}, out *[]cipher.PubKey) (err error) {
+	defer rpcutil.LogCall(r.log, "ListMgmt", nil)(out, &err)
+
+	*out, err = r.visor.ListMgmt()
 	return err
 }

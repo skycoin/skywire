@@ -583,6 +583,23 @@ func (rc *rpcClient) TestVisor(conf PingConfig) ([]TestResult, error) {
 	return results, err
 }
 
+// ConnectMgmt calls ConnectMgmt.
+func (rc *rpcClient) ConnectMgmt(remotePK cipher.PubKey) error {
+	return rc.Call("ConnectMgmt", &remotePK, &struct{}{})
+}
+
+// DisconnectMgmt calls DisconnectMgmt.
+func (rc *rpcClient) DisconnectMgmt(remotePK cipher.PubKey) error {
+	return rc.Call("DisconnectMgmt", &remotePK, &struct{}{})
+}
+
+// ListMgmt calls ListMgmt.
+func (rc *rpcClient) ListMgmt() (cipher.PubKeys, error) {
+	var keys cipher.PubKeys
+	err := rc.Call("ListMgmt", &struct{}{}, &keys)
+	return keys, err
+}
+
 // MockRPCClient mocks API.
 type mockRPCClient struct {
 	startedAt time.Time
@@ -1282,4 +1299,19 @@ func (mc *mockRPCClient) StopPing(_ cipher.PubKey) error {
 // TestVisor implements API.
 func (mc *mockRPCClient) TestVisor(_ PingConfig) ([]TestResult, error) {
 	return []TestResult{}, nil
+}
+
+// ConnectMgmt implements API.
+func (mc *mockRPCClient) ConnectMgmt(remotePK cipher.PubKey) error {
+	return nil
+}
+
+// DisconnectMgmt implements API.
+func (mc *mockRPCClient) DisconnectMgmt(remotePK cipher.PubKey) error {
+	return nil
+}
+
+// ListMgmt implements API.
+func (mc *mockRPCClient) ListMgmt() (cipher.PubKeys, error) {
+	return nil, nil
 }

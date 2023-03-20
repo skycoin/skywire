@@ -122,6 +122,10 @@ type API interface {
 	StopPing(pk cipher.PubKey) error
 
 	TestVisor(config PingConfig) ([]TestResult, error)
+
+	ConnectMgmt(remotePK cipher.PubKey) error
+	DisconnectMgmt(remotePK cipher.PubKey) error
+	ListMgmt() (cipher.PubKeys, error)
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -1474,6 +1478,35 @@ func (v *Visor) Disconnect(id uuid.UUID) error {
 // List implements API.
 func (v *Visor) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
 	return appnet.GetAllForwardConns(), nil
+}
+
+// ConnectMgmt implements API.
+func (v *Visor) ConnectMgmt(remotePK cipher.PubKey) error {
+	err := v.managementClient.Connect(remotePK)
+	if err != nil {
+		return err
+	}
+	mc := v.managementClient.GetClient(remotePK)
+	test, err := mc.GetTransports()
+	if err != nil {
+		return err
+	}
+	v.log.Errorf("test:%v", test)
+	return nil
+}
+
+// DisconnectMgmt implements API.
+func (v *Visor) DisconnectMgmt(remotePK cipher.PubKey) error {
+	err := v.managementClient.Disconnect(remotePK)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// ListMgmt implements API.
+func (v *Visor) ListMgmt() (cipher.PubKeys, error) {
+	return v.managementClient.List(), nil
 }
 
 func isPortAvailable(log *logging.Logger, port int) bool {

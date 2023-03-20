@@ -59,6 +59,20 @@ func (mc *ManagementClient) Disconnect(remotePK cipher.PubKey) error {
 	return mc.removeClient(remotePK)
 }
 
+// List lists all the pk's of ongoing connections
+func (mc *ManagementClient) List() cipher.PubKeys {
+	return mc.getAllClientKeys()
+}
+
+func (mc *ManagementClient) getAllClientKeys() (pks cipher.PubKeys) {
+	mc.connMX.Lock()
+	defer mc.connMX.Unlock()
+	for k := range mc.managerConns {
+		pks = append(pks, k)
+	}
+	return pks
+}
+
 func (mc *ManagementClient) addClient(remotePK cipher.PubKey, rc *RPCClient) {
 	mc.connMX.Lock()
 	defer mc.connMX.Unlock()
