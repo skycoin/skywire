@@ -249,8 +249,6 @@ github.com/shirou/gopsutil/v3/internal/common
 github.com/shirou/gopsutil/v3/mem
 github.com/shirou/gopsutil/v3/net
 github.com/shirou/gopsutil/v3/process
-# github.com/shopspring/decimal v1.3.1
-## explicit; go 1.13
 # github.com/sirupsen/logrus v1.8.1
 ## explicit; go 1.13
 github.com/sirupsen/logrus
@@ -268,8 +266,6 @@ github.com/skycoin/dmsg/pkg/dmsgpty
 github.com/skycoin/dmsg/pkg/dmsgtest
 github.com/skycoin/dmsg/pkg/ioutil
 github.com/skycoin/dmsg/pkg/noise
-# github.com/skycoin/encodertest v0.0.0-20190217072920-14c2e31898b9
-## explicit
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 ## explicit
 github.com/skycoin/noise
@@ -277,7 +273,13 @@ github.com/skycoin/noise
 ## explicit
 github.com/skycoin/skycoin/src/cipher
 github.com/skycoin/skycoin/src/cipher/base58
+github.com/skycoin/skycoin/src/cipher/chacha20poly1305
+github.com/skycoin/skycoin/src/cipher/chacha20poly1305/internal/chacha20
+github.com/skycoin/skycoin/src/cipher/encrypt
+github.com/skycoin/skycoin/src/cipher/pbkdf2
+github.com/skycoin/skycoin/src/cipher/poly1305
 github.com/skycoin/skycoin/src/cipher/ripemd160
+github.com/skycoin/skycoin/src/cipher/scrypt
 github.com/skycoin/skycoin/src/cipher/secp256k1-go
 github.com/skycoin/skycoin/src/cipher/secp256k1-go/secp256k1-go2
 github.com/skycoin/skycoin/src/util/logging

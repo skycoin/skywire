@@ -94,16 +94,16 @@ func (m *Manager) ListenAndServe(ctx context.Context) {
 			}
 		}
 
-		sharedSec, err := skycipher.ECDH(skycipher.PubKey(remotePK), skycipher.SecKey(m.localSK))
-		if err != nil {
-			m.log.WithError(err).Error("failed to created ECDH")
-		}
-
 		tpAPI := setup.NewAPI(m.tm, m.log, m.router)
 
-		mgmtAPI := NewManagementInterface(tpAPI)
+		sharedSec, err := skycipher.ECDH(skycipher.PubKey(remotePK), skycipher.SecKey(m.localSK))
+		if err != nil {
+			m.log.WithError(err).Error("Failed to generate shared secret")
+		}
 
-		rpcS, err := newRPCServer(mgmtAPI, m.log, sharedSec)
+		mgmtAPI := NewManagementInterface(tpAPI, remotePK, m.localSK, sharedSec)
+
+		rpcS, err := newRPCServer(mgmtAPI, m.log)
 		if err != nil {
 			m.log.WithError(err).Error("failed to register rpc")
 		}

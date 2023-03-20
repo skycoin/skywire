@@ -21,17 +21,15 @@ const (
 
 // RPC that exposes Management API methods to be used via RPC
 type RPC struct {
-	mgmt      *ManagementInterface
-	log       *logging.Logger
-	sharedSec []byte
+	mgmt *ManagementInterface
+	log  *logging.Logger
 }
 
-func newRPCServer(mgmt *ManagementInterface, log *logging.Logger, sharedSec []byte) (*rpc.Server, error) {
+func newRPCServer(mgmt *ManagementInterface, log *logging.Logger) (*rpc.Server, error) {
 	rpcS := rpc.NewServer()
 	rpcG := &RPC{
-		mgmt:      mgmt,
-		log:       log,
-		sharedSec: sharedSec,
+		mgmt: mgmt,
+		log:  log,
 	}
 
 	if err := rpcS.RegisterName(RPCPrefix, rpcG); err != nil {
