@@ -11,15 +11,10 @@ import (
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 )
 
-var (
-	remotePK string
-)
-
 func init() {
 	RootCmd.AddCommand(connCmd)
 	RootCmd.AddCommand(disCmd)
 	RootCmd.AddCommand(lsCmd)
-	RootCmd.PersistentFlags().StringVarP(&remotePK, "pk", "k", "", "remote public key to connect to")
 }
 
 // connCmd contains commands to connect to Manager Server
