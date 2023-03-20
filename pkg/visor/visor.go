@@ -25,6 +25,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/manager"
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
@@ -113,7 +114,8 @@ type Visor struct {
 	pingConnMx   *sync.Mutex
 	pingPcktSize int
 
-	rawSurvey bool
+	rawSurvey        bool
+	managementClient *manager.ManagementClient
 }
 
 // todo: consider moving module closing to the module system
@@ -249,6 +251,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		pingConnMx:           new(sync.Mutex),
 		allowedPorts:         make(map[int]bool),
 		rawSurvey:            rawSurvey,
+		managementClient:     manager.NewManagementClient(conf.MasterLogger().PackageLogger("manager")),
 	}
 	v.isServicesHealthy.init()
 
