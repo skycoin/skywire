@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
@@ -18,7 +17,7 @@ import (
 // RPCClient API provides methods to call an RPC Server.
 // It implements API
 type RPCClient struct {
-	log     logrus.FieldLogger
+	log     *logging.Logger
 	timeout time.Duration
 	conn    io.ReadWriteCloser
 	client  *rpc.Client
@@ -26,8 +25,8 @@ type RPCClient struct {
 	FixGob  bool
 }
 
-// NewRPCClient creates a new API.
-func NewRPCClient(log logrus.FieldLogger, conn io.ReadWriteCloser, prefix string, timeout time.Duration) *RPCClient {
+// newRPCClient creates a new API.
+func newRPCClient(log *logging.Logger, conn io.ReadWriteCloser, prefix string, timeout time.Duration) *RPCClient {
 	if log == nil {
 		log = logging.MustGetLogger("manager_rpc_client")
 	}
