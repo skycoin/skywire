@@ -29,6 +29,8 @@ func init() {
 	apiCmd.PersistentFlags().StringVarP(&managerPK, "pk", "k", "", "pk of the remote Manager Server")
 	apiCmd.AddCommand(
 		addTpCmd,
+		rmTpCmd,
+		discTpCmd,
 	)
 	RootCmd.AddCommand(apiCmd)
 }
