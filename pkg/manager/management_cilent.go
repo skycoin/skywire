@@ -150,6 +150,9 @@ func (mc *ManagementClient) removeClient(remotePK cipher.PubKey) error {
 	mc.connMX.Lock()
 	defer mc.connMX.Unlock()
 	rpcConn := mc.managerConns[remotePK]
+	if rpcConn == nil {
+		return ErrNotConnected
+	}
 	err := rpcConn.conn.Close()
 	if err != nil {
 		return err
