@@ -67,17 +67,13 @@ var disCmd = &cobra.Command{
 var lsCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "List all ongoing connections to Manager Server of skywire visors",
-	Args:  cobra.MinimumNArgs(1),
+	Args:  cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			os.Exit(1)
 		}
-
-		var remotePK cipher.PubKey
-
-		internal.Catch(cmd.Flags(), remotePK.Set(args[0]))
 
 		pks, err := rpcClient.ListMgmt()
 		internal.Catch(cmd.Flags(), err)
