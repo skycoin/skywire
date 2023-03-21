@@ -13,12 +13,21 @@ import (
 
 func init() {
 	RootCmd.AddCommand(connCmd)
-	RootCmd.AddCommand(disCmd)
-	RootCmd.AddCommand(lsCmd)
+	connCmd.AddCommand(
+		connectCmd,
+		disconnectCmd,
+		lsCmd,
+	)
 }
 
 // connCmd contains commands to connect to Manager Server
 var connCmd = &cobra.Command{
+	Use:   "conn",
+	Short: "Manage connections to Manager Servers",
+}
+
+// connectCmd contains commands to connect to Manager Server
+var connectCmd = &cobra.Command{
 	Use:   "connect <remote-pk>",
 	Short: "Connect to a remote Manager Server of a skywire visor",
 	Args:  cobra.MinimumNArgs(1),
@@ -40,8 +49,8 @@ var connCmd = &cobra.Command{
 	},
 }
 
-// disCmd contains commands to disconnect from the Manager Server
-var disCmd = &cobra.Command{
+// disconnectCmd contains commands to disconnect from the Manager Server
+var disconnectCmd = &cobra.Command{
 	Use:   "disconnect <remote-pk>",
 	Short: "Disconnect from a remote Manager Server of a skywire visor",
 	Args:  cobra.MinimumNArgs(1),
