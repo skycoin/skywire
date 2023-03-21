@@ -10,6 +10,7 @@ import (
 	"github.com/skycoin/skycoin/src/cipher/encrypt"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport/setup"
 )
 
@@ -45,6 +46,7 @@ func generateRandomString(s int) string {
 
 // ManagementInterface contains the API that is served over RPC for authorized managers
 type ManagementInterface struct {
+	log          *logging.Logger
 	tpSetup      *setup.API
 	sharedSec    []byte
 	remotePK     cipher.PubKey
@@ -56,9 +58,10 @@ type ManagementInterface struct {
 }
 
 // NewManagementInterface returns ManagementInterface
-func NewManagementInterface(tpSetup *setup.API, remotePK cipher.PubKey, localSK cipher.SecKey, sharedSec []byte) *ManagementInterface {
+func NewManagementInterface(log *logging.Logger, tpSetup *setup.API, remotePK cipher.PubKey, localSK cipher.SecKey, sharedSec []byte) *ManagementInterface {
 
 	m := &ManagementInterface{
+		log:          log,
 		tpSetup:      tpSetup,
 		sharedSec:    sharedSec,
 		remotePK:     remotePK,
@@ -79,6 +82,7 @@ type Connection struct {
 
 // Challenge sends the requesting visor an encrypted challenge string
 func (mi *ManagementInterface) Challenge() ([]byte, error) {
+	mi.log.Debugf("Challenge request received from %v", mi.remotePK)
 	sendC := Connection{
 		Challenge: mi.challengeMsg,
 	}
@@ -91,6 +95,7 @@ func (mi *ManagementInterface) Challenge() ([]byte, error) {
 
 // Response receives the response of the challenge and verifies it
 func (mi *ManagementInterface) Response(resp []byte) (bool, error) {
+	mi.log.Debugf("Challenge Response received from %v", mi.remotePK)
 	byteArray, err := mi.cryptor.Decrypt(resp, mi.sharedSec)
 	if err != nil {
 		return false, err
@@ -104,5 +109,6 @@ func (mi *ManagementInterface) Response(resp []byte) (bool, error) {
 		return false, nil
 	}
 	mi.readyOnce.Do(func() { close(mi.readyCh) })
+	mi.log.Debugf("Challenge solved by %v", mi.remotePK)
 	return true, nil
 }

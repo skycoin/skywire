@@ -64,7 +64,6 @@ func (m *Manager) ListenAndServe(ctx context.Context) {
 		}
 	}()
 
-	m.log.Error("Listening")
 	m.log.WithField("dmsg_port", skyenv.DmsgManagerRPCPort).Debug("Accepting dmsg streams.")
 	for {
 		conn, err := lis.AcceptStream()
@@ -78,7 +77,6 @@ func (m *Manager) ListenAndServe(ctx context.Context) {
 			break
 		}
 		remotePK := conn.RawRemoteAddr().PK
-		m.log.Errorf("got one %v", remotePK)
 		found := false
 		for _, trusted := range m.authNodes {
 			if trusted == remotePK {
@@ -92,6 +90,7 @@ func (m *Manager) ListenAndServe(ctx context.Context) {
 			if err := conn.Close(); err != nil {
 				m.log.WithError(err).Error("Failed to close stream")
 			}
+			return
 		}
 
 		tpAPI := setup.NewAPI(m.tm, m.log, m.router)
@@ -99,16 +98,24 @@ func (m *Manager) ListenAndServe(ctx context.Context) {
 		sharedSec, err := skycipher.ECDH(skycipher.PubKey(remotePK), skycipher.SecKey(m.localSK))
 		if err != nil {
 			m.log.WithError(err).Error("Failed to generate shared secret")
+			if err := conn.Close(); err != nil {
+				m.log.WithError(err).Error("Failed to close stream")
+			}
+			return
 		}
 
-		mgmtAPI := NewManagementInterface(tpAPI, remotePK, m.localSK, sharedSec)
+		mgmtAPI := NewManagementInterface(m.log, tpAPI, remotePK, m.localSK, sharedSec)
 
 		rpcS, err := newRPCServer(mgmtAPI, m.log)
 		if err != nil {
 			m.log.WithError(err).Error("failed to register rpc")
+			if err := conn.Close(); err != nil {
+				m.log.WithError(err).Error("Failed to close stream")
+			}
+			return
 		}
 
-		m.log.WithField("remote_conn", remotePK).Debug("Serving rpc")
+		m.log.WithField("remote_conn", remotePK).Debug("Serving Manager rpc")
 		go rpcS.ServeConn(conn)
 	}
 }
