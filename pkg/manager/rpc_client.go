@@ -61,6 +61,20 @@ func (rc *RPCClient) Call(method string, args, reply interface{}) error {
 	}
 }
 
+// Challenge calls Challenge.
+func (rc *RPCClient) Challenge() ([]byte, error) {
+	var out []byte
+	err := rc.Call("Challenge", &struct{}{}, &out)
+	return out, err
+}
+
+// Response calls Response.
+func (rc *RPCClient) Response(resp []byte) (bool, error) {
+	var out bool
+	err := rc.Call("Response", &resp, &out)
+	return out, err
+}
+
 // AddTransport calls AddTransport.
 func (rc *RPCClient) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*setup.TransportSummary, error) {
 	var summary setup.TransportSummary

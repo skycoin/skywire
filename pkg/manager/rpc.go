@@ -46,6 +46,22 @@ type AddTransportIn struct {
 	Timeout  time.Duration
 }
 
+// Challenge calls the Challenge API
+func (r *RPC) Challenge(_ *struct{}, out *[]byte) (err error) {
+	defer rpcutil.LogCall(r.log, "Challenge", nil)(out, &err)
+
+	*out, err = r.mgmt.Challenge()
+	return err
+}
+
+// Response send the response to the Challenge
+func (r *RPC) Response(in *[]byte, out *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "Response", in)(out, &err)
+
+	*out, err = r.mgmt.Response(*in)
+	return err
+}
+
 // AddTransport creates a transport for the visor.
 func (r *RPC) AddTransport(in *AddTransportIn, out *setup.TransportSummary) (err error) {
 	defer rpcutil.LogCall(r.log, "AddTransport", in)(out, &err)
