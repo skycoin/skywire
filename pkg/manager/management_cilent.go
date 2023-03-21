@@ -30,6 +30,7 @@ type ManagementClient struct {
 func NewManagementClient(log *logging.Logger, localSK cipher.SecKey) *ManagementClient {
 	mc := make(map[cipher.PubKey]*RPCClient)
 	mv := &ManagementClient{
+		connMX:       new(sync.RWMutex),
 		log:          log,
 		managerConns: mc,
 		localSK:      localSK,
