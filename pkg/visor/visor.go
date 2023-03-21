@@ -251,7 +251,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		pingConnMx:           new(sync.Mutex),
 		allowedPorts:         make(map[int]bool),
 		rawSurvey:            rawSurvey,
-		managementClient:     manager.NewManagementClient(conf.MasterLogger().PackageLogger("manager")),
+		managementClient:     manager.NewManagementClient(conf.MasterLogger().PackageLogger("manager"), conf.SK),
 	}
 	v.isServicesHealthy.init()
 

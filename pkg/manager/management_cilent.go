@@ -2,8 +2,12 @@
 package manager
 
 import (
+	"encoding/json"
 	"errors"
 	"sync"
+
+	skycipher "github.com/skycoin/skycoin/src/cipher"
+	"github.com/skycoin/skycoin/src/cipher/encrypt"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
@@ -18,23 +22,30 @@ type ManagementClient struct {
 	managerConns map[cipher.PubKey]*RPCClient
 	connMX       *sync.RWMutex
 	log          *logging.Logger
+	localSK      cipher.SecKey
 }
 
 // NewManagementClient create a new ManagementClient
-func NewManagementClient(log *logging.Logger) *ManagementClient {
+func NewManagementClient(log *logging.Logger, localSK cipher.SecKey) *ManagementClient {
 	mc := make(map[cipher.PubKey]*RPCClient)
 	mv := &ManagementClient{
 		log:          log,
 		managerConns: mc,
+		localSK:      localSK,
 	}
 	return mv
 }
 
-// ErrAlreadyConnected is sent when a conn to the remote manager server is already available
-var ErrAlreadyConnected = errors.New("already connected to the manager server")
+var (
+	// ErrAlreadyConnected is sent when a conn to the remote manager server is already available
+	ErrAlreadyConnected = errors.New("already connected to the manager server")
 
-// ErrNotConnected is sent when a conn to the remote manager server is not available
-var ErrNotConnected = errors.New("not connected to the manager server")
+	// ErrNotConnected is sent when a conn to the remote manager server is not available
+	ErrNotConnected = errors.New("not connected to the manager server")
+
+	// ErrChalFailed is sent when a conn to the remote manager server is not available
+	ErrChalFailed = errors.New("failed to solve the challenge sent by the manager server")
+)
 
 // Connect attempts to connect the ManagerServer of the specified remote key
 func (mc *ManagementClient) Connect(remotePK cipher.PubKey) error {
@@ -53,7 +64,58 @@ func (mc *ManagementClient) Connect(remotePK cipher.PubKey) error {
 		return err
 	}
 	rc := newRPCClient(mc.log, conn, RPCPrefix, visorconfig.RPCTimeout)
+	err = mc.solveChallenge(remotePK, rc)
+	if err != nil {
+		return err
+	}
 	mc.addClient(remotePK, rc)
+	return nil
+}
+
+func (mc *ManagementClient) solveChallenge(remotePK cipher.PubKey, rc *RPCClient) error {
+	sharedSec, err := skycipher.ECDH(skycipher.PubKey(remotePK), skycipher.SecKey(mc.localSK))
+	if err != nil {
+		return err
+	}
+
+	resp, err := rc.Challenge()
+	if err != nil {
+		return err
+	}
+
+	var cryptor encrypt.ScryptChacha20poly1305
+	byteArray, err := cryptor.Decrypt(resp, sharedSec)
+	if err != nil {
+		return err
+	}
+
+	var con Connection
+	err = json.Unmarshal(byteArray, &con)
+	if err != nil {
+		return err
+	}
+
+	conResp := Connection{
+		Response: con.Challenge,
+	}
+
+	byteResp, err := json.Marshal(conResp)
+	if err != nil {
+		return err
+	}
+
+	encResp, err := cryptor.Encrypt(byteResp, sharedSec)
+	if err != nil {
+		return err
+	}
+
+	isSolved, err := rc.Response(encResp)
+	if err != nil {
+		return err
+	}
+	if !isSolved {
+		return ErrChalFailed
+	}
 	return nil
 }
 

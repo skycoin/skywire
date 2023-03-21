@@ -1491,12 +1491,6 @@ func (v *Visor) ConnectMgmt(remotePK cipher.PubKey) error {
 	if err != nil {
 		return err
 	}
-	mc := v.managementClient.GetClient(remotePK)
-	test, err := mc.GetTransports()
-	if err != nil {
-		return err
-	}
-	v.log.Errorf("test:%v", test)
 	return nil
 }
 
