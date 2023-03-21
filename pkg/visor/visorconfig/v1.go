@@ -52,11 +52,10 @@ type Dmsgpty struct {
 
 // Transport defines a transport config.
 type Transport struct {
-	Discovery         string          `json:"discovery"`
-	AddressResolver   string          `json:"address_resolver"`
-	PublicAutoconnect bool            `json:"public_autoconnect"`
-	TransportSetup    []cipher.PubKey `json:"transport_setup_nodes"`
-	LogStore          *LogStore       `json:"log_store"`
+	Discovery         string    `json:"discovery"`
+	AddressResolver   string    `json:"address_resolver"`
+	PublicAutoconnect bool      `json:"public_autoconnect"`
+	LogStore          *LogStore `json:"log_store"`
 }
 
 // LogStore configures a LogStore.

@@ -48,7 +48,6 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
-	ts "github.com/skycoin/skywire/pkg/transport/setup"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	"github.com/skycoin/skywire/pkg/utclient"
 	"github.com/skycoin/skywire/pkg/util/osutil"
@@ -94,8 +93,8 @@ var (
 	dmsgC vinit.Module
 	// Transport manager
 	tr vinit.Module
-	// Transport setup
-	trs vinit.Module
+	// Manager Server
+	ms vinit.Module
 	// Routing system
 	rt vinit.Module
 	// Application launcher
@@ -166,14 +165,13 @@ func registerModules(logger *logging.MasterLogger) {
 	hvs = maker("hypervisors", initHypervisors, &dmsgC)
 	ut = maker("uptime_tracker", initUptimeTracker, &dmsgHTTP)
 	pv = maker("public_autoconnect", initPublicAutoconnect, &tr, &disc)
-	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
-	trs = maker("manager_server", initManagerServer, &dmsgC, &tr)
+	ms = maker("manager_server", initManagerServer, &dmsgC, &tr)
 	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl, &dmsgHTTPLogServer, &dmsgTrackers, &launch)
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
 	skyFwd = maker("sky_forward_conn", initSkywireForwardConn, &dmsgC, &dmsgCtrl, &tr, &launch)
 	pi = maker("ping", initPing, &dmsgC, &tm)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &systemSurvey)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &ms, &stcpC, &stcprC, &skyFwd, &pi, &systemSurvey)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -562,32 +560,6 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.initLock.Lock()
 	v.tpM = tpM
 	v.initLock.Unlock()
-	return nil
-}
-
-func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) error {
-	ctx, cancel := context.WithCancel(ctx)
-	// To remove the block set by NewTransportListener if dmsg is not initialized
-	go func() {
-		ts, err := ts.NewTransportListener(ctx, v.conf.PK, v.conf.Transport.TransportSetup, v.dmsgC, v.tpM, v.MasterLogger())
-		if err != nil {
-			log.Warn(err)
-			cancel()
-		}
-		select {
-		case <-ctx.Done():
-		default:
-			go ts.Serve(ctx)
-		}
-	}()
-
-	// waiting for at least one transport to initialize
-	<-v.tpM.Ready()
-
-	v.pushCloseStack("transport_setup.rpc", func() error {
-		cancel()
-		return nil
-	})
 	return nil
 }
 
