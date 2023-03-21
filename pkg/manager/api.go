@@ -49,8 +49,8 @@ type ManagementInterface struct {
 	sharedSec    []byte
 	remotePK     cipher.PubKey
 	localSK      cipher.SecKey
-	challengeMsg string
 	cryptor      encrypt.ScryptChacha20poly1305
+	challengeMsg string
 	readyCh      chan struct{} // push here when challenge is completed - protected by 'readyOnce'
 	readyOnce    sync.Once     // ensures we only push to 'readyCh' once
 }
@@ -63,6 +63,7 @@ func NewManagementInterface(tpSetup *setup.API, remotePK cipher.PubKey, localSK 
 		sharedSec:    sharedSec,
 		remotePK:     remotePK,
 		localSK:      localSK,
+		cryptor:      encrypt.DefaultScryptChacha20poly1305,
 		challengeMsg: generateRandomString(20),
 		readyCh:      make(chan struct{}, 1),
 	}

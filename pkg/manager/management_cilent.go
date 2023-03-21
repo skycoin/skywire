@@ -23,6 +23,7 @@ type ManagementClient struct {
 	connMX       *sync.RWMutex
 	log          *logging.Logger
 	localSK      cipher.SecKey
+	cryptor      encrypt.ScryptChacha20poly1305
 }
 
 // NewManagementClient create a new ManagementClient
@@ -32,6 +33,7 @@ func NewManagementClient(log *logging.Logger, localSK cipher.SecKey) *Management
 		log:          log,
 		managerConns: mc,
 		localSK:      localSK,
+		cryptor:      encrypt.DefaultScryptChacha20poly1305,
 	}
 	return mv
 }
@@ -83,8 +85,7 @@ func (mc *ManagementClient) solveChallenge(remotePK cipher.PubKey, rc *RPCClient
 		return err
 	}
 
-	var cryptor encrypt.ScryptChacha20poly1305
-	byteArray, err := cryptor.Decrypt(resp, sharedSec)
+	byteArray, err := mc.cryptor.Decrypt(resp, sharedSec)
 	if err != nil {
 		return err
 	}
@@ -104,7 +105,7 @@ func (mc *ManagementClient) solveChallenge(remotePK cipher.PubKey, rc *RPCClient
 		return err
 	}
 
-	encResp, err := cryptor.Encrypt(byteResp, sharedSec)
+	encResp, err := mc.cryptor.Encrypt(byteResp, sharedSec)
 	if err != nil {
 		return err
 	}
