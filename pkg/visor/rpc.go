@@ -796,7 +796,9 @@ type AddMgmtTransportIn struct {
 func (r *RPC) AddMgmtTransport(in *AddMgmtTransportIn, out *setup.TransportSummary) (err error) {
 	defer rpcutil.LogCall(r.log, "AddMgmtTransport", in)(out, &err)
 	tpSum, err := r.visor.AddMgmtTransport(in.MsPK, in.RemotePK, in.TpType, in.Timeout)
-	*out = *tpSum
+	if tpSum != nil {
+		*out = *tpSum
+	}
 	return err
 }
 
