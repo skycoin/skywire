@@ -170,7 +170,7 @@ func init() {
 }
 
 var rmTpCmd = &cobra.Command{
-	Use:                   "rm -i",
+	Use:                   "rm-tp -i",
 	Short:                 "Remove transport(s) by id",
 	Long:                  "\n    Remove transport(s) by id from the Manager Server",
 	DisableFlagsInUseLine: true,
@@ -229,7 +229,7 @@ var discTpCmd = &cobra.Command{
 				}
 			}
 			PrintTransports(cmd.Flags(), tpSums...)
-		} else if tpid.String() != "" {
+		} else if tpID != "" {
 			var tpSum *setup.TransportSummary
 			for _, tp := range tps {
 				if tp.ID.String() == tpid.String() {
