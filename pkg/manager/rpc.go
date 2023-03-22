@@ -84,7 +84,6 @@ func (r *RPC) RemoveTransport(tid *uuid.UUID, _ *struct{}) (err error) {
 // GetTransports returns all transports of this node that have been established by transport setup system
 func (r *RPC) GetTransports(_ *struct{}, out *[]*setup.TransportSummary) (err error) {
 	defer rpcutil.LogCall(r.log, "Transports", nil)(out, &err)
-	r.log.Error("suckla")
 	transports, err := r.mgmt.tpSetup.GetTransports()
 	*out = transports
 
