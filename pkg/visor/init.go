@@ -165,7 +165,7 @@ func registerModules(logger *logging.MasterLogger) {
 	hvs = maker("hypervisors", initHypervisors, &dmsgC)
 	ut = maker("uptime_tracker", initUptimeTracker, &dmsgHTTP)
 	pv = maker("public_autoconnect", initPublicAutoconnect, &tr, &disc)
-	ms = maker("manager_server", initManagerServer, &dmsgC, &tr)
+	ms = maker("manager_server", initManagerServer, &dmsgC, &tr, &rt)
 	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudphC, &dmsgCtrl, &dmsgHTTPLogServer, &dmsgTrackers, &launch)
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
 	skyFwd = maker("sky_forward_conn", initSkywireForwardConn, &dmsgC, &dmsgCtrl, &tr, &launch)
