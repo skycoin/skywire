@@ -26,7 +26,7 @@ var (
 )
 
 func init() {
-	apiCmd.PersistentFlags().StringVarP(&managerPK, "pk", "k", "", "pk of the remote Manager Server")
+	apiCmd.PersistentFlags().StringVarP(&managerPK, "mpk", "k", "", "pk of the remote Manager Server")
 	apiCmd.AddCommand(
 		addTpCmd,
 		rmTpCmd,
@@ -131,6 +131,9 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*setup.TransportSummary) {
 	var outputTPS []outputTP
 
 	for _, tp := range tps {
+		if tp == nil {
+			continue
+		}
 		tpMode := "regular"
 		if tp.IsSetup {
 			tpMode = "setup"
@@ -205,8 +208,12 @@ var discTpCmd = &cobra.Command{
 		var tppk cipher.PubKey
 		var tpid transportID
 		internal.Catch(cmd.Flags(), mpk.Set(managerPK))
-		internal.Catch(cmd.Flags(), tpid.Set(tpID))
-		internal.Catch(cmd.Flags(), tppk.Set(tpPK))
+		if tpID != "" {
+			internal.Catch(cmd.Flags(), tpid.Set(tpID))
+		}
+		if tpPK != "" {
+			internal.Catch(cmd.Flags(), tppk.Set(tpPK))
+		}
 
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -253,3 +260,14 @@ func (t *transportID) Set(s string) error {
 	*t = transportID(tID)
 	return nil
 }
+
+// // Client2 is used by other skywire-cli commands to query the visor rpc
+// func Client2(cmdFlags *pflag.FlagSet) (*manager.RPCClient, error) {
+// 	const rpcDialTimeout = time.Second * 5
+// 	conn, err := net.DialTimeout("tcp", ":3039", rpcDialTimeout)
+// 	if err != nil {
+// 		internal.PrintError(cmdFlags, fmt.Errorf("RPC connection failed; is skywire running?: %v", err))
+// 		return nil, err
+// 	}
+// 	return manager.NewRPCClient(logger, conn, manager.RPCPrefix, 0), nil
+// }

@@ -625,7 +625,7 @@ func (rc *rpcClient) RemoveMgmtTransport(remotePK cipher.PubKey, tid uuid.UUID) 
 // GetMgmtTransports calls GetMgmtTransports.
 func (rc *rpcClient) GetMgmtTransports(remote cipher.PubKey) ([]*setup.TransportSummary, error) {
 	var tpSums []*setup.TransportSummary
-	err := rc.Call("GetMgmtTransports", &struct{}{}, &tpSums)
+	err := rc.Call("GetMgmtTransports", remote, &tpSums)
 	return tpSums, err
 }
 

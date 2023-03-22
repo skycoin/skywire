@@ -816,7 +816,6 @@ func (r *RPC) RemoveMgmtTransport(in *RemoveMgmtTransportIn, _ *struct{}) (err e
 // GetMgmtTransports returns all transports established via ManagerServer on the remote visor
 func (r *RPC) GetMgmtTransports(remote *cipher.PubKey, out *[]*setup.TransportSummary) (err error) {
 	defer rpcutil.LogCall(r.log, "GetMgmtTransports", nil)(remote, &err)
-
 	*out, err = r.visor.GetMgmtTransports(*remote)
 	return err
 }
