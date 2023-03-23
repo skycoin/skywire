@@ -16,6 +16,7 @@ import (
 	"time"
 
 	ipc "github.com/james-barrow/golang-ipc"
+	"github.com/orandin/lumberjackrus"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire-utilities/pkg/logging"
@@ -80,7 +81,7 @@ type Proc struct {
 
 // NewProc constructs `Proc`.
 func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc.Updater, m ProcManager,
-	appName string) *Proc {
+	appName, logStorePath string) *Proc {
 	if mLog == nil {
 		mLog = logging.NewMasterLogger()
 	}
@@ -96,8 +97,14 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	var appLogDB appcommon.LogStore
 	var appLog *logging.MasterLogger
 	var stderr io.ReadCloser
+	procLogger := mLog
 	if conf.LogDBLoc != "" {
 		appLog, appLogDB = appcommon.NewProcLogger(conf, mLog)
+		procLogger = appLog
+		if logStorePath != "" {
+			storeLog(appLog, logStorePath)
+		}
+
 		cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").WriterLevel(logrus.DebugLevel)
 
 		// we read the Stderr pipe in order to filter some false positive app errors
@@ -109,7 +116,7 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	p := &Proc{
 		disc:      disc,
 		conf:      conf,
-		log:       mLog.PackageLogger(moduleName),
+		log:       procLogger.PackageLogger(moduleName),
 		logDB:     appLogDB,
 		cmd:       cmd,
 		connCh:    make(chan struct{}, 1),
@@ -467,4 +474,74 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 	})
 
 	return summaries
+}
+
+func storeLog(log *logging.MasterLogger, localPath string) {
+	hook, _ := lumberjackrus.NewHook( //nolint
+		&lumberjackrus.LogFile{
+			Filename:   localPath + "/log/skywire.log",
+			MaxSize:    1,
+			MaxBackups: 1,
+			MaxAge:     1,
+			Compress:   false,
+			LocalTime:  false,
+		},
+		logrus.TraceLevel,
+		&logging.TextFormatter{
+			DisableColors:   true,
+			FullTimestamp:   true,
+			ForceFormatting: true,
+		},
+		&lumberjackrus.LogFileOpts{
+			logrus.InfoLevel: &lumberjackrus.LogFile{
+				Filename:   localPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.WarnLevel: &lumberjackrus.LogFile{
+				Filename:   localPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.TraceLevel: &lumberjackrus.LogFile{
+				Filename:   localPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.ErrorLevel: &lumberjackrus.LogFile{
+				Filename:   localPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.DebugLevel: &lumberjackrus.LogFile{
+				Filename:   localPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.FatalLevel: &lumberjackrus.LogFile{
+				Filename:   localPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+		},
+	)
+	log.Hooks.Add(hook)
 }

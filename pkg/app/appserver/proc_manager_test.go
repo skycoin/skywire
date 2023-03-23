@@ -12,7 +12,7 @@ import (
 )
 
 func TestProcManager_ProcByName(t *testing.T) {
-	mI, err := NewProcManager(nil, nil, nil, ":0")
+	mI, err := NewProcManager(nil, nil, nil, ":0", "")
 	require.NoError(t, err)
 
 	m, ok := mI.(*procManager)
@@ -32,7 +32,7 @@ func TestProcManager_ProcByName(t *testing.T) {
 }
 
 func TestProcManager_Range(t *testing.T) {
-	mI, err := NewProcManager(nil, nil, nil, ":0")
+	mI, err := NewProcManager(nil, nil, nil, ":0", "")
 	require.NoError(t, err)
 
 	m, ok := mI.(*procManager)
@@ -61,7 +61,7 @@ func TestProcManager_Range(t *testing.T) {
 }
 
 func TestProcManager_Pop(t *testing.T) {
-	mI, err := NewProcManager(nil, nil, nil, ":0")
+	mI, err := NewProcManager(nil, nil, nil, ":0", "")
 	require.NoError(t, err)
 
 	m, ok := mI.(*procManager)
@@ -84,7 +84,7 @@ func TestProcManager_Pop(t *testing.T) {
 }
 
 func TestProcManager_SetDetailedStatus(t *testing.T) {
-	mI, err := NewProcManager(nil, nil, nil, ":0")
+	mI, err := NewProcManager(nil, nil, nil, ":0", "")
 	require.NoError(t, err)
 
 	m, ok := mI.(*procManager)
@@ -109,7 +109,7 @@ func TestProcManager_SetDetailedStatus(t *testing.T) {
 }
 
 func TestProcManager_DetailedStatus(t *testing.T) {
-	mI, err := NewProcManager(nil, nil, nil, ":0")
+	mI, err := NewProcManager(nil, nil, nil, ":0", "")
 	require.NoError(t, err)
 
 	m, ok := mI.(*procManager)
@@ -132,7 +132,7 @@ func TestProcManager_DetailedStatus(t *testing.T) {
 }
 
 func TestProcManager_RegisterAndDeregister(t *testing.T) {
-	mI, err := NewProcManager(nil, nil, nil, ":0")
+	mI, err := NewProcManager(nil, nil, nil, ":0", "")
 	require.NoError(t, err)
 
 	m, ok := mI.(*procManager)
