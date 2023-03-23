@@ -41,6 +41,7 @@ func init() {
 var RootCmd = &cobra.Command{
 	Use:   "ut",
 	Short: "query uptime tracker",
+	Long:  "query uptime tracker\n Check local visor daily uptime percent with:\n skywire-cli ut -k $(skywire-cli visor pk)",
 	Run: func(cmd *cobra.Command, _ []string) {
 		if url == "" {
 			url = "http://ut.skywire.skycoin.com/uptimes?v=v2"
@@ -51,7 +52,7 @@ var RootCmd = &cobra.Command{
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
 			} else {
-				url += url + "&visors=" + pubkey.String()
+				url += "&visors=" + pubkey.String()
 			}
 		}
 		utClient := http.Client{
