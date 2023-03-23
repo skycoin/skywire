@@ -119,7 +119,7 @@ build-example: host-apps example-apps bin ## Build apps, example apps and binari
 
 installer: mac-installer ## Builds MacOS installer for skywire-visor
 
-install-system-linux: build # Workaround for debugging linux package installation
+install-system-linux: build ## Install apps and binaries over those provided by the linux package - linux package must be installed first!
 	sudo install -Dm755 $(BUILD_PATH)skywire-cli /opt/skywire/bin/
 	sudo install -Dm755 $(BUILD_PATH)skywire-visor /opt/skywire/bin/
 	sudo install -Dm755 $(BUILD_PATH)apps/vpn-server /opt/skywire/apps/
@@ -191,10 +191,10 @@ format-windows: tidy ## Formats the code. Must have goimports and goimports-revi
 dep: tidy ## Sorts dependencies
 	${OPTS} go mod vendor -v
 
-snapshot:
+snapshot: ## goreleaser --snapshot --skip-publish --rm-dist
 	goreleaser --snapshot --skip-publish --rm-dist
 
-snapshot-linux:
+snapshot-linux: ## 	goreleaser --snapshot --config .goreleaser-linux.yml --skip-publish --rm-dist
 	goreleaser --snapshot --config .goreleaser-linux.yml --skip-publish --rm-dist
 
 snapshot-clean: ## Cleans snapshot / release
@@ -213,11 +213,11 @@ example-apps: ## Build example apps
 	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)apps/ ./example/example-client-app
 	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)apps/ ./example/example-server-app
 
-host-apps-windows:
+host-apps-windows: ## build apps on windows
 	powershell -Command new-item .\apps -itemtype directory -force
 	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build ${BUILD_OPTS} -o ./apps $$_.FullName }'
 
-host-apps-windows-appveyor:
+host-apps-windows-appveyor: ## build apps on windows. `go build` with ${OPTS} for AppVeyor image
 	powershell -Command new-item .\apps -itemtype directory -force
 	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build -o ./apps $$_.FullName }'
 
@@ -356,44 +356,35 @@ prepare:
 	chmod +x ./apps/*
 	sudo echo "sudo cache"
 
-## Run skywire from source, without compiling binaries - requires skywire cloned
-run-source: prepare
+run-source: prepare ## Run skywire from source, without compiling binaries
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -in | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
 
-## Run skywire from source, with vpn server enabled
-run-systray: prepare
+run-systray: prepare ## Run skywire from source, with vpn server enabled
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -ni | sudo go run ./cmd/skywire-visor/skywire-visor.go -n --systray || true
 
-## Run skywire from source, without compiling binaries - requires skywire cloned
-run-vpnsrv: prepare
+
+run-vpnsrv: prepare ## Run skywire from source, without compiling binaries
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -in --servevpn | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
 
-## Run skywire from source with test endpoints
-run-source-test: prepare
+run-source-test: prepare ## Run skywire from source with test endpoints
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -nit | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
 
-## Run skywire from source, with vpn server enabled
-run-vpnsrv-test: prepare
+run-vpnsrv-test: prepare ## Run skywire from source, with vpn server enabled
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -nit --servevpn | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
 
-## Run skywire from source, with vpn server enabled
-run-systray-test: prepare
+run-systray-test: prepare ## Run skywire from source, with vpn server enabled
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -nit | sudo go run ./cmd/skywire-visor/skywire-visor.go --systray -nb || true
 
-## Run skywire from source with dmsghttp config
-run-source-dmsghttp: prepare
+run-source-dmsghttp: prepare ## Run skywire from source with dmsghttp config
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -din | sudo go run ./cmd/skywire-visor/skywire-visor.go -nb || true
 
-## Run skywire from source with dmsghttp config and vpn server
-run-vpnsrv-dmsghttp: prepare
+run-vpnsrv-dmsghttp: prepare ## Run skywire from source with dmsghttp config and vpn server
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -din --servevpn | sudo go run ./cmd/skywire-visor/skywire-visor.go -nb || true
 
-## Run skywire from source with dmsghttp config and test endpoints
-run-source-dmsghttp-test: prepare
+run-source-dmsghttp-test: prepare ## Run skywire from source with dmsghttp config and test endpoints
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -dint | sudo go run ./cmd/skywire-visor/skywire-visor.go -nb || true
 
-## Run skywire from source with dmsghttp config, vpn server, and test endpoints
-run-vpnsrv-dmsghttp-test: prepare
+run-vpnsrv-dmsghttp-test: prepare ## Run skywire from source with dmsghttp config, vpn server, and test endpoints
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -dint --servevpn | sudo go run ./cmd/skywire-visor/skywire-visor.go -nb || true
 
 lint-ui:  ## Lint the UI code
@@ -433,10 +424,10 @@ mac-installer-release: mac-installer ## Upload created signed and notarized appl
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-darwin-amd64.pkg
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-darwin-arm64.pkg
 
-win-installer-latest:
+win-installer-latest: ## Build the windows .msi (installer) latest version
 	@powershell '.\scripts\win_installer\script.ps1 latest'
 
-win-installer:
+win-installer: ## Build the windows .msi (installer) custom version
 	@powershell '.\scripts\win_installer\script.ps1 $(CUSTOM_VERSION)'
 
 windows-installer-release:
@@ -445,7 +436,7 @@ windows-installer-release:
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-windows-amd64.msi
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-windows-386.msi
 
-help:
+help: ## `make help` menu
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
 help-windows: ## Display help for windows
