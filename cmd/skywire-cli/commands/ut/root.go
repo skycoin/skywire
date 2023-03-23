@@ -8,48 +8,54 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
-	"os"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 
 	"github.com/spf13/cobra"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 )
 
-var pubkey cipher.PubKey
-var pk string
-var thisPk string
-var online bool
-var isStats      bool
-
+var (
+	pubkey  cipher.PubKey
+	pk      string
+	thisPk  string
+	online  bool
+	isStats bool
+	url     string
+)
 
 var minUT int
+
 func init() {
 	RootCmd.Flags().StringVarP(&pk, "pk", "k", "", "check uptime for the specified key")
 	RootCmd.Flags().BoolVarP(&online, "on", "o", false, "list currently online visors")
 	RootCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "count the number of results")
 	RootCmd.Flags().IntVarP(&minUT, "min", "n", 75, "list visors meeting minimum uptime")
+	RootCmd.Flags().StringVarP(&url, "url", "u", "", "specify alternative uptime tracker url\ndefault: http://ut.skywire.skycoin.com/uptimes?v=v2")
 }
-
 
 // RootCmd contains commands that interact with the skywire-visor
 var RootCmd = &cobra.Command{
 	Use:   "ut",
 	Short: "query uptime tracker",
 	Run: func(cmd *cobra.Command, _ []string) {
-		url := "http://ut.skywire.skycoin.com/uptimes?v=v2"
+		if url == "" {
+			url = "http://ut.skywire.skycoin.com/uptimes?v=v2"
+		}
 		now := time.Now()
 		if pk != "" {
 			err := pubkey.Set(pk)
 			if err != nil {
-					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
 			} else {
-				url = "http://ut.skywire.skycoin.com/uptimes?v=v2&visors="+pubkey.String()
+				url += url + "&visors=" + pubkey.String()
+			}
 		}
-	}
 		utClient := http.Client{
-			Timeout: time.Second * 15, // Timeout after 2 seconds
+			Timeout: time.Second * 15, // Timeout after 15 seconds
 		}
 
 		req, err := http.NewRequest(http.MethodGet, url, nil)
@@ -96,7 +102,7 @@ var RootCmd = &cobra.Command{
 			}
 			for _, i := range msg {
 				internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%s", i), fmt.Sprintf("%s", i))
-		}
+			}
 		}
 	},
 }
@@ -109,16 +115,13 @@ func selectedDaily(data map[string]string, startDate, endDate string) {
 				log.Fatal(err)
 			}
 			if utfloat >= float64(minUT) {
-				//        if date == startDate {
 				fmt.Printf(thisPk)
 				fmt.Printf(" ")
 				fmt.Println(date, uptime)
-				//        }
 			}
 		}
 	}
 }
-
 
 type Uptimes []struct {
 	Pk    string            `json:"pk"`

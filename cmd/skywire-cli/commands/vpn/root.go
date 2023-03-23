@@ -3,10 +3,9 @@ package clivpn
 
 import (
 	"github.com/spf13/cobra"
+
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
-
 )
 
 var (
@@ -16,9 +15,9 @@ var (
 	ver          string
 	country      string
 	isStats      bool
-	pubkey cipher.PubKey
-	pk string
-	count int
+	pubkey       cipher.PubKey
+	pk           string
+	count        int
 )
 
 func init() {
