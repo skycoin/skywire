@@ -3,7 +3,17 @@
 
 package visorconfig
 
-import "github.com/skycoin/skywire/pkg/skyenv"
+import (
+	"runtime"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jaypipes/ghw"
+	"github.com/zcalusic/sysinfo"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skyenv"
+)
 
 // UserConfig contains installation paths for running skywire as the user
 func UserConfig() skyenv.PkgConfig {
