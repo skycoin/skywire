@@ -22,7 +22,7 @@ func init() {
 	)
 	version := buildinfo.Version()
 	if version == "unknown" {
-		version = ""
+		version = "" //nolint
 	}
 	vpnUICmd.Flags().BoolVarP(&isPkg, "pkg", "p", false, "use package config path: "+visorconfig.SkywirePath)
 	vpnUICmd.Flags().StringVarP(&path, "config", "c", "", "config path")

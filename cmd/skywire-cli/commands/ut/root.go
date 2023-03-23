@@ -1,11 +1,10 @@
-// Package cliut root.go
-
+// Package cliut cmd/skywire-cli/ut/root.go
 package cliut
 
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -70,23 +69,23 @@ var RootCmd = &cobra.Command{
 		}
 
 		if res.Body != nil {
-			defer res.Body.Close()
+			defer res.Body.Close() //nolint: errcheck
 		}
 
-		body, readErr := ioutil.ReadAll(res.Body)
+		body, readErr := io.ReadAll(res.Body)
 		if readErr != nil {
 			log.Fatal(readErr)
 		}
 
 		startDate := time.Date(now.Year(), now.Month(), -1, 0, 0, 0, 0, now.Location()).Format("2006-01-02")
 		endDate := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, now.Location()).Add(-1 * time.Second).Format("2006-01-02")
-		uptimes := Uptimes{}
-		jsonErr := json.Unmarshal(body, &uptimes)
+		uts := uptimes{}
+		jsonErr := json.Unmarshal(body, &uts)
 		if jsonErr != nil {
 			log.Fatal(jsonErr)
 		}
 		var msg []string
-		for _, j := range uptimes {
+		for _, j := range uts {
 			thisPk = j.Pk
 			if online {
 				if j.On {
@@ -102,7 +101,7 @@ var RootCmd = &cobra.Command{
 				os.Exit(0)
 			}
 			for _, i := range msg {
-				internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%s", i), fmt.Sprintf("%s", i))
+				internal.PrintOutput(cmd.Flags(), i, i)
 			}
 		}
 	},
@@ -116,15 +115,15 @@ func selectedDaily(data map[string]string, startDate, endDate string) {
 				log.Fatal(err)
 			}
 			if utfloat >= float64(minUT) {
-				fmt.Printf(thisPk)
-				fmt.Printf(" ")
+				fmt.Print(thisPk)
+				fmt.Print(" ")
 				fmt.Println(date, uptime)
 			}
 		}
 	}
 }
 
-type Uptimes []struct {
+type uptimes []struct {
 	Pk    string            `json:"pk"`
 	Up    int               `json:"up"`
 	Down  int               `json:"down"`

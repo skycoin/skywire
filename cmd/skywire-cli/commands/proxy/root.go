@@ -8,8 +8,6 @@ import (
 )
 
 var (
-	path         string
-	isPkg        bool
 	isUnFiltered bool
 	ver          string
 	country      string

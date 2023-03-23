@@ -380,6 +380,7 @@ func SystemSurvey() (Survey, error) {
 	return s, nil
 }
 
+// PackageConfig returns the package-specific config paths
 func PackageConfig() skyenv.PkgConfig {
 	return skyenv.PackageConfig()
 }

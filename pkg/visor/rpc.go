@@ -651,7 +651,7 @@ func (r *RPC) VPNServers(vc *FilterServersIn, out *[]servicedisc.Service) (err e
 	return err
 }
 
-// VPNServers gets available public VPN server from service discovery URL
+// ProxyServers gets available socks5 proxy servers from service discovery URL
 func (r *RPC) ProxyServers(vc *FilterServersIn, out *[]servicedisc.Service) (err error) {
 	defer rpcutil.LogCall(r.log, "ProxyServers", nil)(out, &err)
 	proxyServers, err := r.visor.ProxyServers(vc.Version, vc.Country)
