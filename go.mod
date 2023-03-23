@@ -56,7 +56,6 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/zcalusic/sysinfo v0.9.5
 	golang.org/x/sync v0.0.0-20220819030929-7fc1605a5dde
-	periph.io/x/periph v3.6.8+incompatible
 )
 
 require (
