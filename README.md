@@ -145,6 +145,7 @@ To run skywire from this point, first generate a config
 
 The visor can then be started with
 ```
+cd ./build
 sudo ./skywire-visor
 ```
 
