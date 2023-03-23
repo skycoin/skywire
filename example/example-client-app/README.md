@@ -17,6 +17,7 @@ Compile app binary and start a visor:
 
 ```sh
 $ make build-example
+$ cd ./build
 $ ./skywire-visor skywire-config.json
 ```
 
@@ -28,7 +29,7 @@ $ ./skywire-cli visor app register -a example-client-app
 
 Run the app with the `example-server-app` addr and the generated proc key 
 ```sh
-$ ./apps/example-client-app -addr <example-server-app-pk>:<example-server-app-skywire-port> -procAddr 01cd10e65d88494481c50a1bb0659af2
+$ ./build/apps/example-client-app -addr <example-server-app-pk>:<example-server-app-skywire-port> -procAddr 01cd10e65d88494481c50a1bb0659af2
 ```
 
 Deregister app after stopping the `example-client-app`
