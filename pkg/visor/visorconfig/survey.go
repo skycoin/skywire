@@ -1,5 +1,4 @@
-//go:build linux
-// +build linux
+// Package visorconfig pkg/visor/visorconfig/survey.go
 
 package visorconfig
 
