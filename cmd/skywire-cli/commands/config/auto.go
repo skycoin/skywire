@@ -1,5 +1,4 @@
-//go:build linux
-// +build linux
+//go:build exclude
 
 // Package cliconfig cmd/skywire-cli/commands/config/auto.go
 package cliconfig

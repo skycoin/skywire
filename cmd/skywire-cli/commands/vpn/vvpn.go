@@ -4,119 +4,52 @@ package clivpn
 import (
 	"bytes"
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 	"text/tabwriter"
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
-	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/visor"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 func init() {
-	RootCmd.PersistentFlags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
 	RootCmd.AddCommand(
-		vpnListCmd,
-		vpnUICmd,
-		vpnURLCmd,
 		vpnStartCmd,
 		vpnStopCmd,
 		vpnStatusCmd,
+		vpnListCmd,
 	)
 	version := buildinfo.Version()
 	if version == "unknown" {
 		version = ""
 	}
-	vpnUICmd.Flags().BoolVarP(&isPkg, "pkg", "p", false, "use package config path")
-	vpnUICmd.Flags().StringVarP(&path, "config", "c", "", "config path")
-	vpnURLCmd.Flags().BoolVarP(&isPkg, "pkg", "p", false, "use package config path")
-	vpnURLCmd.Flags().StringVarP(&path, "config", "c", "", "config path")
-	vpnListCmd.Flags().BoolVarP(&isUnFiltered, "nofilter", "n", false, "provide unfiltered results")
+	vpnStartCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
+	vpnListCmd.Flags().StringVarP(&pk, "pk", "k", "", "check proxy service discovery for public key")
+	vpnListCmd.Flags().IntVarP(&count, "num", "n", 0, "number of results to return")
+	vpnListCmd.Flags().BoolVarP(&isUnFiltered, "unfilter", "u", false, "provide unfiltered results")
 	vpnListCmd.Flags().StringVarP(&ver, "ver", "v", version, "filter results by version")
 	vpnListCmd.Flags().StringVarP(&country, "country", "c", "", "filter results by country")
 	vpnListCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the results")
 }
 
-var vpnUICmd = &cobra.Command{
-	Use:   "ui",
-	Short: "Open VPN UI in default browser",
-	Run: func(cmd *cobra.Command, _ []string) {
-		var url string
-		if isPkg {
-			path = visorconfig.SkywireConfig()
-		}
-		if path != "" {
-			conf, err := visorconfig.ReadFile(path)
-			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to read in config: %v", err))
-			}
-			url = fmt.Sprintf("http://127.0.0.1%s/#/vpn/%s/", clivisor.HypervisorPort(cmd.Flags()), conf.PK.Hex())
-		} else {
-			rpcClient, err := clirpc.Client(cmd.Flags())
-			if err != nil {
-				os.Exit(1)
-			}
-			overview, err := rpcClient.Overview()
-			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect; is skywire running?: %v", err))
-			}
-			url = fmt.Sprintf("http://127.0.0.1%s/#/vpn/%s/", clivisor.HypervisorPort(cmd.Flags()), overview.PubKey.Hex())
-		}
-		if err := webbrowser.Open(url); err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to open VPN UI in browser:: %v", err))
-		}
-	},
-}
-
-var vpnURLCmd = &cobra.Command{
-	Use:   "url",
-	Short: "Show VPN UI URL",
-	Run: func(cmd *cobra.Command, _ []string) {
-		var url string
-		if isPkg {
-			path = visorconfig.SkywireConfig()
-		}
-		if path != "" {
-			conf, err := visorconfig.ReadFile(path)
-			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to read in config: %v", err))
-			}
-			url = fmt.Sprintf("http://127.0.0.1%s/#/vpn/%s/", clivisor.HypervisorPort(cmd.Flags()), conf.PK.Hex())
-		} else {
-			rpcClient, err := clirpc.Client(cmd.Flags())
-			if err != nil {
-				os.Exit(1)
-			}
-			overview, err := rpcClient.Overview()
-			if err != nil {
-				internal.PrintFatalRPCError(cmd.Flags(), err)
-			}
-			url = fmt.Sprintf("http://127.0.0.1%s/#/vpn/%s/", clivisor.HypervisorPort(cmd.Flags()), overview.PubKey.Hex())
-		}
-
-		output := struct {
-			URL string `json:"url"`
-		}{
-			URL: url,
-		}
-
-		internal.PrintOutput(cmd.Flags(), output, fmt.Sprintln(url))
-	},
-}
-
 var vpnListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List public VPN servers",
-	Run: func(cmd *cobra.Command, _ []string) {
+	Short: "List servers",
+	Run: func(cmd *cobra.Command, args []string) {
+		if pk != "" {
+			err := pubkey.Set(pk)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
+			}
+		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalRPCError(cmd.Flags(), err)
@@ -130,39 +63,81 @@ var vpnListCmd = &cobra.Command{
 			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
 		if len(servers) == 0 {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("No VPN Servers found"))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("No Servers found"))
 		}
 		if isStats {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("%d VPN Servers", len(servers)))
-		}
-
-		var msg string
-		for _, i := range servers {
-			msg += strings.Replace(i.Addr.String(), ":44", "", 1)
-			if i.Geo != nil {
-				msg += fmt.Sprintf(" | %s\n", i.Geo.Country)
-			} else {
-				msg += "\n"
+			internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d Servers\n", len(servers)), fmt.Sprintf("%d Servers\n", len(servers)))
+		} else {
+			var msg string
+			var results []string
+			limit := len(servers)
+			if count > 0 && count < limit {
+				limit = count
 			}
+			if pk != "" {
+				for _, server := range servers {
+					if strings.Replace(server.Addr.String(), ":3", "", 1) == pk {
+						results = append(results, server.Addr.String())
+					}
+				}
+			} else {
+				for _, server := range servers {
+					results = append(results, server.Addr.String())
+				}
+			}
+			rand.Shuffle(len(results), func(i, j int) {
+				results[i], results[j] = results[j], results[i]
+			})
+			for i := 0; i < limit && i < len(results); i++ {
+				msg += strings.Replace(results[i], ":3", "", 1)
+				if server := findServerByPK(servers, results[i]); server != nil && server.Geo != nil {
+					if server.Geo.Country != "" {
+						msg += fmt.Sprintf(" | %s\n", server.Geo.Country)
+					} else {
+						msg += "\n"
+					}
+				} else {
+					msg += "\n"
+				}
+			}
+			internal.PrintOutput(cmd.Flags(), servers, msg)
 		}
-
-		internal.PrintOutput(cmd.Flags(), servers, msg)
 	},
+}
+
+func findServerByPK(servers []servicedisc.Service, addr string) *servicedisc.Service {
+	for _, server := range servers {
+		if server.Addr.String() == addr {
+			return &server
+		}
+	}
+	return nil
 }
 
 var vpnStartCmd = &cobra.Command{
 	Use:   "start <public-key>",
 	Short: "start the vpn for <public-key>",
-	Args:  cobra.MinimumNArgs(1),
+	//	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-
-		var pk cipher.PubKey
-		internal.Catch(cmd.Flags(), pk.Set(args[0]))
+		//check that a valid public key is provided
+		err := pubkey.Set(pk)
+		if err != nil {
+			if len(args) > 0 {
+				err := pubkey.Set(args[0])
+				if err != nil {
+					internal.PrintFatalError(cmd.Flags(), err)
+				}
+			} else {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
+			}
+		}
+		//connect to RPC
+		internal.Catch(cmd.Flags(), pubkey.Set(args[0]))
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			os.Exit(1)
 		}
-		internal.Catch(cmd.Flags(), rpcClient.StartVPNClient(pk))
+		internal.Catch(cmd.Flags(), rpcClient.StartVPNClient(pubkey))
 		internal.PrintOutput(cmd.Flags(), nil, "Starting.")
 		startProcess := true
 		for startProcess {

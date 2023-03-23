@@ -1,3 +1,4 @@
+// Package visorconfig pkg/visor/visorconfig/survey.go
 package visorconfig
 
 import (
