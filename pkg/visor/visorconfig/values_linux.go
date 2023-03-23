@@ -17,3 +17,58 @@ func UserConfig() skyenv.PkgConfig {
 	}
 	return usrConfig
 }
+
+// Survey system hardware survey struct
+type Survey struct {
+	Timestamp      time.Time        `json:"timestamp"`
+	PubKey         cipher.PubKey    `json:"public_key,omitempty"`
+	SkycoinAddress string           `json:"skycoin_address,omitempty"`
+	GOOS           string           `json:"go_os,omitempty"`
+	GOARCH         string           `json:"go_arch,omitempty"`
+	SYSINFO        sysinfo.SysInfo  `json:"zcalusic_sysinfo,omitempty"`
+	IPInfo         *IPSkycoin       `json:"ip.skycoin.com,omitempty"`
+	IPAddr         *IPAddr          `json:"ip_addr,omitempty"`
+	Disks          *ghw.BlockInfo   `json:"ghw_blockinfo,omitempty"`
+	Product        *ghw.ProductInfo `json:"ghw_productinfo,omitempty"`
+	Memory         *ghw.MemoryInfo  `json:"ghw_memoryinfo,omitempty"`
+	UUID           uuid.UUID        `json:"uuid,omitempty"`
+	SkywireVersion string           `json:"skywire_version,omitempty"`
+}
+
+// SystemSurvey returns system survey
+func SystemSurvey() (Survey, error) {
+	var si sysinfo.SysInfo
+	si.GetSysInfo()
+	disks, err := ghw.Block()
+	if err != nil {
+		return Survey{}, err
+	}
+	product, err := ghw.Product()
+	if err != nil {
+		return Survey{}, err
+	}
+	memory, err := ghw.Memory()
+	if err != nil {
+		return Survey{}, err
+	}
+	for {
+		ipInfo := IPSkycoinFetch()
+		if ipInfo != nil {
+			break
+		}
+	}
+	s := Survey{
+		Timestamp:      time.Now(),
+		IPInfo:         IPSkycoinFetch(),
+		IPAddr:         IPA(),
+		GOOS:           runtime.GOOS,
+		GOARCH:         runtime.GOARCH,
+		SYSINFO:        si,
+		UUID:           uuid.New(),
+		Disks:          disks,
+		Product:        product,
+		Memory:         memory,
+		SkywireVersion: Version(),
+	}
+	return s, nil
+}
