@@ -30,7 +30,8 @@ Full config of the client should look like this:
 Compile app binary and start a visor:
 
 ```sh
-$ go build -o apps/vpn-client ./cmd/apps/vpn-client
+$ go build -o ./build/apps/vpn-client ./cmd/apps/vpn-client
+$ cd ./build
 $ ./skywire-visor skywire-config.json
 ```
 
