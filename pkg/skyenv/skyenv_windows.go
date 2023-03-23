@@ -1,5 +1,5 @@
-//go:build linux
-// +build linux
+//go:build windows
+// +build windows
 
 // Package skyenv defines variables and constants
 package skyenv
