@@ -72,6 +72,7 @@ ifneq (,$(findstring 64,$(GOARCH)))
 endif
 
 BUILDINFO_PATH := $(SKYWIRE_UTILITIES_BASE)/pkg/buildinfo
+BUILD_PATH := ./build/
 
 BUILDINFO_VERSION := -X $(BUILDINFO_PATH).version=$(VERSION)
 BUILDINFO_DATE := -X $(BUILDINFO_PATH).date=$(DATE)
@@ -102,6 +103,10 @@ check-windows: lint-windows test-windows ## Run linters and tests on appveyor wi
 
 build: host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
+build1: BUILD_PATH = ./
+
+build1: build ## Install dependencies, build apps and binaries in root folder. `go build` with ${OPTS}
+
 build-windows: host-apps-windows bin-windows ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
 build-windows-appveyor: host-apps-windows-appveyor bin-windows-appveyor ## Install dependencies, build apps and binaries. `go build` with ${OPTS} for AppVeyor image
@@ -114,14 +119,14 @@ build-example: host-apps example-apps bin ## Build apps, example apps and binari
 
 installer: mac-installer ## Builds MacOS installer for skywire-visor
 
-install-system-linux: build # Workaround for debugging linux package installation
-	sudo install -Dm755 skywire-cli /opt/skywire/bin/
-	sudo install -Dm755 skywire-visor /opt/skywire/bin/
-	sudo install -Dm755 apps/vpn-server /opt/skywire/apps/
-	sudo install -Dm755 apps/vpn-client /opt/skywire/apps/
-	sudo install -Dm755 apps/skysocks-client /opt/skywire/apps/
-	sudo install -Dm755 apps/skysocks /opt/skywire/apps/
-	sudo install -Dm755 apps/skychat /opt/skywire/apps/
+install-system-linux: build ## Install apps and binaries over those provided by the linux package - linux package must be installed first!
+	sudo install -Dm755 $(BUILD_PATH)skywire-cli /opt/skywire/bin/
+	sudo install -Dm755 $(BUILD_PATH)skywire-visor /opt/skywire/bin/
+	sudo install -Dm755 $(BUILD_PATH)apps/vpn-server /opt/skywire/apps/
+	sudo install -Dm755 $(BUILD_PATH)apps/vpn-client /opt/skywire/apps/
+	sudo install -Dm755 $(BUILD_PATH)apps/skysocks-client /opt/skywire/apps/
+	sudo install -Dm755 $(BUILD_PATH)apps/skysocks /opt/skywire/apps/
+	sudo install -Dm755 $(BUILD_PATH)apps/skychat /opt/skywire/apps/
 
 install-generate: ## Installs required execs for go generate.
 	${OPTS} go install github.com/mjibson/esc
@@ -131,12 +136,10 @@ generate: ## Generate mocks and config README's
 	go generate ./...
 
 clean: ## Clean project: remove created binaries and apps
-	-rm -rf ./apps
-	-rm -f ./skywire-visor ./skywire-cli ./setup-node
+	-rm -f ./build
 
 clean-windows: ## Clean project: remove created binaries and apps
-	powershell -Command Remove-Item -Path ./apps -Force -Recurse
-	powershell -Command Remove-Item -Path .\skywire-visor.exe,.\skywire-cli.exe,.\setup-node.exe -Force
+	powershell -Command Remove-Item -Path ./build -Force -Recurse
 
 install: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node
@@ -188,33 +191,33 @@ format-windows: tidy ## Formats the code. Must have goimports and goimports-revi
 dep: tidy ## Sorts dependencies
 	${OPTS} go mod vendor -v
 
-snapshot:
+snapshot: ## goreleaser --snapshot --skip-publish --rm-dist
 	goreleaser --snapshot --skip-publish --rm-dist
 
-snapshot-linux:
+snapshot-linux: ## 	goreleaser --snapshot --config .goreleaser-linux.yml --skip-publish --rm-dist
 	goreleaser --snapshot --config .goreleaser-linux.yml --skip-publish --rm-dist
 
 snapshot-clean: ## Cleans snapshot / release
 	rm -rf ./dist
 
 host-apps: ## Build app
-	test -d apps && rm -r apps || true
-	mkdir -p ./apps
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skychat
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skysocks
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skysocks-client
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/vpn-server
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/vpn-client
+	test -d $(BUILD_PATH) && rm -r $(BUILD_PATH) || true
+	mkdir -p $(BUILD_PATH)apps
+	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)apps/ ./cmd/apps/skychat
+	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)apps/ ./cmd/apps/skysocks
+	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)apps/ ./cmd/apps/skysocks-client
+	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)apps/ ./cmd/apps/vpn-server
+	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)apps/ ./cmd/apps/vpn-client
 
 example-apps: ## Build example apps
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./example/example-client-app
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./example/example-server-app
+	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)apps/ ./example/example-client-app
+	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)apps/ ./example/example-server-app
 
-host-apps-windows:
+host-apps-windows: ## build apps on windows
 	powershell -Command new-item .\apps -itemtype directory -force
 	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build ${BUILD_OPTS} -o ./apps $$_.FullName }'
 
-host-apps-windows-appveyor:
+host-apps-windows-appveyor: ## build apps on windows. `go build` with ${OPTS} for AppVeyor image
 	powershell -Command new-item .\apps -itemtype directory -force
 	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build -o ./apps $$_.FullName }'
 
@@ -222,39 +225,46 @@ host-apps-windows-appveyor:
 host-apps-static: ## Build app
 	test -d apps && rm -r apps || true
 	mkdir -p ./apps
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/ ./cmd/apps/skychat
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/ ./cmd/apps/skysocks
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/ ./cmd/apps/skysocks-client
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/ ./cmd/apps/vpn-server
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/ ./cmd/apps/vpn-client
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH)apps/ ./cmd/apps/skychat
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH)apps/ ./cmd/apps/skysocks
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH)apps/ ./cmd/apps/skysocks-client
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH)apps/ ./cmd/apps/vpn-server
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH)apps/ ./cmd/apps/vpn-client
 
 host-apps-deploy: ## Build app
 	test -d apps && rm -r apps || true
 	mkdir -p ./apps
-	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o ./apps/ ./cmd/apps/skychat
-	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o ./apps/ ./cmd/apps/skysocks
-	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o ./apps/ ./cmd/apps/skysocks-client
-	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o ./apps/ ./cmd/apps/vpn-server
-	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o ./apps/ ./cmd/apps/vpn-client
+	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o $(BUILD_PATH)apps/ ./cmd/apps/skychat
+	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o $(BUILD_PATH)apps/ ./cmd/apps/skysocks
+	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o $(BUILD_PATH)apps/ ./cmd/apps/skysocks-client
+	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o $(BUILD_PATH)apps/ ./cmd/apps/vpn-server
+	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o $(BUILD_PATH)apps/ ./cmd/apps/vpn-client
 
 host-apps-race: ## Build app
 	test -d apps && rm -r apps || true
 	mkdir -p ./apps
-	CGO_ENABLED=1${OPTS} go build ${BUILD_OPTS} -race -o ./apps/ ./cmd/apps/skychat
-	CGO_ENABLED=1${OPTS} go build ${BUILD_OPTS} -race -o ./apps/ ./cmd/apps/skysocks
-	CGO_ENABLED=1${OPTS} go build ${BUILD_OPTS} -race -o ./apps/ ./cmd/apps/skysocks-client
-	CGO_ENABLED=1${OPTS} go build ${BUILD_OPTS} -race -o ./apps/ ./cmd/apps/vpn-server
-	CGO_ENABLED=1${OPTS} go build ${BUILD_OPTS} -race -o ./apps/ ./cmd/apps/vpn-client
+	CGO_ENABLED=1${OPTS} go build ${BUILD_OPTS} -race -o $(BUILD_PATH)apps/ ./cmd/apps/skychat
+	CGO_ENABLED=1${OPTS} go build ${BUILD_OPTS} -race -o $(BUILD_PATH)apps/ ./cmd/apps/skysocks
+	CGO_ENABLED=1${OPTS} go build ${BUILD_OPTS} -race -o $(BUILD_PATH)apps/ ./cmd/apps/skysocks-client
+	CGO_ENABLED=1${OPTS} go build ${BUILD_OPTS} -race -o $(BUILD_PATH)apps/ ./cmd/apps/vpn-server
+	CGO_ENABLED=1${OPTS} go build ${BUILD_OPTS} -race -o $(BUILD_PATH)apps/ ./cmd/apps/vpn-client
 
 # Bin
-bin: fix-systray-vendor ## Build `skywire-visor`, `skywire-cli`
-	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/skywire-visor
-	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/skywire-cli
-	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/setup-node
+bin: fix-systray-vendor bin-fix unfix-systray-vendor
+
+bin-fix: ## Build `skywire-visor`, `skywire-cli`
+	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH) ./cmd/skywire-visor
+	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH) ./cmd/skywire-cli
+	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH) ./cmd/setup-node
 
 fix-systray-vendor:
 	@if [ $(UNAME_S) = "Linux" ]; then\
 		sed -i '/go conn.handleCall(msg)/c\conn.handleCall(msg)' ./vendor/github.com/godbus/dbus/v5/conn.go ;\
+	fi
+
+unfix-systray-vendor:
+	@if [ $(UNAME_S) = "Linux" ]; then\
+		sed -i '/conn.handleCall(msg)/c\			go conn.handleCall(msg)' ./vendor/github.com/godbus/dbus/v5/conn.go ;\
 	fi
 
 bin-windows: ## Build `skywire-visor`, `skywire-cli`
@@ -265,15 +275,15 @@ bin-windows-appveyor: ## Build `skywire-visor`, `skywire-cli`
 
 # Static Bin
 bin-static: ## Build `skywire-visor`, `skywire-cli`
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-visor ./cmd/skywire-visor
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-cli  ./cmd/skywire-cli
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./setup-node ./cmd/setup-node
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH)skywire-visor ./cmd/skywire-visor
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH)skywire-cli  ./cmd/skywire-cli
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH)setup-node ./cmd/setup-node
 
 # Static Bin without Systray
 bin-static-wos: ## Build `skywire-visor`, `skywire-cli`
-	${STATIC_OPTS} go build -tags withoutsystray -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-visor ./cmd/skywire-visor
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-cli  ./cmd/skywire-cli
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./setup-node ./cmd/setup-node
+	${STATIC_OPTS} go build -tags withoutsystray -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH)skywire-visor ./cmd/skywire-visor
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH)skywire-cli  ./cmd/skywire-cli
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH)setup-node ./cmd/setup-node
 
 build-deploy: host-apps-deploy ## Build for deployment Docker images
 	${OPTS} go build -tags netgo ${BUILD_OPTS_DEPLOY} -o /release/skywire-visor ./cmd/skywire-visor
@@ -321,6 +331,8 @@ dep-github-release:
 	tar -xzf arm-linux-musleabihf-cross.tgz -C ./musl-data && rm arm-linux-musleabihf-cross.tgz
 	wget -c https://more.musl.cc/10/x86_64-linux-musl/x86_64-linux-musl-cross.tgz -O x86_64-linux-musl-cross.tgz
 	tar -xzf x86_64-linux-musl-cross.tgz -C ./musl-data && rm x86_64-linux-musl-cross.tgz
+	wget -c https://more.musl.cc/10/x86_64-linux-musl/riscv64-linux-musl-cross.tgz -O riscv64-linux-musl-cross.tgz
+	tar -xzf riscv64-linux-musl-cross.tgz -C ./musl-data && rm riscv64-linux-musl-cross.tgz
 
 build-docker: ## Build docker image
 	./ci_scripts/docker-push.sh -t latest -b
@@ -330,7 +342,7 @@ install-deps-ui:  ## Install the UI dependencies
 	cd $(MANAGER_UI_DIR) && npm ci
 
 run: ## Run skywire visor with skywire-config.json, and start a browser if running a hypervisor
-	./skywire-visor -bc ./skywire-config.json
+	$(BUILD_PATH)skywire-visor -bc ./skywire-config.json
 
 ## Prepare to run skywire from source, without compiling binaries
 prepare:
@@ -344,44 +356,35 @@ prepare:
 	chmod +x ./apps/*
 	sudo echo "sudo cache"
 
-## Run skywire from source, without compiling binaries - requires skywire cloned
-run-source: prepare
+run-source: prepare ## Run skywire from source, without compiling binaries
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -in | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
 
-## Run skywire from source, with vpn server enabled
-run-systray: prepare
+run-systray: prepare ## Run skywire from source, with vpn server enabled
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -ni | sudo go run ./cmd/skywire-visor/skywire-visor.go -n --systray || true
 
-## Run skywire from source, without compiling binaries - requires skywire cloned
-run-vpnsrv: prepare
+
+run-vpnsrv: prepare ## Run skywire from source, without compiling binaries
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -in --servevpn | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
 
-## Run skywire from source with test endpoints
-run-source-test: prepare
+run-source-test: prepare ## Run skywire from source with test endpoints
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -nit | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
 
-## Run skywire from source, with vpn server enabled
-run-vpnsrv-test: prepare
+run-vpnsrv-test: prepare ## Run skywire from source, with vpn server enabled
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -nit --servevpn | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
 
-## Run skywire from source, with vpn server enabled
-run-systray-test: prepare
+run-systray-test: prepare ## Run skywire from source, with vpn server enabled
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -nit | sudo go run ./cmd/skywire-visor/skywire-visor.go --systray -nb || true
 
-## Run skywire from source with dmsghttp config
-run-source-dmsghttp: prepare
+run-source-dmsghttp: prepare ## Run skywire from source with dmsghttp config
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -din | sudo go run ./cmd/skywire-visor/skywire-visor.go -nb || true
 
-## Run skywire from source with dmsghttp config and vpn server
-run-vpnsrv-dmsghttp: prepare
+run-vpnsrv-dmsghttp: prepare ## Run skywire from source with dmsghttp config and vpn server
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -din --servevpn | sudo go run ./cmd/skywire-visor/skywire-visor.go -nb || true
 
-## Run skywire from source with dmsghttp config and test endpoints
-run-source-dmsghttp-test: prepare
+run-source-dmsghttp-test: prepare ## Run skywire from source with dmsghttp config and test endpoints
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -dint | sudo go run ./cmd/skywire-visor/skywire-visor.go -nb || true
 
-## Run skywire from source with dmsghttp config, vpn server, and test endpoints
-run-vpnsrv-dmsghttp-test: prepare
+run-vpnsrv-dmsghttp-test: prepare ## Run skywire from source with dmsghttp config, vpn server, and test endpoints
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -dint --servevpn | sudo go run ./cmd/skywire-visor/skywire-visor.go -nb || true
 
 lint-ui:  ## Lint the UI code
@@ -421,10 +424,10 @@ mac-installer-release: mac-installer ## Upload created signed and notarized appl
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-darwin-amd64.pkg
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-darwin-arm64.pkg
 
-win-installer-latest:
+win-installer-latest: ## Build the windows .msi (installer) latest version
 	@powershell '.\scripts\win_installer\script.ps1 latest'
 
-win-installer:
+win-installer: ## Build the windows .msi (installer) custom version
 	@powershell '.\scripts\win_installer\script.ps1 $(CUSTOM_VERSION)'
 
 windows-installer-release:
@@ -433,7 +436,7 @@ windows-installer-release:
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-windows-amd64.msi
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-windows-386.msi
 
-help:
+help: ## `make help` menu
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
 help-windows: ## Display help for windows

@@ -176,11 +176,16 @@ func (v *Visor) Overview() (*Overview, error) {
 		}
 	}
 
+	apps := []*appserver.AppState{}
+	if v.appL != nil {
+		apps = v.appL.AppStates()
+	}
+
 	overview := &Overview{
 		PubKey:          v.conf.PK,
 		BuildInfo:       buildinfo.Get(),
 		AppProtoVersion: supportedProtocolVersion,
-		Apps:            v.appL.AppStates(),
+		Apps:            apps,
 		Transports:      tSummaries,
 		RoutesCount:     v.router.RoutesCount(),
 		PublicIP:        publicIP,
@@ -394,11 +399,19 @@ func (v *Visor) DeleteRewardAddress() error {
 
 // Apps implements API.
 func (v *Visor) Apps() ([]*appserver.AppState, error) {
+	// check app launcher availability
+	if v.appL == nil {
+		return nil, ErrAppLauncherNotAvailable
+	}
 	return v.appL.AppStates(), nil
 }
 
 // App implements API.
 func (v *Visor) App(appName string) (*appserver.AppState, error) {
+	// check app launcher availability
+	if v.appL == nil {
+		return nil, ErrAppLauncherNotAvailable
+	}
 	appState, ok := v.appL.AppState(appName)
 	if !ok {
 		return &appserver.AppState{}, ErrAppProcNotRunning
@@ -413,6 +426,10 @@ func (v *Visor) SkybianBuildVersion() string {
 
 // StartApp implements API.
 func (v *Visor) StartApp(appName string) error {
+	// check app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
 	var envs []string
 	var err error
 	if appName == visorconfig.VPNClientName {
@@ -442,7 +459,10 @@ func (v *Visor) StartApp(appName string) error {
 
 // RegisterApp implements API.
 func (v *Visor) RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error) {
-	// check process manager availability
+	// check process manager and app launcher availability
+	if v.appL == nil {
+		return appcommon.ProcKey{}, ErrAppLauncherNotAvailable
+	}
 	if v.procM != nil {
 		return v.appL.RegisterApp(procConf)
 	}
@@ -451,7 +471,10 @@ func (v *Visor) RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, e
 
 // DeregisterApp implements API.
 func (v *Visor) DeregisterApp(procKey appcommon.ProcKey) error {
-	// check process manager availability
+	// check process manager and app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
 	if v.procM != nil {
 		return v.appL.DeregisterApp(procKey)
 	}
@@ -460,7 +483,10 @@ func (v *Visor) DeregisterApp(procKey appcommon.ProcKey) error {
 
 // StopApp implements API.
 func (v *Visor) StopApp(appName string) error {
-	// check process manager availability
+	// check process manager and app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
 	if v.procM != nil {
 		_, err := v.appL.StopApp(appName) //nolint:errcheck
 		return err
@@ -475,7 +501,10 @@ func (v *Visor) StartVPNClient(pk cipher.PubKey) error {
 	if v.tpM == nil {
 		return ErrTrpMangerNotAvailable
 	}
-
+	// check app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
 	if len(v.conf.Launcher.Apps) == 0 {
 		return errors.New("no vpn app configuration found")
 	}
@@ -508,7 +537,10 @@ func (v *Visor) StartVPNClient(pk cipher.PubKey) error {
 
 // StopVPNClient implements API.
 func (v *Visor) StopVPNClient(appName string) error {
-	// check process manager availability
+	// check process manager and app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
 	if v.procM != nil {
 		_, err := v.appL.StopApp(appName) //nolint:errcheck
 		return err
@@ -522,7 +554,10 @@ func (v *Visor) StartSkysocksClient(serverKey string) error {
 	if v.tpM == nil {
 		return ErrTrpMangerNotAvailable
 	}
-
+	// check app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
 	if len(v.conf.Launcher.Apps) == 0 {
 		return errors.New("no skysocks-client app configuration found")
 	}
@@ -563,7 +598,10 @@ func (v *Visor) StartSkysocksClient(serverKey string) error {
 
 // StopSkysocksClient implements API.
 func (v *Visor) StopSkysocksClient() error {
-	// check process manager availability
+	// check process manager and app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
 	if v.procM != nil {
 		_, err := v.appL.StopApp(visorconfig.SkysocksClientName) //nolint:errcheck
 		return err
@@ -598,6 +636,11 @@ func (v *Visor) SetAppError(appName, appErr string) error {
 
 // RestartApp implements API.
 func (v *Visor) RestartApp(appName string) error {
+	// check app launcher availability
+	if v.appL == nil {
+		v.log.Warn("app launcher not ready yet")
+		return ErrAppLauncherNotAvailable
+	}
 	if _, ok := v.procM.ProcByName(appName); ok { //nolint:errcheck
 		v.log.Infof("Updated %v password, restarting it", appName)
 		return v.appL.RestartApp(appName, appName)
@@ -608,6 +651,11 @@ func (v *Visor) RestartApp(appName string) error {
 
 // SetAutoStart implements API.
 func (v *Visor) SetAutoStart(appName string, autoStart bool) error {
+	// check app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
+
 	if _, ok := v.appL.AppState(appName); !ok {
 		return ErrAppProcNotRunning
 	}
@@ -618,6 +666,10 @@ func (v *Visor) SetAutoStart(appName string, autoStart bool) error {
 
 // SetAppPassword implements API.
 func (v *Visor) SetAppPassword(appName, password string) error {
+	// check app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
 	allowedToChangePassword := func(appName string) bool {
 		allowedApps := map[string]struct{}{
 			visorconfig.SkysocksName:  {},
@@ -649,6 +701,11 @@ func (v *Visor) SetAppPassword(appName, password string) error {
 
 // SetAppNetworkInterface implements API.
 func (v *Visor) SetAppNetworkInterface(appName, netifc string) error {
+	// check app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
+
 	if visorconfig.VPNServerName != appName {
 		return fmt.Errorf("app %s is not allowed to set network interface", appName)
 	}
@@ -669,6 +726,11 @@ func (v *Visor) SetAppNetworkInterface(appName, netifc string) error {
 
 // SetAppKillswitch implements API.
 func (v *Visor) SetAppKillswitch(appName string, killswitch bool) error {
+	// check app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
+
 	if appName != visorconfig.VPNClientName {
 		return fmt.Errorf("app %s is not allowed to set killswitch", appName)
 	}
@@ -770,7 +832,9 @@ func (v *Visor) SetAppDNS(appName string, dnsAddr string) error {
 func (v *Visor) DoCustomSetting(appName string, customSetting map[string]string) error {
 
 	v.log.Infof("Changing %s Settings to %q", appName, customSetting)
-
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
 	if err := v.conf.DeleteAppArg(v.appL, appName); err != nil {
 		v.log.Warn("An error occurs deleting old arguments.")
 		return err

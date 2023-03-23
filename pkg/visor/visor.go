@@ -48,6 +48,8 @@ var (
 	ErrProcNotAvailable = errors.New("no process manager available")
 	// ErrTrpMangerNotAvailable represents error for unavailable transport manager
 	ErrTrpMangerNotAvailable = errors.New("no transport manager available")
+	// ErrAppLauncherNotAvailable represents error for unavailable app launcher
+	ErrAppLauncherNotAvailable = errors.New("no app launcher available")
 )
 
 const (
@@ -486,6 +488,11 @@ func (v *Visor) Close() error {
 		start := time.Now()
 		errCh := make(chan error, 1)
 		t := time.NewTimer(moduleShutdownTimeout)
+
+		// should keep transport.manager shutdown continue till all transports delete there
+		if cl.src == "transport.manager" {
+			t = time.NewTimer(2 * time.Hour)
+		}
 
 		log := v.MasterLogger().PackageLogger(fmt.Sprintf("visor:shutdown:%s", cl.src)).
 			WithField("func", fmt.Sprintf("[%d/%d]", i+1, len(v.closeStack)))

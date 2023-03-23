@@ -16,11 +16,11 @@ RUN apk add --no-cache make git && \
     sh -c /skywire/docker/images/visor/install-preq.sh && \
     make build-deploy && \
     mkdir -p /apps && \
-    cp ./apps/vpn-server /apps/ && \
-    cp ./apps/vpn-client /apps/ && \
-	cp ./apps/skysocks /apps/ && \
-	cp ./apps/skysocks-client /apps/ && \
-	cp ./apps/skychat /apps/
+    cp ./build/apps/vpn-server /apps/ && \
+    cp ./build/apps/vpn-client /apps/ && \
+	cp ./build/apps/skysocks /apps/ && \
+	cp ./build/apps/skysocks-client /apps/ && \
+	cp ./build/apps/skychat /apps/
 
 ## Resulting image
 FROM ${base} as visor-runner
