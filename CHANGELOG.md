@@ -6,7 +6,30 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.7
+-   Fix deps (dependabot)  [#1521](https://github.com/skycoin/skywire/pull/1521)
+-   improve transport logic  [#1519](https://github.com/skycoin/skywire/pull/1519)
+-   survey issue arm7 hotfix  [#1518](https://github.com/skycoin/skywire/pull/1518)
+-   Change build path of binaries to build folder  [#1516](https://github.com/skycoin/skywire/pull/1516)
+-   Cli refactor  [#1515](https://github.com/skycoin/skywire/pull/1515)
+-   update readme  [#1514](https://github.com/skycoin/skywire/pull/1514)
+-   risc-v build  [#1513](https://github.com/skycoin/skywire/pull/1513)
+-   Bump golang.org/x/text from 0.3.7 to 0.3.8  [#1511](https://github.com/skycoin/skywire/pull/1511)
+-   Bump golang.org/x/net from 0.0.0-20220722155237-a158d28d115b to 0.7.0  [#1510](https://github.com/skycoin/skywire/pull/1510)
+-   Bump golang.org/x/crypto from 0.0.0-20210921155107-089bfa567519 to 0.1.0  [#1509](https://github.com/skycoin/skywire/pull/1509)
+
+## 1.3.6
+-   Hot fix on Launcher panic  [#1508](https://github.com/skycoin/skywire/pull/1508)
+-   improve logging  [#1507](https://github.com/skycoin/skywire/pull/1507)
+-   Fix appL nil  [#1506](https://github.com/skycoin/skywire/pull/1506)
+-   fix docker login  [#1503](https://github.com/skycoin/skywire/pull/1503)
+
 ## 1.3.5
+-   build UI for v1.3.5  [#1502](https://github.com/skycoin/skywire/pull/1502)
+-   remove `exec` and `profile`  [#1501](https://github.com/skycoin/skywire/pull/1501)
+-   Update change log for patch release  [#1500](https://github.com/skycoin/skywire/pull/1500)
+-   Remove the basic terminal from the UI  [#1499](https://github.com/skycoin/skywire/pull/1499)
+-   Improvements for the UI code  [#1498](https://github.com/skycoin/skywire/pull/1498)
 -   log collection size limit | improve survey logic  [#1496](https://github.com/skycoin/skywire/pull/1496)
 -   Custom Apps  [#1495](https://github.com/skycoin/skywire/pull/1495)
 -   improve survey logic  [#1489](https://github.com/skycoin/skywire/pull/1489)
