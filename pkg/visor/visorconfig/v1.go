@@ -32,7 +32,7 @@ type V1 struct {
 
 	LogLevel             string                           `json:"log_level"`
 	LocalPath            string                           `json:"local_path"`
-	CustomDmsgHTTPPath   string                           `json:"custom_dmsg_http_path"`
+	DmsgHTTPServerPath   string                           `json:"dmsghttp_server_path"`
 	StunServers          []string                         `json:"stun_servers"`
 	ShutdownTimeout      Duration                         `json:"shutdown_timeout,omitempty"`    // time value, examples: 10s, 1m, etc
 	RestartCheckDelay    Duration                         `json:"restart_check_delay,omitempty"` // time value, examples: 10s, 1m, etc
@@ -150,6 +150,27 @@ func (v1 *V1) UpdateAppArg(launch *launcher.AppLauncher, appName, argName string
 	default:
 		return fmt.Errorf("invalid arg type %T", value)
 	}
+
+	if !configChanged {
+		return nil
+	}
+	launch.ResetConfig(launcher.AppLauncherConfig{
+		VisorPK:       v1.PK,
+		Apps:          conf.Apps,
+		ServerAddr:    conf.ServerAddr,
+		DisplayNodeIP: conf.DisplayNodeIP,
+	})
+	return v1.flush(v1)
+}
+
+// DeleteAppArg Delete entire of args of a custom app
+func (v1 *V1) DeleteAppArg(launch *launcher.AppLauncher, appName string) error {
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+
+	conf := v1.Launcher
+
+	configChanged := deleteAppArg(conf, appName)
 
 	if !configChanged {
 		return nil
@@ -323,6 +344,21 @@ func updateBoolArg(conf *Launcher, appName, argName string, value bool) bool {
 		break
 	}
 
+	return configChanged
+}
+
+// deleteAppArg delete all args of an app by its name
+func deleteAppArg(conf *Launcher, appName string) bool {
+	var configChanged bool
+	for i := range conf.Apps {
+		if conf.Apps[i].Name != appName {
+			continue
+		}
+
+		conf.Apps[i].Args = []string{}
+		configChanged = true
+		break
+	}
 	return configChanged
 }
 

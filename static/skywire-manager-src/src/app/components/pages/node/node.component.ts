@@ -5,12 +5,12 @@ import { Observable, of, ReplaySubject, timer } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
 import { delay } from 'rxjs/operators';
 
-import { NodeService, BackendData } from '../../../services/node.service';
 import { Node } from '../../../app.datatypes';
 import { StorageService } from '../../../services/storage.service';
 import { TabButtonData } from '../../layout/top-bar/top-bar.component';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { NodeActionsHelper } from './actions/node-actions-helper';
+import { SingleNodeBackendData, SingleNodeDataService, TrafficData } from 'src/app/services/single-node-data.service';
 
 /**
  * Main page used for showing the details of a node. It is in charge of loading
@@ -35,8 +35,13 @@ export class NodeComponent implements OnInit, OnDestroy {
    * Lastest node data downloaded by the currently active instance of this page.
    */
   private static nodeSubject: ReplaySubject<Node>;
+  /**
+   * Lastest node traffic data downloaded by the currently active instance of this page.
+   */
+  private static trafficDataSubject: ReplaySubject<TrafficData>;
 
   node: Node;
+  trafficData: TrafficData;
   notFound = false;
 
   // Values for the tab bar.
@@ -103,9 +108,16 @@ export class NodeComponent implements OnInit, OnDestroy {
     return NodeComponent.nodeSubject.asObservable();
   }
 
+  /**
+   * Gets the lastest node traffic data downloaded by the currently active instance of this page.
+   */
+  public static get currentTrafficData(): Observable<TrafficData> {
+    return NodeComponent.trafficDataSubject.asObservable();
+  }
+
   constructor(
     public storageService: StorageService,
-    private nodeService: NodeService,
+    private singleNodeDataService: SingleNodeDataService,
     private route: ActivatedRoute,
     private ngZone: NgZone,
     private snackbarService: SnackbarService,
@@ -113,6 +125,7 @@ export class NodeComponent implements OnInit, OnDestroy {
     router: Router,
   ) {
     NodeComponent.nodeSubject = new ReplaySubject<Node>(1);
+    NodeComponent.trafficDataSubject = new ReplaySubject<TrafficData>(1);
     NodeComponent.currentInstanceInternal = this;
 
     this.navigationsSubscription = router.events.subscribe(event => {
@@ -150,7 +163,6 @@ export class NodeComponent implements OnInit, OnDestroy {
     this.navigationsSubscription.unsubscribe();
 
     // Load the data.
-    this.nodeService.startRequestingSpecificNode(NodeComponent.currentNodeKey);
     this.startGettingData();
   }
 
@@ -260,25 +272,26 @@ export class NodeComponent implements OnInit, OnDestroy {
       this.lastUpdateRequestedManually = true;
     }
 
-    this.nodeService.forceSpecificNodeRefresh();
+    this.singleNodeDataService.forceSpecificNodeRefresh(NodeComponent.currentNodeKey);
   }
 
   /**
    * Starts getting the data from the backend.
    */
   private startGettingData() {
-    // Detect when the service is updating the data.
-    this.dataSubscription = this.nodeService.updatingSpecificNode.subscribe(val => this.updating = val);
-
     this.ngZone.runOutsideAngular(() => {
       // Get the node info.
-      this.dataSubscription.add(this.nodeService.specificNode.subscribe((result: BackendData) => {
+      this.dataSubscription = this.singleNodeDataService.startRequestingData(NodeComponent.currentNodeKey).subscribe((result: SingleNodeBackendData) => {
         this.ngZone.run(() => {
-          if (result) {
+          this.updating = result ? result.updating : true;
+
+          if (result && !result.updating) {
             // If the data was obtained.
             if (result.data && !result.error) {
-              this.node = result.data as Node;
+              this.node = result.data;
+              this.trafficData = result.trafficData;
               NodeComponent.nodeSubject.next(this.node);
+              NodeComponent.trafficDataSubject.next(this.trafficData);
               if (this.nodeActionsHelper) {
                 this.nodeActionsHelper.setCurrentNode(this.node);
               }
@@ -319,12 +332,12 @@ export class NodeComponent implements OnInit, OnDestroy {
             }
           }
         });
-      }));
+      });
     });
   }
 
   ngOnDestroy() {
-    this.nodeService.stopRequestingSpecificNode();
+    this.singleNodeDataService.stopRequestingSpecificNode(NodeComponent.currentNodeKey);
 
     this.dataSubscription.unsubscribe();
     this.updateTimeSubscription.unsubscribe();
@@ -336,6 +349,9 @@ export class NodeComponent implements OnInit, OnDestroy {
 
     NodeComponent.nodeSubject.complete();
     NodeComponent.nodeSubject = undefined;
+
+    NodeComponent.trafficDataSubject.complete();
+    NodeComponent.trafficDataSubject = undefined;
 
     this.nodeActionsHelper.dispose();
   }

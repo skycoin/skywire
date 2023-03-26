@@ -215,8 +215,7 @@ func (l *bBoltLogStore) Fire(entry *log.Entry) error {
 	}()
 
 	// time in RFC3339Nano is between the bytes 1 and 36. This will change if other time layout is in use
-	t := p[1 : 1+len(timeLayout)]
-
+	t := strings.Split(strings.Split(strings.Split(p, " ")[0], "]")[0], "[")[2]
 	err = db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket(l.bucket)
 		return b.Put([]byte(t), []byte(str))

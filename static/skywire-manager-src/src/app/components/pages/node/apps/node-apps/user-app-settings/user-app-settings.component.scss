@@ -1,0 +1,32 @@
+@import "variables";
+
+.info-container {
+  margin-bottom: 10px;
+}
+
+.settings-row {
+  display: flex;
+}
+
+mat-form-field {
+  flex-grow: 1;
+  margin-right: 10px;
+}
+
+button {
+  flex-shrink: 0;
+  width: 50px;
+  padding: 0 !important;
+  align-self: center;
+  align-self: center;
+  border-radius: $mat-dialog-radius;
+
+  mat-icon {
+    margin: 0 !important;
+  }
+}
+
+.add-setting {
+  color: $blue-medium !important;
+  cursor: pointer;
+}

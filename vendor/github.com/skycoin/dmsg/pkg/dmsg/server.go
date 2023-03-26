@@ -226,6 +226,6 @@ func (s *Server) handleSession(conn net.Conn) {
 		dSes.Serve()
 	}
 
-	s.delSession(ctx, dSes.RemotePK(), true)
+	s.delSession(ctx, dSes.RemotePK())
 	cancel()
 }

@@ -275,6 +275,14 @@ func (rc *rpcClient) SetAppDNS(appName string, dnsAddr string) error {
 	}, &struct{}{})
 }
 
+// DoCustomSetting implements API.
+func (rc *rpcClient) DoCustomSetting(appName string, customSetting map[string]string) error {
+	return rc.Call("DoCustomSetting", &SetAppMapIn{
+		AppName: appName,
+		Val:     customSetting,
+	}, &struct{}{})
+}
+
 // LogsSince calls LogsSince
 func (rc *rpcClient) LogsSince(timestamp time.Time, appName string) ([]string, error) {
 	res := make([]string, 0)
@@ -481,7 +489,17 @@ type StatusMessage struct {
 // VPNServers calls VPNServers.
 func (rc *rpcClient) VPNServers(version, country string) ([]servicedisc.Service, error) {
 	output := []servicedisc.Service{}
-	err := rc.Call("VPNServers", &FilterVPNServersIn{ // nolint
+	err := rc.Call("VPNServers", &FilterServersIn{ // nolint
+		Version: version,
+		Country: country,
+	}, &output)
+	return output, err
+}
+
+// ProxyServers calls ProxyServers.
+func (rc *rpcClient) ProxyServers(version, country string) ([]servicedisc.Service, error) {
+	output := []servicedisc.Service{}
+	err := rc.Call("ProxyServers", &FilterServersIn{ // nolint
 		Version: version,
 		Country: country,
 	}, &output)
@@ -659,8 +677,8 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, AP
 			BuildInfo:       buildinfo.Get(),
 			AppProtoVersion: supportedProtocolVersion,
 			Apps: []*appserver.AppState{
-				{AppConfig: appserver.AppConfig{Name: "foo.v1.0", AutoStart: false, Port: 10}},
-				{AppConfig: appserver.AppConfig{Name: "bar.v2.0", AutoStart: false, Port: 20}},
+				{AppConfig: appserver.AppConfig{Name: "foo.v1.0", Binary: "foo.v1.0", AutoStart: false, Port: 10}},
+				{AppConfig: appserver.AppConfig{Name: "bar.v2.0", Binary: "bar.v2.0", AutoStart: false, Port: 20}},
 			},
 			Transports:  tps,
 			RoutesCount: rt.Count(),
@@ -977,6 +995,19 @@ func (mc *mockRPCClient) SetAppDNS(string, string) error {
 	})
 }
 
+// DoCustomSetting implents API.
+func (mc *mockRPCClient) DoCustomSetting(appName string, customSetting map[string]string) error {
+	return mc.do(true, func() error {
+		for i := range mc.o.Apps {
+			if mc.o.Apps[i].Name == appName {
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", appName)
+	})
+}
+
 // LogsSince implements API. Manually set (*mockRPPClient).logS before calling this function
 func (mc *mockRPCClient) LogsSince(timestamp time.Time, _ string) ([]string, error) {
 	return mc.logS.LogsSince(timestamp)
@@ -1195,6 +1226,11 @@ func (mc *mockRPCClient) GetLogRotationInterval() (visorconfig.Duration, error) 
 
 // VPNServers implements API
 func (mc *mockRPCClient) VPNServers(_, _ string) ([]servicedisc.Service, error) {
+	return []servicedisc.Service{}, nil
+}
+
+// ProxyServers implements API
+func (mc *mockRPCClient) ProxyServers(_, _ string) ([]servicedisc.Service, error) {
 	return []servicedisc.Service{}, nil
 }
 

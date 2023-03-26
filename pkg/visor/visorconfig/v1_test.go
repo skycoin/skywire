@@ -29,8 +29,9 @@ func Test_updateStringArg(t *testing.T) {
 				conf: &Launcher{
 					Apps: []appserver.AppConfig{
 						{
-							Name: "skysocks-client",
-							Args: []string{"-passcode", "1234"},
+							Name:   "skysocks-client",
+							Binary: "skysocks-client",
+							Args:   []string{"-passcode", "1234"},
 						},
 					},
 				},
@@ -42,8 +43,9 @@ func Test_updateStringArg(t *testing.T) {
 			wantConf: &Launcher{
 				Apps: []appserver.AppConfig{
 					{
-						Name: "skysocks-client",
-						Args: []string{"-passcode", "4321"},
+						Name:   "skysocks-client",
+						Binary: "skysocks-client",
+						Args:   []string{"-passcode", "4321"},
 					},
 				},
 			},
@@ -54,8 +56,9 @@ func Test_updateStringArg(t *testing.T) {
 				conf: &Launcher{
 					Apps: []appserver.AppConfig{
 						{
-							Name: "skysocks-client",
-							Args: []string{"-passcode", "1234"},
+							Name:   "skysocks-client",
+							Binary: "skysocks-client",
+							Args:   []string{"-passcode", "1234"},
 						},
 					},
 				},
@@ -67,8 +70,9 @@ func Test_updateStringArg(t *testing.T) {
 			wantConf: &Launcher{
 				Apps: []appserver.AppConfig{
 					{
-						Name: "skysocks-client",
-						Args: []string{},
+						Name:   "skysocks-client",
+						Binary: "skysocks-client",
+						Args:   []string{},
 					},
 				},
 			},
@@ -79,8 +83,9 @@ func Test_updateStringArg(t *testing.T) {
 				conf: &Launcher{
 					Apps: []appserver.AppConfig{
 						{
-							Name: "skysocks-client",
-							Args: []string{"-t", "-passcode", "1234", "-test", "abc"},
+							Name:   "skysocks-client",
+							Binary: "skysocks-client",
+							Args:   []string{"-t", "-passcode", "1234", "-test", "abc"},
 						},
 					},
 				},
@@ -92,8 +97,9 @@ func Test_updateStringArg(t *testing.T) {
 			wantConf: &Launcher{
 				Apps: []appserver.AppConfig{
 					{
-						Name: "skysocks-client",
-						Args: []string{"-t", "-test", "abc"},
+						Name:   "skysocks-client",
+						Binary: "skysocks-client",
+						Args:   []string{"-t", "-test", "abc"},
 					},
 				},
 			},
@@ -104,8 +110,9 @@ func Test_updateStringArg(t *testing.T) {
 				conf: &Launcher{
 					Apps: []appserver.AppConfig{
 						{
-							Name: "skysocks-client",
-							Args: []string{"-t", "-passcode", "1234", "-test", "abc"},
+							Name:   "skysocks-client",
+							Binary: "skysocks-client",
+							Args:   []string{"-t", "-passcode", "1234", "-test", "abc"},
 						},
 					},
 				},
@@ -117,8 +124,9 @@ func Test_updateStringArg(t *testing.T) {
 			wantConf: &Launcher{
 				Apps: []appserver.AppConfig{
 					{
-						Name: "skysocks-client",
-						Args: []string{"-t", "-passcode", "1234", "-test", "abc", "-arg1", "678"},
+						Name:   "skysocks-client",
+						Binary: "skysocks-client",
+						Args:   []string{"-t", "-passcode", "1234", "-test", "abc", "-arg1", "678"},
 					},
 				},
 			},
@@ -129,8 +137,9 @@ func Test_updateStringArg(t *testing.T) {
 				conf: &Launcher{
 					Apps: []appserver.AppConfig{
 						{
-							Name: "skysocks-client",
-							Args: []string{"-t", "-passcode", "1234", "-test", "abc"},
+							Name:   "skysocks-client",
+							Binary: "skysocks-client",
+							Args:   []string{"-t", "-passcode", "1234", "-test", "abc"},
 						},
 					},
 				},
@@ -142,8 +151,9 @@ func Test_updateStringArg(t *testing.T) {
 			wantConf: &Launcher{
 				Apps: []appserver.AppConfig{
 					{
-						Name: "skysocks-client",
-						Args: []string{"-t", "-passcode", "1234", "-test", "abc"},
+						Name:   "skysocks-client",
+						Binary: "skysocks-client",
+						Args:   []string{"-t", "-passcode", "1234", "-test", "abc"},
 					},
 				},
 			},
@@ -154,7 +164,8 @@ func Test_updateStringArg(t *testing.T) {
 				conf: &Launcher{
 					Apps: []appserver.AppConfig{
 						{
-							Name: "skysocks-client",
+							Name:   "skysocks-client",
+							Binary: "skysocks-client",
 						},
 					},
 				},
@@ -166,7 +177,8 @@ func Test_updateStringArg(t *testing.T) {
 			wantConf: &Launcher{
 				Apps: []appserver.AppConfig{
 					{
-						Name: "skysocks-client",
+						Name:   "skysocks-client",
+						Binary: "skysocks-client",
 					},
 				},
 			},
@@ -201,8 +213,9 @@ func Test_updateBoolArg(t *testing.T) {
 				conf: &Launcher{
 					Apps: []appserver.AppConfig{
 						{
-							Name: skyenv.VPNClientName,
-							Args: []string{"-passcode", "1234"},
+							Name:   skyenv.VPNClientName,
+							Binary: skyenv.VPNClientName,
+							Args:   []string{"-passcode", "1234"},
 						},
 					},
 				},
@@ -214,8 +227,9 @@ func Test_updateBoolArg(t *testing.T) {
 			wantConf: &Launcher{
 				Apps: []appserver.AppConfig{
 					{
-						Name: skyenv.VPNClientName,
-						Args: []string{"-passcode", "1234", "-killswitch=true"},
+						Name:   skyenv.VPNClientName,
+						Binary: skyenv.VPNClientName,
+						Args:   []string{"-passcode", "1234", "-killswitch=true"},
 					},
 				},
 			},
@@ -226,8 +240,9 @@ func Test_updateBoolArg(t *testing.T) {
 				conf: &Launcher{
 					Apps: []appserver.AppConfig{
 						{
-							Name: skyenv.VPNClientName,
-							Args: []string{"-passcode", "1234"},
+							Name:   skyenv.VPNClientName,
+							Binary: skyenv.VPNClientName,
+							Args:   []string{"-passcode", "1234"},
 						},
 					},
 				},
@@ -239,8 +254,9 @@ func Test_updateBoolArg(t *testing.T) {
 			wantConf: &Launcher{
 				Apps: []appserver.AppConfig{
 					{
-						Name: skyenv.VPNClientName,
-						Args: []string{"-passcode", "1234", "-killswitch=false"},
+						Name:   skyenv.VPNClientName,
+						Binary: skyenv.VPNClientName,
+						Args:   []string{"-passcode", "1234", "-killswitch=false"},
 					},
 				},
 			},
@@ -251,8 +267,9 @@ func Test_updateBoolArg(t *testing.T) {
 				conf: &Launcher{
 					Apps: []appserver.AppConfig{
 						{
-							Name: skyenv.VPNClientName,
-							Args: []string{"-passcode", "1234", "--killswitch=true"},
+							Name:   skyenv.VPNClientName,
+							Binary: skyenv.VPNClientName,
+							Args:   []string{"-passcode", "1234", "--killswitch=true"},
 						},
 					},
 				},
@@ -264,8 +281,9 @@ func Test_updateBoolArg(t *testing.T) {
 			wantConf: &Launcher{
 				Apps: []appserver.AppConfig{
 					{
-						Name: skyenv.VPNClientName,
-						Args: []string{"-passcode", "1234", "-killswitch=false"},
+						Name:   skyenv.VPNClientName,
+						Binary: skyenv.VPNClientName,
+						Args:   []string{"-passcode", "1234", "-killswitch=false"},
 					},
 				},
 			},
@@ -276,8 +294,9 @@ func Test_updateBoolArg(t *testing.T) {
 				conf: &Launcher{
 					Apps: []appserver.AppConfig{
 						{
-							Name: skyenv.VPNClientName,
-							Args: []string{"-passcode", "1234", "-killswitch=false"},
+							Name:   skyenv.VPNClientName,
+							Binary: skyenv.VPNClientName,
+							Args:   []string{"-passcode", "1234", "-killswitch=false"},
 						},
 					},
 				},
@@ -289,8 +308,9 @@ func Test_updateBoolArg(t *testing.T) {
 			wantConf: &Launcher{
 				Apps: []appserver.AppConfig{
 					{
-						Name: skyenv.VPNClientName,
-						Args: []string{"-passcode", "1234", "-killswitch=true"},
+						Name:   skyenv.VPNClientName,
+						Binary: skyenv.VPNClientName,
+						Args:   []string{"-passcode", "1234", "-killswitch=true"},
 					},
 				},
 			},
@@ -301,8 +321,9 @@ func Test_updateBoolArg(t *testing.T) {
 				conf: &Launcher{
 					Apps: []appserver.AppConfig{
 						{
-							Name: skyenv.VPNClientName,
-							Args: []string{"-passcode", "1234", "-killswitch", "false"},
+							Name:   skyenv.VPNClientName,
+							Binary: skyenv.VPNClientName,
+							Args:   []string{"-passcode", "1234", "-killswitch", "false"},
 						},
 					},
 				},
@@ -314,8 +335,9 @@ func Test_updateBoolArg(t *testing.T) {
 			wantConf: &Launcher{
 				Apps: []appserver.AppConfig{
 					{
-						Name: skyenv.VPNClientName,
-						Args: []string{"-passcode", "1234", "-killswitch=true"},
+						Name:   skyenv.VPNClientName,
+						Binary: skyenv.VPNClientName,
+						Args:   []string{"-passcode", "1234", "-killswitch=true"},
 					},
 				},
 			},
@@ -326,8 +348,9 @@ func Test_updateBoolArg(t *testing.T) {
 				conf: &Launcher{
 					Apps: []appserver.AppConfig{
 						{
-							Name: skyenv.VPNClientName,
-							Args: []string{"--killswitch", "true"},
+							Name:   skyenv.VPNClientName,
+							Binary: skyenv.VPNClientName,
+							Args:   []string{"--killswitch", "true"},
 						},
 					},
 				},
@@ -339,8 +362,9 @@ func Test_updateBoolArg(t *testing.T) {
 			wantConf: &Launcher{
 				Apps: []appserver.AppConfig{
 					{
-						Name: skyenv.VPNClientName,
-						Args: []string{"-killswitch=false"},
+						Name:   skyenv.VPNClientName,
+						Binary: skyenv.VPNClientName,
+						Args:   []string{"-killswitch=false"},
 					},
 				},
 			},
@@ -351,7 +375,8 @@ func Test_updateBoolArg(t *testing.T) {
 				conf: &Launcher{
 					Apps: []appserver.AppConfig{
 						{
-							Name: skyenv.VPNClientName,
+							Name:   skyenv.VPNClientName,
+							Binary: skyenv.VPNClientName,
 						},
 					},
 				},
@@ -363,8 +388,9 @@ func Test_updateBoolArg(t *testing.T) {
 			wantConf: &Launcher{
 				Apps: []appserver.AppConfig{
 					{
-						Name: skyenv.VPNClientName,
-						Args: []string{"-killswitch=false"},
+						Name:   skyenv.VPNClientName,
+						Binary: skyenv.VPNClientName,
+						Args:   []string{"-killswitch=false"},
 					},
 				},
 			},
@@ -375,8 +401,9 @@ func Test_updateBoolArg(t *testing.T) {
 				conf: &Launcher{
 					Apps: []appserver.AppConfig{
 						{
-							Name: skyenv.VPNClientName,
-							Args: []string{"-passcode", ""},
+							Name:   skyenv.VPNClientName,
+							Binary: skyenv.VPNClientName,
+							Args:   []string{"-passcode", ""},
 						},
 					},
 				},
@@ -388,8 +415,9 @@ func Test_updateBoolArg(t *testing.T) {
 			wantConf: &Launcher{
 				Apps: []appserver.AppConfig{
 					{
-						Name: skyenv.VPNClientName,
-						Args: []string{"-passcode", "", "-killswitch=false"},
+						Name:   skyenv.VPNClientName,
+						Binary: skyenv.VPNClientName,
+						Args:   []string{"-passcode", "", "-killswitch=false"},
 					},
 				},
 			},

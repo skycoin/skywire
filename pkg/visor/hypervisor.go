@@ -260,7 +260,6 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Delete("/visors/{pk}/routes/", hv.deleteRoutes())
 				r.Get("/visors/{pk}/routegroups", hv.getRouteGroups())
 				r.Post("/visors/{pk}/restart", hv.restart())
-				r.Post("/visors/{pk}/exec", hv.exec())
 				r.Get("/visors/{pk}/runtime-logs", hv.getRuntimeLogs())
 				r.Post("/visors/{pk}/min-hops", hv.postMinHops())
 				r.Get("/visors/{pk}/persistent-transports", hv.getPersistentTransports())
@@ -596,20 +595,21 @@ func (hv *Hypervisor) getAppStats() http.HandlerFunc {
 func (hv *Hypervisor) putApp() http.HandlerFunc {
 	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		type req struct {
-			AutoStart  *bool          `json:"autostart,omitempty"`
-			Killswitch *bool          `json:"killswitch,omitempty"`
-			Secure     *bool          `json:"secure,omitempty"`
-			Status     *int           `json:"status,omitempty"`
-			Passcode   *string        `json:"passcode,omitempty"`
-			NetIfc     *string        `json:"netifc,omitempty"`
-			DNSAddr    *string        `json:"dns,omitempty"`
-			PK         *cipher.PubKey `json:"pk,omitempty"`
+			AutoStart     *bool             `json:"autostart,omitempty"`
+			Killswitch    *bool             `json:"killswitch,omitempty"`
+			Secure        *bool             `json:"secure,omitempty"`
+			Status        *int              `json:"status,omitempty"`
+			Passcode      *string           `json:"passcode,omitempty"`
+			NetIfc        *string           `json:"netifc,omitempty"`
+			DNSAddr       *string           `json:"dns,omitempty"`
+			PK            *cipher.PubKey    `json:"pk,omitempty"`
+			CustomSetting map[string]string `json:"custom_setting,omitempty"`
 		}
 
 		shouldRestartApp := func(r req) bool {
 			// we restart the app if one of these fields was changed
 			return r.Killswitch != nil || r.Secure != nil || r.Passcode != nil ||
-				r.PK != nil || r.NetIfc != nil
+				r.PK != nil || r.NetIfc != nil || r.CustomSetting != nil
 		}
 
 		var reqBody req
@@ -669,6 +669,13 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 
 		if reqBody.DNSAddr != nil {
 			if err := ctx.API.SetAppDNS(ctx.App.Name, *reqBody.DNSAddr); err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		if reqBody.CustomSetting != nil {
+			if err := ctx.API.DoCustomSetting(ctx.App.Name, reqBody.CustomSetting); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
 			}
@@ -1140,37 +1147,6 @@ func (hv *Hypervisor) restart() http.HandlerFunc {
 		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, true)
-	})
-}
-
-// executes a command and returns its output
-func (hv *Hypervisor) exec() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var reqBody struct {
-			Command string `json:"command"`
-		}
-
-		if err := httputil.ReadJSON(r, &reqBody); err != nil {
-			if err != io.EOF {
-				hv.log(r).Warnf("exec request: %v", err)
-			}
-
-			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
-
-			return
-		}
-
-		out, err := ctx.API.Exec(reqBody.Command)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-
-		output := struct {
-			Output string `json:"output"`
-		}{strings.TrimSpace(string(out))}
-
-		httputil.WriteJSON(w, r, http.StatusOK, output)
 	})
 }
 

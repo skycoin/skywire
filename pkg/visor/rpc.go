@@ -364,6 +364,12 @@ type SetAppStringIn struct {
 	Val     string
 }
 
+// SetAppMapIn is input for SetApp map[string]string flags
+type SetAppMapIn struct {
+	AppName string
+	Val     map[string]string
+}
+
 // SetAppPK sets PK for the app.
 func (r *RPC) SetAppPK(in *SetAppPKIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppPK", in)(nil, &err)
@@ -599,14 +605,6 @@ func (r *RPC) Shutdown(_ *struct{}, _ *struct{}) (err error) {
 	return r.visor.Shutdown()
 }
 
-// Exec executes a given command in cmd and writes its output to out.
-func (r *RPC) Exec(cmd *string, out *[]byte) (err error) {
-	defer rpcutil.LogCall(r.log, "Exec", cmd)(out, &err)
-
-	*out, err = r.visor.Exec(*cmd)
-	return err
-}
-
 // SetMinHops sets min_hops in visor's routing config
 func (r *RPC) SetMinHops(n *uint16, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetMinHops", *n)
@@ -637,18 +635,28 @@ func (r *RPC) SetPublicAutoconnect(pAc *bool, _ *struct{}) (err error) {
 	return err
 }
 
-// FilterVPNServersIn is input for VPNServers
-type FilterVPNServersIn struct {
+// FilterServersIn is input for VPNServers and ProxyServers
+type FilterServersIn struct {
 	Version string
 	Country string
 }
 
 // VPNServers gets available public VPN server from service discovery URL
-func (r *RPC) VPNServers(vc *FilterVPNServersIn, out *[]servicedisc.Service) (err error) {
+func (r *RPC) VPNServers(vc *FilterServersIn, out *[]servicedisc.Service) (err error) {
 	defer rpcutil.LogCall(r.log, "VPNServers", nil)(out, &err)
 	vpnServers, err := r.visor.VPNServers(vc.Version, vc.Country)
 	if vpnServers != nil {
 		*out = vpnServers
+	}
+	return err
+}
+
+// ProxyServers gets available socks5 proxy servers from service discovery URL
+func (r *RPC) ProxyServers(vc *FilterServersIn, out *[]servicedisc.Service) (err error) {
+	defer rpcutil.LogCall(r.log, "ProxyServers", nil)(out, &err)
+	proxyServers, err := r.visor.ProxyServers(vc.Version, vc.Country)
+	if proxyServers != nil {
+		*out = proxyServers
 	}
 	return err
 }

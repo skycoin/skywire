@@ -30,9 +30,9 @@ require (
 	github.com/toqueteos/webbrowser v1.2.0
 	github.com/xtaci/kcp-go v5.4.20+incompatible
 	go.etcd.io/bbolt v1.3.6
-	golang.org/x/net v0.0.0-20220722155237-a158d28d115b
-	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f
-	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
+	golang.org/x/net v0.7.0
+	golang.org/x/sys v0.5.0
+	golang.org/x/term v0.5.0 // indirect
 	golang.org/x/tools v0.1.12 // indirect
 	golang.zx2c4.com/wireguard v0.0.0-20211012180210-dfd688b6aa7b
 	nhooyr.io/websocket v1.8.2 // indirect
@@ -49,15 +49,14 @@ require (
 	github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
 	github.com/jaypipes/ghw v0.10.0
 	github.com/lib/pq v1.10.7
-	github.com/pkg/profile v1.7.0
+	github.com/orandin/lumberjackrus v1.0.1
 	github.com/pterm/pterm v0.12.49
-	github.com/skycoin/dmsg v1.3.0-rc1.0.20230105101327-c8f2541c3de8
-	github.com/skycoin/skywire-utilities v0.0.0-20230110132024-c5536ba8e22c
+	github.com/skycoin/dmsg v1.3.0-rc1.0.20230224131835-1c194ef9791e
+	github.com/skycoin/skywire-utilities v0.0.0-20230315234948-7c62dc34c53a
 	github.com/skycoin/systray v1.10.0
 	github.com/spf13/pflag v1.0.5
 	github.com/zcalusic/sysinfo v0.9.5
 	golang.org/x/sync v0.0.0-20220819030929-7fc1605a5dde
-	periph.io/x/periph v3.6.8+incompatible
 )
 
 require (
@@ -75,11 +74,9 @@ require (
 	github.com/creack/pty v1.1.15 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fatih/color v1.13.0 // indirect
-	github.com/felixge/fgprof v0.9.3 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
-	github.com/google/pprof v0.0.0-20211214055906-6f57359322fd // indirect
 	github.com/gookit/color v1.5.2 // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
@@ -103,9 +100,10 @@ require (
 	github.com/valyala/histogram v1.2.0 // indirect
 	github.com/xo/terminfo v0.0.0-20210125001918-ca9a967f8778 // indirect
 	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
-	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519 // indirect
+	golang.org/x/crypto v0.1.0 // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
-	golang.org/x/text v0.3.7 // indirect
+	golang.org/x/text v0.7.0 // indirect
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	howett.net/plist v1.0.0 // indirect

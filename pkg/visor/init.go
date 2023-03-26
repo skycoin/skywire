@@ -388,7 +388,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 		printLog = true
 	}
 
-	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.CustomDmsgHTTPPath, printLog)
+	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, printLog)
 
 	lis, err := dmsgC.Listen(visorconfig.DmsgHTTPPort)
 	if err != nil {
@@ -434,7 +434,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 }
 
 func initSystemSurvey(ctx context.Context, v *Visor, log *logging.Logger) error {
-	go visorconfig.GenerateSurvey(v.conf, log, v.rawSurvey)
+	go visorconfig.GenerateSurvey(v.conf, log, true, v.rawSurvey)
 	return nil
 }
 
@@ -1007,7 +1007,7 @@ func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Launcher
 
 	// Prepare proc manager.
-	procM, err := appserver.NewProcManager(v.MasterLogger(), &v.serviceDisc, v.ebc, conf.ServerAddr)
+	procM, err := appserver.NewProcManager(v.MasterLogger(), &v.serviceDisc, v.ebc, conf.ServerAddr, v.conf.LocalPath)
 	if err != nil {
 		err := fmt.Errorf("failed to start proc_manager: %w", err)
 		return err

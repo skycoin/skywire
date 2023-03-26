@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -47,7 +46,6 @@ type API interface {
 	Restart() error
 	Reload() error
 	Shutdown() error
-	Exec(command string) ([]byte, error)
 	RuntimeLogs() (string, error)
 	RemoteVisors() ([]string, error)
 	GetLogRotationInterval() (visorconfig.Duration, error)
@@ -77,6 +75,7 @@ type API interface {
 	SetAppKillswitch(appName string, killswitch bool) error
 	SetAppNetworkInterface(appName string, netifc string) error
 	SetAppDNS(appName string, dnsaddr string) error
+	DoCustomSetting(appName string, customSetting map[string]string) error
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)
@@ -90,6 +89,7 @@ type API interface {
 	//skysocks-client controls
 	StartSkysocksClient(pk string) error
 	StopSkysocksClient() error
+	ProxyServers(version, country string) ([]servicedisc.Service, error)
 
 	//transports
 	TransportTypes() ([]string, error)
@@ -177,11 +177,16 @@ func (v *Visor) Overview() (*Overview, error) {
 		}
 	}
 
+	apps := []*appserver.AppState{}
+	if v.appL != nil {
+		apps = v.appL.AppStates()
+	}
+
 	overview := &Overview{
 		PubKey:          v.conf.PK,
 		BuildInfo:       buildinfo.Get(),
 		AppProtoVersion: supportedProtocolVersion,
-		Apps:            v.appL.AppStates(),
+		Apps:            apps,
 		Transports:      tSummaries,
 		RoutesCount:     v.router.RoutesCount(),
 		PublicIP:        publicIP,
@@ -357,7 +362,7 @@ func (v *Visor) SetRewardAddress(p string) (string, error) {
 		return p, fmt.Errorf("failed to write config to file. err=%v", err)
 	}
 	// generate survey after set/update reward address
-	visorconfig.GenerateSurvey(v.conf, v.log, v.rawSurvey)
+	visorconfig.GenerateSurvey(v.conf, v.log, false, v.rawSurvey)
 	return p, nil
 }
 
@@ -395,11 +400,19 @@ func (v *Visor) DeleteRewardAddress() error {
 
 // Apps implements API.
 func (v *Visor) Apps() ([]*appserver.AppState, error) {
+	// check app launcher availability
+	if v.appL == nil {
+		return nil, ErrAppLauncherNotAvailable
+	}
 	return v.appL.AppStates(), nil
 }
 
 // App implements API.
 func (v *Visor) App(appName string) (*appserver.AppState, error) {
+	// check app launcher availability
+	if v.appL == nil {
+		return nil, ErrAppLauncherNotAvailable
+	}
 	appState, ok := v.appL.AppState(appName)
 	if !ok {
 		return &appserver.AppState{}, ErrAppProcNotRunning
@@ -414,6 +427,10 @@ func (v *Visor) SkybianBuildVersion() string {
 
 // StartApp implements API.
 func (v *Visor) StartApp(appName string) error {
+	// check app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
 	var envs []string
 	var err error
 	if appName == visorconfig.VPNClientName {
@@ -443,7 +460,10 @@ func (v *Visor) StartApp(appName string) error {
 
 // RegisterApp implements API.
 func (v *Visor) RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error) {
-	// check process manager availability
+	// check process manager and app launcher availability
+	if v.appL == nil {
+		return appcommon.ProcKey{}, ErrAppLauncherNotAvailable
+	}
 	if v.procM != nil {
 		return v.appL.RegisterApp(procConf)
 	}
@@ -452,7 +472,10 @@ func (v *Visor) RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, e
 
 // DeregisterApp implements API.
 func (v *Visor) DeregisterApp(procKey appcommon.ProcKey) error {
-	// check process manager availability
+	// check process manager and app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
 	if v.procM != nil {
 		return v.appL.DeregisterApp(procKey)
 	}
@@ -461,7 +484,10 @@ func (v *Visor) DeregisterApp(procKey appcommon.ProcKey) error {
 
 // StopApp implements API.
 func (v *Visor) StopApp(appName string) error {
-	// check process manager availability
+	// check process manager and app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
 	if v.procM != nil {
 		_, err := v.appL.StopApp(appName) //nolint:errcheck
 		return err
@@ -476,7 +502,10 @@ func (v *Visor) StartVPNClient(pk cipher.PubKey) error {
 	if v.tpM == nil {
 		return ErrTrpMangerNotAvailable
 	}
-
+	// check app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
 	if len(v.conf.Launcher.Apps) == 0 {
 		return errors.New("no vpn app configuration found")
 	}
@@ -509,7 +538,10 @@ func (v *Visor) StartVPNClient(pk cipher.PubKey) error {
 
 // StopVPNClient implements API.
 func (v *Visor) StopVPNClient(appName string) error {
-	// check process manager availability
+	// check process manager and app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
 	if v.procM != nil {
 		_, err := v.appL.StopApp(appName) //nolint:errcheck
 		return err
@@ -523,7 +555,10 @@ func (v *Visor) StartSkysocksClient(serverKey string) error {
 	if v.tpM == nil {
 		return ErrTrpMangerNotAvailable
 	}
-
+	// check app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
 	if len(v.conf.Launcher.Apps) == 0 {
 		return errors.New("no skysocks-client app configuration found")
 	}
@@ -564,7 +599,10 @@ func (v *Visor) StartSkysocksClient(serverKey string) error {
 
 // StopSkysocksClient implements API.
 func (v *Visor) StopSkysocksClient() error {
-	// check process manager availability
+	// check process manager and app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
 	if v.procM != nil {
 		_, err := v.appL.StopApp(visorconfig.SkysocksClientName) //nolint:errcheck
 		return err
@@ -599,9 +637,14 @@ func (v *Visor) SetAppError(appName, appErr string) error {
 
 // RestartApp implements API.
 func (v *Visor) RestartApp(appName string) error {
+	// check app launcher availability
+	if v.appL == nil {
+		v.log.Warn("app launcher not ready yet")
+		return ErrAppLauncherNotAvailable
+	}
 	if _, ok := v.procM.ProcByName(appName); ok { //nolint:errcheck
 		v.log.Infof("Updated %v password, restarting it", appName)
-		return v.appL.RestartApp(appName)
+		return v.appL.RestartApp(appName, appName)
 	}
 
 	return nil
@@ -609,6 +652,11 @@ func (v *Visor) RestartApp(appName string) error {
 
 // SetAutoStart implements API.
 func (v *Visor) SetAutoStart(appName string, autoStart bool) error {
+	// check app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
+
 	if _, ok := v.appL.AppState(appName); !ok {
 		return ErrAppProcNotRunning
 	}
@@ -619,6 +667,10 @@ func (v *Visor) SetAutoStart(appName string, autoStart bool) error {
 
 // SetAppPassword implements API.
 func (v *Visor) SetAppPassword(appName, password string) error {
+	// check app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
 	allowedToChangePassword := func(appName string) bool {
 		allowedApps := map[string]struct{}{
 			visorconfig.SkysocksName:  {},
@@ -650,6 +702,11 @@ func (v *Visor) SetAppPassword(appName, password string) error {
 
 // SetAppNetworkInterface implements API.
 func (v *Visor) SetAppNetworkInterface(appName, netifc string) error {
+	// check app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
+
 	if visorconfig.VPNServerName != appName {
 		return fmt.Errorf("app %s is not allowed to set network interface", appName)
 	}
@@ -670,6 +727,11 @@ func (v *Visor) SetAppNetworkInterface(appName, netifc string) error {
 
 // SetAppKillswitch implements API.
 func (v *Visor) SetAppKillswitch(appName string, killswitch bool) error {
+	// check app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
+
 	if appName != visorconfig.VPNClientName {
 		return fmt.Errorf("app %s is not allowed to set killswitch", appName)
 	}
@@ -767,6 +829,29 @@ func (v *Visor) SetAppDNS(appName string, dnsAddr string) error {
 	return nil
 }
 
+// DoCustomSetting implents API.
+func (v *Visor) DoCustomSetting(appName string, customSetting map[string]string) error {
+
+	v.log.Infof("Changing %s Settings to %q", appName, customSetting)
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
+	if err := v.conf.DeleteAppArg(v.appL, appName); err != nil {
+		v.log.Warn("An error occurs deleting old arguments.")
+		return err
+	}
+
+	for field, value := range customSetting {
+		if err := v.conf.UpdateAppArg(v.appL, appName, fmt.Sprintf("-%s", field), value); err != nil {
+			return err
+		}
+	}
+
+	v.log.Info("Updated Settings.")
+
+	return nil
+}
+
 // LogsSince implements API.
 func (v *Visor) LogsSince(timestamp time.Time, appName string) ([]string, error) {
 	proc, ok := v.procM.ProcByName(appName)
@@ -830,6 +915,27 @@ func (v *Visor) VPNServers(version, country string) ([]servicedisc.Service, erro
 		return nil, err
 	}
 	return vpnServers, nil
+}
+
+// ProxyServers gets available public VPN server from service discovery URL
+func (v *Visor) ProxyServers(version, country string) ([]servicedisc.Service, error) {
+	log := logging.MustGetLogger("proxyservers")
+	vLog := logging.NewMasterLogger()
+	vLog.SetLevel(logrus.InfoLevel)
+
+	sdClient := servicedisc.NewClient(log, vLog, servicedisc.Config{
+		Type:          servicedisc.ServiceTypeProxy,
+		PK:            v.conf.PK,
+		SK:            v.conf.SK,
+		DiscAddr:      v.conf.Launcher.ServiceDisc,
+		DisplayNodeIP: v.conf.Launcher.DisplayNodeIP,
+	}, &http.Client{Timeout: time.Duration(20) * time.Second}, "")
+	proxyServers, err := sdClient.Services(context.Background(), 0, version, country)
+	if err != nil {
+		v.log.Error("Error getting public vpn servers: ", err)
+		return nil, err
+	}
+	return proxyServers, nil
 }
 
 // PublicVisors gets available public public visors from service discovery URL
@@ -1270,14 +1376,6 @@ func (v *Visor) Shutdown() error {
 	}
 	defer os.Exit(0)
 	return v.Close()
-}
-
-// Exec implements API.
-// Exec executes a shell command. It returns combined stdout and stderr output and an error.
-func (v *Visor) Exec(command string) ([]byte, error) {
-	args := strings.Split(command, " ")
-	cmd := exec.Command(args[0], args[1:]...) // nolint: gosec
-	return cmd.CombinedOutput()
 }
 
 // RuntimeLogs returns visor runtime logs
