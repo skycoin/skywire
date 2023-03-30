@@ -107,11 +107,11 @@ func (ms MessengerService) Handle(pk cipher.PubKey) {
 			fmt.Println("---------------------------------------------------------------------------------------------------")
 
 			if jm.GetDestinationVisor() == localPK && jm.GetDestinationServer() == localPK && jm.GetDestinationRoom() == localPK && jm.GetRootVisor() == jm.GetRootServer() && jm.GetRootServer() == jm.GetRootRoom() {
-				err = ms.handleP2PMessage(jm)
+				go ms.handleP2PMessage(jm)
 			} else if jm.GetRootVisor() != jm.GetRootServer() && jm.GetRootServer() != jm.GetRootRoom() {
-				err = ms.handleRemoteServerMessage(jm)
+				go ms.handleRemoteServerMessage(jm)
 			} else if jm.GetDestinationVisor() == localPK && jm.GetDestinationVisor() != jm.GetDestinationServer() && jm.GetDestinationServer() != jm.GetDestinationRoom() {
-				err = ms.handleLocalServerMessage(jm)
+				go ms.handleLocalServerMessage(jm)
 			} else {
 				fmt.Println("received message that can't be matched to remote or local server or p2p chat")
 			}
