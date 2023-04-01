@@ -71,9 +71,9 @@ function build_installer() {
   cp ${mac_script_dir}/Entitlements.plist ${installer_build_dir}/entitlements.plist
 
   cp ${mac_script_dir}/icon.icns ${installer_package_dir}/Contents/Resources/icon.icns
-  mv ./build/skywire-visor ${installer_package_dir}/Contents/MacOS/skywire-visor
+  mv ./skywire-visor ${installer_package_dir}/Contents/MacOS/skywire-visor
   mv ./skywire-cli ${installer_package_dir}/Contents/MacOS/skywire-cli
-  mv ./build/apps/vpn-client ${installer_package_dir}/Contents/MacOS/apps/vpn-client
+  mv ./apps/vpn-client ${installer_package_dir}/Contents/MacOS/apps/vpn-client
   cp ./dmsghttp-config.json ${installer_package_dir}/Contents/MacOS/dmsghttp-config.json
   cp ./skycoin.asc ${installer_package_dir}/Contents/MacOS/skycoin.asc
 
