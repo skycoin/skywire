@@ -49,11 +49,7 @@ func (r *VisorRepo) GetAll() ([]chat.Visor, error) {
 
 // Add adds the provided visor to the repository
 func (r *VisorRepo) Add(visor chat.Visor) error {
-	r.visorsMu.Lock()
-	defer r.visorsMu.Unlock()
-
-	r.visors[visor.GetPK()] = visor
-	return nil
+	return r.Set(visor)
 }
 
 // Set sets the provided visor
