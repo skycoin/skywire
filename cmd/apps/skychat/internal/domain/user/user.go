@@ -11,39 +11,39 @@ import (
 
 // User defines the user
 type User struct {
-	info     info.Info         // the info of the local user
-	settings settings.Settings // the settings of the local user
-	peerbook peer.Peerbook     // the contactsbook of the local user
+	Info     info.Info         // the info of the local user
+	Settings settings.Settings // the settings of the local user
+	Peerbook peer.Peerbook     // the contactsbook of the local user
 }
 
 // GetInfo gets the user info
 func (u *User) GetInfo() *info.Info {
-	return &u.info
+	return &u.Info
 }
 
 // GetSettings returns *settings.Settings
 func (u *User) GetSettings() *settings.Settings {
-	return &u.settings
+	return &u.Settings
 }
 
 // GetPeerbook returns the peerbook
 func (u *User) GetPeerbook() *peer.Peerbook {
-	return &u.peerbook
+	return &u.Peerbook
 }
 
 // SetInfo sets the user's info
 func (u *User) SetInfo(i info.Info) {
-	u.info = i
+	u.Info = i
 }
 
 // SetSettings applies settings
 func (u *User) SetSettings(s settings.Settings) {
-	u.settings = s
+	u.Settings = s
 }
 
 // SetPeerbook sets the peerbook
 func (u *User) SetPeerbook(p peer.Peerbook) {
-	u.peerbook = p
+	u.Peerbook = p
 }
 
 // NewDefaultUser returns *User
@@ -51,15 +51,15 @@ func NewDefaultUser() *User {
 	fmt.Println("user - NewDefaultUser")
 	u := User{}
 
-	u.info = info.NewDefaultInfo()
-	u.settings = settings.NewDefaultSettings()
+	u.Info = info.NewDefaultInfo()
+	u.Settings = settings.NewDefaultSettings()
 
 	return &u
 }
 
 // IsEmpty checks if the user is empty
 func (u *User) IsEmpty() bool {
-	if u.info.IsEmpty() && u.settings.IsEmpty() {
+	if u.Info.IsEmpty() && u.Settings.IsEmpty() {
 		return true
 	}
 	return false
