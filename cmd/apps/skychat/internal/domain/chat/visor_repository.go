@@ -12,4 +12,6 @@ type Repository interface {
 	Add(v Visor) error
 	Set(v Visor) error
 	Delete(pk cipher.PubKey) error
+
+	Close() error
 }

@@ -53,3 +53,8 @@ func (r *UserRepo) SetUser(user *user.User) error {
 	r.user = *user
 	return nil
 }
+
+// Close does nothing in memory package
+func (r *UserRepo) Close() error {
+	return nil
+}

@@ -6,4 +6,5 @@ type Repository interface {
 	New() (Client, error)
 	GetClient() (*Client, error)
 	SetClient(c Client) error
+	Close() error
 }

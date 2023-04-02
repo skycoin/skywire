@@ -73,3 +73,8 @@ func (r *VisorRepo) Delete(pk cipher.PubKey) error {
 	delete(r.visors, pk)
 	return nil
 }
+
+// Close does nothing in memory package
+func (r *VisorRepo) Close() error {
+	return nil
+}

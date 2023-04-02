@@ -57,3 +57,8 @@ func (r *ClientRepo) SetClient(client client.Client) error {
 	r.client = client
 	return nil
 }
+
+// Close does nothing in memory package
+func (r *ClientRepo) Close() error {
+	return nil
+}

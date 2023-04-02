@@ -5,4 +5,6 @@ package user
 type Repository interface {
 	GetUser() (*User, error)
 	SetUser(u *User) error
+
+	Close() error
 }
