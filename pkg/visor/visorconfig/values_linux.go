@@ -5,6 +5,7 @@ package visorconfig
 
 import (
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -58,7 +59,7 @@ func SystemSurvey() (Survey, error) {
 		return Survey{}, err
 	}
 	memory, err := ghw.Memory(ghw.WithDisableWarnings())
-	if err != nil {
+	if err != nil && !strings.Contains(err.Error(), "Could not determine total usable bytes of memory") {
 		return Survey{}, err
 	}
 	for {
