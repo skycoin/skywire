@@ -209,6 +209,19 @@ func (ms MessengerService) handleP2PConnMsgType(m message.Message) error {
 		}
 
 	case message.ConnMsgTypeReject:
+		//get the visor
+		v, err := ms.visorRepo.GetByPK(pkroute.Visor)
+		if err != nil {
+			return err
+		}
+
+		//add request message to visor route
+		v.AddMessage(pkroute, m)
+		err = ms.visorRepo.Set(*v)
+		if err != nil {
+			return err
+		}
+
 		n := notification.NewMsgNotification(pkroute, m)
 		err = ms.ns.Notify(n)
 		if err != nil {
