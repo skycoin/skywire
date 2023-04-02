@@ -5,7 +5,7 @@ package visorconfig
 
 import (
 	"runtime"
-	"string"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
