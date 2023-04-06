@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/visor/ping"
 )
 
 //go:generate mockery --name Router --case underscore --inpackage
@@ -331,13 +332,15 @@ func (r *router) PingRoute(
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, lPK, lPort, rPort)
 
-	// set up transport to remote via autotransport aka routeSetupHook
-	r.routeSetupHookMu.Lock()
-	defer r.routeSetupHookMu.Unlock()
-	if len(r.routeSetupHooks) != 0 {
-		for _, rsf := range r.routeSetupHooks {
-			if err := rsf(rPK, r.tm); err != nil {
-				return nil, err
+	if opts.AutoTransport {
+		// set up transport to remote via autotransport aka routeSetupHook
+		r.routeSetupHookMu.Lock()
+		defer r.routeSetupHookMu.Unlock()
+		if len(r.routeSetupHooks) != 0 {
+			for _, rsf := range r.routeSetupHooks {
+				if err := rsf(rPK, r.tm); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
@@ -345,7 +348,7 @@ func (r *router) PingRoute(
 	// check if transports are available
 	ok := r.checkIfTransportAvailable()
 	if !ok {
-		return nil, ErrNoTransportFound
+		return nil, ping.ErrNoTransportFound
 	}
 	forwardPath, reversePath, err := r.fetchPingRoute(lPK, rPK, opts)
 	if err != nil {
