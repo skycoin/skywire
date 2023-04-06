@@ -1148,6 +1148,7 @@ type PingConfig struct {
 	Tries       int
 	PcktSize    int
 	PubVisCount int
+	AutoTp      bool
 }
 
 // DialPing implements API.
@@ -1171,7 +1172,7 @@ func (v *Visor) DialPing(conf PingConfig) error {
 	ctx := context.TODO()
 	var r = netutil.NewRetrier(v.log, 2*time.Second, netutil.DefaultMaxBackoff, 1, 2)
 	err = r.Do(ctx, func() error {
-		conn, err = appnet.Ping(conf.PK, addr)
+		conn, err = appnet.Ping(conf.PK, addr, conf.AutoTp)
 		return err
 	})
 	if err != nil {

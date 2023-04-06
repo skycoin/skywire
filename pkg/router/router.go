@@ -98,6 +98,7 @@ type DialOptions struct {
 	MaxForwardRts int
 	MinConsumeRts int
 	MaxConsumeRts int
+	AutoTransport bool
 }
 
 // DefaultDialOptions returns default dial options.
@@ -108,6 +109,7 @@ func DefaultDialOptions() *DialOptions {
 		MaxForwardRts: 1,
 		MinConsumeRts: 1,
 		MaxConsumeRts: 1,
+		AutoTransport: true,
 	}
 }
 
@@ -246,6 +248,7 @@ func (r *router) DialRoutes(
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, lPort, rPort)
 
+	// set up transport to remote via autotransport aka routeSetupHook
 	r.routeSetupHookMu.Lock()
 	defer r.routeSetupHookMu.Unlock()
 	if len(r.routeSetupHooks) != 0 {
@@ -328,6 +331,7 @@ func (r *router) PingRoute(
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, lPK, lPort, rPort)
 
+	// set up transport to remote via autotransport aka routeSetupHook
 	r.routeSetupHookMu.Lock()
 	defer r.routeSetupHookMu.Unlock()
 	if len(r.routeSetupHooks) != 0 {

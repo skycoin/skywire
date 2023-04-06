@@ -29,7 +29,7 @@ func (n *DmsgNetworker) Dial(addr Addr) (net.Conn, error) {
 }
 
 // Ping dials remote `addr` via dmsg network.
-func (n *DmsgNetworker) Ping(pk cipher.PubKey, addr Addr) (net.Conn, error) {
+func (n *DmsgNetworker) Ping(pk cipher.PubKey, addr Addr, autoTp bool) (net.Conn, error) {
 	return nil, fmt.Errorf("Ping not available on dmsg network")
 }
 
