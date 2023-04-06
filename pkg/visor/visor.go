@@ -37,6 +37,7 @@ import (
 	"github.com/skycoin/skywire/pkg/utclient"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
+	"github.com/skycoin/skywire/pkg/visor/ping"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorinit"
 )
@@ -113,7 +114,7 @@ type Visor struct {
 	allowedPorts         map[int]bool
 	allowedMX            *sync.RWMutex
 
-	pingConns    map[cipher.PubKey]ping
+	pingConns    map[cipher.PubKey]ping.Conn
 	pingConnMx   *sync.Mutex
 	pingPcktSize int
 
@@ -258,7 +259,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		dtmReady:             make(chan struct{}),
 		stunReady:            make(chan struct{}),
 		connectedHypervisors: make(map[cipher.PubKey]bool),
-		pingConns:            make(map[cipher.PubKey]ping),
+		pingConns:            make(map[cipher.PubKey]ping.Conn),
 		pingConnMx:           new(sync.Mutex),
 		allowedPorts:         make(map[int]bool),
 		rawSurvey:            rawSurvey,

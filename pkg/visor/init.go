@@ -53,6 +53,7 @@ import (
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
+	"github.com/skycoin/skywire/pkg/visor/ping"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	vinit "github.com/skycoin/skywire/pkg/visor/visorinit"
 )
@@ -826,7 +827,7 @@ func handlePingConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 			}
 			return
 		}
-		var size PingSizeMsg
+		var size ping.SizeMsg
 		err = json.Unmarshal(buf[:n], &size)
 		if err != nil {
 			log.WithError(err).Error("Failed to unmarshal json")
@@ -838,8 +839,8 @@ func handlePingConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 			log.WithError(err).Error("Failed to write message")
 			return
 		}
-		var ping []byte
-		for len(ping) != size.Size {
+		var p []byte
+		for len(p) != size.Size {
 			n, err = remoteConn.Read(buf)
 			if err != nil {
 				if !errors.Is(err, io.EOF) {
@@ -847,17 +848,17 @@ func handlePingConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 				}
 				return
 			}
-			ping = append(ping, buf[:n]...)
+			p = append(p, buf[:n]...)
 		}
-		var msg PingMsg
-		err = json.Unmarshal(ping, &msg)
+		var msg ping.Msg
+		err = json.Unmarshal(p, &msg)
 		if err != nil {
 			log.WithError(err).Error("Failed to unmarshal json")
 			return
 		}
 		now := time.Now()
 		diff := now.Sub(msg.Timestamp)
-		v.pingConns[msg.PingPk].latency <- diff
+		v.pingConns[msg.PingPk].Latency <- diff
 
 		log.Debugf("Received: %s", buf[:n])
 	}
