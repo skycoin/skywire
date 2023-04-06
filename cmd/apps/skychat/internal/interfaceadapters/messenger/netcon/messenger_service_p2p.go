@@ -12,7 +12,7 @@ import (
 )
 
 // handleP2PMessage handles messages received as direct message
-func (ms MessengerService) handleP2PMessage(m message.Message) error {
+func (ms MessengerService) handleP2PMessage(m message.Message) {
 	fmt.Println("handleP2PMessage")
 
 	pkroute := util.NewP2PRoute(m.Root.Visor)
@@ -22,15 +22,17 @@ func (ms MessengerService) handleP2PMessage(m message.Message) error {
 	if m.GetMessageType() == message.ConnMsgType {
 		err := ms.handleP2PConnMsgType(m)
 		if err != nil {
-			return err
+			ms.errs <- err
+			return
 		}
-		return nil
+		return
 	}
 	//if the message is not of type ConnMsgType check if the remote pk is blacklisted
 	// to prevent a peer from sending other messages before a connection-request message
 	usr, err := ms.usrRepo.GetUser()
 	if err != nil {
-		return err
+		ms.errs <- err
+		return
 	}
 
 	//the p2p route of the user
@@ -41,15 +43,18 @@ func (ms MessengerService) handleP2PMessage(m message.Message) error {
 	if usr.GetSettings().InBlacklist(pkroute.Visor) {
 		err = ms.SendChatRejectMessage(root, dest)
 		if err != nil {
-			return err
+			ms.errs <- err
+			return
 		}
-		return fmt.Errorf("Message rejected from " + m.Root.Visor.String())
+		ms.errs <- fmt.Errorf("Message rejected from " + m.Root.Visor.String())
+		return
 	}
 
 	//get the current p2p-room so when updating nothing gets overwritten
 	visor, err := ms.visorRepo.GetByPK(m.Root.Visor)
 	if err != nil {
-		return err
+		ms.errs <- err
+		return
 	}
 
 	//now we can handle all other message-types
@@ -59,7 +64,8 @@ func (ms MessengerService) handleP2PMessage(m message.Message) error {
 		visor.AddMessage(pkroute, m)
 		err = ms.visorRepo.Set(*visor)
 		if err != nil {
-			return err
+			ms.errs <- err
+			return
 		}
 		//handle the message
 		err = ms.handleP2PInfoMsgType(visor, m)
@@ -71,19 +77,22 @@ func (ms MessengerService) handleP2PMessage(m message.Message) error {
 		visor.AddMessage(pkroute, m)
 		err = ms.visorRepo.Set(*visor)
 		if err != nil {
-			return err
+			ms.errs <- err
+			return
 		}
 		//handle the message
 		err := ms.handleP2PTextMsgType(m)
 		if err != nil {
-			return err
+			ms.errs <- err
+			return
 		}
 	case message.CmdMsgType:
-		return fmt.Errorf("commands are not allowed on p2p chats")
+		ms.errs <- fmt.Errorf("commands are not allowed on p2p chats")
+		return
 	default:
-		return fmt.Errorf("incorrect data received")
+		ms.errs <- fmt.Errorf("incorrect data received")
+		return
 	}
-	return nil
 
 }
 

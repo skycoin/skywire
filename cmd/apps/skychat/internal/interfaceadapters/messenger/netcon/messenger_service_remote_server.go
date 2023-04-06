@@ -14,7 +14,7 @@ import (
 )
 
 // handleRemoteServerMessage handles all messages from a remote server/room
-func (ms MessengerService) handleRemoteServerMessage(m message.Message) error {
+func (ms MessengerService) handleRemoteServerMessage(m message.Message) {
 	fmt.Println("handleRemoteServerMessage")
 
 	pkroute := util.NewRoomRoute(m.GetRootVisor(), m.GetRootServer(), m.GetRootRoom())
@@ -22,11 +22,13 @@ func (ms MessengerService) handleRemoteServerMessage(m message.Message) error {
 	//check if we are member of remote server -> if not ignore message
 	visor, err := ms.visorRepo.GetByPK(pkroute.Visor)
 	if err != nil {
-		return fmt.Errorf("message dumped: no member of remote, visor not even known")
+		ms.errs <- fmt.Errorf("message dumped: no member of remote, visor not even known")
+		return
 	}
 	_, err = visor.GetServerByPK(pkroute.Server)
 	if err != nil {
-		return fmt.Errorf("message dumped: no member of remote server")
+		ms.errs <- fmt.Errorf("message dumped: no member of remote server")
+		return
 	}
 
 	switch m.GetMessageType() {
@@ -35,7 +37,8 @@ func (ms MessengerService) handleRemoteServerMessage(m message.Message) error {
 		visor.AddMessage(pkroute, m)
 		err = ms.visorRepo.Set(*visor)
 		if err != nil {
-			return err
+			ms.errs <- err
+			return
 		}
 		//handle the message
 		err = ms.handleRemoteRoomConnMsgType(m)
@@ -47,7 +50,8 @@ func (ms MessengerService) handleRemoteServerMessage(m message.Message) error {
 		visor.AddMessage(pkroute, m)
 		err = ms.visorRepo.Set(*visor)
 		if err != nil {
-			return err
+			ms.errs <- err
+			return
 		}
 		//handle the message
 		err = ms.handleRemoteRoomInfoMsgType(visor, m)
@@ -59,20 +63,23 @@ func (ms MessengerService) handleRemoteServerMessage(m message.Message) error {
 		visor.AddMessage(pkroute, m)
 		err = ms.visorRepo.Set(*visor)
 		if err != nil {
-			return err
+			ms.errs <- err
+			return
 		}
 		//handle the message
 		err := ms.handleRemoteRoomTextMsgType(visor, m)
 		if err != nil {
-			return err
+			ms.errs <- err
+			return
 		}
 	case message.CmdMsgType:
-		return fmt.Errorf("commands are not allowed on p2p chats")
+		ms.errs <- fmt.Errorf("commands are not allowed on p2p chats")
+		return
 	default:
-		return fmt.Errorf("incorrect data received")
+		ms.errs <- fmt.Errorf("incorrect data received")
+		return
 
 	}
-	return nil
 }
 
 // handleRemoteRoomConnMsgType handles all messages of type ConnMsgtype of remote servers

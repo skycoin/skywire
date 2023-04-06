@@ -16,7 +16,7 @@ import (
 
 // handleLocalServerMessage handles messages received to a local route (server/room)
 // these can also be locally sent messages from the user to his own local route
-func (ms MessengerService) handleLocalServerMessage(m message.Message) error {
+func (ms MessengerService) handleLocalServerMessage(m message.Message) {
 	fmt.Println("handleLocalServerMessage")
 
 	pkroute := util.NewRoomRoute(m.GetDestinationVisor(), m.GetDestinationServer(), m.GetDestinationRoom())
@@ -24,13 +24,15 @@ func (ms MessengerService) handleLocalServerMessage(m message.Message) error {
 	//Check if visor exists
 	visor, err := ms.visorRepo.GetByPK(m.Dest.Visor)
 	if err != nil {
-		return err
+		ms.errs <- err
+		return
 	}
 
 	//Check if server exists
 	server, err := visor.GetServerByPK(m.Dest.Server)
 	if err != nil {
-		return err
+		ms.errs <- err
+		return
 	}
 
 	//check if the message is of type ConnMsgType
@@ -38,9 +40,10 @@ func (ms MessengerService) handleLocalServerMessage(m message.Message) error {
 	if m.GetMessageType() == message.ConnMsgType {
 		err := ms.handleLocalServerConnMsgType(visor, m)
 		if err != nil {
-			return err
+			ms.errs <- err
+			return
 		}
-		return nil
+		return
 	}
 
 	//the root route of this server
@@ -54,24 +57,28 @@ func (ms MessengerService) handleLocalServerMessage(m message.Message) error {
 	if !isServerMember || isInServerBlacklist {
 		err = ms.SendChatRejectMessage(root, dest)
 		if err != nil {
-			return fmt.Errorf("error sending reject message: %s", err)
+			ms.errs <- fmt.Errorf("error sending reject message: %s", err)
+			return
 		}
-		return fmt.Errorf("message rejected from " + m.Root.Visor.String() + "isServerMember: " + strconv.FormatBool(isServerMember) + "isInServerBlacklist: " + strconv.FormatBool(isInServerBlacklist))
+		ms.errs <- fmt.Errorf("message rejected from " + m.Root.Visor.String() + "isServerMember: " + strconv.FormatBool(isServerMember) + "isInServerBlacklist: " + strconv.FormatBool(isInServerBlacklist))
+		return
 	}
 
 	//handle Command Messages
 	if m.GetMessageType() == message.CmdMsgType {
 		err := ms.handleLocalServerCmdMsgType(visor, m)
 		if err != nil {
-			return err
+			ms.errs <- err
+			return
 		}
-		return nil
+		return
 	}
 
 	//Check if room exists
 	room, err := server.GetRoomByPK(pkroute.Room)
 	if err != nil {
-		return err
+		ms.errs <- err
+		return
 	}
 
 	//check if origin of message is in blacklist or not member of room
@@ -80,10 +87,11 @@ func (ms MessengerService) handleLocalServerMessage(m message.Message) error {
 	if !isRoomMember || isInRoomBlacklist {
 		err = ms.SendChatRejectMessage(root, dest)
 		if err != nil {
-			return fmt.Errorf("error sending reject message: %s", err)
+			ms.errs <- fmt.Errorf("error sending reject message: %s", err)
+			return
 		}
-		return fmt.Errorf("message rejected from " + m.Root.Visor.String() + "isRoomMember: " + strconv.FormatBool(isRoomMember) + "isInRoomBlacklist: " + strconv.FormatBool(isInRoomBlacklist))
-
+		ms.errs <- fmt.Errorf("message rejected from " + m.Root.Visor.String() + "isRoomMember: " + strconv.FormatBool(isRoomMember) + "isInRoomBlacklist: " + strconv.FormatBool(isInRoomBlacklist))
+		return
 	}
 
 	//now we can handle all other message-types
@@ -93,7 +101,8 @@ func (ms MessengerService) handleLocalServerMessage(m message.Message) error {
 		visor.AddMessage(pkroute, m)
 		err = ms.visorRepo.Set(*visor)
 		if err != nil {
-			return err
+			ms.errs <- err
+			return
 		}
 		//handle the message
 		err = ms.handleLocalServerInfoMsgType(visor, m)
@@ -105,18 +114,20 @@ func (ms MessengerService) handleLocalServerMessage(m message.Message) error {
 		visor.AddMessage(pkroute, m)
 		err = ms.visorRepo.Set(*visor)
 		if err != nil {
-			return err
+			ms.errs <- err
+			return
 		}
 		//handle the message
 		err := ms.handleLocalRoomTextMsgType(visor, m)
 		if err != nil {
-			return err
+			ms.errs <- err
+			return
 		}
 	default:
-		return fmt.Errorf("incorrect data received")
+		ms.errs <- fmt.Errorf("incorrect data received")
+		return
 
 	}
-	return nil
 }
 
 // handleLocalServerConnMsgType handles an incoming connection message and either accepts it and sends back the own info as message
@@ -379,6 +390,7 @@ func (ms MessengerService) handleLocalServerCmdMsgType(visor *chat.Visor, m mess
 			return fmt.Errorf("command not accepted, no admin")
 		}
 
+		//TODO: really delete room from server and update visor in reposiory
 		//prepare NewRooomDeletedMessage and send it to all members
 		msg := message.NewRouteDeletedMessage(pkroute, pkroute)
 

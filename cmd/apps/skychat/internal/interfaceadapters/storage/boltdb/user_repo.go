@@ -11,6 +11,7 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/user"
 )
 
+// USERBUCKET defines the key for the users bucket
 const USERBUCKET = "users"
 
 // UserRepo Implements the Repository Interface to provide an in-memory storage provider
@@ -28,11 +29,10 @@ func NewUserRepo(pk cipher.PubKey) *UserRepo {
 		fmt.Println(err.Error())
 	}
 	r.db = db
-	//defer db.Close()
 
 	r.pk = pk
 
-	r.NewUser()
+	err = r.NewUser()
 	if err != nil {
 		fmt.Println(err)
 	}

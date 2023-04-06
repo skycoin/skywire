@@ -17,8 +17,7 @@ type UserRepo struct {
 func NewUserRepo(pk cipher.PubKey) *UserRepo {
 	r := UserRepo{}
 
-	var err error
-	err = r.NewUser()
+	err := r.NewUser()
 	r.user.GetInfo().SetPK(pk)
 	if err != nil {
 		fmt.Println(err)

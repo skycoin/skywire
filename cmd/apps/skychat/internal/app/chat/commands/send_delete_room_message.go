@@ -1,4 +1,4 @@
-// Package commands contains commands to send text message
+// Package commands contains commands to send delete room message
 package commands
 
 import (

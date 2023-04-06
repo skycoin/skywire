@@ -1,3 +1,4 @@
+// Package commands contains commands to delete local route
 package commands
 
 import (

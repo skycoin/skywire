@@ -1,4 +1,4 @@
-// Package commands contains commands to send text message
+// Package commands contains commands to send unmute peer message
 package commands
 
 import (
