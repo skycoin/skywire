@@ -210,7 +210,7 @@ func (m *procManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 			Debug("No app discovery associated with app.")
 	}
 
-	proc := NewProc(nil, conf, disc, m, conf.AppName, m.logStorePath)
+	proc := NewProc(m.mLog, conf, disc, m, conf.AppName, m.logStorePath)
 	m.procs[conf.AppName] = proc
 	m.procsByKey[conf.ProcKey] = proc
 
@@ -256,7 +256,7 @@ func (m *procManager) Register(conf appcommon.ProcConfig) (appcommon.ProcKey, er
 			Debug("No app discovery associated with app.")
 	}
 
-	proc := NewProc(nil, conf, disc, m, conf.AppName, m.logStorePath)
+	proc := NewProc(m.mLog, conf, disc, m, conf.AppName, m.logStorePath)
 	m.procs[conf.AppName] = proc
 	m.procsByKey[conf.ProcKey] = proc
 	go func() {
