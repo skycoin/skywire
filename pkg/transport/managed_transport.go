@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -340,18 +339,14 @@ func (mt *ManagedTransport) deleteFromDiscovery() error {
 	retrier := netutil.NewRetrier(mt.log, 1*time.Second, netutil.DefaultMaxBackoff, 5, 2)
 	return retrier.Do(context.Background(), func() error {
 		err := mt.dc.DeleteTransport(context.Background(), mt.Entry.ID)
-		mt.log.WithField("tp-id", mt.Entry.ID).WithError(err).Debug("Error deleting transport")
-		if netErr, ok := err.(net.Error); ok && netErr.Temporary() { // nolint
-			mt.log.
-				WithError(err).
-				WithField("timeout", true).
-				Warn("Failed to update transport status.")
+		if err != nil {
+			if httpErr, ok := err.(*httputil.HTTPError); ok && httpErr.Status == http.StatusNotFound {
+				return nil
+			}
+			mt.log.WithField("tp-id", mt.Entry.ID).WithError(err).Warn("Error deleting transport")
 			return err
 		}
-		if httpErr, ok := err.(*httputil.HTTPError); ok && httpErr.Status == http.StatusNotFound {
-			return nil
-		}
-		return err
+		return nil
 	})
 }
 
