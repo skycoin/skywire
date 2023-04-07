@@ -15,7 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
-//go:generate mockery -name Client -case underscore -inpkg
+//go:generate mockery --name Client --case underscore --inpackage
 
 const defaultContextTimeout = 10 * time.Second
 
