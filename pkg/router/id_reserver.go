@@ -17,7 +17,7 @@ import (
 // ErrNoKey is returned when key is not found.
 var ErrNoKey = errors.New("id reservoir has no key")
 
-//go:generate mockery -name IDReserver -case underscore -inpkg
+//go:generate mockery --name IDReserver --case underscore --inpackage
 
 // IDReserver reserves route IDs from remote routers.
 // It takes in a slice of paths where each path is a slice of hops and each hop has src and dst public keys and also a

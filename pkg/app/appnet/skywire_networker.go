@@ -89,7 +89,7 @@ func (r *SkywireNetworker) Ping(pk cipher.PubKey, addr Addr, autoTp bool) (net.C
 	}()
 	dialOpts := router.DefaultDialOptions()
 	dialOpts.AutoTransport = autoTp
-	conn, err := r.r.PingRoute(ctx, pk, routing.Port(localPort), addr.Port, dialOpts)
+	conn, err := r.r.DialPingRoute(ctx, pk, routing.Port(localPort), addr.Port, dialOpts)
 	if err != nil {
 		return nil, err
 	}

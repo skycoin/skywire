@@ -128,7 +128,7 @@ type Router interface {
 	// - Save to routing.Table and internal RouteGroup map.
 	// - Return RouteGroup if successful.
 	DialRoutes(ctx context.Context, rPK cipher.PubKey, lPort, rPort routing.Port, opts *DialOptions) (net.Conn, error)
-	PingRoute(ctx context.Context, rPK cipher.PubKey, lPort, rPort routing.Port, opts *DialOptions) (net.Conn, error)
+	DialPingRoute(ctx context.Context, rPK cipher.PubKey, lPort, rPort routing.Port, opts *DialOptions) (net.Conn, error)
 
 	// AcceptRoutes should block until we receive an AddRules packet from SetupNode
 	// that contains ConsumeRule(s) or ForwardRule(s).
@@ -308,7 +308,7 @@ func (r *router) DialRoutes(
 	return nrg, nil
 }
 
-// PingRoute dials to a given visor of 'rPK'.
+// DialPingRoute dials to a given visor of 'rPK'.
 // 'lPort'/'rPort' specifies the local/remote ports respectively.
 // A nil 'opts' input results in a value of '1' for all DialOptions fields.
 // A single call to DialRoutes should perform the following:
@@ -316,7 +316,7 @@ func (r *router) DialRoutes(
 // - Setup routes via SetupNode (in one call).
 // - Save to routing.Table and internal RouteGroup map.
 // - Return RouteGroup if successful.
-func (r *router) PingRoute(
+func (r *router) DialPingRoute(
 	ctx context.Context,
 	rPK cipher.PubKey,
 	lPort, rPort routing.Port,
