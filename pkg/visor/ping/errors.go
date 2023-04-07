@@ -16,7 +16,7 @@ var (
 	ErrNoTransportFound           = registerErr(Error{code: 201, msg: "no transport found on source node"})
 	ErrSessionClosed              = registerErr(Error{code: 202, msg: "no routes found to destination"})
 	ErrCannotConnectToDelegated   = registerErr(Error{code: 203, msg: "cannot connect to delegated server"})
-	ErrSessionHandshakeExtraBytes = registerErr(Error{code: 203, msg: "extra bytes received during session handshake"})
+	ErrSessionHandshakeExtraBytes = registerErr(Error{code: 204, msg: "extra bytes received during session handshake"})
 )
 
 // Errors for dial request/response (3xx).
