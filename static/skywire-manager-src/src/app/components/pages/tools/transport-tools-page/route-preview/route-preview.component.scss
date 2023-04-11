@@ -1,0 +1,52 @@
+@import "variables";
+
+.mat-mdc-dialog-content {
+  padding-top: 0 !important;
+
+}
+
+.explanation {
+  font-size: 10px;
+  margin: 15px 0;
+  opacity: 0.75;
+}
+
+.finish {
+  font-size: 10px;
+}
+
+.label {
+  color: $lighter-gray;
+}
+
+.border {
+  color: darkcyan !important;
+}
+
+.error {
+  color: red;
+}
+
+.warning {
+  color: orange;
+}
+
+.separator {
+  height: 1px;
+  background: black;
+  margin: 10px 0;
+}
+
+.topArea {
+  font-size: 12px;
+  color: $lighter-gray;
+
+  span {
+    font-size: 14px;
+    color: $black;
+  }
+}
+
+.note {
+  font-size: 12px;
+}

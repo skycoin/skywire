@@ -19,6 +19,7 @@ import { VpnStatusComponent } from './components/vpn/pages/vpn-status/vpn-status
 import { VpnErrorComponent } from './components/vpn/pages/vpn-error/vpn-error.component';
 import { VpnSettingsComponent } from './components/vpn/pages/vpn-settings/vpn-settings.component';
 import { VpnAuthGuardService } from './services/vpn-auth-guard.service';
+import { TransportToolsPageComponent } from './components/pages/tools/transport-tools-page/transport-tools-page.component';
 
 const routes: Routes = [
   {
@@ -123,6 +124,10 @@ const routes: Routes = [
         component: AllLabelsComponent
       },
     ],
+  },
+  {
+    path: 'tools/transports',
+    component: TransportToolsPageComponent
   },
   {
     path: 'vpnlogin/:key',

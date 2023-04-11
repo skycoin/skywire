@@ -1,0 +1,40 @@
+<app-dialog [headline]="'Connection Steps'" [includeScrollableArea]="false" [includeVerticalMargins]="false" [dialog]="dialogRef">
+  <mat-dialog-content>
+    <div class="topArea" *ngIf="!completeRoute">
+      Route if you create a transport to <span>{{data.PkForNewTransport}}</span> from <span>{{data.startPk}}</span> to connect to <span>{{data.destinationPk}}</span>.
+    </div>
+    <div class="topArea" *ngIf="completeRoute">
+      Already possible route from <span>{{data.startPk}}</span> to connect to <span>{{data.destinationPk}}</span> with <span>{{steps.length - 1}}</span> hops.
+    </div>
+
+    <div class="separator"></div>
+
+    <div *ngFor="let s of steps; let i = index">
+      <div>
+        <span class="label" *ngIf="s === data.startPk">Start: </span>
+        <span class="label" *ngIf="s === data.destinationPk">Destination: </span>
+        <span [ngClass]="{'border': s === data.startPk || s === data.destinationPk }">{{ s }}</span>
+        <span class="error" *ngIf="s === data.startPk && i !== 0">(Returning to the initial node in the middle of the route)</span>
+        <span class="error" *ngIf="s === data.destinationPk && i + 1 !== steps.length">(Going to the final node in the middle of the route)</span>
+        <span class="warning" *ngIf="alreadyConnected(s)">(There is already a transport from the start visor to this visor)</span>
+      </div>
+      <div class="explanation" *ngIf="i + 1 !== steps.length">
+        <span *ngIf="i === 0"> Starting point. </span>
+        Go to the next visor. Hop number {{ i + 1 }}.
+      </div>
+      <div class="finish" *ngIf="i + 1 === steps.length">
+        Finished after {{ i }} hops.
+      </div>
+    </div>
+
+    <div class="separator"></div>
+
+    <div class="note">
+      Note: If you see an alert indicating that there is already a transport from the start visor to any of the visors in the middle opf the route, or the end one, it means that the visor will be able to create routes with fewer hops to go to the destination.
+    </div>
+    <br />
+    <div class="note">
+      Note: If you see an alert indicating that the initial or final visor is in the middle of the route, the route is making cycles.
+    </div>
+  </mat-dialog-content>
+</app-dialog>

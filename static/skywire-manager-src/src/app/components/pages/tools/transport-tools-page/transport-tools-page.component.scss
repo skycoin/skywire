@@ -1,0 +1,80 @@
+@import "variables";
+
+.form-area {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 10px;
+
+  label {
+    margin-bottom: 0;
+  }
+
+  div {
+    font-size: 11px;
+  }
+}
+
+.explanation {
+  color: $lighter-gray;
+
+  span {
+    font-size: 14px;
+    color: $white;
+  }
+}
+
+.list-element {
+  list-style:none;
+
+  .area {
+    cursor: pointer;
+  }
+
+  .hops {
+    font-size: 12px;
+    color: $lighter-gray;
+  }
+
+  .pk {
+    color: $white;
+  }
+
+  .current {
+    color: yellow !important;
+  }
+
+  .with-transport {
+    color: lawngreen !important;
+  }
+
+  .id {
+    font-size: 12px;
+    color: $lighter-gray;
+  }
+}
+
+.divider {
+  height: 1px;
+  background-color: white;
+  margin: 20px 0;
+}
+
+.irrelevant {
+  opacity: 0.3;
+  text-decoration: line-through;
+}
+
+.indications {
+  font-size: 12px;
+  margin-bottom: 15px;
+}
+
+.error-msg {
+  color: #ff5e5e;
+}
+
+.complete-route {
+  font-size: 14px;
+  color: orange;
+  cursor: pointer;
+}

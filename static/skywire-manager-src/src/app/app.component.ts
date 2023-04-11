@@ -69,7 +69,7 @@ export class AppComponent {
       // Check if the user enters or leaves the login page.
       if (e.url) {
         const previousInLoginPageValue = this.inLoginPage;
-        this.inLoginPage = e.url.includes('login');
+        this.inLoginPage = e.url.includes('login') || e.url.includes('tools/transports');
 
         if (previousInLoginPageValue && !this.inLoginPage && !this.hypervisorPkObtained) {
           this.checkHypervisorPk(0);

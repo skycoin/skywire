@@ -1,0 +1,136 @@
+<div *ngIf="requestingData">
+
+  <div class="indications">
+    <div>The idea of this system is to simulate posible routes from visor A (the start visor) to visor B (the destination visor). It can detect what routes are already possible to make with the transports the transport discovery service already has, but that is not the main point.</div>
+    <br />
+    <div>The real utility of this system is when it is not possible to create routes connecting visor A with Visor B with the transports on the transport discovery service, so a new transport has to be create from visor A to be able to connect to visor B. However, if you simply create a transport from visor A to visor B, the route will only have 1 hop, so this system gives you a lot of other visors you can create transports to, to have a route that takes many hops before reaching the destination.</div>
+  </div>
+
+  <div class="divider"></div>
+
+  <form [formGroup]="form">
+    <div class="form-area">
+      <label for="discoveryData">Discovery data:</label>
+      <div>
+        Copy here the data from <a href="http://tpd.skywire.skycoin.com/all-transports" target="_blank" rel="noreferrer nofollow noopener">http://tpd.skywire.skycoin.com/all-transports</a>.
+        The system can not get the data automaticalle due to the CORS policy.
+      </div>
+      <textarea
+        formControlName="discoveryData"
+      ></textarea>
+    </div>
+    <div class="form-area">
+      <label for="startNode">Start visor PK:</label>
+      <div>Public key of the visor you are going to connect from.</div>
+      <input
+        formControlName="startNode"
+      >
+    </div>
+    <div class="form-area">
+      <label for="finalNode">Destination visor PK:</label>
+      <div>Public key of the visor you are going to connect to.</div>
+      <input
+        formControlName="finalNode"
+      >
+    </div>
+    <div class="form-area">
+      <label for="maxSteps">Max hops:</label>
+      <div>Max hops to test. A big number may cause a really big number of results and make the system unresponsive. Combining the results of various consecutive checks with few hops is more optimal.</div>
+      <input
+        formControlName="maxSteps"
+        type="number"
+      >
+    </div>
+  </form>
+
+  <button (click)="process()">Process</button>
+</div>
+
+<div *ngIf="!requestingData">
+
+  <div class="error-msg" *ngIf="validationError === validationErrors.SameStartAndDestination">
+    The start and destination PK are the same.
+  </div>
+
+  <div class="error-msg" *ngIf="validationError === validationErrors.FinishNotOnMap">
+    The destination visor is not in the transport discovery data, so it is not possible to calculate routes.
+  </div>
+
+  <div class="error-msg" *ngIf="validationError === validationErrors.InvalidMaxHopsValue">
+    The max hops values in not valid.
+  </div>
+
+  <div class="error-msg" *ngIf="validationError === validationErrors.NoDiscoveryData">
+    Please enter the transport discovery data.
+  </div>
+
+  <div *ngIf="!validationError">
+    <div class="explanation">
+      <div>
+        Checking possible routes from <span>{{ startNode }}</span>
+      </div>
+      <div>
+        to <span>{{ destinationNode }}</span>
+      </div>
+      <div>
+        in about <span>{{ maxLevels }} hops</span> or less
+      </div>
+    </div>
+
+    <ng-container *ngIf="completeRoutesFound">
+      <div class="divider"></div>
+      <div>There are already {{ completeRoutesFound }} routes connecting the start and destination visors:</div>
+      <ol>
+        <li *ngFor="let cr of completeRoutes; let i = index">
+          <span class="complete-route" (click)="openRouteDetails(cr)">
+            {{cr.transportId}} ({{cr.level}} hops)
+          </span>
+        </li>
+      </ol>
+    </ng-container>
+
+    <div class="divider"></div>
+
+    <div class="indications">
+      <div>Colored PKS are from visors your source visor already have transports with. If you click on a white pk, the system will do the following:</div>
+      <div>1) Simulate the creation of a transport from you start visor to the selected PK.</div>
+      <div>2) Create a route to the destination visor using the transports already on the tree you selected.</div>
+      <div>3) Show a modal window with how the final route would look like.</div>
+      <div>Note: Some selected routes may cre4ate cycles or go to visors you alreary have transports to. You will see warning in the modal window that whochs the route.</div>
+      <br />
+    </div>
+
+    <ng-container *ngIf="visorConnections && visorConnections.children && visorConnections.children.length > 0">
+      <ol>
+        <li>Destination node ({{destinationNode}}) ({{branches}} branches)</li>
+        <ng-container *ngFor="let ch of visorConnections.children">
+          <ng-container [ngTemplateOutlet]="infoArea" [ngTemplateOutletContext]="{elementData: ch}"></ng-container>
+        </ng-container>
+      </ol>
+    </ng-container>
+
+    <ng-template #infoArea let-elementData='elementData'>
+      <ol>
+        <li class="list-element">
+          <span class="area" *ngIf="startNode !== elementData.nodePk" [ngClass]="{'irrelevant': elementData.returnsToOrigin}" [matTooltip]="nodeTooltip(elementData)" (click)="openRouteDetails(elementData)">
+            <span class="hops" [ngClass]="{'with-transport': elementData.withTransportToOrigin}">{{ elementData.level + 1 }} total hop{{elementData.level > 1 ? 's' : '' }} - </span>
+            <span class="pk" [ngClass]="{'with-transport': elementData.withTransportToOrigin}">{{ elementData.nodePk }}</span>
+            <span class="id" [ngClass]="{'with-transport': elementData.withTransportToOrigin}"> ({{ elementData.transportId }})</span>
+            <span class="id with-transport" *ngIf="elementData.withTransportToOrigin"> ( There is already a transport from the start to this visor )</span>
+          </span>
+          <span class="area" *ngIf="startNode === elementData.nodePk" [matTooltip]="'This is your start visor, it is already connected to the destination with' + elementData.level + ' hops.'" (click)="openRouteDetails(elementData)">
+            <span class="hops current">{{ elementData.level }} total hop{{elementData.level > 1 ? 's' : '' }} - </span>
+            <span class="pk current">{{ elementData.nodePk }}</span>
+            <span class="id current"> ({{ elementData.transportId }})</span>
+            <span class="id current"> ( This is the start noder )</span>
+          </span>
+        </li>
+        <ng-container *ngIf="elementData && elementData.children && elementData.children.length > 0">
+          <ng-container *ngFor="let ch of elementData.children">
+            <ng-container [ngTemplateOutlet]="infoArea" [ngTemplateOutletContext]="{elementData: ch}"></ng-container>
+          </ng-container>
+        </ng-container>
+      </ol>
+    </ng-template>
+  </div>
+</div>
