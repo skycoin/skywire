@@ -52,3 +52,6 @@ When the visor B receives the Challenge
 - Then compares the decrypted hash from the response with the hash of `ChallengeNum`
 - If it matches then the Identity Authentication is completed and no error is sent in response to the RPC `ChallengeResponse`
 - If it doesn't match or if there is an error on any step then the error is sent back to visor A and the connection is closed.
+
+The structs `SharedSecretProtocolPacket` and `IdentityAuthentication` are encoded with [encoder.Serialize](https://github.com/skycoin/skycoin/blob/v0.27.1/src/cipher/encoder/encoder.go#L290) and then sent and are decoded on the receiving end with [encoder.DeserializeRawExact](https://github.com/skycoin/skycoin/blob/v0.27.1/src/cipher/encoder/encoder.go#L249).
+
