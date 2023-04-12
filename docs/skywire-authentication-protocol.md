@@ -55,3 +55,29 @@ When the visor B receives the Challenge
 
 The structs `SharedSecretProtocolPacket` and `IdentityAuthentication` are encoded with [encoder.Serialize](https://github.com/skycoin/skycoin/blob/v0.27.1/src/cipher/encoder/encoder.go#L290) and then sent and are decoded on the receiving end with [encoder.DeserializeRawExact](https://github.com/skycoin/skycoin/blob/v0.27.1/src/cipher/encoder/encoder.go#L249).
 
+## Identity Request Manager
+
+These connections are managed in the Identity Request Manager on visor A
+```
+type RequestStatus struct {
+    remotePK    cipher.PubKey
+	rpcConn     *RPCClient
+	timestamp   int64
+    status      int
+}
+```
+```
+type IdentityRequestManager struct {
+	requests    map[uuid.UUID]*RequestStatus
+	reqMX       *sync.RWMutex
+	log         *logging.Logger
+}
+```
+In the `IdentityRequestManager` the field requests contains the map for request ids and request status.
+- The `RequestStatus` struct contains 
+    - The field `remotePK` which is the PK of Visor B
+    - The field `rpcConn` which contains the *RPCClient for visor B
+    - The field `timestamp` which contains the start time of the request
+    - The field `status` which contains the status of the request
+
+When a connection to the Visor B is closed the entry from `requests` map is removed
