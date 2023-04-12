@@ -34,21 +34,21 @@ type IdentityAuthentication struct {
     Response            []byte
 }
 ```
-- For encryption we use (encrypt.DefaultScryptChacha20poly1305)[https://github.com/skycoin/skycoin/blob/v0.27.1/src/cipher/encrypt/scrypt_chacha20poly1305.go#L47]
-- Shared secret is generated with the `SharedSecretPK` of Visor A and `SharedSecretSK` of Visor B with (cipher.ECDH)[https://github.com/skycoin/skycoin/blob/v0.27.1/src/cipher/crypto.go#L282]
-- In Visor B a random 256 bit number `ChallengeNum` is generated and is encrypted with (encrypt)[https://github.com/skycoin/skycoin/blob/v0.27.1/src/cipher/encrypt/scrypt_chacha20poly1305.go#L77] where the password is the shared secret.
+- For encryption we use [encrypt.DefaultScryptChacha20poly1305](https://github.com/skycoin/skycoin/blob/v0.27.1/src/cipher/encrypt/scrypt_chacha20poly1305.go#L47)
+- Shared secret is generated with the `SharedSecretPK` of Visor A and `SharedSecretSK` of Visor B with [cipher.ECDH](https://github.com/skycoin/skycoin/blob/v0.27.1/src/cipher/crypto.go#L28)
+- In Visor B a random 256 bit number `ChallengeNum` is generated and is encrypted with [encrypt](https://github.com/skycoin/skycoin/blob/v0.27.1/src/cipher/encrypt/scrypt_chacha20poly1305.go#L77) where the password is the shared secret.
 - The encrypted output is then sent to Visor A via `IdentityAuthentication`
 - The `Response` field is blank
 
 The visor A then decrypts the Challenge
-- By first generating the shared secret with `SharedSecretPK` of Visor B and `SharedSecretSK` of Visor A with (cipher.ECDH)[https://github.com/skycoin/skycoin/blob/v0.27.1/src/cipher/crypto.go#L282]
-- Then decrypts the challenge with (decrypt)[https://github.com/skycoin/skycoin/blob/v0.27.1/src/cipher/encrypt/scrypt_chacha20poly1305.go#L134] where the password is the shared secret.
-- The decrypted challenge then is then hashed with (cipher.SumSHA256)[https://github.com/skycoin/skycoin/blob/v0.27.1/src/cipher/hash.go#L158]
-- Then the hash is encrypted with (encrypt)[https://github.com/skycoin/skycoin/blob/v0.27.1/src/cipher/encrypt/scrypt_chacha20poly1305.go#L77] where the password is the shared secret.
+- By first generating the shared secret with `SharedSecretPK` of Visor B and `SharedSecretSK` of Visor A with [cipher.ECDH](https://github.com/skycoin/skycoin/blob/v0.27.1/src/cipher/crypto.go#L282)
+- Then decrypts the challenge with [decrypt](https://github.com/skycoin/skycoin/blob/v0.27.1/src/cipher/encrypt/scrypt_chacha20poly1305.go#L134) where the password is the shared secret.
+- The decrypted challenge then is then hashed with [cipher.SumSHA256](https://github.com/skycoin/skycoin/blob/v0.27.1/src/cipher/hash.go#L158)
+- Then the hash is encrypted with [encrypt](https://github.com/skycoin/skycoin/blob/v0.27.1/src/cipher/encrypt/scrypt_chacha20poly1305.go#L77) where the password is the shared secret.
 - It is then sent to Visor B with the RPC `ChallengeResponse` using the struct `IdentityAuthentication` where the field `Challenge` is blank and the encrypted hash is in `Response`.
 
 When the visor B receives the Challenge
-- It decrypts the response with (decrypt)[https://github.com/skycoin/skycoin/blob/v0.27.1/src/cipher/encrypt/scrypt_chacha20poly1305.go#L134] where the password is the shared secret.
+- It decrypts the response with [decrypt](https://github.com/skycoin/skycoin/blob/v0.27.1/src/cipher/encrypt/scrypt_chacha20poly1305.go#L134) where the password is the shared secret.
 - Then compares the decrypted hash from the response with the hash of `ChallengeNum`
 - If it matches then the Identity Authentication is completed and no error is sent in response to the RPC `ChallengeResponse`
 - If it doesn't match or if there is an error on any step then the error is sent back to visor A and the connection is closed.
