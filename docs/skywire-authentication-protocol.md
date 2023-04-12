@@ -35,7 +35,7 @@ type IdentityAuthentication struct {
 }
 ```
 - For encryption we use [encrypt.DefaultScryptChacha20poly1305](https://github.com/skycoin/skycoin/blob/v0.27.1/src/cipher/encrypt/scrypt_chacha20poly1305.go#L47)
-- Shared secret is generated with the `SharedSecretPK` of Visor A and `SharedSecretSK` of Visor B with [cipher.ECDH](https://github.com/skycoin/skycoin/blob/v0.27.1/src/cipher/crypto.go#L28)
+- Shared secret is generated with the `SharedSecretPK` of Visor A and `SharedSecretSK` of Visor B with [cipher.ECDH](https://github.com/skycoin/skycoin/blob/v0.27.1/src/cipher/crypto.go#L282)
 - In Visor B a random 256 bit number `ChallengeNum` is generated and is encrypted with [encrypt](https://github.com/skycoin/skycoin/blob/v0.27.1/src/cipher/encrypt/scrypt_chacha20poly1305.go#L77) where the password is the shared secret.
 - The encrypted output is then sent to Visor A via `IdentityAuthentication`
 - The `Response` field is blank
