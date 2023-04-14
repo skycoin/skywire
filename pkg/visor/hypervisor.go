@@ -492,7 +492,7 @@ func makeSummaryResp(online, hyper bool, sum *Summary) Summary {
 
 func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		hv.mu.RLock()
+		hv.mu.Lock()
 		wg := new(sync.WaitGroup)
 		wg.Add(len(hv.remoteVisors))
 
@@ -554,7 +554,7 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 			}
 		}
 
-		hv.mu.RUnlock()
+		hv.mu.Unlock()
 
 		httputil.WriteJSON(w, r, http.StatusOK, summaries)
 	}
