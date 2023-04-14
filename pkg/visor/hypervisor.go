@@ -520,7 +520,7 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 		}
 
 		summaries = append(summaries, makeSummaryResp(err == nil, true, summary))
-
+		sumMx := new(sync.Mutex)
 		for pk, c := range hv.remoteVisors {
 			go func(pk cipher.PubKey, c Conn) {
 				log := hv.log(r).
@@ -537,7 +537,9 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 				} else {
 					log.Trace("Obtained summary via RPC.")
 					resp := makeSummaryResp(err == nil, false, summary)
+					sumMx.Lock()
 					summaries = append(summaries, resp)
+					sumMx.Unlock()
 				}
 				wg.Done()
 			}(pk, c)
