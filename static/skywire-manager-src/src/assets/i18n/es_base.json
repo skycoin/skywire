@@ -87,6 +87,23 @@
   "node": {
     "title": "Visor details",
     "not-found": "Visor not found.",
+    "logs" : {
+      "title": "Runtime Logs",
+      "no-logs": "No runtime logs were found for this visor.",
+      "no-logs-for-filter": "No runtime logs matches the selected filter.",
+      "view-all": "View all logs in raw format >",
+      "view-rest": "View all {{ number }} elements in raw format >",
+      "selected-filter": "Showing:",
+      "filter-ignored": "The filter excluded {{ number }} entries",
+      "filter-title": "Filter",
+      "filter-all": "All logs",
+      "filter-debug": "Debug or more important",
+      "filter-info": "Info or more important",
+      "filter-warning": "Warning or more important",
+      "filter-error": "Error or more important",
+      "filter-faltal": "Faltal or more important",
+      "filter-panic": "Panic"
+    },
     "statuses": {
       "online": "Online",
       "online-tooltip": "The visor is online.",
@@ -108,6 +125,7 @@
         "public-ip": "Public IP:",
         "ip": "IP:",
         "dmsg-server": "DMSG server:",
+        "no-dmsg-server": "Not connected",
         "ping": "Ping:",
         "node-version": "Visor version:",
         "build-type": "Build type:",
