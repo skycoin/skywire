@@ -87,6 +87,23 @@
   "node": {
     "title": "Detalles del visor",
     "not-found": "Visor no encontrado.",
+    "logs" : {
+      "title": "Registros de operación",
+      "no-logs": "No se encontraron registros de operación para este visor.",
+      "no-logs-for-filter": "No hay registros de operación que coincidan con el filtro seleccionado.",
+      "view-all": "Ver todos los registros en formato original >",
+      "view-rest": "Ver los {{ number }} elementos en formato original >",
+      "selected-filter": "Mostrando:",
+      "filter-ignored": "En filtro excluyó {{ number }} registros",
+      "filter-title": "Filtro",
+      "filter-all": "Todos los registros",
+      "filter-debug": "Debug o más importante",
+      "filter-info": "Info o más importante",
+      "filter-warning": "Warning o más importante",
+      "filter-error": "Error o más importante",
+      "filter-faltal": "Faltal o más importante",
+      "filter-panic": "Panic"
+    },
     "statuses": {
       "online": "Online",
       "online-tooltip": "El visor se encuentra online.",
@@ -108,6 +125,7 @@
         "public-ip": "IP pública:",
         "ip": "IP:",
         "dmsg-server": "Servidor DMSG:",
+        "no-dmsg-server": "No connectado",
         "ping": "Ping:",
         "node-version": "Versión del visor:",
         "build-type": "Tipo de build:",
