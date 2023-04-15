@@ -333,6 +333,13 @@ export class NodeService {
   }
 
   /**
+   * Gets the runtime logs of the node.
+   */
+  getRuntimeLogs(nodeKey: string) {
+    return this.apiService.get(`visors/${nodeKey}/runtime-logs`);
+  }
+
+  /**
    * Removes the rewards address of the node.
    */
   deleteRewardsAddress(nodeKey: string) {

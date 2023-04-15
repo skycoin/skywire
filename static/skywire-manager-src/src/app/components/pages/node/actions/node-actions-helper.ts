@@ -13,6 +13,7 @@ import { processServiceError } from 'src/app/utils/errors';
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
 import { MenuOptionData } from 'src/app/components/layout/top-bar/top-bar.component';
 import { StorageService } from 'src/app/services/storage.service';
+import { NodeLogsComponent } from './node-logs/node-logs.component';
 
 /**
  * Helper object for managing the options shown in the menu while in the node details page.
@@ -134,7 +135,7 @@ export class NodeActionsHelper {
     } else if (actionName === 'update') {
       this.update();
     } else if (actionName === 'logs') {
-      window.open(window.location.origin + '/api/visors/' + nodePk + '/runtime-logs', '_blank');
+      this.runtimeLogs();
     } else if (actionName === 'reboot') {
       this.reboot();
     } else if (actionName === null) {
@@ -218,6 +219,13 @@ export class NodeActionsHelper {
     const protocol = window.location.protocol;
     const hostname = window.location.host.replace('localhost:4200', '127.0.0.1:8000');
     window.open(protocol + '//' + hostname + '/pty/' + this.currentNodeKey, '_blank', 'noopener noreferrer');
+  }
+
+  /**
+   * Opens the modal window for checking the runtime logs of a node.
+   */
+  runtimeLogs() {
+    NodeLogsComponent.openDialog(this.dialog);
   }
 
   back() {
