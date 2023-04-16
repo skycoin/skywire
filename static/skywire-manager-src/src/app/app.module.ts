@@ -102,6 +102,7 @@ import { BulkRewardAddressChangerComponent } from './components/layout/bulk-rewa
 import { UserAppSettingsComponent } from './components/pages/node/apps/node-apps/user-app-settings/user-app-settings.component';
 import { TransportToolsPageComponent } from './components/pages/tools/transport-tools-page/transport-tools-page.component';
 import { RoutePreviewComponent } from './components/pages/tools/transport-tools-page/route-preview/route-preview.component';
+import { NodeLogsComponent } from './components/pages/node/actions/node-logs/node-logs.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
   disabled: true,
@@ -180,6 +181,7 @@ const globalRippleConfig: RippleGlobalOptions = {
     UserAppSettingsComponent,
     TransportToolsPageComponent,
     RoutePreviewComponent,
+    NodeLogsComponent,
   ],
   imports: [
     BrowserModule,
