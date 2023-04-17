@@ -544,10 +544,7 @@ func (ms MessengerService) sendMessageToRemoteRoute(msg message.Message) error {
 
 // sendMessageToLocalRoute "sends" the message to local server, so local server handles it, as it was sent from a remote route (used for messages send from server host, but as client)
 func (ms MessengerService) sendMessageToLocalRoute(msg message.Message) error {
-	err := ms.handleLocalServerMessage(msg)
-	if err != nil {
-		return err
-	}
+	go ms.handleLocalServerMessage(msg)
 	//notification is handled inside handleServerMessage
 
 	return nil
