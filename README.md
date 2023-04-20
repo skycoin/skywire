@@ -56,9 +56,9 @@ further documentation can be found in the [skywire wiki](https://github.com/skyc
 
 Pre-compiled resouces
 
-* [Windows installer](https://github.com/skycoin/skywire/releases/download/v1.3.6/skywire-installer-v1.3.6-windows-amd64.msi)
-* [MacOS amd64 package](https://github.com/skycoin/skywire/releases/download/v1.3.6/skywire-installer-v1.3.6-darwin-amd64.pkg)
-* [MacOS m1 / arm64](https://github.com/skycoin/skywire/releases/download/v1.3.6/skywire-installer-v1.3.6-darwin-arm64.pkg)
+* [Windows installer](https://github.com/skycoin/skywire/releases/download/v1.3.7/skywire-installer-v1.3.7-windows-amd64.msi)
+* [MacOS amd64 package](https://github.com/skycoin/skywire/releases/download/v1.3.7/skywire-installer-v1.3.7-darwin-amd64.pkg)
+* [MacOS m1 / arm64](https://github.com/skycoin/skywire/releases/download/v1.3.7/skywire-installer-v1.3.7-darwin-arm64.pkg)
 * [Debian Package Installation Guide](https://github.com/skycoin/skywire/wiki/Skywire-Package-Installation)
 * [Binary Releases](https://github.com/skycoin/skywire/releases)
 
