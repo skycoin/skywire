@@ -142,9 +142,6 @@ var (
 	// NodeInfo is the name of the survey file
 	NodeInfo = skyenv.NodeInfo
 
-	// NodeInfoSha256 is the name of the survey checksum file
-	NodeInfoSha256 = skyenv.NodeInfoSha256
-
 	// RewardFile is the name of the file containing skycoin reward address
 	RewardFile = skyenv.RewardFile
 )
