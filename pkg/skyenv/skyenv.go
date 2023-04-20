@@ -109,9 +109,6 @@ const (
 
 	// NodeInfo is the name of the survey file
 	NodeInfo string = "node-info.json"
-
-	// NodeInfoSha256 is the name of the survey checksum file
-	NodeInfoSha256 string = "node-info.sha"
 )
 
 // SkywireConfig returns the full path to the package config
