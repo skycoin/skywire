@@ -131,14 +131,6 @@ var logCmd = &cobra.Command{
 					return
 				}
 
-				err = download(ctx, log, httpC, "node-info.sha", "node-info.sha", key, maxFileSize)
-				if err != nil {
-					if deleteOnError {
-						bulkFolders = append(bulkFolders, key)
-					}
-					return
-				}
-
 				if duration == 1 {
 					yesterday := time.Now().AddDate(0, 0, -1).UTC().Format("2006-01-02")
 					download(ctx, log, httpC, "transport_logs/"+yesterday+".csv", yesterday+".csv", key, maxFileSize) //nolint
