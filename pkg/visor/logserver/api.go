@@ -49,7 +49,6 @@ func New(log *logging.Logger, tpLogPath, localPath, customPath string, printLog 
 
 	fsLocal := http.FileServer(http.Dir(localPath))
 	r.Handle("/"+skyenv.NodeInfo, http.StripPrefix("/", fsLocal))
-	r.Handle("/"+skyenv.NodeInfoSha256, http.StripPrefix("/", fsLocal))
 	r.Handle("/"+skyenv.RewardFile, http.StripPrefix("/", fsLocal))
 	r.Handle("/transport_logs/*", http.StripPrefix("/", fsLocal))
 
