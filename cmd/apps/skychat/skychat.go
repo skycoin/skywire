@@ -4,36 +4,11 @@ skychat app for skywire visor
 */
 package main
 
-import (
-	"fmt"
-	"flag"
-
-	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app"
-	"github.com/skycoin/skywire/cmd/apps/skychat/internal/inputports"
-	"github.com/skycoin/skywire/cmd/apps/skychat/internal/interfaceadapters"
-)
-
-var addr = flag.String("addr", ":8001", "address to bind")
+import "github.com/skycoin/skywire/cmd/apps/skychat/internal/inputports/cli"
 
 func main() {
-
-	flag.Parse()
-
-	interfaceAdapterServices := interfaceadapters.NewServices()
-	defer func() {
-		err := interfaceAdapterServices.Close()
-		if err != nil {
-			fmt.Println(err.Error())
-		}
-	}()
-	appServices := app.NewServices(interfaceAdapterServices.ClientRepository, interfaceAdapterServices.UserRepository, interfaceAdapterServices.VisorRepository, interfaceAdapterServices.NotificationService, interfaceAdapterServices.MessengerService)
-	inputPortsServices := inputports.NewServices(appServices)
-
-	//appclient listen
-	go interfaceAdapterServices.MessengerService.Listen()
-
-	//http-server
-	inputPortsServices.Server.ListenAndServe(addr)
+	//cobra-cli
+	cli.Execute()
 
 }
 
