@@ -70,6 +70,8 @@ func (httpServer *Server) AddChatHTTPRoutes() {
 	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.SendTextMessageURLParam, chat.NewHandler(httpServer.appServices.ChatServices).SendTextMessage).Methods("POST")
 	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.SendMutePeerMessageURLParam, chat.NewHandler(httpServer.appServices.ChatServices).SendMutePeerMessage).Methods("POST")
 	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.SendUnmutePeerMessageURLParam, chat.NewHandler(httpServer.appServices.ChatServices).SendUnmutePeerMessage).Methods("POST")
+	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.SendHireModMessageURLParam, chat.NewHandler(httpServer.appServices.ChatServices).SendHireModMessage).Methods("POST")
+	httpServer.router.HandleFunc(chatsHTTPRoutePath+"/"+chat.SendFireModMessageURLParam, chat.NewHandler(httpServer.appServices.ChatServices).SendFireModMessage).Methods("POST")
 
 }
 

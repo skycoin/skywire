@@ -28,4 +28,7 @@ type Service interface {
 	//used as client
 	SendMutePeerMessage(pkroute util.PKRoute, pk cipher.PubKey) error
 	SendUnmutePeerMessage(pkroute util.PKRoute, pk cipher.PubKey) error
+
+	SendHireModeratorMessage(pkroute util.PKRoute, pk cipher.PubKey) error
+	SendFireModeratorMessage(pkroute util.PKRoute, pk cipher.PubKey) error
 }

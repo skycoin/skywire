@@ -22,15 +22,17 @@ type Queries struct {
 
 // Commands Contains all available command handlers of this app
 type Commands struct {
-	AddLocalServerHandler        commands.AddLocalServerRequestHandler
-	JoinRemoteRouteHandler       commands.JoinRemoteRouteRequestHandler
-	DeleteLocalRouteHandler      commands.DeleteLocalRouteRequestHandler
-	LeaveRemoteRouteHandler      commands.LeaveRemoteRouteRequestHandler
-	SendAddRoomMessageHandler    commands.SendAddRoomMessageRequestHandler
-	SendDeleteRoomMessageHandler commands.SendDeleteRoomMessageRequestHandler
-	SendTextMessageHandler       commands.SendTextMessageRequestHandler
-	SendMutePeerMessageHandler   commands.SendMutePeerMessageRequestHandler
-	SendUnmutePeerMessageHandler commands.SendUnmutePeerMessageRequestHandler
+	AddLocalServerHandler           commands.AddLocalServerRequestHandler
+	JoinRemoteRouteHandler          commands.JoinRemoteRouteRequestHandler
+	DeleteLocalRouteHandler         commands.DeleteLocalRouteRequestHandler
+	LeaveRemoteRouteHandler         commands.LeaveRemoteRouteRequestHandler
+	SendAddRoomMessageHandler       commands.SendAddRoomMessageRequestHandler
+	SendDeleteRoomMessageHandler    commands.SendDeleteRoomMessageRequestHandler
+	SendTextMessageHandler          commands.SendTextMessageRequestHandler
+	SendMutePeerMessageHandler      commands.SendMutePeerMessageRequestHandler
+	SendUnmutePeerMessageHandler    commands.SendUnmutePeerMessageRequestHandler
+	SendHireModeratorMessageHandler commands.SendHireModeratorMessageRequestHandler
+	SendFireModeratorMessageHandler commands.SendFireModeratorMessageRequestHandler
 }
 
 // ChatServices Contains the grouped queries and commands of the app layer
@@ -50,15 +52,17 @@ func NewServices(cliRepo client.Repository, visorRepo chat.Repository, userRepo 
 			GetAllMessagesFromRoomHandler: queries.NewGetAllMessagesFromRoomRequestHandler(visorRepo),
 		},
 		Commands: Commands{
-			AddLocalServerHandler:        commands.NewAddLocalServerRequestHandler(visorRepo, userRepo, ns),
-			JoinRemoteRouteHandler:       commands.NewJoinRemoteRouteRequestHandler(visorRepo, ms),
-			DeleteLocalRouteHandler:      commands.NewDeleteLocalRouteRequestHandler(ms, visorRepo),
-			LeaveRemoteRouteHandler:      commands.NewLeaveRemoteRouteRequestHandler(ms, visorRepo, userRepo),
-			SendAddRoomMessageHandler:    commands.NewSendAddRoomMessageRequestHandler(ms),
-			SendDeleteRoomMessageHandler: commands.NewSendDeleteRoomMessageRequestHandler(ms),
-			SendTextMessageHandler:       commands.NewSendTextMessageRequestHandler(ms),
-			SendMutePeerMessageHandler:   commands.NewSendMutePeerMessageRequestHandler(ms),
-			SendUnmutePeerMessageHandler: commands.NewSendUnmutePeerMessageRequestHandler(ms),
+			AddLocalServerHandler:           commands.NewAddLocalServerRequestHandler(visorRepo, userRepo, ns),
+			JoinRemoteRouteHandler:          commands.NewJoinRemoteRouteRequestHandler(visorRepo, ms),
+			DeleteLocalRouteHandler:         commands.NewDeleteLocalRouteRequestHandler(ms, visorRepo),
+			LeaveRemoteRouteHandler:         commands.NewLeaveRemoteRouteRequestHandler(ms, visorRepo, userRepo),
+			SendAddRoomMessageHandler:       commands.NewSendAddRoomMessageRequestHandler(ms),
+			SendDeleteRoomMessageHandler:    commands.NewSendDeleteRoomMessageRequestHandler(ms),
+			SendTextMessageHandler:          commands.NewSendTextMessageRequestHandler(ms),
+			SendMutePeerMessageHandler:      commands.NewSendMutePeerMessageRequestHandler(ms),
+			SendUnmutePeerMessageHandler:    commands.NewSendUnmutePeerMessageRequestHandler(ms),
+			SendHireModeratorMessageHandler: commands.NewSendHireModeratorMessageRequestHandler(ms),
+			SendFireModeratorMessageHandler: commands.NewSendFireModeratorMessageRequestHandler(ms),
 		},
 	}
 }

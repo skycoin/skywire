@@ -522,6 +522,70 @@ func (ms MessengerService) SendUnmutePeerMessage(pkroute util.PKRoute, pk cipher
 	return nil
 }
 
+// SendHireModeratorMessage sends a command message to hire a peer as moderator
+func (ms MessengerService) SendHireModeratorMessage(pkroute util.PKRoute, pk cipher.PubKey) error {
+	usr, err := ms.usrRepo.GetUser()
+	if err != nil {
+		fmt.Printf("Error getting user from repository: %s", err)
+		return err
+	}
+
+	bytes, err := json.Marshal(pk)
+	if err != nil {
+		fmt.Printf("Failed to marshal json: %v", err)
+		return err
+	}
+
+	root := util.NewVisorOnlyRoute(usr.GetInfo().GetPK())
+
+	msg := message.NewHireModeratorMessage(root, pkroute, bytes)
+
+	if msg.Dest.Visor == usr.GetInfo().GetPK() {
+		err = ms.sendMessageToLocalRoute(msg)
+		if err != nil {
+			return err
+		}
+	} else {
+		err = ms.sendMessageToRemoteRoute(msg)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SendFireModeratorMessage sends a command message to fire a moderator
+func (ms MessengerService) SendFireModeratorMessage(pkroute util.PKRoute, pk cipher.PubKey) error {
+	usr, err := ms.usrRepo.GetUser()
+	if err != nil {
+		fmt.Printf("Error getting user from repository: %s", err)
+		return err
+	}
+
+	bytes, err := json.Marshal(pk)
+	if err != nil {
+		fmt.Printf("Failed to marshal json: %v", err)
+		return err
+	}
+
+	root := util.NewVisorOnlyRoute(usr.GetInfo().GetPK())
+
+	msg := message.NewFireModeratorMessage(root, pkroute, bytes)
+
+	if msg.Dest.Visor == usr.GetInfo().GetPK() {
+		err = ms.sendMessageToLocalRoute(msg)
+		if err != nil {
+			return err
+		}
+	} else {
+		err = ms.sendMessageToRemoteRoute(msg)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // sendMessageToRemoteRoute sends the given message to a remote route (as p2p and client)
 func (ms MessengerService) sendMessageToRemoteRoute(msg message.Message) error {
 	//if the message goes to p2p we save it in database, if not we wait for the remote server to send us our message

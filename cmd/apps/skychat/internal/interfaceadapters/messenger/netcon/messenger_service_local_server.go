@@ -422,6 +422,27 @@ func (ms MessengerService) handleLocalServerCmdMsgType(visor *chat.Visor, m mess
 				return err
 			}
 
+			// update server, update visor and then update repository
+			err = server.SetRoom(*room)
+			if err != nil {
+				return err
+			}
+			err = visor.SetServer(*server)
+			if err != nil {
+				return err
+			}
+			err = ms.visorRepo.Set(*visor)
+			if err != nil {
+				return err
+			}
+
+			//notify about the added route
+			n := notification.NewAddRouteNotification(pkroute)
+			err = ms.ns.Notify(n)
+			if err != nil {
+				return err
+			}
+
 			//send updated list of Muted to peers
 			muted := room.GetAllMuted()
 			bytes, err := json.Marshal(muted)
@@ -459,6 +480,20 @@ func (ms MessengerService) handleLocalServerCmdMsgType(visor *chat.Visor, m mess
 				return err
 			}
 
+			// update server, update visor and then update repository
+			err = server.SetRoom(*room)
+			if err != nil {
+				return err
+			}
+			err = visor.SetServer(*server)
+			if err != nil {
+				return err
+			}
+			err = ms.visorRepo.Set(*visor)
+			if err != nil {
+				return err
+			}
+
 			//send updated list of Muted to peers
 			muted := room.GetAllMuted()
 			bytes, err := json.Marshal(muted)
@@ -467,6 +502,104 @@ func (ms MessengerService) handleLocalServerCmdMsgType(visor *chat.Visor, m mess
 				return err
 			}
 			msg := message.NewRoomMutedMessage(pkroute, pkroute, bytes)
+
+			err = ms.sendMessageToPeers(visor, pkroute, msg)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	case message.CmdMsgTypeHireModerator:
+		//check if room exists
+		room, err := server.GetRoomByPK(pkroute.Room)
+		if err != nil {
+			return err
+		}
+		//First check if origin of msg is admin
+		_, isAdmin := server.GetAllAdmin()[m.Root.Visor]
+
+		if isAdmin {
+			//unmarshal the received message bytes to cipher.PubKey
+			pk := cipher.PubKey{}
+			err = json.Unmarshal(m.Message, &pk)
+			if err != nil {
+				return fmt.Errorf("failed to unmarshal json message: %v", err)
+			}
+			err = room.AddMod(pk)
+			if err != nil {
+				return err
+			}
+			// update server, update visor and then update repository
+			err = server.SetRoom(*room)
+			if err != nil {
+				return err
+			}
+			err = visor.SetServer(*server)
+			if err != nil {
+				return err
+			}
+			err = ms.visorRepo.Set(*visor)
+			if err != nil {
+				return err
+			}
+
+			//send updated list of Mods to peers
+			muted := room.GetAllMods()
+			bytes, err := json.Marshal(muted)
+			if err != nil {
+				fmt.Printf("Failed to marshal json: %v", err)
+				return err
+			}
+			msg := message.NewRoomModsMessage(pkroute, pkroute, bytes)
+
+			err = ms.sendMessageToPeers(visor, pkroute, msg)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	case message.CmdMsgTypeFireModerator:
+		//check if room exists
+		room, err := server.GetRoomByPK(pkroute.Room)
+		if err != nil {
+			return err
+		}
+		//First check if origin of msg is admin
+		_, isAdmin := server.GetAllAdmin()[m.Root.Visor]
+
+		if isAdmin {
+			//unmarshal the received message bytes to cipher.PubKey
+			pk := cipher.PubKey{}
+			err = json.Unmarshal(m.Message, &pk)
+			if err != nil {
+				return fmt.Errorf("failed to unmarshal json message: %v", err)
+			}
+			err = room.DeleteMod(pk)
+			if err != nil {
+				return err
+			}
+			// update server, update visor and then update repository
+			err = server.SetRoom(*room)
+			if err != nil {
+				return err
+			}
+			err = visor.SetServer(*server)
+			if err != nil {
+				return err
+			}
+			err = ms.visorRepo.Set(*visor)
+			if err != nil {
+				return err
+			}
+
+			//send updated list of Mods to peers
+			muted := room.GetAllMods()
+			bytes, err := json.Marshal(muted)
+			if err != nil {
+				fmt.Printf("Failed to marshal json: %v", err)
+				return err
+			}
+			msg := message.NewRoomModsMessage(pkroute, pkroute, bytes)
 
 			err = ms.sendMessageToPeers(visor, pkroute, msg)
 			if err != nil {

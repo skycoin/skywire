@@ -77,12 +77,15 @@ const (
 	CmdMsgTypeMutePeer
 	// CmdMsgTypeUnmutePeer is used tu unmute a peer
 	CmdMsgTypeUnmutePeer
+	// CmdMsgTypeHireModerator is used to hire a peer as moderator
+	CmdMsgTypeHireModerator
+	// CmdMsgTypeFireModerator is used to fire a moderator
+	CmdMsgTypeFireModerator
 	/*CmdMsgTypeBanPeer
 	CmdMsgTypeUnbanPeer
 	CmdMsgTypeHireAdmin
 	CmdMsgTypeFireAdmin
-	CmdMsgTypeHireModerator
-	CmdMsgTypeFireModerator*/
+	*/
 )
 
 // Message defines a message
@@ -321,7 +324,7 @@ func NewDeleteRoomMessage(root util.PKRoute, dest util.PKRoute) Message {
 	return m
 }
 
-// NewRoomMembersMessage returns a Message of roomMembers
+// NewRoomMembersMessage returns a Message of room members
 func NewRoomMembersMessage(root util.PKRoute, dest util.PKRoute, members []byte) Message {
 	m := Message{}
 	m.Origin = root.Visor
@@ -330,6 +333,20 @@ func NewRoomMembersMessage(root util.PKRoute, dest util.PKRoute, members []byte)
 	m.MsgType = InfoMsgType
 	m.MsgSubtype = InfoMsgTypeRoomMembers
 	m.Message = members
+	m.Status = MsgStatusInitial
+	m.Time = time.Now()
+	return m
+}
+
+// NewRoomModsMessage returns a Message of room moderators
+func NewRoomModsMessage(root util.PKRoute, dest util.PKRoute, moderators []byte) Message {
+	m := Message{}
+	m.Origin = root.Visor
+	m.Root = root
+	m.Dest = dest
+	m.MsgType = InfoMsgType
+	m.MsgSubtype = InfoMsgTypeRoomMembers
+	m.Message = moderators
 	m.Status = MsgStatusInitial
 	m.Time = time.Now()
 	return m
@@ -371,6 +388,34 @@ func NewUnmutePeerMessage(root util.PKRoute, dest util.PKRoute, pk []byte) Messa
 	m.Dest = dest
 	m.MsgType = CmdMsgType
 	m.MsgSubtype = CmdMsgTypeUnmutePeer
+	m.Message = pk
+	m.Status = MsgStatusInitial
+	m.Time = time.Now()
+	return m
+}
+
+// NewHireModeratorMessage returns a Message to hire a peer as moderator
+func NewHireModeratorMessage(root util.PKRoute, dest util.PKRoute, pk []byte) Message {
+	m := Message{}
+	m.Origin = root.Visor
+	m.Root = root
+	m.Dest = dest
+	m.MsgType = CmdMsgType
+	m.MsgSubtype = CmdMsgTypeHireModerator
+	m.Message = pk
+	m.Status = MsgStatusInitial
+	m.Time = time.Now()
+	return m
+}
+
+// NewFireModeratorMessage returns a Message to fire a moderator
+func NewFireModeratorMessage(root util.PKRoute, dest util.PKRoute, pk []byte) Message {
+	m := Message{}
+	m.Origin = root.Visor
+	m.Root = root
+	m.Dest = dest
+	m.MsgType = CmdMsgType
+	m.MsgSubtype = CmdMsgTypeFireModerator
 	m.Message = pk
 	m.Status = MsgStatusInitial
 	m.Time = time.Now()
