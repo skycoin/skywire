@@ -1,6 +1,16 @@
-[![Test](https://github.com/skycoin/skywire/actions/workflows/test.yml/badge.svg) [![Deploy](https://github.com/skycoin/skywire/actions/workflows/deploy.yml/badge.svg) [![Release](https://github.com/skycoin/skywire/actions/workflows/release.yml/badge.svg)
+[![Go Report Card](https://goreportcard.com/badge/github.com/skycoin/skywire)](https://goreportcard.com/report/github.com/skycoin/skywire)
+[![Test](https://github.com/skycoin/skywire/actions/workflows/test.yml/badge.svg)
+[![Deploy](https://github.com/skycoin/skywire/actions/workflows/deploy.yml/badge.svg)
+[![Release](https://github.com/skycoin/skywire/actions/workflows/release.yml/badge.svg)
+[![GitHub release](https://img.shields.io/github/release/skycoin/skywire.svg)](https://github.com/skycoin/skywire/releases/)
+[![skywire](https://img.shields.io/aur/version/skywire?color=1793d1&label=skywire&logo=arch-linux)](https://aur.archlinux.org/packages/skywire/)
+[![skywire-bin](https://img.shields.io/aur/version/skywire-bin?color=1793d1&label=skywire-bin&logo=arch-linux)](https://aur.archlinux.org/packages/skywire-bin/)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/skycoin/skywire/badge)](https://api.securityscorecards.dev/projects/github.com/skycoin/skywire)
+[![go.mod](https://img.shields.io/github/go-mod/go-version/skycoin/skywire.svg)](https://github.com/skycoin/skywire)
+[![Telegram](https://img.shields.io/badge/Join-Telegram-blue?&logo=data:image/svg%2bxml;base64,PHN2ZyBlbmFibGUtYmFja2dyb3VuZD0ibmV3IDAgMCAyNCAyNCIgaGVpZ2h0PSI1MTIiIHZpZXdCb3g9IjAgMCAyNCAyNCIgd2lkdGg9IjUxMiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJtOS40MTcgMTUuMTgxLS4zOTcgNS41ODRjLjU2OCAwIC44MTQtLjI0NCAxLjEwOS0uNTM3bDIuNjYzLTIuNTQ1IDUuNTE4IDQuMDQxYzEuMDEyLjU2NCAxLjcyNS4yNjcgMS45OTgtLjkzMWwzLjYyMi0xNi45NzIuMDAxLS4wMDFjLjMyMS0xLjQ5Ni0uNTQxLTIuMDgxLTEuNTI3LTEuNzE0bC0yMS4yOSA4LjE1MWMtMS40NTMuNTY0LTEuNDMxIDEuMzc0LS4yNDcgMS43NDFsNS40NDMgMS42OTMgMTIuNjQzLTcuOTExYy41OTUtLjM5NCAxLjEzNi0uMTc2LjY5MS4yMTh6IiBmaWxsPSIjMDM5YmU1Ii8+PC9zdmc+)](https://t.me/skywire)
 
-Compiling Skywire requires a Golang version of at least `1.18`.
+
+Compiling Skywire requires a Golang version of at least `1.16`.
 
 # Skywire
 
@@ -534,6 +544,17 @@ build from git sources to the develop branch
 ```
 yay --mflags " -p git.PKGBUILD " -S skywire
 ```
+
+## Skycoin Rewards
+
+Running skywire on eligible hardware can earn rewards in skycoin. Currently, only package-based linux installations are supported for rewards.
+Review the [mainnet rules](/mainnet_rules.md) article for the details.
+
+Set a reward address:
+```
+skywire-cli reward <skycoin-address>
+```
+Visors meeting uptime and eligability requirements will recieve daily skycoin rewards for up to 8 visors per location / ip address.
 
 ## Creating a GitHub release
 
