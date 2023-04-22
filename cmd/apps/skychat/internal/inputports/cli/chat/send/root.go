@@ -1,3 +1,4 @@
+// Package clichatsend contains code of the cobra cli chat send commands
 package clichatsend
 
 import "github.com/spf13/cobra"

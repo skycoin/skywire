@@ -7,6 +7,7 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/inputports/rpc"
 )
 
+// InputportsServices holds the inputports services as variable
 var InputportsServices Services
 
 // Services contains the ports services

@@ -11,6 +11,7 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/user"
 )
 
+// AppServices holds the apps services as variable
 var AppServices Services
 
 // Services contains all exposed services of the application layer

@@ -15,6 +15,7 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/interfaceadapters/storage/memory"
 )
 
+// InterfaceAdapterServices holds the interface adapter services as variable
 var InterfaceAdapterServices Services
 
 // Services contains the exposed services of interface adapters

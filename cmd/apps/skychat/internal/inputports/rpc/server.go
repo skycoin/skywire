@@ -4,16 +4,15 @@ package rpc
 import (
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"net/rpc"
+	"time"
 
 	"github.com/gorilla/mux"
+
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/inputports/rpc/chat"
 )
-
-var RPCAdress string
 
 // Server represents the rpc server running for this service
 type Server struct {
@@ -40,17 +39,23 @@ func (rpcServer *Server) ListenAndServe(port *string) {
 
 	rpc.HandleHTTP()
 
-	listener, err := net.Listen("tcp", *port)
-	if err != nil {
-		log.Fatal("Listener error", err)
-	}
+	/*
+		listener, err := net.Listen("tcp", *port)
+		if err != nil {
+			log.Fatal("Listener error", err)
+		}*/
 
 	fmt.Println("Serving RPC on", *port)
 
-	err = http.Serve(listener, nil)
-	if err != nil {
-		log.Fatal("error serving: ", err)
+	//err = http.Serve(listener, nil)
+	srv := &http.Server{
+		Addr:         *port,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
 	}
+	/*if err != nil {
+		log.Fatal("error serving: ", err)
+	}*/
 
-	RPCAdress = *port
+	log.Fatal(srv.ListenAndServe())
 }

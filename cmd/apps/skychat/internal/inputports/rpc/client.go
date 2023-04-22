@@ -21,9 +21,10 @@ func NewClient(appServices app.Services) *Client {
 	return rc
 }
 
+// SendTextMessage sends the command to send a message via rpc
 func (c *Client) SendTextMessage(VisorPk cipher.PubKey, ServerPk cipher.PubKey, RoomPk cipher.PubKey, Message string) error {
 
-	//TODO: fix so that rpc adress is dynamic from cobra args here.
+	//TODO: fix so that rpc address is dynamic from cobra args here.
 	rpcClient, err := rpc.DialHTTP("tcp", ":4040")
 	if err != nil {
 		log.Fatal("Connection error: ", err)
