@@ -11,6 +11,8 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/user"
 )
 
+var AppServices Services
+
 // Services contains all exposed services of the application layer
 type Services struct {
 	NotificationService notification.Service

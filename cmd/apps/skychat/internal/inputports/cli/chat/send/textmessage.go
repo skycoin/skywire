@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/cmd/apps/skychat/internal/inputports"
 )
 
 var textMessageCmd = &cobra.Command{
@@ -18,9 +19,15 @@ var textMessageCmd = &cobra.Command{
 		spk := ParsePK(cmd.Flags(), "spk", args[1])
 		rpk := ParsePK(cmd.Flags(), "rpk", args[2])
 		msg := args[3]
-		fmt.Println("SendTextMessage (cli)")
+
+		fmt.Println("SendTextMessage via cli (cli)")
 		fmt.Println(msg)
 		fmt.Printf("to v: %s s: %s, r %s\n", vpk.Hex(), spk.Hex(), rpk.Hex())
+
+		err := inputports.InputportsServices.RPCClient.SendTextMessage(vpk, spk, rpk, msg)
+		if err != nil {
+			fmt.Println(err)
+		}
 	},
 }
 

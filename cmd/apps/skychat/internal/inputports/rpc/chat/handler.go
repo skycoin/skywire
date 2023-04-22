@@ -1,5 +1,5 @@
-// Package clichatsend contains code of the cobra-cli handler for inputports
-package clichatsend
+// Package chat contains code of the rpc handler for inputports
+package chat
 
 import (
 	"encoding/json"
@@ -11,7 +11,7 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/util"
 )
 
-// Handler clichat request handler
+// Handler chat request handler
 type Handler struct {
 	chatServices chatservices.ChatServices
 }
@@ -20,6 +20,9 @@ type Handler struct {
 func NewHandler(cs chatservices.ChatServices) *Handler {
 	return &Handler{chatServices: cs}
 }
+
+// SendTextMessageRPCParam contains the parameter identifier to be parsed by the handler
+const SendTextMessageRPCParam = "Handler" + "." + "SendTextMessage"
 
 // SendTextMessageRequestModel represents the request model expected for send text request
 type SendTextMessageRequestModel struct {
@@ -30,7 +33,12 @@ type SendTextMessageRequestModel struct {
 }
 
 // SendTextMessage sends a text message to the given route
-func (c Handler) SendTextMessage(r SendTextMessageRequestModel) error {
+func (c Handler) SendTextMessage(r SendTextMessageRequestModel, reply *int) error {
+
+	fmt.Println("RPC: SendTextMessage via cli (rpc)")
+	fmt.Printf("RPC: Message: %s\n v: %s\n s: %s\n r: %s\n", r.Msg, r.VisorPk.Hex(), r.ServerPk.Hex(), r.RoomPk.Hex())
+
+	//TODO: maybe check if route is available first and depending on result first send join remote route
 
 	bytes, err := json.Marshal(r.Msg)
 	if err != nil {

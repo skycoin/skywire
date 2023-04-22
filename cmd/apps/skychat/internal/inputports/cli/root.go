@@ -14,10 +14,11 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/interfaceadapters"
 )
 
-var port string
+var httpport string
+var rpcport string
 
 var rootCmd = &cobra.Command{
-	Use:   "skychat.go",
+	Use:   "skychat",
 	Short: "Command Line Interface for skychat",
 	Long: `
 	┌─┐┬┌─┬ ┬         ┌─┐┬  ┬
@@ -30,21 +31,32 @@ var rootCmd = &cobra.Command{
 
 		//TODO: Setup Databases depending on flags/attributes
 
-		interfaceAdapterServices := interfaceadapters.NewServices()
+		interfaceadapters.InterfaceAdapterServices = interfaceadapters.NewServices()
 		defer func() {
-			err := interfaceAdapterServices.Close()
+			err := interfaceadapters.InterfaceAdapterServices.Close()
 			if err != nil {
 				fmt.Println(err.Error())
 			}
 		}()
-		appServices := app.NewServices(interfaceAdapterServices.ClientRepository, interfaceAdapterServices.UserRepository, interfaceAdapterServices.VisorRepository, interfaceAdapterServices.NotificationService, interfaceAdapterServices.MessengerService)
-		inputportsServices := inputports.NewServices(appServices)
+
+		app.AppServices = app.NewServices(
+			interfaceadapters.InterfaceAdapterServices.ClientRepository,
+			interfaceadapters.InterfaceAdapterServices.UserRepository,
+			interfaceadapters.InterfaceAdapterServices.VisorRepository,
+			interfaceadapters.InterfaceAdapterServices.NotificationService,
+			interfaceadapters.InterfaceAdapterServices.MessengerService)
+
+		inputports.InputportsServices = inputports.NewServices(app.AppServices)
 
 		//messengerService listen
-		go interfaceAdapterServices.MessengerService.Listen()
+		go interfaceadapters.InterfaceAdapterServices.MessengerService.Listen()
+
+		//rpc-server
+		rpcport = ":4040"
+		go inputports.InputportsServices.RPCServer.ListenAndServe(&rpcport)
 
 		//http-server
-		inputportsServices.Server.ListenAndServe(&port)
+		inputports.InputportsServices.HTTPServer.ListenAndServe(&httpport)
 	},
 }
 
@@ -58,7 +70,7 @@ func init() {
 	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
 	rootCmd.PersistentFlags().MarkHidden("help") //nolint
 
-	rootCmd.Flags().StringVar(&port, "httpport", ":8001", "port to bind")
+	rootCmd.Flags().StringVar(&httpport, "httpport", ":8001", "port to bind")
 }
 
 // Execute executes root CLI command.

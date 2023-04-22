@@ -15,6 +15,8 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/interfaceadapters/storage/memory"
 )
 
+var InterfaceAdapterServices Services
+
 // Services contains the exposed services of interface adapters
 type Services struct {
 	ClientRepository    client.Repository
