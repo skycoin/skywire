@@ -11,6 +11,7 @@ import { InitialSetupComponent } from './initial-setup/initial-setup.component';
 import { OperationError } from '../../../utils/operation-error';
 import { processServiceError } from '../../../utils/errors';
 import { AppComponent } from 'src/app/app.component';
+import { MultipleNodeDataService } from 'src/app/services/multiple-node-data.service';
 
 /**
  * Login page.
@@ -36,9 +37,13 @@ export class LoginComponent implements OnInit, OnDestroy {
     private snackbarService: SnackbarService,
     private dialog: MatDialog,
     private route: ActivatedRoute,
+    private multipleNodeDataService: MultipleNodeDataService,
   ) { }
 
   ngOnInit() {
+    // Stop multiple requests that will fail for auth.
+    this.multipleNodeDataService.stopRequestingData();
+
     this.routeSubscription = this.route.paramMap.subscribe(params => {
       this.vpnKey = params.get('key');
 
