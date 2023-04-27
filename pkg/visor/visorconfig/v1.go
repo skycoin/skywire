@@ -56,8 +56,8 @@ type Transport struct {
 	PublicAutoconnect bool            `json:"public_autoconnect"`
 	TransportSetup    []cipher.PubKey `json:"transport_setup_nodes"`
 	LogStore          *LogStore       `json:"log_store"`
-	StcprPort         string          `json:"stcpr_port"`
-	SudphPort         string          `json:"sudph_port"`
+	StcprPort         int             `json:"stcpr_port"`
+	SudphPort         int             `json:"sudph_port"`
 }
 
 // LogStore configures a LogStore.
