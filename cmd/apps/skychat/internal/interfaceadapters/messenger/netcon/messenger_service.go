@@ -3,8 +3,10 @@ package netcon
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"time"
 
@@ -62,24 +64,55 @@ func (ms MessengerService) Handle(pk cipher.PubKey) {
 
 	localPK := pCli.GetAppClient().Config().VisorPK
 
-	for {
+	buf := make([]byte, 1024)
 
-		//read packets
-		buf := make([]byte, 32*1024*4)
-		n, err := conn.Read(buf)
-		fmt.Printf("Received %d bytes \n", n)
+	for {
+		// read the length prefix
+		prefix := make([]byte, 4)
+		_, err = io.ReadFull(conn, prefix)
 		if err != nil {
-			fmt.Println("Failed to read packet:", err)
-			//close and delete connection
-			//? close connection ?
-			err2 := pCli.DeleteConn(conn.RemoteAddr().(appnet.Addr).PubKey)
-			if err2 != nil {
-				errs <- err2
-				return
-			}
+			fmt.Printf("Error Prefix: %s", err)
 			errs <- err
 			return
 		}
+		length_from_prefix := binary.BigEndian.Uint32(prefix)
+		fmt.Printf("Prefix length: %d \n", length_from_prefix)
+
+		data := make([]byte, 0)
+		length := 0
+		for length = 0; length < int(length_from_prefix); {
+			//read packets
+			n, err := conn.Read(buf)
+			if err != nil {
+				// log if not normal error
+				if err != io.EOF {
+					fmt.Printf("Read error - %s\n", err)
+				}
+				break
+			}
+
+			// append read data to full data
+			data = append(data, buf[:n]...)
+
+			// update total read var
+			length += n
+			fmt.Printf("Data:	%d/%d	(PacketSize: %d) \n", length, length_from_prefix, n)
+		}
+
+		fmt.Printf("Received %d bytes \n", length)
+		/*
+			if err != nil {
+				fmt.Println("Failed to read packet:", err)
+				//close and delete connection
+				//? close connection ?
+				err2 := pCli.DeleteConn(conn.RemoteAddr().(appnet.Addr).PubKey)
+				if err2 != nil {
+					errs <- err2
+					return
+				}
+				errs <- err
+				return
+			}*/
 
 		//unmarshal the received bytes to a message.Message
 		m := message.RAWMessage{}
@@ -87,7 +120,7 @@ func (ms MessengerService) Handle(pk cipher.PubKey) {
 		fmt.Println("New Raw Message")
 		fmt.Println("---------------------------------------------------------------------------------------------------")
 
-		err = json.Unmarshal(buf[:n], &m)
+		err = json.Unmarshal(data, &m)
 		if err != nil {
 			fmt.Printf("Failed to unmarshal json message: %v \n", err)
 		} else {
@@ -101,7 +134,7 @@ func (ms MessengerService) Handle(pk cipher.PubKey) {
 			fmt.Printf("Dest:		%s \n", jm.Dest.String())
 			fmt.Printf("MsgType:		%d \n", jm.MsgType)
 			fmt.Printf("MsgSubType:		%d \n", jm.MsgSubtype)
-			fmt.Printf("Message:		%s \n", string(jm.Message))
+			//fmt.Printf("Message:		%s \n", string(jm.Message))
 			fmt.Printf("Status:		%d \n", jm.Status)
 			fmt.Printf("Seen:		%t \n", jm.Seen)
 			fmt.Println("---------------------------------------------------------------------------------------------------")
@@ -158,7 +191,7 @@ func (ms MessengerService) Dial(pk cipher.PubKey) (net.Conn, error) {
 		Port:   pCli.GetPort(),
 	}
 
-	var r = netutil.NewRetrier(pCli.GetLog(), 50*time.Millisecond, netutil.DefaultMaxBackoff, 5, 2)
+	var r = netutil.NewRetrier(pCli.GetLog(), 50*time.Millisecond, netutil.DefaultMaxBackoff, 2, 2)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -273,7 +306,7 @@ func (ms MessengerService) sendMessage(pkroute util.PKRoute, m message.Message, 
 	fmt.Printf("Dest:		%s \n", m.Dest.String())
 	fmt.Printf("MsgType:		%d \n", m.MsgType)
 	fmt.Printf("MsgSubType:		%d \n", m.MsgSubtype)
-	fmt.Printf("Message:		%s \n", string(m.Message))
+	//fmt.Printf("Message:		%s \n", string(m.Message))
 	fmt.Printf("Status:		%d \n", m.Status)
 	fmt.Printf("Seen:		%t \n", m.Seen)
 	fmt.Println("---------------------------------------------------------------------------------------------------")
@@ -296,9 +329,20 @@ func (ms MessengerService) sendMessage(pkroute util.PKRoute, m message.Message, 
 		}
 	}
 
-	fmt.Printf("Write Bytes to Conn: %s \n", conn.LocalAddr())
+	// create the length prefix
+	prefix := make([]byte, 4)
+	binary.BigEndian.PutUint32(prefix, uint32(len(bytes)))
+	fmt.Printf("Write prefix with %d Bytes to Conn: %s \n", len(prefix), conn.LocalAddr())
+	_, err = conn.Write(prefix)
+	if err != nil {
+		fmt.Printf("Failed to write prefix: %v \n", err)
+		return err
+	}
+
+	fmt.Printf("Write %d Bytes to Conn: %s \n", len(bytes), conn.LocalAddr())
 	_, err = conn.Write(bytes)
 	if err != nil {
+		fmt.Printf("Failed to write bytes: %v \n", err)
 		return err
 	}
 

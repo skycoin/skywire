@@ -280,7 +280,7 @@ func (ms MessengerService) handleP2PInfoMsgType(v *chat.Visor, m message.Message
 	fmt.Printf("Pk:		%s \n", i.Pk.Hex())
 	fmt.Printf("Alias:	%s \n", i.Alias)
 	fmt.Printf("Desc:	%s \n", i.Desc)
-	fmt.Printf("Img:	%s \n", i.Img)
+	//fmt.Printf("Img:	%s \n", i.Img)
 	fmt.Println("---------------------------------------------------------------------------------------------------")
 
 	//update the info of the p2p

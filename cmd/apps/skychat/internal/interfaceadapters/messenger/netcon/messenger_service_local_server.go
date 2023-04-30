@@ -630,7 +630,7 @@ func (ms MessengerService) handleLocalServerInfoMsgType(v *chat.Visor, m message
 	fmt.Printf("Pk:		%s \n", i.Pk.Hex())
 	fmt.Printf("Alias:	%s \n", i.Alias)
 	fmt.Printf("Desc:	%s \n", i.Desc)
-	fmt.Printf("Img:	%s \n", i.Img)
+	//fmt.Printf("Img:	%s \n", i.Img)
 	fmt.Println("---------------------------------------------------------------------------------------------------")
 
 	//get server from visor
