@@ -75,12 +75,12 @@ func (ms MessengerService) Handle(pk cipher.PubKey) {
 			errs <- err
 			return
 		}
-		length_from_prefix := binary.BigEndian.Uint32(prefix)
-		fmt.Printf("Prefix length: %d \n", length_from_prefix)
+		lengthFromPrefix := binary.BigEndian.Uint32(prefix)
+		fmt.Printf("Prefix length: %d \n", lengthFromPrefix)
 
 		data := make([]byte, 0)
 		length := 0
-		for length = 0; length < int(length_from_prefix); {
+		for length = 0; length < int(lengthFromPrefix); {
 			//read packets
 			n, err := conn.Read(buf)
 			if err != nil {
@@ -96,7 +96,7 @@ func (ms MessengerService) Handle(pk cipher.PubKey) {
 
 			// update total read var
 			length += n
-			fmt.Printf("Data:	%d/%d	(PacketSize: %d) \n", length, length_from_prefix, n)
+			fmt.Printf("Data:	%d/%d	(PacketSize: %d) \n", length, lengthFromPrefix, n)
 		}
 
 		fmt.Printf("Received %d bytes \n", length)
