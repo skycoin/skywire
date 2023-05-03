@@ -151,12 +151,15 @@ install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 	${STATIC_OPTS} go install -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node
 
 lint: ## Run linters. Use make install-linters first
+	golangci-lint --version
 	${OPTS} golangci-lint run -c .golangci.yml ./...
 
 lint-windows: ## Run linters. Use make install-linters-windows first
+	powershell 'golangci-lint --version'
 	powershell 'golangci-lint run -c .golangci.yml ./...'
 
 lint-appveyor-windows: ## Run linters for appveyor only on windows
+	C:\Users\appveyor\go\bin\golangci-lint --version
 	C:\Users\appveyor\go\bin\golangci-lint run -c .golangci.yml ./...
 
 test: ## Run tests
