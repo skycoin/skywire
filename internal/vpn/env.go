@@ -50,7 +50,7 @@ type DirectRoutesEnvConfig struct {
 	DmsgServers     []string
 	TPDiscovery     string
 	RF              string
-	UptimeTracker   string
+	UptimeTracker   []string
 	AddressResolver string
 	TPRemoteIPs     []string
 	STCPTable       map[cipher.PubKey]string
@@ -76,8 +76,9 @@ func AppEnvArgs(config DirectRoutesEnvConfig) map[string]string {
 		envs[RFAddrEnvKey] = config.RF
 	}
 
-	if config.UptimeTracker != "" {
-		envs[UptimeTrackerAddrEnvKey] = config.UptimeTracker
+	if len(config.UptimeTracker) != 0 {
+		//TODO: Fix this placeholder logic after converting underlying types
+		envs[UptimeTrackerAddrEnvKey] = config.UptimeTracker[1]
 	}
 
 	if len(config.STCPTable) != 0 {

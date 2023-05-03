@@ -1093,7 +1093,7 @@ func vpnEnvMaker(conf *visorconfig.V1, dmsgC, dmsgDC *dmsg.Client, tpRemoteAddrs
 		}
 
 		if conf.UptimeTracker != nil {
-			envCfg.UptimeTracker = conf.UptimeTracker.Addr
+			envCfg.UptimeTracker = *conf.UptimeTracker
 		}
 
 		if conf.STCP != nil && len(conf.STCP.PKTable) != 0 {
@@ -1185,52 +1185,54 @@ func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error {
 func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error {
 	const tickDuration = 5 * time.Minute
 
-	conf := v.conf.UptimeTracker
+	utconf := *v.conf.UptimeTracker
 
-	if conf == nil {
+	if len(utconf) == 0 {
 		v.log.Debug("'uptime_tracker' is not configured, skipping.")
 		return nil
 	}
+	//TODO: consider the best logic for multiple uptime trackers
+	for _, conf := range utconf {
 
-	httpC, err := getHTTPClient(ctx, v, conf.Addr)
-	if err != nil {
-		return err
-	}
-
-	pIP, err := getPublicIP(v, conf.Addr)
-	if err != nil {
-		return err
-	}
-
-	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
-	if err != nil {
-		v.log.WithError(err).Warn("Failed to connect to uptime tracker.")
-		return nil
-	}
-
-	ticker := time.NewTicker(tickDuration)
-
-	go func() {
-		for range ticker.C {
-			c := context.Background()
-			if err := ut.UpdateVisorUptime(c, v.conf.Version); err != nil {
-				v.isServicesHealthy.unset()
-				log.WithError(err).Warn("Failed to update visor uptime.")
-			} else {
-				v.isServicesHealthy.set()
-			}
+		httpC, err := getHTTPClient(ctx, v, conf)
+		if err != nil {
+			return err
 		}
-	}()
 
-	v.pushCloseStack("uptime_tracker", func() error {
-		ticker.Stop()
-		return nil
-	})
+		pIP, err := getPublicIP(v, conf)
+		if err != nil {
+			return err
+		}
 
-	v.initLock.Lock()
-	v.uptimeTracker = ut
-	v.initLock.Unlock()
+		ut, err := utclient.NewHTTP(conf, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
+		if err != nil {
+			v.log.WithError(err).Warn("Failed to connect to uptime tracker.")
+			return nil
+		}
 
+		ticker := time.NewTicker(tickDuration)
+
+		go func() {
+			for range ticker.C {
+				c := context.Background()
+				if err := ut.UpdateVisorUptime(c, v.conf.Version); err != nil {
+					v.isServicesHealthy.unset()
+					log.WithError(err).Warn("Failed to update visor uptime.")
+				} else {
+					v.isServicesHealthy.set()
+				}
+			}
+		}()
+
+		v.pushCloseStack("uptime_tracker", func() error {
+			ticker.Stop()
+			return nil
+		})
+
+		v.initLock.Lock()
+		v.uptimeTracker = ut
+		v.initLock.Unlock()
+	}
 	return nil
 }
 

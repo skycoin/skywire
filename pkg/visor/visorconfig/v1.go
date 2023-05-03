@@ -24,7 +24,7 @@ type V1 struct {
 	STCP          *network.STCPConfig `json:"skywire-tcp,omitempty"`
 	Transport     *Transport          `json:"transport"`
 	Routing       *Routing            `json:"routing"`
-	UptimeTracker *UptimeTracker      `json:"uptime_tracker,omitempty"`
+	UptimeTracker *[]string           `json:"uptime_tracker,omitempty"`
 	Launcher      *Launcher           `json:"launcher"`
 
 	Hypervisors []cipher.PubKey `json:"hypervisors"`
@@ -72,11 +72,6 @@ type Routing struct {
 	RouteFinder        string          `json:"route_finder"`
 	RouteFinderTimeout Duration        `json:"route_finder_timeout,omitempty"`
 	MinHops            uint16          `json:"min_hops"`
-}
-
-// UptimeTracker configures uptime tracker.
-type UptimeTracker struct {
-	Addr string `json:"addr"`
 }
 
 // Launcher configures the app

@@ -86,9 +86,9 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		BinPath:       AppBinPath,
 		DisplayNodeIP: false,
 	}
-	conf.UptimeTracker = &UptimeTracker{
-		Addr: services.UptimeTracker, //utilenv.UptimeTrackerAddr,
-	}
+	var utconf []string
+	utconf = append(utconf, services.UptimeTracker) //utilenv.UptimeTrackerAddr,
+	conf.UptimeTracker = &utconf
 	conf.CLIAddr = RPCAddr
 	conf.LogLevel = LogLevel
 	conf.LocalPath = LocalPath
@@ -115,7 +115,9 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 				conf.Dmsg.Discovery = dmsgHTTPServersList.Test.DMSGDiscovery
 				conf.Transport.AddressResolver = dmsgHTTPServersList.Test.AddressResolver
 				conf.Transport.Discovery = dmsgHTTPServersList.Test.TransportDiscovery
-				conf.UptimeTracker.Addr = dmsgHTTPServersList.Test.UptimeTracker
+				var utconf []string
+				utconf = append(utconf, dmsgHTTPServersList.Test.UptimeTracker) //utilenv.UptimeTrackerAddr,
+				conf.UptimeTracker = &utconf
 				conf.Routing.RouteFinder = dmsgHTTPServersList.Test.RouteFinder
 				conf.Launcher.ServiceDisc = dmsgHTTPServersList.Test.ServiceDiscovery
 			} else {
@@ -123,7 +125,9 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 				conf.Dmsg.Discovery = dmsgHTTPServersList.Prod.DMSGDiscovery
 				conf.Transport.AddressResolver = dmsgHTTPServersList.Prod.AddressResolver
 				conf.Transport.Discovery = dmsgHTTPServersList.Prod.TransportDiscovery
-				conf.UptimeTracker.Addr = dmsgHTTPServersList.Prod.UptimeTracker
+				var utconf []string
+				utconf = append(utconf, dmsgHTTPServersList.Prod.UptimeTracker) //utilenv.UptimeTrackerAddr,
+				conf.UptimeTracker = &utconf
 				conf.Routing.RouteFinder = dmsgHTTPServersList.Prod.RouteFinder
 				conf.Launcher.ServiceDisc = dmsgHTTPServersList.Prod.ServiceDiscovery
 			}

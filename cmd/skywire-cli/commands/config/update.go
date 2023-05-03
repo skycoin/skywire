@@ -125,9 +125,9 @@ var updateCmd = &cobra.Command{
 			conf.Launcher = &visorconfig.Launcher{
 				ServiceDisc: services.ServiceDiscovery, //utilenv.DefaultServiceDiscAddr,
 			}
-			conf.UptimeTracker = &visorconfig.UptimeTracker{
-				Addr: services.UptimeTracker, //utilenv.DefaultUptimeTrackerAddr,
-			}
+			utconf := *conf.UptimeTracker
+			utconf = append(utconf, services.UptimeTracker) //utilenv.DefaultUptimeTrackerAddr,
+			*conf.UptimeTracker = utconf
 			conf.StunServers = services.StunServers //utilenv.GetStunServers()
 		}
 
