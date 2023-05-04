@@ -222,7 +222,9 @@ var genConfigCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
-		serviceConfURL = svcConf
+		if serviceConfURL == "" {
+			serviceConfURL = svcConf
+		}
 		//use test deployment
 		if isTestEnv {
 			serviceConfURL = testConf
