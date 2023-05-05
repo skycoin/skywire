@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"os"
 	"sync"
@@ -87,6 +88,10 @@ var logCmd = &cobra.Command{
 		if err != nil {
 			log.WithError(err).Panic("Unable to get data from uptime tracker.")
 		}
+		//randomize the order of the fetching - prevents observed hanging
+		rand.Shuffle(len(uptimes), func(i, j int) {
+			uptimes[i], uptimes[j] = uptimes[j], uptimes[i]
+		})
 		// Create dmsg http client
 		pk, sk, _ := genKeys("") //nolint
 		dmsgC, closeDmsg, err := dg.StartDmsg(ctx, log, pk, sk)
