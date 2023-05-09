@@ -51,7 +51,7 @@ require (
 	github.com/orandin/lumberjackrus v1.0.1
 	github.com/pterm/pterm v0.12.49
 	github.com/skycoin/dmsg v1.3.0-rc1.0.20230224131835-1c194ef9791e
-	github.com/skycoin/skywire-utilities v0.0.0-20230315234948-7c62dc34c53a
+	github.com/skycoin/skywire-utilities v0.0.0-20230110132024-c5536ba8e22c
 	github.com/skycoin/systray v1.10.0
 	github.com/spf13/pflag v1.0.5
 	github.com/zcalusic/sysinfo v0.9.5
