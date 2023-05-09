@@ -43,6 +43,7 @@ func init() {
 var vpnListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List servers",
+	Long:  "List vpn servers from service discovery\n http://sd.skycoin.com/api/services?type=vpn\n http://sd.skycoin.com/api/services?type=vpn&country=US",
 	Run: func(cmd *cobra.Command, args []string) {
 		if pk != "" {
 			err := pubkey.Set(pk)

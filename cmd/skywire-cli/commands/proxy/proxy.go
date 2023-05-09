@@ -152,7 +152,7 @@ var proxyStatusCmd = &cobra.Command{
 var proxyListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List servers",
-	Long:  "List proxy servers from service discovery\n http://sd.skycoin.com/api/services?type=proxy\n http://sd.skycoin.com/api/services?type=vpn&country=US",
+	Long:  "List proxy servers from service discovery\n http://sd.skycoin.com/api/services?type=proxy\n http://sd.skycoin.com/api/services?type=proxy&country=US",
 	Run: func(cmd *cobra.Command, args []string) {
 		if pk != "" {
 			err := pubkey.Set(pk)
