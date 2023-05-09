@@ -9,9 +9,9 @@ import (
 )
 
 var (
-	stateName    string = "vpn-clent"
-	serviceType  string = servicedisc.ServiceTypeVPN
-	servicePort  string = ":3"
+	stateName    = "vpn-clent"
+	serviceType  = servicedisc.ServiceTypeVPN
+	servicePort  = ":3"
 	path         string
 	isPkg        bool
 	isUnFiltered bool

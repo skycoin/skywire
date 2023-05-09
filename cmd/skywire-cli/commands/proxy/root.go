@@ -9,9 +9,9 @@ import (
 )
 
 var (
-	stateName    string = "skysocks-client"
-	serviceType  string = servicedisc.ServiceTypeProxy
-	servicePort  string = ":44"
+	stateName    = "skysocks-client"
+	serviceType  = servicedisc.ServiceTypeProxy
+	servicePort  = ":44"
 	isUnFiltered bool
 	ver          string
 	country      string
