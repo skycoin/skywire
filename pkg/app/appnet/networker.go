@@ -59,7 +59,7 @@ func ClearNetworkers() {
 // Networker defines basic network operations, such as Dial/Listen.
 type Networker interface {
 	Dial(addr Addr) (net.Conn, error)
-	Ping(pk cipher.PubKey, addr Addr) (net.Conn, error)
+	Ping(pk cipher.PubKey, addr Addr, autoTp bool) (net.Conn, error)
 	DialContext(ctx context.Context, addr Addr) (net.Conn, error)
 	Listen(addr Addr) (net.Listener, error)
 	ListenContext(ctx context.Context, addr Addr) (net.Listener, error)
@@ -71,12 +71,12 @@ func Dial(addr Addr) (net.Conn, error) {
 }
 
 // Ping dials the remote `addr`.
-func Ping(pk cipher.PubKey, addr Addr) (net.Conn, error) {
+func Ping(pk cipher.PubKey, addr Addr, autoTp bool) (net.Conn, error) {
 	n, err := ResolveNetworker(addr.Net)
 	if err != nil {
 		return nil, err
 	}
-	return n.Ping(pk, addr)
+	return n.Ping(pk, addr, autoTp)
 }
 
 // DialContext dials the remote `addr` with the context.

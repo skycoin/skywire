@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/visor/ping"
 )
 
 //go:generate mockery --name Router --case underscore --inpackage
@@ -98,6 +99,7 @@ type DialOptions struct {
 	MaxForwardRts int
 	MinConsumeRts int
 	MaxConsumeRts int
+	AutoTransport bool
 }
 
 // DefaultDialOptions returns default dial options.
@@ -108,6 +110,7 @@ func DefaultDialOptions() *DialOptions {
 		MaxForwardRts: 1,
 		MinConsumeRts: 1,
 		MaxConsumeRts: 1,
+		AutoTransport: true,
 	}
 }
 
@@ -125,7 +128,7 @@ type Router interface {
 	// - Save to routing.Table and internal RouteGroup map.
 	// - Return RouteGroup if successful.
 	DialRoutes(ctx context.Context, rPK cipher.PubKey, lPort, rPort routing.Port, opts *DialOptions) (net.Conn, error)
-	PingRoute(ctx context.Context, rPK cipher.PubKey, lPort, rPort routing.Port, opts *DialOptions) (net.Conn, error)
+	DialPingRoute(ctx context.Context, rPK cipher.PubKey, lPort, rPort routing.Port, opts *DialOptions) (net.Conn, error)
 
 	// AcceptRoutes should block until we receive an AddRules packet from SetupNode
 	// that contains ConsumeRule(s) or ForwardRule(s).
@@ -246,6 +249,7 @@ func (r *router) DialRoutes(
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, lPort, rPort)
 
+	// set up transport to remote via autotransport aka routeSetupHook
 	r.routeSetupHookMu.Lock()
 	defer r.routeSetupHookMu.Unlock()
 	if len(r.routeSetupHooks) != 0 {
@@ -304,7 +308,7 @@ func (r *router) DialRoutes(
 	return nrg, nil
 }
 
-// PingRoute dials to a given visor of 'rPK'.
+// DialPingRoute dials to a given visor of 'rPK'.
 // 'lPort'/'rPort' specifies the local/remote ports respectively.
 // A nil 'opts' input results in a value of '1' for all DialOptions fields.
 // A single call to DialRoutes should perform the following:
@@ -312,7 +316,7 @@ func (r *router) DialRoutes(
 // - Setup routes via SetupNode (in one call).
 // - Save to routing.Table and internal RouteGroup map.
 // - Return RouteGroup if successful.
-func (r *router) PingRoute(
+func (r *router) DialPingRoute(
 	ctx context.Context,
 	rPK cipher.PubKey,
 	lPort, rPort routing.Port,
@@ -328,12 +332,15 @@ func (r *router) PingRoute(
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, lPK, lPort, rPort)
 
-	r.routeSetupHookMu.Lock()
-	defer r.routeSetupHookMu.Unlock()
-	if len(r.routeSetupHooks) != 0 {
-		for _, rsf := range r.routeSetupHooks {
-			if err := rsf(rPK, r.tm); err != nil {
-				return nil, err
+	if opts.AutoTransport {
+		// set up transport to remote via autotransport aka routeSetupHook
+		r.routeSetupHookMu.Lock()
+		defer r.routeSetupHookMu.Unlock()
+		if len(r.routeSetupHooks) != 0 {
+			for _, rsf := range r.routeSetupHooks {
+				if err := rsf(rPK, r.tm); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
@@ -341,7 +348,7 @@ func (r *router) PingRoute(
 	// check if transports are available
 	ok := r.checkIfTransportAvailable()
 	if !ok {
-		return nil, ErrNoTransportFound
+		return nil, ping.ErrNoTransportFound
 	}
 	forwardPath, reversePath, err := r.fetchPingRoute(lPK, rPK, opts)
 	if err != nil {

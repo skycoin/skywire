@@ -4,11 +4,13 @@ package router
 
 import (
 	context "context"
-	net "net"
+
+	cipher "github.com/skycoin/skywire-utilities/pkg/cipher"
 
 	mock "github.com/stretchr/testify/mock"
 
-	cipher "github.com/skycoin/skywire-utilities/pkg/cipher"
+	net "net"
+
 	routing "github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -59,6 +61,29 @@ func (_m *MockRouter) DelRules(_a0 []routing.RouteID) {
 	_m.Called(_a0)
 }
 
+// DialPingRoute provides a mock function with given fields: ctx, rPK, lPort, rPort, opts
+func (_m *MockRouter) DialPingRoute(ctx context.Context, rPK cipher.PubKey, lPort routing.Port, rPort routing.Port, opts *DialOptions) (net.Conn, error) {
+	ret := _m.Called(ctx, rPK, lPort, rPort, opts)
+
+	var r0 net.Conn
+	if rf, ok := ret.Get(0).(func(context.Context, cipher.PubKey, routing.Port, routing.Port, *DialOptions) net.Conn); ok {
+		r0 = rf(ctx, rPK, lPort, rPort, opts)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(net.Conn)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, cipher.PubKey, routing.Port, routing.Port, *DialOptions) error); ok {
+		r1 = rf(ctx, rPK, lPort, rPort, opts)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // DialRoutes provides a mock function with given fields: ctx, rPK, lPort, rPort, opts
 func (_m *MockRouter) DialRoutes(ctx context.Context, rPK cipher.PubKey, lPort routing.Port, rPort routing.Port, opts *DialOptions) (net.Conn, error) {
 	ret := _m.Called(ctx, rPK, lPort, rPort, opts)
@@ -94,29 +119,6 @@ func (_m *MockRouter) IntroduceRules(rules routing.EdgeRules) error {
 	}
 
 	return r0
-}
-
-// PingRoute provides a mock function with given fields: ctx, rPK, lPort, rPort, opts
-func (_m *MockRouter) PingRoute(ctx context.Context, rPK cipher.PubKey, lPort routing.Port, rPort routing.Port, opts *DialOptions) (net.Conn, error) {
-	ret := _m.Called(ctx, rPK, lPort, rPort, opts)
-
-	var r0 net.Conn
-	if rf, ok := ret.Get(0).(func(context.Context, cipher.PubKey, routing.Port, routing.Port, *DialOptions) net.Conn); ok {
-		r0 = rf(ctx, rPK, lPort, rPort, opts)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(net.Conn)
-		}
-	}
-
-	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, cipher.PubKey, routing.Port, routing.Port, *DialOptions) error); ok {
-		r1 = rf(ctx, rPK, lPort, rPort, opts)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
 }
 
 // ReserveKeys provides a mock function with given fields: n

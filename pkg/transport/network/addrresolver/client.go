@@ -51,7 +51,7 @@ type Error struct {
 	Error string `json:"error"`
 }
 
-//go:generate mockery -name APIClient -case underscore -inpkg
+//go:generate mockery --name APIClient --case underscore --inpackage
 
 // APIClient implements address resolver API client.
 type APIClient interface {

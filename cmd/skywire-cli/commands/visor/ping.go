@@ -16,10 +16,12 @@ var (
 	tries       int
 	pcktSize    int
 	pubVisCount int
+	autoTp      bool
 )
 
 func init() {
 	RootCmd.AddCommand(pingCmd)
+	pingCmd.Flags().BoolVarP(&autoTp, "auto-tp", "a", false, "Automatic transport creation")
 	pingCmd.Flags().IntVarP(&tries, "tries", "t", 1, "Number of tries")
 	pingCmd.Flags().IntVarP(&pcktSize, "size", "s", 2, "Size of packet, in KB, default is 2KB")
 	RootCmd.AddCommand(testCmd)
@@ -35,7 +37,7 @@ var pingCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		pk := internal.ParsePK(cmd.Flags(), "pk", args[0])
-		pingConfig := visor.PingConfig{PK: pk, Tries: tries, PcktSize: pcktSize}
+		pingConfig := visor.PingConfig{PK: pk, Tries: tries, PcktSize: pcktSize, AutoTp: autoTp}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			os.Exit(1)

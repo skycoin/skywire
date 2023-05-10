@@ -14,7 +14,7 @@ import (
 	"github.com/skycoin/skywire/internal/httpauth"
 )
 
-//go:generate mockery -name APIClient -case underscore -inpkg
+//go:generate mockery --name APIClient --case underscore --inpackage
 
 // APIClient implements uptime tracker API client.
 type APIClient interface {

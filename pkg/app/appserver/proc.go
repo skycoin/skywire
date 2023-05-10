@@ -105,7 +105,7 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 			storeLog(appLog, logStorePath)
 		}
 
-		cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").WriterLevel(logrus.DebugLevel)
+		cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").WriterLevel(logrus.InfoLevel)
 
 		// we read the Stderr pipe in order to filter some false positive app errors
 		errorLog := appLog.WithField("_module", moduleName).WithField("func", "(STDERR)")

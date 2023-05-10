@@ -25,7 +25,7 @@ const (
 	DMSG Type = "dmsg"
 )
 
-//go:generate mockery -name Dialer -case underscore -inpkg
+//go:generate mockery --name Dialer --case underscore --inpackage
 
 // Dialer is an entity that can be dialed and asked for its type.
 type Dialer interface {

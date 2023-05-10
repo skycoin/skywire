@@ -33,6 +33,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
+	"github.com/skycoin/skywire/pkg/visor/ping"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -1147,6 +1148,7 @@ type PingConfig struct {
 	Tries       int
 	PcktSize    int
 	PubVisCount int
+	AutoTp      bool
 }
 
 // DialPing implements API.
@@ -1170,7 +1172,7 @@ func (v *Visor) DialPing(conf PingConfig) error {
 	ctx := context.TODO()
 	var r = netutil.NewRetrier(v.log, 2*time.Second, netutil.DefaultMaxBackoff, 1, 2)
 	err = r.Do(ctx, func() error {
-		conn, err = appnet.Ping(conf.PK, addr)
+		conn, err = appnet.Ping(conf.PK, addr, conf.AutoTp)
 		return err
 	})
 	if err != nil {
@@ -1182,9 +1184,9 @@ func (v *Visor) DialPing(conf PingConfig) error {
 		return fmt.Errorf("Can't get such info from this conn")
 	}
 	v.pingConnMx.Lock()
-	v.pingConns[conf.PK] = ping{
-		conn:    skywireConn,
-		latency: make(chan time.Duration),
+	v.pingConns[conf.PK] = ping.Conn{
+		Conn:    skywireConn,
+		Latency: make(chan time.Duration),
 	}
 	v.pingConnMx.Unlock()
 	return nil
@@ -1197,18 +1199,18 @@ func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
 	latencies := []time.Duration{}
 	data := make([]byte, conf.PcktSize*1024)
 	for i := 1; i <= conf.Tries; i++ {
-		skywireConn := v.pingConns[conf.PK].conn
-		msg := PingMsg{
+		skywireConn := v.pingConns[conf.PK].Conn
+		msg := ping.Msg{
 			Timestamp: time.Now(),
 			PingPk:    conf.PK,
 			Data:      data,
 		}
-		ping, err := json.Marshal(msg)
+		p, err := json.Marshal(msg)
 		if err != nil {
 			return latencies, err
 		}
-		pingSizeMsg := PingSizeMsg{
-			Size: len(ping),
+		pingSizeMsg := ping.SizeMsg{
+			Size: len(p),
 		}
 		size, err := json.Marshal(pingSizeMsg)
 		if err != nil {
@@ -1226,11 +1228,11 @@ func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
 				return latencies, err
 			}
 		}
-		_, err = skywireConn.Write(ping)
+		_, err = skywireConn.Write(p)
 		if err != nil {
 			return latencies, err
 		}
-		latencies = append(latencies, <-v.pingConns[conf.PK].latency)
+		latencies = append(latencies, <-v.pingConns[conf.PK].Latency)
 	}
 	return latencies, nil
 }
@@ -1240,7 +1242,7 @@ func (v *Visor) StopPing(pk cipher.PubKey) error {
 	v.pingConnMx.Lock()
 	defer v.pingConnMx.Unlock()
 
-	skywireConn := v.pingConns[pk].conn
+	skywireConn := v.pingConns[pk].Conn
 	err := skywireConn.Close()
 	if err != nil {
 		return err
