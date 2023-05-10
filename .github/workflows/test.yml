@@ -11,15 +11,15 @@ jobs:
       - name: Install Requirements
         run: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.50.1
-          make dep
+          make -j8 dep
           chmod +x ./ci_scripts/create-ip-aliases.sh
           ./ci_scripts/create-ip-aliases.sh
         shell: bash
       - name: Checking Format and Testing
-        run: make check
+        run: make -j8 check
       - name: Build
-        run: make build
-  
+        run: make -j8 build
+
   darwin:
     runs-on: macos-latest
     steps:
@@ -35,10 +35,10 @@ jobs:
           ./ci_scripts/create-ip-aliases.sh
         shell: bash
       - name: Checking Format and Testing
-        run: make check
+        run: make -j8 check
       - name: Build
-        run: make build
-  
+        run: make -j8 build
+
   windows:
     runs-on: windows-latest
     steps:
@@ -50,10 +50,10 @@ jobs:
         run: |
           choco install make
           go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.50.1
-          make dep
+          make -j8 dep
       - name: Testing
         run:  |
           set GO111MODULE=on
-          make test-windows
+          make -j8 test-windows
       - name: Build
-        run: make build-windows
+        run: make -j8 build-windows
