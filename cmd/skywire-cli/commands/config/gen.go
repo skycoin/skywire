@@ -24,48 +24,117 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
-var isEnvs bool
+var envfile = `
+#
+# /etc/skywire.conf
+#
+#########################################################################
+#	SKYWIRE CONFIG TEMPLATE
+#		Defaults for booleans are false
+#		Uncomment to change default value
+#########################################################################
 
+#--	Other Visors will automatically establish transports to this visor
+#	requires port forwarding or public ip
+#VISORISPUBLIC=true
+
+#--	Autostart vpn server for this visor
+#VPNSERVER=true
+
+#--	Use test deployment
+#TESTENV=true
+
+#--	Automatically determine the best protocol (dmsg or http)
+#	based on location to connect to the deployment servers
+#BESTPROTO=true
+
+#--	Set custom service conf URLs
+#SVCCONFADDR=('')
+
+#--	Set visor runtime log level.
+#	Default is info ; uncomment for debug logging
+#LOGLVL=debug
+
+#--	Use dmsghttp to connect to the production deployment
+#DMSGHTTP=true
+
+#--	Start the hypervisor interface for this visor
+#ISHYPERVISOR=true
+
+#--	Output path of the config file
+#OUTPUT='./skywire-config.json'
+
+#--	Display the node ip in the service discovery
+#	for any public services this visor is running
+#DISPLAYNODEIP=true
+
+#--	Set remote hypervisor public keys
+#HYPERVISORPKS=('')
+
+#--	Default config paths for the installer or package (system paths)
+#PKGENV=true
+
+#--	Default config paths for the current userspace
+#USRENV=true
+
+#--	Set secret key
+#SK=''
+
+#--	Disable auto-transports to public visors
+#DISABLEPUBLICAUTOCONN=true
+
+#--	Custom config version override
+#VERSION=''
+
+#--	Set app bin_path
+#BINPATH='./apps'
+
+`
+var (
+	isEnvs bool
+	skyenvfile = os.Getenv("SKYENV")
+)
 func init() {
+
 	var msg string
 	//disable sorting, flags appear in the order shown here
 	genConfigCmd.Flags().SortFlags = false
 	RootCmd.AddCommand(genConfigCmd)
 
-	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", scriptExecString(fmt.Sprintf("${SVCCONFADDR:-%s}", utilenv.ServiceConfAddr)), "services conf url\n\r")
+	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", scriptExecArray(fmt.Sprintf("${SVCCONFADDR[@]-%s}", utilenv.ServiceConfAddr)), "services conf url\n\r")
 	gHiddenFlags = append(gHiddenFlags, "url")
 	genConfigCmd.Flags().StringVar(&logLevel, "loglvl", scriptExecString("${LOGLVL:-info}"), "level of logging in config\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "loglvl")
-	genConfigCmd.Flags().BoolVarP(&isBestProtocol, "bestproto", "b", scriptExecBool("${BESTPROTO:-false}"), "best protocol (dmsg | direct) based on location") //this will also disable public autoconnect based on location
-	genConfigCmd.Flags().BoolVarP(&isDisableAuth, "noauth", "c", false, "disable authentication for hypervisor UI")
+	genConfigCmd.Flags().BoolVarP(&isBestProtocol, "bestproto", "b", scriptExecBool("${BESTPROTO:-false}"), "best protocol (dmsg | direct) based on location\033[0m") //this will also disable public autoconnect based on location
+	genConfigCmd.Flags().BoolVarP(&isDisableAuth, "noauth", "c", false, "disable authentication for hypervisor UI\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "noauth")
-	genConfigCmd.Flags().BoolVarP(&isDmsgHTTP, "dmsghttp", "d", scriptExecBool("${DMSGHTTP:-false}"), "use dmsg connection to skywire services")
+	genConfigCmd.Flags().BoolVarP(&isDmsgHTTP, "dmsghttp", "d", scriptExecBool("${DMSGHTTP:-false}"), "use dmsg connection to skywire services\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "dmsghttp")
-	genConfigCmd.Flags().BoolVarP(&isEnableAuth, "auth", "e", false, "enable auth on hypervisor UI")
+	genConfigCmd.Flags().BoolVarP(&isEnableAuth, "auth", "e", false, "enable auth on hypervisor UI\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "auth")
-	genConfigCmd.Flags().BoolVarP(&isForce, "force", "f", false, "remove pre-existing config")
+	genConfigCmd.Flags().BoolVarP(&isForce, "force", "f", false, "remove pre-existing config\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "force")
-	genConfigCmd.Flags().StringVarP(&disableApps, "disableapps", "g", "", "comma separated list of apps to disable")
+	genConfigCmd.Flags().StringVarP(&disableApps, "disableapps", "g", "", "comma separated list of apps to disable\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "disableapps")
-	genConfigCmd.Flags().BoolVarP(&isHypervisor, "ishv", "i", scriptExecBool("${ISHYPERVISOR:-false}"), "local hypervisor configuration")
+	genConfigCmd.Flags().BoolVarP(&isHypervisor, "ishv", "i", scriptExecBool("${ISHYPERVISOR:-false}"), "local hypervisor configuration\033[0m")
 	msg = "list of public keys to use as hypervisor"
-	if scriptExecString("${OUTPUT}") == "" {
+	if scriptExecArray("${HYPERVISORPKS[@]}") != "" {
 		msg += "\n\r"
 	}
 	genConfigCmd.Flags().StringVarP(&hypervisorPKs, "hvpks", "j", scriptExecArray("${HYPERVISORPKS[@]}"), msg)
 	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", visorconfig.OS, "(linux / mac / win) paths\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "os")
-	genConfigCmd.Flags().BoolVarP(&isDisplayNodeIP, "publicip", "l", scriptExecBool("${DISPLAYNODEIP:-false}"), "allow display node ip in services")
+	genConfigCmd.Flags().BoolVarP(&isDisplayNodeIP, "publicip", "l", scriptExecBool("${DISPLAYNODEIP:-false}"), "allow display node ip in services\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "publicip")
-	genConfigCmd.Flags().BoolVarP(&addExampleApps, "example-apps", "m", false, "add example apps to the config")
+	genConfigCmd.Flags().BoolVarP(&addExampleApps, "example-apps", "m", false, "add example apps to the config\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "example-apps")
-	genConfigCmd.Flags().BoolVarP(&isStdout, "stdout", "n", false, "write config to stdout")
+	genConfigCmd.Flags().BoolVarP(&isStdout, "stdout", "n", false, "write config to stdout\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "stdout")
 	msg = "output config"
 	if scriptExecString("${OUTPUT}") == "" {
 		msg += ": " + visorconfig.ConfigName
 	}
-	genConfigCmd.Flags().StringVarP(&output, "out", "o", scriptExecString("${OUTPUT}"), msg)
+	genConfigCmd.Flags().StringVarP(&output, "out", "o", scriptExecString("${OUTPUT}"), msg+"\033[0m")
 	if visorconfig.OS == "win" {
 		pText = "use .msi installation path: "
 	}
@@ -75,30 +144,29 @@ func init() {
 	if visorconfig.OS == "mac" {
 		pText = "use mac installation path: "
 	}
-	genConfigCmd.Flags().BoolVarP(&isPkgEnv, "pkg", "p", scriptExecBool("${PKGENV:-false}"), pText+"\033[0m"+visorconfig.SkywirePath)
+	genConfigCmd.Flags().BoolVarP(&isPkgEnv, "pkg", "p", scriptExecBool("${PKGENV:-false}"), pText+visorconfig.SkywirePath+"\033[0m")
 	homepath := visorconfig.HomePath()
 	if homepath != "" {
-		genConfigCmd.Flags().BoolVarP(&isUsrEnv, "user", "u", scriptExecBool("${USRENV:-false}"), "use paths for user space: \033[0m"+homepath)
+		genConfigCmd.Flags().BoolVarP(&isUsrEnv, "user", "u", scriptExecBool("${USRENV:-false}"), "use paths for user space: "+homepath+"\033[0m")
 	}
 	genConfigCmd.Flags().BoolVarP(&isRegen, "regen", "r", false, "re-generate existing config & retain keys")
 	if scriptExecString("${SK:-0000000000000000000000000000000000000000000000000000000000000000}") != "0000000000000000000000000000000000000000000000000000000000000000" {
-		sk.Set(scriptExecString("${SK:-0000000000000000000000000000000000000000000000000000000000000000}"))
+		sk.Set(scriptExecString("${SK:-0000000000000000000000000000000000000000000000000000000000000000}")) //nolint
 	}
 	genConfigCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
 	gHiddenFlags = append(gHiddenFlags, "sk")
-	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", scriptExecBool("${TESTENV:-false}"), "use test deployment "+testConf)
+	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", scriptExecBool("${TESTENV:-false}"), "use test deployment "+testConf+"\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "testenv")
-	genConfigCmd.Flags().BoolVarP(&isVpnServerEnable, "servevpn", "v", scriptExecBool("${SERVEVPN:-false}"), "enable vpn server")
+	genConfigCmd.Flags().BoolVarP(&isVpnServerEnable, "servevpn", "v", scriptExecBool("${SERVEVPN:-false}"), "enable vpn server\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "servevpn")
-	genConfigCmd.Flags().BoolVarP(&isHide, "hide", "w", false, "dont print the config to the terminal")
+	genConfigCmd.Flags().BoolVarP(&isHide, "hide", "w", false, "dont print the config to the terminal\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "hide")
-	genConfigCmd.Flags().BoolVarP(&isRetainHypervisors, "retainhv", "x", false, "retain existing hypervisors with regen")
+	genConfigCmd.Flags().BoolVarP(&isRetainHypervisors, "retainhv", "x", false, "retain existing hypervisors with regen\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "retainhv")
-	genConfigCmd.Flags().BoolVarP(&disablePublicAutoConn, "autoconn", "y", scriptExecBool("${DISABLEPUBLICAUTOCONN:-false}"), "disable autoconnect to public visors")
+	genConfigCmd.Flags().BoolVarP(&disablePublicAutoConn, "autoconn", "y", scriptExecBool("${DISABLEPUBLICAUTOCONN:-false}"), "disable autoconnect to public visors\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "hide")
-	genConfigCmd.Flags().BoolVarP(&isPublic, "public", "z", scriptExecBool("${VISORISPUBLIC:-false}"), "publicize visor in service discovery")
+	genConfigCmd.Flags().BoolVarP(&isPublic, "public", "z", scriptExecBool("${VISORISPUBLIC:-false}"), "publicize visor in service discovery\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "public")
-	//	genConfigCmd.Flags().BoolVar(&isDisplayNodeIP, "publicip", false, "display node ip")
 	genConfigCmd.Flags().StringVar(&ver, "version", scriptExecString("${VERSION}"), "custom version testing override\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "version")
 	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
@@ -135,37 +203,27 @@ func scriptExecArray(s string) string {
 
 var genConfigCmd = &cobra.Command{
 	Use: "gen",
-	Short: func() string {
+	Short: "Generate a config file",
+	Long: func() string {
 		if skyenvfile == "" {
-			return "Generate a config file\nConfig defaults file may also be specified with SKYENV=/path/to/skywire.conf"
+			return `Generate a config file
+
+	Config defaults file may also be specified with
+	SKYENV=/path/to/skywire.conf skywire-cli config gen`
 		}
 		if _, err := os.Stat(skyenvfile); err == nil {
-			return "Generate a config file\n skyenv file detected: " + skyenvfile
+			return `Generate a config file
+
+	skyenv file detected: ` + skyenvfile
 		}
-		return "Generate a config file\nConfig defaults file may also be specified with SKYENV=/path/to/skywire.conf"
+		return `Generate a config file
+
+	Config defaults file may also be specified with
+	SKYENV=/path/to/skywire.conf skywire-cli config gen`
 	}(),
 	PreRun: func(cmd *cobra.Command, _ []string) {
 		if isEnvs {
-			fmt.Printf("\n")
-			fmt.Printf("#DEFAULT VALUES ARE SHOWN\n")
-			fmt.Printf("#Other Visors will automatically establish transports to this visor\n#requires port forwarding or public ip\n#VISORISPUBLIC=false\n")
-			fmt.Printf("#Autostart vpn server for this visor\n#VPNSERVER=false\n")
-			fmt.Printf("#Use test deployment\n#TESTENV=false\n")
-			fmt.Printf("#Automatically determine the best protocol (dmsg or http) based on location to connect to the production deployment\n#BESTPROTO=false\n")
-			fmt.Printf("#Set custom service conf URLs\n#SVCCONFADDR=('')\n")
-			fmt.Printf("#Set visor runtime log level\n#LOGLVL=info\n")
-			fmt.Printf("#Use dmsghttp to connect to the production deployment\n#DMSGHTTP=false\n")
-			fmt.Printf("#Start the hypervisor interface for this visor\n#ISHYPERVISOR=false\n")
-			fmt.Printf("#Output path of the config file\n#OUTPUT='./skywire-config.json'\n")
-			fmt.Printf("#Display the node ip in the service discovery for any public services this visor is running\n#DISPLAYNODEIP=false\n")
-			fmt.Printf("#Set remote hypervisor public keys\n#HYPERVISORPKS=('')\n")
-			fmt.Printf("#Default config paths for the installer or package (system paths)\n#PKGENV=false\n")
-			fmt.Printf("#Default config paths for the current userspace\n#USRENV=false\n")
-			fmt.Printf("#Set secret key\n#SK=''\n")
-			fmt.Printf("#Disable auto-transports to public visors\n#DISABLEPUBLICAUTOCONN=false\n")
-			fmt.Printf("#Custom config version override\n#VERSION=''\n")
-			fmt.Printf("#Set app bin_path\n#BINPATH='./apps'\n")
-			fmt.Printf("\n\r")
+			fmt.Printf(envfile)
 			os.Exit(0)
 		}
 
