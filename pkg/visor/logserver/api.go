@@ -3,7 +3,13 @@ package logserver
 
 import (
 	"encoding/json"
+	"log"
+	"mime"
+	"net"
 	"net/http"
+	"os"
+	"path"
+	"path/filepath"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -11,6 +17,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -26,7 +33,7 @@ type API struct {
 }
 
 // New creates a new api.
-func New(log *logging.Logger, tpLogPath, localPath, customPath string, printLog bool) *API {
+func New(log *logging.Logger, tpLogPath, localPath, customPath string, whitelistedPKs []cipher.PubKey, printLog bool) *API {
 	api := &API{
 		logger:    log,
 		startedAt: time.Now(),
@@ -48,8 +55,10 @@ func New(log *logging.Logger, tpLogPath, localPath, customPath string, printLog 
 	r.Handle("/*", http.StripPrefix("/", fsTP))
 
 	fsLocal := http.FileServer(http.Dir(localPath))
-	r.Handle("/"+skyenv.NodeInfo, http.StripPrefix("/", fsLocal))
-	r.Handle("/"+skyenv.RewardFile, http.StripPrefix("/", fsLocal))
+	r.Handle("/"+skyenv.NodeInfo, http.StripPrefix("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		whitelistFSHandler(w, r, localPath, whitelistedPKs)
+	})))
+
 	r.Handle("/transport_logs/*", http.StripPrefix("/", fsLocal))
 
 	fsCustom := http.FileServer(http.Dir(customPath))
@@ -87,4 +96,50 @@ func (api *API) writeJSON(w http.ResponseWriter, r *http.Request, code int, obje
 
 func (api *API) log(r *http.Request) logrus.FieldLogger {
 	return httputil.GetLogger(r)
+}
+
+func whitelistFSHandler(w http.ResponseWriter, r *http.Request, serveDir string, whitelistedPKs []cipher.PubKey) {
+	start := time.Now()
+	// Get the remote PK.
+	remotePK, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	// Check if the remote PK is whitelisted.
+	whitelisted := false
+	if len(whitelistedPKs) == 0 {
+		whitelisted = true
+	} else {
+		for _, pk2 := range whitelistedPKs {
+			if remotePK == pk2.String() {
+				whitelisted = true
+				break
+			}
+		}
+	}
+	// If the remote PK is whitelisted, serve the file.
+	if whitelisted {
+		filePath := serveDir + r.URL.Path
+		file, err := os.Open(filePath) //nolint
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+			return
+		}
+		defer file.Close() //nolint
+
+		_, filename := path.Split(filePath)
+		w.Header().Set("Content-Type", mime.TypeByExtension(filepath.Ext(filename)))
+		http.ServeContent(w, r, filename, time.Time{}, file)
+
+		// Log the response status and time taken.
+		elapsed := time.Since(start)
+		log.Printf("[DMSGHTTP] %s %s | %d | %v | %s | %s %s\n", start.Format("2006/01/02 - 15:04:05"), r.RemoteAddr, http.StatusOK, elapsed, r.Method, r.Proto, r.URL)
+		return
+	}
+	// Otherwise, return a 403 Forbidden error.
+	http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+	// Log the response status and time taken.
+	elapsed := time.Since(start)
+	log.Printf("[DMSGHTTP] %s %s | %d | %v | %s | %s %s\n", start.Format("2006/01/02 - 15:04:05"), r.RemoteAddr, http.StatusForbidden, elapsed, r.Method, r.Proto, r.URL)
 }
