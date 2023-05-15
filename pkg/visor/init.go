@@ -388,7 +388,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 		printLog = true
 	}
 
-	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, printLog)
+	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, v.conf.SurveyWhitelist, v.conf.Hypervisors, printLog)
 
 	lis, err := dmsgC.Listen(visorconfig.DmsgHTTPPort)
 	if err != nil {
