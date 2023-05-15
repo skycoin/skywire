@@ -223,7 +223,7 @@ var genConfigCmd = &cobra.Command{
 	}(),
 	PreRun: func(cmd *cobra.Command, _ []string) {
 		if isEnvs {
-			fmt.Printf(envfile)
+			fmt.Println(envfile)
 			os.Exit(0)
 		}
 

@@ -29,7 +29,6 @@ var (
 	isHypervisor           bool
 	hypervisorPKs          string
 	isDmsgHTTP             bool
-	isPublicRPC            bool
 	isVpnServerEnable      bool
 	isDisableAuth          bool
 	isEnableAuth           bool
