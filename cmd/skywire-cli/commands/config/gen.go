@@ -91,9 +91,10 @@ var envfile = `
 
 `
 var (
-	isEnvs bool
+	isEnvs     bool
 	skyenvfile = os.Getenv("SKYENV")
 )
+
 func init() {
 
 	var msg string
@@ -202,7 +203,7 @@ func scriptExecArray(s string) string {
 }
 
 var genConfigCmd = &cobra.Command{
-	Use: "gen",
+	Use:   "gen",
 	Short: "Generate a config file",
 	Long: func() string {
 		if skyenvfile == "" {
