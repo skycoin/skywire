@@ -33,7 +33,7 @@ type API struct {
 }
 
 // New creates a new api.
-func New(log *logging.Logger, tpLogPath, localPath, customPath string, surveyWhitelist []cpher.PubKey, hypervisors []cpher.PubKey, printLog bool) *API {
+func New(log *logging.Logger, tpLogPath, localPath, customPath string, whitelistedPKs []cipher.PubKey, printLog bool) *API {
 	api := &API{
 		logger:    log,
 		startedAt: time.Now(),
@@ -55,7 +55,10 @@ func New(log *logging.Logger, tpLogPath, localPath, customPath string, surveyWhi
 	r.Handle("/*", http.StripPrefix("/", fsTP))
 
 	fsLocal := http.FileServer(http.Dir(localPath))
-	r.Handle("/"+skyenv.NodeInfo, http.StripPrefix("/", fsLocal))
+	r.Handle("/"+skyenv.NodeInfo, http.StripPrefix("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		whitelistFSHandler(w, r, localPath, whitelistedPKs)
+	})))
+
 	r.Handle("/transport_logs/*", http.StripPrefix("/", fsLocal))
 
 	fsCustom := http.FileServer(http.Dir(customPath))
@@ -95,7 +98,7 @@ func (api *API) log(r *http.Request) logrus.FieldLogger {
 	return httputil.GetLogger(r)
 }
 
-func fileServerHandler(w http.ResponseWriter, r *http.Request) {
+func whitelistFSHandler(w http.ResponseWriter, r *http.Request, serveDir string, whitelistedPKs []cipher.PubKey) {
 	start := time.Now()
 	// Get the remote PK.
 	remotePK, _, err := net.SplitHostPort(r.RemoteAddr)
@@ -105,10 +108,10 @@ func fileServerHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	// Check if the remote PK is whitelisted.
 	whitelisted := false
-	if len(wlkeys) == 0 {
+	if len(whitelistedPKs) == 0 {
 		whitelisted = true
 	} else {
-		for _, pk2 := range wlkeys {
+		for _, pk2 := range whitelistedPKs {
 			if remotePK == pk2.String() {
 				whitelisted = true
 				break
