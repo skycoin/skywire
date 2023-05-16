@@ -30,10 +30,11 @@ const (
 type sudphClient struct {
 	*resolvedClient
 	filter *pfilter.PacketFilter
+	port   int
 }
 
-func newSudph(resolved *resolvedClient) Client {
-	client := &sudphClient{resolvedClient: resolved}
+func newSudph(resolved *resolvedClient, port int) Client {
+	client := &sudphClient{resolvedClient: resolved, port: port}
 	client.netType = SUDPH
 	return client
 }
@@ -50,7 +51,7 @@ func (c *sudphClient) Start() error {
 func (c *sudphClient) serve() {
 	lis, err := c.listen()
 	if err != nil {
-		c.log.Errorf("Failed to listen on random port: %v", err)
+		c.log.Errorf("Failed to listen on port: %v", err)
 		return
 	}
 	c.acceptTransports(lis)
@@ -58,9 +59,22 @@ func (c *sudphClient) serve() {
 
 // listen
 func (c *sudphClient) listen() (net.Listener, error) {
-	packetListener, err := net.ListenPacket("udp", "")
-	if err != nil {
-		return nil, err
+	var packetListener net.PacketConn
+	var err error
+	var confPort string
+	if c.port != 0 {
+		confPort = fmt.Sprintf(":%d", c.port)
+	}
+	for {
+		packetListener, err = net.ListenPacket("udp", confPort)
+		if err != nil {
+			c.log.WithError(err).Warnf("Failed to listen on port: %d", c.port)
+			c.port++
+			confPort = fmt.Sprintf(":%d", c.port)
+			c.log.Warnf("Trying port %d", c.port)
+			continue
+		}
+		break
 	}
 	c.filter = pfilter.NewPacketFilter(packetListener)
 	sudphVisorsConn := c.filter.NewConn(visorsConnPriority, nil)
