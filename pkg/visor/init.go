@@ -388,7 +388,13 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 		printLog = true
 	}
 
-	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, printLog)
+	//whitelist access to the surveys for the hypervisor, dmsggpty whitelist, and for the surveywhitelist of keys which is fetched from the conf service
+	var whitelistedPKs []cipher.PubKey
+	whitelistedPKs = append(whitelistedPKs, v.conf.SurveyWhitelist...)
+	whitelistedPKs = append(whitelistedPKs, v.conf.Hypervisors...)
+	whitelistedPKs = append(whitelistedPKs, v.conf.Dmsgpty.Whitelist...)
+
+	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, whitelistedPKs, printLog)
 
 	lis, err := dmsgC.Listen(visorconfig.DmsgHTTPPort)
 	if err != nil {
