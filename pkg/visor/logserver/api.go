@@ -111,8 +111,8 @@ func whitelistFSHandler(w http.ResponseWriter, r *http.Request, serveDir string,
 	if len(whitelistedPKs) == 0 {
 		whitelisted = true
 	} else {
-		for _, pk2 := range whitelistedPKs {
-			if remotePK == pk2.String() {
+		for _, whitelistedPK := range whitelistedPKs {
+			if remotePK == whitelistedPK.String() {
 				whitelisted = true
 				break
 			}
