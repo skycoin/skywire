@@ -73,6 +73,8 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 			Location:         LocalPath + "/" + TpLogStore,
 			RotationInterval: DefaultLogRotationInterval,
 		},
+		SudphPort: 0,
+		StcprPort: 0,
 	}
 	conf.Routing = &Routing{
 		RouteFinder:        services.RouteFinder, //utilenv.RouteFinderAddr,
