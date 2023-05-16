@@ -27,8 +27,9 @@ type V1 struct {
 	UptimeTracker *UptimeTracker      `json:"uptime_tracker,omitempty"`
 	Launcher      *Launcher           `json:"launcher"`
 
-	Hypervisors []cipher.PubKey `json:"hypervisors"`
-	CLIAddr     string          `json:"cli_addr"`
+	SurveyWhitelist []cipher.PubKey `json:"survey_whitelist"`
+	Hypervisors     []cipher.PubKey `json:"hypervisors"`
+	CLIAddr         string          `json:"cli_addr"`
 
 	LogLevel             string                           `json:"log_level"`
 	LocalPath            string                           `json:"local_path"`
