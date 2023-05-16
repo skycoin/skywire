@@ -44,9 +44,10 @@ type V1 struct {
 
 // Dmsgpty configures the dmsgpty-host.
 type Dmsgpty struct {
-	DmsgPort uint16 `json:"dmsg_port"`
-	CLINet   string `json:"cli_network"`
-	CLIAddr  string `json:"cli_address"`
+	DmsgPort  uint16          `json:"dmsg_port"`
+	CLINet    string          `json:"cli_network"`
+	CLIAddr   string          `json:"cli_address"`
+	Whitelist []cipher.PubKey `json:"whitelist"`
 }
 
 // Transport defines a transport config.
