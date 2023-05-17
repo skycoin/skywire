@@ -388,7 +388,13 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 		printLog = true
 	}
 
-	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, printLog)
+	//whitelist access to the surveys for the hypervisor, dmsggpty whitelist, and for the surveywhitelist of keys which is fetched from the conf service
+	var whitelistedPKs []cipher.PubKey
+	whitelistedPKs = append(whitelistedPKs, v.conf.SurveyWhitelist...)
+	whitelistedPKs = append(whitelistedPKs, v.conf.Hypervisors...)
+	whitelistedPKs = append(whitelistedPKs, v.conf.Dmsgpty.Whitelist...)
+
+	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, whitelistedPKs, printLog)
 
 	lis, err := dmsgC.Listen(visorconfig.DmsgHTTPPort)
 	if err != nil {
@@ -466,20 +472,20 @@ func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
 			log.Warnf("SUDPH transport wont be available as visor is under %v", v.stunClient.NATType.String())
 		default:
-			v.tpM.InitClient(ctx, network.SUDPH)
+			v.tpM.InitClient(ctx, network.SUDPH, v.conf.Transport.SudphPort)
 		}
 	}
 	return nil
 }
 
 func initStcprClient(ctx context.Context, v *Visor, log *logging.Logger) error {
-	v.tpM.InitClient(ctx, network.STCPR)
+	v.tpM.InitClient(ctx, network.STCPR, v.conf.Transport.StcprPort)
 	return nil
 }
 
 func initStcpClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if v.conf.STCP != nil {
-		v.tpM.InitClient(ctx, network.STCP)
+		v.tpM.InitClient(ctx, network.STCP, 0)
 	}
 	return nil
 }
@@ -1302,11 +1308,16 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	wl := dmsgpty.NewMemoryWhitelist()
 
+	// Initialize the dmsgpty whitelist
+	if err := wl.Add(v.conf.Dmsgpty.Whitelist...); err != nil {
+		return err
+	}
+
 	// Ensure hypervisors are added to the whitelist.
 	if err := wl.Add(v.conf.Hypervisors...); err != nil {
 		return err
 	}
-	// add itself to the whitelist to allow local pty
+	// add the visor's own public key to the whitelist to allow local pty
 	if err := wl.Add(v.conf.PK); err != nil {
 		v.log.Errorf("Cannot add itself to the pty whitelist: %s", err)
 	}
