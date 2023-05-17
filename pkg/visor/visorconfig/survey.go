@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ProtonMail/gopenpgp/v2/helper"
 	coincipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire-utilities/pkg/logging"
@@ -46,32 +45,10 @@ func GenerateSurvey(conf *V1, log *logging.Logger, routine, rawSurvey bool) {
 					return
 				}
 
-				if rawSurvey {
-					err = os.WriteFile(conf.LocalPath+"/"+NodeInfo, []byte(s), 0644) //nolint
-					if err != nil {
-						log.WithError(err).Error("Failed to write system hardware survey to file.")
-						return
-					}
-				} else {
-					skycoinKeyPath := SkywirePath + "/" + SkycoinKeyName
-					skycoinKey, err := os.ReadFile(skycoinKeyPath)
-					if err != nil {
-						log.WithError(err).Error("Could not find skycoin key.")
-						return
-					}
-
-					skycoinKeyString := string(skycoinKey)
-					encryptedNodeInfo, err := helper.EncryptBinaryMessageArmored(skycoinKeyString, s)
-					if err != nil {
-						log.WithError(err).Error("Could not encrypt survey.")
-						return
-					}
-
-					err = os.WriteFile(conf.LocalPath+"/"+NodeInfo, []byte(encryptedNodeInfo), 0644) //nolint
-					if err != nil {
-						log.WithError(err).Error("Failed to write system hardware survey to file.")
-						return
-					}
+				err = os.WriteFile(conf.LocalPath+"/"+NodeInfo, []byte(s), 0644) //nolint
+				if err != nil {
+					log.WithError(err).Error("Failed to write system hardware survey to file.")
+					return
 				}
 				log.Info("Generating system survey")
 			} else {
