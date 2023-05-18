@@ -19,23 +19,23 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 )
 
 var (
-	env         string
-	duration    int
-	minv        string
-	allVisors   bool
-	batchSize   int
-	maxFileSize int64
-	utAddr      string
-	sk       cipher.SecKey
-	dmsgDisc string
-	logOnly bool
-	surveyOnly bool
+	env            string
+	duration       int
+	minv           string
+	allVisors      bool
+	batchSize      int
+	maxFileSize    int64
+	utAddr         string
+	sk             cipher.SecKey
+	dmsgDisc       string
+	logOnly        bool
+	surveyOnly     bool
 	deleteOnErrors bool
 )
 
@@ -67,9 +67,9 @@ var logCmd = &cobra.Command{
 	Long:  "collect surveys and transport logging from visors which are online in the uptime tracker",
 	Run: func(cmd *cobra.Command, args []string) {
 		log := logging.MustGetLogger("log-collecting")
- if logsOnly && surveysOnly {
-	 log.Fatal("use of mutually exclusive flags --log and --survey")
- }
+		if logsOnly && surveysOnly {
+			log.Fatal("use of mutually exclusive flags --log and --survey")
+		}
 
 		// Preparing directories
 		if _, err := os.ReadDir("log_collecting"); err != nil {
@@ -94,9 +94,9 @@ var logCmd = &cobra.Command{
 			os.Exit(1)
 		}()
 		// Set the uptime tracker to fetch data from
-		endpoint := skyenv.UptimeTrackerAddr+"/uptimes?v=v2"
+		endpoint := skyenv.UptimeTrackerAddr + "/uptimes?v=v2"
 		if env == "test" {
-			endpoint = skyenv.TestUptimeTrackerAddr+"/uptimes?v=v2"
+			endpoint = skyenv.TestUptimeTrackerAddr + "/uptimes?v=v2"
 		}
 		if utAddr != "" {
 			endpoint = utAddr
@@ -169,13 +169,13 @@ var logCmd = &cobra.Command{
 					if duration == 1 {
 						yesterday := time.Now().AddDate(0, 0, -1).UTC().Format("2006-01-02")
 						download(ctx, log, httpC, "transport_logs/"+yesterday+".csv", yesterday+".csv", key, maxFileSize) //nolint
-						} else {
-							for i := 1; i <= duration; i++ {
-								date := time.Now().AddDate(0, 0, -i).UTC().Format("2006-01-02")
-								download(ctx, log, httpC, "transport_logs/"+date+".csv", date+".csv", key, maxFileSize) //nolint
-							}
+					} else {
+						for i := 1; i <= duration; i++ {
+							date := time.Now().AddDate(0, 0, -i).UTC().Format("2006-01-02")
+							download(ctx, log, httpC, "transport_logs/"+date+".csv", date+".csv", key, maxFileSize) //nolint
+						}
+					}
 				}
-			}
 			}(v.PubKey, &wg)
 			batchSize--
 			if batchSize == 0 {
@@ -253,7 +253,7 @@ func genKeys(skStr string) (pk cipher.PubKey, sk cipher.SecKey, err error) {
 func getAllDMSGServers() []dmsgServer {
 	var results []dmsgServer
 
-	response, err := http.Get(dmsgDisc+"/dmsg-discovery/all_servers") //nolint
+	response, err := http.Get(dmsgDisc + "/dmsg-discovery/all_servers") //nolint
 	if err != nil {
 		return results
 	}
