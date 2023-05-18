@@ -35,6 +35,7 @@ func init() {
 	RootCmd.Flags().BoolVarP(&cfgFromStdin, "stdin", "i", false, "read config from STDIN")
 }
 
+// RootCmd is the root command for setup node
 var RootCmd = &cobra.Command{
 	Use:   "setup-node [config.json]",
 	Short: "Route Setup Node for skywire",
