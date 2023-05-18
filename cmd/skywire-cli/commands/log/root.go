@@ -67,7 +67,7 @@ var logCmd = &cobra.Command{
 	Long:  "collect surveys and transport logging from visors which are online in the uptime tracker",
 	Run: func(cmd *cobra.Command, args []string) {
 		log := logging.MustGetLogger("log-collecting")
-		if logsOnly && surveysOnly {
+		if logOnly && surveyOnly {
 			log.Fatal("use of mutually exclusive flags --log and --survey")
 		}
 
