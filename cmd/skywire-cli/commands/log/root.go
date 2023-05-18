@@ -50,7 +50,7 @@ func init() {
 	logCmd.Flags().BoolVar(&allVisors, "all", false, "consider all visors ; no version filtering")
 	logCmd.Flags().IntVar(&batchSize, "batchSize", 50, "number of visor in each batch, default is 50")
 	logCmd.Flags().Int64Var(&maxFileSize, "maxfilesize", 30, "maximum file size allowed to download during collecting logs, in KB")
-	logCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", skyenv.DmsgDiscAddr, "dmsg discovery url default:\n"+skyenv.DmsgDiscAddr)
+	logCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", skyenv.DmsgDiscAddr, "dmsg discovery url\n")
 	logCmd.Flags().StringVarP(&utAddr, "ut", "u", "", "custom uptime tracker url")
 	if os.Getenv("DMSGGET_SK") != "" {
 		sk.Set(os.Getenv("DMSGGET_SK")) //nolint
@@ -236,18 +236,6 @@ type VisorUptimeResponse struct { //nolint
 	Percentage float64 `json:"pct"`
 	Online     bool    `json:"on"`
 	Version    string  `json:"version"`
-}
-
-func genKeys(skStr string) (pk cipher.PubKey, sk cipher.SecKey, err error) {
-	if skStr == "" {
-		pk, sk = cipher.GenerateKeyPair()
-		return
-	}
-	if err = sk.Set(skStr); err != nil {
-		return
-	}
-	pk, err = sk.PubKey()
-	return
 }
 
 func getAllDMSGServers() []dmsgServer {
