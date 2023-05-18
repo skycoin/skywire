@@ -65,7 +65,7 @@ var startCmd = &cobra.Command{
 		err := pubkey.Set(pk)
 		if err != nil {
 			if len(args) > 0 {
-				err := pubkey.Set(args[1])
+				err := pubkey.Set(args[0])
 				if err != nil {
 					internal.PrintFatalError(cmd.Flags(), err)
 				}
