@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"github.com/spf13/cobra"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-
 	cc "github.com/ivanpirog/coloredcobra"
 
 	"github.com/skycoin/skywire/pkg/visor"
   skywirecli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
+	setupnode "github.com/skycoin/skywire/cmd/setup-node/commands"
 
 )
 
@@ -20,6 +20,7 @@ func init() {
 	rootCmd.AddCommand(
 		visor.RootCmd,
 		skywirecli.RootCmd,
+		setupnode.RootCmd,
 	)
 	var helpflag bool
 	rootCmd.SetUsageTemplate(help)
@@ -63,9 +64,8 @@ func main() {
 		fmt.Println(err)
 	}
 }
-const help = "Usage:\r\n" +
-	"  {{.UseLine}}{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}\r\n\r\n" +
-	"{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}\r\n\r\n" +
+const help = "{{if gt (len .Aliases) 0}}" +
+	"{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}" +
 	"Available Commands:{{range .Commands}}{{if (or .IsAvailableCommand)}}\r\n  " +
 	"{{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}\r\n\r\n" +
 	"Flags:\r\n" +
