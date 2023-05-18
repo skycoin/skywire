@@ -173,7 +173,7 @@ func trimStringFromDot(s string) string {
 
 // RootCmd contains the help command & invocation flags
 var RootCmd = &cobra.Command{
-	Use:   "skywire-visor",
+	Use:   "visor",
 	Short: "Skywire Visor",
 	Long: `
 	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
