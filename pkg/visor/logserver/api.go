@@ -123,6 +123,7 @@ func whitelistFSHandler(w http.ResponseWriter, r *http.Request, serveDir string,
 		filePath := serveDir + r.URL.Path
 		file, err := os.Open(filePath) //nolint
 		if err != nil {
+			log.Printf("[DMSGHTTP] %s %s | %d | %v | %s | %s %s\n", start.Format("2006/01/02 - 15:04:05"), r.RemoteAddr, http.StatusOK, elapsed, r.Method, r.Proto, r.URL)
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 			return
 		}
