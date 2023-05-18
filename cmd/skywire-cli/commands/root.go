@@ -30,7 +30,7 @@ import (
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 )
 
-//RootCmd is the root command for skywire-cli
+// RootCmd is the root command for skywire-cli
 var RootCmd = &cobra.Command{
 	Use:   "cli",
 	Short: "Command Line Interface for skywire",
