@@ -15,7 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
-const rpcName = "RPCGateway"
+const rpcName = "SetupRPCGateway"
 
 // ErrSetupNode is used when the visor is unable to connect to a setup node
 var ErrSetupNode = errors.New("failed to dial to a setup node")
