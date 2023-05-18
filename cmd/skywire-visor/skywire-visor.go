@@ -1,6 +1,6 @@
-// /* cmd/skywire-visor/skywire-visor.go
+// /* cmd/skywire/skywire.go
 /*
-skywire visor
+skywire
 */
 package main
 
