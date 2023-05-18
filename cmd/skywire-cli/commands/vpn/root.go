@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	stateName    = "vpn-clent"
+	stateName    = "vpn-client"
 	serviceType  = servicedisc.ServiceTypeVPN
 	servicePort  = ":3"
 	path         string
