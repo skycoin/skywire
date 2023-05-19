@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
@@ -84,9 +85,9 @@ func New(log *logging.Logger, tpLogPath, localPath, customPath string, whitelist
 func (api *API) health(c *gin.Context) {
 	jsonObject, err := json.Marshal(
 		httputil.HealthCheckResponse{
-		BuildInfo: buildinfo.Get(),
-		StartedAt: api.startedAt,
-	})
+			BuildInfo: buildinfo.Get(),
+			StartedAt: api.startedAt,
+		})
 	if err != nil {
 		httputil.GetLogger(c.Request).WithError(err).Errorf("failed to encode json response")
 		c.Writer.WriteHeader(http.StatusInternalServerError)
@@ -101,7 +102,6 @@ func (api *API) health(c *gin.Context) {
 		httputil.GetLogger(c.Request).WithError(err).Errorf("failed to write json response")
 	}
 }
-
 
 func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -203,7 +203,9 @@ func resetColor() string {
 }
 
 type consoleColorModeValue int
+
 var consoleColorMode = autoColor
+
 const (
 	autoColor consoleColorModeValue = iota
 	disableColor
