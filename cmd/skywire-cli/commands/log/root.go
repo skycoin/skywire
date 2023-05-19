@@ -149,22 +149,20 @@ var logCmd = &cobra.Command{
 					}
 					deleteOnError = true
 				}
-				if !logOnly {
-					err = download(ctx, log, httpC, "node-info.json", "node-info.json", key, maxFileSize)
-					if err != nil {
-						// This logic saves time, however it potentially
-						// omits or deletes transport logs for visors
-						// that are not seeking rewards which we still should collect
-						// so it is made optional via flag
-						if deleteOnErrors {
-							if deleteOnError {
-								bulkFolders = append(bulkFolders, key)
-							}
-							return
+				// health check before downloading anything else
+				// delete that folder if the health check fails
+				err = download(ctx, log, httpC, "health", "health.json", key, maxFileSize)
+				if err != nil {
+					if deleteOnErrors {
+						if deleteOnError {
+							bulkFolders = append(bulkFolders, key)
 						}
+						return
 					}
 				}
-
+				if !logOnly {
+					download(ctx, log, httpC, "node-info.json", "node-info.json", key, maxFileSize) //nolint
+				}
 				if !surveyOnly {
 					if duration == 1 {
 						yesterday := time.Now().AddDate(0, 0, -1).UTC().Format("2006-01-02")
