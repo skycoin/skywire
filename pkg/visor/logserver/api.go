@@ -110,7 +110,10 @@ func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {
 		remotePK, _, err := net.SplitHostPort(c.Request.RemoteAddr)
 		if err != nil {
 			c.Writer.WriteHeader(http.StatusInternalServerError)
-			c.Writer.Write([]byte("500 Internal Server Error"))
+			_, err := c.Writer.Write([]byte("500 Internal Server Error"))
+			if err != nil {
+				httputil.GetLogger(c.Request).WithError(err).Errorf("write http response")
+			}
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
@@ -131,7 +134,10 @@ func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {
 		} else {
 			// Otherwise, return a 401 Unauthorized error.
 			c.Writer.WriteHeader(http.StatusUnauthorized)
-			c.Writer.Write([]byte("401 Unauthorized"))
+			_, err := c.Writer.Write([]byte("401 Unauthorized"))
+			if err != nil {
+				httputil.GetLogger(c.Request).WithError(err).Errorf("write http response")
+			}
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}
@@ -207,16 +213,6 @@ func getMethodColor(method string) string {
 func resetColor() string {
 	return reset
 }
-
-type consoleColorModeValue int
-
-var consoleColorMode = autoColor
-
-const (
-	autoColor consoleColorModeValue = iota
-	disableColor
-	forceColor
-)
 
 const (
 	green   = "\033[97;42m"
