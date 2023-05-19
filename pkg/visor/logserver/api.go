@@ -91,6 +91,7 @@ func (api *API) health(c *gin.Context) {
 	if err != nil {
 		httputil.GetLogger(c.Request).WithError(err).Errorf("failed to encode json response")
 		c.Writer.WriteHeader(http.StatusInternalServerError)
+		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
 
@@ -108,6 +109,8 @@ func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {
 		// Get the remote PK.
 		remotePK, _, err := net.SplitHostPort(c.Request.RemoteAddr)
 		if err != nil {
+			c.Writer.WriteHeader(http.StatusInternalServerError)
+			c.Writer.Write([]byte("500 Internal Server Error"))
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
@@ -126,8 +129,11 @@ func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {
 		if whitelisted {
 			c.Next()
 		} else {
-			// Otherwise, return a 403 Forbidden error.
-			c.AbortWithStatus(http.StatusForbidden)
+			// Otherwise, return a 401 Unauthorized error.
+			c.Writer.WriteHeader(http.StatusUnauthorized)
+			c.Writer.Write([]byte("401 Unauthorized"))
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
 		}
 	}
 }
