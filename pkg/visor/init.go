@@ -440,7 +440,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 }
 
 func initSystemSurvey(ctx context.Context, v *Visor, log *logging.Logger) error {
-	go visorconfig.GenerateSurvey(v.conf, log, true, v.rawSurvey)
+	go visorconfig.GenerateSurvey(v.conf, log, true)
 	return nil
 }
 
@@ -472,20 +472,20 @@ func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
 			log.Warnf("SUDPH transport wont be available as visor is under %v", v.stunClient.NATType.String())
 		default:
-			v.tpM.InitClient(ctx, network.SUDPH)
+			v.tpM.InitClient(ctx, network.SUDPH, v.conf.Transport.SudphPort)
 		}
 	}
 	return nil
 }
 
 func initStcprClient(ctx context.Context, v *Visor, log *logging.Logger) error {
-	v.tpM.InitClient(ctx, network.STCPR)
+	v.tpM.InitClient(ctx, network.STCPR, v.conf.Transport.StcprPort)
 	return nil
 }
 
 func initStcpClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if v.conf.STCP != nil {
-		v.tpM.InitClient(ctx, network.STCP)
+		v.tpM.InitClient(ctx, network.STCP, 0)
 	}
 	return nil
 }

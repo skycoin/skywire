@@ -27,7 +27,7 @@ type V1 struct {
 	UptimeTracker *UptimeTracker      `json:"uptime_tracker,omitempty"`
 	Launcher      *Launcher           `json:"launcher"`
 
-	SurveyWhitelist []cipher.PubKey `json:"hypervisors"`
+	SurveyWhitelist []cipher.PubKey `json:"survey_whitelist"`
 	Hypervisors     []cipher.PubKey `json:"hypervisors"`
 	CLIAddr         string          `json:"cli_addr"`
 
@@ -58,6 +58,8 @@ type Transport struct {
 	PublicAutoconnect bool            `json:"public_autoconnect"`
 	TransportSetup    []cipher.PubKey `json:"transport_setup_nodes"`
 	LogStore          *LogStore       `json:"log_store"`
+	StcprPort         int             `json:"stcpr_port"`
+	SudphPort         int             `json:"sudph_port"`
 }
 
 // LogStore configures a LogStore.

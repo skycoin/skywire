@@ -65,4 +65,5 @@ type Services struct {
 	ServiceDiscovery   string          `json:"service_discovery"`
 	StunServers        []string        `json:"stun_servers"`
 	DNSServer          string          `json:"dns_server"`
+	SurveyWhitelist    []string        `json:"survey_whitelist"`
 }
