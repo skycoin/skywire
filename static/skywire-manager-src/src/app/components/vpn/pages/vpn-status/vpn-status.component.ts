@@ -135,7 +135,7 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
       // Start getting and updating the state of the backend.
       this.dataSubscription = this.vpnClientService.backendState.subscribe(data => {
         if (data && data.serviceState !== VpnServiceStates.PerformingInitialCheck) {
-          const firstEventExecution = !!!this.backendState;
+          const firstEventExecution = !!!this.backendState; // eslint-disable-line no-extra-boolean-cast
           this.backendState = data;
 
           if (!firstEventExecution) {
