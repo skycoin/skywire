@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { ActivatedRouteSnapshot, CanActivate, Router, RouterStateSnapshot, CanActivateChild } from '@angular/router';
+import { ActivatedRouteSnapshot, Router, RouterStateSnapshot } from '@angular/router';
 import { Observable, of } from 'rxjs';
 
 /**
@@ -9,7 +9,7 @@ import { Observable, of } from 'rxjs';
 @Injectable({
   providedIn: 'root'
 })
-export class VpnAuthGuardService implements CanActivate, CanActivateChild {
+export class VpnAuthGuardService  {
   private lastErrorInternal: string;
   /**
    * When set, the user will be redirected to the error page of the VPN client, with
