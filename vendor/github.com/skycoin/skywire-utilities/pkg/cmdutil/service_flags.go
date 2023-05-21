@@ -10,9 +10,8 @@ import (
 	"unicode"
 
 	jsoniter "github.com/json-iterator/go"
-	"github.com/spf13/cobra"
-
 	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/spf13/cobra"
 )
 
 // Associated errors.
