@@ -31,27 +31,29 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		//fall back on  defaults
 		if !testEnv {
 			services = &Services{
-				DmsgDiscovery:      utilenv.DmsgDiscAddr,
-				TransportDiscovery: utilenv.TpDiscAddr,
-				AddressResolver:    utilenv.AddressResolverAddr,
-				RouteFinder:        utilenv.RouteFinderAddr,
-				SetupNodes:         []cipher.PubKey{MustPK(utilenv.SetupPK)},
-				UptimeTracker:      utilenv.UptimeTrackerAddr,
-				ServiceDiscovery:   utilenv.ServiceDiscAddr,
-				StunServers:        utilenv.GetStunServers(),
-				DNSServer:          utilenv.DNSServer,
+				DmsgDiscovery:       utilenv.DmsgDiscAddr,
+				TransportDiscovery:  utilenv.TpDiscAddr,
+				AddressResolver:     utilenv.AddressResolverAddr,
+				RouteFinder:         utilenv.RouteFinderAddr,
+				RouteSetupNodes:     []cipher.PubKey{MustPK(utilenv.RouteSetupPKs)},
+				TransportSetupNodes: []cipher.PubKey{MustPK(utilenv.TPSetupPKs)},
+				UptimeTracker:       utilenv.UptimeTrackerAddr,
+				ServiceDiscovery:    utilenv.ServiceDiscAddr,
+				StunServers:         utilenv.GetStunServers(),
+				DNSServer:           utilenv.DNSServer,
 			}
 		} else {
 			services = &Services{
-				DmsgDiscovery:      utilenv.TestDmsgDiscAddr,
-				TransportDiscovery: utilenv.TestTpDiscAddr,
-				AddressResolver:    utilenv.TestAddressResolverAddr,
-				RouteFinder:        utilenv.TestRouteFinderAddr,
-				SetupNodes:         []cipher.PubKey{MustPK(utilenv.TestSetupPK)},
-				UptimeTracker:      utilenv.TestUptimeTrackerAddr,
-				ServiceDiscovery:   utilenv.TestServiceDiscAddr,
-				StunServers:        utilenv.GetStunServers(),
-				DNSServer:          utilenv.DNSServer,
+				DmsgDiscovery:       utilenv.TestDmsgDiscAddr,
+				TransportDiscovery:  utilenv.TestTpDiscAddr,
+				AddressResolver:     utilenv.TestAddressResolverAddr,
+				RouteFinder:         utilenv.TestRouteFinderAddr,
+				RouteSetupNodes:     []cipher.PubKey{MustPK(utilenv.TestRouteSetupPKs)},
+				TransportSetupNodes: []cipher.PubKey{MustPK(utilenv.TestTPSetupPKs)},
+				UptimeTracker:       utilenv.TestUptimeTrackerAddr,
+				ServiceDiscovery:    utilenv.TestServiceDiscAddr,
+				StunServers:         utilenv.GetStunServers(),
+				DNSServer:           utilenv.DNSServer,
 			}
 		}
 	}
@@ -77,8 +79,8 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		StcprPort: 0,
 	}
 	conf.Routing = &Routing{
-		RouteFinder:        services.RouteFinder, //utilenv.RouteFinderAddr,
-		SetupNodes:         services.SetupNodes,  //[]cipher.PubKey{utilenv.MustPK(utilenv.SetupPK)},
+		RouteFinder:        services.RouteFinder,     //utilenv.RouteFinderAddr,
+		RouteSetupNodes:    services.RouteSetupNodes, //[]cipher.PubKey{utilenv.MustPK(utilenv.SetupPK)},
 		RouteFinderTimeout: DefaultTimeout,
 	}
 	conf.Launcher = &Launcher{

@@ -119,8 +119,8 @@ var updateCmd = &cobra.Command{
 				AddressResolver: services.AddressResolver,    //utilenv.DefaultAddressResolverAddr,
 			}
 			conf.Routing = &visorconfig.Routing{
-				RouteFinder: services.RouteFinder, //utilenv.DefaultRouteFinderAddr,
-				SetupNodes:  services.SetupNodes,  //[]cipher.PubKey{utilenv.MustPK(utilenv.DefaultSetupPK)},
+				RouteFinder:     services.RouteFinder,     //utilenv.DefaultRouteFinderAddr,
+				RouteSetupNodes: services.RouteSetupNodes, //[]cipher.PubKey{utilenv.MustPK(utilenv.DefaultSetupPK)},
 			}
 			conf.Launcher = &visorconfig.Launcher{
 				ServiceDisc: services.ServiceDiscovery, //utilenv.DefaultServiceDiscAddr,

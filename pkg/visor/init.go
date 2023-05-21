@@ -573,7 +573,7 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 	ctx, cancel := context.WithCancel(ctx)
 	// To remove the block set by NewTransportListener if dmsg is not initialized
 	go func() {
-		ts, err := ts.NewTransportListener(ctx, v.conf.PK, v.conf.Transport.TransportSetup, v.dmsgC, v.tpM, v.MasterLogger())
+		ts, err := ts.NewTransportListener(ctx, v.conf.PK, v.conf.Transport.TransportSetupNodes, v.dmsgC, v.tpM, v.MasterLogger())
 		if err != nil {
 			log.Warn(err)
 			cancel()
@@ -977,7 +977,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		TransportManager: v.tpM,
 		RouteFinder:      rfClient,
 		RouteGroupDialer: router.NewSetupNodeDialer(),
-		SetupNodes:       conf.SetupNodes,
+		SetupNodes:       conf.RouteSetupNodes,
 		RulesGCInterval:  0, // TODO
 		MinHops:          v.conf.Routing.MinHops,
 	}

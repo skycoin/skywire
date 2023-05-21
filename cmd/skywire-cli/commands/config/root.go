@@ -15,6 +15,11 @@ import (
 var logger = logging.MustGetLogger("skywire-cli")
 
 var (
+	conf                   = new(visorconfig.V1)
+	noFetch                bool
+	noDefaults             bool
+	stcprPort              int
+	sudphPort              int
 	sk                     cipher.SecKey
 	output                 string
 	confPath               string
@@ -28,6 +33,10 @@ var (
 	isUsrEnv               bool
 	isHypervisor           bool
 	hypervisorPKs          string
+	dmsgptywlPKs           string
+	surveywhitelistPks     string
+	routesetupnodePks      string
+	transportsetupnodePks  string
 	isDmsgHTTP             bool
 	isVpnServerEnable      bool
 	isDisableAuth          bool
@@ -69,7 +78,6 @@ var (
 	isResetSkysocks        bool
 	setPublicAutoconnect   string
 	minHops                int
-	conf                   *visorconfig.V1
 	isUsr                  bool
 	isPublic               bool
 	disablePublicAutoConn  bool

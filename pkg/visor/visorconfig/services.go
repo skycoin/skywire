@@ -15,9 +15,9 @@ import (
 // Fetch fetches the service URLs & ip:ports from the config service endpoint
 func Fetch(mLog *logging.MasterLogger, serviceConfURL string, stdout bool) (services *Services) {
 
-	serviceConf := fmt.Sprint("http://", serviceConfURL)
+	serviceConf := fmt.Sprint(serviceConfURL)
 	client := http.Client{
-		Timeout: time.Second * 2, // Timeout after 2 seconds
+		Timeout: time.Second * 30, // Timeout after 30 seconds
 	}
 	//create the http request
 	req, err := http.NewRequest(http.MethodGet, serviceConf, nil)
@@ -56,14 +56,15 @@ func Fetch(mLog *logging.MasterLogger, serviceConfURL string, stdout bool) (serv
 
 // Services are subdomains and IP addresses of the skywire services
 type Services struct {
-	DmsgDiscovery      string          `json:"dmsg_discovery"`
-	TransportDiscovery string          `json:"transport_discovery"`
-	AddressResolver    string          `json:"address_resolver"`
-	RouteFinder        string          `json:"route_finder"`
-	SetupNodes         []cipher.PubKey `json:"setup_nodes"`
-	UptimeTracker      string          `json:"uptime_tracker"`
-	ServiceDiscovery   string          `json:"service_discovery"`
-	StunServers        []string        `json:"stun_servers"`
-	DNSServer          string          `json:"dns_server"`
-	SurveyWhitelist    []string        `json:"survey_whitelist"`
+	DmsgDiscovery       string          `json:"dmsg_discovery"`
+	TransportDiscovery  string          `json:"transport_discovery"`
+	AddressResolver     string          `json:"address_resolver"`
+	RouteFinder         string          `json:"route_finder"`
+	RouteSetupNodes     []cipher.PubKey `json:"route_setup_nodes"`
+	TransportSetupNodes []cipher.PubKey `json:"transport_setup_nodes"`
+	UptimeTracker       string          `json:"uptime_tracker"`
+	ServiceDiscovery    string          `json:"service_discovery"`
+	StunServers         []string        `json:"stun_servers"`
+	DNSServer           string          `json:"dns_server"`
+	SurveyWhitelist     []cipher.PubKey `json:"survey_whitelist"`
 }
