@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"net"
 
 	"github.com/bitfield/script"
 	"github.com/sirupsen/logrus"
@@ -35,6 +36,8 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
+
+
 var (
 	isEnvs     bool
 	skyenvfile = os.Getenv("SKYENV")
@@ -42,7 +45,6 @@ var (
 var envfile string
 
 func init() {
-
 	var msg string
 	//disable sorting, flags appear in the order shown here
 	genConfigCmd.Flags().SortFlags = false
@@ -132,7 +134,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "testenv")
 	genConfigCmd.Flags().BoolVarP(&isVpnServerEnable, "servevpn", "v", scriptExecBool("${SERVEVPN:-false}"), "enable vpn server\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "servevpn")
-	genConfigCmd.Flags().BoolVarP(&isHide, "hide", "w", false, "dont print the config to the terminal OR show errors with -n flag\033[0m")
+	genConfigCmd.Flags().BoolVarP(&isHide, "hide", "w", false, "dont print the config to the terminal :: show errors with -n flag\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "hide")
 	genConfigCmd.Flags().BoolVarP(&isRetainHypervisors, "retainhv", "x", false, "retain existing hypervisors with regen\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "retainhv")
@@ -140,21 +142,33 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "hide")
 	genConfigCmd.Flags().BoolVarP(&isPublic, "public", "z", scriptExecBool("${VISORISPUBLIC:-false}"), "publicize visor in service discovery\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "public")
-	genConfigCmd.Flags().StringVar(&ver, "version", scriptExecString("${VERSION}"), "custom version testing override\033[0m")
-	gHiddenFlags = append(gHiddenFlags, "version")
-	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
-	genConfigCmd.Flags().StringVar(&binPath, "binpath", scriptExecString("${BINPATH}"), "set bin_path\033[0m")
-	gHiddenFlags = append(gHiddenFlags, "binpath")
 	genConfigCmd.Flags().IntVar(&stcprPort, "stcpr", scriptExecInt("${STCPRPORT:-0}"), "set tcp transport listening port - 0 for random\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "stcpr")
 	genConfigCmd.Flags().IntVar(&sudphPort, "sudph", scriptExecInt("${SUDPHPORT:-0}"), "set udp transport listening port - 0 for random\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "sudph")
+	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
+	genConfigCmd.Flags().StringVar(&binPath, "binpath", scriptExecString("${BINPATH}"), "set bin_path\033[0m")
+	gHiddenFlags = append(gHiddenFlags, "binpath")
+//	genConfigCmd.Flags().StringVar(&addSkysocksClientSrv, "proxyclientpk", scriptExecString("${PROXYCLIENTPK}"), "set server public key for proxy client")
+//	genConfigCmd.Flags().BoolVar(&proxyClientAutostart, "startproxyclient", scriptExecBool("${STARTPROXYCLIENT:-false}"), "autostart proxy client")
+//	genConfigCmd.Flags().BoolVar(&disableProxyServerAutostart, "noproxyserver", scriptExecBool("${NOPROXYSERVER:-false}"), "disable autostart of proxy server")
+//	genConfigCmd.Flags().StringVar(&proxyServerPass, "proxyserverpass", "", "set password for the proxy server")
+//	genConfigCmd.Flags().StringVar(&proxyClientPass, "proxyclientpass", "", "set password for the proxy client to access the proxy server (if needed)")
+//	// TODO: Password for accessing proxy client
+//	 genConfigCmd.Flags().StringVar(&setVPNClientKillswitch, "killsw", "", "vpn client killswitch")
+//	 genConfigCmd.Flags().StringVar(&addVPNClientSrv, "addvpn", "", "set vpn server public key for vpn client")
+//	 genConfigCmd.Flags().StringVar(&addVPNClientPasscode, "vpnpass", "", "password for vpn client to access the vpn server (if needed)")
+//	 genConfigCmd.Flags().StringVar(&addVPNServerPasscode, "vpnserverpass", "", "set password to the vpn server")
+//	 genConfigCmd.Flags().StringVar(&setVPNServerSecure, "secure", "", "change secure mode status of vpn server")
+//	 genConfigCmd.Flags().StringVar(&setVPNServerNetIfc, "netifc", "", "VPN Server network interface (detected: "+getInterfaceNames()+")")
 	genConfigCmd.Flags().BoolVarP(&isEnvs, "envs", "q", false, "show the environmental variable settings")
 	gHiddenFlags = append(gHiddenFlags, "envs")
 	genConfigCmd.Flags().BoolVar(&noFetch, "nofetch", false, "do not fetch the services from the service conf url")
 	gHiddenFlags = append(gHiddenFlags, "nofetch")
 	genConfigCmd.Flags().BoolVar(&noDefaults, "nodefaults", false, "do not use hardcoded defaults for production / test services")
 	gHiddenFlags = append(gHiddenFlags, "nodefaults")
+	genConfigCmd.Flags().StringVar(&ver, "version", scriptExecString("${VERSION}"), "custom version testing override\033[0m")
+	gHiddenFlags = append(gHiddenFlags, "version")
 
 	//show all flags on help
 	if os.Getenv("UNHIDEFLAGS") != "1" {
@@ -164,63 +178,120 @@ func init() {
 	}
 }
 
-// TODO: adapt for windows
 func scriptExecString(s string) string {
 	if visorconfig.OS == "windows" {
-		cmd := fmt.Sprintf(`cmd /V /C "setlocal enabledelayedexpansion && set SKYENV=%s && if not [!SKYENV!]==[] if exist !SKYENV! (for /f "usebackq delims=" %%i in (`+"\"!SKYENV!\""+`) do set "SKYENV=%%i") && echo !%s!"`, skyenvfile, s)
-		out, _ := script.Exec(cmd).String()
-		if out == "" {
-			defaultValue := s[strings.Index(s, ":-")+2 : strings.Index(s, "}")]
-			return defaultValue
+		var variable, defaultvalue string
+		if strings.Contains(s, ":-") {
+			parts := strings.SplitN(s, ":-", 2)
+			variable = parts[0] + "}"
+			defaultvalue = strings.TrimRight(parts[1], "}")
+		} else {
+			variable = s
+			defaultvalue = ""
 		}
-		return strings.TrimSpace(out)
+		out, err := script.Exec(fmt.Sprintf(`powershell -c '$SKYENV = "%s"; if ($SKYENV -ne "" -and (Test-Path $SKYENV)) { . $SKYENV }; echo %s"`, skyenvfile, variable)).String()
+		if err == nil {
+			if (out == "") || (out == variable) {
+				return defaultvalue
+			}
+			return strings.TrimRight(out, "\n")
+		}
+		return defaultvalue
 	}
-
-	z, _ := script.Exec(fmt.Sprintf(`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, skyenvfile, s)).String()
-	return strings.TrimSpace(z)
+	z, err := script.Exec(fmt.Sprintf(`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, skyenvfile, s)).String()
+	if err == nil {
+		return strings.TrimSpace(z)
+	}
+return ""
 }
 
 func scriptExecBool(s string) bool {
 	if visorconfig.OS == "windows" {
-		cmd := fmt.Sprintf(`cmd /V /C "setlocal enabledelayedexpansion && set SKYENV=%s && if not [!SKYENV!]==[] if exist !SKYENV! (for /f "usebackq delims=" %%i in (`+"\"!SKYENV!\""+`) do set "SKYENV=%%i") && echo !%s!"`, skyenvfile, s)
-		out, _ := script.Exec(cmd).String()
-		b, err := strconv.ParseBool(strings.TrimSpace(out))
+		var variable string
+		if strings.Contains(s, ":-") {
+			parts := strings.SplitN(s, ":-", 2)
+			variable = parts[0] + "}"
+		} else {
+			variable = s
+		}
+		out, err := script.Exec(fmt.Sprintf(`powershell -c '$SKYENV = "%s"; if ($SKYENV -ne "" -and (Test-Path $SKYENV)) { . $SKYENV }; echo %s"`, skyenvfile, variable)).String()
 		if err == nil {
-			return b
+			if (out == "") || (out == variable) {
+				return false
+			}
+			b, err := strconv.ParseBool(strings.TrimSpace(strings.TrimRight(out, "\n")))
+			if err == nil {
+				return b
+			}
 		}
 		return false
 	}
-
-	z, _ := script.Exec(fmt.Sprintf(`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, skyenvfile, s)).String()
-	b, err := strconv.ParseBool(z)
+	z, err := script.Exec(fmt.Sprintf(`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, skyenvfile, s)).String()
 	if err == nil {
-		return b
+		b, err := strconv.ParseBool(z)
+		if err == nil {
+			return b
+		}
 	}
+
 	return false
 }
 
 func scriptExecArray(s string) string {
 	if visorconfig.OS == "windows" {
-		cmd := fmt.Sprintf(`cmd /V /C "setlocal enabledelayedexpansion && set SKYENV=%s && if not [!SKYENV!]==[] if exist !SKYENV! (for /f "usebackq delims=" %%i in (`+"\"!SKYENV!\""+`) do set "SKYENV=%%i") && for %%i in (%s) do echo %%i"`, skyenvfile, s)
-		out, _ := script.Exec(cmd).Slice()
-		return strings.Join(out, ",")
+		variable := s
+		if strings.Contains(variable, "[@]}") {
+			variable = strings.TrimRight(variable, "[@]}")
+			variable = strings.TrimRight(variable, "{")
+		}
+		out, err := script.Exec(fmt.Sprintf(`powershell -c '$SKYENV = "%s"; if ($SKYENV -ne "" -and (Test-Path $SKYENV)) { . $SKYENV }; foreach ($item in %s) { Write-Host $item }'`, skyenvfile, variable)).Slice()
+		if err == nil {
+			if len(out) != 0 {
+				return ""
+			}
+			return strings.Join(out, ",")
+		}
 	}
-
-	y, _ := script.Exec(fmt.Sprintf(`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; for _i in %s ; do echo "$_i" ; done'`, skyenvfile, s)).Slice()
-	return strings.Join(y, ",")
+	y, err := script.Exec(fmt.Sprintf(`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; for _i in %s ; do echo "$_i" ; done'`, skyenvfile, s)).Slice()
+	if err == nil {
+		return strings.Join(y, ",")
+	}
+return ""
 }
 
 func scriptExecInt(s string) int {
 	if visorconfig.OS == "windows" {
-		cmd := fmt.Sprintf(`cmd /V /C "setlocal enabledelayedexpansion && set SKYENV=%s && if not [!SKYENV!]==[] if exist !SKYENV! (for /f "usebackq delims=" %%i in (`+"\"!SKYENV!\""+`) do set "SKYENV=%%i") && echo !%s!"`, skyenvfile, s)
-		out, _ := script.Exec(cmd).String()
-		i, _ := strconv.Atoi(strings.TrimSpace(out))
-		return i
+		var variable string
+		if strings.Contains(s, ":-") {
+			parts := strings.SplitN(s, ":-", 2)
+			variable = parts[0] + "}"
+		} else {
+			variable = s
+		}
+		out, err := script.Exec(fmt.Sprintf(`powershell -c '$SKYENV = "%s"; if ($SKYENV -ne "" -and (Test-Path $SKYENV)) { . $SKYENV }; echo %s"`, skyenvfile, variable)).String()
+		if err == nil {
+			if (out == "") || (out == variable) {
+				return 0
+			}
+			i, err := strconv.Atoi(strings.TrimSpace(strings.TrimRight(out, "\n")))
+			if err == nil {
+				return i
+			}
+			return 0
+		}
+		return 0
 	}
-
-	z, _ := script.Exec(fmt.Sprintf(`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, skyenvfile, s)).String()
-	i, _ := strconv.Atoi(z)
-	return i
+	z, err := script.Exec(fmt.Sprintf(`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, skyenvfile, s)).String()
+	if err == nil {
+		if (z == "") {
+			return 0
+		}
+		i, err := strconv.Atoi(z)
+		if err == nil {
+			return i
+		}
+	}
+	return 0
 }
 
 var genConfigCmd = &cobra.Command{
@@ -250,8 +321,8 @@ var genConfigCmd = &cobra.Command{
 	PreRun: func(cmd *cobra.Command, _ []string) {
 		if isEnvs {
 
-			if visorconfig.OS != "linux" {
-				pText = "this feature does not yet support this platform"
+			if visorconfig.OS == "windows" {
+				envfile = envfileWindows
 			} else {
 				envfile = envfileLinux
 			}
@@ -800,6 +871,7 @@ var genConfigCmd = &cobra.Command{
 				conf.Hypervisor.DBPath = usrConfig.Hypervisor.DbPath
 			}
 		}
+
 		conf.Launcher.Apps = []appserver.AppConfig{
 			{
 				Name:      visorconfig.VPNClientName,
@@ -820,6 +892,7 @@ var genConfigCmd = &cobra.Command{
 				Binary:    visorconfig.SkysocksName,
 				AutoStart: true,
 				Port:      routing.Port(visorconfig.SkysocksPort),
+				Args:      []string{"--srv", visorconfig.SkychatAddr},
 			},
 			{
 				Name:      visorconfig.SkysocksClientName,
@@ -975,8 +1048,40 @@ var genConfigCmd = &cobra.Command{
 	},
 }
 
-var envfileLinux = `
-#
+func getInterfaceNames() string {	//nolint Note: pending implementation for config gen
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		fmt.Println("Error:", err)
+		return ""
+	}
+
+	var interfaceNames []string
+	defaultInterface := ""
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagLoopback == 0 {
+			interfaceNames = append(interfaceNames, iface.Name)
+			if iface.Index == 0 && defaultInterface == "" {
+				defaultInterface = iface.Name
+			}
+		}
+	}
+
+	if defaultInterface != "" {
+		// Move the default interface name to the beginning of the list
+		for i, name := range interfaceNames {
+			if name == defaultInterface {
+				copy(interfaceNames[1:i+1], interfaceNames[:i])
+				interfaceNames[0] = defaultInterface
+				break
+			}
+		}
+	}
+
+	return strings.Join(interfaceNames, ", ")
+}
+
+
+var envfileLinux = `#
 # /etc/skywire.conf
 #
 #########################################################################
@@ -1039,5 +1144,71 @@ var envfileLinux = `
 
 #--	Set app bin_path
 #BINPATH='./apps'
+
+`
+var envfileWindows = `#
+# C:\ProgramData\skywire.ps1
+#
+#########################################################################
+#	SKYWIRE CONFIG TEMPLATE
+#		Defaults for booleans are false
+#		Uncomment to change default value
+#########################################################################
+
+#--	Other Visors will automatically establish transports to this visor
+#	requires port forwarding or public ip
+#$VISORISPUBLIC=true
+
+#--	Autostart vpn server for this visor
+#$VPNSERVER=true
+
+#--	Use test deployment
+#$TESTENV=true
+
+#--	Automatically determine the best protocol (dmsg or http)
+#	based on location to connect to the deployment servers
+#$BESTPROTO=true
+
+#--	Set custom service conf URLs
+#$SVCCONFADDR= @('')
+
+#--	Set visor runtime log level.
+#	Default is info ; uncomment for debug logging
+#$LOGLVL=debug
+
+#--	Use dmsghttp to connect to the production deployment
+#$DMSGHTTP=true
+
+#--	Start the hypervisor interface for this visor
+#$ISHYPERVISOR=true
+
+#--	Output path of the config file
+#$OUTPUT='./skywire-config.json'
+
+#--	Display the node ip in the service discovery
+#	for any public services this visor is running
+#$DISPLAYNODEIP=true
+
+#--	Set remote hypervisor public keys
+#$HYPERVISORPKS= @('')
+#$HYPERVISORPKS= @('','')
+
+#--	Default config paths for the installer or package (system paths)
+#$PKGENV=true
+
+#--	Default config paths for the current userspace
+#$USRENV=true
+
+#--	Set secret key
+#$SK=''
+
+#--	Disable auto-transports to public visors
+#$DISABLEPUBLICAUTOCONN=true
+
+#--	Custom config version override
+#$VERSION=''
+
+#--	Set app bin_path
+#$BINPATH='./apps'
 
 `

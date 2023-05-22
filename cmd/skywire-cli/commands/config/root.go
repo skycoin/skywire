@@ -15,6 +15,10 @@ import (
 var logger = logging.MustGetLogger("skywire-cli")
 
 var (
+	proxyClientAutostart	bool	//nolint Note: pending implementation for config gen
+	disableProxyServerAutostart bool	//nolint Note: pending implementation for config gen
+	proxyServerPass string	//nolint Note: pending implementation for config gen
+	proxyClientPass string	//nolint Note: pending implementation for config gen
 	conf                   = new(visorconfig.V1)
 	noFetch                bool
 	noDefaults             bool
@@ -89,5 +93,5 @@ var (
 var RootCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Generate or update a skywire config",
-	Long:  "A primary function of skywire-cli is generating and updating the config file used by skywire-visor.",
+	Long:  "Generate or update the config file used by skywire-visor.",
 }

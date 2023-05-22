@@ -289,7 +289,7 @@ var skySocksClientUpdateCmd = &cobra.Command{
 		if addSkysocksClientSrv != "" {
 			keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(addSkysocksClientSrv))
 			if err != nil {
-				logger.WithError(err).Fatalf("Failed to parse hypervisor private key: %s.", addSkysocksClientSrv)
+				logger.WithError(err).Fatalf("Failed to parse public key: %s.", addSkysocksClientSrv)
 			}
 			changeAppsConfig(conf, "skysocks-client", "--srv", keyParsed.Hex())
 		}
