@@ -325,7 +325,7 @@ github.com/skycoin/skycoin/src/cipher/ripemd160
 github.com/skycoin/skycoin/src/cipher/secp256k1-go
 github.com/skycoin/skycoin/src/cipher/secp256k1-go/secp256k1-go2
 github.com/skycoin/skycoin/src/util/logging
-# github.com/skycoin/skywire-utilities v0.0.0-20230522105416-0c3b75e1fef4
+# github.com/skycoin/skywire-utilities v0.0.0-20230522105416-0c3b75e1fef4 => ../skywire-utilities
 ## explicit; go 1.17
 github.com/skycoin/skywire-utilities/pkg/buildinfo
 github.com/skycoin/skywire-utilities/pkg/cipher
