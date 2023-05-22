@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -12,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"net"
 
 	"github.com/bitfield/script"
 	"github.com/sirupsen/logrus"
@@ -35,8 +35,6 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
-
-
 
 var (
 	isEnvs     bool
@@ -149,18 +147,18 @@ func init() {
 	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
 	genConfigCmd.Flags().StringVar(&binPath, "binpath", scriptExecString("${BINPATH}"), "set bin_path\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "binpath")
-//	genConfigCmd.Flags().StringVar(&addSkysocksClientSrv, "proxyclientpk", scriptExecString("${PROXYCLIENTPK}"), "set server public key for proxy client")
-//	genConfigCmd.Flags().BoolVar(&proxyClientAutostart, "startproxyclient", scriptExecBool("${STARTPROXYCLIENT:-false}"), "autostart proxy client")
-//	genConfigCmd.Flags().BoolVar(&disableProxyServerAutostart, "noproxyserver", scriptExecBool("${NOPROXYSERVER:-false}"), "disable autostart of proxy server")
-//	genConfigCmd.Flags().StringVar(&proxyServerPass, "proxyserverpass", "", "set password for the proxy server")
-//	genConfigCmd.Flags().StringVar(&proxyClientPass, "proxyclientpass", "", "set password for the proxy client to access the proxy server (if needed)")
-//	// TODO: Password for accessing proxy client
-//	 genConfigCmd.Flags().StringVar(&setVPNClientKillswitch, "killsw", "", "vpn client killswitch")
-//	 genConfigCmd.Flags().StringVar(&addVPNClientSrv, "addvpn", "", "set vpn server public key for vpn client")
-//	 genConfigCmd.Flags().StringVar(&addVPNClientPasscode, "vpnpass", "", "password for vpn client to access the vpn server (if needed)")
-//	 genConfigCmd.Flags().StringVar(&addVPNServerPasscode, "vpnserverpass", "", "set password to the vpn server")
-//	 genConfigCmd.Flags().StringVar(&setVPNServerSecure, "secure", "", "change secure mode status of vpn server")
-//	 genConfigCmd.Flags().StringVar(&setVPNServerNetIfc, "netifc", "", "VPN Server network interface (detected: "+getInterfaceNames()+")")
+	//	genConfigCmd.Flags().StringVar(&addSkysocksClientSrv, "proxyclientpk", scriptExecString("${PROXYCLIENTPK}"), "set server public key for proxy client")
+	//	genConfigCmd.Flags().BoolVar(&proxyClientAutostart, "startproxyclient", scriptExecBool("${STARTPROXYCLIENT:-false}"), "autostart proxy client")
+	//	genConfigCmd.Flags().BoolVar(&disableProxyServerAutostart, "noproxyserver", scriptExecBool("${NOPROXYSERVER:-false}"), "disable autostart of proxy server")
+	//	genConfigCmd.Flags().StringVar(&proxyServerPass, "proxyserverpass", "", "set password for the proxy server")
+	//	genConfigCmd.Flags().StringVar(&proxyClientPass, "proxyclientpass", "", "set password for the proxy client to access the proxy server (if needed)")
+	//	// TODO: Password for accessing proxy client
+	//	 genConfigCmd.Flags().StringVar(&setVPNClientKillswitch, "killsw", "", "vpn client killswitch")
+	//	 genConfigCmd.Flags().StringVar(&addVPNClientSrv, "addvpn", "", "set vpn server public key for vpn client")
+	//	 genConfigCmd.Flags().StringVar(&addVPNClientPasscode, "vpnpass", "", "password for vpn client to access the vpn server (if needed)")
+	//	 genConfigCmd.Flags().StringVar(&addVPNServerPasscode, "vpnserverpass", "", "set password to the vpn server")
+	//	 genConfigCmd.Flags().StringVar(&setVPNServerSecure, "secure", "", "change secure mode status of vpn server")
+	//	 genConfigCmd.Flags().StringVar(&setVPNServerNetIfc, "netifc", "", "VPN Server network interface (detected: "+getInterfaceNames()+")")
 	genConfigCmd.Flags().BoolVarP(&isEnvs, "envs", "q", false, "show the environmental variable settings")
 	gHiddenFlags = append(gHiddenFlags, "envs")
 	genConfigCmd.Flags().BoolVar(&noFetch, "nofetch", false, "do not fetch the services from the service conf url")
@@ -202,7 +200,7 @@ func scriptExecString(s string) string {
 	if err == nil {
 		return strings.TrimSpace(z)
 	}
-return ""
+	return ""
 }
 
 func scriptExecBool(s string) bool {
@@ -256,7 +254,7 @@ func scriptExecArray(s string) string {
 	if err == nil {
 		return strings.Join(y, ",")
 	}
-return ""
+	return ""
 }
 
 func scriptExecInt(s string) int {
@@ -283,7 +281,7 @@ func scriptExecInt(s string) int {
 	}
 	z, err := script.Exec(fmt.Sprintf(`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, skyenvfile, s)).String()
 	if err == nil {
-		if (z == "") {
+		if z == "" {
 			return 0
 		}
 		i, err := strconv.Atoi(z)
@@ -1048,7 +1046,7 @@ var genConfigCmd = &cobra.Command{
 	},
 }
 
-func getInterfaceNames() string {	//nolint Note: pending implementation for config gen
+func getInterfaceNames() string { //nolint Note: pending implementation for config gen
 	interfaces, err := net.Interfaces()
 	if err != nil {
 		fmt.Println("Error:", err)
@@ -1079,7 +1077,6 @@ func getInterfaceNames() string {	//nolint Note: pending implementation for conf
 
 	return strings.Join(interfaceNames, ", ")
 }
-
 
 var envfileLinux = `#
 # /etc/skywire.conf
