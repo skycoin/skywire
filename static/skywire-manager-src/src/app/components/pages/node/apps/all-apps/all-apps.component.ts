@@ -3,6 +3,7 @@ import { Subscription } from 'rxjs';
 
 import { Node, Application } from '../../../../../app.datatypes';
 import { NodeComponent } from '../../node.component';
+import { PageBaseComponent } from 'src/app/utils/page-base';
 
 /**
  * Page for showing the complete list of the apps of a node.
@@ -12,7 +13,7 @@ import { NodeComponent } from '../../node.component';
   templateUrl: './all-apps.component.html',
   styleUrls: ['./all-apps.component.scss']
 })
-export class AllAppsComponent implements OnInit, OnDestroy {
+export class AllAppsComponent extends PageBaseComponent implements OnInit, OnDestroy {
   apps: Application[];
   nodePK: string;
 
@@ -24,6 +25,8 @@ export class AllAppsComponent implements OnInit, OnDestroy {
       this.nodePK = node.localPk;
       this.apps = node.apps;
     });
+
+    return super.ngOnInit();
   }
 
   ngOnDestroy() {

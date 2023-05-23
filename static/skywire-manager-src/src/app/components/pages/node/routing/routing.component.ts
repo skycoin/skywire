@@ -3,6 +3,7 @@ import { Subscription } from 'rxjs';
 
 import { Node, Route } from '../../../../app.datatypes';
 import { NodeComponent } from '../node.component';
+import { PageBaseComponent } from 'src/app/utils/page-base';
 
 /**
  * Page that shows the routing summary. It is a subpage of the Node page.
@@ -12,7 +13,7 @@ import { NodeComponent } from '../node.component';
   templateUrl: './routing.component.html',
   styleUrls: ['./routing.component.scss']
 })
-export class RoutingComponent implements OnInit, OnDestroy {
+export class RoutingComponent extends PageBaseComponent implements OnInit, OnDestroy {
   node: Node;
   routes: Route[];
   nodePK: string;
@@ -26,6 +27,8 @@ export class RoutingComponent implements OnInit, OnDestroy {
       this.node = node;
       this.routes = node.routes;
     });
+
+    return super.ngOnInit();
   }
 
   ngOnDestroy() {

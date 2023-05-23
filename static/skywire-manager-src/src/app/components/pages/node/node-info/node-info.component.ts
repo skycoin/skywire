@@ -4,6 +4,7 @@ import { TrafficData } from 'src/app/services/single-node-data.service';
 
 import { Node } from '../../../../app.datatypes';
 import { NodeComponent } from '../node.component';
+import { PageBaseComponent } from 'src/app/utils/page-base';
 
 /**
  * Page for showing the basic info of a node.
@@ -13,7 +14,7 @@ import { NodeComponent } from '../node.component';
   templateUrl: './node-info.component.html',
   styleUrls: ['./node-info.component.scss']
 })
-export class NodeInfoComponent implements OnInit, OnDestroy {
+export class NodeInfoComponent extends PageBaseComponent implements OnInit, OnDestroy {
   node: Node;
   trafficData: TrafficData;
 
@@ -28,6 +29,8 @@ export class NodeInfoComponent implements OnInit, OnDestroy {
     this.trafficDataSubscription = NodeComponent.currentTrafficData.subscribe((data: TrafficData) => {
       this.trafficData = data;
     });
+
+    return super.ngOnInit();
   }
 
   ngOnDestroy() {
