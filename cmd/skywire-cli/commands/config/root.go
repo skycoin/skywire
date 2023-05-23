@@ -4,95 +4,95 @@ package cliconfig
 import (
 	"strings"
 
+	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
-		"github.com/skycoin/dmsg/pkg/disc"
 )
 
 var logger = logging.MustGetLogger("skywire-cli")
 
-//	proxyClientAutostart        bool   //nolint Note: pending implementation for config gen
-//	disableProxyServerAutostart bool   //nolint Note: pending implementation for config gen
-//	proxyServerPass             string //nolint Note: pending implementation for config gen
-//	proxyClientPass             string //nolint Note: pending implementation for config gen
+// proxyClientAutostart        bool   //nolint Note: pending implementation for config gen
+// disableProxyServerAutostart bool   //nolint Note: pending implementation for config gen
+// proxyServerPass             string //nolint Note: pending implementation for config gen
+// proxyClientPass             string //nolint Note: pending implementation for config gen
 var (
-	conf                        = new(visorconfig.V1)
+	conf                = new(visorconfig.V1)
 	dmsgHTTPServersList = &visorconfig.DmsgHTTPServers{
-	Test: visorconfig.DmsgHTTPServersData{DMSGServers: []*disc.Entry{}},
-	Prod: visorconfig.DmsgHTTPServersData{DMSGServers: []*disc.Entry{}},
-}
+		Test: visorconfig.DmsgHTTPServersData{DMSGServers: []*disc.Entry{}},
+		Prod: visorconfig.DmsgHTTPServersData{DMSGServers: []*disc.Entry{}},
+	}
 	//dmsgHTTPServersList = new(visorconfig.DmsgHTTPServers)
-	noFetch                     bool
-	noDefaults                  bool
-	stcprPort                   int
-	sudphPort                   int
-	sk                          cipher.SecKey
-	output                      string
-	confPath                    string
-	configName                  string //nolint Note: configName used, but golangci-lint marked it unused in wrong
-	isStdout                    bool
-	isRegen                     bool
-	isRetainHypervisors         bool
-	isTestEnv                   bool
-	pText                       string
-	isPkgEnv                    bool
-	isUsrEnv                    bool
-	isHypervisor                bool
-	hypervisorPKs               string
-	dmsgptywlPKs                string
-	surveywhitelistPks          string
-	routesetupnodePks           string
-	transportsetupnodePks       string
-	isDmsgHTTP                  bool
-	isVpnServerEnable           bool
-	isDisableAuth               bool
-	isEnableAuth                bool
-	selectedOS                  string
-	disableApps                 string
-	isBestProtocol              bool
-	serviceConfURL              string
-	services                    *visorconfig.Services
-	isForce                     bool
-	isHide                      bool
-	isAll                       bool
-	isOutUnset                  bool
-	ver                         string
-	isRoot                      = visorconfig.IsRoot()
-	svcConf                     = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")     //visorconfig.DefaultServiceConfAddr
-	testConf                    = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "") //visorconfig.DefaultServiceConfAddr
-	gHiddenFlags                []string
-	uHiddenFlags                []string
-	binPath                     string
-	logLevel                    string
-	isPkg                       bool
-	input                       string
-	isUpdateEndpoints           bool
-	addHypervisorPKs            string
-	isResetHypervisor           bool
-	setVPNClientKillswitch      string
-	addVPNClientSrv             string
-	addVPNClientPasscode        string
-	isResetVPNclient            bool
-	addVPNServerPasscode        string
-	setVPNServerSecure          string
-	setVPNServerAutostart       string
-	setVPNServerNetIfc          string
-	isResetVPNServer            bool
-	addSkysocksClientSrv        string
-	isResetSkysocksClient       bool
-	skysocksPasscode            string
-	isResetSkysocks             bool
-	setPublicAutoconnect        string
-	minHops                     int
-	isUsr                       bool
-	isPublic                    bool
-	disablePublicAutoConn       bool
-	isDisplayNodeIP             bool
-	addExampleApps              bool
+	noFetch                bool
+	noDefaults             bool
+	stcprPort              int
+	sudphPort              int
+	sk                     cipher.SecKey
+	output                 string
+	confPath               string
+	configName             string //nolint Note: configName used, but golangci-lint marked it unused in wrong
+	isStdout               bool
+	isRegen                bool
+	isRetainHypervisors    bool
+	isTestEnv              bool
+	pText                  string
+	isPkgEnv               bool
+	isUsrEnv               bool
+	isHypervisor           bool
+	hypervisorPKs          string
+	dmsgptywlPKs           string
+	surveywhitelistPks     string
+	routesetupnodePks      string
+	transportsetupnodePks  string
+	isDmsgHTTP             bool
+	isVpnServerEnable      bool
+	isDisableAuth          bool
+	isEnableAuth           bool
+	selectedOS             string
+	disableApps            string
+	isBestProtocol         bool
+	serviceConfURL         string
+	services               *visorconfig.Services
+	isForce                bool
+	isHide                 bool
+	isAll                  bool
+	isOutUnset             bool
+	ver                    string
+	isRoot                 = visorconfig.IsRoot()
+	svcConf                = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")     //visorconfig.DefaultServiceConfAddr
+	testConf               = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "") //visorconfig.DefaultServiceConfAddr
+	gHiddenFlags           []string
+	uHiddenFlags           []string
+	binPath                string
+	logLevel               string
+	isPkg                  bool
+	input                  string
+	isUpdateEndpoints      bool
+	addHypervisorPKs       string
+	isResetHypervisor      bool
+	setVPNClientKillswitch string
+	addVPNClientSrv        string
+	addVPNClientPasscode   string
+	isResetVPNclient       bool
+	addVPNServerPasscode   string
+	setVPNServerSecure     string
+	setVPNServerAutostart  string
+	setVPNServerNetIfc     string
+	isResetVPNServer       bool
+	addSkysocksClientSrv   string
+	isResetSkysocksClient  bool
+	skysocksPasscode       string
+	isResetSkysocks        bool
+	setPublicAutoconnect   string
+	minHops                int
+	isUsr                  bool
+	isPublic               bool
+	disablePublicAutoConn  bool
+	isDisplayNodeIP        bool
+	addExampleApps         bool
 )
 
 // RootCmd contains commands that interact with the config of local skywire-visor

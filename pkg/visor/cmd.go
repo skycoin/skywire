@@ -2,6 +2,7 @@
 package visor
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
@@ -10,12 +11,11 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"encoding/json"
-		"github.com/tidwall/pretty"
-	"github.com/spf13/viper"
 
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
@@ -24,10 +24,10 @@ import (
 )
 
 var (
-	restartCtx       = restart.CaptureContext()
-	pkgconfigexists  bool
-	userconfigexists bool
-	isPrintConfig	bool
+	restartCtx           = restart.CaptureContext()
+	pkgconfigexists      bool
+	userconfigexists     bool
+	isPrintConfig        bool
 	stopVisorWg          sync.WaitGroup //nolint:unused
 	launchBrowser        bool
 	syslogAddr           string
@@ -145,6 +145,7 @@ func init() {
 	RootCmd.SetUsageTemplate(help)
 
 }
+
 // RootCmd contains the help command & invocation flags
 var RootCmd = &cobra.Command{
 	Use:   "visor",
@@ -282,7 +283,7 @@ func initConfig() *visorconfig.V1 { //nolint
 		viper.SetConfigFile(confPath)
 	}
 
-	conf :=	new(visorconfig.V1)
+	conf := new(visorconfig.V1)
 	conf.Common = new(visorconfig.Common)
 
 	// Read the config into the V1 struct

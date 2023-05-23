@@ -50,7 +50,6 @@ var checkPKCmd = &cobra.Command{
 		fmt.Printf("Valid public key: %s\n", checkKey.String())
 		return
 	},
-
 }
 
 // RootCmd contains commands that interact with the config of local skywire-visor
@@ -58,10 +57,10 @@ var genKeysCmd = &cobra.Command{
 	Use:   "gen-keys",
 	Short: "generate public / secret keypair",
 	Run: func(cmd *cobra.Command, args []string) {
-	pk, sk := cipher.GenerateKeyPair()
-	fmt.Println(pk)
-	fmt.Println(sk)
-},
+		pk, sk := cipher.GenerateKeyPair()
+		fmt.Println(pk)
+		fmt.Println(sk)
+	},
 }
 
 var (
@@ -494,7 +493,7 @@ var genConfigCmd = &cobra.Command{
 			//create the http request
 			req, err := http.NewRequest(http.MethodGet, fmt.Sprint(serviceConfURL), nil)
 			if err != nil {
-				 log.WithError(err).Fatal("Failed to create http request\n")
+				log.WithError(err).Fatal("Failed to create http request\n")
 			}
 			req.Header.Add("Cache-Control", "no-cache")
 			//check for errors in the response
@@ -502,8 +501,8 @@ var genConfigCmd = &cobra.Command{
 			if err != nil {
 				//silence errors for stdout
 				if !isStdout {
-					 log.WithError(err).Error("Failed to fetch servers\n")
-					 log.Warn("Falling back on hardcoded servers")
+					log.WithError(err).Error("Failed to fetch servers\n")
+					log.Warn("Falling back on hardcoded servers")
 				}
 			} else {
 				// nil error from client.Do(req)
@@ -512,15 +511,15 @@ var genConfigCmd = &cobra.Command{
 				}
 				body, err := io.ReadAll(res.Body)
 				if err != nil {
-					 log.WithError(err).Fatal("Failed to read response\n")
+					log.WithError(err).Fatal("Failed to read response\n")
 				}
 				//fill in services struct with the response
 				err = json.Unmarshal(body, &services)
 				if err != nil {
-					 log.WithError(err).Fatal("Failed to unmarshal json response\n")
+					log.WithError(err).Fatal("Failed to unmarshal json response\n")
 				}
 				if !isStdout {
-					 log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
+					log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
 				}
 			}
 			// reset the state of isStdout
@@ -542,8 +541,8 @@ var genConfigCmd = &cobra.Command{
 			err = json.Unmarshal(oldConfJson, &oldConf)
 			if err != nil {
 				if !isStdout || isStdout && isHide {
-				 log.WithError(err).Fatal("Failed to unmarshal old config json")
-			 }
+					log.WithError(err).Fatal("Failed to unmarshal old config json")
+				}
 			}
 			if err != nil {
 				_, sk = cipher.GenerateKeyPair()
@@ -590,7 +589,6 @@ var genConfigCmd = &cobra.Command{
 		conf.Common.SK = sk
 		conf.Common.PK = pk
 
-
 		dnsServer := utilenv.DNSServer
 		if services != nil {
 			if services.DNSServer != "" {
@@ -616,7 +614,7 @@ var genConfigCmd = &cobra.Command{
 			// Decode JSON data
 			err = json.Unmarshal(dmsghttpConfigData, &dmsgHTTPServersList)
 			if err != nil {
-				 log.WithError(err).Fatal("Failed to unmarshal "+visorconfig.DMSGHTTPName)
+				log.WithError(err).Fatal("Failed to unmarshal " + visorconfig.DMSGHTTPName)
 			}
 
 			//DEBUG
@@ -627,7 +625,6 @@ var genConfigCmd = &cobra.Command{
 			//}
 			//fmt.Println(string(jsonData))
 		}
-
 
 		//TODO: handle partial service conf / service conf for less than the whole set of services
 		//fall back on  defaults

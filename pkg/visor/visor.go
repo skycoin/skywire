@@ -18,6 +18,7 @@ import (
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/toqueteos/webbrowser"
+
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
@@ -184,7 +185,6 @@ func run(conf *visorconfig.V1) error {
 
 	mLog.Info("test")
 
-
 	if logLvl != "" {
 		//validate & set log level
 		_, err := logging.LevelFromString(logLvl)
@@ -344,7 +344,6 @@ func (v *Visor) isStunReady() bool {
 		return false
 	}
 }
-
 
 func initLogger() *logging.MasterLogger {
 	mLog := logging.NewMasterLogger()
