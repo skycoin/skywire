@@ -47,7 +47,6 @@ var checkPKCmd = &cobra.Command{
 			logger.WithError(err).Fatal("invalid public key ")	//nolint
 		}
 		logger.Info("Valid public key: ", checkKey.String())
-		return
 	},
 }
 
@@ -530,14 +529,14 @@ var genConfigCmd = &cobra.Command{
 		var oldConf visorconfig.V1
 		if isRegen {
 			// Read the JSON configuration file
-			oldConfJson, err := os.ReadFile(confPath)
+			oldConfJSON, err := os.ReadFile(confPath)
 			if err != nil {
 				if !isStdout || isStdout && isHide {
 					log.Fatalf("Failed to read config file: %v", err)
 				}
 			}
 			// Decode JSON data
-			err = json.Unmarshal(oldConfJson, &oldConf)
+			err = json.Unmarshal(oldConfJSON, &oldConf)
 			if err != nil {
 				if !isStdout || isStdout && isHide {
 					log.WithError(err).Fatal("Failed to unmarshal old config json")
@@ -605,7 +604,7 @@ var genConfigCmd = &cobra.Command{
 			}
 
 			// Read the JSON configuration file
-			dmsghttpConfigData, err := os.ReadFile(dmsghttpConfig)
+			dmsghttpConfigData, err := os.ReadFile(dmsghttpConfig) //nolint
 			if err != nil {
 				log.Fatalf("Failed to read config file: %v", err)
 			}
@@ -1046,7 +1045,7 @@ var genConfigCmd = &cobra.Command{
 				log.Fatalf("Failed to marshal config to JSON: %v", err)
 			}
 			// Write the JSON data back to the file
-			err = os.WriteFile(confPath, jsonData, 0644)
+			err = os.WriteFile(confPath, jsonData, 0644)	//nolint
 			if err != nil {
 				log.Fatalf("Failed to write config file: %v", err)
 			}

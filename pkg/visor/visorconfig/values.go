@@ -187,7 +187,7 @@ func MustPK(pk string) cipher.PubKey {
 	return sPK
 }
 
-// MustPK unmarshals comma separated list of string PKs to []cipher.PubKey. It panics if unmarshaling fails.
+// MustPKs unmarshals comma separated list of string PKs to []cipher.PubKey. It panics if unmarshaling fails.
 func MustPKs(pks string) []cipher.PubKey {
 	var sPKs cipher.PubKeys
 	if err := sPKs.Set(pks); err != nil {
