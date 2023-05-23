@@ -806,13 +806,6 @@ var genConfigCmd = &cobra.Command{
 			ListeningAddress: visorconfig.STCPAddr,
 			PKTable:          nil,
 		}
-		//DEBUG
-		// Marshal the modified config to JSON and print
-		//jsonData, err := json.MarshalIndent(dmsgHTTPServersList, "", "  ")
-		//if err != nil {
-		//	  log.Fatalf("Failed to marshal config to JSON: %v", err)
-		//}
-		//fmt.Println(string(jsonData))
 
 		// Use dmsg urls for services and add dmsg-servers
 		if isDmsgHTTP {
@@ -1064,7 +1057,6 @@ var genConfigCmd = &cobra.Command{
 		if err != nil {
 			log.WithError(err).Fatal("Could not unmarshal json.")
 		}
-		//omit logging messages with stdout
 		//print config to stdout, omit logging messages, exit
 		if isStdout {
 			fmt.Printf("%s", j)

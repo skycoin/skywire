@@ -164,6 +164,7 @@ func run(conf *visorconfig.V1) error {
 		conf = initConfig()
 	}
 
+	mLog.Info("test")
 	conf.MasterLogger().AddHook(hook)
 
 	if disableHypervisorPKs {
@@ -183,7 +184,6 @@ func run(conf *visorconfig.V1) error {
 		}
 	}
 
-	mLog.Info("test")
 
 	if logLvl != "" {
 		//validate & set log level

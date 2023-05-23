@@ -2,6 +2,7 @@
 package visor
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -14,8 +15,6 @@ import (
 
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
-	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
@@ -267,57 +266,91 @@ var RootCmd = &cobra.Command{
 	Version: buildinfo.Version(),
 }
 
-func initConfig() *visorconfig.V1 { //nolint
+func initConfig() *visorconfig.V1 {
 	log := mLog.PackageLogger("visor:config")
 
 	switch confPath {
 	case visorconfig.Stdin:
 		log.Info("Reading config from STDIN.")
-		viper.SetConfigType("json") // Assuming JSON format, change accordingly if using a different format
-		viper.SetConfigName("config")
-		viper.ReadConfig(os.Stdin)
+
+		// Read from STDIN and store the input in a buffer
+		buf := new(bytes.Buffer)
+		_, err := buf.ReadFrom(os.Stdin)
+		if err != nil {
+			log.Fatalf("Failed to read config from STDIN: %v", err)
+		}
+
+		conf := new(visorconfig.V1)
+		conf.Common = new(visorconfig.Common)
+		err = json.Unmarshal(buf.Bytes(), &conf)
+		if err != nil {
+			log.WithError(err).Fatal("Failed to unmarshal config from STDIN")
+		}
+
+
+		if hypervisorUI {
+			config := visorconfig.GenerateWorkDirConfig(false)
+			conf.Hypervisor = &config
+		}
+		if conf.Hypervisor != nil {
+			if *uiAssets == nil {
+				log.Fatalf("missing embedded assets for hypervisor ui")
+			}
+			conf.Hypervisor.UIAssets = *uiAssets
+		}
+		if noHypervisorUI {
+			conf.Hypervisor = nil
+		}
+		// print JSON
+		jsonData, err := json.MarshalIndent(conf, "", "  ")
+		if err != nil {
+			log.Fatalf("Failed to marshal config to JSON: %v", err)
+		}
+		fmt.Println(string(jsonData))
+		return conf
 	case "":
 		fallthrough
 	default:
 		log.WithField("filepath", confPath).Info()
-		viper.SetConfigFile(confPath)
-	}
 
-	conf := new(visorconfig.V1)
-	conf.Common = new(visorconfig.Common)
-
-	// Read the config into the V1 struct
-	if err := viper.Unmarshal(&conf); err != nil {
-		log.WithError(err).Fatal("Failed to unmarshal config")
-	}
-
-	// Marshal config to JSON with indentation
-	jsonData, err := json.MarshalIndent(conf, "", "  ")
-	if err != nil {
-		mLog.Fatalf("Failed to marshal config to JSON: %v", err)
-	}
-
-	// Pretty print JSON
-	fmt.Println(string(pretty.Pretty(jsonData)))
-
-	if hypervisorUI {
-		config := visorconfig.GenerateWorkDirConfig(false)
-		conf.Hypervisor = &config
-	}
-	if conf.Hypervisor != nil {
-		if *uiAssets == nil {
-			log.Fatalf("missing embedded assets for hypervisor ui")
+		// Read the JSON configuration file
+		confData, err := os.ReadFile(confPath)
+		if err != nil {
+			log.Fatalf("Failed to read config file: %v", err)
 		}
-		conf.Hypervisor.UIAssets = *uiAssets
-	}
-	if noHypervisorUI {
-		conf.Hypervisor = nil
-	}
 
-	visorconfig.VisorConfigFile = confPath
+		// Decode JSON data
+		conf := new(visorconfig.V1)
+		err = json.Unmarshal(confData, &conf)
+		if err != nil {
+			log.WithError(err).Fatal("Failed to unmarshal config")
+		}
 
-	return conf
+		if hypervisorUI {
+			config := visorconfig.GenerateWorkDirConfig(false)
+			conf.Hypervisor = &config
+		}
+		if conf.Hypervisor != nil {
+			if *uiAssets == nil {
+				log.Fatalf("missing embedded assets for hypervisor ui")
+			}
+			conf.Hypervisor.UIAssets = *uiAssets
+		}
+		if noHypervisorUI {
+			conf.Hypervisor = nil
+		}
+		// print JSON
+		jsonData, err := json.MarshalIndent(conf, "", "  ")
+		if err != nil {
+			log.Fatalf("Failed to marshal config to JSON: %v", err)
+		}
+		fmt.Println(string(jsonData))
+
+
+		return conf
+	}
 }
+
 
 const help = "{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}" +
 	"{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}" +
