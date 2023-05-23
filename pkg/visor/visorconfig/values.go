@@ -180,10 +180,21 @@ func DmsgPtyWhiteList() string {
 func MustPK(pk string) cipher.PubKey {
 	var sPK cipher.PubKey
 	if err := sPK.UnmarshalText([]byte(pk)); err != nil {
+		fmt.Printf("invalid public key: %s", pk)
 		panic(err)
 	}
 
 	return sPK
+}
+
+// MustPK unmarshals comma separated list of string PKs to []cipher.PubKey. It panics if unmarshaling fails.
+func MustPKs(pks string) []cipher.PubKey {
+	var sPKs cipher.PubKeys
+	if err := sPKs.Set(pks); err != nil {
+		fmt.Printf("invalid public key or keys: %s", pks)
+		panic(err)
+	}
+	return []cipher.PubKey(sPKs)
 }
 
 // Version gets the version of the installation for the config
