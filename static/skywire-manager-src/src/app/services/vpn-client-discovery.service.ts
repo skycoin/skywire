@@ -110,43 +110,45 @@ export class VpnClientDiscoveryService {
       map((result: any[]) => {
         const response: VpnServer[] = [];
 
-        // Process the data.
-        result.forEach(entry => {
-          const currentEntry = new VpnServer();
+        if (result) {
+          // Process the data.
+          result.forEach(entry => {
+            const currentEntry = new VpnServer();
 
-          // The address must have 2 parts: the pk and the port.
-          const addressParts = (entry.address as string).split(':');
-          if (addressParts.length === 2) {
-            currentEntry.pk = addressParts[0];
+            // The address must have 2 parts: the pk and the port.
+            const addressParts = (entry.address as string).split(':');
+            if (addressParts.length === 2) {
+              currentEntry.pk = addressParts[0];
 
-            // Process the location.
-            currentEntry.location = '';
-            if (entry.geo) {
-              if (entry.geo.country) {
-                currentEntry.countryCode = entry.geo.country;
+              // Process the location.
+              currentEntry.location = '';
+              if (entry.geo) {
+                if (entry.geo.country) {
+                  currentEntry.countryCode = entry.geo.country;
+                }
+                if (entry.geo.region) {
+                  currentEntry.location = entry.geo.region;
+                }
               }
-              if (entry.geo.region) {
-                currentEntry.location = entry.geo.region;
-              }
+
+              currentEntry.name = addressParts[0];
+              /*
+              // TODO: used only for columns that are currently deactivated in the server list. Must
+              // be deleted or reactivated depending on what happens to the columns.
+              currentEntry.congestion = 20;
+              currentEntry.congestionRating = Ratings.Gold;
+              currentEntry.latency = 123;
+              currentEntry.latencyRating = Ratings.Gold;
+              currentEntry.hops = 3;
+              */
+
+              // TODO: still not added to the discovery service.
+              currentEntry.note = '';
+
+              response.push(currentEntry);
             }
-
-            currentEntry.name = addressParts[0];
-            /*
-            // TODO: used only for columns that are currently deactivated in the server list. Must
-            // be deleted or reactivated depending on what happens to the columns.
-            currentEntry.congestion = 20;
-            currentEntry.congestionRating = Ratings.Gold;
-            currentEntry.latency = 123;
-            currentEntry.latencyRating = Ratings.Gold;
-            currentEntry.hops = 3;
-            */
-
-            // TODO: still not added to the discovery service.
-            currentEntry.note = '';
-
-            response.push(currentEntry);
-          }
-        });
+          });
+        }
 
         this.servers = response;
 
