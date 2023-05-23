@@ -268,7 +268,12 @@ func directQuerySD(cmdFlags *pflag.FlagSet) (s []servicedisc.Service) {
 	if err != nil {
 		internal.PrintFatalError(cmdFlags, fmt.Errorf("error fetching servers from service discovery: %w", err))
 	}
-	defer resp.Body.Close() //nolint:errcheck
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			internal.PrintError(cmdFlags, fmt.Errorf("Failed to close response body"))
+		}
+	}()
 	// Decode JSON response into struct
 	err = json.NewDecoder(resp.Body).Decode(&s)
 	if err != nil {

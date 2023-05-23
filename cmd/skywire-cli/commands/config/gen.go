@@ -44,7 +44,7 @@ var checkPKCmd = &cobra.Command{
 		var checkKey cipher.PubKey
 		err := checkKey.Set(args[0])
 		if err != nil {
-			logger.WithError(err).Fatal("invalid public key ")	//nolint
+			logger.WithError(err).Fatal("invalid public key ") //nolint
 		}
 		logger.Info("Valid public key: ", checkKey.String())
 	},
@@ -1045,7 +1045,7 @@ var genConfigCmd = &cobra.Command{
 				log.Fatalf("Failed to marshal config to JSON: %v", err)
 			}
 			// Write the JSON data back to the file
-			err = os.WriteFile(confPath, jsonData, 0644)	//nolint
+			err = os.WriteFile(confPath, jsonData, 0644) //nolint
 			if err != nil {
 				log.Fatalf("Failed to write config file: %v", err)
 			}
