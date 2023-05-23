@@ -44,10 +44,9 @@ var checkPKCmd = &cobra.Command{
 		var checkKey cipher.PubKey
 		err := checkKey.Set(args[0])
 		if err != nil {
-			fmt.Errorf("invalid public key: %v\n", err)
-			return
+			logger.WithError(err).Fatal("invalid public key ")	//nolint
 		}
-		fmt.Printf("Valid public key: %s\n", checkKey.String())
+		logger.Info("Valid public key: ", checkKey.String())
 		return
 	},
 }
