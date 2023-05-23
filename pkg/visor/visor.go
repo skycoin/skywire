@@ -18,7 +18,6 @@ import (
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/toqueteos/webbrowser"
-
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
@@ -183,9 +182,8 @@ func run(conf *visorconfig.V1) error {
 		}
 	}
 
-	//	if isAutoPeer {
-	//		conf = initAutopeer(conf)
-	//	}
+	mLog.Info("test")
+
 
 	if logLvl != "" {
 		//validate & set log level
@@ -320,10 +318,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	if !v.processRuntimeErrs() {
 		return nil, false
 	}
-	//	if isAutoPeer {
-	//		v.autoPeer = true
-	//		v.autoPeerIP = autoPeerIP
-	//	}
+
 	log.Info("Startup complete.")
 	return v, true
 }
@@ -350,51 +345,6 @@ func (v *Visor) isStunReady() bool {
 	}
 }
 
-/*
-func initAutopeer(conf *visorconfig.V1) *visorconfig.V1 {
-	log := mLog.PackageLogger("visor:autopeer")
-
-	if !isAutoPeer {
-		log.WithError(fmt.Errorf("erroneous initialization")).Error("error autopeering")
-		return conf
-	}
-	//autopeering should only happen when there is no local or remote hypervisor set in the config.
-	//and hence can be disabled by setting these. the visor may still be invoked with autopeering flag.
-	if conf.Hypervisor != nil {
-		isAutoPeer = false
-		log.Info("Local hypervisor running, disabling autopeer")
-		return conf
-	}
-
-	if len(conf.Hypervisors) > 0 {
-		isAutoPeer = false
-		log.Info("%d Remote hypervisor(s) set in config; disabling autopeer", len(conf.Hypervisors))
-		log.Info(conf.Hypervisors)
-		return conf
-	}
-
-	log.Info("Autopeer: ", isAutoPeer)
-	hvkey, err := FetchHvPk(autoPeerIP)
-	if err != nil {
-		log.WithError(err).Error("error autopeering")
-		return conf
-	}
-
-	pubkey := cipher.PubKey{}
-	hvkey = strings.TrimSpace(hvkey)
-	hypervisorPKsSlice := strings.Split(hvkey, ",")
-	for _, pubkeyString := range hypervisorPKsSlice {
-		if err := pubkey.Set(pubkeyString); err != nil {
-			log.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
-			continue
-		}
-		log.Infof("%s PK added as remote hypervisor PK", pubkeyString)
-		conf.Hypervisors = append(conf.Hypervisors, pubkey)
-	}
-
-	return conf
-}
-*/
 
 func initLogger() *logging.MasterLogger {
 	mLog := logging.NewMasterLogger()

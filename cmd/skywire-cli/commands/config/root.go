@@ -10,16 +10,22 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+		"github.com/skycoin/dmsg/pkg/disc"
 )
 
 var logger = logging.MustGetLogger("skywire-cli")
 
+//	proxyClientAutostart        bool   //nolint Note: pending implementation for config gen
+//	disableProxyServerAutostart bool   //nolint Note: pending implementation for config gen
+//	proxyServerPass             string //nolint Note: pending implementation for config gen
+//	proxyClientPass             string //nolint Note: pending implementation for config gen
 var (
-	proxyClientAutostart        bool   //nolint Note: pending implementation for config gen
-	disableProxyServerAutostart bool   //nolint Note: pending implementation for config gen
-	proxyServerPass             string //nolint Note: pending implementation for config gen
-	proxyClientPass             string //nolint Note: pending implementation for config gen
 	conf                        = new(visorconfig.V1)
+	dmsgHTTPServersList = &visorconfig.DmsgHTTPServers{
+	Test: visorconfig.DmsgHTTPServersData{DMSGServers: []*disc.Entry{}},
+	Prod: visorconfig.DmsgHTTPServersData{DMSGServers: []*disc.Entry{}},
+}
+	//dmsgHTTPServersList = new(visorconfig.DmsgHTTPServers)
 	noFetch                     bool
 	noDefaults                  bool
 	stcprPort                   int

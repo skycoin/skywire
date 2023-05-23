@@ -2,9 +2,7 @@
 package visor
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"net"
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
@@ -12,6 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"encoding/json"
+		"github.com/tidwall/pretty"
+	"github.com/spf13/viper"
 
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
@@ -26,8 +27,7 @@ var (
 	restartCtx       = restart.CaptureContext()
 	pkgconfigexists  bool
 	userconfigexists bool
-	//	isAutoPeer           bool
-	//	autoPeerIP           string
+	isPrintConfig	bool
 	stopVisorWg          sync.WaitGroup //nolint:unused
 	launchBrowser        bool
 	syslogAddr           string
@@ -136,6 +136,8 @@ func init() {
 	hiddenflags = append(hiddenflags, "store-log")
 	RootCmd.Flags().BoolVar(&isForceColor, "force-color", false, "set force coler true in loggers")
 	hiddenflags = append(hiddenflags, "force-color")
+	RootCmd.Flags().BoolVar(&isPrintConfig, "print-config", false, "print the config used (debug)")
+	hiddenflags = append(hiddenflags, "print-config")
 	RootCmd.Flags().BoolVar(&all, "all", false, "show all flags")
 	for _, j := range hiddenflags {
 		RootCmd.Flags().MarkHidden(j) //nolint
@@ -143,34 +145,6 @@ func init() {
 	RootCmd.SetUsageTemplate(help)
 
 }
-
-//omit due to possible panic
-/*
-func initAutoPeerFlags() {
-	localIPs, err := netutil.DefaultNetworkInterfaceIPs()
-	if err != nil {
-		logger.WithError(err).Warn("Could not determine network interface IP address")
-		if len(localIPs) == 0 {
-			localIPs = append(localIPs, net.ParseIP("192.168.0.1"))
-		}
-	}
-	RootCmd.Flags().StringVarP(&autoPeerIP, "hvip", "l", trimStringFromDot(localIPs[0].String())+".2:7998", "set hypervisor by ip")
-	hiddenflags = append(hiddenflags, "hvip")
-	isDefaultAutopeer := false
-	if os.Getenv("AUTOPEER") == "1" {
-		isDefaultAutopeer = true
-	}
-	RootCmd.Flags().BoolVarP(&isAutoPeer, "autopeer", "m", isDefaultAutopeer, "enable autopeering to remote hypervisor")
-	hiddenflags = append(hiddenflags, "autopeer")
-}
-func trimStringFromDot(s string) string {
-	if idx := strings.LastIndex(s, "."); idx != -1 {
-		return s[:idx]
-	}
-	return s
-}
-*/
-
 // RootCmd contains the help command & invocation flags
 var RootCmd = &cobra.Command{
 	Use:   "visor",
@@ -295,31 +269,36 @@ var RootCmd = &cobra.Command{
 func initConfig() *visorconfig.V1 { //nolint
 	log := mLog.PackageLogger("visor:config")
 
-	var r io.Reader
-
 	switch confPath {
 	case visorconfig.Stdin:
 		log.Info("Reading config from STDIN.")
-		r = os.Stdin
+		viper.SetConfigType("json") // Assuming JSON format, change accordingly if using a different format
+		viper.SetConfigName("config")
+		viper.ReadConfig(os.Stdin)
 	case "":
 		fallthrough
 	default:
 		log.WithField("filepath", confPath).Info()
-		f, err := os.ReadFile(filepath.Clean(confPath))
-		if err != nil {
-			log.WithError(err).Fatal("Failed to read config file.")
-		}
-		confPath = filepath.Clean(confPath)
-		r = bytes.NewReader(f)
+		viper.SetConfigFile(confPath)
 	}
 
-	conf, compat, err := visorconfig.Parse(log, r, confPath, visorBuildInfo)
+	conf :=	new(visorconfig.V1)
+	conf.Common = new(visorconfig.Common)
+
+	// Read the config into the V1 struct
+	if err := viper.Unmarshal(&conf); err != nil {
+		log.WithError(err).Fatal("Failed to unmarshal config")
+	}
+
+	// Marshal config to JSON with indentation
+	jsonData, err := json.MarshalIndent(conf, "", "  ")
 	if err != nil {
-		log.WithError(err).Fatal("Failed to read in config.")
+		mLog.Fatalf("Failed to marshal config to JSON: %v", err)
 	}
-	if !compat {
-		log.Fatalf("failed to start skywire - config version is incompatible")
-	}
+
+	// Pretty print JSON
+	fmt.Println(string(pretty.Pretty(jsonData)))
+
 	if hypervisorUI {
 		config := visorconfig.GenerateWorkDirConfig(false)
 		conf.Hypervisor = &config
@@ -335,6 +314,7 @@ func initConfig() *visorconfig.V1 { //nolint
 	}
 
 	visorconfig.VisorConfigFile = confPath
+
 	return conf
 }
 

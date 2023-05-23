@@ -15,16 +15,13 @@ import (
 	"time"
 
 	"github.com/bitfield/script"
-	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -36,6 +33,37 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
+// RootCmd contains commands that interact with the config of local skywire-visor
+var checkPKCmd = &cobra.Command{
+	Use:   "check-pk <public-key>",
+	Short: "check a skywire public key",
+	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) == 0 {
+			return
+		}
+		var checkKey cipher.PubKey
+		err := checkKey.Set(args[0])
+		if err != nil {
+			fmt.Errorf("invalid public key: %v\n", err)
+			return
+		}
+		fmt.Printf("Valid public key: %s\n", checkKey.String())
+		return
+	},
+
+}
+
+// RootCmd contains commands that interact with the config of local skywire-visor
+var genKeysCmd = &cobra.Command{
+	Use:   "gen-keys",
+	Short: "generate public / secret keypair",
+	Run: func(cmd *cobra.Command, args []string) {
+	pk, sk := cipher.GenerateKeyPair()
+	fmt.Println(pk)
+	fmt.Println(sk)
+},
+}
+
 var (
 	isEnvs     bool
 	skyenvfile = os.Getenv("SKYENV")
@@ -46,7 +74,7 @@ func init() {
 	var msg string
 	//disable sorting, flags appear in the order shown here
 	genConfigCmd.Flags().SortFlags = false
-	RootCmd.AddCommand(genConfigCmd)
+	RootCmd.AddCommand(genConfigCmd, genKeysCmd, checkPKCmd)
 
 	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", scriptExecArray(fmt.Sprintf("${SVCCONFADDR[@]-%s}", utilenv.ServiceConfAddr)), "services conf url\n\r")
 	gHiddenFlags = append(gHiddenFlags, "url")
@@ -317,8 +345,8 @@ var genConfigCmd = &cobra.Command{
 
 	}(),
 	PreRun: func(cmd *cobra.Command, _ []string) {
+		log := logger
 		if isEnvs {
-
 			if visorconfig.OS == "windows" {
 				envfile = envfileWindows
 			} else {
@@ -356,11 +384,11 @@ var genConfigCmd = &cobra.Command{
 		}
 		//--force will delete a config, which excludes --regen
 		if (isForce) && (isRegen) {
-			logger.Fatal("Use of mutually exclusive flags: -f --force cannot override -r --regen")
+			log.Fatal("Use of mutually exclusive flags: -f --force cannot override -r --regen")
 		}
 		// these flags overwrite each other
 		if (isUsrEnv) && (isPkgEnv) {
-			logger.Fatal("Use of mutually exclusive flags: -u --user and -p --pkg")
+			log.Fatal("Use of mutually exclusive flags: -u --user and -p --pkg")
 		}
 		//enable local hypervisor by default for user
 		if isUsrEnv {
@@ -374,24 +402,24 @@ var genConfigCmd = &cobra.Command{
 			}
 			if _, err := os.Stat(dmsgHTTPPath); err == nil {
 				if !isStdout {
-					logger.Info("Found Dmsghttp config: ", dmsgHTTPPath)
+					log.Info("Found Dmsghttp config: ", dmsgHTTPPath)
 				}
 			} else {
-				logger.Fatal("Dmsghttp config not found at: ", dmsgHTTPPath)
+				log.Fatal("Dmsghttp config not found at: ", dmsgHTTPPath)
 			}
 		}
 		if !isStdout {
 			if confPath, err = filepath.Abs(confPath); err != nil {
-				logger.WithError(err).Fatal("Invalid output provided.")
+				log.WithError(err).Fatal("Invalid output provided.")
 			}
 			if isForce {
 				if _, err := os.Stat(confPath); err == nil {
 					err := os.Remove(confPath)
 					if err != nil {
-						logger.WithError(err).Warn("Could not remove file")
+						log.WithError(err).Warn("Could not remove file")
 					}
 				} else {
-					logger.Info("Ignoring -f --force flag, config not found.")
+					log.Info("Ignoring -f --force flag, config not found.")
 				}
 			}
 		}
@@ -411,7 +439,7 @@ var genConfigCmd = &cobra.Command{
 			//check if the config exists
 			if _, err := os.Stat(confPath); err == nil {
 				//error config exists !regen
-				logger.Fatal("Config file already exists. Specify the '-r --regen' flag to regenerate.")
+				log.Fatal("Config file already exists. Specify the '-r --regen' flag to regenerate.")
 			}
 		}
 		//don't write file with stdout
@@ -425,17 +453,17 @@ var genConfigCmd = &cobra.Command{
 					}
 					owner, err := script.Exec(`stat -c '%U' ` + confPath1).String()
 					if err != nil {
-						logger.Error("cannot stat: " + confPath1)
+						log.Error("cannot stat: " + confPath1)
 					}
 					rootOwner, err := script.Exec(`stat -c '%U' /root`).String()
 					if err != nil {
-						logger.Error("cannot stat: /root")
+						log.Error("cannot stat: /root")
 					}
 					if (owner != rootOwner) && isRoot {
-						logger.Warn("writing config as root to directory not owned by root")
+						log.Warn("writing config as root to directory not owned by root")
 					}
 					if !isRoot && (owner == rootOwner) {
-						logger.Fatal("Insufficient permissions to write to the specified path")
+						log.Fatal("Insufficient permissions to write to the specified path")
 					}
 				}
 			}
@@ -443,18 +471,7 @@ var genConfigCmd = &cobra.Command{
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 
-		// Initialize Viper
-		v := viper.New()
-		// Set the name of the configuration file (without the extension)
-		v.SetConfigName(configName)
-		// Set the path where the configuration file is located
-		v.AddConfigPath(confPath)
-		// Set the configuration file type
-		v.SetConfigType("json")
-
-		mLog := logging.NewMasterLogger()
-		mLog.SetLevel(logrus.InfoLevel)
-		log := mLog
+		log := logger
 
 		if !noFetch {
 			// set default service conf url if none is specified
@@ -477,7 +494,7 @@ var genConfigCmd = &cobra.Command{
 			//create the http request
 			req, err := http.NewRequest(http.MethodGet, fmt.Sprint(serviceConfURL), nil)
 			if err != nil {
-				mLog.WithError(err).Fatal("Failed to create http request\n")
+				 log.WithError(err).Fatal("Failed to create http request\n")
 			}
 			req.Header.Add("Cache-Control", "no-cache")
 			//check for errors in the response
@@ -485,8 +502,8 @@ var genConfigCmd = &cobra.Command{
 			if err != nil {
 				//silence errors for stdout
 				if !isStdout {
-					mLog.WithError(err).Error("Failed to fetch servers\n")
-					mLog.Warn("Falling back on hardcoded servers")
+					 log.WithError(err).Error("Failed to fetch servers\n")
+					 log.Warn("Falling back on hardcoded servers")
 				}
 			} else {
 				// nil error from client.Do(req)
@@ -495,15 +512,15 @@ var genConfigCmd = &cobra.Command{
 				}
 				body, err := io.ReadAll(res.Body)
 				if err != nil {
-					mLog.WithError(err).Fatal("Failed to read response\n")
+					 log.WithError(err).Fatal("Failed to read response\n")
 				}
 				//fill in services struct with the response
 				err = json.Unmarshal(body, &services)
 				if err != nil {
-					mLog.WithError(err).Fatal("Failed to unmarshal json response\n")
+					 log.WithError(err).Fatal("Failed to unmarshal json response\n")
 				}
 				if !isStdout {
-					mLog.Infof("Fetched service endpoints from '%s'", serviceConfURL)
+					 log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
 				}
 			}
 			// reset the state of isStdout
@@ -513,13 +530,21 @@ var genConfigCmd = &cobra.Command{
 		// Read in old config and obtain old secret key or generate a new random secret key
 		// and obtain old hypervisors (if any)
 		var oldConf visorconfig.V1
-		if !isStdout || isRegen {
-			err := v.ReadInConfig()
+		if isRegen {
+			// Read the JSON configuration file
+			oldConfJson, err := os.ReadFile(confPath)
 			if err != nil {
-				log.Fatalf("Failed to read old file: %v", err)
+				if !isStdout || isStdout && isHide {
+					log.Fatalf("Failed to read config file: %v", err)
+				}
 			}
-			// Unmarshal the configuration into your struct
-			err = v.Unmarshal(&oldConf)
+			// Decode JSON data
+			err = json.Unmarshal(oldConfJson, &oldConf)
+			if err != nil {
+				if !isStdout || isStdout && isHide {
+				 log.WithError(err).Fatal("Failed to unmarshal old config json")
+			 }
+			}
 			if err != nil {
 				_, sk = cipher.GenerateKeyPair()
 			} else {
@@ -565,7 +590,7 @@ var genConfigCmd = &cobra.Command{
 		conf.Common.SK = sk
 		conf.Common.PK = pk
 
-		var dmsgHTTPServersList *visorconfig.DmsgHTTPServers
+
 		dnsServer := utilenv.DNSServer
 		if services != nil {
 			if services.DNSServer != "" {
@@ -573,35 +598,38 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 		if isDmsgHTTP {
-			dmsgHTTPPath := visorconfig.DMSGHTTPName
-			if isPkg {
-				dmsgHTTPPath = visorconfig.SkywirePath + "/" + visorconfig.DMSGHTTPName
-			}
+			dmsghttpConfig := visorconfig.DMSGHTTPName
 			// TODO
-			//if usrEnv {
-			//	dmsgHTTPPath = homepath + "/" + visorconfig.DMSGHTTPName
+			//if isUsr {
+			//	dmsghttpConfig = homepath + "/" + visorconfig.DMSGHTTPName
 			//}
-			// Initialize Viper
-			d := viper.New()
-			// Set the name of the configuration file (without the extension)
-			d.SetConfigName(strings.TrimSuffix(dmsgHTTPPath, ".json"))
-			// Set the path where the configuration file is located
-			d.AddConfigPath(filepath.Clean(dmsgHTTPPath))
-			// Set the configuration file type
-			d.SetConfigType("json")
-
-			err := d.ReadInConfig()
-			if err != nil {
-				log.Fatalf("Failed to read dmsghttp-config.json file: %v", err)
+			if isPkg {
+				dmsghttpConfig = visorconfig.SkywirePath + "/" + visorconfig.DMSGHTTPName
 			}
 
-			err = d.Unmarshal(&dmsgHTTPServersList)
+			// Read the JSON configuration file
+			dmsghttpConfigData, err := os.ReadFile(dmsghttpConfig)
 			if err != nil {
-				mLog.WithError(err).Fatal("Failed to unmarshal json response\n")
+				log.Fatalf("Failed to read config file: %v", err)
 			}
+
+			// Decode JSON data
+			err = json.Unmarshal(dmsghttpConfigData, &dmsgHTTPServersList)
+			if err != nil {
+				 log.WithError(err).Fatal("Failed to unmarshal "+visorconfig.DMSGHTTPName)
+			}
+
+			//DEBUG
+			// Marshal the modified config to JSON and print
+			//jsonData, err := json.MarshalIndent(dmsgHTTPServersList, "", "  ")
+			//if err != nil {
+			//	  log.Fatalf("Failed to marshal config to JSON: %v", err)
+			//}
+			//fmt.Println(string(jsonData))
 		}
 
-		//TODO: handle partial sercice conf / service conf for less than the whole set of services
+
+		//TODO: handle partial service conf / service conf for less than the whole set of services
 		//fall back on  defaults
 		var routeSetupPKs cipher.PubKeys
 		var tpSetupPKs cipher.PubKeys
@@ -781,6 +809,14 @@ var genConfigCmd = &cobra.Command{
 			ListeningAddress: visorconfig.STCPAddr,
 			PKTable:          nil,
 		}
+		//DEBUG
+		// Marshal the modified config to JSON and print
+		//jsonData, err := json.MarshalIndent(dmsgHTTPServersList, "", "  ")
+		//if err != nil {
+		//	  log.Fatalf("Failed to marshal config to JSON: %v", err)
+		//}
+		//fmt.Println(string(jsonData))
+
 		// Use dmsg urls for services and add dmsg-servers
 		if isDmsgHTTP {
 			if dmsgHTTPServersList != nil {
@@ -1015,20 +1051,21 @@ var genConfigCmd = &cobra.Command{
 		}
 		//don't write file with stdout
 		if !isStdout {
-			// Save config to file.
-			// Marshal the struct to JSON and save to file
-			err := v.WriteConfig()
+			// Marshal the modified config to JSON with indentation
+			jsonData, err := json.MarshalIndent(conf, "", "  ")
 			if err != nil {
-				log.Fatalf("Failed to write the configuration file: %v", err)
+				log.Fatalf("Failed to marshal config to JSON: %v", err)
 			}
-			//			if err := conf.Flush(); err != nil {
-			//				logger.WithError(err).Fatal("Failed to flush config to file.")
-			//			}
+			// Write the JSON data back to the file
+			err = os.WriteFile(confPath, jsonData, 0644)
+			if err != nil {
+				log.Fatalf("Failed to write config file: %v", err)
+			}
 		}
 		// Print results.
 		j, err := json.MarshalIndent(conf, "", "\t")
 		if err != nil {
-			logger.WithError(err).Fatal("Could not unmarshal json.")
+			log.WithError(err).Fatal("Could not unmarshal json.")
 		}
 		//omit logging messages with stdout
 		//print config to stdout, omit logging messages, exit
@@ -1038,11 +1075,11 @@ var genConfigCmd = &cobra.Command{
 		}
 		//hide the printing of the config to the terminal
 		if isHide {
-			logger.Infof("Updated file '%s'\n", output)
+			log.Infof("Updated file '%s'\n", output)
 			os.Exit(0)
 		}
 		//default behavior
-		logger.Infof("Updated file '%s' to:\n%s\n", output, j)
+		log.Infof("Updated file '%s' to:\n%s\n", output, j)
 	},
 }
 

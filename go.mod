@@ -55,6 +55,7 @@ require (
 	github.com/skycoin/systray v1.10.0
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.10.0
+	github.com/tidwall/pretty v1.2.1
 	github.com/zcalusic/sysinfo v0.9.5
 	golang.org/x/sync v0.0.0-20220819030929-7fc1605a5dde
 )
