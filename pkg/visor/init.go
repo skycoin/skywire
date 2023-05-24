@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"os"
@@ -1449,6 +1450,11 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	hv.serveDmsg(ctx, v.log)
 
 	// Serve HTTP(s).
+
+	// Needed to work with modern browsers when serving from windows, which need the correct mime type for javascript.
+	if err := mime.AddExtensionType(".js", "application/javascript"); err != nil {
+		log.Fatalln("Unable to register js mime type.")
+	}
 
 	v.log.WithField("addr", conf.HTTPAddr).
 		WithField("tls", conf.EnableTLS).
