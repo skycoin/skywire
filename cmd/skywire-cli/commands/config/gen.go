@@ -478,12 +478,12 @@ var genConfigCmd = &cobra.Command{
 					services.RouteSetupNodes = append(services.RouteSetupNodes, routeSetupPKs...)
 				}
 			}
-			if services.TransportSetupNodes == nil {
+			if services.TransportSetupPKs == nil {
 				if transportsetupnodePks != "" {
 					if err := tpSetupPKs.Set(transportsetupnodePks); err != nil {
 						log.Fatalf("bad key set for transport setup node flag: %v", err)
 					}
-					services.TransportSetupNodes = routeSetupPKs
+					services.TransportSetupPKs = routeSetupPKs
 					routeSetupPKs = cipher.PubKeys{}
 				}
 			}
@@ -491,7 +491,7 @@ var genConfigCmd = &cobra.Command{
 				if err := tpSetupPKs.Set(utilenv.TPSetupPKs); err != nil {
 					log.Fatalf("Failed to unmarshal transport setup-node public keys: %v", err)
 				}
-				services.TransportSetupNodes = append(services.TransportSetupNodes, tpSetupPKs...)
+				services.TransportSetupPKs = append(services.TransportSetupPKs, tpSetupPKs...)
 			}
 		} else {
 			if services.DmsgDiscovery == "" {
@@ -531,7 +531,7 @@ var genConfigCmd = &cobra.Command{
 				}
 				services.RouteSetupNodes = append(services.RouteSetupNodes, routeSetupPKs...)
 			}
-			if services.TransportSetupNodes == nil {
+			if services.TransportSetupPKs == nil {
 				if transportsetupnodePks != "" {
 					if err := tpSetupPKs.Set(transportsetupnodePks); err != nil {
 						log.Fatalf("bad key set for transport setup node flag: %v", err)
@@ -540,7 +540,7 @@ var genConfigCmd = &cobra.Command{
 				if err := tpSetupPKs.Set(utilenv.TestTPSetupPKs); err != nil {
 					log.Fatalf("Failed to unmarshal transport setup-node public keys: %v", err)
 				}
-				services.TransportSetupNodes = append(services.TransportSetupNodes, tpSetupPKs...)
+				services.TransportSetupPKs = append(services.TransportSetupPKs, tpSetupPKs...)
 			}
 		}
 
@@ -550,10 +550,10 @@ var genConfigCmd = &cobra.Command{
 			Servers:       []*disc.Entry{},
 		}
 		conf.Transport = &visorconfig.Transport{
-			Discovery:           services.TransportDiscovery, //utilenv.TpDiscAddr,
-			AddressResolver:     services.AddressResolver,    //utilenv.AddressResolverAddr,
-			PublicAutoconnect:   visorconfig.PublicAutoconnect,
-			TransportSetupNodes: services.TransportSetupNodes,
+			Discovery:         services.TransportDiscovery, //utilenv.TpDiscAddr,
+			AddressResolver:   services.AddressResolver,    //utilenv.AddressResolverAddr,
+			PublicAutoconnect: visorconfig.PublicAutoconnect,
+			TransportSetupPKs: services.TransportSetupPKs,
 			LogStore: &visorconfig.LogStore{
 				Type:             visorconfig.FileLogStore,
 				Location:         visorconfig.LocalPath + "/" + visorconfig.TpLogStore,
