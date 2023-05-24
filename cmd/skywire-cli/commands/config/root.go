@@ -25,7 +25,6 @@ var (
 		Test: visorconfig.DmsgHTTPServersData{DMSGServers: []*disc.Entry{}},
 		Prod: visorconfig.DmsgHTTPServersData{DMSGServers: []*disc.Entry{}},
 	}
-	//dmsgHTTPServersList = new(visorconfig.DmsgHTTPServers)
 	noFetch                bool
 	noDefaults             bool
 	stcprPort              int
