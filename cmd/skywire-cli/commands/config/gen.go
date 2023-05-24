@@ -5,12 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -61,14 +59,7 @@ var genKeysCmd = &cobra.Command{
 	},
 }
 
-var (
-	isEnvs     bool
-	skyenvfile = os.Getenv("SKYENV")
-)
-var envfile string
-
 func init() {
-	var msg string
 	//disable sorting, flags appear in the order shown here
 	genConfigCmd.Flags().SortFlags = false
 	RootCmd.AddCommand(genConfigCmd, genKeysCmd, checkPKCmd)
@@ -105,11 +96,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "example-apps")
 	genConfigCmd.Flags().BoolVarP(&isStdout, "stdout", "n", false, "write config to stdout\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "stdout")
-	msg = "output config"
-	if scriptExecString("${OUTPUT}") == "" {
-		msg += ": " + visorconfig.ConfigName
-	}
-	genConfigCmd.Flags().StringVarP(&output, "out", "o", scriptExecString("${OUTPUT}"), msg+"\033[0m")
+	genConfigCmd.Flags().StringVarP(&output, "out", "o", "", "output config\033[0m")
 	if visorconfig.OS == "win" {
 		pText = "use .msi installation path: "
 	}
@@ -122,13 +109,9 @@ func init() {
 	genConfigCmd.Flags().BoolVarP(&isPkgEnv, "pkg", "p", false, pText+visorconfig.SkywirePath+"\033[0m")
 	homepath := visorconfig.HomePath()
 	if homepath != "" {
-
 		genConfigCmd.Flags().BoolVarP(&isUsrEnv, "user", "u", false, "use paths for user space: "+homepath+"\033[0m")
 	}
 	genConfigCmd.Flags().BoolVarP(&isRegen, "regen", "r", false, "re-generate existing config & retain keys")
-	if scriptExecString("${SK:-0000000000000000000000000000000000000000000000000000000000000000}") != "0000000000000000000000000000000000000000000000000000000000000000" {
-		sk.Set(scriptExecString("${SK:-0000000000000000000000000000000000000000000000000000000000000000}")) //nolint
-	}
 	genConfigCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
 	gHiddenFlags = append(gHiddenFlags, "sk")
 	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", false, "use test deployment "+testConf+"\033[0m")
@@ -150,8 +133,6 @@ func init() {
 	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
 	genConfigCmd.Flags().StringVar(&binPath, "binpath", "", "set bin_path\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "binpath")
-	genConfigCmd.Flags().BoolVarP(&isEnvs, "envs", "q", false, "show the environmental variable settings")
-	gHiddenFlags = append(gHiddenFlags, "envs")
 	genConfigCmd.Flags().BoolVar(&noFetch, "nofetch", false, "do not fetch the services from the service conf url")
 	gHiddenFlags = append(gHiddenFlags, "nofetch")
 	genConfigCmd.Flags().BoolVar(&noDefaults, "nodefaults", false, "do not use hardcoded defaults for production / test services")
@@ -172,16 +153,6 @@ var genConfigCmd = &cobra.Command{
 	Short: "Generate a config file",
 	PreRun: func(cmd *cobra.Command, _ []string) {
 		log := logger
-		if isEnvs {
-			if visorconfig.OS == "windows" {
-				envfile = envfileWindows
-			} else {
-				envfile = envfileLinux
-			}
-			fmt.Println(envfile)
-			os.Exit(0)
-		}
-
 		//--all unhides flags, prints help menu, and exits
 		if isAll {
 			for _, j := range gHiddenFlags {
@@ -842,22 +813,18 @@ var genConfigCmd = &cobra.Command{
 				conf.Hypervisor.EnableAuth = true
 			}
 		}
-
-		// check binpath argument and use if set
+		// set bin_path for apps from flag
 		if binPath != "" {
 			conf.Launcher.BinPath = binPath
 		}
-
-		// set version of the config file - testing override
+		// set version of the config file from flag - testing override
 		if ver != "" {
 			conf.Common.Version = ver
 		}
-
 		// Disable autoconnect to public visors
 		if disablePublicAutoConn {
 			conf.Transport.PublicAutoconnect = false
 		}
-
 		// Enable the display of the visor's ip address in service discovery services
 		if isDisplayNodeIP {
 			conf.Launcher.DisplayNodeIP = true
