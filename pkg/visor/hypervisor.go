@@ -269,6 +269,12 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/reward", hv.getRewardAddress())
 				r.Put("/visors/{pk}/reward", hv.putRewardAddress())
 				r.Delete("/visors/{pk}/reward", hv.deleteRewardAddress())
+				r.Get("/visors/{pk}/fwd", hv.getLocalFwdPorts())
+				r.Post("/visors/{pk}/fwd", hv.postLocalFwdPort())
+				r.Delete("/visors/{pk}/fwd/{port}", hv.deleteLocalFwdPort())
+				r.Get("/visors/{pk}/rev", hv.getRemoteRevPorts())
+				r.Post("/visors/{pk}/rev", hv.postRemoteRevPort())
+				r.Delete("/visors/{pk}/rev/{id}", hv.deleteRemoteRevPort())
 			})
 		})
 
@@ -1300,6 +1306,111 @@ func (hv *Hypervisor) deleteRewardAddress() http.HandlerFunc {
 	})
 }
 
+// getLocalFwdPorts lists registered local ports
+func (hv *Hypervisor) getLocalFwdPorts() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		ports, err := ctx.API.ListHTTPPorts()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		httputil.WriteJSON(w, r, http.StatusOK, ports)
+	})
+}
+
+// postLocalFwdPort registers a local port
+func (hv *Hypervisor) postLocalFwdPort() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var reqBody struct {
+			Port int `json:"port"`
+		}
+
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("postLocalFwdPort request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+
+		if err := ctx.API.RegisterHTTPPort(reqBody.Port); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
+// deleteLocalFwdPort deregisters a local port
+func (hv *Hypervisor) deleteLocalFwdPort() http.HandlerFunc {
+	return hv.withCtx(hv.fwdCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		err := ctx.API.DeregisterHTTPPort(ctx.FwdPort)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
+// getRemoteRevPorts list configured connections to remote ports
+func (hv *Hypervisor) getRemoteRevPorts() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		list, err := ctx.API.List()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		httputil.WriteJSON(w, r, http.StatusOK, list)
+	})
+}
+
+// postRemoteRevPort connect to a remote port
+func (hv *Hypervisor) postRemoteRevPort() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var reqBody struct {
+			RemotePk   string `json:"remote_pk"`
+			RemotePort int    `json:"remote_port"`
+			LocalPort  int    `json:"local_port"`
+		}
+
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("postRemoteRevPort request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+
+		pk := cipher.PubKey{}
+		if err := pk.UnmarshalText([]byte(reqBody.RemotePk)); err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+
+		if _, err := ctx.API.Connect(pk, reqBody.RemotePort, reqBody.LocalPort); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
+// deleteRemoteRevPort disconnect from a remote port
+func (hv *Hypervisor) deleteRemoteRevPort() http.HandlerFunc {
+	return hv.withCtx(hv.revCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		err := ctx.API.Disconnect(ctx.RevId)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
 /*
 	<<< Helper functions >>>
 */
@@ -1324,6 +1435,12 @@ type httpCtx struct {
 
 	// Route
 	RtKey routing.RouteID
+
+	// FWD local port
+	FwdPort int
+
+	// Rev connection id
+	RevId uuid.UUID
 }
 
 type (
@@ -1431,6 +1548,40 @@ func (hv *Hypervisor) routeCtx(w http.ResponseWriter, r *http.Request) (*httpCtx
 	}
 
 	ctx.RtKey = rid
+
+	return ctx, true
+}
+
+func (hv *Hypervisor) fwdCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, bool) {
+	ctx, ok := hv.visorCtx(w, r)
+	if !ok {
+		return nil, false
+	}
+
+	port, err := strconv.Atoi(chi.URLParam(r, "port"))
+	if err != nil {
+		httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+		return nil, false
+	}
+
+	ctx.FwdPort = port
+
+	return ctx, true
+}
+
+func (hv *Hypervisor) revCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, bool) {
+	ctx, ok := hv.visorCtx(w, r)
+	if !ok {
+		return nil, false
+	}
+
+	id, err := uuidFromParam(r, "id")
+	if err != nil {
+		httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+		return nil, false
+	}
+
+	ctx.RevId = id
 
 	return ctx, true
 }
