@@ -30,8 +30,8 @@ func TestHealth(t *testing.T) {
 			Discovery: "foo",
 		}
 		c.Routing = &visorconfig.Routing{
-			RouteFinder: "foo",
-			SetupNodes:  []cipher.PubKey{c.PK},
+			RouteFinder:     "foo",
+			RouteSetupNodes: []cipher.PubKey{c.PK},
 		}
 
 		utClient := &utclient.MockAPIClient{}
