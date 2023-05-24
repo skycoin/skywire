@@ -286,7 +286,7 @@ var genConfigCmd = &cobra.Command{
 			}
 			// create an http client to fetch the services
 			client := http.Client{
-				Timeout: time.Second * 30, // Timeout after 30 seconds
+				Timeout: time.Second * 15, // Timeout after 30 seconds
 			}
 			//create the http request
 			req, err := http.NewRequest(http.MethodGet, fmt.Sprint(serviceConfURL), nil)

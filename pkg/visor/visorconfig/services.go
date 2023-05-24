@@ -3,7 +3,6 @@ package visorconfig
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -13,11 +12,10 @@ import (
 )
 
 // Fetch fetches the service URLs & ip:ports from the config service endpoint
-func Fetch(mLog *logging.MasterLogger, serviceConfURL string, stdout bool) (services *Services) {
+func Fetch(mLog *logging.MasterLogger, serviceConf string, stdout bool) (services *Services) {
 
-	serviceConf := fmt.Sprint(serviceConfURL)
 	client := http.Client{
-		Timeout: time.Second * 30, // Timeout after 30 seconds
+		Timeout: time.Second * 15, // Timeout after 15 seconds
 	}
 	//create the http request
 	req, err := http.NewRequest(http.MethodGet, serviceConf, nil)
