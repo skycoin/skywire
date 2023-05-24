@@ -275,6 +275,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/rev", hv.getRemoteRevPorts())
 				r.Post("/visors/{pk}/rev", hv.postRemoteRevPort())
 				r.Delete("/visors/{pk}/rev/{id}", hv.deleteRemoteRevPort())
+				r.Post("/visors/{pk}/ping-visor", hv.postPingVisor())
 			})
 		})
 
@@ -1402,12 +1403,53 @@ func (hv *Hypervisor) postRemoteRevPort() http.HandlerFunc {
 // deleteRemoteRevPort disconnect from a remote port
 func (hv *Hypervisor) deleteRemoteRevPort() http.HandlerFunc {
 	return hv.withCtx(hv.revCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		err := ctx.API.Disconnect(ctx.RevId)
+		err := ctx.API.Disconnect(ctx.RevID)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
+func (hv *Hypervisor) postPingVisor() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var reqBody struct {
+			RemotePk string `json:"remote_pk"`
+			Size     int    `json:"size"`
+			Tries    int    `json:"tries"`
+		}
+
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("postPingVisor request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+
+		pk := cipher.PubKey{}
+		if err := pk.UnmarshalText([]byte(reqBody.RemotePk)); err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+
+		pingConfig := PingConfig{PK: pk, Tries: reqBody.Tries, PcktSize: reqBody.Size}
+
+		err := ctx.API.DialPing(pingConfig)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		latencies, err := ctx.API.Ping(pingConfig)
+		if err != nil {
+			go ctx.API.StopPing(pk) //nolint
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, errors.New("unexpected problem during connection"))
+			return
+		}
+		ctx.API.StopPing(pk) //nolint
+
+		httputil.WriteJSON(w, r, http.StatusOK, latencies)
 	})
 }
 
@@ -1440,7 +1482,7 @@ type httpCtx struct {
 	FwdPort int
 
 	// Rev connection id
-	RevId uuid.UUID
+	RevID uuid.UUID
 }
 
 type (
@@ -1581,7 +1623,7 @@ func (hv *Hypervisor) revCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, 
 		return nil, false
 	}
 
-	ctx.RevId = id
+	ctx.RevID = id
 
 	return ctx, true
 }
