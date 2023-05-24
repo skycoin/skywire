@@ -15,7 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
-func homepage(w http.ResponseWriter, r *http.Request) {
+func homepage(w http.ResponseWriter, r *http.Request) { //nolint:all
 	p := html.HomepageParams{
 		Title:   "Homepage",
 		Message: "Hello from Homepage",

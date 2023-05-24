@@ -30,7 +30,7 @@ func NewDiscoveryMock() DiscoveryClient {
 	return &mockDiscoveryClient{entries: map[uuid.UUID]Entry{}}
 }
 
-func (td *mockDiscoveryClient) RegisterTransports(ctx context.Context, entries ...*SignedEntry) error {
+func (td *mockDiscoveryClient) RegisterTransports(ctx context.Context, entries ...*SignedEntry) error { //nolint:all
 	td.Lock()
 	for _, entry := range entries {
 		td.entries[entry.Entry.ID] = *entry.Entry
@@ -40,7 +40,7 @@ func (td *mockDiscoveryClient) RegisterTransports(ctx context.Context, entries .
 	return nil
 }
 
-func (td *mockDiscoveryClient) GetTransportByID(ctx context.Context, id uuid.UUID) (*Entry, error) {
+func (td *mockDiscoveryClient) GetTransportByID(ctx context.Context, id uuid.UUID) (*Entry, error) { //nolint:all
 	td.Lock()
 	entry, ok := td.entries[id]
 	td.Unlock()
@@ -57,7 +57,7 @@ func (td *mockDiscoveryClient) GetTransportByID(ctx context.Context, id uuid.UUI
 	}, nil
 }
 
-func (td *mockDiscoveryClient) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*Entry, error) {
+func (td *mockDiscoveryClient) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*Entry, error) { //nolint:all
 	td.Lock()
 	res := make([]*Entry, 0)
 	for _, entry := range td.entries {
@@ -78,7 +78,7 @@ func (td *mockDiscoveryClient) GetTransportsByEdge(ctx context.Context, pk ciphe
 
 // NOTE that mock implementation doesn't checks whether the transport to be deleted is valid or not, this is, that
 // it can be deleted by the visor who called DeleteTransport
-func (td *mockDiscoveryClient) DeleteTransport(ctx context.Context, id uuid.UUID) error {
+func (td *mockDiscoveryClient) DeleteTransport(ctx context.Context, id uuid.UUID) error { //nolint:all
 	td.Lock()
 	defer td.Unlock()
 

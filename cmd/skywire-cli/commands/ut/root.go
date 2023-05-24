@@ -69,7 +69,12 @@ var RootCmd = &cobra.Command{
 		}
 
 		if res.Body != nil {
-			defer res.Body.Close() //nolint: errcheck
+			defer func() {
+				err := res.Body.Close()
+				if err != nil {
+					internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to close response body"))
+				}
+			}()
 		}
 
 		body, readErr := io.ReadAll(res.Body)
