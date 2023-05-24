@@ -15,10 +15,6 @@ import (
 
 var logger = logging.MustGetLogger("skywire-cli")
 
-// proxyClientAutostart        bool   //nolint Note: pending implementation for config gen
-// disableProxyServerAutostart bool   //nolint Note: pending implementation for config gen
-// proxyServerPass             string //nolint Note: pending implementation for config gen
-// proxyClientPass             string //nolint Note: pending implementation for config gen
 var (
 	conf                = new(visorconfig.V1)
 	dmsgHTTPServersList = &visorconfig.DmsgHTTPServers{
