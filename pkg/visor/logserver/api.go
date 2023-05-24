@@ -8,12 +8,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"time"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	coincipher "github.com/skycoin/skycoin/src/cipher"
-
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -68,7 +67,7 @@ func New(log *logging.Logger, tpLogPath, localPath, customPath string, whitelist
 			//validate the skycoin address
 			cAddr, err = coincipher.DecodeBase58Address(rewardAddress)
 			if err != nil {
-				log.WithError(err).Error("Invalid skycoin reward address "+rewardAddress)
+				log.WithError(err).Error("Invalid skycoin reward address " + rewardAddress)
 			}
 			log.Debug("Skycoin reward address: ", cAddr.String())
 		}
@@ -92,7 +91,6 @@ func New(log *logging.Logger, tpLogPath, localPath, customPath string, whitelist
 			httputil.GetLogger(c.Request).WithError(err).Errorf("failed to write json response")
 		}
 	})
-
 
 	r.GET("/health", func(c *gin.Context) {
 		api.health(c)
