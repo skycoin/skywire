@@ -109,6 +109,7 @@ const (
 
 	// NodeInfo is the name of the survey file
 	NodeInfo string = "node-info.json"
+	SurveyName string = "node-info"	// SurveyName ...
 )
 
 // SkywireConfig returns the full path to the package config

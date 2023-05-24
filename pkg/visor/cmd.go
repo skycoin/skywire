@@ -54,7 +54,6 @@ var (
 	// visorBuildInfo holds information about the build
 	visorBuildInfo *buildinfo.Info
 	dmsgServer     string
-	rawSurvey      bool
 	isStoreLog     bool
 	isForceColor   bool
 )
@@ -117,7 +116,6 @@ func init() {
 	hiddenflags = append(hiddenflags, "hv")
 	RootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors \u001b[0m*")
 	hiddenflags = append(hiddenflags, "xhv")
-	//	initAutoPeerFlags()
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "", "[ debug | warn | error | fatal | panic | trace ] \u001b[0m*")
 	hiddenflags = append(hiddenflags, "loglvl")
 	RootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "q", "", "[ cpu | mem | mutex | block | trace | http ]")
@@ -130,12 +128,10 @@ func init() {
 	hiddenflags = append(hiddenflags, "syslog")
 	RootCmd.Flags().StringVarP(&completion, "completion", "z", "", "[ bash | zsh | fish | powershell ]")
 	hiddenflags = append(hiddenflags, "completion")
-	RootCmd.Flags().BoolVar(&rawSurvey, "raw-survey", false, "survey will generate and store decrypted if pass this flag")
-	hiddenflags = append(hiddenflags, "raw-survey")
-	RootCmd.Flags().BoolVarP(&isStoreLog, "store-log", "l", false, "store all logs to file")
-	hiddenflags = append(hiddenflags, "store-log")
-	RootCmd.Flags().BoolVar(&isForceColor, "force-color", false, "set force coler true in loggers")
-	hiddenflags = append(hiddenflags, "force-color")
+	RootCmd.Flags().BoolVarP(&isStoreLog, "storelog", "l", false, "store all logs to file")
+	hiddenflags = append(hiddenflags, "storelog")
+	RootCmd.Flags().BoolVar(&isForceColor, "forcecolor", false, "set force coler true in loggers")
+	hiddenflags = append(hiddenflags, "forcecolor")
 	RootCmd.Flags().BoolVar(&all, "all", false, "show all flags")
 	for _, j := range hiddenflags {
 		RootCmd.Flags().MarkHidden(j) //nolint
@@ -143,33 +139,6 @@ func init() {
 	RootCmd.SetUsageTemplate(help)
 
 }
-
-//omit due to possible panic
-/*
-func initAutoPeerFlags() {
-	localIPs, err := netutil.DefaultNetworkInterfaceIPs()
-	if err != nil {
-		logger.WithError(err).Warn("Could not determine network interface IP address")
-		if len(localIPs) == 0 {
-			localIPs = append(localIPs, net.ParseIP("192.168.0.1"))
-		}
-	}
-	RootCmd.Flags().StringVarP(&autoPeerIP, "hvip", "l", trimStringFromDot(localIPs[0].String())+".2:7998", "set hypervisor by ip")
-	hiddenflags = append(hiddenflags, "hvip")
-	isDefaultAutopeer := false
-	if os.Getenv("AUTOPEER") == "1" {
-		isDefaultAutopeer = true
-	}
-	RootCmd.Flags().BoolVarP(&isAutoPeer, "autopeer", "m", isDefaultAutopeer, "enable autopeering to remote hypervisor")
-	hiddenflags = append(hiddenflags, "autopeer")
-}
-func trimStringFromDot(s string) string {
-	if idx := strings.LastIndex(s, "."); idx != -1 {
-		return s[:idx]
-	}
-	return s
-}
-*/
 
 // RootCmd contains the help command & invocation flags
 var RootCmd = &cobra.Command{
