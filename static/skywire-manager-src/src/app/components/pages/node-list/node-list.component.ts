@@ -374,7 +374,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
    */
   private startGettingData(checkSavedData: boolean) {
     // Use saved data or get from the server. If there is no saved data, savedData is null.
-    let savedData = checkSavedData ? this.getLocalValue(this.persistentServerDataResponseKey) : null;
+    const savedData = checkSavedData ? this.getLocalValue(this.persistentServerDataResponseKey) : null;
     let nextOperation: Observable<any> = this.multipleNodeDataService.startRequestingData();
     if (savedData) {
       nextOperation = of(JSON.parse(savedData.value));
