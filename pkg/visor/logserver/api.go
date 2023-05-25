@@ -54,14 +54,13 @@ func New(log *logging.Logger, tpLogPath, localPath, customPath string, whitelist
 		authRoute.Use(whitelistAuth(whitelistedPKs))
 	}
 	// note that the survey FILE only exists / is generated if the reward address is set
-	authRoute.StaticFile("/"+visorconfig.NodeInfo, filepath.Join(localPath, visorconfig.NodeInfo))
-	// serve the file with the reward address - only exists if the reward address is set
-	authRoute.StaticFile("/"+visorconfig.RewardFile, filepath.Join(localPath, visorconfig.RewardFile))
+	authRoute.StaticFile("/"+visorconfig.NodeInfo, filepath.Join(localPath, visorconfig.NodeInfo)) // "/node-info.json"
 
-	//Derive the surveyName from visorconfig.NodeInfo by dropping the ".json" suffix
-	surveyName := strings.TrimSuffix(string(visorconfig.NodeInfo), ".json")
+	// serve the file with the reward address - only exists if the reward address is set
+	authRoute.StaticFile("/"+visorconfig.RewardFile, filepath.Join(localPath, visorconfig.RewardFile))	// "/reward.txt"
+
 	// This survey endpoint generates the survey as a response
-	authRoute.GET("/"+surveyName, func(c *gin.Context) {
+	authRoute.GET("/node-info", func(c *gin.Context) {
 		var rewardAddress string
 		var cAddr coincipher.Address
 		//check for reward address
