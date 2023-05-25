@@ -130,7 +130,7 @@ func init() {
 	hiddenflags = append(hiddenflags, "completion")
 	RootCmd.Flags().BoolVarP(&isStoreLog, "storelog", "l", false, "store all logs to file")
 	hiddenflags = append(hiddenflags, "storelog")
-	RootCmd.Flags().BoolVar(&isForceColor, "forcecolor", false, "set force coler true in loggers")
+	RootCmd.Flags().BoolVar(&isForceColor, "forcecolor", false, "force color logging when out is not STDOUT")
 	hiddenflags = append(hiddenflags, "forcecolor")
 	RootCmd.Flags().BoolVar(&all, "all", false, "show all flags")
 	for _, j := range hiddenflags {
