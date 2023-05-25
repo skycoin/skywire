@@ -1,5 +1,5 @@
 import { Component, OnDestroy } from '@angular/core';
-import { Subscription, Observable } from 'rxjs';
+import { Subscription, Observable, of } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { Router, ActivatedRoute } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
@@ -17,6 +17,7 @@ import { VpnSavedDataService, LocalServerData, ServerFlags } from 'src/app/servi
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { EnterVpnServerPasswordComponent } from './enter-vpn-server-password/enter-vpn-server-password.component';
 import { StorageService } from 'src/app/services/storage.service';
+import { PageBaseComponent } from 'src/app/utils/page-base';
 
 /**
  * Server lists VpnServerListComponent can show.
@@ -144,7 +145,10 @@ interface VpnServerForList {
   templateUrl: './vpn-server-list.component.html',
   styleUrls: ['./vpn-server-list.component.scss'],
 })
-export class VpnServerListComponent implements OnDestroy {
+export class VpnServerListComponent extends PageBaseComponent implements OnDestroy {
+  // Keys for persisting the server data, to be able to restore the state after navigation.
+  private readonly persistentServerDataResponseKey = 'serv-dat-response';
+
   // Small text for identifying the list, needed for the helper objects.
   private listId: string;
 
@@ -229,6 +233,8 @@ export class VpnServerListComponent implements OnDestroy {
     private snackbarService: SnackbarService,
     private storageService: StorageService,
   ) {
+    super();
+
     this.navigationsSubscription = route.paramMap.subscribe(params => {
       // Get which list must be shown.
       if (params.has('type')) {
@@ -275,7 +281,7 @@ export class VpnServerListComponent implements OnDestroy {
       // Load the data, if needed.
       if (!this.initialLoadStarted) {
         this.initialLoadStarted = true;
-        this.loadData();
+        this.loadData(true);
       }
     });
 
@@ -433,10 +439,21 @@ export class VpnServerListComponent implements OnDestroy {
   /**
    * Loads the server list.
    */
-  private loadData() {
+  private loadData(checkSavedData: boolean) {
     if (this.currentList === Lists.Public) {
+      // Use saved data or get from the server. If there is no saved data, savedData is null.
+      let savedData = checkSavedData ? this.getLocalValue(this.persistentServerDataResponseKey) : null;
+      let nextOperation: Observable<any> = this.vpnClientDiscoveryService.getServers();
+      if (savedData) {
+        nextOperation = of(JSON.parse(savedData.value));
+      }
+
       // Get the vpn servers from the discovery service.
       this.dataSubscription = this.vpnClientDiscoveryService.getServers().subscribe(response => {
+        if (!savedData) {
+          this.saveLocalValue(this.persistentServerDataResponseKey, JSON.stringify(response));
+        }
+
         // Process the result.
         this.allServers = response.map(server => {
           return {
@@ -468,6 +485,11 @@ export class VpnServerListComponent implements OnDestroy {
 
         this.loading = false;
         this.processAllServers();
+
+        // If old saved data was used, repeat the operation, ignoring the saved data.
+        if (savedData) {
+          this.loadData(false);
+        }
       });
     } else {
       let dataObservable: Observable<LocalServerData[]>;
