@@ -2,7 +2,9 @@
 
 # Skywire Reward Eligibility Rules
 
-* We are transitioning to new system for rewards, deprecating the skywire whitelist
+Notice: the [skywire whitelist](https://whitelist.skycoin.com) is now deprecated.
+We have transitioned to a new system with daily reward distribution
+
 * The rules in this article may change at any time, depending on if there are problems
 * We will attempt to address any issues reported via [@skywire](https://t.me/skywire) Telegram channel
 
@@ -22,31 +24,60 @@
 
 All information about rewards will be published here. Please ask for clarification in the [@skywire](https://t.me/skywire) Telegram channel if some things appear to not be covered. Join [@SkywirePSA](https://t.me/SkywirePSA) for public service announcements (PSA) regarding the skywire network.
 
-Reward notifications will happen via the skychat app, which is included with the skywire release (PENDING IMPLEMENTATION)
+Reward distribution notifications are on telegram [@skywire_reward](https://t.me/skywire_reward).
 
+# Uptime Reward Pool
+
+408000 Skycoin are distributed annually to those visors which meet the mimimum uptime and the other requirements listed below
+
+A total of up to ~1117.808 Skycoin are distributed daily; evenly divided among those eligible participants on the basis of having met uptime for the previous day.
 
 ## Rules & Requirements
 
-* Up to 8 (eight) visors may receive rewards per location (ip address)
-* 75% uptime is required to be eligible to receive rewards
-* A valid skycoin address must be set for the visor
-* The visor must be running on approved [hardware](#hardware)
-* the visor responds to intermittent pings (i.e. it's possible to establish transports to that visor)
+* **Minimum skywire version v1.3.8** - Cutoff July 1st 2023
+
+* The visor must be an **ARM architecture SBC running on approved [hardware](#hardware)**
+
+* Visors must be running on **[the skywire production deployment](https://conf.skywire.skycoin.com)**
+
+* **Up to 8 (eight) visors may each receive 1 reward share per location (ip address)**
+
+* **75% uptime per day** is required to be eligible to receive rewards
+
+* **A valid skycoin address** must be set for the visor
+
+* The visor must be **connected to the DMSG network**
+
+* **Transports can be established to the visor**
+
+* **The visor responds to pings** - needed for latency-based rewards
+
+* **The visor produces transport bandwidth logs** - needed for bandwidth-based rewards
 
 
-## Rewards
+## Verifying Requirements & Eligibility
 
-**The new reward system requires Skywire v1.3.4**
+### Version
 
-Requirement established 2-11-2023
+View the version of skywire you are running with:
+```
+skywire-cli -v
+skywire-visor -v
+```
 
-Rewards Cutoff date for updating 4-1-2023
+### Deployment
 
-The required minimal Skywire version will be incremented periodically.
+The deployment your visor is running on can be verified by comparing the services configured in the visor's .json config against [conf.skywire.skycoin.com](https://conf.skywire.skycoin.com)
+It will be automatically updated any time a config is generated or regenerated.
 
-In the event of changes to the survey decryption key, it will be required to update in order to change the reward address
+### Uptime
 
-The rewards in the new system will be **paid daily or weekly**
+Daily uptime statistics for all visors may be accessed via the
+- [uptime tracker](https://ut.skywire.skycoin.com/uptimes?v=v2)
+or using `skywire-cli`
+- `skywire-cli ut -n0 -k <public-key>`
+
+### Skycoin Address
 
 The skycoin address to be rewarded can be set from the cli:
 
@@ -62,6 +93,40 @@ or via the hypervisor UI.
 ![image](https://user-images.githubusercontent.com/36607567/213941478-34c81493-9c3c-40c2-ac22-e33e3683a16f.png)
 
 the example above shows the genesis address for the skycoin blockchain. **Please do not use the genesis address.**
+
+### Connection to DMSG network
+
+The connection to the dmsg network can be verified either from the hypervisor UI or with skywire-cli:
+```
+$ skywire-cli visor info
+.:: Visor Summary ::.
+Public key: "03a3f9a0dd913bacd277aa35f2e0c36796812d3f26aa3911a07929e51122bd57bd"
+Symmetric NAT: false
+IP: 192.168.2.118
+DMSG Server: "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13"
+Ping: "437.930335ms"
+Visor Version: unknown
+Skybian Version:
+Uptime Tracker: healthy
+Time Online: 50981.176843 seconds
+Build Tag:
+
+```
+
+
+## Rewards
+
+**The new reward system requires Skywire v1.3.8**
+
+Requirement established 2-11-2023
+
+Rewards Cutoff date for updating 4-1-2023
+
+The required minimal Skywire version will be incremented periodically.
+
+In the event of changes to the survey decryption key, it will be required to update in order to change the reward address
+
+The rewards in the new system will be **paid daily or weekly**
 
 ### How it works
 
