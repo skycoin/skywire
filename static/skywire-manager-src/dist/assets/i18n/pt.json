@@ -1,0 +1,571 @@
+{
+  "common": {
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "downloaded": "Baixado",
+    "uploaded": "Enviado",
+    "loading-error": "Ocorreu um erro ao obter os dados. Tentando novamente...",
+    "operation-error": "Ocorreu um erro ao tentar concluir a operação.",
+    "no-connection-error": "Não há conexão com a Internet ou conexão com o Hypervisor.",
+    "error": "Erro:",
+    "refreshed": "Dados atualizados.",
+    "options": "Opções",
+    "logout": "Sair",
+    "logout-error": "Erro ao sair.",
+    "logout-confirmation": "Tem certeza que deseja sair?",
+    "time-in-ms": "{{ time }}ms",
+    "ok": "Ok",
+    "unknown": "Desconhecido",
+    "close": "Fechar"
+  },
+  "labeled-element": {
+    "edit-label": "Editar rótulo",
+    "remove-label": "Remover rótulo",
+    "copy": "Copiar",
+    "remove-label-confirmation": "Tem certeza de que deseja remover o rótulo?",
+    "unnamed-element": "Sem nome",
+    "unnamed-local-visor": "Visor local",
+    "local-element": "Local",
+    "tooltip": "Clique para copiar a entrada ou alterar o rótulo",
+    "tooltip-with-text": "{{ text }} (Clique para copiar a entrada ou alterar o rótulo)"
+  },
+  "labels": {
+    "title": "Rótulos",
+    "info": "Rótulos que você inseriu para identificar facilmente visores, transportes e outros elementos, em vez de ter que ler identificadores gerados por máquina.",
+    "list-title": "Lista de Rótulos",
+    "label": "Rótulo",
+    "id": "ID do elemento",
+    "type": "Tipo",
+    "delete-confirmation": "Tem certeza de que deseja excluir o rótulo?",
+    "delete-selected-confirmation": "Tem certeza de que deseja excluir os rótulos selecionados?",
+    "delete": "Apagar rótulo",
+    "deleted": "Operação de exclusão concluída.",
+    "empty": "Não há rótulos salvos.",
+    "empty-with-filter": "Nenhum rótulo corresponde aos critérios de filtragem selecionados.",
+    "filter-dialog": {
+      "label": "O rótulo deve conter",
+      "id": "O id deve conter",
+      "type": "O tipo deve ser",
+      "type-options": {
+        "any": "Algum",
+        "visor": "Visor",
+        "dmsg-server": "Servidor DMSG",
+        "transport": "Transporte"
+      }
+    }
+  },
+  "filters": {
+    "filter-action": "Filtro",
+    "press-to-remove": "(Pressione para remover os filtros)",
+    "remove-confirmation": "Tem certeza de que deseja remover os filtros?"
+  },
+  "tables": {
+    "title": "Ordenar por",
+    "sorting-title": "Ordenado por:",
+    "sort-by-value": "Valor",
+    "sort-by-label": "Rótulo",
+    "label": "(Rótulo)",
+    "inverted-order": "(invertido)"
+  },
+  "start": {
+    "title": "Começar"
+  },
+  "node": {
+    "title": "Detalhes do Visor",
+    "not-found": "Visor não encontrado.",
+    "statuses": {
+      "online": "Online",
+      "online-tooltip": "Visor está online.",
+      "partially-online": "Online com problemas",
+      "partially-online-tooltip": "O Visor está online, mas nem todos os serviços estão funcionando. Para mais informações, abra a página de detalhes e verifique a seção \"Informações de saúde\".",
+      "offline": "Offline",
+      "offline-tooltip": "Visor está offline."
+    },
+    "details": {
+      "node-info": {
+        "title": "Informação do Visor",
+        "label": "Rótulo:",
+        "public-key": "Chave pública:",
+        "port": "Porta:",
+        "dmsg-server": "Servidor DMSG:",
+        "ping": "Ping:",
+        "node-version": "Versão do Visor:",
+        "time": {
+          "title": "Tempo online:",
+          "seconds": "alguns segundos",
+          "minute": "1 minuto",
+          "minutes": "{{ time }} minutos",
+          "hour": "1 hora",
+          "hours": "{{ time }} horas",
+          "day": "1 dia",
+          "days": "{{ time }} dias",
+          "week": "1 semana",
+          "weeks": "{{ time }} semanas"
+        }
+      },
+      "node-health": {
+        "title": "Informação de saúde",
+        "status": "Status:",
+        "transport-discovery": "Descoberta de transporte:",
+        "route-finder": "Localizador de rota:",
+        "setup-node": "Configuração de Nó:",
+        "uptime-tracker": "Rastreador de tempo de atividade:",
+        "address-resolver": "Resolvedor de endereços:",
+        "element-offline": "Offline"
+      },
+      "node-traffic-data": "Tráfego de dados"
+    },
+    "tabs": {
+      "info": "Informação",
+      "apps": "Aplicativos",
+      "routing": "Encaminhamento"
+    },
+    "error-load": "Ocorreu um erro ao atualizar os dados. Tentando novamente..."
+  },
+  "nodes": {
+    "title": "Lista de Visor",
+    "dmsg-title": "DMSG",
+    "update-all": "Atualizar todas as Visores",
+    "hypervisor": "Hypervisor",
+    "state": "Estado",
+    "state-tooltip": "Estado atual",
+    "label": "Rótulo",
+    "key": "Chave",
+    "dmsg-server": "Servidor DMSG",
+    "ping": "Ping",
+    "hypervisor-info": "Este visor é o hipervisor atual.",
+    "copy-key": "Copiar chave",
+    "copy-dmsg": "Copiar chave do servidor DMSG",
+    "copy-data": "Copiar dados",
+    "view-node": "Ver visor",
+    "delete-node": "Remover visor",
+    "delete-all-offline": "Remover todos visores offline",
+    "error-load": "Ocorreu um erro ao atualizar a lista. Tentando novamente...",
+    "empty": "Não há visores conectados a este hipervisor.",
+    "empty-with-filter": "Nenhum visor corresponde aos critérios de filtragem selecionados.",
+    "delete-node-confirmation": "Tem certeza de que deseja remover o visor da lista?",
+    "delete-all-offline-confirmation": "Tem certeza de que deseja remover todas as visores offline da lista?",
+    "delete-all-filtered-offline-confirmation": "Todos os visores offline que satisfaçam os critérios de filtragem atuais serão removidos da lista. Você tem certeza que quer continuar?",
+    "deleted": "Visor removido.",
+    "deleted-singular": "1 visor offline removido.",
+    "deleted-plural": "{{ number }} visores offline removidos.",
+    "no-visors-to-update": "Não há visores para atualizar.",
+    "filter-dialog": {
+      "online": "O visor deve ser",
+      "label": "O rótulo deve conter",
+      "key": "A chave pública deve conter",
+      "dmsg": "A chave do servidor DMSG deve conter",
+      "online-options": {
+        "any": "Online ou offline",
+        "online": "Online",
+        "offline": "Offline"
+      }
+    }
+  },
+  "edit-label": {
+    "label": "Rótulo",
+    "done": "Rótulo salvo.",
+    "label-removed-warning": "O rótulo foi removido."
+  },
+  "settings": {
+    "title": "Definições",
+    "password": {
+      "initial-config-help": "Use esta opção para definir a senha inicial. Depois de definir uma senha, não é possível usar esta opção para modificá-la.",
+      "help": "Opções para alterar sua senha.",
+      "old-password": "Senha Antiga",
+      "new-password": "Nova Senha",
+      "repeat-password": "Repita a senha",
+      "password-changed": "Senha alterada.",
+      "error-changing": "Erro ao alterar a senha.",
+      "initial-config": {
+        "title": "Definir senha inicial",
+        "password": "Senha",
+        "repeat-password": "Repita a senha",
+        "set-password": "Definir senha",
+        "done": "Senha definida. Use-a para acessar o sistema.",
+        "error": "Erro. Certifique-se de que ainda não definiu a senha."
+      },
+      "errors": {
+        "bad-old-password": "A senha antiga fornecida não está correta.",
+        "old-password-required": "A senha antiga é necessária.",
+        "new-password-error": "A senha deve ter de 6 a 64 caracteres.",
+        "passwords-not-match": "As senhas não coincidem.",
+        "default-password": "Não use a senha padrão (1234)."
+      }
+    },
+    "updater-config": {
+      "open-link": "Mostrar configurações do atualizador",
+      "open-confirmation": "As configurações do atualizador são apenas para usuários experientes. Você tem certeza que quer continuar?",
+      "help": "Use este formulário para substituir as configurações que serão usadas pelo atualizador. Todos os campos vazios serão ignorados. As configurações serão usadas para todas as operações de atualização, independentemente de qual elemento está sendo atualizado, portanto, tome cuidado.",
+      "channel": "Canal",
+      "version": "Versão",
+      "archive-url": "URL do arquivo",
+      "checksum-url": "URL do Checksum ",
+      "not-saved": "As alterações ainda não foram salvas.",
+      "save": "Salvar alterações",
+      "remove-settings": "Remover as configurações",
+      "saved": "As configurações personalizadas foram salvas.",
+      "removed": "As configurações personalizadas foram removidas.",
+      "save-confirmation": "Tem certeza de que deseja aplicar as configurações personalizadas?",
+      "remove-confirmation": "Tem certeza de que deseja remover as configurações personalizadas?"
+    },
+    "change-password": "Mudar senha",
+    "refresh-rate": "Taxa de atualização",
+    "refresh-rate-help": "Tempo que o sistema espera para atualizar os dados automaticamente.",
+    "refresh-rate-confirmation": "Taxa de atualização alterada.",
+    "seconds": "segundos"
+  },
+  "login": {
+    "password": "Senha",
+    "incorrect-password": "Senha incorreta.",
+    "initial-config": "Configurar a inicialização inicial"
+  },
+  "actions": {
+    "menu": {
+      "terminal": "Terminal",
+      "config": "Configuração",
+      "update": "Atualizar",
+      "reboot": "Reiniciar"
+    },
+    "reboot": {
+      "confirmation": "Tem certeza de que deseja reiniciar o visor?",
+      "done": "O visor está reiniciando."
+    },
+    "terminal-options": {
+      "full": "Terminal completo",
+      "simple": "Terminal simples"
+    },
+    "terminal": {
+      "title": "Terminal",
+      "input-start": "Terminal Skywire para {{address}}",
+      "error": "Erro inesperado ao tentar executar o comando."
+    }
+  },
+  "update": {
+    "title": "Atualizar",
+    "error-title": "Erro",
+    "processing": "Procurando por atualizações...",
+    "no-update": "Não há atualização para o visor. A versão atualmente instalada é:",
+    "no-updates": "Nenhuma nova atualização foi encontrada.",
+    "already-updating": "Algumas visores já estão sendo atualizadas:",
+    "update-available": "As seguintes atualizações foram encontradas:",
+    "update-available-singular": "As seguintes atualizações para 1 visor foram encontradas:",
+    "update-available-plural": "As seguintes atualizações para visores {{ number }} foram encontradas:",
+    "update-available-additional-singular": "As seguintes atualizações adicionais para 1 visor foram encontradas:",
+    "update-available-additional-plural": "As seguintes atualizações adicionais para visores {{ number }} foram encontradas:",
+    "update-instructions": "Clique no botão 'Instalar atualizações' para continuar.",
+    "updating": "A operação de atualização foi iniciada, você pode abrir esta janela novamente para verificar o andamento:",
+    "version-change": "De {{ currentVersion }} para {{ newVersion }}",
+    "selected-channel": "Canal selecionado:",
+    "downloaded-file-name-prefix": "Baixando: ",
+    "speed-prefix": "Velocidade: ",
+    "time-downloading-prefix": "Tempo de download: ",
+    "time-left-prefix": "Tempo restante (aprox.): ",
+    "starting": "Preparando para atualizar",
+    "finished": "Conexão de status finalizada",
+    "install": "Instalar atualizações"
+  },
+  "apps": {
+    "log": {
+      "title": "Registro",
+      "empty": "Não há mensagens de registro para o intervalo de tempo selecionado.",
+      "filter-button": "Mostrando apenas os registros gerados desde:",
+      "filter": {
+        "title": "Filtro",
+        "filter": "Mostrar apenas os registros gerados desde",
+        "7-days": "Últimos 7 dias",
+        "1-month": "Últimos 30 dias",
+        "3-months": "Últimos 03 meses",
+        "6-months": "Últimos 06 meses",
+        "1-year": "Último ano",
+        "all": "Mostrar todos"
+      }
+    },
+    "apps-list": {
+      "title": "Aplicativos",
+      "list-title": "Lista de aplicativos",
+      "app-name": "Nome",
+      "port": "Porta",
+      "state": "Estado",
+      "state-tooltip": "Estado atual",
+      "auto-start": "Inicialização automaticamente",
+      "empty": "Visor não tem nenhum aplicativo.",
+      "empty-with-filter": "Nenhum aplicativo corresponde aos critérios de filtragem selecionados.",
+      "disable-autostart": "Desativar inicialização automática",
+      "enable-autostart": "Habilitar inicialização automática",
+      "autostart-disabled": "Inicialização automática desativada",
+      "autostart-enabled": "Inicialização automática ativada",
+      "unavailable-logs-error": "Não é possível mostrar os logs enquanto o aplicativo não está em execução.",
+      "filter-dialog": {
+        "state": "O estado deve ser",
+        "name": "O nome deve conter",
+        "port": "A porta deve conter",
+        "autostart": "A inicialização automática deve ser",
+        "state-options": {
+          "any": "Executando ou parado",
+          "running": "Executando",
+          "stopped": "Parado"
+        },
+        "autostart-options": {
+          "any": "Habilitado ou desabilitado",
+          "enabled": "Habilitado",
+          "disabled": "Desabilitado"
+        }
+      }
+    },
+    "vpn-socks-server-settings": {
+      "socks-title": "Configurações do Skysocks",
+      "vpn-title": "Configurações do servidor VPN",
+      "new-password": "Nova senha (deixe em branco para remover a senha)",
+      "repeat-password": "Repita a senha",
+      "passwords-not-match": "As senhas não coincidem.",
+      "secure-mode-check": "Use o modo seguro",
+      "secure-mode-info": "Quando ativo, o servidor não permite SSH cliente / servidor e não permite nenhum tráfego de clientes VPN para a rede local do servidor.",
+      "save": "Salvar",
+      "remove-passowrd-confirmation": "Você deixou o campo de senha vazio. Tem certeza de que deseja remover a senha?",
+      "change-passowrd-confirmation": "Tem certeza que deseja alterar a senha?",
+      "changes-made": "As mudanças foram feitas."
+    },
+    "vpn-socks-client-settings": {
+      "socks-title": "Configurações do cliente Skysocks",
+      "vpn-title": "Configurações de cliente VPN",
+      "discovery-tab": "Procurar",
+      "remote-visor-tab": "Inserir manualmente",
+      "history-tab": "Histórico",
+      "settings-tab": "Configurações",
+      "use": "Use estes dados",
+      "change-note": "Mudar nota",
+      "remove-entry": "Remover entrada",
+      "note": "Nota:",
+      "note-entered-manually": "Inserida manualmente",
+      "note-obtained": "Obtida do serviço de descoberta",
+      "key": "Chave:",
+      "port": "Porta:",
+      "location": "Localização:",
+      "state-available": "Disponível",
+      "state-offline": "Offline",
+      "public-key": "Chave pública do visor remoto",
+      "password": "Senha",
+      "password-history-warning": "Nota: a senha não será salva no histórico.",
+      "copy-pk-info": "Copiar chave pública.",
+      "copied-pk-info": "A chave pública foi copiada.",
+      "copy-pk-error": "Ocorreu um problema ao copiar a chave pública.",
+      "no-elements": "Atualmente não há elementos para mostrar. Por favor, tente novamente mais tarde.",
+      "no-elements-for-filters": "Não há elementos que atendam aos critérios do filtro.",
+      "no-filter": "Nenhum filtro foi selecionado",
+      "click-to-change": "Clique para mudar",
+      "remote-key-length-error": "A chave pública deve ter 66 caracteres.",
+      "remote-key-chars-error": "A chave pública deve conter apenas caracteres hexadecimais.",
+      "save": "Salvar",
+      "remove-from-history-confirmation": "Tem certeza de que deseja remover a entrada do histórico?",
+      "change-key-confirmation": "Tem certeza de que deseja alterar a chave pública do visor remoto?",
+      "changes-made": "As mudanças foram feitas.",
+      "no-history": "Esta guia mostrará as últimas {{ number }} chaves públicas usadas.",
+      "default-note-warning": "A nota padrão foi usada.",
+      "pagination-info": "{{ currentElementsRange }} de {{ totalElements }}",
+      "killswitch-check": "Ativar killswitch",
+      "killswitch-info": "Quando ativo, todas as conexões de rede serão desativadas se o aplicativo estiver em execução, exceto a proteção VPN for interrompida (por erros temporários ou qualquer outro problema).",
+      "settings-changed-alert": "As alterações ainda não foram salvas.",
+      "save-settings": "Salvar configurações",
+      "change-note-dialog": {
+        "title": "Mudar nota",
+        "note": "Nota"
+      },
+      "password-dialog": {
+        "title": "Digite a senha",
+        "password": "Senha",
+        "info": "Uma senha está sendo solicitada porque uma senha foi definida quando a entrada selecionada foi criada, mas não foi salva por motivos de segurança. Você pode deixar a senha em branco, se necessário.",
+        "continue-button": "Continuar"
+      },
+      "filter-dialog": {
+        "title": "Filtros",
+        "country": "O país deve ser",
+        "any-country": "Qualquer um",
+        "location": "O local deve conter",
+        "pub-key": "A chave pública deve conter",
+        "apply": "Aplicar"
+      }
+    },
+    "stop-app": "Parar",
+    "start-app": "Iniciar",
+    "view-logs": "Ver registros",
+    "settings": "Configurações",
+    "error": "Ocorreu um erro e não foi possível realizar a operação.",
+    "stop-confirmation": "Tem certeza de que deseja parar o aplicativo?",
+    "stop-selected-confirmation": "Tem certeza de que deseja parar os aplicativos selecionados?",
+    "disable-autostart-confirmation": "Tem certeza de que deseja desativar a inicialização automática do aplicativo?",
+    "enable-autostart-confirmation": "Tem certeza de que deseja ativar a inicialização automática do aplicativo?",
+    "disable-autostart-selected-confirmation": "Tem certeza de que deseja desativar o início automático para os aplicativos selecionados?",
+    "enable-autostart-selected-confirmation": "Tem certeza de que deseja ativar o início automático para os aplicativos selecionados?",
+    "operation-completed": "Operação concluída.",
+    "operation-unnecessary": "A seleção já possui a configuração solicitada.",
+    "status-running": "Executando",
+    "status-stopped": "Parado",
+    "status-failed": "Fracassado",
+    "status-running-tooltip": "O aplicativo está em execução",
+    "status-stopped-tooltip": "O aplicativo está parado no momento",
+    "status-failed-tooltip": "Algo deu errado. Verifique as mensagens do aplicativo para obter mais informações"
+  },
+  "transports": {
+    "title": "Transportes",
+    "remove-all-offline": "Remover todos os transportes offline",
+    "remove-all-offline-confirmation": "Tem certeza de que deseja remover todos os transportes offline?",
+    "remove-all-filtered-offline-confirmation": "Todos os transportes off-line que atendem aos critérios de filtragem atuais serão removidos. Tem certeza de que deseja continuar?",
+    "info": "Conexões que você tem com visores Skywire remotos, para permitir que aplicativos Skywire locais se comuniquem com aplicativos executados nesses visores remotos.",
+    "list-title": "Lista de transporte",
+    "state": "Estado",
+    "state-tooltip": "Estado atual",
+    "id": "ID",
+    "remote-node": "Remoto",
+    "type": "Tipo",
+    "create": "Criar transporte",
+    "delete-confirmation": "Tem certeza que deseja excluir o transporte?",
+    "delete-selected-confirmation": "Tem certeza que deseja excluir os transportes selecionados?",
+    "delete": "Excluir transporte",
+    "deleted": "Operação de exclusão concluída.",
+    "empty": "Visor não tem transportes.",
+    "empty-with-filter": "Nenhum transporte corresponde aos critérios de filtragem selecionados.",
+    "statuses": {
+      "online": "Online",
+      "online-tooltip": "Transporte está online",
+      "offline": "Offline",
+      "offline-tooltip": "Transporte está offline"
+    },
+    "details": {
+      "title": "Detalhes",
+      "basic": {
+        "title": "Informação básica",
+        "state": "Estado:",
+        "id": "ID:",
+        "local-pk": "Chave pública local:",
+        "remote-pk": "Chave pública remota:",
+        "type": "Tipo:"
+      },
+      "data": {
+        "title": "Transmissão de dados",
+        "uploaded": "Dados carregados:",
+        "downloaded": "Dados baixados:"
+      }
+    },
+    "dialog": {
+      "remote-key": "Chave pública remota",
+      "label": "Nome de identificação (opcional)",
+      "transport-type": "Tipo de transporte",
+      "success": "Transporte criado.",
+      "success-without-label": "O transporte foi criado, mas não foi possível salvar a etiqueta.",
+      "errors": {
+        "remote-key-length-error": "A chave pública remota deve ter 66 caracteres.",
+        "remote-key-chars-error": "A chave pública remota deve conter apenas caracteres hexadecimais.",
+        "transport-type-error": "O tipo de transporte é obrigatório."
+      }
+    },
+    "filter-dialog": {
+      "online": "O transporte deve ser",
+      "id": "O id deve conter",
+      "remote-node": "A chave remota deve conter",
+      "online-options": {
+        "any": "Online ou offline",
+        "online": "Online",
+        "offline": "Offline"
+      }
+    }
+  },
+  "routes": {
+    "title": "Rotas",
+    "info": "Caminhos usados para alcançar os visores remotos para os quais os transportes foram estabelecidos. As rotas são geradas automaticamente conforme necessário.",
+    "list-title": "Lista de rotas",
+    "key": "Chave",
+    "type": "Tipo",
+    "source": "Fonte",
+    "destination": "Destino",
+    "delete-confirmation": "Tem certeza que deseja excluir a rota?",
+    "delete-selected-confirmation": "Tem certeza que deseja excluir as rotas selecionadas?",
+    "delete": "Excluir rota",
+    "deleted": "Operação de exclusão concluída.",
+    "empty": "Visor não tem nenhuma rota.",
+    "empty-with-filter": "Nenhuma rota corresponde aos critérios de filtragem selecionados.",
+    "details": {
+      "title": "Detalhes",
+      "basic": {
+        "title": "Informação básica",
+        "key": "Chave:",
+        "rule": "Regras:"
+      },
+      "summary": {
+        "title": "Resumo da regra",
+        "keep-alive": "Ativo:",
+        "type": "Tipo de regra:",
+        "key-route-id": "ID de rota chave:"
+      },
+      "specific-fields-titles": {
+        "app": "Campos de aplicativos",
+        "forward": "Campos de encaminhamento",
+        "intermediary-forward": "Campos intermediários de encaminhamento"
+      },
+      "specific-fields": {
+        "route-id": "Próximo ID de rota:",
+        "transport-id": "Próximo ID de transporte:",
+        "destination-pk": "Chave pública de destino:",
+        "source-pk": "Chave pública de origem:",
+        "destination-port": "Porta de destino:",
+        "source-port": "Porta de origem:"
+      }
+    },
+    "filter-dialog": {
+      "key": "A chave deve conter",
+      "type": "O tipo deve ser",
+      "source": "A fonte deve conter",
+      "destination": "O destino deve conter",
+      "any-type-option": "Qualquer uma"
+    }
+  },
+  "copy": {
+    "tooltip": "Clique para copiar",
+    "tooltip-with-text": "{{ text }} (Clique para copiar)",
+    "copied": "Copiado!"
+  },
+  "selection": {
+    "select-all": "Selecionar tudo",
+    "unselect-all": "Desmarque todos",
+    "delete-all": "Excluir todos os elementos selecionados",
+    "start-all": "Iniciar todos os aplicativos selecionados",
+    "stop-all": "Parar todos os aplicativos selecionados",
+    "enable-autostart-all": "Habilitar inicialização automática para todos os aplicativos selecionados",
+    "disable-autostart-all": "Desativar inicialização automática para todos os aplicativos selecionados"
+  },
+  "refresh-button": {
+    "seconds": "Atualizado alguns segundos atrás",
+    "minute": "Atualizado 1 minuto atrás",
+    "minutes": "Atualizado {{ time }} minutos atrás",
+    "hour": "Atualizado 1 hora atrás",
+    "hours": "Atualizado {{ time }} horas atrás",
+    "day": "Atualizado 1 dia atrás",
+    "days": "Atualizado {{ time }} dias atrás",
+    "week": "Atualizado 1 semana atrás",
+    "weeks": "Atualizado {{ time }} semanas atrás",
+    "error-tooltip": "Ocorreu um erro ao atualizar os dados. Tentando novamente a cada {{ time }} segundos automaticamente..."
+  },
+  "view-all-link": {
+    "label": "Ver todos os elementos {{ number }}"
+  },
+  "paginator": {
+    "first": "Primeira",
+    "last": "Última",
+    "total": "Total: {{ number }} páginas",
+    "select-page-title": "Selecione a página"
+  },
+  "confirmation": {
+    "header-text": "Confirmação",
+    "confirm-button": "Sim",
+    "cancel-button": "Não",
+    "close": "Fechar",
+    "error-header-text": "Erro",
+    "done-header-text": "Feito"
+  },
+  "language": {
+    "title": "Selecione o idioma"
+  },
+  "tabs-window": {
+    "title": "Alterar guia"
+  }
+}
