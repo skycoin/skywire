@@ -350,7 +350,7 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
   getFullLogsUrl(): string {
     const apiPrefix = !environment.production && location.protocol.indexOf('http:') !== -1 ? 'http-api' : 'api';
 
-    return window.location.origin + '/' + apiPrefix + '/visors/' + NodeComponent.getCurrentNodeKey() + '/runtime-logs';;
+    return window.location.origin + '/' + apiPrefix + '/visors/' + NodeComponent.getCurrentNodeKey() + '/runtime-logs';
   }
 
   private onLogsError(err: OperationError) {
