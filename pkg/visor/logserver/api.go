@@ -57,7 +57,7 @@ func New(log *logging.Logger, tpLogPath, localPath, customPath string, whitelist
 	authRoute.StaticFile("/"+visorconfig.NodeInfo, filepath.Join(localPath, visorconfig.NodeInfo)) // "/node-info.json"
 
 	// serve the file with the reward address - only exists if the reward address is set
-	authRoute.StaticFile("/"+visorconfig.RewardFile, filepath.Join(localPath, visorconfig.RewardFile))	// "/reward.txt"
+	authRoute.StaticFile("/"+visorconfig.RewardFile, filepath.Join(localPath, visorconfig.RewardFile)) // "/reward.txt"
 
 	// This survey endpoint generates the survey as a response
 	authRoute.GET("/node-info", func(c *gin.Context) {
@@ -86,7 +86,7 @@ func New(log *logging.Logger, tpLogPath, localPath, customPath string, whitelist
 		if err != nil {
 			log.WithError(err).Error("Could not marshal system survey to json.")
 		}
-		c.JSON(http.StatusOK, gin.H{survey})
+		c.JSON(http.StatusOK, s)
 	})
 
 	r.GET("/health", func(c *gin.Context) {
