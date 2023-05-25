@@ -1,0 +1,997 @@
+{
+  "common": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "downloaded": "Recibido",
+    "uploaded": "Enviado",
+    "loading-error": "Hubo un error obteniendo los datos. Reintentando...",
+    "operation-error": "Hubo un error al intentar completar la operación.",
+    "no-connection-error": "No hay conexión a Internet o conexión con el hipervisor.",
+    "error": "Error:",
+    "refreshed": "Datos refrescados.",
+    "options": "Opciones",
+    "logout": "Cerrar sesión",
+    "logout-error": "Error cerrando la sesión.",
+    "logout-confirmation": "Are you sure you want to log out?",
+    "time-in-ms": "{{ time }}ms.",
+    "time-in-segs": "{{ time }}s.",
+    "ok": "Ok",
+    "yes": "Sí",
+    "no": "No",
+    "unknown": "Desconocido",
+    "close": "Cerrar",
+    "window-size-error": "La ventana es demasiado estrecha para el contenido."
+  },
+
+  "labeled-element": {
+    "edit-label": "Editar etiqueta",
+    "remove-label": "Remover etiqueta",
+    "go-to-settings": "Ir a la configuración",
+    "copy": "Copiar",
+    "remove-label-confirmation": "¿Realmente desea eliminar la etiqueta?",
+    "unnamed-element": "Sin nombre",
+    "unnamed-local-visor": "Visor local",
+    "local-element": "Local",
+    "tooltip": "Haga clic para copiar la entrada o cambiar la etiqueta",
+    "tooltip-with-text": "{{ text }} (Haga clic para copiar la entrada o cambiar la etiqueta)"
+  },
+
+  "labels": {
+    "title": "Etiquetas",
+    "info": "Etiquetas que ha introducido para identificar fácilmente visores, transportes y otros elementos, en lugar de tener que leer identificadores generados por una máquina.",
+    "list-title": "Lista de etiquetas",
+    "label": "Etiqueta",
+    "id": "ID del elemento",
+    "type": "Tipo",
+    "delete-confirmation": "¿Seguro que desea borrar la etiqueta?",
+    "delete-selected-confirmation": "¿Seguro que desea borrar las etiquetas seleccionados?",
+    "delete": "Borrar etiqueta",
+    "deleted": "Operación de borrado completada.",
+    "empty": "No hay etiquetas guardadas.",
+    "empty-with-filter": "Ninguna etiqueta coincide con los criterios de filtrado seleccionados.",
+    "filter-dialog": {
+      "label": "La etiqueta debe contener",
+      "id": "El id debe contener",
+      "type": "El tipo debe ser",
+
+      "type-options": {
+        "any": "Cualquiera",
+        "visor": "Visor",
+        "dmsg-server": "Servidor DMSG",
+        "transport": "Transporte"
+      }
+    }
+  },
+
+  "filters": {
+    "filter-action": "Filtrar",
+    "filter-info": "Lista de filtros.",
+    "press-to-remove": "(Presione para remover los filtros)",
+    "remove-confirmation": "¿Seguro que desea remover los filtros?"
+  },
+
+  "tables": {
+    "title": "Ordenar por",
+    "sorting-title": "Ordenado por:",
+    "sort-by-value": "Valor",
+    "sort-by-label": "Etiqueta",
+    "label": "(etiqueta)",
+    "inverted-order": "(invertido)"
+  },
+
+  "start": {
+    "title": "Inicio",
+    "loading-error": "Hubo un error obteniendo los datos iniciales. Reintentando..."
+  },
+
+  "node": {
+    "title": "Detalles del visor",
+    "not-found": "Visor no encontrado.",
+    "logs" : {
+      "title": "Registros de operación",
+      "no-logs": "No se encontraron registros de operación para este visor.",
+      "no-logs-for-filter": "No hay registros de operación que coincidan con el filtro seleccionado.",
+      "view-all": "Ver todos los registros en formato original >",
+      "view-rest": "Ver los {{ number }} elementos en formato original >",
+      "selected-filter": "Mostrando:",
+      "filter-ignored": "En filtro excluyó {{ number }} registros",
+      "filter-title": "Filtro",
+      "filter-all": "Todos los registros",
+      "filter-debug": "Debug o más importante",
+      "filter-info": "Info o más importante",
+      "filter-warning": "Warning o más importante",
+      "filter-error": "Error o más importante",
+      "filter-faltal": "Faltal o más importante",
+      "filter-panic": "Panic"
+    },
+    "statuses": {
+      "online": "Online",
+      "online-tooltip": "El visor se encuentra online.",
+      "connecting": "Conectando",
+      "connecting-tooltip": "El visor se encuentra online, pero todavía está conectando con el uptime tracker.",
+      "unknown": "Desconocido",
+      "unknown-tooltip": "El visor se encuentra online, pero no ha sido posible determinar si está conectado con el uptime tracker.",
+      "partially-online": "Online con problemas",
+      "partially-online-tooltip": "El visor se encuentra online, pero desconectado del uptime tracker.",
+      "offline": "Offline",
+      "offline-tooltip": "El visor se encuentra offline."
+    },
+    "details": {
+      "node-info": {
+        "title": "Información del visor",
+        "label": "Etiqueta:",
+        "public-key": "Llave pública:",
+        "symmetic-nat": "NAT simétrica:",
+        "public-ip": "IP pública:",
+        "ip": "IP:",
+        "dmsg-server": "Servidor DMSG:",
+        "no-dmsg-server": "No connectado",
+        "ping": "Ping:",
+        "node-version": "Versión del visor:",
+        "build-type": "Tipo de build:",
+        "skybian-version": "Versión de Skybian:",
+        "unknown-build": "Desconocido",
+        "time": {
+          "title": "Tiempo online:",
+          "seconds": "unos segundos",
+          "minute": "1 minuto",
+          "minutes": "{{ time }} minutos",
+          "hour": "1 hora",
+          "hours": "{{ time }} horas",
+          "day": "1 día",
+          "days": "{{ time }} días",
+          "week": "1 semana",
+          "weeks": "{{ time }} semanas"
+        }
+      },
+      "rewards-info": {
+        "title": "Información de Recompensas",
+        "rewards-address": "Dirección de recompensas:",
+        "not-registered": "No registrado",
+        "not-registered-info": "No ha especificado una dirección de Skycoin para recibir recompensas para este visor. Si quiere registrar el visor para recibir recompensas, presione el botón \"Establecer dirección\" e introduzca la una dirección de Skycoin.",
+        "open-in-explorer": "Abrir en el explorador de blockchain",
+        "set-address-button": "Establecer dirección",
+        "change-address-button": "Cambiar dirección"
+      },
+      "transports-info": {
+        "title": "Información de Transportes",
+        "autoconnect": "Autoconectar:",
+        "autoconnect-info": "Al activarse, el visor creará automáticamente los transportes necesarios cuando se solicite la conexión a un visor público. Al desactivarse, los transportes deberán ser creados antes de poder establecer la conexión.",
+        "enabled": "Activado",
+        "disabled": "Desactivado",
+        "enable-button": "Activar",
+        "disable-button": "Desactivar",
+        "enable-confirmation": "¿Seguro que desea activar la función de autoconectar?",
+        "disable-confirmation": "¿Seguro que desea desactivar la función de autoconectar?",
+        "enable-done": "La función de autoconectar ha sido activada.",
+        "disable-done": "La función de autoconectar ha sido desactivada."
+      },
+      "router-info": {
+        "title": "Información del Enrutador",
+        "min-hops": "Saltos mínimos:",
+        "max-hops": "Saltos máximos:",
+        "change-config-button": "Cambiar configuración"
+      },
+      "node-health": {
+        "title": "Información de Salud",
+        "status": "Estatus:",
+        "transport-discovery": "Transport discovery:",
+        "route-finder": "Route finder:",
+        "setup-node": "Setup node:",
+        "uptime-tracker": "Uptime tracker:",
+        "address-resolver": "Address resolver:",
+        "element-offline": "Offline"
+      },
+      "node-traffic-data": "Datos de tráfico"
+    },
+    "tabs": {
+      "info": "Info",
+      "apps": "Apps",
+      "routing": "Enrutamiento"
+    },
+    "error-load": "Hubo un error al intentar refrescar los datos. Reintentando..."
+  },
+
+  "rewards-address-config": {
+    "title": "Configuración de dirección de recompensas",
+    "info": "Aquí usted puede establecer la dirección de Skycoin a la que quiere que se envíen las recompensas. Si deja la dirección vacía, el registro será eliminado y el visor no recibirá recompensas.",
+    "more-info-link": "(Más información acerca del sistema de recompensas)",
+    "address": "Dirección ",
+    "address-error": "Por favor, coloque una dirección Skycoin valida.",
+    "save-config-button": "Guardar configuración",
+    "done": "Cambios guardados.",
+    "empty-warning": "La dirección está vacía, así que el registro será eliminado y no recibirá recompensas. ¿Realmente desea continuar?"
+  },
+
+  "router-config": {
+    "title": "Configuración del Enrutador",
+    "info": "Aquí podrá configurar cuantos saltos la conexión deberá realizar a través de otros visores de Skywire antes de alcanzar el destino final. NOTA: los cambios no afectarán a las rutas ya existentes.",
+    "min-hops": "Saltos mínimos",
+    "min-hops-error": "Por favor, coloque un número valido.",
+    "save-config-button": "Guardar configuración",
+    "done": "Cambios guardados."
+  },
+
+  "nodes": {
+    "title": "Lista de visores",
+    "dmsg-title": "DMSG",
+    "modify-rewards-all": "Cambiar dirección de recompensas",
+    "update-all": "Actualizar todos los visores online",
+    "hypervisor": "Hypervisor",
+    "state": "Estado",
+    "state-tooltip": "Estado actual",
+    "label": "Etiqueta",
+    "key": "Llave",
+    "dmsg-server": "Servidor DMSG",
+    "ping": "Ping",
+    "hypervisor-info": "Este visor es el Hypervisor actual.",
+    "copy-key": "Copiar llave",
+    "copy-dmsg": "Copiar llave DMSG",
+    "copy-data": "Copiar datos",
+    "view-node": "Ver visor",
+    "delete-node": "Remover visor",
+    "delete-all-offline": "Remover todos los visores offline",
+    "error-load": "Hubo un error al intentar refrescar la lista. Reintentando...",
+    "empty": "No hay ningún visor conectado a este hypervisor.",
+    "empty-with-filter": "Ningun visor coincide con los criterios de filtrado seleccionados.",
+    "delete-node-confirmation": "¿Seguro que desea remover el visor de la lista?",
+    "delete-all-offline-confirmation": "¿Seguro que desea remover todos los visores offline de la lista?",
+    "delete-all-filtered-offline-confirmation": "Todos los visores offline que satisfagan los criterios de filtrado actuales serán removidos de la lista. ¿Seguro que desea continuar?",
+    "deleted": "Visor removido.",
+    "deleted-singular": "1 visor offline removido.",
+    "deleted-plural": "{{ number }} visores offline removidos.",
+    "no-visors-to-update": "No hay visores para actualizar.",
+    "no-visors-to-modify": "No hay visores para modificar.",
+    "filter-dialog": {
+      "online": "El visor debe estar",
+      "label": "La etiqueta debe contener",
+      "key": "La llave debe contener",
+      "dmsg": "La llave del servidor DMSG debe contener",
+
+      "online-options": {
+        "any": "Online u offline",
+        "online": "Online",
+        "offline": "Offline"
+      }
+    }
+  },
+
+  "bulk-rewards": {
+    "title": "Cambiar dirección de recompensas",
+    "info": "Introduzca la dirección de Skycoin donde desea recibir las recompensas. La dirección será establecida en todos los visores seleccionados. Si deja la dirección vacía, el registro será eliminado y los visores no recibirán recompensas. También puede colocar la dirección de recompensas de cada visor individualmente usando la opción en la pantalla de detalles del visor.",
+    "more-info-link": "(Más información acerca del sistema de recompensas)",
+    "address": "Nueva dirección",
+    "select-visors": "Visores a modificar:",
+    "current-address": "Dirección actual:",
+    "not-registered": "Ninguna (no registrado para recompensas).",
+    "checking": "Consultando...",
+    "error-checking": "Error consultando:",
+    "processing": "Procesando...",
+    "error-processing": "Error realizando el cambio:",
+    "done": "Cambio realizado.",
+    "perform-changes": "Aplicar cambios",
+    "empty-warning": "La dirección está vacía, así que los registros serán eliminados y no recibirá recompensas. ¿Realmente desea continuar?"
+  },
+
+  "edit-label": {
+    "label": "Etiqueta",
+    "done": "Etiqueta guardada.",
+    "label-removed-warning": "La etiqueta fue removida."
+  },
+
+  "settings": {
+    "title": "Configuración",
+    "checking-auth": "Revisando configuración de autenticación.",
+    "password" : {
+      "initial-config-help": "Use esta opción para establecer la contraseña inicial. Después de establecer una contraseña no es posible usar esta opción para modificarla.",
+      "help": "Opciones para cambiar la contraseña.",
+      "old-password": "Contraseña actual",
+      "new-password": "Nueva contraseña",
+      "repeat-password": "Repita la contraseña",
+      "password-changed": "Contraseña cambiada.",
+      "error-changing": "Error cambiando la contraseña.",
+      "initial-config": {
+        "title": "Establecer contraseña inicial",
+        "password": "Contraseña",
+        "repeat-password": "Repita la contraseña",
+        "set-password": "Establecer contraseña",
+        "done": "Contraseña establecida. Por favor úsela para acceder al sistema.",
+        "error": "Error. Por favor asegúrese de que no hubiese establecido la contraseña anteriormente."
+      },
+      "errors": {
+        "bad-old-password": "La contraseña actual introducida no es correcta.",
+        "old-password-required": "La contraseña actual es requerida.",
+        "new-password-error": "La contraseña debe tener entre 6 y 64 caracteres.",
+        "passwords-not-match": "Las contraseñas no coinciden.",
+        "default-password": "No utilice la contraseña por defecto (1234)."
+      }
+    },
+    "updater-config" : {
+      "open-link": "Mostrar la configuración del actualizador",
+      "open-confirmation": "La configuración del actualizador es sólo para usuarios experimentados. Seguro que desea continuar?",
+      "help": "Utilice este formulario para modificar la configuración que utilizará el actualizador. Se ignorarán todos los campos vacíos. La configuración se utilizará para todas las operaciones de actualización, sin importar qué elemento se esté actualizando, así que por favor tenga cuidado.",
+      "channel": "Canal",
+      "version": "Versión",
+      "archive-url": "URL del archivo",
+      "checksum-url": "URL del checksum",
+      "not-saved": "Los cambios aún no se han guardado.",
+      "save": "Guardar cambios",
+      "remove-settings": "Remover la configuración",
+      "saved": "Las configuracion personalizada ha sido guardada.",
+      "removed": "Las configuracion personalizada ha sido removida.",
+      "save-confirmation": "¿Seguro que desea aplicar la configuración personalizada?",
+      "remove-confirmation": "¿Seguro que desea remover la configuración personalizada?"
+    },
+    "change-password": "Cambiar contraseña",
+    "refresh-rate": "Frecuencia de refrescado",
+    "refresh-rate-help": "Tiempo que el sistema espera para actualizar automáticamente los datos.",
+    "refresh-rate-confirmation": "Frecuencia de refrescado cambiada.",
+    "seconds": "segundos"
+  },
+
+  "login": {
+    "password": "Contraseña",
+    "incorrect-password": "Contraseña incorrecta.",
+    "initial-config": "Configurar lanzamiento inicial"
+  },
+
+  "actions": {
+    "menu": {
+      "terminal": "Terminal",
+      "config": "Configuración",
+      "update": "Actualizar",
+      "reboot": "Reiniciar",
+      "logs": "Ver logs"
+    },
+    "reboot": {
+      "confirmation": "¿Seguro que desea reiniciar el visor?",
+      "done": "El visor se está reiniciando."
+    },
+    "update": {
+      "confirmation": "Una terminal será abierta en una nueva pestaña y el proceso de actualización iniciará automáticamente. ¿Desea continuar?"
+    },
+    "terminal-options": {
+      "full": "Terminal completa",
+      "simple": "Terminal simple"
+    },
+    "terminal": {
+      "title": "Terminal",
+      "input-start": "Terminal de Skywire para {{address}}",
+      "error": "Error inesperado mientras se intentaba ejecutar el comando."
+    }
+  },
+
+  "update": {
+    "title": "Actualizar",
+    "error-title": "Error",
+    "processing": "Buscando actualizaciones...",
+    "no-update": "No hay ninguna actualización para el visor. La versión instalada actualmente es:",
+    "no-updates": "No se encontraron nuevas actualizaciones.",
+    "already-updating": "Algunos visores ya están siendo actualizandos:",
+    "with-error": "No fue posible verificar los siguientes visores:",
+    "update-available": "Las siguientes actualizaciones fueron encontradas:",
+    "update-available-singular": "Las siguientes actualizaciones para 1 visor fueron encontradas:",
+    "update-available-plural": "Las siguientes actualizaciones para {{ number }} visores fueron encontradas:",
+    "update-available-additional-singular": "Las siguientes actualizaciones adicionales para 1 visor fueron encontradas:",
+    "update-available-additional-plural": "Las siguientes actualizaciones adicionales para {{ number }} visores fueron encontradas:",
+    "update-instructions": "Haga clic en el botón 'Instalar actualizaciones' para continuar.",
+    "updating": "La operación de actualización se ha iniciado, puede abrir esta ventana nuevamente para verificar el progreso:",
+    "version-change": "De {{ currentVersion }} a {{ newVersion }}",
+    "selected-channel": "Canal seleccionado:",
+    "downloaded-file-name-prefix": "Descargando: ",
+    "speed-prefix": "Velocidad: ",
+    "time-downloading-prefix": "Tiempo descargando: ",
+    "time-left-prefix": "Tiempo aprox. faltante: ",
+    "starting": "Preparando para actualizar",
+    "finished": "Conexión de estado terminada",
+    "install": "Instalar actualizaciones"
+  },
+
+  "update-all": {
+    "title": "Actualizar",
+    "updatable-list-text": "Por favor, presione los botones de los visores que desea actualizar. Una terminal será abierta en una nueva pestaña por cada visor y el proceso de actualización iniciará automáticamente.",
+    "non-updatable-list-text": "Los siguientes visores no pueden ser actualizados vía la terminal:",
+    "update-button": "Actualizar"
+  },
+
+  "apps": {
+    "log": {
+      "title": "Log",
+      "empty": "No hay mensajes de log para el rango de fecha seleccionado.",
+      "filter-button": "Mostrando sólo logs generados desde:",
+      "view-all": "Ver todas las {{ totalLogs }} entradas",
+      "filter": {
+        "title": "Filtro",
+        "filter": "Mostrar sólo logs generados desde",
+        "7-days": "Los últimos 7 días",
+        "1-month": "Los últimos 30 días",
+        "3-months": "Los últimos 3 meses",
+        "6-months": "Los últimos 6 meses",
+        "1-year": "El último año",
+        "all": "mostrar todos"
+      }
+    },
+    "apps-list": {
+      "title": "Aplicaciones",
+      "title-official": "Aplicaciones Oficiales",
+      "title-user": "Aplicaciones de Usuario",
+      "list-title": "Lista de aplicaciones",
+      "app-name": "Nombre",
+      "port": "Puerto",
+      "state": "Estado",
+      "state-tooltip": "Estado actual",
+      "auto-start": "Autoinicio",
+      "empty-official": "El visor no tiene ninguna aplicación oficial.",
+      "empty-user": "El visor no tiene ninguna aplicación de usuario.",
+      "empty-with-filter": "Ninguna app coincide con los criterios de filtrado seleccionados.",
+      "disable-autostart": "Deshabilitar autoinicio",
+      "enable-autostart": "Habilitar autoinicio",
+      "autostart-disabled": "Autoinicio deshabilitado",
+      "autostart-enabled": "Autoinicio habilitado",
+      "unavailable-logs-error": "No es posible mostrar los logs mientras la aplicación no se está ejecutando.",
+
+      "filter-dialog": {
+        "state": "El estado debe ser",
+        "name": "El nombre debe contener",
+        "port": "El puerto debe contener",
+        "autostart": "El autoinicio debe estar",
+  
+        "state-options": {
+          "any": "Iniciada o detenida",
+          "running": "Iniciada",
+          "stopped": "Detenida"
+        },
+
+        "autostart-options": {
+          "any": "Activado or desactivado",
+          "enabled": "Activado",
+          "disabled": "Desactivado"
+        }
+      }
+    },
+    "user-app-settings": {
+      "title": "{{ name }} (Configuración)",
+      "info": "Aquí puede editar la configuración de la app como pares nombre-valor. Por favor, revise la documentación de la aplicación para ver cuáles configuraciones y valores soporta esta app.",
+      "name": "Nombre {{ number }}",
+      "value": "Valor {{ number }}",
+      "remove": "Remover",
+      "add": "Agregar configuración",
+      "save": "Guardar",
+      "invalid-confirmation": "Una o más configuraciones no tienen nombre y serán ignoradas. ¿Desea continuar?",
+      "empty-confirmation": "La lista de configuración está vacía. ¿Realmente desea continuar?",
+      "changes-made": "Los cambios han sido realizados."
+    },
+    "vpn-socks-server-settings": {
+      "socks-title": "Configuración de Skysocks",
+      "vpn-title": "Configuración de VPN-Server",
+      "new-password": "Nueva contraseña (dejar en blanco para eliminar la contraseña)",
+      "repeat-password": "Repita la contraseña",
+      "netifc": "Interfaz de red predeterminada (opcional)",
+      "passwords-not-match": "Las contraseñas no coinciden.",
+      "secure-mode-check": "Usar modo seguro",
+      "secure-mode-info": "Cuando está activo, el servidor no permite SSH con los clientes y no permite ningún tráfico de clientes VPN a la red local del servidor.",
+      "save": "Guardar",
+      "remove-passowrd-confirmation": "Ha dejado el campo de contraseña vacío. ¿Seguro que desea eliminar la contraseña?",
+      "change-passowrd-confirmation": "¿Seguro que desea cambiar la contraseña?",
+      "changes-made": "Los cambios han sido realizados."
+    },
+    "vpn-socks-client-settings": {
+      "socks-title": "Configuración de Skysocks-Client",
+      "vpn-title": "Configuración de VPN-Client",
+      "discovery-tab": "Buscar",
+      "remote-visor-tab": "Introducir manualmente",
+      "settings-tab": "Configuracion",
+      "history-tab": "Historial",
+      "use": "Usar estos datos",
+      "change-note": "Cambiar nota",
+      "remove-entry": "Remover entrada",
+      "note": "Nota:",
+      "note-entered-manually": "Introducido manualmente",
+      "note-obtained": "Obtenido del servicio de descubrimiento",
+      "key": "Llave:",
+      "port": "Puerto:",
+      "location": "Ubicación:",
+      "state-available": "Disponible",
+      "state-offline": "Offline",
+      "public-key": "Llave pública del visor remoto",
+      "password": "Contraseña",
+      "password-history-warning": "Nota: la contraseña no se guardará en el historial.",
+      "copy-pk-info": "Copiar la llave pública.",
+      "copied-pk-info": "La llave pública ha sido copiada.",
+      "copy-pk-error": "Hubo un problema al intentar cambiar la llave pública.",
+      "no-elements": "Actualmente no hay elementos para mostrar. Por favor, inténtelo de nuevo más tarde.",
+      "no-elements-for-filters": "No hay elementos que cumplan los criterios de filtro.",
+      "no-filter": "No se ha seleccionado ningún filtro",
+      "click-to-change": "Haga clic para cambiar",
+      "remote-key-length-error": "La llave pública debe tener 66 caracteres.",
+      "remote-key-chars-error": "La llave pública sólo debe contener caracteres hexadecimales.",
+      "save": "Guardar",
+      "remove-from-history-confirmation": "¿Seguro de que desea eliminar la entrada del historial?",
+      "change-key-confirmation": "¿Seguro que desea cambiar la llave pública del visor remoto?",
+      "changes-made": "Los cambios han sido realizados.",
+      "no-history": "Esta pestaña mostrará las últimas {{ number }} llaves públicas usadas.",
+      "default-note-warning": "La nota por defecto ha sido utilizada.",
+      "pagination-info": "{{ currentElementsRange }} de {{ totalElements }}",
+      "dns": "Dirección IP del servidor DNS personalizado",
+      "dns-error": "Valor inválido.",
+      "killswitch-check": "Activar killswitch",
+      "killswitch-info": "Cuando está activo, todas las conexiones de red se desactivarán si la aplicación se está ejecutando pero la protección VPN está interrumpida (por errores temporales o cualquier otro problema). Esto evita fugas de datos.",
+      "settings-changed-alert": "Los cambios aún no se han guardado.",
+      "save-settings": "Guardar configuracion",
+
+      "change-note-dialog": {
+        "title": "Cambiar Nota",
+        "note": "Nota"
+      },
+
+      "password-dialog": {
+        "title": "Introducir Contraseña",
+        "password": "Contraseña",
+        "info": "Se le solicita una contraseña porque una contraseña fue utilizada cuando se creó la entrada seleccionada, pero no fue guardada por razones de seguridad. Puede dejar la contraseña vacía si es necesario.",
+        "continue-button": "Continuar"
+      },
+
+      "filter-dialog": {
+        "title": "Filtros",
+        "country": "El país debe ser",
+        "any-country": "Cualquiera",
+        "location": "La ubicación debe contener",
+        "pub-key": "La llave pública debe contener",
+        "apply": "Aplicar"
+      }
+    },
+    "stop-app": "Detener",
+    "start-app": "Iniciar",
+    "view-logs": "Ver logs",
+    "settings": "Configuración",
+    "open": "Abrir",
+    "error": "Se produjo un error y no fue posible realizar la operación.",
+    "stop-confirmation": "¿Seguro que desea detener la aplicación?",
+    "stop-selected-confirmation": "¿Seguro que desea detener las aplicaciones seleccionadas?",
+    "disable-autostart-confirmation": "¿Seguro que desea deshabilitar el autoinicio de la aplicación?",
+    "enable-autostart-confirmation": "¿Seguro que desea habilitar el autoinicio de la aplicación?",
+    "disable-autostart-selected-confirmation": "¿Seguro que desea deshabilitar el autoinicio de las aplicaciones seleccionadas?",
+    "enable-autostart-selected-confirmation": "¿Seguro que desea habilitar el autoinicio de las aplicaciones seleccionadas?",
+    "operation-completed": "Operación completada.",
+    "operation-unnecessary": "La selección ya tiene la configuración solicitada.",
+    "status-running": "Corriendo",
+    "status-connecting": "Conectando",
+    "status-stopped": "Detenida",
+    "status-failed": "Finalizó con el siguiente error: {{ error }}",
+    "status-running-tooltip": "La aplicación está actualmente corriendo",
+    "status-connecting-tooltip": "La aplicación está actualmente conectando",
+    "status-stopped-tooltip": "La aplicación está actualmente detenida",
+    "status-failed-tooltip": "La app finalizó con el siguiente error: {{ error }}"
+  },
+
+  "transports": {
+    "title": "Transportes",
+    "info": "Conexiones que tiene con visores remotos de Skywire, para permitir que las aplicaciones Skywire locales se comuniquen con las aplicaciones que se ejecutan en esos visores remotos.",
+    "list-title": "Lista de transportes",
+    "offline": "Offline",
+    "persistent": "Persistente",
+    "persistent-tooltip": "Transportes persistentes, los cuales son creados automáticamente al iniciar el visor y son recreados automáticamente en caso de desconexión.",
+    "persistent-transport-tooltip": "Este transporte es persistente, así que es creado automáticamente al iniciar el visor y es recreado automáticamente en caso de desconexión.",
+    "persistent-transport-button-tooltip": "Este transporte es persistente, así que es creado automáticamente al iniciar el visor y es recreado automáticamente en caso de desconexión. Presione aquí para volverlo no persistente.",
+    "non-persistent-transport-button-tooltip": "Presione aquí para volver persistente el transporte. Los transportes persistentes son creados automáticamente al iniciar el visor y son recreados automáticamente en caso de desconexión.",
+    "make-persistent": "Volver persistente",
+    "make-non-persistent": "Volver no persistente",
+    "make-selected-persistent": "Volver persistentes los seleccionados",
+    "make-selected-non-persistent": "Volver no persistentes los seleccionados",
+    "changes-made": "Cambios hechos.",
+    "no-changes-needed": "Ningún cambio fue necesario.",
+    "id": "ID",
+    "remote-node": "Remoto",
+    "type": "Tipo",
+    "create": "Crear transporte",
+    "make-persistent-confirmation": "¿Seguro que desea volver persistente el transporte?",
+    "make-non-persistent-confirmation": "¿Seguro que desea volver no persistente el transporte?",
+    "make-selected-persistent-confirmation": "¿Seguro que desea volver persistentes los transportes seleccionados?",
+    "make-selected-non-persistent-confirmation": "¿Seguro que desea volver no persistentes los transportes seleccionados?",
+    "make-offline-non-persistent-confirmation": "¿Seguro que desea volver no persistente el transporte? No seguirá siendo mostrado en la lista mientras se encuentre offline.",
+    "delete-confirmation": "¿Seguro que desea borrar el transporte?",
+    "delete-persistent-confirmation": "Este transporte es persistente, así que puede ser recreado poco después de ser borrado. ¿Seguro que desea borrarlo?",
+    "delete-selected-confirmation": "¿Seguro que desea borrar los transportes seleccionados?",
+    "delete": "Borrar transporte",
+    "deleted": "Operación de borrado completada.",
+    "empty": "El visor no tiene ningún transporte.",
+    "empty-with-filter": "Ningun transporte coincide con los criterios de filtrado seleccionados.",
+    "details": {
+      "title": "Detalles",
+      "basic": {
+        "title": "Información básica",
+        "persistent": "Persistente:",
+        "id": "ID:",
+        "local-pk": "Llave pública local:",
+        "remote-pk": "Llave pública remota:",
+        "type": "Tipo:"
+      },
+      "data": {
+        "title": "Transmisión de datos",
+        "uploaded": "Datos enviados:",
+        "downloaded": "Datos recibidos:"
+      }
+    },
+    "dialog": {
+      "remote-key": "Llave pública remota",
+      "label": "Nombre del transporte (opcional)",
+      "transport-type": "Tipo de transporte",
+      "make-persistent": "Hacer persistente",
+      "persistent-tooltip": "Los transportes persistentes son creados automáticamente al iniciar el visor y son recreados automáticamente en caso de desconexión.",
+      "only-persistent-created": "El transporte persistente fue creado, pero podría no haber sido activado.",
+      "success": "Transporte creado.",
+      "success-without-label": "El transporte fue creado, pero no fue posible guardar la etiqueta.",
+      "errors": {
+        "remote-key-length-error": "La llave pública remota debe tener 66 caracteres.",
+        "remote-key-chars-error": "La llave pública remota sólo debe contener caracteres hexadecimales.",
+        "transport-type-error": "El tipo de transporte es requerido."
+      }
+    },
+    "filter-dialog": {
+      "persistent": "El transporte debe ser",
+      "id": "El id debe contener",
+      "remote-node": "La llave remota debe contener",
+
+      "persistent-options": {
+        "any": "Cualquiera",
+        "persistent": "Persistente",
+        "non-persistent": "No persistente"
+      }
+    }
+  },
+
+  "routes": {
+    "title": "Rutas",
+    "info": "Caminos utilizados para llegar a los visores remotos con los que se han establecido transportes. Las rutas se generan automáticamente según sea necesario.",
+    "list-title": "Lista de rutas",
+    "key": "Llave",
+    "type": "Tipo",
+    "source": "Inicio",
+    "destination": "Destino",
+    "delete-confirmation": "¿Seguro que desea borrar la ruta?",
+    "delete-selected-confirmation": "¿Seguro que desea borrar las rutas seleccionadas?",
+    "delete": "Borrar ruta",
+    "deleted": "Operación de borrado completada.",
+    "empty": "El visor no tiene ninguna ruta.",
+    "empty-with-filter": "Ninguna ruta coincide con los criterios de filtrado seleccionados.",
+    "details": {
+      "title": "Detalles",
+      "basic": {
+        "title": "Información básica",
+        "key": "Llave:",
+        "rule": "Regla:"
+      },
+      "summary": {
+        "title": "Resumen de regla",
+        "keep-alive": "Keep alive:",
+        "type": "Tipo de regla:",
+        "key-route-id": "ID de la llave de la ruta:"
+      },
+      "specific-fields-titles": {
+        "app": "Campos de applicación",
+        "forward": "Campos de reenvío",
+        "intermediary-forward": "Campos de reenvío intermedio"
+      },
+      "specific-fields": {
+        "route-id": "ID de la siguiente ruta:",
+        "transport-id": "ID del siguiente transporte:",
+        "destination-pk": "Llave pública de destino:",
+        "source-pk": "Llave pública de origen:",
+        "destination-port": "Puerto de destino:",
+        "source-port": "Puerto de origen:"
+      }
+    },
+    "filter-dialog": {
+      "key": "La llave debe contener",
+      "type": "El tipo debe ser",
+      "source": "El inicio debe contener",
+      "destination": "El destino debe contener",
+      "any-type-option": "Cualquiera"
+    }
+  },
+
+  "copy": {
+    "tooltip": "Presione para copiar",
+    "tooltip-with-text": "{{ text }} (Presione para copiar)",
+    "copied": "¡Copiado!"
+  },
+
+  "selection": {
+    "select-all": "Seleccionar todo",
+    "unselect-all": "Deseleccionar todo",
+    "delete-all": "Borrar los elementos seleccionados",
+    "start-all": "Iniciar las apps seleccionadas",
+    "stop-all": "Detener las apps seleccionadas",
+    "enable-autostart-all": "Habilitar el autoinicio de las apps seleccionadas",
+    "disable-autostart-all": "Deshabilitar el autoinicio de las apps seleccionadas"
+  },
+
+  "refresh-button": {
+    "seconds": "Refrescado hace unos segundos",
+    "minute": "Refrescado hace un minuto",
+    "minutes": "Refrescado hace {{ time }} minutos",
+    "hour": "Refrescado hace una hora",
+    "hours": "Refrescado hace {{ time }} horas",
+    "day": "Refrescado hace un día",
+    "days": "Refrescado hace {{ time }} días",
+    "week": "Refrescado hace una semana",
+    "weeks": "Refrescado hace {{ time }} semanas",
+    "error-tooltip": "Hubo un error al intentar refrescar los datos. Reintentando automáticamente cada {{ time }} segundos..."
+  },
+
+  "view-all-link": {
+    "label": "Ver todos los {{ number }} elementos"
+  },
+
+  "paginator": {
+    "first": "Primera",
+    "last": "Última",
+    "total": "Total: {{ number }} páginas",
+    "select-page-title": "Seleccionar página"
+  },
+
+  "confirmation" : {
+    "header-text": "Confirmación",
+    "confirm-button": "Sí",
+    "cancel-button": "No",
+    "close": "Cerrar",
+    "error-header-text": "Error",
+    "done-header-text": "Hecho"
+  },
+
+  "language" : {
+    "title": "Seleccionar lenguaje"
+  },
+
+  "tabs-window" : {
+    "title" : "Cambiar pestaña"
+  },
+
+  "vpn" : {
+    "title": "Panel de Control de VPN",
+    "start": "Inicio",
+    "servers": "Servidores",
+    "settings": "Configuracion",
+
+    "unnamed": "Sin nombre",
+
+    "starting-blocked-server-error": "No se puede conectar con el servidor seleccionado porque se ha agregado a la lista de servidores bloqueados.",
+    "unexpedted-error": "Se produjo un error inesperado y no se pudo completar la operación.",
+
+    "remote-access-title": "Parece que está accediendo al sistema de manera remota",
+    "remote-access-text": "Esta aplicación sólo permite administrar la protección VPN del dispositivo en el que fue instalada. Los cambios hechos con ella no afectarán a dispositivos remotos como el que parece estar usando. También es posible que los datos de IP que se muestren sean incorrectos.",
+
+    "server-change": {
+      "busy-error": "El sistema está ocupado. Por favor, espere.",
+      "backend-error": "No fue posible cambiar el servidor. Por favor, asegúrese de que la clave pública sea correcta y de que la aplicación VPN se esté ejecutando.",
+      "already-selected-warning": "El servidor seleccionado ya está siendo utilizando.",
+      "change-server-while-connected-confirmation": "La protección VPN se interrumpirá mientras se cambia el servidor y algunos datos pueden transmitirse sin protección durante el proceso. ¿Desea continuar?",
+      "start-same-server-confirmation": "Ya había seleccionado ese servidor. ¿Desea conectarte a él?"
+    },
+
+    "error-page": {
+      "text": "La aplicación de cliente VPN no está disponible.",
+      "more-info": "No fue posible conectarse a la aplicación cliente VPN. Esto puede deberse a un error de configuración, un problema inesperado con el visor o porque utilizó una clave pública no válida en la URL.",
+      "text-pk": "Configuración inválida.",
+      "more-info-pk": "La aplicación no puede ser iniciada porque no ha especificado la clave pública del visor.",
+      "text-storage": "Error al guardar los datos.",
+      "more-info-storage": "Ha habido un conflicto al intentar guardar los datos y la aplicación se ha cerrado para prevenir errores. Esto puede suceder si abre la aplicación en más de una pestaña o ventana.",
+      "text-pk-change": "Operación inválida.",
+      "more-info-pk-change": "Por favor, utilice esta aplicación para administrar sólo un cliente VPN."
+    },
+
+    "connection-info" : {
+      "state-title": "El estado de tu conexión es actualmente:",
+      "state-connecting": "Conectando",
+      "state-connecting-info": "Se está activando la protección VPN.",
+      "state-connected": "Conectado",
+      "state-connected-info": "La protección VPN está activada.",
+      "state-disconnecting": "Desconectando",
+      "state-disconnecting-info": "Se está desactivando la protección VPN.",
+      "state-reconnecting": "Reconectando",
+      "state-reconnecting-info": "Se está restaurando la protección de VPN.",
+      "state-disconnected": "Desconectado",
+      "state-disconnected-info": "La protección VPN está desactivada.",
+      "state-info": "Estado actual de la conexión.",
+      "latency-info": "Latencia actual.",
+      "upload-info": "Velocidad de subida.",
+      "download-info": "Velocidad de descarga."
+    },
+
+    "connection-error" : {
+      "text": "Error de conexión",
+      "info": "Problema conectando con la app vpn. Algunos datos mostrados podrían estar desactualizados."
+    },
+
+    "status-page": {
+      "start-title": "Iniciar VPN",
+      "no-server": "¡Ningún servidor seleccionado!",
+      "disconnect": "Desconectar",
+      "last-error": "Último error:",
+      "unknown-error": "Error desconocido.",
+      "disconnect-confirmation": "¿Realmente desea detener la protección VPN?",
+      "upload-info": "Estadísticas de datos subidos.",
+      "download-info": "Estadísticas de datos descargados.",
+      "latency-info": "Estadísticas de latencia.",
+      "total-data-label": "total",
+      "problem-connecting-error": "No fue posible conectarse al servidor. El servidor puede no ser válido o estar temporalmente inactivo.",
+      "problem-starting-error": "No fue posible iniciar la VPN. Por favor, asegúrese de que la aplicación base de cliente VPN esté ejecutandose.",
+      "problem-stopping-error": "No fue posible detener la VPN. Por favor, asegúrese de que la aplicación base de cliente VPN esté ejecutandose.",
+      "generic-problem-error": "No fue posible realizar la operación. Por favor, asegúrese de que la aplicación base de cliente VPN esté ejecutandose.",
+      "select-server-warning": "Por favor, seleccione un servidor primero.",
+
+      "data": {
+        "ip": "Dirección IP:",
+        "ip-problem-info": "Hubo un problema al intentar obtener la IP. Por favor, verifíquela utilizando un servicio externo.",
+        "ip-country-problem-info": "Hubo un problema al intentar obtener el país. Por favor, verifíquelo utilizando un servicio externo.",
+        "ip-refresh-info": "Refrescar",
+        "ip-refresh-time-warning": "Por favor, espere {{ seconds }} segundo(s) antes de refrescar los datos.",
+        "ip-refresh-loading-warning": "Por favor, espere a que finalice la operación anterior.",
+        "country": "País:",
+        "server": "Servidor:",
+        "server-note": "Nota del servidor:",
+        "original-server-note": "Nota original del servidor:",
+        "local-pk": "Llave pública del visor local:",
+        "remote-pk": "Llave pública del visor remoto:",
+        "unavailable": "No disponible"
+      }
+    },
+
+    "server-options": {
+      "tooltip": "Opciones",
+      "connect-without-password": "Conectarse sin contraseña",
+      "connect-without-password-confirmation": "La conexión se realizará sin la contraseña. ¿Seguro que desea continuar?",
+      "connect-using-password": "Conectarse usando una contraseña",
+      "connect-using-another-password": "Conectarse usando otra contraseña",
+      "edit-name": "Nombre personalizado",
+      "edit-label": "Nota personalizada",
+      "make-favorite": "Hacer favorito",
+      "make-favorite-confirmation": "¿Realmente desea marcar este servidor como favorito? Se eliminará de la lista de bloqueados.",
+      "make-favorite-done": "Agregado a la lista de favoritos.",
+      "remove-from-favorites": "Quitar de favoritos",
+      "remove-from-favorites-done": "Eliminado de la lista de favoritos.",
+      "block": "Bloquear servidor",
+      "block-done": "Agregado a la lista de bloqueados.",
+      "block-confirmation": "¿Realmente desea bloquear este servidor? Se eliminará de la lista de favoritos.",
+      "block-selected-confirmation": "¿Realmente desea bloquear el servidor actualmente seleccionado? Se cerrarán todas las conexiones.",
+      "block-selected-favorite-confirmation": "¿Realmente desea bloquear el servidor actualmente seleccionado? Se cerrarán todas las conexiones y se eliminará de la lista de favoritos.",
+      "unblock": "Desbloquear servidor",
+      "unblock-done": "Eliminado de la lista de bloqueados.",
+      "remove-from-history": "Quitar del historial",
+      "remove-from-history-confirmation": "¿Realmente desea quitar del historial el servidor?",
+      "remove-from-history-done": "Eliminado del historial.",
+
+      "edit-value": {
+        "name-title": "Nombre Personalizado",
+        "note-title": "Nota Personalizada",
+        "name-label": "Nombre personalizado",
+        "note-label": "Nota personalizada",
+        "apply-button": "Aplicar",
+        "changes-made-confirmation": "Se ha realizado el cambio."
+      }
+    },
+
+    "server-conditions": {
+      "selected-info": "Este es el servidor actualmente seleccionado.",
+      "blocked-info": "Este servidor está en la lista de bloqueados.",
+      "favorite-info": "Este servidor está en la lista de favoritos.",
+      "history-info": "Este servidor está en el historial de servidores.",
+      "has-password-info": "Se estableció una contraseña para conectarse con este servidor."
+    },
+
+    "server-list" : {
+      "date-small-table-label": "Fecha",
+      "date-info": "Última vez en la que usó este servidor.",
+      "country-small-table-label": "País",
+      "country-info": "País donde se encuentra el servidor.",
+      "name-small-table-label": "Nombre",
+      "location-small-table-label": "Ubicación",
+      "public-key-small-table-label": "Lp",
+      "public-key-info": "Llave pública del servidor.",
+      "congestion-rating-small-table-label": "Calificación de congestión",
+      "congestion-rating-info": "Calificación del servidor relacionada con lo congestionado que suele estar.",
+      "congestion-small-table-label": "Congestión",
+      "congestion-info": "Congestión actual del servidor.",
+      "latency-rating-small-table-label": "Calificación de latencia",
+      "latency-rating-info": "Calificación del servidor relacionada con la latencia que suele tener.",
+      "latency-small-table-label": "Latencia",
+      "latency-info": "Latencia actual del servidor.",
+      "hops-small-table-label": "Saltos",
+      "hops-info": "Cuántos saltos se necesitan para conectarse con el servidor.",
+      "note-small-table-label": "Nota",
+      "note-info": "Nota acerca del servidor.",
+      "gold-rating-info": "Oro",
+      "silver-rating-info": "Plata",
+      "bronze-rating-info": "Bronce",
+      "notes-info": "Nota personalizada: {{ custom }} - Nota original: {{ original }}",
+      "empty-discovery": "Actualmente no hay servidores VPN para mostrar. Por favor, inténtelo de nuevo más tarde.",
+      "empty-history": "No hay historial que mostrar.",
+      "empty-favorites": "No hay servidores favoritos para mostrar.",
+      "empty-blocked": "No hay servidores bloqueados para mostrar.",
+      "empty-with-filter": "Ningún servidor VPN coincide con los criterios de filtrado seleccionados.",
+      "add-manually-info": "Agregar el servidor manualmente.",
+      "current-filters": "Filtros actuales (presione para eliminar)",
+      "none": "Ninguno",
+      "unknown": "Desconocido",
+
+      "tabs": {
+        "public": "Públicos",
+        "history": "Historial",
+        "favorites": "Favoritos",
+        "blocked": "Bloqueados"
+      },
+
+      "add-server-dialog": {
+        "title": "Ingresar manualmente",
+        "pk-label": "Llave pública del servidor",
+        "password-label": "Contraseña del servidor (si tiene)",
+        "name-label": "Nombre del servidor (opcional)",
+        "note-label": "Nota personal (opcional)",
+        "pk-length-error": "La llave pública debe tener 66 caracteres.",
+        "pk-chars-error": "La llave pública sólo debe contener caracteres hexadecimales.",
+        "use-server-button": "Usar servidor"
+      },
+
+      "password-dialog": {
+        "title": "Introducir Contraseña",
+        "password-if-any-label": "Contraseña del servidor (si tiene)",
+        "password-label": "Contraseña del servidor",
+        "continue-button": "Continuar"
+      },
+
+      "filter-dialog": {
+        "country": "El país debe ser",
+        "name": "El nombre debe contener",
+        "location": "La ubicación debe contener",
+        "public-key": "La llave pública debe contener",
+        "congestion-rating": "La calificación de congestión debe ser",
+        "latency-rating": "La calificación de latencia debe ser",
+  
+        "rating-options": {
+          "any": "Cualquiera",
+          "gold": "Oro",
+          "silver": "Plata",
+          "bronze": "Bronce"
+        },
+
+        "country-options": {
+          "any": "Cualquiera"
+        }
+      }
+    },
+
+    "settings-page": {
+      "setting-small-table-label": "Ajuste",
+      "value-small-table-label": "Valor",
+      "killswitch": "Killswitch",
+      "killswitch-info": "Cuando está activo, todas las conexiones de red se desactivarán si la aplicación se está ejecutando pero la protección VPN es interrumpida (por errores temporales o cualquier otro problema). Esto evita fugas de datos.",
+      "get-ip": "Obtener información de IP",
+      "get-ip-info": "Cuando está activa, la aplicación utilizará servicios externos para obtener información sobre la IP actual.",
+      "data-units": "Unidades de datos",
+      "data-units-info": "Permite seleccionar las unidades que se utilizarán para mostrar las estadísticas de transmisión de datos.",
+      "minimum-hops": "Saltos mínimos",
+      "minimum-hops-info": "Permite configurar la cantidad mínima de saltos que la conexión deberá realizar a través de otros visores de Skywire antes de alcanzar el destino final.",
+      "dns": "Servidor DNS personalizado",
+      "dns-info": "Permite usar un servidor DNS personalizado, lo que podría mejorar la privacidad y prevenir que algunos sitios sean bloqueados por el servidor DNS por defecto de su proveedor.",
+      "setting-none": "Ninguno",
+      "setting-on": "Encendido",
+      "setting-off": "Apagado",
+      "working-warning": "El sistema está ocupado. Por favor, espere a que finalice la operación anterior.",
+      "change-while-connected-confirmation": "La protección VPN se interrumpirá mientras se realiza el cambio. ¿Desea continuar?",
+
+      "data-units-modal": {
+        "title": "Unidades de Datos",
+        "only-bits": "Bits para todas las estadísticas",
+        "only-bytes": "Bytes para todas las estadísticas",
+        "bits-speed-and-bytes-volume": "Bits para velocidad y bytes para volumen (predeterminado)"
+      }
+    },
+
+    "dns-config": {
+      "title": "Servidor DNS personalizado",
+      "ip": "Dirección IP del servidor DNS personalizado",
+      "save-config-button": "Guardar configuración",
+      "done": "Cambios guardados."
+    }
+  }
+}
