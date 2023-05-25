@@ -442,14 +442,14 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
   private loadData(checkSavedData: boolean) {
     if (this.currentList === Lists.Public) {
       // Use saved data or get from the server. If there is no saved data, savedData is null.
-      let savedData = checkSavedData ? this.getLocalValue(this.persistentServerDataResponseKey) : null;
+      const savedData = checkSavedData ? this.getLocalValue(this.persistentServerDataResponseKey) : null;
       let nextOperation: Observable<any> = this.vpnClientDiscoveryService.getServers();
       if (savedData) {
         nextOperation = of(JSON.parse(savedData.value));
       }
 
       // Get the vpn servers from the discovery service.
-      this.dataSubscription = this.vpnClientDiscoveryService.getServers().subscribe(response => {
+      this.dataSubscription = nextOperation.subscribe(response => {
         if (!savedData) {
           this.saveLocalValue(this.persistentServerDataResponseKey, JSON.stringify(response));
         }
