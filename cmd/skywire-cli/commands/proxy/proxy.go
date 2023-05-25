@@ -54,7 +54,7 @@ var startCmd = &cobra.Command{
 		err := pubkey.Set(pk)
 		if err != nil {
 			if len(args) > 0 {
-				err := pubkey.Set(args[1])
+				err := pubkey.Set(args[0])
 				if err != nil {
 					internal.PrintFatalError(cmd.Flags(), err)
 				}
@@ -250,7 +250,11 @@ func directQuerySD(cmdFlags *pflag.FlagSet) (s []servicedisc.Service) {
 	if err != nil {
 		internal.PrintFatalError(cmdFlags, fmt.Errorf("error fetching servers from service discovery: %w", err))
 	}
-	defer resp.Body.Close() //nolint:errcheck
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			internal.PrintError(cmdFlags, fmt.Errorf("error closing http response body: %w", err))
+		}
+	}()
 	// Decode JSON response into struct
 	err = json.NewDecoder(resp.Body).Decode(&s)
 	if err != nil {

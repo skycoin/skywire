@@ -18,7 +18,7 @@ func GetIPTablesForwardPolicy() (string, error) {
 }
 
 // SetIPTablesForwardPolicy sets `policy` for iptables `forward` chain.
-func SetIPTablesForwardPolicy(policy string) error {
+func SetIPTablesForwardPolicy(policy string) error { //nolint:all
 	return errServerMethodsNotSupported
 }
 
