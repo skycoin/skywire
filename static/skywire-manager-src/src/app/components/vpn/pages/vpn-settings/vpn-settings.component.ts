@@ -14,6 +14,7 @@ import { SelectableOption, SelectOptionComponent } from 'src/app/components/layo
 import { TopBarComponent } from 'src/app/components/layout/top-bar/top-bar.component';
 import { RouterConfigComponent, RouterConfigParams } from 'src/app/components/pages/node/node-info/node-info-content/router-config/router-config.component';
 import { VpnDnsConfigComponent, VpnDnsConfigParams } from '../../layout/vpn-dns-config/vpn-dns-config.component';
+import { PageBaseComponent } from 'src/app/utils/page-base';
 
 /**
  * Options that VpnSettingsComponent might be changing asynchronously.
@@ -31,7 +32,7 @@ enum WorkingOptions {
   templateUrl: './vpn-settings.component.html',
   styleUrls: ['./vpn-settings.component.scss'],
 })
-export class VpnSettingsComponent implements OnDestroy {
+export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy {
   @ViewChild('topBarLoading') topBarLoading: TopBarComponent;
   @ViewChild('topBarLoaded') topBarLoaded: TopBarComponent;
 
@@ -65,6 +66,8 @@ export class VpnSettingsComponent implements OnDestroy {
     private dialog: MatDialog,
     route: ActivatedRoute,
   ) {
+    super();
+    
     this.navigationsSubscription = route.paramMap.subscribe(params => {
       // Get the PK of the current local visor.
       if (params.has('key')) {
