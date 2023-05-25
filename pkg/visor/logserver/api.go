@@ -55,15 +55,20 @@ func New(log *logging.Logger, tpLogPath, localPath, customPath string, whitelist
 	}
 	// note that the survey FILE only exists / is generated if the reward address is set
 	authRoute.StaticFile("/"+visorconfig.NodeInfo, filepath.Join(localPath, visorconfig.NodeInfo))
+	// serve the file with the reward address - only exists if the reward address is set
+	authRoute.StaticFile("/"+visorconfig.RewardFile, filepath.Join(localPath, visorconfig.RewardFile))
+
+	//Derive the surveyName from visorconfig.NodeInfo by dropping the ".json" suffix
+	surveyName := strings.TrimSuffix(string(visorconfig.NodeInfo), ".json")
 	// This survey endpoint generates the survey as a response
-	authRoute.GET("/"+visorconfig.SurveyName, func(c *gin.Context) {
+	authRoute.GET("/"+surveyName, func(c *gin.Context) {
 		var rewardAddress string
 		var cAddr coincipher.Address
 		//check for reward address
 		rewardAddressBytes, err := os.ReadFile(localPath + "/" + visorconfig.RewardFile) //nolint
 		if err == nil {
-			//remove any newline from rewardAddress string
-			rewardAddress = strings.TrimSuffix(string(rewardAddressBytes), "\n")
+			//remove any newlines & whitespace from rewardAddress string
+			rewardAddress = strings.TrimSpace(string(rewardAddressBytes))
 			//validate the skycoin address
 			cAddr, err = coincipher.DecodeBase58Address(rewardAddress)
 			if err != nil {

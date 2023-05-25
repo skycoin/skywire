@@ -142,9 +142,6 @@ var (
 	// NodeInfo is the name of the survey file
 	NodeInfo = skyenv.NodeInfo
 
-	// SurveyName is the name of the system survey (file) without the extension
-	SurveyName = skyenv.SurveyName
-
 	// RewardFile is the name of the file containing skycoin reward address
 	RewardFile = skyenv.RewardFile
 )
