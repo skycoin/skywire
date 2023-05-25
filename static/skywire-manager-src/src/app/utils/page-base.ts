@@ -25,11 +25,13 @@ export class LocalValueData {
   styles: [],
 })
 export class PageBaseComponent implements OnInit {
+  // Property to make mandatory calling super.ngOnInit on child classes.
+  private static mustCallNgOnInitSuper = Symbol('You must call super.ngOnInit.');
+
+
   // Key for saving the scroll position.
   private readonly persistentScrollPosKey = 'scroll-pos';
 
-  // Property to make mandatory calling super.ngOnInit on child classes.
-  private static mustCallNgOnInitSuper = Symbol('You must call super.ngOnInit.');
   ngOnInit() {
     // Restore the scroll position. If there is no saved value, go to the top.
     let lastScrollPos = this.getLocalValue(this.persistentScrollPosKey);
@@ -72,6 +74,7 @@ export class PageBaseComponent implements OnInit {
     const response = new LocalValueData();
     response.value = window.history.state[key];
     response.date = window.history.state[key + '_time'];
+
     return response;
   }
 }
