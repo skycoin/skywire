@@ -87,14 +87,7 @@ func New(log *logging.Logger, tpLogPath, localPath, customPath string, whitelist
 		if err != nil {
 			log.WithError(err).Error("Could not marshal system survey to json.")
 		}
-
-		c.Header("Content-Type", "application/json")
-		c.Writer.WriteHeader(http.StatusOK)
-
-		_, err = c.Writer.Write([]byte(s))
-		if err != nil {
-			httputil.GetLogger(c.Request).WithError(err).Errorf("failed to write json response")
-		}
+		c.JSON(http.StatusOK, gin.H{survey})
 	})
 
 	r.GET("/health", func(c *gin.Context) {
