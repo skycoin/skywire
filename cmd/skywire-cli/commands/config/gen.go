@@ -665,7 +665,6 @@ var genConfigCmd = &cobra.Command{
 		// set survey collection whitelist - will include by default hypervisors & dmsgpty whitelisted keys
 		conf.SurveyWhitelist = services.SurveyWhitelist
 		// set package-specific config paths
-		log.Info("Using package installation path /opt/skywire")
 		if isPkgEnv {
 			pkgConfig := visorconfig.PackageConfig()
 			conf.LocalPath = pkgConfig.LocalPath
