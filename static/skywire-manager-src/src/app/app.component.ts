@@ -48,13 +48,17 @@ export class AppComponent {
     // Close the snackbar when opening a modal window.
     dialog.afterOpened.subscribe(() => snackbarService.closeCurrent());
 
+    // Prevent automatic scroll retoration during navigation.
+    if (history.scrollRestoration) {
+      history.scrollRestoration = 'manual';
+    }
+
     // Scroll to the top after navigating.
     // When navigating, scroll to the top and close the snackbar and all modal windows.
     router.events.subscribe(e => {
       if (e instanceof NavigationEnd) {
         snackbarService.closeCurrent();
         dialog.closeAll();
-        window.scrollTo(0, 0);
       }
     });
 
