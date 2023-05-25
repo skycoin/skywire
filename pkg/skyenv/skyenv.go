@@ -108,7 +108,7 @@ const (
 	RewardFile string = "reward.txt"
 
 	// NodeInfo is the name of the survey file
-	NodeInfo   string = "node-info.json"
+	NodeInfo string = "node-info.json"
 )
 
 // SkywireConfig returns the full path to the package config
