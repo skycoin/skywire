@@ -155,7 +155,7 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
    */
   private startGettingData(checkSavedData: boolean) {
     // Use saved data or get from the server. If there is no saved data, savedData is null.
-    let savedData = checkSavedData ? this.getLocalValue(this.persistentServerDataResponseKey) : null;
+    const savedData = checkSavedData ? this.getLocalValue(this.persistentServerDataResponseKey) : null;
     let nextOperation: Observable<any> = this.vpnClientService.backendState;
     if (savedData) {
       nextOperation = of(JSON.parse(savedData.value));
@@ -167,7 +167,7 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
       }
 
       if (data && data.serviceState !== VpnServiceStates.PerformingInitialCheck) {
-        const firstEventExecution = !!!this.backendState;
+        const firstEventExecution = !!!this.backendState; // eslint-disable-line no-extra-boolean-cast
         this.backendState = data;
 
         if (!firstEventExecution) {
@@ -537,7 +537,7 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
     this.loadingCurrentIp = true;
 
     // Use saved data or get from the server. If there is no saved data, savedData is null.
-    let savedData = checkSavedData ? this.getLocalValue(this.persistentIpResponseKey) : null;
+    const savedData = checkSavedData ? this.getLocalValue(this.persistentIpResponseKey) : null;
     let nextOperation: Observable<any> = this.vpnClientService.getIpData();
     if (savedData) {
       nextOperation = of(JSON.parse(savedData.value));

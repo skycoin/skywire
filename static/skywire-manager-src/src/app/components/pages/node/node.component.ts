@@ -24,9 +24,6 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
   styleUrls: ['./node.component.scss']
 })
 export class NodeComponent extends PageBaseComponent implements OnInit, OnDestroy {
-  // Keys for persisting the server data, to be able to restore the state after navigation.
-  private readonly persistentDataResponseKey = 'serv-dat-response';
-
   /**
    * Mantains a reference to the currently active instance of this page.
    */
@@ -43,6 +40,10 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
    * Lastest node traffic data downloaded by the currently active instance of this page.
    */
   private static trafficDataSubject: ReplaySubject<TrafficData>;
+
+
+  // Keys for persisting the server data, to be able to restore the state after navigation.
+  private readonly persistentDataResponseKey = 'serv-dat-response';
 
   node: Node;
   trafficData: TrafficData;
@@ -288,7 +289,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
    */
   private startGettingData(checkSavedData: boolean) {
     // Use saved data or get from the server. If there is no saved data, savedData is null.
-    let savedData = checkSavedData ? this.getLocalValue(this.persistentDataResponseKey) : null;
+    const savedData = checkSavedData ? this.getLocalValue(this.persistentDataResponseKey) : null;
     let nextOperation: Observable<any> = this.singleNodeDataService.startRequestingData(NodeComponent.currentNodeKey);
     if (savedData) {
       nextOperation = of(JSON.parse(savedData.value));

@@ -82,7 +82,7 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
    */
   private checkAuth(delayMilliseconds: number, checkSavedData: boolean) {
     // Use saved data or get from the server. If there is no saved data, savedData is null.
-    let savedData = checkSavedData ? this.getLocalValue(this.persistentAuthDataResponseKey) : null;
+    const savedData = checkSavedData ? this.getLocalValue(this.persistentAuthDataResponseKey) : null;
     let nextOperation: Observable<any> = this.authService.checkLogin();
     if (savedData) {
       nextOperation = of(JSON.parse(savedData.value));
