@@ -8,6 +8,8 @@ We have transitioned to a new system with daily reward distribution
 * The rules in this article may change at any time, depending on if there are problems
 * We will attempt to address any issues reported via [@skywire](https://t.me/skywire) Telegram channel
 
+The required minimum Skywire version will be incremented periodically.
+
 #### Table of Contents
 * [Introduction](#introduction)
 * [Rules & Requirements](#rules--requirements)
@@ -65,6 +67,10 @@ skywire-cli -v
 skywire-visor -v
 ```
 
+**The new reward system requires Skywire v1.3.8**
+Requirement established 5-25-2023
+Rewards Cutoff date for updating 7-1-2023
+
 ### Deployment
 
 The deployment your visor is running on can be verified by comparing the services configured in the visor's .json config against [conf.skywire.skycoin.com](https://conf.skywire.skycoin.com)
@@ -74,7 +80,7 @@ It will be automatically updated any time a config is generated or regenerated.
 
 Daily uptime statistics for all visors may be accessed via the
 - [uptime tracker](https://ut.skywire.skycoin.com/uptimes?v=v2)
-or using `skywire-cli`
+or using skywire-cli
 - `skywire-cli ut -n0 -k <public-key>`
 
 ### Skycoin Address
@@ -102,7 +108,7 @@ $ skywire-cli visor info
 .:: Visor Summary ::.
 Public key: "03a3f9a0dd913bacd277aa35f2e0c36796812d3f26aa3911a07929e51122bd57bd"
 Symmetric NAT: false
-IP: 192.168.2.118
+IP: 192.168.0.2
 DMSG Server: "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13"
 Ping: "437.930335ms"
 Visor Version: unknown
@@ -110,42 +116,31 @@ Skybian Version:
 Uptime Tracker: healthy
 Time Online: 50981.176843 seconds
 Build Tag:
-
 ```
+**If the public key of the DMSG Server is all zeros the visor is not connectedto any DMSG server**
+
+If the situaton persists, please reach out to us on telegram [@skywire](https://t.me/skywire)
+
+### Verifying other requirements
+
+If the visor is not able to meet the other requirements, that is usually not the fault of the user nor is it something the user is expected to troubleshoot at this time.
 
 
-## Rewards
+## Reward System overview
 
-**The new reward system requires Skywire v1.3.8**
+The skycoin reward address may be set for each visor using skywire-cli or for all visors connected to a hypervisor from the hypervisor UI
 
-Requirement established 2-11-2023
+The skycoin reward address is in a text file contained in the "local" folder (local_path in the skywire config file) i.e `local/reward.txt`.
 
-Rewards Cutoff date for updating 4-1-2023
+The skycoin reward address is also included with the [system survey](https://github.com/skycoin/skywire/tree/develop/cmd/skywire-cli#survey) and served, along with transport logs, via dmsghttp.
 
-The required minimal Skywire version will be incremented periodically.
+The system survey is fetched hourly with `skywire-cli log`; along with transport bandwidth logs.
 
-In the event of changes to the survey decryption key, it will be required to update in order to change the reward address
+Once collected from the nodes, the surveys for those visors which met uptime are checked to verify hardware and other requirements, etc.
 
-The rewards in the new system will be **paid daily or weekly**
+The system survey is only made available to those keys which are whitelisted for survey collection, but is additionally available to any hypervisor or dmsgpty_whitelist keys set inthe config for a given visor.
 
-### How it works
-
-The skycoin reward address is set per the visor via the cli or the hypervisor, in a text file contained in the "local" folder (local_path in the skywire config file). This address is written into the [system survey](https://github.com/skycoin/skywire/tree/develop/cmd/skywire-cli#survey) and served, along with transport logs, via dmsghttp.
-
-This survey will be fetched on a daily basis with [`dmsgget`](https://github.com/skycoin/dmsg/tree/develop/cmd/dmsgget), along with the transport logs, and checked to verify hardware and other requirements, etc. The transport logs from both ends of any given transport are compared and verified.
-
-The system survey is encrypted to the public key of the package maintainer, this key is present in the skywire github repository and is included with any future release
-
-### Reward tiers
-
-There are three tiers for rewards.
-
-* **TIER 3** The lowest tier is distributed to all nodes which meet the basic requirements.
-
-Other tiers are based on bandwidth which was handled by the visor. Meaning the logs from each end of the transport were fetched and agree
-
-* **TIER 2** If the visor processed **any** verifiable bandwidth, the visor will have earned the rewards of the second tier plus those of the lowest tier.
-* **TIER 1** If the visor processed above the average amount of bandwidth, it will receive first tier rewards, in addition to the lowest tier.
+The public keys which require to be whitelisted in order to collect the surveys, for the purpose of reward eligibility verification, should populate in the visor's config automatically when the config is generated with visors of at least version 1.3.8.
 
 ## Hardware
 
