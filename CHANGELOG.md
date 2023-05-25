@@ -8,6 +8,8 @@ updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
 ## 1.3.8
 
+-   Change Logserver to use c.JSON method ; remove variable for endpoint name '/node-info'  [#1582](https://github.com/skycoin/skywire/pull/1582)
+-   update changelog  [#1580](https://github.com/skycoin/skywire/pull/1580)
 -   Add Config gen flags for survey whitelist, transport and route setup pks [#1578](https://github.com/skycoin/skywire/pull/1578)
 -   Fix query of the conf service [#1578](https://github.com/skycoin/skywire/pull/1578)
 -   Revise config gen logic / structure [#1578](https://github.com/skycoin/skywire/pull/1578)
