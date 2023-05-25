@@ -3,7 +3,6 @@ package visorconfig
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -13,11 +12,10 @@ import (
 )
 
 // Fetch fetches the service URLs & ip:ports from the config service endpoint
-func Fetch(mLog *logging.MasterLogger, serviceConfURL string, stdout bool) (services *Services) {
+func Fetch(mLog *logging.MasterLogger, serviceConf string, stdout bool) (services *Services) {
 
-	serviceConf := fmt.Sprint("http://", serviceConfURL)
 	client := http.Client{
-		Timeout: time.Second * 2, // Timeout after 2 seconds
+		Timeout: time.Second * 15, // Timeout after 15 seconds
 	}
 	//create the http request
 	req, err := http.NewRequest(http.MethodGet, serviceConf, nil)
@@ -60,10 +58,11 @@ type Services struct {
 	TransportDiscovery string          `json:"transport_discovery"`
 	AddressResolver    string          `json:"address_resolver"`
 	RouteFinder        string          `json:"route_finder"`
-	SetupNodes         []cipher.PubKey `json:"setup_nodes"`
+	RouteSetupNodes    []cipher.PubKey `json:"route_setup_nodes"`
+	TransportSetupPKs  []cipher.PubKey `json:"transport_setup_nodes"`
 	UptimeTracker      string          `json:"uptime_tracker"`
 	ServiceDiscovery   string          `json:"service_discovery"`
 	StunServers        []string        `json:"stun_servers"`
 	DNSServer          string          `json:"dns_server"`
-	SurveyWhitelist    []string        `json:"survey_whitelist"`
+	SurveyWhitelist    []cipher.PubKey `json:"survey_whitelist"`
 }

@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 
 import { AuthService, AuthStates } from '../../../services/auth.service';
+import { PageBaseComponent } from 'src/app/utils/page-base';
 
 /**
  * Initial utility page for redirecting the user to the real appropriate initial page.
@@ -14,13 +15,15 @@ import { AuthService, AuthStates } from '../../../services/auth.service';
   templateUrl: './start.component.html',
   styleUrls: ['./start.component.scss']
 })
-export class StartComponent implements OnInit, OnDestroy {
+export class StartComponent extends PageBaseComponent implements OnInit, OnDestroy {
   private verificationSubscription: Subscription;
 
   constructor(
     private authService: AuthService,
     private router: Router,
-  ) { }
+  ) {
+    super();
+  }
 
   ngOnInit() {
     // Check if the user is unauthorized.
@@ -35,6 +38,8 @@ export class StartComponent implements OnInit, OnDestroy {
       // comprobations will be performed in that page.
       this.router.navigate(['nodes'], { replaceUrl: true });
     });
+
+    return super.ngOnInit();
   }
 
   ngOnDestroy() {

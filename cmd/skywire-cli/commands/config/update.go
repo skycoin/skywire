@@ -119,8 +119,8 @@ var updateCmd = &cobra.Command{
 				AddressResolver: services.AddressResolver,    //utilenv.DefaultAddressResolverAddr,
 			}
 			conf.Routing = &visorconfig.Routing{
-				RouteFinder: services.RouteFinder, //utilenv.DefaultRouteFinderAddr,
-				SetupNodes:  services.SetupNodes,  //[]cipher.PubKey{utilenv.MustPK(utilenv.DefaultSetupPK)},
+				RouteFinder:     services.RouteFinder,     //utilenv.DefaultRouteFinderAddr,
+				RouteSetupNodes: services.RouteSetupNodes, //[]cipher.PubKey{utilenv.MustPK(utilenv.DefaultSetupPK)},
 			}
 			conf.Launcher = &visorconfig.Launcher{
 				ServiceDisc: services.ServiceDiscovery, //utilenv.DefaultServiceDiscAddr,
@@ -289,7 +289,7 @@ var skySocksClientUpdateCmd = &cobra.Command{
 		if addSkysocksClientSrv != "" {
 			keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(addSkysocksClientSrv))
 			if err != nil {
-				logger.WithError(err).Fatalf("Failed to parse hypervisor private key: %s.", addSkysocksClientSrv)
+				logger.WithError(err).Fatalf("Failed to parse public key: %s.", addSkysocksClientSrv)
 			}
 			changeAppsConfig(conf, "skysocks-client", "--srv", keyParsed.Hex())
 		}

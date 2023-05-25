@@ -20,7 +20,7 @@ var (
 // Parse parses the visor config from a given reader.
 // The config version is checked against the visor's version and if not the same we send back the
 // error as well as compat(compatibility) as false.
-func Parse(log *logging.Logger, r io.Reader, confPath string, visorBuildInfo *buildinfo.Info) (conf *V1, compat bool, err error) {
+func Parse(log *logging.Logger, r io.Reader, confPath string, visorBuildInfo *buildinfo.Info) (conf *V1, compat bool, err error) { //nolint:all
 
 	conf, err = Reader(r, confPath)
 	if err != nil {
