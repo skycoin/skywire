@@ -66,7 +66,7 @@ func init() {
 
 	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", utilenv.ServiceConfAddr, "services conf url\n\r")
 	gHiddenFlags = append(gHiddenFlags, "url")
-	genConfigCmd.Flags().StringVar(&logLevel, "loglvl", "", "[ debug | warn | error | fatal | panic | trace ]\033[0m")
+	genConfigCmd.Flags().StringVar(&logLevel, "loglvl", "info", "[ debug | warn | error | fatal | panic | trace | info ]\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "loglvl")
 	genConfigCmd.Flags().BoolVarP(&isBestProtocol, "bestproto", "b", false, "best protocol (dmsg | direct) based on location\033[0m") //this will also disable public autoconnect based on location
 	genConfigCmd.Flags().BoolVarP(&isDisableAuth, "noauth", "c", false, "disable authentication for hypervisor UI\033[0m")
@@ -396,10 +396,10 @@ var genConfigCmd = &cobra.Command{
 		if isDmsgHTTP {
 			dmsghttpConfig := visorconfig.DMSGHTTPName
 			// TODO
-			//if isUsr {
+			//if isUsrEnv {
 			//	dmsghttpConfig = homepath + "/" + visorconfig.DMSGHTTPName
 			//}
-			if isPkg {
+			if isPkgEnv {
 				dmsghttpConfig = visorconfig.SkywirePath + "/" + visorconfig.DMSGHTTPName
 			}
 
@@ -665,7 +665,7 @@ var genConfigCmd = &cobra.Command{
 		// set survey collection whitelist - will include by default hypervisors & dmsgpty whitelisted keys
 		conf.SurveyWhitelist = services.SurveyWhitelist
 		// set package-specific config paths
-		if isPkg {
+		if isPkgEnv {
 			pkgConfig := visorconfig.PackageConfig()
 			conf.LocalPath = pkgConfig.LocalPath
 			conf.DmsgHTTPServerPath = pkgConfig.LocalPath + "/" + visorconfig.Custom
