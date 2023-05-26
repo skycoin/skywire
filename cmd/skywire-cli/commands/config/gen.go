@@ -39,7 +39,7 @@ var checkPKCmd = &cobra.Command{
 		if len(args) == 0 {
 			return
 		}
-		var checkKey cipher.PubKey
+	surveyWhitelistPKser.PubKey
 		err := checkKey.Set(args[0])
 		if err != nil {
 			logger.WithError(err).Fatal("invalid public key ") //nolint
@@ -81,12 +81,12 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "disableapps")
 	genConfigCmd.Flags().BoolVarP(&isHypervisor, "ishv", "i", false, "local hypervisor configuration\033[0m")
 	genConfigCmd.Flags().StringVarP(&hypervisorPKs, "hvpks", "j", "", "list of public keys to add as hypervisor\033[0m")
-	genConfigCmd.Flags().StringVar(&dmsgptywlPKs, "dmsgpty", "", "add dmsgpty whitelist PKs")
-	genConfigCmd.Flags().StringVar(&surveywhitelistPks, "survey", "", "add survey whitelist PKs")
+	genConfigCmd.Flags().StringVar(&dmsgptyWlPKs, "dmsgpty", "", "add dmsgpty whitelist PKs")
+	genConfigCmd.Flags().StringVar(&surveyWhitelistPKs, "survey", "", "add survey whitelist PKs")
 	gHiddenFlags = append(gHiddenFlags, "survey")
-	genConfigCmd.Flags().StringVar(&routesetupnodePks, "routesetup", "", "add route setup node PKs")
+	genConfigCmd.Flags().StringVar(&routeSetupNodes, "routesetup", "", "add route setup node PKs")
 	gHiddenFlags = append(gHiddenFlags, "routesetup")
-	genConfigCmd.Flags().StringVar(&transportsetupPks, "tpsetup", "", "add transport setup PKs")
+	genConfigCmd.Flags().StringVar(&transportSetupPKs, "tpsetup", "", "add transport setup PKs")
 	gHiddenFlags = append(gHiddenFlags, "tpsetup")
 	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", visorconfig.OS, "(linux / mac / win) paths\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "os")
@@ -351,7 +351,7 @@ var genConfigCmd = &cobra.Command{
 						hypervisorPKs = hypervisorPKs + "," + fmt.Sprintf("\t%s\n", j)
 					}
 					for _, j := range oldConf.Dmsgpty.Whitelist {
-						dmsgptywlPKs = dmsgptywlPKs + "," + fmt.Sprintf("\t%s\n", j)
+						dmsgptyWlPKs = dmsgptyWlPKs + "," + fmt.Sprintf("\t%s\n", j)
 					}
 				}
 			}
@@ -419,21 +419,21 @@ var genConfigCmd = &cobra.Command{
 		//fall back on  defaults
 		var routeSetupPKs cipher.PubKeys
 		var tpSetupPKs cipher.PubKeys
-		var surveyWhitelistPKs cipher.PubKeys
+		var surveyWlPKs cipher.PubKeys
 		// If nothing was fetched
 		if services.SurveyWhitelist == nil {
 		  // By default
 		  if !noDefaults {
 		    // set the hardcoded defaults from skywire-utilities for the service public keys
-		    if err := surveyWhitelistPKs.Set(utilenv.SurveyWhitelistPKs); err != nil {
+		    if err := surveyWlPKs.Set(utilenv.SurveyWhitelistPKs); err != nil {
 		      log.Fatalf("Failed to unmarshal survey whitelist public keys: %v", err)
 		    }
 		  }
 		}
 		//if the flag is not empty
-		if surveywhitelistPks != "" {
+		if surveyWhitelistPKs != "" {
 		  // validate public keys set via flag / fail explicitly on errors
-		  if err := surveyWhitelistPKs.Set(surveywhitelistPks); err != nil {
+		  if err := surveyWlPKs.Set(surveyWhitelistPKs); err != nil {
 		    log.Fatalf("bad key set for survey whitelist flag: %v", err)
 		  }
 		}
@@ -467,8 +467,8 @@ var genConfigCmd = &cobra.Command{
 			if services.DNSServer == "" {
 				services.DNSServer = utilenv.DNSServer
 			}
-			if routesetupnodePks != "" {
-				if err := routeSetupPKs.Set(routesetupnodePks); err != nil {
+			if RouteSetupNodes != "" {
+				if err := routeSetupPKs.Set(RouteSetupNodes); err != nil {
 					log.Fatalf("bad key set for route setup node flag: %v", err)
 				}
 			}
@@ -480,8 +480,8 @@ var genConfigCmd = &cobra.Command{
 				}
 			}
 			services.RouteSetupNodes = append(services.RouteSetupNodes, routeSetupPKs...)
-			if transportsetupPks != "" {
-				if err := tpSetupPKs.Set(transportsetupPks); err != nil {
+			if TransportSetupPKs != "" {
+				if err := tpSetupPKs.Set(TransportSetupPKs); err != nil {
 					log.Fatalf("bad key set for transport setup node flag: %v", err)
 				}
 			}
@@ -518,8 +518,8 @@ var genConfigCmd = &cobra.Command{
 			if services.DNSServer == "" {
 				services.DNSServer = utilenv.DNSServer
 			}
-			if routesetupnodePks != "" {
-				if err := routeSetupPKs.Set(routesetupnodePks); err != nil {
+			if routeSetupNodes != "" {
+				if err := routeSetupPKs.Set(routeSetupNodes); err != nil {
 					log.Fatalf("bad key set for route setup node flag: %v", err)
 				}
 			}
@@ -529,8 +529,8 @@ var genConfigCmd = &cobra.Command{
 				}
 			}
 			services.RouteSetupNodes = append(services.RouteSetupNodes, routeSetupPKs...)
-			if transportsetupPks != "" {
-				if err := tpSetupPKs.Set(transportsetupPks); err != nil {
+			if transportSetupPKs != "" {
+				if err := tpSetupPKs.Set(transportSetupPKs); err != nil {
 					log.Fatalf("bad key set for transport setup node flag: %v", err)
 				}
 			}
@@ -650,8 +650,8 @@ var genConfigCmd = &cobra.Command{
 
 		// Manipulate dmsgpty whitelist PKs
 		conf.Dmsgpty.Whitelist = make([]cipher.PubKey, 0)
-		if dmsgptywlPKs != "" {
-			keys := strings.Split(dmsgptywlPKs, ",")
+		if dmsgptyWlPKs != "" {
+			keys := strings.Split(dmsgptyWlPKs, ",")
 			for _, key := range keys {
 				if key != "" {
 					keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(key))
