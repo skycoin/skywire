@@ -86,7 +86,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "survey")
 	genConfigCmd.Flags().StringVar(&routesetupnodePks, "routesetup", "", "add route setup node PKs")
 	gHiddenFlags = append(gHiddenFlags, "routesetup")
-	genConfigCmd.Flags().StringVar(&transportsetupnodePks, "tpsetup", "", "add transport setup node PKs")
+	genConfigCmd.Flags().StringVar(&transportsetupPks, "tpsetup", "", "add transport setup PKs")
 	gHiddenFlags = append(gHiddenFlags, "tpsetup")
 	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", visorconfig.OS, "(linux / mac / win) paths\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "os")
@@ -420,21 +420,25 @@ var genConfigCmd = &cobra.Command{
 		var routeSetupPKs cipher.PubKeys
 		var tpSetupPKs cipher.PubKeys
 		var surveyWhitelistPKs cipher.PubKeys
+		// If nothing was fetched
 		if services.SurveyWhitelist == nil {
-			if surveywhitelistPks != "" {
-				if err := surveyWhitelistPKs.Set(surveywhitelistPks); err != nil {
-					log.Fatalf("bad key set for survey whitelist flag: %v", err)
-				}
-				services.SurveyWhitelist = surveyWhitelistPKs
-				surveyWhitelistPKs = cipher.PubKeys{}
-			}
-			if !noDefaults {
-				if err := surveyWhitelistPKs.Set(utilenv.SurveyWhitelistPKs); err != nil {
-					log.Fatalf("Failed to unmarshal survey whitelist public keys: %v", err)
-				}
-				services.SurveyWhitelist = append(services.SurveyWhitelist, surveyWhitelistPKs...)
-			}
+		  // By default
+		  if !noDefaults {
+		    // set the hardcoded defaults from skywire-utilities for the service public keys
+		    if err := surveyWhitelistPKs.Set(utilenv.SurveyWhitelistPKs); err != nil {
+		      log.Fatalf("Failed to unmarshal survey whitelist public keys: %v", err)
+		    }
+		  }
 		}
+		//if the flag is not empty
+		if surveywhitelistPks != "" {
+		  // validate public keys set via flag / fail explicitly on errors
+		  if err := surveyWhitelistPKs.Set(surveywhitelistPks); err != nil {
+		    log.Fatalf("bad key set for survey whitelist flag: %v", err)
+		  }
+		}
+		services.SurveyWhitelist = append(services.SurveyWhitelist, surveyWhitelistPKs...)
+
 		if !isTestEnv {
 			if services.DmsgDiscovery == "" {
 				services.DmsgDiscovery = utilenv.DmsgDiscAddr
@@ -463,36 +467,32 @@ var genConfigCmd = &cobra.Command{
 			if services.DNSServer == "" {
 				services.DNSServer = utilenv.DNSServer
 			}
-			if services.RouteSetupNodes == nil {
-				if routesetupnodePks != "" {
-					if err := routeSetupPKs.Set(routesetupnodePks); err != nil {
-						log.Fatalf("bad key set for route setup node flag: %v", err)
-					}
-					services.RouteSetupNodes = routeSetupPKs
-					routeSetupPKs = cipher.PubKeys{}
+			if routesetupnodePks != "" {
+				if err := routeSetupPKs.Set(routesetupnodePks); err != nil {
+					log.Fatalf("bad key set for route setup node flag: %v", err)
 				}
+			}
+			if services.RouteSetupNodes == nil {
 				if !noDefaults {
 					if err := routeSetupPKs.Set(utilenv.RouteSetupPKs); err != nil {
 						log.Fatalf("Failed to unmarshal route setup-node public keys: %v", err)
 					}
-					services.RouteSetupNodes = append(services.RouteSetupNodes, routeSetupPKs...)
+				}
+			}
+			services.RouteSetupNodes = append(services.RouteSetupNodes, routeSetupPKs...)
+			if transportsetupPks != "" {
+				if err := tpSetupPKs.Set(transportsetupPks); err != nil {
+					log.Fatalf("bad key set for transport setup node flag: %v", err)
 				}
 			}
 			if services.TransportSetupPKs == nil {
-				if transportsetupnodePks != "" {
-					if err := tpSetupPKs.Set(transportsetupnodePks); err != nil {
-						log.Fatalf("bad key set for transport setup node flag: %v", err)
+				if !noDefaults {
+					if err := tpSetupPKs.Set(utilenv.TPSetupPKs); err != nil {
+						log.Fatalf("Failed to unmarshal transport setup-node public keys: %v", err)
 					}
-					services.TransportSetupPKs = routeSetupPKs
-					routeSetupPKs = cipher.PubKeys{}
 				}
 			}
-			if !noDefaults {
-				if err := tpSetupPKs.Set(utilenv.TPSetupPKs); err != nil {
-					log.Fatalf("Failed to unmarshal transport setup-node public keys: %v", err)
-				}
-				services.TransportSetupPKs = append(services.TransportSetupPKs, tpSetupPKs...)
-			}
+			services.TransportSetupPKs = append(services.TransportSetupPKs, tpSetupPKs...)
 		} else {
 			if services.DmsgDiscovery == "" {
 				services.DmsgDiscovery = utilenv.TestDmsgDiscAddr
@@ -518,30 +518,30 @@ var genConfigCmd = &cobra.Command{
 			if services.DNSServer == "" {
 				services.DNSServer = utilenv.DNSServer
 			}
-			if services.RouteSetupNodes == nil {
-				if routesetupnodePks != "" {
-					if err := routeSetupPKs.Set(routesetupnodePks); err != nil {
-						log.Fatalf("bad key set for route setup node flag: %v", err)
-					}
-					services.RouteSetupNodes = routeSetupPKs
-					routeSetupPKs = cipher.PubKeys{}
+			if routesetupnodePks != "" {
+				if err := routeSetupPKs.Set(routesetupnodePks); err != nil {
+					log.Fatalf("bad key set for route setup node flag: %v", err)
 				}
+			}
+			if services.RouteSetupNodes == nil {
 				if err := routeSetupPKs.Set(utilenv.TestRouteSetupPKs); err != nil {
 					log.Fatalf("Failed to unmarshal route setup-node public keys: %v", err)
 				}
-				services.RouteSetupNodes = append(services.RouteSetupNodes, routeSetupPKs...)
+			}
+			services.RouteSetupNodes = append(services.RouteSetupNodes, routeSetupPKs...)
+			if transportsetupPks != "" {
+				if err := tpSetupPKs.Set(transportsetupPks); err != nil {
+					log.Fatalf("bad key set for transport setup node flag: %v", err)
+				}
 			}
 			if services.TransportSetupPKs == nil {
-				if transportsetupnodePks != "" {
-					if err := tpSetupPKs.Set(transportsetupnodePks); err != nil {
-						log.Fatalf("bad key set for transport setup node flag: %v", err)
+				if !noDefaults {
+					if err := tpSetupPKs.Set(utilenv.TestTPSetupPKs); err != nil {
+						log.Fatalf("Failed to unmarshal transport setup-node public keys: %v", err)
 					}
 				}
-				if err := tpSetupPKs.Set(utilenv.TestTPSetupPKs); err != nil {
-					log.Fatalf("Failed to unmarshal transport setup-node public keys: %v", err)
-				}
-				services.TransportSetupPKs = append(services.TransportSetupPKs, tpSetupPKs...)
 			}
+			services.TransportSetupPKs = append(services.TransportSetupPKs, tpSetupPKs...)
 		}
 
 		conf.Dmsg = &dmsgc.DmsgConfig{
@@ -709,7 +709,6 @@ var genConfigCmd = &cobra.Command{
 				Binary:    visorconfig.SkysocksName,
 				AutoStart: true,
 				Port:      routing.Port(visorconfig.SkysocksPort),
-				Args:      []string{"--srv", visorconfig.SkychatAddr},
 			},
 			{
 				Name:      visorconfig.SkysocksClientName,

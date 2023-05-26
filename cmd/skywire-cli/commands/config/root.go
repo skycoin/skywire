@@ -41,7 +41,7 @@ var (
 	dmsgptywlPKs           string
 	surveywhitelistPks     string
 	routesetupnodePks      string
-	transportsetupnodePks  string
+	transportsetupPks  string
 	isDmsgHTTP             bool
 	isVpnServerEnable      bool
 	isDisableAuth          bool
