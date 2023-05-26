@@ -59,7 +59,7 @@ type Services struct {
 	AddressResolver    string          `json:"address_resolver"`
 	RouteFinder        string          `json:"route_finder"`
 	RouteSetupNodes    []cipher.PubKey `json:"route_setup_nodes"`
-	TransportSetupPKs  []cipher.PubKey `json:"transport_setup_nodes"`
+	TransportSetupPKs  []cipher.PubKey `json:"transport_setup"`
 	UptimeTracker      string          `json:"uptime_tracker"`
 	ServiceDiscovery   string          `json:"service_discovery"`
 	StunServers        []string        `json:"stun_servers"`
