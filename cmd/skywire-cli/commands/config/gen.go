@@ -39,7 +39,7 @@ var checkPKCmd = &cobra.Command{
 		if len(args) == 0 {
 			return
 		}
-	surveyWhitelistPKser.PubKey
+		var checkKey cipher.PubKey
 		err := checkKey.Set(args[0])
 		if err != nil {
 			logger.WithError(err).Fatal("invalid public key ") //nolint
@@ -422,22 +422,22 @@ var genConfigCmd = &cobra.Command{
 		var surveyWlPKs cipher.PubKeys
 		// If nothing was fetched
 		if services.SurveyWhitelist == nil {
-		  // By default
-		  if !noDefaults {
-		    // set the hardcoded defaults from skywire-utilities for the service public keys
-		    if err := surveyWlPKs.Set(utilenv.SurveyWhitelistPKs); err != nil {
-		      log.Fatalf("Failed to unmarshal survey whitelist public keys: %v", err)
-		    }
-		  }
+			// By default
+			if !noDefaults {
+				// set the hardcoded defaults from skywire-utilities for the service public keys
+				if err := surveyWlPKs.Set(utilenv.SurveyWhitelistPKs); err != nil {
+					log.Fatalf("Failed to unmarshal survey whitelist public keys: %v", err)
+				}
+			}
 		}
 		//if the flag is not empty
 		if surveyWhitelistPKs != "" {
-		  // validate public keys set via flag / fail explicitly on errors
-		  if err := surveyWlPKs.Set(surveyWhitelistPKs); err != nil {
-		    log.Fatalf("bad key set for survey whitelist flag: %v", err)
-		  }
+			// validate public keys set via flag / fail explicitly on errors
+			if err := surveyWlPKs.Set(surveyWhitelistPKs); err != nil {
+				log.Fatalf("bad key set for survey whitelist flag: %v", err)
+			}
 		}
-		services.SurveyWhitelist = append(services.SurveyWhitelist, surveyWhitelistPKs...)
+		services.SurveyWhitelist = append(services.SurveyWhitelist, surveyWlPKs...)
 
 		if !isTestEnv {
 			if services.DmsgDiscovery == "" {
@@ -467,8 +467,8 @@ var genConfigCmd = &cobra.Command{
 			if services.DNSServer == "" {
 				services.DNSServer = utilenv.DNSServer
 			}
-			if RouteSetupNodes != "" {
-				if err := routeSetupPKs.Set(RouteSetupNodes); err != nil {
+			if routeSetupNodes != "" {
+				if err := routeSetupPKs.Set(routeSetupNodes); err != nil {
 					log.Fatalf("bad key set for route setup node flag: %v", err)
 				}
 			}
@@ -480,8 +480,8 @@ var genConfigCmd = &cobra.Command{
 				}
 			}
 			services.RouteSetupNodes = append(services.RouteSetupNodes, routeSetupPKs...)
-			if TransportSetupPKs != "" {
-				if err := tpSetupPKs.Set(TransportSetupPKs); err != nil {
+			if transportSetupPKs != "" {
+				if err := tpSetupPKs.Set(transportSetupPKs); err != nil {
 					log.Fatalf("bad key set for transport setup node flag: %v", err)
 				}
 			}
