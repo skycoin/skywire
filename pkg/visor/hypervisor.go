@@ -38,7 +38,7 @@ import (
 )
 
 const (
-	httpTimeout = 30 * time.Second
+	HttpWriteTimeout = 30 * time.Second
 )
 
 const (
@@ -211,7 +211,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 
 	r.Route("/", func(r chi.Router) {
 		r.Route("/api", func(r chi.Router) {
-			r.Use(middleware.Timeout(httpTimeout))
+			r.Use(middleware.Timeout(HttpWriteTimeout))
 
 			r.Get("/ping", hv.getPong())
 
@@ -1449,7 +1449,12 @@ func (hv *Hypervisor) postPingVisor() http.HandlerFunc {
 		}
 		ctx.API.StopPing(pk) //nolint
 
-		httputil.WriteJSON(w, r, http.StatusOK, latencies)
+		var response []int64
+		for _, lat := range latencies {
+			response = append(response, lat.Milliseconds())
+		}
+
+		httputil.WriteJSON(w, r, http.StatusOK, response)
 	})
 }
 
