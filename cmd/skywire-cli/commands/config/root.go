@@ -38,10 +38,10 @@ var (
 	isUsrEnv               bool
 	isHypervisor           bool
 	hypervisorPKs          string
-	dmsgptywlPKs           string
-	surveywhitelistPks     string
-	routesetupnodePks      string
-	transportsetupnodePks  string
+	dmsgptyWlPKs           string
+	surveyWhitelistPKs     string
+	routeSetupNodes        string
+	transportSetupPKs      string
 	isDmsgHTTP             bool
 	isVpnServerEnable      bool
 	isDisableAuth          bool
