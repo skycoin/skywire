@@ -3,6 +3,10 @@
   [showShortList]="true">
 </app-transport-list>
 
+<app-button color="primary" (action)="openPingDialog()" class="ping-button" [forDarkBackground]="true">
+  {{ 'ping.title' | translate }}
+</app-button>
+
 <app-route-list
   [routes]="routes"
   [showShortList]="true"

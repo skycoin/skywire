@@ -354,6 +354,19 @@ export class NodeService {
   }
 
   /**
+   * Pings a remote node
+   */
+  ping(nodeKey: string, remotePk: string): Observable<any> {
+    const data = {
+      remote_pk: remotePk,
+      size: 3,
+      tries: 2,
+    };
+
+    return this.apiService.post(`visors/${nodeKey}/ping-visor`, data);
+  }
+
+  /**
    * Checks if a node is currently being updated.
    */
   checkIfUpdating(nodeKey: string): Observable<any> {

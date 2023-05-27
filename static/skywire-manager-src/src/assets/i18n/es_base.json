@@ -640,6 +640,17 @@
     }
   },
 
+  "ping": {
+    "button-text": "Ping specific visor",
+    "title": "Ping Specific Visor",
+    "remote-visor-key": "Remote visor key",
+    "result": "Response obtained in: {{ result }}ms.",
+    "ping-button": "Ping",
+    "remote-key-length-error": "The public key must be 66 characters long.",
+    "remote-key-chars-error": "The public key must only contain hexadecimal characters.",
+    "make-another-test": "Make another test"
+  },
+
   "routes": {
     "title": "Routes",
     "info": "Paths used to reach the remote visors to which transports have been established. Routes are automatically generated as needed.",

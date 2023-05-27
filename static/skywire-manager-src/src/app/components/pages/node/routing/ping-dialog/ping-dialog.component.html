@@ -1,0 +1,48 @@
+<app-dialog [headline]="'ping.title' | translate" [dialog]="dialogRef" [disableDismiss]="disableDismiss">
+  <!-- Loading animation. -->
+  <app-loading-indicator [showWhite]="false" *ngIf="checking"></app-loading-indicator>
+
+  <!-- Form. -->
+  <form [formGroup]="form" *ngIf="!checking && result === null">
+    <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
+      <div class="field-container">
+        <label class="field-label" for="remoteKey">{{ 'ping.remote-visor-key' | translate }}</label>
+        <input
+          formControlName="remoteKey"
+          maxlength="66"
+          #firstInput
+          matInput
+        >
+      </div>
+      <mat-error>
+        <ng-container *ngIf="!this.form.get('remoteKey').hasError('pattern');else hexError">
+          <span>{{ 'ping.remote-key-length-error' | translate }}</span>
+        </ng-container>
+      </mat-error>
+      <ng-template #hexError>
+        <span>{{ 'ping.remote-key-chars-error' | translate }}</span>
+      </ng-template>
+    </mat-form-field>
+  </form>
+
+  <!-- Result. -->
+  <div *ngIf="!checking && result !== null">
+    {{ 'ping.result' | translate:{ result: result } }}
+  </div>
+
+  <app-button
+    #button
+    (action)="process()"
+    [disabled]="result === null && !form.valid"
+    color="primary"
+    class="float-right"
+    *ngIf="!checking"
+  >
+    <ng-container *ngIf="result === null">
+      {{ 'ping.ping-button' | translate }}
+    </ng-container>
+    <ng-container *ngIf="result !== null">
+      {{ 'ping.make-another-test' | translate }}
+    </ng-container>
+  </app-button>
+</app-dialog>
