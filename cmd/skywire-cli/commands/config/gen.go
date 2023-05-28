@@ -332,17 +332,15 @@ var genConfigCmd = &cobra.Command{
 			oldConfJSON, err := os.ReadFile(confPath)
 			if err != nil {
 				if !isStdout || isStdout && isHide {
-					log.Fatalf("Failed to read config file: %v", err)
+					log.Errorf("Failed to read config file: %v", err)
 				}
-			}
+			} else {
 			// Decode JSON data
 			err = json.Unmarshal(oldConfJSON, &oldConf)
 			if err != nil {
 				if !isStdout || isStdout && isHide {
 					log.WithError(err).Fatal("Failed to unmarshal old config json")
 				}
-			}
-			if err != nil {
 				_, sk = cipher.GenerateKeyPair()
 			} else {
 				sk = oldConf.SK
@@ -356,6 +354,7 @@ var genConfigCmd = &cobra.Command{
 				}
 			}
 		}
+	}
 
 		//determine best protocol
 		if isBestProtocol && netutil.LocalProtocol() {
