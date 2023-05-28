@@ -335,26 +335,26 @@ var genConfigCmd = &cobra.Command{
 					log.Errorf("Failed to read config file: %v", err)
 				}
 			} else {
-			// Decode JSON data
-			err = json.Unmarshal(oldConfJSON, &oldConf)
-			if err != nil {
-				if !isStdout || isStdout && isHide {
-					log.WithError(err).Fatal("Failed to unmarshal old config json")
-				}
-				_, sk = cipher.GenerateKeyPair()
-			} else {
-				sk = oldConf.SK
-				if isRetainHypervisors {
-					for _, j := range oldConf.Hypervisors {
-						hypervisorPKs = hypervisorPKs + "," + fmt.Sprintf("\t%s\n", j)
+				// Decode JSON data
+				err = json.Unmarshal(oldConfJSON, &oldConf)
+				if err != nil {
+					if !isStdout || isStdout && isHide {
+						log.WithError(err).Fatal("Failed to unmarshal old config json")
 					}
-					for _, j := range oldConf.Dmsgpty.Whitelist {
-						dmsgptyWlPKs = dmsgptyWlPKs + "," + fmt.Sprintf("\t%s\n", j)
+					_, sk = cipher.GenerateKeyPair()
+				} else {
+					sk = oldConf.SK
+					if isRetainHypervisors {
+						for _, j := range oldConf.Hypervisors {
+							hypervisorPKs = hypervisorPKs + "," + fmt.Sprintf("\t%s\n", j)
+						}
+						for _, j := range oldConf.Dmsgpty.Whitelist {
+							dmsgptyWlPKs = dmsgptyWlPKs + "," + fmt.Sprintf("\t%s\n", j)
+						}
 					}
 				}
 			}
 		}
-	}
 
 		//determine best protocol
 		if isBestProtocol && netutil.LocalProtocol() {
