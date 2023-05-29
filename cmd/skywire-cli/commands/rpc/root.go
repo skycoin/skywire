@@ -4,10 +4,11 @@ package clirpc
 import (
 	"fmt"
 	"net"
-	"time"
 	"reflect"
-	"github.com/spf13/pflag"
+	"time"
+
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
@@ -31,7 +32,6 @@ func Client(cmdFlags *pflag.FlagSet) (visor.API, error) {
 	return visor.NewRPCClient(logger, conn, visor.RPCPrefix, 0), nil
 }
 
-
 // CheckMethod checks for the existence of the RPC method before calling it.
 func CheckMethod(rpcClient visor.API, rpcMethod string) error {
 	// Get the type of the client object.
@@ -49,6 +49,7 @@ func CheckMethod(rpcClient visor.API, rpcMethod string) error {
 	return fmt.Errorf("RPC method not found: %s", rpcMethod)
 }
 
+// RootCmd shows available rpc methods
 var RootCmd = &cobra.Command{
 	Use:                   "rpc",
 	Short:                 "list available rpc methods",
@@ -72,5 +73,5 @@ var RootCmd = &cobra.Command{
 		// Close the connection.
 		//rpcClient.Close()
 
-		},
+	},
 }

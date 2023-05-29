@@ -20,6 +20,7 @@ import (
 	climdisc "github.com/skycoin/skywire/cmd/skywire-cli/commands/mdisc"
 	cliskysocksc "github.com/skycoin/skywire/cmd/skywire-cli/commands/proxy"
 	clireward "github.com/skycoin/skywire/cmd/skywire-cli/commands/reward"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	clirtfind "github.com/skycoin/skywire/cmd/skywire-cli/commands/rtfind"
 	cliskyfwd "github.com/skycoin/skywire/cmd/skywire-cli/commands/skyfwd"
 	cliskyrev "github.com/skycoin/skywire/cmd/skywire-cli/commands/skyrev"
@@ -27,7 +28,6 @@ import (
 	cliut "github.com/skycoin/skywire/cmd/skywire-cli/commands/ut"
 	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 	clivpn "github.com/skycoin/skywire/cmd/skywire-cli/commands/vpn"
-	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 )
 

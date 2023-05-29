@@ -42,7 +42,7 @@ var RootCmd = &cobra.Command{
 
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-		  internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Unable to create RPC client, is skywire running?: %w", err))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Unable to create RPC client, is skywire running?: %w", err))
 		}
 
 		if lsPorts {

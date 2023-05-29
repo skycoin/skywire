@@ -230,7 +230,7 @@ func (r *router) RegisterSetupHooks(rshooks ...RouteSetupHook) {
 // - Setup routes via SetupNode (in one call).
 // - Save to routing.Table and internal RouteGroup map.
 // - Return RouteGroup if successful.
-func (r *router) DialRoutes(ctx context.Context, rPK cipher.PubKey,	lPort, rPort routing.Port, opts *DialOptions) (net.Conn, error) {
+func (r *router) DialRoutes(ctx context.Context, rPK cipher.PubKey, lPort, rPort routing.Port, opts *DialOptions) (net.Conn, error) {
 
 	if rPK.Null() {
 		err := ErrRemoteEmptyPK

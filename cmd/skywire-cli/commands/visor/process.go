@@ -4,7 +4,6 @@ package clivisor
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/user"
 	"time"
 

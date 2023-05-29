@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 	"text/tabwriter"

@@ -4,7 +4,6 @@ package clivisor
 import (
 	"fmt"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 

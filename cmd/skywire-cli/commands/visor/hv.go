@@ -3,7 +3,6 @@ package clivisor
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -105,7 +104,7 @@ func HypervisorPort(cmdFlags *pflag.FlagSet) string {
 	}
 	err = clirpc.CheckMethod(rpcClient, "Ports")
 	if err != nil {
-		internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
+		internal.PrintFatalError(cmdFlags, fmt.Errorf("RPC method does not exist: %w", err))
 	}
 	ports, err := rpcClient.Ports()
 	if err != nil {
