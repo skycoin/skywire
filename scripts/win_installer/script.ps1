@@ -69,7 +69,6 @@ function BuildInstaller($arch)
     Move-Item ..\..\archive\skywire-cli.exe .\build\skywire-cli.exe
     Move-Item ..\..\archive\apps\vpn-client.exe .\build\apps\vpn-client.exe
     Copy-Item ..\..\archive\dmsghttp-config.json .\build\dmsghttp-config.json
-    Copy-Item ..\..\archive\skycoin.asc .\build\skycoin.asc
     Copy-Item skywire.bat .\build\skywire.bat
     New-Item new.update  > $null
     Move-Item new.update .\build\new.update
