@@ -40,9 +40,6 @@ var (
 	// DMSGHTTPName is the default dmsghttp config name
 	DMSGHTTPName = skyenv.DMSGHTTPName
 
-	// SkycoinKeyName is name of skycoin key file
-	SkycoinKeyName = skyenv.SkycoinKeyName
-
 	// Dmsg port constants.
 	// TODO(evanlinjin): Define these properly. These are currently random.
 
