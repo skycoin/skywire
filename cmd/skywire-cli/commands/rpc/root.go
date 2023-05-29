@@ -70,8 +70,5 @@ var RootCmd = &cobra.Command{
 			method := clientType.Method(i)
 			fmt.Println(method.Name)
 		}
-		// Close the connection.
-		//rpcClient.Close()
-
 	},
 }
