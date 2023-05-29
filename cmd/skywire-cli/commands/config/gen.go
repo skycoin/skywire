@@ -332,26 +332,25 @@ var genConfigCmd = &cobra.Command{
 			oldConfJSON, err := os.ReadFile(confPath)
 			if err != nil {
 				if !isStdout || isStdout && isHide {
-					log.Fatalf("Failed to read config file: %v", err)
+					log.Errorf("Failed to read config file: %v", err)
 				}
-			}
-			// Decode JSON data
-			err = json.Unmarshal(oldConfJSON, &oldConf)
-			if err != nil {
-				if !isStdout || isStdout && isHide {
-					log.WithError(err).Fatal("Failed to unmarshal old config json")
-				}
-			}
-			if err != nil {
-				_, sk = cipher.GenerateKeyPair()
 			} else {
-				sk = oldConf.SK
-				if isRetainHypervisors {
-					for _, j := range oldConf.Hypervisors {
-						hypervisorPKs = hypervisorPKs + "," + fmt.Sprintf("\t%s\n", j)
+				// Decode JSON data
+				err = json.Unmarshal(oldConfJSON, &oldConf)
+				if err != nil {
+					if !isStdout || isStdout && isHide {
+						log.WithError(err).Fatal("Failed to unmarshal old config json")
 					}
-					for _, j := range oldConf.Dmsgpty.Whitelist {
-						dmsgptyWlPKs = dmsgptyWlPKs + "," + fmt.Sprintf("\t%s\n", j)
+					_, sk = cipher.GenerateKeyPair()
+				} else {
+					sk = oldConf.SK
+					if isRetainHypervisors {
+						for _, j := range oldConf.Hypervisors {
+							hypervisorPKs = hypervisorPKs + "," + fmt.Sprintf("\t%s\n", j)
+						}
+						for _, j := range oldConf.Dmsgpty.Whitelist {
+							dmsgptyWlPKs = dmsgptyWlPKs + "," + fmt.Sprintf("\t%s\n", j)
+						}
 					}
 				}
 			}
