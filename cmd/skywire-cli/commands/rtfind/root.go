@@ -59,6 +59,11 @@ Assumes the local visor public key as an argument if only one argument is given`
 		if len(args) == 1 {
 			rpcClient, err := clirpc.Client(cmd.Flags())
 			if err == nil {
+				err = clirpc.CheckMethod(rpcClient, "Overview")
+				if err != nil {
+					// RPC method not found, handle the error.
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
+				}
 				overview, err := rpcClient.Overview()
 				if err == nil {
 					pk = overview.PubKey.String()

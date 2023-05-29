@@ -42,10 +42,14 @@ var RootCmd = &cobra.Command{
 
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+		  internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Unable to create RPC client, is skywire running?: %w", err))
 		}
 
 		if lsPorts {
+			err = clirpc.CheckMethod(rpcClient, "List")
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
+			}
 			forwardConns, err := rpcClient.List()
 			internal.Catch(cmd.Flags(), err)
 
@@ -67,6 +71,11 @@ var RootCmd = &cobra.Command{
 		if disconnect != "" {
 			id, err := uuid.Parse(disconnect)
 			internal.Catch(cmd.Flags(), err)
+			err = clirpc.CheckMethod(rpcClient, "Disconnect")
+			if err != nil {
+				// RPC method not found
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
+			}
 			err = rpcClient.Disconnect(id)
 			internal.Catch(cmd.Flags(), err)
 			internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
@@ -96,7 +105,11 @@ var RootCmd = &cobra.Command{
 		if 65536 < remotePort || 65536 < localPort {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("port cannot be greater than 65535"))
 		}
-
+		err = clirpc.CheckMethod(rpcClient, "Connect")
+		if err != nil {
+			// RPC method not found
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
+		}
 		id, err := rpcClient.Connect(remotePK, remotePort, localPort)
 		internal.Catch(cmd.Flags(), err)
 		internal.PrintOutput(cmd.Flags(), id, fmt.Sprintln(id))

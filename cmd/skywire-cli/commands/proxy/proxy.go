@@ -64,7 +64,13 @@ var startCmd = &cobra.Command{
 		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Unable to create RPC client, is skywire running?: %w", err))
+		}
+		// Check for the rpc method
+		err = clirpc.CheckMethod(rpcClient, "StartSkysocksClient")
+		if err != nil {
+			// RPC method not found, handle the error.
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method  does not exist: %w", err))
 		}
 		//TODO: implement operational timeout
 		internal.Catch(cmd.Flags(), rpcClient.StartSkysocksClient(pubkey.String()))

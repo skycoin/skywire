@@ -78,6 +78,14 @@ var startCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
 		}
+		err = clirpc.CheckMethod(rpcClient, "StartVPNClient")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "Apps")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
+		}
 		internal.Catch(cmd.Flags(), rpcClient.StartVPNClient(pubkey))
 		internal.PrintOutput(cmd.Flags(), nil, "Starting.")
 		startProcess := true
@@ -126,6 +134,10 @@ var stopCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
 		}
+		err = clirpc.CheckMethod(rpcClient, "StopVPNClient")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
+		}
 		internal.Catch(cmd.Flags(), rpcClient.StopVPNClient(stateName))
 		internal.PrintOutput(cmd.Flags(), "OK", fmt.Sprintln("OK"))
 	},
@@ -137,7 +149,11 @@ var statusCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "Apps")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 		states, err := rpcClient.Apps()
 		internal.Catch(cmd.Flags(), err)
@@ -199,6 +215,10 @@ var listCmd = &cobra.Command{
 				internal.PrintOutput(cmd.Flags(), fmt.Sprintf("directly querying service discovery\n%s/api/services?type=%s\n", sdURL, serviceType), fmt.Sprintf("directly querying service discovery\n%s/api/services?type=%s\n", sdURL, serviceType))
 				servers = directQuerySD(cmd.Flags())
 			} else {
+				err = clirpc.CheckMethod(rpcClient, "VPNServers")
+				if err != nil {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
+				}
 				servers, err = rpcClient.VPNServers(ver, country)
 				if err != nil {
 					internal.PrintError(cmd.Flags(), err)

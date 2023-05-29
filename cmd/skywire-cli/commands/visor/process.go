@@ -65,7 +65,11 @@ var restartCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "Restart")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 		err = rpcClient.Restart()
 		if err != nil {
@@ -91,7 +95,11 @@ var reloadCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "Reload")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 
 		go func() {
@@ -117,7 +125,11 @@ var shutdownCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "Shutdown")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 		rpcClient.Shutdown() //nolint
 		internal.PrintOutput(cmd.Flags(), "Visor was shut down", fmt.Sprintln("Visor was shut down"))

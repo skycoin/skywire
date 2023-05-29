@@ -116,14 +116,18 @@ var rewardCmd = &cobra.Command{
 			}
 		}
 		//using the rpc of the running visor avoids needing sudo permissions
-		client, clienterr := clirpc.Client(cmd.Flags())
+		rpcClient, clienterr := clirpc.Client(cmd.Flags())
 		if clienterr != nil {
 			internal.PrintError(cmd.Flags(), clienterr)
 		}
-
 		if isDeleteFile {
 			if clienterr == nil {
-				err := client.DeleteRewardAddress()
+				err := clirpc.CheckMethod(rpcClient, "DeleteRewardAddress")
+				if err != nil {
+					// RPC method not found, handle the error.
+					internal.PrintError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
+				}
+				err = rpcClient.DeleteRewardAddress()
 				if err != nil {
 					internal.PrintError(cmd.Flags(), err)
 				}
@@ -172,7 +176,12 @@ var rewardCmd = &cobra.Command{
 		}
 
 		if clienterr == nil {
-			rwdAdd, err := client.SetRewardAddress(rewardAddress)
+			err := clirpc.CheckMethod(rpcClient, "SetRewardAddress")
+			if err != nil {
+				// RPC method not found, handle the error.
+				internal.PrintError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
+			}
+			rwdAdd, err := rpcClient.SetRewardAddress(rewardAddress)
 			if err != nil {
 				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err)) //nolint
 				return

@@ -38,16 +38,27 @@ var pingCmd = &cobra.Command{
 		pingConfig := visor.PingConfig{PK: pk, Tries: tries, PcktSize: pcktSize}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "DialPing")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 		err = rpcClient.DialPing(pingConfig)
 		internal.Catch(cmd.Flags(), err)
-
+		err = clirpc.CheckMethod(rpcClient, "Ping")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
+		}
 		latencies, err := rpcClient.Ping(pingConfig)
 		internal.Catch(cmd.Flags(), err)
 
 		for _, latency := range latencies {
 			internal.PrintOutput(cmd.Flags(), fmt.Sprint(latency), fmt.Sprintf(fmt.Sprint(latency)+"\n"))
+		}
+		err = clirpc.CheckMethod(rpcClient, "StopPing")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 		err = rpcClient.StopPing(pk)
 		internal.Catch(cmd.Flags(), err)
@@ -62,7 +73,11 @@ var testCmd = &cobra.Command{
 		pingConfig := visor.PingConfig{Tries: tries, PcktSize: pcktSize, PubVisCount: pubVisCount}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "TestVisor")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 		results, err := rpcClient.TestVisor(pingConfig)
 		internal.Catch(cmd.Flags(), err)

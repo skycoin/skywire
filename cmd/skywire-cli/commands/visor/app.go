@@ -65,7 +65,11 @@ var lsAppsCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "Apps")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 		states, err := rpcClient.Apps()
 		internal.Catch(cmd.Flags(), err)
@@ -116,7 +120,11 @@ var startAppCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "StartApp")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 		internal.Catch(cmd.Flags(), rpcClient.StartApp(args[0]))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
@@ -131,8 +139,13 @@ var stopAppCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
 		}
+		err = clirpc.CheckMethod(rpcClient, "StopApp")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
+		}
+
 		internal.Catch(cmd.Flags(), rpcClient.StopApp(args[0]))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
@@ -145,7 +158,7 @@ var registerAppCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
 		}
 		if appName == "" {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("required flag not specified"))
@@ -165,6 +178,10 @@ var registerAppCmd = &cobra.Command{
 			BinaryLoc:   "",
 			LogDBLoc:    filepath.Join(localPath, appName+"_log.db"),
 		}
+		err = clirpc.CheckMethod(rpcClient, "RegisterApp")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
+		}
 		procKey, err := rpcClient.RegisterApp(procConfig)
 		internal.Catch(cmd.Flags(), err)
 		internal.PrintOutput(cmd.Flags(), procKey, fmt.Sprintf("%v\n", procKey))
@@ -178,7 +195,7 @@ var deregisterAppCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
 		}
 		if procKey == "" {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("required flag not specified"))
@@ -188,6 +205,10 @@ var deregisterAppCmd = &cobra.Command{
 		err = pKey.UnmarshalText([]byte(procKey))
 		if err != nil {
 			internal.Catch(cmd.Flags(), fmt.Errorf("failed to read procKey: %v", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "DeregisterApp")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 		err = rpcClient.DeregisterApp(pKey)
 		internal.Catch(cmd.Flags(), err)
@@ -211,7 +232,11 @@ var setAppAutostartCmd = &cobra.Command{
 		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "SetAutoStart")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 		internal.Catch(cmd.Flags(), rpcClient.SetAutoStart(args[0], autostart))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
@@ -235,8 +260,13 @@ var setAppKillswitchCmd = &cobra.Command{
 		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
 		}
+		err = clirpc.CheckMethod(rpcClient, "SetAppKillswitch")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
+		}
+
 		internal.Catch(cmd.Flags(), rpcClient.SetAppKillswitch(args[0], killswitch))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
@@ -259,7 +289,11 @@ var setAppSecureCmd = &cobra.Command{
 		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "SetAppSecure")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 		internal.Catch(cmd.Flags(), rpcClient.SetAppSecure(args[0], secure))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
@@ -278,7 +312,11 @@ var setAppPasscodeCmd = &cobra.Command{
 		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "SetAppPassword")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 		internal.Catch(cmd.Flags(), rpcClient.SetAppPassword(args[0], passcode))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
@@ -297,7 +335,11 @@ var setAppNetworkInterfaceCmd = &cobra.Command{
 		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "SetAppNetworkInterface")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 		internal.Catch(cmd.Flags(), rpcClient.SetAppNetworkInterface(args[0], netifc))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
@@ -321,7 +363,11 @@ var appLogsSinceCmd = &cobra.Command{
 		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "LogsSince")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 		logs, err := rpcClient.LogsSince(t, args[0])
 		internal.Catch(cmd.Flags(), err)

@@ -44,7 +44,11 @@ var lsRulesCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "RoutingRules")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 		rules, err := rpcClient.RoutingRules()
 		internal.Catch(cmd.Flags(), err)
@@ -63,7 +67,11 @@ var ruleCmd = &cobra.Command{
 		internal.Catch(cmd.Flags(), err)
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "RoutingRule")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 		rule, err := rpcClient.RoutingRule(routing.RouteID(id))
 		internal.Catch(cmd.Flags(), err)
@@ -92,7 +100,11 @@ var rmRuleCmd = &cobra.Command{
 		internal.Catch(cmd.Flags(), err)
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "RemoveRoutingRule")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 		internal.Catch(cmd.Flags(), rpcClient.RemoveRoutingRule(routing.RouteID(id)))
 		//}
@@ -218,7 +230,11 @@ var addAppRuleCmd = &cobra.Command{
 
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "SaveRoutingRule")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 		internal.Catch(cmd.Flags(), rpcClient.SaveRoutingRule(rule))
 
@@ -280,7 +296,11 @@ var addFwdRuleCmd = &cobra.Command{
 
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "SaveRoutingRule")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 		internal.Catch(cmd.Flags(), rpcClient.SaveRoutingRule(rule))
 
@@ -334,7 +354,11 @@ var addIntFwdRuleCmd = &cobra.Command{
 
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "SaveRoutingRule")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 		internal.Catch(cmd.Flags(), rpcClient.SaveRoutingRule(rule))
 

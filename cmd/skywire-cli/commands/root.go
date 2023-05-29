@@ -27,6 +27,7 @@ import (
 	cliut "github.com/skycoin/skywire/cmd/skywire-cli/commands/ut"
 	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 	clivpn "github.com/skycoin/skywire/cmd/skywire-cli/commands/vpn"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 )
 
@@ -193,6 +194,7 @@ func init() {
 		clicompletion.RootCmd,
 		clilog.RootCmd,
 		cliskysocksc.RootCmd,
+		clirpc.RootCmd,
 		treeCmd,
 		docCmd,
 	)

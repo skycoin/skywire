@@ -60,7 +60,11 @@ var hvpkCmd = &cobra.Command{
 		} else {
 			rpcClient, err := clirpc.Client(cmd.Flags())
 			if err != nil {
-				os.Exit(1)
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+			}
+			err = clirpc.CheckMethod(rpcClient, "Overview")
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 			}
 			overview, err := rpcClient.Overview()
 			if err != nil {
@@ -81,6 +85,10 @@ var chvpkCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
+		err = clirpc.CheckMethod(rpcClient, "Overview")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
+		}
 		overview, err := rpcClient.Overview()
 		if err != nil {
 			internal.PrintFatalRPCError(cmd.Flags(), err)
@@ -94,6 +102,10 @@ func HypervisorPort(cmdFlags *pflag.FlagSet) string {
 	rpcClient, err := clirpc.Client(cmdFlags)
 	if err != nil {
 		return visorconfig.HTTPAddr()
+	}
+	err = clirpc.CheckMethod(rpcClient, "Ports")
+	if err != nil {
+		internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 	}
 	ports, err := rpcClient.Ports()
 	if err != nil {

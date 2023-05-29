@@ -41,6 +41,11 @@ var RootCmd = &cobra.Command{
 		}
 
 		if lsPorts {
+			err = clirpc.CheckMethod(rpcClient, "ListHTTPPorts")
+			if err != nil {
+				// RPC method not found
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
+			}
 			ports, err := rpcClient.ListHTTPPorts()
 			internal.Catch(cmd.Flags(), err)
 			var b bytes.Buffer
@@ -78,8 +83,18 @@ var RootCmd = &cobra.Command{
 		}
 
 		if deregister {
+			err = clirpc.CheckMethod(rpcClient, "DeregisterHTTPPort")
+			if err != nil {
+				// RPC method not found
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
+			}
 			err = rpcClient.DeregisterHTTPPort(portNo)
 		} else {
+			err = clirpc.CheckMethod(rpcClient, "RegisterHTTPPort")
+			if err != nil {
+				// RPC method not found
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
+			}
 			err = rpcClient.RegisterHTTPPort(portNo)
 		}
 		internal.Catch(cmd.Flags(), err)

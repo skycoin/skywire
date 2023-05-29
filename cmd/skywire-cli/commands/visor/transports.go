@@ -66,7 +66,11 @@ var lsTypesCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "Shutdown")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 		types, err := rpcClient.TransportTypes()
 		internal.Catch(cmd.Flags(), err)
@@ -91,7 +95,11 @@ var lsTpCmd = &cobra.Command{
 		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "Transports")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 		transports, err := rpcClient.Transports(filterTypes, pks, showLogs)
 		internal.Catch(cmd.Flags(), err)
@@ -113,7 +121,11 @@ var idCmd = &cobra.Command{
 		tpid := internal.ParseUUID(cmd.Flags(), "transport-id", args[0])
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "Transport")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 		tp, err := rpcClient.Transport(tpid)
 		internal.Catch(cmd.Flags(), err)
@@ -155,7 +167,15 @@ var addTpCmd = &cobra.Command{
 		if transportType != "" {
 			rpcClient, err := clirpc.Client(cmd.Flags())
 			if err != nil {
-				os.Exit(1)
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+			}
+			err = clirpc.CheckMethod(rpcClient, "AddTransport")
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
+			}
+			err = clirpc.CheckMethod(rpcClient, "Transports")
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 			}
 			tp, err = rpcClient.AddTransport(pk, transportType, timeout)
 			if err != nil {
@@ -174,7 +194,7 @@ var addTpCmd = &cobra.Command{
 			for _, transportType := range transportTypes {
 				rpcClient, err := clirpc.Client(cmd.Flags())
 				if err != nil {
-					os.Exit(1)
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
 				}
 				tp, err = rpcClient.AddTransport(pk, string(transportType), timeout)
 				if err == nil {
@@ -217,7 +237,11 @@ var rmTpCmd = &cobra.Command{
 		tID := internal.ParseUUID(cmd.Flags(), "transport-id", tpID)
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
+		}
+		err = clirpc.CheckMethod(rpcClient, "RemoveTransport")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
 		}
 		internal.Catch(cmd.Flags(), rpcClient.RemoveTransport(tID))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
@@ -303,13 +327,21 @@ var discTpCmd = &cobra.Command{
 		internal.Catch(cmd.Flags(), tppk.Set(tpPK))
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Can't connect to rpc ; is skywire running?: %w", err))
 		}
 		if tppk.Null() {
+			err = clirpc.CheckMethod(rpcClient, "DiscoverTransportByID")
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
+			}
 			entry, err := rpcClient.DiscoverTransportByID(uuid.UUID(tpid))
 			internal.Catch(cmd.Flags(), err)
 			PrintTransportEntries(cmd.Flags(), entry)
 		} else {
+			err = clirpc.CheckMethod(rpcClient, "DiscoverTransportsByPK")
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC method does not exist: %w", err))
+			}
 			entries, err := rpcClient.DiscoverTransportsByPK(tppk)
 			internal.Catch(cmd.Flags(), err)
 			PrintTransportEntries(cmd.Flags(), entries...)
