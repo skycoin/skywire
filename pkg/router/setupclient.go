@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"net/rpc"
+	"reflect"
 
 	"github.com/skycoin/dmsg/pkg/dmsg"
 
@@ -28,8 +29,14 @@ type SetupClient struct {
 	rpc        *rpc.Client
 }
 
+
 // NewSetupClient creates a new SetupClient.
 func NewSetupClient(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, setupNodes []cipher.PubKey) (*SetupClient, error) {
+	length := len(setupNodes)
+	for i := 0; i < length/2; i++ {
+		j := length - 1 - i
+		setupNodes[i], setupNodes[j] = setupNodes[j], setupNodes[i]
+	}
 	client := &SetupClient{
 		log:        log,
 		setupNodes: setupNodes,
@@ -43,8 +50,19 @@ func NewSetupClient(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client
 	client.conn = conn
 
 	client.rpc = rpc.NewClient(conn)
+	// Get the type of the client object.
+	clientType := reflect.TypeOf(client.rpc)
 
-	return client, nil
+	// Check if DialRouteGroup method exists in the rpc client type.
+	for i := 0; i < clientType.NumMethod(); i++ {
+		method := clientType.Method(i)
+		if method.Name == "DialRouteGroup" {
+			return client, nil
+		}
+	}
+	// Method not found, return error.
+	return nil, errors.New("RPC method DialRouteGroup not found for setup-node")
+
 }
 
 func (c *SetupClient) dial(ctx context.Context, dmsgC *dmsg.Client) (net.Conn, error) {
