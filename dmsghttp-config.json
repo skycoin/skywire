@@ -64,6 +64,12 @@
         "server":{
           "address":"dmsg.server02a4.skywire.skycoin.com:30089"
         }
+      },
+      {
+        "static": "0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7",
+        "server": {
+          "address": "70.121.6.231:9081"
+        }
       }
     ],
     "dmsg_discovery": "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80",
