@@ -1,0 +1,42 @@
+mat-form-field {
+  display: block !important;
+}
+
+// White form fields, to be shown with the dark background.
+.white-form-field {
+  color: $white;
+  
+  .mat-mdc-select-value, .mat-mdc-select-arrow {
+    color: $white !important;
+  }
+
+  .mdc-line-ripple::before {
+    border-bottom-color: scale-color($white, $alpha: -50%) !important;
+  }
+
+  input {
+    color: $white !important;
+  }
+
+  .mat-mdc-input-element {
+    caret-color: $white;
+  }
+}
+
+// Container for the white help icons shown in the forms, to be shown with the dark background.
+.form-help-icon-container {
+  height: 0px;
+  text-align: right;
+  color: $blue-medium;
+}
+
+.white-form-help-icon-container {
+  @extend .form-help-icon-container;
+  color: scale-color($white, $alpha: -20%);
+}
+
+// Used for showing a form field disabled.
+.element-disabled {
+  pointer-events: none !important;
+  opacity: 0.5 !important;
+}

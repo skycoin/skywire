@@ -47,8 +47,9 @@ Create 2 visor config files:
 Compile binaries and start 2 visors:
 
 ```sh
-$ go build -o apps/skysocks.v1.0 ./cmd/apps/skysocks
-$ go build -o apps/skysocks-client.v1.0 ./cmd/apps/skysocks-client
+$ go build -o ./build/apps/skysocks.v1.0 ./cmd/apps/skysocks
+$ go build -o ./build/apps/skysocks-client.v1.0 ./cmd/apps/skysocks-client
+$ cd ./build
 $ ./skywire-visor skywire1.json
 $ ./skywire-visor skywire2.json
 ```

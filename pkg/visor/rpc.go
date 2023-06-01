@@ -635,18 +635,28 @@ func (r *RPC) SetPublicAutoconnect(pAc *bool, _ *struct{}) (err error) {
 	return err
 }
 
-// FilterVPNServersIn is input for VPNServers
-type FilterVPNServersIn struct {
+// FilterServersIn is input for VPNServers and ProxyServers
+type FilterServersIn struct {
 	Version string
 	Country string
 }
 
 // VPNServers gets available public VPN server from service discovery URL
-func (r *RPC) VPNServers(vc *FilterVPNServersIn, out *[]servicedisc.Service) (err error) {
+func (r *RPC) VPNServers(vc *FilterServersIn, out *[]servicedisc.Service) (err error) {
 	defer rpcutil.LogCall(r.log, "VPNServers", nil)(out, &err)
 	vpnServers, err := r.visor.VPNServers(vc.Version, vc.Country)
 	if vpnServers != nil {
 		*out = vpnServers
+	}
+	return err
+}
+
+// ProxyServers gets available socks5 proxy servers from service discovery URL
+func (r *RPC) ProxyServers(vc *FilterServersIn, out *[]servicedisc.Service) (err error) {
+	defer rpcutil.LogCall(r.log, "ProxyServers", nil)(out, &err)
+	proxyServers, err := r.visor.ProxyServers(vc.Version, vc.Country)
+	if proxyServers != nil {
+		*out = proxyServers
 	}
 	return err
 }

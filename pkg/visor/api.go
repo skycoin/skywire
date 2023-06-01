@@ -89,6 +89,7 @@ type API interface {
 	//skysocks-client controls
 	StartSkysocksClient(pk string) error
 	StopSkysocksClient() error
+	ProxyServers(version, country string) ([]servicedisc.Service, error)
 
 	//transports
 	TransportTypes() ([]string, error)
@@ -361,7 +362,7 @@ func (v *Visor) SetRewardAddress(p string) (string, error) {
 		return p, fmt.Errorf("failed to write config to file. err=%v", err)
 	}
 	// generate survey after set/update reward address
-	visorconfig.GenerateSurvey(v.conf, v.log, false, v.rawSurvey)
+	visorconfig.GenerateSurvey(v.conf, v.log, false)
 	return p, nil
 }
 
@@ -914,6 +915,27 @@ func (v *Visor) VPNServers(version, country string) ([]servicedisc.Service, erro
 		return nil, err
 	}
 	return vpnServers, nil
+}
+
+// ProxyServers gets available public VPN server from service discovery URL
+func (v *Visor) ProxyServers(version, country string) ([]servicedisc.Service, error) {
+	log := logging.MustGetLogger("proxyservers")
+	vLog := logging.NewMasterLogger()
+	vLog.SetLevel(logrus.InfoLevel)
+
+	sdClient := servicedisc.NewClient(log, vLog, servicedisc.Config{
+		Type:          servicedisc.ServiceTypeProxy,
+		PK:            v.conf.PK,
+		SK:            v.conf.SK,
+		DiscAddr:      v.conf.Launcher.ServiceDisc,
+		DisplayNodeIP: v.conf.Launcher.DisplayNodeIP,
+	}, &http.Client{Timeout: time.Duration(20) * time.Second}, "")
+	proxyServers, err := sdClient.Services(context.Background(), 0, version, country)
+	if err != nil {
+		v.log.Error("Error getting public vpn servers: ", err)
+		return nil, err
+	}
+	return proxyServers, nil
 }
 
 // PublicVisors gets available public public visors from service discovery URL

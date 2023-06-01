@@ -211,7 +211,7 @@ type LocalAddresses struct {
 	Addresses []string `json:"addresses"`
 }
 
-func (c *httpClient) Addresses(ctx context.Context) string {
+func (c *httpClient) Addresses(_ context.Context) string {
 	if c.sudphConn != nil {
 		return strings.Split(c.sudphConn.LocalAddr().String(), ":")[3]
 	}

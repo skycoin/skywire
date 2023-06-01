@@ -360,7 +360,7 @@ func (mt *ManagedTransport) deleteFromDiscovery() error {
 */
 
 // WritePacket writes a packet to the remote.
-func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Packet) error {
+func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Packet) error { //nolint:all
 	mt.transportMx.Lock()
 	defer mt.transportMx.Unlock()
 

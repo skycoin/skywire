@@ -104,14 +104,14 @@ function pack_deb {
 	cd ./packages
 
 	mkdir "./$REPONAME-$VER"
-	cp ../skywire-visor "./$REPONAME-$VER/"
-	cp ../skywire-cli "./$REPONAME-$VER/"
+	cp ../build/skywire-visor "./$REPONAME-$VER/"
+	cp ../build/skywire-cli "./$REPONAME-$VER/"
 	mkdir "./$REPONAME-$VER/apps"
-	cp ../apps/skychat "./$REPONAME-$VER/apps/"
-	cp ../apps/skysocks "./$REPONAME-$VER/apps/"
-	cp ../apps/skysocks-client "./$REPONAME-$VER/apps/"
-	cp ../apps/vpn-client "./$REPONAME-$VER/apps/"
-	cp ../apps/vpn-server "./$REPONAME-$VER/apps/"
+	cp ../build/apps/skychat "./$REPONAME-$VER/apps/"
+	cp ../build/apps/skysocks "./$REPONAME-$VER/apps/"
+	cp ../build/apps/skysocks-client "./$REPONAME-$VER/apps/"
+	cp ../build/apps/vpn-client "./$REPONAME-$VER/apps/"
+	cp ../build/apps/vpn-server "./$REPONAME-$VER/apps/"
 
 	cd "./$REPONAME-$VER"
 

@@ -4,6 +4,7 @@ package cliconfig
 import (
 	"strings"
 
+	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -15,6 +16,15 @@ import (
 var logger = logging.MustGetLogger("skywire-cli")
 
 var (
+	conf                = new(visorconfig.V1)
+	dmsgHTTPServersList = &visorconfig.DmsgHTTPServers{
+		Test: visorconfig.DmsgHTTPServersData{DMSGServers: []*disc.Entry{}},
+		Prod: visorconfig.DmsgHTTPServersData{DMSGServers: []*disc.Entry{}},
+	}
+	noFetch                bool
+	noDefaults             bool
+	stcprPort              int
+	sudphPort              int
 	sk                     cipher.SecKey
 	output                 string
 	confPath               string
@@ -28,8 +38,11 @@ var (
 	isUsrEnv               bool
 	isHypervisor           bool
 	hypervisorPKs          string
+	dmsgptyWlPKs           string
+	surveyWhitelistPKs     string
+	routeSetupNodes        string
+	transportSetupPKs      string
 	isDmsgHTTP             bool
-	isPublicRPC            bool
 	isVpnServerEnable      bool
 	isDisableAuth          bool
 	isEnableAuth           bool
@@ -70,7 +83,6 @@ var (
 	isResetSkysocks        bool
 	setPublicAutoconnect   string
 	minHops                int
-	conf                   *visorconfig.V1
 	isUsr                  bool
 	isPublic               bool
 	disablePublicAutoConn  bool
@@ -82,5 +94,5 @@ var (
 var RootCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Generate or update a skywire config",
-	Long:  "A primary function of skywire-cli is generating and updating the config file used by skywire-visor.",
+	Long:  "Generate or update the config file used by skywire-visor.",
 }

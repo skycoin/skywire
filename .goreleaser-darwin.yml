@@ -86,7 +86,6 @@ archives:
     name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
     files:
       - dmsghttp-config.json
-      - skycoin.asc
     builds:
       - skywire-visor
       - skywire-cli
