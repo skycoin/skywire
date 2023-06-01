@@ -35,7 +35,8 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 				TransportDiscovery: utilenv.TpDiscAddr,
 				AddressResolver:    utilenv.AddressResolverAddr,
 				RouteFinder:        utilenv.RouteFinderAddr,
-				SetupNodes:         []cipher.PubKey{MustPK(utilenv.SetupPK)},
+				RouteSetupNodes:    MustPKs(utilenv.RouteSetupPKs),
+				TransportSetupPKs:  MustPKs(utilenv.TPSetupPKs),
 				UptimeTracker:      utilenv.UptimeTrackerAddr,
 				ServiceDiscovery:   utilenv.ServiceDiscAddr,
 				StunServers:        utilenv.GetStunServers(),
@@ -47,7 +48,8 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 				TransportDiscovery: utilenv.TestTpDiscAddr,
 				AddressResolver:    utilenv.TestAddressResolverAddr,
 				RouteFinder:        utilenv.TestRouteFinderAddr,
-				SetupNodes:         []cipher.PubKey{MustPK(utilenv.TestSetupPK)},
+				RouteSetupNodes:    MustPKs(utilenv.TestRouteSetupPKs),
+				TransportSetupPKs:  MustPKs(utilenv.TestTPSetupPKs),
 				UptimeTracker:      utilenv.TestUptimeTrackerAddr,
 				ServiceDiscovery:   utilenv.TestServiceDiscAddr,
 				StunServers:        utilenv.GetStunServers(),
@@ -73,10 +75,12 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 			Location:         LocalPath + "/" + TpLogStore,
 			RotationInterval: DefaultLogRotationInterval,
 		},
+		SudphPort: 0,
+		StcprPort: 0,
 	}
 	conf.Routing = &Routing{
-		RouteFinder:        services.RouteFinder, //utilenv.RouteFinderAddr,
-		SetupNodes:         services.SetupNodes,  //[]cipher.PubKey{utilenv.MustPK(utilenv.SetupPK)},
+		RouteFinder:        services.RouteFinder,     //utilenv.RouteFinderAddr,
+		RouteSetupNodes:    services.RouteSetupNodes, //[]cipher.PubKey{utilenv.MustPK(utilenv.SetupPK)},
 		RouteFinderTimeout: DefaultTimeout,
 	}
 	conf.Launcher = &Launcher{
@@ -92,7 +96,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	conf.CLIAddr = RPCAddr
 	conf.LogLevel = LogLevel
 	conf.LocalPath = LocalPath
-	conf.CustomDmsgHTTPPath = LocalPath + "/" + Custom
+	conf.DmsgHTTPServerPath = LocalPath + "/" + Custom
 	conf.StunServers = services.StunServers //utilenv.GetStunServers()
 	conf.ShutdownTimeout = DefaultTimeout
 	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
@@ -202,7 +206,7 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 	if pkgEnv {
 		pkgConfig := PackageConfig()
 		conf.LocalPath = pkgConfig.LocalPath
-		conf.CustomDmsgHTTPPath = pkgConfig.LocalPath + "/" + Custom
+		conf.DmsgHTTPServerPath = pkgConfig.LocalPath + "/" + Custom
 		conf.Launcher.BinPath = pkgConfig.LauncherBinPath
 		conf.Transport.LogStore.Location = pkgConfig.LocalPath + "/" + TpLogStore
 		if conf.Hypervisor != nil {
@@ -213,7 +217,7 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 	if usrEnv {
 		usrConfig := UserConfig()
 		conf.LocalPath = usrConfig.LocalPath
-		conf.CustomDmsgHTTPPath = usrConfig.LocalPath + "/" + Custom
+		conf.DmsgHTTPServerPath = usrConfig.LocalPath + "/" + Custom
 		conf.Launcher.BinPath = usrConfig.LauncherBinPath
 		conf.Transport.LogStore.Location = usrConfig.LocalPath + "/" + TpLogStore
 		if conf.Hypervisor != nil {

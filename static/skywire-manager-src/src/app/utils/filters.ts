@@ -1,5 +1,3 @@
-/* eslint-disable prefer-arrow/prefer-arrow-functions */
-
 /**
  * Contains the properties needed for showing the selected filters in the UI.
  * For the UI to work well, at least one of the value properties must have a value.

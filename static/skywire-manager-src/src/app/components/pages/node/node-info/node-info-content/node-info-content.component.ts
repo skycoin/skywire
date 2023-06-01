@@ -104,6 +104,17 @@ export class NodeInfoContentComponent implements OnDestroy {
   }
 
   /**
+   * Returns if the node is connected to a valid DMSG server PK.
+   */
+  hasDmsgServer() {
+    if (!this.node || this.node.dmsgServerPk.replace(/0/g, '').length === 0) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
    * Enables or disables the transport.public_autoconnect setting.
    */
   changeTransportsConfig() {

@@ -42,9 +42,14 @@ func PrintFatalError(cmdFlags *pflag.FlagSet, err error) {
 	log.Fatal(err)
 }
 
-// PrintFatalRPCError prints errors for skywire-cli commands packages
+// PrintFatalRPCError prints fatal RPC errors for skywire-cli commands packages
 func PrintFatalRPCError(cmdFlags *pflag.FlagSet, err error) {
-	PrintFatalError(cmdFlags, fmt.Errorf("Failed to connect; is skywire running?: %v", err))
+	PrintFatalError(cmdFlags, fmt.Errorf("Failed to connect to visor RPC or RPC method not found; is skywire running?: %v", err))
+}
+
+// PrintRPCError prints nonfatal RPC errors for skywire-cli commands packages
+func PrintRPCError(cmdFlags *pflag.FlagSet, err error) {
+	PrintError(cmdFlags, fmt.Errorf("Failed to connect to visor RPC or RPC method not found; is skywire running?: %v", err))
 }
 
 // PrintError prints errors for skywire-cli commands packages

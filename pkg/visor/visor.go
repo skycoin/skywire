@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/orandin/lumberjackrus"
+	"github.com/sirupsen/logrus"
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/toqueteos/webbrowser"
@@ -114,8 +116,7 @@ type Visor struct {
 	pingConns    map[cipher.PubKey]ping
 	pingConnMx   *sync.Mutex
 	pingPcktSize int
-
-	rawSurvey bool
+	logStorePath string
 }
 
 // todo: consider moving module closing to the module system
@@ -162,6 +163,8 @@ func run(conf *visorconfig.V1) error {
 	if conf == nil {
 		conf = initConfig()
 	}
+
+	conf.MasterLogger().AddHook(hook)
 
 	if disableHypervisorPKs {
 		conf.Hypervisors = []cipher.PubKey{}
@@ -237,6 +240,11 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	if conf == nil {
 		conf = initConfig()
 	}
+
+	if isForceColor {
+		setForceColor(conf)
+	}
+
 	v := &Visor{
 		log:                  conf.MasterLogger().PackageLogger("visor"),
 		conf:                 conf,
@@ -250,7 +258,6 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		pingConns:            make(map[cipher.PubKey]ping),
 		pingConnMx:           new(sync.Mutex),
 		allowedPorts:         make(map[int]bool),
-		rawSurvey:            rawSurvey,
 	}
 	v.isServicesHealthy.init()
 
@@ -260,10 +267,14 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		v.conf.MasterLogger().SetLevel(logLvl)
 	}
 
+	v.startedAt = time.Now()
+	if isStoreLog {
+		storeLog(conf)
+		v.logStorePath = conf.LocalPath
+	}
 	log := v.MasterLogger().PackageLogger("visor:startup")
 	log.WithField("public_key", conf.PK).
 		Info("Begin startup.")
-	v.startedAt = time.Now()
 	ctx = context.WithValue(ctx, visorKey, v)
 	v.runtimeErrors = make(chan error)
 	ctx = context.WithValue(ctx, runtimeErrsKey, v.runtimeErrors)
@@ -474,6 +485,11 @@ func (v *Visor) Close() error {
 		errCh := make(chan error, 1)
 		t := time.NewTimer(moduleShutdownTimeout)
 
+		// should keep transport.manager shutdown continue till all transports delete there
+		if cl.src == "transport.manager" {
+			t = time.NewTimer(2 * time.Hour)
+		}
+
 		log := v.MasterLogger().PackageLogger(fmt.Sprintf("visor:shutdown:%s", cl.src)).
 			WithField("func", fmt.Sprintf("[%d/%d]", i+1, len(v.closeStack)))
 		log.Debug("Shutting down module...")
@@ -533,4 +549,95 @@ func initUI() *fs.FS {
 	}
 	return &uiFS
 
+}
+
+func storeLog(conf *visorconfig.V1) {
+	hook, _ := lumberjackrus.NewHook( //nolint
+		&lumberjackrus.LogFile{
+			Filename:   conf.LocalPath + "/log/skywire.log",
+			MaxSize:    1,
+			MaxBackups: 1,
+			MaxAge:     1,
+			Compress:   false,
+			LocalTime:  false,
+		},
+		logrus.TraceLevel,
+		&logging.TextFormatter{
+			DisableColors:   true,
+			FullTimestamp:   true,
+			ForceFormatting: true,
+		},
+		&lumberjackrus.LogFileOpts{
+			logrus.InfoLevel: &lumberjackrus.LogFile{
+				Filename:   conf.LocalPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.WarnLevel: &lumberjackrus.LogFile{
+				Filename:   conf.LocalPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.TraceLevel: &lumberjackrus.LogFile{
+				Filename:   conf.LocalPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.ErrorLevel: &lumberjackrus.LogFile{
+				Filename:   conf.LocalPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.DebugLevel: &lumberjackrus.LogFile{
+				Filename:   conf.LocalPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.FatalLevel: &lumberjackrus.LogFile{
+				Filename:   conf.LocalPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+		},
+	)
+	mLog.Hooks.Add(hook)
+	conf.MasterLogger().Hooks.Add(hook)
+}
+
+func setForceColor(conf *visorconfig.V1) {
+	conf.MasterLogger().SetFormatter(&logging.TextFormatter{
+		FullTimestamp:      true,
+		AlwaysQuoteStrings: true,
+		QuoteEmptyFields:   true,
+		ForceFormatting:    true,
+		DisableColors:      false,
+		ForceColors:        true,
+	})
+
+	mLog.SetFormatter(&logging.TextFormatter{
+		FullTimestamp:      true,
+		AlwaysQuoteStrings: true,
+		QuoteEmptyFields:   true,
+		ForceFormatting:    true,
+		DisableColors:      false,
+		ForceColors:        true,
+	})
 }
