@@ -18,19 +18,21 @@ import (
 	clidmsgpty "github.com/skycoin/skywire/cmd/skywire-cli/commands/dmsgpty"
 	clilog "github.com/skycoin/skywire/cmd/skywire-cli/commands/log"
 	climdisc "github.com/skycoin/skywire/cmd/skywire-cli/commands/mdisc"
+	cliskysocksc "github.com/skycoin/skywire/cmd/skywire-cli/commands/proxy"
 	clireward "github.com/skycoin/skywire/cmd/skywire-cli/commands/reward"
 	clirtfind "github.com/skycoin/skywire/cmd/skywire-cli/commands/rtfind"
 	cliskyfwd "github.com/skycoin/skywire/cmd/skywire-cli/commands/skyfwd"
 	cliskyrev "github.com/skycoin/skywire/cmd/skywire-cli/commands/skyrev"
-	cliskysocksc "github.com/skycoin/skywire/cmd/skywire-cli/commands/skysocksc"
 	clisurvey "github.com/skycoin/skywire/cmd/skywire-cli/commands/survey"
+	cliut "github.com/skycoin/skywire/cmd/skywire-cli/commands/ut"
 	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 	clivpn "github.com/skycoin/skywire/cmd/skywire-cli/commands/vpn"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 )
 
-var rootCmd = &cobra.Command{
-	Use:   "skywire-cli",
+// RootCmd is the root command for skywire-cli
+var RootCmd = &cobra.Command{
+	Use:   "cli",
 	Short: "Command Line Interface for skywire",
 	Long: `
 	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐  ┌─┐┬  ┬
@@ -54,8 +56,8 @@ var treeCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// You can use a LeveledList here, for easy generation.
 		leveledList := pterm.LeveledList{}
-		leveledList = append(leveledList, pterm.LeveledListItem{Level: 0, Text: rootCmd.Use})
-		for _, j := range rootCmd.Commands() {
+		leveledList = append(leveledList, pterm.LeveledListItem{Level: 0, Text: RootCmd.Use})
+		for _, j := range RootCmd.Commands() {
 			use := strings.Split(j.Use, " ")
 			leveledList = append(leveledList, pterm.LeveledListItem{Level: 1, Text: use[0]})
 			for _, k := range j.Commands() {
@@ -111,9 +113,9 @@ var docCmd = &cobra.Command{
 		fmt.Printf("\n# %s\n", "skywire-cli documentation")
 		fmt.Printf("\n%s\n", "skywire command line interface")
 
-		fmt.Printf("\n## %s\n", rootCmd.Use)
+		fmt.Printf("\n## %s\n", RootCmd.Use)
 		fmt.Printf("\n```\n")
-		rootCmd.Help() //nolint
+		RootCmd.Help() //nolint
 		fmt.Printf("\n```\n")
 		fmt.Printf("\n## %s\n", "global flags")
 		fmt.Printf("\n%s\n", "The skywire-cli interacts with the running visor via rpc calls. By default the rpc server is available on localhost:3435. The rpc address and port the visor is using may be changed in the config file, once generated.")
@@ -132,7 +134,7 @@ var docCmd = &cobra.Command{
 		fmt.Printf("\n```\n")
 
 		var use string
-		for _, j := range rootCmd.Commands() {
+		for _, j := range RootCmd.Commands() {
 			use = strings.Split(j.Use, " ")[0]
 			fmt.Printf("\n### %s\n", use)
 			fmt.Printf("\n```\n")
@@ -176,11 +178,12 @@ var docCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(
+	RootCmd.AddCommand(
 		cliconfig.RootCmd,
 		clidmsgpty.RootCmd,
 		clivisor.RootCmd,
 		clivpn.RootCmd,
+		cliut.RootCmd,
 		cliskyfwd.RootCmd,
 		cliskyrev.RootCmd,
 		clireward.RootCmd,
@@ -194,19 +197,19 @@ func init() {
 		docCmd,
 	)
 	var jsonOutput bool
-	rootCmd.PersistentFlags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
-	rootCmd.PersistentFlags().MarkHidden(internal.JSONString) //nolint
+	RootCmd.PersistentFlags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
+	RootCmd.PersistentFlags().MarkHidden(internal.JSONString) //nolint
 	var helpflag bool
-	rootCmd.SetUsageTemplate(help)
-	rootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+rootCmd.Use)
-	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
-	rootCmd.PersistentFlags().MarkHidden("help") //nolint
+	RootCmd.SetUsageTemplate(help)
+	RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+RootCmd.Use)
+	RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
+	RootCmd.PersistentFlags().MarkHidden("help") //nolint
 }
 
 // Execute executes root CLI command.
 func Execute() {
 	cc.Init(&cc.Config{
-		RootCmd:       rootCmd,
+		RootCmd:       RootCmd,
 		Headings:      cc.HiBlue + cc.Bold, //+ cc.Underline,
 		Commands:      cc.HiBlue + cc.Bold,
 		CmdShortDescr: cc.HiBlue,
@@ -218,7 +221,7 @@ func Execute() {
 		NoExtraNewlines: true,
 		NoBottomNewline: true,
 	})
-	if err := rootCmd.Execute(); err != nil {
+	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
 	}
 }

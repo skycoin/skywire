@@ -11,6 +11,8 @@ import { InitialSetupComponent } from './initial-setup/initial-setup.component';
 import { OperationError } from '../../../utils/operation-error';
 import { processServiceError } from '../../../utils/errors';
 import { AppComponent } from 'src/app/app.component';
+import { MultipleNodeDataService } from 'src/app/services/multiple-node-data.service';
+import { PageBaseComponent } from 'src/app/utils/page-base';
 
 /**
  * Login page.
@@ -20,7 +22,7 @@ import { AppComponent } from 'src/app/app.component';
   templateUrl: './login.component.html',
   styleUrls: ['./login.component.scss']
 })
-export class LoginComponent implements OnInit, OnDestroy {
+export class LoginComponent extends PageBaseComponent implements OnInit, OnDestroy {
   form: UntypedFormGroup;
   loading = false;
   isForVpn = false;
@@ -36,9 +38,15 @@ export class LoginComponent implements OnInit, OnDestroy {
     private snackbarService: SnackbarService,
     private dialog: MatDialog,
     private route: ActivatedRoute,
-  ) { }
+    private multipleNodeDataService: MultipleNodeDataService,
+  ) {
+    super();
+  }
 
   ngOnInit() {
+    // Stop multiple requests that will fail for auth.
+    this.multipleNodeDataService.stopRequestingData();
+
     this.routeSubscription = this.route.paramMap.subscribe(params => {
       this.vpnKey = params.get('key');
 
@@ -52,7 +60,7 @@ export class LoginComponent implements OnInit, OnDestroy {
           setTimeout(() => {
             const destination = !this.isForVpn ? ['nodes'] : ['vpn', this.vpnKey, 'status'];
             this.router.navigate(destination, { replaceUrl: true });
-          });
+          }, 5);
         }
       });
     });
@@ -60,6 +68,8 @@ export class LoginComponent implements OnInit, OnDestroy {
     this.form = new UntypedFormGroup({
       password: new UntypedFormControl('', Validators.required),
     });
+
+    return super.ngOnInit();
   }
 
   ngOnDestroy() {

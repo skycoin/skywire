@@ -53,7 +53,9 @@ var tpCmd = &cobra.Command{
 	Each Transport is represented as a unique 16 byte (128 bit)
 	UUID value called the Transport ID
 	and has a Transport Type that identifies
-	a specific implementation of the Transport.`,
+	a specific implementation of the Transport.
+
+	Types: stcp stcpr sudph dmsg`,
 }
 
 var lsTypesCmd = &cobra.Command{

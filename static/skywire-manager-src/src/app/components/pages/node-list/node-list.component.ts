@@ -23,6 +23,7 @@ import { DataFilterer } from 'src/app/utils/lists/data-filterer';
 import { NodeData, UpdateAllComponent } from '../../layout/update-all/update-all.component';
 import { BulkRewardAddressChangerComponent, BulkRewardAddressParams, NodeToEditData } from '../../layout/bulk-reward-address-changer/bulk-reward-address-changer.component';
 import { MultipleNodeDataService, MultipleNodesBackendData } from 'src/app/services/multiple-node-data.service';
+import { PageBaseComponent } from 'src/app/utils/page-base';
 
 /**
  * Page for showing the node list.
@@ -32,7 +33,10 @@ import { MultipleNodeDataService, MultipleNodesBackendData } from 'src/app/servi
   templateUrl: './node-list.component.html',
   styleUrls: ['./node-list.component.scss'],
 })
-export class NodeListComponent implements OnInit, OnDestroy {
+export class NodeListComponent extends PageBaseComponent implements OnInit, OnDestroy {
+  // Keys for persisting the server data, to be able to restore the state after navigation.
+  private readonly persistentServerDataResponseKey = 'serv-dat-response';
+
   // Small texts for identifying the list, needed for the helper objects.
   private readonly nodesListId = 'nl';
   private readonly dmsgListId = 'dl';
@@ -141,6 +145,8 @@ export class NodeListComponent implements OnInit, OnDestroy {
     private translateService: TranslateService,
     route: ActivatedRoute,
   ) {
+    super();
+
     // Configure the options menu shown in the top bar.
     this.updateOptionsMenu();
 
@@ -265,7 +271,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     // Load the data.
-    this.startGettingData();
+    this.startGettingData(true);
 
     // Procedure to keep updated the variable that indicates how long ago the data was updated.
     this.ngZone.runOutsideAngular(() => {
@@ -274,6 +280,8 @@ export class NodeListComponent implements OnInit, OnDestroy {
           this.secondsSinceLastUpdate = Math.floor((Date.now() - this.lastUpdate) / 1000);
         }));
     });
+
+    return super.ngOnInit();
   }
 
   ngOnDestroy() {
@@ -364,58 +372,70 @@ export class NodeListComponent implements OnInit, OnDestroy {
   /**
    * Starts getting the data from the backend.
    */
-  private startGettingData() {
-    this.ngZone.runOutsideAngular(() => {
-      // Get the node list.
-      this.dataSubscription = this.multipleNodeDataService.startRequestingData().subscribe((result: MultipleNodesBackendData) => {
-        this.ngZone.run(() => {
-          this.updating = result ? result.updating : true;
+  private startGettingData(checkSavedData: boolean) {
+    // Use saved data or get from the server. If there is no saved data, savedData is null.
+    const savedData = checkSavedData ? this.getLocalValue(this.persistentServerDataResponseKey) : null;
+    let nextOperation: Observable<any> = this.multipleNodeDataService.startRequestingData();
+    if (savedData) {
+      nextOperation = of(JSON.parse(savedData.value));
+    }
 
-          if (result && !result.updating) {
-            // If the data was obtained.
-            if (result.data && !result.error) {
-              this.allNodes = result.data as Node[];
+    // Get the node list.
+    this.dataSubscription = nextOperation.subscribe((result: MultipleNodesBackendData) => {        
+      if (!savedData) {
+        this.saveLocalValue(this.persistentServerDataResponseKey, JSON.stringify(result));
+      }
 
-              if (this.showDmsgInfo) {
-                // Add the label data to the array, to be able to use it for filtering and sorting.
-                this.allNodes.forEach(node => {
-                  node['dmsgServerPk_label'] =
-                    LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, node.dmsgServerPk);
-                });
-              }
-              this.dataFilterer.setData(this.allNodes);
+      this.updating = result ? result.updating : true;
 
-              this.loading = false;
-              // Close any previous temporary loading error msg.
-              this.snackbarService.closeCurrentIfTemporaryError();
+      if (result && !result.updating) {
+        // If the data was obtained.
+        if (result.data && !result.error) {
+          this.allNodes = result.data as Node[];
 
-              this.lastUpdate = result.momentOfLastCorrectUpdate;
-              this.secondsSinceLastUpdate = Math.floor((Date.now() - result.momentOfLastCorrectUpdate) / 1000);
-              this.errorsUpdating = false;
+          if (this.showDmsgInfo) {
+            // Add the label data to the array, to be able to use it for filtering and sorting.
+            this.allNodes.forEach(node => {
+              node['dmsgServerPk_label'] =
+                LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, node.dmsgServerPk);
+            });
+          }
+          this.dataFilterer.setData(this.allNodes);
 
-              if (this.lastUpdateRequestedManually) {
-                // Show a confirmation msg.
-                this.snackbarService.showDone('common.refreshed', null);
-                this.lastUpdateRequestedManually = false;
-              }
+          this.loading = false;
+          // Close any previous temporary loading error msg.
+          this.snackbarService.closeCurrentIfTemporaryError();
 
-            // If there was an error while obtaining the data.
-            } else if (result.error) {
-              // Show an error msg if it has not be done before during the current attempt to obtain the data.
-              if (!this.errorsUpdating) {
-                if (this.loading) {
-                  this.snackbarService.showError('common.loading-error', null, true, result.error);
-                } else {
-                  this.snackbarService.showError('nodes.error-load', null, true, result.error);
-                }
-              }
+          this.lastUpdate = result.momentOfLastCorrectUpdate;
+          this.secondsSinceLastUpdate = Math.floor((Date.now() - result.momentOfLastCorrectUpdate) / 1000);
+          this.errorsUpdating = false;
 
-              // Stop the loading indicator and show a warning icon.
-              this.errorsUpdating = true;
+          if (this.lastUpdateRequestedManually) {
+            // Show a confirmation msg.
+            this.snackbarService.showDone('common.refreshed', null);
+            this.lastUpdateRequestedManually = false;
+          }
+
+        // If there was an error while obtaining the data.
+        } else if (result.error) {
+          // Show an error msg if it has not be done before during the current attempt to obtain the data.
+          if (!this.errorsUpdating) {
+            if (this.loading) {
+              this.snackbarService.showError('common.loading-error', null, true, result.error);
+            } else {
+              this.snackbarService.showError('nodes.error-load', null, true, result.error);
             }
           }
-        });
-      });
+
+          // Stop the loading indicator and show a warning icon.
+          this.errorsUpdating = true;
+        }
+      }
+
+      // If old saved data was used, repeat the operation, ignoring the saved data.
+      if (savedData) {
+        this.startGettingData(false);
+      }
     });
   }
 

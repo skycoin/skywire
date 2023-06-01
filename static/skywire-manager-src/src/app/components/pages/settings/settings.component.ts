@@ -1,13 +1,14 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
-import { of, Subscription } from 'rxjs';
+import { Observable, of, Subscription } from 'rxjs';
 import { delay, mergeMap } from 'rxjs/operators';
 
 import { TabButtonData, MenuOptionData } from '../../layout/top-bar/top-bar.component';
 import { AuthService, AuthStates } from '../../../services/auth.service';
 import { SnackbarService } from '../../../services/snackbar.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
+import { PageBaseComponent } from 'src/app/utils/page-base';
 
 /**
  * Page with the general settings of the app.
@@ -17,7 +18,10 @@ import GeneralUtils from 'src/app/utils/generalUtils';
   templateUrl: './settings.component.html',
   styleUrls: ['./settings.component.scss']
 })
-export class SettingsComponent implements OnInit, OnDestroy {
+export class SettingsComponent extends PageBaseComponent implements OnInit, OnDestroy {
+  // Keys for persisting the server data, to be able to restore the state after navigation.
+  private readonly persistentAuthDataResponseKey = 'serv-aut-response';
+
   tabsData: TabButtonData[] = [];
   options: MenuOptionData[] = [];
 
@@ -38,6 +42,8 @@ export class SettingsComponent implements OnInit, OnDestroy {
     private snackbarService: SnackbarService,
     private dialog: MatDialog,
   ) {
+    super();
+
     // Data for populating the tab bar.
     this.tabsData = [
       {
@@ -66,28 +72,46 @@ export class SettingsComponent implements OnInit, OnDestroy {
       this.waitBeforeShowingLoading = false;
     }, 500);
 
-    this.checkAuth(0);
+    this.checkAuth(0, true);
+
+    return super.ngOnInit();
   }
 
   /**
    * Checks if the auth options are active and the user is authenticated.
    */
-  private checkAuth(delayMilliseconds: number) {
+  private checkAuth(delayMilliseconds: number, checkSavedData: boolean) {
+    // Use saved data or get from the server. If there is no saved data, savedData is null.
+    const savedData = checkSavedData ? this.getLocalValue(this.persistentAuthDataResponseKey) : null;
+    let nextOperation: Observable<any> = this.authService.checkLogin();
+    if (savedData) {
+      nextOperation = of(JSON.parse(savedData.value));
+    }
+
     this.authSubscription = of(1).pipe(
       // Wait the delay.
       delay(delayMilliseconds),
       // Load the data. The node pk is obtained from the currently openned node page.
-      mergeMap(() => this.authService.checkLogin())
+      mergeMap(() => nextOperation)
     ).subscribe(
       result => {
+        if (!savedData) {
+          this.saveLocalValue(this.persistentAuthDataResponseKey, JSON.stringify(result));
+        }
+
         this.authChecked = true;
         this.authActive = result === AuthStates.Logged;
 
         this.updateOptionsMenu();
+
+        // If old saved data was used, repeat the operation, ignoring the saved data.
+        if (savedData) {
+          this.checkAuth(0, false);
+        }
       },
       () => {
         // Retry after a small delay.
-        this.checkAuth(15000);
+        this.checkAuth(15000, false);
       },
     );
   }

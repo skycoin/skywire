@@ -25,55 +25,51 @@ make install
 ## Skywire-visor usage
 
 After the installation, you can run `skywire-visor -h`  to see the usage or `skywire-visor --all` for advanced usage:
-_Note: flags for autopeering are only available with the environmental variable `SKYBIAN=true`
 ```
 $ skywire-visor --help
 
 
-	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
-	└─┐├┴┐└┬┘││││├┬┘├┤
-	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘
-
-Usage:
-  skywire-visor [flags]
+┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
+└─┐├┴┐└┬┘││││├┬┘├┤
+└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘
 
 Flags:
-  -c, --config string   config file to use (default): skywire-config.json
-  -b, --browser         open hypervisor ui in default web browser
-      --systray         run as systray
-  -i, --hvui            run as hypervisor *
-      --all             show all flags
-  -h, --help            help for skywire-visor
-  -v, --version         version for skywire-visor
+-c, --config string   config file to use (default): skywire-config.json
+		--systray         run as systray
+-i, --hvui            run as hypervisor *
+		--all             show all flags
+-h, --help            help for visor
+-v, --version         version for visor
 
 
-  $ skywire-visor --all
 
+$ skywire-visor --all
 
-  	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
-  	└─┐├┴┐└┬┘││││├┬┘├┤
-  	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘
+		┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
+		└─┐├┴┐└┬┘││││├┬┘├┤
+		└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘
 
-  Usage:
-    skywire-visor [flags]
-
-  Flags:
-    -c, --config string       config file to use (default): skywire-config.json
-    -b, --browser             open hypervisor ui in default web browser
-    -n, --stdin               read config from stdin
-        --systray             run as systray
-    -i, --hvui                run as hypervisor *
-    -x, --nohvui              disable hypervisor *
-    -j, --hv string           add remote hypervisor *
-    -k, --xhv                 disable remote hypervisors *
-    -s, --loglvl string       [ debug | warn | error | fatal | panic | trace ] *
-    -q, --pprofmode string    [ cpu | mem | mutex | block | trace | http ]
-    -r, --pprofaddr string    pprof http port (default "localhost:6060")
-    -t, --tag string          logging tag (default "skywire")
-    -y, --syslog string       syslog server address. E.g. localhost:514
-    -z, --completion string   [ bash | zsh | fish | powershell ]
-    -v, --version             version for skywire-visor
-                              * overrides config file
+	 Flags:
+	  -c, --config string        config file to use (default): skywire-config.json
+	      --dmsg-server string   use specified dmsg server public key
+	  -n, --stdin                read config from stdin
+	  -p, --pkg                  use package config /opt/skywire/skywire.json
+	  -u, --user                 u̶s̶e̶r̶s̶p̶a̶c̶e̶ ̶c̶o̶n̶f̶i̶g̶ does not exist
+	      --systray              run as systray
+	  -i, --hvui                 run as hypervisor *
+	  -x, --nohvui               disable hypervisor *
+	  -j, --hv string            add remote hypervisor *
+	  -k, --xhv                  disable remote hypervisors *
+	  -s, --loglvl string        [ debug | warn | error | fatal | panic | trace ] *
+	  -q, --pprofmode string     [ cpu | mem | mutex | block | trace | http ]
+	  -r, --pprofaddr string     pprof http port (default "localhost:6060")
+	  -t, --logtag string        logging tag (default "skywire")
+	  -y, --syslog string        syslog server address. E.g. localhost:514
+	  -z, --completion string    [ bash | zsh | fish | powershell ]
+	  -l, --storelog             store all logs to file
+	      --forcecolor           force color logging when out is not STDOUT
+	  -v, --version              version for visor
+	                            * overrides config file
 ```
 
 ### Skywire visor flags
@@ -91,22 +87,6 @@ Mutually exclusive flags:
 
 The `    -b, --browser` flag is not available to root / with sudo.
 
-### Autopeering visors to a hypervisor
-
-The autopeering system is used in skybian to peer visors to a remote hypervisor on a predetermined static IP address.
-
-For the autopeering of visors to a remote hypervisor to work, neither a remote nor a local hypervisor may be set in the config file.
-
-The `-m` and `-l` flags will simply be ignored if there are remote or local hypervisors in the config file used by the visor
-
-As well, the environmental variable `SKYBIAN=true` must be present
-
-```
-skywire-visor -mp
-```
-
-To use a desktop as the hypervisor which visors autopeer to, run the `skywire-cli visor pk -w` command on the desktop and specify on the visors (or in the visor's systemd service file) the ip address of the desired hypervisor using the `-l` flag for skywire-visor
-
 ## Config file generation
 
 Refer to the [skywire-cli documentation](../skywire-cli/README.md) for more detailed information regarding additional flags and argument that may be passed to the following command:
@@ -115,4 +95,4 @@ Refer to the [skywire-cli documentation](../skywire-cli/README.md) for more deta
 skywire-cli config gen
 ```
 
-With no additional flags or arguments, the configuration is written to skywire-config.json and stdout.
+With no additional flags or arguments, the configuration is written to skywire-config.json and stdout along with logging to stdout.

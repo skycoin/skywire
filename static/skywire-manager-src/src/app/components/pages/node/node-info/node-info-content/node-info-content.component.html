@@ -27,7 +27,12 @@
     </span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-info.dmsg-server' | translate }} </span>
-      <app-copy-to-clipboard-text text="{{ node.dmsgServerPk }}"></app-copy-to-clipboard-text>
+      <ng-container *ngIf="hasDmsgServer()">
+        <app-copy-to-clipboard-text text="{{ node.dmsgServerPk }}"></app-copy-to-clipboard-text>
+      </ng-container>
+      <ng-container *ngIf="!hasDmsgServer()">
+        {{ 'node.details.node-info.no-dmsg-server' | translate }}
+      </ng-container>
     </span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-info.ping' | translate }} </span>

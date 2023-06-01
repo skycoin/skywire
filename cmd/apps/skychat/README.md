@@ -44,7 +44,8 @@ Create 2 visor config files:
 Compile binaries and start 2 visors:
 
 ```bash
-$ go build -o apps/skychat.v1.0 ./cmd/apps/skychat
+$ go build -o ./build/apps/skychat.v1.0 ./cmd/apps/skychat
+$ cd ./build
 $ ./skywire-visor skywire1.json
 $ ./skywire-visor skywire2.json
 ```

@@ -62,7 +62,7 @@ type ClientFactory struct {
 }
 
 // MakeClient creates a new client of specified type
-func (f *ClientFactory) MakeClient(netType Type) (Client, error) {
+func (f *ClientFactory) MakeClient(netType Type, port int) (Client, error) {
 	log := logging.MustGetLogger(string(netType))
 	if f.MLogger != nil {
 		log = f.MLogger.PackageLogger(string(netType))
@@ -88,9 +88,9 @@ func (f *ClientFactory) MakeClient(netType Type) (Client, error) {
 	case STCP:
 		return newStcp(generic, f.PKTable), nil
 	case STCPR:
-		return newStcpr(resolved), nil
+		return newStcpr(resolved, port), nil
 	case SUDPH:
-		return newSudph(resolved), nil
+		return newSudph(resolved, port), nil
 	case DMSG:
 		return newDmsgClient(f.DmsgC), nil
 	}
@@ -149,7 +149,7 @@ func (c *genericClient) acceptTransports(lis net.Listener) {
 	c.log.Debugf("listening on addr: %v", c.connListener.Addr())
 	for {
 		if err := c.acceptTransport(); err != nil {
-			if errors.Is(err, io.EOF) {
+			if errors.Is(err, io.EOF) || strings.Contains(err.Error(), "encrypt connection to") {
 				continue // likely it's a dummy connection from service discovery
 			}
 

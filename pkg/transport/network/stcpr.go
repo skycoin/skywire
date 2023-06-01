@@ -3,6 +3,7 @@ package network
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 
@@ -12,10 +13,11 @@ import (
 
 type stcprClient struct {
 	*resolvedClient
+	port int
 }
 
-func newStcpr(resolved *resolvedClient) Client {
-	client := &stcprClient{resolvedClient: resolved}
+func newStcpr(resolved *resolvedClient, port int) Client {
+	client := &stcprClient{resolvedClient: resolved, port: port}
 	client.netType = STCPR
 	return client
 }
@@ -50,10 +52,22 @@ func (c *stcprClient) Start() error {
 }
 
 func (c *stcprClient) serve() {
-	lis, err := net.Listen("tcp", "")
-	if err != nil {
-		c.log.Errorf("Failed to listen on random port: %v", err)
-		return
+	var lis net.Listener
+	var err error
+	var confPort string
+	if c.port != 0 {
+		confPort = fmt.Sprintf(":%d", c.port)
+	}
+	for {
+		lis, err = net.Listen("tcp", confPort)
+		if err != nil {
+			c.log.WithError(err).Warnf("Failed to listen on port: %d", c.port)
+			c.port++
+			confPort = fmt.Sprintf(":%d", c.port)
+			c.log.Warnf("Trying port %d", c.port)
+			continue
+		}
+		break
 	}
 
 	localAddr := lis.Addr().String()

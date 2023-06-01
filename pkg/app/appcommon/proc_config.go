@@ -70,16 +70,17 @@ type ProcID uint16
 
 // ProcConfig defines configuration parameters for `Proc`.
 type ProcConfig struct {
-	AppName     string        `json:"app_name"`
-	AppSrvAddr  string        `json:"app_server_addr"`
-	ProcKey     ProcKey       `json:"proc_key"`
-	ProcArgs    []string      `json:"proc_args"`
-	ProcEnvs    []string      `json:"proc_envs"` // Additional env variables. Will be overwritten if they conflict with skywire-app specific envs.
-	ProcWorkDir string        `json:"proc_work_dir"`
-	VisorPK     cipher.PubKey `json:"visor_pk"`
-	RoutingPort routing.Port  `json:"routing_port"`
-	BinaryLoc   string        `json:"binary_loc"`
-	LogDBLoc    string        `json:"log_db_loc"`
+	AppName      string        `json:"app_name"`
+	AppSrvAddr   string        `json:"app_server_addr"`
+	ProcKey      ProcKey       `json:"proc_key"`
+	ProcArgs     []string      `json:"proc_args"`
+	ProcEnvs     []string      `json:"proc_envs"` // Additional env variables. Will be overwritten if they conflict with skywire-app specific envs.
+	ProcWorkDir  string        `json:"proc_work_dir"`
+	VisorPK      cipher.PubKey `json:"visor_pk"`
+	RoutingPort  routing.Port  `json:"routing_port"`
+	BinaryLoc    string        `json:"binary_loc"`
+	LogDBLoc     string        `json:"log_db_loc"`
+	LogStorePath string        `json:"log_store_path"`
 }
 
 // ProcConfigFromEnv obtains a ProcConfig from the associated env variable, returning an error if any.

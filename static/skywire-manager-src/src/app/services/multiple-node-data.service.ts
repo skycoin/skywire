@@ -82,6 +82,16 @@ export class MultipleNodeDataService {
   }
 
   /**
+   * Makes the service stop returning the node list.
+   */
+  stopRequestingData() {
+    if (this.updateSubscription) {
+      this.updateSubscription.unsubscribe();
+      this.firstCallToGetDataMade = false;
+    }
+  }
+
+  /**
    * Starts periodically getting the node list.
    * @param delayMs Delay before loading the data.
    */
