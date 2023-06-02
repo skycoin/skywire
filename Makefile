@@ -127,10 +127,10 @@ generate: ## Generate mocks and config README's
 	go generate ./...
 
 clean: ## Clean project: remove created binaries and apps
-	-rm -rf ./build
+	-rm -rf ./build ./local
 
 clean-windows: ## Clean project: remove created binaries and apps
-	powershell -Command Remove-Item -Path ./build -Force -Recurse
+	powershell -Command Remove-Item -Path ./build ./local -Force -Recurse
 
 install: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node
