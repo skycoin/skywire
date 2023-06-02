@@ -99,13 +99,11 @@ commit:
 
 check: lint test ## Run linters and tests
 
-check-windows: lint-windows test-windows ## Run linters and tests on appveyor windows image
+check-windows: lint-windows test-windows ## Run linters and tests on windows image
 
 build: host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
 build-windows: host-apps-windows bin-windows ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
-
-build-windows-appveyor: host-apps-windows-appveyor bin-windows-appveyor ## Install dependencies, build apps and binaries. `go build` with ${OPTS} for AppVeyor image
 
 build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
@@ -127,10 +125,11 @@ generate: ## Generate mocks and config README's
 	go generate ./...
 
 clean: ## Clean project: remove created binaries and apps
-	-rm -rf ./build
+	-rm -rf ./build ./local
 
 clean-windows: ## Clean project: remove created binaries and apps
-	powershell -Command Remove-Item -Path ./build -Force -Recurse
+	powershell -Command "If (Test-Path ./local) { Remove-Item -Path ./local -Force -Recurse }"
+	powershell -Command "If (Test-Path ./build) { Remove-Item -Path ./build -Force -Recurse }"
 
 install: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node
@@ -148,10 +147,6 @@ lint: ## Run linters. Use make install-linters first
 lint-windows: ## Run linters. Use make install-linters-windows first
 	powershell 'golangci-lint --version'
 	powershell 'golangci-lint run -c .golangci.yml ./...'
-
-lint-appveyor-windows: ## Run linters for appveyor only on windows
-	C:\Users\appveyor\go\bin\golangci-lint --version
-	C:\Users\appveyor\go\bin\golangci-lint run -c .golangci.yml ./...
 
 test: ## Run tests
 	-go clean -testcache &>/dev/null
@@ -200,12 +195,8 @@ example-apps: ## Build example apps
 	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)apps/ ./example/...
 
 host-apps-windows: ## build apps on windows
-	powershell -Command new-item .\apps -itemtype directory -force
-	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build ${BUILD_OPTS} -o ./apps $$_.FullName }'
-
-host-apps-windows-appveyor: ## build apps on windows. `go build` with ${OPTS} for AppVeyor image
-	powershell -Command new-item .\apps -itemtype directory -force
-	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build -o ./apps $$_.FullName }'
+	powershell -Command new-item $(BUILD_PATH)apps -itemtype directory -force
+	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)apps $$_.FullName }'
 
 # Static Apps
 host-apps-static: ## Build app
@@ -240,10 +231,7 @@ unfix-systray-vendor:
 	fi
 
 bin-windows: ## Build `skywire-visor`, `skywire-cli`
-	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go build ${BUILD_OPTS} -o ./ $$_.FullName }'
-
-bin-windows-appveyor: ## Build `skywire-visor`, `skywire-cli`
-	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go build -o ./ $$_.FullName }'
+	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH) $$_.FullName }'
 
 # Static Bin
 bin-static: ## Build `skywire-visor`, `skywire-cli`
