@@ -26,8 +26,13 @@
   </form>
 
   <!-- Result. -->
-  <div *ngIf="!checking && result !== null">
-    {{ 'ping.result' | translate:{ result: result } }}
+  <div *ngIf="!checking && result !== null" class="info-dialog">
+    <div class="title mt-0">
+      <mat-icon [inline]="true">import_export</mat-icon>{{ 'ping.result-title' | translate }}
+    </div>
+    <div class="item">
+      <span>{{ 'ping.result' | translate }}</span> {{ result }}ms.
+    </div>
   </div>
 
   <app-button
