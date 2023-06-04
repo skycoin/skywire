@@ -6,8 +6,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.9
+
+-   Fix `skywire-cli config gen -r`
+
 ## 1.3.8
 
+-   Rebuild Hypervisor UI  [#1583](https://github.com/skycoin/skywire/pull/1583)
 -   Rebuild Hypervisor UI  [#1583](https://github.com/skycoin/skywire/pull/1583)
 -   Change Logserver to use c.JSON method ; remove variable for endpoint name '/node-info'  [#1582](https://github.com/skycoin/skywire/pull/1582)
 -   update changelog  [#1580](https://github.com/skycoin/skywire/pull/1580)
