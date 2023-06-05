@@ -264,7 +264,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
         port = ':' + port;
       }
 
-      return 'http://' + this.nodeIp + port;
+      return 'http://127.0.0.1' + port;
     } else if (app.name.toLocaleLowerCase() === 'vpn-client' && this.nodePK) {
       return location.origin + '/#/vpn/' + this.nodePK + '/status';
     } else if (!this.officialAppsList.has(app.name)) {
