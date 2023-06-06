@@ -31,8 +31,8 @@ type Services struct {
 func NewServices() Services {
 	cliRepo := memory.NewClientRepo()
 	cli, _ := cliRepo.GetClient() //nolint
-	vsrRepo := memory.NewVisorRepo()
 	usrRepo := boltdb.NewUserRepo(cli.GetAppClient().Config().VisorPK)
+	vsrRepo := boltdb.NewVisorRepo()
 	ns := channel.NewNotificationService()
 	ms := netcon.NewMessengerService(ns, cliRepo, usrRepo, vsrRepo)
 
