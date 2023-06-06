@@ -769,8 +769,7 @@ func (ms MessengerService) sendMessageToPeers(v *chat.Visor, pkroute util.PKRout
 			m.Root = pkroute
 			m.Dest = util.NewP2PRoute(peer.GetPK())
 
-			//send message to the peer, but don't save it again in database
-			err := ms.sendMessage(pkroute, m, false)
+			err := ms.sendMessageAndDontSaveItToDatabase(pkroute, m)
 			if err != nil {
 				fmt.Printf("error sending group message to peer: %v", err)
 				continue
@@ -790,7 +789,7 @@ func (ms MessengerService) sendLocalRouteInfoToPeer(pkroute util.PKRoute, dest u
 
 	m := message.NewChatInfoMessage(pkroute, dest, bytes)
 
-	err = ms.sendMessage(pkroute, m, true)
+	err = ms.sendMessageAndSaveItToDatabase(pkroute, m)
 	if err != nil {
 		return err
 	}

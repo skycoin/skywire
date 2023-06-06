@@ -146,6 +146,22 @@ func NewJSONMessage(m Message) JSONMessage {
 	}
 }
 
+// NewMessageFromJSON returns a Message from a JSONMessage
+func NewMessageFromJSON(m JSONMessage) Message {
+	return Message{
+		m.ID,
+		m.Origin,
+		m.Time,
+		m.Root,
+		m.Dest,
+		m.MsgType,
+		m.MsgSubtype,
+		[]byte(m.Message),
+		m.Status,
+		m.Seen,
+	}
+}
+
 // NewRAWMessage return a RAWMessage from a message
 func NewRAWMessage(m Message) RAWMessage {
 
@@ -197,229 +213,26 @@ func (m Message) MarshalJSON() ([]byte, error) {
 	return json.Marshal(NewJSONMessage(m))
 }
 
-// NewTextMessage returns a Message
-func NewTextMessage(pkOrigin cipher.PubKey, routeDestination util.PKRoute, msg []byte) Message {
-	m := Message{}
-	m.Origin = pkOrigin
-	m.Root = util.NewP2PRoute(pkOrigin)
-	m.Dest = routeDestination
-	m.MsgType = TxtMsgType
-	m.MsgSubtype = 0
-	m.Message = msg
-	m.Status = MsgStatusInitial
-	m.Time = time.Now()
-	return m
-}
+// UnmarshalJSON returns unmarshaled bytes and error
+func (m *Message) UnmarshalJSON(b []byte) error {
+	jm := JSONMessage{}
+	err := json.Unmarshal(b, &jm)
+	if err != nil {
+		return err
+	}
 
-// NewRouteRequestMessage returns a request Message
-func NewRouteRequestMessage(pkOrigin cipher.PubKey, routeDestination util.PKRoute) Message {
-	m := Message{}
-	m.Origin = pkOrigin
-	m.Root = util.NewP2PRoute(pkOrigin)
-	m.Dest = routeDestination
-	m.MsgType = ConnMsgType
-	m.MsgSubtype = ConnMsgTypeRequest
-	m.Message = []byte("Chat Request")
-	m.Status = MsgStatusInitial
-	m.Time = time.Now()
-	return m
-}
+	m.ID = jm.ID
+	m.Origin = jm.Origin
+	m.Time = jm.Time
+	m.Root = jm.Root
+	m.Dest = jm.Dest
+	m.MsgType = jm.MsgType
+	m.MsgSubtype = jm.MsgSubtype
+	m.Message = []byte(jm.Message)
+	m.Status = jm.Status
+	m.Seen = jm.Seen
 
-// NewChatAcceptMessage returns a chat accepted message
-// pk is the users pk to set the messages root
-func NewChatAcceptMessage(root util.PKRoute, dest util.PKRoute) Message {
-	m := Message{}
-	m.Origin = root.Visor
-	m.Root = root
-	m.Dest = dest
-	m.MsgType = ConnMsgType
-	m.MsgSubtype = ConnMsgTypeAccept
-	m.Status = MsgStatusInitial
-	m.Message = []byte("Chat Accepted")
-	m.Time = time.Now()
-	return m
-}
-
-// NewChatRejectMessage returns new chat rejected message
-func NewChatRejectMessage(root util.PKRoute, dest util.PKRoute) Message {
-	m := Message{}
-	m.Origin = root.Visor
-	m.Root = root
-	m.Dest = dest
-	m.MsgType = ConnMsgType
-	m.MsgSubtype = ConnMsgTypeReject
-	m.Message = []byte("Chat Rejected")
-	m.Status = MsgStatusInitial
-	m.Time = time.Now()
-	return m
-}
-
-// NewChatLeaveMessage returns new chat leave message
-func NewChatLeaveMessage(root util.PKRoute, dest util.PKRoute) Message {
-	m := Message{}
-	m.Origin = root.Visor
-	m.Root = root
-	m.Dest = dest
-	m.MsgType = ConnMsgType
-	m.MsgSubtype = ConnMsgTypeLeave
-	m.Message = []byte("Chat Left")
-	m.Status = MsgStatusInitial
-	m.Time = time.Now()
-	return m
-}
-
-// NewRouteDeletedMessage returns new message to info about deleted route
-func NewRouteDeletedMessage(route util.PKRoute, dest util.PKRoute) Message {
-	m := Message{}
-	m.Origin = route.Visor
-	m.Root = route
-	m.Dest = dest
-	m.MsgType = ConnMsgType
-	m.MsgSubtype = ConnMsgTypeDelete
-	m.Message = []byte("Chat Deleted")
-	m.Status = MsgStatusInitial
-	m.Time = time.Now()
-	return m
-}
-
-// NewChatInfoMessage returns new chat info
-func NewChatInfoMessage(root util.PKRoute, dest util.PKRoute, info []byte) Message {
-	m := Message{}
-	m.Origin = root.Visor
-	m.Root = root
-	m.Dest = dest
-	m.MsgType = InfoMsgType
-	m.MsgSubtype = InfoMsgTypeSingle
-	m.Message = info
-	m.Status = MsgStatusInitial
-	m.Time = time.Now()
-	return m
-}
-
-// NewAddRoomMessage returns a Message
-func NewAddRoomMessage(root util.PKRoute, dest util.PKRoute, info []byte) Message {
-	m := Message{}
-	m.Origin = root.Visor
-	m.Root = root
-	m.Dest = dest
-	m.MsgType = CmdMsgType
-	m.MsgSubtype = CmdMsgTypeAddRoom
-	m.Message = info
-	m.Status = MsgStatusInitial
-	m.Time = time.Now()
-	return m
-}
-
-// NewDeleteRoomMessage returns a Message
-func NewDeleteRoomMessage(root util.PKRoute, dest util.PKRoute) Message {
-	m := Message{}
-	m.Origin = root.Visor
-	m.Root = root
-	m.Dest = dest
-	m.MsgType = CmdMsgType
-	m.MsgSubtype = CmdMsgTypeDeleteRoom
-	m.Message = []byte("Room Deleted")
-	m.Status = MsgStatusInitial
-	m.Time = time.Now()
-	return m
-}
-
-// NewRoomMembersMessage returns a Message of room members
-func NewRoomMembersMessage(root util.PKRoute, dest util.PKRoute, members []byte) Message {
-	m := Message{}
-	m.Origin = root.Visor
-	m.Root = root
-	m.Dest = dest
-	m.MsgType = InfoMsgType
-	m.MsgSubtype = InfoMsgTypeRoomMembers
-	m.Message = members
-	m.Status = MsgStatusInitial
-	m.Time = time.Now()
-	return m
-}
-
-// NewRoomModsMessage returns a Message of room moderators
-func NewRoomModsMessage(root util.PKRoute, dest util.PKRoute, moderators []byte) Message {
-	m := Message{}
-	m.Origin = root.Visor
-	m.Root = root
-	m.Dest = dest
-	m.MsgType = InfoMsgType
-	m.MsgSubtype = InfoMsgTypeRoomMembers
-	m.Message = moderators
-	m.Status = MsgStatusInitial
-	m.Time = time.Now()
-	return m
-}
-
-// NewRoomMutedMessage returns a Message of muted pks of room
-func NewRoomMutedMessage(root util.PKRoute, dest util.PKRoute, muted []byte) Message {
-	m := Message{}
-	m.Origin = root.Visor
-	m.Root = root
-	m.Dest = dest
-	m.MsgType = InfoMsgType
-	m.MsgSubtype = InfoMsgTypeRoomMuted
-	m.Message = muted
-	m.Status = MsgStatusInitial
-	m.Time = time.Now()
-	return m
-}
-
-// NewMutePeerMessage returns a Message to mute a peer
-func NewMutePeerMessage(root util.PKRoute, dest util.PKRoute, pk []byte) Message {
-	m := Message{}
-	m.Origin = root.Visor
-	m.Root = root
-	m.Dest = dest
-	m.MsgType = CmdMsgType
-	m.MsgSubtype = CmdMsgTypeMutePeer
-	m.Message = pk
-	m.Status = MsgStatusInitial
-	m.Time = time.Now()
-	return m
-}
-
-// NewUnmutePeerMessage returns a Message to mute a peer
-func NewUnmutePeerMessage(root util.PKRoute, dest util.PKRoute, pk []byte) Message {
-	m := Message{}
-	m.Origin = root.Visor
-	m.Root = root
-	m.Dest = dest
-	m.MsgType = CmdMsgType
-	m.MsgSubtype = CmdMsgTypeUnmutePeer
-	m.Message = pk
-	m.Status = MsgStatusInitial
-	m.Time = time.Now()
-	return m
-}
-
-// NewHireModeratorMessage returns a Message to hire a peer as moderator
-func NewHireModeratorMessage(root util.PKRoute, dest util.PKRoute, pk []byte) Message {
-	m := Message{}
-	m.Origin = root.Visor
-	m.Root = root
-	m.Dest = dest
-	m.MsgType = CmdMsgType
-	m.MsgSubtype = CmdMsgTypeHireModerator
-	m.Message = pk
-	m.Status = MsgStatusInitial
-	m.Time = time.Now()
-	return m
-}
-
-// NewFireModeratorMessage returns a Message to fire a moderator
-func NewFireModeratorMessage(root util.PKRoute, dest util.PKRoute, pk []byte) Message {
-	m := Message{}
-	m.Origin = root.Visor
-	m.Root = root
-	m.Dest = dest
-	m.MsgType = CmdMsgType
-	m.MsgSubtype = CmdMsgTypeFireModerator
-	m.Message = pk
-	m.Status = MsgStatusInitial
-	m.Time = time.Now()
-	return m
+	return nil
 }
 
 // GetID returns message ID
@@ -490,4 +303,45 @@ func (m *Message) GetSeen() bool {
 // SetStatus sets the message status
 func (m *Message) SetStatus(status int) {
 	m.Status = status
+}
+
+// IsFromRemoteP2PToLocalP2P returns if the message is a p2p message from remote to local
+func (m *Message) IsFromRemoteP2PToLocalP2P(localPK cipher.PubKey) bool {
+	return m.GetDestinationVisor() == localPK && m.GetDestinationServer() == localPK && m.GetDestinationRoom() == localPK && m.GetRootVisor() == m.GetRootServer() && m.GetRootServer() == m.GetRootRoom()
+}
+
+// IsFromLocalToRemoteP2P returns if the message is a p2p message from local to remote
+func (m *Message) IsFromLocalToRemoteP2P() bool {
+	return m.GetDestinationVisor() == m.GetDestinationServer()
+}
+
+// IsFromRemoteServer returns if the message is a message of a remote server
+func (m *Message) IsFromRemoteServer() bool {
+	return m.GetRootVisor() != m.GetRootServer() && m.GetRootServer() != m.GetRootRoom()
+}
+
+// IsFromRemoteToLocalServer returns if the message is a message sent to the local server
+func (m *Message) IsFromRemoteToLocalServer(localPK cipher.PubKey) bool {
+	return m.GetDestinationVisor() == localPK && m.GetDestinationVisor() != m.GetDestinationServer() && m.GetDestinationServer() != m.GetDestinationRoom()
+}
+
+// FmtPrint uses fmt.Print for beautiful representation of message
+func (m *Message) FmtPrint(printMessageBytes bool) {
+	fmt.Println("---------------------------------------------------------------------------------------------------")
+	fmt.Printf("Message: \n")
+	fmt.Printf("ID: 		%d \n", m.ID)
+	fmt.Printf("Origin:		%s \n", m.Origin)
+	fmt.Printf("Time:		%s \n", m.Time)
+	fmt.Printf("Root:		%s \n", m.Root.String())
+	fmt.Printf("Dest:		%s \n", m.Dest.String())
+	fmt.Printf("MsgType:	%d \n", m.MsgType)
+	fmt.Printf("MsgSubType:	%d \n", m.MsgSubtype)
+
+	if printMessageBytes {
+		fmt.Printf("Message:		%s \n", string(m.Message))
+	}
+
+	fmt.Printf("Status:		%d \n", m.Status)
+	fmt.Printf("Seen:		%t \n", m.Seen)
+	fmt.Println("---------------------------------------------------------------------------------------------------")
 }

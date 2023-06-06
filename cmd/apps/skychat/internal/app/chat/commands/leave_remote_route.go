@@ -86,7 +86,7 @@ func (h leaveRemoteRouteRequestHandler) Handle(command LeaveRemoteRouteRequest) 
 	// Send LeaveChatMessage to remote server
 	err = h.ms.SendLeaveRouteMessage(command.Route)
 	if err != nil {
-		return err
+		fmt.Println(err)
 	}
 
 	// Delete room from server

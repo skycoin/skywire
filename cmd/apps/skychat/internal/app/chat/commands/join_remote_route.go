@@ -48,7 +48,7 @@ func (h joinRemoteRouteRequestHandler) Handle(command JoinRemoteRouteRequest) er
 		return err
 	}
 
-	go h.messengerService.Handle(command.Route.Visor) //nolint:errcheck
+	go h.messengerService.HandleConnection(command.Route.Visor) //nolint:errcheck
 
 	return nil
 }

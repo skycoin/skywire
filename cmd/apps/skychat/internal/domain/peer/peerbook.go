@@ -9,12 +9,12 @@ import (
 
 // Peerbook contains a map of peers
 type Peerbook struct {
-	peers map[cipher.PubKey]Peer
+	Peers map[cipher.PubKey]Peer
 }
 
 // GetPeerByPK returns a peer from the peerbook if it is available
 func (pb *Peerbook) GetPeerByPK(pk cipher.PubKey) (*Peer, error) {
-	if p, ok := pb.peers[pk]; ok {
+	if p, ok := pb.Peers[pk]; ok {
 		return &p, nil
 	}
 	return nil, fmt.Errorf("peer not found")
@@ -22,16 +22,16 @@ func (pb *Peerbook) GetPeerByPK(pk cipher.PubKey) (*Peer, error) {
 
 // SetPeer updates or adds the given peer in the peerbook
 func (pb *Peerbook) SetPeer(p Peer) {
-	pb.peers[p.GetPK()] = p
+	pb.Peers[p.GetPK()] = p
 }
 
 // DeletePeer deletes the given peer from the peerbook
 func (pb *Peerbook) DeletePeer(pk cipher.PubKey) {
-	delete(pb.peers, pk)
+	delete(pb.Peers, pk)
 }
 
 // AddPeer adds a new peer to the peerbook
 func (pb *Peerbook) AddPeer(i info.Info, alias string) {
 	p := NewPeer(i, alias)
-	pb.peers[i.GetPK()] = *p
+	pb.Peers[i.GetPK()] = *p
 }

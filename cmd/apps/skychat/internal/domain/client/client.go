@@ -63,6 +63,14 @@ func (c *Client) GetConnByPK(pk cipher.PubKey) (net.Conn, error) {
 	return nil, fmt.Errorf("no conn available with the requested visor")
 }
 
+// ConnectionToPkExists returns if a connection to the given pk is saved inside conns
+func (c *Client) ConnectionToPkExists(pk cipher.PubKey) bool {
+	if _, ok := c.conns[pk]; ok {
+		return true
+	}
+	return false
+}
+
 // AddConn adds the given net.Conn to the map to keep track of active connections
 func (c *Client) AddConn(pk cipher.PubKey, conn net.Conn) error {
 	//check if conn already added

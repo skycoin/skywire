@@ -9,7 +9,7 @@ import (
 
 // Service interface is the interface to the service
 type Service interface {
-	Handle(pk cipher.PubKey)
+	HandleConnection(pk cipher.PubKey)
 	Listen()
 
 	//only used as client/p2p
