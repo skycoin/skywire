@@ -38,7 +38,7 @@ import (
 )
 
 const (
-	HttpWriteTimeout = 30 * time.Second
+	HTTPWriteTimeout = 30 * time.Second
 )
 
 const (
@@ -211,7 +211,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 
 	r.Route("/", func(r chi.Router) {
 		r.Route("/api", func(r chi.Router) {
-			r.Use(middleware.Timeout(HttpWriteTimeout))
+			r.Use(middleware.Timeout(HTTPWriteTimeout))
 
 			r.Get("/ping", hv.getPong())
 

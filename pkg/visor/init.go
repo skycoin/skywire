@@ -1464,7 +1464,7 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 		Addr:         conf.HTTPAddr,
 		Handler:      handler,
 		ReadTimeout:  5 * time.Second,
-		WriteTimeout: HttpWriteTimeout,
+		WriteTimeout: HTTPWriteTimeout,
 	}
 
 	go func() {

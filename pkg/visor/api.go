@@ -215,19 +215,21 @@ func (v *Visor) Overview() (*Overview, error) {
 
 // Summary provides detailed info including overview and health of the visor.
 type Summary struct {
-	Overview             *Overview                        `json:"overview"`
-	Health               *HealthInfo                      `json:"health"`
-	Uptime               float64                          `json:"uptime"`
-	Routes               []routingRuleResp                `json:"routes"`
-	IsHypervisor         bool                             `json:"is_hypervisor,omitempty"`
-	DmsgStats            *dmsgtracker.DmsgClientSummary   `json:"dmsg_stats"`
-	Online               bool                             `json:"online"`
-	MinHops              uint16                           `json:"min_hops"`
-	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
-	SkybianBuildVersion  string                           `json:"skybian_build_version"`
-	RewardAddress        string                           `json:"reward_address"`
-	BuildTag             string                           `json:"build_tag"`
-	PublicAutoconnect    bool                             `json:"public_autoconnect"`
+	Overview             *Overview                         `json:"overview"`
+	Health               *HealthInfo                       `json:"health"`
+	Uptime               float64                           `json:"uptime"`
+	Routes               []routingRuleResp                 `json:"routes"`
+	LocalForwardedPorts  []int                             `json:"local_forwarded_ports"`
+	RemoteConnectedPorts map[uuid.UUID]*appnet.ForwardConn `json:"remote_connected_ports"`
+	IsHypervisor         bool                              `json:"is_hypervisor,omitempty"`
+	DmsgStats            *dmsgtracker.DmsgClientSummary    `json:"dmsg_stats"`
+	Online               bool                              `json:"online"`
+	MinHops              uint16                            `json:"min_hops"`
+	PersistentTransports []transport.PersistentTransports  `json:"persistent_transports"`
+	SkybianBuildVersion  string                            `json:"skybian_build_version"`
+	RewardAddress        string                            `json:"reward_address"`
+	BuildTag             string                            `json:"build_tag"`
+	PublicAutoconnect    bool                              `json:"public_autoconnect"`
 }
 
 // BuildTag variable that will set when building binary
@@ -253,6 +255,16 @@ func (v *Visor) Summary() (*Summary, error) {
 	routes, err := v.RoutingRules()
 	if err != nil {
 		return nil, fmt.Errorf("routes")
+	}
+
+	localPorts, err := v.ListHTTPPorts()
+	if err != nil {
+		return nil, fmt.Errorf("fwd")
+	}
+
+	remotePorts, err := v.List()
+	if err != nil {
+		return nil, fmt.Errorf("rev")
 	}
 
 	skybianBuildVersion := v.SkybianBuildVersion()
@@ -287,6 +299,8 @@ func (v *Visor) Summary() (*Summary, error) {
 		Health:               health,
 		Uptime:               uptime,
 		Routes:               extraRoutes,
+		LocalForwardedPorts:  localPorts,
+		RemoteConnectedPorts: remotePorts,
 		MinHops:              v.conf.Routing.MinHops,
 		PersistentTransports: pts,
 		SkybianBuildVersion:  skybianBuildVersion,
