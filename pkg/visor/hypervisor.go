@@ -38,6 +38,7 @@ import (
 )
 
 const (
+	// HTTPWriteTimeout is the max time, in seconds, for returning a http response.
 	HTTPWriteTimeout = 30 * time.Second
 )
 
