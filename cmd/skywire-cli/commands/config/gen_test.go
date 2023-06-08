@@ -1,6 +1,7 @@
 package cliconfig
 
 import (
+	"os"
 	"os/exec"
 	"runtime"
 	"testing"
@@ -56,7 +57,7 @@ func TestConfigGenCmdFunc(t *testing.T) {
 			expectedErr: true,
 		},
 	}
-
+	_ = os.Remove("test-config.json") //nolint
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := script.Exec(shell + ` -c "go run ../../skywire-cli.go ` + test.command + `"`).Stdout()
@@ -72,4 +73,5 @@ func TestConfigGenCmdFunc(t *testing.T) {
 			}
 		})
 	}
+	_ = os.Remove("test-config.json") //nolint
 }
