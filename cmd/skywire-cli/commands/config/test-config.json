@@ -1,0 +1,92 @@
+{
+  "version": "unknown",
+  "sk": "c5b7853e27a29378eeee4574dc5a7db3cd763ebb49bbedf3acf00beee0ce8f33",
+  "pk": "022270bd4a21a321f4646d7ddfbe1d28490b808ab02af8fdc86dbbc36760f2e72a",
+  "dmsg": {
+    "discovery": "http://dmsgd.skywire.skycoin.com",
+    "sessions_count": 1,
+    "servers": []
+  },
+  "dmsgpty": {
+    "dmsg_port": 22,
+    "cli_network": "unix",
+    "cli_address": "/tmp/dmsgpty.sock",
+    "whitelist": []
+  },
+  "skywire-tcp": {
+    "pk_table": null,
+    "listening_address": ":7777"
+  },
+  "transport": {
+    "discovery": "http://tpd.skywire.skycoin.com",
+    "address_resolver": "http://ar.skywire.skycoin.com",
+    "public_autoconnect": true,
+    "transport_setup": [
+      "03530b786c670fc7f5ab9021478c7ec9cd06a03f3ea1416c50c4a8889ef5bba80e",
+      "03271c0de223b80400d9bd4b7722b536a245eb6c9c3176781ee41e7bac8f9bad21",
+      "03a792e6d960c88c6fb2184ee4f16714c58b55f0746840617a19f7dd6e021699d9",
+      "0313efedc579f57f05d4f5bc3fbf0261f31e51cdcfde7e568169acf92c78868926",
+      "025c7bbf23e3441a36d7e8a1e9d717921e2a49a2ce035680fec4808a048d244c8a",
+      "030eb6967f6e23e81db0d214f925fc5ce3371e1b059fb8379ae3eb1edfc95e0b46",
+      "02e582c0a5e5563aad47f561b272e4c3a9f7ac716258b58e58eb50afd83c286a7f",
+      "02ddc6c749d6ed067bb68df19c9bcb1a58b7587464043b1707398ffa26a9746b26",
+      "03aa0b1c4e23616872058c11c6efba777c130a85eaf909945d697399a1eb08426d",
+      "03adb2c924987d8deef04d02bd95236c5ae172fe5dfe7273e0461d96bf4bc220be"
+    ],
+    "log_store": {
+      "type": "file",
+      "location": "./local/transport_logs",
+      "rotation_interval": "168h0m0s"
+    },
+    "stcpr_port": 0,
+    "sudph_port": 0
+  },
+  "routing": {
+    "route_setup_nodes": [
+      "0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557",
+      "024fbd3997d4260f731b01abcfce60b8967a6d4c6a11d1008812810ea1437ce438",
+      "03b87c282f6e9f70d97aeea90b07cf09864a235ef718725632d067873431dd1015"
+    ],
+    "route_finder": "http://rf.skywire.skycoin.com",
+    "route_finder_timeout": "10s",
+    "min_hops": 0
+  },
+  "uptime_tracker": {
+    "addr": "http://ut.skywire.skycoin.com"
+  },
+  "launcher": {
+    "service_discovery": "http://sd.skycoin.com",
+    "apps": null,
+    "server_addr": "localhost:5505",
+    "bin_path": "./apps",
+    "display_node_ip": false
+  },
+  "survey_whitelist": [
+    "02b5ee5333aa6b7f5fc623b7d5f35f505cb7f974e98a70751cf41962f84c8c4637",
+    "03714c8bdaee0fb48f47babbc47c33e1880752b6620317c9d56b30f3b0ff58a9c3",
+    "020d35bbaf0a5abc8ec0ba33cde219fde734c63e7202098e1f9a6cf9daaeee55a9",
+    "027f7dec979482f418f01dfabddbd750ad036c579a16422125dd9a313eaa59c8e1",
+    "031d4cf1b7ab4c789b56c769f2888e4a61c778dfa5fe7e5cd0217fc41660b2eb65",
+    "0327e2cf1d2e516ecbfdbd616a87489cc92a73af97335d5c8c29eafb5d8882264a",
+    "03abbb3eff140cf3dce468b3fa5a28c80fa02c6703d7b952be6faaf2050990ebf4"
+  ],
+  "hypervisors": [],
+  "cli_addr": "localhost:3435",
+  "log_level": "",
+  "local_path": "./local",
+  "dmsghttp_server_path": "./local/custom",
+  "stun_servers": [
+    "139.162.12.30:3478",
+    "170.187.228.181:3478",
+    "172.104.161.184:3478",
+    "170.187.231.137:3478",
+    "143.42.74.91:3478",
+    "170.187.225.78:3478",
+    "143.42.78.123:3478",
+    "139.162.12.244:3478"
+  ],
+  "shutdown_timeout": "10s",
+  "restart_check_delay": "1s",
+  "is_public": false,
+  "persistent_transports": null
+}
