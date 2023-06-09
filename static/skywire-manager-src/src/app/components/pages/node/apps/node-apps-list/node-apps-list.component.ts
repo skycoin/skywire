@@ -23,6 +23,7 @@ import { FilterProperties, FilterFieldTypes } from 'src/app/utils/filters';
 import { SortingColumn, SortingModes, DataSorter } from 'src/app/utils/lists/data-sorter';
 import { DataFilterer } from 'src/app/utils/lists/data-filterer';
 import { UserAppSettingsComponent } from '../node-apps/user-app-settings/user-app-settings.component';
+import { SkychatSettingsComponent } from '../node-apps/skychat-settings/skychat-settings.component';
 
 /**
  * Shows the list of applications of a node. It shows official or user apps, not both at the
@@ -80,7 +81,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
   }
 
   // List with the names of all the apps which can not be configured directly on the manager.
-  appsWithoutConfig = new Set<string>(['skychat']);
+  appsWithoutConfig = new Set<string>();
 
   // All apps the ode has.
   allApps: Application[];
@@ -248,14 +249,23 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
    */
   getLink(app: Application): string {
     if (app.name.toLocaleLowerCase() === 'skychat' && this.nodeIp && app.status !== 0 && app.status !== 2) {
-      // Default port.
+      // Default port and ip.
       let port = '8001';
+      let url = '127.0.0.1';
 
-      // Try to get the port from the config array.
+      // Try to get the address and port from the config array.
       if (app.args) {
         for (let i = 0; i < app.args.length; i++) {
           if (app.args[i] === '-addr' && i + 1 < app.args.length) {
-            port = (app.args[i + 1] as string).trim();
+            const addr = (app.args[i + 1] as string).trim();
+
+            const parts = addr.split(':');
+            // If the app can be accessed outside localhost, use the remote ip.
+            if (parts[0] === '*') {
+              url = this.nodeIp;
+            }
+
+            port = parts[1];
           }
         }
       }
@@ -264,7 +274,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
         port = ':' + port;
       }
 
-      return 'http://127.0.0.1' + port;
+      return 'http://' + url + port;
     } else if (app.name.toLocaleLowerCase() === 'vpn-client' && this.nodePK) {
       return location.origin + '/#/vpn/' + this.nodePK + '/status';
     } else if (!this.officialAppsList.has(app.name)) {
@@ -574,12 +584,12 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
    * Shows the appropriate modal window for configuring the app.
    */
   config(app: Application): void {
-    if (app.name === 'skysocks' || app.name === 'vpn-server') {
+    if (app.name === 'skychat') {
+      SkychatSettingsComponent.openDialog(this.dialog, app);
+    } else if (app.name === 'skysocks' || app.name === 'vpn-server') {
       SkysocksSettingsComponent.openDialog(this.dialog, app);
     } else if (app.name === 'skysocks-client' || app.name === 'vpn-client') {
       SkysocksClientSettingsComponent.openDialog(this.dialog, app);
-    } else if (app.name === 'skychat') {
-      this.snackbarService.showError('apps.error');
     } else {
       UserAppSettingsComponent.openDialog(this.dialog, app);
     }
