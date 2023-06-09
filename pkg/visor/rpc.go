@@ -391,7 +391,7 @@ func (r *RPC) SetAppSecure(in *SetAppBoolIn, _ *struct{}) (err error) {
 	return r.visor.SetAppSecure(in.AppName, in.Val)
 }
 
-// SetAppPort sets addr flag for the app
+// SetAppAddress sets addr flag for the app
 func (r *RPC) SetAppAddress(in *SetAppStringIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppAddress", in)(nil, &err)
 

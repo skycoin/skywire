@@ -788,7 +788,7 @@ func (v *Visor) SetAppAddress(appName string, address string) error {
 
 	forLocalhostOnly := address[:1] == ":"
 	prefix := 2
-	if forLocalhostOnly == true {
+	if forLocalhostOnly {
 		prefix = 1
 	}
 
