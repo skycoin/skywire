@@ -36,7 +36,7 @@ const (
 	port    = routing.Port(1)
 )
 
-var addr = flag.String("addr", ":8001", "address to bind")
+var addr = flag.String("addr", ":8001", "address to bind, put an * before the port if you want to be able to access outside localhost")
 var r = netutil.NewRetrier(nil, 50*time.Millisecond, netutil.DefaultMaxBackoff, 5, 2)
 
 var (
@@ -84,7 +84,20 @@ func main() {
 	http.HandleFunc("/message", messageHandler(ctx))
 	http.HandleFunc("/sse", sseHandler)
 
-	fmt.Println("Serving HTTP on", *addr)
+	url := ""
+	address := *addr
+	if len(address) < 5 || (address[:1] != ":" && address[:2] != "*:") {
+		url = "127.0.0.1:8001"
+	} else if address[:1] == ":" {
+		url = "127.0.0.1" + address
+	} else if address[:2] == "*:" {
+		url = address[1:]
+	} else {
+		url = "127.0.0.1:8001"
+	}
+
+	fmt.Println("Serving HTTP on", url)
+
 	if runtime.GOOS != "windows" {
 		termCh := make(chan os.Signal, 1)
 		signal.Notify(termCh, os.Interrupt)
@@ -97,7 +110,7 @@ func main() {
 	}
 	setAppStatus(appCl, appserver.AppDetailedStatusRunning)
 	srv := &http.Server{ //nolint gosec
-		Addr:         "127.0.0.1" + (*addr),
+		Addr:         url,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}

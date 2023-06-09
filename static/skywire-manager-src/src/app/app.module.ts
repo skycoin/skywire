@@ -101,6 +101,7 @@ import { RewardsAddressComponent } from './components/pages/node/node-info/node-
 import { BulkRewardAddressChangerComponent } from './components/layout/bulk-reward-address-changer/bulk-reward-address-changer.component';
 import { UserAppSettingsComponent } from './components/pages/node/apps/node-apps/user-app-settings/user-app-settings.component';
 import { NodeLogsComponent } from './components/pages/node/actions/node-logs/node-logs.component';
+import { SkychatSettingsComponent } from './components/pages/node/apps/node-apps/skychat-settings/skychat-settings.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
   disabled: true,
@@ -178,6 +179,7 @@ const globalRippleConfig: RippleGlobalOptions = {
     BulkRewardAddressChangerComponent,
     UserAppSettingsComponent,
     NodeLogsComponent,
+    SkychatSettingsComponent,
   ],
   imports: [
     BrowserModule,
