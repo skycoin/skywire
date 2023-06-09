@@ -1,0 +1,42 @@
+<app-dialog
+  [headline]="('apps.skychat-settings.title') | translate"
+  [dialog]="dialogRef"
+  [disableDismiss]="disableDismiss"
+>
+  <form [formGroup]="form">
+
+    <mat-form-field  [ngClass]="{'element-disabled' : disableDismiss}">
+      <div class="field-container">
+        <label class="field-label" for="localhostOnly">{{ 'apps.skychat-settings.localhost-only' | translate }}</label>
+        <mat-select formControlName="localhostOnly">
+          <mat-option [value]="true">{{ 'common.yes' | translate }}</mat-option>
+          <mat-option [value]="false">{{ 'common.no' | translate }}</mat-option>
+        </mat-select>
+      </div>
+    </mat-form-field>
+
+    <mat-form-field  [ngClass]="{'element-disabled' : disableDismiss}">
+      <div class="field-container">
+        <label class="field-label" for="port">{{ 'apps.skychat-settings.port' | translate }}</label>
+        <input
+          formControlName="port"
+          type="number"
+          matInput
+        >
+      </div>
+      <mat-error>
+        <span>{{ 'apps.skychat-settings.port-error' | translate }}</span>
+      </mat-error>
+    </mat-form-field>
+  </form>
+
+  <app-button
+    #button
+    (action)="saveChanges()"
+    [disabled]="!form.valid"
+    color="primary"
+    class="float-right"
+  >
+    {{ 'apps.skychat-settings.save' | translate }}
+  </app-button>
+</app-dialog>

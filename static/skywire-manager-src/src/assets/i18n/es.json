@@ -461,6 +461,14 @@
       "empty-confirmation": "La lista de configuración está vacía. ¿Realmente desea continuar?",
       "changes-made": "Los cambios han sido realizados."
     },
+    "skychat-settings": {
+      "title": "Configuración de Skychat",
+      "localhost-only": "Permitir acceso sólo desde la máquina local",
+      "port": "Puerto",
+      "save": "Guardar",
+      "changes-made": "Los cambios han sido realizados.",
+      "port-error": "Debe ser un número válido entre 1025 y 65536."
+    },
     "vpn-socks-server-settings": {
       "socks-title": "Configuración de Skysocks",
       "vpn-title": "Configuración de VPN-Server",
