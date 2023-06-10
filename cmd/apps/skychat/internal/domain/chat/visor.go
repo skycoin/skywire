@@ -32,6 +32,33 @@ func (v *Visor) GetP2P() (*Room, error) {
 	return &v.P2P, nil
 }
 
+// GetP2PMessages returns the messages from the visors p2p room
+func (v *Visor) GetP2PMessages() ([]message.Message, error) {
+	p2p, err := v.GetP2P()
+	if err != nil {
+		return nil, err
+	}
+	return p2p.GetMessages(), nil
+}
+
+// GetRoomMessages returns the messages from the given room route
+func (v *Visor) GetRoomMessages(route util.PKRoute) ([]message.Message, error) {
+	room, err := v.GetRoomByRoute(route)
+	if err != nil {
+		return nil, err
+	}
+	return room.GetMessages(), nil
+}
+
+// GetRoomByRoute returns the room from the given route
+func (v *Visor) GetRoomByRoute(route util.PKRoute) (*Room, error) {
+	server, err := v.GetServerByPK(route.Server)
+	if err != nil {
+		return nil, err
+	}
+	return server.GetRoomByPK(route.Room)
+}
+
 // P2PIsEmpty returns a bool depending on if the visor has got a p2p
 func (v *Visor) P2PIsEmpty() bool {
 	return reflect.DeepEqual(v.P2P, Room{})

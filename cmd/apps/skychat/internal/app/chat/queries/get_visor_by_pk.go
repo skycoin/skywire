@@ -34,7 +34,6 @@ func NewGetVisorByPKRequestHandler(visorRepo chat.Repository) GetVisorByPKReques
 
 // Handle Handles the query
 func (h getVisorByPKRequestHandler) Handle(query GetVisorByPKRequest) (GetVisorByPKResult, error) {
-
 	var result GetVisorByPKResult
 
 	visor, err := h.visorRepo.GetByPK(query.Pk)
@@ -47,7 +46,11 @@ func (h getVisorByPKRequestHandler) Handle(query GetVisorByPKRequest) (GetVisorB
 		return GetVisorByPKResult{}, err
 	}
 
-	result = GetVisorByPKResult{Pk: visor.GetPK(), P2P: *p2p, Server: visor.GetAllServer()}
+	result = GetVisorByPKResult{
+		Pk:     visor.GetPK(),
+		P2P:    *p2p,
+		Server: visor.GetAllServer(),
+	}
 
 	return result, nil
 }

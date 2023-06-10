@@ -45,39 +45,71 @@ func NewGetRoomByRouteRequestHandler(visorRepo chat.Repository) GetRoomByRouteRe
 	return getRoomByRouteRequestHandler{visorRepo: visorRepo}
 }
 
-// Handle Handles the query
+// Handle handles the query
 func (h getRoomByRouteRequestHandler) Handle(query GetRoomByRouteRequest) (GetRoomByRouteResult, error) {
+	if query.isP2PRequest() {
+		return h.getP2PRoomResult(query)
+	} else {
+		return h.getRouteRoomResult(query)
+	}
+}
 
-	visor, err := h.visorRepo.GetByPK(query.Route.Visor)
+func (r *GetRoomByRouteRequest) isP2PRequest() bool {
+	return r.Route.Server == r.Route.Visor
+}
+
+func (h getRoomByRouteRequestHandler) getP2PRoomResult(query GetRoomByRouteRequest) (GetRoomByRouteResult, error) {
 	var result GetRoomByRouteResult
 
+	visor, err := h.visorRepo.GetByPK(query.Route.Visor)
 	if err != nil {
 		return result, err
 	}
 
-	if query.Route.Visor == query.Route.Server {
-		p2p, err := visor.GetP2P()
-		if err != nil {
-			return result, err
-		}
+	p2p, err := visor.GetP2P()
+	if err != nil {
+		return result, err
+	}
 
-		result = GetRoomByRouteResult{PKRoute: p2p.PKRoute, Info: p2p.Info, Msgs: p2p.Msgs, IsVisible: p2p.IsVisible, Type: p2p.Type, Members: p2p.Members, Mods: p2p.Mods, Muted: p2p.Muted, Blacklist: p2p.Blacklist, Whitelist: p2p.Whitelist}
+	result = GetRoomByRouteResult{
+		PKRoute:   p2p.PKRoute,
+		Info:      p2p.Info,
+		Msgs:      p2p.Msgs,
+		IsVisible: p2p.IsVisible,
+		Type:      p2p.Type,
+		Members:   p2p.Members,
+		Mods:      p2p.Mods,
+		Muted:     p2p.Muted,
+		Blacklist: p2p.Blacklist,
+		Whitelist: p2p.Whitelist,
+	}
+	return result, nil
+}
 
-	} else {
+func (h getRoomByRouteRequestHandler) getRouteRoomResult(query GetRoomByRouteRequest) (GetRoomByRouteResult, error) {
+	var result GetRoomByRouteResult
 
-		server, err := visor.GetServerByPK(query.Route.Server)
+	visor, err := h.visorRepo.GetByPK(query.Route.Visor)
+	if err != nil {
+		return result, err
+	}
 
-		if err != nil {
-			return result, err
-		}
+	room, err := visor.GetRoomByRoute(query.Route)
+	if err != nil {
+		return result, err
+	}
 
-		room, err := server.GetRoomByPK(query.Route.Room)
-
-		if err != nil {
-			return result, err
-		}
-
-		result = GetRoomByRouteResult{PKRoute: room.PKRoute, Info: room.Info, Msgs: room.Msgs, IsVisible: room.IsVisible, Type: room.Type, Members: room.Members, Mods: room.Mods, Muted: room.Muted, Blacklist: server.Blacklist, Whitelist: server.Whitelist}
+	result = GetRoomByRouteResult{
+		PKRoute:   room.PKRoute,
+		Info:      room.Info,
+		Msgs:      room.Msgs,
+		IsVisible: room.IsVisible,
+		Type:      room.Type,
+		Members:   room.Members,
+		Mods:      room.Mods,
+		Muted:     room.Muted,
+		Blacklist: room.Blacklist,
+		Whitelist: room.Whitelist,
 	}
 	return result, nil
 }

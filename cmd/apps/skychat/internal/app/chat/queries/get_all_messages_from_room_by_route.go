@@ -33,34 +33,49 @@ func NewGetAllMessagesFromRoomRequestHandler(visorRepo chat.Repository) GetAllMe
 
 // Handle Handlers the GetAllMessagesFromRoomRequest query
 func (h getAllMessagesFromRoomRequestHandler) Handle(query GetAllMessagesFromRoomRequest) (GetAllMessagesFromRoomResult, error) {
+	if query.isP2PRequest() {
+		return h.getP2PMessagesResult(query)
+	} else {
+		return h.getRoomMessagesResult(query)
+	}
+}
+
+func (r *GetAllMessagesFromRoomRequest) isP2PRequest() bool {
+	return r.Route.Server == r.Route.Visor
+}
+
+func (h getAllMessagesFromRoomRequestHandler) getP2PMessagesResult(query GetAllMessagesFromRoomRequest) (GetAllMessagesFromRoomResult, error) {
 	var result GetAllMessagesFromRoomResult
 
 	visor, err := h.visorRepo.GetByPK(query.Route.Visor)
 	if err != nil {
 		return result, err
 	}
-	var msgs []message.Message
 
-	if query.Route.Server == query.Route.Visor {
-		p2p, err := visor.GetP2P()
-		if err != nil {
-			return result, err
-		}
-		msgs = p2p.GetMessages()
-	} else {
-		server, err := visor.GetServerByPK(query.Route.Server)
-		if err != nil {
-			return result, err
-		}
-		room, err := server.GetRoomByPK(query.Route.Room)
-		if err != nil {
-			return result, err
-		}
-		msgs = room.GetMessages()
+	msgs, err := visor.GetP2PMessages()
+	if err != nil {
+		return result, err
 	}
 
-	if msgs != nil {
-		result = GetAllMessagesFromRoomResult{Messages: msgs}
+	result = GetAllMessagesFromRoomResult{Messages: msgs}
+
+	return result, nil
+}
+
+func (h getAllMessagesFromRoomRequestHandler) getRoomMessagesResult(query GetAllMessagesFromRoomRequest) (GetAllMessagesFromRoomResult, error) {
+	var result GetAllMessagesFromRoomResult
+
+	visor, err := h.visorRepo.GetByPK(query.Route.Visor)
+	if err != nil {
+		return result, err
 	}
+
+	msgs, err := visor.GetRoomMessages(query.Route)
+	if err != nil {
+		return result, err
+	}
+
+	result = GetAllMessagesFromRoomResult{Messages: msgs}
+
 	return result, nil
 }

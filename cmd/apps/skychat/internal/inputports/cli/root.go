@@ -51,11 +51,11 @@ var rootCmd = &cobra.Command{
 		//messengerService listen
 		go interfaceadapters.InterfaceAdapterServices.MessengerService.Listen()
 
-		//rpc-server
+		//rpc-server for cli functionality
 		rpcport = ":4040"
 		go inputports.InputportsServices.RPCServer.ListenAndServe(&rpcport)
 
-		//http-server
+		//http-server for web-ui
 		inputports.InputportsServices.HTTPServer.ListenAndServe(&httpport)
 	},
 }

@@ -29,19 +29,25 @@ func NewGetAllVisorsRequestHandler(visorRepo chat.Repository) GetAllVisorsReques
 
 // Handle Handles the query
 func (h getAllVisorsRequestHandler) Handle() ([]GetAllVisorsResult, error) {
+	var result []GetAllVisorsResult
 
-	res, err := h.visorRepo.GetAll()
+	allVisors, err := h.visorRepo.GetAll()
 	if err != nil {
 		return nil, err
 	}
-	var result []GetAllVisorsResult
-	for _, visor := range res {
+
+	for _, visor := range allVisors {
 
 		p2p, err := visor.GetP2P()
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, GetAllVisorsResult{Pk: visor.GetPK(), P2P: *p2p, Server: visor.GetAllServer()})
+
+		result = append(result, GetAllVisorsResult{
+			Pk:     visor.GetPK(),
+			P2P:    *p2p,
+			Server: visor.GetAllServer(),
+		})
 	}
 	return result, nil
 }

@@ -1,7 +1,8 @@
-// Package commands contains commands to add a local server
+// Package commands containotifService commands to add a local server
 package commands
 
 import (
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/notification"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/chat"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/info"
@@ -21,35 +22,89 @@ type AddLocalServerRequestHandler interface {
 }
 
 type addLocalServerRequestHandler struct {
-	visorRepo chat.Repository
-	userRepo  user.Repository
-	ns        notification.Service
+	visorRepo    chat.Repository
+	userRepo     user.Repository
+	notifService notification.Service
 }
 
 // NewAddLocalServerRequestHandler Initializes an AddCommandHandler
-func NewAddLocalServerRequestHandler(visorRepo chat.Repository, userRepo user.Repository, ns notification.Service) AddLocalServerRequestHandler {
-	return addLocalServerRequestHandler{visorRepo: visorRepo, userRepo: userRepo, ns: ns}
+func NewAddLocalServerRequestHandler(visorRepo chat.Repository, userRepo user.Repository, notifService notification.Service) AddLocalServerRequestHandler {
+	return addLocalServerRequestHandler{visorRepo: visorRepo, userRepo: userRepo, notifService: notifService}
 }
 
 // Handle Handles the AddLocalServerRequest
 func (h addLocalServerRequestHandler) Handle(command AddLocalServerRequest) error {
-	//Get user
-	usr, err := h.userRepo.GetUser()
+
+	visor, err := h.getLocalVisorOrAddIfNotExists()
 	if err != nil {
 		return err
 	}
 
-	// Check if local visor exists, if not add the default local visor
-	var visor chat.Visor
-	pVisor, err := h.visorRepo.GetByPK(usr.GetInfo().GetPK())
+	server, err := h.getNewServer(visor, command)
 	if err != nil {
-		visor = chat.NewUndefinedVisor(usr.GetInfo().GetPK())
-		err = h.visorRepo.Add(visor)
+		return err
+	}
+
+	room, err := h.getNewRoom(server, command)
+	if err != nil {
+		return err
+	}
+
+	err = server.AddRoom(*room)
+	if err != nil {
+		return err
+	}
+
+	err = visor.AddServer(*server)
+	if err != nil {
+		return err
+	}
+	err = h.visorRepo.Set(*visor)
+	if err != nil {
+		return err
+	}
+
+	n := notification.NewAddRouteNotification(room.GetPKRoute())
+	err = h.notifService.Notify(n)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (h addLocalServerRequestHandler) getLocalVisorOrAddIfNotExists() (*chat.Visor, error) {
+	userPK, err := h.getUserPK()
+	if err != nil {
+		return nil, err
+	}
+
+	visorIfExists, err := h.visorRepo.GetByPK(*userPK)
+	if err != nil {
+		newVisor := chat.NewUndefinedVisor(*userPK)
+		err = h.visorRepo.Add(newVisor)
 		if err != nil {
-			return err
+			return nil, err
 		}
-	} else {
-		visor = *pVisor
+		return &newVisor, nil
+	}
+	return visorIfExists, nil
+}
+
+func (h addLocalServerRequestHandler) getUserPK() (*cipher.PubKey, error) {
+	usr, err := h.userRepo.GetUser()
+	if err != nil {
+		return nil, err
+	}
+
+	pk := usr.GetInfo().GetPK()
+	return &pk, nil
+}
+
+func (h addLocalServerRequestHandler) getNewServer(visor *chat.Visor, command AddLocalServerRequest) (*chat.Server, error) {
+	userAsPeer, err := h.getUserAsPeer()
+	if err != nil {
+		return nil, err
 	}
 
 	visorBoolMap := visor.GetAllServerBoolMap()
@@ -57,55 +112,46 @@ func (h addLocalServerRequestHandler) Handle(command AddLocalServerRequest) erro
 	route := util.NewLocalServerRoute(visor.GetPK(), visorBoolMap)
 	server, err := chat.NewLocalServer(route, command.Info)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	//setup room
+	//Add user as member, otherwise we can't receive server messages //?? check if really needed.
+	err = server.AddMember(*userAsPeer)
+	if err != nil {
+		return nil, err
+	}
+
+	//Add user as admin, otherwise we can't send admin command messages to our own server
+	err = server.AddAdmin(userAsPeer.GetPK())
+	if err != nil {
+		return nil, err
+	}
+	return server, nil
+}
+
+func (h addLocalServerRequestHandler) getNewRoom(server *chat.Server, command AddLocalServerRequest) (*chat.Room, error) {
+
 	roomBoolMap := server.GetAllRoomsBoolMap()
 	roomRoute := util.NewLocalRoomRoute(server.PKRoute.Visor, server.PKRoute.Server, roomBoolMap)
-	r := chat.NewLocalRoom(roomRoute, command.Info, chat.DefaultRoomType)
+	room := chat.NewLocalRoom(roomRoute, command.Info, chat.DefaultRoomType)
 
-	//setup user as peer for memberships
+	//Add user as member, otherwise we can't receive room messages //?? check if really needed.
+	userAsPeer, err := h.getUserAsPeer()
+	if err != nil {
+		return nil, err
+	}
+	err = room.AddMember(*userAsPeer)
+	if err != nil {
+		return nil, err
+	}
+	return &room, nil
+}
+
+func (h addLocalServerRequestHandler) getUserAsPeer() (*peer.Peer, error) {
+	usr, err := h.userRepo.GetUser()
+	if err != nil {
+		return nil, err
+	}
 	p := peer.NewPeer(*usr.GetInfo(), usr.GetInfo().Alias)
-
-	//Add user as member from server
-	err = server.AddMember(*p)
-	if err != nil {
-		return err
-	}
-	//Add user as admin, otherwise we can't send admin command messages to our own server
-	err = server.AddAdmin(p.GetPK())
-	if err != nil {
-		return err
-	}
-	//Add user as member from room
-	err = r.AddMember(*p)
-	if err != nil {
-		return err
-	}
-
-	//Add room to server
-	err = server.AddRoom(r)
-	if err != nil {
-		return err
-	}
-
-	// Add server to visor and then update repository
-	err = visor.AddServer(*server)
-	if err != nil {
-		return err
-	}
-	err = h.visorRepo.Set(visor)
-	if err != nil {
-		return err
-	}
-
-	//notify about sent chat request message
-	n := notification.NewAddRouteNotification(roomRoute)
-	err = h.ns.Notify(n)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return p, nil
 }

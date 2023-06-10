@@ -42,21 +42,28 @@ func NewGetServerByRouteRequestHandler(visorRepo chat.Repository) GetServerByRou
 
 // Handle Handles the query
 func (h getServerByRouteRequestHandler) Handle(query GetServerByRouteRequest) (GetServerByRouteResult, error) {
-
-	visor, err := h.visorRepo.GetByPK(query.Route.Visor)
 	var result GetServerByRouteResult
 
+	visor, err := h.visorRepo.GetByPK(query.Route.Visor)
 	if err != nil {
 		return result, err
 	}
 
 	server, err := visor.GetServerByPK(query.Route.Server)
-
 	if err != nil {
 		return result, err
 	}
 
-	result = GetServerByRouteResult{PKRoute: server.PKRoute, Info: server.Info, Members: server.Members, Admins: server.Admins, Muted: server.Muted, Blacklist: server.Blacklist, Whitelist: server.Whitelist, Rooms: server.Rooms}
+	result = GetServerByRouteResult{
+		PKRoute:   server.PKRoute,
+		Info:      server.Info,
+		Members:   server.Members,
+		Admins:    server.Admins,
+		Muted:     server.Muted,
+		Blacklist: server.Blacklist,
+		Whitelist: server.Whitelist,
+		Rooms:     server.Rooms,
+	}
 
 	return result, nil
 }
