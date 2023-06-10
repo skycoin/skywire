@@ -10,8 +10,6 @@ const (
 	ConfigName = "skywire-config.json"
 	// DMSGHTTPName is the default dmsghttp config name
 	DMSGHTTPName = "dmsghttp-config.json"
-	// SkycoinKeyName is the default skycoin key file name
-	SkycoinKeyName = "skycoin.asc"
 
 	// Dmsg port constants.
 	// TODO(evanlinjin): Define these properly. These are currently random.
@@ -78,7 +76,7 @@ const (
 
 	AppSrvAddr                = "localhost:5505" // AppSrvAddr ...
 	ServiceDiscUpdateInterval = time.Minute      // ServiceDiscUpdateInterval ...
-	AppBinPath                = "./build/apps"   // AppBinPath ...
+	AppBinPath                = "./apps"         // AppBinPath ...
 	LogLevel                  = "info"           // LogLevel ...
 
 	// Routing constants
@@ -109,9 +107,6 @@ const (
 
 	// NodeInfo is the name of the survey file
 	NodeInfo string = "node-info.json"
-
-	// NodeInfoSha256 is the name of the survey checksum file
-	NodeInfoSha256 string = "node-info.sha"
 )
 
 // SkywireConfig returns the full path to the package config

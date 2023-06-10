@@ -3,6 +3,7 @@ import { Subscription } from 'rxjs';
 
 import { Application, Node } from '../../../../app.datatypes';
 import { NodeComponent } from '../node.component';
+import { PageBaseComponent } from 'src/app/utils/page-base';
 
 /**
  * Page that shows the apps summary. It is a subpage of the Node page.
@@ -12,7 +13,7 @@ import { NodeComponent } from '../node.component';
   templateUrl: './apps.component.html',
   styleUrls: ['./apps.component.scss']
 })
-export class AppsComponent implements OnInit, OnDestroy {
+export class AppsComponent extends PageBaseComponent implements OnInit, OnDestroy {
   apps: Application[];
   nodePK: string;
   nodeIp: string;
@@ -26,6 +27,8 @@ export class AppsComponent implements OnInit, OnDestroy {
       this.apps = node.apps;
       this.nodeIp = node.ip;
     });
+
+    return super.ngOnInit();
   }
 
   ngOnDestroy() {

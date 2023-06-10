@@ -41,7 +41,7 @@ type Survey struct {
 
 // SystemSurvey returns system survey
 func SystemSurvey() (Survey, error) {
-	disks, err := ghw.Block()
+	disks, err := ghw.Block(ghw.WithDisableWarnings())
 	if err != nil {
 		return Survey{}, err
 	}

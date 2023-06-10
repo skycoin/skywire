@@ -27,8 +27,9 @@ type V1 struct {
 	UptimeTracker *UptimeTracker      `json:"uptime_tracker,omitempty"`
 	Launcher      *Launcher           `json:"launcher"`
 
-	Hypervisors []cipher.PubKey `json:"hypervisors"`
-	CLIAddr     string          `json:"cli_addr"`
+	SurveyWhitelist []cipher.PubKey `json:"survey_whitelist"`
+	Hypervisors     []cipher.PubKey `json:"hypervisors"`
+	CLIAddr         string          `json:"cli_addr"`
 
 	LogLevel             string                           `json:"log_level"`
 	LocalPath            string                           `json:"local_path"`
@@ -44,9 +45,10 @@ type V1 struct {
 
 // Dmsgpty configures the dmsgpty-host.
 type Dmsgpty struct {
-	DmsgPort uint16 `json:"dmsg_port"`
-	CLINet   string `json:"cli_network"`
-	CLIAddr  string `json:"cli_address"`
+	DmsgPort  uint16          `json:"dmsg_port"`
+	CLINet    string          `json:"cli_network"`
+	CLIAddr   string          `json:"cli_address"`
+	Whitelist []cipher.PubKey `json:"whitelist"`
 }
 
 // Transport defines a transport config.
@@ -54,8 +56,10 @@ type Transport struct {
 	Discovery         string          `json:"discovery"`
 	AddressResolver   string          `json:"address_resolver"`
 	PublicAutoconnect bool            `json:"public_autoconnect"`
-	TransportSetup    []cipher.PubKey `json:"transport_setup_nodes"`
+	TransportSetupPKs []cipher.PubKey `json:"transport_setup"`
 	LogStore          *LogStore       `json:"log_store"`
+	StcprPort         int             `json:"stcpr_port"`
+	SudphPort         int             `json:"sudph_port"`
 }
 
 // LogStore configures a LogStore.
@@ -68,7 +72,7 @@ type LogStore struct {
 
 // Routing configures routing.
 type Routing struct {
-	SetupNodes         []cipher.PubKey `json:"setup_nodes,omitempty"`
+	RouteSetupNodes    []cipher.PubKey `json:"route_setup_nodes,omitempty"`
 	RouteFinder        string          `json:"route_finder"`
 	RouteFinderTimeout Duration        `json:"route_finder_timeout,omitempty"`
 	MinHops            uint16          `json:"min_hops"`

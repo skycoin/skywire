@@ -35,7 +35,8 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 				TransportDiscovery: utilenv.TpDiscAddr,
 				AddressResolver:    utilenv.AddressResolverAddr,
 				RouteFinder:        utilenv.RouteFinderAddr,
-				SetupNodes:         []cipher.PubKey{MustPK(utilenv.SetupPK)},
+				RouteSetupNodes:    MustPKs(utilenv.RouteSetupPKs),
+				TransportSetupPKs:  MustPKs(utilenv.TPSetupPKs),
 				UptimeTracker:      utilenv.UptimeTrackerAddr,
 				ServiceDiscovery:   utilenv.ServiceDiscAddr,
 				StunServers:        utilenv.GetStunServers(),
@@ -47,7 +48,8 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 				TransportDiscovery: utilenv.TestTpDiscAddr,
 				AddressResolver:    utilenv.TestAddressResolverAddr,
 				RouteFinder:        utilenv.TestRouteFinderAddr,
-				SetupNodes:         []cipher.PubKey{MustPK(utilenv.TestSetupPK)},
+				RouteSetupNodes:    MustPKs(utilenv.TestRouteSetupPKs),
+				TransportSetupPKs:  MustPKs(utilenv.TestTPSetupPKs),
 				UptimeTracker:      utilenv.TestUptimeTrackerAddr,
 				ServiceDiscovery:   utilenv.TestServiceDiscAddr,
 				StunServers:        utilenv.GetStunServers(),
@@ -73,10 +75,12 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 			Location:         LocalPath + "/" + TpLogStore,
 			RotationInterval: DefaultLogRotationInterval,
 		},
+		SudphPort: 0,
+		StcprPort: 0,
 	}
 	conf.Routing = &Routing{
-		RouteFinder:        services.RouteFinder, //utilenv.RouteFinderAddr,
-		SetupNodes:         services.SetupNodes,  //[]cipher.PubKey{utilenv.MustPK(utilenv.SetupPK)},
+		RouteFinder:        services.RouteFinder,     //utilenv.RouteFinderAddr,
+		RouteSetupNodes:    services.RouteSetupNodes, //[]cipher.PubKey{utilenv.MustPK(utilenv.SetupPK)},
 		RouteFinderTimeout: DefaultTimeout,
 	}
 	conf.Launcher = &Launcher{

@@ -40,9 +40,6 @@ var (
 	// DMSGHTTPName is the default dmsghttp config name
 	DMSGHTTPName = skyenv.DMSGHTTPName
 
-	// SkycoinKeyName is name of skycoin key file
-	SkycoinKeyName = skyenv.SkycoinKeyName
-
 	// Dmsg port constants.
 	// TODO(evanlinjin): Define these properly. These are currently random.
 
@@ -142,9 +139,6 @@ var (
 	// NodeInfo is the name of the survey file
 	NodeInfo = skyenv.NodeInfo
 
-	// NodeInfoSha256 is the name of the survey checksum file
-	NodeInfoSha256 = skyenv.NodeInfoSha256
-
 	// RewardFile is the name of the file containing skycoin reward address
 	RewardFile = skyenv.RewardFile
 )
@@ -183,10 +177,21 @@ func DmsgPtyWhiteList() string {
 func MustPK(pk string) cipher.PubKey {
 	var sPK cipher.PubKey
 	if err := sPK.UnmarshalText([]byte(pk)); err != nil {
+		fmt.Printf("invalid public key: %s", pk)
 		panic(err)
 	}
 
 	return sPK
+}
+
+// MustPKs unmarshals comma separated list of string PKs to []cipher.PubKey. It panics if unmarshaling fails.
+func MustPKs(pks string) []cipher.PubKey {
+	var sPKs cipher.PubKeys
+	if err := sPKs.Set(pks); err != nil {
+		fmt.Printf("invalid public key or keys: %s", pks)
+		panic(err)
+	}
+	return []cipher.PubKey(sPKs)
 }
 
 // Version gets the version of the installation for the config
