@@ -11,9 +11,11 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/hashicorp/go-version"
 	"github.com/skycoin/dmsg/pkg/dmsgget"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
@@ -37,6 +39,7 @@ var (
 	logOnly        bool
 	surveyOnly     bool
 	deleteOnErrors bool
+	incVer         string
 )
 
 func init() {
@@ -46,6 +49,7 @@ func init() {
 	logCmd.Flags().BoolVarP(&surveyOnly, "survey", "v", false, "fetch only surveys")
 	logCmd.Flags().BoolVarP(&deleteOnErrors, "clean", "c", false, "delete files and folders on errors")
 	logCmd.Flags().StringVar(&minv, "minv", "v1.3.4", "minimum version for get logs, default is 1.3.4")
+	logCmd.Flags().StringVar(&incVer, "include-versions", "", "list of version that not satisfy our minimum version condition, but we want include them")
 	logCmd.Flags().IntVarP(&duration, "duration", "n", 1, "numberof days before today to fetch transport logs for")
 	logCmd.Flags().BoolVar(&allVisors, "all", false, "consider all visors ; no version filtering")
 	logCmd.Flags().IntVar(&batchSize, "batchSize", 50, "number of visor in each batch, default is 50")
@@ -128,12 +132,22 @@ var logCmd = &cobra.Command{
 			dmsgC.EnsureAndObtainSession(ctx, server.PK) //nolint
 		}
 
+		minimumVersion, _ := version.NewVersion(minv) //nolint
+		incVerList := strings.Split(incVer, ",")
+
 		start := time.Now()
 		var bulkFolders []string
 		// Get visors data
 		var wg sync.WaitGroup
 		for _, v := range uptimes {
-			if !allVisors && v.Version < minv {
+			visorVersion, err := version.NewVersion(v.Version) //nolint
+			includeV := contains(incVerList, v.Version)
+			if err != nil && !includeV {
+				log.Warnf("The version %s for visor %s is not valid", v.Version, v.PubKey)
+				continue
+			}
+			if !allVisors && visorVersion.LessThan(minimumVersion) && !includeV {
+				log.Warnf("The version %s for visor %s does not satisfy our minimum version condition", v.Version, v.PubKey)
 				continue
 			}
 			wg.Add(1)
@@ -258,4 +272,13 @@ func getAllDMSGServers() []dmsgServer {
 
 type dmsgServer struct {
 	PK cipher.PubKey `json:"static"`
+}
+
+func contains(s []string, str string) bool {
+	for _, v := range s {
+		if v == str {
+			return true
+		}
+	}
+	return false
 }

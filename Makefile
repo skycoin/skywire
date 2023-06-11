@@ -150,12 +150,12 @@ lint-windows: ## Run linters. Use make install-linters-windows first
 
 test: ## Run tests
 	-go clean -testcache &>/dev/null
-	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/...
+	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/...
 	${OPTS} go test ${TEST_OPTS}
 
 test-windows: ## Run tests on windows
 	@go clean -testcache
-	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/...
+	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/...
 
 install-linters: ## Install linters
 	- VERSION=latest ./ci_scripts/install-golangci-lint.sh
