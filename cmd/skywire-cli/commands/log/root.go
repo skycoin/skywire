@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hashicorp/go-version"
 	"github.com/skycoin/dmsg/pkg/dmsgget"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
@@ -128,12 +129,20 @@ var logCmd = &cobra.Command{
 			dmsgC.EnsureAndObtainSession(ctx, server.PK) //nolint
 		}
 
+		minimumVersion, _ := version.NewVersion(minv) //nolint
+
 		start := time.Now()
 		var bulkFolders []string
 		// Get visors data
 		var wg sync.WaitGroup
 		for _, v := range uptimes {
-			if !allVisors && v.Version < minv {
+			visorVersion, err := version.NewVersion(v.Version) //nolint
+			if err != nil {
+				log.Warnf("The version %s for visor %s is not valid", v.Version, v.PubKey)
+				continue
+			}
+			if !allVisors && visorVersion.LessThan(minimumVersion) {
+				log.Warnf("The version %s for visor %s does not satisfy our minimum version rule", v.Version, v.PubKey)
 				continue
 			}
 			wg.Add(1)
