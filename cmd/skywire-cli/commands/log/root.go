@@ -142,7 +142,7 @@ var logCmd = &cobra.Command{
 				continue
 			}
 			if !allVisors && visorVersion.LessThan(minimumVersion) {
-				log.Warnf("The version %s for visor %s does not satisfy our minimum version rule", v.Version, v.PubKey)
+				log.Warnf("The version %s for visor %s does not satisfy our minimum version condition", v.Version, v.PubKey)
 				continue
 			}
 			wg.Add(1)
