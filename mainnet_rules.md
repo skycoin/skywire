@@ -2,7 +2,8 @@
 
 # Skywire Reward Eligibility Rules
 
-Notice: the [skywire whitelist](https://whitelist.skycoin.com) is now deprecated.
+Notice: the [skywire whitelist](https://whitelist.skycoin.com) is deprecated since April 1st 2023.
+
 We have transitioned to a new system with daily reward distribution
 
 * The rules in this article may change at any time, depending on if there are problems
@@ -68,7 +69,9 @@ skywire-visor -v
 ```
 
 **The new reward system requires Skywire v1.3.8**
+
 Requirement established 5-25-2023
+
 Rewards Cutoff date for updating 7-1-2023
 
 ### Deployment
@@ -121,9 +124,21 @@ Build Tag:
 
 If the situaton persists, please reach out to us on telegram [@skywire](https://t.me/skywire)
 
+### Survey & transport log collection
+
+For any given visor, the system survey and transport bandwidth logs should be downloaded **hourly**.
+
+This should be apparent from the visor's logging
+
+![image](https://github.com/skycoin/skywire/assets/36607567/eb66bca1-fc9e-4c80-a38a-e00a73f675d0)
+
+Note: the transport bandwidth logs will only exist if it was generated; i.e. if there were transports to that visor which handled traffic.
+
+Note: the system survey (node-info.json) will only exist if the reward address is set.
+
 ### Verifying other requirements
 
-If the visor is not able to meet the other requirements, that is usually not the fault of the user nor is it something the user is expected to troubleshoot at this time.
+If the visor is not able to meet the other requirements, that is usually not the fault of the user nor is it something the user is expected to troubleshoot at this time. Please ask for assistance on telegram [@skywire](https://t.me/skywire)
 
 
 ## Reward System overview
