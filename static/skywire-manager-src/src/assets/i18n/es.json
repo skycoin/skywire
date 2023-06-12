@@ -467,7 +467,8 @@
       "port": "Puerto",
       "save": "Guardar",
       "changes-made": "Los cambios han sido realizados.",
-      "port-error": "Debe ser un número válido entre 1025 y 65536."
+      "port-error": "Debe ser un número válido entre 1025 y 65536.",
+      "non-localhost-confirmation": "Esto permitirá usar la aplicación desde cualquier lugar en Internet. ¿Seguro que desea continuar?"
     },
     "vpn-socks-server-settings": {
       "socks-title": "Configuración de Skysocks",
