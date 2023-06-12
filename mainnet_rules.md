@@ -103,32 +103,11 @@ or via the hypervisor UI.
 
 the example above shows the genesis address for the skycoin blockchain. **Please do not use the genesis address.**
 
-### Connection to DMSG network
+### Connection to DMSG network - Survey & transport log collection
 
-The connection to the dmsg network can be verified either from the hypervisor UI or with skywire-cli:
-```
-$ skywire-cli visor info
-.:: Visor Summary ::.
-Public key: "03a3f9a0dd913bacd277aa35f2e0c36796812d3f26aa3911a07929e51122bd57bd"
-Symmetric NAT: false
-IP: 192.168.0.2
-DMSG Server: "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13"
-Ping: "437.930335ms"
-Visor Version: unknown
-Skybian Version:
-Uptime Tracker: healthy
-Time Online: 50981.176843 seconds
-Build Tag:
-```
-**If the public key of the DMSG Server is all zeros the visor is not connectedto any DMSG server**
+For any given visor, the system survey and transport bandwidth logs should be downloaded **hourly** over dmsghttp.
 
-If the situaton persists, please reach out to us on telegram [@skywire](https://t.me/skywire)
-
-### Survey & transport log collection
-
-For any given visor, the system survey and transport bandwidth logs should be downloaded **hourly**.
-
-This should be apparent from the visor's logging
+This can be verified by examinimg the visor's logging:
 
 ![image](https://github.com/skycoin/skywire/assets/36607567/eb66bca1-fc9e-4c80-a38a-e00a73f675d0)
 
@@ -136,10 +115,11 @@ Note: the transport bandwidth logs will only exist if it was generated; i.e. if 
 
 Note: the system survey (node-info.json) will only exist if the reward address is set.
 
+If your visor is not generating such logging, please reach out to us on telegram [@skywire](https://t.me/skywire) for assistance
+
 ### Verifying other requirements
 
 If the visor is not able to meet the other requirements, that is usually not the fault of the user nor is it something the user is expected to troubleshoot at this time. Please ask for assistance on telegram [@skywire](https://t.me/skywire)
-
 
 ## Reward System overview
 
@@ -153,7 +133,7 @@ The system survey is fetched hourly with `skywire-cli log`; along with transport
 
 Once collected from the nodes, the surveys for those visors which met uptime are checked to verify hardware and other requirements, etc.
 
-The system survey is only made available to those keys which are whitelisted for survey collection, but is additionally available to any hypervisor or dmsgpty_whitelist keys set inthe config for a given visor.
+The system survey is only made available to those keys which are whitelisted for survey collection, but is additionally available to any `hypervisor` or `dmsgpty_whitelist` keys set inthe config for a given visor.
 
 The public keys which require to be whitelisted in order to collect the surveys, for the purpose of reward eligibility verification, should populate in the visor's config automatically when the config is generated with visors of at least version 1.3.8.
 
