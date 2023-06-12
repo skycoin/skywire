@@ -11,6 +11,7 @@ import { processServiceError } from 'src/app/utils/errors';
 import { OperationError } from 'src/app/utils/operation-error';
 import { AppsService } from 'src/app/services/apps.service';
 import { Application } from 'src/app/app.datatypes';
+import GeneralUtils from 'src/app/utils/generalUtils';
 
 /**
  * Modal window used for configuring the Skychat app.
@@ -24,6 +25,7 @@ export class SkychatSettingsComponent implements OnInit, OnDestroy {
   @ViewChild('button') button: ButtonComponent;
   form: UntypedFormGroup;
 
+  private formSubscription: Subscription;
   private operationSubscription: Subscription;
 
   /**
@@ -44,12 +46,27 @@ export class SkychatSettingsComponent implements OnInit, OnDestroy {
     private formBuilder: UntypedFormBuilder,
     public dialogRef: MatDialogRef<SkychatSettingsComponent>,
     private snackbarService: SnackbarService,
+    private dialog: MatDialog,
   ) { }
 
   ngOnInit() {
     this.form = this.formBuilder.group({
       localhostOnly: [true],
       port: ['', Validators.compose([Validators.required, Validators.min(1025), Validators.max(65536)])],
+    });
+
+    this.formSubscription = this.form.get('localhostOnly').valueChanges.subscribe(value => {
+      // If "no" is selected ask for confirmation.
+      if (!value) {
+        this.form.get('localhostOnly').setValue(true);
+        const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'apps.skychat-settings.non-localhost-confirmation');
+
+        confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+          confirmationDialog.componentInstance.closeModal();
+
+          this.form.get('localhostOnly').setValue(false, { emitEvent: false });
+        });
+      }
     });
 
     // Get the current values saved on the visor, if returned by the API.
@@ -68,6 +85,10 @@ export class SkychatSettingsComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    if (this.formSubscription) {
+      this.formSubscription.unsubscribe();
+    }
+
     if (this.operationSubscription) {
       this.operationSubscription.unsubscribe();
     }

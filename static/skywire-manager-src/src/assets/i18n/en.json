@@ -463,7 +463,8 @@
       "port": "Port",
       "save": "Save",
       "changes-made": "The changes have been made.",
-      "port-error": "Must be a valid number between 1025 and 65536."
+      "port-error": "Must be a valid number between 1025 and 65536.",
+      "non-localhost-confirmation": "This will allow to use the app from anywhere on the internet. Are you sure you vant to continue?"
     },
     "vpn-socks-server-settings": {
       "socks-title": "Skysocks Settings",
