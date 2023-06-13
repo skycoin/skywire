@@ -1,0 +1,28 @@
+<app-dialog [headline]="'local-fwd-ports.create' | translate" [dialog]="dialogRef" [disableDismiss]="disableDismiss">
+  <form [formGroup]="form">
+    <mat-form-field  [ngClass]="{'element-disabled' : disableDismiss}">
+      <div class="field-container">
+        <label class="field-label" for="localPort">{{ 'local-fwd-ports.dialog.local-port' | translate }}</label>
+        <input
+          #firstInput
+          formControlName="localPort"
+          type="number"
+          matInput
+        >
+      </div>
+      <mat-error>
+        <span>{{ 'local-fwd-ports.dialog.errors.port-error' | translate }}</span>
+      </mat-error>
+    </mat-form-field>
+  </form>
+
+  <app-button
+    #button
+    (action)="create()"
+    [disabled]="!form.valid"
+    color="primary"
+    class="float-right"
+  >
+    {{ 'local-fwd-ports.dialog.proceed' | translate }}
+  </app-button>
+</app-dialog>

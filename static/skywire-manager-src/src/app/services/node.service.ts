@@ -281,6 +281,22 @@ export class NodeService {
           });
         }
 
+        // FWD.
+        node.localForwardedPorts = [];
+        if (response.local_forwarded_ports) {
+          (response.local_forwarded_ports as number[]).forEach(val => {
+            node.localForwardedPorts.push({portNumber: val});
+          });
+        }
+        node.remoteConnectedPorts = [];
+        Object.keys(response.remote_connected_ports).forEach(key => {
+          node.remoteConnectedPorts.push({
+            connectionID: response.remote_connected_ports[key].ID,
+            remotePortNumber: response.remote_connected_ports[key].RemotePort,
+            localPortNumber: response.remote_connected_ports[key].LocalPort,
+          });
+        });
+
         // Apps.
         node.apps = [];
         if (response.overview.apps) {

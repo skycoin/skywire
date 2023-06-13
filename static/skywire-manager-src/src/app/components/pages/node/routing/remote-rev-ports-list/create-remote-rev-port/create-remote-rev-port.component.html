@@ -1,0 +1,61 @@
+<app-dialog [headline]="'remote-rev-ports.create' | translate" [dialog]="dialogRef" [disableDismiss]="disableDismiss">
+  <form [formGroup]="form">
+    <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
+      <div class="field-container">
+        <label class="field-label" for="remoteKey">{{ 'remote-rev-ports.dialog.remote-key' | translate }}</label>
+        <input
+          formControlName="remoteKey"
+          maxlength="66"
+          #firstInput
+          matInput
+        >
+      </div>
+      <mat-error>
+        <ng-container *ngIf="!this.form.get('remoteKey').hasError('pattern');else hexError">
+          <span>{{ 'remote-rev-ports.dialog.errors.remote-key-length-error' | translate }}</span>
+        </ng-container>
+      </mat-error>
+      <ng-template #hexError>
+        <span>{{ 'remote-rev-ports.dialog.errors.remote-key-chars-error' | translate }}</span>
+      </ng-template>
+    </mat-form-field>
+
+    <mat-form-field  [ngClass]="{'element-disabled' : disableDismiss}">
+      <div class="field-container">
+        <label class="field-label" for="remotePort">{{ 'remote-rev-ports.dialog.remote-port' | translate }}</label>
+        <input
+          formControlName="remotePort"
+          type="number"
+          matInput
+        >
+      </div>
+      <mat-error>
+        <span>{{ 'remote-rev-ports.dialog.errors.port-error' | translate }}</span>
+      </mat-error>
+    </mat-form-field>
+
+    <mat-form-field  [ngClass]="{'element-disabled' : disableDismiss}">
+      <div class="field-container">
+        <label class="field-label" for="localPort">{{ 'remote-rev-ports.dialog.local-port' | translate }}</label>
+        <input
+          formControlName="localPort"
+          type="number"
+          matInput
+        >
+      </div>
+      <mat-error>
+        <span>{{ 'remote-rev-ports.dialog.errors.port-error' | translate }}</span>
+      </mat-error>
+    </mat-form-field>
+  </form>
+
+  <app-button
+    #button
+    (action)="create()"
+    [disabled]="!form.valid"
+    color="primary"
+    class="float-right"
+  >
+    {{ 'remote-rev-ports.dialog.proceed' | translate }}
+  </app-button>
+</app-dialog>

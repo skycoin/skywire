@@ -19,6 +19,8 @@ import { VpnStatusComponent } from './components/vpn/pages/vpn-status/vpn-status
 import { VpnErrorComponent } from './components/vpn/pages/vpn-error/vpn-error.component';
 import { VpnSettingsComponent } from './components/vpn/pages/vpn-settings/vpn-settings.component';
 import { VpnAuthGuardService } from './services/vpn-auth-guard.service';
+import { AllRemoteRevPortsComponent } from './components/pages/node/routing/all-remote-rev-ports/all-remote-rev-ports.component';
+import { AllLocalFwdPortsComponent } from './components/pages/node/routing/all-local-fwd-ports/all-local-fwd-ports.component';
 
 const routes: Routes = [
   {
@@ -95,6 +97,24 @@ const routes: Routes = [
           {
             path: 'routes/:page',
             component: AllRoutesComponent
+          },
+          {
+            path: 'local-ports',
+            redirectTo: 'local-ports/1',
+            pathMatch: 'full'
+          },
+          {
+            path: 'local-ports/:page',
+            component: AllLocalFwdPortsComponent
+          },
+          {
+            path: 'remote-ports',
+            redirectTo: 'remote-ports/1',
+            pathMatch: 'full'
+          },
+          {
+            path: 'remote-ports/:page',
+            component: AllRemoteRevPortsComponent
           },
           {
             path: 'apps-list/:showOfficialApps/:page',

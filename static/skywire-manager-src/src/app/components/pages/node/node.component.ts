@@ -228,6 +228,8 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
     } else if (
       this.lastUrl && (this.lastUrl.includes('/transports') ||
       this.lastUrl.includes('/routes') ||
+      this.lastUrl.includes('/local-ports') ||
+      this.lastUrl.includes('/remote-ports') ||
       this.lastUrl.includes('/apps-list'))) {
 
       this.showingFullList = true;
@@ -242,6 +244,10 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       let prefix = 'transports';
       if (this.lastUrl.includes('/routes')) {
         prefix = 'routes';
+      } else if (this.lastUrl.includes('/local-ports')) {
+        prefix = 'local-fwd-ports';
+      } else if (this.lastUrl.includes('/remote-ports')) {
+        prefix = 'remote-rev-ports';
       } else if (this.lastUrl.includes('/apps-list')) {
         prefix = 'apps.apps-list';
       }

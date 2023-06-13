@@ -690,6 +690,64 @@
     }
   },
 
+  "local-fwd-ports": {
+    "title": "Local shared ports",
+    "list-title": "Local shared ports list",
+    "info": "Local ports from your visor that are being exposed to the network. Remote visors can connect to these ports and have free access to them.",
+    "port-number": "Port",
+    "empty": "Visor doesn't have any shared ports.",
+    "empty-with-filter": "No port matches the selected filtering criteria.",
+    "create": "Open local port",
+    "delete-confirmation": "Are you sure you want to stop exposing the port?",
+    "delete-selected-confirmation": "Are you sure you want to stop exposing the selected ports?",
+    "delete": "Stop exposing port",
+    "deleted": "Operation completed.",
+    "filter-dialog": {
+      "port": "The port must contain"
+    },
+    "dialog": {
+      "local-port": "Local port",
+      "success": "Port opened.",
+      "proceed": "Proceed",
+      "errors": {
+        "port-error": "Must be a valid number between 1025 and 65536."
+      }
+    }
+  },
+
+  "remote-rev-ports": {
+    "title": "Remote connected ports",
+    "list-title": "Remote connected ports list",
+    "info": "Ports on remote visors you are connected to. You can access these remote ports via \"localhost:\" followed by the local port number you assigned to it.",
+    "connection-id": "ID",
+    "remote-port-number": "Remote Port",
+    "local-port-number": "Local Port",
+    "empty": "Visor is not connected to any remote ports.",
+    "empty-with-filter": "No port matches the selected filtering criteria.",
+    "create": "Create remote port connection",
+    "delete-confirmation": "Are you sure you want to close the connection to the port?",
+    "delete-selected-confirmation": "Are you sure you want to stop close the connection to the selected ports?",
+    "delete": "Close connection to the port",
+    "deleted": "Operation completed.",
+    "filter-dialog": {
+      "id": "The ID must contain",
+      "remote-port": "The remote port must contain",
+      "local-port": "The local port must contain"
+    },
+    "dialog": {
+      "remote-key": "Remote visor public key",
+      "remote-port": "Remote port number",
+      "local-port": "Local port number",
+      "success": "Connection created.",
+      "proceed": "Proceed",
+      "errors": {
+        "remote-key-length-error": "The remote public key must be 66 characters long.",
+        "remote-key-chars-error": "The remote public key must only contain hexadecimal characters.",
+        "port-error": "Must be a valid number between 1025 and 65536."
+      }
+    }
+  },
+
   "copy": {
     "tooltip": "Click to copy",
     "tooltip-with-text": "{{ text }} (Click to copy)",

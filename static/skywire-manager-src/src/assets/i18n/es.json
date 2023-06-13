@@ -690,6 +690,64 @@
     }
   },
 
+  "local-fwd-ports": {
+    "title": "Puertos locales compartidos",
+    "list-title": "Lista de puertos locales compartidos",
+    "info": "Puertos locales de su visor que están siendo expouestos a la red. Los visores remotos se pueden conectar a estos puertos y tener acceso libre a ellos.",
+    "port-number": "Puerto",
+    "empty": "El visor no tiene ningún puerto compartido.",
+    "empty-with-filter": "Ningún puerto coincide con los criterios de filtrado seleccionados.",
+    "create": "Abrir puerto local",
+    "delete-confirmation": "¿Seguro que desea dejar de exponer el puerto?",
+    "delete-selected-confirmation": "¿Seguro que desea dejar de exponer los puertos seleccionados?",
+    "delete": "Dejar de exponer el puerto",
+    "deleted": "Operación completada.",
+    "filter-dialog": {
+      "port": "El puerto debe contener"
+    },
+    "dialog": {
+      "local-port": "Puerto local",
+      "success": "Puerto abierto.",
+      "proceed": "Proceder",
+      "errors": {
+        "port-error": "Debe ser un número válido entre 1025 y 65536."
+      }
+    }
+  },
+
+  "remote-rev-ports": {
+    "title": "Puertos remotos conectados",
+    "list-title": "Lista de puertos remotos conectados",
+    "info": "Puertos en visores remotos a los que está conectado. Usted puede acceder a esos puertos remotos vía \"localhost:\" seguido del número del puerto local que le asignara.",
+    "connection-id": "ID",
+    "remote-port-number": "Puerto remoto",
+    "local-port-number": "Puerto local",
+    "empty": "El visor no está conectado a ningún puerto remoto.",
+    "empty-with-filter": "Ningún puerto coincide con los criterios de filtrado seleccionados.",
+    "create": "Crear conexión a puerto remoto",
+    "delete-confirmation": "¿Seguro que desea cerrar la conexión con el puerto?",
+    "delete-selected-confirmation": "¿Seguro que desea cerrar la conexión con los puertos seleccionados?",
+    "delete": "Cerrar conexión con el puerto",
+    "deleted": "Operación completada.",
+    "filter-dialog": {
+      "id": "El ID debe contener",
+      "remote-port": "El puerto remoto debe contener",
+      "local-port": "El puerto local debe contener"
+    },
+    "dialog": {
+      "remote-key": "Llave pública del visor remoto",
+      "remote-port": "Número del puerto remoto",
+      "local-port": "Número del puerto local",
+      "success": "Conexión creada.",
+      "proceed": "Proceder",
+      "errors": {
+        "remote-key-length-error": "La llave pública debe tener 66 caracteres.",
+        "remote-key-chars-error": "La llave pública sólo debe contener caracteres hexadecimales.",
+        "port-error": "Debe ser un número válido entre 1025 y 65536."
+      }
+    }
+  },
+
   "copy": {
     "tooltip": "Presione para copiar",
     "tooltip-with-text": "{{ text }} (Presione para copiar)",

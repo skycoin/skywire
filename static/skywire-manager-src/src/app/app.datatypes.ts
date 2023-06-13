@@ -11,6 +11,8 @@ export class Node {
   routesCount: number;
   minHops: number;
   routes?: Route[];
+  localForwardedPorts: LocalFwdPort[];
+  remoteConnectedPorts: RemoteRevPort[];
   online?: boolean;
   secondsOnline?: number;
   health?: HealthInfo;
@@ -93,4 +95,14 @@ export class ProxyDiscoveryEntry {
   country?: string;
   region?: string;
   location?: string;
+}
+
+export class LocalFwdPort {
+  portNumber: number
+}
+
+export class RemoteRevPort {
+  connectionID: string;
+  remotePortNumber: number
+  localPortNumber: number
 }

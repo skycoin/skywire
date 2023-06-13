@@ -101,6 +101,12 @@ import { RewardsAddressComponent } from './components/pages/node/node-info/node-
 import { BulkRewardAddressChangerComponent } from './components/layout/bulk-reward-address-changer/bulk-reward-address-changer.component';
 import { UserAppSettingsComponent } from './components/pages/node/apps/node-apps/user-app-settings/user-app-settings.component';
 import { NodeLogsComponent } from './components/pages/node/actions/node-logs/node-logs.component';
+import { LocalFwdPortsListComponent } from './components/pages/node/routing/local-fwd-ports-list/local-fwd-ports-list.component';
+import { RemoteRevPortsListComponent } from './components/pages/node/routing/remote-rev-ports-list/remote-rev-ports-list.component';
+import { CreateRemoteRevPortComponent } from './components/pages/node/routing/remote-rev-ports-list/create-remote-rev-port/create-remote-rev-port.component';
+import { CreateLocalFwdPortComponent } from './components/pages/node/routing/local-fwd-ports-list/create-local-fwd-port/create-local-fwd-port.component';
+import { AllLocalFwdPortsComponent } from './components/pages/node/routing/all-local-fwd-ports/all-local-fwd-ports.component';
+import { AllRemoteRevPortsComponent } from './components/pages/node/routing/all-remote-rev-ports/all-remote-rev-ports.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
   disabled: true,
@@ -178,6 +184,12 @@ const globalRippleConfig: RippleGlobalOptions = {
     BulkRewardAddressChangerComponent,
     UserAppSettingsComponent,
     NodeLogsComponent,
+    LocalFwdPortsListComponent,
+    RemoteRevPortsListComponent,
+    CreateRemoteRevPortComponent,
+    CreateLocalFwdPortComponent,
+    AllLocalFwdPortsComponent,
+    AllRemoteRevPortsComponent,
   ],
   imports: [
     BrowserModule,
