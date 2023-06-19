@@ -1,3 +1,4 @@
+//go:build windows
 // +build windows
 
 package net
@@ -44,16 +45,19 @@ var kindTCP4 = netConnectionKindType{
 	sockType: syscall.SOCK_STREAM,
 	filename: "tcp",
 }
+
 var kindTCP6 = netConnectionKindType{
 	family:   syscall.AF_INET6,
 	sockType: syscall.SOCK_STREAM,
 	filename: "tcp6",
 }
+
 var kindUDP4 = netConnectionKindType{
 	family:   syscall.AF_INET,
 	sockType: syscall.SOCK_DGRAM,
 	filename: "udp",
 }
+
 var kindUDP6 = netConnectionKindType{
 	family:   syscall.AF_INET6,
 	sockType: syscall.SOCK_DGRAM,
@@ -196,7 +200,7 @@ func IOCountersWithContext(ctx context.Context, pernic bool) ([]IOCountersStat, 
 	return counters, nil
 }
 
-// NetIOCountersByFile is an method which is added just a compatibility for linux.
+// IOCountersByFile exists just for compatibility with Linux.
 func IOCountersByFile(pernic bool, filename string) ([]IOCountersStat, error) {
 	return IOCountersByFileWithContext(context.Background(), pernic, filename)
 }
@@ -207,7 +211,8 @@ func IOCountersByFileWithContext(ctx context.Context, pernic bool, filename stri
 
 // Return a list of network connections
 // Available kind:
-//   reference to netConnectionKindMap
+//
+//	reference to netConnectionKindMap
 func Connections(kind string) ([]ConnectionStat, error) {
 	return ConnectionsWithContext(context.Background(), kind)
 }
@@ -333,8 +338,7 @@ func ConntrackStatsWithContext(ctx context.Context, percpu bool) ([]ConntrackSta
 	return nil, common.ErrNotImplementedError
 }
 
-
-// NetProtoCounters returns network statistics for the entire system
+// ProtoCounters returns network statistics for the entire system
 // If protocols is empty then all protocols are returned, otherwise
 // just the protocols in the list are returned.
 // Not Implemented for Windows
@@ -525,9 +529,7 @@ func getUDPConnections(family uint32) ([]ConnectionStat, error) {
 		buf = make([]byte, size)
 	}
 
-	var (
-		index, step, length int
-	)
+	var index, step, length int
 
 	stats := make([]ConnectionStat, 0)
 	switch family {
@@ -694,8 +696,10 @@ type mibTCP6TableOwnerPid struct {
 	Table        [anySize]mibTCP6RowOwnerPid
 }
 
-type pmibTCPTableOwnerPidAll *mibTCPTableOwnerPid
-type pmibTCP6TableOwnerPidAll *mibTCP6TableOwnerPid
+type (
+	pmibTCPTableOwnerPidAll  *mibTCPTableOwnerPid
+	pmibTCP6TableOwnerPidAll *mibTCP6TableOwnerPid
+)
 
 // UDP
 
@@ -750,8 +754,10 @@ type mibUDP6TableOwnerPid struct {
 	Table        [anySize]mibUDP6RowOwnerPid
 }
 
-type pmibUDPTableOwnerPid *mibUDPTableOwnerPid
-type pmibUDP6TableOwnerPid *mibUDP6TableOwnerPid
+type (
+	pmibUDPTableOwnerPid  *mibUDPTableOwnerPid
+	pmibUDP6TableOwnerPid *mibUDP6TableOwnerPid
+)
 
 func decodePort(port uint32) uint16 {
 	return syscall.Ntohs(uint16(port))

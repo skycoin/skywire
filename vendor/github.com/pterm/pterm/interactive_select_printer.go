@@ -2,6 +2,7 @@ package pterm
 
 import (
 	"fmt"
+	"math"
 	"sort"
 
 	"atomicgo.dev/cursor"
@@ -106,9 +107,9 @@ func (p *InteractiveSelectPrinter) Show(text ...string) (string, error) {
 		for i, option := range p.Options {
 			if option == p.DefaultOption {
 				p.selectedOption = i
-				if i > 0 {
-					p.displayedOptionsStart = i - 1
-					p.displayedOptionsEnd = i - 1 + maxHeight
+				if i > 0 && len(p.Options) > maxHeight {
+					p.displayedOptionsEnd = int(math.Min(float64(i-1+maxHeight), float64(len(p.Options))))
+					p.displayedOptionsStart = p.displayedOptionsEnd - maxHeight
 				} else {
 					p.displayedOptionsStart = 0
 					p.displayedOptionsEnd = maxHeight
@@ -235,7 +236,7 @@ func (p *InteractiveSelectPrinter) Show(text ...string) (string, error) {
 		return false, nil
 	})
 	if err != nil {
-		fmt.Println(err)
+		Error.Println(err)
 		return "", fmt.Errorf("failed to start keyboard listener: %w", err)
 	}
 
@@ -244,7 +245,7 @@ func (p *InteractiveSelectPrinter) Show(text ...string) (string, error) {
 
 func (p *InteractiveSelectPrinter) renderSelectMenu() string {
 	var content string
-	content += Sprintf("%s %s: %s\n", p.text, ThemeDefault.SecondaryStyle.Sprint("[type to search]"), p.fuzzySearchString)
+	content += Sprintf("%s %s: %s\n", p.text, p.SelectorStyle.Sprint("[type to search]"), p.fuzzySearchString)
 
 	// find options that match fuzzy search string
 	rankedResults := fuzzy.RankFindFold(p.fuzzySearchString, p.Options)
@@ -274,9 +275,9 @@ func (p *InteractiveSelectPrinter) renderSelectMenu() string {
 			continue
 		}
 		if i == p.selectedOption {
-			content += Sprintf("%s %s\n", p.renderSelector(), option)
+			content += Sprintf("%s %s\n", p.renderSelector(), p.OptionStyle.Sprint(option))
 		} else {
-			content += Sprintf("  %s\n", option)
+			content += Sprintf("  %s\n", p.OptionStyle.Sprint(option))
 		}
 	}
 
