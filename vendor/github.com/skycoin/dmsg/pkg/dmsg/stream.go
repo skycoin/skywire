@@ -6,9 +6,9 @@ import (
 	"net"
 	"time"
 
+	"github.com/hashicorp/yamux"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/yamux"
 
 	"github.com/skycoin/dmsg/pkg/noise"
 )
