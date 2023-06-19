@@ -1,9 +1,11 @@
-// +build linux freebsd openbsd darwin
+//go:build linux || freebsd || openbsd || darwin || solaris
+// +build linux freebsd openbsd darwin solaris
 
 package process
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/user"
@@ -12,9 +14,12 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/shirou/gopsutil/v3/internal/common"
 	"golang.org/x/sys/unix"
+
+	"github.com/shirou/gopsutil/v3/internal/common"
 )
+
+type Signal = syscall.Signal
 
 // POSIX
 func getTerminalMap() (map[uint64]string, error) {
@@ -75,11 +80,16 @@ func getTerminalMap() (map[uint64]string, error) {
 // https://github.com/python/cpython/blob/08ff4369afca84587b1c82034af4e9f64caddbf2/Lib/posixpath.py#L186-L216
 // https://docs.python.org/3/library/os.path.html#os.path.ismount
 func isMount(path string) bool {
-	var stat1 unix.Stat_t
-	if err := unix.Lstat(path, &stat1); err != nil {
+	// Check symlinkness with os.Lstat; unix.DT_LNK is not portable
+	fileInfo, err := os.Lstat(path)
+	if err != nil {
 		return false
 	}
-	if stat1.Mode == unix.DT_LNK {
+	if fileInfo.Mode()&os.ModeSymlink != 0 {
+		return false
+	}
+	var stat1 unix.Stat_t
+	if err := unix.Lstat(path, &stat1); err != nil {
 		return false
 	}
 	parent := filepath.Join(path, "..")
@@ -112,11 +122,11 @@ func PidExistsWithContext(ctx context.Context, pid int32) (bool, error) {
 	if err == nil {
 		return true, nil
 	}
-	if err.Error() == "os: process already finished" {
+	if errors.Is(err, os.ErrProcessDone) {
 		return false, nil
 	}
-	errno, ok := err.(syscall.Errno)
-	if !ok {
+	var errno syscall.Errno
+	if !errors.As(err, &errno) {
 		return false, err
 	}
 	switch errno {
