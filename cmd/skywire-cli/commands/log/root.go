@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hashicorp/go-version"
 	"github.com/skycoin/dmsg/pkg/dmsgget"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
@@ -128,57 +129,68 @@ var logCmd = &cobra.Command{
 			dmsgC.EnsureAndObtainSession(ctx, server.PK) //nolint
 		}
 
+		minimumVersion, _ := version.NewVersion(minv) //nolint
+
 		start := time.Now()
 		var bulkFolders []string
 		// Get visors data
 		var wg sync.WaitGroup
 		for _, v := range uptimes {
-			if !allVisors && v.Version < minv {
-				continue
-			}
-			wg.Add(1)
-			go func(key string, wg *sync.WaitGroup) {
-				httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC), Timeout: 10 * time.Second}
-				defer httpC.CloseIdleConnections()
-				defer wg.Done()
+			if v.Online {
 
-				deleteOnError := false
-				if _, err := os.ReadDir(key); err != nil {
-					if err := os.Mkdir(key, 0750); err != nil {
-						log.Panicf("Unable to create directory for visor %s", key)
-					}
-					deleteOnError = true
-				}
-				// health check before downloading anything else
-				// delete that folder if the health check fails
-				err = download(ctx, log, httpC, "health", "health.json", key, maxFileSize)
+				visorVersion, err := version.NewVersion(v.Version) //nolint
 				if err != nil {
-					if deleteOnErrors {
-						if deleteOnError {
-							bulkFolders = append(bulkFolders, key)
+					log.Warnf("The version %s for visor %s is not valid", v.Version, v.PubKey)
+					continue
+				}
+				if !allVisors && visorVersion.LessThan(minimumVersion) {
+					log.Warnf("The version %s for visor %s does not satisfy our minimum version condition", v.Version, v.PubKey)
+					continue
+				}
+				wg.Add(1)
+				go func(key string, wg *sync.WaitGroup) {
+					httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC), Timeout: 10 * time.Second}
+					defer httpC.CloseIdleConnections()
+					defer wg.Done()
+
+					deleteOnError := false
+					if _, err := os.ReadDir(key); err != nil {
+						if err := os.Mkdir(key, 0750); err != nil {
+							log.Panicf("Unable to create directory for visor %s", key)
 						}
-						return
+						deleteOnError = true
 					}
-				}
-				if !logOnly {
-					download(ctx, log, httpC, "node-info.json", "node-info.json", key, maxFileSize) //nolint
-				}
-				if !surveyOnly {
-					if duration == 1 {
-						yesterday := time.Now().AddDate(0, 0, -1).UTC().Format("2006-01-02")
-						download(ctx, log, httpC, "transport_logs/"+yesterday+".csv", yesterday+".csv", key, maxFileSize) //nolint
-					} else {
-						for i := 1; i <= duration; i++ {
-							date := time.Now().AddDate(0, 0, -i).UTC().Format("2006-01-02")
-							download(ctx, log, httpC, "transport_logs/"+date+".csv", date+".csv", key, maxFileSize) //nolint
+					// health check before downloading anything else
+					// delete that folder if the health check fails
+					err = download(ctx, log, httpC, "health", "health.json", key, maxFileSize)
+					if err != nil {
+						if deleteOnErrors {
+							if deleteOnError {
+								bulkFolders = append(bulkFolders, key)
+							}
+							return
 						}
 					}
+					if !logOnly {
+						download(ctx, log, httpC, "node-info.json", "node-info.json", key, maxFileSize) //nolint
+					}
+					if !surveyOnly {
+						if duration == 1 {
+							yesterday := time.Now().AddDate(0, 0, -1).UTC().Format("2006-01-02")
+							download(ctx, log, httpC, "transport_logs/"+yesterday+".csv", yesterday+".csv", key, maxFileSize) //nolint
+						} else {
+							for i := 1; i <= duration; i++ {
+								date := time.Now().AddDate(0, 0, -i).UTC().Format("2006-01-02")
+								download(ctx, log, httpC, "transport_logs/"+date+".csv", date+".csv", key, maxFileSize) //nolint
+							}
+						}
+					}
+				}(v.PubKey, &wg)
+				batchSize--
+				if batchSize == 0 {
+					time.Sleep(15 * time.Second)
+					batchSize = 50
 				}
-			}(v.PubKey, &wg)
-			batchSize--
-			if batchSize == 0 {
-				time.Sleep(15 * time.Second)
-				batchSize = 50
 			}
 		}
 

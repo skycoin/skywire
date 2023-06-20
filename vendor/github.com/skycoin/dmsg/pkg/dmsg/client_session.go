@@ -6,8 +6,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/skycoin/yamux"
-
+	"github.com/hashicorp/yamux"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 )

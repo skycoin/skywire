@@ -5,13 +5,24 @@ import (
 	"fmt"
 )
 
-type timeoutError struct {
-	error string
+// NetError implements net.Error
+type NetError struct {
+	err       error
+	timeout   bool
+	temporary bool
 }
 
-func (e timeoutError) Error() string   { return e.error }
-func (e timeoutError) Timeout() bool   { return true }
-func (e timeoutError) Temporary() bool { return true }
+func (e *NetError) Error() string {
+	return e.err.Error()
+}
+
+func (e *NetError) Timeout() bool {
+	return e.timeout
+}
+
+func (e *NetError) Temporary() bool {
+	return e.temporary
+}
 
 var (
 	// ErrInvalidVersion means we received a frame with an
@@ -38,7 +49,13 @@ var (
 	ErrRecvWindowExceeded = fmt.Errorf("recv window exceeded")
 
 	// ErrTimeout is used when we reach an IO deadline
-	ErrTimeout = timeoutError{error: "i/o deadline reached"}
+	ErrTimeout = &NetError{
+		err: fmt.Errorf("i/o deadline reached"),
+
+		// Error should meet net.Error interface for timeouts for compatability
+		// with standard library expectations, such as http servers.
+		timeout: true,
+	}
 
 	// ErrStreamClosed is returned when using a closed stream
 	ErrStreamClosed = fmt.Errorf("stream closed")
