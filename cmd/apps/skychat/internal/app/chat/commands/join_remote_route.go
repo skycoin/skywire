@@ -31,19 +31,11 @@ func NewJoinRemoteRouteRequestHandler(visorRepo chat.Repository, messengerServic
 
 // Handle Handles the JoinRemoteRouteRequest
 func (h joinRemoteRouteRequestHandler) Handle(command JoinRemoteRouteRequest) error {
-	visor, err := h.visorRepo.GetByPK(command.Route.Visor)
-	if err == nil {
-		server, err := visor.GetServerByPK(command.Route.Server)
-		if err == nil {
-			_, err := server.GetRoomByPK(command.Route.Room)
-			if err == nil {
-				return fmt.Errorf("room %s already added", command.Route.String())
-			}
-		}
-
+	if h.roomAlreadyJoined(command) {
+		return fmt.Errorf("already member of route %s", command.Route.String())
 	}
 
-	err = h.messengerService.SendRouteRequestMessage(command.Route)
+	err := h.messengerService.SendRouteRequestMessage(command.Route)
 	if err != nil {
 		return err
 	}
@@ -51,4 +43,19 @@ func (h joinRemoteRouteRequestHandler) Handle(command JoinRemoteRouteRequest) er
 	go h.messengerService.HandleConnection(command.Route.Visor) //nolint:errcheck
 
 	return nil
+}
+
+// roomAlreadyJoined returns if the user already is member of the route he wants to join
+func (h joinRemoteRouteRequestHandler) roomAlreadyJoined(command JoinRemoteRouteRequest) bool {
+	visor, err := h.visorRepo.GetByPK(command.Route.Visor)
+	if err == nil {
+		server, err := visor.GetServerByPK(command.Route.Server)
+		if err == nil {
+			_, err := server.GetRoomByPK(command.Route.Room)
+			if err == nil {
+				return true
+			}
+		}
+	}
+	return false
 }

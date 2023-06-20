@@ -33,88 +33,198 @@ func NewLeaveRemoteRouteRequestHandler(ms messenger.Service, visorRepo chat.Repo
 
 // Handle Handles the LeaveRemoteRouteRequest request
 func (h leaveRemoteRouteRequestHandler) Handle(command LeaveRemoteRouteRequest) error {
-	usr, err := h.usrRepo.GetUser()
-	if err != nil {
-		fmt.Printf("Error getting user from repository: %s", err)
-		return err
-	}
-
-	// Make sure that we don't leave a room of our own server
-	if command.Route.Visor == usr.GetInfo().GetPK() {
+	if h.routeIsOfOwnVisor(command.Route) {
 		return fmt.Errorf("cannot leave route of own server")
 	}
 
-	// Check if visor exists
-	visor, err := h.visorRepo.GetByPK(command.Route.Visor)
-	if err != nil {
-		return err
+	if command.isLeavingP2PRouteCommand() {
+		err := h.leaveAndDeleteP2PRoute(command.Route)
+		if err != nil {
+			return err
+		}
+		err = h.deleteVisorIfEmpty(command.Route)
+		if err != nil {
+			return err
+		}
+		return nil
 	}
 
-	// Check if handling p2p room
-	if command.Route.Server == command.Route.Room {
-		if !visor.P2PIsEmpty() {
-			err = h.ms.SendLeaveRouteMessage(command.Route)
-			if err != nil {
-				return err
-			}
-			err = visor.DeleteP2P()
-			if err != nil {
-				return err
-			}
+	if command.isLeavingServerRouteCommand() {
+		err := h.leaveAndDeleteServerRoute(command.Route)
+		if err != nil {
+			return err
+		}
+		err = h.deleteVisorIfEmpty(command.Route)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if command.isLeavingRoomRouteCommand() {
+		err := h.leaveAndDeleteRoomRoute(command.Route)
+		if err != nil {
+			return err
 		}
 
-		// Check if visor has servers, if not delete visor
-		if len(visor.GetAllServer()) == 0 {
-			return h.visorRepo.Delete(command.Route.Visor)
+		err = h.deleteServerIfEmpty(command.Route)
+		if err != nil {
+			return err
 		}
 
-		return h.visorRepo.Set(*visor)
+		err = h.deleteVisorIfEmpty(command.Route)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	return nil
+}
+
+func (h leaveRemoteRouteRequestHandler) routeIsOfOwnVisor(route util.PKRoute) bool {
+	usr, err := h.usrRepo.GetUser()
+	if err != nil {
+		fmt.Printf("Error getting user from repository: %s", err)
+		//return err
+		//TODO: handle different?
+		return true
 	}
 
-	// Check if server exists
-	server, err := visor.GetServerByPK(command.Route.Server)
+	if route.Visor == usr.GetInfo().GetPK() {
+		return true
+	}
+
+	return false
+}
+
+func (c LeaveRemoteRouteRequest) isLeavingP2PRouteCommand() bool {
+	return c.Route.IsP2PRoute()
+}
+
+func (c LeaveRemoteRouteRequest) isLeavingServerRouteCommand() bool {
+	return c.Route.IsServerRoute()
+}
+
+func (c LeaveRemoteRouteRequest) isLeavingRoomRouteCommand() bool {
+	return c.Route.IsRoomRoute()
+}
+
+func (h leaveRemoteRouteRequestHandler) leaveAndDeleteP2PRoute(route util.PKRoute) error {
+	visor, err := h.visorRepo.GetByPK(route.Visor)
 	if err != nil {
 		return err
 	}
 
-	// Check if room exists
-	_, err = server.GetRoomByPK(command.Route.Room)
+	if !visor.P2PIsEmpty() {
+		err = h.ms.SendLeaveRouteMessage(route)
+		if err != nil {
+			return err
+		}
+		err = visor.DeleteP2P()
+		if err != nil {
+			return err
+		}
+	}
+
+	return h.visorRepo.Set(*visor)
+}
+
+func (h leaveRemoteRouteRequestHandler) leaveAndDeleteServerRoute(route util.PKRoute) error {
+	visor, err := h.visorRepo.GetByPK(route.Visor)
 	if err != nil {
 		return err
 	}
 
-	// Send LeaveChatMessage to remote server
-	err = h.ms.SendLeaveRouteMessage(command.Route)
+	_, err = visor.GetServerByPK(route.Server)
+	if err != nil {
+		return err
+	}
+
+	err = h.ms.SendLeaveRouteMessage(route)
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	// Delete room from server
-	err = server.DeleteRoom(command.Route.Room)
+	err = visor.DeleteServer(route.Server)
 	if err != nil {
 		return err
 	}
 
-	//check if this was the last room of the server
+	return h.visorRepo.Set(*visor)
+}
+
+func (h leaveRemoteRouteRequestHandler) leaveAndDeleteRoomRoute(route util.PKRoute) error {
+	visor, err := h.visorRepo.GetByPK(route.Visor)
+	if err != nil {
+		return err
+	}
+
+	server, err := visor.GetServerByPK(route.Server)
+	if err != nil {
+		return err
+	}
+
+	_, err = server.GetRoomByPK(route.Room)
+	if err != nil {
+		return err
+	}
+
+	err = h.ms.SendLeaveRouteMessage(route)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	err = server.DeleteRoom(route.Room)
+	if err != nil {
+		return err
+	}
+
+	err = visor.SetServer(*server)
+	if err != nil {
+		return err
+	}
+
+	return h.visorRepo.Set(*visor)
+}
+
+func (h leaveRemoteRouteRequestHandler) deleteVisorIfEmpty(route util.PKRoute) error {
+	visor, err := h.visorRepo.GetByPK(route.Visor)
+	if err != nil {
+		return err
+	}
+
+	if len(visor.GetAllServer()) == 0 && visor.P2PIsEmpty() {
+		return h.visorRepo.Delete(route.Visor)
+	}
+
+	return nil
+}
+
+func (h leaveRemoteRouteRequestHandler) deleteServerIfEmpty(route util.PKRoute) error {
+	visor, err := h.visorRepo.GetByPK(route.Visor)
+	if err != nil {
+		return err
+	}
+
+	server, err := visor.GetServerByPK(route.Server)
+	if err != nil {
+		return err
+	}
+
 	if len(server.GetAllRooms()) == 0 {
 		//Prepare ServerRoute
-		serverroute := util.NewServerRoute(command.Route.Server, command.Route.Server)
+		serverroute := util.NewServerRoute(route.Server, route.Server)
 		// Send LeaveChatMessage to remote server
 		err = h.ms.SendLeaveRouteMessage(serverroute)
 		if err != nil {
 			return err
 		}
-		err = visor.DeleteServer(command.Route.Server)
+		err = visor.DeleteServer(route.Server)
 		if err != nil {
 			return err
 		}
+		return h.visorRepo.Set(*visor)
 	}
 
-	// Check if visor has any other servers or p2p, if not delete visor
-	if len(visor.GetAllServer()) == 0 && visor.P2PIsEmpty() {
-		return h.visorRepo.Delete(command.Route.Visor)
-	}
-
-	// Update repository with changed visor
-	return h.visorRepo.Set(*visor)
+	return nil
 }
