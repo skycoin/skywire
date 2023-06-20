@@ -24,7 +24,7 @@ type Queries struct {
 type Commands struct {
 	AddLocalServerHandler           commands.AddLocalServerRequestHandler
 	JoinRemoteRouteHandler          commands.JoinRemoteRouteRequestHandler
-	DeleteLocalRouteHandler         commands.DeleteLocalRouteRequestHandler
+	DeleteRouteHandler              commands.DeleteRouteRequestHandler
 	LeaveRemoteRouteHandler         commands.LeaveRemoteRouteRequestHandler
 	SendAddRoomMessageHandler       commands.SendAddRoomMessageRequestHandler
 	SendDeleteRoomMessageHandler    commands.SendDeleteRoomMessageRequestHandler
@@ -54,7 +54,7 @@ func NewServices(cliRepo client.Repository, visorRepo chat.Repository, userRepo 
 		Commands: Commands{
 			AddLocalServerHandler:           commands.NewAddLocalServerRequestHandler(visorRepo, userRepo, ns),
 			JoinRemoteRouteHandler:          commands.NewJoinRemoteRouteRequestHandler(visorRepo, ms),
-			DeleteLocalRouteHandler:         commands.NewDeleteLocalRouteRequestHandler(ms, visorRepo),
+			DeleteRouteHandler:              commands.NewDeleteRouteRequestHandler(ms, visorRepo, userRepo),
 			LeaveRemoteRouteHandler:         commands.NewLeaveRemoteRouteRequestHandler(ms, visorRepo, userRepo),
 			SendAddRoomMessageHandler:       commands.NewSendAddRoomMessageRequestHandler(ms),
 			SendDeleteRoomMessageHandler:    commands.NewSendDeleteRoomMessageRequestHandler(ms),

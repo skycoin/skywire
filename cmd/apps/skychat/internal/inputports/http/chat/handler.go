@@ -567,19 +567,19 @@ func (c Handler) SendFireModMessage(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// DeleteLocalRouteURLParam contains the parameter identifier to be parsed by the handler
-const DeleteLocalRouteURLParam = "DeleteLocalRoute"
+// DeleteRouteURLParam contains the parameter identifier to be parsed by the handler
+const DeleteRouteURLParam = "deleteRoute"
 
-// DeleteLocalRouteRequestModel represents the request model expected for Delete request
-type DeleteLocalRouteRequestModel struct {
+// DeleteRouteRequestModel represents the request model expected for Delete request
+type DeleteRouteRequestModel struct {
 	VisorPk  string `json:"visorpk"`
 	ServerPk string `json:"serverpk"`
 	RoomPk   string `json:"roompk"`
 }
 
-// DeleteLocalRoute adds a room to the local visor/server
-func (c Handler) DeleteLocalRoute(w http.ResponseWriter, r *http.Request) {
-	var requestModel DeleteLocalRouteRequestModel
+// DeleteRoute adds a room to the local visor/server
+func (c Handler) DeleteRoute(w http.ResponseWriter, r *http.Request) {
+	var requestModel DeleteRouteRequestModel
 	decodeErr := json.NewDecoder(r.Body).Decode(&requestModel)
 	if decodeErr != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -619,7 +619,7 @@ func (c Handler) DeleteLocalRoute(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	err = c.chatServices.Commands.DeleteLocalRouteHandler.Handle(commands.DeleteLocalRouteRequest{
+	err = c.chatServices.Commands.DeleteRouteHandler.Handle(commands.DeleteRouteRequest{
 		Route: route,
 	})
 	if err != nil {
