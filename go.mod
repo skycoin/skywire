@@ -44,7 +44,7 @@ require (
 	github.com/gocarina/gocsv v0.0.0-20230616125104-99d496ca653d
 	github.com/hashicorp/yamux v0.1.1
 	github.com/ivanpirog/coloredcobra v1.0.1
-	github.com/james-barrow/golang-ipc v1.2.3
+	github.com/james-barrow/golang-ipc v1.1.0
 	github.com/jaypipes/ghw v0.11.0
 	github.com/lib/pq v1.10.9
 	github.com/orandin/lumberjackrus v1.0.1
