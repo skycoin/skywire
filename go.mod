@@ -10,6 +10,7 @@ require (
 	github.com/gen2brain/dlgs v0.0.0-20210911090025-cbd38e821b98
 	github.com/google/uuid v1.1.2
 	github.com/gorilla/securecookie v1.1.1
+	github.com/hashicorp/yamux v0.1.1
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/reedsolomon v1.9.9 // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2
@@ -19,7 +20,6 @@ require (
 	github.com/shirou/gopsutil/v3 v3.21.4
 	github.com/sirupsen/logrus v1.8.1
 	github.com/skycoin/skycoin v0.27.1
-	github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.5.0
 	github.com/stretchr/testify v1.8.3
@@ -45,13 +45,13 @@ require (
 	github.com/go-chi/chi/v5 v5.0.8-0.20220103230436-7dbe9a0bd10f
 	github.com/gocarina/gocsv v0.0.0-20220927221512-ad3251f9fa25
 	github.com/hashicorp/go-version v1.6.0
-	github.com/ivanpirog/coloredcobra v1.0.0
+	github.com/ivanpirog/coloredcobra v1.0.1
 	github.com/james-barrow/golang-ipc v0.0.0-20210227130457-95e7cc81f5e2
 	github.com/jaypipes/ghw v0.10.0
 	github.com/lib/pq v1.10.7
 	github.com/orandin/lumberjackrus v1.0.1
 	github.com/pterm/pterm v0.12.49
-	github.com/skycoin/dmsg v1.3.0-rc1.0.20230224131835-1c194ef9791e
+	github.com/skycoin/dmsg v1.3.0-rc1.0.20230609193507-b02bb8f7d1bc
 	github.com/skycoin/skywire-utilities v0.0.0-20230601232053-0abbc9604fbc
 	github.com/skycoin/systray v1.10.0
 	github.com/spf13/pflag v1.0.5
