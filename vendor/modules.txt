@@ -153,6 +153,9 @@ github.com/gorilla/securecookie
 # github.com/hashicorp/go-version v1.6.0
 ## explicit
 github.com/hashicorp/go-version
+# github.com/hashicorp/yamux v0.1.1
+## explicit; go 1.15
+github.com/hashicorp/yamux
 # github.com/inconshreveable/mousetrap v1.0.0
 ## explicit
 github.com/inconshreveable/mousetrap
@@ -331,7 +334,7 @@ github.com/skycoin/systray/internal/generated/notifier
 # github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 ## explicit
 github.com/songgao/water
-# github.com/spf13/cobra v1.4.0
+# github.com/spf13/cobra v1.5.0
 ## explicit; go 1.15
 github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.5

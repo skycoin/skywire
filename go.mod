@@ -21,7 +21,7 @@ require (
 	github.com/sirupsen/logrus v1.8.1
 	github.com/skycoin/skycoin v0.27.1
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
-	github.com/spf13/cobra v1.4.0
+	github.com/spf13/cobra v1.5.0
 	github.com/stretchr/testify v1.8.3
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
 	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect
