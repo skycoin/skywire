@@ -110,8 +110,11 @@ func init() {
 	homepath := visorconfig.HomePath()
 	if homepath != "" {
 		genConfigCmd.Flags().BoolVarP(&isUsrEnv, "user", "u", false, "use paths for user space: "+homepath+"\033[0m")
+		genConfigCmd.MarkFlagsMutuallyExclusive("pkg", "user")
 	}
+
 	genConfigCmd.Flags().BoolVarP(&isRegen, "regen", "r", false, "re-generate existing config & retain keys")
+	genConfigCmd.MarkFlagsMutuallyExclusive("regen", "force")
 	genConfigCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
 	gHiddenFlags = append(gHiddenFlags, "sk")
 	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", false, "use test deployment "+testConf+"\033[0m")
@@ -178,14 +181,6 @@ var genConfigCmd = &cobra.Command{
 		}
 		if isStdout {
 			isRegen = false
-		}
-		//--force will delete a config, which excludes --regen
-		if (isForce) && (isRegen) {
-			log.Fatal("Use of mutually exclusive flags: -f --force cannot override -r --regen")
-		}
-		// these flags overwrite each other
-		if (isUsrEnv) && (isPkgEnv) {
-			log.Fatal("Use of mutually exclusive flags: -u --user and -p --pkg")
 		}
 		//enable local hypervisor by default for user
 		if isUsrEnv {
