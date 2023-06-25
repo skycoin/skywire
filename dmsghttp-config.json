@@ -32,37 +32,37 @@
       {
         "static":"02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd",
         "server":{
-          "address":"170.187.231.137:30081"
+          "address":"139.162.44.14:30081"
         }
       },
       {
         "static":"03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4",
         "server":{
-          "address":"170.187.228.181:30082"
+          "address":"172.104.57.11:30082"
         }
       },
       {
         "static":"0228af3fd99c8d86a882495c8e0202bdd4da78c69e013065d8634286dd4a0ac098",
         "server":{
-          "address":"172.104.161.184:30084"
+          "address":"192.46.229.112:30084"
         }
       },
       {
         "static":"03d5b55d1133b26485c664cf8b95cff6746d1e321c34e48c9fed293eff0d6d49e5",
         "server":{
-          "address":"143.42.78.123:30083"
+          "address":"139.177.189.68:30083"
         }
       },
       {
         "static":"0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
         "server":{
-          "address":"139.162.12.244:30085"
+          "address":"172.105.124.139:30085"
         }
       },
       {
         "static":"02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0",
         "server":{
-          "address":"dmsg.server02a4.skywire.skycoin.com:30089"
+          "address":"172.104.61.116:30089"
         }
       },
       {
