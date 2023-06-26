@@ -98,25 +98,25 @@ func init() {
 	if scriptExecArray("${DMSGPTYPKS[@]}") != "" {
 		msg += "\n\r"
 	}
-	genConfigCmd.Flags().StringVar(&dmsgptywlPKs, "dmsgpty", scriptExecArray("${DMSGPTYPKS[@]}"), msg)
+	genConfigCmd.Flags().StringVar(&dmsgptyWlPKs, "dmsgpty", scriptExecArray("${DMSGPTYPKS[@]}"), msg)
 	msg = "add survey whitelist PKs"
 	if scriptExecArray("${SURVEYPKS[@]}") != "" {
 		msg += "\n\r"
 	}
 
-	genConfigCmd.Flags().StringVar(&surveywhitelistPks, "survey", scriptExecArray("${SURVEYPKS[@]}"), msg)
+	genConfigCmd.Flags().StringVar(&surveyWhitelistPKs, "survey", scriptExecArray("${SURVEYPKS[@]}"), msg)
 	gHiddenFlags = append(gHiddenFlags, "survey")
 	msg = "add route setup node PKs"
 	if scriptExecArray("${ROUTESETUPPKS[@]}") != "" {
 		msg += "\n\r"
 	}
-	genConfigCmd.Flags().StringVar(&routesetupnodePks, "routesetup", scriptExecArray("${ROUTESETUPPKS[@]}"), msg)
+	genConfigCmd.Flags().StringVar(&routeSetupNodes, "routesetup", scriptExecArray("${ROUTESETUPPKS[@]}"), msg)
 	gHiddenFlags = append(gHiddenFlags, "routesetup")
 	msg = "add transport setup node PKs"
 	if scriptExecArray("${ROUTESETUPPKS[@]}") != "" {
 		msg += "\n\r"
 	}
-	genConfigCmd.Flags().StringVar(&transportsetupnodePks, "tpsetup", scriptExecArray("${ROUTESETUPPKS[@]}"), msg)
+	genConfigCmd.Flags().StringVar(&transportSetupPKs, "tpsetup", scriptExecArray("${ROUTESETUPPKS[@]}"), msg)
 	gHiddenFlags = append(gHiddenFlags, "tpsetup")
 
 	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", visorconfig.OS, "(linux / mac / win) paths\033[0m")
