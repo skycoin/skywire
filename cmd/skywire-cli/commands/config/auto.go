@@ -6,13 +6,15 @@ package cliconfig
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
