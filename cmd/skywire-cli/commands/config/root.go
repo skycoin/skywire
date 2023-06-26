@@ -25,7 +25,6 @@ var (
 		Test: visorconfig.DmsgHTTPServersData{DMSGServers: []*disc.Entry{}},
 		Prod: visorconfig.DmsgHTTPServersData{DMSGServers: []*disc.Entry{}},
 	}
-	//dmsgHTTPServersList = new(visorconfig.DmsgHTTPServers)
 	noFetch                bool
 	noDefaults             bool
 	stcprPort              int
@@ -43,10 +42,10 @@ var (
 	isUsrEnv               bool
 	isHypervisor           bool
 	hypervisorPKs          string
-	dmsgptywlPKs           string
-	surveywhitelistPks     string
-	routesetupnodePks      string
-	transportsetupnodePks  string
+	dmsgptyWlPKs           string
+	surveyWhitelistPKs     string
+	routeSetupNodes        string
+	transportSetupPKs      string
 	isDmsgHTTP             bool
 	isVpnServerEnable      bool
 	isDisableAuth          bool

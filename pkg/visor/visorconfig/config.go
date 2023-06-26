@@ -31,29 +31,29 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		//fall back on  defaults
 		if !testEnv {
 			services = &Services{
-				DmsgDiscovery:       utilenv.DmsgDiscAddr,
-				TransportDiscovery:  utilenv.TpDiscAddr,
-				AddressResolver:     utilenv.AddressResolverAddr,
-				RouteFinder:         utilenv.RouteFinderAddr,
-				RouteSetupNodes:     MustPKs(utilenv.RouteSetupPKs),
-				TransportSetupNodes: MustPKs(utilenv.TPSetupPKs),
-				UptimeTracker:       utilenv.UptimeTrackerAddr,
-				ServiceDiscovery:    utilenv.ServiceDiscAddr,
-				StunServers:         utilenv.GetStunServers(),
-				DNSServer:           utilenv.DNSServer,
+				DmsgDiscovery:      utilenv.DmsgDiscAddr,
+				TransportDiscovery: utilenv.TpDiscAddr,
+				AddressResolver:    utilenv.AddressResolverAddr,
+				RouteFinder:        utilenv.RouteFinderAddr,
+				RouteSetupNodes:    MustPKs(utilenv.RouteSetupPKs),
+				TransportSetupPKs:  MustPKs(utilenv.TPSetupPKs),
+				UptimeTracker:      utilenv.UptimeTrackerAddr,
+				ServiceDiscovery:   utilenv.ServiceDiscAddr,
+				StunServers:        utilenv.GetStunServers(),
+				DNSServer:          utilenv.DNSServer,
 			}
 		} else {
 			services = &Services{
-				DmsgDiscovery:       utilenv.TestDmsgDiscAddr,
-				TransportDiscovery:  utilenv.TestTpDiscAddr,
-				AddressResolver:     utilenv.TestAddressResolverAddr,
-				RouteFinder:         utilenv.TestRouteFinderAddr,
-				RouteSetupNodes:     MustPKs(utilenv.TestRouteSetupPKs),
-				TransportSetupNodes: MustPKs(utilenv.TestTPSetupPKs),
-				UptimeTracker:       utilenv.TestUptimeTrackerAddr,
-				ServiceDiscovery:    utilenv.TestServiceDiscAddr,
-				StunServers:         utilenv.GetStunServers(),
-				DNSServer:           utilenv.DNSServer,
+				DmsgDiscovery:      utilenv.TestDmsgDiscAddr,
+				TransportDiscovery: utilenv.TestTpDiscAddr,
+				AddressResolver:    utilenv.TestAddressResolverAddr,
+				RouteFinder:        utilenv.TestRouteFinderAddr,
+				RouteSetupNodes:    MustPKs(utilenv.TestRouteSetupPKs),
+				TransportSetupPKs:  MustPKs(utilenv.TestTPSetupPKs),
+				UptimeTracker:      utilenv.TestUptimeTrackerAddr,
+				ServiceDiscovery:   utilenv.TestServiceDiscAddr,
+				StunServers:        utilenv.GetStunServers(),
+				DNSServer:          utilenv.DNSServer,
 			}
 		}
 	}

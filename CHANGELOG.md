@@ -6,6 +6,49 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.9
+
+-   Fix `skywire-cli config gen -r`
+
+## 1.3.8
+
+-   Rebuild Hypervisor UI  [#1583](https://github.com/skycoin/skywire/pull/1583)
+-   Rebuild Hypervisor UI  [#1583](https://github.com/skycoin/skywire/pull/1583)
+-   Change Logserver to use c.JSON method ; remove variable for endpoint name '/node-info'  [#1582](https://github.com/skycoin/skywire/pull/1582)
+-   update changelog  [#1580](https://github.com/skycoin/skywire/pull/1580)
+-   Add Config gen flags for survey whitelist, transport and route setup pks [#1578](https://github.com/skycoin/skywire/pull/1578)
+-   Fix query of the conf service [#1578](https://github.com/skycoin/skywire/pull/1578)
+-   Revise config gen logic / structure [#1578](https://github.com/skycoin/skywire/pull/1578)
+-   Fix the js mime type  [#1576](https://github.com/skycoin/skywire/pull/1576)
+-   Fix two new panic detected  [#1573](https://github.com/skycoin/skywire/pull/1573)
+-   Health check of log collection api prerequisite for survey & transport log collection via `skywire-cli log`  [#1568](https://github.com/skycoin/skywire/pull/1568)
+-   Fix typo on state name  [#1567](https://github.com/skycoin/skywire/pull/1567)
+-   Log collection by secret key  [#1566](https://github.com/skycoin/skywire/pull/1566)
+-   Optional combined compilation of `skywire-cli` `skywire-visor` & `setup-node` binaries  [#1565](https://github.com/skycoin/skywire/pull/1565)
+-   Fix vpn start command  [#1564](https://github.com/skycoin/skywire/pull/1564)
+-   Solve setupnode rpc issue  [#1563](https://github.com/skycoin/skywire/pull/1563)
+-   Remove pgp encryption of the survey  [#1562](https://github.com/skycoin/skywire/pull/1562)
+-   Change variable name  [#1561](https://github.com/skycoin/skywire/pull/1561)
+-   add WhitelistedPKs to services struct  [#1560](https://github.com/skycoin/skywire/pull/1560)
+-   Survey collection whitelist  [#1557](https://github.com/skycoin/skywire/pull/1557)
+-   Dmsgpty whitelist  [#1554](https://github.com/skycoin/skywire/pull/1554)
+-   `make config` directive & makefile optimizations  [#1549](https://github.com/skycoin/skywire/pull/1549)
+-   Update skywire-utilities dependency   [#1546](https://github.com/skycoin/skywire/pull/1546)
+-   fix `skywire-cli vpn list` [#1546](https://github.com/skycoin/skywire/pull/1546)
+-   Randomize the order of survey collection with `skywire-cli log`  [#1541](https://github.com/skycoin/skywire/pull/1541)
+-   Fix skywire-cli config gen -a  [#1539](https://github.com/skycoin/skywire/pull/1539)
+-   Print version of golangci-lint with `make check`  [#1538](https://github.com/skycoin/skywire/pull/1538)
+-   Change port logic on sudph and stcpr init - set ports for sudph and stcpr  [#1534](https://github.com/skycoin/skywire/pull/1534)
+-   Stop UI requests when not needed ; avoid unnecessary logging  [#1533](https://github.com/skycoin/skywire/pull/1533)
+-   Remove survey checksum  [#1532](https://github.com/skycoin/skywire/pull/1532)
+-   Update README.md  [#1531](https://github.com/skycoin/skywire/pull/1531)
+-   Rebuild UI  [#1530](https://github.com/skycoin/skywire/pull/1530)
+-   Logs UI  [#1528](https://github.com/skycoin/skywire/pull/1528)
+-   Change bin_path to apps instead build/apps  [#1526](https://github.com/skycoin/skywire/pull/1526)
+-   Fix for survey on armv7 [#1524](https://github.com/skycoin/skywire/pull/1524)
+-   Fix mac installer script issue  [#1523](https://github.com/skycoin/skywire/pull/1523)
+-   Fix arm log store panic  [#1522](https://github.com/skycoin/skywire/pull/1522)
+
 ## 1.3.7
 -   Fix deps (dependabot)  [#1521](https://github.com/skycoin/skywire/pull/1521)
 -   improve transport logic  [#1519](https://github.com/skycoin/skywire/pull/1519)

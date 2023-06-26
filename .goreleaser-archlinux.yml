@@ -290,7 +290,6 @@ archives:
     name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
     files:
       - dmsghttp-config.json
-      - skycoin.asc
     builds:
       - skywire-visor-amd64
       - skywire-cli-amd64
@@ -306,7 +305,6 @@ archives:
     name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
     files:
       - dmsghttp-config.json
-      - skycoin.asc
     builds:
       - skywire-visor-arm64
       - skywire-cli-arm64
@@ -322,7 +320,6 @@ archives:
     name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
     files:
       - dmsghttp-config.json
-      - skycoin.asc
     builds:
       - skywire-visor-arm
       - skywire-cli-arm

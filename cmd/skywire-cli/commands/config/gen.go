@@ -486,7 +486,7 @@ var genConfigCmd = &cobra.Command{
 			}
 			// create an http client to fetch the services
 			client := http.Client{
-				Timeout: time.Second * 30, // Timeout after 30 seconds
+				Timeout: time.Second * 15, // Timeout after 30 seconds
 			}
 			//create the http request
 			req, err := http.NewRequest(http.MethodGet, fmt.Sprint(serviceConfURL), nil)
@@ -532,26 +532,25 @@ var genConfigCmd = &cobra.Command{
 			oldConfJSON, err := os.ReadFile(confPath)
 			if err != nil {
 				if !isStdout || isStdout && isHide {
-					log.Fatalf("Failed to read config file: %v", err)
+					log.Errorf("Failed to read config file: %v", err)
 				}
-			}
-			// Decode JSON data
-			err = json.Unmarshal(oldConfJSON, &oldConf)
-			if err != nil {
-				if !isStdout || isStdout && isHide {
-					log.WithError(err).Fatal("Failed to unmarshal old config json")
-				}
-			}
-			if err != nil {
-				_, sk = cipher.GenerateKeyPair()
 			} else {
-				sk = oldConf.SK
-				if isRetainHypervisors {
-					for _, j := range oldConf.Hypervisors {
-						hypervisorPKs = hypervisorPKs + "," + fmt.Sprintf("\t%s\n", j)
+				// Decode JSON data
+				err = json.Unmarshal(oldConfJSON, &oldConf)
+				if err != nil {
+					if !isStdout || isStdout && isHide {
+						log.WithError(err).Fatal("Failed to unmarshal old config json")
 					}
-					for _, j := range oldConf.Dmsgpty.Whitelist {
-						dmsgptywlPKs = dmsgptywlPKs + "," + fmt.Sprintf("\t%s\n", j)
+					_, sk = cipher.GenerateKeyPair()
+				} else {
+					sk = oldConf.SK
+					if isRetainHypervisors {
+						for _, j := range oldConf.Hypervisors {
+							hypervisorPKs = hypervisorPKs + "," + fmt.Sprintf("\t%s\n", j)
+						}
+						for _, j := range oldConf.Dmsgpty.Whitelist {
+							dmsgptyWlPKs = dmsgptyWlPKs + "," + fmt.Sprintf("\t%s\n", j)
+						}
 					}
 				}
 			}
@@ -596,10 +595,10 @@ var genConfigCmd = &cobra.Command{
 		if isDmsgHTTP {
 			dmsghttpConfig := visorconfig.DMSGHTTPName
 			// TODO
-			//if isUsr {
+			//if isUsrEnv {
 			//	dmsghttpConfig = homepath + "/" + visorconfig.DMSGHTTPName
 			//}
-			if isPkg {
+			if isPkgEnv {
 				dmsghttpConfig = visorconfig.SkywirePath + "/" + visorconfig.DMSGHTTPName
 			}
 
@@ -614,36 +613,31 @@ var genConfigCmd = &cobra.Command{
 			if err != nil {
 				log.WithError(err).Fatal("Failed to unmarshal " + visorconfig.DMSGHTTPName)
 			}
-
-			//DEBUG
-			// Marshal the modified config to JSON and print
-			//jsonData, err := json.MarshalIndent(dmsgHTTPServersList, "", "  ")
-			//if err != nil {
-			//	  log.Fatalf("Failed to marshal config to JSON: %v", err)
-			//}
-			//fmt.Println(string(jsonData))
 		}
 
-		//TODO: handle partial service conf / service conf for less than the whole set of services
 		//fall back on  defaults
 		var routeSetupPKs cipher.PubKeys
 		var tpSetupPKs cipher.PubKeys
-		var surveyWhitelistPKs cipher.PubKeys
+		var surveyWlPKs cipher.PubKeys
+		// If nothing was fetched
 		if services.SurveyWhitelist == nil {
-			if surveywhitelistPks != "" {
-				if err := surveyWhitelistPKs.Set(surveywhitelistPks); err != nil {
-					log.Fatalf("bad key set for survey whitelist flag: %v", err)
-				}
-				services.SurveyWhitelist = surveyWhitelistPKs
-				surveyWhitelistPKs = cipher.PubKeys{}
-			}
+			// By default
 			if !noDefaults {
-				if err := surveyWhitelistPKs.Set(utilenv.SurveyWhitelistPKs); err != nil {
+				// set the hardcoded defaults from skywire-utilities for the service public keys
+				if err := surveyWlPKs.Set(utilenv.SurveyWhitelistPKs); err != nil {
 					log.Fatalf("Failed to unmarshal survey whitelist public keys: %v", err)
 				}
-				services.SurveyWhitelist = append(services.SurveyWhitelist, surveyWhitelistPKs...)
 			}
 		}
+		//if the flag is not empty
+		if surveyWhitelistPKs != "" {
+			// validate public keys set via flag / fail explicitly on errors
+			if err := surveyWlPKs.Set(surveyWhitelistPKs); err != nil {
+				log.Fatalf("bad key set for survey whitelist flag: %v", err)
+			}
+		}
+		services.SurveyWhitelist = append(services.SurveyWhitelist, surveyWlPKs...)
+
 		if !isTestEnv {
 			if services.DmsgDiscovery == "" {
 				services.DmsgDiscovery = utilenv.DmsgDiscAddr
@@ -672,36 +666,32 @@ var genConfigCmd = &cobra.Command{
 			if services.DNSServer == "" {
 				services.DNSServer = utilenv.DNSServer
 			}
-			if services.RouteSetupNodes == nil {
-				if routesetupnodePks != "" {
-					if err := routeSetupPKs.Set(routesetupnodePks); err != nil {
-						log.Fatalf("bad key set for route setup node flag: %v", err)
-					}
-					services.RouteSetupNodes = routeSetupPKs
-					routeSetupPKs = cipher.PubKeys{}
+			if routeSetupNodes != "" {
+				if err := routeSetupPKs.Set(routeSetupNodes); err != nil {
+					log.Fatalf("bad key set for route setup node flag: %v", err)
 				}
+			}
+			if services.RouteSetupNodes == nil {
 				if !noDefaults {
 					if err := routeSetupPKs.Set(utilenv.RouteSetupPKs); err != nil {
 						log.Fatalf("Failed to unmarshal route setup-node public keys: %v", err)
 					}
-					services.RouteSetupNodes = append(services.RouteSetupNodes, routeSetupPKs...)
 				}
 			}
-			if services.TransportSetupNodes == nil {
-				if transportsetupnodePks != "" {
-					if err := tpSetupPKs.Set(transportsetupnodePks); err != nil {
-						log.Fatalf("bad key set for transport setup node flag: %v", err)
+			services.RouteSetupNodes = append(services.RouteSetupNodes, routeSetupPKs...)
+			if transportSetupPKs != "" {
+				if err := tpSetupPKs.Set(transportSetupPKs); err != nil {
+					log.Fatalf("bad key set for transport setup node flag: %v", err)
+				}
+			}
+			if services.TransportSetupPKs == nil {
+				if !noDefaults {
+					if err := tpSetupPKs.Set(utilenv.TPSetupPKs); err != nil {
+						log.Fatalf("Failed to unmarshal transport setup-node public keys: %v", err)
 					}
-					services.TransportSetupNodes = routeSetupPKs
-					routeSetupPKs = cipher.PubKeys{}
 				}
 			}
-			if !noDefaults {
-				if err := tpSetupPKs.Set(utilenv.TPSetupPKs); err != nil {
-					log.Fatalf("Failed to unmarshal transport setup-node public keys: %v", err)
-				}
-				services.TransportSetupNodes = append(services.TransportSetupNodes, tpSetupPKs...)
-			}
+			services.TransportSetupPKs = append(services.TransportSetupPKs, tpSetupPKs...)
 		} else {
 			if services.DmsgDiscovery == "" {
 				services.DmsgDiscovery = utilenv.TestDmsgDiscAddr
@@ -727,30 +717,30 @@ var genConfigCmd = &cobra.Command{
 			if services.DNSServer == "" {
 				services.DNSServer = utilenv.DNSServer
 			}
-			if services.RouteSetupNodes == nil {
-				if routesetupnodePks != "" {
-					if err := routeSetupPKs.Set(routesetupnodePks); err != nil {
-						log.Fatalf("bad key set for route setup node flag: %v", err)
-					}
-					services.RouteSetupNodes = routeSetupPKs
-					routeSetupPKs = cipher.PubKeys{}
+			if routeSetupNodes != "" {
+				if err := routeSetupPKs.Set(routeSetupNodes); err != nil {
+					log.Fatalf("bad key set for route setup node flag: %v", err)
 				}
+			}
+			if services.RouteSetupNodes == nil {
 				if err := routeSetupPKs.Set(utilenv.TestRouteSetupPKs); err != nil {
 					log.Fatalf("Failed to unmarshal route setup-node public keys: %v", err)
 				}
-				services.RouteSetupNodes = append(services.RouteSetupNodes, routeSetupPKs...)
 			}
-			if services.TransportSetupNodes == nil {
-				if transportsetupnodePks != "" {
-					if err := tpSetupPKs.Set(transportsetupnodePks); err != nil {
-						log.Fatalf("bad key set for transport setup node flag: %v", err)
+			services.RouteSetupNodes = append(services.RouteSetupNodes, routeSetupPKs...)
+			if transportSetupPKs != "" {
+				if err := tpSetupPKs.Set(transportSetupPKs); err != nil {
+					log.Fatalf("bad key set for transport setup node flag: %v", err)
+				}
+			}
+			if services.TransportSetupPKs == nil {
+				if !noDefaults {
+					if err := tpSetupPKs.Set(utilenv.TestTPSetupPKs); err != nil {
+						log.Fatalf("Failed to unmarshal transport setup-node public keys: %v", err)
 					}
 				}
-				if err := tpSetupPKs.Set(utilenv.TestTPSetupPKs); err != nil {
-					log.Fatalf("Failed to unmarshal transport setup-node public keys: %v", err)
-				}
-				services.TransportSetupNodes = append(services.TransportSetupNodes, tpSetupPKs...)
 			}
+			services.TransportSetupPKs = append(services.TransportSetupPKs, tpSetupPKs...)
 		}
 
 		conf.Dmsg = &dmsgc.DmsgConfig{
@@ -759,10 +749,10 @@ var genConfigCmd = &cobra.Command{
 			Servers:       []*disc.Entry{},
 		}
 		conf.Transport = &visorconfig.Transport{
-			Discovery:           services.TransportDiscovery, //utilenv.TpDiscAddr,
-			AddressResolver:     services.AddressResolver,    //utilenv.AddressResolverAddr,
-			PublicAutoconnect:   visorconfig.PublicAutoconnect,
-			TransportSetupNodes: services.TransportSetupNodes,
+			Discovery:         services.TransportDiscovery, //utilenv.TpDiscAddr,
+			AddressResolver:   services.AddressResolver,    //utilenv.AddressResolverAddr,
+			PublicAutoconnect: visorconfig.PublicAutoconnect,
+			TransportSetupPKs: services.TransportSetupPKs,
 			LogStore: &visorconfig.LogStore{
 				Type:             visorconfig.FileLogStore,
 				Location:         visorconfig.LocalPath + "/" + visorconfig.TpLogStore,
@@ -827,6 +817,8 @@ var genConfigCmd = &cobra.Command{
 				}
 			}
 		}
+
+		// Configure public visor
 		conf.IsPublic = isPublic
 
 		// Manipulate Hypervisor PKs
@@ -849,6 +841,7 @@ var genConfigCmd = &cobra.Command{
 				}
 			}
 		}
+		// Local hypervisor setting
 		if isHypervisor {
 			config := visorconfig.GenerateWorkDirConfig(false)
 			conf.Hypervisor = &config
@@ -856,8 +849,8 @@ var genConfigCmd = &cobra.Command{
 
 		// Manipulate dmsgpty whitelist PKs
 		conf.Dmsgpty.Whitelist = make([]cipher.PubKey, 0)
-		if dmsgptywlPKs != "" {
-			keys := strings.Split(dmsgptywlPKs, ",")
+		if dmsgptyWlPKs != "" {
+			keys := strings.Split(dmsgptyWlPKs, ",")
 			for _, key := range keys {
 				if key != "" {
 					keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(key))
@@ -868,10 +861,10 @@ var genConfigCmd = &cobra.Command{
 				}
 			}
 		}
-
+		// set survey collection whitelist - will include by default hypervisors & dmsgpty whitelisted keys
 		conf.SurveyWhitelist = services.SurveyWhitelist
-
-		if isPkg {
+		// set package-specific config paths
+		if isPkgEnv {
 			pkgConfig := visorconfig.PackageConfig()
 			conf.LocalPath = pkgConfig.LocalPath
 			conf.DmsgHTTPServerPath = pkgConfig.LocalPath + "/" + visorconfig.Custom
@@ -882,6 +875,7 @@ var genConfigCmd = &cobra.Command{
 				conf.Hypervisor.DBPath = pkgConfig.Hypervisor.DbPath
 			}
 		}
+		// set config paths for the user space
 		if isUsr {
 			usrConfig := visorconfig.UserConfig()
 			conf.LocalPath = usrConfig.LocalPath
@@ -893,7 +887,7 @@ var genConfigCmd = &cobra.Command{
 				conf.Hypervisor.DBPath = usrConfig.Hypervisor.DbPath
 			}
 		}
-
+		// App config settings
 		conf.Launcher.Apps = []appserver.AppConfig{
 			{
 				Name:      visorconfig.VPNClientName,
@@ -914,7 +908,6 @@ var genConfigCmd = &cobra.Command{
 				Binary:    visorconfig.SkysocksName,
 				AutoStart: true,
 				Port:      routing.Port(visorconfig.SkysocksPort),
-				Args:      []string{"--srv", visorconfig.SkychatAddr},
 			},
 			{
 				Name:      visorconfig.SkysocksClientName,
@@ -929,8 +922,6 @@ var genConfigCmd = &cobra.Command{
 				Port:      routing.Port(visorconfig.VPNServerPort),
 			},
 		}
-
-		//edit the conf
 
 		skywire := os.Args[0]
 		isMatch := strings.Contains("/tmp/", skywire)
@@ -992,7 +983,7 @@ var genConfigCmd = &cobra.Command{
 			}
 			conf.Launcher.Apps = newConfLauncherApps
 		}
-
+		// add example applications to the config
 		if addExampleApps {
 			exampleApps := []appserver.AppConfig{
 				{
@@ -1004,39 +995,39 @@ var genConfigCmd = &cobra.Command{
 			newConfLauncherApps := append(conf.Launcher.Apps, exampleApps...)
 			conf.Launcher.Apps = newConfLauncherApps
 		}
-
-		// Set EnableAuth true  hypervisor UI by --enable-auth flag
 		if isHypervisor {
-			// Make false EnableAuth hypervisor UI by --disable-auth flag
+			// Disable hypervisor UI authentication --disable-auth flag
 			if isDisableAuth {
 				conf.Hypervisor.EnableAuth = false
 			}
-			// Set EnableAuth true  hypervisor UI by --enable-auth flag
+			// Enable hypervisor UI authentication --enable-auth flag
 			if isEnableAuth {
 				conf.Hypervisor.EnableAuth = true
 			}
 		}
-		// Check OS and enable auth windows or macos
+		// Enable hypervisor UI authentication on windows & macos
 		if (selectedOS == "win") || (selectedOS == "mac") {
 			if isHypervisor {
 				conf.Hypervisor.EnableAuth = true
 			}
 		}
-
-		// check binpath argument and use if set
+		// set bin_path for apps from flag
 		if binPath != "" {
 			conf.Launcher.BinPath = binPath
 		}
-
+		// set version of the config file from flag - testing override
 		if ver != "" {
 			conf.Common.Version = ver
 		}
+		// Disable autoconnect to public visors
 		if disablePublicAutoConn {
 			conf.Transport.PublicAutoconnect = false
 		}
+		// Enable the display of the visor's ip address in service discovery services
 		if isDisplayNodeIP {
 			conf.Launcher.DisplayNodeIP = true
 		}
+
 		//don't write file with stdout
 		if !isStdout {
 			// Marshal the modified config to JSON with indentation

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"os"
@@ -390,11 +391,19 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 
 	//whitelist access to the surveys for the hypervisor, dmsggpty whitelist, and for the surveywhitelist of keys which is fetched from the conf service
 	var whitelistedPKs []cipher.PubKey
-	whitelistedPKs = append(whitelistedPKs, v.conf.SurveyWhitelist...)
-	whitelistedPKs = append(whitelistedPKs, v.conf.Hypervisors...)
-	whitelistedPKs = append(whitelistedPKs, v.conf.Dmsgpty.Whitelist...)
+	if v.conf.SurveyWhitelist != nil {
+		whitelistedPKs = append(whitelistedPKs, v.conf.SurveyWhitelist...)
+	}
+	if v.conf.Hypervisors != nil {
+		whitelistedPKs = append(whitelistedPKs, v.conf.Hypervisors...)
+	}
+	if v.conf.Dmsgpty != nil {
+		if v.conf.Dmsgpty.Whitelist != nil {
+			whitelistedPKs = append(whitelistedPKs, v.conf.Dmsgpty.Whitelist...)
+		}
+	}
 
-	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, whitelistedPKs, printLog)
+	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, whitelistedPKs, v.conf.PK, printLog)
 
 	lis, err := dmsgC.Listen(visorconfig.DmsgHTTPPort)
 	if err != nil {
@@ -573,7 +582,7 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 	ctx, cancel := context.WithCancel(ctx)
 	// To remove the block set by NewTransportListener if dmsg is not initialized
 	go func() {
-		ts, err := ts.NewTransportListener(ctx, v.conf.PK, v.conf.Transport.TransportSetupNodes, v.dmsgC, v.tpM, v.MasterLogger())
+		ts, err := ts.NewTransportListener(ctx, v.conf.PK, v.conf.Transport.TransportSetupPKs, v.dmsgC, v.tpM, v.MasterLogger())
 		if err != nil {
 			log.Warn(err)
 			cancel()
@@ -1449,6 +1458,11 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error { //
 	hv.serveDmsg(ctx, v.log)
 
 	// Serve HTTP(s).
+
+	// Needed to work with modern browsers when serving from windows, which need the correct mime type for javascript.
+	if err := mime.AddExtensionType(".js", "application/javascript"); err != nil {
+		log.Fatalln("Unable to register js mime type.")
+	}
 
 	v.log.WithField("addr", conf.HTTPAddr).
 		WithField("tls", conf.EnableTLS).

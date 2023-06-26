@@ -5,9 +5,9 @@ import (
 	"io"
 	"net"
 
+	"github.com/hashicorp/yamux"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
-	"github.com/skycoin/yamux"
 
 	"github.com/skycoin/dmsg/internal/servermetrics"
 	"github.com/skycoin/dmsg/pkg/noise"
