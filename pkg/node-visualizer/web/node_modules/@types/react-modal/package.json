@@ -1,0 +1,72 @@
+{
+    "name": "@types/react-modal",
+    "version": "3.13.1",
+    "description": "TypeScript definitions for react-modal",
+    "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react-modal",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "Rajab Shakirov",
+            "url": "https://github.com/radziksh",
+            "githubUsername": "radziksh"
+        },
+        {
+            "name": "Drew Noakes",
+            "url": "https://github.com/drewnoakes",
+            "githubUsername": "drewnoakes"
+        },
+        {
+            "name": "Thomas B Homburg",
+            "url": "https://github.com/homburg",
+            "githubUsername": "homburg"
+        },
+        {
+            "name": "Tatu Tamminen",
+            "url": "https://github.com/ttamminen",
+            "githubUsername": "ttamminen"
+        },
+        {
+            "name": "Uwe Wiemer",
+            "url": "https://github.com/hallowatcher",
+            "githubUsername": "hallowatcher"
+        },
+        {
+            "name": "Peter Blazejewicz",
+            "url": "https://github.com/peterblazejewicz",
+            "githubUsername": "peterblazejewicz"
+        },
+        {
+            "name": "Justin Powell",
+            "url": "https://github.com/jpowell",
+            "githubUsername": "jpowell"
+        },
+        {
+            "name": "Juwan Wheatley",
+            "url": "https://github.com/fiberjw",
+            "githubUsername": "fiberjw"
+        },
+        {
+            "name": "Nitzan Mousan",
+            "url": "https://github.com/nitzanmo",
+            "githubUsername": "nitzanmo"
+        },
+        {
+            "name": "dkrk",
+            "url": "https://github.com/grgr-dkrk",
+            "githubUsername": "grgr-dkrk"
+        }
+    ],
+    "main": "",
+    "types": "index.d.ts",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+        "directory": "types/react-modal"
+    },
+    "scripts": {},
+    "dependencies": {
+        "@types/react": "*"
+    },
+    "typesPublisherContentHash": "181a28095d91a1cc9770f2369557206a41a158db85abe474efb40dcfb5d42ba7",
+    "typeScriptVersion": "3.7"
+}
