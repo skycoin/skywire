@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/skycoin/dmsg/pkg/dmsgget"
+	"github.com/skycoin/skywire/pkg/dmsgget"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )

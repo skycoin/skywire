@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/pkg/disc"
+	"github.com/skycoin/skywire/pkg/disc"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 

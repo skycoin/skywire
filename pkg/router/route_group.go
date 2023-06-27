@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/skycoin/dmsg/pkg/ioutil"
+	"github.com/skycoin/skywire/pkg/ioutil"
 
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"

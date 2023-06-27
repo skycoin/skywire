@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

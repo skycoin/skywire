@@ -4,7 +4,7 @@ package cliconfig
 import (
 	"strings"
 
-	"github.com/skycoin/dmsg/pkg/disc"
+	"github.com/skycoin/skywire/pkg/disc"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"

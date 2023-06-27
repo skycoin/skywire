@@ -15,8 +15,8 @@ import (
 
 	"github.com/orandin/lumberjackrus"
 	"github.com/sirupsen/logrus"
-	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
-	"github.com/skycoin/dmsg/pkg/dmsg"
+	dmsgdisc "github.com/skycoin/skywire/pkg/disc"
+	"github.com/skycoin/skywire/pkg/dmsg"
 	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire/pkg/cipher"

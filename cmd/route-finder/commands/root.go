@@ -10,9 +10,9 @@ import (
 
 	cc "github.com/ivanpirog/coloredcobra"
 	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
-	"github.com/skycoin/dmsg/pkg/direct"
-	"github.com/skycoin/dmsg/pkg/dmsg"
-	"github.com/skycoin/dmsg/pkg/dmsghttp"
+	"github.com/skycoin/skywire/pkg/direct"
+	"github.com/skycoin/skywire/pkg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsghttp"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"

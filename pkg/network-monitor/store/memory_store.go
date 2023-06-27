@@ -6,7 +6,8 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+
 	"github.com/skycoin/skywire/internal/nm"
 )
 

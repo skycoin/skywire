@@ -17,11 +17,11 @@ import (
 
 	"github.com/gen2brain/dlgs"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/pkg/direct"
-	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
-	"github.com/skycoin/dmsg/pkg/dmsg"
-	"github.com/skycoin/dmsg/pkg/dmsgget"
-	"github.com/skycoin/dmsg/pkg/dmsghttp"
+	"github.com/skycoin/skywire/pkg/direct"
+	dmsgdisc "github.com/skycoin/skywire/pkg/disc"
+	"github.com/skycoin/skywire/pkg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsgget"
+	"github.com/skycoin/skywire/pkg/dmsghttp"
 	"github.com/skycoin/systray"
 	"github.com/toqueteos/webbrowser"
 

@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	cc "github.com/ivanpirog/coloredcobra"
-	"github.com/skycoin/dmsg/pkg/direct"
-	"github.com/skycoin/dmsg/pkg/dmsg"
-	"github.com/skycoin/dmsg/pkg/dmsghttp"
+	"github.com/skycoin/skywire/pkg/direct"
+	"github.com/skycoin/skywire/pkg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsghttp"
 	"github.com/skycoin/skywire/internal/pg"
 	"github.com/skycoin/skywire/internal/sdmetrics"
 	"github.com/skycoin/skywire/pkg/service-discovery/api"

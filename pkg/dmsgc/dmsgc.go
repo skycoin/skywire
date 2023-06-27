@@ -5,8 +5,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/skycoin/dmsg/pkg/disc"
-	"github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/skywire/pkg/disc"
+	"github.com/skycoin/skywire/pkg/dmsg"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"

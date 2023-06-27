@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
-	"github.com/skycoin/dmsg/pkg/dmsgget"
-	"github.com/skycoin/dmsg/pkg/dmsghttp"
+	"github.com/skycoin/skywire/pkg/dmsgget"
+	"github.com/skycoin/skywire/pkg/dmsghttp"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"

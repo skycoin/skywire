@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/bitfield/script"
-	"github.com/skycoin/dmsg/pkg/disc"
-	"github.com/skycoin/dmsg/pkg/dmsgpty"
+	"github.com/skycoin/skywire/pkg/disc"
+	"github.com/skycoin/skywire/pkg/dmsgpty"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
 

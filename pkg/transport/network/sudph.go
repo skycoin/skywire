@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/AudriusButkevicius/pfilter"
-	"github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg"
 	"github.com/xtaci/kcp-go"
 
 	"github.com/skycoin/skywire/pkg/cipher"

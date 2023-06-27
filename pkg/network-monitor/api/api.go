@@ -16,20 +16,20 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
-
-	"github.com/skycoin/skywire/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/httputil"
-	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/metricsutil"
-	utilenv "github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/internal/nm"
-	"github.com/skycoin/skywire/internal/nmmetrics"
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/httputil"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire-utilities/pkg/metricsutil"
+	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/appserver"
-	"github.com/skycoin/skywire/pkg/network-monitor/store"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+
+	"github.com/skycoin/skywire/internal/nm"
+	"github.com/skycoin/skywire/internal/nmmetrics"
+	"github.com/skycoin/skywire/pkg/network-monitor/store"
 )
 
 // API register all the API endpoints.
@@ -358,17 +358,16 @@ func (api *API) testTransport(key cipher.PubKey, transport network.Type, ch chan
 			api.logger.WithField("Retry", 4-retrier).WithError(err).Warnf("Failed to establish %v transport to %v", transport, key)
 			retrier--
 			continue
+		} else {
+			api.logger.Infof("Established %v transport to %v", transport, key)
+			isUp = true
+			err = api.Visor.RemoveTransport(tp.ID)
+			if err != nil {
+				api.logger.Warnf("Error removing %v transport of %v: %v", transport, key, err)
+			}
+			retrier = 0
 		}
-
-		api.logger.Infof("Established %v transport to %v", transport, key)
-		isUp = true
-		err = api.Visor.RemoveTransport(tp.ID)
-		if err != nil {
-			api.logger.Warnf("Error removing %v transport of %v: %v", transport, key, err)
-		}
-		retrier = 0
 	}
-
 	ch <- isUp
 }
 
