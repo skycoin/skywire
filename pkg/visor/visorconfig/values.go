@@ -16,8 +16,8 @@ import (
 	"github.com/bitfield/script"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 
-	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 

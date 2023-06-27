@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire-utilities/pkg/storeconfig"
+	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/storeconfig"
 	"github.com/skycoin/skywire/internal/lc"
 )
 

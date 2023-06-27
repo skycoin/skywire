@@ -8,8 +8,8 @@ import (
 
 	"github.com/go-redis/redis/v8"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/internal/lc"
 )
 

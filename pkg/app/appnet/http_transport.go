@@ -6,7 +6,7 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // HTTPTransport implements http.RoundTripper

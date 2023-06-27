@@ -12,7 +12,7 @@ import (
 
 	"github.com/skycoin/dmsg/pkg/dmsg"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 const (

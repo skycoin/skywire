@@ -12,7 +12,7 @@ import (
 
 	"go.etcd.io/bbolt"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 const (

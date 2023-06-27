@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/skycoin/skywire-utilities/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/internal/lc"
 )
 

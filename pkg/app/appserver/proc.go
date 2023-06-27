@@ -19,7 +19,7 @@ import (
 	"github.com/orandin/lumberjackrus"
 	"github.com/sirupsen/logrus"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appnet"

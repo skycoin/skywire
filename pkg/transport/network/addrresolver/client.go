@@ -18,9 +18,9 @@ import (
 	"github.com/AudriusButkevicius/pfilter"
 	"github.com/xtaci/kcp-go"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/internal/httpauth"
 	"github.com/skycoin/skywire/internal/packetfilter"
 )

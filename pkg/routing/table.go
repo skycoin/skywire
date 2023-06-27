@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 var (

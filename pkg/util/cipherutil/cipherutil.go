@@ -1,7 +1,7 @@
 // Package cipherutil works with public keys
 package cipherutil
 
-import "github.com/skycoin/skywire-utilities/pkg/cipher"
+import "github.com/skycoin/skywire/pkg/cipher"
 
 // KeyPair is a pair of public and secret keys
 type KeyPair struct {

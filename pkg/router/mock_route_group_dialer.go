@@ -8,8 +8,8 @@ import (
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
 	mock "github.com/stretchr/testify/mock"
 
-	cipher "github.com/skycoin/skywire-utilities/pkg/cipher"
-	logging "github.com/skycoin/skywire-utilities/pkg/logging"
+	cipher "github.com/skycoin/skywire/pkg/cipher"
+	logging "github.com/skycoin/skywire/pkg/logging"
 	routing "github.com/skycoin/skywire/pkg/routing"
 )
 

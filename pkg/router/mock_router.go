@@ -8,7 +8,7 @@ import (
 
 	mock "github.com/stretchr/testify/mock"
 
-	cipher "github.com/skycoin/skywire-utilities/pkg/cipher"
+	cipher "github.com/skycoin/skywire/pkg/cipher"
 	routing "github.com/skycoin/skywire/pkg/routing"
 )
 

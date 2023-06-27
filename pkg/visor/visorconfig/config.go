@@ -11,9 +11,9 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
-	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
+	utilenv "github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/restart"

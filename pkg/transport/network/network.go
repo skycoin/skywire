@@ -6,7 +6,7 @@ import (
 	"errors"
 	"net"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 // Type is a type of network. Type affects the way connection is established

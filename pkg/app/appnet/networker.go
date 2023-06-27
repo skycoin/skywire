@@ -7,7 +7,7 @@ import (
 	"net"
 	"sync"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 //go:generate mockery --name Networker --case underscore --inpackage

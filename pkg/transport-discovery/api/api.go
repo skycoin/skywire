@@ -12,12 +12,12 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
 
-	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire-utilities/pkg/httpauth"
-	"github.com/skycoin/skywire-utilities/pkg/httputil"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire-utilities/pkg/metricsutil"
-	"github.com/skycoin/skywire-utilities/pkg/networkmonitor"
+	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/httpauth"
+	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/metricsutil"
+	"github.com/skycoin/skywire/pkg/networkmonitor"
 	"github.com/skycoin/skywire/internal/tpdiscmetrics"
 	"github.com/skycoin/skywire/pkg/transport-discovery/store"
 )

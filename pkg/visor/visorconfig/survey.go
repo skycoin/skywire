@@ -9,7 +9,7 @@ import (
 
 	coincipher "github.com/skycoin/skycoin/src/cipher"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/util/pathutil"
 )
 
