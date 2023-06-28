@@ -486,15 +486,10 @@ var genConfigCmd = &cobra.Command{
 			}
 			// create an http client to fetch the services
 			client := http.Client{
-				Timeout: time.Second * 15, // Timeout after 30 seconds
+				Timeout: time.Second * 15, // Timeout after 15 seconds
 			}
-			//create the http request
-			req, err := http.NewRequest(http.MethodGet, fmt.Sprint(serviceConfURL), nil)
-			if err != nil {
-				log.WithError(err).Fatal("Failed to create http request\n")
-			}
-			req.Header.Add("Cache-Control", "no-cache")
-			res, err := client.Do(req)
+			// Make the HTTP GET request
+			res, err := client.Get(fmt.Sprint(serviceConfURL))
 			if err != nil {
 				//silence errors for stdout
 				if !isStdout {
@@ -502,7 +497,7 @@ var genConfigCmd = &cobra.Command{
 					log.Warn("Falling back on hardcoded servers")
 				}
 			} else {
-				// nil error from client.Do(req)
+				// nil error from client.Get
 				if res.Body != nil {
 					defer res.Body.Close() //nolint
 				}
