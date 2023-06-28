@@ -37,6 +37,7 @@ import (
 var checkPKCmd = &cobra.Command{
 	Use:   "check-pk <public-key>",
 	Short: "check a skywire public key",
+	Args:  cobra.ExactArgs(1), // Require exactly one argument
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
 			return
