@@ -1093,7 +1093,7 @@ func getInterfaceNames() string { //nolint Note: pending implementation for conf
 	return strings.Join(interfaceNames, ", ")
 }
 
-var envfileLinux = `#
+const envfileLinux = `#
 # /etc/skywire.conf
 #
 #########################################################################
@@ -1158,7 +1158,7 @@ var envfileLinux = `#
 #BINPATH='./apps'
 
 `
-var envfileWindows = `#
+const envfileWindows = `#
 # C:\ProgramData\skywire.ps1
 #
 #########################################################################
