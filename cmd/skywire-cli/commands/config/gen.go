@@ -494,7 +494,6 @@ var genConfigCmd = &cobra.Command{
 				log.WithError(err).Fatal("Failed to create http request\n")
 			}
 			req.Header.Add("Cache-Control", "no-cache")
-			//check for errors in the response
 			res, err := client.Do(req)
 			if err != nil {
 				//silence errors for stdout
