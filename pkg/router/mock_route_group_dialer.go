@@ -5,8 +5,9 @@ package router
 import (
 	context "context"
 
-	dmsg "github.com/skycoin/skywire/pkg/dmsg"
 	mock "github.com/stretchr/testify/mock"
+
+	dmsg "github.com/skycoin/skywire/pkg/dmsg"
 
 	cipher "github.com/skycoin/skywire/pkg/cipher"
 	logging "github.com/skycoin/skywire/pkg/logging"

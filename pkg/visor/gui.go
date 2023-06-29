@@ -17,15 +17,15 @@ import (
 
 	"github.com/gen2brain/dlgs"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/systray"
+	"github.com/toqueteos/webbrowser"
+
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/direct"
 	dmsgdisc "github.com/skycoin/skywire/pkg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsgget"
 	"github.com/skycoin/skywire/pkg/dmsghttp"
-	"github.com/skycoin/systray"
-	"github.com/toqueteos/webbrowser"
-
-	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"

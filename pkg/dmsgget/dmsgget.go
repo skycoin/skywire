@@ -14,12 +14,12 @@ import (
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/disc"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsghttp"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 var json = jsoniter.ConfigFastest

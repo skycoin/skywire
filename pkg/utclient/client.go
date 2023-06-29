@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/skycoin/skywire/internal/httpauth"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
-	"github.com/skycoin/skywire/internal/httpauth"
 )
 
 //go:generate mockery -name APIClient -case underscore -inpkg

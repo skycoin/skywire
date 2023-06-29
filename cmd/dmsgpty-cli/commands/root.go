@@ -8,10 +8,10 @@ import (
 	"os"
 
 	cc "github.com/ivanpirog/coloredcobra"
-	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/cmdutil"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsgpty"
 )
@@ -46,8 +46,8 @@ func init() {
 
 // RootCmd contains commands for dmsgpty-cli; which interacts with the dmsgpty-host instance (i.e. skywire-visor)
 var RootCmd = &cobra.Command{
-	Use:   "dmsgpty-cli",
-	Short: "Run commands over dmsg",
+	Use:   "cli",
+	Short: "Run commands over dmsg with dmsgpty-cli",
 	Long: `
 	┌┬┐┌┬┐┌─┐┌─┐┌─┐┌┬┐┬ ┬   ┌─┐┬  ┬
 	 │││││└─┐│ ┬├─┘ │ └┬┘───│  │  │

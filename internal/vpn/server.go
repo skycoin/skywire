@@ -9,9 +9,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/netutil"
 )
 
 // Server is a VPN server.

@@ -3,7 +3,7 @@ package tpdiscmetrics
 import (
 	"sync"
 
-	"github.com/skycoin/skywire-utilities/pkg/metricsutil"
+	"github.com/skycoin/skywire/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 

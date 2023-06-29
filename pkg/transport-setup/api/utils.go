@@ -10,9 +10,9 @@ import (
 	"net/rpc"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skywire/pkg/dmsg"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )

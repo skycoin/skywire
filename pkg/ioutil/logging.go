@@ -2,7 +2,7 @@
 package ioutil
 
 import (
-	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 var log = logging.MustGetLogger("ioutil")

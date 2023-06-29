@@ -12,16 +12,15 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/httputil"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire-utilities/pkg/metricsutil"
-	"github.com/skycoin/skywire-utilities/pkg/networkmonitor"
 
 	"github.com/skycoin/skywire/internal/discmetrics"
 	"github.com/skycoin/skywire/internal/dmsg-discovery/store"
+	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/disc"
+	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/metricsutil"
 )
 
 var log = logging.MustGetLogger("dmsg-discovery")
@@ -29,7 +28,7 @@ var log = logging.MustGetLogger("dmsg-discovery")
 var json = jsoniter.ConfigFastest
 
 // WhitelistPKs store whitelisted pks of network monitor
-var WhitelistPKs = networkmonitor.GetWhitelistPKs()
+//var WhitelistPKs = networkmonitor.GetWhitelistPKs()
 
 const maxGetAvailableServersResult = 512
 
@@ -164,11 +163,11 @@ func (a *API) deregisterEntry() func(w http.ResponseWriter, r *http.Request) {
 		log.Info("Deregistration process started.")
 
 		nmPkString := r.Header.Get("NM-PK")
-		if ok := WhitelistPKs.Get(nmPkString); !ok {
-			log.WithError(disc.ErrUnauthorizedNetworkMonitor).WithField("Step", "Checking NMs PK").Error("Deregistration process interrupt.")
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
+		//		if ok := WhitelistPKs.Get(nmPkString); !ok {
+		//			log.WithError(disc.ErrUnauthorizedNetworkMonitor).WithField("Step", "Checking NMs PK").Error("Deregistration process interrupt.")
+		//			w.WriteHeader(http.StatusForbidden)
+		//			return
+		//		}
 
 		nmPk := cipher.PubKey{}
 		if err := nmPk.UnmarshalText([]byte(nmPkString)); err != nil {

@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	utilenv "github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/util/pathutil"
+	"github.com/skycoin/skywire/pkg/utilenv"
 )
 
 const (

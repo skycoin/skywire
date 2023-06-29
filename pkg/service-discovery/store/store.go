@@ -4,9 +4,10 @@ import (
 	"context"
 	"io"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/servicedisc"
 	"gorm.io/gorm"
+
+	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/servicedisc"
 )
 
 //go:generate mockery --name Store --case underscore --inpackage

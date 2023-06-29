@@ -5,27 +5,27 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 
 	cc "github.com/ivanpirog/coloredcobra"
+	"github.com/spf13/cobra"
+	"gorm.io/gorm"
+
+	"github.com/skycoin/skywire/internal/pg"
+	"github.com/skycoin/skywire/internal/sdmetrics"
+	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/direct"
 	"github.com/skycoin/skywire/pkg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsghttp"
-	"github.com/skycoin/skywire/internal/pg"
-	"github.com/skycoin/skywire/internal/sdmetrics"
+	"github.com/skycoin/skywire/pkg/httpauth"
+	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/service-discovery/api"
 	"github.com/skycoin/skywire/pkg/service-discovery/store"
-	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
-	"github.com/skycoin/skywire-utilities/pkg/httpauth"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire-utilities/pkg/metricsutil"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
-	"github.com/skycoin/skywire-utilities/pkg/storeconfig"
-	"github.com/skycoin/skywire-utilities/pkg/tcpproxy"
-	"github.com/spf13/cobra"
-	"gorm.io/gorm"
+	"github.com/skycoin/skywire/pkg/storeconfig"
+	"github.com/skycoin/skywire/pkg/tcpproxy"
+	"github.com/skycoin/skywire/pkg/utilenv"
 )
 
 var log = logging.MustGetLogger("service-discovery")
@@ -48,27 +48,27 @@ var (
 )
 
 func init() {
-	rootCmd.Flags().StringVarP(&addr, "addr", "a", ":9098", "address to bind to")
-	rootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
-	rootCmd.Flags().StringVarP(&redisURL, "redis", "r", "redis://localhost:6379", "connections string for a redis store")
-	rootCmd.Flags().StringVarP(&pgHost, "pg-host", "o", "localhost", "host of postgres")
-	rootCmd.Flags().StringVarP(&pgPort, "pg-port", "p", "5432", "port of postgres")
-	rootCmd.Flags().StringVarP(&whitelistKeys, "whitelist-keys", "w", "", "list of whitelisted keys of network monitor used for deregistration")
-	rootCmd.Flags().BoolVarP(&testMode, "test", "t", false, "run in test mode and disable auth")
-	rootCmd.Flags().StringVarP(&apiKey, "api-key", "g", "", "geo API key")
-	rootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "d", "", "url of dmsg-discovery default:\n"+skyenv.DmsgDiscAddr)
-	rootCmd.Flags().BoolVarP(&testEnvironment, "test-environment", "n", false, "distinguished between prod and test environment")
-	rootCmd.Flags().VarP(&sk, "sk", "s", "dmsg secret key\n")
-	rootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\r")
+	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9098", "address to bind to")
+	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
+	RootCmd.Flags().StringVarP(&redisURL, "redis", "r", "redis://localhost:6379", "connections string for a redis store")
+	RootCmd.Flags().StringVarP(&pgHost, "pg-host", "o", "localhost", "host of postgres")
+	RootCmd.Flags().StringVarP(&pgPort, "pg-port", "p", "5432", "port of postgres")
+	RootCmd.Flags().StringVarP(&whitelistKeys, "whitelist-keys", "w", "", "list of whitelisted keys of network monitor used for deregistration")
+	RootCmd.Flags().BoolVarP(&testMode, "test", "t", false, "run in test mode and disable auth")
+	RootCmd.Flags().StringVarP(&apiKey, "api-key", "g", "", "geo API key")
+	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "d", "", "url of dmsg-discovery default:\n"+utilenv.DmsgDiscAddr)
+	RootCmd.Flags().BoolVarP(&testEnvironment, "test-environment", "n", false, "distinguished between prod and test environment")
+	RootCmd.Flags().VarP(&sk, "sk", "s", "dmsg secret key\n")
+	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\r")
 	var helpflag bool
-	rootCmd.SetUsageTemplate(help)
-	rootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+rootCmd.Use)
-	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
-	rootCmd.PersistentFlags().MarkHidden("help") //nolint
+	RootCmd.SetUsageTemplate(help)
+	RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+RootCmd.Use)
+	RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
+	RootCmd.PersistentFlags().MarkHidden("help") //nolint
 }
 
-var rootCmd = &cobra.Command{
-	Use:   "service-discovery",
+var RootCmd = &cobra.Command{
+	Use:   "sd",
 	Short: "Service discovery server",
 	Long: `
 	┌─┐┌─┐┬─┐┬  ┬┬┌─┐┌─┐ ┌┬┐┬┌─┐┌─┐┌─┐┬  ┬┌─┐┬─┐┬ ┬
@@ -76,7 +76,7 @@ var rootCmd = &cobra.Command{
 	└─┘└─┘┴└─ └┘ ┴└─┘└─┘ ─┴┘┴└─┘└─┘└─┘ └┘ └─┘┴└─ ┴ `,
 	Run: func(_ *cobra.Command, _ []string) {
 		if dmsgDisc == "" {
-			dmsgDisc = skyenv.DmsgDiscAddr
+			dmsgDisc = utilenv.DmsgDiscAddr
 		}
 		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 			log.Printf("Failed to output build info: %v", err)
@@ -141,21 +141,21 @@ var rootCmd = &cobra.Command{
 		// we enable metrics middleware if address is passed
 		enableMetrics := metricsAddr != ""
 		sdAPI := api.New(log, db, nonceDB, apiKey, enableMetrics, m, dmsgAddr)
-
-		var whitelistPKs []string
-		if whitelistKeys != "" {
-			whitelistPKs = strings.Split(whitelistKeys, ",")
-		} else {
-			if testEnvironment {
-				whitelistPKs = strings.Split(skyenv.TestNetworkMonitorPK, ",")
+		/*
+			var whitelistPKs []string
+			if whitelistKeys != "" {
+				whitelistPKs = strings.Split(whitelistKeys, ",")
 			} else {
-				whitelistPKs = strings.Split(skyenv.NetworkMonitorPK, ",")
+				if testEnvironment {
+					whitelistPKs = strings.Split(utilenv.TestNetworkMonitorPK, ",")
+				} else {
+					whitelistPKs = strings.Split(utilenv.NetworkMonitorPK, ",")
+				}
 			}
-		}
-		for _, v := range whitelistPKs {
-			api.WhitelistPKs.Set(v)
-		}
-
+			for _, v := range whitelistPKs {
+				api.WhitelistPKs.Set(v)
+			}
+		*/
 		go sdAPI.RunBackgroundTasks(ctx, log)
 
 		log.WithField("addr", addr).Info("Serving discovery API...")
@@ -200,7 +200,7 @@ var rootCmd = &cobra.Command{
 // Execute executes root CLI command.
 func Execute() {
 	cc.Init(&cc.Config{
-		RootCmd:       rootCmd,
+		RootCmd:       RootCmd,
 		Headings:      cc.HiBlue + cc.Bold, //+ cc.Underline,
 		Commands:      cc.HiBlue + cc.Bold,
 		CmdShortDescr: cc.HiBlue,
@@ -212,7 +212,7 @@ func Execute() {
 		NoExtraNewlines: true,
 		NoBottomNewline: true,
 	})
-	if err := rootCmd.Execute(); err != nil {
+	if err := RootCmd.Execute(); err != nil {
 		log.Fatal(err)
 	}
 }

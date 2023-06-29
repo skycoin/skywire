@@ -12,8 +12,9 @@ import (
 	"syscall"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
+
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // CLI connects with and has ownership over a dmsgpty.Host.

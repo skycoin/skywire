@@ -10,13 +10,13 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsgtest"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // TODO(evanlinjin): fix failing tests

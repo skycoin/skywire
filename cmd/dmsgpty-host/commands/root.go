@@ -15,15 +15,15 @@ import (
 	cc "github.com/ivanpirog/coloredcobra"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/disc"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsgpty"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 const defaultEnvPrefix = "DMSGPTY"
@@ -75,7 +75,7 @@ func init() {
 
 // RootCmd contains commands for dmsgpty-host
 var RootCmd = &cobra.Command{
-	Use:   cmdutil.RootCmdName(),
+	Use:   "host",
 	Short: "runs a standalone dmsgpty-host instance",
 	Long: `
 	┌┬┐┌┬┐┌─┐┌─┐┌─┐┌┬┐┬ ┬   ┬ ┬┌─┐┌─┐┌┬┐

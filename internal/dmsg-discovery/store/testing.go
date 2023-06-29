@@ -6,8 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/disc"
 )
 

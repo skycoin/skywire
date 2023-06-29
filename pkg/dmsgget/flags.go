@@ -4,7 +4,7 @@ package dmsgget
 import (
 	"flag"
 
-	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/buildinfo"
 )
 
 // ExecName contains the execution name.

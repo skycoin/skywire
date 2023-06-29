@@ -5,11 +5,10 @@ import (
 	"context"
 	"sync"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
-
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/disc"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // StartDmsg starts dmsg directly without the discovery

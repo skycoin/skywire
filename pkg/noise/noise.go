@@ -8,8 +8,9 @@ import (
 	"fmt"
 
 	"github.com/skycoin/noise"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
+
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 var noiseLogger = logging.MustGetLogger("noise")

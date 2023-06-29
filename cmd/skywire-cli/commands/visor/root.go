@@ -4,8 +4,8 @@ package clivisor
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 var logger = logging.MustGetLogger("skywire-cli")

@@ -9,9 +9,9 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/toqueteos/webbrowser"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 

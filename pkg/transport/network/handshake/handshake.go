@@ -10,9 +10,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/dmsg"
-
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg"
 )
 
 const (

@@ -1,5 +1,5 @@
 // Package skyenv pkg/skyenv/values.go
-package skyenv
+package utilenv
 
 // Constants for new default services.
 const (

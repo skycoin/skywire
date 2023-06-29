@@ -10,8 +10,8 @@ import (
 
 	"github.com/hashicorp/yamux"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/noise"
 )
 

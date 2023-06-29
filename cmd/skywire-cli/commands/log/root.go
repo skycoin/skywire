@@ -15,14 +15,14 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
-	"github.com/skycoin/skywire/pkg/dmsgget"
-	"github.com/skycoin/skywire/pkg/dmsghttp"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/dmsgget"
+	"github.com/skycoin/skywire/pkg/dmsghttp"
+	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/utilenv"
 )
 
 var (
@@ -51,7 +51,7 @@ func init() {
 	logCmd.Flags().BoolVar(&allVisors, "all", false, "consider all visors ; no version filtering")
 	logCmd.Flags().IntVar(&batchSize, "batchSize", 50, "number of visor in each batch, default is 50")
 	logCmd.Flags().Int64Var(&maxFileSize, "maxfilesize", 30, "maximum file size allowed to download during collecting logs, in KB")
-	logCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", skyenv.DmsgDiscAddr, "dmsg discovery url\n")
+	logCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", utilenv.DmsgDiscAddr, "dmsg discovery url\n")
 	logCmd.Flags().StringVarP(&utAddr, "ut", "u", "", "custom uptime tracker url")
 	if os.Getenv("DMSGGET_SK") != "" {
 		sk.Set(os.Getenv("DMSGGET_SK")) //nolint
@@ -95,9 +95,9 @@ var logCmd = &cobra.Command{
 			os.Exit(1)
 		}()
 		// Set the uptime tracker to fetch data from
-		endpoint := skyenv.UptimeTrackerAddr + "/uptimes?v=v2"
+		endpoint := utilenv.UptimeTrackerAddr + "/uptimes?v=v2"
 		if env == "test" {
-			endpoint = skyenv.TestUptimeTrackerAddr + "/uptimes?v=v2"
+			endpoint = utilenv.TestUptimeTrackerAddr + "/uptimes?v=v2"
 		}
 		if utAddr != "" {
 			endpoint = utAddr

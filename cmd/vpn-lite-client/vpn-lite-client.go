@@ -10,14 +10,14 @@ import (
 	"syscall"
 
 	cc "github.com/ivanpirog/coloredcobra"
-	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/app"
-	"github.com/skycoin/skywire/pkg/app/appevent"
-	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/internal/vpn"
+	"github.com/skycoin/skywire/pkg/app"
+	"github.com/skycoin/skywire/pkg/app/appevent"
+	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 var (

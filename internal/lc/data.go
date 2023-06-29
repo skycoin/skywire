@@ -1,7 +1,7 @@
 // Package lc internal/lc/data.go
 package lc
 
-import "github.com/skycoin/skywire-utilities/pkg/httputil"
+import "github.com/skycoin/skywire/pkg/httputil"
 
 // ServiceSummary summary of a visor connection
 type ServiceSummary struct {

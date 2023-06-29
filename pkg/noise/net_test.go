@@ -13,9 +13,10 @@ import (
 	"time"
 
 	"github.com/skycoin/noise"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
+
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 type TestRPC struct{}

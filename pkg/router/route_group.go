@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/ioutil"
-
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"

@@ -14,10 +14,10 @@ import (
 	"time"
 
 	"github.com/bitfield/script"
-	"github.com/skycoin/skywire/pkg/dmsg"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 

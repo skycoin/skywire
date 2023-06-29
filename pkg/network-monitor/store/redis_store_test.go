@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/internal/nm"
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 func testNetwork(t *testing.T, store Store) {

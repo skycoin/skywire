@@ -4,12 +4,12 @@ package cliconfig
 import (
 	"strings"
 
-	"github.com/skycoin/skywire/pkg/disc"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
-	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/disc"
+	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/utilenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 

@@ -15,12 +15,12 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/utilenv"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
@@ -37,7 +37,7 @@ func init() {
 		version = ""
 	}
 	startCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
-	listCmd.Flags().StringVarP(&sdURL, "url", "a", "", "service discovery url default:\n"+skyenv.ServiceDiscAddr)
+	listCmd.Flags().StringVarP(&sdURL, "url", "a", "", "service discovery url default:\n"+utilenv.ServiceDiscAddr)
 	listCmd.Flags().BoolVarP(&directQuery, "direct", "b", false, "query service discovery directly")
 	listCmd.Flags().StringVarP(&pk, "pk", "k", "", "check "+serviceType+" service discovery for public key")
 	listCmd.Flags().IntVarP(&count, "num", "n", 0, "number of results to return")
@@ -174,7 +174,7 @@ var statusCmd = &cobra.Command{
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List " + serviceType + " servers",
-	Long:  "List " + serviceType + " servers from service discovery\n " + skyenv.ServiceDiscAddr + "/api/services?type=" + serviceType + "\n " + skyenv.ServiceDiscAddr + "/api/services?type=" + serviceType + "&country=US",
+	Long:  "List " + serviceType + " servers from service discovery\n " + utilenv.ServiceDiscAddr + "/api/services?type=" + serviceType + "\n " + utilenv.ServiceDiscAddr + "/api/services?type=" + serviceType + "&country=US",
 	Run: func(cmd *cobra.Command, args []string) {
 		//validate any specified public key
 		if pk != "" {
@@ -184,7 +184,7 @@ var listCmd = &cobra.Command{
 			}
 		}
 		if sdURL == "" {
-			sdURL = skyenv.ServiceDiscAddr
+			sdURL = utilenv.ServiceDiscAddr
 		}
 		if isUnFiltered {
 			ver = ""

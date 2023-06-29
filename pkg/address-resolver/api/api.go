@@ -15,18 +15,17 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skywire/pkg/dmsg"
 
+	"github.com/skycoin/skywire/internal/armetrics"
+	"github.com/skycoin/skywire/pkg/address-resolver/store"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg"
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/netutil"
-	"github.com/skycoin/skywire/pkg/networkmonitor"
-	"github.com/skycoin/skywire/internal/armetrics"
-	"github.com/skycoin/skywire/pkg/address-resolver/store"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/transport/network/handshake"
@@ -45,7 +44,11 @@ var ErrUnauthorizedNetworkMonitor = errors.New("invalid network monitor key")
 var ErrBadInput = errors.New("error bad input")
 
 // WhitelistPKs store whitelisted pks of network monitor
-var WhitelistPKs = networkmonitor.GetWhitelistPKs()
+//var WhitelistPKs = networkmonitor.GetWhitelistPKs()
+//Issue with imports on the above ; omitting for now
+
+// WhitelistPKs store whitelisted pks of network monitor
+var WhitelistPKs = []cipher.PubKey{}
 
 // API represents the api of the address-resolver service.
 type API struct {
@@ -121,7 +124,7 @@ func New(log *logging.Logger, s store.Store, nonceStore httpauth.NonceStore,
 
 	r.Get("/health", api.health)
 	r.Get("/transports", api.transports)
-	r.Delete("/deregister/{network}", api.deregister)
+	//r.Delete("/deregister/{network}", api.deregister)
 
 	nonceHandler := &httpauth.NonceHandler{Store: nonceStore}
 	r.Get("/security/nonces/{pk}", nonceHandler.ServeHTTP)
@@ -354,86 +357,87 @@ func (a *API) transports(w http.ResponseWriter, r *http.Request) {
 	a.writeJSON(w, r, http.StatusOK, info)
 }
 
-func (a *API) deregister(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	a.log.Info("Deregistration process started.")
+/*
+	func (a *API) deregister(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		a.log.Info("Deregistration process started.")
 
-	nmPkString := r.Header.Get("NM-PK")
-	if ok := WhitelistPKs.Get(nmPkString); !ok {
-		a.log.WithError(ErrUnauthorizedNetworkMonitor).WithField("Step", "Checking NMs PK").Error("Deregistration process interrupt.")
-		w.WriteHeader(http.StatusForbidden)
-		return
-	}
+		nmPkString := r.Header.Get("NM-PK")
+		if ok := WhitelistPKs.Get(nmPkString); !ok {
+			a.log.WithError(ErrUnauthorizedNetworkMonitor).WithField("Step", "Checking NMs PK").Error("Deregistration process interrupt.")
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
 
-	nmPk := cipher.PubKey{}
-	if err := nmPk.UnmarshalText([]byte(nmPkString)); err != nil {
-		a.log.WithError(ErrBadInput).WithField("Step", "Reading NMs PK").Error("Deregistration process interrupt.")
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	nmSign := cipher.Sig{}
-	if err := nmSign.UnmarshalText([]byte(r.Header.Get("NM-Sign"))); err != nil {
-		a.log.WithError(ErrBadInput).WithField("Step", "Checking sign").Error("Deregistration process interrupt.")
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	if err := cipher.VerifyPubKeySignedPayload(nmPk, nmSign, []byte(nmPk.Hex())); err != nil {
-		a.log.WithError(ErrUnauthorizedNetworkMonitor).WithField("Step", "Veryfing request").Error("Deregistration process interrupt.")
-		w.WriteHeader(http.StatusForbidden)
-		return
-	}
-
-	var netType network.Type
-	switch chi.URLParam(r, "network") {
-	case "sudph":
-		netType = network.SUDPH
-	case "stcpr":
-		netType = network.STCPR
-	default:
-		a.log.WithError(ErrMissingNetworkType).WithField("Step", "Checking Network Type").Error("Deregistration process interrupt.")
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	pks := []cipher.PubKey{}
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		a.log.WithError(ErrBadInput).WithField("Step", "Reading keys").Error("Deregistration process interrupt.")
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	var keys []string
-	if err := json.Unmarshal(body, &keys); err != nil {
-		a.log.WithError(ErrBadInput).WithField("Step", "Slicing keys").Error("Deregistration process interrupt.")
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	for _, key := range keys {
-		pk := cipher.PubKey{}
-		if err := pk.UnmarshalText([]byte(key)); err != nil {
-			a.log.WithError(ErrBadInput).WithField("Step", "Checking keys").Error("Deregistration process interrupt.")
+		nmPk := cipher.PubKey{}
+		if err := nmPk.UnmarshalText([]byte(nmPkString)); err != nil {
+			a.log.WithError(ErrBadInput).WithField("Step", "Reading NMs PK").Error("Deregistration process interrupt.")
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		pks = append(pks, pk)
-	}
 
-	for _, pk := range pks {
-		err := a.store.DelBind(ctx, netType, pk)
-		if err != nil {
-			a.log.WithFields(logrus.Fields{"PK": pk.Hex(), "Step": "Delete Bind"}).Error("Deregistration process interrupt.")
-			w.WriteHeader(http.StatusInternalServerError)
+		nmSign := cipher.Sig{}
+		if err := nmSign.UnmarshalText([]byte(r.Header.Get("NM-Sign"))); err != nil {
+			a.log.WithError(ErrBadInput).WithField("Step", "Checking sign").Error("Deregistration process interrupt.")
+			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+
+		if err := cipher.VerifyPubKeySignedPayload(nmPk, nmSign, []byte(nmPk.Hex())); err != nil {
+			a.log.WithError(ErrUnauthorizedNetworkMonitor).WithField("Step", "Veryfing request").Error("Deregistration process interrupt.")
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+
+		var netType network.Type
+		switch chi.URLParam(r, "network") {
+		case "sudph":
+			netType = network.SUDPH
+		case "stcpr":
+			netType = network.STCPR
+		default:
+			a.log.WithError(ErrMissingNetworkType).WithField("Step", "Checking Network Type").Error("Deregistration process interrupt.")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		pks := []cipher.PubKey{}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			a.log.WithError(ErrBadInput).WithField("Step", "Reading keys").Error("Deregistration process interrupt.")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		var keys []string
+		if err := json.Unmarshal(body, &keys); err != nil {
+			a.log.WithError(ErrBadInput).WithField("Step", "Slicing keys").Error("Deregistration process interrupt.")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		for _, key := range keys {
+			pk := cipher.PubKey{}
+			if err := pk.UnmarshalText([]byte(key)); err != nil {
+				a.log.WithError(ErrBadInput).WithField("Step", "Checking keys").Error("Deregistration process interrupt.")
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			pks = append(pks, pk)
+		}
+
+		for _, pk := range pks {
+			err := a.store.DelBind(ctx, netType, pk)
+			if err != nil {
+				a.log.WithFields(logrus.Fields{"PK": pk.Hex(), "Step": "Delete Bind"}).Error("Deregistration process interrupt.")
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+		}
+
+		a.log.WithFields(logrus.Fields{"Number of Keys": len(keys), "Keys": keys, "Network Type": netType}).Info("Deregistration process completed.")
+		a.writeJSON(w, r, http.StatusOK, nil)
 	}
-
-	a.log.WithFields(logrus.Fields{"Number of Keys": len(keys), "Keys": keys, "Network Type": netType}).Info("Deregistration process completed.")
-	a.writeJSON(w, r, http.StatusOK, nil)
-}
-
+*/
 func (a *API) getTransports(r *http.Request, netType network.Type) []string {
 	ctx := r.Context()
 	pks, err := a.store.GetAll(ctx, netType)

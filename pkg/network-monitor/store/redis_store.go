@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/go-redis/redis"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 
 	"github.com/skycoin/skywire/internal/nm"
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 const (

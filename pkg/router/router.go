@@ -12,11 +12,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/dmsg"
-	"github.com/skycoin/skywire/pkg/noise"
-
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/noise"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"

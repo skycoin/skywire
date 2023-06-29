@@ -7,9 +7,8 @@ import (
 	"net"
 	"net/rpc"
 
-	"github.com/skycoin/skywire/pkg/dmsg"
-
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"

@@ -7,9 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 func TestNewReadWriter(t *testing.T) {

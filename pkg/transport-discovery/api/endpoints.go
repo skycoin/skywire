@@ -146,11 +146,11 @@ func (api *API) deregisterTransport(w http.ResponseWriter, r *http.Request) {
 	api.log(r).Info("Deregistration process started.")
 
 	nmPkString := r.Header.Get("NM-PK")
-	if ok := WhitelistPKs.Get(nmPkString); !ok {
-		api.log(r).WithError(ErrUnauthorizedNetworkMonitor).WithField("Step", "Checking NMs PK").Error("Deregistration process interrupt.")
-		w.WriteHeader(http.StatusForbidden)
-		return
-	}
+	//	if ok := WhitelistPKs.Get(nmPkString); !ok {
+	//		api.log(r).WithError(ErrUnauthorizedNetworkMonitor).WithField("Step", "Checking NMs PK").Error("Deregistration process interrupt.")
+	//		w.WriteHeader(http.StatusForbidden)
+	//		return
+	//	}
 
 	nmPk := cipher.PubKey{}
 	if err := nmPk.UnmarshalText([]byte(nmPkString)); err != nil {

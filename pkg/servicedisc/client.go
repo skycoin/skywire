@@ -16,11 +16,11 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/skycoin/skywire/internal/httpauth"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
-	"github.com/skycoin/skywire/internal/httpauth"
 )
 
 // ErrVisorUnreachable is returned when visor is not reachable

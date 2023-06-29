@@ -8,27 +8,25 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	cc "github.com/ivanpirog/coloredcobra"
 	proxyproto "github.com/pires/go-proxyproto"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire-utilities/pkg/metricsutil"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/internal/discmetrics"
 	"github.com/skycoin/skywire/internal/dmsg-discovery/api"
 	"github.com/skycoin/skywire/internal/dmsg-discovery/store"
+	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/direct"
 	"github.com/skycoin/skywire/pkg/disc"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsghttp"
+	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/metricsutil"
 )
 
 const redisPasswordEnvName = "REDIS_PASSWORD"
@@ -68,7 +66,7 @@ func init() {
 
 // RootCmd contains commands for dmsg-discovery
 var RootCmd = &cobra.Command{
-	Use:   "dmsg-discovery",
+	Use:   "d",
 	Short: "Dmsg Discovery Server for skywire",
 	Long: `
 	┌┬┐┌┬┐┌─┐┌─┐  ┌┬┐┬┌─┐┌─┐┌─┐┬  ┬┌─┐┬─┐┬ ┬
@@ -113,21 +111,22 @@ var RootCmd = &cobra.Command{
 		enableMetrics := sf.MetricsAddr != ""
 		a := api.New(log, db, m, testMode, enableLoadTesting, enableMetrics, dmsgAddr)
 
-		var whitelistPKs []string
-		if whitelistKeys != "" {
-			whitelistPKs = strings.Split(whitelistKeys, ",")
-		} else {
-			if testEnvironment {
-				whitelistPKs = strings.Split(skyenv.TestNetworkMonitorPKs, ",")
+		/*
+			var whitelistPKs []string
+			if whitelistKeys != "" {
+				whitelistPKs = strings.Split(whitelistKeys, ",")
 			} else {
-				whitelistPKs = strings.Split(skyenv.NetworkMonitorPKs, ",")
+				if testEnvironment {
+					whitelistPKs = strings.Split(skyenv.TestNetworkMonitorPKs, ",")
+				} else {
+					whitelistPKs = strings.Split(skyenv.NetworkMonitorPKs, ",")
+				}
 			}
-		}
 
-		for _, v := range whitelistPKs {
-			api.WhitelistPKs.Set(v)
-		}
-
+			for _, v := range whitelistPKs {
+				api.WhitelistPKs.Set(v)
+			}
+		*/
 		go a.RunBackgroundTasks(ctx, log)
 		log.WithField("addr", addr).Info("Serving discovery API...")
 		go func() {

@@ -7,8 +7,8 @@ import (
 	"os"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/dmsgc"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // Config defines configuration for transport setup

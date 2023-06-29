@@ -9,10 +9,11 @@ import (
 
 	"github.com/lib/pq"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skywire-utilities/pkg/geo"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/servicedisc"
 	"gorm.io/gorm"
+
+	"github.com/skycoin/skywire/pkg/geo"
+	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/servicedisc"
 )
 
 type postgresStore struct {

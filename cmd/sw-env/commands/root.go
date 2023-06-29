@@ -6,14 +6,14 @@ import (
 	"log"
 
 	cc "github.com/ivanpirog/coloredcobra"
-	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/skycoin/skywire/internal/config"
+	"github.com/skycoin/skywire/pkg/buildinfo"
 )
 
-var rootCmd = &cobra.Command{
-	Use:   "sw-env",
+var RootCmd = &cobra.Command{
+	Use:   "se",
 	Short: "skywire environment generator",
 	Long: `
 	┌─┐┬ ┬   ┌─┐┌┐┌┬  ┬
@@ -44,20 +44,20 @@ var (
 )
 
 func init() {
-	rootCmd.AddCommand(
+	RootCmd.AddCommand(
 		visorCmd,
 		dmsgCmd,
 		setupCmd,
 	)
-	rootCmd.Flags().BoolVarP(&publicFlag, "public", "p", false, "Environment with public skywire-services\033[0m")
-	rootCmd.Flags().BoolVarP(&localFlag, "local", "l", false, "Environment with skywire-services on localhost\033[0m")
-	rootCmd.Flags().BoolVarP(&dockerFlag, "docker", "d", false, "Environment with dockerized skywire-services\033[0m")
-	rootCmd.Flags().StringVarP(&dockerNetwork, "network", "n", "SKYNET", "Docker network to use\033[0m")
+	RootCmd.Flags().BoolVarP(&publicFlag, "public", "p", false, "Environment with public skywire-services\033[0m")
+	RootCmd.Flags().BoolVarP(&localFlag, "local", "l", false, "Environment with skywire-services on localhost\033[0m")
+	RootCmd.Flags().BoolVarP(&dockerFlag, "docker", "d", false, "Environment with dockerized skywire-services\033[0m")
+	RootCmd.Flags().StringVarP(&dockerNetwork, "network", "n", "SKYNET", "Docker network to use\033[0m")
 	var helpflag bool
-	rootCmd.SetUsageTemplate(help)
-	rootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+rootCmd.Use)
-	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
-	rootCmd.PersistentFlags().MarkHidden("help") //nolint
+	RootCmd.SetUsageTemplate(help)
+	RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+RootCmd.Use)
+	RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
+	RootCmd.PersistentFlags().MarkHidden("help") //nolint
 }
 
 var visorCmd = &cobra.Command{
@@ -87,7 +87,7 @@ var setupCmd = &cobra.Command{
 // Execute executes root CLI command.
 func Execute() {
 	cc.Init(&cc.Config{
-		RootCmd:       rootCmd,
+		RootCmd:       RootCmd,
 		Headings:      cc.HiBlue + cc.Bold, //+ cc.Underline,
 		Commands:      cc.HiBlue + cc.Bold,
 		CmdShortDescr: cc.HiBlue,
@@ -99,7 +99,7 @@ func Execute() {
 		NoExtraNewlines: true,
 		NoBottomNewline: true,
 	})
-	if err := rootCmd.Execute(); err != nil {
+	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
 	}
 }

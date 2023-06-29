@@ -10,8 +10,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/internal/lc"
+	"github.com/skycoin/skywire/pkg/httputil"
 )
 
 func testNetwork(t *testing.T, store Store) {

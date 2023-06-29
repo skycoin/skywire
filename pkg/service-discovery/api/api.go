@@ -16,15 +16,15 @@ import (
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/cors"
 	"github.com/sirupsen/logrus"
+
 	"github.com/skycoin/skywire/internal/sdmetrics"
+	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/geo"
+	"github.com/skycoin/skywire/pkg/httpauth"
+	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/service-discovery/store"
-	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/geo"
-	"github.com/skycoin/skywire-utilities/pkg/httpauth"
-	"github.com/skycoin/skywire-utilities/pkg/httputil"
-	"github.com/skycoin/skywire-utilities/pkg/metricsutil"
-	"github.com/skycoin/skywire-utilities/pkg/networkmonitor"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 )
 
@@ -57,7 +57,7 @@ type HealthCheckResponse struct {
 }
 
 // WhitelistPKs store whitelisted pks of network monitor
-var WhitelistPKs = networkmonitor.GetWhitelistPKs()
+//var WhitelistPKs = networkmonitor.GetWhitelistPKs()
 
 // API represents the service-discovery API.
 type API struct {
@@ -348,11 +348,11 @@ func (a *API) deregisterEntry(w http.ResponseWriter, r *http.Request) {
 	a.log.Info("Deregistration process started.")
 	// check validation of request from network monitor
 	nmPkString := r.Header.Get("NM-PK")
-	if ok := WhitelistPKs.Get(nmPkString); !ok {
-		a.log.WithError(ErrUnauthorizedNetworkMonitor).WithField("Step", "Checking NMs PK").Error("Deregistration process interrupt.")
-		w.WriteHeader(http.StatusForbidden)
-		return
-	}
+	//	if ok := WhitelistPKs.Get(nmPkString); !ok {
+	//		a.log.WithError(ErrUnauthorizedNetworkMonitor).WithField("Step", "Checking NMs PK").Error("Deregistration process interrupt.")
+	//		w.WriteHeader(http.StatusForbidden)
+	//		return
+	//	}
 
 	nmPk := cipher.PubKey{}
 	if err := nmPk.UnmarshalText([]byte(nmPkString)); err != nil {

@@ -12,13 +12,13 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
 
+	"github.com/skycoin/skywire/internal/tpdiscmetrics"
 	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
-	"github.com/skycoin/skywire/pkg/networkmonitor"
-	"github.com/skycoin/skywire/internal/tpdiscmetrics"
 	"github.com/skycoin/skywire/pkg/transport-discovery/store"
 )
 
@@ -40,7 +40,11 @@ var (
 	// ErrBadInput occurs in case of bad input
 	ErrBadInput = errors.New("error bad input")
 	// WhitelistPKs store whitelisted pks of network monitor
-	WhitelistPKs = networkmonitor.GetWhitelistPKs()
+	//WhitelistPKs = networkmonitor.GetWhitelistPKs()
+	//Issue with imports on the above ; omitting for now
+
+	// WhitelistPKs store whitelisted pks of network monitor
+	WhitelistPKs = []cipher.PubKey{}
 )
 
 // API register all the API endpoints.

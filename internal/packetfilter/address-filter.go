@@ -4,7 +4,7 @@ package packetfilter
 import (
 	"net"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // AddressFilter filters packets from specified address.

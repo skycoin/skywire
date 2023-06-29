@@ -13,16 +13,16 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
-	"github.com/skycoin/skywire-utilities/pkg/metricsutil"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/internal/dmsg-server/api"
 	"github.com/skycoin/skywire/internal/servermetrics"
+	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/disc"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsgserver"
+	"github.com/skycoin/skywire/pkg/metricsutil"
 )
 
 var (
