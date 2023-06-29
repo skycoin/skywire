@@ -56,7 +56,7 @@ type Transport struct {
 	Discovery         string          `json:"discovery"`
 	AddressResolver   string          `json:"address_resolver"`
 	PublicAutoconnect bool            `json:"public_autoconnect"`
-	TransportSetup    []cipher.PubKey `json:"transport_setup_nodes"`
+	TransportSetupPKs []cipher.PubKey `json:"transport_setup"`
 	LogStore          *LogStore       `json:"log_store"`
 	StcprPort         int             `json:"stcpr_port"`
 	SudphPort         int             `json:"sudph_port"`
@@ -72,7 +72,7 @@ type LogStore struct {
 
 // Routing configures routing.
 type Routing struct {
-	SetupNodes         []cipher.PubKey `json:"setup_nodes,omitempty"`
+	RouteSetupNodes    []cipher.PubKey `json:"route_setup_nodes,omitempty"`
 	RouteFinder        string          `json:"route_finder"`
 	RouteFinderTimeout Duration        `json:"route_finder_timeout,omitempty"`
 	MinHops            uint16          `json:"min_hops"`

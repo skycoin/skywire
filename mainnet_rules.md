@@ -2,9 +2,14 @@
 
 # Skywire Reward Eligibility Rules
 
-* We are transitioning to new system for rewards, deprecating the skywire whitelist
+Notice: the [skywire whitelist](https://whitelist.skycoin.com) is deprecated since April 1st 2023.
+
+We have transitioned to a new system with daily reward distribution
+
 * The rules in this article may change at any time, depending on if there are problems
 * We will attempt to address any issues reported via [@skywire](https://t.me/skywire) Telegram channel
+
+The required minimum Skywire version will be incremented periodically.
 
 #### Table of Contents
 * [Introduction](#introduction)
@@ -22,31 +27,66 @@
 
 All information about rewards will be published here. Please ask for clarification in the [@skywire](https://t.me/skywire) Telegram channel if some things appear to not be covered. Join [@SkywirePSA](https://t.me/SkywirePSA) for public service announcements (PSA) regarding the skywire network.
 
-Reward notifications will happen via the skychat app, which is included with the skywire release (PENDING IMPLEMENTATION)
+Reward distribution notifications are on telegram [@skywire_reward](https://t.me/skywire_reward).
 
+# Uptime Reward Pool
+
+408000 Skycoin are distributed annually to those visors which meet the mimimum uptime and the other requirements listed below
+
+A total of up to ~1117.808 Skycoin are distributed daily; evenly divided among those eligible participants on the basis of having met uptime for the previous day.
 
 ## Rules & Requirements
 
-* Up to 8 (eight) visors may receive rewards per location (ip address)
-* 75% uptime is required to be eligible to receive rewards
-* A valid skycoin address must be set for the visor
-* The visor must be running on approved [hardware](#hardware)
-* the visor responds to intermittent pings (i.e. it's possible to establish transports to that visor)
+* **Minimum skywire version v1.3.8** - Cutoff July 1st 2023
+
+* The visor must be an **ARM architecture SBC running on approved [hardware](#hardware)**
+
+* Visors must be running on **[the skywire production deployment](https://conf.skywire.skycoin.com)**
+
+* **Up to 8 (eight) visors may each receive 1 reward share per location (ip address)**
+
+* **75% uptime per day** is required to be eligible to receive rewards
+
+* **A valid skycoin address** must be set for the visor
+
+* The visor must be **connected to the DMSG network**
+
+* **Transports can be established to the visor**
+
+* **The visor responds to pings** - needed for latency-based rewards
+
+* **The visor produces transport bandwidth logs** - needed for bandwidth-based rewards
 
 
-## Rewards
+## Verifying Requirements & Eligibility
 
-**The new reward system requires Skywire v1.3.4**
+### Version
 
-Requirement established 2-11-2023
+View the version of skywire you are running with:
+```
+skywire-cli -v
+skywire-visor -v
+```
 
-Rewards Cutoff date for updating 4-1-2023
+**The new reward system requires Skywire v1.3.8**
 
-The required minimal Skywire version will be incremented periodically.
+Requirement established 5-25-2023
 
-In the event of changes to the survey decryption key, it will be required to update in order to change the reward address
+Rewards Cutoff date for updating 7-1-2023
 
-The rewards in the new system will be **paid daily or weekly**
+### Deployment
+
+The deployment your visor is running on can be verified by comparing the services configured in the visor's .json config against [conf.skywire.skycoin.com](https://conf.skywire.skycoin.com)
+It will be automatically updated any time a config is generated or regenerated.
+
+### Uptime
+
+Daily uptime statistics for all visors may be accessed via the
+- [uptime tracker](https://ut.skywire.skycoin.com/uptimes?v=v2)
+or using skywire-cli
+- `skywire-cli ut -n0 -k <public-key>`
+
+### Skycoin Address
 
 The skycoin address to be rewarded can be set from the cli:
 
@@ -63,24 +103,39 @@ or via the hypervisor UI.
 
 the example above shows the genesis address for the skycoin blockchain. **Please do not use the genesis address.**
 
-### How it works
+### Connection to DMSG network - Survey & transport log collection
 
-The skycoin reward address is set per the visor via the cli or the hypervisor, in a text file contained in the "local" folder (local_path in the skywire config file). This address is written into the [system survey](https://github.com/skycoin/skywire/tree/develop/cmd/skywire-cli#survey) and served, along with transport logs, via dmsghttp.
+For any given visor, the system survey and transport bandwidth logs should be downloaded **hourly** over dmsghttp.
 
-This survey will be fetched on a daily basis with [`dmsgget`](https://github.com/skycoin/dmsg/tree/develop/cmd/dmsgget), along with the transport logs, and checked to verify hardware and other requirements, etc. The transport logs from both ends of any given transport are compared and verified.
+This can be verified by examinimg the visor's logging:
 
-The system survey is encrypted to the public key of the package maintainer, this key is present in the skywire github repository and is included with any future release
+![image](https://github.com/skycoin/skywire/assets/36607567/eb66bca1-fc9e-4c80-a38a-e00a73f675d0)
 
-### Reward tiers
+Note: the transport bandwidth logs will only exist if it was generated; i.e. if there were transports to that visor which handled traffic.
 
-There are three tiers for rewards.
+Note: the system survey (node-info.json) will only exist if the reward address is set.
 
-* **TIER 3** The lowest tier is distributed to all nodes which meet the basic requirements.
+If your visor is not generating such logging, please reach out to us on telegram [@skywire](https://t.me/skywire) for assistance
 
-Other tiers are based on bandwidth which was handled by the visor. Meaning the logs from each end of the transport were fetched and agree
+### Verifying other requirements
 
-* **TIER 2** If the visor processed **any** verifiable bandwidth, the visor will have earned the rewards of the second tier plus those of the lowest tier.
-* **TIER 1** If the visor processed above the average amount of bandwidth, it will receive first tier rewards, in addition to the lowest tier.
+If the visor is not able to meet the other requirements, that is usually not the fault of the user nor is it something the user is expected to troubleshoot at this time. Please ask for assistance on telegram [@skywire](https://t.me/skywire)
+
+## Reward System overview
+
+The skycoin reward address may be set for each visor using skywire-cli or for all visors connected to a hypervisor from the hypervisor UI
+
+The skycoin reward address is in a text file contained in the "local" folder (local_path in the skywire config file) i.e `local/reward.txt`.
+
+The skycoin reward address is also included with the [system survey](https://github.com/skycoin/skywire/tree/develop/cmd/skywire-cli#survey) and served, along with transport logs, via dmsghttp.
+
+The system survey is fetched hourly with `skywire-cli log`; along with transport bandwidth logs.
+
+Once collected from the nodes, the surveys for those visors which met uptime are checked to verify hardware and other requirements, etc.
+
+The system survey is only made available to those keys which are whitelisted for survey collection, but is additionally available to any `hypervisor` or `dmsgpty_whitelist` keys set inthe config for a given visor.
+
+The public keys which require to be whitelisted in order to collect the surveys, for the purpose of reward eligibility verification, should populate in the visor's config automatically when the config is generated with visors of at least version 1.3.8.
 
 ## Hardware
 

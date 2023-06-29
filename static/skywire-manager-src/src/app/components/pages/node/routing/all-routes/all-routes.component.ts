@@ -3,6 +3,7 @@ import { Subscription } from 'rxjs';
 
 import { Node, Route } from '../../../../../app.datatypes';
 import { NodeComponent } from '../../node.component';
+import { PageBaseComponent } from 'src/app/utils/page-base';
 
 /**
  * Page for showing the complete list of the routes of a node.
@@ -12,7 +13,7 @@ import { NodeComponent } from '../../node.component';
   templateUrl: './all-routes.component.html',
   styleUrls: ['./all-routes.component.scss']
 })
-export class AllRoutesComponent implements OnInit, OnDestroy {
+export class AllRoutesComponent extends PageBaseComponent implements OnInit, OnDestroy {
   routes: Route[];
   nodePK: string;
 
@@ -24,6 +25,8 @@ export class AllRoutesComponent implements OnInit, OnDestroy {
       this.nodePK = node.localPk;
       this.routes = node.routes;
     });
+
+    return super.ngOnInit();
   }
 
   ngOnDestroy() {
