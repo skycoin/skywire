@@ -10,6 +10,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -261,6 +262,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Delete("/visors/{pk}/routes/", hv.deleteRoutes())
 				r.Get("/visors/{pk}/routegroups", hv.getRouteGroups())
 				r.Post("/visors/{pk}/restart", hv.restart())
+				r.Post("/visors/{pk}/shutdown", hv.shutdown())
 				r.Get("/visors/{pk}/runtime-logs", hv.getRuntimeLogs())
 				r.Post("/visors/{pk}/min-hops", hv.postMinHops())
 				r.Get("/visors/{pk}/persistent-transports", hv.getPersistentTransports())
@@ -1155,6 +1157,23 @@ func (hv *Hypervisor) restart() http.HandlerFunc {
 		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, true)
+	})
+}
+
+func (hv *Hypervisor) shutdown() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		if err := ctx.API.ShutdownWithoutOsExit(); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		httputil.WriteJSON(w, r, http.StatusOK, true)
+
+		// Wait a few seconds to be able so send the response.
+		go func() {
+			time.Sleep(8 * time.Second)
+			go os.Exit(0)
+		}()
 	})
 }
 

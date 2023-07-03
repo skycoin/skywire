@@ -434,6 +434,11 @@ func (rc *rpcClient) Shutdown() error {
 	return rc.Call("Shutdown", &struct{}{}, &struct{}{})
 }
 
+// ShutdownWithoutOsExit calls ShutdownWithoutOsExit.
+func (rc *rpcClient) ShutdownWithoutOsExit() error {
+	return rc.Call("ShutdownWithoutOsExit", &struct{}{}, &struct{}{})
+}
+
 // Exec calls Exec.
 func (rc *rpcClient) Exec(command string) ([]byte, error) {
 	output := make([]byte, 0)
@@ -1185,6 +1190,11 @@ func (mc *mockRPCClient) Reload() error {
 
 // Shutdown implements API.
 func (mc *mockRPCClient) Shutdown() error {
+	return nil
+}
+
+// ShutdownWithoutOsExit implements API.
+func (mc *mockRPCClient) ShutdownWithoutOsExit() error {
 	return nil
 }
 

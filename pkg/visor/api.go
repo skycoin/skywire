@@ -46,6 +46,7 @@ type API interface {
 	Restart() error
 	Reload() error
 	Shutdown() error
+	ShutdownWithoutOsExit() error
 	RuntimeLogs() (string, error)
 	RemoteVisors() ([]string, error)
 	GetLogRotationInterval() (visorconfig.Duration, error)
@@ -1389,6 +1390,14 @@ func (v *Visor) Shutdown() error {
 		return ErrMalformedRestartContext
 	}
 	defer os.Exit(0)
+	return v.Close()
+}
+
+// ShutdownWithoutOsExit implements API.
+func (v *Visor) ShutdownWithoutOsExit() error {
+	if v.restartCtx == nil {
+		return ErrMalformedRestartContext
+	}
 	return v.Close()
 }
 
