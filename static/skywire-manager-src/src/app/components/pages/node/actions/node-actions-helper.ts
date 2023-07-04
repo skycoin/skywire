@@ -35,6 +35,7 @@ export class NodeActionsHelper {
   returnButtonText: string;
 
   private rebootSubscription: Subscription;
+  private shutdownSubscription: Subscription;
   private updateSubscription: Subscription;
 
   // Services this class need.
@@ -83,6 +84,12 @@ export class NodeActionsHelper {
         name: 'actions.menu.reboot',
         actionName: 'reboot',
         icon: 'rotate_right'
+      });
+
+      this.options.push({
+        name: 'actions.menu.turn-off',
+        actionName: 'shutdown',
+        icon: 'power_settings_new'
       });
     }
 
@@ -138,6 +145,8 @@ export class NodeActionsHelper {
       this.runtimeLogs();
     } else if (actionName === 'reboot') {
       this.reboot();
+    } else if (actionName === 'shutdown') {
+      this.shutdown();
     } else if (actionName === null) {
       // Null is returned if the back button was pressed.
       this.back();
@@ -150,6 +159,9 @@ export class NodeActionsHelper {
   dispose() {
     if (this.rebootSubscription) {
       this.rebootSubscription.unsubscribe();
+    }
+    if (this.shutdownSubscription) {
+      this.shutdownSubscription.unsubscribe();
     }
     if (this.updateSubscription) {
       this.updateSubscription.unsubscribe();
@@ -165,6 +177,25 @@ export class NodeActionsHelper {
       this.rebootSubscription = this.nodeService.reboot(this.currentNodeKey).subscribe(() => {
         this.snackbarService.showDone('actions.reboot.done');
         confirmationDialog.close();
+      }, (err: OperationError) => {
+        err = processServiceError(err);
+
+        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
+      });
+    });
+  }
+
+  shutdown() {
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'actions.turn-off.confirmation');
+
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmationDialog.componentInstance.showProcessing();
+
+      this.shutdownSubscription = this.nodeService.shutdown(this.currentNodeKey).subscribe(() => {
+        this.snackbarService.showDone('actions.turn-off.done');
+        confirmationDialog.close();
+
+        this.router.navigate(['nodes']);
       }, (err: OperationError) => {
         err = processServiceError(err);
 

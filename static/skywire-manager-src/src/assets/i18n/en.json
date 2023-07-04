@@ -337,11 +337,16 @@
       "config": "Configuration",
       "update": "Update",
       "reboot": "Reboot",
+      "turn-off": "Turn off",
       "logs": "View logs"
     },
     "reboot": {
       "confirmation": "Are you sure you want to reboot the visor?",
       "done": "The visor is restarting."
+    },
+    "turn-off": {
+      "confirmation": "Are you sure you want to turn off the visor?",
+      "done": "The visor is shutting down."
     },
     "update": {
       "confirmation": "A terminal will be opened in a new tab and the update procedure will be started automatically. Do you want to continue?"
