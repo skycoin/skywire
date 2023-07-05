@@ -2,8 +2,6 @@
 package user
 
 import (
-	"fmt"
-
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/info"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/peer"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/settings"
@@ -48,7 +46,6 @@ func (u *User) SetPeerbook(p peer.Peerbook) {
 
 // NewDefaultUser returns *User
 func NewDefaultUser() *User {
-	fmt.Println("user - NewDefaultUser")
 	u := User{}
 
 	u.Info = info.NewDefaultInfo()

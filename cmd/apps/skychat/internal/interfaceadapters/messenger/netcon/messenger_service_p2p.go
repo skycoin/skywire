@@ -206,7 +206,7 @@ func (ms MessengerService) handleP2PConnMsgType(m message.Message) error {
 		}
 
 		//notify that we received an accept message
-		n := notification.NewMsgNotification(pkroute, m)
+		n := notification.NewMsgNotification(pkroute)
 		err = ms.ns.Notify(n)
 		if err != nil {
 			return err
@@ -231,7 +231,7 @@ func (ms MessengerService) handleP2PConnMsgType(m message.Message) error {
 			return err
 		}
 
-		n := notification.NewMsgNotification(pkroute, m)
+		n := notification.NewMsgNotification(pkroute)
 		err = ms.ns.Notify(n)
 		if err != nil {
 			return err
@@ -251,7 +251,7 @@ func (ms MessengerService) handleP2PConnMsgType(m message.Message) error {
 		}
 
 		//notify that we received an accept message
-		n := notification.NewMsgNotification(pkroute, m)
+		n := notification.NewMsgNotification(pkroute)
 		err = ms.ns.Notify(n)
 		if err != nil {
 			return err
@@ -294,7 +294,7 @@ func (ms MessengerService) handleP2PInfoMsgType(v *chat.Visor, m message.Message
 	}
 
 	//notify about new info message
-	n := notification.NewMsgNotification(pkroute, m)
+	n := notification.NewMsgNotification(pkroute)
 	err = ms.ns.Notify(n)
 	if err != nil {
 		return err
@@ -315,7 +315,7 @@ func (ms MessengerService) handleP2PTextMsgType(m message.Message) error {
 	fmt.Println("---------------------------------------------------------------------------------------------------")
 
 	//notify about a new TextMessage
-	n := notification.NewMsgNotification(pkroute, m)
+	n := notification.NewMsgNotification(pkroute)
 	err := ms.ns.Notify(n)
 	if err != nil {
 		return err

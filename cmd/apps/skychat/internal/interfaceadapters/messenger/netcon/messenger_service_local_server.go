@@ -174,7 +174,7 @@ func (ms MessengerService) handleLocalServerConnMsgType(visor *chat.Visor, m mes
 				//add remote peer to server
 				err = server.AddMember(*dummyPeer)
 				if err != nil {
-					return err
+					fmt.Println(err)
 				}
 				//add remote peer to room
 				err = room.AddMember(*dummyPeer)
@@ -654,7 +654,7 @@ func (ms MessengerService) handleLocalServerInfoMsgType(v *chat.Visor, m message
 	}
 
 	//notify about new info message
-	n := notification.NewMsgNotification(pkroute, m)
+	n := notification.NewMsgNotification(pkroute)
 	err = ms.ns.Notify(n)
 	if err != nil {
 		return err
@@ -711,7 +711,7 @@ func (ms MessengerService) handleLocalRoomTextMsgType(visor *chat.Visor, m messa
 	}
 
 	//notify about a new TextMessage
-	n := notification.NewMsgNotification(pkroute, m)
+	n := notification.NewMsgNotification(pkroute)
 	err = ms.ns.Notify(n)
 	if err != nil {
 		return err
@@ -795,7 +795,7 @@ func (ms MessengerService) sendLocalRouteInfoToPeer(pkroute util.PKRoute, dest u
 	}
 
 	//notify about sent text message
-	n := notification.NewMsgNotification(pkroute, m)
+	n := notification.NewMsgNotification(pkroute)
 	err = ms.ns.Notify(n)
 	if err != nil {
 		return err

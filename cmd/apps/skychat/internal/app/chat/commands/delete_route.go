@@ -159,6 +159,7 @@ func (h deleteRouteRequestHandler) deleteVisorIfEmpty(route util.PKRoute) error 
 	}
 
 	if len(visor.GetAllServer()) == 0 && visor.P2PIsEmpty() {
+		//TODO: delete connection to Visor in client struct
 		return h.visorRepo.Delete(route.Visor)
 	}
 

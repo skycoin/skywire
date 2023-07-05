@@ -318,7 +318,7 @@ func (ms MessengerService) SendLeaveRouteMessage(pkroute util.PKRoute) error {
 	root := util.NewP2PRoute(usr.GetInfo().GetPK())
 
 	m := message.NewChatLeaveMessage(root, pkroute)
-	err = ms.sendMessageAndSaveItToDatabase(pkroute, m)
+	err = ms.sendMessageAndDontSaveItToDatabase(pkroute, m)
 	if err != nil {
 		return err
 	}

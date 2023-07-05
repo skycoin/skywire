@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"time"
 
@@ -23,12 +24,14 @@ import (
 
 // MessengerService provides a netcon implementation of the Service
 type MessengerService struct {
-	ctx       context.Context
-	ns        notification.Service
-	cliRepo   client.Repository
-	usrRepo   user.Repository
-	visorRepo chat.Repository
-	errs      chan error
+	ctx          context.Context
+	ns           notification.Service
+	cliRepo      client.Repository
+	usrRepo      user.Repository
+	visorRepo    chat.Repository
+	errs         chan error
+	conns        map[cipher.PubKey]net.Conn //TODO: find better way on handling active conns
+	handledConns map[cipher.PubKey]net.Conn //TODO: find better way on handling active conns
 }
 
 // NewMessengerService constructor for MessengerService
@@ -40,9 +43,70 @@ func NewMessengerService(ns notification.Service, cR client.Repository, uR user.
 	ms.usrRepo = uR
 	ms.visorRepo = chR
 
+	ms.conns = make(map[cipher.PubKey]net.Conn)
 	ms.errs = make(chan error, 1)
 
 	return &ms
+}
+
+// HandleConnection handles the connection to the given Pubkey and incoming messages
+func (ms MessengerService) HandleConnection(pk cipher.PubKey) {
+
+	//for debug purposes:
+	rand.Seed(time.Now().UnixNano())
+	min := 10
+	max := 1000
+	randomNumber := rand.Intn(max-min+1) + min
+	fmt.Printf("HandleConnection random number: %d \n", randomNumber)
+
+	connection, err := ms.GetConnByPK(pk)
+	if err != nil {
+		ms.errs <- err
+		return
+	}
+
+	if ms.ConnectionToPkHandled(pk) {
+		ms.errs <- fmt.Errorf("connection already handled")
+		return
+	}
+
+	err = ms.AddConnToHandled(pk, connection)
+	if err != nil {
+		ms.errs <- err
+		return
+	}
+
+	for {
+
+		messageLength, err := readMessageLengthFromConnection(connection)
+		if err != nil {
+			ms.errs <- err
+			continue
+		}
+
+		fmt.Printf("readMessageLengthFromConnection - Message Length:	%d (%d)\n", messageLength, randomNumber)
+
+		messageBytes, err := readNBytesFromConnection(*messageLength, connection)
+		if err != nil {
+			ms.errs <- err
+			continue
+		}
+
+		fmt.Printf("readNBytesFromConnection - Message Length:	%d (%d)\n", messageLength, randomNumber)
+
+		receivedMessage, err := decodeReceivedBytesToMessage(messageBytes)
+		if err != nil {
+			ms.errs <- err
+			continue
+		}
+
+		err = ms.handleReceivedMessage(*receivedMessage)
+		if err != nil {
+			ms.errs <- err
+			continue
+		}
+	}
+
 }
 
 // readMessageLengthFromConnection reads a prefix message of the connection to get the length of the upcoming message
@@ -53,6 +117,7 @@ func readMessageLengthFromConnection(conn net.Conn) (*uint32, error) {
 		return nil, err
 	}
 	messageLength := binary.BigEndian.Uint32(prefixMessage)
+	fmt.Printf("readMessageLengthFromConnection - Message Length:	%d \n", messageLength)
 	return &messageLength, nil
 }
 
@@ -62,7 +127,7 @@ func writeMessageLengthPrefixToConnection(message []byte, conn net.Conn) error {
 	fmt.Printf("Write prefix with %d Bytes to Conn: %s \n", len(prefix), conn.LocalAddr())
 	_, err := conn.Write(prefix)
 	if err != nil {
-		return fmt.Errorf("failed to write prefix: %v ", err)
+		return fmt.Errorf("failed to write prefix: %v", err)
 	}
 	return nil
 }
@@ -84,54 +149,11 @@ func readNBytesFromConnection(n uint32, conn net.Conn) ([]byte, error) {
 		}
 		receivedBytes = append(receivedBytes, packetBuffer[:packetSize]...)
 		recievedBytesCounter += packetSize
-		fmt.Printf("Data:	%d/%d	(PacketSize: %d) \n", recievedBytesCounter, n, packetSize)
+		fmt.Printf("Data:	%d/%d		(PacketSize: %d) \n", recievedBytesCounter, n, packetSize)
 	}
 	fmt.Printf("Received %d bytes \n", recievedBytesCounter)
 
 	return receivedBytes, nil
-}
-
-// HandleConnection handles the connection to the given Pubkey and incoming messages
-func (ms MessengerService) HandleConnection(pk cipher.PubKey) {
-
-	chatClient, err := ms.cliRepo.GetClient()
-	if err != nil {
-		ms.errs <- err
-		return
-	}
-
-	connection, err := chatClient.GetConnByPK(pk)
-	if err != nil {
-		ms.errs <- err
-		return
-	}
-
-	for {
-
-		messageLength, err := readMessageLengthFromConnection(connection)
-		if err != nil {
-			ms.errs <- err
-			continue
-		}
-
-		messageBytes, err := readNBytesFromConnection(*messageLength, connection)
-		if err != nil {
-			ms.errs <- err
-			continue
-		}
-
-		receivedMessage, err := decodeReceivedBytesToMessage(messageBytes)
-		if err != nil {
-			ms.errs <- err
-			continue
-		}
-
-		err = ms.handleReceivedMessage(*receivedMessage)
-		if err != nil {
-			ms.errs <- err
-			continue
-		}
-	}
 }
 
 // handleReceivedMessage handles a received message
@@ -200,16 +222,6 @@ func (ms MessengerService) DialPubKey(pk cipher.PubKey) (net.Conn, error) {
 		return nil, err
 	}
 
-	err = chatClient.AddConn(pk, conn)
-	if err != nil {
-		return nil, err
-	}
-
-	err = ms.cliRepo.SetClient(*chatClient)
-	if err != nil {
-		return nil, err
-	}
-
 	return conn, nil
 }
 
@@ -223,67 +235,24 @@ func (ms MessengerService) sendMessageAndDontSaveItToDatabase(pkroute util.PKRou
 	return ms.sendMessage(pkroute, m, false)
 }
 
+func addP2PIfEmpty(v *chat.Visor) error {
+	if v.P2PIsEmpty() {
+		p2p := chat.NewDefaultP2PRoom(v.GetPK())
+		err := v.AddP2P(p2p)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("New P2P room added to visor %s\n", v.GetPK().String())
+	}
+	return nil
+}
+
 // sendMessage sends a message to the given route
+//
+// if addToDatabase is true the message will be saved locally, otherwise not.
 func (ms MessengerService) sendMessage(pkroute util.PKRoute, m message.Message, addToDatabase bool) error {
 
-	v, err := ms.visorRepo.GetByPK(pkroute.Visor)
-	if err != nil {
-		var v2 chat.Visor
-		//visor doesn't exist so we add a new remote route
-		if pkroute.Visor == pkroute.Server { // --> P2P remote route
-			v2 = chat.NewDefaultP2PVisor(pkroute.Visor)
-		} else {
-			v2 = chat.NewDefaultVisor(pkroute)
-		}
-		err2 := ms.visorRepo.Add(v2)
-		if err2 != nil {
-			return err2
-		}
-		v = &v2
-		fmt.Printf("New skychat added: %s\n", pkroute.String())
-	}
-
-	// if the message is a p2p message we have to check if the p2p room exists in the server
-	if pkroute.Visor == pkroute.Server {
-		//maybe we already have a visor, but not yet a p2p-room so check if we have that.
-		if v.P2PIsEmpty() {
-			p2p := chat.NewDefaultP2PRoom(pkroute.Visor)
-			err = v.AddP2P(p2p)
-			if err != nil {
-				return err
-			}
-			fmt.Printf("New P2P room added: %s\n", pkroute.String())
-		}
-	} else {
-		// the message we want to send is a server / room message
-		server, err := v.GetServerByPK(pkroute.Server)
-		if err != nil {
-			s := chat.NewDefaultServer(pkroute)
-			err = v.AddServer(s)
-			if err != nil {
-				return err
-			}
-			fmt.Printf("New Server added: %s\n", pkroute.String())
-		} else {
-			//the server exists so we have to check if the room already exists
-			_, err := server.GetRoomByPK(pkroute.Room)
-			if err != nil {
-				r := chat.NewDefaultRemoteRoom(pkroute)
-				err = server.AddRoom(r)
-				if err != nil {
-					return err
-				}
-				err = v.SetServer(*server)
-				if err != nil {
-					return err
-				}
-				fmt.Printf("New Room added: %s\n", pkroute.String())
-			}
-		}
-
-	}
-
-	chatClient, err := ms.cliRepo.GetClient()
+	v, err := ms.getVisorAndSetupIfNecessary(pkroute)
 	if err != nil {
 		return err
 	}
@@ -297,12 +266,19 @@ func (ms MessengerService) sendMessage(pkroute util.PKRoute, m message.Message, 
 		return fmt.Errorf("failed to marshal json: %v ", err)
 	}
 
-	conn, err := chatClient.GetConnByPK(m.Dest.Visor)
+	conn, err := ms.GetConnByPK(m.Dest.Visor)
 	if err != nil {
 		conn, err = ms.DialPubKey(m.Dest.Visor)
 		if err != nil {
 			return err
 		}
+		err = ms.AddConn(pkroute.Visor, conn)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("added conn %s	%s\n", conn.RemoteAddr().String(), conn.RemoteAddr().Network())
+
+		go ms.HandleConnection(pkroute.Visor) //nolint:errcheck
 	}
 
 	err = writeMessageLengthPrefixToConnection(bytes, conn)
@@ -327,6 +303,63 @@ func (ms MessengerService) sendMessage(pkroute util.PKRoute, m message.Message, 
 	return nil
 }
 
+func (ms MessengerService) getVisorAndSetupIfNecessary(pkroute util.PKRoute) (*chat.Visor, error) {
+	v, err := ms.getExistingVisorOrAddNewIfNotExists(pkroute)
+	if err != nil {
+		return nil, err
+	}
+
+	if pkroute.IsP2PRoute() {
+		err = addP2PIfEmpty(v)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		server, err := v.GetServerByRouteOrAddNewIfNotExists(pkroute)
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = server.GetRoomByRouteOrAddNewIfNotExists(pkroute)
+		if err != nil {
+			return nil, err
+		}
+
+		err = v.SetServer(*server)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return v, nil
+}
+
+func (ms MessengerService) getExistingVisorOrAddNewIfNotExists(pkroute util.PKRoute) (*chat.Visor, error) {
+
+	if ms.visorExists(pkroute) {
+		return ms.visorRepo.GetByPK(pkroute.Visor)
+	}
+
+	var v chat.Visor
+
+	if pkroute.IsP2PRoute() {
+		v = chat.NewDefaultP2PVisor(pkroute.Visor)
+	} else {
+		v = chat.NewDefaultVisor(pkroute)
+	}
+
+	err := ms.visorRepo.Add(v)
+	if err != nil {
+		return nil, err
+	}
+	return &v, nil
+
+}
+
+func (ms MessengerService) visorExists(pkroute util.PKRoute) bool {
+	_, err := ms.visorRepo.GetByPK(pkroute.Visor)
+	return err == nil
+}
+
 // sendMessageToRemoteRoute sends the given message to a remote route (as p2p and client)
 func (ms MessengerService) sendMessageToRemoteRoute(msg message.Message) error {
 	//if the message goes to p2p we save it in database, if not we wait for the remote server to send us our message
@@ -343,7 +376,7 @@ func (ms MessengerService) sendMessageToRemoteRoute(msg message.Message) error {
 		}
 	}
 
-	n := notification.NewMsgNotification(msg.Dest, msg)
+	n := notification.NewMsgNotification(msg.Dest)
 	err := ms.ns.Notify(n)
 	if err != nil {
 		return err
@@ -376,7 +409,7 @@ func (ms MessengerService) Listen() {
 
 	go func() {
 		if err := <-ms.errs; err != nil {
-			fmt.Printf("Error in go HandleConnection function: %s ", err)
+			fmt.Printf("Error in go HandleConnection function: %s \n", err)
 		}
 	}()
 
@@ -392,17 +425,75 @@ func (ms MessengerService) Listen() {
 
 		fmt.Printf("Accepted skychat conn on %s from %s\n", conn.LocalAddr(), raddr.PubKey)
 
-		err = chatClient.AddConn(raddr.PubKey, conn)
+		err = ms.AddConn(raddr.PubKey, conn)
 		if err != nil {
 			fmt.Println(err)
 		}
-		err = ms.cliRepo.SetClient(*chatClient)
-		if err != nil {
-			fmt.Println(err)
-		}
+		fmt.Printf("added conn %s	%s\n", conn.RemoteAddr().String(), conn.RemoteAddr().Network())
 
 		//error handling in anonymous go func above
 		go ms.HandleConnection(raddr.PubKey)
+		defer func() {
+			err = ms.DeleteConnFromHandled(raddr.PubKey)
+			fmt.Println(err.Error())
+		}()
 
 	}
+}
+
+// GetConnByPK returns the conn of the given visor pk or an error if there is no open connection to the requested visor
+func (ms *MessengerService) GetConnByPK(pk cipher.PubKey) (net.Conn, error) {
+	//check if conn already added
+	if conn, ok := ms.conns[pk]; ok {
+		return conn, nil
+	}
+	return nil, fmt.Errorf("no conn available with the requested visor")
+}
+
+// AddConn adds the given net.Conn to the map to keep track of active connections
+func (ms *MessengerService) AddConn(pk cipher.PubKey, conn net.Conn) error {
+	//check if conn already added
+	if _, ok := ms.conns[pk]; ok {
+		return fmt.Errorf("conn already added")
+	}
+	ms.conns[pk] = conn
+	return nil
+}
+
+// DeleteConn removes the given net.Conn from the map
+func (ms *MessengerService) DeleteConn(pk cipher.PubKey) error {
+	//check if conn is added
+	if _, ok := ms.conns[pk]; ok {
+		delete(ms.conns, pk)
+		return nil
+	}
+	return fmt.Errorf("pk has no connection") //? handle as error?
+}
+
+// ConnectionToPkExists returns if a connection to the given pk is saved inside conns
+func (ms *MessengerService) ConnectionToPkHandled(pk cipher.PubKey) bool {
+	if _, ok := ms.handledConns[pk]; ok {
+		return true
+	}
+	return false
+}
+
+// AddConnToHandled adds the given net.Conn to the map to keep track of active connections
+func (ms *MessengerService) AddConnToHandled(pk cipher.PubKey, conn net.Conn) error {
+	//check if conn already added
+	if _, ok := ms.handledConns[pk]; ok {
+		return fmt.Errorf("conn already added")
+	}
+	ms.conns[pk] = conn
+	return nil
+}
+
+// DeleteConnFromHandled removes the given net.Conn from the map
+func (ms *MessengerService) DeleteConnFromHandled(pk cipher.PubKey) error {
+	//check if conn is added
+	if _, ok := ms.handledConns[pk]; ok {
+		delete(ms.handledConns, pk)
+		return nil
+	}
+	return fmt.Errorf("pk has no connection") //? handle as error?
 }

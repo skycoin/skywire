@@ -152,6 +152,19 @@ func (v *Visor) GetServerByPK(pk cipher.PubKey) (*Server, error) {
 	return nil, fmt.Errorf("no server with pk %s found in visor %s", pk.Hex(), v.PK)
 }
 
+func (v *Visor) GetServerByRouteOrAddNewIfNotExists(pkroute util.PKRoute) (*Server, error) {
+	server, err := v.GetServerByPK(pkroute.Server)
+	if err != nil {
+		s := NewDefaultServer(pkroute)
+		err := v.AddServer(s)
+		if err != nil {
+			return nil, err
+		}
+		return &s, nil
+	}
+	return server, nil
+}
+
 // AddMessage Adds the given message to the given visor depending on the destination of the message
 func (v *Visor) AddMessage(pkroute util.PKRoute, m message.Message) {
 	if pkroute.Server == pkroute.Visor {

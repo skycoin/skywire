@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/message"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/util"
 )
 
@@ -31,7 +30,7 @@ type Notification struct {
 }
 
 // NewMsgNotification notifies the user of a new message
-func NewMsgNotification(route util.PKRoute, msg message.Message) Notification {
+func NewMsgNotification(route util.PKRoute) Notification {
 	clientMsg, err := json.Marshal(map[string]string{"visorpk": route.Visor.Hex(), "serverpk": route.Server.Hex(), "roompk": route.Room.Hex()})
 
 	if err != nil {

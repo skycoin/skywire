@@ -103,6 +103,19 @@ func (s *Server) GetRoomByPK(pk cipher.PubKey) (*Room, error) {
 	return nil, fmt.Errorf("no room with pk %s found in visor %s and server %s", pk.Hex(), s.PKRoute.Visor, s.PKRoute.Server)
 }
 
+func (s *Server) GetRoomByRouteOrAddNewIfNotExists(pkroute util.PKRoute) (*Room, error) {
+	room, err := s.GetRoomByPK(pkroute.Room)
+	if err != nil {
+		r := NewDefaultRemoteRoom(pkroute)
+		err = s.AddRoom(r)
+		if err != nil {
+			return nil, err
+		}
+		return &r, nil
+	}
+	return room, nil
+}
+
 // SetRoom updates the given room
 func (s *Server) SetRoom(room Room) error {
 	//check if room exists

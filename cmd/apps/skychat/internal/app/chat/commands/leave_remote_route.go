@@ -38,11 +38,7 @@ func (h leaveRemoteRouteRequestHandler) Handle(command LeaveRemoteRouteRequest) 
 	}
 
 	if command.isLeavingP2PRouteCommand() {
-		err := h.leaveAndDeleteP2PRoute(command.Route)
-		if err != nil {
-			return err
-		}
-		err = h.deleteVisorIfEmpty(command.Route)
+		err := h.leaveP2PRoute(command.Route)
 		if err != nil {
 			return err
 		}
@@ -50,11 +46,7 @@ func (h leaveRemoteRouteRequestHandler) Handle(command LeaveRemoteRouteRequest) 
 	}
 
 	if command.isLeavingServerRouteCommand() {
-		err := h.leaveAndDeleteServerRoute(command.Route)
-		if err != nil {
-			return err
-		}
-		err = h.deleteVisorIfEmpty(command.Route)
+		err := h.leaveServerRoute(command.Route)
 		if err != nil {
 			return err
 		}
@@ -62,20 +54,16 @@ func (h leaveRemoteRouteRequestHandler) Handle(command LeaveRemoteRouteRequest) 
 	}
 
 	if command.isLeavingRoomRouteCommand() {
-		err := h.leaveAndDeleteRoomRoute(command.Route)
+		err := h.leaveRoomRoute(command.Route)
 		if err != nil {
 			return err
 		}
 
-		err = h.deleteServerIfEmpty(command.Route)
+		err = h.leaveServerIfEmpty(command.Route)
 		if err != nil {
 			return err
 		}
 
-		err = h.deleteVisorIfEmpty(command.Route)
-		if err != nil {
-			return err
-		}
 		return nil
 	}
 	return nil
@@ -109,7 +97,7 @@ func (c LeaveRemoteRouteRequest) isLeavingRoomRouteCommand() bool {
 	return c.Route.IsRoomRoute()
 }
 
-func (h leaveRemoteRouteRequestHandler) leaveAndDeleteP2PRoute(route util.PKRoute) error {
+func (h leaveRemoteRouteRequestHandler) leaveP2PRoute(route util.PKRoute) error {
 	visor, err := h.visorRepo.GetByPK(route.Visor)
 	if err != nil {
 		return err
@@ -120,16 +108,12 @@ func (h leaveRemoteRouteRequestHandler) leaveAndDeleteP2PRoute(route util.PKRout
 		if err != nil {
 			return err
 		}
-		err = visor.DeleteP2P()
-		if err != nil {
-			return err
-		}
 	}
 
 	return h.visorRepo.Set(*visor)
 }
 
-func (h leaveRemoteRouteRequestHandler) leaveAndDeleteServerRoute(route util.PKRoute) error {
+func (h leaveRemoteRouteRequestHandler) leaveServerRoute(route util.PKRoute) error {
 	visor, err := h.visorRepo.GetByPK(route.Visor)
 	if err != nil {
 		return err
@@ -145,15 +129,10 @@ func (h leaveRemoteRouteRequestHandler) leaveAndDeleteServerRoute(route util.PKR
 		fmt.Println(err)
 	}
 
-	err = visor.DeleteServer(route.Server)
-	if err != nil {
-		return err
-	}
-
 	return h.visorRepo.Set(*visor)
 }
 
-func (h leaveRemoteRouteRequestHandler) leaveAndDeleteRoomRoute(route util.PKRoute) error {
+func (h leaveRemoteRouteRequestHandler) leaveRoomRoute(route util.PKRoute) error {
 	visor, err := h.visorRepo.GetByPK(route.Visor)
 	if err != nil {
 		return err
@@ -174,33 +153,10 @@ func (h leaveRemoteRouteRequestHandler) leaveAndDeleteRoomRoute(route util.PKRou
 		fmt.Println(err)
 	}
 
-	err = server.DeleteRoom(route.Room)
-	if err != nil {
-		return err
-	}
-
-	err = visor.SetServer(*server)
-	if err != nil {
-		return err
-	}
-
-	return h.visorRepo.Set(*visor)
-}
-
-func (h leaveRemoteRouteRequestHandler) deleteVisorIfEmpty(route util.PKRoute) error {
-	visor, err := h.visorRepo.GetByPK(route.Visor)
-	if err != nil {
-		return err
-	}
-
-	if len(visor.GetAllServer()) == 0 && visor.P2PIsEmpty() {
-		return h.visorRepo.Delete(route.Visor)
-	}
-
 	return nil
 }
 
-func (h leaveRemoteRouteRequestHandler) deleteServerIfEmpty(route util.PKRoute) error {
+func (h leaveRemoteRouteRequestHandler) leaveServerIfEmpty(route util.PKRoute) error {
 	visor, err := h.visorRepo.GetByPK(route.Visor)
 	if err != nil {
 		return err
@@ -213,17 +169,14 @@ func (h leaveRemoteRouteRequestHandler) deleteServerIfEmpty(route util.PKRoute) 
 
 	if len(server.GetAllRooms()) == 0 {
 		//Prepare ServerRoute
-		serverroute := util.NewServerRoute(route.Server, route.Server)
+		serverroute := util.NewServerRoute(route.Visor, route.Server)
 		// Send LeaveChatMessage to remote server
 		err = h.ms.SendLeaveRouteMessage(serverroute)
 		if err != nil {
 			return err
 		}
-		err = visor.DeleteServer(route.Server)
-		if err != nil {
-			return err
-		}
-		return h.visorRepo.Set(*visor)
+
+		return nil
 	}
 
 	return nil

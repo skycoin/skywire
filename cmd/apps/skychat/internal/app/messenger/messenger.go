@@ -10,6 +10,7 @@ import (
 // Service interface is the interface to the service
 type Service interface {
 	HandleConnection(pk cipher.PubKey)
+	DeleteConnFromHandled(pk cipher.PubKey) error //TODO: refactor to better handling -> this is not beautiful
 	Listen()
 
 	//only used as client/p2p
