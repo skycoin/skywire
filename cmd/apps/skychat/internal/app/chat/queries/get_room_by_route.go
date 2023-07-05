@@ -49,9 +49,9 @@ func NewGetRoomByRouteRequestHandler(visorRepo chat.Repository) GetRoomByRouteRe
 func (h getRoomByRouteRequestHandler) Handle(query GetRoomByRouteRequest) (GetRoomByRouteResult, error) {
 	if query.isP2PRequest() {
 		return h.getP2PRoomResult(query)
-	} else {
-		return h.getRouteRoomResult(query)
 	}
+	return h.getRouteRoomResult(query)
+
 }
 
 func (r *GetRoomByRouteRequest) isP2PRequest() bool {

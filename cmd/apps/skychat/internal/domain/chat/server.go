@@ -103,6 +103,7 @@ func (s *Server) GetRoomByPK(pk cipher.PubKey) (*Room, error) {
 	return nil, fmt.Errorf("no room with pk %s found in visor %s and server %s", pk.Hex(), s.PKRoute.Visor, s.PKRoute.Server)
 }
 
+// GetRoomByRouteOrAddNewIfNotExists does exactly what it's named
 func (s *Server) GetRoomByRouteOrAddNewIfNotExists(pkroute util.PKRoute) (*Room, error) {
 	room, err := s.GetRoomByPK(pkroute.Room)
 	if err != nil {

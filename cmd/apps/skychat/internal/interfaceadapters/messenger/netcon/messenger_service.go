@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/rand"
 	"net"
 	"time"
 
@@ -52,13 +51,6 @@ func NewMessengerService(ns notification.Service, cR client.Repository, uR user.
 // HandleConnection handles the connection to the given Pubkey and incoming messages
 func (ms MessengerService) HandleConnection(pk cipher.PubKey) {
 
-	//for debug purposes:
-	rand.Seed(time.Now().UnixNano())
-	min := 10
-	max := 1000
-	randomNumber := rand.Intn(max-min+1) + min
-	fmt.Printf("HandleConnection random number: %d \n", randomNumber)
-
 	connection, err := ms.GetConnByPK(pk)
 	if err != nil {
 		ms.errs <- err
@@ -84,15 +76,11 @@ func (ms MessengerService) HandleConnection(pk cipher.PubKey) {
 			continue
 		}
 
-		fmt.Printf("readMessageLengthFromConnection - Message Length:	%d (%d)\n", messageLength, randomNumber)
-
 		messageBytes, err := readNBytesFromConnection(*messageLength, connection)
 		if err != nil {
 			ms.errs <- err
 			continue
 		}
-
-		fmt.Printf("readNBytesFromConnection - Message Length:	%d (%d)\n", messageLength, randomNumber)
 
 		receivedMessage, err := decodeReceivedBytesToMessage(messageBytes)
 		if err != nil {
@@ -470,7 +458,7 @@ func (ms *MessengerService) DeleteConn(pk cipher.PubKey) error {
 	return fmt.Errorf("pk has no connection") //? handle as error?
 }
 
-// ConnectionToPkExists returns if a connection to the given pk is saved inside conns
+// ConnectionToPkHandled returns if a connection to the given pk is handled in a go routine
 func (ms *MessengerService) ConnectionToPkHandled(pk cipher.PubKey) bool {
 	if _, ok := ms.handledConns[pk]; ok {
 		return true
@@ -478,7 +466,7 @@ func (ms *MessengerService) ConnectionToPkHandled(pk cipher.PubKey) bool {
 	return false
 }
 
-// AddConnToHandled adds the given net.Conn to the map to keep track of active connections
+// AddConnToHandled adds the given net.Conn to the map to keep track of handled connections
 func (ms *MessengerService) AddConnToHandled(pk cipher.PubKey, conn net.Conn) error {
 	//check if conn already added
 	if _, ok := ms.handledConns[pk]; ok {
@@ -488,7 +476,7 @@ func (ms *MessengerService) AddConnToHandled(pk cipher.PubKey, conn net.Conn) er
 	return nil
 }
 
-// DeleteConnFromHandled removes the given net.Conn from the map
+// DeleteConnFromHandled removes the given net.Conn from the handledConns map
 func (ms *MessengerService) DeleteConnFromHandled(pk cipher.PubKey) error {
 	//check if conn is added
 	if _, ok := ms.handledConns[pk]; ok {

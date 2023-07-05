@@ -73,7 +73,7 @@ func (ms MessengerService) handleRemoteServerMessage(m message.Message) {
 			return
 		}
 		//handle the message
-		err := ms.handleRemoteRoomTextMsgType(visor, m)
+		err := ms.handleRemoteRoomTextMsgType(m)
 		if err != nil {
 			ms.errs <- err
 			return
@@ -301,8 +301,8 @@ func (ms MessengerService) handleRemoteRoomInfoMsgType(v *chat.Visor, m message.
 	return nil
 }
 
-// handleRemoteRoomTextMstType handles messages of type text of the remote chat
-func (ms MessengerService) handleRemoteRoomTextMsgType(c *chat.Visor, m message.Message) error {
+// handleRemoteRoomTextMsgType handles messages of type text of the remote chat
+func (ms MessengerService) handleRemoteRoomTextMsgType(m message.Message) error {
 	fmt.Println("handleRemoteRoomTextMsgType")
 
 	pkroute := util.NewRoomRoute(m.GetRootVisor(), m.GetRootServer(), m.GetRootRoom())

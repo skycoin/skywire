@@ -152,6 +152,7 @@ func (v *Visor) GetServerByPK(pk cipher.PubKey) (*Server, error) {
 	return nil, fmt.Errorf("no server with pk %s found in visor %s", pk.Hex(), v.PK)
 }
 
+// GetServerByRouteOrAddNewIfNotExists does what it is named
 func (v *Visor) GetServerByRouteOrAddNewIfNotExists(pkroute util.PKRoute) (*Server, error) {
 	server, err := v.GetServerByPK(pkroute.Server)
 	if err != nil {

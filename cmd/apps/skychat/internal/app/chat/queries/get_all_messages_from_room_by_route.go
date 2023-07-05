@@ -35,9 +35,9 @@ func NewGetAllMessagesFromRoomRequestHandler(visorRepo chat.Repository) GetAllMe
 func (h getAllMessagesFromRoomRequestHandler) Handle(query GetAllMessagesFromRoomRequest) (GetAllMessagesFromRoomResult, error) {
 	if query.isP2PRequest() {
 		return h.getP2PMessagesResult(query)
-	} else {
-		return h.getRoomMessagesResult(query)
 	}
+	return h.getRoomMessagesResult(query)
+
 }
 
 func (r *GetAllMessagesFromRoomRequest) isP2PRequest() bool {
