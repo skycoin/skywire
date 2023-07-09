@@ -51,8 +51,8 @@ require (
 	github.com/lib/pq v1.10.7
 	github.com/orandin/lumberjackrus v1.0.1
 	github.com/pterm/pterm v0.12.49
-	github.com/skycoin/dmsg v1.3.0-rc1.0.20230609193507-b02bb8f7d1bc
-	github.com/skycoin/skywire-utilities v0.0.0-20230601232053-0abbc9604fbc
+	github.com/skycoin/dmsg v1.3.11
+	github.com/skycoin/skywire-utilities v0.0.0-20230609191923-1e678802e17e
 	github.com/skycoin/systray v1.10.0
 	github.com/spf13/pflag v1.0.5
 	github.com/zcalusic/sysinfo v0.9.5

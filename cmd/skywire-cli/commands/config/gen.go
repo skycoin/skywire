@@ -173,18 +173,18 @@ func init() {
 	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
 	genConfigCmd.Flags().StringVar(&binPath, "binpath", scriptExecString("${BINPATH}"), "set bin_path\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "binpath")
-	//	genConfigCmd.Flags().StringVar(&addSkysocksClientSrv, "proxyclientpk", scriptExecString("${PROXYCLIENTPK}"), "set server public key for proxy client")
-	//	genConfigCmd.Flags().BoolVar(&proxyClientAutostart, "startproxyclient", scriptExecBool("${STARTPROXYCLIENT:-false}"), "autostart proxy client")
-	//	genConfigCmd.Flags().BoolVar(&disableProxyServerAutostart, "noproxyserver", scriptExecBool("${NOPROXYSERVER:-false}"), "disable autostart of proxy server")
-	//	genConfigCmd.Flags().StringVar(&proxyServerPass, "proxyserverpass", "", "set password for the proxy server")
-	//	genConfigCmd.Flags().StringVar(&proxyClientPass, "proxyclientpass", "", "set password for the proxy client to access the proxy server (if needed)")
-	//	// TODO: Password for accessing proxy client
-	//	 genConfigCmd.Flags().StringVar(&setVPNClientKillswitch, "killsw", "", "vpn client killswitch")
-	//	 genConfigCmd.Flags().StringVar(&addVPNClientSrv, "addvpn", "", "set vpn server public key for vpn client")
-	//	 genConfigCmd.Flags().StringVar(&addVPNClientPasscode, "vpnpass", "", "password for vpn client to access the vpn server (if needed)")
-	//	 genConfigCmd.Flags().StringVar(&addVPNServerPasscode, "vpnserverpass", "", "set password to the vpn server")
-	//	 genConfigCmd.Flags().StringVar(&setVPNServerSecure, "secure", "", "change secure mode status of vpn server")
-	//	 genConfigCmd.Flags().StringVar(&setVPNServerNetIfc, "netifc", "", "VPN Server network interface (detected: "+getInterfaceNames()+")")
+	genConfigCmd.Flags().StringVar(&addSkysocksClientSrv, "proxyclientpk", scriptExecString("${PROXYCLIENTPK}"), "set server public key for proxy client")
+	genConfigCmd.Flags().BoolVar(&enableProxyClientAutostart, "startproxyclient", scriptExecBool("${STARTPROXYCLIENT:-false}"), "autostart proxy client")
+	genConfigCmd.Flags().BoolVar(&disableProxyServerAutostart, "noproxyserver", scriptExecBool("${NOPROXYSERVER:-false}"), "disable autostart of proxy server")
+	genConfigCmd.Flags().StringVar(&proxyServerPass, "proxyserverpass", scriptExecString("${PROXYSEVERPASS}"), "set proxy server password")
+	genConfigCmd.Flags().StringVar(&proxyClientPass, "proxyclientpass", scriptExecString("${PROXYCLIENTPASS}"), "password for the proxy client to access the server (if needed)")
+	// TODO: Password for accessing proxy client
+	genConfigCmd.Flags().StringVar(&setVPNClientKillswitch, "killsw", scriptExecString("${VPNKS}"), "vpn client killswitch")
+	genConfigCmd.Flags().StringVar(&addVPNClientSrv, "addvpn", scriptExecString("${ADDVPNPK}"), "set vpn server public key for vpn client")
+	genConfigCmd.Flags().StringVar(&addVPNClientPasscode, "vpnpass", scriptExecString("${VPNCLIENTPASS}"), "password for vpn client to access the vpn server (if needed)")
+	genConfigCmd.Flags().StringVar(&addVPNServerPasscode, "vpnserverpass", scriptExecString("${VPNSEVERPASS}"), "set password to the vpn server")
+	genConfigCmd.Flags().StringVar(&setVPNServerSecure, "secure", scriptExecString("${VPNSEVERSECURE}"), "change secure mode status of vpn server")
+	genConfigCmd.Flags().StringVar(&setVPNServerNetIfc, "netifc", scriptExecString("${VPNSEVERNETIFC}"), "VPN Server network interface (detected: "+getInterfaceNames()+")")
 	genConfigCmd.Flags().BoolVarP(&isEnvs, "envs", "q", false, "show the environmental variable settings")
 	gHiddenFlags = append(gHiddenFlags, "envs")
 	genConfigCmd.Flags().BoolVar(&noFetch, "nofetch", false, "do not fetch the services from the service conf url")
@@ -497,24 +497,23 @@ var genConfigCmd = &cobra.Command{
 					log.WithError(err).Error("Failed to fetch servers\n")
 					log.Warn("Falling back on hardcoded servers")
 				}
-			} else {
-				// nil error from client.Get
-				if res.Body != nil {
-					defer res.Body.Close() //nolint
-				}
-				body, err := io.ReadAll(res.Body)
-				if err != nil {
-					log.WithError(err).Fatal("Failed to read response\n")
-				}
-				//fill in services struct with the response
-				err = json.Unmarshal(body, &services)
-				if err != nil {
-					log.WithError(err).Fatal("Failed to unmarshal json response\n")
-				}
-				if !isStdout {
-					log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
-				}
 			}
+			if res.Body != nil {
+				defer res.Body.Close() //nolint
+			}
+			body, err := io.ReadAll(res.Body)
+			if err != nil {
+				log.WithError(err).Fatal("Failed to read response\n")
+			}
+			//fill in services struct with the response
+			err = json.Unmarshal(body, &services)
+			if err != nil {
+				log.WithError(err).Fatal("Failed to unmarshal json response\n")
+			}
+			if !isStdout {
+				log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
+			}
+
 			// reset the state of isStdout
 			isStdout = wasStdout
 		}
@@ -990,6 +989,79 @@ var genConfigCmd = &cobra.Command{
 			newConfLauncherApps := append(conf.Launcher.Apps, exampleApps...)
 			conf.Launcher.Apps = newConfLauncherApps
 		}
+
+		if addVPNServerPasscode != "" {
+			changeAppsConfig(conf, "vpn-server", "--passcode", addVPNServerPasscode)
+		}
+		if setVPNServerNetIfc != "" {
+			changeAppsConfig(conf, "vpn-server", "--netifc", setVPNServerNetIfc)
+		}
+		switch setVPNServerSecure {
+		case "true":
+			changeAppsConfig(conf, "vpn-server", "--secure", setVPNServerSecure)
+		case "false":
+			changeAppsConfig(conf, "vpn-server", "--secure", setVPNServerSecure)
+		}
+		switch setVPNServerAutostart {
+		case "true":
+			for i, app := range conf.Launcher.Apps {
+				if app.Name == "vpn-server" {
+					conf.Launcher.Apps[i].AutoStart = true
+				}
+			}
+		case "false":
+			for i, app := range conf.Launcher.Apps {
+				if app.Name == "vpn-server" {
+					conf.Launcher.Apps[i].AutoStart = false
+				}
+			}
+		}
+
+		switch setVPNClientKillswitch {
+		case "true":
+			changeAppsConfig(conf, "vpn-client", "--killswitch", setVPNClientKillswitch)
+		case "false":
+			changeAppsConfig(conf, "vpn-client", "--killswitch", setVPNClientKillswitch)
+		}
+		if addVPNClientSrv != "" {
+			keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(addVPNClientSrv))
+			if err != nil {
+				log.WithError(err).Fatalf("Failed to parse hypervisor private key: %s.", addVPNClientSrv)
+			}
+			changeAppsConfig(conf, "vpn-client", "--srv", keyParsed.Hex())
+		}
+
+		if addVPNClientPasscode != "" {
+			changeAppsConfig(conf, "vpn-client", "--passcode", addVPNClientPasscode)
+		}
+		if addSkysocksClientSrv != "" {
+			keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(addSkysocksClientSrv))
+			if err != nil {
+				logger.WithError(err).Fatalf("Failed to parse public key: %s.", addSkysocksClientSrv)
+			}
+			changeAppsConfig(conf, "skysocks-client", "--srv", keyParsed.Hex())
+		}
+		if proxyServerPass != "" {
+			changeAppsConfig(conf, "skysocks", "--passcode", proxyServerPass)
+		}
+		if proxyClientPass != "" {
+			changeAppsConfig(conf, "skysocks-client", "--passcode", proxyClientPass)
+		}
+
+		if disableProxyServerAutostart {
+			for i, app := range conf.Launcher.Apps {
+				if app.Name == "skysocks" {
+					conf.Launcher.Apps[i].AutoStart = false
+				}
+			}
+		}
+		if enableProxyClientAutostart {
+			for i, app := range conf.Launcher.Apps {
+				if app.Name == "skysocks-client" {
+					conf.Launcher.Apps[i].AutoStart = true
+				}
+			}
+		}
 		if isHypervisor {
 			// Disable hypervisor UI authentication --disable-auth flag
 			if isDisableAuth {
@@ -1152,6 +1224,40 @@ const envfileLinux = `#
 #--	Set app bin_path
 #BINPATH='./apps'
 
+#--	Set server public key for proxy client to connect to
+#PROXYCLIENTPK=''
+
+#--	Enable autostart of the proxy client
+#STARTPROXYCLIENT=true
+
+#--	Disable autostart of proxy server
+#NOPROXYSERVER=true
+
+#--	Set a password for the proxy server
+#PROXYSEVERPASS=''
+
+#--	Password for the proxy client to access the server (if password is set for the server)
+#PROXYCLIENTPASS=''
+
+#--	Set VPN client killswitch
+#VPNKS=true
+
+#--	Set vpn server public key for the vpn client to use
+#ADDVPNPK=''
+
+#--	Password for vpn client to access the server (if password is set forthe server)
+#VPNCLIENTPASS=''
+
+#--	Set password to the vpn server
+#VPNSEVERPASS=''
+
+#--	Change secure mode status of vpn server
+#VPNSEVERSECURE=''
+
+#--	Set VPN Server network interface
+#VPNSEVERNETIFC=''
+
+
 `
 const envfileWindows = `#
 # C:\ProgramData\skywire.ps1
@@ -1218,4 +1324,36 @@ const envfileWindows = `#
 #--	Set app bin_path
 #$BINPATH='./apps'
 
+#--	Set server public key for proxy client to connect to
+#$PROXYCLIENTPK=''
+
+#--	Enable autostart of the proxy client
+#$STARTPROXYCLIENT=true
+
+#--	Disable autostart of proxy server
+#$NOPROXYSERVER=true
+
+#--	Set a password for the proxy server
+#$PROXYSEVERPASS=''
+
+#--	Password for the proxy client to access the server (if password is set for the server)
+#$PROXYCLIENTPASS=''
+
+#--	Set VPN client killswitch
+#$VPNKS=true
+
+#--	Set vpn server public key for the vpn client to use
+#$ADDVPNPK=''
+
+#--	Password for vpn client to access the server (if password is set forthe server)
+#$VPNCLIENTPASS=''
+
+#--	Set password to the vpn server
+#$VPNSEVERPASS=''
+
+#--	Change secure mode status of vpn server
+#$VPNSEVERSECURE=''
+
+#--	Set VPN Server network interface
+#$VPNSEVERNETIFC=''
 `
