@@ -8,7 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
-//	"strconv"
+	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -24,18 +24,16 @@ var (
 	online  bool
 	isStats bool
 	url     string
-	ver     string
 )
 
 var minUT int
 
 func init() {
 	RootCmd.Flags().StringVarP(&pk, "pk", "k", "", "check uptime for the specified key")
-	RootCmd.Flags().StringVarP(&ver, "ver", "v", "", "filter results by version")
 	RootCmd.Flags().BoolVarP(&online, "on", "o", false, "list currently online visors")
 	RootCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "count the number of results")
 	RootCmd.Flags().IntVarP(&minUT, "min", "n", 75, "list visors meeting minimum uptime")
-	RootCmd.Flags().StringVarP(&url, "url", "u", "https://ut.skywire.skycoin.com/uptimes?v=v2", "specify alternative uptime tracker URL")
+	RootCmd.Flags().StringVarP(&url, "url", "u", "", "specify alternative uptime tracker url\ndefault: http://ut.skywire.skycoin.com/uptimes?v=v2")
 }
 
 // RootCmd contains commands that interact with the skywire-visor
@@ -44,13 +42,18 @@ var RootCmd = &cobra.Command{
 	Short: "query uptime tracker",
 	Long:  "query uptime tracker\n Check local visor daily uptime percent with:\n skywire-cli ut -k $(skywire-cli visor pk)",
 	Run: func(cmd *cobra.Command, _ []string) {
+		if url == "" {
+			url = "http://ut.skywire.skycoin.com/uptimes?v=v2"
+		}
+		now := time.Now()
 		if pk != "" {
 			err := pubkey.Set(pk)
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
+			} else {
+				url += "&visors=" + pubkey.String()
 			}
 		}
-
 		utClient := http.Client{
 			Timeout: time.Second * 15, // Timeout after 15 seconds
 		}
@@ -79,14 +82,25 @@ var RootCmd = &cobra.Command{
 			log.Fatal(readErr)
 		}
 
+		startDate := time.Date(now.Year(), now.Month(), -1, 0, 0, 0, 0, now.Location()).Format("2006-01-02")
+		endDate := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, now.Location()).Add(-1 * time.Second).Format("2006-01-02")
 		uts := uptimes{}
 		jsonErr := json.Unmarshal(body, &uts)
 		if jsonErr != nil {
 			log.Fatal(jsonErr)
 		}
-
+		var msg []string
+		for _, j := range uts {
+			thisPk = j.Pk
+			if online {
+				if j.On {
+					msg = append(msg, fmt.Sprintf(thisPk+"\n"))
+				}
+			} else {
+				selectedDaily(j.Daily, startDate, endDate)
+			}
+		}
 		if online {
-			msg := getOnlineVisors(uts)
 			if isStats {
 				internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d visors online\n", len(msg)), fmt.Sprintf("%d visors online\n", len(msg)))
 				os.Exit(0)
@@ -94,58 +108,31 @@ var RootCmd = &cobra.Command{
 			for _, i := range msg {
 				internal.PrintOutput(cmd.Flags(), i, i)
 			}
-		} else {
-			count := getFilteredResultsCount(uts, ver)
-			if isStats {
-				internal.PrintOutput(cmd.Flags(), fmt.Sprintf("Number of results with version %s: %d\n", ver, count), fmt.Sprintf("Number of results with version %s: %d\n", ver, count))
-				os.Exit(0)
-			}
-			printFilteredResults(uts, ver)
 		}
 	},
 }
 
-func getOnlineVisors(uts uptimes) []string {
-	var msg []string
-	for _, j := range uts {
-		if j.On {
-			msg = append(msg, fmt.Sprintf(j.Pk+"\n"))
-		}
-	}
-	return msg
-}
-
-func getFilteredResultsCount(uts uptimes, versionFilter string) int {
-	count := 0
-	for _, j := range uts {
-		if versionFilter != "" && j.Version == versionFilter {
-			count++
-		}
-	}
-	return count
-}
-
-func printFilteredResults(uts uptimes, versionFilter string) {
-	for _, j := range uts {
-		if versionFilter != "" && j.Version == versionFilter {
-			for date, uptime := range j.Daily {
-				printResult(j.Pk, date, uptime)
+func selectedDaily(data map[string]string, startDate, endDate string) {
+	for date, uptime := range data {
+		if date >= startDate && date <= endDate {
+			utfloat, err := strconv.ParseFloat(uptime, 64)
+			if err != nil {
+				log.Fatal(err)
 			}
-		} else if versionFilter == "" {
-			for date, uptime := range j.Daily {
-				printResult(j.Pk, date, uptime)
+			if utfloat >= float64(minUT) {
+				fmt.Print(thisPk)
+				fmt.Print(" ")
+				fmt.Println(date, uptime)
 			}
 		}
 	}
-}
-
-func printResult(pk, date, uptime string) {
-	fmt.Printf("%s %s %s\n", pk, date, uptime)
 }
 
 type uptimes []struct {
-	Pk      string            `json:"pk"`
-	On      bool              `json:"on"`
-	Version string            `json:"version"`
-	Daily   map[string]string `json:"daily,omitempty"`
+	Pk    string            `json:"pk"`
+	Up    int               `json:"up"`
+	Down  int               `json:"down"`
+	Pct   float64           `json:"pct"`
+	On    bool              `json:"on"`
+	Daily map[string]string `json:"daily,omitempty"`
 }
