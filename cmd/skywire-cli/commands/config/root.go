@@ -6,7 +6,6 @@ import (
 
 	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/spf13/cobra"
-
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
@@ -15,10 +14,6 @@ import (
 
 var logger = logging.MustGetLogger("skywire-cli")
 
-// proxyClientAutostart        bool   //nolint Note: pending implementation for config gen
-// disableProxyServerAutostart bool   //nolint Note: pending implementation for config gen
-// proxyServerPass             string //nolint Note: pending implementation for config gen
-// proxyClientPass             string //nolint Note: pending implementation for config gen
 var (
 	conf                = new(visorconfig.V1)
 	dmsgHTTPServersList = &visorconfig.DmsgHTTPServers{
@@ -92,6 +87,10 @@ var (
 	disablePublicAutoConn  bool
 	isDisplayNodeIP        bool
 	addExampleApps         bool
+	enableProxyClientAutostart        bool
+	disableProxyServerAutostart bool
+	proxyServerPass             string
+	proxyClientPass             string
 )
 
 // RootCmd contains commands that interact with the config of local skywire-visor
