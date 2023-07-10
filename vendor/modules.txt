@@ -181,7 +181,7 @@ github.com/itchyny/timefmt-go
 # github.com/ivanpirog/coloredcobra v1.0.1
 ## explicit; go 1.15
 github.com/ivanpirog/coloredcobra
-# github.com/james-barrow/golang-ipc v1.2.3
+# github.com/james-barrow/golang-ipc v1.1.0
 ## explicit; go 1.15
 github.com/james-barrow/golang-ipc
 # github.com/jaypipes/ghw v0.11.0
