@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package common
@@ -11,15 +12,12 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
 func DoSysctrl(mib string) ([]string, error) {
-	sysctl, err := exec.LookPath("sysctl")
-	if err != nil {
-		return []string{}, err
-	}
-	cmd := exec.Command(sysctl, "-n", mib)
+	cmd := exec.Command("sysctl", "-n", mib)
 	cmd.Env = getSysctrlEnv(os.Environ())
 	out, err := cmd.Output()
 	if err != nil {
@@ -55,8 +53,7 @@ func NumProcs() (uint64, error) {
 }
 
 func BootTimeWithContext(ctx context.Context) (uint64, error) {
-
-	system, role, err := Virtualization()
+	system, role, err := VirtualizationWithContext(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -72,6 +69,17 @@ func BootTimeWithContext(ctx context.Context) (uint64, error) {
 
 	filename := HostProc(statFile)
 	lines, err := ReadLines(filename)
+	if os.IsPermission(err) {
+		var info syscall.Sysinfo_t
+		err := syscall.Sysinfo(&info)
+		if err != nil {
+			return 0, err
+		}
+
+		currentTime := time.Now().UnixNano() / int64(time.Second)
+		t := currentTime - int64(info.Uptime)
+		return uint64(t), nil
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -100,8 +108,9 @@ func BootTimeWithContext(ctx context.Context) (uint64, error) {
 		if err != nil {
 			return 0, err
 		}
-		t := uint64(time.Now().Unix()) - uint64(b)
-		return t, nil
+		currentTime := float64(time.Now().UnixNano()) / float64(time.Second)
+		t := currentTime - b
+		return uint64(t), nil
 	}
 
 	return 0, fmt.Errorf("could not find btime")
@@ -152,6 +161,9 @@ func VirtualizationWithContext(ctx context.Context) (string, string, error) {
 			if StringsContains(contents, "kvm") {
 				system = "kvm"
 				role = "host"
+			} else if StringsContains(contents, "hv_util") {
+				system = "hyperv"
+				role = "guest"
 			} else if StringsContains(contents, "vboxdrv") {
 				system = "vbox"
 				role = "host"
@@ -201,7 +213,6 @@ func VirtualizationWithContext(ctx context.Context) (string, string, error) {
 	if PathExists(filepath.Join(filename, "self", "status")) {
 		contents, err := ReadLines(filepath.Join(filename, "self", "status"))
 		if err == nil {
-
 			if StringsContains(contents, "s_context:") ||
 				StringsContains(contents, "VxID:") {
 				system = "linux-vserver"
@@ -248,6 +259,11 @@ func VirtualizationWithContext(ctx context.Context) (string, string, error) {
 		}
 	}
 
+	if PathExists(HostRoot(".dockerenv")) {
+		system = "docker"
+		role = "guest"
+	}
+
 	// before returning for the first time, cache the system and role
 	cachedVirtOnce.Do(func() {
 		cachedVirtMutex.Lock()
@@ -278,6 +294,12 @@ func GetOSRelease() (platform string, version string, err error) {
 			version = trimQuotes(field[1])
 		}
 	}
+
+	// cleanup amazon ID
+	if platform == "amzn" {
+		platform = "amazon"
+	}
+
 	return platform, version, nil
 }
 

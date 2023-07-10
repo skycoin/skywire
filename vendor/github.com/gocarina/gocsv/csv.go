@@ -11,6 +11,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"os"
 	"reflect"
 	"strings"
@@ -34,6 +35,9 @@ var TagName = "csv"
 
 // TagSeparator defines seperator string for multiple csv tags in struct fields
 var TagSeparator = ","
+
+// FieldSeperator defines how to combine parent struct with child struct
+var FieldsCombiner = "."
 
 // Normalizer is a function that takes and returns a string. It is applied to
 // struct and header field values before they are compared. It can be used to alter
@@ -185,7 +189,12 @@ func UnmarshalFile(in *os.File, out interface{}) error {
 	return Unmarshal(in, out)
 }
 
-// UnmarshalFile parses the CSV from the file in the interface.
+// UnmarshalMultipartFile parses the CSV from the multipart file in the interface.
+func UnmarshalMultipartFile(in *multipart.File, out interface{}) error {
+	return Unmarshal(convertTo(in), out)
+}
+
+// UnmarshalFileWithErrorHandler parses the CSV from the file in the interface.
 func UnmarshalFileWithErrorHandler(in *os.File, errHandler ErrorHandler, out interface{}) error {
 	return UnmarshalWithErrorHandler(in, errHandler, out)
 }
@@ -273,7 +282,15 @@ func UnmarshalToChan(in io.Reader, c interface{}) error {
 	if c == nil {
 		return fmt.Errorf("goscv: channel is %v", c)
 	}
-	return readEach(newSimpleDecoderFromReader(in), c)
+	return readEach(newSimpleDecoderFromReader(in), nil, c)
+}
+
+// UnmarshalToChanWithErrorHandler parses the CSV from the reader in the interface.
+func UnmarshalToChanWithErrorHandler(in io.Reader, errorHandler ErrorHandler, c interface{}) error {
+	if c == nil {
+		return fmt.Errorf("goscv: channel is %v", c)
+	}
+	return readEach(newSimpleDecoderFromReader(in), errorHandler, c)
 }
 
 // UnmarshalToChanWithoutHeaders parses the CSV from the reader and send each value in the chan c.
@@ -291,7 +308,7 @@ func UnmarshalDecoderToChan(in SimpleDecoder, c interface{}) error {
 	if c == nil {
 		return fmt.Errorf("goscv: channel is %v", c)
 	}
-	return readEach(in, c)
+	return readEach(in, nil, c)
 }
 
 // UnmarshalStringToChan parses the CSV from the string and send each value in the chan c.
@@ -337,7 +354,7 @@ func UnmarshalToCallback(in io.Reader, f interface{}) error {
 			}
 		}
 	}
-	return nil
+	return <-cerr
 }
 
 // UnmarshalDecoderToCallback parses the CSV from the decoder and send each value to the given func f.
@@ -365,7 +382,7 @@ func UnmarshalDecoderToCallback(in SimpleDecoder, f interface{}) error {
 		}
 		valueFunc.Call([]reflect.Value{v})
 	}
-	return nil
+	return <-cerr
 }
 
 // UnmarshalBytesToCallback parses the CSV from the bytes and send each value to the given func f.
@@ -487,7 +504,7 @@ func CSVToMap(in io.Reader) (map[string]string, error) {
 
 // CSVToMaps takes a reader and returns an array of dictionaries, using the header row as the keys
 func CSVToMaps(reader io.Reader) ([]map[string]string, error) {
-	r := csv.NewReader(reader)
+	r := getCSVReader(reader)
 	rows := []map[string]string{}
 	var header []string
 	for {
