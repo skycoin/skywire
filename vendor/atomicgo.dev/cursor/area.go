@@ -2,7 +2,7 @@ package cursor
 
 import (
 	"fmt"
-	"runtime"
+	"os"
 	"strings"
 )
 
@@ -10,16 +10,28 @@ import (
 // You can use this to create live output, charts, dropdowns, etc.
 type Area struct {
 	height int
+	writer Writer
 }
 
 // NewArea returns a new Area.
 func NewArea() Area {
-	return Area{}
+	return Area{
+		writer: os.Stdout,
+		height: 0,
+	}
+}
+
+// WithWriter sets a custom writer for the Area.
+func (area Area) WithWriter(writer Writer) Area {
+	area.writer = writer
+
+	return area
 }
 
 // Clear clears the content of the Area.
 func (area *Area) Clear() {
 	Bottom()
+
 	if area.height > 0 {
 		ClearLinesUp(area.height)
 	}
@@ -27,23 +39,13 @@ func (area *Area) Clear() {
 
 // Update overwrites the content of the Area.
 func (area *Area) Update(content string) {
+	oldWriter := target
+
+	SetTarget(area.writer) // Temporary set the target to the Area's writer so we can use the cursor functions
 	area.Clear()
-	lines := strings.Split(content, "\n")
+	SetTarget(oldWriter) // Reset the target to the old writer
+	fmt.Fprintln(area.writer, content)
 
-	fmt.Println(strings.Repeat("\n", len(lines)-1)) // This appends space if the terminal is at the bottom
-	Up(len(lines))
-
-	if runtime.GOOS == "windows" {
-		for _, line := range lines {
-			fmt.Print(line)
-			StartOfLineDown(1)
-		}
-	} else {
-		for _, line := range lines {
-			fmt.Println(line)
-		}
-	}
 	height = 0
-
-	area.height = len(lines)
+	area.height = len(strings.Split(content, "\n"))
 }
