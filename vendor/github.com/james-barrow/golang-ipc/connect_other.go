@@ -1,4 +1,3 @@
-//go:build linux || darwin
 // +build linux darwin
 
 package ipc
@@ -13,23 +12,23 @@ import (
 )
 
 // Server create a unix socket and start listening connections - for unix and linux
-func (s *Server) run() error {
+func (sc *Server) run() error {
 
 	base := "/tmp/"
 	sock := ".sock"
 
-	if err := os.RemoveAll(base + s.name + sock); err != nil {
+	if err := os.RemoveAll(base + sc.name + sock); err != nil {
 		return err
 	}
 
 	var oldUmask int
-	if s.unMask {
+	if sc.unMask {
 		oldUmask = syscall.Umask(0)
 	}
 
-	listen, err := net.Listen("unix", base+s.name+sock)
+	listen, err := net.Listen("unix", base+sc.name+sock)
 
-	if s.unMask {
+	if sc.unMask {
 		syscall.Umask(oldUmask)
 	}
 
@@ -37,18 +36,25 @@ func (s *Server) run() error {
 		return err
 	}
 
-	s.listen = listen
+	sc.listen = listen
 
-	go s.acceptLoop()
+	sc.status = Listening
+	sc.recieved <- &Message{Status: sc.status.String(), MsgType: -1}
+	sc.connChannel = make(chan bool)
 
-	s.status = Listening
+	go sc.acceptLoop()
+
+	err = sc.connectionTimer()
+	if err != nil {
+		return err
+	}
 
 	return nil
 
 }
 
 // Client connect to the unix socket created by the server -  for unix and linux
-func (c *Client) dial() error {
+func (cc *Client) dial() error {
 
 	base := "/tmp/"
 	sock := ".sock"
@@ -56,16 +62,14 @@ func (c *Client) dial() error {
 	startTime := time.Now()
 
 	for {
-		
-		if c.timeout != 0 {
-
-			if time.Since(startTime).Seconds() > c.timeout {
-				c.status = Closed
+		if cc.timeout != 0 {
+			if time.Now().Sub(startTime).Seconds() > cc.timeout {
+				cc.status = Closed
 				return errors.New("timed out trying to connect")
 			}
 		}
 
-		conn, err := net.Dial("unix", base+c.Name+sock)
+		conn, err := net.Dial("unix", base+cc.Name+sock)
 		if err != nil {
 
 			if strings.Contains(err.Error(), "connect: no such file or directory") {
@@ -73,14 +77,14 @@ func (c *Client) dial() error {
 			} else if strings.Contains(err.Error(), "connect: connection refused") {
 
 			} else {
-				c.received <- &Message{Err: err, MsgType: -1}
+				cc.recieved <- &Message{err: err, MsgType: -2}
 			}
 
 		} else {
 
-			c.conn = conn
+			cc.conn = conn
 
-			err = c.handshake()
+			err = cc.handshake()
 			if err != nil {
 				return err
 			}
@@ -88,7 +92,7 @@ func (c *Client) dial() error {
 			return nil
 		}
 
-		time.Sleep(c.retryTimer * time.Second)
+		time.Sleep(cc.retryTimer * time.Second)
 
 	}
 
