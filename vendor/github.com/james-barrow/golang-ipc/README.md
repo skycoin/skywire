@@ -6,6 +6,20 @@
  
  A simple to use package that uses unix sockets on Macos/Linux and named pipes on Windows to create a communication channel between two go processes.
 
+### Intergration
+
+As well as using this library just for go processes it was also designed to work with other languages, with the go process as the server and the other languages processing being the client.
+
+
+#### NodeJs
+
+I currently use this library to comunicate between a ElectronJs GUI and a go program.
+
+https://github.com/james-barrow/node-ipc-client
+
+#### Python 
+
+To do
 
 ## Usage
 
@@ -81,6 +95,22 @@ Read and write data to the connection:
 	sc, err := ipc.StartServer("<name of socket or pipe>", config)
 
 ```
+
+ ### Unix Socket Permissions
+
+ Under most configurations, a socket created by a user will by default not be writable by another user, making it impossible for the client and server to communicate if being run by separate users.
+
+ The permission mask can be dropped during socket creation by passing custom configuration to the server start function.  **This will make the socket writable by any user.**
+
+```go
+
+	config := &ipc.ServerConfig{UnmaskPermissions: true}
+	sc, err := ipc.StartServer("<name of socket or pipe>", config)
+
+```
+ Note: Tested on Linux, not tested on Mac, not implemented on Windows.
+ 
+
 
  ### Testing
 
