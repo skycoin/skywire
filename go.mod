@@ -10,6 +10,7 @@ require (
 	github.com/gen2brain/dlgs v0.0.0-20220603100644-40c77870fa8d
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/securecookie v1.1.1
+	github.com/hashicorp/yamux v0.1.1
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/reedsolomon v1.11.7 // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.3
@@ -42,7 +43,7 @@ require (
 	github.com/gin-gonic/gin v1.9.1
 	github.com/go-chi/chi/v5 v5.0.8
 	github.com/gocarina/gocsv v0.0.0-20230616125104-99d496ca653d
-	github.com/hashicorp/yamux v0.1.1
+	github.com/hashicorp/go-version v1.6.0
 	github.com/ivanpirog/coloredcobra v1.0.1
 	github.com/james-barrow/golang-ipc v1.2.3
 	github.com/jaypipes/ghw v0.11.0
