@@ -19,7 +19,6 @@ jobs:
           make dep-github-release
       - name: Releasing
         env:
-          GITHUB_ORG: ${{ env.GITHUB_REPOSITORY_OWNER }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make github-release
 
@@ -38,7 +37,6 @@ jobs:
           brew install wget
       - name: Releasing
         env:
-          GITHUB_ORG: ${{ env.GITHUB_REPOSITORY_OWNER }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           make github-release-darwin
@@ -60,7 +58,6 @@ jobs:
           choco install make
       - name: Releasing
         env:
-          GITHUB_ORG: ${{ env.GITHUB_REPOSITORY_OWNER }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           make github-release-windows
