@@ -9,6 +9,8 @@
 VERSION := $(shell git describe)
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 COMMIT := $(shell git rev-list -1 HEAD)
+GITHUB_FORK_URL := $(shell git config --get remote.origin.url)
+GITHUB_REPO := $(patsubst %.git,%,$(lastword $(subst /, ,$(GITHUB_FORK_URL))))
 
 PROJECT_BASE := github.com/skycoin/skywire
 SKYWIRE_UTILITIES_BASE := github.com/skycoin/skywire-utilities
@@ -263,20 +265,20 @@ github-release-archlinux: github-prepare-release
 github-release-darwin:
 	goreleaser --rm-dist  --config .goreleaser-darwin.yml --skip-publish
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags))
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-darwin-amd64.tar.gz
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-darwin-arm64.tar.gz
-	gh release download ${GITHUB_TAG} --repo skycoin/skywire --pattern 'checksums*'
+	gh release upload --repo $(GITHUB_REPO) ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-darwin-amd64.tar.gz
+	gh release upload --repo $(GITHUB_REPO) ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-darwin-arm64.tar.gz
+	gh release download ${GITHUB_TAG} --repo $(GITHUB_REPO) --pattern 'checksums*'
 	cat ./dist/checksums.txt >> ./checksums.txt
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} --clobber ./checksums.txt
+	gh release upload --repo $(GITHUB_REPO) ${GITHUB_TAG} --clobber ./checksums.txt
 
 github-release-windows:
 	.\goreleaser\goreleaser.exe --rm-dist  --config .goreleaser-windows.yml --skip-publish
 	$(eval GITHUB_TAG=$(shell powershell git describe --abbrev=0 --tags))
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-windows-amd64.zip
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-windows-386.zip
-	gh release download ${GITHUB_TAG} --repo skycoin/skywire --pattern 'checksums*'
+	gh release upload --repo $(GITHUB_REPO) ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-windows-amd64.zip
+	gh release upload --repo $(GITHUB_REPO) ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-windows-386.zip
+	gh release download ${GITHUB_TAG} --repo $(GITHUB_REPO) --pattern 'checksums*'
 	cat ./dist/checksums.txt >> ./checksums.txt
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} --clobber ./checksums.txt
+	gh release upload --repo $(GITHUB_REPO) ${GITHUB_TAG} --clobber ./checksums.txt
 
 dep-github-release:
 	mkdir musl-data
@@ -370,8 +372,8 @@ mac-installer-help: ## Show installer creation help
 
 mac-installer-release: mac-installer ## Upload created signed and notarized applciation to github
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags))
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-darwin-amd64.pkg
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-darwin-arm64.pkg
+	gh release upload --repo $(GITHUB_REPO) ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-darwin-amd64.pkg
+	gh release upload --repo $(GITHUB_REPO) ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-darwin-arm64.pkg
 
 win-installer-latest: ## Build the windows .msi (installer) latest version
 	@powershell '.\scripts\win_installer\script.ps1 latest'
@@ -382,8 +384,8 @@ win-installer: ## Build the windows .msi (installer) custom version
 windows-installer-release:
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags))
 	make win-installer CUSTOM_VERSION=$(GITHUB_TAG)
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-windows-amd64.msi
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-windows-386.msi
+	gh release upload --repo $(GITHUB_REPO) ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-windows-amd64.msi
+	gh release upload --repo $(GITHUB_REPO) ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-windows-386.msi
 
 help: ## `make help` menu
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
