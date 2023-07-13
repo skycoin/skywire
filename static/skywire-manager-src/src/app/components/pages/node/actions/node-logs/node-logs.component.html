@@ -1,7 +1,7 @@
 <app-dialog [headline]="'node.logs.title' | translate" [includeVerticalMargins]="false" [includeScrollableArea]="false" [dialog]="dialogRef">
   <!-- Filter button. -->
-  <div *ngIf="!loading && logEntries && logEntries.length > 0" class="filter-area" (click)="showFilters()">
-    <div class="filter-content">
+  <div *ngIf="!loading && logEntries && logEntries.length > 0" class="top-dialog-button" (click)="showFilters()">
+    <div class="top-dialog-button-content">
       <div>
         <span>{{ 'node.logs.selected-filter' | translate }} </span>
         <span class="actual-value">{{ ('node.logs.' + levelDetails.get(currentMinimumLevel).levelFilterName) | translate }}</span>
@@ -10,7 +10,7 @@
         {{ 'node.logs.filter-ignored' | translate:{number: logEntries.length - filteredLogEntries.length} }}
       </div>
     </div>
-    <div class="filter-margin"></div>
+    <div class="top-dialog-button-margin"></div>
   </div>
 
   <mat-dialog-content #content>
