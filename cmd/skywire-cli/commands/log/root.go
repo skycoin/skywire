@@ -72,21 +72,6 @@ var logCmd = &cobra.Command{
 			log.Fatal("use of mutually exclusive flags --log and --survey")
 		}
 
-		// Preparing directories
-		if _, err := os.ReadDir("log_collecting"); err != nil {
-			if err := os.Mkdir("log_collecting", 0750); err != nil {
-				log.Panic("Unable to log_collecting directory")
-			}
-		}
-
-		if err := os.Chdir("log_collecting"); err != nil {
-			log.Panic("Unable to change directory to log_collecting")
-		}
-
-		// Create dmsgget instance
-		dg := dmsgget.New(flag.CommandLine)
-		flag.Parse()
-
 		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 		defer cancel()
 		go func() {
@@ -94,6 +79,24 @@ var logCmd = &cobra.Command{
 			cancel()
 			os.Exit(1)
 		}()
+
+		// Preparing directories
+		if _, err := os.ReadDir("log_collecting"); err != nil {
+			if err := os.Mkdir("log_collecting", 0750); err != nil {
+				log.Error("Unable to log_collecting directory")
+				return
+			}
+		}
+
+		if err := os.Chdir("log_collecting"); err != nil {
+			log.Error("Unable to change directory to log_collecting")
+			return
+		}
+
+		// Create dmsgget instance
+		dg := dmsgget.New(flag.CommandLine)
+		flag.Parse()
+
 		// Set the uptime tracker to fetch data from
 		endpoint := skyenv.UptimeTrackerAddr + "/uptimes?v=v2"
 		if env == "test" {
@@ -105,7 +108,8 @@ var logCmd = &cobra.Command{
 		//Fetch the uptime data over http
 		uptimes, err := getUptimes(endpoint, log)
 		if err != nil {
-			log.WithError(err).Panic("Unable to get data from uptime tracker.")
+			log.WithError(err).Error("Unable to get data from uptime tracker.")
+			return
 		}
 		//randomize the order of the survey collection - workaround for hanging
 		rand.Shuffle(len(uptimes), func(i, j int) {
@@ -119,7 +123,8 @@ var logCmd = &cobra.Command{
 
 		dmsgC, closeDmsg, err := dg.StartDmsg(ctx, log, pk, sk)
 		if err != nil {
-			log.WithError(err).Panic(err)
+			log.Error(err)
+			return
 		}
 		defer closeDmsg()
 
@@ -156,7 +161,8 @@ var logCmd = &cobra.Command{
 					deleteOnError := false
 					if _, err := os.ReadDir(key); err != nil {
 						if err := os.Mkdir(key, 0750); err != nil {
-							log.Panicf("Unable to create directory for visor %s", key)
+							log.Errorf("Unable to create directory for visor %s", key)
+							return
 						}
 						deleteOnError = true
 					}
