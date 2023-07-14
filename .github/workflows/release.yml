@@ -12,12 +12,6 @@ jobs:
         with:
           go-version: 1.19.x
       - uses: actions/checkout@v3
-      - name: Cache musl cross-compilation toolchain
-        id: cache-musl
-        uses: actions/cache@v2
-        with:
-          path: musl-data
-          key: musl-cross-{{ runner.os }}-{{ hashFiles('dep-github-release') }}
       - name: Install Requirements
         run: |
           sudo apt update
@@ -56,12 +50,6 @@ jobs:
         with:
           go-version: 1.19.x
       - uses: actions/checkout@v3
-      - name: Cache musl cross-compilation toolchain
-        id: cache-musl
-        uses: actions/cache@v2
-        with:
-          path: musl-data
-          key: musl-cross-{{ runner.os }}-{{ hashFiles('dep-github-release') }}
       - name: Install Requirements
         shell: pwsh
         run: |
