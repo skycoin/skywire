@@ -7,7 +7,6 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/messenger"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/notification"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/chat"
-	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/client"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/user"
 )
 
@@ -42,7 +41,7 @@ type ChatServices struct {
 }
 
 // NewServices Bootstraps Application Layer dependencies
-func NewServices(cliRepo client.Repository, visorRepo chat.Repository, userRepo user.Repository, ms messenger.Service, ns notification.Service) ChatServices {
+func NewServices(visorRepo chat.Repository, userRepo user.Repository, ms messenger.Service, ns notification.Service) ChatServices {
 	return ChatServices{
 		Queries: Queries{
 			GetRoomByRouteHandler:         queries.NewGetRoomByRouteRequestHandler(visorRepo),

@@ -247,7 +247,7 @@ func (r *Room) DeleteFromWhitelist(pk cipher.PubKey) error {
 }
 
 // GetWhitelist returns all whitelisted members/peers
-func (r *Room) GetWhitelist(pk cipher.PubKey) map[cipher.PubKey]bool {
+func (r *Room) GetWhitelist() map[cipher.PubKey]bool {
 	return r.Whitelist
 }
 

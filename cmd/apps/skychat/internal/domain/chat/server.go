@@ -316,7 +316,7 @@ func (s *Server) DeleteFromWhitelist(pk cipher.PubKey) error {
 }
 
 // GetWhitelist returns all whitelisted members/peers
-func (s *Server) GetWhitelist(pk cipher.PubKey) map[cipher.PubKey]bool {
+func (s *Server) GetWhitelist() map[cipher.PubKey]bool {
 	return s.Whitelist
 }
 

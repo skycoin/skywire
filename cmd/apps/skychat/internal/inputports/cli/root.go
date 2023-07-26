@@ -40,7 +40,6 @@ var rootCmd = &cobra.Command{
 		}()
 
 		app.AppServices = app.NewServices(
-			interfaceadapters.InterfaceAdapterServices.ClientRepository,
 			interfaceadapters.InterfaceAdapterServices.UserRepository,
 			interfaceadapters.InterfaceAdapterServices.VisorRepository,
 			interfaceadapters.InterfaceAdapterServices.NotificationService,

@@ -33,7 +33,7 @@ type SendTextMessageRequestModel struct {
 }
 
 // SendTextMessage sends a text message to the given route
-func (c Handler) SendTextMessage(r SendTextMessageRequestModel, reply *int) error {
+func (c Handler) SendTextMessage(r SendTextMessageRequestModel, _ *int) error {
 
 	fmt.Println("RPC: SendTextMessage via cli (rpc)")
 	fmt.Printf("RPC: Message: %s\n v: %s\n s: %s\n r: %s\n", r.Msg, r.VisorPk.Hex(), r.ServerPk.Hex(), r.RoomPk.Hex())

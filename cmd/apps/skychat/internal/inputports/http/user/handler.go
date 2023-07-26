@@ -219,7 +219,7 @@ func (c Handler) SetSettings(w http.ResponseWriter, r *http.Request) {
 const GetInfoURLParam = "getInfo"
 
 // GetInfo Returns the info of the user
-func (c Handler) GetInfo(w http.ResponseWriter, r *http.Request) {
+func (c Handler) GetInfo(w http.ResponseWriter, _ *http.Request) {
 	info, err := c.userServices.Queries.GetUserInfoHandler.Handle()
 	if err == nil && info == nil {
 		w.WriteHeader(http.StatusNotFound)
@@ -244,7 +244,7 @@ func (c Handler) GetInfo(w http.ResponseWriter, r *http.Request) {
 const GetPeerbookURLParam = "getPeerbook"
 
 // GetPeerbook returns the peerbook of the user
-func (c Handler) GetPeerbook(w http.ResponseWriter, r *http.Request) {
+func (c Handler) GetPeerbook(w http.ResponseWriter, _ *http.Request) {
 	info, err := c.userServices.Queries.GetUserPeerBookHandler.Handle()
 	if err == nil && info == nil {
 		w.WriteHeader(http.StatusNotFound)
@@ -269,7 +269,7 @@ func (c Handler) GetPeerbook(w http.ResponseWriter, r *http.Request) {
 const GetSettingsURLParam = "getSettings"
 
 // GetSettings Returns the settings of the user
-func (c Handler) GetSettings(w http.ResponseWriter, r *http.Request) {
+func (c Handler) GetSettings(w http.ResponseWriter, _ *http.Request) {
 	settings, err := c.userServices.Queries.GetUserSettingsHandler.Handle()
 	if err == nil && settings == nil {
 		w.WriteHeader(http.StatusNotFound)
