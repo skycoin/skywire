@@ -32,7 +32,7 @@ var textMessageCmd = &cobra.Command{
 }
 
 // ParsePK parses a public key
-func ParsePK(_ *pflag.FlagSet, name, v string) cipher.PubKey {
+func ParsePK(_ *pflag.FlagSet, _, v string) cipher.PubKey {
 	var pk cipher.PubKey
 	err := pk.Set(v)
 	if err != nil {
