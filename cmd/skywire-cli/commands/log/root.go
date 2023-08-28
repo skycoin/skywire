@@ -54,7 +54,7 @@ func init() {
 	logCmd.Flags().StringVarP(&fetchFrom, "pks", "k", "", "fetch only from specific public keys ; semicolon separated")
 	logCmd.Flags().StringVarP(&writeDir, "dir", "d", "log_collecting", "save files to specified dir")
 	logCmd.Flags().BoolVarP(&deleteOnErrors, "clean", "c", false, "delete files and folders on errors")
-	logCmd.Flags().StringVar(&minv, "minv", "v1.3.8", "minimum visor version to fetch from")
+	logCmd.Flags().StringVar(&minv, "minv", "v1.3.11", "minimum visor version to fetch from")
 	logCmd.Flags().IntVarP(&duration, "duration", "n", 0, "number of days before today to fetch transport logs for")
 	logCmd.Flags().BoolVar(&allVisors, "all", false, "consider all visors ; no version filtering")
 	logCmd.Flags().IntVar(&batchSize, "batchSize", 50, "number of visor in each batch")
