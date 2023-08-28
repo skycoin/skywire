@@ -11,12 +11,9 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
-	"encoding/binary"
 	"errors"
-	"io"
-	"time"
-
 	"golang.org/x/crypto/cryptobyte"
+	"io"
 )
 
 // sessionState contains the information that is serialized into a session
@@ -34,7 +31,7 @@ type sessionState struct {
 	usedOldKey bool
 }
 
-func (m *sessionState) marshal() []byte {
+func (m *sessionState) marshal() ([]byte, error) {
 	var b cryptobyte.Builder
 	b.AddUint16(m.vers)
 	b.AddUint16(m.cipherSuite)
@@ -49,7 +46,7 @@ func (m *sessionState) marshal() []byte {
 			})
 		}
 	})
-	return b.BytesOrPanic()
+	return b.Bytes()
 }
 
 func (m *sessionState) unmarshal(data []byte) bool {
@@ -94,7 +91,7 @@ type sessionStateTLS13 struct {
 	appData []byte
 }
 
-func (m *sessionStateTLS13) marshal() []byte {
+func (m *sessionStateTLS13) marshal() ([]byte, error) {
 	var b cryptobyte.Builder
 	b.AddUint16(VersionTLS13)
 	b.AddUint8(2) // revision
@@ -111,7 +108,7 @@ func (m *sessionStateTLS13) marshal() []byte {
 	b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
 		b.AddBytes(m.appData)
 	})
-	return b.BytesOrPanic()
+	return b.Bytes()
 }
 
 func (m *sessionStateTLS13) unmarshal(data []byte) bool {
@@ -203,72 +200,4 @@ func (c *Conn) decryptTicket(encrypted []byte) (plaintext []byte, usedOldKey boo
 	cipher.NewCTR(block, iv).XORKeyStream(plaintext, ciphertext)
 
 	return plaintext, keyIndex > 0
-}
-
-func (c *Conn) getSessionTicketMsg(appData []byte) (*newSessionTicketMsgTLS13, error) {
-	m := new(newSessionTicketMsgTLS13)
-
-	var certsFromClient [][]byte
-	for _, cert := range c.peerCertificates {
-		certsFromClient = append(certsFromClient, cert.Raw)
-	}
-	state := sessionStateTLS13{
-		cipherSuite:      c.cipherSuite,
-		createdAt:        uint64(c.config.time().Unix()),
-		resumptionSecret: c.resumptionSecret,
-		certificate: Certificate{
-			Certificate:                 certsFromClient,
-			OCSPStaple:                  c.ocspResponse,
-			SignedCertificateTimestamps: c.scts,
-		},
-		appData: appData,
-		alpn:    c.clientProtocol,
-	}
-	if c.extraConfig != nil {
-		state.maxEarlyData = c.extraConfig.MaxEarlyData
-	}
-	var err error
-	m.label, err = c.encryptTicket(state.marshal())
-	if err != nil {
-		return nil, err
-	}
-	m.lifetime = uint32(maxSessionTicketLifetime / time.Second)
-
-	// ticket_age_add is a random 32-bit value. See RFC 8446, section 4.6.1
-	// The value is not stored anywhere; we never need to check the ticket age
-	// because 0-RTT is not supported.
-	ageAdd := make([]byte, 4)
-	_, err = c.config.rand().Read(ageAdd)
-	if err != nil {
-		return nil, err
-	}
-	m.ageAdd = binary.LittleEndian.Uint32(ageAdd)
-
-	// ticket_nonce, which must be unique per connection, is always left at
-	// zero because we only ever send one ticket per connection.
-
-	if c.extraConfig != nil {
-		m.maxEarlyData = c.extraConfig.MaxEarlyData
-	}
-	return m, nil
-}
-
-// GetSessionTicket generates a new session ticket.
-// It should only be called after the handshake completes.
-// It can only be used for servers, and only if the alternative record layer is set.
-// The ticket may be nil if config.SessionTicketsDisabled is set,
-// or if the client isn't able to receive session tickets.
-func (c *Conn) GetSessionTicket(appData []byte) ([]byte, error) {
-	if c.isClient || !c.isHandshakeComplete.Load() || c.extraConfig == nil || c.extraConfig.AlternativeRecordLayer == nil {
-		return nil, errors.New("GetSessionTicket is only valid for servers after completion of the handshake, and if an alternative record layer is set.")
-	}
-	if c.config.SessionTicketsDisabled {
-		return nil, nil
-	}
-
-	m, err := c.getSessionTicketMsg(appData)
-	if err != nil {
-		return nil, err
-	}
-	return m.marshal(), nil
 }
