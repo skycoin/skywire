@@ -43,6 +43,21 @@ const (
 	ECNCE             // 11
 )
 
+func (e ECN) String() string {
+	switch e {
+	case ECNNon:
+		return "Not-ECT"
+	case ECT1:
+		return "ECT(1)"
+	case ECT0:
+		return "ECT(0)"
+	case ECNCE:
+		return "CE"
+	default:
+		return fmt.Sprintf("invalid ECN value: %d", e)
+	}
+}
+
 // A ByteCount in QUIC
 type ByteCount int64
 
@@ -59,7 +74,10 @@ type StatelessResetToken [16]byte
 // ethernet's max size, minus the IP and UDP headers. IPv6 has a 40 byte header,
 // UDP adds an additional 8 bytes.  This is a total overhead of 48 bytes.
 // Ethernet's max packet size is 1500 bytes,  1500 - 48 = 1452.
-const MaxPacketBufferSize ByteCount = 1452
+const MaxPacketBufferSize = 1452
+
+// MaxLargePacketBufferSize is used when using GSO
+const MaxLargePacketBufferSize = 20 * 1024
 
 // MinInitialPacketSize is the minimum size an Initial packet is required to have.
 const MinInitialPacketSize = 1200
@@ -76,6 +94,9 @@ const MinConnectionIDLenInitial = 8
 
 // DefaultAckDelayExponent is the default ack delay exponent
 const DefaultAckDelayExponent = 3
+
+// DefaultActiveConnectionIDLimit is the default active connection ID limit
+const DefaultActiveConnectionIDLimit = 2
 
 // MaxAckDelayExponent is the maximum ack delay exponent
 const MaxAckDelayExponent = 20
