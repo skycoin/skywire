@@ -242,15 +242,15 @@ func download(ctx context.Context, log *logging.Logger, httpC http.Client, targe
 	file, _ := os.Create(pubkey + "/" + fileName) //nolint
 	defer file.Close()                            //nolint
 
-	if err := Download(ctx, log, &httpC, file, target, maxSize); err != nil {
+	if err := downloadDmsg(ctx, log, &httpC, file, target, maxSize); err != nil {
 		log.WithError(err).Errorf("The %s for visor %s not available", fileName, pubkey)
 		return err
 	}
 	return nil
 }
 
-// Download downloads a file from the given URL into 'w'.
-func Download(ctx context.Context, log logrus.FieldLogger, httpC *http.Client, w io.Writer, urlStr string, maxSize int64) error {
+// downloadDmsg downloads a file from the given URL into 'w'.
+func downloadDmsg(ctx context.Context, log logrus.FieldLogger, httpC *http.Client, w io.Writer, urlStr string, maxSize int64) error {
 	req, err := http.NewRequest(http.MethodGet, urlStr, nil)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to formulate HTTP request.")
