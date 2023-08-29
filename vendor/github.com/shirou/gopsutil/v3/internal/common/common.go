@@ -6,12 +6,14 @@ package common
 //  - linux (amd64, arm)
 //  - freebsd (amd64)
 //  - windows (amd64)
+
 import (
 	"bufio"
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -23,6 +25,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/shirou/gopsutil/v3/common"
 )
 
 var (
@@ -63,7 +67,7 @@ func (i Invoke) CommandWithContext(ctx context.Context, name string, arg ...stri
 
 type FakeInvoke struct {
 	Suffix string // Suffix species expected file name suffix such as "fail"
-	Error  error  // If Error specfied, return the error.
+	Error  error  // If Error specified, return the error.
 }
 
 // Command in FakeInvoke returns from expected file if exists.
@@ -97,7 +101,6 @@ var ErrNotImplementedError = errors.New("not implemented yet")
 // ReadFile reads contents from a file
 func ReadFile(filename string) (string, error) {
 	content, err := ioutil.ReadFile(filename)
-
 	if err != nil {
 		return "", err
 	}
@@ -111,11 +114,11 @@ func ReadLines(filename string) ([]string, error) {
 	return ReadLinesOffsetN(filename, 0, -1)
 }
 
-// ReadLines reads contents from file and splits them by new line.
+// ReadLinesOffsetN reads contents from file and splits them by new line.
 // The offset tells at which line number to start.
 // The count determines the number of lines to read (starting from offset):
-//   n >= 0: at most n lines
-//   n < 0: whole file
+// n >= 0: at most n lines
+// n < 0: whole file
 func ReadLinesOffsetN(filename string, offset uint, n int) ([]string, error) {
 	f, err := os.Open(filename)
 	if err != nil {
@@ -129,6 +132,9 @@ func ReadLinesOffsetN(filename string, offset uint, n int) ([]string, error) {
 	for i := 0; i < n+int(offset) || n < 0; i++ {
 		line, err := r.ReadString('\n')
 		if err != nil {
+			if err == io.EOF && len(line) > 0 {
+				ret = append(ret, strings.Trim(line, "\n"))
+			}
 			break
 		}
 		if i < int(offset) {
@@ -308,13 +314,43 @@ func PathExists(filename string) bool {
 	return false
 }
 
-//GetEnv retrieves the environment variable key. If it does not exist it returns the default.
+// PathExistsWithContents returns the filename exists and it is not empty
+func PathExistsWithContents(filename string) bool {
+	info, err := os.Stat(filename)
+	if err != nil {
+		return false
+	}
+	return info.Size() > 4 // at least 4 bytes
+}
+
+// GetEnvWithContext retrieves the environment variable key. If it does not exist it returns the default.
+// The context may optionally contain a map superseding os.EnvKey.
+func GetEnvWithContext(ctx context.Context, key string, dfault string, combineWith ...string) string {
+	var value string
+	if env, ok := ctx.Value(common.EnvKey).(common.EnvMap); ok {
+		value = env[common.EnvKeyType(key)]
+	}
+	if value == "" {
+		value = os.Getenv(key)
+	}
+	if value == "" {
+		value = dfault
+	}
+
+	return combine(value, combineWith)
+}
+
+// GetEnv retrieves the environment variable key. If it does not exist it returns the default.
 func GetEnv(key string, dfault string, combineWith ...string) string {
 	value := os.Getenv(key)
 	if value == "" {
 		value = dfault
 	}
 
+	return combine(value, combineWith)
+}
+
+func combine(value string, combineWith []string) string {
 	switch len(combineWith) {
 	case 0:
 		return value
@@ -350,6 +386,42 @@ func HostRun(combineWith ...string) string {
 
 func HostDev(combineWith ...string) string {
 	return GetEnv("HOST_DEV", "/dev", combineWith...)
+}
+
+func HostRoot(combineWith ...string) string {
+	return GetEnv("HOST_ROOT", "/", combineWith...)
+}
+
+func HostProcWithContext(ctx context.Context, combineWith ...string) string {
+	return GetEnvWithContext(ctx, "HOST_PROC", "/proc", combineWith...)
+}
+
+func HostProcMountInfoWithContext(ctx context.Context, combineWith ...string) string {
+	return GetEnvWithContext(ctx, "HOST_PROC_MOUNTINFO", "", combineWith...)
+}
+
+func HostSysWithContext(ctx context.Context, combineWith ...string) string {
+	return GetEnvWithContext(ctx, "HOST_SYS", "/sys", combineWith...)
+}
+
+func HostEtcWithContext(ctx context.Context, combineWith ...string) string {
+	return GetEnvWithContext(ctx, "HOST_ETC", "/etc", combineWith...)
+}
+
+func HostVarWithContext(ctx context.Context, combineWith ...string) string {
+	return GetEnvWithContext(ctx, "HOST_VAR", "/var", combineWith...)
+}
+
+func HostRunWithContext(ctx context.Context, combineWith ...string) string {
+	return GetEnvWithContext(ctx, "HOST_RUN", "/run", combineWith...)
+}
+
+func HostDevWithContext(ctx context.Context, combineWith ...string) string {
+	return GetEnvWithContext(ctx, "HOST_DEV", "/dev", combineWith...)
+}
+
+func HostRootWithContext(ctx context.Context, combineWith ...string) string {
+	return GetEnvWithContext(ctx, "HOST_ROOT", "/", combineWith...)
 }
 
 // getSysctrlEnv sets LC_ALL=C in a list of env vars for use when running

@@ -4,6 +4,7 @@
 package dlgs
 
 import (
+	"fmt"
 	"os/exec"
 	"strings"
 	"syscall"
@@ -13,6 +14,9 @@ import (
 func List(title, text string, items []string) (string, bool, error) {
 	list := ""
 	for i, l := range items {
+		if l == "false" {
+			return "", false, fmt.Errorf("Cannot use 'false' in items, as it's reserved by osascript's returned value.")
+		}
 		list += osaEscapeString(l)
 		if i != len(items)-1 {
 			list += ", "
@@ -28,6 +32,9 @@ func List(title, text string, items []string) (string, bool, error) {
 	}
 
 	out := strings.TrimSpace(o)
+	if out == "false" {
+		return "", false, nil
+	}
 
 	return out, true, err
 }
@@ -36,6 +43,9 @@ func List(title, text string, items []string) (string, bool, error) {
 func ListMulti(title, text string, items []string) ([]string, bool, error) {
 	list := ""
 	for i, l := range items {
+		if l == "false" {
+			return nil, false, fmt.Errorf("Cannot use 'false' in items, as it's reserved by osascript's returned value.")
+		}
 		list += osaEscapeString(l)
 		if i != len(items)-1 {
 			list += ", "
@@ -51,6 +61,9 @@ func ListMulti(title, text string, items []string) ([]string, bool, error) {
 	}
 
 	out := strings.TrimSpace(o)
+	if out == "false" {
+		return nil, false, nil
+	}
 
 	return strings.Split(out, ", "), true, err
 }

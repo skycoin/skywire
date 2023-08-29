@@ -4,15 +4,19 @@
 package mem
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"math"
 	"os"
 	"strconv"
 	"strings"
 
-	"github.com/shirou/gopsutil/v3/internal/common"
 	"golang.org/x/sys/unix"
+
+	"github.com/shirou/gopsutil/v3/internal/common"
 )
 
 type VirtualMemoryExStat struct {
@@ -53,7 +57,7 @@ func VirtualMemoryExWithContext(ctx context.Context) (*VirtualMemoryExStat, erro
 }
 
 func fillFromMeminfoWithContext(ctx context.Context) (*VirtualMemoryStat, *VirtualMemoryExStat, error) {
-	filename := common.HostProc("meminfo")
+	filename := common.HostProcWithContext(ctx, "meminfo")
 	lines, _ := common.ReadLines(filename)
 
 	// flag if MemAvailable is in /proc/meminfo (kernel 3.14+)
@@ -150,13 +154,13 @@ func fillFromMeminfoWithContext(ctx context.Context) (*VirtualMemoryStat, *Virtu
 				return ret, retEx, err
 			}
 			retEx.Unevictable = t * 1024
-		case "WriteBack":
+		case "Writeback":
 			t, err := strconv.ParseUint(value, 10, 64)
 			if err != nil {
 				return ret, retEx, err
 			}
 			ret.WriteBack = t * 1024
-		case "WriteBackTmp":
+		case "WritebackTmp":
 			t, err := strconv.ParseUint(value, 10, 64)
 			if err != nil {
 				return ret, retEx, err
@@ -289,6 +293,18 @@ func fillFromMeminfoWithContext(ctx context.Context) (*VirtualMemoryStat, *Virtu
 				return ret, retEx, err
 			}
 			ret.HugePagesFree = t
+		case "HugePages_Rsvd":
+			t, err := strconv.ParseUint(value, 10, 64)
+			if err != nil {
+				return ret, retEx, err
+			}
+			ret.HugePagesRsvd = t
+		case "HugePages_Surp":
+			t, err := strconv.ParseUint(value, 10, 64)
+			if err != nil {
+				return ret, retEx, err
+			}
+			ret.HugePagesSurp = t
 		case "Hugepagesize":
 			t, err := strconv.ParseUint(value, 10, 64)
 			if err != nil {
@@ -302,7 +318,7 @@ func fillFromMeminfoWithContext(ctx context.Context) (*VirtualMemoryStat, *Virtu
 
 	if !memavail {
 		if activeFile && inactiveFile && sReclaimable {
-			ret.Available = calcuateAvailVmem(ret, retEx)
+			ret.Available = calculateAvailVmem(ctx, ret, retEx)
 		} else {
 			ret.Available = ret.Cached + ret.Free
 		}
@@ -329,13 +345,13 @@ func SwapMemoryWithContext(ctx context.Context) (*SwapMemoryStat, error) {
 		Free:  uint64(sysinfo.Freeswap) * uint64(sysinfo.Unit),
 	}
 	ret.Used = ret.Total - ret.Free
-	//check Infinity
+	// check Infinity
 	if ret.Total != 0 {
 		ret.UsedPercent = float64(ret.Total-ret.Free) / float64(ret.Total) * 100.0
 	} else {
 		ret.UsedPercent = 0
 	}
-	filename := common.HostProc("vmstat")
+	filename := common.HostProcWithContext(ctx, "vmstat")
 	lines, _ := common.ReadLines(filename)
 	for _, l := range lines {
 		fields := strings.Fields(l)
@@ -384,15 +400,14 @@ func SwapMemoryWithContext(ctx context.Context) (*SwapMemoryStat, error) {
 	return ret, nil
 }
 
-// calcuateAvailVmem is a fallback under kernel 3.14 where /proc/meminfo does not provide
+// calculateAvailVmem is a fallback under kernel 3.14 where /proc/meminfo does not provide
 // "MemAvailable:" column. It reimplements an algorithm from the link below
 // https://github.com/giampaolo/psutil/pull/890
-func calcuateAvailVmem(ret *VirtualMemoryStat, retEx *VirtualMemoryExStat) uint64 {
+func calculateAvailVmem(ctx context.Context, ret *VirtualMemoryStat, retEx *VirtualMemoryExStat) uint64 {
 	var watermarkLow uint64
 
-	fn := common.HostProc("zoneinfo")
+	fn := common.HostProcWithContext(ctx, "zoneinfo")
 	lines, err := common.ReadLines(fn)
-
 	if err != nil {
 		return ret.Free + ret.Cached // fallback under kernel 2.6.13
 	}
@@ -405,7 +420,6 @@ func calcuateAvailVmem(ret *VirtualMemoryStat, retEx *VirtualMemoryExStat) uint6
 
 		if strings.HasPrefix(fields[0], "low") {
 			lowValue, err := strconv.ParseUint(fields[1], 10, 64)
-
 			if err != nil {
 				lowValue = 0
 			}
@@ -426,4 +440,87 @@ func calcuateAvailVmem(ret *VirtualMemoryStat, retEx *VirtualMemoryExStat) uint6
 	}
 
 	return availMemory
+}
+
+const swapsFilename = "swaps"
+
+// swaps file column indexes
+const (
+	nameCol = 0
+	// typeCol     = 1
+	totalCol = 2
+	usedCol  = 3
+	// priorityCol = 4
+)
+
+func SwapDevices() ([]*SwapDevice, error) {
+	return SwapDevicesWithContext(context.Background())
+}
+
+func SwapDevicesWithContext(ctx context.Context) ([]*SwapDevice, error) {
+	swapsFilePath := common.HostProcWithContext(ctx, swapsFilename)
+	f, err := os.Open(swapsFilePath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	return parseSwapsFile(ctx, f)
+}
+
+func parseSwapsFile(ctx context.Context, r io.Reader) ([]*SwapDevice, error) {
+	swapsFilePath := common.HostProcWithContext(ctx, swapsFilename)
+	scanner := bufio.NewScanner(r)
+	if !scanner.Scan() {
+		if err := scanner.Err(); err != nil {
+			return nil, fmt.Errorf("couldn't read file %q: %w", swapsFilePath, err)
+		}
+		return nil, fmt.Errorf("unexpected end-of-file in %q", swapsFilePath)
+
+	}
+
+	// Check header headerFields are as expected
+	headerFields := strings.Fields(scanner.Text())
+	if len(headerFields) < usedCol {
+		return nil, fmt.Errorf("couldn't parse %q: too few fields in header", swapsFilePath)
+	}
+	if headerFields[nameCol] != "Filename" {
+		return nil, fmt.Errorf("couldn't parse %q: expected %q to be %q", swapsFilePath, headerFields[nameCol], "Filename")
+	}
+	if headerFields[totalCol] != "Size" {
+		return nil, fmt.Errorf("couldn't parse %q: expected %q to be %q", swapsFilePath, headerFields[totalCol], "Size")
+	}
+	if headerFields[usedCol] != "Used" {
+		return nil, fmt.Errorf("couldn't parse %q: expected %q to be %q", swapsFilePath, headerFields[usedCol], "Used")
+	}
+
+	var swapDevices []*SwapDevice
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) < usedCol {
+			return nil, fmt.Errorf("couldn't parse %q: too few fields", swapsFilePath)
+		}
+
+		totalKiB, err := strconv.ParseUint(fields[totalCol], 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("couldn't parse 'Size' column in %q: %w", swapsFilePath, err)
+		}
+
+		usedKiB, err := strconv.ParseUint(fields[usedCol], 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("couldn't parse 'Used' column in %q: %w", swapsFilePath, err)
+		}
+
+		swapDevices = append(swapDevices, &SwapDevice{
+			Name:      fields[nameCol],
+			UsedBytes: usedKiB * 1024,
+			FreeBytes: (totalKiB - usedKiB) * 1024,
+		})
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("couldn't read file %q: %w", swapsFilePath, err)
+	}
+
+	return swapDevices, nil
 }

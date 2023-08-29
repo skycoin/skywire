@@ -1,17 +1,13 @@
 package pfilter
 
 import (
-	"io"
 	"net"
 	"time"
+
+	"github.com/quic-go/quic-go"
 )
 
-type oobPacketConn interface {
-	ReadMsgUDP(b, oob []byte) (n, oobn, flags int, addr *net.UDPAddr, err error)
-	WriteMsgUDP(b, oob []byte, addr *net.UDPAddr) (n, oobn int, err error)
-}
-
-var _ oobPacketConn = (*filteredConnObb)(nil)
+var _ quic.OOBCapablePacketConn = (*filteredConnObb)(nil)
 
 type filteredConnObb struct {
 	*filteredConn
@@ -39,30 +35,17 @@ func (r *filteredConnObb) ReadMsgUDP(b, oob []byte) (n, oobn, flags int, addr *n
 	select {
 	case <-timeout:
 		return 0, 0, 0, nil, errTimeout
-	case pkt := <-r.recvBuffer:
-		err := pkt.err
+	case msg := <-r.recvBuffer:
+		n, nn, err := copyBuffers(msg, b, oob)
 
-		n := pkt.n
-		if l := len(b); l < n {
-			n = l
-			if err == nil {
-				err = io.ErrShortBuffer
-			}
-		}
-		copy(b, pkt.buf[:n])
+		r.source.returnBuffers(msg.Message)
 
-		oobn := pkt.oobn
-		if oobl := len(oob); oobl < oobn {
-			oobn = oobl
-		}
-		if oobn > 0 {
-			copy(oob, pkt.oobBuf[:oobn])
+		udpAddr, ok := msg.Addr.(*net.UDPAddr)
+		if !ok && err == nil {
+			err = errNotSupported
 		}
 
-		r.source.bufPool.Put(pkt.buf[:r.source.packetSize])
-		r.source.bufPool.Put(pkt.oobBuf[:r.source.packetSize])
-
-		return n, oobn, pkt.flags, pkt.udpAddr, err
+		return n, nn, msg.Flags, udpAddr, err
 	case <-r.closed:
 		return 0, 0, 0, nil, errClosed
 	}

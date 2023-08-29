@@ -29,6 +29,8 @@ All information about rewards will be published here. Please ask for clarificati
 
 Reward distribution notifications are on telegram [@skywire_reward](https://t.me/skywire_reward).
 
+Information about reward distribution as well as other metrics for the skywire network can be found at [fiber.skywire.dev](https://fiber.skywire.dev)
+
 # Uptime Reward Pool
 
 408000 Skycoin are distributed annually to those visors which meet the mimimum uptime and the other requirements listed below
@@ -37,7 +39,7 @@ A total of up to ~1117.808 Skycoin are distributed daily; evenly divided among t
 
 ## Rules & Requirements
 
-* **Minimum skywire version v1.3.8** - Cutoff July 1st 2023
+* **Minimum skywire version v1.3.11** - Cutoff September 1st 2023
 
 * The visor must be an **ARM architecture SBC running on approved [hardware](#hardware)**
 
@@ -68,15 +70,17 @@ skywire-cli -v
 skywire-visor -v
 ```
 
-**The new reward system requires Skywire v1.3.8**
+**Reward eligibility requires Skywire v1.3.11**
 
-Requirement established 5-25-2023
+Requirement established 7-22-2023
 
-Rewards Cutoff date for updating 7-1-2023
+Rewards Cutoff date for updating 9-1-2023
 
 ### Deployment
 
 The deployment your visor is running on can be verified by comparing the services configured in the visor's .json config against [conf.skywire.skycoin.com](https://conf.skywire.skycoin.com)
+
+For those visors in china or those running a dmsghttp-config, compare the dmsghttp-config of your current installation with the dmsghttp-config on the develop branch of [github.com/skycoin/skywire](https://github.com/skycoin/skywire)
 It will be automatically updated any time a config is generated or regenerated.
 
 ### Uptime
