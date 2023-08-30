@@ -1222,7 +1222,7 @@ const envfileLinux = `#
 #VERSION=''
 
 #--	Set app bin_path
-#BINPATH='./apps'
+#BINPATH='./build/apps'
 
 #--	Set server public key for proxy client to connect to
 #PROXYCLIENTPK=''
@@ -1322,7 +1322,7 @@ const envfileWindows = `#
 #$VERSION=''
 
 #--	Set app bin_path
-#$BINPATH='./apps'
+#$BINPATH='./build/apps'
 
 #--	Set server public key for proxy client to connect to
 #$PROXYCLIENTPK=''
