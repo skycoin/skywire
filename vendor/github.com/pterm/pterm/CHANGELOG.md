@@ -2,6 +2,34 @@
 ## [Unreleased]
 
 ### Bug Fixes
+- buggy basic text input ([#551](https://github.com/pterm/pterm/issues/551))
+- **textinput:** fixed buggy behavior ([#550](https://github.com/pterm/pterm/issues/550))
+
+
+<a name="v0.12.64"></a>
+## [v0.12.64] - 2023-08-03
+### Features
+- add custom delimiters to select printers ([#545](https://github.com/pterm/pterm/issues/545))
+
+
+<a name="v0.12.63"></a>
+## [v0.12.63] - 2023-07-18
+### Features
+- add filter option for `select`
+
+### Bug Fixes
+- fixed area on Windows
+- **box:** fixed wrong title length calculation
+
+### Code Refactoring
+- use WithBoolean on multiselect printer
+- use WithBoolean on multiselect printer
+- use WithBoolean method on WithFilter method of select printer
+
+
+<a name="v0.12.62"></a>
+## [v0.12.62] - 2023-05-24
+### Bug Fixes
 - fixed not being able to add a custom graceful shutdown
 
 
@@ -1183,7 +1211,10 @@ removed `Header` and put it's content directly into `HeaderPrinter`
 - initial commit
 
 
-[Unreleased]: https://github.com/pterm/pterm/compare/v0.12.61...HEAD
+[Unreleased]: https://github.com/pterm/pterm/compare/v0.12.64...HEAD
+[v0.12.64]: https://github.com/pterm/pterm/compare/v0.12.63...v0.12.64
+[v0.12.63]: https://github.com/pterm/pterm/compare/v0.12.62...v0.12.63
+[v0.12.62]: https://github.com/pterm/pterm/compare/v0.12.61...v0.12.62
 [v0.12.61]: https://github.com/pterm/pterm/compare/v0.12.60...v0.12.61
 [v0.12.60]: https://github.com/pterm/pterm/compare/v0.12.59...v0.12.60
 [v0.12.59]: https://github.com/pterm/pterm/compare/v0.12.58...v0.12.59
