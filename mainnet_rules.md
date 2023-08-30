@@ -33,13 +33,13 @@ Information about reward distribution as well as other metrics for the skywire n
 
 # Uptime Reward Pool
 
-408000 Skycoin are distributed annually to those visors which meet the mimimum uptime and the other requirements listed below
+408000 Skycoin are distributed annually to those visors which meet the mimimum uptime and the other requirements listed below.
 
-A total of up to ~1117.808 Skycoin are distributed daily; evenly divided among those eligible participants on the basis of having met uptime for the previous day.
+A total of up to ~1117.808 Skycoin are distributed daily in non leap-years; evenly divided among those eligible participants on the basis of having met uptime for the previous day.
 
 ## Rules & Requirements
 
-* **Minimum skywire version v1.3.11** - Cutoff September 1st 2023
+* **Minimum skywire version v1.3.13** - Cutoff October 1st 2023
 
 * The visor must be an **ARM architecture SBC running on approved [hardware](#hardware)**
 
@@ -70,11 +70,11 @@ skywire-cli -v
 skywire-visor -v
 ```
 
-**Reward eligibility requires Skywire v1.3.11**
+**Reward eligibility requires Skywire v1.3.13**
 
-Requirement established 7-22-2023
+Requirement established 8-29-2023
 
-Rewards Cutoff date for updating 9-1-2023
+Rewards Cutoff date for updating 10-1-2023
 
 ### Deployment
 
