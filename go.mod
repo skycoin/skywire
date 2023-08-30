@@ -18,7 +18,7 @@ require (
 	github.com/hashicorp/go-version v1.6.0
 	github.com/hashicorp/yamux v0.1.1
 	github.com/ivanpirog/coloredcobra v1.0.1
-	github.com/james-barrow/golang-ipc v1.2.4
+	github.com/james-barrow/golang-ipc v1.1.0
 	github.com/jaypipes/ghw v0.12.0
 	github.com/konsorten/go-windows-terminal-sequences v1.0.3
 	github.com/lib/pq v1.10.9
