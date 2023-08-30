@@ -8,9 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/nettest"
-
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"golang.org/x/net/nettest"
 
 	"github.com/skycoin/dmsg/pkg/disc"
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"

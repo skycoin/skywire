@@ -2,7 +2,7 @@ package ipc
 
 import "errors"
 
-// returns the status of the connection as a string
+//  returns the status of the connection as a string
 func (status *Status) String() string {
 
 	switch *status {
@@ -17,15 +17,13 @@ func (status *Status) String() string {
 	case Closing:
 		return "Closing"
 	case ReConnecting:
-		return "Reconnecting"
+		return "Re-connecting"
 	case Timeout:
 		return "Timeout"
 	case Closed:
 		return "Closed"
 	case Error:
 		return "Error"
-	case Disconnected:
-		return "Disconnected"
 	default:
 		return "Status not found"
 	}
@@ -39,4 +37,5 @@ func checkIpcName(ipcName string) error {
 	}
 
 	return nil
+
 }
