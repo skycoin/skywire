@@ -1,0 +1,22 @@
+@startuml
+box "MessengerService"
+participant Listen
+participant Handle
+participant ErrorRoutine
+end box
+
+Listen -> CliRepo: GetClient
+CliRepo --> Listen: Client
+Listen -> ErrorRoutine: go(error channel)
+activate ErrorRoutine
+deactivate
+Listen -> Listen: for
+activate Listen
+Listen -> Listen: l.Accept()
+Listen -> Listen: Client: AddConnection
+Listen -> CliRepo: SetClient
+CliRepo --> Listen: errSetClient
+Listen -> Handle: go(cipher.PubKey)
+activate Handle
+deactivate
+@enduml

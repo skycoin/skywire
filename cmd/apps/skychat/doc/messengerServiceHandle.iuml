@@ -1,0 +1,35 @@
+@startuml
+box "MessengerService"
+participant Handle
+participant handleP2PMessage
+participant handleRemoteServerMessage
+participant handleLocalServerMessage
+end box
+
+-> Handle: cipher.PubKey
+Handle -> CliRepo: GetClient
+CliRepo --> Handle: Client
+Handle -> Handle: conn := Client.GetConn(cipher.PubKey)
+Handle -> Handle: for
+activate Handle
+Handle -> Handle: err := conn.Read(buf)
+alt #Pink err != nil
+    Handle -> Handle: Client.DeleteConn(cipher.PubKey)
+else #LightBlue err = nil
+    Handle ->  Handle: json.Unmarshal(buf)
+    alt P2P
+      Handle -> handleP2PMessage: go (Message)
+      activate handleP2PMessage
+      deactivate handleP2PMessage
+    else RemoteServerMessage
+      Handle -> handleRemoteServerMessage: go (Message)
+      activate handleRemoteServerMessage
+      deactivate handleRemoteServerMessage
+    else LocalServerMessage
+      Handle -> handleLocalServerMessage: go (Message)
+      activate handleLocalServerMessage
+      deactivate handleLocalServerMessage
+    end
+end
+deactivate
+@enduml

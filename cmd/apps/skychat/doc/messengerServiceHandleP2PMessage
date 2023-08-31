@@ -1,0 +1,73 @@
+@startuml
+participant Alice.Notification order 9
+participant Alice.VisorRepo order 10
+participant Alice order 20
+participant Alice2.VisorRepo order 25
+participant Alice2 order 25
+participant Bob order 30
+participant Bob.VisorRepo order 40
+participant Bob.Notification order 50
+== Handling ChatRequest ==
+Alice -> Bob: ChatRequestMessage
+activate Bob
+alt NotInBlacklist
+  Bob <-> Bob.VisorRepo: visor = GetByPK
+  Bob -> Bob: visor.AddMessage
+  Bob -> Bob.VisorRepo: SetVisor
+  Bob -> Bob.Notification: NewP2PChatNotification & Notify
+  Bob -> Alice: ChatAcceptMessage
+  activate Alice
+  Bob -> Alice2: InfoMessage
+  deactivate Bob
+  activate Alice2
+  Alice2 -> Alice2: visor.SetRouteInfo
+  Alice2 -> Alice2.VisorRepo: SetVisor
+  Alice2 -> Alice.Notification: NewMsgNotification & Notify
+  deactivate Alice2
+  Alice <-> Alice.VisorRepo: visor = GetByPK
+  Alice -> Alice: visor.AddMessage
+  Alice -> Alice.VisorRepo: SetVisor
+  Alice -> Alice.Notification: NewMsgNotification & Notify
+  Alice -> Bob: InfoMessage
+  deactivate Alice
+  activate Bob
+  Bob -> Bob: visor.SetRouteInfo
+  Bob -> Bob.VisorRepo: SetVisor
+  Bob -> Bob.Notification: NewMsgNotification & Notify
+  deactivate Bob
+  deactivate Alice2
+else InBlacklist
+  Bob -> Alice: ChatRejectMessage
+  activate Bob
+  activate Alice
+  Bob -> Bob.VisorRepo: GetByPK
+  Bob.VisorRepo --> Bob: Visor
+  Bob -> Bob.VisorRepo: if no server of visor DeleteVisor
+  deactivate Bob
+  Alice <-> Alice.VisorRepo: visor = GetByPK
+  Alice -> Alice: visor.AddMessage
+  Alice -> Alice.VisorRepo: SetVisor
+  Alice -> Alice.Notification: NewMsgNotification & Notify
+  deactivate Alice
+end
+
+== Handling Text Messages ==
+Alice -> Bob: TextMessage
+activate Bob
+Bob -> Bob: visor.AddMessage
+Bob -> Bob.VisorRepo: SetVisor
+Bob -> Bob.Notification: NewMsgNotification & Notify
+deactivate Bob
+
+== Handling Info Messages ==
+Alice -> Bob: InfoMessage
+activate Bob
+Bob -> Bob: visor.AddMessage
+Bob -> Bob.VisorRepo: SetVisor
+Bob -> Bob: json.Unmarshal -> to info.Info
+Bob -> Bob: visor.SetRouteInfo(info)
+Bob -> Bob.VisorRepo: SetVisor
+Bob -> Bob.Notification: NewMsgNotification & Notify
+deactivate Bob
+
+@enduml
