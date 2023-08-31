@@ -34,16 +34,16 @@ To get a basic understanding on how it is structured, reading the blog will help
 
 ## Sequence Diagrams
 ### Init
-![Init](http://plantuml.com/plantuml/proxy?cache=no&src=https://github.com/4rchim3d3s/skywire-mainnet/tree/feature/skychat/cmd/apps/skychat/doc/init.iuml)
+![Init](http://plantuml.com/plantuml/proxy?cache=no&src=https://raw.githubusercontent.com/4rchim3d3s/skywire-mainnet/feature/skychat/cmd/apps/skychat/doc/init.iuml)
 
 ### MessengerService.Listen
-![MessengerService.Listen](http://plantuml.com/plantuml/proxy?cache=no&src=https://github.com/4rchim3d3s/skywire-mainnet/tree/feature/skychat/cmd/apps/skychat/doc/messengerServiceListen.iuml)
+![MessengerService.Listen](http://plantuml.com/plantuml/proxy?cache=no&src=https://raw.githubusercontent.com/4rchim3d3s/skywire-mainnet/feature/skychat/cmd/apps/skychat/doc/messengerServiceListen.iuml)
 
 ### MessengerService.Handle
-![Init](http://plantuml.com/plantuml/proxy?cache=no&src=https://github.com/4rchim3d3s/skywire-mainnet/tree/feature/skychat/cmd/apps/skychat/doc/messengerServiceHandle.iuml)
+![Init](http://plantuml.com/plantuml/proxy?cache=no&src=https://raw.githubusercontent.com/4rchim3d3s/skywire-mainnet/feature/skychat/cmd/apps/skychat/doc/messengerServiceHandle.iuml)
 
 ### MessengerService.handleP2PMessage
-![Init](http://plantuml.com/plantuml/proxy?cache=no&src=https://github.com/4rchim3d3s/skywire-mainnet/tree/feature/skychat/cmd/apps/skychat/doc/messengerServiceHandleP2PMessage.iuml)
+![Init](http://plantuml.com/plantuml/proxy?cache=no&src=https://raw.githubusercontent.com/4rchim3d3s/skywire-mainnet/feature/skychat/cmd/apps/skychat/doc/messengerServiceHandleP2PMessage.iuml)
 
 ### MessengerService.handleRemoteServerMessage (This is the client-side handling of servers)
 TODO
