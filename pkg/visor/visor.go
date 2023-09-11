@@ -105,7 +105,7 @@ type Visor struct {
 	// produced by concurrent parts of modules
 	runtimeErrors chan error
 
-	isServicesHealthy *internalHealthInfo
+	isServicesHealthy    *internalHealthInfo
 	remoteVisors         map[cipher.PubKey]Conn // remote hypervisors the visor is attempting to connect to
 	connectedHypervisors map[cipher.PubKey]bool // remote hypervisors the visor is currently connected to
 	allowedPorts         map[int]bool
