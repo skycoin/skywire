@@ -477,7 +477,7 @@ var genConfigCmd = &cobra.Command{
 				serviceConfURL = utilenv.ServiceConfAddr
 			}
 			//use test deployment
-			if serviceConfURL == "" && isTestEnv {
+			if isTestEnv {
 				serviceConfURL = utilenv.TestServiceConfAddr
 			}
 			// enable errors from service conf fetch from the combination of these flags
