@@ -24,7 +24,7 @@ import (
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsgctrl"
-	"github.com/skycoin/dmsg/pkg/dmsgget"
+	"github.com/skycoin/dmsg/pkg/dmsgcurl"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
 
@@ -469,7 +469,7 @@ func initDmsgTrackers(ctx context.Context, v *Visor, _ *logging.Logger) error { 
 
 func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 
-	var serviceURL dmsgget.URL
+	var serviceURL dmsgcurl.URL
 	_ = serviceURL.Fill(v.conf.Transport.AddressResolver) //nolint:errcheck
 	// don't start sudph if we are connection to AR via dmsghttp
 	if serviceURL.Scheme == "dmsg" {
@@ -1588,7 +1588,7 @@ func getErrors(ctx context.Context) chan error {
 
 func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client, error) {
 
-	var serviceURL dmsgget.URL
+	var serviceURL dmsgcurl.URL
 	var delegatedServers []cipher.PubKey
 	err := serviceURL.Fill(service)
 
@@ -1628,7 +1628,7 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 }
 
 func getPublicIP(v *Visor, service string) (string, error) {
-	var serviceURL dmsgget.URL
+	var serviceURL dmsgcurl.URL
 	var pIP string
 	err := serviceURL.Fill(service)
 	// only get the IP if the url is of dmsg
