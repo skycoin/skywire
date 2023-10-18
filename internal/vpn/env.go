@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/skycoin/dmsg/pkg/dmsgget"
+	"github.com/skycoin/dmsg/pkg/dmsgcurl"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
@@ -137,7 +137,7 @@ func ParseIP(addr string) (net.IP, bool, error) {
 	if addr == "" {
 		return nil, false, nil
 	}
-	var url dmsgget.URL
+	var url dmsgcurl.URL
 
 	// in case dmsghttp url is provided
 	err := url.Fill(addr)
