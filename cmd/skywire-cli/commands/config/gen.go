@@ -497,25 +497,26 @@ var genConfigCmd = &cobra.Command{
 					log.WithError(err).Error("Failed to fetch servers\n")
 					log.Warn("Falling back on hardcoded servers")
 				}
-			}
-			if res.Body != nil {
-				defer res.Body.Close() //nolint
-			}
-			body, err := io.ReadAll(res.Body)
-			if err != nil {
-				log.WithError(err).Fatal("Failed to read response\n")
-			}
-			//fill in services struct with the response
-			err = json.Unmarshal(body, &services)
-			if err != nil {
-				log.WithError(err).Fatal("Failed to unmarshal json response\n")
-			}
-			if !isStdout {
-				log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
-			}
+			} else {
+				if res.Body != nil {
+					defer res.Body.Close() //nolint
+				}
+				body, err := io.ReadAll(res.Body)
+				if err != nil {
+					log.WithError(err).Fatal("Failed to read response\n")
+				}
+				//fill in services struct with the response
+				err = json.Unmarshal(body, &services)
+				if err != nil {
+					log.WithError(err).Fatal("Failed to unmarshal json response\n")
+				}
+				if !isStdout {
+					log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
+				}
 
-			// reset the state of isStdout
-			isStdout = wasStdout
+				// reset the state of isStdout
+				isStdout = wasStdout
+			}
 		}
 
 		// Read in old config and obtain old secret key or generate a new random secret key
@@ -581,11 +582,11 @@ var genConfigCmd = &cobra.Command{
 		conf.Common.PK = pk
 
 		dnsServer := utilenv.DNSServer
-		if services != nil {
-			if services.DNSServer != "" {
-				dnsServer = services.DNSServer
-			}
+
+		if services.DNSServer != "" {
+			dnsServer = services.DNSServer
 		}
+
 		if isDmsgHTTP {
 			dmsghttpConfig := visorconfig.DMSGHTTPName
 			// TODO
