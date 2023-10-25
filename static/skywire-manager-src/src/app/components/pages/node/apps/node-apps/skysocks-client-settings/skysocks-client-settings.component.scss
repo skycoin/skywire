@@ -3,6 +3,22 @@
 
 ::ng-deep mat-tab-header {
   border-bottom: solid 1px $grey-separator;
+
+  @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
+    & {
+      display: none !important;
+    }
+  }
+}
+
+app-tab-selector {
+  display: none;
+
+  @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
+    & {
+      display: block !important;
+    }
+  }
 }
 
 form {
@@ -17,7 +33,7 @@ form {
 
   mat-icon {
     position: relative;
-    top: 2px;
+    top: 5px;
   }
 }
 

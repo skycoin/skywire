@@ -24,6 +24,7 @@ import { countriesList } from 'src/app/utils/countries-list';
 import { SkysocksClientPasswordComponent } from './skysocks-client-password/skysocks-client-password.component';
 import { ClipboardService } from 'src/app/services/clipboard.service';
 import { StorageService } from 'src/app/services/storage.service';
+import { MatTabGroup } from '@angular/material/tabs';
 
 /**
  * Data of the entries from the history.
@@ -69,9 +70,14 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   // How many elements to show per page on the proxy discovery tab.
   readonly maxElementsPerPage = 10;
 
+  tabLabels: string[] = [];
+  currentTab = 0;
+
   @ViewChild('button') button: ButtonComponent;
   @ViewChild('settingsButton') settingsButton: ButtonComponent;
   @ViewChild('firstInput') firstInput: ElementRef;
+  @ViewChild('tabGroup') tabGroup: MatTabGroup;
+
   form: UntypedFormGroup;
   settingsForm: UntypedFormGroup;
   // Entries to show on the history.
@@ -142,6 +148,19 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   ) {
     if (data.name.toLocaleLowerCase().indexOf('vpn') !== -1) {
       this.configuringVpn = true;
+
+      this.tabLabels = [
+        'apps.vpn-socks-client-settings.remote-visor-tab',
+        'apps.vpn-socks-client-settings.discovery-tab',
+        'apps.vpn-socks-client-settings.history-tab',
+        'apps.vpn-socks-client-settings.settings-tab',
+      ];
+    } else {
+      this.tabLabels = [
+        'apps.vpn-socks-client-settings.remote-visor-tab',
+        'apps.vpn-socks-client-settings.discovery-tab',
+        'apps.vpn-socks-client-settings.history-tab',
+      ];
     }
   }
 
@@ -240,6 +259,20 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
    */
   get disableDismiss(): boolean {
     return (this.button && this.button.isLoading) || (this.settingsButton && this.settingsButton.isLoading);
+  }
+
+  /**
+   * Called when the app-tab-selector asks for the tab to be changed in mat-tab-group.
+   */
+  tabChangeRequested(requestedTab: number) {
+    this.tabGroup.selectedIndex = requestedTab;
+  }
+
+  /**
+   * Called when the selected tab is changed in mat-tab-group.
+   */
+  tabIdexChanged() {
+    this.currentTab = this.tabGroup.selectedIndex;
   }
 
   // Validates an IPv4 address.
