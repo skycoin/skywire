@@ -157,12 +157,12 @@ var logCmd = &cobra.Command{
 		for _, v := range uptimes {
 			//only attempt to fetch from online visors
 			if v.Online {
+				visorVersion, err := version.NewVersion(v.Version) //nolint
+				if err != nil {
+					log.Warnf("The version %s for visor %s is not valid", v.Version, v.PubKey)
+					continue
+				}
 				if fetchFile == "" {
-					visorVersion, err := version.NewVersion(v.Version) //nolint
-					if err != nil {
-						log.Warnf("The version %s for visor %s is not valid", v.Version, v.PubKey)
-						continue
-					}
 					if !allVisors && visorVersion.LessThan(minimumVersion) {
 						log.Warnf("The version %s for visor %s does not satisfy our minimum version condition", v.Version, v.PubKey)
 						continue
@@ -183,7 +183,7 @@ var logCmd = &cobra.Command{
 						}
 						// health check before downloading anything else
 						// delete that folder if the health check fails
-						err = download(ctx, log, httpC, "health", "health.json", key, maxFileSize)
+						err = download(ctx, log, httpC, "health", "health.json", key, maxFileSize, visorVersion)
 						if err != nil {
 							if deleteOnErrors {
 								if deleteOnError {
@@ -193,12 +193,12 @@ var logCmd = &cobra.Command{
 							}
 						}
 						if !logOnly {
-							download(ctx, log, httpC, "node-info.json", "node-info.json", key, maxFileSize) //nolint
+							download(ctx, log, httpC, "node-info.json", "node-info.json", key, maxFileSize, visorVersion) //nolint
 						}
 						if !surveyOnly {
 							for i := 0; i <= duration; i++ {
 								date := time.Now().AddDate(0, 0, -i).UTC().Format("2006-01-02")
-								download(ctx, log, httpC, date+".csv", date+".csv", key, maxFileSize) //nolint
+								download(ctx, log, httpC, date+".csv", date+".csv", key, maxFileSize, visorVersion) //nolint
 							}
 						}
 					}(v.PubKey, &wg)
@@ -221,7 +221,7 @@ var logCmd = &cobra.Command{
 								return
 							}
 						}
-						_ = download(ctx, log, httpC, fetchFile, fetchFile, key, maxFileSize) //nolint
+						_ = download(ctx, log, httpC, fetchFile, fetchFile, key, maxFileSize, visorVersion) //nolint
 					}(v.PubKey, &wg)
 				}
 			}
@@ -237,13 +237,13 @@ var logCmd = &cobra.Command{
 	},
 }
 
-func download(ctx context.Context, log *logging.Logger, httpC http.Client, targetPath, fileName, pubkey string, maxSize int64) error {
+func download(ctx context.Context, log *logging.Logger, httpC http.Client, targetPath, fileName, pubkey string, maxSize int64, version *version.Version) error {
 	target := fmt.Sprintf("dmsg://%s:80/%s", pubkey, targetPath)
 	file, _ := os.Create(pubkey + "/" + fileName) //nolint
 	defer file.Close()                            //nolint
 
 	if err := downloadDmsg(ctx, log, &httpC, file, target, maxSize); err != nil {
-		log.WithError(err).Errorf("The %s for visor %s not available", fileName, pubkey)
+		log.WithError(err).Errorf("The %s for visor %s not available. The version of visor is %s", fileName, pubkey, version.String())
 		return err
 	}
 	return nil
