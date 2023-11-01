@@ -243,7 +243,7 @@ func download(ctx context.Context, log *logging.Logger, httpC http.Client, targe
 	defer file.Close()                            //nolint
 
 	if err := downloadDmsg(ctx, log, &httpC, file, target, maxSize); err != nil {
-		log.WithError(err).Errorf("The %s for visor %s not available. The version of visor is %s", fileName, pubkey, version.String())
+		log.WithError(err).Errorf("The %s for visor %s not available. The version of visor is %s.", fileName, pubkey, version.String())
 		return err
 	}
 	return nil
