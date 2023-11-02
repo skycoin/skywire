@@ -113,6 +113,20 @@ func New(log *logging.Logger, tpLogPath, localPath, customPath string, whitelist
 		// File not found, return 404
 		c.Writer.WriteHeader(http.StatusNotFound)
 	})
+	// serve transport log files
+	r.GET("/transport_logs/:file", func(c *gin.Context) {
+		// files with .csv extension are **likely** transport log files
+		if filepath.Ext(c.Param("file")) == ".csv" {
+			// check transport logs dir for the file, and serve it if it exists
+			_, err := os.Stat(filepath.Join(tpLogPath, c.Param("file")))
+			if err == nil {
+				c.File(filepath.Join(tpLogPath, c.Param("file")))
+				return
+			}
+		}
+		// File not found, return 404
+		c.Writer.WriteHeader(http.StatusNotFound)
+	})
 
 	api.Handler = r
 	return api
@@ -146,10 +160,6 @@ func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {
 		remotePK, _, err := net.SplitHostPort(c.Request.RemoteAddr)
 		if err != nil {
 			c.Writer.WriteHeader(http.StatusInternalServerError)
-			_, err := c.Writer.Write([]byte("500 Internal Server Error"))
-			if err != nil {
-				httputil.GetLogger(c.Request).WithError(err).Errorf("write http response")
-			}
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
@@ -170,10 +180,6 @@ func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {
 		} else {
 			// Otherwise, return a 401 Unauthorized error.
 			c.Writer.WriteHeader(http.StatusUnauthorized)
-			_, err := c.Writer.Write([]byte("401 Unauthorized"))
-			if err != nil {
-				httputil.GetLogger(c.Request).WithError(err).Errorf("write http response")
-			}
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}

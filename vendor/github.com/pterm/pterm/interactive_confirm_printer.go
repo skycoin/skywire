@@ -2,40 +2,42 @@ package pterm
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"atomicgo.dev/cursor"
 	"atomicgo.dev/keyboard"
 	"atomicgo.dev/keyboard/keys"
+
+	"github.com/pterm/pterm/internal"
 )
 
-var (
-	// DefaultInteractiveConfirm is the default InteractiveConfirm printer.
-	// Pressing "y" will return true, "n" will return false.
-	// Pressing enter without typing "y" or "n" will return the configured default value (by default set to "no").
-	DefaultInteractiveConfirm = InteractiveConfirmPrinter{
-		DefaultValue: false,
-		DefaultText:  "Please confirm",
-		TextStyle:    &ThemeDefault.PrimaryStyle,
-		ConfirmText:  "Yes",
-		ConfirmStyle: &ThemeDefault.SuccessMessageStyle,
-		RejectText:   "No",
-		RejectStyle:  &ThemeDefault.ErrorMessageStyle,
-		SuffixStyle:  &ThemeDefault.SecondaryStyle,
-	}
-)
+// DefaultInteractiveConfirm is the default InteractiveConfirm printer.
+// Pressing "y" will return true, "n" will return false.
+// Pressing enter without typing "y" or "n" will return the configured default value (by default set to "no").
+var DefaultInteractiveConfirm = InteractiveConfirmPrinter{
+	DefaultValue: false,
+	DefaultText:  "Please confirm",
+	TextStyle:    &ThemeDefault.PrimaryStyle,
+	ConfirmText:  "Yes",
+	ConfirmStyle: &ThemeDefault.SuccessMessageStyle,
+	RejectText:   "No",
+	RejectStyle:  &ThemeDefault.ErrorMessageStyle,
+	SuffixStyle:  &ThemeDefault.SecondaryStyle,
+	Delimiter:    ": ",
+}
 
 // InteractiveConfirmPrinter is a printer for interactive confirm prompts.
 type InteractiveConfirmPrinter struct {
-	DefaultValue bool
-	DefaultText  string
-	TextStyle    *Style
-	ConfirmText  string
-	ConfirmStyle *Style
-	RejectText   string
-	RejectStyle  *Style
-	SuffixStyle  *Style
+	DefaultValue    bool
+	DefaultText     string
+	Delimiter       string
+	TextStyle       *Style
+	ConfirmText     string
+	ConfirmStyle    *Style
+	RejectText      string
+	RejectStyle     *Style
+	SuffixStyle     *Style
+	OnInterruptFunc func()
 }
 
 // WithDefaultText sets the default text.
@@ -86,21 +88,40 @@ func (p InteractiveConfirmPrinter) WithSuffixStyle(style *Style) *InteractiveCon
 	return &p
 }
 
+// OnInterrupt sets the function to execute on exit of the input reader
+func (p InteractiveConfirmPrinter) WithOnInterruptFunc(exitFunc func()) *InteractiveConfirmPrinter {
+	p.OnInterruptFunc = exitFunc
+	return &p
+}
+
+// WithDelimiter sets the delimiter between the message and the input.
+func (p InteractiveConfirmPrinter) WithDelimiter(delimiter string) *InteractiveConfirmPrinter {
+	p.Delimiter = delimiter
+	return &p
+}
+
 // Show shows the confirm prompt.
 //
 // Example:
-//  result, _ := pterm.DefaultInteractiveConfirm.Show("Are you sure?")
-//  pterm.Println(result)
+//
+//	result, _ := pterm.DefaultInteractiveConfirm.Show("Are you sure?")
+//	pterm.Println(result)
 func (p InteractiveConfirmPrinter) Show(text ...string) (bool, error) {
+	// should be the first defer statement to make sure it is executed last
+	// and all the needed cleanup can be done before
+	cancel, exit := internal.NewCancelationSignal(p.OnInterruptFunc)
+	defer exit()
+
 	var result bool
 
 	if len(text) == 0 || text[0] == "" {
 		text = []string{p.DefaultText}
 	}
 
-	p.TextStyle.Print(text[0] + " " + p.getSuffix() + ": ")
+	p.TextStyle.Print(text[0] + " " + p.getSuffix() + p.Delimiter)
 	y, n := p.getShortHandles()
 
+	var interrupted bool
 	err := keyboard.Listen(func(keyInfo keys.Key) (stop bool, err error) {
 		key := keyInfo.Code
 		char := strings.ToLower(keyInfo.String())
@@ -132,12 +153,15 @@ func (p InteractiveConfirmPrinter) Show(text ...string) (bool, error) {
 			result = p.DefaultValue
 			return true, nil
 		case keys.CtrlC:
-			os.Exit(1)
+			cancel()
+			interrupted = true
 			return true, nil
 		}
 		return false, nil
 	})
-	cursor.StartOfLine()
+	if !interrupted {
+		cursor.StartOfLine()
+	}
 	return result, err
 }
 

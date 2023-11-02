@@ -219,7 +219,7 @@ func Init(cfg *Config) {
 
 				// Styling short and full flags (-f, --flag)
 				if cf != nil {
-					re := regexp.MustCompile(`(--?\w+)`)
+					re := regexp.MustCompile(`(--?\S+)`)
 					for _, flag := range re.FindAllString(lines[k], 2) {
 						lines[k] = strings.Replace(lines[k], flag, cf.Sprint(flag), 1)
 					}

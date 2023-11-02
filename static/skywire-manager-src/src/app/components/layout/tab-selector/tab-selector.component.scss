@@ -1,0 +1,17 @@
+.top-dialog-button{
+  .top-dialog-button-content {
+    display: flex;
+
+    .tab-name {
+      flex-grow: 1;
+      margin-right: 10px;
+      align-self: center;
+    }
+
+    .icon {
+      font-size: 20px;
+      flex-shrink: 0;
+      align-self: center;
+    }
+  }
+}
