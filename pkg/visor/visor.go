@@ -105,9 +105,7 @@ type Visor struct {
 	// produced by concurrent parts of modules
 	runtimeErrors chan error
 
-	isServicesHealthy *internalHealthInfo
-	//	autoPeer             bool                   // autoPeer=true tells the visor to query the http endpoint of the hypervisor on the local network for the hypervisor's public key when connectio to the hypervisor is lost
-	//	autoPeerIP           string                 // autoPeerCmd is the command string used to return the public key of the hypervisor
+	isServicesHealthy    *internalHealthInfo
 	remoteVisors         map[cipher.PubKey]Conn // remote hypervisors the visor is attempting to connect to
 	connectedHypervisors map[cipher.PubKey]bool // remote hypervisors the visor is currently connected to
 	allowedPorts         map[int]bool
@@ -182,10 +180,6 @@ func run(conf *visorconfig.V1) error {
 			conf.Hypervisors = append(conf.Hypervisors, pubkey)
 		}
 	}
-
-	//	if isAutoPeer {
-	//		conf = initAutopeer(conf)
-	//	}
 
 	if logLvl != "" {
 		//validate & set log level
@@ -320,10 +314,6 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	if !v.processRuntimeErrs() {
 		return nil, false
 	}
-	//	if isAutoPeer {
-	//		v.autoPeer = true
-	//		v.autoPeerIP = autoPeerIP
-	//	}
 	log.Info("Startup complete.")
 	return v, true
 }
@@ -349,52 +339,6 @@ func (v *Visor) isStunReady() bool {
 		return false
 	}
 }
-
-/*
-func initAutopeer(conf *visorconfig.V1) *visorconfig.V1 {
-	log := mLog.PackageLogger("visor:autopeer")
-
-	if !isAutoPeer {
-		log.WithError(fmt.Errorf("erroneous initialization")).Error("error autopeering")
-		return conf
-	}
-	//autopeering should only happen when there is no local or remote hypervisor set in the config.
-	//and hence can be disabled by setting these. the visor may still be invoked with autopeering flag.
-	if conf.Hypervisor != nil {
-		isAutoPeer = false
-		log.Info("Local hypervisor running, disabling autopeer")
-		return conf
-	}
-
-	if len(conf.Hypervisors) > 0 {
-		isAutoPeer = false
-		log.Info("%d Remote hypervisor(s) set in config; disabling autopeer", len(conf.Hypervisors))
-		log.Info(conf.Hypervisors)
-		return conf
-	}
-
-	log.Info("Autopeer: ", isAutoPeer)
-	hvkey, err := FetchHvPk(autoPeerIP)
-	if err != nil {
-		log.WithError(err).Error("error autopeering")
-		return conf
-	}
-
-	pubkey := cipher.PubKey{}
-	hvkey = strings.TrimSpace(hvkey)
-	hypervisorPKsSlice := strings.Split(hvkey, ",")
-	for _, pubkeyString := range hypervisorPKsSlice {
-		if err := pubkey.Set(pubkeyString); err != nil {
-			log.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
-			continue
-		}
-		log.Infof("%s PK added as remote hypervisor PK", pubkeyString)
-		conf.Hypervisors = append(conf.Hypervisors, pubkey)
-	}
-
-	return conf
-}
-*/
 
 func initLogger() *logging.MasterLogger {
 	mLog := logging.NewMasterLogger()
@@ -484,11 +428,6 @@ func (v *Visor) Close() error {
 		start := time.Now()
 		errCh := make(chan error, 1)
 		t := time.NewTimer(moduleShutdownTimeout)
-
-		// should keep transport.manager shutdown continue till all transports delete there
-		if cl.src == "transport.manager" {
-			t = time.NewTimer(2 * time.Hour)
-		}
 
 		log := v.MasterLogger().PackageLogger(fmt.Sprintf("visor:shutdown:%s", cl.src)).
 			WithField("func", fmt.Sprintf("[%d/%d]", i+1, len(v.closeStack)))

@@ -21,6 +21,7 @@ package common
 // high-performance serialization, especially for large data structures,
 // should look at more advanced solutions such as the encoding/gob
 // package or protocol buffers.
+
 import (
 	"errors"
 	"io"
@@ -388,8 +389,10 @@ type coder struct {
 	buf   []byte
 }
 
-type decoder coder
-type encoder coder
+type (
+	decoder coder
+	encoder coder
+)
 
 func (d *decoder) uint8() uint8 {
 	x := d.buf[0]
