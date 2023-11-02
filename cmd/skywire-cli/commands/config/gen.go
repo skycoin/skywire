@@ -26,7 +26,6 @@ import (
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/dmsgc"
-	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -776,7 +775,6 @@ var genConfigCmd = &cobra.Command{
 		conf.DmsgHTTPServerPath = visorconfig.LocalPath + "/" + visorconfig.Custom
 		conf.StunServers = services.StunServers //utilenv.GetStunServers()
 		conf.ShutdownTimeout = visorconfig.DefaultTimeout
-		conf.RestartCheckDelay = visorconfig.Duration(restart.DefaultCheckDelay)
 
 		conf.Dmsgpty = &visorconfig.Dmsgpty{
 			DmsgPort: visorconfig.DmsgPtyPort,
