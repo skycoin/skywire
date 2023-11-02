@@ -1032,6 +1032,9 @@ func (v *Visor) Ports() (map[string]PortDetail, error) {
 // TransportTypes implements API.
 func (v *Visor) TransportTypes() ([]string, error) {
 	var types []string
+	if v.tpM == nil {
+		return types, ErrTrpMangerNotAvailable
+	}
 	for _, netType := range v.tpM.Networks() {
 		types = append(types, string(netType))
 	}
