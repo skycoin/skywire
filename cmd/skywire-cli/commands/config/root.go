@@ -50,7 +50,7 @@ var (
 	disableApps                 string
 	isBestProtocol              bool
 	serviceConfURL              string
-	services                    *visorconfig.Services
+	services                    visorconfig.Services
 	isForce                     bool
 	isHide                      bool
 	isAll                       bool
