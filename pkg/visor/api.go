@@ -1064,12 +1064,14 @@ func (v *Visor) Transports(types []string, pks []cipher.PubKey, logs bool) ([]*T
 		}
 		return true
 	}
-	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
-		if typeIncluded(tp.Type()) && pkIncluded(v.tpM.Local(), tp.Remote()) {
-			result = append(result, newTransportSummary(v.tpM, tp, logs, v.router.SetupIsTrusted(tp.Remote())))
-		}
-		return true
-	})
+	if v.tpM != nil {
+		v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
+			if typeIncluded(tp.Type()) && pkIncluded(v.tpM.Local(), tp.Remote()) {
+				result = append(result, newTransportSummary(v.tpM, tp, logs, v.router.SetupIsTrusted(tp.Remote())))
+			}
+			return true
+		})
+	}
 
 	return result, nil
 }
