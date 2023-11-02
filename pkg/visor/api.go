@@ -153,10 +153,10 @@ func (v *Visor) Overview() (*Overview, error) {
 	var publicIP string
 	var isSymmetricNAT bool
 	if v == nil {
-		panic("v is nil")
+		return &Overview{}, errors.New("v is nil")
 	}
 	if v.tpM == nil {
-		panic("tpM is nil")
+		return &Overview{}, errors.New("tpM is nil")
 	}
 	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
 		tSummaries = append(tSummaries,
