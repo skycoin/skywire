@@ -72,15 +72,15 @@ export class NodeActionsHelper {
     }
 
     this.options.push({
-      name: 'actions.menu.turn-off',
-      actionName: 'shutdown',
-      icon: 'power_settings_new'
-    });
-
-    this.options.push({
       name: 'actions.menu.logs',
       actionName: 'logs',
       icon: 'subject',
+    });
+
+    this.options.push({
+      name: 'actions.menu.turn-off',
+      actionName: 'shutdown',
+      icon: 'power_settings_new'
     });
 
     // TODO: remove if the option will not be added again. Delete the translatable strings too.
@@ -129,10 +129,10 @@ export class NodeActionsHelper {
       this.terminal();
     } else if (actionName === 'update') {
       this.update();
-    } else if (actionName === 'shutdown') {
-      this.shutdown();
     } else if (actionName === 'logs') {
       this.runtimeLogs();
+    } else if (actionName === 'shutdown') {
+      this.shutdown();
     } else if (actionName === null) {
       // Null is returned if the back button was pressed.
       this.back();
