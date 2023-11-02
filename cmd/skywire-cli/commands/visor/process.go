@@ -28,7 +28,6 @@ func init() {
 		root = true
 	}
 	RootCmd.AddCommand(startCmd)
-	RootCmd.AddCommand(restartCmd)
 	RootCmd.AddCommand(reloadCmd)
 	RootCmd.AddCommand(shutdownCmd)
 	startCmd.Flags().BoolVarP(&sourcerun, "src", "s", false, "'go run' external commands from the skywire sources")
@@ -56,22 +55,6 @@ var startCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to start visor: %v", err))
 		}
 		internal.PrintOutput(cmd.Flags(), output, fmt.Sprintln(output))
-	},
-}
-
-var restartCmd = &cobra.Command{
-	Use:   "restart",
-	Short: "restart visor",
-	Run: func(cmd *cobra.Command, args []string) {
-		rpcClient, err := clirpc.Client(cmd.Flags())
-		if err != nil {
-			os.Exit(1)
-		}
-		err = rpcClient.Restart()
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error restarting visor"))
-		}
-		internal.PrintOutput(cmd.Flags(), "Visor restarted", fmt.Sprintln("Visor restarted"))
 	},
 }
 
