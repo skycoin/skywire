@@ -391,6 +391,13 @@ func (r *RPC) SetAppSecure(in *SetAppBoolIn, _ *struct{}) (err error) {
 	return r.visor.SetAppSecure(in.AppName, in.Val)
 }
 
+// SetAppAddress sets addr flag for the app
+func (r *RPC) SetAppAddress(in *SetAppStringIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppAddress", in)(nil, &err)
+
+	return r.visor.SetAppAddress(in.AppName, in.Val)
+}
+
 // GetAppStats gets app runtime statistics.
 func (r *RPC) GetAppStats(appName *string, out *appserver.AppStats) (err error) {
 	defer rpcutil.LogCall(r.log, "GetAppStats", appName)(out, &err)

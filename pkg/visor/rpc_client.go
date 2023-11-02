@@ -267,6 +267,14 @@ func (rc *rpcClient) SetAppSecure(appName string, isSecure bool) error {
 	}, &struct{}{})
 }
 
+// SetAppAddress implements API.
+func (rc *rpcClient) SetAppAddress(appName string, address string) error {
+	return rc.Call("SetAppAddress", &SetAppStringIn{
+		AppName: appName,
+		Val:     address,
+	}, &struct{}{})
+}
+
 // SetAppDNS implements API.
 func (rc *rpcClient) SetAppDNS(appName string, dnsAddr string) error {
 	return rc.Call("SetAppDNS", &SetAppStringIn{
@@ -977,6 +985,21 @@ func (mc *mockRPCClient) SetAppSecure(appName string, isSecure bool) error { //n
 		}
 
 		return fmt.Errorf("app of name '%s' does not exist", socksName)
+	})
+}
+
+// SetAppAddress implements API.
+func (mc *mockRPCClient) SetAppAddress(appName string, address string) error { //nolint:all
+	return mc.do(true, func() error {
+		const chatName = "skychat"
+
+		for i := range mc.o.Apps {
+			if mc.o.Apps[i].Name == chatName {
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", chatName)
 	})
 }
 

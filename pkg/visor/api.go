@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -72,6 +73,7 @@ type API interface {
 	SetAppPassword(appName, password string) error
 	SetAppPK(appName string, pk cipher.PubKey) error
 	SetAppSecure(appName string, isSecure bool) error
+	SetAppAddress(appName string, address string) error
 	SetAppKillswitch(appName string, killswitch bool) error
 	SetAppNetworkInterface(appName string, netifc string) error
 	SetAppDNS(appName string, dnsaddr string) error
@@ -765,6 +767,46 @@ func (v *Visor) SetAppSecure(appName string, isSecure bool) error {
 		return err
 	}
 	v.log.Infof("Updated %v secure state", appName)
+
+	return nil
+}
+
+// SetAppAddress implements API.
+func (v *Visor) SetAppAddress(appName string, address string) error {
+	// check app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
+
+	if appName != visorconfig.SkychatName {
+		return fmt.Errorf("app %s is not allowed to set addr", appName)
+	}
+
+	if len(address) < 5 || (address[:1] != ":" && address[:2] != "*:") {
+		return fmt.Errorf("invalid addr value: %s", address)
+	}
+
+	forLocalhostOnly := address[:1] == ":"
+	prefix := 2
+	if forLocalhostOnly {
+		prefix = 1
+	}
+
+	portNumber, err := strconv.Atoi(address[prefix:])
+	if err != nil || portNumber < 1025 || portNumber > 65536 {
+		return fmt.Errorf("invalid port number: %s", strconv.Itoa(portNumber))
+	}
+
+	v.log.Infof("Setting %s addr to %v", appName, address)
+
+	const (
+		addrArg = "-addr"
+	)
+	if err := v.conf.UpdateAppArg(v.appL, appName, addrArg, address); err != nil {
+		return err
+	}
+
+	v.log.Infof("Updated %v addr state", appName)
 
 	return nil
 }
