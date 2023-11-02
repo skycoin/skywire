@@ -27,14 +27,12 @@ export class NodeActionsHelper {
   private currentNode: Node;
   private currentNodeKey: string;
   private canBeUpdated = false;
-  private canBeRestarted = false;
   private canOpenTerminal = false;
 
   options: MenuOptionData[] = [];
 
   returnButtonText: string;
 
-  private rebootSubscription: Subscription;
   private updateSubscription: Subscription;
 
   // Services this class need.
@@ -78,14 +76,6 @@ export class NodeActionsHelper {
       icon: 'subject',
     });
 
-    if (this.canBeRestarted) {
-      this.options.push({
-        name: 'actions.menu.reboot',
-        actionName: 'reboot',
-        icon: 'rotate_right'
-      });
-    }
-
     // TODO: remove if the option will not be added again. Delete the translatable strings too.
     /*
     if (this.canBeUpdated) {
@@ -106,10 +96,8 @@ export class NodeActionsHelper {
 
     if (GeneralUtils.checkIfTagIsUpdatable(currentNode.buildTag)) {
       this.canBeUpdated = true;
-      this.canBeRestarted = true;
     } else {
       this.canBeUpdated = false;
-      this.canBeRestarted = false;
     }
 
     this.canOpenTerminal = GeneralUtils.checkIfTagCanOpenterminal(currentNode.buildTag);
@@ -136,8 +124,6 @@ export class NodeActionsHelper {
       this.update();
     } else if (actionName === 'logs') {
       this.runtimeLogs();
-    } else if (actionName === 'reboot') {
-      this.reboot();
     } else if (actionName === null) {
       // Null is returned if the back button was pressed.
       this.back();
@@ -148,29 +134,9 @@ export class NodeActionsHelper {
    * Cleans the object. Must be called when the object is no longer needed.
    */
   dispose() {
-    if (this.rebootSubscription) {
-      this.rebootSubscription.unsubscribe();
-    }
     if (this.updateSubscription) {
       this.updateSubscription.unsubscribe();
     }
-  }
-
-  reboot() {
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'actions.reboot.confirmation');
-
-    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-      confirmationDialog.componentInstance.showProcessing();
-
-      this.rebootSubscription = this.nodeService.reboot(this.currentNodeKey).subscribe(() => {
-        this.snackbarService.showDone('actions.reboot.done');
-        confirmationDialog.close();
-      }, (err: OperationError) => {
-        err = processServiceError(err);
-
-        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
-      });
-    });
   }
 
   update() {
