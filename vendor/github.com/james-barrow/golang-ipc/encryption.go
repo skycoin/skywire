@@ -27,7 +27,7 @@ func (sc *Server) keyExchange() ([32]byte, error) {
 		return shared, err
 	}
 
-	// recieve clients public key
+	// received clients public key
 	pubRecvd, err := recvPublic(sc.conn)
 	if err != nil {
 		return shared, err
@@ -50,7 +50,7 @@ func (cc *Client) keyExchange() ([32]byte, error) {
 		return shared, err
 	}
 
-	// recieve servers public key
+	// received servers public key
 	pubRecvd, err := recvPublic(cc.conn)
 	if err != nil {
 		return shared, err
@@ -78,7 +78,7 @@ func generateKeys() (*ecdsa.PrivateKey, *ecdsa.PublicKey, error) {
 
 	puba := &priva.PublicKey
 
-	if priva.IsOnCurve(puba.X, puba.Y) == false {
+	if !priva.IsOnCurve(puba.X, puba.Y) {
 		return nil, nil, errors.New("keys created arn't on curve")
 	}
 
@@ -103,20 +103,20 @@ func sendPublic(conn net.Conn, pub *ecdsa.PublicKey) error {
 
 func recvPublic(conn net.Conn) (*ecdsa.PublicKey, error) {
 
-	buff := make([]byte, 300)
+	buff := make([]byte, 98)
 	i, err := conn.Read(buff)
 	if err != nil {
-		return nil, errors.New("didn't recieve public key")
+		return nil, errors.New("didn't received public key")
 	}
 
 	if i != 97 {
-		return nil, errors.New("public key recieved isn't valid length")
+		return nil, errors.New("public key received isn't valid length")
 	}
 
 	recvdPub := bytesToPublicKey(buff[:i])
 
-	if recvdPub.IsOnCurve(recvdPub.X, recvdPub.Y) == false {
-		return nil, errors.New("didn't recieve valid public key")
+	if !recvdPub.IsOnCurve(recvdPub.X, recvdPub.Y) {
+		return nil, errors.New("didn't received valid public key")
 	}
 
 	return recvdPub, nil
@@ -145,7 +145,6 @@ func bytesToPublicKey(recvdPub []byte) *ecdsa.PublicKey {
 func createCipher(shared [32]byte) (*cipher.AEAD, error) {
 
 	b, err := aes.NewCipher(shared[:])
-
 	if err != nil {
 		return nil, err
 	}
@@ -162,11 +161,9 @@ func encrypt(g cipher.AEAD, data []byte) ([]byte, error) {
 
 	nonce := make([]byte, g.NonceSize())
 
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, err
-	}
+	_, err := io.ReadFull(rand.Reader, nonce)
 
-	return g.Seal(nonce, nonce, data, nil), nil
+	return g.Seal(nonce, nonce, data, nil), err
 
 }
 

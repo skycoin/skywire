@@ -8,6 +8,7 @@ import (
 	"atomicgo.dev/keyboard"
 	"atomicgo.dev/keyboard/keys"
 	"github.com/lithammer/fuzzysearch/fuzzy"
+
 	"github.com/pterm/pterm/internal"
 )
 
@@ -25,20 +26,23 @@ var (
 		Filter:         true,
 		KeySelect:      keys.Enter,
 		KeyConfirm:     keys.Tab,
+		Checkmark:      &ThemeDefault.Checkmark,
 	}
 )
 
 // InteractiveMultiselectPrinter is a printer for interactive multiselect menus.
 type InteractiveMultiselectPrinter struct {
-	DefaultText    string
-	TextStyle      *Style
-	Options        []string
-	OptionStyle    *Style
-	DefaultOptions []string
-	MaxHeight      int
-	Selector       string
-	SelectorStyle  *Style
-	Filter         bool
+	DefaultText     string
+	TextStyle       *Style
+	Options         []string
+	OptionStyle     *Style
+	DefaultOptions  []string
+	MaxHeight       int
+	Selector        string
+	SelectorStyle   *Style
+	Filter          bool
+	Checkmark       *Checkmark
+	OnInterruptFunc func()
 
 	selectedOption        int
 	selectedOptions       []int
@@ -49,7 +53,10 @@ type InteractiveMultiselectPrinter struct {
 	displayedOptionsStart int
 	displayedOptionsEnd   int
 
-	KeySelect  keys.KeyCode
+	// KeySelect is the select key. It cannot be keys.Space when Filter is enabled.
+	KeySelect keys.KeyCode
+
+	// KeyConfirm is the confirm key. It cannot be keys.Space when Filter is enabled.
 	KeyConfirm keys.KeyCode
 }
 
@@ -78,20 +85,34 @@ func (p InteractiveMultiselectPrinter) WithMaxHeight(maxHeight int) *Interactive
 }
 
 // WithFilter sets the Filter option
-func (p InteractiveMultiselectPrinter) WithFilter(filter bool) *InteractiveMultiselectPrinter {
-	p.Filter = filter
+func (p InteractiveMultiselectPrinter) WithFilter(b ...bool) *InteractiveMultiselectPrinter {
+	p.Filter = internal.WithBoolean(b)
 	return &p
 }
 
 // WithKeySelect sets the confirm key
+// It cannot be keys.Space when Filter is enabled.
 func (p InteractiveMultiselectPrinter) WithKeySelect(keySelect keys.KeyCode) *InteractiveMultiselectPrinter {
 	p.KeySelect = keySelect
 	return &p
 }
 
 // WithKeyConfirm sets the confirm key
+// It cannot be keys.Space when Filter is enabled.
 func (p InteractiveMultiselectPrinter) WithKeyConfirm(keyConfirm keys.KeyCode) *InteractiveMultiselectPrinter {
 	p.KeyConfirm = keyConfirm
+	return &p
+}
+
+// WithCheckmark sets the checkmark
+func (p InteractiveMultiselectPrinter) WithCheckmark(checkmark *Checkmark) *InteractiveMultiselectPrinter {
+	p.Checkmark = checkmark
+	return &p
+}
+
+// OnInterrupt sets the function to execute on exit of the input reader
+func (p InteractiveMultiselectPrinter) WithOnInterruptFunc(exitFunc func()) *InteractiveMultiselectPrinter {
+	p.OnInterruptFunc = exitFunc
 	return &p
 }
 
@@ -99,7 +120,7 @@ func (p InteractiveMultiselectPrinter) WithKeyConfirm(keyConfirm keys.KeyCode) *
 func (p *InteractiveMultiselectPrinter) Show(text ...string) ([]string, error) {
 	// should be the first defer statement to make sure it is executed last
 	// and all the needed cleanup can be done before
-	cancel, exit := internal.NewCancelationSignal()
+	cancel, exit := internal.NewCancelationSignal(p.OnInterruptFunc)
 	defer exit()
 
 	if len(text) == 0 || Sprint(text[0]) == "" {
@@ -270,7 +291,7 @@ func (p *InteractiveMultiselectPrinter) Show(text ...string) ([]string, error) {
 		return false, nil
 	})
 	if err != nil {
-		fmt.Println(err)
+		Error.Println(err)
 		return nil, fmt.Errorf("failed to start keyboard listener: %w", err)
 	}
 
@@ -345,9 +366,9 @@ func (p *InteractiveMultiselectPrinter) renderSelectMenu() string {
 		}
 		var checkmark string
 		if p.isSelected(option) {
-			checkmark = fmt.Sprintf("[%s]", Green("✓"))
+			checkmark = fmt.Sprintf("[%s]", p.Checkmark.Checked)
 		} else {
-			checkmark = fmt.Sprintf("[%s]", Red("✗"))
+			checkmark = fmt.Sprintf("[%s]", p.Checkmark.Unchecked)
 		}
 		if i == p.selectedOption {
 			content += Sprintf("%s %s %s\n", p.renderSelector(), checkmark, option)

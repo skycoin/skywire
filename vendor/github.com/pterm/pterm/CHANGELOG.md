@@ -1,6 +1,148 @@
 <a name="unreleased"></a>
 ## [Unreleased]
 
+### Bug Fixes
+- buggy basic text input ([#551](https://github.com/pterm/pterm/issues/551))
+- **textinput:** fixed buggy behavior ([#550](https://github.com/pterm/pterm/issues/550))
+
+
+<a name="v0.12.64"></a>
+## [v0.12.64] - 2023-08-03
+### Features
+- add custom delimiters to select printers ([#545](https://github.com/pterm/pterm/issues/545))
+
+
+<a name="v0.12.63"></a>
+## [v0.12.63] - 2023-07-18
+### Features
+- add filter option for `select`
+
+### Bug Fixes
+- fixed area on Windows
+- **box:** fixed wrong title length calculation
+
+### Code Refactoring
+- use WithBoolean on multiselect printer
+- use WithBoolean on multiselect printer
+- use WithBoolean method on WithFilter method of select printer
+
+
+<a name="v0.12.62"></a>
+## [v0.12.62] - 2023-05-24
+### Bug Fixes
+- fixed not being able to add a custom graceful shutdown
+
+
+<a name="v0.12.61"></a>
+## [v0.12.61] - 2023-05-14
+### Bug Fixes
+- **table:** fixed table when a column contained a whitespace at the start or end
+
+
+<a name="v0.12.60"></a>
+## [v0.12.60] - 2023-05-11
+### Features
+- **progressbar:** various progressbar improvements
+- **progressbar:** various progressbar improvements
+- **progressbar:** various progressbar improvements
+- **rgb:** added RGBStyle
+
+### Test
+- **rgb:** added RGBStyle tests
+
+### Code Refactoring
+- **rgb:** removed 'GetValues' for 'RGBStyle'
+
+
+<a name="v0.12.59"></a>
+## [v0.12.59] - 2023-04-15
+### Features
+- add optional mask to InteractiveTextInputPrinter
+
+
+<a name="v0.12.58"></a>
+## [v0.12.58] - 2023-04-03
+### Features
+- **logger:** implemented structured logging
+- **logger:** implemented structured logging
+- **logger:** implemented structured logging
+- **logger:** added logger
+- **logger:** create logger
+- **rgb:** made it possible to use RGB colors as background
+- **rgb:** made it possible to use RGB colors as background
+- **rgb:** made it possible to use RGB colors as background
+
+### Bug Fixes
+- **rgb:** fix Fade maxValue == current not displaying the last color
+
+
+<a name="v0.12.57"></a>
+## [v0.12.57] - 2023-03-28
+### Code Refactoring
+- use `pterm.Print` instead of `fmt.Print` functions
+
+
+<a name="v0.12.56"></a>
+## [v0.12.56] - 2023-03-14
+### Bug Fixes
+- **table:** fixed panic when multiple lines contained color in a single row
+
+
+<a name="v0.12.55"></a>
+## [v0.12.55] - 2023-03-04
+### Features
+- **table:** multiline support for table printer
+- **table:** multiline support for table printer
+
+### Code Refactoring
+- **table:** fixed linting
+
+
+<a name="v0.12.54"></a>
+## [v0.12.54] - 2023-01-22
+### Bug Fixes
+- **tree:** print top node [#443](https://github.com/pterm/pterm/issues/443)
+
+
+<a name="v0.12.53"></a>
+## [v0.12.53] - 2023-01-05
+### Features
+- **color:** added `color.ToStyle()`
+- **color:** added `color.ToStyle()`
+- **progressbar:** added optional title to `Start` method
+
+### Bug Fixes
+- **prefix:** fixed line numbers in different print functions
+
+
+<a name="v0.12.52"></a>
+## [v0.12.52] - 2023-01-05
+### Features
+- **multiselect:** added theme support for checkmarks
+- **multiselect:** added theme support for checkmarks
+
+### Test
+- **multiselect:** fixed test
+
+### Code Refactoring
+- **progressbar:** make add more safe
+
+
+<a name="v0.12.51"></a>
+## [v0.12.51] - 2022-12-24
+### Bug Fixes
+- Make sure the confirm printer can clean up after Ctrl+C
+
+
+<a name="v0.12.50"></a>
+## [v0.12.50] - 2022-11-22
+### Bug Fixes
+- revert original test & add new test
+- slice bounds out of range on select printer
+
+
+<a name="v0.12.49"></a>
+## [v0.12.49] - 2022-10-03
 
 <a name="v0.12.48"></a>
 ## [v0.12.48] - 2022-10-02
@@ -483,13 +625,13 @@
 
 ### Code Refactoring
 - remove analytics
-- **boxprinter:** change from `RenderablePrinter` to `TextPrinter`
 - **boxprinter:** return theme when style is nil
 - **boxprinter:** change `DefaultBox` top and bottom padding to 0
 - **boxprinter:** fix spacing between boxes and in boxes
 - **boxprinter:** refactor code
-- **panelprinter:** optional border for `Panel`
+- **boxprinter:** change from `RenderablePrinter` to `TextPrinter`
 - **panelprinter:** add `BoxPrinter` to surround panels with a fully custom box
+- **panelprinter:** optional border for `Panel`
 
 
 <a name="v0.12.7"></a>
@@ -576,8 +718,8 @@
 - **panel:** add test for `WithBottomPadding`
 - **panel:** add test for `WithSameColumnWidth` & multiple `panel`
 - **panel:** add test for `WithSameColumnWidth`
-- **progressbar:** change `Progressbar` to `ProgressbarPrinter`
 - **progressbar:** change directory name `progressbar_test` to `progressbar_printer_test`
+- **progressbar:** change `Progressbar` to `ProgressbarPrinter`
 - **spinner:** change directory name `spinner_test` to `spinner_printer_test`
 - **spinner:** change `Spinner` to `SpinnerPrinter`
 - **table:** change `Table` to `TablePrinter`
@@ -592,8 +734,8 @@
 - **progressbar:** change `ActiveProgressbars` to `ActiveProgressbarPrinters`
 - **progressbar:** change directory name `progressbar` to `progressbar_printer`
 - **progressbar:** change `Progressbar` to `ProgressbarPrinter`
-- **spinner:** change `Spinner` to `SpinnerPrinter`
 - **spinner:** change directory name `spinner` to `spinner_printer`
+- **spinner:** change `Spinner` to `SpinnerPrinter`
 - **table:** change `Table` to `TablePrinter`
 - **tree:** change `Tree` to `TreePrinter`
 
@@ -687,10 +829,10 @@ The global variable `DisableOutput` was renamed to `Output`.
 - **tree:** add Indent to control the spacing between levels and changed docs(examples)
 - **tree:** add more spacing between levels
 - **tree:** refactor `Tree` code and write tests for `Tree`
-- **tree:** refactor `Tree` code
-- **tree:** refactor `Tree` code
-- **tree:** refactor `Tree` code
 - **tree:** refactor `Tree` code and write tests for `Tree`
+- **tree:** refactor `Tree` code
+- **tree:** refactor `Tree` code
+- **tree:** refactor `Tree` code
 
 
 <a name="v0.9.2"></a>
@@ -1069,7 +1211,23 @@ removed `Header` and put it's content directly into `HeaderPrinter`
 - initial commit
 
 
-[Unreleased]: https://github.com/pterm/pterm/compare/v0.12.48...HEAD
+[Unreleased]: https://github.com/pterm/pterm/compare/v0.12.64...HEAD
+[v0.12.64]: https://github.com/pterm/pterm/compare/v0.12.63...v0.12.64
+[v0.12.63]: https://github.com/pterm/pterm/compare/v0.12.62...v0.12.63
+[v0.12.62]: https://github.com/pterm/pterm/compare/v0.12.61...v0.12.62
+[v0.12.61]: https://github.com/pterm/pterm/compare/v0.12.60...v0.12.61
+[v0.12.60]: https://github.com/pterm/pterm/compare/v0.12.59...v0.12.60
+[v0.12.59]: https://github.com/pterm/pterm/compare/v0.12.58...v0.12.59
+[v0.12.58]: https://github.com/pterm/pterm/compare/v0.12.57...v0.12.58
+[v0.12.57]: https://github.com/pterm/pterm/compare/v0.12.56...v0.12.57
+[v0.12.56]: https://github.com/pterm/pterm/compare/v0.12.55...v0.12.56
+[v0.12.55]: https://github.com/pterm/pterm/compare/v0.12.54...v0.12.55
+[v0.12.54]: https://github.com/pterm/pterm/compare/v0.12.53...v0.12.54
+[v0.12.53]: https://github.com/pterm/pterm/compare/v0.12.52...v0.12.53
+[v0.12.52]: https://github.com/pterm/pterm/compare/v0.12.51...v0.12.52
+[v0.12.51]: https://github.com/pterm/pterm/compare/v0.12.50...v0.12.51
+[v0.12.50]: https://github.com/pterm/pterm/compare/v0.12.49...v0.12.50
+[v0.12.49]: https://github.com/pterm/pterm/compare/v0.12.48...v0.12.49
 [v0.12.48]: https://github.com/pterm/pterm/compare/v0.12.47...v0.12.48
 [v0.12.47]: https://github.com/pterm/pterm/compare/v0.12.46...v0.12.47
 [v0.12.46]: https://github.com/pterm/pterm/compare/v0.12.45...v0.12.46
