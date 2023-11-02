@@ -38,9 +38,6 @@ var (
 
 	// ErrNotFound is returned when a requested resource is not found.
 	ErrNotFound = errors.New("not found")
-
-	// ErrMalformedRestartContext is returned when restart context is malformed.
-	ErrMalformedRestartContext = errors.New("restart context is malformed")
 )
 
 // RPC defines RPC methods for Visor.
@@ -580,14 +577,6 @@ func (r *RPC) RouteGroups(_ *struct{}, out *[]RouteGroupInfo) (err error) {
 /*
 	<<< VISOR MANAGEMENT >>>
 */
-
-// Restart restarts visor.
-func (r *RPC) Restart(_ *struct{}, _ *struct{}) (err error) {
-	// @evanlinjin: do not defer this log statement, as the underlying visor.Logger will get closed.
-	rpcutil.LogCall(r.log, "Restart", nil)(nil, nil)
-
-	return r.visor.Restart()
-}
 
 // Reload reloads the config - without restarting the visor
 func (r *RPC) Reload(_ *struct{}, _ *struct{}) (err error) {

@@ -259,7 +259,6 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Delete("/visors/{pk}/routes/{rid}", hv.deleteRoute())
 				r.Delete("/visors/{pk}/routes/", hv.deleteRoutes())
 				r.Get("/visors/{pk}/routegroups", hv.getRouteGroups())
-				r.Post("/visors/{pk}/restart", hv.restart())
 				r.Post("/visors/{pk}/shutdown", hv.shutdown())
 				r.Get("/visors/{pk}/runtime-logs", hv.getRuntimeLogs())
 				r.Post("/visors/{pk}/min-hops", hv.postMinHops())
@@ -1136,18 +1135,6 @@ func (hv *Hypervisor) getRouteGroups() http.HandlerFunc {
 		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, resp)
-	})
-}
-
-// NOTE: Reply comes with a delay, because of check if new executable is started successfully.
-func (hv *Hypervisor) restart() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		if err := ctx.API.Restart(); err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-
-		httputil.WriteJSON(w, r, http.StatusOK, true)
 	})
 }
 
