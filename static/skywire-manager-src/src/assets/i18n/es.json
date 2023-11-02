@@ -340,15 +340,15 @@
       "terminal": "Terminal",
       "config": "Configuración",
       "update": "Actualizar",
-      "reboot": "Reiniciar",
+      "turn-off": "Apagar",
       "logs": "Ver logs"
-    },
-    "reboot": {
-      "confirmation": "¿Seguro que desea reiniciar el visor?",
-      "done": "El visor se está reiniciando."
     },
     "update": {
       "confirmation": "Una terminal será abierta en una nueva pestaña y el proceso de actualización iniciará automáticamente. ¿Desea continuar?"
+    },
+    "turn-off": {
+      "confirmation": "¿Seguro que desea apagar el visor?",
+      "done": "El visor se está apagando."
     },
     "terminal-options": {
       "full": "Terminal completa",

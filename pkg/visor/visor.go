@@ -27,7 +27,6 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
-	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/syslog"
@@ -77,7 +76,6 @@ type Visor struct {
 	logstore logstore.Store
 
 	startedAt     time.Time
-	restartCtx    *restart.Context
 	uptimeTracker utclient.APIClient
 
 	ebc          *appevent.Broadcaster // event broadcaster
@@ -244,7 +242,6 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	v := &Visor{
 		log:                  conf.MasterLogger().PackageLogger("visor"),
 		conf:                 conf,
-		restartCtx:           restartCtx,
 		initLock:             new(sync.RWMutex),
 		allowedMX:            new(sync.RWMutex),
 		isServicesHealthy:    newInternalHealthInfo(),
