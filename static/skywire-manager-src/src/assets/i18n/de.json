@@ -236,12 +236,7 @@
     "menu": {
       "terminal": "Terminal",
       "config": "Konfiguration",
-      "update": "Aktualisieren",
-      "reboot": "Neustart"
-    },
-    "reboot": {
-      "confirmation": "Den Visor wirklich neustarten?",
-      "done": "Der Visor wird neu gestartet."
+      "update": "Aktualisieren"
     },
     "terminal-options": {
       "full": "Terminal",

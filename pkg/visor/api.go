@@ -44,7 +44,6 @@ type API interface {
 	Summary() (*Summary, error)
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
-	Restart() error
 	Reload() error
 	Shutdown() error
 	RuntimeLogs() (string, error)
@@ -1399,28 +1398,13 @@ func (v *Visor) RouteGroups() ([]RouteGroupInfo, error) {
 	return routegroups, nil
 }
 
-// Restart implements API.
-func (v *Visor) Restart() error {
-	if v.restartCtx == nil {
-		return ErrMalformedRestartContext
-	}
-
-	return v.restartCtx.Restart()
-}
-
 // Reload implements API.
 func (v *Visor) Reload() error {
-	if v.restartCtx == nil {
-		return ErrMalformedRestartContext
-	}
 	return reload(v)
 }
 
 // Shutdown implements API.
 func (v *Visor) Shutdown() error {
-	if v.restartCtx == nil {
-		return ErrMalformedRestartContext
-	}
 	defer os.Exit(0)
 	return v.Close()
 }
