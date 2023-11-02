@@ -347,6 +347,13 @@ export class NodeService {
   }
 
   /**
+   * Turns off a node.
+   */
+  shutdown(nodeKey: string): Observable<any> {
+    return this.apiService.post(`visors/${nodeKey}/shutdown`);
+  }
+
+  /**
    * Checks if a node is currently being updated.
    */
   checkIfUpdating(nodeKey: string): Observable<any> {
