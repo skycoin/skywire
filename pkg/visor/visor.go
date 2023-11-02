@@ -42,6 +42,8 @@ import (
 )
 
 var (
+	// ErrVisorNotAvailable represents error for unavailable visor
+	ErrVisorNotAvailable = errors.New("no visor available")
 	// ErrAppProcNotRunning represents lookup error for App related calls.
 	ErrAppProcNotRunning = errors.New("no process of given app is running")
 	// ErrProcNotAvailable represents error for unavailable process manager
