@@ -155,10 +155,10 @@ func (v *Visor) Overview() (*Overview, error) {
 	var publicIP string
 	var isSymmetricNAT bool
 	if v == nil {
-		panic("v is nil")
+		return &Overview{}, ErrVisorNotAvailable
 	}
 	if v.tpM == nil {
-		panic("tpM is nil")
+		return &Overview{}, ErrTrpMangerNotAvailable
 	}
 	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
 		tSummaries = append(tSummaries,
@@ -1074,6 +1074,9 @@ func (v *Visor) Ports() (map[string]PortDetail, error) {
 // TransportTypes implements API.
 func (v *Visor) TransportTypes() ([]string, error) {
 	var types []string
+	if v.tpM == nil {
+		return types, ErrTrpMangerNotAvailable
+	}
 	for _, netType := range v.tpM.Networks() {
 		types = append(types, string(netType))
 	}
@@ -1106,12 +1109,14 @@ func (v *Visor) Transports(types []string, pks []cipher.PubKey, logs bool) ([]*T
 		}
 		return true
 	}
-	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
-		if typeIncluded(tp.Type()) && pkIncluded(v.tpM.Local(), tp.Remote()) {
-			result = append(result, newTransportSummary(v.tpM, tp, logs, v.router.SetupIsTrusted(tp.Remote())))
-		}
-		return true
-	})
+	if v.tpM != nil {
+		v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
+			if typeIncluded(tp.Type()) && pkIncluded(v.tpM.Local(), tp.Remote()) {
+				result = append(result, newTransportSummary(v.tpM, tp, logs, v.router.SetupIsTrusted(tp.Remote())))
+			}
+			return true
+		})
+	}
 
 	return result, nil
 }
