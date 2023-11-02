@@ -461,6 +461,15 @@
       "empty-confirmation": "The settings list is empty. Do you really want to continue?",
       "changes-made": "The changes have been made."
     },
+    "skychat-settings": {
+      "title": "Skychat Settings",
+      "localhost-only": "Allow access from the local machine only",
+      "port": "Port",
+      "save": "Save",
+      "changes-made": "The changes have been made.",
+      "port-error": "Must be a valid number between 1025 and 65536.",
+      "non-localhost-confirmation": "This will allow to use the app from anywhere on the internet. Are you sure you vant to continue?"
+    },
     "vpn-socks-server-settings": {
       "socks-title": "Skysocks Settings",
       "vpn-title": "VPN-Server Settings",
