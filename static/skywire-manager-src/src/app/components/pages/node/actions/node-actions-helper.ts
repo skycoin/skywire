@@ -34,6 +34,7 @@ export class NodeActionsHelper {
   returnButtonText: string;
 
   private updateSubscription: Subscription;
+  private shutdownSubscription: Subscription;
 
   // Services this class need.
   private dialog: MatDialog;
@@ -69,6 +70,12 @@ export class NodeActionsHelper {
         icon: 'laptop'
       });
     }
+
+    this.options.push({
+      name: 'actions.menu.turn-off',
+      actionName: 'shutdown',
+      icon: 'power_settings_new'
+    });
 
     this.options.push({
       name: 'actions.menu.logs',
@@ -122,6 +129,8 @@ export class NodeActionsHelper {
       this.terminal();
     } else if (actionName === 'update') {
       this.update();
+    } else if (actionName === 'shutdown') {
+      this.shutdown();
     } else if (actionName === 'logs') {
       this.runtimeLogs();
     } else if (actionName === null) {
@@ -137,6 +146,28 @@ export class NodeActionsHelper {
     if (this.updateSubscription) {
       this.updateSubscription.unsubscribe();
     }
+    if (this.shutdownSubscription) {
+      this.shutdownSubscription.unsubscribe();
+    }
+  }
+
+  shutdown() {
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'actions.turn-off.confirmation');
+
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmationDialog.componentInstance.showProcessing();
+
+      this.shutdownSubscription = this.nodeService.shutdown(this.currentNodeKey).subscribe(() => {
+        this.snackbarService.showDone('actions.turn-off.done');
+        confirmationDialog.close();
+
+        this.router.navigate(['nodes']);
+      }, (err: OperationError) => {
+        err = processServiceError(err);
+
+        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
+      });
+    });
   }
 
   update() {
