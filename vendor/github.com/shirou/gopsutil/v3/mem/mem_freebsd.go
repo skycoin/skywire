@@ -1,3 +1,4 @@
+//go:build freebsd
 // +build freebsd
 
 package mem
@@ -7,9 +8,8 @@ import (
 	"errors"
 	"unsafe"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/shirou/gopsutil/v3/internal/common"
+	"golang.org/x/sys/unix"
 )
 
 func VirtualMemory() (*VirtualMemoryStat, error) {
