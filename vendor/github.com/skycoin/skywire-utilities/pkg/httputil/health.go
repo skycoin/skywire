@@ -15,6 +15,7 @@ var path = "/health"
 type HealthCheckResponse struct {
 	BuildInfo *buildinfo.Info `json:"build_info,omitempty"`
 	StartedAt time.Time       `json:"started_at"`
+	DmsgAddr  string          `json:"dmsg_address,omitempty"`
 }
 
 // GetServiceHealth gets the response from the given service url

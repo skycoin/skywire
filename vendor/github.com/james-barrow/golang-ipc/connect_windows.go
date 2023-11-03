@@ -11,28 +11,27 @@ import (
 // Server function
 // Create the named pipe (if it doesn't already exist) and start listening for a client to connect.
 // when a client connects and connection is accepted the read function is called on a go routine.
-func (sc *Server) run() error {
+func (s *Server) run() error {
 
 	var pipeBase = `\\.\pipe\`
 
-	listen, err := winio.ListenPipe(pipeBase+sc.name, nil)
+	var config *winio.PipeConfig
+
+	if s.unMask {
+		config = &winio.PipeConfig{SecurityDescriptor: "D:P(A;;GA;;;AU)"}
+	} 
+
+	listen, err := winio.ListenPipe(pipeBase+s.name, config)
 	if err != nil {
 
 		return err
 	}
 
-	sc.listen = listen
+	s.listen = listen
 
-	sc.status = Listening
+	s.status = Listening
 
-	sc.connChannel = make(chan bool)
-
-	go sc.acceptLoop()
-
-	err2 := sc.connectionTimer()
-	if err2 != nil {
-		return err2
-	}
+	go s.acceptLoop()
 
 	return nil
 
@@ -40,23 +39,23 @@ func (sc *Server) run() error {
 
 // Client function
 // dial - attempts to connect to a named pipe created by the server
-func (cc *Client) dial() error {
+func (c *Client) dial() error {
 
 	var pipeBase = `\\.\pipe\`
 
 	startTime := time.Now()
 
 	for {
-		if cc.timeout != 0 {
-			if time.Now().Sub(startTime).Seconds() > cc.timeout {
-				cc.status = Closed
-				return errors.New("Timed out trying to connect")
+		if c.timeout != 0 {
+			if time.Since(startTime).Seconds() > c.timeout {
+				c.status = Closed
+				return errors.New("timed out trying to connect")
 			}
 		}
-		pn, err := winio.DialPipe(pipeBase+cc.Name, nil)
+		pn, err := winio.DialPipe(pipeBase+c.Name, nil)
 		if err != nil {
 
-			if strings.Contains(err.Error(), "The system cannot find the file specified.") == true {
+			if strings.Contains(err.Error(), "the system cannot find the file specified.") == true {
 
 			} else {
 				return err
@@ -64,16 +63,16 @@ func (cc *Client) dial() error {
 
 		} else {
 
-			cc.conn = pn
+			c.conn = pn
 
-			err = cc.handshake()
+			err = c.handshake()
 			if err != nil {
 				return err
 			}
 			return nil
 		}
 
-		time.Sleep(cc.retryTimer * time.Second)
+		time.Sleep(c.retryTimer * time.Second)
 
 	}
 }

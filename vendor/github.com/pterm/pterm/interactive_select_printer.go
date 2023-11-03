@@ -2,6 +2,7 @@ package pterm
 
 import (
 	"fmt"
+	"math"
 	"sort"
 
 	"atomicgo.dev/cursor"
@@ -22,19 +23,22 @@ var (
 		MaxHeight:     5,
 		Selector:      ">",
 		SelectorStyle: &ThemeDefault.SecondaryStyle,
+		Filter:        true,
 	}
 )
 
 // InteractiveSelectPrinter is a printer for interactive select menus.
 type InteractiveSelectPrinter struct {
-	TextStyle     *Style
-	DefaultText   string
-	Options       []string
-	OptionStyle   *Style
-	DefaultOption string
-	MaxHeight     int
-	Selector      string
-	SelectorStyle *Style
+	TextStyle       *Style
+	DefaultText     string
+	Options         []string
+	OptionStyle     *Style
+	DefaultOption   string
+	MaxHeight       int
+	Selector        string
+	SelectorStyle   *Style
+	OnInterruptFunc func()
+	Filter          bool
 
 	selectedOption        int
 	result                string
@@ -70,11 +74,23 @@ func (p InteractiveSelectPrinter) WithMaxHeight(maxHeight int) *InteractiveSelec
 	return &p
 }
 
+// OnInterrupt sets the function to execute on exit of the input reader
+func (p InteractiveSelectPrinter) WithOnInterruptFunc(exitFunc func()) *InteractiveSelectPrinter {
+	p.OnInterruptFunc = exitFunc
+	return &p
+}
+
+// WithFilter sets the Filter option
+func (p InteractiveSelectPrinter) WithFilter(b ...bool) *InteractiveSelectPrinter {
+	p.Filter = internal.WithBoolean(b)
+	return &p
+}
+
 // Show shows the interactive select menu and returns the selected entry.
 func (p *InteractiveSelectPrinter) Show(text ...string) (string, error) {
 	// should be the first defer statement to make sure it is executed last
 	// and all the needed cleanup can be done before
-	cancel, exit := internal.NewCancelationSignal()
+	cancel, exit := internal.NewCancelationSignal(p.OnInterruptFunc)
 	defer exit()
 
 	if len(text) == 0 || Sprint(text[0]) == "" {
@@ -106,9 +122,9 @@ func (p *InteractiveSelectPrinter) Show(text ...string) (string, error) {
 		for i, option := range p.Options {
 			if option == p.DefaultOption {
 				p.selectedOption = i
-				if i > 0 {
-					p.displayedOptionsStart = i - 1
-					p.displayedOptionsEnd = i - 1 + maxHeight
+				if i > 0 && len(p.Options) > maxHeight {
+					p.displayedOptionsEnd = int(math.Min(float64(i-1+maxHeight), float64(len(p.Options))))
+					p.displayedOptionsStart = p.displayedOptionsEnd - maxHeight
 				} else {
 					p.displayedOptionsStart = 0
 					p.displayedOptionsEnd = maxHeight
@@ -141,14 +157,16 @@ func (p *InteractiveSelectPrinter) Show(text ...string) (string, error) {
 
 		switch key {
 		case keys.RuneKey:
-			// Fuzzy search for options
-			// append to fuzzy search string
-			p.fuzzySearchString += keyInfo.String()
-			p.selectedOption = 0
-			p.displayedOptionsStart = 0
-			p.displayedOptionsEnd = maxHeight
-			p.displayedOptions = append([]string{}, p.fuzzySearchMatches[:maxHeight]...)
-			area.Update(p.renderSelectMenu())
+			if p.Filter {
+				// Fuzzy search for options
+				// append to fuzzy search string
+				p.fuzzySearchString += keyInfo.String()
+				p.selectedOption = 0
+				p.displayedOptionsStart = 0
+				p.displayedOptionsEnd = maxHeight
+				p.displayedOptions = append([]string{}, p.fuzzySearchMatches[:maxHeight]...)
+				area.Update(p.renderSelectMenu())
+			}
 		case keys.Space:
 			p.fuzzySearchString += " "
 			p.selectedOption = 0
@@ -235,7 +253,7 @@ func (p *InteractiveSelectPrinter) Show(text ...string) (string, error) {
 		return false, nil
 	})
 	if err != nil {
-		fmt.Println(err)
+		Error.Println(err)
 		return "", fmt.Errorf("failed to start keyboard listener: %w", err)
 	}
 
@@ -244,7 +262,11 @@ func (p *InteractiveSelectPrinter) Show(text ...string) (string, error) {
 
 func (p *InteractiveSelectPrinter) renderSelectMenu() string {
 	var content string
-	content += Sprintf("%s %s: %s\n", p.text, ThemeDefault.SecondaryStyle.Sprint("[type to search]"), p.fuzzySearchString)
+	if p.Filter {
+		content += Sprintf("%s %s: %s\n", p.text, p.SelectorStyle.Sprint("[type to search]"), p.fuzzySearchString)
+	} else {
+		content += Sprintf("%s:\n", p.text)
+	}
 
 	// find options that match fuzzy search string
 	rankedResults := fuzzy.RankFindFold(p.fuzzySearchString, p.Options)
@@ -274,9 +296,9 @@ func (p *InteractiveSelectPrinter) renderSelectMenu() string {
 			continue
 		}
 		if i == p.selectedOption {
-			content += Sprintf("%s %s\n", p.renderSelector(), option)
+			content += Sprintf("%s %s\n", p.renderSelector(), p.OptionStyle.Sprint(option))
 		} else {
-			content += Sprintf("  %s\n", option)
+			content += Sprintf("  %s\n", p.OptionStyle.Sprint(option))
 		}
 	}
 
