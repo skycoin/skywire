@@ -6,13 +6,21 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.14
+
+-   Rebuild Hypervisor UI  [#1672](https://github.com/skycoin/skywire/pull/1672)
+-   Fix two panic issues on `skywire-cli` commands  [#1671](https://github.com/skycoin/skywire/pull/1671)
+-   Improve UI and Backend on `reboot` and `turn off`  [#1670](https://github.com/skycoin/skywire/pull/1670)
+-   add skywire version to `skywire-cli log`  [#1669](https://github.com/skycoin/skywire/pull/1669)
+-   fix issue fetching data from hardcoded server  [#1666](https://github.com/skycoin/skywire/pull/1666)
+-   Fix wrong config generation with t flag  [#1661](https://github.com/skycoin/skywire/pull/1661)
+
 ## 1.3.9
 
 -   Fix `skywire-cli config gen -r`
 
 ## 1.3.8
 
--   Rebuild Hypervisor UI  [#1583](https://github.com/skycoin/skywire/pull/1583)
 -   Rebuild Hypervisor UI  [#1583](https://github.com/skycoin/skywire/pull/1583)
 -   Change Logserver to use c.JSON method ; remove variable for endpoint name '/node-info'  [#1582](https://github.com/skycoin/skywire/pull/1582)
 -   update changelog  [#1580](https://github.com/skycoin/skywire/pull/1580)
