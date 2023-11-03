@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,6 +41,7 @@ var (
 	logOnly        bool
 	surveyOnly     bool
 	deleteOnErrors bool
+	incVer         string
 	fetchFile      string
 	fetchFrom      string
 	writeDir       string
@@ -55,6 +57,7 @@ func init() {
 	logCmd.Flags().StringVarP(&writeDir, "dir", "d", "log_collecting", "save files to specified dir")
 	logCmd.Flags().BoolVarP(&deleteOnErrors, "clean", "c", false, "delete files and folders on errors")
 	logCmd.Flags().StringVar(&minv, "minv", "v1.3.11", "minimum visor version to fetch from")
+	logCmd.Flags().StringVar(&incVer, "include-versions", "", "list of version that not satisfy our minimum version condition, but we want include them")
 	logCmd.Flags().IntVarP(&duration, "duration", "n", 0, "number of days before today to fetch transport logs for")
 	logCmd.Flags().BoolVar(&allVisors, "all", false, "consider all visors ; no version filtering")
 	logCmd.Flags().IntVar(&batchSize, "batchSize", 50, "number of visor in each batch")
@@ -149,6 +152,7 @@ var logCmd = &cobra.Command{
 		}
 
 		minimumVersion, _ := version.NewVersion(minv) //nolint
+		incVerList := strings.Split(incVer, ",")
 
 		start := time.Now()
 		var bulkFolders []string
@@ -157,13 +161,14 @@ var logCmd = &cobra.Command{
 		for _, v := range uptimes {
 			//only attempt to fetch from online visors
 			if v.Online {
-				visorVersion, err := version.NewVersion(v.Version) //nolint
-				if err != nil {
-					log.Warnf("The version %s for visor %s is not valid", v.Version, v.PubKey)
-					continue
-				}
 				if fetchFile == "" {
-					if !allVisors && visorVersion.LessThan(minimumVersion) {
+					visorVersion, err := version.NewVersion(v.Version) //nolint
+					includeV := contains(incVerList, v.Version)
+					if err != nil && !includeV {
+						log.Warnf("The version %s for visor %s is not valid", v.Version, v.PubKey)
+						continue
+					}
+					if !allVisors && visorVersion.LessThan(minimumVersion) && !includeV {
 						log.Warnf("The version %s for visor %s does not satisfy our minimum version condition", v.Version, v.PubKey)
 						continue
 					}
@@ -183,7 +188,7 @@ var logCmd = &cobra.Command{
 						}
 						// health check before downloading anything else
 						// delete that folder if the health check fails
-						err = download(ctx, log, httpC, "health", "health.json", key, maxFileSize, visorVersion)
+						err = download(ctx, log, httpC, "health", "health.json", key, maxFileSize)
 						if err != nil {
 							if deleteOnErrors {
 								if deleteOnError {
@@ -193,12 +198,12 @@ var logCmd = &cobra.Command{
 							}
 						}
 						if !logOnly {
-							download(ctx, log, httpC, "node-info.json", "node-info.json", key, maxFileSize, visorVersion) //nolint
+							download(ctx, log, httpC, "node-info.json", "node-info.json", key, maxFileSize) //nolint
 						}
 						if !surveyOnly {
 							for i := 0; i <= duration; i++ {
 								date := time.Now().AddDate(0, 0, -i).UTC().Format("2006-01-02")
-								download(ctx, log, httpC, date+".csv", date+".csv", key, maxFileSize, visorVersion) //nolint
+								download(ctx, log, httpC, date+".csv", date+".csv", key, maxFileSize) //nolint
 							}
 						}
 					}(v.PubKey, &wg)
@@ -221,7 +226,7 @@ var logCmd = &cobra.Command{
 								return
 							}
 						}
-						_ = download(ctx, log, httpC, fetchFile, fetchFile, key, maxFileSize, visorVersion) //nolint
+						_ = download(ctx, log, httpC, fetchFile, fetchFile, key, maxFileSize) //nolint
 					}(v.PubKey, &wg)
 				}
 			}
@@ -237,13 +242,13 @@ var logCmd = &cobra.Command{
 	},
 }
 
-func download(ctx context.Context, log *logging.Logger, httpC http.Client, targetPath, fileName, pubkey string, maxSize int64, version *version.Version) error {
+func download(ctx context.Context, log *logging.Logger, httpC http.Client, targetPath, fileName, pubkey string, maxSize int64) error {
 	target := fmt.Sprintf("dmsg://%s:80/%s", pubkey, targetPath)
 	file, _ := os.Create(pubkey + "/" + fileName) //nolint
 	defer file.Close()                            //nolint
 
 	if err := downloadDmsg(ctx, log, &httpC, file, target, maxSize); err != nil {
-		log.WithError(err).Errorf("The %s for visor %s not available. The version of visor is %s.", fileName, pubkey, version.String())
+		log.WithError(err).Errorf("The %s for visor %s not available", fileName, pubkey)
 		return err
 	}
 	return nil
@@ -383,6 +388,15 @@ func getAllDMSGServers() []dmsgServer {
 
 type dmsgServer struct {
 	PK cipher.PubKey `json:"static"`
+}
+
+func contains(s []string, str string) bool {
+	for _, v := range s {
+		if v == str {
+			return true
+		}
+	}
+	return false
 }
 
 type httpError struct {
