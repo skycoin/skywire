@@ -161,8 +161,9 @@ var logCmd = &cobra.Command{
 		for _, v := range uptimes {
 			//only attempt to fetch from online visors
 			if v.Online {
-				if fetchFile == "" {					visorVersion, err := version.NewVersion(v.Version) //nolint
-				includeV := contains(incVerList, v.Version)
+				if fetchFile == "" {
+					visorVersion, err := version.NewVersion(v.Version) //nolint
+					includeV := contains(incVerList, v.Version)
 					if err != nil && !includeV {
 						log.Warnf("The version %s for visor %s is not valid", v.Version, v.PubKey)
 						continue
