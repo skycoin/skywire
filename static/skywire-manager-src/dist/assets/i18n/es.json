@@ -340,15 +340,15 @@
       "terminal": "Terminal",
       "config": "Configuración",
       "update": "Actualizar",
-      "reboot": "Reiniciar",
+      "turn-off": "Apagar",
       "logs": "Ver logs"
-    },
-    "reboot": {
-      "confirmation": "¿Seguro que desea reiniciar el visor?",
-      "done": "El visor se está reiniciando."
     },
     "update": {
       "confirmation": "Una terminal será abierta en una nueva pestaña y el proceso de actualización iniciará automáticamente. ¿Desea continuar?"
+    },
+    "turn-off": {
+      "confirmation": "¿Seguro que desea apagar el visor?",
+      "done": "El visor se está apagando."
     },
     "terminal-options": {
       "full": "Terminal completa",
@@ -460,6 +460,15 @@
       "invalid-confirmation": "Una o más configuraciones no tienen nombre y serán ignoradas. ¿Desea continuar?",
       "empty-confirmation": "La lista de configuración está vacía. ¿Realmente desea continuar?",
       "changes-made": "Los cambios han sido realizados."
+    },
+    "skychat-settings": {
+      "title": "Configuración de Skychat",
+      "localhost-only": "Permitir acceso sólo desde la máquina local",
+      "port": "Puerto",
+      "save": "Guardar",
+      "changes-made": "Los cambios han sido realizados.",
+      "port-error": "Debe ser un número válido entre 1025 y 65536.",
+      "non-localhost-confirmation": "Esto permitirá usar la aplicación desde cualquier lugar en Internet. ¿Seguro que desea continuar?"
     },
     "vpn-socks-server-settings": {
       "socks-title": "Configuración de Skysocks",
