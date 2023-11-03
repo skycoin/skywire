@@ -16,7 +16,7 @@ func (sc *Server) handshake() error {
 		return err
 	}
 
-	if sc.encryption == true {
+	if sc.encryption {
 		err = sc.startEncryption()
 		if err != nil {
 			return err
@@ -38,7 +38,7 @@ func (sc *Server) one() error {
 
 	buff[0] = byte(version)
 
-	if sc.encryption == true {
+	if sc.encryption {
 		buff[1] = byte(1)
 	} else {
 		buff[1] = byte(0)
@@ -52,7 +52,7 @@ func (sc *Server) one() error {
 	recv := make([]byte, 1)
 	_, err = sc.conn.Read(recv)
 	if err != nil {
-		return errors.New("failed to recieve handshake reply")
+		return errors.New("failed to received handshake reply")
 	}
 
 	switch result := recv[0]; result {
@@ -100,7 +100,7 @@ func (sc *Server) msgLength() error {
 	buff := make([]byte, 4)
 	binary.BigEndian.PutUint32(buff, uint32(sc.maxMsgSize))
 
-	if sc.encryption == true {
+	if sc.encryption {
 		maxMsg, err := encrypt(*sc.enc.cipher, buff)
 		if err != nil {
 			return err
@@ -124,14 +124,14 @@ func (sc *Server) msgLength() error {
 
 	_, err = sc.conn.Read(reply)
 	if err != nil {
-		return errors.New("did not recieve message length reply")
+		return errors.New("did not received message length reply")
 	}
 
 	return nil
 
 }
 
-// 1st message recieved by the client
+// 1st message received by the client
 func (cc *Client) handshake() error {
 
 	err := cc.one()
@@ -139,7 +139,7 @@ func (cc *Client) handshake() error {
 		return err
 	}
 
-	if cc.encryption == true {
+	if cc.encryption {
 		err := cc.startEncryption()
 		if err != nil {
 			return err
@@ -160,7 +160,7 @@ func (cc *Client) one() error {
 	recv := make([]byte, 2)
 	_, err := cc.conn.Read(recv)
 	if err != nil {
-		return errors.New("failed to recieve handshake message")
+		return errors.New("failed to received handshake message")
 	}
 
 	if recv[0] != version {
@@ -168,7 +168,7 @@ func (cc *Client) one() error {
 		return errors.New("server has sent a different version number")
 	}
 
-	if recv[1] != 1 && cc.encryptionReq == true {
+	if recv[1] != 1 && cc.encryptionReq {
 		cc.handshakeSendReply(2)
 		return errors.New("server tried to connect without encryption")
 	}
@@ -212,7 +212,7 @@ func (cc *Client) msgLength() error {
 
 	_, err := cc.conn.Read(buff)
 	if err != nil {
-		return errors.New("failed to recieve max message length 1")
+		return errors.New("failed to received max message length 1")
 	}
 
 	var msgLen uint32
@@ -222,13 +222,13 @@ func (cc *Client) msgLength() error {
 
 	_, err = cc.conn.Read(buff)
 	if err != nil {
-		return errors.New("failed to recieve max message length 2")
+		return errors.New("failed to received max message length 2")
 	}
 	var buff2 []byte
-	if cc.encryption == true {
+	if cc.encryption {
 		buff2, err = decrypt(*cc.enc.cipher, buff)
 		if err != nil {
-			return errors.New("failed to recieve max message length 3")
+			return errors.New("failed to received max message length 3")
 		}
 
 	} else {

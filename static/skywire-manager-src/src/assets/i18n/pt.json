@@ -224,12 +224,7 @@
     "menu": {
       "terminal": "Terminal",
       "config": "Configuração",
-      "update": "Atualizar",
-      "reboot": "Reiniciar"
-    },
-    "reboot": {
-      "confirmation": "Tem certeza de que deseja reiniciar o visor?",
-      "done": "O visor está reiniciando."
+      "update": "Atualizar"
     },
     "terminal-options": {
       "full": "Terminal completo",

@@ -38,9 +38,6 @@ var (
 
 	// ErrNotFound is returned when a requested resource is not found.
 	ErrNotFound = errors.New("not found")
-
-	// ErrMalformedRestartContext is returned when restart context is malformed.
-	ErrMalformedRestartContext = errors.New("restart context is malformed")
 )
 
 // RPC defines RPC methods for Visor.
@@ -391,6 +388,13 @@ func (r *RPC) SetAppSecure(in *SetAppBoolIn, _ *struct{}) (err error) {
 	return r.visor.SetAppSecure(in.AppName, in.Val)
 }
 
+// SetAppAddress sets addr flag for the app
+func (r *RPC) SetAppAddress(in *SetAppStringIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppAddress", in)(nil, &err)
+
+	return r.visor.SetAppAddress(in.AppName, in.Val)
+}
+
 // GetAppStats gets app runtime statistics.
 func (r *RPC) GetAppStats(appName *string, out *appserver.AppStats) (err error) {
 	defer rpcutil.LogCall(r.log, "GetAppStats", appName)(out, &err)
@@ -580,14 +584,6 @@ func (r *RPC) RouteGroups(_ *struct{}, out *[]RouteGroupInfo) (err error) {
 /*
 	<<< VISOR MANAGEMENT >>>
 */
-
-// Restart restarts visor.
-func (r *RPC) Restart(_ *struct{}, _ *struct{}) (err error) {
-	// @evanlinjin: do not defer this log statement, as the underlying visor.Logger will get closed.
-	rpcutil.LogCall(r.log, "Restart", nil)(nil, nil)
-
-	return r.visor.Restart()
-}
 
 // Reload reloads the config - without restarting the visor
 func (r *RPC) Reload(_ *struct{}, _ *struct{}) (err error) {

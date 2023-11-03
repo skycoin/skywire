@@ -27,15 +27,14 @@ export class NodeActionsHelper {
   private currentNode: Node;
   private currentNodeKey: string;
   private canBeUpdated = false;
-  private canBeRestarted = false;
   private canOpenTerminal = false;
 
   options: MenuOptionData[] = [];
 
   returnButtonText: string;
 
-  private rebootSubscription: Subscription;
   private updateSubscription: Subscription;
+  private shutdownSubscription: Subscription;
 
   // Services this class need.
   private dialog: MatDialog;
@@ -78,13 +77,11 @@ export class NodeActionsHelper {
       icon: 'subject',
     });
 
-    if (this.canBeRestarted) {
-      this.options.push({
-        name: 'actions.menu.reboot',
-        actionName: 'reboot',
-        icon: 'rotate_right'
-      });
-    }
+    this.options.push({
+      name: 'actions.menu.turn-off',
+      actionName: 'shutdown',
+      icon: 'power_settings_new'
+    });
 
     // TODO: remove if the option will not be added again. Delete the translatable strings too.
     /*
@@ -106,10 +103,8 @@ export class NodeActionsHelper {
 
     if (GeneralUtils.checkIfTagIsUpdatable(currentNode.buildTag)) {
       this.canBeUpdated = true;
-      this.canBeRestarted = true;
     } else {
       this.canBeUpdated = false;
-      this.canBeRestarted = false;
     }
 
     this.canOpenTerminal = GeneralUtils.checkIfTagCanOpenterminal(currentNode.buildTag);
@@ -136,8 +131,8 @@ export class NodeActionsHelper {
       this.update();
     } else if (actionName === 'logs') {
       this.runtimeLogs();
-    } else if (actionName === 'reboot') {
-      this.reboot();
+    } else if (actionName === 'shutdown') {
+      this.shutdown();
     } else if (actionName === null) {
       // Null is returned if the back button was pressed.
       this.back();
@@ -148,23 +143,25 @@ export class NodeActionsHelper {
    * Cleans the object. Must be called when the object is no longer needed.
    */
   dispose() {
-    if (this.rebootSubscription) {
-      this.rebootSubscription.unsubscribe();
-    }
     if (this.updateSubscription) {
       this.updateSubscription.unsubscribe();
     }
+    if (this.shutdownSubscription) {
+      this.shutdownSubscription.unsubscribe();
+    }
   }
 
-  reboot() {
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'actions.reboot.confirmation');
+  shutdown() {
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'actions.turn-off.confirmation');
 
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.componentInstance.showProcessing();
 
-      this.rebootSubscription = this.nodeService.reboot(this.currentNodeKey).subscribe(() => {
-        this.snackbarService.showDone('actions.reboot.done');
+      this.shutdownSubscription = this.nodeService.shutdown(this.currentNodeKey).subscribe(() => {
+        this.snackbarService.showDone('actions.turn-off.done');
         confirmationDialog.close();
+
+        this.router.navigate(['nodes']);
       }, (err: OperationError) => {
         err = processServiceError(err);
 
