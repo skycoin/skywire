@@ -265,15 +265,18 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
         archMap[disallowedarch] = struct{}{}
       }
     }
-    res, _ := script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Slice()
+    res, err := script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Slice()
+		if err != nil {
+			internal.PrintFatalError(cmdFlags, fmt.Errorf("Error reading uptime tracker data file. err=%v", err))
+		}
     var nodesInfos []nodeinfo
     for _, pk := range res {
       nodeInfo := fmt.Sprintf("%s/%s/node-info.json", surveyPath, pk)
-      ip, _ := script.File(nodeInfo).JQ(`."ip.skycoin.com".ip_address`).Replace(" ", "").Replace(`"`, "").String()
+      ip, _ := script.File(nodeInfo).JQ(`."ip.skycoin.com".ip_address`).Replace(" ", "").Replace(`"`, "").String() //nolint
       ip = strings.TrimRight(ip, "\n")
-      sky, _ := script.File(nodeInfo).JQ(".skycoin_address").Replace(" ", "").Replace(`"`, "").String()
+      sky, _ := script.File(nodeInfo).JQ(".skycoin_address").Replace(" ", "").Replace(`"`, "").String() //nolint
       sky = strings.TrimRight(sky, "\n")
-      arch, _ := script.File(nodeInfo).JQ(".go_arch").Replace(" ", "").Replace(`"`, "").String()
+      arch, _ := script.File(nodeInfo).JQ(".go_arch").Replace(" ", "").Replace(`"`, "").String() //nolint
       arch = strings.TrimRight(arch, "\n")
       if _, disallowed := archMap[arch]; !disallowed && ip != "" && strings.Count(ip, ".") == 3 && sky != "" {
         ni := nodeinfo{
