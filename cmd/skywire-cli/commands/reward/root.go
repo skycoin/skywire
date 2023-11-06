@@ -296,7 +296,7 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
     fmt.Printf("this month's rewards: %.4f\n", monthReward)
     fmt.Printf("reward total: %.4f\n", dayReward)
 
-    uniqueIP, _ := script.Echo(func() string {
+    uniqueIP, _ := script.Echo(func() string { //nolint
       var inputStr strings.Builder
       for _, ni := range nodesInfos {
         inputStr.WriteString(fmt.Sprintf("%s\n", ni.IPAddr))
