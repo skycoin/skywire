@@ -265,10 +265,7 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
         archMap[disallowedarch] = struct{}{}
       }
     }
-    res, err := script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Slice()
-		if err != nil {
-			internal.PrintFatalError(cmdFlags, fmt.Errorf("Error reading uptime tracker data file. err=%v", err))
-		}
+    res, _ := script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Slice() //nolint
     var nodesInfos []nodeinfo
     for _, pk := range res {
       nodeInfo := fmt.Sprintf("%s/%s/node-info.json", surveyPath, pk)
