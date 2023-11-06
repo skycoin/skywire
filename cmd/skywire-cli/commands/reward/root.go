@@ -302,14 +302,14 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
         inputStr.WriteString(fmt.Sprintf("%s\n", ni.IPAddr))
       }
       return inputStr.String()
-    }()).Freq().String()
+    }()).Freq().String() //nolint
     var ipCounts []ipCount
     lines := strings.Split(uniqueIP, "\n")
     for _, line := range lines {
       if line != "" {
         fields := strings.Fields(line)
         if len(fields) == 2 {
-          count, _ := strconv.Atoi(fields[0])
+          count, _ := strconv.Atoi(fields[0]) //nolint
           ipCounts = append(ipCounts, ipCount{
             IP:    fields[1],
             Count: count,
