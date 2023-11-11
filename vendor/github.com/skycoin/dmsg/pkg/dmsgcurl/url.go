@@ -1,5 +1,5 @@
-// Package dmsgget pkg/dmsgget/url.go
-package dmsgget
+// Package dmsgcurl pkg/dmsgcurl/url.go
+package dmsgcurl
 
 import (
 	"errors"
