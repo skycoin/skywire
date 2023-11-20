@@ -240,8 +240,6 @@ github.com/lib/pq/scram
 # github.com/lithammer/fuzzysearch v1.1.8
 ## explicit; go 1.15
 github.com/lithammer/fuzzysearch/fuzzy
-# github.com/lufia/plan9stats v0.0.0-20230326075908-cb1d2100619a
-## explicit; go 1.16
 # github.com/mattn/go-colorable v0.1.13
 ## explicit; go 1.15
 github.com/mattn/go-colorable
@@ -297,8 +295,6 @@ github.com/pkg/errors
 # github.com/pmezard/go-difflib v1.0.0
 ## explicit
 github.com/pmezard/go-difflib/difflib
-# github.com/power-devops/perfstat v0.0.0-20221212215047-62379fc7944b
-## explicit; go 1.14
 # github.com/pterm/pterm v0.12.66
 ## explicit; go 1.18
 github.com/pterm/pterm
@@ -327,10 +323,6 @@ github.com/quic-go/quic-go/quicvarint
 # github.com/rivo/uniseg v0.4.4
 ## explicit; go 1.18
 github.com/rivo/uniseg
-# github.com/shirou/gopsutil/v3 v3.23.7
-## explicit; go 1.15
-# github.com/shoenig/go-m1cpu v0.1.6
-## explicit; go 1.20
 # github.com/sirupsen/logrus v1.9.3
 ## explicit; go 1.13
 github.com/sirupsen/logrus
@@ -404,10 +396,6 @@ github.com/templexxx/xor
 # github.com/tjfoc/gmsm v1.4.1
 ## explicit; go 1.14
 github.com/tjfoc/gmsm/sm4
-# github.com/tklauser/go-sysconf v0.3.12
-## explicit; go 1.13
-# github.com/tklauser/numcpus v0.6.1
-## explicit; go 1.13
 # github.com/toqueteos/webbrowser v1.2.0
 ## explicit; go 1.12
 github.com/toqueteos/webbrowser
@@ -447,8 +435,6 @@ github.com/xo/terminfo
 github.com/xtaci/kcp-go
 # github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37
 ## explicit; go 1.13
-# github.com/yusufpapurcu/wmi v1.2.3
-## explicit; go 1.16
 # github.com/zcalusic/sysinfo v1.0.1
 ## explicit; go 1.20
 github.com/zcalusic/sysinfo
