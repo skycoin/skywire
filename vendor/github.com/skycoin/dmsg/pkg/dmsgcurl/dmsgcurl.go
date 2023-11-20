@@ -1,5 +1,5 @@
-// Package dmsgget pkg/dmsgget/dmsgget.go
-package dmsgget
+// Package dmsgcurl pkg/dmsgcurl/dmsgcurl.go
+package dmsgcurl
 
 import (
 	"context"
@@ -24,8 +24,8 @@ import (
 
 var json = jsoniter.ConfigFastest
 
-// DmsgGet contains the logic for dmsgget (wget over dmsg).
-type DmsgGet struct {
+// DmsgCurl contains the logic for dmsgcurl (curl over dmsg).
+type DmsgCurl struct {
 	startF startupFlags
 	dmsgF  dmsgFlags
 	dlF    downloadFlags
@@ -33,9 +33,9 @@ type DmsgGet struct {
 	fs     *flag.FlagSet
 }
 
-// New creates a new DmsgGet instance.
-func New(fs *flag.FlagSet) *DmsgGet {
-	dg := &DmsgGet{fs: fs}
+// New creates a new DmsgCurl instance.
+func New(fs *flag.FlagSet) *DmsgCurl {
+	dg := &DmsgCurl{fs: fs}
 
 	for _, fg := range dg.flagGroups() {
 		fg.Init(fs)
@@ -53,7 +53,7 @@ func New(fs *flag.FlagSet) *DmsgGet {
 }
 
 // String implements io.Stringer
-func (dg *DmsgGet) String() string {
+func (dg *DmsgCurl) String() string {
 	m := make(map[string]interface{})
 	for _, fg := range dg.flagGroups() {
 		m[fg.Name()] = fg
@@ -65,14 +65,14 @@ func (dg *DmsgGet) String() string {
 	return string(j)
 }
 
-func (dg *DmsgGet) flagGroups() []FlagGroup {
+func (dg *DmsgCurl) flagGroups() []FlagGroup {
 	return []FlagGroup{&dg.startF, &dg.dmsgF, &dg.dlF, &dg.httpF}
 }
 
 // Run runs the download logic.
-func (dg *DmsgGet) Run(ctx context.Context, log *logging.Logger, skStr string, args []string) (err error) {
+func (dg *DmsgCurl) Run(ctx context.Context, log *logging.Logger, skStr string, args []string) (err error) {
 	if log == nil {
-		log = logging.MustGetLogger("dmsgget")
+		log = logging.MustGetLogger("dmsgcurl")
 	}
 
 	if dg.startF.Help {
@@ -193,7 +193,7 @@ func parseOutputFile(name string, urlPath string) (*os.File, error) {
 }
 
 // StartDmsg create dsmg client instance
-func (dg *DmsgGet) StartDmsg(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey) (dmsgC *dmsg.Client, stop func(), err error) {
+func (dg *DmsgCurl) StartDmsg(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey) (dmsgC *dmsg.Client, stop func(), err error) {
 	dmsgC = dmsg.NewClient(pk, sk, disc.NewHTTP(dg.dmsgF.Disc, &http.Client{}, log), &dmsg.Config{MinSessions: dg.dmsgF.Sessions})
 	go dmsgC.Serve(context.Background())
 

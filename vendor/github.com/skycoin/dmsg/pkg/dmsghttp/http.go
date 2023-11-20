@@ -15,8 +15,8 @@ import (
 )
 
 // ListenAndServe serves http over dmsg
-func ListenAndServe(ctx context.Context, pk cipher.PubKey, sk cipher.SecKey, a http.Handler, dClient disc.APIClient, dmsgPort uint16,
-	config *dmsg.Config, dmsgC *dmsg.Client, log *logging.Logger) error {
+func ListenAndServe(ctx context.Context, _ cipher.SecKey, a http.Handler, _ disc.APIClient, dmsgPort uint16,
+	dmsgC *dmsg.Client, log *logging.Logger) error {
 
 	lis, err := dmsgC.Listen(dmsgPort)
 	if err != nil {
