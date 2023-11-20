@@ -28,7 +28,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/skycoin/dmsg v1.3.11
 	github.com/skycoin/skycoin v0.27.1
-	github.com/skycoin/skywire-utilities v1.3.11
+	github.com/skycoin/skywire-utilities v0.0.0-20231118211437-866af591cea6
 	github.com/skycoin/systray v1.10.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.7.0

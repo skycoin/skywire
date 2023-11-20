@@ -242,7 +242,6 @@ github.com/lib/pq/scram
 github.com/lithammer/fuzzysearch/fuzzy
 # github.com/lufia/plan9stats v0.0.0-20230326075908-cb1d2100619a
 ## explicit; go 1.16
-github.com/lufia/plan9stats
 # github.com/mattn/go-colorable v0.1.13
 ## explicit; go 1.15
 github.com/mattn/go-colorable
@@ -300,7 +299,6 @@ github.com/pkg/errors
 github.com/pmezard/go-difflib/difflib
 # github.com/power-devops/perfstat v0.0.0-20221212215047-62379fc7944b
 ## explicit; go 1.14
-github.com/power-devops/perfstat
 # github.com/pterm/pterm v0.12.66
 ## explicit; go 1.18
 github.com/pterm/pterm
@@ -331,15 +329,8 @@ github.com/quic-go/quic-go/quicvarint
 github.com/rivo/uniseg
 # github.com/shirou/gopsutil/v3 v3.23.7
 ## explicit; go 1.15
-github.com/shirou/gopsutil/v3/common
-github.com/shirou/gopsutil/v3/cpu
-github.com/shirou/gopsutil/v3/internal/common
-github.com/shirou/gopsutil/v3/mem
-github.com/shirou/gopsutil/v3/net
-github.com/shirou/gopsutil/v3/process
 # github.com/shoenig/go-m1cpu v0.1.6
 ## explicit; go 1.20
-github.com/shoenig/go-m1cpu
 # github.com/sirupsen/logrus v1.9.3
 ## explicit; go 1.13
 github.com/sirupsen/logrus
@@ -368,7 +359,7 @@ github.com/skycoin/skycoin/src/cipher/ripemd160
 github.com/skycoin/skycoin/src/cipher/secp256k1-go
 github.com/skycoin/skycoin/src/cipher/secp256k1-go/secp256k1-go2
 github.com/skycoin/skycoin/src/util/logging
-# github.com/skycoin/skywire-utilities v1.3.11
+# github.com/skycoin/skywire-utilities v0.0.0-20231118211437-866af591cea6
 ## explicit; go 1.17
 github.com/skycoin/skywire-utilities/pkg/buildinfo
 github.com/skycoin/skywire-utilities/pkg/cipher
@@ -415,10 +406,8 @@ github.com/templexxx/xor
 github.com/tjfoc/gmsm/sm4
 # github.com/tklauser/go-sysconf v0.3.12
 ## explicit; go 1.13
-github.com/tklauser/go-sysconf
 # github.com/tklauser/numcpus v0.6.1
 ## explicit; go 1.13
-github.com/tklauser/numcpus
 # github.com/toqueteos/webbrowser v1.2.0
 ## explicit; go 1.12
 github.com/toqueteos/webbrowser
@@ -460,7 +449,6 @@ github.com/xtaci/kcp-go
 ## explicit; go 1.13
 # github.com/yusufpapurcu/wmi v1.2.3
 ## explicit; go 1.16
-github.com/yusufpapurcu/wmi
 # github.com/zcalusic/sysinfo v1.0.1
 ## explicit; go 1.20
 github.com/zcalusic/sysinfo

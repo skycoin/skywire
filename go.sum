@@ -283,6 +283,8 @@ github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6 h1:1Nc5EBY6pjfw1kwW0
 github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6/go.mod h1:UXghlricA7J3aRD/k7p/zBObQfmBawwCxIVPVjz2Q3o=
 github.com/skycoin/skycoin v0.27.1 h1:HatxsRwVSPaV4qxH6290xPBmkH/HgiuAoY2qC+e8C9I=
 github.com/skycoin/skycoin v0.27.1/go.mod h1:78nHjQzd8KG0jJJVL/j0xMmrihXi70ti63fh8vXScJw=
+github.com/skycoin/skywire-utilities v0.0.0-20231118211437-866af591cea6 h1:QM7YKvz7ljuzY983fwTfQyyxzJTcG8j9PcNjmYIY0E0=
+github.com/skycoin/skywire-utilities v0.0.0-20231118211437-866af591cea6/go.mod h1:X5H+fKC3rD11/sm4t9V2FWy/aet7OdEilaO2Ar3waXY=
 github.com/skycoin/skywire-utilities v1.3.11 h1:xTdbBUmhjpn0UgACojZl1BS40WEftX/oBx4UVUZ58lY=
 github.com/skycoin/skywire-utilities v1.3.11/go.mod h1:X5H+fKC3rD11/sm4t9V2FWy/aet7OdEilaO2Ar3waXY=
 github.com/skycoin/systray v1.10.0 h1:fQZJHMylpVvfmOOTLvUssfyHVDoC8Idx6Ba2BlLEuGg=
