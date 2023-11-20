@@ -1,5 +1,5 @@
-// Package dmsgget pkg/dmsgget/flags.go
-package dmsgget
+// Package dmsgcurl pkg/dmsgcurl/flags.go
+package dmsgcurl
 
 import (
 	"flag"
@@ -8,7 +8,7 @@ import (
 )
 
 // ExecName contains the execution name.
-const ExecName = "dmsgget"
+const ExecName = "dmsgcurl"
 
 // Version contains the version string.
 var Version = buildinfo.Version()
