@@ -18,7 +18,7 @@ import (
 
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/pkg/dmsgget"
+	"github.com/skycoin/dmsg/pkg/dmsgcurl"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
 
@@ -64,8 +64,8 @@ func init() {
 	logCmd.Flags().Int64Var(&maxFileSize, "maxfilesize", 30, "maximum file size allowed to download during collecting logs, in KB")
 	logCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", skyenv.DmsgDiscAddr, "dmsg discovery url\n")
 	logCmd.Flags().StringVarP(&utAddr, "ut", "u", "", "custom uptime tracker url")
-	if os.Getenv("DMSGGET_SK") != "" {
-		sk.Set(os.Getenv("DMSGGET_SK")) //nolint
+	if os.Getenv("DMSGCURL_SK") != "" {
+		sk.Set(os.Getenv("DMSGCURL_SK")) //nolint
 	}
 	logCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
 }
@@ -104,8 +104,8 @@ var logCmd = &cobra.Command{
 			return
 		}
 
-		// Create dmsgget instance
-		dg := dmsgget.New(flag.CommandLine)
+		// Create dmsgcurl instance
+		dg := dmsgcurl.New(flag.CommandLine)
 		flag.Parse()
 
 		// Set the uptime tracker to fetch data from

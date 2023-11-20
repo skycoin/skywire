@@ -1,5 +1,5 @@
-// Package dmsgget pkg/dmsgget/progress_writer.go
-package dmsgget
+// Package dmsgcurl pkg/dmsgcurl/progress_writer.go
+package dmsgcurl
 
 import (
 	"fmt"
