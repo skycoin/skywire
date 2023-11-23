@@ -20,6 +20,7 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 )
 
@@ -128,12 +129,16 @@ var statusCmd = &cobra.Command{
 		w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
 		internal.Catch(cmd.Flags(), err)
 		type appState struct {
-			Status string `json:"status"`
+			Name      string       `json:"name"`
+			Status    string       `json:"status"`
+			AutoStart bool         `json:"autostart"`
+			Args      []string     `json:"args"`
+			AppPort   routing.Port `json:"app_port"`
 		}
-		var jsonAppStatus appState
+		var jsonAppStatus []appState
+		fmt.Fprintf(w, "---- All Proxy List -----------------------------------------------------\n\n")
 		for _, state := range states {
-			if state.Name == stateName {
-
+			if state.AppConfig.Binary == binaryName {
 				status := "stopped"
 				if state.Status == appserver.AppStatusRunning {
 					status = "running"
@@ -141,13 +146,28 @@ var statusCmd = &cobra.Command{
 				if state.Status == appserver.AppStatusErrored {
 					status = "errored"
 				}
-				jsonAppStatus = appState{
-					Status: status,
+				jsonAppStatus = append(jsonAppStatus, appState{
+					Name:      state.Name,
+					Status:    status,
+					AutoStart: state.AutoStart,
+					Args:      state.Args,
+					AppPort:   state.Port,
+				})
+				var tmpAddr string
+				var tmpSrv string
+				for idx, arg := range state.Args {
+					if arg == "-srv" {
+						tmpSrv = state.Args[idx+1]
+					}
+					if arg == "-addr" {
+						tmpAddr = "127.0.0.1" + state.Args[idx+1]
+					}
 				}
-				_, err = fmt.Fprintf(w, "%s\n", status)
+				_, err = fmt.Fprintf(w, "Name: %s\nStatus: %s\nServer: %s\nAddress: %s\nAppPort: %d\nAutoStart: %t\n\n", state.Name, status, tmpSrv, tmpAddr, state.Port, state.AutoStart)
 				internal.Catch(cmd.Flags(), err)
 			}
 		}
+		fmt.Fprintf(w, "-------------------------------------------------------------------------\n")
 		internal.Catch(cmd.Flags(), w.Flush())
 		internal.PrintOutput(cmd.Flags(), jsonAppStatus, b.String())
 	},
