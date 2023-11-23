@@ -17,6 +17,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
+
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
