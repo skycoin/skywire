@@ -564,7 +564,9 @@ func (v *Visor) FetchUptimeTrackerData(pk string) ([]byte, error) {
 			return body, fmt.Errorf("Invalid or missing public key")
 		}
 	}
-
+	if v.uptimeTracker == nil {
+		return body, fmt.Errorf("Uptime tracker module not available")
+	}
 	return v.uptimeTracker.FetchUptimes(context.TODO(), pk)
 }
 

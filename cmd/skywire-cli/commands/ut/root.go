@@ -149,8 +149,6 @@ func dmsgHTTPQuery(cmd *cobra.Command) ([]byte, error) {
 
 	dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(cmd.Context(), dmsgDC)}
 
-	dmsgHTTP.Timeout = time.Second * 15
-
 	resp, err := dmsgHTTP.Get(utDmsgAddr + "/uptimes?v=v2")
 	if err != nil {
 		return []byte{}, err
