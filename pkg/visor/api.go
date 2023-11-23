@@ -124,6 +124,9 @@ type API interface {
 	StopPing(pk cipher.PubKey) error
 
 	TestVisor(config PingConfig) ([]TestResult, error)
+
+	//uptime-tracker tools
+	FetchUptimeTrackerData(pk string) ([]byte, error)
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -548,6 +551,21 @@ func (v *Visor) StopVPNClient(appName string) error {
 		return err
 	}
 	return ErrProcNotAvailable
+}
+
+// FetchUptimeTrackerData implements API
+func (v *Visor) FetchUptimeTrackerData(pk string) ([]byte, error) {
+	var body []byte
+	var pubkey cipher.PubKey
+
+	if pk != "" {
+		err := pubkey.Set(pk)
+		if err != nil {
+			return body, fmt.Errorf("Invalid or missing public key")
+		}
+	}
+
+	return v.uptimeTracker.FetchUptimes(context.TODO(), pk)
 }
 
 // StartSkysocksClient implements API.
