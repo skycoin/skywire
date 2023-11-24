@@ -290,11 +290,11 @@ func (r *RPC) StartSkysocksClient(pk string, _ *struct{}) (err error) {
 	return r.visor.StartSkysocksClient(pk)
 }
 
-// StopSkysocksClient stops SkysocksClient App
-func (r *RPC) StopSkysocksClient(_ *struct{}, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "StopSkysocksClient", nil)(nil, &err)
+// StopSkysocksClients stops all SkysocksClient Apps
+func (r *RPC) StopSkysocksClients(_ *struct{}, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StopSkysocksClients", nil)(nil, &err)
 
-	return r.visor.StopSkysocksClient()
+	return r.visor.StopSkysocksClients()
 }
 
 // RestartApp restarts App with provided name.

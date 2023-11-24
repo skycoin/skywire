@@ -37,6 +37,8 @@ func init() {
 		version = ""
 	}
 	startCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
+	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks client")
+	stopCmd.Flags().StringVar(&clientName, "name", "", "specific skysocks client that want stop")
 	listCmd.Flags().StringVarP(&sdURL, "url", "a", "", "service discovery url default:\n"+skyenv.ServiceDiscAddr)
 	listCmd.Flags().BoolVarP(&directQuery, "direct", "b", false, "query service discovery directly")
 	listCmd.Flags().StringVarP(&pk, "pk", "k", "", "check "+serviceType+" service discovery for public key")
@@ -108,8 +110,16 @@ var stopCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
 		}
-		internal.Catch(cmd.Flags(), rpcClient.StopSkysocksClient())
-		internal.PrintOutput(cmd.Flags(), "OK", fmt.Sprintln("OK"))
+		if allClients && clientName != "" {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("cannot use both --all and --name flag in together"))
+		}
+		if allClients {
+			internal.Catch(cmd.Flags(), rpcClient.StopSkysocksClients())
+			internal.PrintOutput(cmd.Flags(), "All Skysocks Client stopped", fmt.Sprintln("All Skysocks Client stopped"))
+			return
+		}
+		internal.Catch(cmd.Flags(), rpcClient.StopApp(clientName))
+		internal.PrintOutput(cmd.Flags(), fmt.Sprintf("Skysocks Client %s stopped", clientName), fmt.Sprintf("Skysocks Client %s stopped\n", clientName))
 	},
 }
 

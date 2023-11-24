@@ -23,6 +23,8 @@ var (
 	sdURL        string
 	directQuery  bool
 	servers      []servicedisc.Service
+	allClients   bool
+	clientName   string
 )
 
 // RootCmd contains commands that interact with the skywire-visor

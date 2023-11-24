@@ -193,9 +193,9 @@ func (rc *rpcClient) StartSkysocksClient(pk string) error {
 	return rc.Call("StartSkysocksClient", pk, &struct{}{})
 }
 
-// StopSkysocksClient calls StopSkysocksClient.
-func (rc *rpcClient) StopSkysocksClient() error {
-	return rc.Call("StopSkysocksClient", &struct{}{}, &struct{}{})
+// StopSkysocksCliens calls StopSkysocksCliens.
+func (rc *rpcClient) StopSkysocksClients() error {
+	return rc.Call("StopSkysocksClients", &struct{}{}, &struct{}{})
 }
 
 // SetAppDetailedStatus sets app's detailed state.
@@ -857,8 +857,8 @@ func (*mockRPCClient) StartSkysocksClient(string) error {
 	return nil
 }
 
-// StopSkysocksClient implements API.
-func (*mockRPCClient) StopSkysocksClient() error {
+// StopSkysocksClients implements API.
+func (*mockRPCClient) StopSkysocksClients() error {
 	return nil
 }
 

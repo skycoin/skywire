@@ -89,7 +89,7 @@ type API interface {
 
 	//skysocks-client controls
 	StartSkysocksClient(pk string) error
-	StopSkysocksClient() error
+	StopSkysocksClients() error
 	ProxyServers(version, country string) ([]servicedisc.Service, error)
 
 	//transports
@@ -598,15 +598,19 @@ func (v *Visor) StartSkysocksClient(serverKey string) error {
 	return errors.New("no skysocks-client app configuration found")
 }
 
-// StopSkysocksClient implements API.
-func (v *Visor) StopSkysocksClient() error {
+// StopSkysocksClients implements API.
+func (v *Visor) StopSkysocksClients() error {
 	// check process manager and app launcher availability
 	if v.appL == nil {
 		return ErrAppLauncherNotAvailable
 	}
 	if v.procM != nil {
-		_, err := v.appL.StopApp(visorconfig.SkysocksClientName) //nolint:errcheck
-		return err
+		for _, app := range v.conf.Launcher.Apps {
+			if app.Binary == visorconfig.SkysocksClientName {
+				v.appL.StopApp(app.Name) //nolint
+			}
+		}
+		return nil
 	}
 	return ErrProcNotAvailable
 }
