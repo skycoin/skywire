@@ -113,6 +113,9 @@ var stopCmd = &cobra.Command{
 		if allClients && clientName != "" {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("cannot use both --all and --name flag in together"))
 		}
+		if !allClients && clientName == "" {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("you should use one of flags, --all or --name"))
+		}
 		if allClients {
 			internal.Catch(cmd.Flags(), rpcClient.StopSkysocksClients())
 			internal.PrintOutput(cmd.Flags(), "All Skysocks Client stopped", fmt.Sprintln("All Skysocks Client stopped"))
