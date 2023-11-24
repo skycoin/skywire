@@ -118,11 +118,11 @@ var stopCmd = &cobra.Command{
 		}
 		if allClients {
 			internal.Catch(cmd.Flags(), rpcClient.StopSkysocksClients())
-			internal.PrintOutput(cmd.Flags(), "All Skysocks Client stopped", fmt.Sprintln("All Skysocks Client stopped"))
+			internal.PrintOutput(cmd.Flags(), "all skysocks client stopped", fmt.Sprintln("all skysocks clients stopped"))
 			return
 		}
 		internal.Catch(cmd.Flags(), rpcClient.StopApp(clientName))
-		internal.PrintOutput(cmd.Flags(), fmt.Sprintf("Skysocks Client %s stopped", clientName), fmt.Sprintf("Skysocks Client %s stopped\n", clientName))
+		internal.PrintOutput(cmd.Flags(), fmt.Sprintf("skysocks client %s stopped", clientName), fmt.Sprintf("skysocks client %s stopped\n", clientName))
 	},
 }
 
