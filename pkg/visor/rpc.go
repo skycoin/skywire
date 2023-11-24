@@ -248,6 +248,32 @@ func (r *RPC) StartApp(name *string, _ *struct{}) (err error) {
 	return r.visor.StartApp(*name)
 }
 
+// SetAppAddIn is input for SetAppAdd.
+type SetAppAddIn struct {
+	AppName    string
+	BinaryName string
+}
+
+// AddApp add app to config
+func (r *RPC) AddApp(in *SetAppAddIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "AddApp", in)(nil, &err)
+
+	return r.visor.AddApp(in.AppName, in.BinaryName)
+}
+
+// DoCustomSettingIn is input for DoCustomSetting
+type DoCustomSettingIn struct {
+	AppName       string
+	CustomSetting map[string]string
+}
+
+// DoCustomSetting set custom setting to apps arguments
+func (r *RPC) DoCustomSetting(in *DoCustomSettingIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DoCustomSetting", in)(nil, &err)
+
+	return r.visor.DoCustomSetting(in.AppName, in.CustomSetting)
+}
+
 // RegisterApp registers a App with provided proc config.
 func (r *RPC) RegisterApp(procConf *appcommon.ProcConfig, reply *appcommon.ProcKey) (err error) {
 	defer rpcutil.LogCall(r.log, "RegisterApp", procConf)(reply, &err)

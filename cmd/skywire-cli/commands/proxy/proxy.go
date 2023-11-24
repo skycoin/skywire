@@ -37,6 +37,8 @@ func init() {
 		version = ""
 	}
 	startCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
+	startCmd.Flags().StringVarP(&addr, "addr", "a", "", "address of proxy for use")
+	startCmd.Flags().StringVarP(&clientName, "name", "n", "", "name of skysocks client")
 	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks client")
 	stopCmd.Flags().StringVar(&clientName, "name", "", "specific skysocks client that want stop")
 	listCmd.Flags().StringVarP(&sdURL, "url", "a", "", "service discovery url default:\n"+skyenv.ServiceDiscAddr)
@@ -53,25 +55,71 @@ var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "start the " + serviceType + " client",
 	Run: func(cmd *cobra.Command, args []string) {
-		//check that a valid public key is provided
-		err := pubkey.Set(pk)
-		if err != nil {
-			if len(args) > 0 {
-				err := pubkey.Set(args[0])
-				if err != nil {
-					internal.PrintFatalError(cmd.Flags(), err)
-				}
-			} else {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
-			}
-		}
+
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
 		}
-		//TODO: implement operational timeout
-		internal.Catch(cmd.Flags(), rpcClient.StartSkysocksClient(pubkey.String()))
-		internal.PrintOutput(cmd.Flags(), nil, "Starting.")
+
+		if clientName != "" && pk != "" && addr != "" {
+			// add new app with -srv and -addr args, and if app was there just change -srv and -addr args and run it
+			err := pubkey.Set(pk)
+			if err != nil {
+				if len(args) > 0 {
+					err := pubkey.Set(args[0])
+					if err != nil {
+						internal.PrintFatalError(cmd.Flags(), err)
+					}
+				} else {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
+				}
+			}
+
+			arguments := map[string]string{}
+			arguments["srv"] = pubkey.String()
+			arguments["addr"] = addr
+
+			_, err = rpcClient.App(clientName)
+			if err == nil {
+				err = rpcClient.DoCustomSetting(clientName, arguments)
+				if err != nil {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error occurs during set args to custom skysocks client"))
+				}
+			} else {
+				err = rpcClient.AddApp(clientName, "skysocks-client")
+				if err != nil {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error during add new app"))
+				}
+				err = rpcClient.DoCustomSetting(clientName, arguments)
+				if err != nil {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error occurs during set args to custom skysocks client"))
+				}
+			}
+			internal.Catch(cmd.Flags(), rpcClient.StartApp(clientName))
+			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
+		} else if clientName != "" && pk == "" && addr == "" {
+			internal.Catch(cmd.Flags(), rpcClient.StartApp(clientName))
+			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
+		} else if pk != "" && clientName == "" && addr == "" {
+			err := pubkey.Set(pk)
+			if err != nil {
+				if len(args) > 0 {
+					err := pubkey.Set(args[0])
+					if err != nil {
+						internal.PrintFatalError(cmd.Flags(), err)
+					}
+				} else {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
+				}
+			}
+			internal.Catch(cmd.Flags(), rpcClient.StartSkysocksClient(pubkey.String()))
+			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
+			// change defaul skysocks-proxy app -srv arg and run it
+		} else {
+			// error
+			return
+		}
+
 		startProcess := true
 		for startProcess {
 			time.Sleep(time.Second * 1)

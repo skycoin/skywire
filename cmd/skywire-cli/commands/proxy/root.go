@@ -25,6 +25,7 @@ var (
 	servers      []servicedisc.Service
 	allClients   bool
 	clientName   string
+	addr         string
 )
 
 // RootCmd contains commands that interact with the skywire-visor

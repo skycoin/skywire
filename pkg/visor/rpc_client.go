@@ -161,6 +161,14 @@ func (rc *rpcClient) StartApp(appName string) error {
 	return rc.Call("StartApp", &appName, &struct{}{})
 }
 
+// AddApp calls AddApp.
+func (rc *rpcClient) AddApp(appName, binaryName string) error {
+	return rc.Call("AddApp", &SetAppAddIn{
+		AppName:    appName,
+		BinaryName: binaryName,
+	}, &struct{}{})
+}
+
 // RegisterApp calls RegisterApp.
 func (rc *rpcClient) RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error) {
 	var procKey appcommon.ProcKey
@@ -824,6 +832,11 @@ func (mc *mockRPCClient) App(appName string) (*appserver.AppState, error) {
 
 // StartApp implements API.
 func (*mockRPCClient) StartApp(string) error {
+	return nil
+}
+
+// AddApp implement API.
+func (*mockRPCClient) AddApp(string, string) error {
 	return nil
 }
 

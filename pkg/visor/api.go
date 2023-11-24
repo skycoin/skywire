@@ -62,6 +62,7 @@ type API interface {
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
+	AddApp(appName, binaryName string) error
 	RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error)
 	DeregisterApp(procKey appcommon.ProcKey) error
 	StopApp(appName string) error
@@ -457,6 +458,15 @@ func (v *Visor) StartApp(appName string) error {
 		return v.appL.StartApp(appName, nil, envs)
 	}
 	return ErrProcNotAvailable
+}
+
+// AddApp implement API.
+func (v *Visor) AddApp(appName, binaryName string) error {
+	// check process manager and app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
+	return v.conf.AddAppConfig(v.appL, appName, binaryName)
 }
 
 // RegisterApp implements API.
