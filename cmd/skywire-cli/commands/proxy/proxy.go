@@ -3,6 +3,7 @@ package skysocksc
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -12,10 +13,12 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
@@ -114,11 +117,21 @@ var startCmd = &cobra.Command{
 			}
 			internal.Catch(cmd.Flags(), rpcClient.StartSkysocksClient(pubkey.String()))
 			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
+			clientName = "skysocks-client"
 			// change defaul skysocks-proxy app -srv arg and run it
 		} else {
 			// error
 			return
 		}
+
+		ctx, cancel := cmdutil.SignalContext(context.Background(), &logrus.Logger{})
+		defer cancel()
+		go func() {
+			<-ctx.Done()
+			cancel()
+			rpcClient.StopApp(clientName) //nolint
+			os.Exit(1)
+		}()
 
 		startProcess := true
 		for startProcess {
