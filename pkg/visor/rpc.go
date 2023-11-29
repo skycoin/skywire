@@ -261,17 +261,10 @@ func (r *RPC) AddApp(in *SetAppAddIn, _ *struct{}) (err error) {
 	return r.visor.AddApp(in.AppName, in.BinaryName)
 }
 
-// DoCustomSettingIn is input for DoCustomSetting
-type DoCustomSettingIn struct {
-	AppName       string
-	CustomSetting map[string]string
-}
-
 // DoCustomSetting set custom setting to apps arguments
-func (r *RPC) DoCustomSetting(in *DoCustomSettingIn, _ *struct{}) (err error) {
+func (r *RPC) DoCustomSetting(in *SetAppMapIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "DoCustomSetting", in)(nil, &err)
-
-	return r.visor.DoCustomSetting(in.AppName, in.CustomSetting)
+	return r.visor.DoCustomSetting(in.AppName, in.Val)
 }
 
 // RegisterApp registers a App with provided proc config.
