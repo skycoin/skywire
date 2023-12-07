@@ -188,6 +188,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "envs")
 	genConfigCmd.Flags().BoolVar(&noFetch, "nofetch", false, "do not fetch the services from the service conf url")
 	gHiddenFlags = append(gHiddenFlags, "nofetch")
+	genConfigCmd.Flags().StringVar(&configServicePath, "config-service", "", "path of config-service offline file")
 	genConfigCmd.Flags().BoolVar(&noDefaults, "nodefaults", false, "do not use hardcoded defaults for production / test services")
 	gHiddenFlags = append(gHiddenFlags, "nodefaults")
 	genConfigCmd.Flags().StringVar(&ver, "version", scriptExecString("${VERSION}"), "custom version testing override\033[0m")
@@ -471,38 +472,64 @@ var genConfigCmd = &cobra.Command{
 		log := logger
 
 		if !noFetch {
-			// set default service conf url if none is specified
-			if serviceConfURL == "" {
-				serviceConfURL = utilenv.ServiceConfAddr
-			}
-			//use test deployment
-			if isTestEnv {
-				serviceConfURL = utilenv.TestServiceConfAddr
-			}
-			// enable errors from service conf fetch from the combination of these flags
 			wasStdout := isStdout
-			if isStdout && isHide {
-				isStdout = false
-			}
-			// create an http client to fetch the services
-			client := http.Client{
-				Timeout: time.Second * 15, // Timeout after 15 seconds
-			}
-			// Make the HTTP GET request
-			res, err := client.Get(fmt.Sprint(serviceConfURL))
-			if err != nil {
-				//silence errors for stdout
-				if !isStdout {
-					log.WithError(err).Error("Failed to fetch servers\n")
-					log.Warn("Falling back on hardcoded servers")
+			var body []byte
+			var err error
+
+			if configServicePath != "" {
+				body, err = os.ReadFile(configServicePath)
+				if err != nil {
+					if !isStdout {
+						log.WithError(err).Error("Failed to read config service from file\n")
+						log.Warn("Falling back on hardcoded servers")
+					}
+				} else {
+					//fill in services struct with the response
+					err = json.Unmarshal(body, &services)
+					if err != nil {
+						log.WithError(err).Fatal("Failed to unmarshal json response\n")
+					}
+					if !isStdout {
+						log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
+					}
+
+					// reset the state of isStdout
+					isStdout = wasStdout
 				}
 			} else {
-				if res.Body != nil {
-					defer res.Body.Close() //nolint
+				// set default service conf url if none is specified
+				if serviceConfURL == "" {
+					serviceConfURL = utilenv.ServiceConfAddr
 				}
-				body, err := io.ReadAll(res.Body)
+				//use test deployment
+				if isTestEnv {
+					serviceConfURL = utilenv.TestServiceConfAddr
+				}
+				// enable errors from service conf fetch from the combination of these flags
+
+				if isStdout && isHide {
+					isStdout = false
+				}
+				// create an http client to fetch the services
+				client := http.Client{
+					Timeout: time.Second * 15, // Timeout after 15 seconds
+				}
+				// Make the HTTP GET request
+				res, err := client.Get(fmt.Sprint(serviceConfURL))
 				if err != nil {
-					log.WithError(err).Fatal("Failed to read response\n")
+					//silence errors for stdout
+					if !isStdout {
+						log.WithError(err).Error("Failed to fetch servers\n")
+						log.Warn("Falling back on hardcoded servers")
+					}
+				} else {
+					if res.Body != nil {
+						defer res.Body.Close() //nolint
+					}
+					body, err = io.ReadAll(res.Body)
+					if err != nil {
+						log.WithError(err).Fatal("Failed to read response\n")
+					}
 				}
 				//fill in services struct with the response
 				err = json.Unmarshal(body, &services)
