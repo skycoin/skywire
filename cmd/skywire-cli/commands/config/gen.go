@@ -188,7 +188,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "envs")
 	genConfigCmd.Flags().BoolVar(&noFetch, "nofetch", false, "do not fetch the services from the service conf url")
 	gHiddenFlags = append(gHiddenFlags, "nofetch")
-	genConfigCmd.Flags().StringVar(&configServicePath, "config-service", "", "path of config-service offline file")
+	genConfigCmd.Flags().StringVar(&configServicePath, "confpath", "", "path of config-service offline file")
 	genConfigCmd.Flags().BoolVar(&noDefaults, "nodefaults", false, "do not use hardcoded defaults for production / test services")
 	gHiddenFlags = append(gHiddenFlags, "nodefaults")
 	genConfigCmd.Flags().StringVar(&ver, "version", scriptExecString("${VERSION}"), "custom version testing override\033[0m")
