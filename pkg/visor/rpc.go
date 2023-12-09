@@ -283,6 +283,14 @@ func (r *RPC) StopVPNClient(name *string, _ *struct{}) (err error) {
 	return r.visor.StopVPNClient(*name)
 }
 
+// FetchUptimeTrackerData trying to fetch ut data
+func (r *RPC) FetchUptimeTrackerData(pk string, data *[]byte) (err error) {
+	defer rpcutil.LogCall(r.log, "FetchUptimeTrackerData", pk)(data, &err)
+	rep, err := r.visor.FetchUptimeTrackerData(pk)
+	*data = rep
+	return err
+}
+
 // StartSkysocksClient starts SkysocksClient App
 func (r *RPC) StartSkysocksClient(pk string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StartSkysocksClient", pk)(nil, &err)
