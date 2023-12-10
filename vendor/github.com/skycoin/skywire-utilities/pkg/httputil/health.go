@@ -13,13 +13,14 @@ var path = "/health"
 
 // HealthCheckResponse is struct of /health endpoint
 type HealthCheckResponse struct {
-	BuildInfo *buildinfo.Info `json:"build_info,omitempty"`
-	StartedAt time.Time       `json:"started_at"`
-	DmsgAddr  string          `json:"dmsg_address,omitempty"`
+	BuildInfo   *buildinfo.Info `json:"build_info,omitempty"`
+	StartedAt   time.Time       `json:"started_at"`
+	DmsgAddr    string          `json:"dmsg_address,omitempty"`
+	DmsgServers []string        `json:"dmsg_servers,omitempty"`
 }
 
 // GetServiceHealth gets the response from the given service url
-func GetServiceHealth(ctx context.Context, url string) (health *HealthCheckResponse, err error) {
+func GetServiceHealth(_ context.Context, url string) (health *HealthCheckResponse, err error) {
 	resp, err := http.Get(url + path)
 	if err != nil {
 		return nil, err
