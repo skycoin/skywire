@@ -3,6 +3,7 @@ package visorconfig
 
 import (
 	"fmt"
+	"math/rand"
 	"strings"
 	"sync"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/dmsgc"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
@@ -234,6 +236,40 @@ func (v1 *V1) UpdatePublicAutoconnect(pAc bool) error {
 	v1.Transport.PublicAutoconnect = pAc
 	v1.mu.Unlock()
 
+	return v1.flush(v1)
+}
+
+// AddAppConfig add new config to apps if name was not same
+func (v1 *V1) AddAppConfig(launch *launcher.AppLauncher, appName, binaryName string) error {
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+
+	conf := v1.Launcher
+	busyPorts := map[routing.Port]bool{}
+	for _, app := range conf.Apps {
+		busyPorts[app.Port] = true
+		if app.Name == appName {
+			return fmt.Errorf("the app exist")
+		}
+	}
+	var randomNumber int
+	for {
+		min := 10
+		max := 99
+		randomNumber = rand.Intn(max-min+1) + min //nolint
+		if _, ok := busyPorts[routing.Port(randomNumber)]; !ok {
+			break
+		}
+	}
+
+	conf.Apps = append(conf.Apps, appserver.AppConfig{Name: appName, Binary: binaryName, Port: routing.Port(randomNumber)})
+
+	launch.ResetConfig(launcher.AppLauncherConfig{
+		VisorPK:       v1.PK,
+		Apps:          conf.Apps,
+		ServerAddr:    conf.ServerAddr,
+		DisplayNodeIP: conf.DisplayNodeIP,
+	})
 	return v1.flush(v1)
 }
 

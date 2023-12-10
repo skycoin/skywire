@@ -9,6 +9,7 @@ import (
 )
 
 var (
+	binaryName   = "skysocks-client"
 	stateName    = "skysocks-client"
 	serviceType  = servicedisc.ServiceTypeProxy
 	servicePort  = ":44"
@@ -22,6 +23,9 @@ var (
 	sdURL        string
 	directQuery  bool
 	servers      []servicedisc.Service
+	allClients   bool
+	clientName   string
+	addr         string
 )
 
 // RootCmd contains commands that interact with the skywire-visor
