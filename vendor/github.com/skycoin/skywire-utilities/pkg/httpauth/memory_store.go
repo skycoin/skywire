@@ -27,7 +27,7 @@ func (s *memStore) SetError(err error) {
 	s.mu.Unlock()
 }
 
-func (s *memStore) Nonce(ctx context.Context, pk cipher.PubKey) (Nonce, error) {
+func (s *memStore) Nonce(_ context.Context, pk cipher.PubKey) (Nonce, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -38,7 +38,7 @@ func (s *memStore) Nonce(ctx context.Context, pk cipher.PubKey) (Nonce, error) {
 	return s.nonces[pk], nil
 }
 
-func (s *memStore) IncrementNonce(ctx context.Context, pk cipher.PubKey) (Nonce, error) {
+func (s *memStore) IncrementNonce(_ context.Context, pk cipher.PubKey) (Nonce, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -50,7 +50,7 @@ func (s *memStore) IncrementNonce(ctx context.Context, pk cipher.PubKey) (Nonce,
 	return s.nonces[pk], nil
 }
 
-func (s *memStore) Count(ctx context.Context) (n int, err error) {
+func (s *memStore) Count(_ context.Context) (n int, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

@@ -43,6 +43,7 @@ type API struct {
 	startedAt                   time.Time
 	enableLoadTesting           bool
 	dmsgAddr                    string
+	DmsgServers                 []string
 }
 
 // New returns a new API object, which can be started as a server
@@ -65,6 +66,7 @@ func New(log logrus.FieldLogger, db store.Storer, m discmetrics.Metrics, testMod
 		enableLoadTesting:           enableLoadTesting,
 		reqsInFlightCountMiddleware: metricsutil.NewRequestsInFlightCountMiddleware(),
 		dmsgAddr:                    dmsgAddr,
+		DmsgServers:                 []string{},
 	}
 
 	r.Use(middleware.RequestID)
@@ -415,9 +417,10 @@ func (a *API) getAllServers() http.HandlerFunc {
 func (a *API) serviceHealth(w http.ResponseWriter, r *http.Request) {
 	info := buildinfo.Get()
 	a.writeJSON(w, r, http.StatusOK, httputil.HealthCheckResponse{
-		BuildInfo: info,
-		StartedAt: a.startedAt,
-		DmsgAddr:  a.dmsgAddr,
+		BuildInfo:   info,
+		StartedAt:   a.startedAt,
+		DmsgAddr:    a.dmsgAddr,
+		DmsgServers: a.DmsgServers,
 	})
 }
 

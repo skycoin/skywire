@@ -153,6 +153,13 @@ var RootCmd = &cobra.Command{
 
 			defer closeDmsgDC()
 
+			go func() {
+				for {
+					a.DmsgServers = dmsgDC.ConnectedServersPK()
+					time.Sleep(time.Second)
+				}
+			}()
+
 			go updateServers(ctx, a, dClient, dmsgDC, log)
 
 			go func() {

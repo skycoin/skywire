@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"net/url"
@@ -41,17 +42,17 @@ var (
 	dmsgcurlTries  int
 	dmsgcurlWait   int
 	dmsgcurlOutput string
-	stdout         bool
+	replace        bool
 )
 
 func init() {
 	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "c", "", "dmsg discovery url default:\n"+skyenv.DmsgDiscAddr)
 	RootCmd.Flags().IntVarP(&dmsgSessions, "sess", "e", 1, "number of dmsg servers to connect to")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "", "[ debug | warn | error | fatal | panic | trace | info ]\033[0m")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "fatal", "[ debug | warn | error | fatal | panic | trace | info ]\033[0m")
 	RootCmd.Flags().StringVarP(&dmsgcurlData, "data", "d", "", "dmsghttp POST data")
 	//	RootCmd.Flags().StringVarP(&dmsgcurlHeader, "header", "H", "", "Pass custom header(s) to server")
-	RootCmd.Flags().StringVarP(&dmsgcurlOutput, "out", "o", ".", "output filepath")
-	RootCmd.Flags().BoolVarP(&stdout, "stdout", "n", false, "output to STDOUT")
+	RootCmd.Flags().StringVarP(&dmsgcurlOutput, "out", "o", "", "output filepath")
+	RootCmd.Flags().BoolVarP(&replace, "replace", "r", false, "replace exist file with new downloaded")
 	RootCmd.Flags().IntVarP(&dmsgcurlTries, "try", "t", 1, "download attempts (0 unlimits)")
 	RootCmd.Flags().IntVarP(&dmsgcurlWait, "wait", "w", 0, "time to wait between fetches")
 	RootCmd.Flags().StringVarP(&dmsgcurlAgent, "agent", "a", "dmsgcurl/"+buildinfo.Version(), "identify as `AGENT`")
@@ -137,8 +138,10 @@ var RootCmd = &cobra.Command{
 			}
 			fmt.Println(string(respBody))
 		} else {
-
-			file, err := parseOutputFile(dmsgcurlOutput, u.URL.Path)
+			file := os.Stdout
+			if dmsgcurlOutput != "" {
+				file, err = parseOutputFile(dmsgcurlOutput, replace)
+			}
 			if err != nil {
 				return fmt.Errorf("failed to prepare output file: %w", err)
 			}
@@ -162,23 +165,11 @@ var RootCmd = &cobra.Command{
 			httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
 
 			for i := 0; i < dmsgcurlTries; i++ {
-				if !stdout {
+				if dmsgcurlOutput != "" {
 					dmsgcurlLog.Debugf("Download attempt %d/%d ...", i, dmsgcurlTries)
-				}
-
-				if _, err := file.Seek(0, 0); err != nil {
-					return fmt.Errorf("failed to reset file: %w", err)
-				}
-				if stdout {
-					if fErr := file.Close(); fErr != nil {
-						dmsgcurlLog.WithError(fErr).Warn("Failed to close output file.")
+					if _, err := file.Seek(0, 0); err != nil {
+						return fmt.Errorf("failed to reset file: %w", err)
 					}
-					if err != nil {
-						if rErr := os.RemoveAll(file.Name()); rErr != nil {
-							dmsgcurlLog.WithError(rErr).Warn("Failed to remove output file.")
-						}
-					}
-					file = os.Stdout
 				}
 				if err := Download(ctx, dmsgcurlLog, &httpC, file, u.URL.String(), 0); err != nil {
 					dmsgcurlLog.WithError(err).Error()
@@ -243,11 +234,14 @@ func parseURL(args []string) (*URL, error) {
 	return &out, nil
 }
 
-func parseOutputFile(name string, urlPath string) (*os.File, error) {
-	stat, statErr := os.Stat(name)
+func parseOutputFile(output string, replace bool) (*os.File, error) {
+	_, statErr := os.Stat(output)
 	if statErr != nil {
 		if os.IsNotExist(statErr) {
-			f, err := os.Create(name) //nolint
+			if err := os.MkdirAll(filepath.Dir(output), fs.ModePerm); err != nil {
+				return nil, err
+			}
+			f, err := os.Create(output) //nolint
 			if err != nil {
 				return nil, err
 			}
@@ -255,15 +249,9 @@ func parseOutputFile(name string, urlPath string) (*os.File, error) {
 		}
 		return nil, statErr
 	}
-
-	if stat.IsDir() {
-		f, err := os.Create(filepath.Join(name, urlPath)) //nolint
-		if err != nil {
-			return nil, err
-		}
-		return f, nil
+	if replace {
+		return os.OpenFile(filepath.Clean(output), os.O_RDWR|os.O_CREATE|os.O_TRUNC, os.ModePerm)
 	}
-
 	return nil, os.ErrExist
 }
 
@@ -357,7 +345,7 @@ func (pw *ProgressWriter) Write(p []byte) (int, error) {
 	current := atomic.AddInt64(&pw.Current, int64(n))
 	total := atomic.LoadInt64(&pw.Total)
 	pc := fmt.Sprintf("%d%%", current*100/total)
-	if !stdout {
+	if dmsgcurlOutput != "" {
 		fmt.Printf("Downloading: %d/%dB (%s)", current, total, pc)
 		if current != total {
 			fmt.Print("\r")
