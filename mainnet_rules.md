@@ -39,7 +39,7 @@ A total of up to ~1117.808 Skycoin are distributed daily in non leap-years; even
 
 ## Rules & Requirements
 
-* **Minimum skywire version v1.3.14** - Cutoff December 1st 2023
+* **Minimum skywire version v1.3.14** - Cutoff January 1st 2024
 
 * The visor must be an **ARM architecture SBC running on approved [hardware](#hardware)**
 
@@ -72,9 +72,9 @@ skywire-visor -v
 
 **Reward eligibility requires Skywire v1.3.14**
 
-Requirement established 11-10-2023
+Requirement established 12-10-2023
 
-Rewards Cutoff date for updating 12-1-2023
+Rewards Cutoff date for updating 1-1-2024
 
 ### Deployment
 
