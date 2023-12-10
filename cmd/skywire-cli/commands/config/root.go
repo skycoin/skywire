@@ -92,6 +92,7 @@ var (
 	disableProxyServerAutostart bool
 	proxyServerPass             string
 	proxyClientPass             string
+	configServicePath           string
 )
 
 // RootCmd contains commands that interact with the config of local skywire-visor
