@@ -2,8 +2,6 @@ module github.com/skycoin/skywire
 
 go 1.21
 
-toolchain go1.21.3
-
 require (
 	github.com/AudriusButkevicius/pfilter v0.0.11
 	github.com/VictoriaMetrics/metrics v1.24.0
