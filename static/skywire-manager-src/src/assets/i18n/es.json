@@ -20,7 +20,8 @@
     "no": "No",
     "unknown": "Desconocido",
     "close": "Cerrar",
-    "window-size-error": "La ventana es demasiado estrecha para el contenido."
+    "window-size-error": "La ventana es demasiado estrecha para el contenido.",
+    "data-update-problems": "Problema actualizando los datos."
   },
 
   "labeled-element": {

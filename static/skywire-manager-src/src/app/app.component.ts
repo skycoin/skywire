@@ -32,6 +32,8 @@ export class AppComponent {
   pkErrorShown = false;
   pkErrorsFound = 0;
 
+  showingDataProblemMsg = false;
+
   obtainPkSubscription: Subscription;
 
   constructor(
@@ -106,6 +108,20 @@ export class AppComponent {
     if (!this.hypervisorPkObtained) {
       this.checkHypervisorPk(0);
     }
+  }
+
+  /**
+   * Shows a box at the bottom-right corner indicating that there is a problem getting the data.
+   */
+  showDataProblemMsg() {
+    this.showingDataProblemMsg = true;
+  }
+
+  /**
+   * Hides the box at the bottom-right corner indicating that there is a problem getting the data.
+   */
+  hideDataProblemMsg() {
+    this.showingDataProblemMsg = false;
   }
 
   /**

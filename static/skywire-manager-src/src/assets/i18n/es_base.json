@@ -20,7 +20,8 @@
     "no": "No",
     "unknown": "Unknown",
     "close": "Close",
-    "window-size-error": "The window is too narrow for the content."
+    "window-size-error": "The window is too narrow for the content.",
+    "data-update-problems": "Problem updating the data."
   },
 
   "labeled-element": {

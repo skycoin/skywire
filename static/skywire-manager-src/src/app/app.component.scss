@@ -41,3 +41,18 @@
   left: 0;
   position: fixed;
 }
+
+.connection-problem-container {
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  background-color: red;
+  padding: 0px 10px 5px;
+  font-size: 10px;
+  opacity: 0.75;
+
+  mat-icon {
+    position: relative;
+    top: 4px;
+  }
+}
