@@ -62,6 +62,7 @@ type API interface {
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
+	AddApp(appName, binaryName string) error
 	RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error)
 	DeregisterApp(procKey appcommon.ProcKey) error
 	StopApp(appName string) error
@@ -89,7 +90,7 @@ type API interface {
 
 	//skysocks-client controls
 	StartSkysocksClient(pk string) error
-	StopSkysocksClient() error
+	StopSkysocksClients() error
 	ProxyServers(version, country string) ([]servicedisc.Service, error)
 
 	//transports
@@ -124,6 +125,9 @@ type API interface {
 	StopPing(pk cipher.PubKey) error
 
 	TestVisor(config PingConfig) ([]TestResult, error)
+
+	//uptime-tracker tools
+	FetchUptimeTrackerData(pk string) ([]byte, error)
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -459,6 +463,15 @@ func (v *Visor) StartApp(appName string) error {
 	return ErrProcNotAvailable
 }
 
+// AddApp implement API.
+func (v *Visor) AddApp(appName, binaryName string) error {
+	// check process manager and app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
+	return v.conf.AddAppConfig(v.appL, appName, binaryName)
+}
+
 // RegisterApp implements API.
 func (v *Visor) RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error) {
 	// check process manager and app launcher availability
@@ -550,6 +563,23 @@ func (v *Visor) StopVPNClient(appName string) error {
 	return ErrProcNotAvailable
 }
 
+// FetchUptimeTrackerData implements API
+func (v *Visor) FetchUptimeTrackerData(pk string) ([]byte, error) {
+	var body []byte
+	var pubkey cipher.PubKey
+
+	if pk != "" {
+		err := pubkey.Set(pk)
+		if err != nil {
+			return body, fmt.Errorf("Invalid or missing public key")
+		}
+	}
+	if v.uptimeTracker == nil {
+		return body, fmt.Errorf("Uptime tracker module not available")
+	}
+	return v.uptimeTracker.FetchUptimes(context.TODO(), pk)
+}
+
 // StartSkysocksClient implements API.
 func (v *Visor) StartSkysocksClient(serverKey string) error {
 	var envs []string
@@ -598,15 +628,19 @@ func (v *Visor) StartSkysocksClient(serverKey string) error {
 	return errors.New("no skysocks-client app configuration found")
 }
 
-// StopSkysocksClient implements API.
-func (v *Visor) StopSkysocksClient() error {
+// StopSkysocksClients implements API.
+func (v *Visor) StopSkysocksClients() error {
 	// check process manager and app launcher availability
 	if v.appL == nil {
 		return ErrAppLauncherNotAvailable
 	}
 	if v.procM != nil {
-		_, err := v.appL.StopApp(visorconfig.SkysocksClientName) //nolint:errcheck
-		return err
+		for _, app := range v.conf.Launcher.Apps {
+			if app.Binary == visorconfig.SkysocksClientName {
+				v.appL.StopApp(app.Name) //nolint
+			}
+		}
+		return nil
 	}
 	return ErrProcNotAvailable
 }

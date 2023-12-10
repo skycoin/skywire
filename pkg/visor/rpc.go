@@ -248,6 +248,25 @@ func (r *RPC) StartApp(name *string, _ *struct{}) (err error) {
 	return r.visor.StartApp(*name)
 }
 
+// SetAppAddIn is input for SetAppAdd.
+type SetAppAddIn struct {
+	AppName    string
+	BinaryName string
+}
+
+// AddApp add app to config
+func (r *RPC) AddApp(in *SetAppAddIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "AddApp", in)(nil, &err)
+
+	return r.visor.AddApp(in.AppName, in.BinaryName)
+}
+
+// DoCustomSetting set custom setting to apps arguments
+func (r *RPC) DoCustomSetting(in *SetAppMapIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DoCustomSetting", in)(nil, &err)
+	return r.visor.DoCustomSetting(in.AppName, in.Val)
+}
+
 // RegisterApp registers a App with provided proc config.
 func (r *RPC) RegisterApp(procConf *appcommon.ProcConfig, reply *appcommon.ProcKey) (err error) {
 	defer rpcutil.LogCall(r.log, "RegisterApp", procConf)(reply, &err)
@@ -283,6 +302,14 @@ func (r *RPC) StopVPNClient(name *string, _ *struct{}) (err error) {
 	return r.visor.StopVPNClient(*name)
 }
 
+// FetchUptimeTrackerData trying to fetch ut data
+func (r *RPC) FetchUptimeTrackerData(pk string, data *[]byte) (err error) {
+	defer rpcutil.LogCall(r.log, "FetchUptimeTrackerData", pk)(data, &err)
+	rep, err := r.visor.FetchUptimeTrackerData(pk)
+	*data = rep
+	return err
+}
+
 // StartSkysocksClient starts SkysocksClient App
 func (r *RPC) StartSkysocksClient(pk string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StartSkysocksClient", pk)(nil, &err)
@@ -290,11 +317,11 @@ func (r *RPC) StartSkysocksClient(pk string, _ *struct{}) (err error) {
 	return r.visor.StartSkysocksClient(pk)
 }
 
-// StopSkysocksClient stops SkysocksClient App
-func (r *RPC) StopSkysocksClient(_ *struct{}, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "StopSkysocksClient", nil)(nil, &err)
+// StopSkysocksClients stops all SkysocksClient Apps
+func (r *RPC) StopSkysocksClients(_ *struct{}, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StopSkysocksClients", nil)(nil, &err)
 
-	return r.visor.StopSkysocksClient()
+	return r.visor.StopSkysocksClients()
 }
 
 // RestartApp restarts App with provided name.
