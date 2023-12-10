@@ -257,6 +257,7 @@ func makeDefaultLauncherAppsConfig(dnsServer string) []appserver.AppConfig {
 			Binary:    SkysocksClientName,
 			AutoStart: false,
 			Port:      routing.Port(skyenv.SkysocksClientPort),
+			Args:      []string{"-addr", SkysocksClientAddr},
 		},
 		{
 			Name:      VPNServerName,

@@ -161,6 +161,14 @@ func (rc *rpcClient) StartApp(appName string) error {
 	return rc.Call("StartApp", &appName, &struct{}{})
 }
 
+// AddApp calls AddApp.
+func (rc *rpcClient) AddApp(appName, binaryName string) error {
+	return rc.Call("AddApp", &SetAppAddIn{
+		AppName:    appName,
+		BinaryName: binaryName,
+	}, &struct{}{})
+}
+
 // RegisterApp calls RegisterApp.
 func (rc *rpcClient) RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error) {
 	var procKey appcommon.ProcKey
@@ -200,9 +208,9 @@ func (rc *rpcClient) StartSkysocksClient(pk string) error {
 	return rc.Call("StartSkysocksClient", pk, &struct{}{})
 }
 
-// StopSkysocksClient calls StopSkysocksClient.
-func (rc *rpcClient) StopSkysocksClient() error {
-	return rc.Call("StopSkysocksClient", &struct{}{}, &struct{}{})
+// StopSkysocksCliens calls StopSkysocksCliens.
+func (rc *rpcClient) StopSkysocksClients() error {
+	return rc.Call("StopSkysocksClients", &struct{}{}, &struct{}{})
 }
 
 // SetAppDetailedStatus sets app's detailed state.
@@ -834,6 +842,11 @@ func (*mockRPCClient) StartApp(string) error {
 	return nil
 }
 
+// AddApp implement API.
+func (*mockRPCClient) AddApp(string, string) error {
+	return nil
+}
+
 // RegisterApp implements API.
 func (*mockRPCClient) RegisterApp(appcommon.ProcConfig) (appcommon.ProcKey, error) {
 	return appcommon.ProcKey{}, nil
@@ -869,8 +882,8 @@ func (*mockRPCClient) StartSkysocksClient(string) error {
 	return nil
 }
 
-// StopSkysocksClient implements API.
-func (*mockRPCClient) StopSkysocksClient() error {
+// StopSkysocksClients implements API.
+func (*mockRPCClient) StopSkysocksClients() error {
 	return nil
 }
 
