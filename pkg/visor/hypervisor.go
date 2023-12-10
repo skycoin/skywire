@@ -215,6 +215,8 @@ func (hv *Hypervisor) makeMux() chi.Router {
 
 			r.Get("/ping", hv.getPong())
 
+			r.Get("/csrf", hv.getCsrf())
+
 			if hv.c.EnableAuth {
 				r.Group(func(r chi.Router) {
 					r.Post("/create-account", hv.users.CreateAccount())
@@ -295,6 +297,29 @@ func (hv *Hypervisor) getPong() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if _, err := w.Write([]byte(`"PONG!"`)); err != nil {
 			hv.log(r).WithError(err).Warn("getPong: Failed to send PONG!")
+		}
+	}
+}
+
+// Csrf provides a temporal security token.
+type Csrf struct {
+	Token string `json:"csrf_token"`
+}
+
+func (hv *Hypervisor) getCsrf() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if useCsrf {
+			token, err := newCSRFToken()
+			if err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+
+			httputil.WriteJSON(w, r, http.StatusOK, Csrf{
+				Token: token,
+			})
+		} else {
+			httputil.WriteJSON(w, r, http.StatusOK, Csrf{Token: ""})
 		}
 	}
 }
@@ -1350,6 +1375,21 @@ func (hv *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx
 	if err != nil {
 		httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 		return nil, false
+	}
+
+	if useCsrf && (r.Method == "POST" || r.Method == "PUT" || r.Method == "DELETE") {
+		csrfToken := r.Header.Get(CSRFHeaderName)
+		if csrfToken == "" {
+			errMsg := fmt.Errorf("no csrf token for %s request", r.Method)
+			httputil.WriteJSON(w, r, http.StatusForbidden, errMsg)
+			return nil, false
+		}
+
+		err = verifyCSRFToken(csrfToken)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusForbidden, err)
+			return nil, false
+		}
 	}
 
 	if pk != hv.c.PK {

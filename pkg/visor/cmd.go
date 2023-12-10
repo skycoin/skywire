@@ -43,6 +43,7 @@ var (
 	logTag               string
 	hiddenflags          []string
 	all                  bool
+	useCsrf              bool
 	pkg                  bool
 	usr                  bool
 	localIPs             []net.IP //  nolint:unused
@@ -131,6 +132,7 @@ func init() {
 	RootCmd.Flags().BoolVar(&isForceColor, "forcecolor", false, "force color logging when out is not STDOUT")
 	hiddenflags = append(hiddenflags, "forcecolor")
 	RootCmd.Flags().BoolVar(&all, "all", false, "show all flags")
+	RootCmd.Flags().BoolVar(&useCsrf, "csrf", true, "Request a CSRF token for sensitive hypervisor API requests")
 	for _, j := range hiddenflags {
 		RootCmd.Flags().MarkHidden(j) //nolint
 	}
