@@ -907,6 +907,7 @@ var genConfigCmd = &cobra.Command{
 				Binary:    visorconfig.SkysocksClientName,
 				AutoStart: false,
 				Port:      routing.Port(visorconfig.SkysocksClientPort),
+				Args:      []string{"-addr", visorconfig.SkysocksClientAddr},
 			},
 			{
 				Name:      visorconfig.VPNServerName,
