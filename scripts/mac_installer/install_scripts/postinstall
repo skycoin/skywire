@@ -15,7 +15,7 @@ chown -R "${USER}" "$skywire_dir"
 
 echo "generating skywire config if it doesn't exist"
 if [[ ! -f "${skywire_dir}"/skywire-config.json ]]; then
-  /Applications/Skywire.app/Contents/MacOS/skywire-cli config gen -bpio "${skywire_dir}"/skywire-config.json --disableapps skychat,skysocks,skysocks-client,vpn-server
+  /Applications/Skywire.app/Contents/MacOS/skywire-cli config gen -bpio "${skywire_dir}"/skywire-config.json
 fi
 chown "${USER}" "${skywire_dir}"/skywire-config.json
 
