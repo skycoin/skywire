@@ -82,6 +82,8 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "noauth")
 	genConfigCmd.Flags().BoolVarP(&isDmsgHTTP, "dmsghttp", "d", scriptExecBool("${DMSGHTTP:-false}"), "use dmsg connection to skywire services\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "dmsghttp")
+	genConfigCmd.Flags().IntVar(&minDmsgSess, "minsess", scriptExecInt("${MINDMSGSESS:-1}"), "number of dmsg servers to connect to (0 = unlimited)\033[0m")
+	gHiddenFlags = append(gHiddenFlags, "minsess")
 	genConfigCmd.Flags().BoolVarP(&isEnableAuth, "auth", "e", false, "enable auth on hypervisor UI\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "auth")
 	genConfigCmd.Flags().BoolVarP(&isForce, "force", "f", false, "remove pre-existing config\033[0m")
@@ -197,7 +199,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "netifc")
 	genConfigCmd.Flags().BoolVar(&noFetch, "nofetch", false, "do not fetch the services from the service conf url")
 	gHiddenFlags = append(gHiddenFlags, "nofetch")
-	genConfigCmd.Flags().StringVar(&configServicePath, "confpath", "", "path of config-service offline file")
+	genConfigCmd.Flags().StringVar(&configServicePath, "confpath", "", "specify service conf file (instead of fetching from URL)")
 	gHiddenFlags = append(gHiddenFlags, "confpath")
 	genConfigCmd.Flags().BoolVar(&noDefaults, "nodefaults", false, "do not use hardcoded defaults for production / test services")
 	gHiddenFlags = append(gHiddenFlags, "nodefaults")
@@ -777,7 +779,7 @@ var genConfigCmd = &cobra.Command{
 
 		conf.Dmsg = &dmsgc.DmsgConfig{
 			Discovery:     services.DmsgDiscovery,
-			SessionsCount: 1,
+			SessionsCount: minDmsgSess,
 			Servers:       []*disc.Entry{},
 		}
 		conf.Transport = &visorconfig.Transport{
@@ -1231,6 +1233,9 @@ const envfileLinux = `#
 #--	Use dmsghttp to connect to the production deployment
 #DMSGHTTP=true
 
+#--	Number of dmsg serverts to connect to (0 unlimits)
+#MINDMSGSESS=8
+
 #--	Start the hypervisor interface for this visor
 #ISHYPERVISOR=true
 
@@ -1329,6 +1334,9 @@ const envfileWindows = `#
 
 #--	Use dmsghttp to connect to the production deployment
 #$DMSGHTTP=true
+
+#--	Number of dmsg serverts to connect to (0 unlimits)
+#$MINDMSGSESS=8
 
 #--	Start the hypervisor interface for this visor
 #$ISHYPERVISOR=true
