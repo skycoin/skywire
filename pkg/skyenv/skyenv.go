@@ -1,9 +1,7 @@
 // Package skyenv defines variables and constants
 package skyenv
 
-import (
-	"time"
-)
+import "time"
 
 const (
 	// config file constants

@@ -3,9 +3,7 @@
 
 package osutil
 
-import (
-	"syscall"
-)
+import "syscall"
 
 // GainRoot escalates privileges to gain root access, it's not needed on windows
 func GainRoot() (int, error) {
