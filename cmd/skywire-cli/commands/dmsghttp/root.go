@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 
@@ -53,7 +52,7 @@ var dmsghttpCmd = &cobra.Command{
 			log.WithError(err).Error("Error accurs during marshal content to json file")
 		}
 
-		err = ioutil.WriteFile(path, file, 0600)
+		err = os.WriteFile(path, file, 0600)
 		if err != nil {
 			log.WithError(err).Errorf("Cannot save new dmsghttp-config.json file at %s", path)
 		}
