@@ -198,7 +198,7 @@ builds:
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
   - id: skychat-riscv64
-    binary: skychat
+    binary: apps/skychat
     goos:
       - linux
     goarch:
@@ -262,7 +262,7 @@ builds:
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
   - id: skysocks-riscv64
-    binary: skysocks
+    binary: apps/skysocks
     goos:
       - linux
     goarch:
@@ -326,7 +326,7 @@ builds:
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
   - id: skysocks-client-riscv64
-    binary: skysocks-client
+    binary: apps/skysocks-client
     goos:
       - linux
     goarch:
@@ -390,7 +390,7 @@ builds:
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
   - id: vpn-server-riscv64
-    binary: vpn-server
+    binary: apps/vpn-server
     goos:
       - linux
     goarch:
@@ -454,7 +454,7 @@ builds:
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
   - id: vpn-client-riscv64
-    binary: vpn-client
+    binary: apps/vpn-client
     goos:
       - linux
     goarch:
