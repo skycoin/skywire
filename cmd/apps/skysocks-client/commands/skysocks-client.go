@@ -1,7 +1,4 @@
-// /* cmd/apps/skysocks-client/skysocks-client.go
-/*
-proxy client app for skywire visor
-*/
+// Package commands cmd/apps/skysocks-client/skysocks-client.go
 package commands
 
 import (
@@ -10,12 +7,14 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"os"
 	"time"
-"log"
-cc "github.com/ivanpirog/coloredcobra"
-"github.com/spf13/cobra"
+
+	cc "github.com/ivanpirog/coloredcobra"
+	"github.com/spf13/cobra"
+
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
@@ -40,6 +39,7 @@ func init() {
 	RootCmd.Flags().StringVar(&addr, "addr", visorconfig.SkysocksClientAddr, "Client address to listen on")
 	RootCmd.Flags().StringVar(&serverPK, "srv", "", "PubKey of the server to connect to")
 }
+
 // RootCmd is the root command for skysocks
 var RootCmd = &cobra.Command{
 	Use:   "skysocks-client",
@@ -54,65 +54,65 @@ var RootCmd = &cobra.Command{
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
 	Run: func(cmd *cobra.Command, args []string) {
-	appCl := app.NewClient(nil)
-	defer appCl.Close()
+		appCl := app.NewClient(nil)
+		defer appCl.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
-		print(fmt.Sprintf("Failed to output build info: %v\n", err))
-	}
+		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
+			print(fmt.Sprintf("Failed to output build info: %v\n", err))
+		}
 
-	flag.Parse()
+		flag.Parse()
 
-	if serverPK == "" {
-		err := errors.New("Empty server PubKey. Exiting")
-		print(fmt.Sprintf("%v\n", err))
-		setAppErr(appCl, err)
-		os.Exit(1)
-	}
-
-	pk := cipher.PubKey{}
-	if err := pk.UnmarshalText([]byte(serverPK)); err != nil {
-		print(fmt.Sprintf("Invalid server PubKey: %v\n", err))
-		setAppErr(appCl, err)
-		os.Exit(1)
-	}
-	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
-	setAppPort(appCl, appCl.Config().RoutingPort)
-	for {
-		conn, err := dialServer(ctx, appCl, pk)
-		if err != nil {
-			print(fmt.Sprintf("Failed to dial to a server: %v\n", err))
+		if serverPK == "" {
+			err := errors.New("Empty server PubKey. Exiting")
+			print(fmt.Sprintf("%v\n", err))
 			setAppErr(appCl, err)
 			os.Exit(1)
 		}
 
-		fmt.Printf("Connected to %v\n", pk)
-		client, err := skysocks.NewClient(conn, appCl)
-		if err != nil {
-			print(fmt.Sprintf("Failed to create a new client: %v\n", err))
+		pk := cipher.PubKey{}
+		if err := pk.UnmarshalText([]byte(serverPK)); err != nil {
+			print(fmt.Sprintf("Invalid server PubKey: %v\n", err))
 			setAppErr(appCl, err)
 			os.Exit(1)
 		}
+		defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+		setAppPort(appCl, appCl.Config().RoutingPort)
+		for {
+			conn, err := dialServer(ctx, appCl, pk)
+			if err != nil {
+				print(fmt.Sprintf("Failed to dial to a server: %v\n", err))
+				setAppErr(appCl, err)
+				os.Exit(1)
+			}
 
-		fmt.Printf("Serving proxy client %v\n", addr)
-		setAppStatus(appCl, appserver.AppDetailedStatusRunning)
+			fmt.Printf("Connected to %v\n", pk)
+			client, err := skysocks.NewClient(conn, appCl)
+			if err != nil {
+				print(fmt.Sprintf("Failed to create a new client: %v\n", err))
+				setAppErr(appCl, err)
+				os.Exit(1)
+			}
 
-		if err := client.ListenAndServe(addr); err != nil {
-			print(fmt.Sprintf("Error serving proxy client: %v\n", err))
+			fmt.Printf("Serving proxy client %v\n", addr)
+			setAppStatus(appCl, appserver.AppDetailedStatusRunning)
+
+			if err := client.ListenAndServe(addr); err != nil {
+				print(fmt.Sprintf("Error serving proxy client: %v\n", err))
+			}
+
+			// need to filter this out, cause usually client failure means app conn is already closed
+			if err := conn.Close(); err != nil && err != io.ErrClosedPipe {
+				print(fmt.Sprintf("Error closing app conn: %v\n", err))
+			}
+
+			fmt.Println("Reconnecting to skysocks server")
+			setAppStatus(appCl, appserver.AppDetailedStatusReconnecting)
 		}
-
-		// need to filter this out, cause usually client failure means app conn is already closed
-		if err := conn.Close(); err != nil && err != io.ErrClosedPipe {
-			print(fmt.Sprintf("Error closing app conn: %v\n", err))
-		}
-
-		fmt.Println("Reconnecting to skysocks server")
-		setAppStatus(appCl, appserver.AppDetailedStatusReconnecting)
-	}
-},
+	},
 }
 
 func dialServer(ctx context.Context, appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
@@ -134,7 +134,6 @@ func dialServer(ctx context.Context, appCl *app.Client, pk cipher.PubKey) (net.C
 	return conn, nil
 }
 
-
 func setAppErr(appCl *app.Client, err error) {
 	if appErr := appCl.SetError(err.Error()); appErr != nil {
 		print(fmt.Sprintf("Failed to set error %v: %v\n", err, appErr))
@@ -152,6 +151,7 @@ func setAppPort(appCl *app.Client, port routing.Port) {
 		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
 	}
 }
+
 // Execute executes root CLI command.
 func Execute() {
 	cc.Init(&cc.Config{
@@ -171,13 +171,3 @@ func Execute() {
 		log.Fatal("Failed to execute command: ", err)
 	}
 }
-
-const help = "Usage:\r\n" +
-	"  {{.UseLine}}{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}\r\n\r\n" +
-	"{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}\r\n\r\n" +
-	"Available Commands:{{range .Commands}}{{if (or .IsAvailableCommand)}}\r\n  " +
-	"{{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}\r\n\r\n" +
-	"Flags:\r\n" +
-	"{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}\r\n\r\n" +
-	"Global Flags:\r\n" +
-	"{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}\r\n\r\n"

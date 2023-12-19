@@ -1,7 +1,4 @@
-// /* cmd/apps/skychat/skychat.go
-/*
-skychat app for skywire visor
-*/
+// Package commands cmd/apps/skychat/skychat.go
 package commands
 
 import (
@@ -10,8 +7,8 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
 	"io/fs"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -19,9 +16,10 @@ import (
 	"runtime"
 	"sync"
 	"time"
+
 	cc "github.com/ivanpirog/coloredcobra"
-	"github.com/spf13/cobra"
 	ipc "github.com/james-barrow/golang-ipc"
+	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -38,11 +36,11 @@ const (
 	port    = routing.Port(1)
 )
 
-//var addr = flag.String("addr", ":8001", "address to bind, put an * before the port if you want to be able to access outside localhost")
+// var addr = flag.String("addr", ":8001", "address to bind, put an * before the port if you want to be able to access outside localhost")
 var r = netutil.NewRetrier(nil, 50*time.Millisecond, netutil.DefaultMaxBackoff, 5, 2)
 
 var (
-	addr string
+	addr     string
 	appCl    *app.Client
 	clientCh chan string
 	conns    map[cipher.PubKey]net.Conn // Chat connections
@@ -57,6 +55,7 @@ var embededFiles embed.FS
 func init() {
 	RootCmd.Flags().StringVar(&addr, "addr", ":8001", "address to bind, put an * before the port if you want to be able to access outside localhost")
 }
+
 // RootCmd is the root command for skywire-cli
 var RootCmd = &cobra.Command{
 	Use:   "skychat",
@@ -105,45 +104,45 @@ var RootCmd = &cobra.Command{
 		http.HandleFunc("/sse", sseHandler)
 
 		url := ""
-//		address := *addr
+		//		address := *addr
 		address := addr
 		if len(address) < 5 || (address[:1] != ":" && address[:2] != "*:") {
 			url = "127.0.0.1:8001"
-			} else if address[:1] == ":" {
-				url = "127.0.0.1" + address
-				} else if address[:2] == "*:" {
-					url = address[1:]
-					} else {
-						url = "127.0.0.1:8001"
-					}
+		} else if address[:1] == ":" {
+			url = "127.0.0.1" + address
+		} else if address[:2] == "*:" {
+			url = address[1:]
+		} else {
+			url = "127.0.0.1:8001"
+		}
 
-					fmt.Println("Serving HTTP on", url)
+		fmt.Println("Serving HTTP on", url)
 
-					if runtime.GOOS != "windows" {
-						termCh := make(chan os.Signal, 1)
-						signal.Notify(termCh, os.Interrupt)
+		if runtime.GOOS != "windows" {
+			termCh := make(chan os.Signal, 1)
+			signal.Notify(termCh, os.Interrupt)
 
-						go func() {
-							<-termCh
-							setAppStatus(appCl, appserver.AppDetailedStatusStopped)
-							os.Exit(1)
-							}()
-						}
-						setAppStatus(appCl, appserver.AppDetailedStatusRunning)
-						srv := &http.Server{ //nolint gosec
-							Addr:         url,
-							ReadTimeout:  5 * time.Second,
-							WriteTimeout: 10 * time.Second,
-						}
-						err := srv.ListenAndServe()
-						if err != nil {
-							print(err.Error())
-							setAppError(appCl, err)
-							os.Exit(1)
-						}
+			go func() {
+				<-termCh
+				setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+				os.Exit(1)
+			}()
+		}
+		setAppStatus(appCl, appserver.AppDetailedStatusRunning)
+		srv := &http.Server{ //nolint gosec
+			Addr:         url,
+			ReadTimeout:  5 * time.Second,
+			WriteTimeout: 10 * time.Second,
+		}
+		err := srv.ListenAndServe()
+		if err != nil {
+			print(err.Error())
+			setAppError(appCl, err)
+			os.Exit(1)
+		}
 
-					},
-				}
+	},
+}
 
 // Execute executes root CLI command.
 func Execute() {
@@ -164,18 +163,6 @@ func Execute() {
 		log.Fatal("Failed to execute command: ", err)
 	}
 }
-
-const help = "Usage:\r\n" +
-	"  {{.UseLine}}{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}\r\n\r\n" +
-	"{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}\r\n\r\n" +
-	"Available Commands:{{range .Commands}}{{if (or .IsAvailableCommand)}}\r\n  " +
-	"{{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}\r\n\r\n" +
-	"Flags:\r\n" +
-	"{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}\r\n\r\n" +
-	"Global Flags:\r\n" +
-	"{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}\r\n\r\n"
-
-
 
 func listenLoop() {
 	l, err := appCl.Listen(netType, port)
