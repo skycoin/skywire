@@ -14,6 +14,12 @@ import (
 	setupnode "github.com/skycoin/skywire/cmd/setup-node/commands"
 	skywirecli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
 	"github.com/skycoin/skywire/pkg/visor"
+	vpnserver "github.com/skycoin/skywire/cmd/apps/vpn-server/commands"
+	vpnclient "github.com/skycoin/skywire/cmd/apps/vpn-client/commands"
+	skysocksclient "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
+	skysocks "github.com/skycoin/skywire/cmd/apps/skysocks/commands"
+	skychat "github.com/skycoin/skywire/cmd/apps/skychat/commands"
+
 )
 
 func init() {
@@ -21,6 +27,14 @@ func init() {
 		visor.RootCmd,
 		skywirecli.RootCmd,
 		setupnode.RootCmd,
+		appsCmd,
+	)
+	appsCmd.AddCommand(
+		vpnserver.RootCmd,
+		vpnclient.RootCmd,
+		skysocksclient.RootCmd,
+		skysocks.RootCmd,
+		skychat.RootCmd,
 	)
 	var helpflag bool
 	rootCmd.SetUsageTemplate(help)
@@ -33,6 +47,7 @@ func init() {
 
 var rootCmd = &cobra.Command{
 	Use: "skywire",
+	Short: "building a new internet",
 	Long: `
 	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
 	└─┐├┴┐└┬┘││││├┬┘├┤
@@ -42,6 +57,19 @@ var rootCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
+}
+
+var appsCmd = &cobra.Command{
+	Use: "app",
+	Short: "skywire native applications",
+	Long: `
+	┌─┐┌─┐┌─┐┬  ┬┌─┐┌─┐┌┬┐┬┌─┐┌┐┌┌─┐
+	├─┤├─┘├─┘│  ││  ├─┤ │ ││ ││││└─┐
+	┴ ┴┴  ┴  ┴─┘┴└─┘┴ ┴ ┴ ┴└─┘┘└┘└─┘`,
+	SilenceErrors:         true,
+	SilenceUsage:          true,
+	DisableSuggestions:    true,
+	DisableFlagsInUseLine: true,
 }
 
 func main() {
