@@ -84,7 +84,6 @@ var startCmd = &cobra.Command{
 		internal.Catch(cmd.Flags(), rpcClient.StartVPNClient(pubkey))
 		internal.PrintOutput(cmd.Flags(), nil, "Starting.")
 		ctx, cancel := cmdutil.SignalContext(context.Background(), &logrus.Logger{})
-		defer cancel()
 		go func() {
 			<-ctx.Done()
 			cancel()
