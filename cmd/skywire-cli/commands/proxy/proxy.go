@@ -125,7 +125,6 @@ var startCmd = &cobra.Command{
 		}
 
 		ctx, cancel := cmdutil.SignalContext(context.Background(), &logrus.Logger{})
-		defer cancel()
 		go func() {
 			<-ctx.Done()
 			cancel()
