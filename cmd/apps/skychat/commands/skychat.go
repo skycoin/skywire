@@ -61,7 +61,10 @@ func init() {
 var RootCmd = &cobra.Command{
 	Use:   "skychat",
 	Short: "skywire chat application",
-	Long: ``,
+	Long: `
+	┌─┐┬┌─┬ ┬┌─┐┬ ┬┌─┐┌┬┐
+	└─┐├┴┐└┬┘│  ├─┤├─┤ │
+	└─┘┴ ┴ ┴ └─┘┴ ┴┴ ┴ ┴ `,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
