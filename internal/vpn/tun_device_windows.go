@@ -34,13 +34,11 @@ func newTUNDevice() (TUNDevice, error) {
 }
 
 func (t *tunDevice) Read(buf []byte) (int, error) {
-	validBuf := [][]byte{buf}
-	return t.tun.Read(validBuf, []int{len(buf) + 1}, 0)
+	return t.tun.Read(buf, 0)
 }
 
 func (t *tunDevice) Write(buf []byte) (int, error) {
-	validBuf := [][]byte{buf}
-	return t.tun.Write(validBuf, 0)
+	return t.tun.Write(buf, 0)
 }
 
 func (t *tunDevice) Close() error {
