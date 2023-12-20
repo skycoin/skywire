@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.16
+
+-   fix VPN issues on CI and Windows  [#1703](https://github.com/skycoin/skywire/pull/1703)
+-   fix logic of close app  [#1702](https://github.com/skycoin/skywire/pull/1702)
+
 ## 1.3.15
 
 -   Update minimum version requirement in mainnet rules [#1699](https://github.com/skycoin/skywire/pull/1699)
