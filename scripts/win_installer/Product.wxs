@@ -11,7 +11,7 @@
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
    <Product Id="*" UpgradeCode="cd7955bc-304e-470f-9c24-eb9f429a8085"
             Name="Skywire"
-            Version="1.3.15"
+            Version="1.3.16"
             Manufacturer="Skycoin"
             Language="1033">
 
@@ -21,11 +21,9 @@
       <Media Id="1" Cabinet="product.cab" EmbedCab="yes"/>
 
       <Upgrade Id="cd7955bc-304e-470f-9c24-eb9f429a8085">
-         <UpgradeVersion Minimum="1.0.0" OnlyDetect="yes" Property="NEWERVERSIONDETECTED"/>
-         <UpgradeVersion Minimum="0.0.0" Maximum="1.0.0" IncludeMinimum="yes" IncludeMaximum="no"
-                         Property="OLDERVERSIONBEINGUPGRADED"/>
+         <UpgradeVersion Minimum="1.3.15" OnlyDetect="yes" IncludeMaximum="yes" Property="NEWERVERSIONDETECTED"/>
       </Upgrade>
-      <Condition Message="A newer version of this software is already installed.">NOT NEWERVERSIONDETECTED</Condition>
+      <Condition Message="A newer version of this software is already installed.">NEWERVERSIONDETECTED</Condition>
 
       <Directory Id="TARGETDIR" Name="SourceDir">
          <Directory Id="$(var.Program_Files)">
