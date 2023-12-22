@@ -1,6 +1,8 @@
 module github.com/skycoin/skywire
 
-go 1.18
+go 1.21
+
+toolchain go1.21.3
 
 require (
 	github.com/AudriusButkevicius/pfilter v0.0.11
@@ -24,11 +26,10 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/orandin/lumberjackrus v1.0.1
 	github.com/pterm/pterm v0.12.66
-	github.com/shirou/gopsutil/v3 v3.23.7
 	github.com/sirupsen/logrus v1.9.3
-	github.com/skycoin/dmsg v1.3.11
+	github.com/skycoin/dmsg v1.3.14
 	github.com/skycoin/skycoin v0.27.1
-	github.com/skycoin/skywire-utilities v1.3.11
+	github.com/skycoin/skywire-utilities v1.3.14
 	github.com/skycoin/systray v1.10.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.7.0
@@ -42,7 +43,7 @@ require (
 	golang.org/x/net v0.14.0
 	golang.org/x/sync v0.3.0
 	golang.org/x/sys v0.11.0
-	golang.zx2c4.com/wireguard v0.0.0-20230704135630-469159ecf7d1
+	golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675
 )
 
 require (
@@ -84,7 +85,6 @@ require (
 	github.com/klauspost/reedsolomon v1.11.8 // indirect
 	github.com/leodido/go-urn v1.2.4 // indirect
 	github.com/lithammer/fuzzysearch v1.1.8 // indirect
-	github.com/lufia/plan9stats v0.0.0-20230326075908-cb1d2100619a // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.19 // indirect
 	github.com/mattn/go-runewidth v0.0.15 // indirect
@@ -96,25 +96,20 @@ require (
 	github.com/pelletier/go-toml/v2 v2.0.9 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/power-devops/perfstat v0.0.0-20221212215047-62379fc7944b // indirect
 	github.com/quic-go/qtls-go1-20 v0.3.3 // indirect
 	github.com/quic-go/quic-go v0.38.1 // indirect
 	github.com/rivo/uniseg v0.4.4 // indirect
-	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6 // indirect
 	github.com/stretchr/objx v0.5.1 // indirect
 	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect
 	github.com/templexxx/xor v0.0.0-20191217153810-f85b25db303b // indirect
 	github.com/tjfoc/gmsm v1.4.1 // indirect
-	github.com/tklauser/go-sysconf v0.3.12 // indirect
-	github.com/tklauser/numcpus v0.6.1 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.11 // indirect
 	github.com/valyala/fastrand v1.1.0 // indirect
 	github.com/valyala/histogram v1.2.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
-	github.com/yusufpapurcu/wmi v1.2.3 // indirect
 	golang.org/x/arch v0.4.0 // indirect
 	golang.org/x/crypto v0.12.0 // indirect
 	golang.org/x/exp v0.0.0-20230817173708-d852ddb80c63 // indirect

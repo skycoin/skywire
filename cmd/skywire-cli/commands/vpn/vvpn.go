@@ -3,6 +3,7 @@ package clivpn
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -12,10 +13,12 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
@@ -80,6 +83,13 @@ var startCmd = &cobra.Command{
 		}
 		internal.Catch(cmd.Flags(), rpcClient.StartVPNClient(pubkey))
 		internal.PrintOutput(cmd.Flags(), nil, "Starting.")
+		ctx, cancel := cmdutil.SignalContext(context.Background(), &logrus.Logger{})
+		go func() {
+			<-ctx.Done()
+			cancel()
+			rpcClient.StopVPNClient("vpn-client") //nolint
+			os.Exit(1)
+		}()
 		startProcess := true
 		for startProcess {
 			time.Sleep(time.Second * 1)

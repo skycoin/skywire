@@ -43,6 +43,7 @@ var (
 	routeSetupNodes             string
 	transportSetupPKs           string
 	isDmsgHTTP                  bool
+	minDmsgSess                 int
 	isVpnServerEnable           bool
 	isDisableAuth               bool
 	isEnableAuth                bool
@@ -50,7 +51,7 @@ var (
 	disableApps                 string
 	isBestProtocol              bool
 	serviceConfURL              string
-	services                    *visorconfig.Services
+	services                    visorconfig.Services
 	isForce                     bool
 	isHide                      bool
 	isAll                       bool
@@ -92,6 +93,7 @@ var (
 	disableProxyServerAutostart bool
 	proxyServerPass             string
 	proxyClientPass             string
+	configServicePath           string
 )
 
 // RootCmd contains commands that interact with the config of local skywire-visor

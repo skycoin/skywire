@@ -26,7 +26,6 @@ import (
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/dmsgc"
-	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -83,6 +82,8 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "noauth")
 	genConfigCmd.Flags().BoolVarP(&isDmsgHTTP, "dmsghttp", "d", scriptExecBool("${DMSGHTTP:-false}"), "use dmsg connection to skywire services\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "dmsghttp")
+	genConfigCmd.Flags().IntVar(&minDmsgSess, "minsess", scriptExecInt("${MINDMSGSESS:-1}"), "number of dmsg servers to connect to (0 = unlimited)\033[0m")
+	gHiddenFlags = append(gHiddenFlags, "minsess")
 	genConfigCmd.Flags().BoolVarP(&isEnableAuth, "auth", "e", false, "enable auth on hypervisor UI\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "auth")
 	genConfigCmd.Flags().BoolVarP(&isForce, "force", "f", false, "remove pre-existing config\033[0m")
@@ -128,6 +129,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "example-apps")
 	genConfigCmd.Flags().BoolVarP(&isStdout, "stdout", "n", false, "write config to stdout\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "stdout")
+	genConfigCmd.Flags().BoolVarP(&isEnvs, "envs", "q", false, "show the environmental variable settings")
 	msg = "output config"
 	if scriptExecString("${OUTPUT}") == "" {
 		msg += ": " + visorconfig.ConfigName
@@ -156,7 +158,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "sk")
 	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", scriptExecBool("${TESTENV:-false}"), "use test deployment "+testConf+"\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "testenv")
-	genConfigCmd.Flags().BoolVarP(&isVpnServerEnable, "servevpn", "v", scriptExecBool("${SERVEVPN:-false}"), "enable vpn server\033[0m")
+	genConfigCmd.Flags().BoolVarP(&isVpnServerEnable, "servevpn", "v", scriptExecBool("${VPNSERVER:-false}"), "enable vpn server\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "servevpn")
 	genConfigCmd.Flags().BoolVarP(&isHide, "hide", "w", false, "dont print the config to the terminal :: show errors with -n flag\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "hide")
@@ -170,29 +172,40 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "stcpr")
 	genConfigCmd.Flags().IntVar(&sudphPort, "sudph", scriptExecInt("${SUDPHPORT:-0}"), "set udp transport listening port - 0 for random\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "sudph")
-	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
 	genConfigCmd.Flags().StringVar(&binPath, "binpath", scriptExecString("${BINPATH}"), "set bin_path\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "binpath")
 	genConfigCmd.Flags().StringVar(&addSkysocksClientSrv, "proxyclientpk", scriptExecString("${PROXYCLIENTPK}"), "set server public key for proxy client")
+	gHiddenFlags = append(gHiddenFlags, "proxyclientpk")
 	genConfigCmd.Flags().BoolVar(&enableProxyClientAutostart, "startproxyclient", scriptExecBool("${STARTPROXYCLIENT:-false}"), "autostart proxy client")
+	gHiddenFlags = append(gHiddenFlags, "startproxyclient")
 	genConfigCmd.Flags().BoolVar(&disableProxyServerAutostart, "noproxyserver", scriptExecBool("${NOPROXYSERVER:-false}"), "disable autostart of proxy server")
+	gHiddenFlags = append(gHiddenFlags, "noproxyserver")
 	genConfigCmd.Flags().StringVar(&proxyServerPass, "proxyserverpass", scriptExecString("${PROXYSEVERPASS}"), "set proxy server password")
+	gHiddenFlags = append(gHiddenFlags, "proxyserverpass")
 	genConfigCmd.Flags().StringVar(&proxyClientPass, "proxyclientpass", scriptExecString("${PROXYCLIENTPASS}"), "password for the proxy client to access the server (if needed)")
+	gHiddenFlags = append(gHiddenFlags, "proxyclientpass")
 	// TODO: Password for accessing proxy client
 	genConfigCmd.Flags().StringVar(&setVPNClientKillswitch, "killsw", scriptExecString("${VPNKS}"), "vpn client killswitch")
+	gHiddenFlags = append(gHiddenFlags, "killsw")
 	genConfigCmd.Flags().StringVar(&addVPNClientSrv, "addvpn", scriptExecString("${ADDVPNPK}"), "set vpn server public key for vpn client")
+	gHiddenFlags = append(gHiddenFlags, "addvpn")
 	genConfigCmd.Flags().StringVar(&addVPNClientPasscode, "vpnpass", scriptExecString("${VPNCLIENTPASS}"), "password for vpn client to access the vpn server (if needed)")
+	gHiddenFlags = append(gHiddenFlags, "vpnpass")
 	genConfigCmd.Flags().StringVar(&addVPNServerPasscode, "vpnserverpass", scriptExecString("${VPNSEVERPASS}"), "set password to the vpn server")
+	gHiddenFlags = append(gHiddenFlags, "vpnserverpass")
 	genConfigCmd.Flags().StringVar(&setVPNServerSecure, "secure", scriptExecString("${VPNSEVERSECURE}"), "change secure mode status of vpn server")
+	gHiddenFlags = append(gHiddenFlags, "secure")
 	genConfigCmd.Flags().StringVar(&setVPNServerNetIfc, "netifc", scriptExecString("${VPNSEVERNETIFC}"), "VPN Server network interface (detected: "+getInterfaceNames()+")")
-	genConfigCmd.Flags().BoolVarP(&isEnvs, "envs", "q", false, "show the environmental variable settings")
-	gHiddenFlags = append(gHiddenFlags, "envs")
+	gHiddenFlags = append(gHiddenFlags, "netifc")
 	genConfigCmd.Flags().BoolVar(&noFetch, "nofetch", false, "do not fetch the services from the service conf url")
 	gHiddenFlags = append(gHiddenFlags, "nofetch")
+	genConfigCmd.Flags().StringVar(&configServicePath, "confpath", "", "specify service conf file (instead of fetching from URL)")
+	gHiddenFlags = append(gHiddenFlags, "confpath")
 	genConfigCmd.Flags().BoolVar(&noDefaults, "nodefaults", false, "do not use hardcoded defaults for production / test services")
 	gHiddenFlags = append(gHiddenFlags, "nodefaults")
 	genConfigCmd.Flags().StringVar(&ver, "version", scriptExecString("${VERSION}"), "custom version testing override\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "version")
+	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
 
 	//show all flags on help
 	if os.Getenv("UNHIDEFLAGS") != "1" {
@@ -472,50 +485,77 @@ var genConfigCmd = &cobra.Command{
 		log := logger
 
 		if !noFetch {
-			// set default service conf url if none is specified
-			if serviceConfURL == "" {
-				serviceConfURL = utilenv.ServiceConfAddr
-			}
-			//use test deployment
-			if serviceConfURL == "" && isTestEnv {
-				serviceConfURL = utilenv.TestServiceConfAddr
-			}
-			// enable errors from service conf fetch from the combination of these flags
 			wasStdout := isStdout
-			if isStdout && isHide {
-				isStdout = false
-			}
-			// create an http client to fetch the services
-			client := http.Client{
-				Timeout: time.Second * 15, // Timeout after 15 seconds
-			}
-			// Make the HTTP GET request
-			res, err := client.Get(fmt.Sprint(serviceConfURL))
-			if err != nil {
-				//silence errors for stdout
-				if !isStdout {
-					log.WithError(err).Error("Failed to fetch servers\n")
-					log.Warn("Falling back on hardcoded servers")
-				}
-			}
-			if res.Body != nil {
-				defer res.Body.Close() //nolint
-			}
-			body, err := io.ReadAll(res.Body)
-			if err != nil {
-				log.WithError(err).Fatal("Failed to read response\n")
-			}
-			//fill in services struct with the response
-			err = json.Unmarshal(body, &services)
-			if err != nil {
-				log.WithError(err).Fatal("Failed to unmarshal json response\n")
-			}
-			if !isStdout {
-				log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
-			}
+			var body []byte
+			var err error
 
-			// reset the state of isStdout
-			isStdout = wasStdout
+			if configServicePath != "" {
+				body, err = os.ReadFile(configServicePath)
+				if err != nil {
+					if !isStdout {
+						log.WithError(err).Error("Failed to read config service from file\n")
+						log.Warn("Falling back on hardcoded servers")
+					}
+				} else {
+					//fill in services struct with the response
+					err = json.Unmarshal(body, &services)
+					if err != nil {
+						log.WithError(err).Fatal("Failed to unmarshal json response\n")
+					}
+					if !isStdout {
+						log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
+					}
+
+					// reset the state of isStdout
+					isStdout = wasStdout
+				}
+			} else {
+				// set default service conf url if none is specified
+				if serviceConfURL == "" {
+					serviceConfURL = utilenv.ServiceConfAddr
+				}
+				//use test deployment
+				if isTestEnv {
+					serviceConfURL = utilenv.TestServiceConfAddr
+				}
+				// enable errors from service conf fetch from the combination of these flags
+
+				if isStdout && isHide {
+					isStdout = false
+				}
+				// create an http client to fetch the services
+				client := http.Client{
+					Timeout: time.Second * 15, // Timeout after 15 seconds
+				}
+				// Make the HTTP GET request
+				res, err := client.Get(fmt.Sprint(serviceConfURL))
+				if err != nil {
+					//silence errors for stdout
+					if !isStdout {
+						log.WithError(err).Error("Failed to fetch servers\n")
+						log.Warn("Falling back on hardcoded servers")
+					}
+				} else {
+					if res.Body != nil {
+						defer res.Body.Close() //nolint
+					}
+					body, err = io.ReadAll(res.Body)
+					if err != nil {
+						log.WithError(err).Fatal("Failed to read response\n")
+					}
+				}
+				//fill in services struct with the response
+				err = json.Unmarshal(body, &services)
+				if err != nil {
+					log.WithError(err).Fatal("Failed to unmarshal json response\n")
+				}
+				if !isStdout {
+					log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
+				}
+
+				// reset the state of isStdout
+				isStdout = wasStdout
+			}
 		}
 
 		// Read in old config and obtain old secret key or generate a new random secret key
@@ -581,11 +621,11 @@ var genConfigCmd = &cobra.Command{
 		conf.Common.PK = pk
 
 		dnsServer := utilenv.DNSServer
-		if services != nil {
-			if services.DNSServer != "" {
-				dnsServer = services.DNSServer
-			}
+
+		if services.DNSServer != "" {
+			dnsServer = services.DNSServer
 		}
+
 		if isDmsgHTTP {
 			dmsghttpConfig := visorconfig.DMSGHTTPName
 			// TODO
@@ -739,7 +779,7 @@ var genConfigCmd = &cobra.Command{
 
 		conf.Dmsg = &dmsgc.DmsgConfig{
 			Discovery:     services.DmsgDiscovery,
-			SessionsCount: 1,
+			SessionsCount: minDmsgSess,
 			Servers:       []*disc.Entry{},
 		}
 		conf.Transport = &visorconfig.Transport{
@@ -776,7 +816,6 @@ var genConfigCmd = &cobra.Command{
 		conf.DmsgHTTPServerPath = visorconfig.LocalPath + "/" + visorconfig.Custom
 		conf.StunServers = services.StunServers //utilenv.GetStunServers()
 		conf.ShutdownTimeout = visorconfig.DefaultTimeout
-		conf.RestartCheckDelay = visorconfig.Duration(restart.DefaultCheckDelay)
 
 		conf.Dmsgpty = &visorconfig.Dmsgpty{
 			DmsgPort: visorconfig.DmsgPtyPort,
@@ -908,6 +947,7 @@ var genConfigCmd = &cobra.Command{
 				Binary:    visorconfig.SkysocksClientName,
 				AutoStart: false,
 				Port:      routing.Port(visorconfig.SkysocksClientPort),
+				Args:      []string{"-addr", visorconfig.SkysocksClientAddr},
 			},
 			{
 				Name:      visorconfig.VPNServerName,
@@ -1193,6 +1233,9 @@ const envfileLinux = `#
 #--	Use dmsghttp to connect to the production deployment
 #DMSGHTTP=true
 
+#--	Number of dmsg serverts to connect to (0 unlimits)
+#MINDMSGSESS=8
+
 #--	Start the hypervisor interface for this visor
 #ISHYPERVISOR=true
 
@@ -1291,6 +1334,9 @@ const envfileWindows = `#
 
 #--	Use dmsghttp to connect to the production deployment
 #$DMSGHTTP=true
+
+#--	Number of dmsg serverts to connect to (0 unlimits)
+#$MINDMSGSESS=8
 
 #--	Start the hypervisor interface for this visor
 #$ISHYPERVISOR=true

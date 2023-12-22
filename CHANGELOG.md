@@ -6,13 +6,92 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.16
+
+-   fix VPN issues on CI and Windows  [#1703](https://github.com/skycoin/skywire/pull/1703)
+-   fix logic of close app  [#1702](https://github.com/skycoin/skywire/pull/1702)
+
+## 1.3.15
+
+-   Update minimum version requirement in mainnet rules [#1699](https://github.com/skycoin/skywire/pull/1699)
+-   `riscv64` archive structure  [#1698](https://github.com/skycoin/skywire/pull/1698)
+-   update golangci-lint  [#1697](https://github.com/skycoin/skywire/pull/1697)
+-   fix enable vpn server environmental variable detection for config gen  [#1695](https://github.com/skycoin/skywire/pull/1695)
+
+## 1.3.14
+
+-   improve postinstall script on Mac installer  [#1691](https://github.com/skycoin/skywire/pull/1691)
+-   add skysocks client to windows archive  [#1690](https://github.com/skycoin/skywire/pull/1690)
+-   add missed apps to package installer  [#1689](https://github.com/skycoin/skywire/pull/1689)
+-   correct rewards update cutoff date  [#1688](https://github.com/skycoin/skywire/pull/1688)
+-   update dmsghttp-config.json file  [#1687](https://github.com/skycoin/skywire/pull/1687)
+-   Update Mainnet rules minimum version requirement  [#1686](https://github.com/skycoin/skywire/pull/1686)
+-   Rebuild Hypervisor UI  [#1685](https://github.com/skycoin/skywire/pull/1685)
+-   Update skywire-cli README.md  [#1684](https://github.com/skycoin/skywire/pull/1684)
+-   new flag `--confpath` on generate config  [#1683](https://github.com/skycoin/skywire/pull/1683)
+-   improve `skywire-cli proxy` command  [#1680](https://github.com/skycoin/skywire/pull/1680)
+-   improve `skywire-cli ut` command logic  [#1679](https://github.com/skycoin/skywire/pull/1679)
+-   update dmsg and skywire-utilities  [#1677](https://github.com/skycoin/skywire/pull/1677)
+-   Fix/update skywire utilities  [#1676](https://github.com/skycoin/skywire/pull/1676)
+-   Rebuild Hypervisor UI  [#1672](https://github.com/skycoin/skywire/pull/1672)
+-   Fix two panic issues on `skywire-cli` commands  [#1671](https://github.com/skycoin/skywire/pull/1671)
+-   Improve UI and Backend on `reboot` and `turn off`  [#1670](https://github.com/skycoin/skywire/pull/1670)
+
+## 1.3.10 - 1.3.13
+
+-   add skywire version to `skywire-cli log`  [#1669](https://github.com/skycoin/skywire/pull/1669)
+-   `skywire-cli reward calc`  [#1668](https://github.com/skycoin/skywire/pull/1668)
+-   fix issue fetching data from hardcoded server  [#1666](https://github.com/skycoin/skywire/pull/1666)
+-   replace dmsgget with dmsgcurl lib  [#1663](https://github.com/skycoin/skywire/pull/1663)
+-   Fix wrong config generation with t flag  [#1661](https://github.com/skycoin/skywire/pull/1661)
+-   Remove Comments  [#1658](https://github.com/skycoin/skywire/pull/1658)
+-   Develop  [#1655](https://github.com/skycoin/skywire/pull/1655)
+-   Update minimum version requirement in mainnet rules  [#1654](https://github.com/skycoin/skywire/pull/1654)
+-   Fix transport bandwidth logs  [#1653](https://github.com/skycoin/skywire/pull/1653)
+-   fix `ping` command logic  [#1652](https://github.com/skycoin/skywire/pull/1652)
+-   improve ping command output  [#1651](https://github.com/skycoin/skywire/pull/1651)
+-   Update Mainnet rules ; increment minimum version requirement  [#1650](https://github.com/skycoin/skywire/pull/1650)
+-   improve `skywire-cli log` command  [#1648](https://github.com/skycoin/skywire/pull/1648)
+-   UI improvements  [#1647](https://github.com/skycoin/skywire/pull/1647)
+-   v1.3.11  [#1645](https://github.com/skycoin/skywire/pull/1645)
+-    source a .conf file with skywire-cli config gen  [#1644](https://github.com/skycoin/skywire/pull/1644)
+-   UI for turning off the visor  [#1642](https://github.com/skycoin/skywire/pull/1642)
+-   Update dmsghttp config  [#1632](https://github.com/skycoin/skywire/pull/1632)
+-   Use `MarkFlagsMutuallyExclusive` for `config gen -rf` and `config gen -up`  [#1629](https://github.com/skycoin/skywire/pull/1629)
+-   [WIP] dmsghttp updater  [#1628](https://github.com/skycoin/skywire/pull/1628)
+-   Vendor dmsg@master and replace two yamux deps  [#1626](https://github.com/skycoin/skywire/pull/1626)
+-   `skywire-cli log` collect transport bandwidth logging for today  [#1625](https://github.com/skycoin/skywire/pull/1625)
+-   reduce `transport_manager` timeout on module shutting down  [#1624](https://github.com/skycoin/skywire/pull/1624)
+-   collect surveys from online visors only  [#1623](https://github.com/skycoin/skywire/pull/1623)
+-   Improvements for the UI  [#1620](https://github.com/skycoin/skywire/pull/1620)
+-   Add details to mainnet rules article  [#1618](https://github.com/skycoin/skywire/pull/1618)
+-   add new flag to log command  [#1617](https://github.com/skycoin/skywire/pull/1617)
+-   improve log collection logic  [#1615](https://github.com/skycoin/skywire/pull/1615)
+-   update dependencies  [#1614](https://github.com/skycoin/skywire/pull/1614)
+-   fix GitHub Action  [#1613](https://github.com/skycoin/skywire/pull/1613)
+-   `skywire-cli config gen -r` test  [#1611](https://github.com/skycoin/skywire/pull/1611)
+-   Limit the Skychay UI to localhost  [#1605](https://github.com/skycoin/skywire/pull/1605)
+-   Add CSRF protection to the Hypervisor API  [#1604](https://github.com/skycoin/skywire/pull/1604)
+-   fix dockerhub username and token  [#1601](https://github.com/skycoin/skywire/pull/1601)
+-   Fix/makefile clean target  [#1600](https://github.com/skycoin/skywire/pull/1600)
+-   Merge Develop to Master  [#1599](https://github.com/skycoin/skywire/pull/1599)
+-   Add dmsghttp servers  [#1597](https://github.com/skycoin/skywire/pull/1597)
+-   fix release issue on mac and win  [#1593](https://github.com/skycoin/skywire/pull/1593)
+-   remove .asc file from archives of release  [#1592](https://github.com/skycoin/skywire/pull/1592)
+-   Fix `skywire-cli config gen -r`  [#1591](https://github.com/skycoin/skywire/pull/1591)
+-   Merge develop to master  [#1589](https://github.com/skycoin/skywire/pull/1589)
+-   Remove pgp key previously used for survey collection on earlier versions  [#1588](https://github.com/skycoin/skywire/pull/1588)
+-   Update Command Documentation  [#1587](https://github.com/skycoin/skywire/pull/1587)
+-   Fix config gen logic for fetching services &amp; erroneous app config  [#1586](https://github.com/skycoin/skywire/pull/1586)
+-   change json of service struct to transport_setup  [#1585](https://github.com/skycoin/skywire/pull/1585)
+-   fix wrong variable name for config gen  [#1584](https://github.com/skycoin/skywire/pull/1584)
+
 ## 1.3.9
 
 -   Fix `skywire-cli config gen -r`
 
 ## 1.3.8
 
--   Rebuild Hypervisor UI  [#1583](https://github.com/skycoin/skywire/pull/1583)
 -   Rebuild Hypervisor UI  [#1583](https://github.com/skycoin/skywire/pull/1583)
 -   Change Logserver to use c.JSON method ; remove variable for endpoint name '/node-info'  [#1582](https://github.com/skycoin/skywire/pull/1582)
 -   update changelog  [#1580](https://github.com/skycoin/skywire/pull/1580)

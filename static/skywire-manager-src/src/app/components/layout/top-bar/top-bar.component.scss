@@ -281,6 +281,11 @@ $top-bar-height: 56px;
   flex-direction: row-reverse;
   font-size: $font-size-mini-plus;
 
+  mat-icon {
+    position: relative;
+    top: 3px;
+  }
+
   .connection-error-msg-vpn {
     margin: -5px 5px 5px 10px;
     color: $yellow-clear;

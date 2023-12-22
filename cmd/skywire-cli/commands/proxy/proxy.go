@@ -3,6 +3,7 @@ package skysocksc
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -12,14 +13,17 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 )
 
@@ -36,6 +40,10 @@ func init() {
 		version = ""
 	}
 	startCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
+	startCmd.Flags().StringVarP(&addr, "addr", "a", "", "address of proxy for use")
+	startCmd.Flags().StringVarP(&clientName, "name", "n", "", "name of skysocks client")
+	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks client")
+	stopCmd.Flags().StringVar(&clientName, "name", "", "specific skysocks client that want stop")
 	listCmd.Flags().StringVarP(&sdURL, "url", "a", "", "service discovery url default:\n"+skyenv.ServiceDiscAddr)
 	listCmd.Flags().BoolVarP(&directQuery, "direct", "b", false, "query service discovery directly")
 	listCmd.Flags().StringVarP(&pk, "pk", "k", "", "check "+serviceType+" service discovery for public key")
@@ -50,25 +58,80 @@ var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "start the " + serviceType + " client",
 	Run: func(cmd *cobra.Command, args []string) {
-		//check that a valid public key is provided
-		err := pubkey.Set(pk)
-		if err != nil {
-			if len(args) > 0 {
-				err := pubkey.Set(args[0])
-				if err != nil {
-					internal.PrintFatalError(cmd.Flags(), err)
-				}
-			} else {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
-			}
-		}
+
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
 		}
-		//TODO: implement operational timeout
-		internal.Catch(cmd.Flags(), rpcClient.StartSkysocksClient(pubkey.String()))
-		internal.PrintOutput(cmd.Flags(), nil, "Starting.")
+
+		if clientName != "" && pk != "" && addr != "" {
+			// add new app with -srv and -addr args, and if app was there just change -srv and -addr args and run it
+			err := pubkey.Set(pk)
+			if err != nil {
+				if len(args) > 0 {
+					err := pubkey.Set(args[0])
+					if err != nil {
+						internal.PrintFatalError(cmd.Flags(), err)
+					}
+				} else {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
+				}
+			}
+
+			arguments := map[string]string{}
+			arguments["srv"] = pubkey.String()
+			arguments["addr"] = addr
+
+			_, err = rpcClient.App(clientName)
+			if err == nil {
+				err = rpcClient.DoCustomSetting(clientName, arguments)
+				if err != nil {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error occurs during set args to custom skysocks client"))
+				}
+			} else {
+				err = rpcClient.AddApp(clientName, "skysocks-client")
+				if err != nil {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error during add new app"))
+				}
+				err = rpcClient.DoCustomSetting(clientName, arguments)
+				if err != nil {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error occurs during set args to custom skysocks client"))
+				}
+			}
+			internal.Catch(cmd.Flags(), rpcClient.StartApp(clientName))
+			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
+		} else if clientName != "" && pk == "" && addr == "" {
+			internal.Catch(cmd.Flags(), rpcClient.StartApp(clientName))
+			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
+		} else if pk != "" && clientName == "" && addr == "" {
+			err := pubkey.Set(pk)
+			if err != nil {
+				if len(args) > 0 {
+					err := pubkey.Set(args[0])
+					if err != nil {
+						internal.PrintFatalError(cmd.Flags(), err)
+					}
+				} else {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
+				}
+			}
+			internal.Catch(cmd.Flags(), rpcClient.StartSkysocksClient(pubkey.String()))
+			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
+			clientName = "skysocks-client"
+			// change defaul skysocks-proxy app -srv arg and run it
+		} else {
+			// error
+			return
+		}
+
+		ctx, cancel := cmdutil.SignalContext(context.Background(), &logrus.Logger{})
+		go func() {
+			<-ctx.Done()
+			cancel()
+			rpcClient.StopApp(clientName) //nolint
+			os.Exit(1)
+		}()
+
 		startProcess := true
 		for startProcess {
 			time.Sleep(time.Second * 1)
@@ -107,8 +170,19 @@ var stopCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
 		}
-		internal.Catch(cmd.Flags(), rpcClient.StopSkysocksClient())
-		internal.PrintOutput(cmd.Flags(), "OK", fmt.Sprintln("OK"))
+		if allClients && clientName != "" {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("cannot use both --all and --name flag in together"))
+		}
+		if !allClients && clientName == "" {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("you should use one of flags, --all or --name"))
+		}
+		if allClients {
+			internal.Catch(cmd.Flags(), rpcClient.StopSkysocksClients())
+			internal.PrintOutput(cmd.Flags(), "all skysocks client stopped", fmt.Sprintln("all skysocks clients stopped"))
+			return
+		}
+		internal.Catch(cmd.Flags(), rpcClient.StopApp(clientName))
+		internal.PrintOutput(cmd.Flags(), fmt.Sprintf("skysocks client %s stopped", clientName), fmt.Sprintf("skysocks client %s stopped\n", clientName))
 	},
 }
 
@@ -128,12 +202,16 @@ var statusCmd = &cobra.Command{
 		w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
 		internal.Catch(cmd.Flags(), err)
 		type appState struct {
-			Status string `json:"status"`
+			Name      string       `json:"name"`
+			Status    string       `json:"status"`
+			AutoStart bool         `json:"autostart"`
+			Args      []string     `json:"args"`
+			AppPort   routing.Port `json:"app_port"`
 		}
-		var jsonAppStatus appState
+		var jsonAppStatus []appState
+		fmt.Fprintf(w, "---- All Proxy List -----------------------------------------------------\n\n")
 		for _, state := range states {
-			if state.Name == stateName {
-
+			if state.AppConfig.Binary == binaryName {
 				status := "stopped"
 				if state.Status == appserver.AppStatusRunning {
 					status = "running"
@@ -141,13 +219,28 @@ var statusCmd = &cobra.Command{
 				if state.Status == appserver.AppStatusErrored {
 					status = "errored"
 				}
-				jsonAppStatus = appState{
-					Status: status,
+				jsonAppStatus = append(jsonAppStatus, appState{
+					Name:      state.Name,
+					Status:    status,
+					AutoStart: state.AutoStart,
+					Args:      state.Args,
+					AppPort:   state.Port,
+				})
+				var tmpAddr string
+				var tmpSrv string
+				for idx, arg := range state.Args {
+					if arg == "-srv" {
+						tmpSrv = state.Args[idx+1]
+					}
+					if arg == "-addr" {
+						tmpAddr = "127.0.0.1" + state.Args[idx+1]
+					}
 				}
-				_, err = fmt.Fprintf(w, "%s\n", status)
+				_, err = fmt.Fprintf(w, "Name: %s\nStatus: %s\nServer: %s\nAddress: %s\nAppPort: %d\nAutoStart: %t\n\n", state.Name, status, tmpSrv, tmpAddr, state.Port, state.AutoStart)
 				internal.Catch(cmd.Flags(), err)
 			}
 		}
+		fmt.Fprintf(w, "-------------------------------------------------------------------------\n")
 		internal.Catch(cmd.Flags(), w.Flush())
 		internal.PrintOutput(cmd.Flags(), jsonAppStatus, b.String())
 	},
