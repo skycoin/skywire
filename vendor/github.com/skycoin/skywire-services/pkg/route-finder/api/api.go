@@ -30,13 +30,15 @@ type API struct {
 	store                       store.Store
 	startedAt                   time.Time
 	dmsgAddr                    string
+	DmsgServers                 []string
 }
 
 // HealthCheckResponse is struct of /health endpoint
 type HealthCheckResponse struct {
-	BuildInfo *buildinfo.Info `json:"build_info,omitempty"`
-	StartedAt time.Time       `json:"started_at"`
-	DmsgAddr  string          `json:"dmsg_address,omitempty"`
+	BuildInfo   *buildinfo.Info `json:"build_info,omitempty"`
+	StartedAt   time.Time       `json:"started_at"`
+	DmsgAddr    string          `json:"dmsg_address,omitempty"`
+	DmsgServers []string        `json:"dmsg_servers,omitempty"`
 }
 
 // New creates a new api
@@ -46,6 +48,7 @@ func New(s store.Store, logger logrus.FieldLogger, enableMetrics bool, dmsgAddr 
 		store:                       s,
 		startedAt:                   time.Now(),
 		dmsgAddr:                    dmsgAddr,
+		DmsgServers:                 []string{},
 	}
 
 	r := chi.NewRouter()
@@ -156,9 +159,10 @@ func (a *API) getPairedRoutes(w http.ResponseWriter, r *http.Request) {
 func (a *API) health(w http.ResponseWriter, r *http.Request) {
 	info := buildinfo.Get()
 	a.writeJSON(w, r, http.StatusOK, HealthCheckResponse{
-		BuildInfo: info,
-		StartedAt: a.startedAt,
-		DmsgAddr:  a.dmsgAddr,
+		BuildInfo:   info,
+		StartedAt:   a.startedAt,
+		DmsgAddr:    a.dmsgAddr,
+		DmsgServers: a.DmsgServers,
 	})
 }
 

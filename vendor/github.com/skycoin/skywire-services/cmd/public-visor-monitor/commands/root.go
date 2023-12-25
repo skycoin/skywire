@@ -2,12 +2,9 @@
 package commands
 
 import (
-	"bytes"
 	"context"
-	"io"
 	"log"
 	"os"
-	"path/filepath"
 	"time"
 
 	cc "github.com/ivanpirog/coloredcobra"
@@ -16,7 +13,6 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/tcpproxy"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-services/pkg/public-visor-monitor/api"
@@ -31,20 +27,21 @@ var (
 )
 
 func init() {
-	rootCmd.Flags().StringVarP(&addr, "addr", "a", ":9082", "address to bind to.\033[0m")
-	rootCmd.Flags().DurationVarP(&sleepDeregistration, "sleep-deregistration", "s", 10, "Sleep time for derigstration process in minutes\033[0m")
-	rootCmd.Flags().StringVarP(&confPath, "config", "c", "public-visor-monitor.json", "config file location.\033[0m")
-	rootCmd.Flags().StringVar(&tag, "tag", "public_visor_monitor", "logging tag\033[0m")
-	rootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "set log level one of: info, error, warn, debug, trace, panic")
+	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9082", "address to bind to.\033[0m")
+	RootCmd.Flags().DurationVarP(&sleepDeregistration, "sleep-deregistration", "s", 10, "Sleep time for derigstration process in minutes\033[0m")
+	RootCmd.Flags().StringVarP(&confPath, "config", "c", "public-visor-monitor.json", "config file location.\033[0m")
+	RootCmd.Flags().StringVar(&tag, "tag", "public_visor_monitor", "logging tag\033[0m")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "set log level one of: info, error, warn, debug, trace, panic")
 	var helpflag bool
-	rootCmd.SetUsageTemplate(help)
-	rootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+rootCmd.Use)
-	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
-	rootCmd.PersistentFlags().MarkHidden("help") //nolint
+	RootCmd.SetUsageTemplate(help)
+	RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for ")
+	RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
+	RootCmd.PersistentFlags().MarkHidden("help") //nolint
 }
 
-var rootCmd = &cobra.Command{
-	Use:   "public-visor-monitor",
+// RootCmd contains the root command
+var RootCmd = &cobra.Command{
+	Use:   "pvm",
 	Short: "Public Visor monitor.",
 	Long: `
 	┌─┐┬ ┬┌┐ ┬  ┬┌─┐ ┬  ┬┬┌─┐┌─┐┬─┐   ┌┬┐┌─┐┌┐┌┬┌┬┐┌─┐┬─┐
@@ -69,7 +66,7 @@ var rootCmd = &cobra.Command{
 
 		logging.SetLevel(lvl)
 
-		conf := initConfig(confPath, visorBuildInfo, mLogger)
+		conf := api.InitConfig(confPath, mLogger)
 
 		srvURLs := api.ServicesURLs{
 			SD: conf.Launcher.ServiceDisc,
@@ -109,34 +106,10 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-func initConfig(confPath string, visorBuildInfo *buildinfo.Info, mLog *logging.MasterLogger) *visorconfig.V1 {
-	log := mLog.PackageLogger("public_visor_monitor:config")
-	var r io.Reader
-
-	if confPath != "" {
-		log.WithField("filepath", confPath).Info()
-		f, err := os.ReadFile(filepath.Clean(confPath))
-		if err != nil {
-			log.WithError(err).Fatal("Failed to read config file.")
-		}
-		r = bytes.NewReader(f)
-	}
-
-	conf, compat, err := visorconfig.Parse(log, r, confPath, visorBuildInfo)
-	if err != nil {
-		log.WithError(err).Fatal("Failed to read in config.")
-	}
-	if !compat {
-		log.Fatalf("failed to start skywire - config version is incompatible")
-	}
-
-	return conf
-}
-
 // Execute executes root CLI command.
 func Execute() {
 	cc.Init(&cc.Config{
-		RootCmd:       rootCmd,
+		RootCmd:       RootCmd,
 		Headings:      cc.HiBlue + cc.Bold, //+ cc.Underline,
 		Commands:      cc.HiBlue + cc.Bold,
 		CmdShortDescr: cc.HiBlue,
@@ -148,7 +121,7 @@ func Execute() {
 		NoExtraNewlines: true,
 		NoBottomNewline: true,
 	})
-	if err := rootCmd.Execute(); err != nil {
+	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
 	}
 }

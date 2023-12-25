@@ -22,22 +22,23 @@ var (
 )
 
 func init() {
-	rootCmd.Flags().StringVarP(&configFile, "config", "c", "", "path to config file\033[0m")
-	rootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "set log level one of: info, error, warn, debug, trace, panic")
-	err := rootCmd.MarkFlagRequired("config")
+	RootCmd.Flags().StringVarP(&configFile, "config", "c", "", "path to config file\033[0m")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "set log level one of: info, error, warn, debug, trace, panic")
+	err := RootCmd.MarkFlagRequired("config")
 	if err != nil {
 		log.Fatal("config flag is not specified")
 	}
 	var helpflag bool
-	rootCmd.SetUsageTemplate(help)
-	rootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+rootCmd.Use)
-	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
-	rootCmd.PersistentFlags().MarkHidden("help") //nolint
+	RootCmd.SetUsageTemplate(help)
+	RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for transport-setup")
+	RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
+	RootCmd.PersistentFlags().MarkHidden("help") //nolint
 }
 
-var rootCmd = &cobra.Command{
-	Use:   "transport-setup [config.json]",
-	Short: "Transport setup node for skywire",
+// RootCmd contains the root command
+var RootCmd = &cobra.Command{
+	Use:   "tps [config.json]",
+	Short: "Transport setup server for skywire",
 	Long: `
 	┌┬┐┬─┐┌─┐┌┐┌┌─┐┌─┐┌─┐┬─┐┌┬┐  ┌─┐┌─┐┌┬┐┬ ┬┌─┐
 	 │ ├┬┘├─┤│││└─┐├─┘│ │├┬┘ │───└─┐├┤  │ │ │├─┘
@@ -73,7 +74,7 @@ var rootCmd = &cobra.Command{
 // Execute executes root CLI command.
 func Execute() {
 	cc.Init(&cc.Config{
-		RootCmd:       rootCmd,
+		RootCmd:       RootCmd,
 		Headings:      cc.HiBlue + cc.Bold, //+ cc.Underline,
 		Commands:      cc.HiBlue + cc.Bold,
 		CmdShortDescr: cc.HiBlue,
@@ -85,7 +86,7 @@ func Execute() {
 		NoExtraNewlines: true,
 		NoBottomNewline: true,
 	})
-	if err := rootCmd.Execute(); err != nil {
+	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
 	}
 }

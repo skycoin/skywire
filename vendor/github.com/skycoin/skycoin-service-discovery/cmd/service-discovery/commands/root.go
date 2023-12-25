@@ -6,15 +6,12 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/skycoin/dmsg/pkg/direct"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
-	"github.com/skycoin/skycoin-service-discovery/internal/pg"
-	"github.com/skycoin/skycoin-service-discovery/internal/sdmetrics"
-	"github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/api"
-	"github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/store"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
@@ -26,6 +23,11 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/tcpproxy"
 	"github.com/spf13/cobra"
 	"gorm.io/gorm"
+
+	"github.com/skycoin/skycoin-service-discovery/internal/pg"
+	"github.com/skycoin/skycoin-service-discovery/internal/sdmetrics"
+	"github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/api"
+	"github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/store"
 )
 
 var log = logging.MustGetLogger("service-discovery")
@@ -44,29 +46,32 @@ var (
 	whitelistKeys   string
 	testEnvironment bool
 	sk              cipher.SecKey
+	dmsgPort        uint16
 )
 
 func init() {
-	rootCmd.Flags().StringVarP(&addr, "addr", "a", ":9098", "address to bind to")
-	rootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
-	rootCmd.Flags().StringVarP(&redisURL, "redis", "r", "redis://localhost:6379", "connections string for a redis store")
-	rootCmd.Flags().StringVarP(&pgHost, "pg-host", "o", "localhost", "host of postgres")
-	rootCmd.Flags().StringVarP(&pgPort, "pg-port", "p", "5432", "port of postgres")
-	rootCmd.Flags().StringVarP(&whitelistKeys, "whitelist-keys", "w", "", "list of whitelisted keys of network monitor used for deregistration")
-	rootCmd.Flags().BoolVarP(&testMode, "test", "t", false, "run in test mode and disable auth")
-	rootCmd.Flags().StringVarP(&apiKey, "api-key", "g", "", "geo API key")
-	rootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "d", "", "url of dmsg-discovery default:\n"+skyenv.DmsgDiscAddr)
-	rootCmd.Flags().BoolVarP(&testEnvironment, "test-environment", "n", false, "distinguished between prod and test environment")
-	rootCmd.Flags().VarP(&sk, "sk", "s", "dmsg secret key\n")
+	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9098", "address to bind to")
+	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
+	RootCmd.Flags().StringVarP(&redisURL, "redis", "r", "redis://localhost:6379", "connections string for a redis store")
+	RootCmd.Flags().StringVarP(&pgHost, "pg-host", "o", "localhost", "host of postgres")
+	RootCmd.Flags().StringVarP(&pgPort, "pg-port", "p", "5432", "port of postgres")
+	RootCmd.Flags().StringVarP(&whitelistKeys, "whitelist-keys", "w", "", "list of whitelisted keys of network monitor used for deregistration")
+	RootCmd.Flags().BoolVarP(&testMode, "test", "t", false, "run in test mode and disable auth")
+	RootCmd.Flags().StringVarP(&apiKey, "api-key", "g", "", "geo API key")
+	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "d", "", "url of dmsg-discovery default:\n"+skyenv.DmsgDiscAddr)
+	RootCmd.Flags().BoolVarP(&testEnvironment, "test-environment", "n", false, "distinguished between prod and test environment")
+	RootCmd.Flags().VarP(&sk, "sk", "s", "dmsg secret key\n")
+	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\r")
 	var helpflag bool
-	rootCmd.SetUsageTemplate(help)
-	rootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+rootCmd.Use)
-	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
-	rootCmd.PersistentFlags().MarkHidden("help") //nolint
+	RootCmd.SetUsageTemplate(help)
+	RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for service-discovery")
+	RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
+	RootCmd.PersistentFlags().MarkHidden("help") //nolint
 }
 
-var rootCmd = &cobra.Command{
-	Use:   "service-discovery",
+// RootCmd contains the root service-discovery command
+var RootCmd = &cobra.Command{
+	Use:   "sd",
 	Short: "Service discovery server",
 	Long: `
 	┌─┐┌─┐┬─┐┬  ┬┬┌─┐┌─┐ ┌┬┐┬┌─┐┌─┐┌─┐┬  ┬┌─┐┬─┐┬ ┬
@@ -131,18 +136,23 @@ var rootCmd = &cobra.Command{
 			m = sdmetrics.NewVictoriaMetrics()
 		}
 
+		var dmsgAddr string
+		if !pk.Null() {
+			dmsgAddr = fmt.Sprintf("%s:%d", pk.Hex(), dmsgPort)
+		}
+
 		// we enable metrics middleware if address is passed
 		enableMetrics := metricsAddr != ""
-		sdAPI := api.New(log, db, nonceDB, apiKey, enableMetrics, m)
+		sdAPI := api.New(log, db, nonceDB, apiKey, enableMetrics, m, dmsgAddr)
 
 		var whitelistPKs []string
 		if whitelistKeys != "" {
 			whitelistPKs = strings.Split(whitelistKeys, ",")
 		} else {
 			if testEnvironment {
-				whitelistPKs = strings.Split(skyenv.TestNetworkMonitorPK, ",")
+				whitelistPKs = strings.Split(skyenv.TestNetworkMonitorPKs, ",")
 			} else {
-				whitelistPKs = strings.Split(skyenv.NetworkMonitorPK, ",")
+				whitelistPKs = strings.Split(skyenv.NetworkMonitorPKs, ",")
 			}
 		}
 		for _, v := range whitelistPKs {
@@ -176,10 +186,17 @@ var rootCmd = &cobra.Command{
 
 			defer closeDmsgDC()
 
+			go func() {
+				for {
+					sdAPI.DmsgServers = dmsgDC.ConnectedServersPK()
+					time.Sleep(time.Second)
+				}
+			}()
+
 			go dmsghttp.UpdateServers(ctx, dClient, dmsgDisc, dmsgDC, log)
 
 			go func() {
-				if err := dmsghttp.ListenAndServe(ctx, pk, sk, sdAPI, dClient, dmsg.DefaultDmsgHTTPPort, config, dmsgDC, log); err != nil {
+				if err := dmsghttp.ListenAndServe(ctx, sk, sdAPI, dClient, dmsg.DefaultDmsgHTTPPort, dmsgDC, log); err != nil {
 					log.Errorf("dmsghttp.ListenAndServe: %v", err)
 					cancel()
 				}
@@ -193,7 +210,7 @@ var rootCmd = &cobra.Command{
 // Execute executes root CLI command.
 func Execute() {
 	cc.Init(&cc.Config{
-		RootCmd:       rootCmd,
+		RootCmd:       RootCmd,
 		Headings:      cc.HiBlue + cc.Bold, //+ cc.Underline,
 		Commands:      cc.HiBlue + cc.Bold,
 		CmdShortDescr: cc.HiBlue,
@@ -205,7 +222,7 @@ func Execute() {
 		NoExtraNewlines: true,
 		NoBottomNewline: true,
 	})
-	if err := rootCmd.Execute(); err != nil {
+	if err := RootCmd.Execute(); err != nil {
 		log.Fatal(err)
 	}
 }

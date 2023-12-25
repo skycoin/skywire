@@ -205,9 +205,10 @@ func (api *API) deregisterTransport(w http.ResponseWriter, r *http.Request) {
 func (api *API) health(w http.ResponseWriter, r *http.Request) {
 	info := buildinfo.Get()
 	api.writeJSON(w, r, http.StatusOK, HealthCheckResponse{
-		BuildInfo: info,
-		StartedAt: api.startedAt,
-		DmsgAddr:  api.dmsgAddr,
+		BuildInfo:   info,
+		StartedAt:   api.startedAt,
+		DmsgAddr:    api.dmsgAddr,
+		DmsgServers: api.DmsgServers,
 	})
 }
 

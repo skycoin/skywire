@@ -475,15 +475,15 @@ github.com/skycoin/skycoin/src/cipher/ripemd160
 github.com/skycoin/skycoin/src/cipher/secp256k1-go
 github.com/skycoin/skycoin/src/cipher/secp256k1-go/secp256k1-go2
 github.com/skycoin/skycoin/src/util/logging
-# github.com/skycoin/skycoin-service-discovery v0.0.0-20230601163051-1f5d8adf57f6
-## explicit; go 1.18
+# github.com/skycoin/skycoin-service-discovery v0.0.0-20231221001759-d1af6ec27db1
+## explicit; go 1.21
 github.com/skycoin/skycoin-service-discovery/cmd/service-discovery/commands
 github.com/skycoin/skycoin-service-discovery/internal/pg
 github.com/skycoin/skycoin-service-discovery/internal/sdmetrics
 github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/api
 github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/store
-# github.com/skycoin/skywire-services v0.0.0-20230710144736-3f228fab0950
-## explicit; go 1.18
+# github.com/skycoin/skywire-services v0.0.0-20231221001820-3212895ddf12
+## explicit; go 1.21
 github.com/skycoin/skywire-services/cmd/address-resolver/commands
 github.com/skycoin/skywire-services/cmd/config-bootstrapper/commands
 github.com/skycoin/skywire-services/cmd/dmsg-monitor/commands

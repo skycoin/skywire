@@ -16,8 +16,6 @@ import (
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/cors"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skycoin-service-discovery/internal/sdmetrics"
-	"github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/store"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/geo"
@@ -26,6 +24,9 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/metricsutil"
 	"github.com/skycoin/skywire-utilities/pkg/networkmonitor"
 	"github.com/skycoin/skywire/pkg/servicedisc"
+
+	"github.com/skycoin/skycoin-service-discovery/internal/sdmetrics"
+	"github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/store"
 )
 
 var (
@@ -51,8 +52,10 @@ const (
 
 // HealthCheckResponse is struct of /health endpoint
 type HealthCheckResponse struct {
-	BuildInfo *buildinfo.Info `json:"build_info,omitempty"`
-	StartedAt time.Time       `json:"started_at"`
+	BuildInfo   *buildinfo.Info `json:"build_info,omitempty"`
+	StartedAt   time.Time       `json:"started_at"`
+	DmsgAddr    string          `json:"dmsg_address,omitempty"`
+	DmsgServers []string        `json:"dmsg_servers,omitempty"`
 }
 
 // WhitelistPKs store whitelisted pks of network monitor
@@ -68,11 +71,13 @@ type API struct {
 	nonceDB                     httpauth.NonceStore
 	geoFromIP                   geo.LocationDetails
 	startedAt                   time.Time
+	dmsgAddr                    string
+	DmsgServers                 []string
 }
 
 // New creates an API.
 func New(log logrus.FieldLogger, db store.Store, nonceDB httpauth.NonceStore, apiKey string,
-	enableMetrics bool, m sdmetrics.Metrics) *API {
+	enableMetrics bool, m sdmetrics.Metrics, dmsgAddr string) *API {
 	api := &API{
 		log:                         log,
 		db:                          db,
@@ -82,6 +87,8 @@ func New(log logrus.FieldLogger, db store.Store, nonceDB httpauth.NonceStore, ap
 		nonceDB:                     nonceDB,
 		geoFromIP:                   geo.MakeIPDetails(log, apiKey),
 		startedAt:                   time.Now(),
+		dmsgAddr:                    dmsgAddr,
+		DmsgServers:                 []string{},
 	}
 	return api
 }
@@ -433,8 +440,10 @@ func (a *API) writeError(w http.ResponseWriter, r *http.Request, status int, err
 func (a *API) health(w http.ResponseWriter, r *http.Request) {
 	info := buildinfo.Get()
 	a.writeJSON(w, r, http.StatusOK, HealthCheckResponse{
-		BuildInfo: info,
-		StartedAt: a.startedAt,
+		BuildInfo:   info,
+		StartedAt:   a.startedAt,
+		DmsgAddr:    a.dmsgAddr,
+		DmsgServers: a.DmsgServers,
 	})
 }
 

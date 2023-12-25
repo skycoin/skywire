@@ -51,6 +51,18 @@ builds:
     main: ./cmd/apps/vpn-client/
     ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
+  - id: skysocks-client
+    binary: apps/skysocks-client
+    goos:
+      - windows
+    goarch:
+      - amd64
+      - 386
+    env:
+      - CGO_ENABLED=0
+    main: ./cmd/apps/skysocks-client/
+    ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
+
 archives:
   - id: archive
     format: zip
@@ -62,6 +74,7 @@ archives:
       - skywire-visor
       - skywire-cli
       - vpn-client
+      - skysocks-client
     allow_different_binary_count: true
 
 checksum:

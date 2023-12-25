@@ -33,24 +33,25 @@ var (
 )
 
 func init() {
-	rootCmd.Flags().StringVarP(&addr, "addr", "a", ":9080", "address to bind to.\033[0m")
-	rootCmd.Flags().DurationVarP(&sleepDeregistration, "sleep-deregistration", "s", 10, "Sleep time for deregistration process in minutes\033[0m")
-	rootCmd.Flags().StringVarP(&confPath, "config", "c", "dmsg-monitor.json", "config file location.\033[0m")
-	rootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "set log level one of: info, error, warn, debug, trace, panic")
-	rootCmd.Flags().StringVar(&dmsgURL, "dmsg-url", "", "url to dmsg data.\033[0m")
-	rootCmd.Flags().StringVar(&tpdURL, "tpd-url", "", "url to transport discovery.\033[0m")
-	rootCmd.Flags().StringVar(&arURL, "ar-url", "", "url to address resolver.\033[0m")
-	rootCmd.Flags().StringVar(&tag, "tag", "tpd-monitor", "logging tag\033[0m")
-	rootCmd.Flags().StringVar(&syslogAddr, "syslog", "", "syslog server address. E.g. localhost:514\033[0m")
+	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9080", "address to bind to.\033[0m")
+	RootCmd.Flags().DurationVarP(&sleepDeregistration, "sleep-deregistration", "s", 10, "Sleep time for deregistration process in minutes\033[0m")
+	RootCmd.Flags().StringVarP(&confPath, "config", "c", "dmsg-monitor.json", "config file location.\033[0m")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "set log level one of: info, error, warn, debug, trace, panic")
+	RootCmd.Flags().StringVar(&dmsgURL, "dmsg-url", "", "url to dmsg data.\033[0m")
+	RootCmd.Flags().StringVar(&tpdURL, "tpd-url", "", "url to transport discovery.\033[0m")
+	RootCmd.Flags().StringVar(&arURL, "ar-url", "", "url to address resolver.\033[0m")
+	RootCmd.Flags().StringVar(&tag, "tag", "tpd-monitor", "logging tag\033[0m")
+	RootCmd.Flags().StringVar(&syslogAddr, "syslog", "", "syslog server address. E.g. localhost:514\033[0m")
 	var helpflag bool
-	rootCmd.SetUsageTemplate(help)
-	rootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+rootCmd.Use)
-	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
-	rootCmd.PersistentFlags().MarkHidden("help") //nolint
+	RootCmd.SetUsageTemplate(help)
+	RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for tpd-monitor")
+	RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
+	RootCmd.PersistentFlags().MarkHidden("help") //nolint
 }
 
-var rootCmd = &cobra.Command{
-	Use:   "tpd-monitor",
+// RootCmd contains the root command
+var RootCmd = &cobra.Command{
+	Use:   "tpdm",
 	Short: "TPD monitor of transport discovery.",
 	Long: `
 	┌┬┐┌─┐┌┬┐   ┌┬┐┌─┐┌┐┌┬┌┬┐┌─┐┬─┐
@@ -132,7 +133,7 @@ var rootCmd = &cobra.Command{
 // Execute executes root CLI command.
 func Execute() {
 	cc.Init(&cc.Config{
-		RootCmd:         rootCmd,
+		RootCmd:         RootCmd,
 		Headings:        cc.HiBlue + cc.Bold,
 		Commands:        cc.HiBlue + cc.Bold,
 		CmdShortDescr:   cc.HiBlue,
@@ -143,7 +144,7 @@ func Execute() {
 		NoExtraNewlines: true,
 		NoBottomNewline: true,
 	})
-	if err := rootCmd.Execute(); err != nil {
+	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
 	}
 }

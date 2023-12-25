@@ -52,13 +52,15 @@ type API struct {
 	store                       store.Store
 	startedAt                   time.Time
 	dmsgAddr                    string
+	DmsgServers                 []string
 }
 
 // HealthCheckResponse is struct of /health endpoint
 type HealthCheckResponse struct {
-	BuildInfo *buildinfo.Info `json:"build_info,omitempty"`
-	StartedAt time.Time       `json:"started_at"`
-	DmsgAddr  string          `json:"dmsg_address,omitempty"`
+	BuildInfo   *buildinfo.Info `json:"build_info,omitempty"`
+	StartedAt   time.Time       `json:"started_at"`
+	DmsgAddr    string          `json:"dmsg_address,omitempty"`
+	DmsgServers []string        `json:"dmsg_servers,omitempty"`
 }
 
 // New constructs a new API instance.
@@ -74,6 +76,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 		store:                       s,
 		startedAt:                   time.Now(),
 		dmsgAddr:                    dmsgAddr,
+		DmsgServers:                 []string{},
 	}
 
 	r := chi.NewRouter()

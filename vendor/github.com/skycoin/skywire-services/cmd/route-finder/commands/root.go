@@ -7,6 +7,7 @@ import (
 	"log"
 	"log/syslog"
 	"os"
+	"time"
 
 	cc "github.com/ivanpirog/coloredcobra"
 	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
@@ -43,26 +44,27 @@ var (
 )
 
 func init() {
-	rootCmd.Flags().StringVarP(&addr, "addr", "a", ":9092", "address to bind to\033[0m")
-	rootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to\033[0m")
-	rootCmd.Flags().StringVar(&pgHost, "pg-host", "localhost", "host of postgres\033[0m")
-	rootCmd.Flags().StringVar(&pgPort, "pg-port", "5432", "port of postgres\033[0m")
-	rootCmd.Flags().StringVar(&syslogAddr, "syslog", "", "syslog server address. E.g. localhost:514\033[0m")
-	rootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "set log level one of: info, error, warn, debug, trace, panic")
-	rootCmd.Flags().StringVar(&tag, "tag", "route_finder", "logging tag\033[0m")
-	rootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis\033[0m")
-	rootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", "http://dmsgd.skywire.skycoin.com", "url of dmsg-discovery\033[0m")
-	rootCmd.Flags().Var(&sk, "sk", "dmsg secret key\r")
-	rootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\r")
+	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9092", "address to bind to\033[0m")
+	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to\033[0m")
+	RootCmd.Flags().StringVar(&pgHost, "pg-host", "localhost", "host of postgres\033[0m")
+	RootCmd.Flags().StringVar(&pgPort, "pg-port", "5432", "port of postgres\033[0m")
+	RootCmd.Flags().StringVar(&syslogAddr, "syslog", "", "syslog server address. E.g. localhost:514\033[0m")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "set log level one of: info, error, warn, debug, trace, panic")
+	RootCmd.Flags().StringVar(&tag, "tag", "route_finder", "logging tag\033[0m")
+	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis\033[0m")
+	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", "http://dmsgd.skywire.skycoin.com", "url of dmsg-discovery\033[0m")
+	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\r")
+	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\r")
 	var helpflag bool
-	rootCmd.SetUsageTemplate(help)
-	rootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+rootCmd.Use)
-	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
-	rootCmd.PersistentFlags().MarkHidden("help") //nolint
+	RootCmd.SetUsageTemplate(help)
+	RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for route-finder")
+	RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
+	RootCmd.PersistentFlags().MarkHidden("help") //nolint
 }
 
-var rootCmd = &cobra.Command{
-	Use:   "route-finder",
+// RootCmd contains the root command
+var RootCmd = &cobra.Command{
+	Use:   "rf",
 	Short: "Route Finder Server for skywire",
 	Long: `
 	┬─┐┌─┐┬ ┬┌┬┐┌─┐  ┌─┐┬┌┐┌┌┬┐┌─┐┬─┐
@@ -167,10 +169,17 @@ var rootCmd = &cobra.Command{
 
 			defer closeDmsgDC()
 
+			go func() {
+				for {
+					rfAPI.DmsgServers = dmsgDC.ConnectedServersPK()
+					time.Sleep(time.Second)
+				}
+			}()
+
 			go dmsghttp.UpdateServers(ctx, dClient, dmsgDisc, dmsgDC, logger)
 
 			go func() {
-				if err := dmsghttp.ListenAndServe(ctx, pk, sk, rfAPI, dClient, dmsg.DefaultDmsgHTTPPort, config, dmsgDC, logger); err != nil {
+				if err := dmsghttp.ListenAndServe(ctx, sk, rfAPI, dClient, dmsg.DefaultDmsgHTTPPort, dmsgDC, logger); err != nil {
 					logger.Errorf("dmsghttp.ListenAndServe: %v", err)
 					cancel()
 				}
@@ -184,7 +193,7 @@ var rootCmd = &cobra.Command{
 // Execute executes root CLI command.
 func Execute() {
 	cc.Init(&cc.Config{
-		RootCmd:       rootCmd,
+		RootCmd:       RootCmd,
 		Headings:      cc.HiBlue + cc.Bold, //+ cc.Underline,
 		Commands:      cc.HiBlue + cc.Bold,
 		CmdShortDescr: cc.HiBlue,
@@ -196,7 +205,7 @@ func Execute() {
 		NoExtraNewlines: true,
 		NoBottomNewline: true,
 	})
-	if err := rootCmd.Execute(); err != nil {
+	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
 	}
 }

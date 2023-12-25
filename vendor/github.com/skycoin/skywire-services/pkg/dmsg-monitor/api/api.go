@@ -401,6 +401,7 @@ func InitConfig(confPath string, mLog *logging.MasterLogger) *visorconfig.V1 {
 	conf.Launcher.BinPath = oldConf.Launcher.BinPath
 	conf.Launcher.ServerAddr = oldConf.Launcher.ServerAddr
 	conf.CLIAddr = oldConf.CLIAddr
+	conf.Transport.TransportSetupPKs = oldConf.Transport.TransportSetupPKs
 
 	// following services are not needed
 	conf.STCP = nil

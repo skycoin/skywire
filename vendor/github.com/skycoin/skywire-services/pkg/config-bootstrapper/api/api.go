@@ -3,6 +3,8 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -29,14 +31,20 @@ type API struct {
 
 	services *visorconfig.Services
 
+	dmsghttpConf   httputil.DMSGHTTPConf
+	dmsghttpConfTs time.Time
+
 	closeOnce sync.Once
 	closeC    chan struct{}
+
+	dmsgAddr string
 }
 
 // HealthCheckResponse is struct of /health endpoint
 type HealthCheckResponse struct {
 	BuildInfo *buildinfo.Info `json:"build_info,omitempty"`
 	StartedAt time.Time       `json:"started_at"`
+	DmsgAddr  string          `json:"dmsg_address,omitempty"`
 }
 
 // Error is the object returned to the client when there's an error.
@@ -53,7 +61,7 @@ type Config struct {
 }
 
 // New creates a new api.
-func New(log *logging.Logger, conf Config, domain string) *API {
+func New(log *logging.Logger, conf Config, domain, dmsgAddr string) *API {
 
 	sd := strings.Replace(skyenv.ServiceDiscAddr, "skycoin.com", domain, -1)
 	if domain == "skywire.skycoin.com" {
@@ -75,10 +83,12 @@ func New(log *logging.Logger, conf Config, domain string) *API {
 	}
 
 	api := &API{
-		log:       log,
-		startedAt: time.Now(),
-		services:  services,
-		closeC:    make(chan struct{}),
+		log:            log,
+		startedAt:      time.Now(),
+		services:       services,
+		dmsghttpConfTs: time.Now().Add(-5 * time.Minute),
+		closeC:         make(chan struct{}),
+		dmsgAddr:       dmsgAddr,
 	}
 
 	r := chi.NewRouter()
@@ -90,6 +100,7 @@ func New(log *logging.Logger, conf Config, domain string) *API {
 	r.Use(httputil.SetLoggerMiddleware(log))
 	r.Get("/health", api.health)
 	r.Get("/", api.config)
+	r.Get("/dmsghttp", api.dmsghttp)
 
 	api.Handler = r
 
@@ -112,11 +123,11 @@ func (a *API) health(w http.ResponseWriter, r *http.Request) {
 	a.writeJSON(w, r, http.StatusOK, HealthCheckResponse{
 		BuildInfo: info,
 		StartedAt: a.startedAt,
+		DmsgAddr:  a.dmsgAddr,
 	})
 }
 
 func (a *API) config(w http.ResponseWriter, r *http.Request) {
-
 	a.writeJSON(w, r, http.StatusOK, a.services)
 }
 
@@ -136,4 +147,59 @@ func (a *API) writeJSON(w http.ResponseWriter, r *http.Request, code int, object
 	if err != nil {
 		a.logger(r).WithError(err).Errorf("failed to write json response")
 	}
+}
+
+func (a *API) dmsghttp(w http.ResponseWriter, r *http.Request) {
+	if time.Now().Add(-5 * time.Minute).After(a.dmsghttpConfTs) {
+		a.dmsghttpConf = a.dmsghttpConfGen()
+		a.dmsghttpConfTs = time.Now()
+	}
+	a.writeJSON(w, r, http.StatusOK, a.dmsghttpConf)
+}
+
+func (a *API) dmsghttpConfGen() httputil.DMSGHTTPConf {
+	var dmsghttpConf httputil.DMSGHTTPConf
+	dmsghttpConf.DMSGServers = fetchDMSGServers(a.services.DmsgDiscovery)
+	dmsghttpConf.AddressResolver = fetchDMSGAddress(a.services.AddressResolver)
+	dmsghttpConf.DMSGDiscovery = fetchDMSGAddress(a.services.DmsgDiscovery)
+	dmsghttpConf.RouteFinder = fetchDMSGAddress(a.services.RouteFinder)
+	dmsghttpConf.ServiceDiscovery = fetchDMSGAddress(a.services.ServiceDiscovery)
+	dmsghttpConf.TranspordDiscovery = fetchDMSGAddress(a.services.TransportDiscovery)
+	dmsghttpConf.UptimeTracker = fetchDMSGAddress(a.services.UptimeTracker)
+
+	return dmsghttpConf
+}
+
+func fetchDMSGAddress(url string) string {
+	resp, err := http.Get(fmt.Sprintf("%s/health", url))
+	if err != nil {
+		return ""
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ""
+	}
+	var healthResponse httputil.HealthCheckResponse
+	err = json.Unmarshal(body, &healthResponse)
+	if err != nil {
+		return ""
+	}
+	return healthResponse.DmsgAddr
+}
+
+func fetchDMSGServers(url string) []httputil.DMSGServersConf {
+	var dmsgServersList []httputil.DMSGServersConf
+	resp, err := http.Get(fmt.Sprintf("%s/dmsg-discovery/all_servers", url))
+	if err != nil {
+		return dmsgServersList
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return dmsgServersList
+	}
+	err = json.Unmarshal(body, &dmsgServersList)
+	if err != nil {
+		return dmsgServersList
+	}
+	return dmsgServersList
 }

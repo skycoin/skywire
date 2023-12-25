@@ -117,7 +117,7 @@ func (s *postgresStore) DeleteService(_ context.Context, sType string, addr serv
 	return nil
 }
 
-func (s *postgresStore) CountServiceTypes(ctx context.Context) (uint64, error) {
+func (s *postgresStore) CountServiceTypes(_ context.Context) (uint64, error) {
 	var countTypes int64
 	if err := s.client.Model(&servicedisc.Service{}).Distinct("type").Count(&countTypes).Error; err != nil {
 		return uint64(0), fmt.Errorf("Postgres command returned unexpected error: %w", err)

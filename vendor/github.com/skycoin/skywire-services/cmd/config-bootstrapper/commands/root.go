@@ -4,15 +4,21 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"os"
 
 	cc "github.com/ivanpirog/coloredcobra"
+	"github.com/skycoin/dmsg/pkg/direct"
+	"github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/tcpproxy"
+
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-services/pkg/config-bootstrapper/api"
@@ -23,22 +29,29 @@ var (
 	tag      string
 	stunPath string
 	domain   string
+	dmsgDisc string
+	sk       cipher.SecKey
+	dmsgPort uint16
 )
 
 func init() {
-	rootCmd.Flags().StringVarP(&addr, "addr", "a", ":9082", "address to bind to\033[0m")
-	rootCmd.Flags().StringVar(&tag, "tag", "address_resolver", "logging tag\033[0m")
-	rootCmd.Flags().StringVarP(&stunPath, "config", "c", "./config.json", "stun server list file location\033[0m")
-	rootCmd.Flags().StringVarP(&domain, "domain", "d", "skywire.skycoin.com", "the domain of the endpoints\033[0m")
+	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9082", "address to bind to\033[0m")
+	RootCmd.Flags().StringVar(&tag, "tag", "address_resolver", "logging tag\033[0m")
+	RootCmd.Flags().StringVarP(&stunPath, "config", "c", "./config.json", "stun server list file location\033[0m")
+	RootCmd.Flags().StringVarP(&domain, "domain", "d", "skywire.skycoin.com", "the domain of the endpoints\033[0m")
+	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", "http://dmsgd.skywire.skycoin.com", "url of dmsg-discovery\033[0m")
+	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\r")
+	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\r")
 	var helpflag bool
-	rootCmd.SetUsageTemplate(help)
-	rootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+rootCmd.Use)
-	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
-	rootCmd.PersistentFlags().MarkHidden("help") //nolint
+	RootCmd.SetUsageTemplate(help)
+	RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for config-bootstrapper")
+	RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
+	RootCmd.PersistentFlags().MarkHidden("help") //nolint
 }
 
-var rootCmd = &cobra.Command{
-	Use:   "config-bootstrapper",
+// RootCmd contains the root command
+var RootCmd = &cobra.Command{
+	Use:   "cb",
 	Short: "Config Bootstrap Server for skywire",
 	Long: `
 	┌─┐┌─┐┌┐┌┌─┐┬┌─┐   ┌┐ ┌─┐┌─┐┌┬┐┌─┐┌┬┐┬─┐┌─┐┌─┐┌─┐┌─┐┬─┐
@@ -57,13 +70,51 @@ var rootCmd = &cobra.Command{
 		logger := logging.MustGetLogger(tag)
 		config := readConfig(logger, stunPath)
 
-		conAPI := api.New(logger, config, domain)
+		pk, err := sk.PubKey()
+		if err != nil {
+			logger.WithError(err).Warn("No SecKey found. Skipping serving on dmsghttp.")
+		}
+
+		var dmsgAddr string
+		if !pk.Null() {
+			dmsgAddr = fmt.Sprintf("%s:%d", pk.Hex(), dmsgPort)
+		}
+
+		conAPI := api.New(logger, config, domain, dmsgAddr)
 		if logger != nil {
 			logger.Infof("Listening on %s", addr)
 		}
 
 		ctx, cancel := cmdutil.SignalContext(context.Background(), logger)
 		defer cancel()
+
+		if !pk.Null() {
+			servers := dmsghttp.GetServers(ctx, dmsgDisc, logger)
+
+			var keys cipher.PubKeys
+			keys = append(keys, pk)
+			dClient := direct.NewClient(direct.GetAllEntries(keys, servers), logger)
+			config := &dmsg.Config{
+				MinSessions:    0, // listen on all available servers
+				UpdateInterval: dmsg.DefaultUpdateInterval,
+			}
+
+			dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, logger, pk, sk, dClient, config)
+			if err != nil {
+				logger.WithError(err).Fatal("failed to start direct dmsg client.")
+			}
+
+			defer closeDmsgDC()
+
+			go dmsghttp.UpdateServers(ctx, dClient, dmsgDisc, dmsgDC, logger)
+
+			go func() {
+				if err := dmsghttp.ListenAndServe(ctx, sk, conAPI, dClient, dmsg.DefaultDmsgHTTPPort, dmsgDC, logger); err != nil {
+					logger.Errorf("dmsghttp.ListenAndServe: %v", err)
+					cancel()
+				}
+			}()
+		}
 
 		go func() {
 			if err := tcpproxy.ListenAndServe(addr, conAPI); err != nil {
@@ -111,18 +162,18 @@ func readConfig(log *logging.Logger, confPath string) (config api.Config) {
 // Execute executes root CLI command.
 func Execute() {
 	cc.Init(&cc.Config{
-		RootCmd:       rootCmd,
-		Headings:      cc.HiBlue + cc.Bold,
-		Commands:      cc.HiBlue + cc.Bold,
-		CmdShortDescr: cc.HiBlue,
-		Example:       cc.HiBlue + cc.Italic,
-		ExecName:      cc.HiBlue + cc.Bold,
-		Flags:         cc.HiBlue + cc.Bold,
+		RootCmd:         RootCmd,
+		Headings:        cc.HiBlue + cc.Bold,
+		Commands:        cc.HiBlue + cc.Bold,
+		CmdShortDescr:   cc.HiBlue,
+		Example:         cc.HiBlue + cc.Italic,
+		ExecName:        cc.HiBlue + cc.Bold,
+		Flags:           cc.HiBlue + cc.Bold,
 		FlagsDescr:      cc.HiBlue,
 		NoExtraNewlines: true,
 		NoBottomNewline: true,
 	})
-	if err := rootCmd.Execute(); err != nil {
+	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
 	}
 }

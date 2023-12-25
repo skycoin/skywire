@@ -18,6 +18,8 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
+	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor"
@@ -278,4 +280,65 @@ func (api *API) startVisor(ctx context.Context, conf *visorconfig.V1) {
 		api.logger.Fatal("Failed to start visor.")
 	}
 	api.Visor = v
+}
+
+// InitConfig to initialize config
+func InitConfig(confPath string, mLog *logging.MasterLogger) *visorconfig.V1 {
+	log := mLog.PackageLogger("public_visor_monitor:config")
+	log.Info("Reading config from file.")
+	log.WithField("filepath", confPath).Info()
+
+	oldConf, err := visorconfig.ReadFile(confPath)
+	if err != nil {
+		log.WithError(err).Fatal("Failed to read config file.")
+	}
+	var testEnv bool
+	if oldConf.Dmsg.Discovery == utilenv.TestDmsgDiscAddr {
+		testEnv = true
+	}
+	// have same services as old config
+	services := &visorconfig.Services{
+		DmsgDiscovery:      oldConf.Dmsg.Discovery,
+		TransportDiscovery: oldConf.Transport.Discovery,
+		AddressResolver:    oldConf.Transport.AddressResolver,
+		RouteFinder:        oldConf.Routing.RouteFinder,
+		RouteSetupNodes:    oldConf.Routing.RouteSetupNodes,
+		UptimeTracker:      oldConf.UptimeTracker.Addr,
+		ServiceDiscovery:   oldConf.Launcher.ServiceDisc,
+	}
+	// update old config
+	conf, err := visorconfig.MakeDefaultConfig(mLog, &oldConf.SK, false, false, testEnv, false, false, confPath, "", services)
+	if err != nil {
+		log.WithError(err).Fatal("Failed to create config.")
+	}
+
+	// have the same apps that the old config had
+	var newConfLauncherApps []appserver.AppConfig
+	for _, app := range conf.Launcher.Apps {
+		for _, oldApp := range oldConf.Launcher.Apps {
+			if app.Name == oldApp.Name {
+				newConfLauncherApps = append(newConfLauncherApps, app)
+			}
+		}
+	}
+	conf.Launcher.Apps = newConfLauncherApps
+
+	conf.Version = oldConf.Version
+	conf.LocalPath = oldConf.LocalPath
+	conf.Launcher.BinPath = oldConf.Launcher.BinPath
+	conf.Launcher.ServerAddr = oldConf.Launcher.ServerAddr
+	conf.CLIAddr = oldConf.CLIAddr
+	conf.Transport.TransportSetupPKs = oldConf.Transport.TransportSetupPKs
+
+	// following services are not needed
+	conf.STCP = nil
+	conf.Dmsgpty = nil
+	conf.Transport.PublicAutoconnect = false
+
+	// save the config file
+	if err := conf.Flush(); err != nil {
+		log.WithError(err).Fatal("Failed to flush config to file.")
+	}
+
+	return conf
 }
