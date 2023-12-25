@@ -155,7 +155,7 @@ test: ## Run tests
 
 test-windows: ## Run tests on windows
 	@go clean -testcache
-	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/...
+	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/apps...
 
 install-linters: ## Install linters
 	- VERSION=latest ./ci_scripts/install-golangci-lint.sh
