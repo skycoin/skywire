@@ -49,7 +49,6 @@ func init() {
 		dmsghttp.RootCmd,
 		dmsgcurl.RootCmd,
 	)
-
 	svcCmd.AddCommand(
 		tpd.RootCmd,
 		tps.RootCmd,
@@ -65,6 +64,10 @@ func init() {
 		dmsgm.RootCmd,
 		sd.RootCmd,
 	)
+	visor.RootCmd.Long= `
+	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐  ┬  ┬┬┌─┐┌─┐┬─┐
+	└─┐├┴┐└┬┘││││├┬┘├┤───└┐┌┘│└─┐│ │├┬┘
+	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘   └┘ ┴└─┘└─┘┴└─`
 	rootCmd.AddCommand(
 		visor.RootCmd,
 		skywirecli.RootCmd,
@@ -137,18 +140,49 @@ var dmsgptyCmd = &cobra.Command{
 }
 
 func main() {
-	cc.Init(&cc.Config{
-		RootCmd:         rootCmd,
-		Headings:        cc.HiBlue + cc.Bold,
-		Commands:        cc.HiBlue + cc.Bold,
-		CmdShortDescr:   cc.HiBlue,
-		Example:         cc.HiBlue + cc.Italic,
-		ExecName:        cc.HiBlue + cc.Bold,
-		Flags:           cc.HiBlue + cc.Bold,
-		FlagsDescr:      cc.HiBlue,
-		NoExtraNewlines: true,
-		NoBottomNewline: true,
-	})
+commands := []*cobra.Command{
+	dmsgptycli.RootCmd,
+	dmsgptyhost.RootCmd,
+	dmsgptyui.RootCmd,
+	dmsgptyCmd,
+	dmsgdisc.RootCmd,
+	dmsgserver.RootCmd,
+	dmsghttp.RootCmd,
+	dmsgcurl.RootCmd,
+	dmsgCmd,
+	tpd.RootCmd,
+	tps.RootCmd,
+	tpdm.RootCmd,
+	ar.RootCmd,
+	rf.RootCmd,
+	confbs.RootCmd,
+	kg.RootCmd,
+	lc.RootCmd,
+	nv.RootCmd,
+	pvm.RootCmd,
+	se.RootCmd,
+	dmsgm.RootCmd,
+	sd.RootCmd,
+	svcCmd,
+	setupnode.RootCmd,
+	visor.RootCmd,
+	skywirecli.RootCmd,
+	rootCmd,
+	}
+for _, cmd := range commands {
+  cc.Init(&cc.Config{
+      RootCmd:         cmd,
+      Headings:        cc.HiBlue + cc.Bold,
+      Commands:        cc.HiBlue + cc.Bold,
+      CmdShortDescr:   cc.HiBlue,
+      Example:         cc.HiBlue + cc.Italic,
+      ExecName:        cc.HiBlue + cc.Bold,
+      Flags:           cc.HiBlue + cc.Bold,
+      FlagsDescr:      cc.HiBlue,
+      NoExtraNewlines: true,
+      NoBottomNewline: true,
+  })
+}
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
