@@ -11,11 +11,11 @@ import (
 	dmsgdisc "github.com/skycoin/dmsg/cmd/dmsg-discovery/commands"
 	dmsgserver "github.com/skycoin/dmsg/cmd/dmsg-server/commands"
 	dmsgcurl "github.com/skycoin/dmsg/cmd/dmsgcurl/commands"
-	dmsgweb "github.com/skycoin/dmsg/cmd/dmsgweb/commands"
 	dmsghttp "github.com/skycoin/dmsg/cmd/dmsghttp/commands"
 	dmsgptycli "github.com/skycoin/dmsg/cmd/dmsgpty-cli/commands"
 	dmsgptyhost "github.com/skycoin/dmsg/cmd/dmsgpty-host/commands"
 	dmsgptyui "github.com/skycoin/dmsg/cmd/dmsgpty-ui/commands"
+	dmsgweb "github.com/skycoin/dmsg/cmd/dmsgweb/commands"
 	sd "github.com/skycoin/skycoin-service-discovery/cmd/service-discovery/commands"
 	"github.com/spf13/cobra"
 
@@ -36,11 +36,6 @@ import (
 	skywirecli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
 	"github.com/skycoin/skywire/pkg/visor"
 )
-
-var(
-	hiddenflags	[]string
-	allhelp bool
-	)
 
 func init() {
 	dmsgptyCmd.AddCommand(
@@ -78,13 +73,13 @@ func init() {
 		svcCmd,
 		dmsgCmd,
 	)
-	visor.RootCmd.Long= `
+	visor.RootCmd.Long = `
 	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐  ┬  ┬┬┌─┐┌─┐┬─┐
 	└─┐├┴┐└┬┘││││├┬┘├┤───└┐┌┘│└─┐│ │├┬┘
 	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘   └┘ ┴└─┘└─┘┴└─`
-	dmsgcurl.RootCmd.Use="curl"
-	dmsgweb.RootCmd.Use="web"
-	setupnode.RootCmd.Use="sn"
+	dmsgcurl.RootCmd.Use = "curl"
+	dmsgweb.RootCmd.Use = "web"
+	setupnode.RootCmd.Use = "sn"
 
 	var helpflag bool
 	rootCmd.SetUsageTemplate(help)
@@ -152,50 +147,50 @@ var dmsgptyCmd = &cobra.Command{
 }
 
 func main() {
-commands := []*cobra.Command{
-	dmsgptycli.RootCmd,
-	dmsgptyhost.RootCmd,
-	dmsgptyui.RootCmd,
-	dmsgptyCmd,
-	dmsgdisc.RootCmd,
-	dmsgserver.RootCmd,
-	dmsghttp.RootCmd,
-	dmsgcurl.RootCmd,
-	dmsgweb.RootCmd,
-	dmsgCmd,
-	tpd.RootCmd,
-	tps.RootCmd,
-	tpdm.RootCmd,
-	ar.RootCmd,
-	rf.RootCmd,
-	confbs.RootCmd,
-	kg.RootCmd,
-	lc.RootCmd,
-	nv.RootCmd,
-	pvm.RootCmd,
-	se.RootCmd,
-	dmsgm.RootCmd,
-	sd.RootCmd,
-	svcCmd,
-	setupnode.RootCmd,
-	visor.RootCmd,
-	skywirecli.RootCmd,
-	rootCmd,
+	commands := []*cobra.Command{
+		dmsgptycli.RootCmd,
+		dmsgptyhost.RootCmd,
+		dmsgptyui.RootCmd,
+		dmsgptyCmd,
+		dmsgdisc.RootCmd,
+		dmsgserver.RootCmd,
+		dmsghttp.RootCmd,
+		dmsgcurl.RootCmd,
+		dmsgweb.RootCmd,
+		dmsgCmd,
+		tpd.RootCmd,
+		tps.RootCmd,
+		tpdm.RootCmd,
+		ar.RootCmd,
+		rf.RootCmd,
+		confbs.RootCmd,
+		kg.RootCmd,
+		lc.RootCmd,
+		nv.RootCmd,
+		pvm.RootCmd,
+		se.RootCmd,
+		dmsgm.RootCmd,
+		sd.RootCmd,
+		svcCmd,
+		setupnode.RootCmd,
+		visor.RootCmd,
+		skywirecli.RootCmd,
+		rootCmd,
 	}
-for _, cmd := range commands {
-  cc.Init(&cc.Config{
-      RootCmd:         cmd,
-      Headings:        cc.HiBlue + cc.Bold,
-      Commands:        cc.HiBlue + cc.Bold,
-      CmdShortDescr:   cc.HiBlue,
-      Example:         cc.HiBlue + cc.Italic,
-      ExecName:        cc.HiBlue + cc.Bold,
-      Flags:           cc.HiBlue + cc.Bold,
-      FlagsDescr:      cc.HiBlue,
-      NoExtraNewlines: true,
-      NoBottomNewline: true,
-  })
-}
+	for _, cmd := range commands {
+		cc.Init(&cc.Config{
+			RootCmd:         cmd,
+			Headings:        cc.HiBlue + cc.Bold,
+			Commands:        cc.HiBlue + cc.Bold,
+			CmdShortDescr:   cc.HiBlue,
+			Example:         cc.HiBlue + cc.Italic,
+			ExecName:        cc.HiBlue + cc.Bold,
+			Flags:           cc.HiBlue + cc.Bold,
+			FlagsDescr:      cc.HiBlue,
+			NoExtraNewlines: true,
+			NoBottomNewline: true,
+		})
+	}
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
