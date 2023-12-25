@@ -11,6 +11,7 @@ import (
 	dmsgdisc "github.com/skycoin/dmsg/cmd/dmsg-discovery/commands"
 	dmsgserver "github.com/skycoin/dmsg/cmd/dmsg-server/commands"
 	dmsgcurl "github.com/skycoin/dmsg/cmd/dmsgcurl/commands"
+	dmsgweb "github.com/skycoin/dmsg/cmd/dmsgweb/commands"
 	dmsghttp "github.com/skycoin/dmsg/cmd/dmsghttp/commands"
 	dmsgptycli "github.com/skycoin/dmsg/cmd/dmsgpty-cli/commands"
 	dmsgptyhost "github.com/skycoin/dmsg/cmd/dmsgpty-host/commands"
@@ -36,6 +37,11 @@ import (
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
+var(
+	hiddenflags	[]string
+	allhelp bool
+	)
+
 func init() {
 	dmsgptyCmd.AddCommand(
 		dmsgptycli.RootCmd,
@@ -46,10 +52,13 @@ func init() {
 		dmsgptyCmd,
 		dmsgdisc.RootCmd,
 		dmsgserver.RootCmd,
+		dmsgm.RootCmd,
 		dmsghttp.RootCmd,
 		dmsgcurl.RootCmd,
+		dmsgweb.RootCmd,
 	)
 	svcCmd.AddCommand(
+		setupnode.RootCmd,
 		tpd.RootCmd,
 		tps.RootCmd,
 		tpdm.RootCmd,
@@ -61,26 +70,29 @@ func init() {
 		nv.RootCmd,
 		pvm.RootCmd,
 		se.RootCmd,
-		dmsgm.RootCmd,
 		sd.RootCmd,
+	)
+	rootCmd.AddCommand(
+		visor.RootCmd,
+		skywirecli.RootCmd,
+		svcCmd,
+		dmsgCmd,
 	)
 	visor.RootCmd.Long= `
 	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐  ┬  ┬┬┌─┐┌─┐┬─┐
 	└─┐├┴┐└┬┘││││├┬┘├┤───└┐┌┘│└─┐│ │├┬┘
 	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘   └┘ ┴└─┘└─┘┴└─`
-	rootCmd.AddCommand(
-		visor.RootCmd,
-		skywirecli.RootCmd,
-		setupnode.RootCmd,
-		svcCmd,
-		dmsgCmd,
-	)
+	dmsgcurl.RootCmd.Use="curl"
+	dmsgweb.RootCmd.Use="web"
+	setupnode.RootCmd.Use="sn"
+
 	var helpflag bool
 	rootCmd.SetUsageTemplate(help)
 	rootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+rootCmd.Use)
 	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
 	rootCmd.PersistentFlags().MarkHidden("help") //nolint
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
+	rootCmd.SetUsageTemplate(help)
 
 }
 
@@ -149,6 +161,7 @@ commands := []*cobra.Command{
 	dmsgserver.RootCmd,
 	dmsghttp.RootCmd,
 	dmsgcurl.RootCmd,
+	dmsgweb.RootCmd,
 	dmsgCmd,
 	tpd.RootCmd,
 	tps.RootCmd,
