@@ -32,14 +32,14 @@ import (
 	tpd "github.com/skycoin/skywire-services/cmd/transport-discovery/commands"
 	tps "github.com/skycoin/skywire-services/cmd/transport-setup/commands"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	setupnode "github.com/skycoin/skywire/cmd/setup-node/commands"
-	skywirecli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
-	"github.com/skycoin/skywire/pkg/visor"
 	skychat "github.com/skycoin/skywire/cmd/apps/skychat/commands"
 	skysocksclient "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
 	skysocks "github.com/skycoin/skywire/cmd/apps/skysocks/commands"
 	vpnclient "github.com/skycoin/skywire/cmd/apps/vpn-client/commands"
 	vpnserver "github.com/skycoin/skywire/cmd/apps/vpn-server/commands"
+	setupnode "github.com/skycoin/skywire/cmd/setup-node/commands"
+	skywirecli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
+	"github.com/skycoin/skywire/pkg/visor"
 )
 
 func init() {
@@ -170,6 +170,7 @@ var appsCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 }
+
 func main() {
 	commands := []*cobra.Command{
 		dmsgptycli.RootCmd,
