@@ -163,6 +163,10 @@ var logCmd = &cobra.Command{
 			if v.Online {
 				if fetchFile == "" {
 					visorVersion, err := version.NewVersion(v.Version) //nolint
+					if v.Version == "" {
+						log.Warnf("The version for visor %s is blank", v.PubKey)
+						continue
+					}
 					includeV := contains(incVerList, v.Version)
 					if err != nil && !includeV {
 						log.Warnf("The version %s for visor %s is not valid", v.Version, v.PubKey)
@@ -336,8 +340,10 @@ func (pw *ProgressWriter) Write(p []byte) (int, error) {
 
 func getUptimes(endpoint string, log *logging.Logger) ([]VisorUptimeResponse, error) {
 	var results []VisorUptimeResponse
-
-	response, err := http.Get(endpoint) //nolint
+	client := http.Client{
+		Timeout: 60 * time.Second,
+	}
+	response, err := client.Get(endpoint) //nolint
 	if err != nil {
 		log.Error("Error while fetching data from uptime service. Error: ", err)
 		return results, errors.New("Cannot get Uptime data")
