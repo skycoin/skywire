@@ -218,7 +218,7 @@ host-apps-race: ## Build app
 bin: fix-systray-vendor bin-fix unfix-systray-vendor
 
 bin-fix: ## Build `skywire-visor`, `skywire-cli`
-	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH) ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node
+	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH) ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node ./cmd/skywire-systray ./cmd/skywire-deployment
 
 fix-systray-vendor:
 	@if [ $(UNAME_S) = "Linux" ]; then\
