@@ -12,9 +12,7 @@ import (
 
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
-
 )
-
 
 const yearlyTotalRewards int = 408000
 
@@ -22,38 +20,36 @@ var (
 	yearlyTotal           int
 	surveyPath            string
 	wdate                 = time.Now().AddDate(0, 0, -1).Format("2006-01-02")
-	wDate time.Time
+	wDate                 time.Time
 	utfile                string
 	disallowArchitectures string
-	h0									bool
-	h1									bool
-	h2									bool
+	h0                    bool
+	h1                    bool
+	h2                    bool
 )
 
 type nodeinfo struct {
-	SkyAddr string  `json:"skycoin_address"`
-	PK      string  `json:"public_key"`
-	Arch    string  `json:"go_arch"`
-	Interfaces			string  `json:"interfaces"`
-	IPAddr  string  `json:"ip_address"`
-	UUID		string	`json:"uuid"`
-	Share   float64 `json:"reward_share"`
-	Reward  float64 `json:"reward_amount"`
-	MacAddr	string
+	SkyAddr    string  `json:"skycoin_address"`
+	PK         string  `json:"public_key"`
+	Arch       string  `json:"go_arch"`
+	Interfaces string  `json:"interfaces"`
+	IPAddr     string  `json:"ip_address"`
+	UUID       string  `json:"uuid"`
+	Share      float64 `json:"reward_share"`
+	Reward     float64 `json:"reward_amount"`
+	MacAddr    string
 }
 
 type Count struct {
-	Name    string
+	Name  string
 	Count int
 }
 
 type rewardData struct {
 	SkyAddr string
 	Reward  float64
-	Shares	float64
+	Shares  float64
 }
-
-
 
 func init() {
 	RootCmd.AddCommand(rewardCalcCmd)
@@ -114,13 +110,13 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 			macs, _ := script.File(nodeInfo).JQ(`.ip_addr[]? | select(.ifname != "lo") | .address`).Replace(" ", "").Replace(`"`, "").Slice() //nolint
 			if _, disallowed := archMap[arch]; !disallowed && ip != "" && strings.Count(ip, ".") == 3 && sky != "" && uu != "" && ifc != "" && len(macs) >= 2 {
 				ni := nodeinfo{
-					IPAddr:  ip,
-					SkyAddr: sky,
-					PK:      pk,
-					Arch:    arch,
+					IPAddr:     ip,
+					SkyAddr:    sky,
+					PK:         pk,
+					Arch:       arch,
 					Interfaces: ifc,
-					MacAddr: macs[1],
-					UUID: uu,
+					MacAddr:    macs[1],
+					UUID:       uu,
 				}
 				nodesInfos = append(nodesInfos, ni)
 			}
@@ -151,88 +147,85 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 				if len(fields) == 2 {
 					count, _ := strconv.Atoi(fields[0]) //nolint
 					ipCounts = append(ipCounts, Count{
-						Name:    fields[1],
+						Name:  fields[1],
 						Count: count,
 					})
 				}
 			}
 		}
-uniqueUUID, _ := script.Echo(func() string { //nolint
-    var inputStr strings.Builder
-    for _, ni := range nodesInfos {
-        inputStr.WriteString(fmt.Sprintf("%s\n", ni.UUID))
-    }
-    return inputStr.String()
-}()).Freq().Slice() //nolint
+		uniqueUUID, _ := script.Echo(func() string { //nolint
+			var inputStr strings.Builder
+			for _, ni := range nodesInfos {
+				inputStr.WriteString(fmt.Sprintf("%s\n", ni.UUID))
+			}
+			return inputStr.String()
+		}()).Freq().Slice() //nolint
 
-
-var uuidCounts []Count
-for _, line := range uniqueUUID {
-    if line != "" {
-        fields := strings.Fields(line)
-        if len(fields) == 2 {
-            count, _ := strconv.Atoi(fields[0]) //nolint
-            uuidCounts = append(uuidCounts, Count{
-                Name:  fields[1],
-                Count: count,
-            })
-
-        }
-    }
-}
-
-// look at the first non loopback interface macaddress
-uniqueMac, _ := script.Echo(func() string { //nolint
-var inputStr strings.Builder
-for _, ni := range nodesInfos {
-		inputStr.WriteString(fmt.Sprintf("%s\n", ni.MacAddr))
-}
-return inputStr.String()
-}()).Freq().Slice() //nolint
-
-
-var macCounts []Count
-for _, line := range uniqueMac {
-	if line != "" {
-			fields := strings.Fields(line)
-			if len(fields) == 2 {
+		var uuidCounts []Count
+		for _, line := range uniqueUUID {
+			if line != "" {
+				fields := strings.Fields(line)
+				if len(fields) == 2 {
 					count, _ := strconv.Atoi(fields[0]) //nolint
-					macCounts = append(macCounts, Count{
-							Name:  fields[1],
-							Count: count,
+					uuidCounts = append(uuidCounts, Count{
+						Name:  fields[1],
+						Count: count,
 					})
 
-			}
-	}
-}
-
-
-totalValidShares := 0.0
-for _, ni := range nodesInfos {
-	share := 1.0
-	for _, ipCount := range ipCounts {
-		if ni.IPAddr == ipCount.Name {
-			if ipCount.Count >= 8 {
-				share = 8.0 / float64(ipCount.Count)
+				}
 			}
 		}
-	}
-	for _, macCount := range macCounts {
-			if macCount.Name == ni.MacAddr {
-				share = share / float64(macCount.Count)
+
+		// look at the first non loopback interface macaddress
+		uniqueMac, _ := script.Echo(func() string { //nolint
+			var inputStr strings.Builder
+			for _, ni := range nodesInfos {
+				inputStr.WriteString(fmt.Sprintf("%s\n", ni.MacAddr))
+			}
+			return inputStr.String()
+		}()).Freq().Slice() //nolint
+
+		var macCounts []Count
+		for _, line := range uniqueMac {
+			if line != "" {
+				fields := strings.Fields(line)
+				if len(fields) == 2 {
+					count, _ := strconv.Atoi(fields[0]) //nolint
+					macCounts = append(macCounts, Count{
+						Name:  fields[1],
+						Count: count,
+					})
+
+				}
 			}
 		}
-	totalValidShares += share
-}
 
-if !h0 {
-	fmt.Printf("Visors meeting uptime & architecture requirements: %d\n", len(nodesInfos))
-	fmt.Printf("Unique mac addresses for first interface after lo: %d\n", len(uniqueMac))
-	fmt.Printf("Unique Ip Addresses: %d\n", len(uniqueIP))
-	fmt.Printf("Unique UUIDs: %d\n", len(uniqueUUID))
-	fmt.Printf("Total valid shares: %.6f\n", totalValidShares)
-	fmt.Printf("Skycoin Per Share: %.6f\n", dayReward/totalValidShares)
-}
+		totalValidShares := 0.0
+		for _, ni := range nodesInfos {
+			share := 1.0
+			for _, ipCount := range ipCounts {
+				if ni.IPAddr == ipCount.Name {
+					if ipCount.Count >= 8 {
+						share = 8.0 / float64(ipCount.Count)
+					}
+				}
+			}
+			for _, macCount := range macCounts {
+				if macCount.Name == ni.MacAddr {
+					share = share / float64(macCount.Count)
+				}
+			}
+			totalValidShares += share
+		}
+
+		if !h0 {
+			fmt.Printf("Visors meeting uptime & architecture requirements: %d\n", len(nodesInfos))
+			fmt.Printf("Unique mac addresses for first interface after lo: %d\n", len(uniqueMac))
+			fmt.Printf("Unique Ip Addresses: %d\n", len(uniqueIP))
+			fmt.Printf("Unique UUIDs: %d\n", len(uniqueUUID))
+			fmt.Printf("Total valid shares: %.6f\n", totalValidShares)
+			fmt.Printf("Skycoin Per Share: %.6f\n", dayReward/totalValidShares)
+		}
 		for i, ni := range nodesInfos {
 			nodesInfos[i].Share = 1.0
 			for _, ipCount := range ipCounts {
@@ -243,14 +236,12 @@ if !h0 {
 				}
 			}
 			for _, macCount := range macCounts {
-					if macCount.Name == ni.MacAddr {
-						nodesInfos[i].Share = nodesInfos[i].Share / float64(macCount.Count)
-					}
+				if macCount.Name == ni.MacAddr {
+					nodesInfos[i].Share = nodesInfos[i].Share / float64(macCount.Count)
 				}
-			nodesInfos[i].Reward = nodesInfos[i].Share * dayReward/float64(totalValidShares)
+			}
+			nodesInfos[i].Reward = nodesInfos[i].Share * dayReward / float64(totalValidShares)
 		}
-
-
 
 		if !h1 {
 			fmt.Println("Skycoin Address, Skywire Public Key, Reward Shares, Reward SKY Amount, IP, Architecture, UUID, Interfaces")
@@ -271,10 +262,10 @@ if !h0 {
 		})
 		if !h0 {
 			fmt.Printf("Total Reward Amount: %.6f\n", func() (tr float64) {
-			    for _, skyAddrReward := range sortedSkyAddrs {
-			        tr += skyAddrReward.Reward
-			    }
-			    return tr
+				for _, skyAddrReward := range sortedSkyAddrs {
+					tr += skyAddrReward.Reward
+				}
+				return tr
 			}())
 		}
 		if !h2 {
