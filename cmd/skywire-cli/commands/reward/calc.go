@@ -161,21 +161,6 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 			return inputStr.String()
 		}()).Freq().Slice() //nolint
 
-		var uuidCounts []counting
-		for _, line := range uniqueUUID {
-			if line != "" {
-				fields := strings.Fields(line)
-				if len(fields) == 2 {
-					count, _ := strconv.Atoi(fields[0]) //nolint
-					uuidCounts = append(uuidCounts, counting{
-						Name:  fields[1],
-						Count: count,
-					})
-
-				}
-			}
-		}
-
 		// look at the first non loopback interface macaddress
 		uniqueMac, _ := script.Echo(func() string { //nolint
 			var inputStr strings.Builder
