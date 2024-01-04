@@ -40,7 +40,7 @@ type nodeinfo struct {
 	MacAddr    string
 }
 
-type Count struct {
+type counting struct {
 	Name  string
 	Count int
 }
@@ -140,13 +140,13 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 			}
 			return inputStr.String()
 		}()).Freq().Slice() //nolint
-		var ipCounts []Count
+		var ipCounts []counting
 		for _, line := range uniqueIP {
 			if line != "" {
 				fields := strings.Fields(line)
 				if len(fields) == 2 {
 					count, _ := strconv.Atoi(fields[0]) //nolint
-					ipCounts = append(ipCounts, Count{
+					ipCounts = append(ipCounts, counting{
 						Name:  fields[1],
 						Count: count,
 					})
@@ -161,13 +161,13 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 			return inputStr.String()
 		}()).Freq().Slice() //nolint
 
-		var uuidCounts []Count
+		var uuidCounts []counting
 		for _, line := range uniqueUUID {
 			if line != "" {
 				fields := strings.Fields(line)
 				if len(fields) == 2 {
 					count, _ := strconv.Atoi(fields[0]) //nolint
-					uuidCounts = append(uuidCounts, Count{
+					uuidCounts = append(uuidCounts, counting{
 						Name:  fields[1],
 						Count: count,
 					})
@@ -185,13 +185,13 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 			return inputStr.String()
 		}()).Freq().Slice() //nolint
 
-		var macCounts []Count
+		var macCounts []counting
 		for _, line := range uniqueMac {
 			if line != "" {
 				fields := strings.Fields(line)
 				if len(fields) == 2 {
 					count, _ := strconv.Atoi(fields[0]) //nolint
-					macCounts = append(macCounts, Count{
+					macCounts = append(macCounts, counting{
 						Name:  fields[1],
 						Count: count,
 					})
