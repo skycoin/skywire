@@ -303,7 +303,7 @@ github.com/pterm/pterm/putils
 # github.com/quic-go/qtls-go1-20 v0.3.3
 ## explicit; go 1.20
 github.com/quic-go/qtls-go1-20
-# github.com/quic-go/quic-go v0.38.1
+# github.com/quic-go/quic-go v0.38.2
 ## explicit; go 1.20
 github.com/quic-go/quic-go
 github.com/quic-go/quic-go/internal/ackhandler
