@@ -105,7 +105,6 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 			}
 		} else {
 			res, _ = script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Match(pubkey).Slice() //nolint
-			script.Echo("len(res)" + string(len(res))).Stdout()
 			if len(res) == 0 {
 				log.Fatal("Specified key " + pubkey + "\n did not achieve minimum uptime on " + wdate + " !")
 			}
