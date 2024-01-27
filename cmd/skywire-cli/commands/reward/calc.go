@@ -26,6 +26,8 @@ var (
 	h0                    bool
 	h1                    bool
 	h2                    bool
+	grr                   bool
+	pubkey                string
 )
 
 type nodeinfo struct {
@@ -55,13 +57,15 @@ func init() {
 	RootCmd.AddCommand(rewardCalcCmd)
 	rewardCalcCmd.Flags().SortFlags = false
 	rewardCalcCmd.Flags().StringVarP(&wdate, "date", "d", wdate, "date for which to calculate reward")
+	rewardCalcCmd.Flags().StringVarP(&pubkey, "pk", "k", pubkey, "check reward for pubkey")
 	rewardCalcCmd.Flags().StringVarP(&disallowArchitectures, "noarch", "n", "amd64", "disallowed architectures, comma separated")
 	rewardCalcCmd.Flags().IntVarP(&yearlyTotal, "year", "y", yearlyTotalRewards, "yearly total rewards")
 	rewardCalcCmd.Flags().StringVarP(&utfile, "utfile", "u", "ut.txt", "uptime tracker data file")
-	rewardCalcCmd.Flags().StringVarP(&surveyPath, "path", "p", "./log_collecting", "path to the surveys ")
+	rewardCalcCmd.Flags().StringVarP(&surveyPath, "path", "p", "log_collecting", "path to the surveys")
 	rewardCalcCmd.Flags().BoolVarP(&h0, "h0", "0", false, "hide statistical data")
 	rewardCalcCmd.Flags().BoolVarP(&h1, "h1", "1", false, "hide survey csv data")
 	rewardCalcCmd.Flags().BoolVarP(&h2, "h2", "2", false, "hide reward csv data")
+	rewardCalcCmd.Flags().BoolVarP(&grr, "err", "e", false, "account for non rewarded keys")
 
 }
 
@@ -93,8 +97,20 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 				archMap[disallowedarch] = struct{}{}
 			}
 		}
-		res, _ := script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Slice() //nolint
+		var res []string
+		if pubkey == "" {
+			res, _ = script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Slice() //nolint
+			if len(res) == 0 {
+				log.Fatal("No keys achieved minimum uptime on " + wdate + " !")
+			}
+		} else {
+			res, _ = script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Match(pubkey).Slice() //nolint
+			if len(res) == 0 {
+				log.Fatal("Specified key " + pubkey + "\n did not achieve minimum uptime on " + wdate + " !")
+			}
+		}
 		var nodesInfos []nodeinfo
+		var grrInfos []nodeinfo
 		for _, pk := range res {
 			nodeInfo := fmt.Sprintf("%s/%s/node-info.json", surveyPath, pk)
 			ip, _ := script.File(nodeInfo).JQ(`."ip.skycoin.com".ip_address`).Replace(" ", "").Replace(`"`, "").String() //nolint
@@ -107,19 +123,40 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 			uu = strings.TrimRight(uu, "\n")
 			ifc, _ := script.File(nodeInfo).JQ(`[.ip_addr[]? | select(.ifname != "lo") | {address: .address, ifname: .ifname}]`).Replace(" ", "").Replace(`"`, "").String() //nolint
 			ifc = strings.TrimRight(ifc, "\n")
+			ifc1, _ := script.File(nodeInfo).JQ(`[.zcalusic_sysinfo.network[] | {address: .macaddress, ifname: .name}]`).Replace(" ", "").Replace(`"`, "").String() //nolint
+			ifc1 = strings.TrimRight(ifc1, "\n")
 			macs, _ := script.File(nodeInfo).JQ(`.ip_addr[]? | select(.ifname != "lo") | .address`).Replace(" ", "").Replace(`"`, "").Slice() //nolint
-			if _, disallowed := archMap[arch]; !disallowed && ip != "" && strings.Count(ip, ".") == 3 && sky != "" && uu != "" && ifc != "" && len(macs) >= 2 {
-				ni := nodeinfo{
-					IPAddr:     ip,
-					SkyAddr:    sky,
-					PK:         pk,
-					Arch:       arch,
-					Interfaces: ifc,
-					MacAddr:    macs[1],
-					UUID:       uu,
-				}
-				nodesInfos = append(nodesInfos, ni)
+			macs1, _ := script.File(nodeInfo).JQ(`.zcalusic_sysinfo.network[] | .macaddress`).Replace(" ", "").Replace(`"`, "").Slice()       //nolint
+			if ifc == "[]" && ifc1 != "[]" {
+				ifc = ifc1
 			}
+			if len(macs) == 0 && len(macs1) > 0 {
+				macs = macs1
+			} else {
+				macs = append(macs, "")
+			}
+			ni := nodeinfo{
+				IPAddr:     ip,
+				SkyAddr:    sky,
+				PK:         pk,
+				Arch:       arch,
+				Interfaces: ifc,
+				MacAddr:    macs[0],
+				UUID:       uu,
+			}
+			if _, disallowed := archMap[arch]; !disallowed && ip != "" && strings.Count(ip, ".") == 3 && sky != "" && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" {
+				nodesInfos = append(nodesInfos, ni)
+			} else {
+				if grr {
+					grrInfos = append(grrInfos, ni)
+				}
+			}
+		}
+		if grr {
+			for _, ni := range grrInfos {
+				fmt.Printf("%s, %s, %.6f, %.6f, %s, %s, %s, %s \n", ni.SkyAddr, ni.PK, ni.Share, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces)
+			}
+			return
 		}
 		daysThisMonth := time.Date(wDate.Year(), wDate.Month()+1, 0, 0, 0, 0, 0, time.UTC).Day()
 		daysThisYear := int(time.Date(wDate.Year(), 12, 31, 23, 59, 59, 999999999, time.UTC).Sub(time.Date(wDate.Year(), 1, 1, 0, 0, 0, 0, time.UTC)).Hours()) / 24
