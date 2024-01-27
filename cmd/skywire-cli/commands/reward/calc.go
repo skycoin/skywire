@@ -26,8 +26,8 @@ var (
 	h0                    bool
 	h1                    bool
 	h2                    bool
-	grr                    bool
-	pubkey										string
+	grr                   bool
+	pubkey                string
 )
 
 type nodeinfo struct {
@@ -101,13 +101,13 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 		if pubkey == "" {
 			res, _ = script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Slice() //nolint
 			if len(res) == 0 {
-				log.Fatal("No keys achieved minimum uptime on "+wdate+" !")
+				log.Fatal("No keys achieved minimum uptime on " + wdate + " !")
 			}
 		} else {
 			res, _ = script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Match(pubkey).Slice() //nolint
-			script.Echo("len(res)"+string(len(res))).Stdout()
+			script.Echo("len(res)" + string(len(res))).Stdout()
 			if len(res) == 0 {
-				log.Fatal("Specified key "+pubkey+"\n did not achieve minimum uptime on "+wdate+" !")
+				log.Fatal("Specified key " + pubkey + "\n did not achieve minimum uptime on " + wdate + " !")
 			}
 		}
 		var nodesInfos []nodeinfo
@@ -127,15 +127,15 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 			ifc1, _ := script.File(nodeInfo).JQ(`[.zcalusic_sysinfo.network[] | {address: .macaddress, ifname: .name}]`).Replace(" ", "").Replace(`"`, "").String() //nolint
 			ifc1 = strings.TrimRight(ifc1, "\n")
 			macs, _ := script.File(nodeInfo).JQ(`.ip_addr[]? | select(.ifname != "lo") | .address`).Replace(" ", "").Replace(`"`, "").Slice() //nolint
-			macs1, _ := script.File(nodeInfo).JQ(`.zcalusic_sysinfo.network[] | .macaddress`).Replace(" ", "").Replace(`"`, "").Slice() //nolint
+			macs1, _ := script.File(nodeInfo).JQ(`.zcalusic_sysinfo.network[] | .macaddress`).Replace(" ", "").Replace(`"`, "").Slice()       //nolint
 			if ifc == "[]" && ifc1 != "[]" {
 				ifc = ifc1
 			}
 			if len(macs) == 0 && len(macs1) > 0 {
 				macs = macs1
-				} else {
+			} else {
 				macs = append(macs, "")
-				}
+			}
 			ni := nodeinfo{
 				IPAddr:     ip,
 				SkyAddr:    sky,
