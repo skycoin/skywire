@@ -313,7 +313,7 @@ var listCmd = &cobra.Command{
 			return
 		}
 		if !isLabel {
-			script.Echo(sdkeys + utkeys).Freq().Match("2 ").Column(2).Stdout()
+			script.Echo(sdkeys + utkeys).Freq().Match("2 ").Column(2).Stdout() //nolint
 		} else {
 			filteredKeys, _ := script.Echo(sdkeys + utkeys).Freq().Match("2 ").Column(2).Slice()                           //nolint
 			formattedoutput, _ := script.Echo(sds).JQ(".[] | \"\\(.address) \\(.geo.country)\"").Replace("\"", "").Slice() //nolint
