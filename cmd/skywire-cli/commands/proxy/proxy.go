@@ -348,7 +348,7 @@ func getData(cachefile, thisurl string) (thisdata string) {
 			_, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).Tee(buf1).WriteFile(cachefile) //nolint
 			thisdata = buf1.String()
 		} else {
-			thisdata, _ = script.File(cachefile).String()	//nolint
+			thisdata, _ = script.File(cachefile).String() //nolint
 		}
 	} else {
 		thisdata, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).String() //nolint

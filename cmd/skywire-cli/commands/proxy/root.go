@@ -14,7 +14,6 @@ var (
 	binaryName     = "skysocks-client"
 	stateName      = "skysocks-client"
 	serviceType    = servicedisc.ServiceTypeProxy
-	servicePort    = ":44"
 	isUnFiltered   bool
 	rawData        bool
 	utURL          string
