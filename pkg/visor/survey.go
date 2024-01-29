@@ -2,6 +2,7 @@
 package visor
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -17,12 +18,12 @@ import (
 func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 	if visconf.IsRoot() {
 		for {
-			//check for valid reward address set as prerequisite for generating the system survey
+			// check for valid reward address set as prerequisite for generating the system survey
 			rewardAddressBytes, err := os.ReadFile(v.conf.LocalPath + "/" + visconf.RewardFile) //nolint
 			if err == nil || true {
 				//remove any newline from rewardAddress string
 				rewardAddress := strings.TrimSuffix(string(rewardAddressBytes), "\n")
-				//validate the skycoin address
+				// //validate the skycoin address
 				cAddr, err := coincipher.DecodeBase58Address(rewardAddress)
 				if err != nil {
 					log.WithError(err).Error("Invalid skycoin reward address.")
@@ -37,16 +38,16 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 					return
 				}
 				generatedSurvey.PubKey = v.conf.PK
-				generatedSurvey.SkycoinAddress = cAddr.String()
+				// generatedSurvey.SkycoinAddress = cAddr.String()
 
 				// TODO: add connected dmsg servers and services URL to survey
-				v.survey.ServicesURLs.TransportDiscovery = v.conf.Transport.Discovery
-				v.survey.ServicesURLs.AddressResolver = v.conf.Transport.AddressResolver
-				v.survey.ServicesURLs.RouteFinder = v.conf.Routing.RouteFinder
-				v.survey.ServicesURLs.RouteSetupNodes = v.conf.Routing.RouteSetupNodes
-				v.survey.ServicesURLs.UptimeTracker = v.conf.UptimeTracker.Addr
-				v.survey.ServicesURLs.ServiceDiscovery = v.conf.Launcher.ServiceDisc
-				v.survey.DmsgServers = v.dmsgC.ConnectedServers()
+				generatedSurvey.ServicesURLs.TransportDiscovery = v.conf.Transport.Discovery
+				generatedSurvey.ServicesURLs.AddressResolver = v.conf.Transport.AddressResolver
+				generatedSurvey.ServicesURLs.RouteFinder = v.conf.Routing.RouteFinder
+				generatedSurvey.ServicesURLs.RouteSetupNodes = v.conf.Routing.RouteSetupNodes
+				generatedSurvey.ServicesURLs.UptimeTracker = v.conf.UptimeTracker.Addr
+				generatedSurvey.ServicesURLs.ServiceDiscovery = v.conf.Launcher.ServiceDisc
+				generatedSurvey.DmsgServers = v.dmsgC.ConnectedServersPK()
 
 				log.Info("Generating system survey")
 				v.surveyLock.Lock()
@@ -62,6 +63,7 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 			if !routine {
 				break
 			}
+			fmt.Println(v.survey)
 			time.Sleep(time.Hour)
 		}
 	}

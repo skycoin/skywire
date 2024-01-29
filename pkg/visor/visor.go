@@ -255,6 +255,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		pingConnMx:           new(sync.Mutex),
 		allowedPorts:         make(map[int]bool),
 		survey:               visorconfig.Survey{},
+		surveyLock:           new(sync.RWMutex),
 	}
 	v.isServicesHealthy.init()
 
