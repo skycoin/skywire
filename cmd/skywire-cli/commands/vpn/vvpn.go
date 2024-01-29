@@ -4,18 +4,17 @@ package clivpn
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"math/rand"
 	"net/http"
 	"os"
 	"strings"
 	"text/tabwriter"
 	"time"
 
+	"github.com/bitfield/script"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
+	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
@@ -40,14 +39,6 @@ func init() {
 		version = ""
 	}
 	startCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
-	listCmd.Flags().StringVarP(&sdURL, "url", "a", "", "service discovery url default:\n"+skyenv.ServiceDiscAddr)
-	listCmd.Flags().BoolVarP(&directQuery, "direct", "b", false, "query service discovery directly")
-	listCmd.Flags().StringVarP(&pk, "pk", "k", "", "check "+serviceType+" service discovery for public key")
-	listCmd.Flags().IntVarP(&count, "num", "n", 0, "number of results to return")
-	listCmd.Flags().BoolVarP(&isUnFiltered, "unfilter", "u", false, "provide unfiltered results")
-	listCmd.Flags().StringVarP(&ver, "ver", "v", version, "filter results by version")
-	listCmd.Flags().StringVarP(&country, "country", "c", "", "filter results by country")
-	listCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the results")
 }
 
 func findServerByPK(servers []servicedisc.Service, addr string) *servicedisc.Service {
