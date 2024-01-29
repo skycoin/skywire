@@ -40,6 +40,13 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 				generatedSurvey.SkycoinAddress = cAddr.String()
 
 				// TODO: add connected dmsg servers and services URL to survey
+				v.survey.ServicesURLs.TransportDiscovery = v.conf.Transport.Discovery
+				v.survey.ServicesURLs.AddressResolver = v.conf.Transport.AddressResolver
+				v.survey.ServicesURLs.RouteFinder = v.conf.Routing.RouteFinder
+				v.survey.ServicesURLs.RouteSetupNodes = v.conf.Routing.RouteSetupNodes
+				v.survey.ServicesURLs.UptimeTracker = v.conf.UptimeTracker.Addr
+				v.survey.ServicesURLs.ServiceDiscovery = v.conf.Launcher.ServiceDisc
+				v.survey.DmsgServers = v.dmsgC.ConnectedServers()
 
 				log.Info("Generating system survey")
 				v.surveyLock.Lock()
