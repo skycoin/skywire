@@ -61,7 +61,7 @@ func init() {
 	logCmd.Flags().IntVarP(&duration, "duration", "n", 0, "number of days before today to fetch transport logs for")
 	logCmd.Flags().BoolVar(&allVisors, "all", false, "consider all visors ; no version filtering")
 	logCmd.Flags().IntVar(&batchSize, "batchSize", 50, "number of visor in each batch")
-	logCmd.Flags().Int64Var(&maxFileSize, "maxfilesize", 30, "maximum file size allowed to download during collecting logs, in KB")
+	logCmd.Flags().Int64Var(&maxFileSize, "maxfilesize", 1024, "maximum file size allowed to download during collecting logs, in KB")
 	logCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", skyenv.DmsgDiscAddr, "dmsg discovery url\n")
 	logCmd.Flags().StringVarP(&utAddr, "ut", "u", "", "custom uptime tracker url")
 	if os.Getenv("DMSGCURL_SK") != "" {
