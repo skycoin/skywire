@@ -1,8 +1,7 @@
-// Package visorconfig pkg/visor/visorconfig/survey.go
-package visorconfig
+// Package visor pkg/visor/survey.go
+package visor
 
 import (
-	"encoding/json"
 	"os"
 	"strings"
 	"time"
@@ -11,14 +10,15 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/util/pathutil"
+	visconf "github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // GenerateSurvey generate survey handler
-func GenerateSurvey(conf *V1, log *logging.Logger, routine bool) {
-	if IsRoot() {
+func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
+	if visconf.IsRoot() {
 		for {
 			//check for valid reward address set as prerequisite for generating the system survey
-			rewardAddressBytes, err := os.ReadFile(conf.LocalPath + "/" + RewardFile) //nolint
+			rewardAddressBytes, err := os.ReadFile(v.conf.LocalPath + "/" + visconf.RewardFile) //nolint
 			if err == nil || true {
 				//remove any newline from rewardAddress string
 				rewardAddress := strings.TrimSuffix(string(rewardAddressBytes), "\n")
@@ -30,38 +30,32 @@ func GenerateSurvey(conf *V1, log *logging.Logger, routine bool) {
 				}
 				log.Info("Skycoin reward address: ", cAddr.String())
 				//generate the system survey
-				pathutil.EnsureDir(conf.LocalPath) //nolint
-				survey, err := SystemSurvey()
+				pathutil.EnsureDir(v.conf.LocalPath) //nolint
+				generatedSurvey, err := visconf.SystemSurvey()
 				if err != nil {
 					log.WithError(err).Error("Could not read system info.")
 					return
 				}
-				survey.PubKey = conf.PK
-				survey.SkycoinAddress = cAddr.String()
-				// Print results.
-				s, err := json.MarshalIndent(survey, "", "\t")
-				if err != nil {
-					log.WithError(err).Error("Could not marshal json.")
-					return
-				}
+				generatedSurvey.PubKey = v.conf.PK
+				generatedSurvey.SkycoinAddress = cAddr.String()
 
-				err = os.WriteFile(conf.LocalPath+"/"+NodeInfo, []byte(s), 0644) //nolint
-				if err != nil {
-					log.WithError(err).Error("Failed to write system hardware survey to file.")
-					return
-				}
+				// TODO: add connected dmsg servers and services URL to survey
+
 				log.Info("Generating system survey")
+				v.surveyLock.Lock()
+				v.survey = generatedSurvey
+				v.surveyLock.Unlock()
 			} else {
-				err := os.Remove(PackageConfig().LocalPath + "/" + NodeInfo)
-				if err == nil {
-					log.Debug("Removed hadware survey for visor not seeking rewards")
-				}
+				v.surveyLock.Lock()
+				v.survey = visconf.Survey{}
+				v.surveyLock.Unlock()
+				log.Debug("Removed hadware survey for visor not seeking rewards")
 			}
 			// break loop for generate each 24hours if just reward address chenged
 			if !routine {
 				break
 			}
-			time.Sleep(24 * time.Hour)
+			time.Sleep(time.Hour)
 		}
 	}
 }

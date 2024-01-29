@@ -449,7 +449,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 }
 
 func initSystemSurvey(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
-	go visorconfig.GenerateSurvey(v.conf, log, true)
+	go GenerateSurvey(v, log, true)
 	return nil
 }
 
