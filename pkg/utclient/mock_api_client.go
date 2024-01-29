@@ -49,7 +49,7 @@ func (_m *MockAPIClient) UpdateVisorUptime(_a0 context.Context, version string) 
 }
 
 // FetchUptimes provide a mock function with given field :_a0
-func (_m *MockAPIClient) FetchUptimes(ctx context.Context, pk string) ([]byte,error){
+func (_m *MockAPIClient) FetchUptimes(ctx context.Context, pk string) ([]byte, error) {
 	ret := _m.Called(ctx)
 
 	var r0 []byte
