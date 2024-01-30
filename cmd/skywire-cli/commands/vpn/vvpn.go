@@ -22,7 +22,6 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/app/appserver"
-	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
@@ -39,15 +38,6 @@ func init() {
 		version = ""
 	}
 	startCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
-}
-
-func findServerByPK(servers []servicedisc.Service, addr string) *servicedisc.Service {
-	for _, server := range servers {
-		if server.Addr.String() == addr {
-			return &server
-		}
-	}
-	return nil
 }
 
 var startCmd = &cobra.Command{
