@@ -2,7 +2,7 @@
 package visor
 
 import (
-	"fmt"
+	"encoding/json"
 	"os"
 	"strings"
 	"time"
@@ -38,9 +38,8 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 					return
 				}
 				generatedSurvey.PubKey = v.conf.PK
-				// generatedSurvey.SkycoinAddress = cAddr.String()
+				generatedSurvey.SkycoinAddress = cAddr.String()
 
-				// TODO: add connected dmsg servers and services URL to survey
 				generatedSurvey.ServicesURLs.TransportDiscovery = v.conf.Transport.Discovery
 				generatedSurvey.ServicesURLs.AddressResolver = v.conf.Transport.AddressResolver
 				generatedSurvey.ServicesURLs.RouteFinder = v.conf.Routing.RouteFinder
@@ -53,6 +52,18 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 				v.surveyLock.Lock()
 				v.survey = generatedSurvey
 				v.surveyLock.Unlock()
+
+				// Save survey as file
+				s, err := json.MarshalIndent(generatedSurvey, "", "\t")
+				if err != nil {
+					log.WithError(err).Error("Could not marshal json.")
+					return
+				}
+				err = os.WriteFile(v.conf.LocalPath+"/"+visconf.NodeInfo, []byte(s), 0644) //nolint
+				if err != nil {
+					log.WithError(err).Error("Failed to write system hardware survey to file.")
+					return
+				}
 			} else {
 				v.surveyLock.Lock()
 				v.survey = visconf.Survey{}
@@ -63,8 +74,7 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 			if !routine {
 				break
 			}
-			fmt.Println(v.survey)
-			time.Sleep(time.Hour)
+			time.Sleep(24 * time.Hour)
 		}
 	}
 }
