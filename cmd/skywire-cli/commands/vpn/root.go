@@ -9,21 +9,22 @@ import (
 )
 
 var (
-	stateName    = "vpn-client"
-	serviceType  = servicedisc.ServiceTypeVPN
-	servicePort  = ":3"
-	path         string
-	isPkg        bool
-	isUnFiltered bool
-	ver          string
-	country      string
-	isStats      bool
-	pubkey       cipher.PubKey
-	pk           string
-	count        int
-	sdURL        string
-	directQuery  bool
-	servers      []servicedisc.Service
+	stateName       = "vpn-client"
+	serviceType     = servicedisc.ServiceTypeVPN
+	servicePort     = ":3"
+	path            string
+	isPkg           bool
+	isUnFiltered    bool
+	ver             string
+	country         string
+	isStats         bool
+	pubkey          cipher.PubKey
+	pk              string
+	count           int
+	sdURL           string
+	directQuery     bool
+	servers         []servicedisc.Service
+	startingTimeout int
 )
 
 // RootCmd contains commands that interact with the skywire-visor
