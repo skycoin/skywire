@@ -16,7 +16,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
-	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
@@ -33,9 +32,8 @@ func init() {
 		statusCmd,
 		listCmd,
 	)
-	version := buildinfo.Version()
 	if version == "unknown" {
-		version = ""
+		version = "" //nolint
 	}
 	startCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
 }
