@@ -42,6 +42,7 @@ func init() {
 	startCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
 	startCmd.Flags().StringVarP(&addr, "addr", "a", "", "address of proxy for use")
 	startCmd.Flags().StringVarP(&clientName, "name", "n", "", "name of skysocks client")
+	startCmd.Flags().IntVarP(&startingTimeout, "timeout", "t", 20, "starting timeout value in second")
 	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks client")
 	stopCmd.Flags().StringVar(&clientName, "name", "", "specific skysocks client that want stop")
 	listCmd.Flags().StringVarP(&sdURL, "url", "a", "", "service discovery url default:\n"+skyenv.ServiceDiscAddr)
@@ -124,7 +125,11 @@ var startCmd = &cobra.Command{
 			return
 		}
 
-		ctx, cancel := cmdutil.SignalContext(context.Background(), &logrus.Logger{})
+		tCtc := context.Background() //nolint
+		if startingTimeout != 0 {
+			tCtc, _ = context.WithTimeout(context.Background(), time.Duration(startingTimeout)*time.Second) //nolint
+		}
+		ctx, cancel := cmdutil.SignalContext(tCtc, &logrus.Logger{})
 		go func() {
 			<-ctx.Done()
 			cancel()
