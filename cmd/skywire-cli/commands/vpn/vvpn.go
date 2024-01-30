@@ -40,6 +40,7 @@ func init() {
 		version = ""
 	}
 	startCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
+	startCmd.Flags().IntVarP(&startingTimeout, "timeout", "t", 20, "starting timeout value in second")
 	listCmd.Flags().StringVarP(&sdURL, "url", "a", "", "service discovery url default:\n"+skyenv.ServiceDiscAddr)
 	listCmd.Flags().BoolVarP(&directQuery, "direct", "b", false, "query service discovery directly")
 	listCmd.Flags().StringVarP(&pk, "pk", "k", "", "check "+serviceType+" service discovery for public key")
@@ -83,7 +84,11 @@ var startCmd = &cobra.Command{
 		}
 		internal.Catch(cmd.Flags(), rpcClient.StartVPNClient(pubkey))
 		internal.PrintOutput(cmd.Flags(), nil, "Starting.")
-		ctx, cancel := cmdutil.SignalContext(context.Background(), &logrus.Logger{})
+		tCtc := context.Background() //nolint
+		if startingTimeout != 0 {
+			tCtc, _ = context.WithTimeout(context.Background(), time.Duration(startingTimeout)*time.Second) //nolint
+		}
+		ctx, cancel := cmdutil.SignalContext(tCtc, &logrus.Logger{})
 		go func() {
 			<-ctx.Done()
 			cancel()
