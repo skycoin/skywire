@@ -10,6 +10,8 @@ const (
 	ConfigName = "skywire-config.json"
 	// DMSGHTTPName is the default dmsghttp config name
 	DMSGHTTPName = "dmsghttp-config.json"
+	// ServicesName is the default services config name
+	ServicesName = "services-config.json"
 
 	// Dmsg port constants.
 	// TODO(evanlinjin): Define these properly. These are currently random.
