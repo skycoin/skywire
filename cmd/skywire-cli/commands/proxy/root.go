@@ -30,6 +30,7 @@ var (
 	noFilterOnline bool
 	clientName     string
 	addr           string
+	startingTimeout int
 )
 
 // RootCmd contains commands that interact with the skywire-visor

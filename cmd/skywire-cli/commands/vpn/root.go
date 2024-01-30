@@ -28,6 +28,7 @@ var (
 	isStats        bool
 	pubkey         cipher.PubKey
 	pk             string
+	startingTimeout int
 )
 
 // RootCmd contains commands that interact with the skywire-visor
