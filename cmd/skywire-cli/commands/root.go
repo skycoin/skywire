@@ -22,6 +22,7 @@ import (
 	cliskysocksc "github.com/skycoin/skywire/cmd/skywire-cli/commands/proxy"
 	clireward "github.com/skycoin/skywire/cmd/skywire-cli/commands/reward"
 	clirtfind "github.com/skycoin/skywire/cmd/skywire-cli/commands/rtfind"
+	cliservices "github.com/skycoin/skywire/cmd/skywire-cli/commands/services"
 	cliskyfwd "github.com/skycoin/skywire/cmd/skywire-cli/commands/skyfwd"
 	cliskyrev "github.com/skycoin/skywire/cmd/skywire-cli/commands/skyrev"
 	clisurvey "github.com/skycoin/skywire/cmd/skywire-cli/commands/survey"
@@ -197,6 +198,7 @@ func init() {
 		treeCmd,
 		docCmd,
 		clidmsghttp.RootCmd,
+		cliservices.RootCmd,
 	)
 	var jsonOutput bool
 	RootCmd.PersistentFlags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
