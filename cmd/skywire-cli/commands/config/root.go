@@ -52,6 +52,7 @@ var (
 	isBestProtocol              bool
 	serviceConfURL              string
 	services                    visorconfig.Services
+	servicesConfig              servicesConf
 	isForce                     bool
 	isHide                      bool
 	isAll                       bool
@@ -101,4 +102,9 @@ var RootCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Generate or update a skywire config",
 	Long:  "Generate or update the config file used by skywire-visor.",
+}
+
+type servicesConf struct { //nolint
+	Test visorconfig.Services `json:"test"`
+	Prod visorconfig.Services `json:"prod"`
 }
