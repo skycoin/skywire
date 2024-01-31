@@ -38,6 +38,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.4
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
+	github.com/tidwall/pretty v1.2.1
 	github.com/toqueteos/webbrowser v1.2.0
 	github.com/xtaci/kcp-go v5.4.20+incompatible
 	github.com/zcalusic/sysinfo v1.0.1
