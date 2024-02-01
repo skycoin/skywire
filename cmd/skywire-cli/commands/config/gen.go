@@ -1234,7 +1234,7 @@ const envfileLinux = `#
 #DMSGHTTP=true
 
 #--	Number of dmsg serverts to connect to (0 unlimits)
-#MINDMSGSESS=2
+#MINDMSGSESS=8
 
 #--	Start the hypervisor interface for this visor
 #ISHYPERVISOR=true
@@ -1336,7 +1336,7 @@ const envfileWindows = `#
 #$DMSGHTTP=true
 
 #--	Number of dmsg serverts to connect to (0 unlimits)
-#$MINDMSGSESS=2
+#$MINDMSGSESS=8
 
 #--	Start the hypervisor interface for this visor
 #$ISHYPERVISOR=true
