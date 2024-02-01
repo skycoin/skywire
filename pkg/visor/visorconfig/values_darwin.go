@@ -37,6 +37,8 @@ type Survey struct {
 	Disks          *ghw.BlockInfo `json:"ghw_blockinfo,omitempty"`
 	UUID           uuid.UUID      `json:"uuid,omitempty"`
 	SkywireVersion string         `json:"skywire_version,omitempty"`
+	ServicesURLs   Services       `json:"services,omitempty"`
+	DmsgServers    []string       `json:"dmsg_servers,omitempty"`
 }
 
 // SystemSurvey returns system survey

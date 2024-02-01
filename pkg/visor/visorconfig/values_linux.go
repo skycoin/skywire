@@ -44,6 +44,8 @@ type Survey struct {
 	Memory         *ghw.MemoryInfo  `json:"ghw_memoryinfo,omitempty"`
 	UUID           uuid.UUID        `json:"uuid,omitempty"`
 	SkywireVersion string           `json:"skywire_version,omitempty"`
+	ServicesURLs   Services         `json:"services,omitempty"`
+	DmsgServers    []string         `json:"dmsg_servers,omitempty"`
 }
 
 // SystemSurvey returns system survey
