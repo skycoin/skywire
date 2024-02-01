@@ -2,12 +2,11 @@
 
 # Skywire Reward Eligibility Rules
 
-Notice: the [skywire whitelist](https://whitelist.skycoin.com) is deprecated since April 1st 2023.
-
 We have transitioned to a new system with daily reward distribution
 
 * The rules in this article may change at any time, depending on if there are problems
 * We will attempt to address any issues reported via [@skywire](https://t.me/skywire) Telegram channel
+* Reward corrections are not possible after the rewards for a day have been distributed.
 
 The required minimum Skywire version will be incremented periodically.
 
@@ -35,26 +34,32 @@ Information about reward distribution as well as other metrics for the skywire n
 
 408000 Skycoin are distributed annually to those visors which meet the mimimum uptime and the other requirements listed below.
 
-A total of up to ~1117.808 Skycoin are distributed daily in non leap-years; evenly divided among those eligible participants on the basis of having met uptime for the previous day.
+The reward amount for a day is evenly divided among those eligible participants on the basis of having met uptime and other requirements, for the previous day.
+
+A total of up to ~1117.808 Skycoin are distributed daily in non leap-years.
+
+A total of up to ~1114.754  Skycoin are distributed daily in leap-years.
 
 ## Rules & Requirements
 
 To obtain Skycoin rewards for running skywire, the following requirements must be met.
 The update deadlines specify the version of software required as of (i.e. on or before) the specified date in order to maintain reward eligibility:
 
-* **Minimum skywire version v1.3.13**
-
 * **Minimum skywire version v1.3.14** - Cutoff January 1st 2024
 
-* **Minimum skywire version v1.3.15** - Cutoff January 14th 2024
+* **Minimum skywire version v1.3.15** - Cutoff February 1st 2024
+
+* **Minimum skywire version v1.3.17** - Cutoff March 1st 2024
 
 * The visor must be an **ARM architecture SBC running on approved [hardware](#hardware)**
 
-* Visors must be running on **[the skywire production deployment](https://conf.skywire.skycoin.com)**
+* Visors must be running on **[the skywire production deployment](https://conf.skywire.skycoin.com)** with a config that is updated on every version.
+
+* **Only 1 (one) visor per machine**
 
 * **Up to 8 (eight) visors may each receive 1 reward share per location (ip address)**
 
-* **75% uptime per day** is required to be eligible to receive rewards
+* **75% uptime per day** minimum is required to be eligible to receive rewards
 
 * **A valid skycoin address** must be set for the visor
 
@@ -65,6 +70,8 @@ The update deadlines specify the version of software required as of (i.e. on or 
 * **The visor responds to pings** - needed for latency-based rewards
 
 * **The visor produces transport bandwidth logs** - needed for bandwidth-based rewards
+
+* **The visor produces a survey** when queried over dmsg by any keys in the survey_whitelist array
 
 ### Exceptions for Deployment Changes with dmsghttp-config (Chinese users)
 
@@ -92,19 +99,19 @@ skywire-cli -v
 skywire-visor -v
 ```
 
-**Reward eligibility before 1-1-2024 requires minimum Skywire version v1.3.13**
 
-**Reward eligibility after 1-1-2024 requires Skywire v1.3.14**
 
-Requirement established 12-10-2023
-
-Rewards Cutoff date for updating 1-1-2024
-
-**Reward eligibility after 1-14-2024 requires Skywire v1.3.15**
+**Reward eligibility after 2-1-2024 requires Skywire v1.3.15**
 
 Requirement established 12-18-2023
 
-Rewards Cutoff date for updating 1-14-2024
+Rewards Cutoff date for updating 2-1-2024
+
+**Reward eligibility after 3-1-2024 requires Skywire v1.3.17**
+
+Requirement established 2-1-2023
+
+Rewards Cutoff date for updating 3-1-2024
 
 ### Deployment
 
@@ -139,13 +146,29 @@ or via the hypervisor UI.
 
 the example above shows the genesis address for the skycoin blockchain. **Please do not use the genesis address.**
 
+It is __highly recommended__ to set the reward address in the file `/etc/skywire.conf` by adding this line to the file:
+
+```
+REWARDSKYADDR=('')
+```
+
+Add your skycoin address there and run `skywire-autoconfig` on linux (assumes you have installed the package)
+
+If this file does not exist for you, it can be created with `skywire-cli config gen -q | tee /etc/skywire.conf`
+
+If you do this, please uncomment `PKGENV=true` before saving the file
+
 ### Connection to DMSG network - Survey & transport log collection
 
-For any given visor, the system survey and transport bandwidth logs should be downloaded **hourly** over dmsghttp.
+For any given visor, the system survey and transport bandwidth logs should be downloaded **hourly** over dmsghttp by the reward system.
 
 This can be verified by examinimg the visor's logging:
 
 ![image](https://github.com/skycoin/skywire/assets/36607567/eb66bca1-fc9e-4c80-a38a-e00a73f675d0)
+
+The collected file should be visible in the survey index here:
+
+[fiber.skywire.dev/log-collection/tree](https://fiber.magnetosphere.net/log-collection/tree)
 
 Note: the transport bandwidth logs will only exist if it was generated; i.e. if there were transports to that visor which handled traffic.
 
@@ -155,7 +178,7 @@ If your visor is not generating such logging, please reach out to us on telegram
 
 ### Verifying other requirements
 
-If the visor is not able to meet the other requirements, that is usually not the fault of the user nor is it something the user is expected to troubleshoot at this time. Please ask for assistance on telegram [@skywire](https://t.me/skywire)
+If the visor is not able to meet the other requirements, that is usually not the fault of the user nor is it something the user is expected to troubleshoot on their own at this time. Please ask for assistance on telegram [@skywire](https://t.me/skywire)
 
 ## Reward System overview
 
@@ -170,10 +193,11 @@ The system survey (`local/node-info.json`) is fetched hourly by the reward syste
 The index of the collected files may be viewed at [fiber.skywire.dev/log-collection/tree](https://fiber.skywire.dev/log-collection/tree)
 
 
-
 Once collected from the nodes, the surveys for those visors which met uptime are checked to verify hardware and other requirements, etc.
 
 The system survey is only made available to those keys which are whitelisted for survey collection, but is additionally available to any `hypervisor` or `dmsgpty_whitelist` keys set in the config for a given visor.
+
+Setting a skycoin address is considered to be consent for collecting the survey.
 
 The public keys which require to be whitelisted in order to collect the surveys, for the purpose of reward eligibility verification, should populate in the visor's config automatically when the config is generated with visors of at least version 1.3.8.
 
