@@ -30,6 +30,7 @@
                     <File Id="ICON" Source=".\images\ico.ico"/>
                     <File Id="WINTUN" Source=".\build\wintun.dll"/>
                     <File Id="DMSGHTTPCONFIG" Source=".\build\dmsghttp-config.json"/>
+                    <File Id="SERVICESCONFIG" Source=".\build\services-config.json"/>
                     <File Id="NEWUPDATE" Source=".\build\new.update"/>
                </Component>
                <Directory Id="APPS" Name="apps">

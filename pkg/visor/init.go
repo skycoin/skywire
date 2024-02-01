@@ -403,7 +403,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 		}
 	}
 
-	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, whitelistedPKs, v.conf.PK, printLog)
+	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, whitelistedPKs, &v.survey, printLog)
 
 	lis, err := dmsgC.Listen(visorconfig.DmsgHTTPPort)
 	if err != nil {
@@ -449,7 +449,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 }
 
 func initSystemSurvey(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
-	go visorconfig.GenerateSurvey(v.conf, log, true)
+	go GenerateSurvey(v, log, true)
 	return nil
 }
 

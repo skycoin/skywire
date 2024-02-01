@@ -498,14 +498,17 @@ var genConfigCmd = &cobra.Command{
 					}
 				} else {
 					//fill in services struct with the response
-					err = json.Unmarshal(body, &services)
+					err = json.Unmarshal(body, &servicesConfig)
 					if err != nil {
 						log.WithError(err).Fatal("Failed to unmarshal json response\n")
 					}
 					if !isStdout {
 						log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
 					}
-
+					services = servicesConfig.Prod
+					if isTestEnv {
+						services = servicesConfig.Test
+					}
 					// reset the state of isStdout
 					isStdout = wasStdout
 				}
