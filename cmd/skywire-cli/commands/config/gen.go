@@ -82,7 +82,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "noauth")
 	genConfigCmd.Flags().BoolVarP(&isDmsgHTTP, "dmsghttp", "d", scriptExecBool("${DMSGHTTP:-false}"), "use dmsg connection to skywire services\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "dmsghttp")
-	genConfigCmd.Flags().IntVar(&minDmsgSess, "minsess", scriptExecInt("${MINDMSGSESS:-1}"), "number of dmsg servers to connect to (0 = unlimited)\033[0m")
+	genConfigCmd.Flags().IntVar(&minDmsgSess, "minsess", 2, "number of dmsg servers to connect to (0 = unlimited)\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "minsess")
 	genConfigCmd.Flags().BoolVarP(&isEnableAuth, "auth", "e", false, "enable auth on hypervisor UI\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "auth")
@@ -1234,7 +1234,7 @@ const envfileLinux = `#
 #DMSGHTTP=true
 
 #--	Number of dmsg serverts to connect to (0 unlimits)
-#MINDMSGSESS=8
+#MINDMSGSESS=2
 
 #--	Start the hypervisor interface for this visor
 #ISHYPERVISOR=true
@@ -1336,7 +1336,7 @@ const envfileWindows = `#
 #$DMSGHTTP=true
 
 #--	Number of dmsg serverts to connect to (0 unlimits)
-#$MINDMSGSESS=8
+#$MINDMSGSESS=2
 
 #--	Start the hypervisor interface for this visor
 #$ISHYPERVISOR=true
