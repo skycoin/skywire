@@ -35,6 +35,7 @@ var (
 	pprofAddr            string
 	confPath             string
 	stdin                bool
+	confArg              string
 	hypervisorUI         bool
 	noHypervisorUI       bool
 	remoteHypervisorPKs  string
@@ -70,6 +71,8 @@ func init() {
 	hiddenflags = append(hiddenflags, "dmsg-server")
 	RootCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
 	hiddenflags = append(hiddenflags, "stdin")
+	RootCmd.Flags().StringVarP(&confArg, "arg", "a", "", "read config from arg")
+	hiddenflags = append(hiddenflags, "arg")
 	//only show flags for configs which exist
 
 	if _, err := os.Stat(visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON); err == nil {
@@ -166,6 +169,9 @@ var RootCmd = &cobra.Command{
 		//log for initial checks
 		log := mLog.PackageLogger("pre-run")
 
+		if confArg != "" {
+			confPath = "android"
+			} else {
 		if stdin {
 			confPath = visorconfig.Stdin
 		} else {
@@ -214,6 +220,7 @@ var RootCmd = &cobra.Command{
 				log.WithError(err).Fatal("config file not found")
 			}
 		}
+	}
 		logBuildInfo(mLog)
 		if launchBrowser {
 			hypervisorUI = true
@@ -270,6 +277,10 @@ func initConfig() *visorconfig.V1 { //nolint
 	case visorconfig.Stdin:
 		log.Info("Reading config from STDIN.")
 		r = os.Stdin
+	case "android":
+		confPath = ""
+		log.Info("Reading config from arg.")
+		r = strings.NewReader(confArg)
 	case "":
 		fallthrough
 	default:

@@ -5,11 +5,33 @@ skywire visor
 package main
 
 import (
-	"fmt"
+		"fmt"
+		"image"
+		"image/color"
+		"image/draw"
+		"log"
+		"math"
+		"math/rand"
+		"time"
+		"os"
+		"runtime"
 
+		"github.com/bitfield/script"
+		"github.com/golang/freetype/truetype"
+		"golang.org/x/image/font"
+		"golang.org/x/image/math/fixed"
+		"golang.org/x/mobile/app"
+		"golang.org/x/mobile/event/key"
+		"golang.org/x/mobile/event/lifecycle"
+		"golang.org/x/mobile/event/paint"
+		"golang.org/x/mobile/event/size"
+		"golang.org/x/mobile/exp/gl/glutil"
+		"golang.org/x/mobile/exp/sprite/clock"
+		"golang.org/x/mobile/gl"
+		mfont "golang.org/x/mobile/exp/font"
+		"golang.org/x/mobile/geom"
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
-
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	setupnode "github.com/skycoin/skywire/cmd/setup-node/commands"
 	skywirecli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
@@ -21,6 +43,7 @@ func init() {
 		visor.RootCmd,
 		skywirecli.RootCmd,
 		setupnode.RootCmd,
+		mobileCmd,
 	)
 	var helpflag bool
 	rootCmd.SetUsageTemplate(help)
@@ -45,6 +68,12 @@ var rootCmd = &cobra.Command{
 }
 
 func main() {
+	if runtime.GOOS == "android" && len(os.Args) == 1 {
+		_, _ = script.Exec(os.Args[0]+" android").Stdout()
+os.Exit(0)
+	}
+
+
 	cc.Init(&cc.Config{
 		RootCmd:         rootCmd,
 		Headings:        cc.HiBlue + cc.Bold,
@@ -71,3 +100,229 @@ const help = "{{if gt (len .Aliases) 0}}" +
 	"{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}\r\n\r\n" +
 	"Global Flags:\r\n" +
 	"{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}\r\n\r\n"
+
+
+	var mobileCmd = &cobra.Command{
+		Use:   "mobile",
+		Short: "mobile ui",
+		Hidden: true,
+		Run: func(cmd *cobra.Command, args []string) {
+			conf, err := script.Exec(os.Args[0]+" cli config gen -n").String()
+			if err != nil {
+				os.Exit(1)
+			}
+			_, _ = script.Echo(os.Args[0]+" visor -a "+conf).Stdout()
+			go func() {
+
+				_, err := script.Exec(os.Args[0]+" visor -a "+conf).Stdout()
+				if err != nil {
+					os.Exit(1)
+				}
+			}()
+				rand.Seed(time.Now().UnixNano())
+				app.Main(func(a app.App) {
+					var glctx gl.Context
+					var sz size.Event
+					for e := range a.Events() {
+						switch e := a.Filter(e).(type) {
+						case lifecycle.Event:
+							switch e.Crosses(lifecycle.StageVisible) {
+							case lifecycle.CrossOn:
+								glctx, _ = e.DrawContext.(gl.Context)
+								onStart(glctx)
+								a.Send(paint.Event{})
+							case lifecycle.CrossOff:
+								onStop()
+								glctx = nil
+							}
+						case size.Event:
+							sz = e
+						case paint.Event:
+							if glctx == nil || e.External {
+								continue
+							}
+							onPaint(glctx, sz)
+							a.Publish()
+							a.Send(paint.Event{})
+						case key.Event:
+							if e.Code != key.CodeSpacebar {
+								break
+							}
+						}
+					}
+				})
+		},
+	}
+
+	const (
+		dpi = 72
+	)
+
+	type TextAlign int
+
+	const (
+		Center TextAlign = iota
+		Left
+		Right
+	)
+
+	type TextSprite struct {
+		placeholder     string
+		text            string
+		font            *truetype.Font
+		widthPx         int
+		heightPx        int
+		textColor       *image.Uniform
+		backgroundColor *image.Uniform
+		fontSize        float64
+		xPt             geom.Pt
+		yPt             geom.Pt
+		align           TextAlign
+	}
+
+	func (ts TextSprite) Render(sz size.Event) {
+		sprite := images.NewImage(ts.widthPx, ts.heightPx)
+
+		draw.Draw(sprite.RGBA, sprite.RGBA.Bounds(), ts.backgroundColor, image.ZP, draw.Src)
+
+		d := &font.Drawer{
+			Dst: sprite.RGBA,
+			Src: ts.textColor,
+			Face: truetype.NewFace(ts.font, &truetype.Options{
+				Size:    ts.fontSize,
+				DPI:     dpi,
+				Hinting: font.HintingNone,
+			}),
+		}
+
+		// Position
+		dy := int(math.Ceil(ts.fontSize * dpi / dpi))
+		var textWidth fixed.Int26_6
+		if ts.placeholder == "" {
+			textWidth = d.MeasureString(ts.text)
+		} else {
+			textWidth = d.MeasureString(ts.placeholder)
+		}
+
+		switch ts.align {
+		case Center:
+			d.Dot = fixed.Point26_6{
+				X: fixed.I(sz.Size().X/2) - (textWidth / 2),
+				Y: fixed.I(ts.heightPx/2 + dy/2),
+			}
+		case Left:
+			d.Dot = fixed.Point26_6{
+				X: fixed.I(0),
+				Y: fixed.I(ts.heightPx/2 + dy/2),
+			}
+		case Right:
+			d.Dot = fixed.Point26_6{
+				X: fixed.I(sz.Size().X) - textWidth,
+				Y: fixed.I(ts.heightPx/2 + dy/2),
+			}
+		}
+
+		d.DrawString(ts.text)
+
+		sprite.Upload()
+		sprite.Draw(
+			sz,
+			geom.Point{X: ts.xPt, Y: ts.yPt},
+			geom.Point{X: ts.xPt + sz.WidthPt, Y: ts.yPt},
+			geom.Point{X: ts.xPt, Y: ts.yPt + sz.HeightPt},
+			sz.Bounds())
+		sprite.Release()
+	}
+
+	var (
+		startTime = time.Now()
+		images    *glutil.Images
+		game      *Game
+		lines     []string
+	)
+
+
+	func onStart(glctx gl.Context) {
+		images = glutil.NewImages(glctx)
+		game = NewGame()
+		lines = append(lines, "Skywire...")
+	//	go generateNewLines()
+	}
+
+	func onStop() {
+		images.Release()
+		game = nil
+	}
+
+	func onPaint(glctx gl.Context, sz size.Event) {
+		glctx.ClearColor(1, 1, 1, 1)
+		glctx.Clear(gl.COLOR_BUFFER_BIT)
+		now := clock.Time(time.Since(startTime) * 60 / time.Second)
+		game.Update(now)
+		game.Render(sz, glctx, images)
+	}
+
+	func generateNewLines() {
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			lines = append([]string{"Skywire"}, lines...)
+		}
+	}
+
+	type Game struct {
+		lastCalc   clock.Time
+		touchCount uint64
+		font       *truetype.Font
+	}
+
+	func NewGame() *Game {
+		var g Game
+		g.reset()
+		return &g
+	}
+
+	func (g *Game) reset() {
+		var err error
+		g.font, err = LoadCustomFont()
+		if err != nil {
+			log.Fatalf("error parsing font: %v", err)
+		}
+	}
+
+	func (g *Game) Update(now clock.Time) {
+		for ; g.lastCalc < now; g.lastCalc++ {
+			g.calcFrame()
+		}
+	}
+
+	func (g *Game) calcFrame() {
+		// Calculate game logic here if needed
+	}
+
+	func (g *Game) Render(sz size.Event, glctx gl.Context, images *glutil.Images) {
+		for i, line := range lines {
+			text := &TextSprite{
+				text:            line,
+				font:            g.font,
+				widthPx:         sz.WidthPx,
+				heightPx:        sz.HeightPx,
+				textColor:       image.White,
+				backgroundColor: image.NewUniform(color.RGBA{0x35, 0x67, 0x99, 0xFF}),
+				fontSize:        12,
+				xPt:             0,
+				yPt:             PxToPt(sz, i*20),
+			}
+			text.Render(sz)
+		}
+	}
+
+	func PxToPt(sz size.Event, sizePx int) geom.Pt {
+		return geom.Pt(float32(sizePx) / sz.PixelsPerPt)
+	}
+
+	func LoadCustomFont() (font *truetype.Font, err error) {
+		fmt.Println("using Monospace font")
+		return truetype.Parse(mfont.Monospace())
+	}
