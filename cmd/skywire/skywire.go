@@ -101,21 +101,13 @@ const help = "{{if gt (len .Aliases) 0}}" +
 	"Global Flags:\r\n" +
 	"{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}\r\n\r\n"
 
+var mobilepk string
 var mobileCmd = &cobra.Command{
 	Use:    "mobile",
 	Short:  "mobile ui",
 	Hidden: true,
 	Run: func(cmd *cobra.Command, args []string) {
-		conf, err := script.Exec(os.Args[0] + " cli config gen -nN").String()
-		if err != nil {
-			os.Exit(1)
-		}
-		go func() {
-			_, err := script.Exec(os.Args[0] + " visor -a '" + conf + "'").Stdout()
-			if err != nil {
-				os.Exit(1)
-			}
-		}()
+
 		rand.Seed(time.Now().UnixNano())
 		app.Main(func(a app.App) {
 			var glctx gl.Context
@@ -126,6 +118,23 @@ var mobileCmd = &cobra.Command{
 					switch e.Crosses(lifecycle.StageVisible) {
 					case lifecycle.CrossOn:
 						glctx, _ = e.DrawContext.(gl.Context)
+						conf, err := script.Exec(os.Args[0] + " cli config gen -ynN").String()
+						if err != nil {
+							mobilepk = err.Error()
+//							onStop()
+//							glctx = nil
+//							return
+						} else {
+							mobilepk, _ = script.Echo(conf).JQ(".pk").String()
+						go func() {
+							_, err := script.Exec(os.Args[0] + " visor -a '" + conf + "'").Stdout()
+							if err != nil {
+								onStop()
+								glctx = nil
+								return
+							}
+							}()
+						}
 						onStart(glctx)
 						a.Send(paint.Event{})
 					case lifecycle.CrossOff:
@@ -241,7 +250,7 @@ var (
 func onStart(glctx gl.Context) {
 	images = glutil.NewImages(glctx)
 	game = NewGame()
-	lines = append(lines, "Skywire...")
+	lines = append(lines, mobilepk)
 	//	go generateNewLines()
 }
 
