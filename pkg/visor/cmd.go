@@ -171,56 +171,56 @@ var RootCmd = &cobra.Command{
 
 		if confArg != "" {
 			confPath = "android"
-			} else {
-		if stdin {
-			confPath = visorconfig.Stdin
 		} else {
+			if stdin {
+				confPath = visorconfig.Stdin
+			} else {
 
-			//enforce conditions for pkg and user flags
-			if pkg {
-				if !root {
-					log.Fatal("root permissions required to use the specified config")
+				//enforce conditions for pkg and user flags
+				if pkg {
+					if !root {
+						log.Fatal("root permissions required to use the specified config")
+					}
+					if !pkgconfigexists {
+						log.Fatal("config not found")
+					}
 				}
-				if !pkgconfigexists {
-					log.Fatal("config not found")
+				if usr {
+					if root {
+						log.Fatal("cannot use specified config as root")
+					}
+					if !userconfigexists {
+						log.Fatal("config not found")
+					}
 				}
-			}
-			if usr {
-				if root {
-					log.Fatal("cannot use specified config as root")
-				}
-				if !userconfigexists {
-					log.Fatal("config not found")
-				}
-			}
 
-			//error on multiple configs from flags
-			if (pkg && usr) || ((pkg || usr) && (confPath != "")) {
-				log.Fatal("Error: multiple configs specified")
-			}
-			//use package config /opt/skywire/skywire.json
-			if pkg {
-				confPath = visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON
-			}
-			//userspace config in $HOME/.skywire/skywire-config.json
-			if usr {
-				confPath = visorconfig.HomePath() + "/" + visorconfig.ConfigName
-			}
-			if confPath == "" {
-				//default config in current dir ./skywire-config.json
-				confPath = visorconfig.ConfigName
-			}
-			//enforce .json extension
-			if !strings.HasSuffix(confPath, ".json") {
-				confPath = confPath + ".json"
-			}
-			//check for the config file
-			if _, err := os.Stat(confPath); err != nil {
-				//fail here on no config
-				log.WithError(err).Fatal("config file not found")
+				//error on multiple configs from flags
+				if (pkg && usr) || ((pkg || usr) && (confPath != "")) {
+					log.Fatal("Error: multiple configs specified")
+				}
+				//use package config /opt/skywire/skywire.json
+				if pkg {
+					confPath = visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON
+				}
+				//userspace config in $HOME/.skywire/skywire-config.json
+				if usr {
+					confPath = visorconfig.HomePath() + "/" + visorconfig.ConfigName
+				}
+				if confPath == "" {
+					//default config in current dir ./skywire-config.json
+					confPath = visorconfig.ConfigName
+				}
+				//enforce .json extension
+				if !strings.HasSuffix(confPath, ".json") {
+					confPath = confPath + ".json"
+				}
+				//check for the config file
+				if _, err := os.Stat(confPath); err != nil {
+					//fail here on no config
+					log.WithError(err).Fatal("config file not found")
+				}
 			}
 		}
-	}
 		logBuildInfo(mLog)
 		if launchBrowser {
 			hypervisorUI = true
@@ -278,7 +278,7 @@ func initConfig() *visorconfig.V1 { //nolint
 		log.Info("Reading config from STDIN.")
 		r = os.Stdin
 	case "android":
-		confPath = ""
+		confPath = visorconfig.Stdin
 		log.Info("Reading config from arg.")
 		r = strings.NewReader(confArg)
 	case "":

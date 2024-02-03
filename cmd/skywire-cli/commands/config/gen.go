@@ -129,6 +129,8 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "example-apps")
 	genConfigCmd.Flags().BoolVarP(&isStdout, "stdout", "n", false, "write config to stdout\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "stdout")
+	genConfigCmd.Flags().BoolVarP(&isSquashed, "squash", "N", false, "remove newlines from json output\033[0m")
+	gHiddenFlags = append(gHiddenFlags, "squash")
 	genConfigCmd.Flags().BoolVarP(&isEnvs, "envs", "q", false, "show the environmental variable settings")
 	msg = "output config"
 	if scriptExecString("${OUTPUT}") == "" {
@@ -1158,13 +1160,17 @@ var genConfigCmd = &cobra.Command{
 		}
 		//print config to stdout, omit logging messages, exit
 		if isStdout {
+			if isSquashed {
+				fmt.Printf(strings.ReplaceAll(strings.ReplaceAll(string(j), "	", ""), "\n", ""))
+				return
+			}
 			fmt.Printf("%s", j)
-			os.Exit(0)
+			return
 		}
 		//hide the printing of the config to the terminal
 		if isHide {
 			log.Infof("Updated file '%s'\n", output)
-			os.Exit(0)
+			return
 		}
 		//default behavior
 		log.Infof("Updated file '%s' to:\n%s\n", output, j)
