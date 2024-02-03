@@ -163,7 +163,6 @@ linters:
     - megacheck
     - misspell
     - nakedret
-    - depguard
   enable-all: false
   disable-all: true
   presets:

@@ -11,13 +11,14 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/pkg/dmsgget"
+	"github.com/skycoin/dmsg/pkg/dmsgcurl"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
 
@@ -40,6 +41,7 @@ var (
 	logOnly        bool
 	surveyOnly     bool
 	deleteOnErrors bool
+	incVer         string
 	fetchFile      string
 	fetchFrom      string
 	writeDir       string
@@ -54,15 +56,16 @@ func init() {
 	logCmd.Flags().StringVarP(&fetchFrom, "pks", "k", "", "fetch only from specific public keys ; semicolon separated")
 	logCmd.Flags().StringVarP(&writeDir, "dir", "d", "log_collecting", "save files to specified dir")
 	logCmd.Flags().BoolVarP(&deleteOnErrors, "clean", "c", false, "delete files and folders on errors")
-	logCmd.Flags().StringVar(&minv, "minv", "v1.3.11", "minimum visor version to fetch from")
+	logCmd.Flags().StringVar(&minv, "minv", "v1.3.15", "minimum visor version to fetch from")
+	logCmd.Flags().StringVar(&incVer, "include-versions", "", "list of version that not satisfy our minimum version condition, but we want include them")
 	logCmd.Flags().IntVarP(&duration, "duration", "n", 0, "number of days before today to fetch transport logs for")
 	logCmd.Flags().BoolVar(&allVisors, "all", false, "consider all visors ; no version filtering")
 	logCmd.Flags().IntVar(&batchSize, "batchSize", 50, "number of visor in each batch")
-	logCmd.Flags().Int64Var(&maxFileSize, "maxfilesize", 30, "maximum file size allowed to download during collecting logs, in KB")
+	logCmd.Flags().Int64Var(&maxFileSize, "maxfilesize", 1024, "maximum file size allowed to download during collecting logs, in KB")
 	logCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", skyenv.DmsgDiscAddr, "dmsg discovery url\n")
 	logCmd.Flags().StringVarP(&utAddr, "ut", "u", "", "custom uptime tracker url")
-	if os.Getenv("DMSGGET_SK") != "" {
-		sk.Set(os.Getenv("DMSGGET_SK")) //nolint
+	if os.Getenv("DMSGCURL_SK") != "" {
+		sk.Set(os.Getenv("DMSGCURL_SK")) //nolint
 	}
 	logCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
 }
@@ -101,8 +104,8 @@ var logCmd = &cobra.Command{
 			return
 		}
 
-		// Create dmsgget instance
-		dg := dmsgget.New(flag.CommandLine)
+		// Create dmsgcurl instance
+		dg := dmsgcurl.New(flag.CommandLine)
 		flag.Parse()
 
 		// Set the uptime tracker to fetch data from
@@ -149,6 +152,7 @@ var logCmd = &cobra.Command{
 		}
 
 		minimumVersion, _ := version.NewVersion(minv) //nolint
+		incVerList := strings.Split(incVer, ",")
 
 		start := time.Now()
 		var bulkFolders []string
@@ -159,11 +163,16 @@ var logCmd = &cobra.Command{
 			if v.Online {
 				if fetchFile == "" {
 					visorVersion, err := version.NewVersion(v.Version) //nolint
-					if err != nil {
+					if v.Version == "" {
+						log.Warnf("The version for visor %s is blank", v.PubKey)
+						continue
+					}
+					includeV := contains(incVerList, v.Version)
+					if err != nil && !includeV {
 						log.Warnf("The version %s for visor %s is not valid", v.Version, v.PubKey)
 						continue
 					}
-					if !allVisors && visorVersion.LessThan(minimumVersion) {
+					if !allVisors && visorVersion.LessThan(minimumVersion) && !includeV {
 						log.Warnf("The version %s for visor %s does not satisfy our minimum version condition", v.Version, v.PubKey)
 						continue
 					}
@@ -331,8 +340,10 @@ func (pw *ProgressWriter) Write(p []byte) (int, error) {
 
 func getUptimes(endpoint string, log *logging.Logger) ([]VisorUptimeResponse, error) {
 	var results []VisorUptimeResponse
-
-	response, err := http.Get(endpoint) //nolint
+	client := http.Client{
+		Timeout: 60 * time.Second,
+	}
+	response, err := client.Get(endpoint) //nolint
 	if err != nil {
 		log.Error("Error while fetching data from uptime service. Error: ", err)
 		return results, errors.New("Cannot get Uptime data")
@@ -383,6 +394,15 @@ func getAllDMSGServers() []dmsgServer {
 
 type dmsgServer struct {
 	PK cipher.PubKey `json:"static"`
+}
+
+func contains(s []string, str string) bool {
+	for _, v := range s {
+		if v == str {
+			return true
+		}
+	}
+	return false
 }
 
 type httpError struct {

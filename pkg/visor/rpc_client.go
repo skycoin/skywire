@@ -161,6 +161,14 @@ func (rc *rpcClient) StartApp(appName string) error {
 	return rc.Call("StartApp", &appName, &struct{}{})
 }
 
+// AddApp calls AddApp.
+func (rc *rpcClient) AddApp(appName, binaryName string) error {
+	return rc.Call("AddApp", &SetAppAddIn{
+		AppName:    appName,
+		BinaryName: binaryName,
+	}, &struct{}{})
+}
+
 // RegisterApp calls RegisterApp.
 func (rc *rpcClient) RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error) {
 	var procKey appcommon.ProcKey
@@ -188,14 +196,21 @@ func (rc *rpcClient) StopVPNClient(appName string) error {
 	return rc.Call("StopVPNClient", &appName, &struct{}{})
 }
 
+// FetchUptimeTrackerData calls FetchUptimeTrackerData.
+func (rc *rpcClient) FetchUptimeTrackerData(pk string) ([]byte, error) {
+	var data []byte
+	err := rc.Call("FetchUptimeTrackerData", pk, &data)
+	return data, err
+}
+
 // StartSkysocksClient calls StartSkysocksClient.
 func (rc *rpcClient) StartSkysocksClient(pk string) error {
 	return rc.Call("StartSkysocksClient", pk, &struct{}{})
 }
 
-// StopSkysocksClient calls StopSkysocksClient.
-func (rc *rpcClient) StopSkysocksClient() error {
-	return rc.Call("StopSkysocksClient", &struct{}{}, &struct{}{})
+// StopSkysocksCliens calls StopSkysocksCliens.
+func (rc *rpcClient) StopSkysocksClients() error {
+	return rc.Call("StopSkysocksClients", &struct{}{}, &struct{}{})
 }
 
 // SetAppDetailedStatus sets app's detailed state.
@@ -264,6 +279,14 @@ func (rc *rpcClient) SetAppSecure(appName string, isSecure bool) error {
 	return rc.Call("SetAppSecure", &SetAppBoolIn{
 		AppName: appName,
 		Val:     isSecure,
+	}, &struct{}{})
+}
+
+// SetAppAddress implements API.
+func (rc *rpcClient) SetAppAddress(appName string, address string) error {
+	return rc.Call("SetAppAddress", &SetAppStringIn{
+		AppName: appName,
+		Val:     address,
 	}, &struct{}{})
 }
 
@@ -417,11 +440,6 @@ func (rc *rpcClient) RouteGroups() ([]RouteGroupInfo, error) {
 	var routegroups []RouteGroupInfo
 	err := rc.Call("RouteGroups", &struct{}{}, &routegroups)
 	return routegroups, err
-}
-
-// Restart calls Restart.
-func (rc *rpcClient) Restart() error {
-	return rc.Call("Restart", &struct{}{}, &struct{}{})
 }
 
 // Reload calls Reload.
@@ -824,6 +842,11 @@ func (*mockRPCClient) StartApp(string) error {
 	return nil
 }
 
+// AddApp implement API.
+func (*mockRPCClient) AddApp(string, string) error {
+	return nil
+}
+
 // RegisterApp implements API.
 func (*mockRPCClient) RegisterApp(appcommon.ProcConfig) (appcommon.ProcKey, error) {
 	return appcommon.ProcKey{}, nil
@@ -849,13 +872,18 @@ func (*mockRPCClient) StopVPNClient(string) error {
 	return nil
 }
 
+// FetchUptimeTrackerData implements API.
+func (*mockRPCClient) FetchUptimeTrackerData(string) ([]byte, error) {
+	return []byte{}, nil
+}
+
 // StartSkysocksClient implements API.
 func (*mockRPCClient) StartSkysocksClient(string) error {
 	return nil
 }
 
-// StopSkysocksClient implements API.
-func (*mockRPCClient) StopSkysocksClient() error {
+// StopSkysocksClients implements API.
+func (*mockRPCClient) StopSkysocksClients() error {
 	return nil
 }
 
@@ -977,6 +1005,21 @@ func (mc *mockRPCClient) SetAppSecure(appName string, isSecure bool) error { //n
 		}
 
 		return fmt.Errorf("app of name '%s' does not exist", socksName)
+	})
+}
+
+// SetAppAddress implements API.
+func (mc *mockRPCClient) SetAppAddress(appName string, address string) error { //nolint:all
+	return mc.do(true, func() error {
+		const chatName = "skychat"
+
+		for i := range mc.o.Apps {
+			if mc.o.Apps[i].Name == chatName {
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", chatName)
 	})
 }
 
@@ -1171,11 +1214,6 @@ func (mc *mockRPCClient) RouteGroups() ([]RouteGroupInfo, error) {
 	}
 
 	return routeGroups, nil
-}
-
-// Restart implements API.
-func (mc *mockRPCClient) Restart() error {
-	return nil
 }
 
 // Reload implements API.

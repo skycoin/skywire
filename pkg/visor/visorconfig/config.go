@@ -16,7 +16,6 @@ import (
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/dmsgc"
-	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -99,7 +98,6 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	conf.DmsgHTTPServerPath = LocalPath + "/" + Custom
 	conf.StunServers = services.StunServers //utilenv.GetStunServers()
 	conf.ShutdownTimeout = DefaultTimeout
-	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
 
 	conf.Dmsgpty = &Dmsgpty{
 		DmsgPort: DmsgPtyPort,
@@ -259,6 +257,7 @@ func makeDefaultLauncherAppsConfig(dnsServer string) []appserver.AppConfig {
 			Binary:    SkysocksClientName,
 			AutoStart: false,
 			Port:      routing.Port(skyenv.SkysocksClientPort),
+			Args:      []string{"-addr", SkysocksClientAddr},
 		},
 		{
 			Name:      VPNServerName,

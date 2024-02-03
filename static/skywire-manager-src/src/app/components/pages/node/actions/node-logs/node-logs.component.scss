@@ -1,19 +1,9 @@
 @import "variables";
 
-.filter-area {
-  margin-left: -$mat-dialog-padding;
-  margin-right: -$mat-dialog-padding;
-  font-size: $font-size-smaller;
-  color: $light-gray;
-  background-color: #d9deeb;
-  cursor: pointer;
+.top-dialog-button {
+  color: $light-gray !important;
 
-  &:hover {
-    background-color: darken(#d9deeb, 3%);
-  }
-
-  .filter-content {
-    padding: 10px $mat-dialog-padding;
+  .top-dialog-button-content {
     text-align: center;
 
     .actual-value {
@@ -23,12 +13,6 @@
     .small {
       font-size: $font-size-mini-plus;
     }
-  }
-
-  .filter-margin {
-    height: 1px;
-    background-color: $modal-separator;
-    margin: 0 12px;
   }
 }
 

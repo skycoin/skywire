@@ -15,6 +15,7 @@ import { environment } from 'src/environments/environment';
 import { SnackbarService } from './snackbar.service';
 import { processServiceError } from '../utils/errors';
 import { OperationError } from '../utils/operation-error';
+import { AppComponent } from '../app.component';
 
 /**
  * States in which the VPN client app of the local visor can be.
@@ -576,6 +577,7 @@ export class VpnClientService {
       mergeMap(() => this.getVpnClientState()),
       retryWhen(err => err.pipe(mergeMap((error: OperationError) => {
         this.errorSubject.next(true);
+        AppComponent.currentInstance.showDataProblemMsg();
 
         error = processServiceError(error);
         // If the problem was because the user is not authorized, don't retry.
@@ -599,6 +601,7 @@ export class VpnClientService {
     ).subscribe(appData => {
       if (appData) {
         this.errorSubject.next(false);
+        AppComponent.currentInstance.hideDataProblemMsg();
 
         // Remove the busy state of the initial check.
         if (this.lastServiceState === VpnServiceStates.PerformingInitialCheck) {
