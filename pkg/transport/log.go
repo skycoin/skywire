@@ -43,7 +43,7 @@ func MakeLogEntry(ls LogStore, tpID uuid.UUID, log *logging.Logger) *LogEntry {
 	oldLogEntry, err := ls.Entry(tpID)
 	if err != nil {
 		log.Warn(err)
-		return &LogEntry{}
+		log.Warn(fmt.Errorf("New log entry will create for transport %s.", tpID.String()))
 	}
 	newEntry := NewLogEntry()
 	if oldLogEntry != nil {
