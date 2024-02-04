@@ -15,7 +15,10 @@ import (
 	"os"
 	"runtime"
 	"time"
+	"io"
 
+	"golang.org/x/mobile/asset"
+//	mfont "golang.org/x/mobile/exp/font"
 	"github.com/bitfield/script"
 	"github.com/golang/freetype/truetype"
 	cc "github.com/ivanpirog/coloredcobra"
@@ -40,6 +43,9 @@ import (
 )
 
 func init() {
+	if runtime.GOOS == "android" {
+		rootCmd.Run = runMobile
+	}
 	rootCmd.AddCommand(
 		visor.RootCmd,
 		skywirecli.RootCmd,
@@ -69,10 +75,7 @@ var rootCmd = &cobra.Command{
 }
 
 func main() {
-	if runtime.GOOS == "android" && len(os.Args) == 1 {
-		_, _ = script.Exec(os.Args[0] + " android").Stdout()
-		os.Exit(0)
-	}
+
 
 	cc.Init(&cc.Config{
 		RootCmd:         rootCmd,
@@ -101,13 +104,7 @@ const help = "{{if gt (len .Aliases) 0}}" +
 	"Global Flags:\r\n" +
 	"{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}\r\n\r\n"
 
-var mobilepk string
-var mobileCmd = &cobra.Command{
-	Use:    "mobile",
-	Short:  "mobile ui",
-	Hidden: true,
-	Run: func(cmd *cobra.Command, args []string) {
-
+func runMobile(cmd *cobra.Command, args []string) {
 		rand.Seed(time.Now().UnixNano())
 		app.Main(func(a app.App) {
 			var glctx gl.Context
@@ -118,22 +115,22 @@ var mobileCmd = &cobra.Command{
 					switch e.Crosses(lifecycle.StageVisible) {
 					case lifecycle.CrossOn:
 						glctx, _ = e.DrawContext.(gl.Context)
-						conf, err := script.Exec(os.Args[0] + " cli config gen -ynN").String()
+						conf, err := script.Exec(os.Args[0] + " cli config gen -ynN --nofetch").String()
 						if err != nil {
 							mobilepk = err.Error()
-//							onStop()
-//							glctx = nil
-//							return
+	//							onStop()
+	//							glctx = nil
+	//							return
 						} else {
 							mobilepk, _ = script.Echo(conf).JQ(".pk").String()
-						go func() {
-							_, err := script.Exec(os.Args[0] + " visor -a '" + conf + "'").Stdout()
-							if err != nil {
-								onStop()
-								glctx = nil
-								return
-							}
-							}()
+//						go func() {
+//							_, err := script.Exec(os.Args[0] + " visor -a '" + conf + "'").Stdout()
+//							if err != nil {
+//								onStop()
+//								glctx = nil
+//								return
+//							}
+//							}()
 						}
 						onStart(glctx)
 						a.Send(paint.Event{})
@@ -157,7 +154,14 @@ var mobileCmd = &cobra.Command{
 				}
 			}
 		})
-	},
+	}
+
+var mobilepk string
+var mobileCmd = &cobra.Command{
+	Use:    "mobile",
+	Short:  "mobile ui",
+	Hidden: true,
+	Run: runMobile,
 }
 
 const (
@@ -328,6 +332,27 @@ func PxToPt(sz size.Event, sizePx int) geom.Pt {
 }
 
 func LoadCustomFont() (font *truetype.Font, err error) {
+	file, err := asset.Open("mononoki-Regular.ttf")
+	if err != nil {
+		fmt.Printf("error opening font asset: %v\n", err)
+		return loadFallbackFont()
+	}
+	defer file.Close()
+	raw, err := io.ReadAll(file)
+	if err != nil {
+		fmt.Printf("error reading font: %v\n", err)
+		return loadFallbackFont()
+	}
+	font, err = truetype.Parse(raw)
+	if err != nil {
+		fmt.Printf("error parsing font: %v\n", err)
+		return loadFallbackFont()
+	}
+	return font, nil
+}
+
+func loadFallbackFont() (font *truetype.Font, err error) {
+	// Default font doesn't work on Darwin
 	fmt.Println("using Monospace font")
 	return truetype.Parse(mfont.Monospace())
 }
