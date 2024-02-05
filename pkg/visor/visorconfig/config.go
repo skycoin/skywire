@@ -3,6 +3,7 @@ package visorconfig
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -264,6 +265,13 @@ func makeDefaultLauncherAppsConfig(dnsServer string) []appserver.AppConfig {
 			Binary:    VPNServerName,
 			AutoStart: false,
 			Port:      routing.Port(skyenv.VPNServerPort),
+		},
+		{
+			Name:      SkyHTTPName,
+			Binary:    SkyHTTPName,
+			AutoStart: false,
+			Port:      routing.Port(skyenv.SkyHTTPPort),
+			Args:      []string{"-addr", SkyHTTPAddr, "-socks", fmt.Sprintf("127.0.0.1%s", SkysocksClientAddr)},
 		},
 	}
 	return defaultConfig
