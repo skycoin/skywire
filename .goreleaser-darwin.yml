@@ -79,6 +79,16 @@ builds:
     main: ./cmd/apps/vpn-client/
     ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
+  - id: skyhttp
+    binary: apps/skyhttp
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    main: ./cmd/apps/skyhttp/
+    ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
+
 archives:
   - id: archive
     format: tar.gz
@@ -94,6 +104,7 @@ archives:
       - skysocks-client
       - skychat
       - vpn-client
+      - skyhttp
     allow_different_binary_count: true
 
 checksum:

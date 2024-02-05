@@ -282,6 +282,44 @@ builds:
       - CC=arm-linux-gnueabihf-musl-gcc
     main: ./cmd/apps/vpn-client/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
+  
+  - id: skyhttp-amd64
+    binary: apps/skyhttp
+    goos:
+      - linux
+    goarch:
+      - amd64
+    env:
+      - CGO_ENABLED=1
+      - CC=musl-gcc
+    main: ./cmd/apps/skyhttp/
+    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
+
+  - id: skyhttp-arm64
+    binary: apps/skyhttp
+    goos:
+      - linux
+    goarch:
+      - arm64
+    env:
+      - CGO_ENABLED=1
+      - CC=aarch64-linux-musl-gcc
+    main: ./cmd/apps/skyhttp/
+    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
+
+  - id: skyhttp-arm
+    binary: apps/skyhttp
+    goos:
+      - linux
+    goarch:
+      - arm
+    goarm:
+      - 6
+    env:
+      - CGO_ENABLED=1
+      - CC=arm-linux-gnueabihf-musl-gcc
+    main: ./cmd/apps/skyhttp/
+    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
 archives:
   - id: amd64
@@ -299,6 +337,7 @@ archives:
       - skychat-amd64
       - vpn-server-amd64
       - vpn-client-amd64
+      - skyhttp-amd64
 
   - id: arm64
     format: tar.gz
@@ -315,6 +354,7 @@ archives:
       - skychat-arm64
       - vpn-server-arm64
       - vpn-client-arm64
+      - skyhttp-arm64
 
   - id: arm
     format: tar.gz
@@ -331,6 +371,7 @@ archives:
       - skychat-arm
       - vpn-server-arm
       - vpn-client-arm
+      - skyhttp-arm
 
 checksum:
   name_template: 'checksums.txt'

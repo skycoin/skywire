@@ -465,6 +465,70 @@ builds:
     main: ./cmd/apps/vpn-client/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
+  - id: skyhttp-amd64
+    binary: apps/skyhttp
+    goos:
+      - linux
+    goarch:
+      - amd64
+    env:
+      - CGO_ENABLED=1
+      - CC=/home/runner/work/skywire/skywire/musl-data/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
+    main: ./cmd/apps/skyhttp/
+    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
+
+  - id: skyhttp-arm64
+    binary: apps/skyhttp
+    goos:
+      - linux
+    goarch:
+      - arm64
+    env:
+      - CGO_ENABLED=1
+      - CC=/home/runner/work/skywire/skywire/musl-data/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
+    main: ./cmd/apps/skyhttp/
+    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
+
+  - id: skyhttp-arm
+    binary: apps/skyhttp
+    goos:
+      - linux
+    goarch:
+      - arm
+    goarm:
+      - 6
+    env:
+      - CGO_ENABLED=1
+      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
+    main: ./cmd/apps/skyhttp/
+    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
+
+  - id: skyhttp-armhf
+    binary: apps/skyhttp
+    goos:
+      - linux
+    goarch:
+      - arm
+    goarm:
+      - 7
+    env:
+      - CGO_ENABLED=1
+      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
+    main: ./cmd/apps/skyhttp/
+    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
+
+  - id: skyhttp-riscv64
+    binary: apps/skyhttp
+    goos:
+      - linux
+    goarch:
+      - riscv64
+    env:
+      - CGO_ENABLED=1
+      - CC=/home/runner/work/skywire/skywire/musl-data/riscv64-linux-musl-cross/bin/riscv64-linux-musl-gcc
+    main: ./cmd/apps/skyhttp/
+    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
+
 archives:
   - id: amd64
     format: tar.gz
@@ -481,6 +545,7 @@ archives:
       - skychat-amd64
       - vpn-server-amd64
       - vpn-client-amd64
+      - skyhttp-amd64
 
   - id: arm64
     format: tar.gz
@@ -497,6 +562,7 @@ archives:
       - skychat-arm64
       - vpn-server-arm64
       - vpn-client-arm64
+      - skyhttp-arm64
 
   - id: arm
     format: tar.gz
@@ -513,6 +579,7 @@ archives:
       - skychat-arm
       - vpn-server-arm
       - vpn-client-arm
+      - skyhttp-arm
 
   - id: armhf
     format: tar.gz
@@ -529,6 +596,7 @@ archives:
       - skychat-armhf
       - vpn-server-armhf
       - vpn-client-armhf
+      - skyhttp-armhf
 
   - id: riscv64
     format: tar.gz
@@ -545,6 +613,7 @@ archives:
       - skychat-riscv64
       - vpn-server-riscv64
       - vpn-client-riscv64
+      - skyhttp-riscv64
 
 checksum:
   name_template: 'checksums.txt'
