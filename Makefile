@@ -116,7 +116,7 @@ installer: mac-installer ## Builds MacOS installer for skywire-visor
 install-system-linux: build ## Install apps and binaries over those provided by the linux package - linux package must be installed first!
 	sudo echo "sudo cache"
 	sudo install -Dm755 $(BUILD_PATH){skywire-cli,skywire-visor} /opt/skywire/bin/ & \
-	sudo install -Dm755 $(BUILD_PATH)apps/{vpn-server,vpn-client,skysocks-client,skysocks,skychat} /opt/skywire/apps/
+	sudo install -Dm755 $(BUILD_PATH)apps/{vpn-server,vpn-client,skysocks-client,skysocks,skychat,skyhttp} /opt/skywire/apps/
 
 install-generate: ## Installs required execs for go generate.
 	${OPTS} go install github.com/mjibson/esc github.com/vektra/mockery/v2@latest
@@ -313,6 +313,7 @@ prepare:
 	ln ./scripts/_apps/skysocks-client ./apps/
 	ln ./scripts/_apps/vpn-server ./apps/
 	ln ./scripts/_apps/vpn-client ./apps/
+	ln ./scripts/_apps/skyhttp ./apps/
 	chmod +x ./apps/*
 	sudo echo "sudo cache"
 
