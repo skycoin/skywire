@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.17
+-   SkyHTTP  [#1724](https://github.com/skycoin/skywire/pull/1724)
+-   Little Improve on skywire and setup-node  [#1723](https://github.com/skycoin/skywire/pull/1723)
+-   Improve VPN and Proxy cli command  [#1722](https://github.com/skycoin/skywire/pull/1722)
+-   Improve Survey and Log Collection  [#1721](https://github.com/skycoin/skywire/pull/1721)
+-   Server list optimization  [#1720](https://github.com/skycoin/skywire/pull/1720)
+-   Fix reward calc  [#1719](https://github.com/skycoin/skywire/pull/1719)
+-   Fix reward calculation  [#1716](https://github.com/skycoin/skywire/pull/1716)
+-   Fix log collection panic  [#1711](https://github.com/skycoin/skywire/pull/1711)
+-   Fix win installer script  [#1706](https://github.com/skycoin/skywire/pull/1706)
+
 ## 1.3.16
 
 -   fix VPN issues on CI and Windows  [#1703](https://github.com/skycoin/skywire/pull/1703)
