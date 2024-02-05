@@ -20,7 +20,8 @@ RUN apk add --no-cache make git && \
     cp ./build/apps/vpn-client /apps/ && \
 	cp ./build/apps/skysocks /apps/ && \
 	cp ./build/apps/skysocks-client /apps/ && \
-	cp ./build/apps/skychat /apps/
+	cp ./build/apps/skychat /apps/ \
+    cp ./build/apps/skyhttp /apps/
 
 ## Resulting image
 FROM ${base} as visor-runner
