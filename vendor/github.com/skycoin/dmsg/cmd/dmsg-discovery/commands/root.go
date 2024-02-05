@@ -3,6 +3,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -45,12 +46,16 @@ var (
 	pk                cipher.PubKey
 	sk                cipher.SecKey
 	dmsgPort          uint16
+	authPassphrase    string
+	officialServers   string
 )
 
 func init() {
 	sf.Init(RootCmd, "dmsg_disc", "")
 
 	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9090", "address to bind to")
+	RootCmd.Flags().StringVar(&authPassphrase, "auth", "", "auth passphrase as simple auth for official dmsg servers registration")
+	RootCmd.Flags().StringVar(&officialServers, "official-servers", "", "list of official dmsg servers keys separated by comma")
 	RootCmd.Flags().StringVar(&redisURL, "redis", store.DefaultURL, "connections string for a redis store")
 	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "list of whitelisted keys of network monitor used for deregistration")
 	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", store.DefaultTimeout, "discovery entry timeout")
@@ -111,7 +116,7 @@ var RootCmd = &cobra.Command{
 
 		// we enable metrics middleware if address is passed
 		enableMetrics := sf.MetricsAddr != ""
-		a := api.New(log, db, m, testMode, enableLoadTesting, enableMetrics, dmsgAddr)
+		a := api.New(log, db, m, testMode, enableLoadTesting, enableMetrics, dmsgAddr, authPassphrase)
 
 		var whitelistPKs []string
 		if whitelistKeys != "" {
@@ -126,6 +131,11 @@ var RootCmd = &cobra.Command{
 
 		for _, v := range whitelistPKs {
 			api.WhitelistPKs.Set(v)
+		}
+
+		a.OfficialServers, err = fetchOfficialDmsgServers(officialServers)
+		if err != nil {
+			log.Info(err)
 		}
 
 		go a.RunBackgroundTasks(ctx, log)
@@ -276,4 +286,16 @@ func listenAndServe(addr string, handler http.Handler) error {
 	proxyListener := &proxyproto.Listener{Listener: ln}
 	defer proxyListener.Close() // nolint:errcheck
 	return srv.Serve(proxyListener)
+}
+
+func fetchOfficialDmsgServers(officialServers string) (map[string]bool, error) {
+	dmsgServers := make(map[string]bool)
+	if officialServers != "" {
+		dmsgServersList := strings.Split(officialServers, ",")
+		for _, v := range dmsgServersList {
+			dmsgServers[v] = true
+		}
+		return dmsgServers, nil
+	}
+	return dmsgServers, errors.New("no official dmsg server list passed by --official-server flag")
 }

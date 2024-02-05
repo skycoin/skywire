@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"net"
 	"sync"
 	"time"
@@ -174,9 +175,18 @@ func (ce *Client) Serve(ctx context.Context) {
 					entries = entries[ind : ind+1]
 				}
 			}
+		} else if ctx.Value("setupNode") != nil {
+			entries, err = ce.discoverServers(cancellabelCtx, true)
+			if err != nil {
+				ce.log.WithError(err).Warn("Failed to discover dmsg servers.")
+				if err == context.Canceled || err == context.DeadlineExceeded {
+					return
+				}
+				ce.serveWait()
+				continue
+			}
 		} else {
 			entries, err = ce.discoverServers(cancellabelCtx, false)
-
 			if err != nil {
 				ce.log.WithError(err).Warn("Failed to discover dmsg servers.")
 				if err == context.Canceled || err == context.DeadlineExceeded {
@@ -190,7 +200,10 @@ func (ce *Client) Serve(ctx context.Context) {
 			ce.log.Warnf("No entries found. Retrying after %s...", ce.bo.String())
 			ce.serveWait()
 		}
-
+		// randomize dmsg servers list
+		rand.Shuffle(len(entries), func(i, j int) {
+			entries[i], entries[j] = entries[j], entries[i]
+		})
 		for n, entry := range entries {
 			if isClosed(ce.done) {
 				return
