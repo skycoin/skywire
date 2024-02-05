@@ -963,7 +963,7 @@ var genConfigCmd = &cobra.Command{
 				Binary:    visorconfig.SkyHTTPName,
 				AutoStart: false,
 				Port:      routing.Port(visorconfig.SkyHTTPPort),
-				Args:      []string{"-addr", visorconfig.SkyHTTPAddr},
+				Args:      []string{"-addr", visorconfig.SkyHTTPAddr, "-socks", "127.0.0.1:1080"},
 			},
 		}
 
