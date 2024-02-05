@@ -57,6 +57,7 @@ Apps are not executed by the user, but hosted by the visor process.
 * [skysocks-client](cmd/apps/skysocks-client/README.md)
 * [vpn-client](cmd/apps/vpn-client/README.md)
 * [vpn-server](cmd/apps/vpn-server/README.md)
+* [skyhttp](cmd/apps/skyhttp/README.md)
 * [example-server-app](example/example-server-app/README.md)
 * [example-client-app](example/example-client-app/README.md)
 
@@ -138,7 +139,7 @@ Build output:
     ├──skysocks-client
     ├──vpn-client
     ├──vpn-server
-    └──skychat
+    └──skyhttp
 ```
 
 'install' these executables to the `GOPATH`:
