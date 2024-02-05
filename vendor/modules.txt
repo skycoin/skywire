@@ -113,6 +113,9 @@ github.com/dgryski/go-rendezvous
 # github.com/dustin/go-humanize v1.0.0
 ## explicit
 github.com/dustin/go-humanize
+# github.com/elazarl/goproxy v0.0.0-20231117061959-7cc037d33fb5
+## explicit
+github.com/elazarl/goproxy
 # github.com/fatih/color v1.15.0
 ## explicit; go 1.17
 github.com/fatih/color
