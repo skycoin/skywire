@@ -85,6 +85,9 @@ var (
 
 	VPNClientName = skyenv.VPNClientName // VPNClientName ...
 
+	SkyHTTPName = skyenv.SkyHTTPName
+	SkyHTTPAddr = skyenv.SkysocksClientAddr // SkysocksClientAddr ...
+
 	// TODO(darkrengarius): this one's not needed for the app to run but lack of it causes errors
 
 	VPNClientPort = skyenv.VPNClientPort // VPNClientPort ...
