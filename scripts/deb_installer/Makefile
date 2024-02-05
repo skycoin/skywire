@@ -6,6 +6,7 @@ install:
 	install -m 0755 skywire-visor $(DESTDIR)/opt/skywire/skywire-visor
 	install -m 0755 skywire-cli $(DESTDIR)/opt/skywire/skywire-cli
 	install -m 0755 apps/skychat $(DESTDIR)/opt/skywire/apps/skychat
+	install -m 0755 apps/skyhttp $(DESTDIR)/opt/skywire/apps/skyhttp
 	install -m 0755 apps/skysocks $(DESTDIR)/opt/skywire/apps/skysocks
 	install -m 0755 apps/skysocks-client $(DESTDIR)/opt/skywire/apps/skysocks-client
 	install -m 0755 apps/vpn-server $(DESTDIR)/opt/skywire/apps/vpn-server

@@ -108,6 +108,7 @@ function pack_deb {
 	cp ../build/skywire-cli "./$REPONAME-$VER/"
 	mkdir "./$REPONAME-$VER/apps"
 	cp ../build/apps/skychat "./$REPONAME-$VER/apps/"
+	cp ../build/apps/skyhttp "./$REPONAME-$VER/apps/"
 	cp ../build/apps/skysocks "./$REPONAME-$VER/apps/"
 	cp ../build/apps/skysocks-client "./$REPONAME-$VER/apps/"
 	cp ../build/apps/vpn-client "./$REPONAME-$VER/apps/"
