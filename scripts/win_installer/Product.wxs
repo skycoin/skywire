@@ -11,7 +11,7 @@
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
    <Product Id="*" UpgradeCode="cd7955bc-304e-470f-9c24-eb9f429a8085"
             Name="Skywire"
-            Version="1.3.16"
+            Version="1.3.17"
             Manufacturer="Skycoin"
             Language="1033">
 
@@ -37,6 +37,7 @@
                   <Component Id="AppsFiles" Guid="d6263d6c-acea-49a0-bd9b-610f8a8bce82">
                      <File Id="VPN_CLIENT" Source=".\build\apps\vpn-client.exe"/>
                      <File Id="SKYSOCKS_CLIENT" Source=".\build\apps\skysocks-client.exe"/>
+                     <File Id="SKYHTTP" Source=".\build\apps\skyhttp.exe"/>
                      <RemoveFolder Id="APPS" On="uninstall"/>
                   </Component>
                </Directory>
