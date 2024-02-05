@@ -20,6 +20,8 @@ func ErrServiceOffline(port uint16) error {
 		return fmt.Errorf("no listener on port %d, vpn-server offline", port)
 	case skyenv.VPNClientPort:
 		return fmt.Errorf("no listener on port %d, vpn-client offline", port)
+	case skyenv.SkyHTTPPort:
+		return fmt.Errorf("no listener on port %d, skyhttp offline", port)
 	}
 	return fmt.Errorf("no listener on port %d, service offline", port)
 }

@@ -958,6 +958,13 @@ var genConfigCmd = &cobra.Command{
 				AutoStart: isVpnServerEnable,
 				Port:      routing.Port(visorconfig.VPNServerPort),
 			},
+			{
+				Name:      visorconfig.SkyHTTPName,
+				Binary:    visorconfig.SkyHTTPName,
+				AutoStart: false,
+				Port:      routing.Port(visorconfig.SkyHTTPPort),
+				Args:      []string{"-addr", visorconfig.SkyHTTPAddr},
+			},
 		}
 
 		skywire := os.Args[0]
@@ -1002,6 +1009,13 @@ var genConfigCmd = &cobra.Command{
 					disableApps = "vpn-server"
 				} else {
 					disableApps = disableApps + ",vpn-server"
+				}
+			}
+			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "skyhttp" + exe); err != nil {
+				if disableApps == "" {
+					disableApps = "skyhttp"
+				} else {
+					disableApps = disableApps + ",skyhttp"
 				}
 			}
 		}
