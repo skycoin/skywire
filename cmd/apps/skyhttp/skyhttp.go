@@ -19,9 +19,13 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/app"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
-	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+)
+
+const (
+	netType = appnet.TypeSkynet
 )
 
 func main() {
@@ -44,16 +48,14 @@ func main() {
 	}
 
 	if runtime.GOOS == "windows" {
-		ipcClient, err := ipc.StartClient(visorconfig.SkychatName, nil)
+		ipcClient, err := ipc.StartClient(visorconfig.SkyHTTPName, nil)
 		if err != nil {
-			print(fmt.Sprintf("Error creating ipc server for skychat client: %v\n", err))
+			print(fmt.Sprintf("Error creating ipc server for skyhttp client: %v\n", err))
 			setAppErr(appCl, err)
 			os.Exit(1)
 		}
 		go handleIPCSignal(ipcClient)
-	}
-
-	if runtime.GOOS != "windows" {
+	} else {
 		termCh := make(chan os.Signal, 1)
 		signal.Notify(termCh, os.Interrupt)
 
@@ -65,27 +67,26 @@ func main() {
 	}
 
 	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
-	setAppPort(appCl, appCl.Config().RoutingPort)
-	for {
-		proxy := goproxy.NewProxyHttpServer()
-		proxyURL, err := url.Parse(fmt.Sprintf("socks5://%s", *socks)) //nolint
-		if err != nil {
-			print(fmt.Sprintf("Failed to parse socks address: %v\n", err))
-			setAppErr(appCl, err)
-			os.Exit(1)
-		}
-		proxy.Tr.Proxy = http.ProxyURL(proxyURL)
-		proxy.Verbose = true
-		fmt.Printf("Serving http proxy %v\n", *addr)
-		setAppStatus(appCl, appserver.AppDetailedStatusRunning)
 
-		if err := http.ListenAndServe(*addr, proxy); err != nil { //nolint
-			print(fmt.Sprintf("Error serving http proxy: %v\n", err))
-		}
+	go listenLoop(appCl)
 
-		fmt.Println("Reconnecting to skysocks server")
-		setAppStatus(appCl, appserver.AppDetailedStatusReconnecting)
+	proxy := goproxy.NewProxyHttpServer()
+	proxyURL, err := url.Parse(fmt.Sprintf("socks5://%s", *socks)) //nolint
+	if err != nil {
+		print(fmt.Sprintf("Failed to parse socks address: %v\n", err))
+		setAppErr(appCl, err)
+		os.Exit(1)
 	}
+	proxy.Tr.Proxy = http.ProxyURL(proxyURL)
+	fmt.Printf("Serving http proxy %v\n", *addr)
+
+	setAppStatus(appCl, appserver.AppDetailedStatusRunning)
+
+	if err := http.ListenAndServe(*addr, proxy); err != nil { //nolint
+		print(fmt.Sprintf("Error serving http proxy: %v\n", err))
+	}
+
+	setAppStatus(appCl, appserver.AppDetailedStatusStopped)
 }
 
 func setAppErr(appCl *app.Client, err error) {
@@ -97,12 +98,6 @@ func setAppErr(appCl *app.Client, err error) {
 func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
 	if err := appCl.SetDetailedStatus(string(status)); err != nil {
 		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
-	}
-}
-
-func setAppPort(appCl *app.Client, port routing.Port) {
-	if err := appCl.SetAppPort(port); err != nil {
-		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
 	}
 }
 
@@ -118,4 +113,22 @@ func handleIPCSignal(client *ipc.Client) {
 		}
 	}
 	os.Exit(0)
+}
+
+func listenLoop(appCl *app.Client) {
+	l, err := appCl.Listen(netType, appCl.Config().RoutingPort)
+	if err != nil {
+		print(fmt.Sprintf("Error listening network %v on port %d: %v\n", netType, appCl.Config().RoutingPort, err))
+		setAppErr(appCl, err)
+		return
+	}
+
+	for {
+		fmt.Println("Running skyhttp connection to visor...")
+		_, err := l.Accept()
+		if err != nil {
+			print(fmt.Sprintf("Failed on connecting to visor: %v\n", err))
+			return
+		}
+	}
 }
