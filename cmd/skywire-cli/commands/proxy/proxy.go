@@ -36,6 +36,7 @@ func init() {
 	startCmd.Flags().StringVarP(&addr, "addr", "a", "", "address of proxy for use")
 	startCmd.Flags().StringVarP(&clientName, "name", "n", "", "name of skysocks client")
 	startCmd.Flags().IntVarP(&startingTimeout, "timeout", "t", 20, "starting timeout value in second")
+	startCmd.Flags().StringVarP(&httpProxy, "http-proxy", "p", "", "starting http-proxy based on skysocks")
 }
 
 var startCmd = &cobra.Command{
@@ -46,6 +47,17 @@ var startCmd = &cobra.Command{
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
+		}
+
+		arguments := map[string]string{}
+		if pk != "" {
+			arguments["srv"] = pk
+		}
+		if addr != "" {
+			arguments["addr"] = addr
+		}
+		if httpProxy != "" {
+			arguments["http"] = httpProxy
 		}
 
 		if clientName != "" && pk != "" && addr != "" {
@@ -61,10 +73,6 @@ var startCmd = &cobra.Command{
 					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
 				}
 			}
-
-			arguments := map[string]string{}
-			arguments["srv"] = pubkey.String()
-			arguments["addr"] = addr
 
 			_, err = rpcClient.App(clientName)
 			if err == nil {
@@ -85,6 +93,10 @@ var startCmd = &cobra.Command{
 			internal.Catch(cmd.Flags(), rpcClient.StartApp(clientName))
 			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
 		} else if clientName != "" && pk == "" && addr == "" {
+			err = rpcClient.DoCustomSetting(clientName, arguments)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error occurs during set args to custom skysocks client"))
+			}
 			internal.Catch(cmd.Flags(), rpcClient.StartApp(clientName))
 			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
 		} else if pk != "" && clientName == "" && addr == "" {
@@ -99,7 +111,11 @@ var startCmd = &cobra.Command{
 					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
 				}
 			}
-			internal.Catch(cmd.Flags(), rpcClient.StartSkysocksClient(pubkey.String()))
+			err = rpcClient.DoCustomSetting("skysocks-client", arguments)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error occurs during set args to custom skysocks client"))
+			}
+			internal.Catch(cmd.Flags(), rpcClient.StartApp("skysocks-client"))
 			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
 			clientName = "skysocks-client"
 			// change defaul skysocks-proxy app -srv arg and run it
