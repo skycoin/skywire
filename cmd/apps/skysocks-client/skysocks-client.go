@@ -68,7 +68,7 @@ func main() {
 
 	var addr = flag.String("addr", visorconfig.SkysocksClientAddr, "Client address to listen on")
 	var serverPK = flag.String("srv", "", "PubKey of the server to connect to")
-	var httpAddr = flag.String("http", "", "Address for http-proxy")
+	var httpAddr = flag.String("http", "", "Starting http proxy or not")
 	flag.Parse()
 
 	if *serverPK == "" {
