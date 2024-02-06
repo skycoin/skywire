@@ -11,8 +11,12 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
+	"net/url"
 	"os"
 	"time"
+
+	"github.com/elazarl/goproxy"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -64,6 +68,7 @@ func main() {
 
 	var addr = flag.String("addr", visorconfig.SkysocksClientAddr, "Client address to listen on")
 	var serverPK = flag.String("srv", "", "PubKey of the server to connect to")
+	var httpAddr = flag.String("http", "", "Starting http proxy or not")
 	flag.Parse()
 
 	if *serverPK == "" {
@@ -99,11 +104,14 @@ func main() {
 
 		fmt.Printf("Serving proxy client %v\n", *addr)
 		setAppStatus(appCl, appserver.AppDetailedStatusRunning)
-
+		httpCtx, httpCancel := context.WithCancel(ctx)
+		if *httpAddr != "" {
+			go httpProxy(httpCtx, httpAddr, addr)
+		}
 		if err := client.ListenAndServe(*addr); err != nil {
 			print(fmt.Sprintf("Error serving proxy client: %v\n", err))
 		}
-
+		httpCancel()
 		// need to filter this out, cause usually client failure means app conn is already closed
 		if err := conn.Close(); err != nil && err != io.ErrClosedPipe {
 			print(fmt.Sprintf("Error closing app conn: %v\n", err))
@@ -129,5 +137,30 @@ func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
 func setAppPort(appCl *app.Client, port routing.Port) {
 	if err := appCl.SetAppPort(port); err != nil {
 		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
+	}
+}
+
+func httpProxy(ctx context.Context, httpAddr, sockscAddr *string) {
+	proxy := goproxy.NewProxyHttpServer()
+
+	proxyURL, err := url.Parse(fmt.Sprintf("socks5://127.0.0.1%s", *sockscAddr)) //nolint
+	if err != nil {
+		print(fmt.Sprintf("Failed to parse socks address: %v\n", err))
+		return
+	}
+
+	proxy.Tr.Proxy = http.ProxyURL(proxyURL)
+
+	fmt.Printf("Serving http proxy %v\n", *httpAddr)
+	httpProxySrv := &http.Server{Addr: *httpAddr, Handler: proxy} //nolint
+
+	go func() {
+		<-ctx.Done()
+		httpProxySrv.Close() //nolint
+		print("Stopping http proxy")
+	}()
+
+	if err := httpProxySrv.ListenAndServe(); err != nil { //nolint
+		print(fmt.Sprintf("Error serving http proxy: %v\n", err))
 	}
 }
