@@ -167,6 +167,9 @@ type Server struct {
 
 	// AvailableSessions is the number of available sessions that the server can currently accept.
 	AvailableSessions int `json:"availableSessions"`
+
+	// ServerType of DMSG Server, be `official` of `community`
+	ServerType string `json:"serverType,omitempty"`
 }
 
 // String implements stringer
