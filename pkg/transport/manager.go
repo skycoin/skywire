@@ -482,6 +482,22 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 	}
 }
 
+// DeleteAllTransports deregisters all Transports in transport discovery and deletes them locally.
+func (tm *Manager) DeleteAllTransports() {
+	tm.mx.Lock()
+	defer tm.mx.Unlock()
+
+	if tm.isClosing() {
+		return
+	}
+
+	// Deregister transports before closing the underlying transport.
+	for _, tp := range tm.tps {
+		tp.close()
+		delete(tm.tps, tp.Entry.ID)
+	}
+}
+
 // ReadPacket reads data packets from routes.
 func (tm *Manager) ReadPacket() (routing.Packet, error) {
 	p, ok := <-tm.readCh
