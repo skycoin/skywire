@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
 ## 1.3.17
--   Add `--http` flag to skysocks-client/proxy for provide http-proxy too  [#1725](https://github.com/skycoin/skywire/pull/1725)
+-   Add http-proxy on skysocks-client  [#1728](https://github.com/skycoin/skywire/pull/1728)
 -   Little Improve on skywire and setup-node  [#1723](https://github.com/skycoin/skywire/pull/1723)
 -   Improve VPN and Proxy cli command  [#1722](https://github.com/skycoin/skywire/pull/1722)
 -   Improve Survey and Log Collection  [#1721](https://github.com/skycoin/skywire/pull/1721)
