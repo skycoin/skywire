@@ -14,4 +14,8 @@ const (
 	DefaultMaxSessions = 100
 
 	DefaultDmsgHTTPPort = uint16(80)
+
+	DefaultOfficialDmsgServerType = "official"
+
+	DefaultCommunityDmsgServerType = "community"
 )
