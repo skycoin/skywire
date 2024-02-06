@@ -11,6 +11,7 @@ require (
 	github.com/bitfield/script v0.22.0
 	github.com/blang/semver/v4 v4.0.0
 	github.com/ccding/go-stun/stun v0.0.0-20200514191101-4dc67bcdb029
+	github.com/elazarl/goproxy v0.0.0-20231117061959-7cc037d33fb5
 	github.com/gen2brain/dlgs v0.0.0-20220603100644-40c77870fa8d
 	github.com/gin-gonic/gin v1.9.1
 	github.com/go-chi/chi/v5 v5.0.11
@@ -27,11 +28,11 @@ require (
 	github.com/orandin/lumberjackrus v1.0.1
 	github.com/pterm/pterm v0.12.66
 	github.com/sirupsen/logrus v1.9.3
-	github.com/skycoin/dmsg v1.3.15-0.20240201143600-b1d1d1012348
+	github.com/skycoin/dmsg v1.3.17
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/skycoin-service-discovery v0.0.0-20231221001759-d1af6ec27db1
 	github.com/skycoin/skywire-services v0.0.0-20231221001820-3212895ddf12
-	github.com/skycoin/skywire-utilities v1.3.14
+	github.com/skycoin/skywire-utilities v1.3.17
 	github.com/skycoin/systray v1.10.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.7.0
