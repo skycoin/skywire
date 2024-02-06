@@ -31,6 +31,7 @@ var (
 	clientName      string
 	addr            string
 	startingTimeout int
+	httpProxy       string
 )
 
 // RootCmd contains commands that interact with the skywire-visor
