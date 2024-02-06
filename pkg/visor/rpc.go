@@ -527,6 +527,13 @@ func (r *RPC) RemoveTransport(tid *uuid.UUID, _ *struct{}) (err error) {
 	return r.visor.RemoveTransport(*tid)
 }
 
+// RemoveAllTransports removes all Transports from the visor.
+func (r *RPC) RemoveAllTransports(_ *struct{}, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "RemoveAllTransports", nil)(nil, &err)
+
+	return r.visor.RemoveAllTransports()
+}
+
 /*
 	<<< AVAILABLE TRANSPORTS >>>
 */

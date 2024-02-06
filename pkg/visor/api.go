@@ -99,6 +99,7 @@ type API interface {
 	Transport(tid uuid.UUID) (*TransportSummary, error)
 	AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*TransportSummary, error)
 	RemoveTransport(tid uuid.UUID) error
+	RemoveAllTransports() error
 	SetPublicAutoconnect(pAc bool) error
 	GetPersistentTransports() ([]transport.PersistentTransports, error)
 	SetPersistentTransports([]transport.PersistentTransports) error
@@ -1189,6 +1190,12 @@ func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, timeout time.D
 // RemoveTransport implements API.
 func (v *Visor) RemoveTransport(tid uuid.UUID) error {
 	v.tpM.DeleteTransport(tid)
+	return nil
+}
+
+// RemoveAllTransports implements API
+func (v *Visor) RemoveAllTransports() error {
+	v.tpM.DeleteAllTransports()
 	return nil
 }
 
