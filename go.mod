@@ -31,7 +31,7 @@ require (
 	github.com/skycoin/dmsg v1.3.17
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/skycoin-service-discovery v0.0.0-20231221001759-d1af6ec27db1
-	github.com/skycoin/skywire-services v0.0.0-20231221001820-3212895ddf12
+	github.com/skycoin/skywire-services v0.0.0-20240207001624-ebee7346e526
 	github.com/skycoin/skywire-utilities v1.3.17
 	github.com/skycoin/systray v1.10.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
@@ -47,7 +47,7 @@ require (
 	golang.org/x/net v0.14.0
 	golang.org/x/sync v0.3.0
 	golang.org/x/sys v0.15.0
-	golang.zx2c4.com/wireguard v0.0.20200320
+	golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675
 )
 
 require (
@@ -150,6 +150,7 @@ require (
 	golang.org/x/term v0.15.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/tools v0.12.1-0.20230815132531-74c255bcf846 // indirect
+	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	google.golang.org/protobuf v1.31.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect

@@ -35,7 +35,7 @@ var (
 func init() {
 	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9080", "address to bind to.\033[0m")
 	RootCmd.Flags().DurationVarP(&sleepDeregistration, "sleep-deregistration", "s", 10, "Sleep time for deregistration process in minutes\033[0m")
-	RootCmd.Flags().StringVarP(&confPath, "config", "c", "dmsg-monitor.json", "config file location.\033[0m")
+	RootCmd.Flags().StringVarP(&confPath, "config", "c", "tpd-monitor.json", "config file location.\033[0m")
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "set log level one of: info, error, warn, debug, trace, panic")
 	RootCmd.Flags().StringVar(&dmsgURL, "dmsg-url", "", "url to dmsg data.\033[0m")
 	RootCmd.Flags().StringVar(&tpdURL, "tpd-url", "", "url to transport discovery.\033[0m")
@@ -105,26 +105,26 @@ var RootCmd = &cobra.Command{
 
 		monitorSign, _ := cipher.SignPayload([]byte(conf.PK.Hex()), conf.SK) //nolint
 
-		var monitorConfig api.DMSGMonitorConfig
+		var monitorConfig api.TpdMonitorConfig
 		monitorConfig.PK = conf.PK
 		monitorConfig.Sign = monitorSign
 
-		dmsgMonitorAPI := api.New(logger, srvURLs, monitorConfig)
+		tpdMonitorAPI := api.New(logger, srvURLs, monitorConfig)
 
 		ctx, cancel := cmdutil.SignalContext(context.Background(), logger)
 		defer cancel()
 
-		go dmsgMonitorAPI.InitDeregistrationLoop(ctx, conf, sleepDeregistration)
+		go tpdMonitorAPI.InitDeregistrationLoop(ctx, conf, sleepDeregistration)
 
 		go func() {
-			if err := tcpproxy.ListenAndServe(addr, dmsgMonitorAPI); err != nil {
+			if err := tcpproxy.ListenAndServe(addr, tpdMonitorAPI); err != nil {
 				logger.Errorf("serve: %v", err)
 				cancel()
 			}
 		}()
 
 		<-ctx.Done()
-		if err := dmsgMonitorAPI.Visor.Close(); err != nil {
+		if err := tpdMonitorAPI.Visor.Close(); err != nil {
 			logger.WithError(err).Error("Visor closed with error.")
 		}
 	},
