@@ -47,8 +47,8 @@ type API struct {
 	whitelistedPKs map[string]bool
 }
 
-// DMSGMonitorConfig is struct for Keys and Sign value of dmsg monitor
-type DMSGMonitorConfig struct {
+// TpdMonitorConfig is struct for Keys and Sign value of tpd monitor
+type TpdMonitorConfig struct {
 	PK   cipher.PubKey
 	Sign cipher.Sig
 }
@@ -72,7 +72,7 @@ type Error struct {
 }
 
 // New returns a new *chi.Mux object, which can be started as a server
-func New(logger *logging.Logger, srvURLs ServicesURLs, monitorConfig DMSGMonitorConfig) *API {
+func New(logger *logging.Logger, srvURLs ServicesURLs, monitorConfig TpdMonitorConfig) *API {
 
 	api := &API{
 		dmsgURL:        srvURLs.DMSG,
@@ -291,7 +291,7 @@ func getARData(url string) (map[string]map[string]bool, error) {
 }
 
 func (api *API) tpdDeregister(tps []string) {
-	err := api.deregisterRequest(tps, api.dmsgURL+"/deregister", "tp discovery")
+	err := api.deregisterRequest(tps, api.tpdURL+"/transports/deregister", "tp discovery")
 	if err != nil {
 		api.logger.Warn(err)
 		return
@@ -331,7 +331,7 @@ func (api *API) deregisterRequest(keys []string, rawReqURL, service string) erro
 	}(res.Body)
 
 	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("Error deregister keys from %s : %s", service, err)
+		return fmt.Errorf("Error on deregister keys from %s : res.StatusCode %d", service, res.StatusCode)
 	}
 
 	return nil

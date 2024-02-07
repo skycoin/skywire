@@ -489,7 +489,7 @@ github.com/skycoin/skycoin-service-discovery/internal/pg
 github.com/skycoin/skycoin-service-discovery/internal/sdmetrics
 github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/api
 github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/store
-# github.com/skycoin/skywire-services v0.0.0-20231221001820-3212895ddf12
+# github.com/skycoin/skywire-services v0.0.0-20240207001624-ebee7346e526
 ## explicit; go 1.21
 github.com/skycoin/skywire-services/cmd/address-resolver/commands
 github.com/skycoin/skywire-services/cmd/config-bootstrapper/commands
@@ -737,16 +737,13 @@ golang.org/x/tools/internal/pkgbits
 golang.org/x/tools/internal/tokeninternal
 golang.org/x/tools/internal/typeparams
 golang.org/x/tools/internal/typesinternal
-# golang.zx2c4.com/wireguard v0.0.20200320
-## explicit; go 1.12
+# golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2
+## explicit; go 1.17
+golang.zx2c4.com/wintun
+# golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675
+## explicit; go 1.19
 golang.zx2c4.com/wireguard/rwcancel
 golang.zx2c4.com/wireguard/tun
-golang.zx2c4.com/wireguard/tun/wintun
-golang.zx2c4.com/wireguard/tun/wintun/iphlpapi
-golang.zx2c4.com/wireguard/tun/wintun/namespaceapi
-golang.zx2c4.com/wireguard/tun/wintun/nci
-golang.zx2c4.com/wireguard/tun/wintun/registry
-golang.zx2c4.com/wireguard/tun/wintun/setupapi
 # google.golang.org/protobuf v1.31.0
 ## explicit; go 1.11
 google.golang.org/protobuf/encoding/prototext

@@ -21,6 +21,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/httpauth"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/metricsutil"
+	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire-utilities/pkg/storeconfig"
 	"github.com/skycoin/skywire-utilities/pkg/tcpproxy"
 	"github.com/spf13/cobra"
@@ -38,19 +39,21 @@ const (
 )
 
 var (
-	addr          string
-	metricsAddr   string
-	redisURL      string
-	redisPoolSize int
-	pgHost        string
-	pgPort        string
-	syslogAddr    string
-	logLvl        string
-	tag           string
-	testing       bool
-	dmsgDisc      string
-	sk            cipher.SecKey
-	dmsgPort      uint16
+	addr            string
+	metricsAddr     string
+	redisURL        string
+	redisPoolSize   int
+	pgHost          string
+	pgPort          string
+	syslogAddr      string
+	logLvl          string
+	tag             string
+	testing         bool
+	dmsgDisc        string
+	whitelistKeys   string
+	testEnvironment bool
+	sk              cipher.SecKey
+	dmsgPort        uint16
 )
 
 func init() {
@@ -65,6 +68,8 @@ func init() {
 	RootCmd.Flags().StringVar(&tag, "tag", "transport_discovery", "logging tag\033[0m")
 	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis\033[0m")
 	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", "http://dmsgd.skywire.skycoin.com", "url of dmsg-discovery\033[0m")
+	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "list of whitelisted keys of network monitor used for deregistration\033[0m")
+	RootCmd.Flags().BoolVar(&testEnvironment, "test-environment", false, "distinguished between prod and test environment\033[0m")
 	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\r")
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\r")
 	var helpflag bool
@@ -110,6 +115,21 @@ var RootCmd = &cobra.Command{
 		}
 
 		logging.SetLevel(lvl)
+
+		var whitelistPKs []string
+		if whitelistKeys != "" {
+			whitelistPKs = strings.Split(whitelistKeys, ",")
+		} else {
+			if testEnvironment {
+				whitelistPKs = strings.Split(skyenv.TestNetworkMonitorPKs, ",")
+			} else {
+				whitelistPKs = strings.Split(skyenv.NetworkMonitorPKs, ",")
+			}
+		}
+
+		for _, v := range whitelistPKs {
+			api.WhitelistPKs.Set(v)
+		}
 
 		if syslogAddr != "" {
 			hook, err := logrussyslog.NewSyslogHook("udp", syslogAddr, syslog.LOG_INFO, tag)
