@@ -59,6 +59,7 @@ var RootCmd = &cobra.Command{
 		}
 
 		mLogger := logging.NewMasterLogger()
+
 		lvl, err := logging.LevelFromString(logLvl)
 		if err != nil {
 			mLogger.Fatal("Invalid loglvl detected")
