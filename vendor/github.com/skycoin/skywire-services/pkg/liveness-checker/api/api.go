@@ -285,7 +285,7 @@ func (api *API) checkAddressResolver(ctx context.Context) {
 
 	err = api.store.AddServiceSummary(ctx, "address-resolver", ss)
 	if err != nil {
-		api.logger.WithError(err).Warn("Failed to add address-resolver service summarry to store.")
+		api.logger.WithError(err).Warn("Failed to add address-resolver service summary to store.")
 	}
 	api.logger.Info("address-resolver liveness check complete.")
 }
@@ -317,7 +317,7 @@ func (api *API) checkServiceDiscovery(ctx context.Context) {
 
 	err = api.store.AddServiceSummary(ctx, "service-discovery", ss)
 	if err != nil {
-		api.logger.WithError(err).Warn("Failed to add service-discovery service summarry to store.")
+		api.logger.WithError(err).Warn("Failed to add service-discovery service summary to store.")
 	}
 	api.logger.Info("service-discovery liveness check complete.")
 }
@@ -351,7 +351,7 @@ func (api *API) checkTransportDiscovery(ctx context.Context) {
 
 	err = api.store.AddServiceSummary(ctx, "transport-discovery", ss)
 	if err != nil {
-		api.logger.WithError(err).Warn("Failed to add transport-discovery service summarry to store.")
+		api.logger.WithError(err).Warn("Failed to add transport-discovery service summary to store.")
 	}
 	api.logger.Info("transport-discovery liveness check complete.")
 }
@@ -398,7 +398,7 @@ func (api *API) checkDMSGDiscovery(ctx context.Context) {
 
 	err = api.store.AddServiceSummary(ctx, "dmsg-discovery", ss)
 	if err != nil {
-		api.logger.WithError(err).Warn("Failed to add dmsg-discovery service summarry to store.")
+		api.logger.WithError(err).Warn("Failed to add dmsg-discovery service summary to store.")
 	}
 	api.logger.Info("dmsg-discovery liveness check complete.")
 
@@ -428,7 +428,7 @@ func (api *API) checkDMSGServers(ctx context.Context, disc disc.APIClient, serve
 		serviceName := "dmsg-server:" + server.Server.Address
 		err := api.store.AddServiceSummary(ctx, serviceName, ss)
 		if err != nil {
-			api.logger.WithError(err).Warnf("Failed to add %v serviceName service summarry to store.", serviceName)
+			api.logger.WithError(err).Warnf("Failed to add %v serviceName service summary to store.", serviceName)
 		}
 		api.logger.Infof("%v liveness check complete.", serviceName)
 	}
@@ -464,7 +464,7 @@ func (api *API) checkRouteFinder(ctx context.Context) {
 
 	err = api.store.AddServiceSummary(ctx, "route-finder", ss)
 	if err != nil {
-		api.logger.WithError(err).Warn("Failed to add route-finder service summarry to store.")
+		api.logger.WithError(err).Warn("Failed to add route-finder service summary to store.")
 	}
 	api.logger.Info("route-finder liveness check complete.")
 }
@@ -508,7 +508,7 @@ func (api *API) checkUptimeTracker(ctx context.Context) {
 
 	err = api.store.AddServiceSummary(ctx, "uptime-tracker", ss)
 	if err != nil {
-		api.logger.WithError(err).Warn("Failed to add uptime-tracker service summarry to store.")
+		api.logger.WithError(err).Warn("Failed to add uptime-tracker service summary to store.")
 	}
 	api.logger.Info("uptime-tracker liveness check complete.")
 }
@@ -557,7 +557,7 @@ func (api *API) checkIPService(ctx context.Context) {
 
 	err = api.store.AddServiceSummary(ctx, "ip-service", ss)
 	if err != nil {
-		api.logger.WithError(err).Warn("Failed to add ip-service service summarry to store.")
+		api.logger.WithError(err).Warn("Failed to add ip-service service summary to store.")
 	}
 	api.logger.Info("ip-service liveness check complete.")
 }
@@ -586,7 +586,7 @@ func (api *API) checkStunServers(ctx context.Context) {
 		serviceName := "stunserver:" + stunServer
 		err = api.store.AddServiceSummary(ctx, serviceName, ss)
 		if err != nil {
-			api.logger.WithError(err).Warn("Failed to add ip-service service summarry to store.")
+			api.logger.WithError(err).Warn("Failed to add ip-service service summary to store.")
 		}
 		api.logger.Infof("%v liveness check complete.", serviceName)
 	}
