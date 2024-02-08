@@ -293,9 +293,8 @@ var genConfigCmd = &cobra.Command{
 		}
 		var err error
 		if isDmsgHTTP {
-			dmsgHTTPPath := visorconfig.DMSGHTTPName
 			if isPkgEnv {
-				dmsgHTTPPath = visorconfig.SkywirePath + "/" + visorconfig.DMSGHTTPName
+				dmsgHTTPPath = visorconfig.SkywirePath + "/" + visorconfig.DMSGHTTPName //nolint
 				dmsgHTTPPath = visorconfig.SkywirePath + "/" + "services-config.json" // TODO: visorconfig.SvcConfName
 			}
 			if _, err := os.Stat(dmsgHTTPPath); err == nil {
