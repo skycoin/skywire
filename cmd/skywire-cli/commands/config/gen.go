@@ -519,14 +519,14 @@ var genConfigCmd = &cobra.Command{
 		if isDmsgHTTP {
 			// TODO
 			//if isUsrEnv {
-			//	dmsghttpConfig = homepath + "/" + visorconfig.DMSGHTTPName
+			//	dmsgHTTPPath = homepath + "/" + visorconfig.DMSGHTTPName
 			//}
 			if isPkgEnv {
-				dmsghttpConfig = visorconfig.SkywirePath + "/" + visorconfig.DMSGHTTPName
+				dmsgHTTPPath = visorconfig.SkywirePath + "/" + visorconfig.DMSGHTTPName
 			}
 
 			// Read the JSON configuration file
-			dmsghttpConfigData, err := os.ReadFile(dmsghttpConfig) //nolint
+			dmsghttpConfigData, err := os.ReadFile(dmsgHTTPPath) //nolint
 			if err != nil {
 				log.Fatalf("Failed to read config file: %v", err)
 			}
