@@ -2,12 +2,13 @@
 package cliconfig
 
 import (
-	"strings"
 	"fmt"
 	"strconv"
+	"strings"
+
+	"github.com/bitfield/script"
 	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/spf13/cobra"
-	"github.com/bitfield/script"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
@@ -97,8 +98,7 @@ var (
 	proxyServerPass             string
 	proxyClientPass             string
 	configServicePath           string
-	dmsghttpConfig							string
-
+	dmsghttpConfig              string
 )
 
 // RootCmd contains commands that interact with the config of local skywire-visor
@@ -112,7 +112,6 @@ type servicesConf struct { //nolint
 	Test visorconfig.Services `json:"test"`
 	Prod visorconfig.Services `json:"prod"`
 }
-
 
 func scriptExecString(s string) string {
 	if visorconfig.OS == "windows" {
