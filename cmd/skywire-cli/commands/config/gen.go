@@ -522,7 +522,7 @@ var genConfigCmd = &cobra.Command{
 			//	dmsgHTTPPath = homepath + "/" + visorconfig.DMSGHTTPName
 			//}
 			if isPkgEnv {
-				dmsgHTTPPath = visorconfig.SkywirePath + "/" + visorconfig.DMSGHTTPName
+				dmsgHTTPPath = visorconfig.SkywirePath + "/" + visorconfig.DMSGHTTPName //nolint
 			}
 
 			// Read the JSON configuration file
