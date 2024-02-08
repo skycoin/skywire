@@ -98,7 +98,7 @@ var (
 	proxyServerPass             string
 	proxyClientPass             string
 	configServicePath           string
-	dmsghttpConfig              string
+	dmsgHTTPPath                string
 )
 
 // RootCmd contains commands that interact with the config of local skywire-visor

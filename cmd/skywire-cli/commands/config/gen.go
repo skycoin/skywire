@@ -81,7 +81,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "noauth")
 	genConfigCmd.Flags().BoolVarP(&isDmsgHTTP, "dmsghttp", "d", scriptExecBool("${DMSGHTTP:-false}"), "use dmsg connection to skywire services\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "dmsghttp")
-	genConfigCmd.Flags().StringVarP(&dmsghttpConfig, "dmsgconf", "D", scriptExecString(fmt.Sprintf("${DMSGCONF:-%s}", visorconfig.DMSGHTTPName)), "dmsghttp-config path\033[0m")
+	genConfigCmd.Flags().StringVarP(&dmsgHTTPPath, "dmsgconf", "D", scriptExecString(fmt.Sprintf("${DMSGCONF:-%s}", visorconfig.DMSGHTTPName)), "dmsghttp-config path\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "dmsgconf")
 	genConfigCmd.Flags().IntVar(&minDmsgSess, "minsess", scriptExecInt("${MINDMSGSESS:-2}"), "number of dmsg servers to connect to (0 = unlimited)\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "minsess")
@@ -517,7 +517,6 @@ var genConfigCmd = &cobra.Command{
 		}
 
 		if isDmsgHTTP {
-			dmsghttpConfig := visorconfig.DMSGHTTPName
 			// TODO
 			//if isUsrEnv {
 			//	dmsghttpConfig = homepath + "/" + visorconfig.DMSGHTTPName
