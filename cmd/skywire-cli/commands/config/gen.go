@@ -416,6 +416,9 @@ var genConfigCmd = &cobra.Command{
 				client := http.Client{
 					Timeout: time.Second * 15, // Timeout after 15 seconds
 				}
+				if !isStdout {
+					log.Infof("Fetching service endpoints from '%s'", serviceConfURL)
+				}
 				// Make the HTTP GET request
 				res, err := client.Get(fmt.Sprint(serviceConfURL))
 				if err != nil {
@@ -425,9 +428,6 @@ var genConfigCmd = &cobra.Command{
 						log.Warn("Falling back on hardcoded servers")
 					}
 				} else {
-					if !isStdout {
-						log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
-					}
 					if res.Body != nil {
 						defer res.Body.Close() //nolint
 					}
