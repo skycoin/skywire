@@ -391,9 +391,6 @@ var genConfigCmd = &cobra.Command{
 					if err != nil {
 						log.WithError(err).Fatal("Failed to unmarshal json response\n")
 					}
-					if !isStdout {
-						log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
-					}
 					services = servicesConfig.Prod
 					if isTestEnv {
 						services = servicesConfig.Test
@@ -428,6 +425,9 @@ var genConfigCmd = &cobra.Command{
 						log.Warn("Falling back on hardcoded servers")
 					}
 				} else {
+					if !isStdout {
+						log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
+					}
 					if res.Body != nil {
 						defer res.Body.Close() //nolint
 					}
