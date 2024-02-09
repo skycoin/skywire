@@ -33,6 +33,7 @@ var (
 	confPath                    string
 	configName                  string //nolint Note: configName used, but golangci-lint marked it unused in wrong
 	isStdout                    bool
+	isSquash                    bool
 	isRegen                     bool
 	isRetainHypervisors         bool
 	isTestEnv                   bool

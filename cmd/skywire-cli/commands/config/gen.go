@@ -130,6 +130,8 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "example-apps")
 	genConfigCmd.Flags().BoolVarP(&isStdout, "stdout", "n", false, "write config to stdout\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "stdout")
+	genConfigCmd.Flags().BoolVarP(&isSquash, "squash", "N", false, "output config without whitespace or newlines\033[0m")
+	gHiddenFlags = append(gHiddenFlags, "squash")
 	genConfigCmd.Flags().BoolVarP(&isEnvs, "envs", "q", false, "show the environmental variable settings")
 	msg = "output config"
 	if scriptExecString("${OUTPUT}") == "" {
@@ -250,7 +252,7 @@ var genConfigCmd = &cobra.Command{
 				envfile = envfileLinux
 			}
 			fmt.Println(envfile)
-			os.Exit(0)
+			return
 		}
 
 		//--all unhides flags, prints help menu, and exits
@@ -261,7 +263,7 @@ var genConfigCmd = &cobra.Command{
 			}
 			cmd.Flags().MarkHidden("all") //nolint
 			cmd.Help()                    //nolint
-			os.Exit(0)
+			return
 		}
 		//set default output filename
 		if output == "" {
@@ -1044,13 +1046,17 @@ var genConfigCmd = &cobra.Command{
 		}
 		//print config to stdout, omit logging messages, exit
 		if isStdout {
-			fmt.Printf("%s", j)
-			os.Exit(0)
+			if isSquash {
+				script.Echo(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(string(j), " ", ""), "\n", ""), "\t", "")).Stdout() //nolint
+				return
+			}
+			script.Echo(string(j)).Stdout()
+			return
 		}
 		//hide the printing of the config to the terminal
 		if isHide {
 			log.Infof("Updated file '%s'\n", output)
-			os.Exit(0)
+			return
 		}
 		//default behavior
 		log.Infof("Updated file '%s' to:\n%s\n", output, j)
