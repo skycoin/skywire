@@ -63,7 +63,7 @@ func init() {
 	RootCmd.Flags().SortFlags = false
 	//the default is not set to fix the aesthetic of the help command
 	RootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use (default): "+visorconfig.ConfigName)
-	RootCmd.Flags().StringVarP(&confArgs, "confarg", "C", "", "supply config as argument")
+	RootCmd.Flags().StringVarP(&confArg, "confarg", "C", "", "supply config as argument")
 	if ((visorconfig.OS == "linux") && !root) || ((visorconfig.OS == "mac") && !root) || (visorconfig.OS == "win") {
 		RootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
 	}
@@ -278,7 +278,7 @@ func initConfig() *visorconfig.V1 { //nolint
 	case "arg":
 		log.Info("Reading config from supplied argument.")
 		confPath = visorconfig.Stdin
-		r = strings.NewReader(confArgs)
+		r = strings.NewReader(confArg)
 	case "":
 		fallthrough
 	default:
