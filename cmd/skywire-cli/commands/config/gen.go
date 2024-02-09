@@ -433,19 +433,19 @@ var genConfigCmd = &cobra.Command{
 				if err != nil {
 					log.WithError(err).Error("Failed to read http response\n")
 				}
-			//fill in services struct with the response
-			err = json.Unmarshal(body, &services)
-			if err != nil {
-				if !isStdout {
-					log.WithError(err).Error("Failed to unmarshal json response to services struct\n")
-					log.Warn("Falling back on hardcoded servers")
-				}
-			} else {
-				if !isStdout {
-					log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
+				//fill in services struct with the response
+				err = json.Unmarshal(body, &services)
+				if err != nil {
+					if !isStdout {
+						log.WithError(err).Error("Failed to unmarshal json response to services struct\n")
+						log.Warn("Falling back on hardcoded servers")
+					}
+				} else {
+					if !isStdout {
+						log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
+					}
 				}
 			}
-		}
 		} else {
 			body, err = os.ReadFile(configServicePath)
 			if err != nil {
