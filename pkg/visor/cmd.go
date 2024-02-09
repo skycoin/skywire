@@ -35,6 +35,7 @@ var (
 	pprofAddr            string
 	confPath             string
 	stdin                bool
+	confArg              string
 	hypervisorUI         bool
 	noHypervisorUI       bool
 	remoteHypervisorPKs  string
@@ -63,6 +64,7 @@ func init() {
 	RootCmd.Flags().SortFlags = false
 	//the default is not set to fix the aesthetic of the help command
 	RootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use (default): "+visorconfig.ConfigName)
+	RootCmd.Flags().StringVarP(&confArg, "confarg", "C", "", "supply config as argument")
 	if ((visorconfig.OS == "linux") && !root) || ((visorconfig.OS == "mac") && !root) || (visorconfig.OS == "win") {
 		RootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
 	}
@@ -166,52 +168,56 @@ var RootCmd = &cobra.Command{
 		//log for initial checks
 		log := mLog.PackageLogger("pre-run")
 
-		if stdin {
-			confPath = visorconfig.Stdin
+		if confArg != "" {
+			confPath = "arg"
 		} else {
+			if stdin {
+				confPath = visorconfig.Stdin
+			} else {
 
-			//enforce conditions for pkg and user flags
-			if pkg {
-				if !root {
-					log.Fatal("root permissions required to use the specified config")
+				//enforce conditions for pkg and user flags
+				if pkg {
+					if !root {
+						log.Fatal("root permissions required to use the specified config")
+					}
+					if !pkgconfigexists {
+						log.Fatal("config not found")
+					}
 				}
-				if !pkgconfigexists {
-					log.Fatal("config not found")
+				if usr {
+					if root {
+						log.Fatal("cannot use specified config as root")
+					}
+					if !userconfigexists {
+						log.Fatal("config not found")
+					}
 				}
-			}
-			if usr {
-				if root {
-					log.Fatal("cannot use specified config as root")
-				}
-				if !userconfigexists {
-					log.Fatal("config not found")
-				}
-			}
 
-			//error on multiple configs from flags
-			if (pkg && usr) || ((pkg || usr) && (confPath != "")) {
-				log.Fatal("Error: multiple configs specified")
-			}
-			//use package config /opt/skywire/skywire.json
-			if pkg {
-				confPath = visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON
-			}
-			//userspace config in $HOME/.skywire/skywire-config.json
-			if usr {
-				confPath = visorconfig.HomePath() + "/" + visorconfig.ConfigName
-			}
-			if confPath == "" {
-				//default config in current dir ./skywire-config.json
-				confPath = visorconfig.ConfigName
-			}
-			//enforce .json extension
-			if !strings.HasSuffix(confPath, ".json") {
-				confPath = confPath + ".json"
-			}
-			//check for the config file
-			if _, err := os.Stat(confPath); err != nil {
-				//fail here on no config
-				log.WithError(err).Fatal("config file not found")
+				//error on multiple configs from flags
+				if (pkg && usr) || ((pkg || usr) && (confPath != "")) {
+					log.Fatal("Error: multiple configs specified")
+				}
+				//use package config /opt/skywire/skywire.json
+				if pkg {
+					confPath = visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON
+				}
+				//userspace config in $HOME/.skywire/skywire-config.json
+				if usr {
+					confPath = visorconfig.HomePath() + "/" + visorconfig.ConfigName
+				}
+				if confPath == "" {
+					//default config in current dir ./skywire-config.json
+					confPath = visorconfig.ConfigName
+				}
+				//enforce .json extension
+				if !strings.HasSuffix(confPath, ".json") {
+					confPath = confPath + ".json"
+				}
+				//check for the config file
+				if _, err := os.Stat(confPath); err != nil {
+					//fail here on no config
+					log.WithError(err).Fatal("config file not found")
+				}
 			}
 		}
 		logBuildInfo(mLog)
@@ -270,6 +276,10 @@ func initConfig() *visorconfig.V1 { //nolint
 	case visorconfig.Stdin:
 		log.Info("Reading config from STDIN.")
 		r = os.Stdin
+	case "arg":
+		log.Info("Reading config from supplied argument.")
+		confPath = visorconfig.Stdin
+		r = strings.NewReader(confArg)
 	case "":
 		fallthrough
 	default:
