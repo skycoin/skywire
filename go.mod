@@ -11,9 +11,10 @@ require (
 	github.com/bitfield/script v0.22.0
 	github.com/blang/semver/v4 v4.0.0
 	github.com/ccding/go-stun/stun v0.0.0-20200514191101-4dc67bcdb029
+	github.com/elazarl/goproxy v0.0.0-20231117061959-7cc037d33fb5
 	github.com/gen2brain/dlgs v0.0.0-20220603100644-40c77870fa8d
 	github.com/gin-gonic/gin v1.9.1
-	github.com/go-chi/chi/v5 v5.0.10
+	github.com/go-chi/chi/v5 v5.0.11
 	github.com/gocarina/gocsv v0.0.0-20230616125104-99d496ca653d
 	github.com/google/uuid v1.3.1
 	github.com/gorilla/securecookie v1.1.1
@@ -27,25 +28,26 @@ require (
 	github.com/orandin/lumberjackrus v1.0.1
 	github.com/pterm/pterm v0.12.66
 	github.com/sirupsen/logrus v1.9.3
-	github.com/skycoin/dmsg v1.3.14
+	github.com/skycoin/dmsg v1.3.17
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/skycoin-service-discovery v0.0.0-20231221001759-d1af6ec27db1
-	github.com/skycoin/skywire-services v0.0.0-20231221001820-3212895ddf12
-	github.com/skycoin/skywire-utilities v1.3.14
+	github.com/skycoin/skywire-services v0.0.0-20240207001624-ebee7346e526
+	github.com/skycoin/skywire-utilities v1.3.17
 	github.com/skycoin/systray v1.10.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.7.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.4
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
+	github.com/tidwall/pretty v1.2.1
 	github.com/toqueteos/webbrowser v1.2.0
 	github.com/xtaci/kcp-go v5.4.20+incompatible
 	github.com/zcalusic/sysinfo v1.0.1
 	go.etcd.io/bbolt v1.3.7
 	golang.org/x/net v0.14.0
 	golang.org/x/sync v0.3.0
-	golang.org/x/sys v0.11.0
-	golang.zx2c4.com/wireguard v0.0.20200320
+	golang.org/x/sys v0.15.0
+	golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675
 )
 
 require (
@@ -142,12 +144,13 @@ require (
 	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
 	go.opencensus.io v0.23.0 // indirect
 	golang.org/x/arch v0.4.0 // indirect
-	golang.org/x/crypto v0.12.0 // indirect
+	golang.org/x/crypto v0.17.0 // indirect
 	golang.org/x/exp v0.0.0-20230817173708-d852ddb80c63 // indirect
 	golang.org/x/mod v0.12.0 // indirect
-	golang.org/x/term v0.11.0 // indirect
-	golang.org/x/text v0.12.0 // indirect
+	golang.org/x/term v0.15.0 // indirect
+	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/tools v0.12.1-0.20230815132531-74c255bcf846 // indirect
+	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	google.golang.org/protobuf v1.31.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect

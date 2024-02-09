@@ -143,7 +143,7 @@ func (c *EntityCommon) delSession(ctx context.Context, pk cipher.PubKey) {
 
 // updateServerEntry updates the dmsg server's entry within dmsg discovery.
 // If 'addr' is an empty string, the Entry.addr field will not be updated in discovery.
-func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, maxSessions int) (err error) {
+func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, maxSessions int, authPassphrase string) (err error) {
 	if addr == "" {
 		panic("updateServerEntry cannot accept empty 'addr' input") // this should never happen
 	}
@@ -170,6 +170,10 @@ func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, maxSe
 		return errors.New("entry in discovery is not of a dmsg server")
 	}
 
+	if authPassphrase != "" {
+		entry.Server.ServerType = authPassphrase
+	}
+
 	sessionsDelta := entry.Server.AvailableSessions != availableSessions
 	addrDelta := entry.Server.Address != addr
 
@@ -192,7 +196,7 @@ func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, maxSe
 	return c.dc.PutEntry(ctx, c.sk, entry)
 }
 
-func (c *EntityCommon) updateServerEntryLoop(ctx context.Context, addr string, maxSessions int) {
+func (c *EntityCommon) updateServerEntryLoop(ctx context.Context, addr string, maxSessions int, authPassphrase string) {
 	t := time.NewTimer(c.updateInterval)
 	defer t.Stop()
 
@@ -208,7 +212,7 @@ func (c *EntityCommon) updateServerEntryLoop(ctx context.Context, addr string, m
 			}
 
 			c.sessionsMx.Lock()
-			err := c.updateServerEntry(ctx, addr, maxSessions)
+			err := c.updateServerEntry(ctx, addr, maxSessions, authPassphrase)
 			c.sessionsMx.Unlock()
 
 			if err != nil {

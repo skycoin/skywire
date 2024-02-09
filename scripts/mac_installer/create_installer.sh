@@ -77,6 +77,7 @@ function build_installer() {
   mv ./apps/skysocks-client ${installer_package_dir}/Contents/MacOS/apps/skysocks-client
   mv ./apps/skychat ${installer_package_dir}/Contents/MacOS/apps/skychat
   cp ./dmsghttp-config.json ${installer_package_dir}/Contents/MacOS/dmsghttp-config.json
+  cp ./services-config.json ${installer_package_dir}/Contents/MacOS/services-config.json
 
   cat <<EOF >${installer_package_dir}/Contents/MacOS/Skywire
 #!/bin/bash

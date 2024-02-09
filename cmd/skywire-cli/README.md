@@ -124,6 +124,7 @@ Available Commands:
   tree                    subcommand tree
   doc                     generate markdown docs
   dmsghttp                update dmsghttp-config.json file from config bootstrap service
+  services                update services-config.json file from config service
 
 
 ```
@@ -2187,6 +2188,20 @@ Usage:
 
 Flags:
   -p, --path string   path of dmsghttp-config file, default is for pkg installation (default "/opt/skywire/dmsghttp-config.json")
+
+
+```
+
+### services
+
+```
+update services-config.json file from config service
+
+Usage:
+  cli services update [flags]
+
+Flags:
+  -p, --path string   path of services-config file, default is for pkg installation (default "/opt/skywire/services-config.json")
 
 
 ```

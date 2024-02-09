@@ -99,6 +99,7 @@ type API interface {
 	Transport(tid uuid.UUID) (*TransportSummary, error)
 	AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*TransportSummary, error)
 	RemoveTransport(tid uuid.UUID) error
+	RemoveAllTransports() error
 	SetPublicAutoconnect(pAc bool) error
 	GetPersistentTransports() ([]transport.PersistentTransports, error)
 	SetPersistentTransports([]transport.PersistentTransports) error
@@ -367,7 +368,7 @@ func (v *Visor) SetRewardAddress(p string) (string, error) {
 		return p, fmt.Errorf("failed to write config to file. err=%v", err)
 	}
 	// generate survey after set/update reward address
-	visorconfig.GenerateSurvey(v.conf, v.log, false)
+	GenerateSurvey(v, v.log, false)
 	return p, nil
 }
 
@@ -1189,6 +1190,12 @@ func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, timeout time.D
 // RemoveTransport implements API.
 func (v *Visor) RemoveTransport(tid uuid.UUID) error {
 	v.tpM.DeleteTransport(tid)
+	return nil
+}
+
+// RemoveAllTransports implements API
+func (v *Visor) RemoveAllTransports() error {
+	v.tpM.DeleteAllTransports()
 	return nil
 }
 

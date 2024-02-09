@@ -70,6 +70,7 @@ archives:
     name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
     files:
       - dmsghttp-config.json
+      - services-config.json
     builds:
       - skywire-visor
       - skywire-cli

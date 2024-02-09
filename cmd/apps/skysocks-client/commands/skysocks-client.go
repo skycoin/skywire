@@ -38,6 +38,8 @@ var serverPK string
 func init() {
 	RootCmd.Flags().StringVar(&addr, "addr", visorconfig.SkysocksClientAddr, "Client address to listen on")
 	RootCmd.Flags().StringVar(&serverPK, "srv", "", "PubKey of the server to connect to")
+	RootCmd.Flags().StringVar(&httpAddr, "http", "", "http proxy mode")
+
 }
 
 // RootCmd is the root command for skysocks
@@ -99,11 +101,14 @@ var RootCmd = &cobra.Command{
 
 			fmt.Printf("Serving proxy client %v\n", addr)
 			setAppStatus(appCl, appserver.AppDetailedStatusRunning)
-
+			httpCtx, httpCancel := context.WithCancel(ctx)
+			if *httpAddr != "" {
+				go httpProxy(httpCtx, httpAddr, addr)
+			}
 			if err := client.ListenAndServe(addr); err != nil {
 				print(fmt.Sprintf("Error serving proxy client: %v\n", err))
 			}
-
+			httpCancel()
 			// need to filter this out, cause usually client failure means app conn is already closed
 			if err := conn.Close(); err != nil && err != io.ErrClosedPipe {
 				print(fmt.Sprintf("Error closing app conn: %v\n", err))
@@ -151,6 +156,33 @@ func setAppPort(appCl *app.Client, port routing.Port) {
 		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
 	}
 }
+
+
+func httpProxy(ctx context.Context, httpAddr, sockscAddr *string) {
+	proxy := goproxy.NewProxyHttpServer()
+
+	proxyURL, err := url.Parse(fmt.Sprintf("socks5://127.0.0.1%s", *sockscAddr)) //nolint
+	if err != nil {
+		print(fmt.Sprintf("Failed to parse socks address: %v\n", err))
+		return
+	}
+
+	proxy.Tr.Proxy = http.ProxyURL(proxyURL)
+
+	fmt.Printf("Serving http proxy %v\n", *httpAddr)
+	httpProxySrv := &http.Server{Addr: *httpAddr, Handler: proxy} //nolint
+
+	go func() {
+		<-ctx.Done()
+		httpProxySrv.Close() //nolint
+		print("Stopping http proxy")
+	}()
+
+	if err := httpProxySrv.ListenAndServe(); err != nil { //nolint
+		print(fmt.Sprintf("Error serving http proxy: %v\n", err))
+	}
+}
+
 
 // Execute executes root CLI command.
 func Execute() {
