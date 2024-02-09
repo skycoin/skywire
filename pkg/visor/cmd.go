@@ -35,6 +35,7 @@ var (
 	pprofAddr            string
 	confPath             string
 	stdin                bool
+	confArg              string
 	hypervisorUI         bool
 	noHypervisorUI       bool
 	remoteHypervisorPKs  string

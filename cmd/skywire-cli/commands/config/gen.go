@@ -1050,7 +1050,7 @@ var genConfigCmd = &cobra.Command{
 				script.Echo(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(string(j), " ", ""), "\n", ""), "\t", "")).Stdout() //nolint
 				return
 			}
-			script.Echo(string(j)).Stdout()
+			script.Echo(string(j)).Stdout() //nolint
 			return
 		}
 		//hide the printing of the config to the terminal
