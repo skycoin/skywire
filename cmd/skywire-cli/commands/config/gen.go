@@ -252,7 +252,7 @@ var genConfigCmd = &cobra.Command{
 				envfile = envfileLinux
 			}
 			fmt.Println(envfile)
-			return
+			os.Exit(0)
 		}
 
 		//--all unhides flags, prints help menu, and exits
@@ -263,7 +263,7 @@ var genConfigCmd = &cobra.Command{
 			}
 			cmd.Flags().MarkHidden("all") //nolint
 			cmd.Help()                    //nolint
-			return
+			os.Exit(0)
 		}
 		//set default output filename
 		if output == "" {
