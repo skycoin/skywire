@@ -252,7 +252,7 @@ var genConfigCmd = &cobra.Command{
 				envfile = envfileLinux
 			}
 			fmt.Println(envfile)
-			return
+			os.Exit(0)
 		}
 
 		//--all unhides flags, prints help menu, and exits
@@ -263,7 +263,7 @@ var genConfigCmd = &cobra.Command{
 			}
 			cmd.Flags().MarkHidden("all") //nolint
 			cmd.Help()                    //nolint
-			return
+			os.Exit(0)
 		}
 		//set default output filename
 		if output == "" {
@@ -292,6 +292,10 @@ var genConfigCmd = &cobra.Command{
 		//enable local hypervisor by default for user
 		if isUsrEnv {
 			isHypervisor = true
+		}
+		//use test deployment
+		if isTestEnv {
+			serviceConfURL = utilenv.TestServiceConfAddr
 		}
 		var err error
 		if isDmsgHTTP {
@@ -372,13 +376,33 @@ var genConfigCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 
 		log := logger
+		wasStdout := isStdout
+		var body []byte
+		var err error
+		// enable errors from service conf fetch from the combination of these flags
+		if isStdout && isHide {
+			isStdout = false
+		}
 
 		if !noFetch {
-			wasStdout := isStdout
-			var body []byte
-			var err error
-
-			if configServicePath != "" {
+			// create an http client to fetch the services
+			client := http.Client{
+				Timeout: time.Second * 15, // Timeout after 15 seconds
+			}
+			if serviceConfURL == "" {
+				serviceConfURL = utilenv.ServiceConfAddr
+			}
+			if !isStdout {
+				log.Infof("Fetching service endpoints from %s", serviceConfURL)
+			}
+			// Make the HTTP GET request
+			res, err := client.Get(fmt.Sprint(serviceConfURL))
+			if err != nil {
+				//silence errors for stdout
+				if !isStdout {
+					log.WithError(err).Error("Failed to fetch servers\n")
+					log.Warn("Falling back on services-config.json")
+				}
 				body, err = os.ReadFile(configServicePath)
 				if err != nil {
 					if !isStdout {
@@ -389,67 +413,65 @@ var genConfigCmd = &cobra.Command{
 					//fill in services struct with the response
 					err = json.Unmarshal(body, &servicesConfig)
 					if err != nil {
-						log.WithError(err).Fatal("Failed to unmarshal json response\n")
+						if !isStdout {
+							log.WithError(err).Error("Failed to unmarshal services-config.json file\n")
+						}
+					} else {
+						services = servicesConfig.Prod
+						if isTestEnv {
+							services = servicesConfig.Test
+						}
 					}
-					if !isStdout {
-						log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
-					}
-					services = servicesConfig.Prod
-					if isTestEnv {
-						services = servicesConfig.Test
-					}
-					// reset the state of isStdout
-					isStdout = wasStdout
+
 				}
 			} else {
-				// set default service conf url if none is specified
-				if serviceConfURL == "" {
-					serviceConfURL = utilenv.ServiceConfAddr
+				//nil error on service conf fetch
+				if res.Body != nil {
+					defer res.Body.Close() //nolint
 				}
-				//use test deployment
-				if isTestEnv {
-					serviceConfURL = utilenv.TestServiceConfAddr
-				}
-				// enable errors from service conf fetch from the combination of these flags
-
-				if isStdout && isHide {
-					isStdout = false
-				}
-				// create an http client to fetch the services
-				client := http.Client{
-					Timeout: time.Second * 15, // Timeout after 15 seconds
-				}
-				// Make the HTTP GET request
-				res, err := client.Get(fmt.Sprint(serviceConfURL))
+				body, err = io.ReadAll(res.Body)
 				if err != nil {
-					//silence errors for stdout
-					if !isStdout {
-						log.WithError(err).Error("Failed to fetch servers\n")
-						log.Warn("Falling back on hardcoded servers")
-					}
-				} else {
-					if res.Body != nil {
-						defer res.Body.Close() //nolint
-					}
-					body, err = io.ReadAll(res.Body)
-					if err != nil {
-						log.WithError(err).Fatal("Failed to read response\n")
-					}
+					log.WithError(err).Error("Failed to read http response\n")
 				}
 				//fill in services struct with the response
 				err = json.Unmarshal(body, &services)
 				if err != nil {
-					log.WithError(err).Fatal("Failed to unmarshal json response\n")
+					if !isStdout {
+						log.WithError(err).Error("Failed to unmarshal json response to services struct\n")
+						log.Warn("Falling back on hardcoded servers")
+					}
+				} else {
+					if !isStdout {
+						log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
+					}
 				}
-				if !isStdout {
-					log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
-				}
-
-				// reset the state of isStdout
-				isStdout = wasStdout
 			}
+		} else {
+			body, err = os.ReadFile(configServicePath)
+			if err != nil {
+				if !isStdout {
+					log.WithError(err).Error("Failed to read config service from file\n")
+					log.Warn("Falling back on hardcoded servers")
+				}
+			} else {
+				//fill in services struct with the response
+				err = json.Unmarshal(body, &servicesConfig)
+				if err != nil {
+					if !isStdout {
+						log.WithError(err).Error("Failed to unmarshal json response to services struct\n")
+						log.Warn("Falling back on hardcoded servers")
+					}
+				}
+				services = servicesConfig.Prod
+				if isTestEnv {
+					services = servicesConfig.Test
+				}
+			}
+
 		}
 
+		// reset the state of isStdout
+		isStdout = wasStdout
 		// Read in old config and obtain old secret key or generate a new random secret key
 		// and obtain old hypervisors (if any)
 		var oldConf visorconfig.V1
