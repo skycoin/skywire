@@ -252,7 +252,7 @@ var genConfigCmd = &cobra.Command{
 				envfile = envfileLinux
 			}
 			fmt.Println(envfile)
-			return
+			os.Exit(0)
 		}
 
 		//--all unhides flags, prints help menu, and exits
@@ -263,7 +263,7 @@ var genConfigCmd = &cobra.Command{
 			}
 			cmd.Flags().MarkHidden("all") //nolint
 			cmd.Help()                    //nolint
-			return
+			os.Exit(0)
 		}
 		//set default output filename
 		if output == "" {
@@ -818,14 +818,14 @@ var genConfigCmd = &cobra.Command{
 				Binary:    visorconfig.VPNClientName,
 				AutoStart: false,
 				Port:      routing.Port(skyenv.VPNClientPort),
-				Args:      []string{"-dns", dnsServer},
+				Args:      []string{"--dns", dnsServer},
 			},
 			{
 				Name:      visorconfig.SkychatName,
 				Binary:    visorconfig.SkychatName,
 				AutoStart: true,
 				Port:      routing.Port(skyenv.SkychatPort),
-				Args:      []string{"-addr", visorconfig.SkychatAddr},
+				Args:      []string{"--addr", visorconfig.SkychatAddr},
 			},
 			{
 				Name:      visorconfig.SkysocksName,
@@ -838,7 +838,7 @@ var genConfigCmd = &cobra.Command{
 				Binary:    visorconfig.SkysocksClientName,
 				AutoStart: false,
 				Port:      routing.Port(visorconfig.SkysocksClientPort),
-				Args:      []string{"-addr", visorconfig.SkysocksClientAddr},
+				Args:      []string{"--addr", visorconfig.SkysocksClientAddr},
 			},
 			{
 				Name:      visorconfig.VPNServerName,
