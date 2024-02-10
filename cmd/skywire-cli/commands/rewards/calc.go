@@ -1,5 +1,5 @@
-// Package clireward cmd/skywire-cli/commands/reward/root.go
-package clireward
+// Package clirewards cmd/skywire-cli/commands/rewards/calc.go
+package clirewards
 
 import (
 	"fmt"
@@ -54,23 +54,22 @@ type rewardData struct {
 }
 
 func init() {
-	RootCmd.AddCommand(rewardCalcCmd)
-	rewardCalcCmd.Flags().SortFlags = false
-	rewardCalcCmd.Flags().StringVarP(&wdate, "date", "d", wdate, "date for which to calculate reward")
-	rewardCalcCmd.Flags().StringVarP(&pubkey, "pk", "k", pubkey, "check reward for pubkey")
-	rewardCalcCmd.Flags().StringVarP(&disallowArchitectures, "noarch", "n", "amd64", "disallowed architectures, comma separated")
-	rewardCalcCmd.Flags().IntVarP(&yearlyTotal, "year", "y", yearlyTotalRewards, "yearly total rewards")
-	rewardCalcCmd.Flags().StringVarP(&utfile, "utfile", "u", "ut.txt", "uptime tracker data file")
-	rewardCalcCmd.Flags().StringVarP(&surveyPath, "path", "p", "log_collecting", "path to the surveys")
-	rewardCalcCmd.Flags().BoolVarP(&h0, "h0", "0", false, "hide statistical data")
-	rewardCalcCmd.Flags().BoolVarP(&h1, "h1", "1", false, "hide survey csv data")
-	rewardCalcCmd.Flags().BoolVarP(&h2, "h2", "2", false, "hide reward csv data")
-	rewardCalcCmd.Flags().BoolVarP(&grr, "err", "e", false, "account for non rewarded keys")
-
+	RootCmd.Flags().SortFlags = false
+	RootCmd.Flags().StringVarP(&wdate, "date", "d", wdate, "date for which to calculate reward")
+	RootCmd.Flags().StringVarP(&pubkey, "pk", "k", pubkey, "check reward for pubkey")
+	RootCmd.Flags().StringVarP(&disallowArchitectures, "noarch", "n", "amd64", "disallowed architectures, comma separated")
+	RootCmd.Flags().IntVarP(&yearlyTotal, "year", "y", yearlyTotalRewards, "yearly total rewards")
+	RootCmd.Flags().StringVarP(&utfile, "utfile", "u", "ut.txt", "uptime tracker data file")
+	RootCmd.Flags().StringVarP(&surveyPath, "path", "p", "log_collecting", "path to the surveys")
+	RootCmd.Flags().BoolVarP(&h0, "h0", "0", false, "hide statistical data")
+	RootCmd.Flags().BoolVarP(&h1, "h1", "1", false, "hide survey csv data")
+	RootCmd.Flags().BoolVarP(&h2, "h2", "2", false, "hide reward csv data")
+	RootCmd.Flags().BoolVarP(&grr, "err", "e", false, "account for non rewarded keys")
 }
 
-var rewardCalcCmd = &cobra.Command{
-	Use:   "calc",
+// RootCmd is the root command for skywire-cli rewards
+var RootCmd = &cobra.Command{
+	Use:   "rewards",
 	Short: "calculate rewards from uptime data & collected surveys",
 	Long: `
 Collect surveys:  skywire-cli log
