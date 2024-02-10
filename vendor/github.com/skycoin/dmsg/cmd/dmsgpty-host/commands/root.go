@@ -12,7 +12,6 @@ import (
 	"strings"
 	"sync"
 
-	cc "github.com/ivanpirog/coloredcobra"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
@@ -56,31 +55,28 @@ var (
 func init() {
 
 	// Prepare flags with env/config references.
-	RootCmd.PersistentFlags().Var(&wl, "wl", "whitelist of the dmsgpty-host")
-	RootCmd.PersistentFlags().StringVar(&dmsgDisc, "dmsgdisc", dmsgDisc, "dmsg discovery address")
-	RootCmd.PersistentFlags().IntVar(&dmsgSessions, "dmsgsessions", dmsgSessions, "minimum number of dmsg sessions to ensure")
-	RootCmd.PersistentFlags().Uint16Var(&dmsgPort, "dmsgport", dmsgPort, "dmsg port for listening for remote hosts")
-	RootCmd.PersistentFlags().StringVar(&cliNet, "clinet", cliNet, "network used for listening for cli connections")
-	RootCmd.PersistentFlags().StringVar(&cliAddr, "cliaddr", cliAddr, "address used for listening for cli connections")
+	RootCmd.Flags().Var(&wl, "wl", "whitelist of the dmsgpty-host")
+	RootCmd.Flags().StringVar(&dmsgDisc, "dmsgdisc", dmsgDisc, "dmsg discovery address")
+	RootCmd.Flags().IntVar(&dmsgSessions, "dmsgsessions", dmsgSessions, "minimum number of dmsg sessions to ensure")
+	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgport", dmsgPort, "dmsg port for listening for remote hosts")
+	RootCmd.Flags().StringVar(&cliNet, "clinet", cliNet, "network used for listening for cli connections")
+	RootCmd.Flags().StringVar(&cliAddr, "cliaddr", cliAddr, "address used for listening for cli connections")
 	// Prepare flags without associated env/config references.
-	RootCmd.PersistentFlags().StringVar(&envPrefix, "envprefix", envPrefix, "env prefix")
+	RootCmd.Flags().StringVar(&envPrefix, "envprefix", envPrefix, "env prefix")
 	RootCmd.Flags().BoolVar(&confStdin, "confstdin", confStdin, "config will be read from stdin if set")
 	RootCmd.Flags().StringVarP(&confPath, "confpath", "c", confPath, "config path")
-	var helpflag bool
-	RootCmd.SetUsageTemplate(help)
-	RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for dmsgpty-host")
-	RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
-	RootCmd.PersistentFlags().MarkHidden("help") //nolint
+
 }
 
 // RootCmd contains commands for dmsgpty-host
 var RootCmd = &cobra.Command{
 	Use:   "host",
-	Short: "runs a standalone dmsgpty-host instance",
+	Short: "DMSG host for pseudoterminal command line interface",
 	Long: `
 	┌┬┐┌┬┐┌─┐┌─┐┌─┐┌┬┐┬ ┬   ┬ ┬┌─┐┌─┐┌┬┐
 	 │││││└─┐│ ┬├─┘ │ └┬┘───├─┤│ │└─┐ │
-	─┴┘┴ ┴└─┘└─┘┴   ┴  ┴    ┴ ┴└─┘└─┘ ┴ `,
+	─┴┘┴ ┴└─┘└─┘┴   ┴  ┴    ┴ ┴└─┘└─┘ ┴
+  ` + "DMSG host for pseudoterminal command line interface",
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
@@ -158,33 +154,10 @@ var RootCmd = &cobra.Command{
 
 // Execute executes the root command.
 func Execute() {
-	cc.Init(&cc.Config{
-		RootCmd:       RootCmd,
-		Headings:      cc.HiBlue + cc.Bold, //+ cc.Underline,
-		Commands:      cc.HiBlue + cc.Bold,
-		CmdShortDescr: cc.HiBlue,
-		Example:       cc.HiBlue + cc.Italic,
-		ExecName:      cc.HiBlue + cc.Bold,
-		Flags:         cc.HiBlue + cc.Bold,
-		//FlagsDataType: cc.HiBlue,
-		FlagsDescr:      cc.HiBlue,
-		NoExtraNewlines: true,
-		NoBottomNewline: true,
-	})
 	if err := RootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
 }
-
-const help = "Usage:\r\n" +
-	"  {{.UseLine}}{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}\r\n\r\n" +
-	"{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}\r\n\r\n" +
-	"Available Commands:{{range .Commands}}{{if (or .IsAvailableCommand)}}\r\n  " +
-	"{{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}\r\n\r\n" +
-	"Flags:\r\n" +
-	"{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}\r\n\r\n" +
-	"Global Flags:\r\n" +
-	"{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}\r\n\r\n"
 
 func configFromJSON(conf dmsgpty.Config) (dmsgpty.Config, error) {
 	var jsonConf dmsgpty.Config
