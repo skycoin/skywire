@@ -28,7 +28,7 @@ require (
 	github.com/orandin/lumberjackrus v1.0.1
 	github.com/pterm/pterm v0.12.66
 	github.com/sirupsen/logrus v1.9.3
-	github.com/skycoin/dmsg v1.3.17
+	github.com/skycoin/dmsg v1.3.18-0.20240210174503-ecde4c538de6
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/skycoin-service-discovery v0.0.0-20231221001759-d1af6ec27db1
 	github.com/skycoin/skywire-services v0.0.0-20240207001624-ebee7346e526
