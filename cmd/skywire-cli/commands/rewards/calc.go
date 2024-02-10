@@ -1,4 +1,4 @@
-// Package clireward cmd/skywire-cli/commands/rewards/root.go
+// Package clirewards cmd/skywire-cli/commands/rewards/calc.go
 package clirewards
 
 import (
@@ -67,6 +67,7 @@ func init() {
 	RootCmd.Flags().BoolVarP(&grr, "err", "e", false, "account for non rewarded keys")
 }
 
+// RootCmd is the root command for skywire-cli rewards
 var RootCmd = &cobra.Command{
 	Use:   "rewards",
 	Short: "calculate rewards from uptime data & collected surveys",
