@@ -11,9 +11,12 @@ import (
 	"net"
 	"os"
 	"time"
+	"net/http"
+	"net/url"
 
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
+	"github.com/elazarl/goproxy"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -31,9 +34,12 @@ const (
 	socksPort = routing.Port(3)
 )
 
-var r = netutil.NewRetrier(nil, time.Second, netutil.DefaultMaxBackoff, 0, 1)
-var addr string
-var serverPK string
+var (
+	r = netutil.NewRetrier(nil, time.Second, netutil.DefaultMaxBackoff, 0, 1)
+	addr string
+	serverPK string
+	httpAddr	string
+)
 
 func init() {
 	RootCmd.Flags().StringVar(&addr, "addr", visorconfig.SkysocksClientAddr, "Client address to listen on")
@@ -102,7 +108,7 @@ var RootCmd = &cobra.Command{
 			fmt.Printf("Serving proxy client %v\n", addr)
 			setAppStatus(appCl, appserver.AppDetailedStatusRunning)
 			httpCtx, httpCancel := context.WithCancel(ctx)
-			if *httpAddr != "" {
+			if httpAddr != "" {
 				go httpProxy(httpCtx, httpAddr, addr)
 			}
 			if err := client.ListenAndServe(addr); err != nil {
@@ -158,10 +164,10 @@ func setAppPort(appCl *app.Client, port routing.Port) {
 }
 
 
-func httpProxy(ctx context.Context, httpAddr, sockscAddr *string) {
+func httpProxy(ctx context.Context, httpAddr, sockscAddr string) {
 	proxy := goproxy.NewProxyHttpServer()
 
-	proxyURL, err := url.Parse(fmt.Sprintf("socks5://127.0.0.1%s", *sockscAddr)) //nolint
+	proxyURL, err := url.Parse(fmt.Sprintf("socks5://127.0.0.1%s", sockscAddr)) //nolint
 	if err != nil {
 		print(fmt.Sprintf("Failed to parse socks address: %v\n", err))
 		return
@@ -169,8 +175,8 @@ func httpProxy(ctx context.Context, httpAddr, sockscAddr *string) {
 
 	proxy.Tr.Proxy = http.ProxyURL(proxyURL)
 
-	fmt.Printf("Serving http proxy %v\n", *httpAddr)
-	httpProxySrv := &http.Server{Addr: *httpAddr, Handler: proxy} //nolint
+	fmt.Printf("Serving http proxy %v\n", httpAddr)
+	httpProxySrv := &http.Server{Addr: httpAddr, Handler: proxy} //nolint
 
 	go func() {
 		<-ctx.Done()

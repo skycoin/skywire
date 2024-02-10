@@ -316,8 +316,23 @@ prepare:
 	chmod +x ./apps/*
 	sudo echo "sudo cache"
 
+## Prepare to run skywire from source via cmd/skywire-deployment, without compiling binaries
+prepare1:
+	test -d apps && rm -r apps || true
+	mkdir -p apps
+	ln ./scripts/_merged-apps/skychat ./apps/
+	ln ./scripts/_merged-apps/skysocks ./apps/
+	ln ./scripts/_merged-apps/skysocks-client ./apps/
+	ln ./scripts/_merged-apps/vpn-server ./apps/
+	ln ./scripts/_merged-apps/vpn-client ./apps/
+	chmod +x ./apps/*
+	sudo echo "sudo cache"
+
 run-source: prepare ## Run skywire from source, without compiling binaries
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -in | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
+
+run-source-merged: prepare1 ## Run skywire from source, without compiling binaries
+	go run ./cmd/skywire-deployment/skywire.go cli config gen -in | sudo go run ./cmd/skywire-deployment/skywire.go visor -n || true
 
 run-systray: prepare ## Run skywire from source, with vpn server enabled
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -ni | sudo go run ./cmd/skywire-visor/skywire-visor.go -n --systray || true
