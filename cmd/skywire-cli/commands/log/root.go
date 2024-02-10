@@ -79,6 +79,10 @@ var logCmd = &cobra.Command{
 	Long:  "Fetch health, survey, and transport logging from visors which are online in the uptime tracker\nhttp://ut.skywire.skycoin.com/uptimes?v=v2\nhttp://ut.skywire.skycoin.com/uptimes?v=v2&visors=<pk1>;<pk2>;<pk3>",
 	Run: func(cmd *cobra.Command, args []string) {
 		log := logging.MustGetLogger("log-collecting")
+		fver, err := version.NewVersion("v1.3.17")
+		if err != nil {
+			log.Fatal("can't parse version for filtering fetches")
+		}
 		if logOnly && surveyOnly {
 			log.Fatal("use of mutually exclusive flags --log and --survey")
 		}
@@ -202,7 +206,11 @@ var logCmd = &cobra.Command{
 							}
 						}
 						if !logOnly {
-							download(ctx, log, httpC, "node-info.json", "node-info.json", key, maxFileSize) //nolint
+							if visorVersion.LessThan(fver) {
+								download(ctx, log, httpC, "node-info.json", "node-info.json", key, maxFileSize) //nolint
+							} else {
+								download(ctx, log, httpC, "node-info", "node-info.json", key, maxFileSize) //nolint
+							}
 						}
 						if !surveyOnly {
 							for i := 0; i <= duration; i++ {
