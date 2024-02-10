@@ -9,14 +9,14 @@ import (
 	"io"
 	"log"
 	"net"
-	"os"
-	"time"
 	"net/http"
 	"net/url"
+	"os"
+	"time"
 
+	"github.com/elazarl/goproxy"
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
-	"github.com/elazarl/goproxy"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -35,10 +35,10 @@ const (
 )
 
 var (
-	r = netutil.NewRetrier(nil, time.Second, netutil.DefaultMaxBackoff, 0, 1)
-	addr string
+	r        = netutil.NewRetrier(nil, time.Second, netutil.DefaultMaxBackoff, 0, 1)
+	addr     string
 	serverPK string
-	httpAddr	string
+	httpAddr string
 )
 
 func init() {
@@ -163,7 +163,6 @@ func setAppPort(appCl *app.Client, port routing.Port) {
 	}
 }
 
-
 func httpProxy(ctx context.Context, httpAddr, sockscAddr string) {
 	proxy := goproxy.NewProxyHttpServer()
 
@@ -188,7 +187,6 @@ func httpProxy(ctx context.Context, httpAddr, sockscAddr string) {
 		print(fmt.Sprintf("Error serving http proxy: %v\n", err))
 	}
 }
-
 
 // Execute executes root CLI command.
 func Execute() {
