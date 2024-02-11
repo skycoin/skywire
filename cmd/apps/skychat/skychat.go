@@ -9,7 +9,7 @@ import (
 
 func main() {
 	cc.Init(&cc.Config{
-		RootCmd:         RootCmd,
+		RootCmd:         commands.RootCmd,
 		Headings:        cc.HiBlue + cc.Bold,
 		Commands:        cc.HiBlue + cc.Bold,
 		CmdShortDescr:   cc.HiBlue,
