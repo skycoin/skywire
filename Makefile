@@ -103,6 +103,10 @@ check-windows: lint-windows test-windows ## Run linters and tests on windows ima
 
 build: host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
+build-merged: ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
+	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire ./cmd/skywire-deployment
+
+
 build-windows: host-apps-windows bin-windows ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
 build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
@@ -117,6 +121,10 @@ install-system-linux: build ## Install apps and binaries over those provided by 
 	sudo echo "sudo cache"
 	sudo install -Dm755 $(BUILD_PATH){skywire-cli,skywire-visor} /opt/skywire/bin/ & \
 	sudo install -Dm755 $(BUILD_PATH)apps/{vpn-server,vpn-client,skysocks-client,skysocks,skychat} /opt/skywire/apps/
+
+install-system-linux-merged: build-merged ## Install apps and binaries over those provided by the linux package - linux package must be installed first!
+	sudo echo "sudo cache"
+	sudo install -Dm755 $(BUILD_PATH)skywire /opt/skywire/bin/
 
 install-generate: ## Installs required execs for go generate.
 	${OPTS} go install github.com/mjibson/esc github.com/vektra/mockery/v2@latest
