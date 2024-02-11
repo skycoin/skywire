@@ -11,7 +11,6 @@ import (
 	"runtime"
 	"syscall"
 
-	cc "github.com/ivanpirog/coloredcobra"
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/spf13/cobra"
 
@@ -239,19 +238,6 @@ func setAppPort(appCl *app.Client, port routing.Port) {
 
 // Execute executes root CLI command.
 func Execute() {
-	cc.Init(&cc.Config{
-		RootCmd:       RootCmd,
-		Headings:      cc.HiBlue + cc.Bold, //+ cc.Underline,
-		Commands:      cc.HiBlue + cc.Bold,
-		CmdShortDescr: cc.HiBlue,
-		Example:       cc.HiBlue + cc.Italic,
-		ExecName:      cc.HiBlue + cc.Bold,
-		Flags:         cc.HiBlue + cc.Bold,
-		//FlagsDataType: cc.HiBlue,
-		FlagsDescr:      cc.HiBlue,
-		NoExtraNewlines: true,
-		NoBottomNewline: true,
-	})
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
 	}

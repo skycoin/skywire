@@ -10,7 +10,6 @@ import (
 	"runtime"
 	"syscall"
 
-	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
@@ -29,11 +28,6 @@ const (
 )
 
 var (
-	//	localPKStr = flag.String("pk", "", "Local PubKey")
-	//	localSKStr = flag.String("sk", "", "Local SecKey")
-	//	passcode   = flag.String("passcode", "", "Passcode to authenticate connecting users")
-	//	networkIfc = flag.String("netifc", "", "Default network interface for multiple available interfaces")
-	//	secure     = flag.Bool("secure", true, "Forbid connections from clients to server local network")
 	localPKStr string
 	localSKStr string
 	passcode   string
@@ -167,19 +161,6 @@ func setAppPort(appCl *app.Client, port routing.Port) {
 
 // Execute executes root CLI command.
 func Execute() {
-	cc.Init(&cc.Config{
-		RootCmd:       RootCmd,
-		Headings:      cc.HiBlue + cc.Bold, //+ cc.Underline,
-		Commands:      cc.HiBlue + cc.Bold,
-		CmdShortDescr: cc.HiBlue,
-		Example:       cc.HiBlue + cc.Italic,
-		ExecName:      cc.HiBlue + cc.Bold,
-		Flags:         cc.HiBlue + cc.Bold,
-		//FlagsDataType: cc.HiBlue,
-		FlagsDescr:      cc.HiBlue,
-		NoExtraNewlines: true,
-		NoBottomNewline: true,
-	})
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
 	}

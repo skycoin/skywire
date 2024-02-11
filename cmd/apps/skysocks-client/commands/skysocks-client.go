@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/elazarl/goproxy"
-	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
@@ -190,19 +189,6 @@ func httpProxy(ctx context.Context, httpAddr, sockscAddr string) {
 
 // Execute executes root CLI command.
 func Execute() {
-	cc.Init(&cc.Config{
-		RootCmd:       RootCmd,
-		Headings:      cc.HiBlue + cc.Bold, //+ cc.Underline,
-		Commands:      cc.HiBlue + cc.Bold,
-		CmdShortDescr: cc.HiBlue,
-		Example:       cc.HiBlue + cc.Italic,
-		ExecName:      cc.HiBlue + cc.Bold,
-		Flags:         cc.HiBlue + cc.Bold,
-		//FlagsDataType: cc.HiBlue,
-		FlagsDescr:      cc.HiBlue,
-		NoExtraNewlines: true,
-		NoBottomNewline: true,
-	})
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
 	}

@@ -188,6 +188,7 @@ func init() {
 	genConfigCmd.Flags().StringVar(&proxyClientPass, "proxyclientpass", scriptExecString("${PROXYCLIENTPASS}"), "password for the proxy client to access the server (if needed)")
 	gHiddenFlags = append(gHiddenFlags, "proxyclientpass")
 	// TODO: Password for accessing proxy client
+	// TODO: VPN client killswitch should be handled as boolean, not string
 	genConfigCmd.Flags().StringVar(&setVPNClientKillswitch, "killsw", scriptExecString("${VPNKS}"), "vpn client killswitch")
 	gHiddenFlags = append(gHiddenFlags, "killsw")
 	genConfigCmd.Flags().StringVar(&addVPNClientSrv, "addvpn", scriptExecString("${ADDVPNPK}"), "set vpn server public key for vpn client")
