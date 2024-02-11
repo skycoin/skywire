@@ -1,2 +1,2 @@
 #!/bin/bash
-sudo go run ../../cmd/apps/vpn-client/vpn-client.go
+go run ../../cmd/apps/vpn-client/vpn-client.go $@

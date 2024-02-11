@@ -1,2 +1,2 @@
 #!/bin/bash
-sudo go run ../../cmd/skywire-deployment/skywire.go app skysocks
+go run ../../cmd/skywire-deployment/skywire.go app skysocks
