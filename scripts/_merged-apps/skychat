@@ -1,0 +1,2 @@
+#!/bin/bash
+go run ../../cmd/skywire-deployment/skywire.go app skychat $@
