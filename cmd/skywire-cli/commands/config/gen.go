@@ -188,6 +188,7 @@ func init() {
 	genConfigCmd.Flags().StringVar(&proxyClientPass, "proxyclientpass", scriptExecString("${PROXYCLIENTPASS}"), "password for the proxy client to access the server (if needed)")
 	gHiddenFlags = append(gHiddenFlags, "proxyclientpass")
 	// TODO: Password for accessing proxy client
+	// TODO: VPN client killswitch should be handled as boolean, not string
 	genConfigCmd.Flags().StringVar(&setVPNClientKillswitch, "killsw", scriptExecString("${VPNKS}"), "vpn client killswitch")
 	gHiddenFlags = append(gHiddenFlags, "killsw")
 	genConfigCmd.Flags().StringVar(&addVPNClientSrv, "addvpn", scriptExecString("${ADDVPNPK}"), "set vpn server public key for vpn client")
@@ -840,14 +841,14 @@ var genConfigCmd = &cobra.Command{
 				Binary:    visorconfig.VPNClientName,
 				AutoStart: false,
 				Port:      routing.Port(skyenv.VPNClientPort),
-				Args:      []string{"-dns", dnsServer},
+				Args:      []string{"--dns", dnsServer},
 			},
 			{
 				Name:      visorconfig.SkychatName,
 				Binary:    visorconfig.SkychatName,
 				AutoStart: true,
 				Port:      routing.Port(skyenv.SkychatPort),
-				Args:      []string{"-addr", visorconfig.SkychatAddr},
+				Args:      []string{"--addr", visorconfig.SkychatAddr},
 			},
 			{
 				Name:      visorconfig.SkysocksName,
@@ -860,7 +861,7 @@ var genConfigCmd = &cobra.Command{
 				Binary:    visorconfig.SkysocksClientName,
 				AutoStart: false,
 				Port:      routing.Port(visorconfig.SkysocksClientPort),
-				Args:      []string{"-addr", visorconfig.SkysocksClientAddr},
+				Args:      []string{"--addr", visorconfig.SkysocksClientAddr},
 			},
 			{
 				Name:      visorconfig.VPNServerName,

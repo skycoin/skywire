@@ -1,104 +1,25 @@
-// /* cmd/apps/skysocks/skysocks.go
-/*
-proxy server app for skywire visor
-*/
+// Package main cmd/apps/skysocks/skysocks.go
 package main
 
 import (
-	"flag"
-	"fmt"
-	"os"
-	"os/signal"
-	"runtime"
+	cc "github.com/ivanpirog/coloredcobra"
 
-	ipc "github.com/james-barrow/golang-ipc"
-
-	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire/internal/skysocks"
-	"github.com/skycoin/skywire/pkg/app"
-	"github.com/skycoin/skywire/pkg/app/appnet"
-	"github.com/skycoin/skywire/pkg/app/appserver"
-	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
-)
-
-const (
-	netType = appnet.TypeSkynet
-	port    = routing.Port(3)
+	"github.com/skycoin/skywire/cmd/apps/skysocks/commands"
 )
 
 func main() {
-	appCl := app.NewClient(nil)
-	defer appCl.Close()
+	cc.Init(&cc.Config{
+		RootCmd:         commands.RootCmd,
+		Headings:        cc.HiBlue + cc.Bold,
+		Commands:        cc.HiBlue + cc.Bold,
+		CmdShortDescr:   cc.HiBlue,
+		Example:         cc.HiBlue + cc.Italic,
+		ExecName:        cc.HiBlue + cc.Bold,
+		Flags:           cc.HiBlue + cc.Bold,
+		FlagsDescr:      cc.HiBlue,
+		NoExtraNewlines: true,
+		NoBottomNewline: true,
+	})
 
-	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
-		print(fmt.Sprintf("Failed to output build info: %v", err))
-	}
-
-	var passcode = flag.String("passcode", "", "Authorize user against this passcode")
-	flag.Parse()
-
-	srv, err := skysocks.NewServer(*passcode, appCl)
-	if err != nil {
-		setAppError(appCl, err)
-		print(fmt.Sprintf("Failed to create a new server: %v\n", err))
-		os.Exit(1)
-	}
-
-	l, err := appCl.Listen(netType, port)
-	if err != nil {
-		setAppError(appCl, err)
-		print(fmt.Sprintf("Error listening network %v on port %d: %v\n", netType, port, err))
-		os.Exit(1)
-	}
-
-	setAppPort(appCl, port)
-
-	fmt.Println("Starting serving proxy server")
-
-	if runtime.GOOS == "windows" {
-		ipcClient, err := ipc.StartClient(visorconfig.VPNClientName, nil)
-		if err != nil {
-			setAppError(appCl, err)
-			print(fmt.Sprintf("Error creating ipc server for VPN client: %v\n", err))
-			os.Exit(1)
-		}
-		go srv.ListenIPC(ipcClient)
-	} else {
-		termCh := make(chan os.Signal, 1)
-		signal.Notify(termCh, os.Interrupt)
-
-		go func() {
-			<-termCh
-
-			if err := srv.Close(); err != nil {
-				print(fmt.Sprintf("%v\n", err))
-				os.Exit(1)
-			}
-		}()
-	}
-	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
-
-	if err := srv.Serve(l); err != nil {
-		print(fmt.Sprintf("%v\n", err))
-		os.Exit(1)
-	}
-}
-
-func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
-	if err := appCl.SetDetailedStatus(string(status)); err != nil {
-		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
-	}
-}
-
-func setAppError(appCl *app.Client, appErr error) {
-	if err := appCl.SetError(appErr.Error()); err != nil {
-		print(fmt.Sprintf("Failed to set error %v: %v\n", appErr, err))
-	}
-}
-
-func setAppPort(appCl *app.Client, port routing.Port) {
-	if err := appCl.SetAppPort(port); err != nil {
-		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
-	}
+	commands.Execute()
 }

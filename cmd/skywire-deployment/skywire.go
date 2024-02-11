@@ -32,6 +32,11 @@ import (
 	tpd "github.com/skycoin/skywire-services/cmd/transport-discovery/commands"
 	tps "github.com/skycoin/skywire-services/cmd/transport-setup/commands"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	skychat "github.com/skycoin/skywire/cmd/apps/skychat/commands"
+	skysocksclient "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
+	skysocks "github.com/skycoin/skywire/cmd/apps/skysocks/commands"
+	vpnclient "github.com/skycoin/skywire/cmd/apps/vpn-client/commands"
+	vpnserver "github.com/skycoin/skywire/cmd/apps/vpn-server/commands"
 	setupnode "github.com/skycoin/skywire/cmd/setup-node/commands"
 	skywirecli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
 	"github.com/skycoin/skywire/pkg/visor"
@@ -67,11 +72,19 @@ func init() {
 		se.RootCmd,
 		sd.RootCmd,
 	)
+	appsCmd.AddCommand(
+		vpnserver.RootCmd,
+		vpnclient.RootCmd,
+		skysocksclient.RootCmd,
+		skysocks.RootCmd,
+		skychat.RootCmd,
+	)
 	rootCmd.AddCommand(
 		visor.RootCmd,
 		skywirecli.RootCmd,
 		svcCmd,
 		dmsgCmd,
+		appsCmd,
 	)
 	visor.RootCmd.Long = `
 	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐  ┬  ┬┬┌─┐┌─┐┬─┐
@@ -145,6 +158,18 @@ var dmsgptyCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 }
+var appsCmd = &cobra.Command{
+	Use:   "app",
+	Short: "skywire native applications",
+	Long: `
+	┌─┐┌─┐┌─┐┌─┐
+	├─┤├─┘├─┘└─┐
+	┴ ┴┴  ┴  └─┘`,
+	SilenceErrors:         true,
+	SilenceUsage:          true,
+	DisableSuggestions:    true,
+	DisableFlagsInUseLine: true,
+}
 
 func main() {
 	commands := []*cobra.Command{
@@ -175,6 +200,12 @@ func main() {
 		setupnode.RootCmd,
 		visor.RootCmd,
 		skywirecli.RootCmd,
+		vpnserver.RootCmd,
+		vpnclient.RootCmd,
+		skysocksclient.RootCmd,
+		skysocks.RootCmd,
+		skychat.RootCmd,
+		appsCmd,
 		rootCmd,
 	}
 	for _, cmd := range commands {
