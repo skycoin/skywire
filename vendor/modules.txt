@@ -493,14 +493,12 @@ github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/store
 ## explicit; go 1.21
 github.com/skycoin/skywire-services/cmd/address-resolver/commands
 github.com/skycoin/skywire-services/cmd/config-bootstrapper/commands
-github.com/skycoin/skywire-services/cmd/dmsg-monitor/commands
 github.com/skycoin/skywire-services/cmd/keys-gen/commands
 github.com/skycoin/skywire-services/cmd/liveness-checker/commands
 github.com/skycoin/skywire-services/cmd/node-visualizer/commands
 github.com/skycoin/skywire-services/cmd/public-visor-monitor/commands
 github.com/skycoin/skywire-services/cmd/route-finder/commands
 github.com/skycoin/skywire-services/cmd/sw-env/commands
-github.com/skycoin/skywire-services/cmd/tpd-monitor/commands
 github.com/skycoin/skywire-services/cmd/transport-discovery/commands
 github.com/skycoin/skywire-services/cmd/transport-setup/commands
 github.com/skycoin/skywire-services/internal/armetrics
@@ -511,14 +509,12 @@ github.com/skycoin/skywire-services/internal/tpdiscmetrics
 github.com/skycoin/skywire-services/pkg/address-resolver/api
 github.com/skycoin/skywire-services/pkg/address-resolver/store
 github.com/skycoin/skywire-services/pkg/config-bootstrapper/api
-github.com/skycoin/skywire-services/pkg/dmsg-monitor/api
 github.com/skycoin/skywire-services/pkg/liveness-checker/api
 github.com/skycoin/skywire-services/pkg/liveness-checker/store
 github.com/skycoin/skywire-services/pkg/node-visualizer/api
 github.com/skycoin/skywire-services/pkg/public-visor-monitor/api
 github.com/skycoin/skywire-services/pkg/route-finder/api
 github.com/skycoin/skywire-services/pkg/route-finder/store
-github.com/skycoin/skywire-services/pkg/tpd-monitor/api
 github.com/skycoin/skywire-services/pkg/transport-discovery/api
 github.com/skycoin/skywire-services/pkg/transport-discovery/store
 github.com/skycoin/skywire-services/pkg/transport-setup/api
