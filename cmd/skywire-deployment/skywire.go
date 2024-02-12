@@ -21,14 +21,12 @@ import (
 
 	ar "github.com/skycoin/skywire-services/cmd/address-resolver/commands"
 	confbs "github.com/skycoin/skywire-services/cmd/config-bootstrapper/commands"
-	dmsgm "github.com/skycoin/skywire-services/cmd/dmsg-monitor/commands"
 	kg "github.com/skycoin/skywire-services/cmd/keys-gen/commands"
 	lc "github.com/skycoin/skywire-services/cmd/liveness-checker/commands"
 	nv "github.com/skycoin/skywire-services/cmd/node-visualizer/commands"
 	pvm "github.com/skycoin/skywire-services/cmd/public-visor-monitor/commands"
 	rf "github.com/skycoin/skywire-services/cmd/route-finder/commands"
 	se "github.com/skycoin/skywire-services/cmd/sw-env/commands"
-	tpdm "github.com/skycoin/skywire-services/cmd/tpd-monitor/commands"
 	tpd "github.com/skycoin/skywire-services/cmd/transport-discovery/commands"
 	tps "github.com/skycoin/skywire-services/cmd/transport-setup/commands"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
@@ -52,7 +50,6 @@ func init() {
 		dmsgptyCmd,
 		dmsgdisc.RootCmd,
 		dmsgserver.RootCmd,
-		dmsgm.RootCmd,
 		dmsghttp.RootCmd,
 		dmsgcurl.RootCmd,
 		dmsgweb.RootCmd,
@@ -61,14 +58,12 @@ func init() {
 		setupnode.RootCmd,
 		tpd.RootCmd,
 		tps.RootCmd,
-		tpdm.RootCmd,
 		ar.RootCmd,
 		rf.RootCmd,
 		confbs.RootCmd,
 		kg.RootCmd,
 		lc.RootCmd,
 		nv.RootCmd,
-		pvm.RootCmd,
 		se.RootCmd,
 		sd.RootCmd,
 	)
@@ -185,7 +180,6 @@ func main() {
 		dmsgCmd,
 		tpd.RootCmd,
 		tps.RootCmd,
-		tpdm.RootCmd,
 		ar.RootCmd,
 		rf.RootCmd,
 		confbs.RootCmd,
@@ -194,7 +188,6 @@ func main() {
 		nv.RootCmd,
 		pvm.RootCmd,
 		se.RootCmd,
-		dmsgm.RootCmd,
 		sd.RootCmd,
 		svcCmd,
 		setupnode.RootCmd,
