@@ -610,7 +610,7 @@ archives:
       - vpn-server-riscv64
       - vpn-client-riscv64
 
-  - id: amd64
+  - id: deployment-amd64
     format: tar.gz
     wrap_in_directory: false
     name_template: 'skywire-deployment-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
@@ -620,7 +620,7 @@ archives:
     builds:
       - skywire-deployment-amd64
 
-  - id: arm64
+  - id: deployment-arm64
     format: tar.gz
     wrap_in_directory: false
     name_template: 'skywire-deployment-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
@@ -630,7 +630,7 @@ archives:
     builds:
       - skywire-deployment-arm64
 
-  - id: arm
+  - id: deployment-arm
     format: tar.gz
     wrap_in_directory: false
     name_template: 'skywire-deployment-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
@@ -640,7 +640,7 @@ archives:
     builds:
       - skywire-deployment-arm
 
-  - id: armhf
+  - id: deployment-armhf
     format: tar.gz
     wrap_in_directory: false
     name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}hf'
@@ -650,7 +650,7 @@ archives:
     builds:
       - skywire-deployment-armhf
 
-  - id: riscv64
+  - id: deployment-riscv64
     format: tar.gz
     wrap_in_directory: false
     name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
