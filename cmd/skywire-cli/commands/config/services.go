@@ -1,5 +1,5 @@
 // Package cliservices cmd/skywire-cli/commands/services/root.go
-package cliservices
+package cliconfig
 
 import (
 	"context"
@@ -16,17 +16,14 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
-var (
-	path string
-)
-
 func init() {
+	updateCmd.AddCommand(servicesCmd)
 	servicesCmd.Flags().SortFlags = false
 	servicesCmd.Flags().StringVarP(&path, "path", "p", "/opt/skywire/services-config.json", "path of services-config file, default is for pkg installation")
 }
 
 // RootCmd is servicesCmd
-var RootCmd = servicesCmd
+//var RootCmd = servicesCmd
 
 var servicesCmd = &cobra.Command{
 	Use:   "services update",
@@ -57,11 +54,6 @@ var servicesCmd = &cobra.Command{
 			log.WithError(err).Errorf("Cannot save new services-config.json file at %s", path)
 		}
 	},
-}
-
-type servicesConf struct { //nolint
-	Test visorconfig.Services `json:"test"`
-	Prod visorconfig.Services `json:"prod"`
 }
 
 func fetchServicesConf() (servicesConf, error) {

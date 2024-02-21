@@ -1,5 +1,5 @@
 // Package clidmsghttp cmd/skywire-cli/commands/dmsghttp/root.go
-package clidmsghttp
+package cliconfig
 
 import (
 	"context"
@@ -16,17 +16,14 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 )
 
-var (
-	path string
-)
-
 func init() {
+	updateCmd.AddCommand(dmsghttpCmd)
 	dmsghttpCmd.Flags().SortFlags = false
 	dmsghttpCmd.Flags().StringVarP(&path, "path", "p", "/opt/skywire/dmsghttp-config.json", "path of dmsghttp-config file, default is for pkg installation")
 }
 
 // RootCmd is surveyCmd
-var RootCmd = dmsghttpCmd
+//var RootCmd = dmsghttpCmd
 
 var dmsghttpCmd = &cobra.Command{
 	Use:   "dmsghttp update",
