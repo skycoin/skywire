@@ -25,7 +25,7 @@ var (
 	cacheFileTPD   string
 	cacheFileUT    string
 	cacheFilesAge  int
-	padSpaces  int
+	padSpaces      int
 	isStats        bool
 	rawData        bool
 	refinedData    bool
@@ -216,7 +216,6 @@ var rtreeCmd = &cobra.Command{
 		}
 	},
 }
-
 
 /*
 	},

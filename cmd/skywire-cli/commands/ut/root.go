@@ -7,28 +7,27 @@ import (
 	"net/http"
 	"os"
 	"time"
-	"github.com/bitfield/script"
 
+	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
-
+	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 )
 
 // RootCmd is utCmd
 var RootCmd = utCmd
 
 var (
-	pubkey     cipher.PubKey
-	pk         string
-	thisPk     string
-	online     bool
-	isStats    bool
-	utURL          string
-	cacheFileUT    string
-	cacheFilesAge  int
+	pubkey        cipher.PubKey
+	pk            string
+	thisPk        string
+	online        bool
+	isStats       bool
+	utURL         string
+	cacheFileUT   string
+	cacheFilesAge int
 )
 
 var minUT int
@@ -64,7 +63,6 @@ var utCmd = &cobra.Command{
 		script.Echo(uts).JQ(".[] | \"\\(.pk) \\(.daily | to_entries[] | select(.value | tonumber > "+fmt.Sprintf("%d", minUT)+") | \"\\(.key) \\(.value)\")\"").Replace("\"", "").Stdout() //nolint
 	},
 }
-
 
 func getData(cachefile, thisurl string) (thisdata string) {
 	var shouldfetch bool
