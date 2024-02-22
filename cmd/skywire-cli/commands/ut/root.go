@@ -2,26 +2,23 @@
 package cliut
 
 import (
-	"encoding/json"
+	"bytes"
 	"fmt"
-	"io"
-	"log"
 	"net/http"
 	"os"
-	"strconv"
 	"time"
+	"github.com/bitfield/script"
 
-	"github.com/skycoin/dmsg/pkg/direct"
-	"github.com/skycoin/dmsg/pkg/disc"
-	"github.com/skycoin/dmsg/pkg/dmsg"
-	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
-	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
+
 )
+
+// RootCmd is utCmd
+var RootCmd = utCmd
 
 var (
 	pubkey     cipher.PubKey
@@ -29,176 +26,70 @@ var (
 	thisPk     string
 	online     bool
 	isStats    bool
-	url        string
-	data       []byte
-	dmsgAddr   string
-	dmsgIP     string
-	utDmsgAddr string
+	utURL          string
+	cacheFileUT    string
+	cacheFilesAge  int
 )
 
 var minUT int
 
 func init() {
-	RootCmd.Flags().StringVarP(&pk, "pk", "k", "", "check uptime for the specified key")
-	RootCmd.Flags().BoolVarP(&online, "on", "o", false, "list currently online visors")
-	RootCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "count the number of results")
-	RootCmd.Flags().IntVarP(&minUT, "min", "n", 75, "list visors meeting minimum uptime")
-	RootCmd.Flags().StringVarP(&url, "url", "u", "http://ut.skywire.skycoin.com/uptimes?v=v2", "specify alternative uptime tracker url\ndefault: http://ut.skywire.skycoin.com/uptimes?v=v2")
-	RootCmd.Flags().StringVar(&dmsgAddr, "dmsgAddr", "030c83534af1041aee60c2f124b682a9d60c6421876db7c67fc83a73c5effdbd96", "specific dmsg server address for dmsghttp query")
-	RootCmd.Flags().StringVar(&dmsgIP, "dmsgIP", "188.121.99.59:8081", "specific dmsg server ip for dmsghttp query")
-	RootCmd.Flags().StringVar(&utDmsgAddr, "utDmsgAddr", "dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80", "dmsg address of uptime tracker")
+	utCmd.Flags().StringVarP(&pk, "pk", "k", "", "check uptime for the specified key")
+	utCmd.Flags().BoolVarP(&online, "on", "o", false, "list currently online visors")
+	utCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "count the number of results")
+	utCmd.Flags().IntVarP(&minUT, "min", "n", 75, "list visors meeting minimum uptime")
+	utCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location.")
+	utCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
+	utCmd.Flags().StringVarP(&utURL, "url", "u", utilenv.UptimeTrackerAddr, "specify alternative uptime tracker url")
 }
 
-// RootCmd contains commands that interact with the skywire-visor
-var RootCmd = &cobra.Command{
+var utCmd = &cobra.Command{
 	Use:   "ut",
 	Short: "query uptime tracker",
-	Long:  "query uptime tracker\n Check local visor daily uptime percent with:\n skywire-cli ut -k $(skywire-cli visor pk)",
+	Long:  fmt.Sprintf("query uptime tracker\n\n%v/uptimes?v=v2\n\nCheck local visor daily uptime percent with:\n skywire-cli ut -k $(skywire-cli visor pk)n\nSet cache file location to \"\" to avoid using cache files", utilenv.UptimeTrackerAddr),
 	Run: func(cmd *cobra.Command, _ []string) {
-		// tyring to connect with running visor
-		rpcClient, err := clirpc.Client(cmd.Flags())
-		if err != nil {
-			internal.PrintError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
-		} else {
-			data, err = rpcClient.FetchUptimeTrackerData(pk)
-			if err != nil {
-				internal.PrintError(cmd.Flags(), fmt.Errorf("unable to fetch uptime tracker data from RPC client: %w", err))
-			}
-		}
-		// no rpc, so trying to dmsghttp query
-		if len(data) == 0 {
-			data, err = dmsgHTTPQuery(cmd)
-			if err != nil {
-				internal.PrintError(cmd.Flags(), fmt.Errorf("unable to fetch uptime tracker data in dmsgHTTPQuery method: %w", err))
-			}
-		}
-		// nor rpc and dmsghttp, trying to direct http query
-		if len(data) == 0 {
-			data, err = httpQuery(cmd)
-			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to fetch uptime tracker data in httpQuery method: %w", err))
-			}
-		}
-		now := time.Now()
-		startDate := time.Date(now.Year(), now.Month(), -1, 0, 0, 0, 0, now.Location()).Format("2006-01-02")
-		endDate := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, now.Location()).Add(-1 * time.Second).Format("2006-01-02")
-		uts := uptimes{}
-		jsonErr := json.Unmarshal(data, &uts)
-		if jsonErr != nil {
-			log.Fatal(jsonErr)
-		}
-		var msg []string
-		for _, j := range uts {
-			thisPk = j.Pk
-			if online {
-				if j.On {
-					msg = append(msg, fmt.Sprintf(thisPk+"\n"))
-				}
-			} else {
-				selectedDaily(j.Daily, startDate, endDate)
-			}
-		}
+		uts := getData(cacheFileUT, utURL+"/uptimes?v=v2")
+
 		if online {
+			utKeysOnline, _ := script.Echo(uts).JQ(".[] | select(.on) | .pk").Replace("\"", "").Slice() //nolint
 			if isStats {
-				internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d visors online\n", len(msg)), fmt.Sprintf("%d visors online\n", len(msg)))
-				os.Exit(0)
+				internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d visors online\n", len(utKeysOnline)), fmt.Sprintf("%d visors online\n", len(utKeysOnline)))
+				return
 			}
-			for _, i := range msg {
+			for _, i := range utKeysOnline {
 				internal.PrintOutput(cmd.Flags(), i, i)
 			}
+			return
 		}
+		script.Echo(uts).JQ(".[] | \"\\(.pk) \\(.daily | to_entries[] | select(.value | tonumber > "+fmt.Sprintf("%d", minUT)+") | \"\\(.key) \\(.value)\")\"").Replace("\"", "").Stdout() //nolint
 	},
 }
 
-func selectedDaily(data map[string]string, startDate, endDate string) {
-	for date, uptime := range data {
-		if date >= startDate && date <= endDate {
-			utfloat, err := strconv.ParseFloat(uptime, 64)
-			if err != nil {
-				log.Fatal(err)
-			}
-			if utfloat >= float64(minUT) {
-				fmt.Print(thisPk)
-				fmt.Print(" ")
-				fmt.Println(date, uptime)
+
+func getData(cachefile, thisurl string) (thisdata string) {
+	var shouldfetch bool
+	buf1 := new(bytes.Buffer)
+	cTime := time.Now()
+	if cachefile == "" {
+		thisdata, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).String() //nolint
+		return thisdata
+	}
+	if cachefile != "" {
+		if u, err := os.Stat(cachefile); err != nil {
+			shouldfetch = true
+		} else {
+			if cTime.Sub(u.ModTime()).Minutes() > float64(cacheFilesAge) {
+				shouldfetch = true
 			}
 		}
-	}
-}
-
-func dmsgHTTPQuery(cmd *cobra.Command) ([]byte, error) {
-	pk, sk := cipher.GenerateKeyPair()
-	var dmsgAddrPK cipher.PubKey
-	err := dmsgAddrPK.Set(dmsgAddr)
-	if err != nil {
-		return []byte{}, err
-	}
-
-	servers := []*disc.Entry{{Server: &disc.Server{Address: dmsgIP}, Static: dmsgAddrPK}}
-	keys := cipher.PubKeys{pk}
-
-	entries := direct.GetAllEntries(keys, servers)
-	dClient := direct.NewClient(entries, logging.NewMasterLogger().PackageLogger("ut_dmsgHTTPQuery"))
-
-	dmsgDC, closeDmsgDC, err := direct.StartDmsg(cmd.Context(), logging.NewMasterLogger().PackageLogger("ut_dmsgHTTPQuery"),
-		pk, sk, dClient, dmsg.DefaultConfig())
-	if err != nil {
-		return []byte{}, fmt.Errorf("failed to start dmsg: %w", err)
-	}
-	defer closeDmsgDC()
-
-	dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(cmd.Context(), dmsgDC)}
-
-	resp, err := dmsgHTTP.Get(utDmsgAddr + "/uptimes?v=v2")
-	if err != nil {
-		return []byte{}, err
-	}
-	return io.ReadAll(resp.Body)
-}
-
-func httpQuery(cmd *cobra.Command) ([]byte, error) {
-	if pk != "" {
-		err := pubkey.Set(pk)
-		if err != nil {
-			return []byte{}, err
+		if shouldfetch {
+			_, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).Tee(buf1).WriteFile(cachefile) //nolint
+			thisdata = buf1.String()
+		} else {
+			thisdata, _ = script.File(cachefile).String() //nolint
 		}
-		url += "&visors=" + pubkey.String()
+	} else {
+		thisdata, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).String() //nolint
 	}
-	utClient := http.Client{
-		Timeout: time.Second * 15, // Timeout after 15 seconds
-	}
-
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return []byte{}, err
-	}
-
-	res, err := utClient.Do(req)
-	if err != nil {
-		return []byte{}, err
-	}
-
-	if res.Body != nil {
-		defer func() {
-			err := res.Body.Close()
-			if err != nil {
-				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to close response body"))
-			}
-		}()
-	}
-
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return []byte{}, err
-	}
-	return body, nil
-}
-
-type uptimes []struct {
-	Pk    string            `json:"pk"`
-	Up    int               `json:"up"`
-	Down  int               `json:"down"`
-	Pct   float64           `json:"pct"`
-	On    bool              `json:"on"`
-	Daily map[string]string `json:"daily,omitempty"`
+	return thisdata
 }
