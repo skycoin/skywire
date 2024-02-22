@@ -50,7 +50,7 @@ func init() {
 var rtreeCmd = &cobra.Command{
 	Use:   "rtree",
 	Short: "map of transports on the skywire network",
-	Long:  fmt.Sprintf("display a tree representation of transports from TPD\n\n%v/all-transports\n\nSet cache file location to \"\" to avoid using cache files", utilenv.TpDiscAddr),
+	Long:  fmt.Sprintf("display a tree representation of transports from TPD\n\n%v/all-transports\n\nSet cache file location to \"\" to avoid using cache files\n\n*Online\n%s\n%s", utilenv.TpDiscAddr, pterm.BgRed.Sprint("*Offline"),pterm.Red("*Not in UT")),
 	Run: func(cmd *cobra.Command, args []string) {
 		tps := getData(cacheFileTPD, tpdURL+"/all-transports")
 		if rawData {
@@ -63,9 +63,11 @@ var rtreeCmd = &cobra.Command{
 		}
 		var uts string
 		var utkeys []string
+		var offlinekeys []string
 		if !noFilterOnline {
 			uts = getData(cacheFileUT, utURL+"/uptimes?v=v2")
 			utkeys, _ = script.Echo(uts).JQ(".[] | select(.on) | .pk").Replace("\"", "").Slice() //nolint
+			offlinekeys, _ = script.Echo(uts).JQ(".[] | select(.on  | not) | .pk").Replace("\"", "").Slice() //nolint
 		}
 
 		sortedEdgeKeys, _ = script.Echo(tps).JQ(".[].edges[]").Freq().Column(2).Slice() //nolint
@@ -86,6 +88,7 @@ var rtreeCmd = &cobra.Command{
 		leveledList := pterm.LeveledList{}
 		edgeKey := sortedEdgeKeys[0]
 		isOnline := false
+		isOffline := false
 		lvlZero := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(edgeKey, " ", ""), "\t", ""), "\n", ""), "\"", "")
 		if !noFilterOnline {
 			for _, key := range utkeys {
@@ -94,12 +97,21 @@ var rtreeCmd = &cobra.Command{
 					break
 				}
 			}
+			for _, key := range offlinekeys {
+				if strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(key, " ", ""), "\t", ""), "\n", ""), "\"", "") == lvlZero {
+					isOffline = true
+					break
+				}
+			}
 		} else {
 			isOnline = true
 		}
 
-		if !isOnline {
+		if !isOnline && !isOffline {
 			lvlZero = pterm.Red(strings.ReplaceAll(edgeKey, "\"", ""))
+		}
+		if isOffline {
+			lvlZero = pterm.BgRed.Sprint(strings.ReplaceAll(edgeKey, "\"", ""))
 		}
 		leveledList = append(leveledList, pterm.LeveledListItem{Level: 0, Text: lvlZero})
 
@@ -129,7 +141,8 @@ var rtreeCmd = &cobra.Command{
 				} else {
 					tpid, _ = script.Echo(tps).JQ(".[] | select(.edges | index(" + k + ") and index(" + m + ")) | .t_id + \" \" + .type").First(1).String() //nolint
 				}
-				isOnline = false
+				isOnline := false
+				isOffline := false
 
 				lvlN := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(m, " ", ""), "\t", ""), "\n", ""), "\"", "")
 				if !noFilterOnline {
@@ -139,11 +152,20 @@ var rtreeCmd = &cobra.Command{
 							break
 						}
 					}
+					for _, key := range offlinekeys {
+						if strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(key, " ", ""), "\t", ""), "\n", ""), "\"", "") == lvlZero {
+							isOffline = true
+							break
+						}
+					}
 				} else {
 					isOnline = true
 				}
-				if !isOnline {
+				if !isOnline && !isOffline {
 					lvlN = pterm.Red(strings.ReplaceAll(m, "\"", ""))
+				}
+				if isOffline {
+					lvlN = pterm.BgRed.Sprint(strings.ReplaceAll(m, "\"", ""))
 				}
 				leveledList = append(leveledList, pterm.LeveledListItem{Level: n, Text: strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%s %s", lvlN, strings.Repeat(" ", func() int {
 					indent := padSpaces - 4 - n*2
@@ -170,6 +192,7 @@ var rtreeCmd = &cobra.Command{
 			if !found {
 				leveledList = pterm.LeveledList{}
 				isOnline := false
+				isOffline := false
 				lvlZero := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(edgeKey, " ", ""), "\t", ""), "\n", ""), "\"", "")
 				if !noFilterOnline {
 					for _, key := range utkeys {
@@ -178,11 +201,20 @@ var rtreeCmd = &cobra.Command{
 							break
 						}
 					}
+					for _, key := range offlinekeys {
+						if strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(key, " ", ""), "\t", ""), "\n", ""), "\"", "") == lvlZero {
+							isOffline = true
+							break
+						}
+					}
 				} else {
 					isOnline = true
 				}
-				if !isOnline {
+				if !isOnline && !isOffline {
 					lvlZero = pterm.Red(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(edgeKey, " ", ""), "\t", ""), "\n", ""), "\"", ""))
+				}
+				if isOffline {
+					lvlZero = pterm.BgRed.Sprint(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(edgeKey, " ", ""), "\t", ""), "\n", ""), "\"", ""))
 				}
 				leveledList = append(leveledList, pterm.LeveledListItem{Level: 0, Text: lvlZero})
 				usedkeys = append(usedkeys, edgeKey)
