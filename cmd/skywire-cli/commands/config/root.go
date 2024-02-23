@@ -24,6 +24,7 @@ var (
 		Test: visorconfig.DmsgHTTPServersData{DMSGServers: []*disc.Entry{}},
 		Prod: visorconfig.DmsgHTTPServersData{DMSGServers: []*disc.Entry{}},
 	}
+	path                        string
 	noFetch                     bool
 	noDefaults                  bool
 	stcprPort                   int
