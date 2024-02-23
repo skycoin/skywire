@@ -2,16 +2,12 @@
 package cliut
 
 import (
-	"bytes"
 	"fmt"
-	"net/http"
 	"os"
-	"time"
 
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 )
@@ -45,7 +41,7 @@ var utCmd = &cobra.Command{
 	Short: "query uptime tracker",
 	Long:  fmt.Sprintf("query uptime tracker\n\n%v/uptimes?v=v2\n\nCheck local visor daily uptime percent with:\n skywire-cli ut -k $(skywire-cli visor pk)n\nSet cache file location to \"\" to avoid using cache files", utilenv.UptimeTrackerAddr),
 	Run: func(cmd *cobra.Command, _ []string) {
-		uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2")
+		uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
 		if online {
 			utKeysOnline, _ := script.Echo(uts).JQ(".[] | select(.on) | .pk").Replace("\"", "").Slice() //nolint
 			if isStats {
@@ -58,7 +54,7 @@ var utCmd = &cobra.Command{
 			return
 		}
 		if pk != "" {
-			script.Echo(uts).JQ(".[] | select(.pk == \"" + pk + "\") | .daily | to_entries[] | select(.value | tonumber > " + fmt.Sprintf("%d", minUT) + ") | \"\(.key) \(.value)\"").Replace("\"", "").Stdout() //nolint
+			script.Echo(uts).JQ(".[] | \"\\(.pk) \\(.daily | to_entries[] | select(.value | tonumber > "+fmt.Sprintf("%d", minUT)+") | \"\\(.key) \\(.value)\")\"").Match(pk).Replace("\"", "").Stdout() //nolint
 			return
 		}
 		script.Echo(uts).JQ(".[] | \"\\(.pk) \\(.daily | to_entries[] | select(.value | tonumber > "+fmt.Sprintf("%d", minUT)+") | \"\\(.key) \\(.value)\")\"").Replace("\"", "").Stdout() //nolint

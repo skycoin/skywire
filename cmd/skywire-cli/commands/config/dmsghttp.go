@@ -23,7 +23,6 @@ func init() {
 	dmsghttpCmd.Flags().StringVarP(&path, "path", "p", "/opt/skywire/dmsghttp-config.json", "path of dmsghttp-config file, default is for pkg installation")
 }
 
-
 var dmsghttpCmd = &cobra.Command{
 	Use:   "dmsghttp",
 	Short: "update dmsghttp-config.json file from config bootstrap service",

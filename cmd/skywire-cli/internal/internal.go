@@ -2,13 +2,16 @@
 package internal
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
+	"time"
 
+	"github.com/bitfield/script"
 	"github.com/google/uuid"
 	"github.com/spf13/pflag"
-	"github.com/bitfield/script"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
@@ -116,7 +119,7 @@ func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output interface{}) {
 }
 
 // GetData fetches data from the specified URL via http or from cached file
-func GetData(cachefile, thisurl string) (thisdata string) {
+func GetData(cachefile, thisurl string, cacheFilesAge int) (thisdata string) {
 	var shouldfetch bool
 	buf1 := new(bytes.Buffer)
 	cTime := time.Now()

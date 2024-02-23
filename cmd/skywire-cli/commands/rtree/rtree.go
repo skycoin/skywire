@@ -2,12 +2,9 @@
 package clirtree
 
 import (
-	"bytes"
 	"fmt"
-	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/bitfield/script"
 	"github.com/pterm/pterm"
@@ -36,6 +33,7 @@ var (
 // RootCmd is rtreeCmd
 
 var RootCmd = rtreeCmd
+
 func init() {
 	rtreeCmd.Flags().StringVarP(&tpdURL, "tpdurl", "a", utilenv.TpDiscAddr, "transport discovery url")
 	rtreeCmd.Flags().StringVarP(&utURL, "uturl", "w", utilenv.UptimeTrackerAddr, "uptime tracker url")
@@ -55,7 +53,7 @@ var rtreeCmd = &cobra.Command{
 	Short: "map of transports on the skywire network",
 	Long:  fmt.Sprintf("display a tree representation of transports from TPD\n\n%v/all-transports\n\nSet cache file location to \"\" to avoid using cache files\n\n*Online\n%s\n%s", utilenv.TpDiscAddr, pterm.BgRed.Sprint("*Offline"), pterm.Red("*Not in UT")),
 	Run: func(cmd *cobra.Command, args []string) {
-		tps := internal.GetData(cacheFileTPD, tpdURL+"/all-transports")
+		tps := internal.GetData(cacheFileTPD, tpdURL+"/all-transports", cacheFilesAge)
 		if rawData {
 			script.Echo(tps).Stdout() //nolint
 			return
@@ -68,7 +66,7 @@ var rtreeCmd = &cobra.Command{
 		var utkeys []string
 		var offlinekeys []string
 		if !noFilterOnline {
-			uts = internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2")
+			uts = internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
 			utkeys, _ = script.Echo(uts).JQ(".[] | select(.on) | .pk").Replace("\"", "").Slice()             //nolint
 			offlinekeys, _ = script.Echo(uts).JQ(".[] | select(.on  | not) | .pk").Replace("\"", "").Slice() //nolint
 		}

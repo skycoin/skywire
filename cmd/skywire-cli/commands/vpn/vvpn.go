@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -189,7 +188,7 @@ var listCmd = &cobra.Command{
 	Short: "List servers",
 	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache file location to \"\" to avoid using cache files", serviceType, skyenv.ServiceDiscAddr, serviceType, skyenv.ServiceDiscAddr, serviceType),
 	Run: func(cmd *cobra.Command, args []string) {
-		sds := internal.GetData(cacheFileSD, sdURL+"/api/services?type="+serviceType)
+		sds := internal.GetData(cacheFileSD, sdURL+"/api/services?type="+serviceType, cacheFilesAge)
 		if rawData {
 			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout() //nolint
 			return
@@ -232,7 +231,7 @@ var listCmd = &cobra.Command{
 			script.Echo(sdkeys).Stdout() //nolint
 			return
 		}
-		uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2")
+		uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
 		utkeys, _ := script.Echo(uts).JQ(".[] | select(.on) | .pk").Replace("\"", "").String() //nolint
 		if isStats {
 			count, _ := script.Echo(sdkeys + utkeys).Freq().Match("2 ").Column(2).CountLines() //nolint
