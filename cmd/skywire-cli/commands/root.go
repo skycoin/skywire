@@ -15,7 +15,6 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	clicompletion "github.com/skycoin/skywire/cmd/skywire-cli/commands/completion"
 	cliconfig "github.com/skycoin/skywire/cmd/skywire-cli/commands/config"
-	clidmsghttp "github.com/skycoin/skywire/cmd/skywire-cli/commands/dmsghttp"
 	clidmsgpty "github.com/skycoin/skywire/cmd/skywire-cli/commands/dmsgpty"
 	clilog "github.com/skycoin/skywire/cmd/skywire-cli/commands/log"
 	climdisc "github.com/skycoin/skywire/cmd/skywire-cli/commands/mdisc"
@@ -23,7 +22,7 @@ import (
 	clireward "github.com/skycoin/skywire/cmd/skywire-cli/commands/reward"
 	clirewards "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards"
 	clirtfind "github.com/skycoin/skywire/cmd/skywire-cli/commands/rtfind"
-	cliservices "github.com/skycoin/skywire/cmd/skywire-cli/commands/services"
+	clirtree "github.com/skycoin/skywire/cmd/skywire-cli/commands/rtree"
 	cliskyfwd "github.com/skycoin/skywire/cmd/skywire-cli/commands/skyfwd"
 	cliskyrev "github.com/skycoin/skywire/cmd/skywire-cli/commands/skyrev"
 	clisurvey "github.com/skycoin/skywire/cmd/skywire-cli/commands/survey"
@@ -193,14 +192,13 @@ func init() {
 		clirewards.RootCmd,
 		clisurvey.RootCmd,
 		clirtfind.RootCmd,
+		clirtree.RootCmd,
 		climdisc.RootCmd,
 		clicompletion.RootCmd,
 		clilog.RootCmd,
 		cliskysocksc.RootCmd,
 		treeCmd,
 		docCmd,
-		clidmsghttp.RootCmd,
-		cliservices.RootCmd,
 	)
 	var jsonOutput bool
 	RootCmd.PersistentFlags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
