@@ -189,7 +189,7 @@ var listCmd = &cobra.Command{
 	Short: "List servers",
 	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache file location to \"\" to avoid using cache files", serviceType, skyenv.ServiceDiscAddr, serviceType, skyenv.ServiceDiscAddr, serviceType),
 	Run: func(cmd *cobra.Command, args []string) {
-		sds := getData(cacheFileSD, sdURL+"/api/services?type="+serviceType)
+		sds := internal.GetData(cacheFileSD, sdURL+"/api/services?type="+serviceType)
 		if rawData {
 			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout() //nolint
 			return
@@ -232,7 +232,7 @@ var listCmd = &cobra.Command{
 			script.Echo(sdkeys).Stdout() //nolint
 			return
 		}
-		uts := getData(cacheFileUT, utURL+"/uptimes?v=v2")
+		uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2")
 		utkeys, _ := script.Echo(uts).JQ(".[] | select(.on) | .pk").Replace("\"", "").String() //nolint
 		if isStats {
 			count, _ := script.Echo(sdkeys + utkeys).Freq().Match("2 ").Column(2).CountLines() //nolint
@@ -253,32 +253,4 @@ var listCmd = &cobra.Command{
 		}
 
 	},
-}
-
-func getData(cachefile, thisurl string) (thisdata string) {
-	var shouldfetch bool
-	buf1 := new(bytes.Buffer)
-	cTime := time.Now()
-	if cachefile == "" {
-		thisdata, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).String() //nolint
-		return thisdata
-	}
-	if cachefile != "" {
-		if u, err := os.Stat(cachefile); err != nil {
-			shouldfetch = true
-		} else {
-			if cTime.Sub(u.ModTime()).Minutes() > float64(cacheFilesAge) {
-				shouldfetch = true
-			}
-		}
-		if shouldfetch {
-			_, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).Tee(buf1).WriteFile(cachefile) //nolint
-			thisdata = buf1.String()
-		} else {
-			thisdata, _ = script.File(cachefile).String() //nolint
-		}
-	} else {
-		thisdata, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).String() //nolint
-	}
-	return thisdata
 }

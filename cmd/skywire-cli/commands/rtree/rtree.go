@@ -1,4 +1,4 @@
-// Package clirtfind subcommand for skywire-cli
+// Package clirtree subcommand for skywire-cli
 package clirtree
 
 import (
@@ -16,6 +16,7 @@ import (
 	"github.com/tidwall/pretty"
 
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
+	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 )
 
 var (
@@ -30,9 +31,11 @@ var (
 	rawData        bool
 	refinedData    bool
 	noFilterOnline bool
-	RootCmd        = rtreeCmd
 )
 
+// RootCmd is rtreeCmd
+
+var RootCmd = rtreeCmd
 func init() {
 	rtreeCmd.Flags().StringVarP(&tpdURL, "tpdurl", "a", utilenv.TpDiscAddr, "transport discovery url")
 	rtreeCmd.Flags().StringVarP(&utURL, "uturl", "w", utilenv.UptimeTrackerAddr, "uptime tracker url")
@@ -52,7 +55,7 @@ var rtreeCmd = &cobra.Command{
 	Short: "map of transports on the skywire network",
 	Long:  fmt.Sprintf("display a tree representation of transports from TPD\n\n%v/all-transports\n\nSet cache file location to \"\" to avoid using cache files\n\n*Online\n%s\n%s", utilenv.TpDiscAddr, pterm.BgRed.Sprint("*Offline"), pterm.Red("*Not in UT")),
 	Run: func(cmd *cobra.Command, args []string) {
-		tps := getData(cacheFileTPD, tpdURL+"/all-transports")
+		tps := internal.GetData(cacheFileTPD, tpdURL+"/all-transports")
 		if rawData {
 			script.Echo(tps).Stdout() //nolint
 			return
@@ -65,7 +68,7 @@ var rtreeCmd = &cobra.Command{
 		var utkeys []string
 		var offlinekeys []string
 		if !noFilterOnline {
-			uts = getData(cacheFileUT, utURL+"/uptimes?v=v2")
+			uts = internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2")
 			utkeys, _ = script.Echo(uts).JQ(".[] | select(.on) | .pk").Replace("\"", "").Slice()             //nolint
 			offlinekeys, _ = script.Echo(uts).JQ(".[] | select(.on  | not) | .pk").Replace("\"", "").Slice() //nolint
 		}
@@ -74,11 +77,11 @@ var rtreeCmd = &cobra.Command{
 
 		if isStats {
 			fmt.Printf("Unique keys in Transport Discovery: %d\n", len(sortedEdgeKeys))
-			tpcount, _ := script.Echo(tps).JQ(".[].type").CountLines()
+			tpcount, _ := script.Echo(tps).JQ(".[].type").CountLines() //nolint
 			fmt.Printf("Count of transports: %v\n", tpcount)
-			tptypes, _ := script.Echo(tps).JQ(".[].type").Freq().String()
+			tptypes, _ := script.Echo(tps).JQ(".[].type").Freq().String() //nolint
 			fmt.Printf("types of transports: \n%v\n", tptypes)
-			vcount, _ := script.Echo(tps).JQ(".[].edges[]").Freq().String()
+			vcount, _ := script.Echo(tps).JQ(".[].edges[]").Freq().String() //nolint
 			fmt.Printf("Visors by transport count:\n%v\n", vcount)
 			return
 		}
@@ -176,7 +179,6 @@ var rtreeCmd = &cobra.Command{
 				}())+tpid), "\n", ""), "\"", "")})
 				lvl(n+1, m)
 			}
-			return
 		}
 		lvl(1, edgeKey)
 
@@ -222,7 +224,7 @@ var rtreeCmd = &cobra.Command{
 				pterm.DefaultTree.WithRoot(putils.TreeFromLeveledList(leveledList)).Render() //nolint
 			}
 		}
-		l, _ := script.Echo(tps).JQ(".[] | select(.edges[0] == .edges[1]) | .edges[0] + \""+strings.Repeat(" ", padSpaces)+"\" + .t_id + \" \" + .type").Replace("\"", "").Slice()
+		l, _ := script.Echo(tps).JQ(".[] | select(.edges[0] == .edges[1]) | .edges[0] + \""+strings.Repeat(" ", padSpaces)+"\" + .t_id + \" \" + .type").Replace("\"", "").Slice() //nolint
 		if len(l) > 0 {
 			pterm.Println(pterm.Red("Self-transports"))
 			for _, m := range l {
@@ -243,41 +245,8 @@ var rtreeCmd = &cobra.Command{
 				}
 				pterm.Println(lvlZero)
 
-				script.Echo(m + "\n").Stdout()
+				script.Echo(m + "\n").Stdout() //nolint
 			}
 		}
 	},
-}
-
-/*
-	},
-}
-*/
-
-func getData(cachefile, thisurl string) (thisdata string) {
-	var shouldfetch bool
-	buf1 := new(bytes.Buffer)
-	cTime := time.Now()
-	if cachefile == "" {
-		thisdata, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).String() //nolint
-		return thisdata
-	}
-	if cachefile != "" {
-		if u, err := os.Stat(cachefile); err != nil {
-			shouldfetch = true
-		} else {
-			if cTime.Sub(u.ModTime()).Minutes() > float64(cacheFilesAge) {
-				shouldfetch = true
-			}
-		}
-		if shouldfetch {
-			_, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).Tee(buf1).WriteFile(cachefile) //nolint
-			thisdata = buf1.String()
-		} else {
-			thisdata, _ = script.File(cachefile).String() //nolint
-		}
-	} else {
-		thisdata, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).String() //nolint
-	}
-	return thisdata
 }

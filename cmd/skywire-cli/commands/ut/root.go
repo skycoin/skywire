@@ -20,9 +20,7 @@ import (
 var RootCmd = utCmd
 
 var (
-	pubkey        cipher.PubKey
 	pk            string
-	thisPk        string
 	online        bool
 	isStats       bool
 	utURL         string
@@ -47,8 +45,7 @@ var utCmd = &cobra.Command{
 	Short: "query uptime tracker",
 	Long:  fmt.Sprintf("query uptime tracker\n\n%v/uptimes?v=v2\n\nCheck local visor daily uptime percent with:\n skywire-cli ut -k $(skywire-cli visor pk)n\nSet cache file location to \"\" to avoid using cache files", utilenv.UptimeTrackerAddr),
 	Run: func(cmd *cobra.Command, _ []string) {
-		uts := getData(cacheFileUT, utURL+"/uptimes?v=v2")
-
+		uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2")
 		if online {
 			utKeysOnline, _ := script.Echo(uts).JQ(".[] | select(.on) | .pk").Replace("\"", "").Slice() //nolint
 			if isStats {
@@ -60,34 +57,10 @@ var utCmd = &cobra.Command{
 			}
 			return
 		}
+		if pk != "" {
+			script.Echo(uts).JQ(".[] | select(.pk == \"" + pk + "\") | .daily | to_entries[] | select(.value | tonumber > " + fmt.Sprintf("%d", minUT) + ") | \"\(.key) \(.value)\"").Replace("\"", "").Stdout() //nolint
+			return
+		}
 		script.Echo(uts).JQ(".[] | \"\\(.pk) \\(.daily | to_entries[] | select(.value | tonumber > "+fmt.Sprintf("%d", minUT)+") | \"\\(.key) \\(.value)\")\"").Replace("\"", "").Stdout() //nolint
 	},
-}
-
-func getData(cachefile, thisurl string) (thisdata string) {
-	var shouldfetch bool
-	buf1 := new(bytes.Buffer)
-	cTime := time.Now()
-	if cachefile == "" {
-		thisdata, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).String() //nolint
-		return thisdata
-	}
-	if cachefile != "" {
-		if u, err := os.Stat(cachefile); err != nil {
-			shouldfetch = true
-		} else {
-			if cTime.Sub(u.ModTime()).Minutes() > float64(cacheFilesAge) {
-				shouldfetch = true
-			}
-		}
-		if shouldfetch {
-			_, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).Tee(buf1).WriteFile(cachefile) //nolint
-			thisdata = buf1.String()
-		} else {
-			thisdata, _ = script.File(cachefile).String() //nolint
-		}
-	} else {
-		thisdata, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).String() //nolint
-	}
-	return thisdata
 }

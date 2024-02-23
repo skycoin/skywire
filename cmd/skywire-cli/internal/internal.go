@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/spf13/pflag"
+	"github.com/bitfield/script"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
@@ -112,4 +113,33 @@ func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output interface{}) {
 	if output != "" {
 		fmt.Print(output)
 	}
+}
+
+// GetData fetches data from the specified URL via http or from cached file
+func GetData(cachefile, thisurl string) (thisdata string) {
+	var shouldfetch bool
+	buf1 := new(bytes.Buffer)
+	cTime := time.Now()
+	if cachefile == "" {
+		thisdata, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).String() //nolint
+		return thisdata
+	}
+	if cachefile != "" {
+		if u, err := os.Stat(cachefile); err != nil {
+			shouldfetch = true
+		} else {
+			if cTime.Sub(u.ModTime()).Minutes() > float64(cacheFilesAge) {
+				shouldfetch = true
+			}
+		}
+		if shouldfetch {
+			_, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).Tee(buf1).WriteFile(cachefile) //nolint
+			thisdata = buf1.String()
+		} else {
+			thisdata, _ = script.File(cachefile).String() //nolint
+		}
+	} else {
+		thisdata, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).String() //nolint
+	}
+	return thisdata
 }

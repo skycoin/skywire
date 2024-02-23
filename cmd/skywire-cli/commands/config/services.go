@@ -1,4 +1,4 @@
-// Package cliservices cmd/skywire-cli/commands/services/root.go
+// Package cliconfig cmd/skywire-cli/commands/config/services.go
 package cliconfig
 
 import (
@@ -19,14 +19,12 @@ import (
 func init() {
 	updateCmd.AddCommand(servicesCmd)
 	servicesCmd.Flags().SortFlags = false
+	//TODO: fix path for non linux package defaults
 	servicesCmd.Flags().StringVarP(&path, "path", "p", "/opt/skywire/services-config.json", "path of services-config file, default is for pkg installation")
 }
 
-// RootCmd is servicesCmd
-//var RootCmd = servicesCmd
-
 var servicesCmd = &cobra.Command{
-	Use:   "services update",
+	Use:   "svc",
 	Short: "update services-config.json file from config bootstrap service",
 	Run: func(cmd *cobra.Command, args []string) {
 		log := logging.MustGetLogger("services_updater")

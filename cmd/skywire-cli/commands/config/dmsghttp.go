@@ -1,4 +1,4 @@
-// Package clidmsghttp cmd/skywire-cli/commands/dmsghttp/root.go
+// Package cliconfig cmd/skywire-cli/commands/config/dmsghttp.go
 package cliconfig
 
 import (
@@ -19,14 +19,13 @@ import (
 func init() {
 	updateCmd.AddCommand(dmsghttpCmd)
 	dmsghttpCmd.Flags().SortFlags = false
+	//TODO: fix path for non linux package defaults
 	dmsghttpCmd.Flags().StringVarP(&path, "path", "p", "/opt/skywire/dmsghttp-config.json", "path of dmsghttp-config file, default is for pkg installation")
 }
 
-// RootCmd is surveyCmd
-//var RootCmd = dmsghttpCmd
 
 var dmsghttpCmd = &cobra.Command{
-	Use:   "dmsghttp update",
+	Use:   "dmsghttp",
 	Short: "update dmsghttp-config.json file from config bootstrap service",
 	Run: func(cmd *cobra.Command, args []string) {
 		log := logging.MustGetLogger("dmsghttp_updater")
