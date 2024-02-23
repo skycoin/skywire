@@ -43,20 +43,16 @@ var utCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
 		if online {
-			utKeysOnline, _ := script.Echo(uts).JQ(".[] | select(.on) | .pk").Replace("\"", "").Slice() //nolint
+			utKeysOnline, _ := script.Echo(uts).JQ(".[] | select(.on) | .pk").Match(pk).Replace("\"", "").Slice() //nolint
 			if isStats {
 				internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d visors online\n", len(utKeysOnline)), fmt.Sprintf("%d visors online\n", len(utKeysOnline)))
 				return
 			}
 			for _, i := range utKeysOnline {
-				internal.PrintOutput(cmd.Flags(), i, i)
+				internal.PrintOutput(cmd.Flags(), i+"\n", i+"\n")
 			}
 			return
 		}
-		if pk != "" {
-			script.Echo(uts).JQ(".[] | \"\\(.pk) \\(.daily | to_entries[] | select(.value | tonumber > "+fmt.Sprintf("%d", minUT)+") | \"\\(.key) \\(.value)\")\"").Match(pk).Replace("\"", "").Stdout() //nolint
-			return
-		}
-		script.Echo(uts).JQ(".[] | \"\\(.pk) \\(.daily | to_entries[] | select(.value | tonumber > "+fmt.Sprintf("%d", minUT)+") | \"\\(.key) \\(.value)\")\"").Replace("\"", "").Stdout() //nolint
+		script.Echo(uts).JQ(".[] | \"\\(.pk) \\(.daily | to_entries[] | select(.value | tonumber > "+fmt.Sprintf("%d", minUT)+") | \"\\(.key) \\(.value)\")\"").Match(pk).Replace("\"", "").Stdout() //nolint
 	},
 }
