@@ -164,7 +164,6 @@ require (
 
 // Uncomment for tests with alternate branches of 'dmsg'
 // replace github.com/skycoin/dmsg => ../dmsg
-replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.18-0.20240210174503-ecde4c538de6
 
 // Uncomment for tests with alternate branches of 'skywire-utilities'
 // replace github.com/skycoin/skywire-utilities => ../skywire-utilities
