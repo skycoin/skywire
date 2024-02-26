@@ -46,6 +46,9 @@ type Storer interface {
 
 	// AllEntries returns all clients PKs.
 	AllEntries(ctx context.Context) ([]string, error)
+
+	// AllVisorEntries returns all clients PKs.
+	AllVisorEntries(ctx context.Context) ([]string, error)
 }
 
 // Config configures the Store object.

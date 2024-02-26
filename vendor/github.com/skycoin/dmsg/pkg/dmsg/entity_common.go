@@ -225,7 +225,7 @@ func (c *EntityCommon) updateServerEntryLoop(ctx context.Context, addr string, m
 	}
 }
 
-func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}) (err error) {
+func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}, clientType string) (err error) {
 	if isClosed(done) {
 		return nil
 	}
@@ -245,12 +245,13 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 	entry, err := c.dc.Entry(ctx, c.pk)
 	if err != nil {
 		entry = disc.NewClientEntry(c.pk, 0, srvPKs)
+		entry.ClientType = clientType
 		if err := entry.Sign(c.sk); err != nil {
 			return err
 		}
 		return c.dc.PostEntry(ctx, entry)
 	}
-
+	entry.ClientType = clientType
 	entry.Client.DelegatedServers = srvPKs
 	c.log.WithField("entry", entry).Debug("Updating entry.")
 	return c.dc.PutEntry(ctx, c.sk, entry)
