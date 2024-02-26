@@ -39,6 +39,7 @@ func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *Dms
 			},
 		},
 	}
+	dmsgConf.ClientType = "visor"
 	dmsgC := dmsg.NewClient(pk, sk, disc.NewHTTP(conf.Discovery, httpC, masterLogger.PackageLogger("dmsgC:disc")), dmsgConf)
 	dmsgC.SetLogger(masterLogger.PackageLogger("dmsgC"))
 	dmsgC.SetMasterLogger(masterLogger)
