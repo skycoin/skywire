@@ -16,6 +16,8 @@ import (
 	dmsgptyhost "github.com/skycoin/dmsg/cmd/dmsgpty-host/commands"
 	dmsgptyui "github.com/skycoin/dmsg/cmd/dmsgpty-ui/commands"
 	dmsgweb "github.com/skycoin/dmsg/cmd/dmsgweb/commands"
+	dmsgsocks "github.com/skycoin/dmsg/cmd/dmsg-socks5/commands"
+	dmsgmon "github.com/skycoin/skywire-services/cmd/dmsg-monitor/commands"
 	sd "github.com/skycoin/skycoin-service-discovery/cmd/service-discovery/commands"
 	"github.com/spf13/cobra"
 
@@ -24,7 +26,10 @@ import (
 	kg "github.com/skycoin/skywire-services/cmd/keys-gen/commands"
 	lc "github.com/skycoin/skywire-services/cmd/liveness-checker/commands"
 	nv "github.com/skycoin/skywire-services/cmd/node-visualizer/commands"
-	pvm "github.com/skycoin/skywire-services/cmd/public-visor-monitor/commands"
+	pvmon "github.com/skycoin/skywire-services/cmd/public-visor-monitor/commands"
+	ssmon "github.com/skycoin/skywire-services/cmd/skysocks-monitor/commands"
+	vpnmon "github.com/skycoin/skywire-services/cmd/vpn-monitor/commands"
+	nwmon "github.com/skycoin/skywire-services/cmd/network-monitor/commands"
 	rf "github.com/skycoin/skywire-services/cmd/route-finder/commands"
 	se "github.com/skycoin/skywire-services/cmd/sw-env/commands"
 	tpd "github.com/skycoin/skywire-services/cmd/transport-discovery/commands"
@@ -53,6 +58,8 @@ func init() {
 		dmsghttp.RootCmd,
 		dmsgcurl.RootCmd,
 		dmsgweb.RootCmd,
+		dmsgsocks.RootCmd,
+		dmsgmon.RootCmd,
 	)
 	svcCmd.AddCommand(
 		setupnode.RootCmd,
@@ -66,6 +73,10 @@ func init() {
 		nv.RootCmd,
 		se.RootCmd,
 		sd.RootCmd,
+		nwmon.RootCmd,
+		pvmon.RootCmd,
+		ssmon.RootCmd,
+		vpnmon.RootCmd,
 	)
 	appsCmd.AddCommand(
 		vpnserver.RootCmd,
@@ -186,7 +197,7 @@ func main() {
 		kg.RootCmd,
 		lc.RootCmd,
 		nv.RootCmd,
-		pvm.RootCmd,
+		pvmon.RootCmd,
 		se.RootCmd,
 		sd.RootCmd,
 		svcCmd,
