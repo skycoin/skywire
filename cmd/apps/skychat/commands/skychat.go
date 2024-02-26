@@ -5,7 +5,6 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io/fs"
 	"log"
@@ -77,7 +76,6 @@ var RootCmd = &cobra.Command{
 			print(fmt.Sprintf("Failed to output build info: %v\n", err))
 		}
 
-		flag.Parse()
 		fmt.Println("Successfully started skychat.")
 
 		clientCh = make(chan string)
