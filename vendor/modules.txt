@@ -166,6 +166,15 @@ github.com/go-playground/universal-translator
 # github.com/go-playground/validator/v10 v10.15.1
 ## explicit; go 1.18
 github.com/go-playground/validator/v10
+# github.com/go-redis/redis v6.15.9+incompatible
+## explicit
+github.com/go-redis/redis
+github.com/go-redis/redis/internal
+github.com/go-redis/redis/internal/consistenthash
+github.com/go-redis/redis/internal/hashtag
+github.com/go-redis/redis/internal/pool
+github.com/go-redis/redis/internal/proto
+github.com/go-redis/redis/internal/util
 # github.com/go-redis/redis/v8 v8.11.5
 ## explicit; go 1.17
 github.com/go-redis/redis/v8
@@ -442,12 +451,13 @@ github.com/rs/cors
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v1.3.18-0.20240226072009-86c43e8d4ca4
+# github.com/skycoin/dmsg v1.3.18-0.20240226072009-86c43e8d4ca4 => github.com/skycoin/dmsg v1.3.18-0.20240226072009-86c43e8d4ca4
 ## explicit; go 1.21
 github.com/skycoin/dmsg/cmd/dmsg-discovery/commands
 github.com/skycoin/dmsg/cmd/dmsg-server/commands
 github.com/skycoin/dmsg/cmd/dmsg-server/commands/config
 github.com/skycoin/dmsg/cmd/dmsg-server/commands/start
+github.com/skycoin/dmsg/cmd/dmsg-socks5/commands
 github.com/skycoin/dmsg/cmd/dmsgcurl/commands
 github.com/skycoin/dmsg/cmd/dmsghttp/commands
 github.com/skycoin/dmsg/cmd/dmsgpty-cli/commands
@@ -493,32 +503,44 @@ github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/store
 ## explicit; go 1.21
 github.com/skycoin/skywire-services/cmd/address-resolver/commands
 github.com/skycoin/skywire-services/cmd/config-bootstrapper/commands
+github.com/skycoin/skywire-services/cmd/dmsg-monitor/commands
 github.com/skycoin/skywire-services/cmd/keys-gen/commands
 github.com/skycoin/skywire-services/cmd/liveness-checker/commands
+github.com/skycoin/skywire-services/cmd/network-monitor/commands
 github.com/skycoin/skywire-services/cmd/node-visualizer/commands
 github.com/skycoin/skywire-services/cmd/public-visor-monitor/commands
 github.com/skycoin/skywire-services/cmd/route-finder/commands
+github.com/skycoin/skywire-services/cmd/skysocks-monitor/commands
 github.com/skycoin/skywire-services/cmd/sw-env/commands
 github.com/skycoin/skywire-services/cmd/transport-discovery/commands
 github.com/skycoin/skywire-services/cmd/transport-setup/commands
+github.com/skycoin/skywire-services/cmd/vpn-monitor/commands
 github.com/skycoin/skywire-services/internal/armetrics
 github.com/skycoin/skywire-services/internal/config
 github.com/skycoin/skywire-services/internal/lc
+github.com/skycoin/skywire-services/internal/nm
+github.com/skycoin/skywire-services/internal/nmmetrics
 github.com/skycoin/skywire-services/internal/pg
 github.com/skycoin/skywire-services/internal/tpdiscmetrics
+github.com/skycoin/skywire-services/internal/vpn
 github.com/skycoin/skywire-services/pkg/address-resolver/api
 github.com/skycoin/skywire-services/pkg/address-resolver/store
 github.com/skycoin/skywire-services/pkg/config-bootstrapper/api
+github.com/skycoin/skywire-services/pkg/dmsg-monitor/api
 github.com/skycoin/skywire-services/pkg/liveness-checker/api
 github.com/skycoin/skywire-services/pkg/liveness-checker/store
+github.com/skycoin/skywire-services/pkg/network-monitor/api
+github.com/skycoin/skywire-services/pkg/network-monitor/store
 github.com/skycoin/skywire-services/pkg/node-visualizer/api
 github.com/skycoin/skywire-services/pkg/public-visor-monitor/api
 github.com/skycoin/skywire-services/pkg/route-finder/api
 github.com/skycoin/skywire-services/pkg/route-finder/store
+github.com/skycoin/skywire-services/pkg/skysocks-monitor/api
 github.com/skycoin/skywire-services/pkg/transport-discovery/api
 github.com/skycoin/skywire-services/pkg/transport-discovery/store
 github.com/skycoin/skywire-services/pkg/transport-setup/api
 github.com/skycoin/skywire-services/pkg/transport-setup/config
+github.com/skycoin/skywire-services/pkg/vpn-monitor/api
 # github.com/skycoin/skywire-utilities v1.3.17
 ## explicit; go 1.21
 github.com/skycoin/skywire-utilities/pkg/buildinfo
@@ -807,3 +829,4 @@ nhooyr.io/websocket/internal/bpool
 nhooyr.io/websocket/internal/errd
 nhooyr.io/websocket/internal/wsjs
 nhooyr.io/websocket/internal/xsync
+# github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.18-0.20240226072009-86c43e8d4ca4
