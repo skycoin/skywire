@@ -10,6 +10,7 @@ import (
 	cc "github.com/ivanpirog/coloredcobra"
 	dmsgdisc "github.com/skycoin/dmsg/cmd/dmsg-discovery/commands"
 	dmsgserver "github.com/skycoin/dmsg/cmd/dmsg-server/commands"
+	dmsgsocks "github.com/skycoin/dmsg/cmd/dmsg-socks5/commands"
 	dmsgcurl "github.com/skycoin/dmsg/cmd/dmsgcurl/commands"
 	dmsghttp "github.com/skycoin/dmsg/cmd/dmsghttp/commands"
 	dmsgptycli "github.com/skycoin/dmsg/cmd/dmsgpty-cli/commands"
@@ -21,14 +22,18 @@ import (
 
 	ar "github.com/skycoin/skywire-services/cmd/address-resolver/commands"
 	confbs "github.com/skycoin/skywire-services/cmd/config-bootstrapper/commands"
+	dmsgmon "github.com/skycoin/skywire-services/cmd/dmsg-monitor/commands"
 	kg "github.com/skycoin/skywire-services/cmd/keys-gen/commands"
 	lc "github.com/skycoin/skywire-services/cmd/liveness-checker/commands"
+	nwmon "github.com/skycoin/skywire-services/cmd/network-monitor/commands"
 	nv "github.com/skycoin/skywire-services/cmd/node-visualizer/commands"
-	pvm "github.com/skycoin/skywire-services/cmd/public-visor-monitor/commands"
+	pvmon "github.com/skycoin/skywire-services/cmd/public-visor-monitor/commands"
 	rf "github.com/skycoin/skywire-services/cmd/route-finder/commands"
+	ssmon "github.com/skycoin/skywire-services/cmd/skysocks-monitor/commands"
 	se "github.com/skycoin/skywire-services/cmd/sw-env/commands"
 	tpd "github.com/skycoin/skywire-services/cmd/transport-discovery/commands"
 	tps "github.com/skycoin/skywire-services/cmd/transport-setup/commands"
+	vpnmon "github.com/skycoin/skywire-services/cmd/vpn-monitor/commands"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	skychat "github.com/skycoin/skywire/cmd/apps/skychat/commands"
 	skysocksclient "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
@@ -53,6 +58,8 @@ func init() {
 		dmsghttp.RootCmd,
 		dmsgcurl.RootCmd,
 		dmsgweb.RootCmd,
+		dmsgsocks.RootCmd,
+		dmsgmon.RootCmd,
 	)
 	svcCmd.AddCommand(
 		setupnode.RootCmd,
@@ -66,6 +73,10 @@ func init() {
 		nv.RootCmd,
 		se.RootCmd,
 		sd.RootCmd,
+		nwmon.RootCmd,
+		pvmon.RootCmd,
+		ssmon.RootCmd,
+		vpnmon.RootCmd,
 	)
 	appsCmd.AddCommand(
 		vpnserver.RootCmd,
@@ -186,7 +197,7 @@ func main() {
 		kg.RootCmd,
 		lc.RootCmd,
 		nv.RootCmd,
-		pvm.RootCmd,
+		pvmon.RootCmd,
 		se.RootCmd,
 		sd.RootCmd,
 		svcCmd,
