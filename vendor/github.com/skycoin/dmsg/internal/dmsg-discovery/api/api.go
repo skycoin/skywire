@@ -89,6 +89,7 @@ func New(log logrus.FieldLogger, db store.Storer, m discmetrics.Metrics, testMod
 	r.Post("/dmsg-discovery/entry/{pk}", api.setEntry())
 	r.Delete("/dmsg-discovery/entry", api.delEntry())
 	r.Get("/dmsg-discovery/entries", api.allEntries())
+	r.Get("/dmsg-discovery/visorEntries", api.allVisorEntries())
 	r.Delete("/dmsg-discovery/deregister", api.deregisterEntry())
 	r.Get("/dmsg-discovery/available_servers", api.getAvailableServers())
 	r.Get("/dmsg-discovery/all_servers", api.getAllServers())
@@ -155,6 +156,20 @@ func (a *API) getEntry() func(w http.ResponseWriter, r *http.Request) {
 func (a *API) allEntries() func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		entries, err := a.db.AllEntries(r.Context())
+		if err != nil {
+			a.handleError(w, r, err)
+			return
+		}
+		a.writeJSON(w, r, http.StatusOK, entries)
+	}
+}
+
+// allVisorEntries returns all visor client entries connected to dmsg
+// URI: /dmsg-discovery/visorEntries
+// Method: GET
+func (a *API) allVisorEntries() func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		entries, err := a.db.AllVisorEntries(r.Context())
 		if err != nil {
 			a.handleError(w, r, err)
 			return
