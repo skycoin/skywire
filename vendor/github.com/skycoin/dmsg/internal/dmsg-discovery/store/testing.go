@@ -217,3 +217,24 @@ func (ms *MockStore) AllEntries(_ context.Context) ([]string, error) {
 	}
 	return entries, nil
 }
+
+// AllVisorEntries implements Storer CountEntries method for MockStore
+func (ms *MockStore) AllVisorEntries(_ context.Context) ([]string, error) {
+	entries := []string{}
+
+	ms.mLock.RLock()
+	defer ms.mLock.RUnlock()
+
+	clients := arrayFromMap(ms.m)
+	for _, entryString := range clients {
+		var e disc.Entry
+
+		err := json.Unmarshal(entryString, &e)
+		if err != nil {
+			return nil, disc.ErrUnexpected
+		}
+
+		entries = append(entries, e.String())
+	}
+	return entries, nil
+}

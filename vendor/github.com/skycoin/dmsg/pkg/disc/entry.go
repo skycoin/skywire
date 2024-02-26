@@ -115,6 +115,9 @@ type Entry struct {
 	// Contains the instance's client meta if it's to be advertised as a DMSG Client.
 	Client *Client `json:"client,omitempty"`
 
+	// ClientType the instance's client_type meta if it's to be advertised as a DMSG Client.
+	ClientType string `json:"client_type,omitempty"`
+
 	// Contains the instance's server meta if it's to be advertised as a DMSG Server.
 	Server *Server `json:"server,omitempty"`
 

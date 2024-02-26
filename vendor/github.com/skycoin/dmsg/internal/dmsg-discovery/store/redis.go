@@ -93,6 +93,13 @@ func (r *redisStore) SetEntry(ctx context.Context, entry *disc.Entry, timeout ti
 			return disc.ErrUnexpected
 		}
 	}
+	if entry.ClientType == "visor" {
+		err = r.client.SAdd(ctx, "visorClients", entry.Static.Hex()).Err()
+		if err != nil {
+			log.WithError(err).Errorf("Failed to add to visorClients (SAdd) from redis")
+			return disc.ErrUnexpected
+		}
+	}
 
 	return nil
 }
@@ -107,6 +114,7 @@ func (r *redisStore) DelEntry(ctx context.Context, staticPubKey cipher.PubKey) e
 	// Delete pubkey from servers or clients set stored
 	r.client.SRem(ctx, "servers", staticPubKey.Hex())
 	r.client.SRem(ctx, "clients", staticPubKey.Hex())
+	r.client.SRem(ctx, "visorClients", staticPubKey.Hex())
 	return nil
 }
 
@@ -228,6 +236,14 @@ func (r *redisStore) RemoveOldServerEntries(ctx context.Context) error {
 
 func (r *redisStore) AllEntries(ctx context.Context) ([]string, error) {
 	clients, err := r.client.SMembers(ctx, "clients").Result()
+	if err != nil {
+		return nil, err
+	}
+	return clients, err
+}
+
+func (r *redisStore) AllVisorEntries(ctx context.Context) ([]string, error) {
+	clients, err := r.client.SMembers(ctx, "visorClients").Result()
 	if err != nil {
 		return nil, err
 	}
