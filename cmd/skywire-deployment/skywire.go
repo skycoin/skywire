@@ -35,13 +35,13 @@ import (
 	tps "github.com/skycoin/skywire-services/cmd/transport-setup/commands"
 	vpnmon "github.com/skycoin/skywire-services/cmd/vpn-monitor/commands"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	skychat "github.com/skycoin/skywire/cmd/apps/skychat/commands"
-	skysocksclient "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
-	skysocks "github.com/skycoin/skywire/cmd/apps/skysocks/commands"
-	vpnclient "github.com/skycoin/skywire/cmd/apps/vpn-client/commands"
-	vpnserver "github.com/skycoin/skywire/cmd/apps/vpn-server/commands"
-	setupnode "github.com/skycoin/skywire/cmd/setup-node/commands"
-	skywirecli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
+	sc "github.com/skycoin/skywire/cmd/apps/skychat/commands"
+	ssc "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
+	ss "github.com/skycoin/skywire/cmd/apps/skysocks/commands"
+	vpnc "github.com/skycoin/skywire/cmd/apps/vpn-client/commands"
+	vpns "github.com/skycoin/skywire/cmd/apps/vpn-server/commands"
+	sn "github.com/skycoin/skywire/cmd/setup-node/commands"
+	scli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
@@ -62,7 +62,7 @@ func init() {
 		dmsgmon.RootCmd,
 	)
 	svcCmd.AddCommand(
-		setupnode.RootCmd,
+		sn.RootCmd,
 		tpd.RootCmd,
 		tps.RootCmd,
 		ar.RootCmd,
@@ -79,15 +79,15 @@ func init() {
 		vpnmon.RootCmd,
 	)
 	appsCmd.AddCommand(
-		vpnserver.RootCmd,
-		vpnclient.RootCmd,
-		skysocksclient.RootCmd,
-		skysocks.RootCmd,
-		skychat.RootCmd,
+		vpns.RootCmd,
+		vpnc.RootCmd,
+		ssc.RootCmd,
+		ss.RootCmd,
+		sc.RootCmd,
 	)
 	rootCmd.AddCommand(
 		visor.RootCmd,
-		skywirecli.RootCmd,
+		scli.RootCmd,
 		svcCmd,
 		dmsgCmd,
 		appsCmd,
@@ -98,8 +98,9 @@ func init() {
 	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘   └┘ ┴└─┘└─┘┴└─`
 	dmsgcurl.RootCmd.Use = "curl"
 	dmsgweb.RootCmd.Use = "web"
-	setupnode.RootCmd.Use = "sn"
-
+	sn.RootCmd.Use = "sn"
+	ssmon.RootCmd.Use = "ssm"
+	vpnmon.RootCmd.Use = "vpnm"
 	var helpflag bool
 	rootCmd.SetUsageTemplate(help)
 	rootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+rootCmd.Use)
@@ -177,41 +178,42 @@ var appsCmd = &cobra.Command{
 	DisableFlagsInUseLine: true,
 }
 
+var commands = []*cobra.Command{
+	dmsgptycli.RootCmd,
+	dmsgptyhost.RootCmd,
+	dmsgptyui.RootCmd,
+	dmsgptyCmd,
+	dmsgdisc.RootCmd,
+	dmsgserver.RootCmd,
+	dmsghttp.RootCmd,
+	dmsgcurl.RootCmd,
+	dmsgweb.RootCmd,
+	dmsgCmd,
+	tpd.RootCmd,
+	tps.RootCmd,
+	ar.RootCmd,
+	rf.RootCmd,
+	confbs.RootCmd,
+	kg.RootCmd,
+	lc.RootCmd,
+	nv.RootCmd,
+	pvmon.RootCmd,
+	se.RootCmd,
+	sd.RootCmd,
+	svcCmd,
+	sn.RootCmd,
+	visor.RootCmd,
+	scli.RootCmd,
+	vpns.RootCmd,
+	vpnc.RootCmd,
+	ssc.RootCmd,
+	ss.RootCmd,
+	sc.RootCmd,
+	appsCmd,
+	rootCmd,
+}
+
 func main() {
-	commands := []*cobra.Command{
-		dmsgptycli.RootCmd,
-		dmsgptyhost.RootCmd,
-		dmsgptyui.RootCmd,
-		dmsgptyCmd,
-		dmsgdisc.RootCmd,
-		dmsgserver.RootCmd,
-		dmsghttp.RootCmd,
-		dmsgcurl.RootCmd,
-		dmsgweb.RootCmd,
-		dmsgCmd,
-		tpd.RootCmd,
-		tps.RootCmd,
-		ar.RootCmd,
-		rf.RootCmd,
-		confbs.RootCmd,
-		kg.RootCmd,
-		lc.RootCmd,
-		nv.RootCmd,
-		pvmon.RootCmd,
-		se.RootCmd,
-		sd.RootCmd,
-		svcCmd,
-		setupnode.RootCmd,
-		visor.RootCmd,
-		skywirecli.RootCmd,
-		vpnserver.RootCmd,
-		vpnclient.RootCmd,
-		skysocksclient.RootCmd,
-		skysocks.RootCmd,
-		skychat.RootCmd,
-		appsCmd,
-		rootCmd,
-	}
 	for _, cmd := range commands {
 		cc.Init(&cc.Config{
 			RootCmd:         cmd,
@@ -226,7 +228,6 @@ func main() {
 			NoBottomNewline: true,
 		})
 	}
-
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 	}

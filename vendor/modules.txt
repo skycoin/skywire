@@ -492,14 +492,14 @@ github.com/skycoin/skycoin/src/cipher/ripemd160
 github.com/skycoin/skycoin/src/cipher/secp256k1-go
 github.com/skycoin/skycoin/src/cipher/secp256k1-go/secp256k1-go2
 github.com/skycoin/skycoin/src/util/logging
-# github.com/skycoin/skycoin-service-discovery v0.0.0-20231221001759-d1af6ec27db1
+# github.com/skycoin/skycoin-service-discovery v0.0.0-20231221001759-d1af6ec27db1 => github.com/skycoin/skycoin-service-discovery v0.0.0-20240227140413-5cf9b81be037
 ## explicit; go 1.21
 github.com/skycoin/skycoin-service-discovery/cmd/service-discovery/commands
 github.com/skycoin/skycoin-service-discovery/internal/pg
 github.com/skycoin/skycoin-service-discovery/internal/sdmetrics
 github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/api
 github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/store
-# github.com/skycoin/skywire-services v0.0.0-20240207001624-ebee7346e526
+# github.com/skycoin/skywire-services v0.0.0-20240207001624-ebee7346e526 => github.com/skycoin/skywire-services v0.0.0-20240227141813-e2b85b1b4733
 ## explicit; go 1.21
 github.com/skycoin/skywire-services/cmd/address-resolver/commands
 github.com/skycoin/skywire-services/cmd/config-bootstrapper/commands
@@ -541,7 +541,7 @@ github.com/skycoin/skywire-services/pkg/transport-discovery/store
 github.com/skycoin/skywire-services/pkg/transport-setup/api
 github.com/skycoin/skywire-services/pkg/transport-setup/config
 github.com/skycoin/skywire-services/pkg/vpn-monitor/api
-# github.com/skycoin/skywire-utilities v1.3.17
+# github.com/skycoin/skywire-utilities v1.3.18-0.20240208220612-9f31eda72f33
 ## explicit; go 1.21
 github.com/skycoin/skywire-utilities/pkg/buildinfo
 github.com/skycoin/skywire-utilities/pkg/cipher
@@ -830,3 +830,5 @@ nhooyr.io/websocket/internal/errd
 nhooyr.io/websocket/internal/wsjs
 nhooyr.io/websocket/internal/xsync
 # github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.18-0.20240226072009-86c43e8d4ca4
+# github.com/skycoin/skywire-services => github.com/skycoin/skywire-services v0.0.0-20240227141813-e2b85b1b4733
+# github.com/skycoin/skycoin-service-discovery => github.com/skycoin/skycoin-service-discovery v0.0.0-20240227140413-5cf9b81be037
