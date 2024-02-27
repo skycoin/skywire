@@ -9,11 +9,11 @@ import (
 	"log"
 	"os"
 	"strings"
+
+	"github.com/bitfield/script"
+	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/pterm/pterm"
 	"github.com/pterm/pterm/putils"
-	"github.com/bitfield/script"
-
-	cc "github.com/ivanpirog/coloredcobra"
 	dmsgdisc "github.com/skycoin/dmsg/cmd/dmsg-discovery/commands"
 	dmsgserver "github.com/skycoin/dmsg/cmd/dmsg-server/commands"
 	dmsgsocks "github.com/skycoin/dmsg/cmd/dmsg-socks5/commands"
@@ -119,7 +119,7 @@ func init() {
 
 }
 
-//Root command contains literally every 'command' from four repos here
+// Root command contains literally every 'command' from four repos here
 var RootCmd = &cobra.Command{
 	Use: "skywire",
 	Long: `
@@ -186,7 +186,6 @@ var appsCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 }
-
 
 var treeCmd = &cobra.Command{
 	Use:                   "tree",
@@ -261,7 +260,7 @@ var docCmd = &cobra.Command{
 		fmt.Printf("\n## %s\n", "subcommand tree")
 		fmt.Printf("\n%s\n", "A tree representation of the skywire subcommands")
 		fmt.Printf("\n```\n")
-		_, err := script.Exec(os.Args[0]+" tree").Stdout() //nolint
+		_, err := script.Exec(os.Args[0] + " tree").Stdout() //nolint
 		if err != nil {
 			fmt.Println(err.Error())
 		}
@@ -275,21 +274,21 @@ var docCmd = &cobra.Command{
 			j.Help() //nolint
 			fmt.Printf("\n```\n")
 			if j.Name() == "cli" {
-			fmt.Printf("\n%s\n", "skywire command line interface")
-			fmt.Printf("\n## %s\n", RootCmd.Use)
-			fmt.Printf("\n```\n")
-			RootCmd.Help() //nolint
-			fmt.Printf("\n```\n")
-			fmt.Printf("\n## %s\n", "global flags")
-			fmt.Printf("\n%s\n", "The skywire-cli interacts with the running visor via rpc calls. By default the rpc server is available on localhost:3435. The rpc address and port the visor is using may be changed in the config file, once generated.")
+				fmt.Printf("\n%s\n", "skywire command line interface")
+				fmt.Printf("\n## %s\n", RootCmd.Use)
+				fmt.Printf("\n```\n")
+				RootCmd.Help() //nolint
+				fmt.Printf("\n```\n")
+				fmt.Printf("\n## %s\n", "global flags")
+				fmt.Printf("\n%s\n", "The skywire-cli interacts with the running visor via rpc calls. By default the rpc server is available on localhost:3435. The rpc address and port the visor is using may be changed in the config file, once generated.")
 
-			fmt.Printf("\n%s\n", "It is not recommended to expose the rpc server on the local network. Exposing the rpc allows unsecured access to the machine over the local network")
-			fmt.Printf("\n```\n")
-			fmt.Printf("\n%s\n", "Global Flags:")
-			fmt.Printf("\n%s\n", "			--rpc string   RPC server address (default \"localhost:3435\")")
-			fmt.Printf("\n%s\n", "			--json bool   print output as json")
-			fmt.Printf("\n```\n")
-		}
+				fmt.Printf("\n%s\n", "It is not recommended to expose the rpc server on the local network. Exposing the rpc allows unsecured access to the machine over the local network")
+				fmt.Printf("\n```\n")
+				fmt.Printf("\n%s\n", "Global Flags:")
+				fmt.Printf("\n%s\n", "			--rpc string   RPC server address (default \"localhost:3435\")")
+				fmt.Printf("\n%s\n", "			--json bool   print output as json")
+				fmt.Printf("\n```\n")
+			}
 			for _, k := range j.Commands() {
 				use = strings.Split(j.Use, " ")[0] + " " + strings.Split(k.Use, " ")[0]
 				fmt.Printf("\n#### %s\n", use)
@@ -298,7 +297,7 @@ var docCmd = &cobra.Command{
 				fmt.Printf("\n```\n")
 				if k.Name() == "survey" {
 					fmt.Printf("\n```\n")
-					_, err = script.Exec("sudo "+os.Args[0]+` survey`).Stdout() //nolint
+					_, err = script.Exec("sudo " + os.Args[0] + ` survey`).Stdout() //nolint
 					if err != nil {
 						fmt.Println(err.Error())
 					}
@@ -314,7 +313,7 @@ var docCmd = &cobra.Command{
 						fmt.Printf("\n##### Example for package / msi\n")
 						fmt.Printf("\n```\n")
 						fmt.Printf("$ skywire cli config gen -bpirxn\n")
-						_, err = script.Exec(os.Args[0]+` cli config gen -bpirxn`).Stdout() //nolint
+						_, err = script.Exec(os.Args[0] + ` cli config gen -bpirxn`).Stdout() //nolint
 						if err != nil {
 							fmt.Println(err.Error())
 						}
@@ -346,9 +345,6 @@ var docCmd = &cobra.Command{
 		}
 	},
 }
-
-
-
 
 var commands = []*cobra.Command{
 	dmsgptycli.RootCmd,
