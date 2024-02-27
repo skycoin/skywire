@@ -4,7 +4,6 @@ package commands
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -70,8 +69,6 @@ var RootCmd = &cobra.Command{
 		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 			print(fmt.Sprintf("Failed to output build info: %v\n", err))
 		}
-
-		flag.Parse()
 
 		if serverPK == "" {
 			err := errors.New("Empty server PubKey. Exiting")
