@@ -119,7 +119,7 @@ func init() {
 
 }
 
-// Root command contains literally every 'command' from four repos here
+// RootCmd contains literally every 'command' from four repos here
 var RootCmd = &cobra.Command{
 	Use: "skywire",
 	Long: `
