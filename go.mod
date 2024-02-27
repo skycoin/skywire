@@ -32,7 +32,7 @@ require (
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/skycoin-service-discovery v0.0.0-20231221001759-d1af6ec27db1
 	github.com/skycoin/skywire-services v0.0.0-20240207001624-ebee7346e526
-	github.com/skycoin/skywire-utilities v1.3.17
+	github.com/skycoin/skywire-utilities v1.3.18-0.20240208220612-9f31eda72f33
 	github.com/skycoin/systray v1.10.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.7.0
@@ -166,6 +166,10 @@ require (
 // Uncomment for tests with alternate branches of 'dmsg'
 // replace github.com/skycoin/dmsg => ../dmsg
 replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.18-0.20240226072009-86c43e8d4ca4
+
+replace github.com/skycoin/skywire-services => github.com/skycoin/skywire-services v0.0.0-20240227141813-e2b85b1b4733
+
+replace github.com/skycoin/skycoin-service-discovery => github.com/skycoin/skycoin-service-discovery v0.0.0-20240227140413-5cf9b81be037
 
 // Uncomment for tests with alternate branches of 'skywire-utilities'
 // replace github.com/skycoin/skywire-utilities => ../skywire-utilities

@@ -443,5 +443,8 @@ func whitelistedPKs() map[string]bool {
 	for _, pk := range strings.Split(utilenv.SurveyWhitelistPKs, ",") {
 		whitelistedPKs[pk] = true
 	}
+	for _, pk := range strings.Split(utilenv.RewardSystemPKs, ",") {
+		whitelistedPKs[pk] = true
+	}
 	return whitelistedPKs
 }
