@@ -7,10 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
-	"log"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
