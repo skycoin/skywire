@@ -128,5 +128,7 @@ func prepareMetrics(log logrus.FieldLogger) setupmetrics.Metrics {
 
 // Execute executes root CLI command.
 func Execute() {
-	RootCmd.Execute()
+	if err := RootCmd.Execute(); err != nil {
+		log.Fatal("Failed to execute command: ", err)
+	}
 }
