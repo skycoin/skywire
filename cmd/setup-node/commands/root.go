@@ -5,10 +5,13 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"log"
 	"os"
+	"path/filepath"
+	"strings"
 
-	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
@@ -37,7 +40,9 @@ func init() {
 
 // RootCmd is the root command for setup node
 var RootCmd = &cobra.Command{
-	Use:   "setup-node [config.json]",
+	Use: func() string {
+		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", ""))+" [config.json]", " ")[0]
+	}(),
 	Short: "Route Setup Node for skywire",
 	Long: `
 	┌─┐┌─┐┌┬┐┬ ┬┌─┐   ┌┐┌┌─┐┌┬┐┌─┐
@@ -124,20 +129,7 @@ func prepareMetrics(log logrus.FieldLogger) setupmetrics.Metrics {
 
 // Execute executes root CLI command.
 func Execute() {
-	cc.Init(&cc.Config{
-		RootCmd:         RootCmd,
-		Headings:        cc.HiBlue + cc.Bold,
-		Commands:        cc.HiBlue + cc.Bold,
-		CmdShortDescr:   cc.HiBlue,
-		Example:         cc.HiBlue + cc.Italic,
-		ExecName:        cc.HiBlue + cc.Bold,
-		Flags:           cc.HiBlue + cc.Bold,
-		FlagsDataType:   cc.HiBlue,
-		FlagsDescr:      cc.HiBlue,
-		NoExtraNewlines: true,
-		NoBottomNewline: true,
-	})
 	if err := RootCmd.Execute(); err != nil {
-		panic(err)
+		log.Fatal("Failed to execute command: ", err)
 	}
 }
