@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/bitfield/script"
@@ -94,6 +95,7 @@ func init() {
 	RootCmd.AddCommand(
 		visor.RootCmd,
 		scli.RootCmd,
+		sn.RootCmd, //help menu doesn't appear correctly for setup-node unless this is included here
 		svcCmd,
 		dmsgCmd,
 		appsCmd,
@@ -109,6 +111,8 @@ func init() {
 	sn.RootCmd.Use = "sn"
 	ssmon.RootCmd.Use = "ssm"
 	vpnmon.RootCmd.Use = "vpnm"
+	scli.RootCmd.Use = "cli"
+	visor.RootCmd.Use = "visor"
 	var helpflag bool
 	RootCmd.SetUsageTemplate(help)
 	RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+RootCmd.Use)
@@ -121,7 +125,9 @@ func init() {
 
 // RootCmd contains literally every 'command' from four repos here
 var RootCmd = &cobra.Command{
-	Use: "skywire",
+	Use: func() string {
+		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
+	}(),
 	Long: `
 	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
 	└─┐├┴┐└┬┘││││├┬┘├┤
