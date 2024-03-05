@@ -3,9 +3,18 @@ package main
 
 import (
 	cc "github.com/ivanpirog/coloredcobra"
+	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/cmd/apps/vpn-server/commands"
 )
+
+func init() {
+	var helpflag bool
+	commands.RootCmd.SetUsageTemplate(help)
+	commands.RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help menu")
+	commands.RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
+	commands.RootCmd.PersistentFlags().MarkHidden("help") //nolint
+}
 
 func main() {
 	cc.Init(&cc.Config{
@@ -22,3 +31,13 @@ func main() {
 	})
 	commands.Execute()
 }
+
+const help = "Usage:\r\n" +
+	"  {{.UseLine}}{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}\r\n\r\n" +
+	"{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}\r\n\r\n" +
+	"Available Commands:{{range .Commands}}{{if (or .IsAvailableCommand)}}\r\n  " +
+	"{{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}\r\n\r\n" +
+	"Flags:\r\n" +
+	"{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}\r\n\r\n" +
+	"Global Flags:\r\n" +
+	"{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}\r\n\r\n"
