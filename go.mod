@@ -165,11 +165,11 @@ require (
 
 // Uncomment for tests with alternate branches of 'dmsg'
 // replace github.com/skycoin/dmsg => ../dmsg
-replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.18-0.20240226072009-86c43e8d4ca4
+replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.18-0.20240306171838-3351bcc4e0ae
 
-replace github.com/skycoin/skywire-services => github.com/skycoin/skywire-services v0.0.0-20240227141813-e2b85b1b4733
+replace github.com/skycoin/skywire-services => github.com/skycoin/skywire-services v0.0.0-20240306165304-177c854f4aec
 
-replace github.com/skycoin/skycoin-service-discovery => github.com/skycoin/skycoin-service-discovery v0.0.0-20240227140413-5cf9b81be037
+replace github.com/skycoin/skycoin-service-discovery => github.com/skycoin/skycoin-service-discovery v0.0.0-20240306165129-2af10aca698e
 
 // Uncomment for tests with alternate branches of 'skywire-utilities'
 // replace github.com/skycoin/skywire-utilities => ../skywire-utilities

@@ -7,6 +7,8 @@ import (
 	"log"
 	"log/syslog"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
@@ -58,12 +60,18 @@ func init() {
 
 // RootCmd contains the root command
 var RootCmd = &cobra.Command{
-	Use:   "rf",
+	Use: func() string {
+		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
+	}(),
 	Short: "Route Finder Server for skywire",
 	Long: `
 	┬─┐┌─┐┬ ┬┌┬┐┌─┐  ┌─┐┬┌┐┌┌┬┐┌─┐┬─┐
 	├┬┘│ ││ │ │ ├┤───├┤ ││││ ││├┤ ├┬┘
-	┴└─└─┘└─┘ ┴ └─┘  └  ┴┘└┘─┴┘└─┘┴└─`,
+	┴└─└─┘└─┘ ┴ └─┘  └  ┴┘└┘─┴┘└─┘┴└─
+----- depends: postgres and initial db setup -----
+sudo -iu postgres createdb rf
+skywire cli config gen-keys | tee rf-config.json
+PG_USER="postgres" PG_DATABASE="rf" PG_PASSWORD="" route-finder  --addr ":9092" --sk $(tail -n1 rf-config.json)`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,

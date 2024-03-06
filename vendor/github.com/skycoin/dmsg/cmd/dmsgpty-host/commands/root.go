@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -70,13 +71,15 @@ func init() {
 
 // RootCmd contains commands for dmsgpty-host
 var RootCmd = &cobra.Command{
-	Use:   "host",
+	Use: func() string {
+		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
+	}(),
 	Short: "DMSG host for pseudoterminal command line interface",
 	Long: `
 	┌┬┐┌┬┐┌─┐┌─┐┌─┐┌┬┐┬ ┬   ┬ ┬┌─┐┌─┐┌┬┐
 	 │││││└─┐│ ┬├─┘ │ └┬┘───├─┤│ │└─┐ │
 	─┴┘┴ ┴└─┘└─┘┴   ┴  ┴    ┴ ┴└─┘└─┘ ┴
-  ` + "DMSG host for pseudoterminal command line interface",
+DMSG host for pseudoterminal command line interface`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,

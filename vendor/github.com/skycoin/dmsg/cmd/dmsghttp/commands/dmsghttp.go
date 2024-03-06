@@ -48,13 +48,15 @@ func init() {
 
 // RootCmd contains the root dmsghttp command
 var RootCmd = &cobra.Command{
-	Use:   "http",
+	Use: func() string {
+		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
+	}(),
 	Short: "DMSG http file server",
 	Long: `
 	┌┬┐┌┬┐┌─┐┌─┐┬ ┬┌┬┐┌┬┐┌─┐
 	 │││││└─┐│ ┬├─┤ │  │ ├─┘
 	─┴┘┴ ┴└─┘└─┘┴ ┴ ┴  ┴ ┴
-  ` + "DMSG http file server",
+DMSG http file server`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
