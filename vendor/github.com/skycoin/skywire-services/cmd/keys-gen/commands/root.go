@@ -4,6 +4,9 @@ package commands
 import (
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -12,7 +15,9 @@ import (
 
 // RootCmd contains the root command
 var RootCmd = &cobra.Command{
-	Use:   "kg",
+	Use: func() string {
+		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
+	}(),
 	Short: "skywire keys generator, prints pub-key and sec-key",
 	Long: `
 	┬┌─┌─┐┬ ┬┌─┐   ┌─┐┌─┐┌┐┌

@@ -95,7 +95,6 @@ func init() {
 	RootCmd.AddCommand(
 		visor.RootCmd,
 		scli.RootCmd,
-		sn.RootCmd, //help menu doesn't appear correctly for setup-node unless this is included here
 		svcCmd,
 		dmsgCmd,
 		appsCmd,
@@ -108,11 +107,39 @@ func init() {
 	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘   └┘ ┴└─┘└─┘┴└─`
 	dmsgcurl.RootCmd.Use = "curl"
 	dmsgweb.RootCmd.Use = "web"
-	sn.RootCmd.Use = "sn"
-	ssmon.RootCmd.Use = "ssm"
+	dmsgptycli.RootCmd.Use = "cli"
+	dmsgptyhost.RootCmd.Use = "host"
+	dmsgptyui.RootCmd.Use = "ui"
+	dmsgdisc.RootCmd.Use = "disc"
+	dmsgserver.RootCmd.Use = "server"
+	dmsghttp.RootCmd.Use = "http"
+	dmsgcurl.RootCmd.Use = "curl"
+	dmsgweb.RootCmd.Use = "web"
+	dmsgsocks.RootCmd.Use = "socks"
+	dmsgmon.RootCmd.Use = "mon"
+	tpd.RootCmd.Use = "tpd"
+	tps.RootCmd.Use = "tps"
+	ar.RootCmd.Use = "ar"
+	rf.RootCmd.Use = "rf"
+	confbs.RootCmd.Use = "cb"
+	kg.RootCmd.Use = "kg"
+	lc.RootCmd.Use = "lc"
+	nv.RootCmd.Use = "nv"
 	vpnmon.RootCmd.Use = "vpnm"
+	pvmon.RootCmd.Use = "pvm"
+	ssmon.RootCmd.Use = "ssm"
+	nwmon.RootCmd.Use = "nwmon"
+	se.RootCmd.Use = "se"
+	sd.RootCmd.Use = "sd"
+	sn.RootCmd.Use = "sn"
 	scli.RootCmd.Use = "cli"
 	visor.RootCmd.Use = "visor"
+	vpns.RootCmd.Use = "vpns"
+	vpnc.RootCmd.Use = "vpnc"
+	ssc.RootCmd.Use = "ssc"
+	ss.RootCmd.Use = "ss"
+	sc.RootCmd.Use = "sc"
+
 	var helpflag bool
 	RootCmd.SetUsageTemplate(help)
 	RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+RootCmd.Use)
@@ -352,56 +379,19 @@ var docCmd = &cobra.Command{
 	},
 }
 
-var commands = []*cobra.Command{
-	dmsgptycli.RootCmd,
-	dmsgptyhost.RootCmd,
-	dmsgptyui.RootCmd,
-	dmsgptyCmd,
-	dmsgdisc.RootCmd,
-	dmsgserver.RootCmd,
-	dmsghttp.RootCmd,
-	dmsgcurl.RootCmd,
-	dmsgweb.RootCmd,
-	dmsgCmd,
-	tpd.RootCmd,
-	tps.RootCmd,
-	ar.RootCmd,
-	rf.RootCmd,
-	confbs.RootCmd,
-	kg.RootCmd,
-	lc.RootCmd,
-	nv.RootCmd,
-	pvmon.RootCmd,
-	se.RootCmd,
-	sd.RootCmd,
-	svcCmd,
-	sn.RootCmd,
-	visor.RootCmd,
-	scli.RootCmd,
-	vpns.RootCmd,
-	vpnc.RootCmd,
-	ssc.RootCmd,
-	ss.RootCmd,
-	sc.RootCmd,
-	appsCmd,
-	RootCmd,
-}
-
 func main() {
-	for _, cmd := range commands {
-		cc.Init(&cc.Config{
-			RootCmd:         cmd,
-			Headings:        cc.HiBlue + cc.Bold,
-			Commands:        cc.HiBlue + cc.Bold,
-			CmdShortDescr:   cc.HiBlue,
-			Example:         cc.HiBlue + cc.Italic,
-			ExecName:        cc.HiBlue + cc.Bold,
-			Flags:           cc.HiBlue + cc.Bold,
-			FlagsDescr:      cc.HiBlue,
-			NoExtraNewlines: true,
-			NoBottomNewline: true,
-		})
-	}
+	cc.Init(&cc.Config{
+		RootCmd:         RootCmd,
+		Headings:        cc.HiBlue + cc.Bold,
+		Commands:        cc.HiBlue + cc.Bold,
+		CmdShortDescr:   cc.HiBlue,
+		Example:         cc.HiBlue + cc.Italic,
+		ExecName:        cc.HiBlue + cc.Bold,
+		Flags:           cc.HiBlue + cc.Bold,
+		FlagsDescr:      cc.HiBlue,
+		NoExtraNewlines: true,
+		NoBottomNewline: true,
+	})
 	if err := RootCmd.Execute(); err != nil {
 		fmt.Println(err)
 	}
