@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -57,20 +58,26 @@ func init() {
 	RootCmd.Flags().StringVarP(&whitelistKeys, "whitelist-keys", "w", "", "list of whitelisted keys of network monitor used for deregistration")
 	RootCmd.Flags().BoolVarP(&testMode, "test", "t", false, "run in test mode and disable auth")
 	RootCmd.Flags().StringVarP(&apiKey, "api-key", "g", "", "geo API key")
-	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "d", "", "url of dmsg-discovery default:\n"+skyenv.DmsgDiscAddr)
+	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "d", skyenv.DmsgDiscAddr, "url of dmsg-discovery")
 	RootCmd.Flags().BoolVarP(&testEnvironment, "test-environment", "n", false, "distinguished between prod and test environment")
 	RootCmd.Flags().VarP(&sk, "sk", "s", "dmsg secret key\n")
-	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\r")
+	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value")
 }
 
 // RootCmd contains the root service-discovery command
 var RootCmd = &cobra.Command{
-	Use:   "sd",
+	Use: func() string {
+		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
+	}(),
 	Short: "Service discovery server",
 	Long: `
 	┌─┐┌─┐┬─┐┬  ┬┬┌─┐┌─┐ ┌┬┐┬┌─┐┌─┐┌─┐┬  ┬┌─┐┬─┐┬ ┬
 	└─┐├┤ ├┬┘└┐┌┘││  ├┤───│││└─┐│  │ │└┐┌┘├┤ ├┬┘└┬┘
-	└─┘└─┘┴└─ └┘ ┴└─┘└─┘ ─┴┘┴└─┘└─┘└─┘ └┘ └─┘┴└─ ┴ `,
+	└─┘└─┘┴└─ └┘ ┴└─┘└─┘ ─┴┘┴└─┘└─┘└─┘ └┘ └─┘┴└─ ┴
+----- depends: redis, postgresql and initial DB setup -----
+sudo -iu postgres createdb sd
+keys-gen | tee sd-config.json
+PG_USER="postgres" PG_DATABASE="sd" PG_PASSWORD="" service-discovery --sk $(tail -n1 sd-config.json)`,
 	Run: func(_ *cobra.Command, _ []string) {
 		if dmsgDisc == "" {
 			dmsgDisc = skyenv.DmsgDiscAddr

@@ -302,7 +302,7 @@ func (api *API) deregisterRequest(keys []string, rawReqURL, service string) erro
 type clientList []string
 
 func getClients(dmsgURL string) (data clientList, err error) {
-	res, err := http.Get(dmsgURL + "/dmsg-discovery/entries") //nolint
+	res, err := http.Get(dmsgURL + "/dmsg-discovery/visorEntries") //nolint
 
 	if err != nil {
 		return nil, err
