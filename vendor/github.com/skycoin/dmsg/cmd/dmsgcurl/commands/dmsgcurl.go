@@ -63,13 +63,15 @@ func init() {
 
 // RootCmd containsa the root dmsgcurl command
 var RootCmd = &cobra.Command{
+	Use: func() string {
+		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
+	}(),
 	Short: "DMSG curl utility",
-	Use:   "dmsgcurl [OPTIONS] ... [URL]",
 	Long: `
 	┌┬┐┌┬┐┌─┐┌─┐┌─┐┬ ┬┬─┐┬
 	 │││││└─┐│ ┬│  │ │├┬┘│
 	─┴┘┴ ┴└─┘└─┘└─┘└─┘┴└─┴─┘
-  ` + "DMSG curl utility",
+DMSG curl utility`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,

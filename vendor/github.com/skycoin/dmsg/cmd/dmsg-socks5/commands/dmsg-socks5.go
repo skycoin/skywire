@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"time"
 
 	socks5 "github.com/confiant-inc/go-socks5"
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/skyenv"
@@ -61,15 +63,28 @@ func init() {
 
 }
 
-// RootCmd contains the root dmsghttp command
+// RootCmd contains the root command
 var RootCmd = &cobra.Command{
-	Use: "proxy",
+	Use: func() string {
+		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
+	}(),
+	Short: "DMSG socks5 proxy server & client",
+	Long: `
+	┌┬┐┌┬┐┌─┐┌─┐   ┌─┐┌─┐┌─┐┬┌─┌─┐
+	 │││││└─┐│ ┬───└─┐│ ││  ├┴┐└─┐
+	─┴┘┴ ┴└─┘└─┘   └─┘└─┘└─┘┴ ┴└─┘
+DMSG socks5 proxy server & client`,
+	SilenceErrors:         true,
+	SilenceUsage:          true,
+	DisableSuggestions:    true,
+	DisableFlagsInUseLine: true,
+	Version:               buildinfo.Version(),
 }
 
 // serveCmd serves socks5 over dmsg
 var serveCmd = &cobra.Command{
 	Use:                   "server",
-	Short:                 "dmsg proxy server",
+	Short:                 "dmsg socks5 proxy server",
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
@@ -154,7 +169,7 @@ var serveCmd = &cobra.Command{
 // proxyCmd serves the local socks5 proxy
 var proxyCmd = &cobra.Command{
 	Use:   "client",
-	Short: "socks5 proxy to connect to socks5 server over dmsg",
+	Short: "socks5 proxy client for dmsg socks5 proxy server",
 	Run: func(cmd *cobra.Command, args []string) {
 		log := logging.MustGetLogger("ssh-proxy-client")
 		var pubKey cipher.PubKey

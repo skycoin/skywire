@@ -4,6 +4,9 @@ package commands
 import (
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/spf13/cobra"
@@ -13,7 +16,9 @@ import (
 
 // RootCmd contains the root command
 var RootCmd = &cobra.Command{
-	Use:   "swe",
+	Use: func() string {
+		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
+	}(),
 	Short: "skywire environment generator",
 	Long: `
 	┌─┐┬ ┬   ┌─┐┌┐┌┬  ┬

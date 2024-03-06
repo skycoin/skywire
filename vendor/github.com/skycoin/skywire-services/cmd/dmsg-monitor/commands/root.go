@@ -3,9 +3,12 @@ package commands
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"log/syslog"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
@@ -33,7 +36,7 @@ var (
 
 func init() {
 	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9080", "address to bind to.\033[0m")
-	RootCmd.Flags().DurationVarP(&sleepDeregistration, "sleep-deregistration", "s", 10, "Sleep time for derigstration process in minutes\033[0m")
+	RootCmd.Flags().DurationVarP(&sleepDeregistration, "sleep-deregistration", "s", 60, "Sleep time for derigstration process in minutes\033[0m")
 	RootCmd.Flags().IntVarP(&batchSize, "batchsize", "b", 20, "Batch size of deregistration\033[0m")
 	RootCmd.Flags().StringVarP(&confPath, "config", "c", "dmsg-monitor.json", "config file location.\033[0m")
 	RootCmd.Flags().StringVarP(&dmsgURL, "dmsg-url", "d", "", "url to dmsg data.\033[0m")
@@ -45,12 +48,15 @@ func init() {
 
 // RootCmd contains the root command
 var RootCmd = &cobra.Command{
-	Use:   "mon",
-	Short: "DMSG monitor of DMSG discoery.",
+	Use: func() string {
+		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
+	}(),
+	Short: "DMSG monitor of DMSG discovery entries.",
 	Long: `
 	┌┬┐┌┬┐┌─┐┌─┐   ┌┬┐┌─┐┌┐┌┬┌┬┐┌─┐┬─┐
 	 │││││└─┐│ ┬───││││ │││││ │ │ │├┬┘
-	─┴┘┴ ┴└─┘└─┘   ┴ ┴└─┘┘└┘┴ ┴ └─┘┴└─`,
+	─┴┘┴ ┴└─┘└─┘   ┴ ┴└─┘┘└┘┴ ┴ └─┘┴└─
+`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,

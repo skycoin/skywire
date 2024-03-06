@@ -2,9 +2,12 @@
 package commands
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -31,7 +34,9 @@ func init() {
 
 // RootCmd contains commands to start a dmsgpty-ui server for a dmsgpty-host
 var RootCmd = &cobra.Command{
-	Use:   "ui",
+	Use: func() string {
+		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
+	}(),
 	Short: "DMSG pseudoterminal GUI",
 	Long: `
 	┌┬┐┌┬┐┌─┐┌─┐┌─┐┌┬┐┬ ┬   ┬ ┬┬

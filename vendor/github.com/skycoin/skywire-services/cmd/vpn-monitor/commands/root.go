@@ -3,8 +3,11 @@ package commands
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
@@ -33,7 +36,9 @@ func init() {
 
 // RootCmd contains the root command
 var RootCmd = &cobra.Command{
-	Use:   "vpnmon",
+	Use: func() string {
+		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
+	}(),
 	Short: "VPN monitor.",
 	Long: `
 	┬  ┬┌─┐┌┐┌   ┌┬┐┌─┐┌┐┌┬┌┬┐┌─┐┬─┐

@@ -3,9 +3,11 @@ package commands
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"log/syslog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -64,7 +66,9 @@ func init() {
 
 // RootCmd contains the root command
 var RootCmd = &cobra.Command{
-	Use:   "mn",
+	Use: func() string {
+		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
+	}(),
 	Short: "Network monitor for skywire VPN and Visor.",
 	Long: `
 	┌┐┌┌─┐┌┬┐┬ ┬┌─┐┬─┐┬┌─   ┌┬┐┌─┐┌┐┌┬┌┬┐┌─┐┬─┐
