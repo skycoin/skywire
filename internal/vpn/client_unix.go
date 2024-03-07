@@ -3,7 +3,9 @@
 
 package vpn
 
-import "fmt"
+import (
+	"fmt"
+)
 
 func (c *Client) releaseSysPrivileges() { // nolint
 	defer c.suidMu.Unlock()

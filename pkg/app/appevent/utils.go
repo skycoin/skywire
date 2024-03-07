@@ -1,7 +1,9 @@
 // Package appevent pkg/app/appevent/utils.go
 package appevent
 
-import "context"
+import (
+	"context"
+)
 
 // SendTCPDial sends tcp dial event
 func (eb *Broadcaster) SendTCPDial(ctx context.Context, remoteNet, remoteAddr string) { //nolint:all

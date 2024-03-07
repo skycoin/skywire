@@ -1,7 +1,9 @@
 // Package vpn internal/vpn/client_hello.go
 package vpn
 
-import "net"
+import (
+	"net"
+)
 
 // ClientHello is a message sent by client during the Client/Server handshake.
 type ClientHello struct {
