@@ -33,6 +33,32 @@ import (
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 )
 
+func init() {
+	RootCmd.AddCommand(
+		cliconfig.RootCmd,
+		clidmsgpty.RootCmd,
+		clivisor.RootCmd,
+		clivpn.RootCmd,
+		cliut.RootCmd,
+		cliskyfwd.RootCmd,
+		cliskyrev.RootCmd,
+		clireward.RootCmd,
+		clirewards.RootCmd,
+		clisurvey.RootCmd,
+		clirtfind.RootCmd,
+		clirtree.RootCmd,
+		climdisc.RootCmd,
+		clicompletion.RootCmd,
+		clilog.RootCmd,
+		cliskysocksc.RootCmd,
+		treeCmd,
+		docCmd,
+	)
+	var jsonOutput bool
+	RootCmd.PersistentFlags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
+	RootCmd.PersistentFlags().MarkHidden(internal.JSONString) //nolint
+}
+
 // RootCmd is the root command for skywire-cli
 var RootCmd = &cobra.Command{
 	Use: func() string {
@@ -180,32 +206,6 @@ var docCmd = &cobra.Command{
 			}
 		}
 	},
-}
-
-func init() {
-	RootCmd.AddCommand(
-		cliconfig.RootCmd,
-		clidmsgpty.RootCmd,
-		clivisor.RootCmd,
-		clivpn.RootCmd,
-		cliut.RootCmd,
-		cliskyfwd.RootCmd,
-		cliskyrev.RootCmd,
-		clireward.RootCmd,
-		clirewards.RootCmd,
-		clisurvey.RootCmd,
-		clirtfind.RootCmd,
-		clirtree.RootCmd,
-		climdisc.RootCmd,
-		clicompletion.RootCmd,
-		clilog.RootCmd,
-		cliskysocksc.RootCmd,
-		treeCmd,
-		docCmd,
-	)
-	var jsonOutput bool
-	RootCmd.PersistentFlags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
-	RootCmd.PersistentFlags().MarkHidden(internal.JSONString) //nolint
 }
 
 // Execute executes root CLI command.
