@@ -2,14 +2,13 @@
 package visor
 
 import (
-	"time"
-
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/skycoin/skycoin/src/cipher"
 )

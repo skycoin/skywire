@@ -175,7 +175,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "stcpr")
 	genConfigCmd.Flags().IntVar(&sudphPort, "sudph", scriptExecInt("${SUDPHPORT:-0}"), "set udp transport listening port - 0 for random\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "sudph")
-	genConfigCmd.Flags().StringVar(&binPath, "binpath", scriptExecString("${BINPATH}"), "set bin_path\033[0m")
+	genConfigCmd.Flags().StringVar(&binPath, "binpath", scriptExecString("${BINPATH}"), "set bin_path for visor vative apps\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "binpath")
 	genConfigCmd.Flags().StringVar(&addSkysocksClientSrv, "proxyclientpk", scriptExecString("${PROXYCLIENTPK}"), "set server public key for proxy client")
 	gHiddenFlags = append(gHiddenFlags, "proxyclientpk")
@@ -204,7 +204,7 @@ func init() {
 	genConfigCmd.Flags().BoolVar(&noFetch, "nofetch", false, "do not fetch the services from the service conf url")
 	gHiddenFlags = append(gHiddenFlags, "nofetch")
 	//TODO: visorconfig.SvcConfName
-	genConfigCmd.Flags().StringVarP(&configServicePath, "svcconf", "S", scriptExecString(fmt.Sprintf("${SVCCONF:-%s}", "services-config.json")), "fallback service configuration file")
+	genConfigCmd.Flags().StringVarP(&configServicePath, "svcconf", "S", scriptExecString(fmt.Sprintf("${SVCCONF:-%s}", visorconfig.SERVICESName)), "fallback service configuration file\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "svcconf")
 	genConfigCmd.Flags().BoolVar(&noDefaults, "nodefaults", false, "do not use hardcoded defaults for production / test services")
 	gHiddenFlags = append(gHiddenFlags, "nodefaults")
@@ -228,8 +228,10 @@ var genConfigCmd = &cobra.Command{
 			if skyenvfile == "" {
 				return `Generate a config file
 
-	Config defaults file may also be specified with
-	SKYENV=/path/to/skywire.conf skywire-cli config gen`
+	Config defaults file may also be specified with:
+	SKYENV=/path/to/skywire.conf skywire-cli config gen
+	print the SKYENV file template with:
+	skywire-cli config gen -q`
 			}
 			if _, err := os.Stat(skyenvfile); err == nil {
 				return `Generate a config file
@@ -239,7 +241,9 @@ var genConfigCmd = &cobra.Command{
 			return `Generate a config file
 
 	Config defaults file may also be specified with
-	SKYENV=/path/to/skywire.conf skywire-cli config gen`
+	SKYENV=/path/to/skywire.conf skywire-cli config gen
+	print the SKYENV file template with:
+	skywire-cli config gen -q`
 		}
 		return `Generate a config file`
 
@@ -301,9 +305,9 @@ var genConfigCmd = &cobra.Command{
 		var err error
 		if isDmsgHTTP {
 			if isPkgEnv {
-				dmsgHTTPPath = visorconfig.SkywirePath + "/" + visorconfig.DMSGHTTPName //nolint
-				// TODO: visorconfig.SvcConfName
-				dmsgHTTPPath = visorconfig.SkywirePath + "/" + "services-config.json"
+				if dmsgHTTPPath == visorconfig.DMSGHTTPName {
+					dmsgHTTPPath = visorconfig.SkywirePath + "/" + visorconfig.DMSGHTTPName //nolint
+				}
 			}
 			if _, err := os.Stat(dmsgHTTPPath); err == nil {
 				if !isStdout {
@@ -448,6 +452,11 @@ var genConfigCmd = &cobra.Command{
 				}
 			}
 		} else {
+			if isPkgEnv {
+				if configServicePath == visorconfig.SERVICESName {
+					configServicePath = visorconfig.SkywirePath + "/" + visorconfig.SERVICESName
+				}
+			}
 			body, err = os.ReadFile(configServicePath)
 			if err != nil {
 				if !isStdout {
