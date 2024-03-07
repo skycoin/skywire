@@ -34,7 +34,7 @@ func init() {
 	)
 	version := buildinfo.Version()
 	if version == "unknown" {
-		version = ""
+		version = "" //nolint
 	}
 	startCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
 	startCmd.Flags().StringVarP(&addr, "addr", "a", "", "address of proxy for use")
@@ -240,7 +240,7 @@ var isLabel bool
 
 func init() {
 	if version == "unknown" {
-		version = ""
+		version = "" //nolint
 	}
 	version = strings.Split(version, "-")[0]
 	listCmd.Flags().StringVarP(&utURL, "uturl", "w", skyenv.UptimeTrackerAddr, "uptime tracker url")

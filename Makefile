@@ -100,9 +100,21 @@ commit:
 check: lint check-cg test ## Run linters and tests
 
 check-cg: ## Cursory check of the main help menu, offline dmsghttp config gen and offline config gen
+	@echo "checking help menu for compilation without errors"
+	@echo
 	go run cmd/skywire-deployment/skywire.go --help
+	@echo
+	@echo "checking dmsghttp offline config gen"
+	@echo
 	go run cmd/skywire-deployment/skywire.go cli config gen --nofetch -dnw
+	@echo
+	@echo "checking offline config gen"
+	@echo
 	go run cmd/skywire-deployment/skywire.go cli config gen --nofetch -nw
+	@echo
+	@echo "config gen succeeded without error"
+	@echo
+
 
 check-windows: lint-windows test-windows ## Run linters and tests on windows image
 
