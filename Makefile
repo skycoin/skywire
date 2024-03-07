@@ -97,7 +97,12 @@ date:
 commit:
 	@echo $(COMMIT)
 
-check: lint test ## Run linters and tests
+check: lint check-cg test ## Run linters and tests
+
+check-cg: ## Cursory check of the main help menu, offline dmsghttp config gen and offline config gen
+	go run cmd/skywire-deployment/skywire.go --help
+	go run cmd/skywire-deployment/skywire.go cli config gen --nofetch -dnw
+	go run cmd/skywire-deployment/skywire.go cli config gen --nofetch -nw
 
 check-windows: lint-windows test-windows ## Run linters and tests on windows image
 
@@ -160,6 +165,9 @@ test: ## Run tests
 	-go clean -testcache &>/dev/null
 	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/...
 	${OPTS} go test ${TEST_OPTS}
+	go run cmd/skywire-deployment/skywire.go --help
+	go run cmd/skywire-deployment/skywire.go cli config gen -dnw
+	go run cmd/skywire-deployment/skywire.go cli config gen --nofetch -nw
 
 test-windows: ## Run tests on windows
 	@go clean -testcache

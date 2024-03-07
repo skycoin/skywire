@@ -175,7 +175,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "stcpr")
 	genConfigCmd.Flags().IntVar(&sudphPort, "sudph", scriptExecInt("${SUDPHPORT:-0}"), "set udp transport listening port - 0 for random\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "sudph")
-	genConfigCmd.Flags().StringVar(&binPath, "binpath", scriptExecString("${BINPATH}"), "set bin_path\033[0m")
+	genConfigCmd.Flags().StringVar(&binPath, "binpath", scriptExecString("${BINPATH}"), "set bin_path for visor vative apps\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "binpath")
 	genConfigCmd.Flags().StringVar(&addSkysocksClientSrv, "proxyclientpk", scriptExecString("${PROXYCLIENTPK}"), "set server public key for proxy client")
 	gHiddenFlags = append(gHiddenFlags, "proxyclientpk")
@@ -204,7 +204,7 @@ func init() {
 	genConfigCmd.Flags().BoolVar(&noFetch, "nofetch", false, "do not fetch the services from the service conf url")
 	gHiddenFlags = append(gHiddenFlags, "nofetch")
 	//TODO: visorconfig.SvcConfName
-	genConfigCmd.Flags().StringVarP(&configServicePath, "svcconf", "S", scriptExecString(fmt.Sprintf("${SVCCONF:-%s}", visorconfig.SERVICESName)), " fallback service configuration file\033[0m")
+	genConfigCmd.Flags().StringVarP(&configServicePath, "svcconf", "S", scriptExecString(fmt.Sprintf("${SVCCONF:-%s}", visorconfig.SERVICESName)), "fallback service configuration file\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "svcconf")
 	genConfigCmd.Flags().BoolVar(&noDefaults, "nodefaults", false, "do not use hardcoded defaults for production / test services")
 	gHiddenFlags = append(gHiddenFlags, "nodefaults")
