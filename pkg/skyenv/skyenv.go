@@ -1,7 +1,9 @@
 // Package skyenv defines variables and constants
 package skyenv
 
-import "time"
+import (
+	"time"
+)
 
 const (
 	// config file constants
@@ -11,7 +13,7 @@ const (
 	// DMSGHTTPName is the default dmsghttp config name
 	DMSGHTTPName = "dmsghttp-config.json"
 	// ServicesName is the default services config name
-	ServicesName = "services-config.json"
+	SERVICESName = "services-config.json"
 
 	// Dmsg port constants.
 	// TODO(evanlinjin): Define these properly. These are currently random.
@@ -114,11 +116,6 @@ const (
 // SkywireConfig returns the full path to the package config
 func SkywireConfig() string {
 	return SkywirePath + "/" + ConfigJSON
-}
-
-// SkyEnvs returns the full path to the environmental variable file
-func SkyEnvs() string {
-	return SkyenvFilePath + "/" + SkyenvFile
 }
 
 // PkgConfig struct contains paths specific to the installation
