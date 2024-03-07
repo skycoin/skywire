@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
@@ -31,11 +32,15 @@ func init() {
 		statusCmd,
 		listCmd,
 	)
+	version := buildinfo.Version()
+	if version == "unknown" {
+		version = ""
+	}
 	startCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
 	startCmd.Flags().StringVarP(&addr, "addr", "a", "", "address of proxy for use")
 	startCmd.Flags().StringVarP(&clientName, "name", "n", "", "name of skysocks client")
-	startCmd.Flags().IntVarP(&startingTimeout, "timeout", "t", 20, "starting timeout value in second")
-	startCmd.Flags().StringVarP(&httpProxy, "http-proxy", "p", "", "starting http-proxy based on skysocks")
+	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks client")
+	stopCmd.Flags().StringVar(&clientName, "name", "", "specific skysocks client that want stop")
 }
 
 var startCmd = &cobra.Command{
@@ -46,17 +51,6 @@ var startCmd = &cobra.Command{
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
-		}
-
-		arguments := map[string]string{}
-		if pk != "" {
-			arguments["srv"] = pk
-		}
-		if addr != "" {
-			arguments["addr"] = addr
-		}
-		if httpProxy != "" {
-			arguments["http"] = httpProxy
 		}
 
 		if clientName != "" && pk != "" && addr != "" {
@@ -72,6 +66,10 @@ var startCmd = &cobra.Command{
 					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
 				}
 			}
+
+			arguments := map[string]string{}
+			arguments["srv"] = pubkey.String()
+			arguments["addr"] = addr
 
 			_, err = rpcClient.App(clientName)
 			if err == nil {
@@ -92,10 +90,6 @@ var startCmd = &cobra.Command{
 			internal.Catch(cmd.Flags(), rpcClient.StartApp(clientName))
 			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
 		} else if clientName != "" && pk == "" && addr == "" {
-			err = rpcClient.DoCustomSetting(clientName, arguments)
-			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error occurs during set args to custom skysocks client"))
-			}
 			internal.Catch(cmd.Flags(), rpcClient.StartApp(clientName))
 			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
 		} else if pk != "" && clientName == "" && addr == "" {
@@ -110,11 +104,7 @@ var startCmd = &cobra.Command{
 					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
 				}
 			}
-			err = rpcClient.DoCustomSetting("skysocks-client", arguments)
-			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error occurs during set args to custom skysocks client"))
-			}
-			internal.Catch(cmd.Flags(), rpcClient.StartApp("skysocks-client"))
+			internal.Catch(cmd.Flags(), rpcClient.StartSkysocksClient(pubkey.String()))
 			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
 			clientName = "skysocks-client"
 			// change defaul skysocks-proxy app -srv arg and run it
@@ -123,11 +113,8 @@ var startCmd = &cobra.Command{
 			return
 		}
 
-		tCtc := context.Background() //nolint
-		if startingTimeout != 0 {
-			tCtc, _ = context.WithTimeout(context.Background(), time.Duration(startingTimeout)*time.Second) //nolint
-		}
-		ctx, cancel := cmdutil.SignalContext(tCtc, &logrus.Logger{})
+		ctx, cancel := cmdutil.SignalContext(context.Background(), &logrus.Logger{})
+		defer cancel()
 		go func() {
 			<-ctx.Done()
 			cancel()
@@ -165,14 +152,9 @@ var startCmd = &cobra.Command{
 	},
 }
 
-func init() {
-	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks client")
-	stopCmd.Flags().StringVar(&clientName, "name", "", "specific skysocks client that want stop")
-}
-
 var stopCmd = &cobra.Command{
 	Use:   "stop",
-	Short: "stop the " + serviceType + " client" + "\nstop the default instance with:\n stop --name skysocks-client",
+	Short: "stop the " + serviceType + " client",
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
