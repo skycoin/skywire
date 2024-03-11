@@ -8,6 +8,7 @@ import (
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/inputports"
 	clichat "github.com/skycoin/skywire/cmd/apps/skychat/internal/inputports/cli/chat"
@@ -21,12 +22,14 @@ var rootCmd = &cobra.Command{
 	Use:   "skychat",
 	Short: "Command Line Interface for skychat",
 	Long: `
-	┌─┐┬┌─┬ ┬         ┌─┐┬  ┬
-	└─┐├┴┐└┬┘ CHAT  ──│  │  │
-	└─┘┴ ┴ ┴          └─┘┴─┘┴`,
-	SilenceErrors:      true,
-	SilenceUsage:       true,
-	DisableSuggestions: true,
+	┌─┐┬┌─┬ ┬┌─┐┬ ┬┌─┐┌┬┐
+	└─┐├┴┐└┬┘│  ├─┤├─┤ │
+	└─┘┴ ┴ ┴ └─┘┴ ┴┴ ┴ ┴ `,
+	SilenceErrors:         true,
+	SilenceUsage:          true,
+	DisableSuggestions:    true,
+	DisableFlagsInUseLine: true,
+	Version:               buildinfo.Version(),
 	Run: func(cmd *cobra.Command, args []string) {
 
 		//TODO: Setup Databases depending on flags/attributes
