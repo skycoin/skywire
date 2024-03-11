@@ -18,9 +18,9 @@ import (
 var httpport string
 var rpcport string
 
-var rootCmd = &cobra.Command{
+var RootCmd = &cobra.Command{
 	Use:   "skychat",
-	Short: "Command Line Interface for skychat",
+	Short: "skywire chat application",
 	Long: `
 	┌─┐┬┌─┬ ┬┌─┐┬ ┬┌─┐┌┬┐
 	└─┐├┴┐└┬┘│  ├─┤├─┤ │
@@ -62,23 +62,23 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(
+	RootCmd.AddCommand(
 		clichat.RootCmd,
 	)
 	var helpflag bool
-	rootCmd.SetUsageTemplate(help)
-	rootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+rootCmd.Use)
-	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
-	rootCmd.PersistentFlags().MarkHidden("help") //nolint
+	RootCmd.SetUsageTemplate(help)
+	RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+RootCmd.Use)
+	RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
+	RootCmd.PersistentFlags().MarkHidden("help") //nolint
 
-	rootCmd.Flags().StringVar(&httpport, "httpport", ":8001", "port to bind")
-	rootCmd.Flags().StringVar(&rpcport, "rpcport", ":4040", "port to bind")
+	RootCmd.Flags().StringVar(&httpport, "httpport", ":8001", "port to bind")
+	RootCmd.Flags().StringVar(&rpcport, "rpcport", ":4040", "port to bind")
 }
 
 // Execute executes root CLI command.
 func Execute() {
 	cc.Init(&cc.Config{
-		RootCmd:       rootCmd,
+		RootCmd:       RootCmd,
 		Headings:      cc.HiBlue + cc.Bold, //+ cc.Underline,
 		Commands:      cc.HiBlue + cc.Bold,
 		CmdShortDescr: cc.HiBlue,
@@ -91,7 +91,7 @@ func Execute() {
 		NoBottomNewline: true,
 	})
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
 	}
 }
