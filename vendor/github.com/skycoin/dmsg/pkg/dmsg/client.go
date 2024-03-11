@@ -41,10 +41,11 @@ func (sc *ClientCallbacks) ensure() {
 
 // Config configures a dmsg client entity.
 type Config struct {
-	MinSessions    int
-	UpdateInterval time.Duration // Duration between discovery entry updates.
-	Callbacks      *ClientCallbacks
-	ClientType     string
+	MinSessions          int
+	UpdateInterval       time.Duration // Duration between discovery entry updates.
+	Callbacks            *ClientCallbacks
+	ClientType           string
+	ConnectedServersType string
 }
 
 // Ensure ensures all config values are set.
@@ -208,6 +209,18 @@ func (ce *Client) Serve(ctx context.Context) {
 			if isClosed(ce.done) {
 				return
 			}
+
+			// Skip dmsg servers without user specific types: official, community, all
+			if ce.conf.ConnectedServersType == "official" {
+				if entry.Server.ServerType != "official" {
+					continue
+				}
+			} else if ce.conf.ConnectedServersType == "community" {
+				if entry.Server.ServerType != "community" {
+					continue
+				}
+			}
+
 			// If MinSessions is set to 0 then we connect to all available servers.
 			// If MinSessions is not 0 AND we have enough sessions, we wait for error or done signal.
 			if ce.conf.MinSessions != 0 && ce.SessionCount() >= ce.conf.MinSessions {

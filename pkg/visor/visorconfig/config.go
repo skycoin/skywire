@@ -61,9 +61,10 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		conf.Common = common
 	}
 	conf.Dmsg = &dmsgc.DmsgConfig{
-		Discovery:     services.DmsgDiscovery, //utilenv.DmsgDiscAddr,
-		SessionsCount: 1,
-		Servers:       []*disc.Entry{},
+		Discovery:            services.DmsgDiscovery, //utilenv.DmsgDiscAddr,
+		SessionsCount:        1,
+		Servers:              []*disc.Entry{},
+		ConnectedServersType: "all",
 	}
 	conf.Transport = &Transport{
 		Discovery:         services.TransportDiscovery, //utilenv.TpDiscAddr,

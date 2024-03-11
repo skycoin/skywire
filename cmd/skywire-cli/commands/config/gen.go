@@ -701,9 +701,10 @@ var genConfigCmd = &cobra.Command{
 		}
 
 		conf.Dmsg = &dmsgc.DmsgConfig{
-			Discovery:     services.DmsgDiscovery,
-			SessionsCount: minDmsgSess,
-			Servers:       []*disc.Entry{},
+			Discovery:            services.DmsgDiscovery,
+			SessionsCount:        minDmsgSess,
+			Servers:              []*disc.Entry{},
+			ConnectedServersType: "all",
 		}
 		conf.Transport = &visorconfig.Transport{
 			Discovery:         services.TransportDiscovery, //utilenv.TpDiscAddr,
