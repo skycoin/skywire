@@ -1666,13 +1666,19 @@ type ipAPI struct {
 
 // GetIP used for getting current IP of visor
 func GetIP() (string, error) {
-	req, err := http.Get("http://ip.skycoin.com")
-	if err != nil {
-		return "", err
-	}
-	defer req.Body.Close() // nolint
+	var resp *http.Response
+	var err error
 
-	body, err := io.ReadAll(req.Body)
+	resp, err = http.Get("https://ip.skycoin.com/")
+	if err != nil {
+		resp, err = http.Get("https://ip.plaintext.ir/")
+		if err != nil {
+			return "", err
+		}
+	}
+	defer resp.Body.Close() // nolint
+
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}

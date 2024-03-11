@@ -31,7 +31,7 @@ type Module struct {
 }
 
 // DoNothing is an initialization hook that does nothing
-var DoNothing Hook = func(ctx context.Context, log *logging.Logger) error {
+var DoNothing Hook = func(_ context.Context, _ *logging.Logger) error {
 	return nil
 }
 
