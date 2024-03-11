@@ -22,7 +22,7 @@ require (
 	github.com/hashicorp/go-version v1.6.0
 	github.com/hashicorp/yamux v0.1.1
 	github.com/ivanpirog/coloredcobra v1.0.1
-	github.com/james-barrow/golang-ipc v1.1.0
+	github.com/james-barrow/golang-ipc v1.2.4
 	github.com/jaypipes/ghw v0.12.0
 	github.com/konsorten/go-windows-terminal-sequences v1.0.3
 	github.com/lib/pq v1.10.9
@@ -45,7 +45,7 @@ require (
 	github.com/xtaci/kcp-go v5.4.20+incompatible
 	github.com/zcalusic/sysinfo v1.0.1
 	go.etcd.io/bbolt v1.3.7
-	golang.org/x/net v0.14.0
+	golang.org/x/net v0.17.0
 	golang.org/x/sync v0.3.0
 	golang.org/x/sys v0.15.0
 	golang.zx2c4.com/wireguard v0.0.20200320
@@ -96,6 +96,7 @@ require (
 	github.com/google/pprof v0.0.0-20230821062121-407c9e7a662f // indirect
 	github.com/gookit/color v1.5.4 // indirect
 	github.com/gopherjs/gopherjs v1.17.2 // indirect
+	github.com/gorilla/websocket v1.5.1
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/itchyny/gojq v0.12.13 // indirect
 	github.com/itchyny/timefmt-go v0.1.5 // indirect
