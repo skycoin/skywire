@@ -7,6 +7,7 @@ import (
 	"log"
 	"log/syslog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -76,12 +77,21 @@ func init() {
 
 // RootCmd contains the root command
 var RootCmd = &cobra.Command{
-	Use:   "ar",
+	Use: func() string {
+		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
+	}(),
 	Short: "Address Resolver Server for skywire",
 	Long: `
 	┌─┐┌┬┐┌┬┐┬─┐┌─┐┌─┐┌─┐   ┬─┐┌─┐┌─┐┌─┐┬ ┬  ┬┌─┐┬─┐
 	├─┤ ││ ││├┬┘├┤ └─┐└─┐───├┬┘├┤ └─┐│ ││ └┐┌┘├┤ ├┬┘
-	┴ ┴─┴┘─┴┘┴└─└─┘└─┘└─┘   ┴└─└─┘└─┘└─┘┴─┘└┘ └─┘┴└─`,
+	┴ ┴─┴┘─┴┘┴└─└─┘└─┘└─┘   ┴└─└─┘└─┘└─┘┴─┘└┘ └─┘┴└─
+
+depends: redis
+
+Note: the specified port must be accessible from the internet ip address or port forwarded for udp
+skywire cli config gen-keys > ar-config.json
+skywire svc ar --addr ":9093" --redis "redis://localhost:6379" --sk $(tail -n1 ar-config.json)
+`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,

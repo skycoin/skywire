@@ -7,9 +7,10 @@ import (
 	"log"
 	"log/syslog"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
-	cc "github.com/ivanpirog/coloredcobra"
 	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
 	"github.com/skycoin/dmsg/pkg/direct"
 	"github.com/skycoin/dmsg/pkg/dmsg"
@@ -55,21 +56,22 @@ func init() {
 	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", "http://dmsgd.skywire.skycoin.com", "url of dmsg-discovery\033[0m")
 	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\r")
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\r")
-	var helpflag bool
-	RootCmd.SetUsageTemplate(help)
-	RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for route-finder")
-	RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
-	RootCmd.PersistentFlags().MarkHidden("help") //nolint
 }
 
 // RootCmd contains the root command
 var RootCmd = &cobra.Command{
-	Use:   "rf",
+	Use: func() string {
+		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
+	}(),
 	Short: "Route Finder Server for skywire",
 	Long: `
 	┬─┐┌─┐┬ ┬┌┬┐┌─┐  ┌─┐┬┌┐┌┌┬┐┌─┐┬─┐
 	├┬┘│ ││ │ │ ├┤───├┤ ││││ ││├┤ ├┬┘
-	┴└─└─┘└─┘ ┴ └─┘  └  ┴┘└┘─┴┘└─┘┴└─`,
+	┴└─└─┘└─┘ ┴ └─┘  └  ┴┘└┘─┴┘└─┘┴└─
+----- depends: postgres and initial db setup -----
+sudo -iu postgres createdb rf
+skywire cli config gen-keys | tee rf-config.json
+PG_USER="postgres" PG_DATABASE="rf" PG_PASSWORD="" route-finder  --addr ":9092" --sk $(tail -n1 rf-config.json)`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
@@ -192,30 +194,7 @@ var RootCmd = &cobra.Command{
 
 // Execute executes root CLI command.
 func Execute() {
-	cc.Init(&cc.Config{
-		RootCmd:       RootCmd,
-		Headings:      cc.HiBlue + cc.Bold, //+ cc.Underline,
-		Commands:      cc.HiBlue + cc.Bold,
-		CmdShortDescr: cc.HiBlue,
-		Example:       cc.HiBlue + cc.Italic,
-		ExecName:      cc.HiBlue + cc.Bold,
-		Flags:         cc.HiBlue + cc.Bold,
-		//FlagsDataType: cc.HiBlue,
-		FlagsDescr:      cc.HiBlue,
-		NoExtraNewlines: true,
-		NoBottomNewline: true,
-	})
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
 	}
 }
-
-const help = "Usage:\r\n" +
-	"  {{.UseLine}}{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}\r\n\r\n" +
-	"{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}\r\n\r\n" +
-	"Available Commands:{{range .Commands}}{{if (or .IsAvailableCommand)}}\r\n  " +
-	"{{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}\r\n\r\n" +
-	"Flags:\r\n" +
-	"{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}\r\n\r\n" +
-	"Global Flags:\r\n" +
-	"{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}\r\n\r\n"

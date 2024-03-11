@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"mime"
 	"net"
 	"net/http"
@@ -1601,7 +1602,10 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 		if err != nil {
 			return nil, fmt.Errorf("error getting AvailableServers: %w", err)
 		}
-
+		// randomize dmsg servers list
+		rand.Shuffle(len(servers), func(i, j int) {
+			servers[i], servers[j] = servers[j], servers[i]
+		})
 		for _, server := range servers {
 			delegatedServers = append(delegatedServers, server.Static)
 		}
@@ -1662,13 +1666,19 @@ type ipAPI struct {
 
 // GetIP used for getting current IP of visor
 func GetIP() (string, error) {
-	req, err := http.Get("http://ip.skycoin.com")
-	if err != nil {
-		return "", err
-	}
-	defer req.Body.Close() // nolint
+	var resp *http.Response
+	var err error
 
-	body, err := io.ReadAll(req.Body)
+	resp, err = http.Get("https://ip.skycoin.com/")
+	if err != nil {
+		resp, err = http.Get("https://ip.plaintext.ir/")
+		if err != nil {
+			return "", err
+		}
+	}
+	defer resp.Body.Close() // nolint
+
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}

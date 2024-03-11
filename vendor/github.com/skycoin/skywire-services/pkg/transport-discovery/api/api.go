@@ -98,11 +98,11 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 		r.Get("/transports/edge:{edge}", api.getTransportByEdge)
 		r.Post("/transports/", api.registerTransport)
 		r.Delete("/transports/id:{id}", api.deleteTransport)
-		r.Delete("/transports/deregister", api.deregisterTransport)
 	})
 
 	r.Get("/health", api.health)
 	r.Get("/all-transports", api.getAllTransports)
+	r.Delete("/transports/deregister", api.deregisterTransport)
 	r.Post("/statuses", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusGone)
 	})

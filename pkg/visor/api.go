@@ -99,6 +99,7 @@ type API interface {
 	Transport(tid uuid.UUID) (*TransportSummary, error)
 	AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*TransportSummary, error)
 	RemoveTransport(tid uuid.UUID) error
+	RemoveAllTransports() error
 	SetPublicAutoconnect(pAc bool) error
 	GetPersistentTransports() ([]transport.PersistentTransports, error)
 	SetPersistentTransports([]transport.PersistentTransports) error
@@ -529,7 +530,7 @@ func (v *Visor) StartVPNClient(pk cipher.PubKey) error {
 			// we set the args in memory and pass it in `v.appL.StartApp`
 			// unlike the api method `StartApp` where `nil` is passed in `v.appL.StartApp` as args
 			// but the args are set in the config
-			v.conf.Launcher.Apps[index].Args = []string{"-srv", pk.Hex()}
+			v.conf.Launcher.Apps[index].Args = []string{"--srv", pk.Hex()}
 			maker := vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.STCPRRemoteAddrs())
 			envs, err = maker()
 			if err != nil {
@@ -609,13 +610,13 @@ func (v *Visor) StartSkysocksClient(serverKey string) error {
 				// we set the args in memory and pass it in `v.appL.StartApp`
 				// unlike the api method `StartApp` where `nil` is passed in `v.appL.StartApp` as args
 				// but the args are set in the config
-				v.conf.Launcher.Apps[index].Args = []string{"-srv", pk.Hex()}
+				v.conf.Launcher.Apps[index].Args = []string{"--srv", pk.Hex()}
 			} else {
 				var pk cipher.PubKey
 				if err := pk.Set(v.GetSkysocksClientAddress()); err != nil {
 					return err
 				}
-				v.conf.Launcher.Apps[index].Args = []string{"-srv", pk.Hex()}
+				v.conf.Launcher.Apps[index].Args = []string{"--srv", pk.Hex()}
 			}
 
 			// check process manager availability
@@ -724,7 +725,7 @@ func (v *Visor) SetAppPassword(appName, password string) error {
 	v.log.Infof("Changing %s password to %q", appName, password)
 
 	const (
-		passcodeArgName = "-passcode"
+		passcodeArgName = "--passcode"
 	)
 	if err := v.conf.UpdateAppArg(v.appL, appName, passcodeArgName, password); err != nil {
 		return err
@@ -833,7 +834,7 @@ func (v *Visor) SetAppAddress(appName string, address string) error {
 	v.log.Infof("Setting %s addr to %v", appName, address)
 
 	const (
-		addrArg = "-addr"
+		addrArg = "--addr"
 	)
 	if err := v.conf.UpdateAppArg(v.appL, appName, addrArg, address); err != nil {
 		return err
@@ -863,7 +864,7 @@ func (v *Visor) SetAppPK(appName string, pk cipher.PubKey) error {
 	v.log.Infof("Changing %s PK to %q", appName, pk)
 
 	const (
-		pkArgName = "-srv"
+		pkArgName = "--srv"
 	)
 	if err := v.conf.UpdateAppArg(v.appL, appName, pkArgName, pk.String()); err != nil {
 		return err
@@ -892,7 +893,7 @@ func (v *Visor) SetAppDNS(appName string, dnsAddr string) error {
 	v.log.Infof("Changing %s DNS Address to %q", appName, dnsAddr)
 
 	const (
-		pkArgName = "-dns"
+		pkArgName = "--dns"
 	)
 
 	if err := v.conf.UpdateAppArg(v.appL, appName, pkArgName, dnsAddr); err != nil {
@@ -917,7 +918,7 @@ func (v *Visor) DoCustomSetting(appName string, customSetting map[string]string)
 	}
 
 	for field, value := range customSetting {
-		if err := v.conf.UpdateAppArg(v.appL, appName, fmt.Sprintf("-%s", field), value); err != nil {
+		if err := v.conf.UpdateAppArg(v.appL, appName, fmt.Sprintf("--%s", field), value); err != nil {
 			return err
 		}
 	}
@@ -1189,6 +1190,12 @@ func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, timeout time.D
 // RemoveTransport implements API.
 func (v *Visor) RemoveTransport(tid uuid.UUID) error {
 	v.tpM.DeleteTransport(tid)
+	return nil
+}
+
+// RemoveAllTransports implements API
+func (v *Visor) RemoveAllTransports() error {
+	v.tpM.DeleteAllTransports()
 	return nil
 }
 
@@ -1489,7 +1496,7 @@ func (v *Visor) GetVPNClientAddress() string {
 	for _, v := range v.conf.Launcher.Apps {
 		if v.Name == visorconfig.VPNClientName {
 			for index := range v.Args {
-				if v.Args[index] == "-srv" {
+				if v.Args[index] == "--srv" {
 					return v.Args[index+1]
 				}
 			}
@@ -1503,7 +1510,7 @@ func (v *Visor) GetSkysocksClientAddress() string {
 	for _, v := range v.conf.Launcher.Apps {
 		if v.Name == visorconfig.SkysocksClientAddr {
 			for index := range v.Args {
-				if v.Args[index] == "-srv" {
+				if v.Args[index] == "--srv" {
 					return v.Args[index+1]
 				}
 			}

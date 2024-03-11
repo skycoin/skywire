@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -16,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
+	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
@@ -32,10 +32,15 @@ func init() {
 		statusCmd,
 		listCmd,
 	)
+	version := buildinfo.Version()
+	if version == "unknown" {
+		version = "" //nolint
+	}
 	startCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
 	startCmd.Flags().StringVarP(&addr, "addr", "a", "", "address of proxy for use")
 	startCmd.Flags().StringVarP(&clientName, "name", "n", "", "name of skysocks client")
-	startCmd.Flags().IntVarP(&startingTimeout, "timeout", "t", 20, "starting timeout value in second")
+	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks client")
+	stopCmd.Flags().StringVar(&clientName, "name", "", "specific skysocks client that want stop")
 }
 
 var startCmd = &cobra.Command{
@@ -108,11 +113,8 @@ var startCmd = &cobra.Command{
 			return
 		}
 
-		tCtc := context.Background() //nolint
-		if startingTimeout != 0 {
-			tCtc, _ = context.WithTimeout(context.Background(), time.Duration(startingTimeout)*time.Second) //nolint
-		}
-		ctx, cancel := cmdutil.SignalContext(tCtc, &logrus.Logger{})
+		ctx, cancel := cmdutil.SignalContext(context.Background(), &logrus.Logger{})
+		defer cancel()
 		go func() {
 			<-ctx.Done()
 			cancel()
@@ -150,14 +152,9 @@ var startCmd = &cobra.Command{
 	},
 }
 
-func init() {
-	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks client")
-	stopCmd.Flags().StringVar(&clientName, "name", "", "specific skysocks client that want stop")
-}
-
 var stopCmd = &cobra.Command{
 	Use:   "stop",
-	Short: "stop the " + serviceType + " client" + "\nstop the default instance with:\n stop --name skysocks-client",
+	Short: "stop the " + serviceType + " client",
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -243,7 +240,7 @@ var isLabel bool
 
 func init() {
 	if version == "unknown" {
-		version = ""
+		version = "" //nolint
 	}
 	version = strings.Split(version, "-")[0]
 	listCmd.Flags().StringVarP(&utURL, "uturl", "w", skyenv.UptimeTrackerAddr, "uptime tracker url")
@@ -266,7 +263,7 @@ var listCmd = &cobra.Command{
 	Short: "List servers",
 	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache file location to \"\" to avoid using cache files", serviceType, skyenv.ServiceDiscAddr, serviceType, skyenv.ServiceDiscAddr, serviceType),
 	Run: func(cmd *cobra.Command, args []string) {
-		sds := getData(cacheFileSD, sdURL+"/api/services?type="+serviceType)
+		sds := internal.GetData(cacheFileSD, sdURL+"/api/services?type="+serviceType, cacheFilesAge)
 		if rawData {
 			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout() //nolint
 			return
@@ -309,7 +306,7 @@ var listCmd = &cobra.Command{
 			script.Echo(sdkeys).Stdout() //nolint
 			return
 		}
-		uts := getData(cacheFileUT, utURL+"/uptimes?v=v2")
+		uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
 		utkeys, _ := script.Echo(uts).JQ(".[] | select(.on) | .pk").Replace("\"", "").String() //nolint
 		if isStats {
 			count, _ := script.Echo(sdkeys + utkeys).Freq().Match("2 ").Column(2).CountLines() //nolint
@@ -330,32 +327,4 @@ var listCmd = &cobra.Command{
 		}
 
 	},
-}
-
-func getData(cachefile, thisurl string) (thisdata string) {
-	var shouldfetch bool
-	buf1 := new(bytes.Buffer)
-	cTime := time.Now()
-	if cachefile == "" {
-		thisdata, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).String() //nolint
-		return thisdata
-	}
-	if cachefile != "" {
-		if u, err := os.Stat(cachefile); err != nil {
-			shouldfetch = true
-		} else {
-			if cTime.Sub(u.ModTime()).Minutes() > float64(cacheFilesAge) {
-				shouldfetch = true
-			}
-		}
-		if shouldfetch {
-			_, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).Tee(buf1).WriteFile(cachefile) //nolint
-			thisdata = buf1.String()
-		} else {
-			thisdata, _ = script.File(cachefile).String() //nolint
-		}
-	} else {
-		thisdata, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).String() //nolint
-	}
-	return thisdata
 }

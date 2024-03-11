@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"strings"
@@ -169,7 +170,10 @@ func (api *API) dmsgDeregistration(uptimes map[string]bool) {
 		api.logger.Warnf("Error occur during get dmsg clients list due to %s", err)
 		return
 	}
-
+	//randomize the order of the dmsg entries
+	rand.Shuffle(len(clients), func(i, j int) {
+		clients[i], clients[j] = clients[j], clients[i]
+	})
 	// check dmsg clients either alive or dead
 	checkerConfig := dmsgCheckerConfig{
 		wg:        new(sync.WaitGroup),
@@ -298,7 +302,7 @@ func (api *API) deregisterRequest(keys []string, rawReqURL, service string) erro
 type clientList []string
 
 func getClients(dmsgURL string) (data clientList, err error) {
-	res, err := http.Get(dmsgURL + "/dmsg-discovery/entries") //nolint
+	res, err := http.Get(dmsgURL + "/dmsg-discovery/visorEntries") //nolint
 
 	if err != nil {
 		return nil, err
@@ -424,7 +428,23 @@ func whitelistedPKs() map[string]bool {
 	for _, pk := range strings.Split(utilenv.TestNetworkMonitorPKs, ",") {
 		whitelistedPKs[pk] = true
 	}
-	whitelistedPKs[utilenv.RouteSetupPKs] = true
-	whitelistedPKs[utilenv.TestRouteSetupPKs] = true
+	for _, pk := range strings.Split(utilenv.RouteSetupPKs, ",") {
+		whitelistedPKs[pk] = true
+	}
+	for _, pk := range strings.Split(utilenv.TestRouteSetupPKs, ",") {
+		whitelistedPKs[pk] = true
+	}
+	for _, pk := range strings.Split(utilenv.TPSetupPKs, ",") {
+		whitelistedPKs[pk] = true
+	}
+	for _, pk := range strings.Split(utilenv.TestTPSetupPKs, ",") {
+		whitelistedPKs[pk] = true
+	}
+	for _, pk := range strings.Split(utilenv.SurveyWhitelistPKs, ",") {
+		whitelistedPKs[pk] = true
+	}
+	for _, pk := range strings.Split(utilenv.RewardSystemPKs, ",") {
+		whitelistedPKs[pk] = true
+	}
 	return whitelistedPKs
 }

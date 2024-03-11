@@ -394,6 +394,11 @@ func (rc *rpcClient) RemoveTransport(tid uuid.UUID) error {
 	return rc.Call("RemoveTransport", &tid, &struct{}{})
 }
 
+// RemoveAllTransports calls RemoveAllTransports.
+func (rc *rpcClient) RemoveAllTransports() error {
+	return rc.Call("RemoveAllTransports", &struct{}{}, &struct{}{})
+}
+
 func (rc *rpcClient) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error) {
 	entries := make([]*transport.Entry, 0)
 	err := rc.Call("DiscoverTransportsByPK", &pk, &entries)
@@ -1155,6 +1160,14 @@ func (mc *mockRPCClient) RemoveTransport(tid uuid.UUID) error {
 			}
 		}
 		return fmt.Errorf("transport of id '%s' is not found", tid)
+	})
+}
+
+// RemoveAllTransports implements API.
+func (mc *mockRPCClient) RemoveAllTransports() error {
+	return mc.do(true, func() error {
+		mc.o.Transports = []*TransportSummary{}
+		return nil
 	})
 }
 

@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -82,7 +81,9 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "noauth")
 	genConfigCmd.Flags().BoolVarP(&isDmsgHTTP, "dmsghttp", "d", scriptExecBool("${DMSGHTTP:-false}"), "use dmsg connection to skywire services\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "dmsghttp")
-	genConfigCmd.Flags().IntVar(&minDmsgSess, "minsess", scriptExecInt("${MINDMSGSESS:-1}"), "number of dmsg servers to connect to (0 = unlimited)\033[0m")
+	genConfigCmd.Flags().StringVarP(&dmsgHTTPPath, "dmsgconf", "D", scriptExecString(fmt.Sprintf("${DMSGCONF:-%s}", visorconfig.DMSGHTTPName)), "dmsghttp-config path\033[0m")
+	gHiddenFlags = append(gHiddenFlags, "dmsgconf")
+	genConfigCmd.Flags().IntVar(&minDmsgSess, "minsess", scriptExecInt("${MINDMSGSESS:-2}"), "number of dmsg servers to connect to (0 = unlimited)\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "minsess")
 	genConfigCmd.Flags().BoolVarP(&isEnableAuth, "auth", "e", false, "enable auth on hypervisor UI\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "auth")
@@ -129,6 +130,8 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "example-apps")
 	genConfigCmd.Flags().BoolVarP(&isStdout, "stdout", "n", false, "write config to stdout\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "stdout")
+	genConfigCmd.Flags().BoolVarP(&isSquash, "squash", "N", false, "output config without whitespace or newlines\033[0m")
+	gHiddenFlags = append(gHiddenFlags, "squash")
 	genConfigCmd.Flags().BoolVarP(&isEnvs, "envs", "q", false, "show the environmental variable settings")
 	msg = "output config"
 	if scriptExecString("${OUTPUT}") == "" {
@@ -172,7 +175,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "stcpr")
 	genConfigCmd.Flags().IntVar(&sudphPort, "sudph", scriptExecInt("${SUDPHPORT:-0}"), "set udp transport listening port - 0 for random\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "sudph")
-	genConfigCmd.Flags().StringVar(&binPath, "binpath", scriptExecString("${BINPATH}"), "set bin_path\033[0m")
+	genConfigCmd.Flags().StringVar(&binPath, "binpath", scriptExecString("${BINPATH}"), "set bin_path for visor vative apps\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "binpath")
 	genConfigCmd.Flags().StringVar(&addSkysocksClientSrv, "proxyclientpk", scriptExecString("${PROXYCLIENTPK}"), "set server public key for proxy client")
 	gHiddenFlags = append(gHiddenFlags, "proxyclientpk")
@@ -185,6 +188,7 @@ func init() {
 	genConfigCmd.Flags().StringVar(&proxyClientPass, "proxyclientpass", scriptExecString("${PROXYCLIENTPASS}"), "password for the proxy client to access the server (if needed)")
 	gHiddenFlags = append(gHiddenFlags, "proxyclientpass")
 	// TODO: Password for accessing proxy client
+	// TODO: VPN client killswitch should be handled as boolean, not string
 	genConfigCmd.Flags().StringVar(&setVPNClientKillswitch, "killsw", scriptExecString("${VPNKS}"), "vpn client killswitch")
 	gHiddenFlags = append(gHiddenFlags, "killsw")
 	genConfigCmd.Flags().StringVar(&addVPNClientSrv, "addvpn", scriptExecString("${ADDVPNPK}"), "set vpn server public key for vpn client")
@@ -199,8 +203,9 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "netifc")
 	genConfigCmd.Flags().BoolVar(&noFetch, "nofetch", false, "do not fetch the services from the service conf url")
 	gHiddenFlags = append(gHiddenFlags, "nofetch")
-	genConfigCmd.Flags().StringVar(&configServicePath, "confpath", "", "specify service conf file (instead of fetching from URL)")
-	gHiddenFlags = append(gHiddenFlags, "confpath")
+	//TODO: visorconfig.SvcConfName
+	genConfigCmd.Flags().StringVarP(&configServicePath, "svcconf", "S", scriptExecString(fmt.Sprintf("${SVCCONF:-%s}", visorconfig.SERVICESName)), "fallback service configuration file\033[0m")
+	gHiddenFlags = append(gHiddenFlags, "svcconf")
 	genConfigCmd.Flags().BoolVar(&noDefaults, "nodefaults", false, "do not use hardcoded defaults for production / test services")
 	gHiddenFlags = append(gHiddenFlags, "nodefaults")
 	genConfigCmd.Flags().StringVar(&ver, "version", scriptExecString("${VERSION}"), "custom version testing override\033[0m")
@@ -215,122 +220,6 @@ func init() {
 	}
 }
 
-func scriptExecString(s string) string {
-	if visorconfig.OS == "windows" {
-		var variable, defaultvalue string
-		if strings.Contains(s, ":-") {
-			parts := strings.SplitN(s, ":-", 2)
-			variable = parts[0] + "}"
-			defaultvalue = strings.TrimRight(parts[1], "}")
-		} else {
-			variable = s
-			defaultvalue = ""
-		}
-		out, err := script.Exec(fmt.Sprintf(`powershell -c '$SKYENV = "%s"; if ($SKYENV -ne "" -and (Test-Path $SKYENV)) { . $SKYENV }; echo %s"`, skyenvfile, variable)).String()
-		if err == nil {
-			if (out == "") || (out == variable) {
-				return defaultvalue
-			}
-			return strings.TrimRight(out, "\n")
-		}
-		return defaultvalue
-	}
-	z, err := script.Exec(fmt.Sprintf(`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, skyenvfile, s)).String()
-	if err == nil {
-		return strings.TrimSpace(z)
-	}
-	return ""
-}
-
-func scriptExecBool(s string) bool {
-	if visorconfig.OS == "windows" {
-		var variable string
-		if strings.Contains(s, ":-") {
-			parts := strings.SplitN(s, ":-", 2)
-			variable = parts[0] + "}"
-		} else {
-			variable = s
-		}
-		out, err := script.Exec(fmt.Sprintf(`powershell -c '$SKYENV = "%s"; if ($SKYENV -ne "" -and (Test-Path $SKYENV)) { . $SKYENV }; echo %s"`, skyenvfile, variable)).String()
-		if err == nil {
-			if (out == "") || (out == variable) {
-				return false
-			}
-			b, err := strconv.ParseBool(strings.TrimSpace(strings.TrimRight(out, "\n")))
-			if err == nil {
-				return b
-			}
-		}
-		return false
-	}
-	z, err := script.Exec(fmt.Sprintf(`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, skyenvfile, s)).String()
-	if err == nil {
-		b, err := strconv.ParseBool(z)
-		if err == nil {
-			return b
-		}
-	}
-
-	return false
-}
-
-func scriptExecArray(s string) string {
-	if visorconfig.OS == "windows" {
-		variable := s
-		if strings.Contains(variable, "[@]}") {
-			variable = strings.TrimRight(variable, "[@]}")
-			variable = strings.TrimRight(variable, "{")
-		}
-		out, err := script.Exec(fmt.Sprintf(`powershell -c '$SKYENV = "%s"; if ($SKYENV -ne "" -and (Test-Path $SKYENV)) { . $SKYENV }; foreach ($item in %s) { Write-Host $item }'`, skyenvfile, variable)).Slice()
-		if err == nil {
-			if len(out) != 0 {
-				return ""
-			}
-			return strings.Join(out, ",")
-		}
-	}
-	y, err := script.Exec(fmt.Sprintf(`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; for _i in %s ; do echo "$_i" ; done'`, skyenvfile, s)).Slice()
-	if err == nil {
-		return strings.Join(y, ",")
-	}
-	return ""
-}
-
-func scriptExecInt(s string) int {
-	if visorconfig.OS == "windows" {
-		var variable string
-		if strings.Contains(s, ":-") {
-			parts := strings.SplitN(s, ":-", 2)
-			variable = parts[0] + "}"
-		} else {
-			variable = s
-		}
-		out, err := script.Exec(fmt.Sprintf(`powershell -c '$SKYENV = "%s"; if ($SKYENV -ne "" -and (Test-Path $SKYENV)) { . $SKYENV }; echo %s"`, skyenvfile, variable)).String()
-		if err == nil {
-			if (out == "") || (out == variable) {
-				return 0
-			}
-			i, err := strconv.Atoi(strings.TrimSpace(strings.TrimRight(out, "\n")))
-			if err == nil {
-				return i
-			}
-			return 0
-		}
-		return 0
-	}
-	z, err := script.Exec(fmt.Sprintf(`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, skyenvfile, s)).String()
-	if err == nil {
-		if z == "" {
-			return 0
-		}
-		i, err := strconv.Atoi(z)
-		if err == nil {
-			return i
-		}
-	}
-	return 0
-}
-
 var genConfigCmd = &cobra.Command{
 	Use:   "gen",
 	Short: "Generate a config file",
@@ -339,8 +228,10 @@ var genConfigCmd = &cobra.Command{
 			if skyenvfile == "" {
 				return `Generate a config file
 
-	Config defaults file may also be specified with
-	SKYENV=/path/to/skywire.conf skywire-cli config gen`
+	Config defaults file may also be specified with:
+	SKYENV=/path/to/skywire.conf skywire-cli config gen
+	print the SKYENV file template with:
+	skywire-cli config gen -q`
 			}
 			if _, err := os.Stat(skyenvfile); err == nil {
 				return `Generate a config file
@@ -350,7 +241,9 @@ var genConfigCmd = &cobra.Command{
 			return `Generate a config file
 
 	Config defaults file may also be specified with
-	SKYENV=/path/to/skywire.conf skywire-cli config gen`
+	SKYENV=/path/to/skywire.conf skywire-cli config gen
+	print the SKYENV file template with:
+	skywire-cli config gen -q`
 		}
 		return `Generate a config file`
 
@@ -405,11 +298,16 @@ var genConfigCmd = &cobra.Command{
 		if isUsrEnv {
 			isHypervisor = true
 		}
+		//use test deployment
+		if isTestEnv {
+			serviceConfURL = utilenv.TestServiceConfAddr
+		}
 		var err error
 		if isDmsgHTTP {
-			dmsgHTTPPath := visorconfig.DMSGHTTPName
 			if isPkgEnv {
-				dmsgHTTPPath = visorconfig.SkywirePath + "/" + visorconfig.DMSGHTTPName
+				if dmsgHTTPPath == visorconfig.DMSGHTTPName {
+					dmsgHTTPPath = visorconfig.SkywirePath + "/" + visorconfig.DMSGHTTPName //nolint
+				}
 			}
 			if _, err := os.Stat(dmsgHTTPPath); err == nil {
 				if !isStdout {
@@ -483,13 +381,33 @@ var genConfigCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 
 		log := logger
+		wasStdout := isStdout
+		var body []byte
+		var err error
+		// enable errors from service conf fetch from the combination of these flags
+		if isStdout && isHide {
+			isStdout = false
+		}
 
 		if !noFetch {
-			wasStdout := isStdout
-			var body []byte
-			var err error
-
-			if configServicePath != "" {
+			// create an http client to fetch the services
+			client := http.Client{
+				Timeout: time.Second * 15, // Timeout after 15 seconds
+			}
+			if serviceConfURL == "" {
+				serviceConfURL = utilenv.ServiceConfAddr
+			}
+			if !isStdout {
+				log.Infof("Fetching service endpoints from %s", serviceConfURL)
+			}
+			// Make the HTTP GET request
+			res, err := client.Get(fmt.Sprint(serviceConfURL))
+			if err != nil {
+				//silence errors for stdout
+				if !isStdout {
+					log.WithError(err).Error("Failed to fetch servers\n")
+					log.Warn("Falling back on services-config.json")
+				}
 				body, err = os.ReadFile(configServicePath)
 				if err != nil {
 					if !isStdout {
@@ -500,67 +418,70 @@ var genConfigCmd = &cobra.Command{
 					//fill in services struct with the response
 					err = json.Unmarshal(body, &servicesConfig)
 					if err != nil {
-						log.WithError(err).Fatal("Failed to unmarshal json response\n")
+						if !isStdout {
+							log.WithError(err).Error("Failed to unmarshal services-config.json file\n")
+						}
+					} else {
+						services = servicesConfig.Prod
+						if isTestEnv {
+							services = servicesConfig.Test
+						}
 					}
-					if !isStdout {
-						log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
-					}
-					services = servicesConfig.Prod
-					if isTestEnv {
-						services = servicesConfig.Test
-					}
-					// reset the state of isStdout
-					isStdout = wasStdout
+
 				}
 			} else {
-				// set default service conf url if none is specified
-				if serviceConfURL == "" {
-					serviceConfURL = utilenv.ServiceConfAddr
+				//nil error on service conf fetch
+				if res.Body != nil {
+					defer res.Body.Close() //nolint
 				}
-				//use test deployment
-				if isTestEnv {
-					serviceConfURL = utilenv.TestServiceConfAddr
-				}
-				// enable errors from service conf fetch from the combination of these flags
-
-				if isStdout && isHide {
-					isStdout = false
-				}
-				// create an http client to fetch the services
-				client := http.Client{
-					Timeout: time.Second * 15, // Timeout after 15 seconds
-				}
-				// Make the HTTP GET request
-				res, err := client.Get(fmt.Sprint(serviceConfURL))
+				body, err = io.ReadAll(res.Body)
 				if err != nil {
-					//silence errors for stdout
-					if !isStdout {
-						log.WithError(err).Error("Failed to fetch servers\n")
-						log.Warn("Falling back on hardcoded servers")
-					}
-				} else {
-					if res.Body != nil {
-						defer res.Body.Close() //nolint
-					}
-					body, err = io.ReadAll(res.Body)
-					if err != nil {
-						log.WithError(err).Fatal("Failed to read response\n")
-					}
+					log.WithError(err).Error("Failed to read http response\n")
 				}
 				//fill in services struct with the response
 				err = json.Unmarshal(body, &services)
 				if err != nil {
-					log.WithError(err).Fatal("Failed to unmarshal json response\n")
+					if !isStdout {
+						log.WithError(err).Error("Failed to unmarshal json response to services struct\n")
+						log.Warn("Falling back on hardcoded servers")
+					}
+				} else {
+					if !isStdout {
+						log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
+					}
 				}
-				if !isStdout {
-					log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
-				}
-
-				// reset the state of isStdout
-				isStdout = wasStdout
 			}
+		} else {
+			if isPkgEnv {
+				if configServicePath == visorconfig.SERVICESName {
+					configServicePath = visorconfig.SkywirePath + "/" + visorconfig.SERVICESName
+				}
+			}
+			body, err = os.ReadFile(configServicePath)
+			if err != nil {
+				if !isStdout {
+					log.WithError(err).Error("Failed to read config service from file\n")
+					log.Warn("Falling back on hardcoded servers")
+				}
+			} else {
+				//fill in services struct with the response
+				err = json.Unmarshal(body, &servicesConfig)
+				if err != nil {
+					if !isStdout {
+						log.WithError(err).Error("Failed to unmarshal json response to services struct\n")
+						log.Warn("Falling back on hardcoded servers")
+					}
+				}
+				services = servicesConfig.Prod
+				if isTestEnv {
+					services = servicesConfig.Test
+				}
+			}
+
 		}
 
+		// reset the state of isStdout
+		isStdout = wasStdout
 		// Read in old config and obtain old secret key or generate a new random secret key
 		// and obtain old hypervisors (if any)
 		var oldConf visorconfig.V1
@@ -630,17 +551,16 @@ var genConfigCmd = &cobra.Command{
 		}
 
 		if isDmsgHTTP {
-			dmsghttpConfig := visorconfig.DMSGHTTPName
 			// TODO
 			//if isUsrEnv {
-			//	dmsghttpConfig = homepath + "/" + visorconfig.DMSGHTTPName
+			//	dmsgHTTPPath = homepath + "/" + visorconfig.DMSGHTTPName
 			//}
 			if isPkgEnv {
-				dmsghttpConfig = visorconfig.SkywirePath + "/" + visorconfig.DMSGHTTPName
+				dmsgHTTPPath = visorconfig.SkywirePath + "/" + visorconfig.DMSGHTTPName //nolint
 			}
 
 			// Read the JSON configuration file
-			dmsghttpConfigData, err := os.ReadFile(dmsghttpConfig) //nolint
+			dmsghttpConfigData, err := os.ReadFile(dmsgHTTPPath) //nolint
 			if err != nil {
 				log.Fatalf("Failed to read config file: %v", err)
 			}
@@ -781,9 +701,10 @@ var genConfigCmd = &cobra.Command{
 		}
 
 		conf.Dmsg = &dmsgc.DmsgConfig{
-			Discovery:     services.DmsgDiscovery,
-			SessionsCount: minDmsgSess,
-			Servers:       []*disc.Entry{},
+			Discovery:            services.DmsgDiscovery,
+			SessionsCount:        minDmsgSess,
+			Servers:              []*disc.Entry{},
+			ConnectedServersType: "all",
 		}
 		conf.Transport = &visorconfig.Transport{
 			Discovery:         services.TransportDiscovery, //utilenv.TpDiscAddr,
@@ -930,7 +851,7 @@ var genConfigCmd = &cobra.Command{
 				Binary:    visorconfig.VPNClientName,
 				AutoStart: false,
 				Port:      routing.Port(skyenv.VPNClientPort),
-				Args:      []string{"-dns", dnsServer},
+				Args:      []string{"--dns", dnsServer},
 			},
 			{
 				Name:      visorconfig.SkychatName,
@@ -950,7 +871,7 @@ var genConfigCmd = &cobra.Command{
 				Binary:    visorconfig.SkysocksClientName,
 				AutoStart: false,
 				Port:      routing.Port(visorconfig.SkysocksClientPort),
-				Args:      []string{"-addr", visorconfig.SkysocksClientAddr},
+				Args:      []string{"--addr", visorconfig.SkysocksClientAddr},
 			},
 			{
 				Name:      visorconfig.VPNServerName,
@@ -1158,13 +1079,17 @@ var genConfigCmd = &cobra.Command{
 		}
 		//print config to stdout, omit logging messages, exit
 		if isStdout {
-			fmt.Printf("%s", j)
-			os.Exit(0)
+			if isSquash {
+				script.Echo(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(string(j), " ", ""), "\n", ""), "\t", "")).Stdout() //nolint
+				return
+			}
+			script.Echo(string(j)).Stdout() //nolint
+			return
 		}
 		//hide the printing of the config to the terminal
 		if isHide {
 			log.Infof("Updated file '%s'\n", output)
-			os.Exit(0)
+			return
 		}
 		//default behavior
 		log.Infof("Updated file '%s' to:\n%s\n", output, j)
@@ -1229,9 +1154,15 @@ const envfileLinux = `#
 #--	Set custom service conf URLs
 #SVCCONFADDR=('')
 
+#--	fallback service conf path
+#SVCCONF="services-config.json"
+
 #--	Set visor runtime log level.
 #	Default is info ; uncomment for debug logging
 #LOGLVL=debug
+
+#--	dmsghttp config path
+#DMSGCONF="dmsghttp-config.json"
 
 #--	Use dmsghttp to connect to the production deployment
 #DMSGHTTP=true
@@ -1331,9 +1262,15 @@ const envfileWindows = `#
 #--	Set custom service conf URLs
 #$SVCCONFADDR= @('')
 
+#--	fallback service conf path
+#$SVCCONF='services-config.json'
+
 #--	Set visor runtime log level.
 #	Default is info ; uncomment for debug logging
 #$LOGLVL=debug
+
+#--	dmsghttp config path
+#$DMSGCONF='dmsghttp-config.json'
 
 #--	Use dmsghttp to connect to the production deployment
 #$DMSGHTTP=true

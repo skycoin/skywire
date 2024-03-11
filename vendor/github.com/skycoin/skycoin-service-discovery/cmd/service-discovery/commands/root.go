@@ -5,10 +5,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
-	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/skycoin/dmsg/pkg/direct"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
@@ -58,25 +58,26 @@ func init() {
 	RootCmd.Flags().StringVarP(&whitelistKeys, "whitelist-keys", "w", "", "list of whitelisted keys of network monitor used for deregistration")
 	RootCmd.Flags().BoolVarP(&testMode, "test", "t", false, "run in test mode and disable auth")
 	RootCmd.Flags().StringVarP(&apiKey, "api-key", "g", "", "geo API key")
-	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "d", "", "url of dmsg-discovery default:\n"+skyenv.DmsgDiscAddr)
+	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "d", skyenv.DmsgDiscAddr, "url of dmsg-discovery")
 	RootCmd.Flags().BoolVarP(&testEnvironment, "test-environment", "n", false, "distinguished between prod and test environment")
 	RootCmd.Flags().VarP(&sk, "sk", "s", "dmsg secret key\n")
-	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\r")
-	var helpflag bool
-	RootCmd.SetUsageTemplate(help)
-	RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for service-discovery")
-	RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
-	RootCmd.PersistentFlags().MarkHidden("help") //nolint
+	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value")
 }
 
 // RootCmd contains the root service-discovery command
 var RootCmd = &cobra.Command{
-	Use:   "sd",
+	Use: func() string {
+		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
+	}(),
 	Short: "Service discovery server",
 	Long: `
 	┌─┐┌─┐┬─┐┬  ┬┬┌─┐┌─┐ ┌┬┐┬┌─┐┌─┐┌─┐┬  ┬┌─┐┬─┐┬ ┬
 	└─┐├┤ ├┬┘└┐┌┘││  ├┤───│││└─┐│  │ │└┐┌┘├┤ ├┬┘└┬┘
-	└─┘└─┘┴└─ └┘ ┴└─┘└─┘ ─┴┘┴└─┘└─┘└─┘ └┘ └─┘┴└─ ┴ `,
+	└─┘└─┘┴└─ └┘ ┴└─┘└─┘ ─┴┘┴└─┘└─┘└─┘ └┘ └─┘┴└─ ┴
+----- depends: redis, postgresql and initial DB setup -----
+sudo -iu postgres createdb sd
+keys-gen | tee sd-config.json
+PG_USER="postgres" PG_DATABASE="sd" PG_PASSWORD="" service-discovery --sk $(tail -n1 sd-config.json)`,
 	Run: func(_ *cobra.Command, _ []string) {
 		if dmsgDisc == "" {
 			dmsgDisc = skyenv.DmsgDiscAddr
@@ -209,30 +210,7 @@ var RootCmd = &cobra.Command{
 
 // Execute executes root CLI command.
 func Execute() {
-	cc.Init(&cc.Config{
-		RootCmd:       RootCmd,
-		Headings:      cc.HiBlue + cc.Bold, //+ cc.Underline,
-		Commands:      cc.HiBlue + cc.Bold,
-		CmdShortDescr: cc.HiBlue,
-		Example:       cc.HiBlue + cc.Italic,
-		ExecName:      cc.HiBlue + cc.Bold,
-		Flags:         cc.HiBlue + cc.Bold,
-		//FlagsDataType: cc.HiBlue,
-		FlagsDescr:      cc.HiBlue,
-		NoExtraNewlines: true,
-		NoBottomNewline: true,
-	})
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal(err)
 	}
 }
-
-const help = "Usage:\r\n" +
-	"  {{.UseLine}}{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}\r\n\r\n" +
-	"{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}\r\n\r\n" +
-	"Available Commands:{{range .Commands}}{{if (or .IsAvailableCommand)}}\r\n  " +
-	"{{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}\r\n\r\n" +
-	"Flags:\r\n" +
-	"{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}\r\n\r\n" +
-	"Global Flags:\r\n" +
-	"{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}\r\n\r\n"

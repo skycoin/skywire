@@ -8,8 +8,9 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 
-	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/skycoin/dmsg/pkg/direct"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
@@ -18,7 +19,6 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/tcpproxy"
-
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-services/pkg/config-bootstrapper/api"
@@ -42,16 +42,13 @@ func init() {
 	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", "http://dmsgd.skywire.skycoin.com", "url of dmsg-discovery\033[0m")
 	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\r")
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\r")
-	var helpflag bool
-	RootCmd.SetUsageTemplate(help)
-	RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for config-bootstrapper")
-	RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
-	RootCmd.PersistentFlags().MarkHidden("help") //nolint
 }
 
 // RootCmd contains the root command
 var RootCmd = &cobra.Command{
-	Use:   "cb",
+	Use: func() string {
+		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
+	}(),
 	Short: "Config Bootstrap Server for skywire",
 	Long: `
 	┌─┐┌─┐┌┐┌┌─┐┬┌─┐   ┌┐ ┌─┐┌─┐┌┬┐┌─┐┌┬┐┬─┐┌─┐┌─┐┌─┐┌─┐┬─┐
@@ -161,29 +158,7 @@ func readConfig(log *logging.Logger, confPath string) (config api.Config) {
 
 // Execute executes root CLI command.
 func Execute() {
-	cc.Init(&cc.Config{
-		RootCmd:         RootCmd,
-		Headings:        cc.HiBlue + cc.Bold,
-		Commands:        cc.HiBlue + cc.Bold,
-		CmdShortDescr:   cc.HiBlue,
-		Example:         cc.HiBlue + cc.Italic,
-		ExecName:        cc.HiBlue + cc.Bold,
-		Flags:           cc.HiBlue + cc.Bold,
-		FlagsDescr:      cc.HiBlue,
-		NoExtraNewlines: true,
-		NoBottomNewline: true,
-	})
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
 	}
 }
-
-const help = "Usage:\r\n" +
-	"  {{.UseLine}}{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}\r\n\r\n" +
-	"{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}\r\n\r\n" +
-	"Available Commands:{{range .Commands}}{{if (or .IsAvailableCommand)}}\r\n  " +
-	"{{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}\r\n\r\n" +
-	"Flags:\r\n" +
-	"{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}\r\n\r\n" +
-	"Global Flags:\r\n" +
-	"{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}\r\n\r\n"

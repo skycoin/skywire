@@ -1,6 +1,6 @@
-// /* cmd/skywire-visor/skywire-visor.go
+// cmd/skywire/skywire.go
 /*
-skywire visor
+skywire merged binary command structure
 */
 package main
 
@@ -11,27 +11,55 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	setupnode "github.com/skycoin/skywire/cmd/setup-node/commands"
-	skywirecli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
+	sc "github.com/skycoin/skywire/cmd/apps/skychat/commands"
+	ssc "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
+	ss "github.com/skycoin/skywire/cmd/apps/skysocks/commands"
+	vpnc "github.com/skycoin/skywire/cmd/apps/vpn-client/commands"
+	vpns "github.com/skycoin/skywire/cmd/apps/vpn-server/commands"
+	sn "github.com/skycoin/skywire/cmd/setup-node/commands"
+	cli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
 func init() {
-	rootCmd.AddCommand(
-		visor.RootCmd,
-		skywirecli.RootCmd,
-		setupnode.RootCmd,
+	appsCmd.AddCommand(
+		vpns.RootCmd,
+		vpnc.RootCmd,
+		ssc.RootCmd,
+		ss.RootCmd,
+		sc.RootCmd,
 	)
+	RootCmd.AddCommand(
+		visor.RootCmd,
+		cli.RootCmd,
+		sn.RootCmd,
+		appsCmd,
+	)
+	visor.RootCmd.Long = `
+	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐  ┬  ┬┬┌─┐┌─┐┬─┐
+	└─┐├┴┐└┬┘││││├┬┘├┤───└┐┌┘│└─┐│ │├┬┘
+	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘   └┘ ┴└─┘└─┘┴└─`
+	visor.RootCmd.Use = "visor"
+	cli.RootCmd.Use = "cli"
+	sn.RootCmd.Use = "sn"
+	vpns.RootCmd.Use = "vpns"
+	vpnc.RootCmd.Use = "vpnc"
+	ssc.RootCmd.Use = "ssc"
+	ss.RootCmd.Use = "ss"
+	sc.RootCmd.Use = "sc"
+
 	var helpflag bool
-	rootCmd.SetUsageTemplate(help)
-	rootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+rootCmd.Use)
-	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
-	rootCmd.PersistentFlags().MarkHidden("help") //nolint
-	rootCmd.CompletionOptions.DisableDefaultCmd = true
+	RootCmd.SetUsageTemplate(help)
+	RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+RootCmd.Use)
+	RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
+	RootCmd.PersistentFlags().MarkHidden("help") //nolint
+	RootCmd.CompletionOptions.DisableDefaultCmd = true
+	RootCmd.SetUsageTemplate(help)
 
 }
 
-var rootCmd = &cobra.Command{
+// RootCmd contains skywire-visor, skywire-cli, setup-node, and the visor native apps
+var RootCmd = &cobra.Command{
 	Use: "skywire",
 	Long: `
 	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
@@ -44,9 +72,24 @@ var rootCmd = &cobra.Command{
 	Version:               buildinfo.Version(),
 }
 
+// appsCmd contains the visor native apps
+var appsCmd = &cobra.Command{
+	Use:   "app",
+	Short: "skywire native applications",
+	Long: `
+	┌─┐┌─┐┌─┐┌─┐
+	├─┤├─┘├─┘└─┐
+	┴ ┴┴  ┴  └─┘`,
+	SilenceErrors:         true,
+	SilenceUsage:          true,
+	DisableSuggestions:    true,
+	DisableFlagsInUseLine: true,
+}
+
 func main() {
+
 	cc.Init(&cc.Config{
-		RootCmd:         rootCmd,
+		RootCmd:         RootCmd,
 		Headings:        cc.HiBlue + cc.Bold,
 		Commands:        cc.HiBlue + cc.Bold,
 		CmdShortDescr:   cc.HiBlue,
@@ -57,8 +100,7 @@ func main() {
 		NoExtraNewlines: true,
 		NoBottomNewline: true,
 	})
-
-	if err := rootCmd.Execute(); err != nil {
+	if err := RootCmd.Execute(); err != nil {
 		fmt.Println(err)
 	}
 }

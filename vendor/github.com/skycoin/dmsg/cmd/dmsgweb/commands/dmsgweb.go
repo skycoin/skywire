@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -18,7 +19,6 @@ import (
 
 	"github.com/confiant-inc/go-socks5"
 	"github.com/gin-gonic/gin"
-	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
@@ -73,6 +73,7 @@ var (
 	webPort            string
 	proxyPort          string
 	addProxy           string
+	resolveDmsgAddr    string
 	wg                 sync.WaitGroup
 )
 
@@ -82,6 +83,7 @@ func init() {
 	RootCmd.Flags().StringVarP(&proxyPort, "socks", "q", "4445", "port to serve the socks5 proxy")
 	RootCmd.Flags().StringVarP(&addProxy, "proxy", "r", "", "configure additional socks5 proxy for dmsgweb (i.e. 127.0.0.1:1080)")
 	RootCmd.Flags().StringVarP(&webPort, "port", "p", "8080", "port to serve the web application")
+	RootCmd.Flags().StringVarP(&resolveDmsgAddr, "resolve", "t", "", "resolve the specified dmsg address:port on the local port & disable proxy")
 	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "d", "", "dmsg discovery url default:\n"+skyenv.DmsgDiscAddr)
 	RootCmd.Flags().IntVarP(&dmsgSessions, "sess", "e", 1, "number of dmsg servers to connect to")
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "", "[ debug | warn | error | fatal | panic | trace | info ]\033[0m")
@@ -89,21 +91,19 @@ func init() {
 		sk.Set(os.Getenv("DMSGGET_SK")) //nolint
 	}
 	RootCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
-	var helpflag bool
-	RootCmd.SetUsageTemplate(help)
-	RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for dmsgweb")
-	RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
-	RootCmd.PersistentFlags().MarkHidden("help") //nolint
 }
 
 // RootCmd contains the root command for dmsgweb
 var RootCmd = &cobra.Command{
-	Use:   "dmsgweb",
-	Short: "access websites over dmsg",
+	Use: func() string {
+		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
+	}(),
+	Short: "DMSG resolving proxy & browser client",
 	Long: `
 	┌┬┐┌┬┐┌─┐┌─┐┬ ┬┌─┐┌┐
 	 │││││└─┐│ ┬│││├┤ ├┴┐
-	─┴┘┴ ┴└─┘└─┘└┴┘└─┘└─┘`,
+	─┴┘┴ ┴└─┘└─┘└┴┘└─┘└─┘
+DMSG resolving proxy & browser client - access websites over dmsg`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
@@ -154,57 +154,58 @@ var RootCmd = &cobra.Command{
 
 		httpC = http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
 
-		// Create a SOCKS5 server with custom name resolution
-		conf := &socks5.Config{
-			Resolver: &customResolver{},
-			Dial: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				host, _, err := net.SplitHostPort(addr)
-				if err != nil {
-					return nil, err
-				}
-				regexPattern := `\` + filterDomainSuffix + `(:[0-9]+)?$`
-				match, _ := regexp.MatchString(regexPattern, host) //nolint:errcheck
-				if match {
-					port, ok := ctx.Value("port").(string)
-					if !ok {
-						port = webPort
+		if resolveDmsgAddr == "" {
+			// Create a SOCKS5 server with custom name resolution
+			conf := &socks5.Config{
+				Resolver: &customResolver{},
+				Dial: func(ctx context.Context, network, addr string) (net.Conn, error) {
+					host, _, err := net.SplitHostPort(addr)
+					if err != nil {
+						return nil, err
 					}
-					addr = "localhost:" + port
-				} else {
-					if addProxy != "" {
-						// Fallback to another SOCKS5 proxy
-						dialer, err := proxy.SOCKS5("tcp", addProxy, nil, proxy.Direct)
-						if err != nil {
-							return nil, err
+					regexPattern := `\` + filterDomainSuffix + `(:[0-9]+)?$`
+					match, _ := regexp.MatchString(regexPattern, host) //nolint:errcheck
+					if match {
+						port, ok := ctx.Value("port").(string)
+						if !ok {
+							port = webPort
 						}
-						return dialer.Dial(network, addr)
+						addr = "localhost:" + port
+					} else {
+						if addProxy != "" {
+							// Fallback to another SOCKS5 proxy
+							dialer, err := proxy.SOCKS5("tcp", addProxy, nil, proxy.Direct)
+							if err != nil {
+								return nil, err
+							}
+							return dialer.Dial(network, addr)
+						}
 					}
-				}
-				dmsgWebLog.Debug("Dialing address:", addr)
-				return net.Dial(network, addr)
-			},
-		}
-
-		// Start the SOCKS5 server
-		socksAddr := "127.0.0.1:" + proxyPort
-		log.Printf("SOCKS5 proxy server started on %s", socksAddr)
-
-		server, err := socks5.New(conf)
-		if err != nil {
-			log.Fatalf("Failed to create SOCKS5 server: %v", err)
-		}
-
-		wg.Add(1)
-		go func() {
-			dmsgWebLog.Debug("Serving SOCKS5 proxy on " + socksAddr)
-			err := server.ListenAndServe("tcp", socksAddr)
-			if err != nil {
-				log.Fatalf("Failed to start SOCKS5 server: %v", err)
+					dmsgWebLog.Debug("Dialing address:", addr)
+					return net.Dial(network, addr)
+				},
 			}
-			defer server.Close()
-			dmsgWebLog.Debug("Stopped serving SOCKS5 proxy on " + socksAddr)
-		}()
 
+			// Start the SOCKS5 server
+			socksAddr := "127.0.0.1:" + proxyPort
+			log.Printf("SOCKS5 proxy server started on %s", socksAddr)
+
+			server, err := socks5.New(conf)
+			if err != nil {
+				log.Fatalf("Failed to create SOCKS5 server: %v", err)
+			}
+
+			wg.Add(1)
+			go func() {
+				dmsgWebLog.Debug("Serving SOCKS5 proxy on " + socksAddr)
+				err := server.ListenAndServe("tcp", socksAddr)
+				if err != nil {
+					log.Fatalf("Failed to start SOCKS5 server: %v", err)
+				}
+				defer server.Close()
+				dmsgWebLog.Debug("Stopped serving SOCKS5 proxy on " + socksAddr)
+			}()
+		}
 		r := gin.New()
 
 		r.Use(gin.Recovery())
@@ -212,14 +213,20 @@ var RootCmd = &cobra.Command{
 		r.Use(loggingMiddleware())
 
 		r.Any("/*path", func(c *gin.Context) {
-			hostParts := strings.Split(c.Request.Host, ":")
-			var dmsgp string
-			if len(hostParts) > 1 {
-				dmsgp = hostParts[1]
+			var urlStr string
+			if resolveDmsgAddr != "" {
+				urlStr = fmt.Sprintf("dmsg://%s%s", resolveDmsgAddr, c.Param("path"))
 			} else {
-				dmsgp = "80"
+
+				hostParts := strings.Split(c.Request.Host, ":")
+				var dmsgp string
+				if len(hostParts) > 1 {
+					dmsgp = hostParts[1]
+				} else {
+					dmsgp = "80"
+				}
+				urlStr = fmt.Sprintf("dmsg://%s:%s%s", strings.TrimRight(hostParts[0], filterDomainSuffix), dmsgp, c.Param("path"))
 			}
-			urlStr := fmt.Sprintf("dmsg://%s:%s%s", strings.TrimRight(hostParts[0], filterDomainSuffix), dmsgp, c.Param("path"))
 
 			maxSize := int64(1024)
 
@@ -363,30 +370,7 @@ const (
 
 // Execute executes root CLI command.
 func Execute() {
-	cc.Init(&cc.Config{
-		RootCmd:       RootCmd,
-		Headings:      cc.HiBlue + cc.Bold, //+ cc.Underline,
-		Commands:      cc.HiBlue + cc.Bold,
-		CmdShortDescr: cc.HiBlue,
-		Example:       cc.HiBlue + cc.Italic,
-		ExecName:      cc.HiBlue + cc.Bold,
-		Flags:         cc.HiBlue + cc.Bold,
-		//FlagsDataType: cc.HiBlue,
-		FlagsDescr:      cc.HiBlue,
-		NoExtraNewlines: true,
-		NoBottomNewline: true,
-	})
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
 	}
 }
-
-const help = "Usage:\r\n" +
-	"  {{.UseLine}}{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}\r\n\r\n" +
-	"{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}\r\n\r\n" +
-	"Available Commands:{{range .Commands}}{{if (or .IsAvailableCommand)}}\r\n  " +
-	"{{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}\r\n\r\n" +
-	"Flags:\r\n" +
-	"{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}\r\n\r\n" +
-	"Global Flags:\r\n" +
-	"{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}\r\n\r\n"

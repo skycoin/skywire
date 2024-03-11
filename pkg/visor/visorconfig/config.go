@@ -61,9 +61,10 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		conf.Common = common
 	}
 	conf.Dmsg = &dmsgc.DmsgConfig{
-		Discovery:     services.DmsgDiscovery, //utilenv.DmsgDiscAddr,
-		SessionsCount: 1,
-		Servers:       []*disc.Entry{},
+		Discovery:            services.DmsgDiscovery, //utilenv.DmsgDiscAddr,
+		SessionsCount:        1,
+		Servers:              []*disc.Entry{},
+		ConnectedServersType: "all",
 	}
 	conf.Transport = &Transport{
 		Discovery:         services.TransportDiscovery, //utilenv.TpDiscAddr,
@@ -237,7 +238,7 @@ func makeDefaultLauncherAppsConfig(dnsServer string) []appserver.AppConfig {
 			Binary:    VPNClientName,
 			AutoStart: false,
 			Port:      routing.Port(skyenv.VPNClientPort),
-			Args:      []string{"-dns", dnsServer},
+			Args:      []string{"--dns", dnsServer},
 		},
 		{
 			Name:      SkychatName,
@@ -257,7 +258,7 @@ func makeDefaultLauncherAppsConfig(dnsServer string) []appserver.AppConfig {
 			Binary:    SkysocksClientName,
 			AutoStart: false,
 			Port:      routing.Port(skyenv.SkysocksClientPort),
-			Args:      []string{"-addr", SkysocksClientAddr},
+			Args:      []string{"--addr", SkysocksClientAddr},
 		},
 		{
 			Name:      VPNServerName,

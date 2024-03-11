@@ -16,7 +16,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -60,21 +59,19 @@ func init() {
 		sk.Set(os.Getenv("DMSGCURL_SK")) //nolint
 	}
 	RootCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
-	var helpflag bool
-	RootCmd.SetUsageTemplate(help)
-	RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for dmsgcurl")
-	RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
-	RootCmd.PersistentFlags().MarkHidden("help") //nolint
 }
 
 // RootCmd containsa the root dmsgcurl command
 var RootCmd = &cobra.Command{
-	Short: "dmsgcurl",
-	Use:   "dmsgcurl [OPTIONS] ... [URL]",
+	Use: func() string {
+		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
+	}(),
+	Short: "DMSG curl utility",
 	Long: `
-	┌┬┐┌┬┐┌─┐┌─┐┌─┐┬ ┬┬─┐┬  
-	 │││││└─┐│ ┬│  │ │├┬┘│  
-	─┴┘┴ ┴└─┘└─┘└─┘└─┘┴└─┴─┘`,
+	┌┬┐┌┬┐┌─┐┌─┐┌─┐┬ ┬┬─┐┬
+	 │││││└─┐│ ┬│  │ │├┬┘│
+	─┴┘┴ ┴└─┘└─┘└─┘└─┘┴└─┴─┘
+DMSG curl utility`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
@@ -359,30 +356,7 @@ func (pw *ProgressWriter) Write(p []byte) (int, error) {
 
 // Execute executes root CLI command.
 func Execute() {
-	cc.Init(&cc.Config{
-		RootCmd:       RootCmd,
-		Headings:      cc.HiBlue + cc.Bold, //+ cc.Underline,
-		Commands:      cc.HiBlue + cc.Bold,
-		CmdShortDescr: cc.HiBlue,
-		Example:       cc.HiBlue + cc.Italic,
-		ExecName:      cc.HiBlue + cc.Bold,
-		Flags:         cc.HiBlue + cc.Bold,
-		//FlagsDataType: cc.HiBlue,
-		FlagsDescr:      cc.HiBlue,
-		NoExtraNewlines: true,
-		NoBottomNewline: true,
-	})
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
 	}
 }
-
-const help = "Usage:\r\n" +
-	"  {{.UseLine}}{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}\r\n\r\n" +
-	"{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}\r\n\r\n" +
-	"Available Commands:{{range .Commands}}{{if (or .IsAvailableCommand)}}\r\n  " +
-	"{{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}\r\n\r\n" +
-	"Flags:\r\n" +
-	"{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}\r\n\r\n" +
-	"Global Flags:\r\n" +
-	"{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}\r\n\r\n"

@@ -113,6 +113,9 @@ github.com/dgryski/go-rendezvous
 # github.com/dustin/go-humanize v1.0.0
 ## explicit
 github.com/dustin/go-humanize
+# github.com/elazarl/goproxy v0.0.0-20231117061959-7cc037d33fb5
+## explicit
+github.com/elazarl/goproxy
 # github.com/fatih/color v1.15.0
 ## explicit; go 1.17
 github.com/fatih/color
@@ -142,7 +145,7 @@ github.com/gin-gonic/gin/render
 ## explicit
 github.com/go-chi/chi
 github.com/go-chi/chi/middleware
-# github.com/go-chi/chi/v5 v5.0.10
+# github.com/go-chi/chi/v5 v5.0.11
 ## explicit; go 1.14
 github.com/go-chi/chi/v5
 github.com/go-chi/chi/v5/middleware
@@ -163,6 +166,15 @@ github.com/go-playground/universal-translator
 # github.com/go-playground/validator/v10 v10.15.1
 ## explicit; go 1.18
 github.com/go-playground/validator/v10
+# github.com/go-redis/redis v6.15.9+incompatible
+## explicit
+github.com/go-redis/redis
+github.com/go-redis/redis/internal
+github.com/go-redis/redis/internal/consistenthash
+github.com/go-redis/redis/internal/hashtag
+github.com/go-redis/redis/internal/pool
+github.com/go-redis/redis/internal/proto
+github.com/go-redis/redis/internal/util
 # github.com/go-redis/redis/v8 v8.11.5
 ## explicit; go 1.17
 github.com/go-redis/redis/v8
@@ -439,12 +451,13 @@ github.com/rs/cors
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v1.3.14
+# github.com/skycoin/dmsg v1.3.18-0.20240311074627-0ba753f65a88
 ## explicit; go 1.21
 github.com/skycoin/dmsg/cmd/dmsg-discovery/commands
 github.com/skycoin/dmsg/cmd/dmsg-server/commands
 github.com/skycoin/dmsg/cmd/dmsg-server/commands/config
 github.com/skycoin/dmsg/cmd/dmsg-server/commands/start
+github.com/skycoin/dmsg/cmd/dmsg-socks5/commands
 github.com/skycoin/dmsg/cmd/dmsgcurl/commands
 github.com/skycoin/dmsg/cmd/dmsghttp/commands
 github.com/skycoin/dmsg/cmd/dmsgpty-cli/commands
@@ -479,48 +492,56 @@ github.com/skycoin/skycoin/src/cipher/ripemd160
 github.com/skycoin/skycoin/src/cipher/secp256k1-go
 github.com/skycoin/skycoin/src/cipher/secp256k1-go/secp256k1-go2
 github.com/skycoin/skycoin/src/util/logging
-# github.com/skycoin/skycoin-service-discovery v0.0.0-20231221001759-d1af6ec27db1
+# github.com/skycoin/skycoin-service-discovery v0.0.0-20240306165129-2af10aca698e
 ## explicit; go 1.21
 github.com/skycoin/skycoin-service-discovery/cmd/service-discovery/commands
 github.com/skycoin/skycoin-service-discovery/internal/pg
 github.com/skycoin/skycoin-service-discovery/internal/sdmetrics
 github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/api
 github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/store
-# github.com/skycoin/skywire-services v0.0.0-20231221001820-3212895ddf12
+# github.com/skycoin/skywire-services v0.0.0-20240306165304-177c854f4aec
 ## explicit; go 1.21
 github.com/skycoin/skywire-services/cmd/address-resolver/commands
 github.com/skycoin/skywire-services/cmd/config-bootstrapper/commands
 github.com/skycoin/skywire-services/cmd/dmsg-monitor/commands
 github.com/skycoin/skywire-services/cmd/keys-gen/commands
 github.com/skycoin/skywire-services/cmd/liveness-checker/commands
+github.com/skycoin/skywire-services/cmd/network-monitor/commands
 github.com/skycoin/skywire-services/cmd/node-visualizer/commands
 github.com/skycoin/skywire-services/cmd/public-visor-monitor/commands
 github.com/skycoin/skywire-services/cmd/route-finder/commands
+github.com/skycoin/skywire-services/cmd/skysocks-monitor/commands
 github.com/skycoin/skywire-services/cmd/sw-env/commands
-github.com/skycoin/skywire-services/cmd/tpd-monitor/commands
 github.com/skycoin/skywire-services/cmd/transport-discovery/commands
 github.com/skycoin/skywire-services/cmd/transport-setup/commands
+github.com/skycoin/skywire-services/cmd/vpn-monitor/commands
 github.com/skycoin/skywire-services/internal/armetrics
 github.com/skycoin/skywire-services/internal/config
 github.com/skycoin/skywire-services/internal/lc
+github.com/skycoin/skywire-services/internal/nm
+github.com/skycoin/skywire-services/internal/nmmetrics
 github.com/skycoin/skywire-services/internal/pg
 github.com/skycoin/skywire-services/internal/tpdiscmetrics
+github.com/skycoin/skywire-services/internal/vpn
 github.com/skycoin/skywire-services/pkg/address-resolver/api
 github.com/skycoin/skywire-services/pkg/address-resolver/store
 github.com/skycoin/skywire-services/pkg/config-bootstrapper/api
 github.com/skycoin/skywire-services/pkg/dmsg-monitor/api
 github.com/skycoin/skywire-services/pkg/liveness-checker/api
 github.com/skycoin/skywire-services/pkg/liveness-checker/store
+github.com/skycoin/skywire-services/pkg/network-monitor/api
+github.com/skycoin/skywire-services/pkg/network-monitor/store
 github.com/skycoin/skywire-services/pkg/node-visualizer/api
 github.com/skycoin/skywire-services/pkg/public-visor-monitor/api
 github.com/skycoin/skywire-services/pkg/route-finder/api
 github.com/skycoin/skywire-services/pkg/route-finder/store
-github.com/skycoin/skywire-services/pkg/tpd-monitor/api
+github.com/skycoin/skywire-services/pkg/skysocks-monitor/api
 github.com/skycoin/skywire-services/pkg/transport-discovery/api
 github.com/skycoin/skywire-services/pkg/transport-discovery/store
 github.com/skycoin/skywire-services/pkg/transport-setup/api
 github.com/skycoin/skywire-services/pkg/transport-setup/config
-# github.com/skycoin/skywire-utilities v1.3.14
+github.com/skycoin/skywire-services/pkg/vpn-monitor/api
+# github.com/skycoin/skywire-utilities v1.3.18-0.20240208220612-9f31eda72f33
 ## explicit; go 1.21
 github.com/skycoin/skywire-utilities/pkg/buildinfo
 github.com/skycoin/skywire-utilities/pkg/cipher
@@ -734,16 +755,13 @@ golang.org/x/tools/internal/pkgbits
 golang.org/x/tools/internal/tokeninternal
 golang.org/x/tools/internal/typeparams
 golang.org/x/tools/internal/typesinternal
-# golang.zx2c4.com/wireguard v0.0.20200320
-## explicit; go 1.12
+# golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2
+## explicit; go 1.17
+golang.zx2c4.com/wintun
+# golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675
+## explicit; go 1.19
 golang.zx2c4.com/wireguard/rwcancel
 golang.zx2c4.com/wireguard/tun
-golang.zx2c4.com/wireguard/tun/wintun
-golang.zx2c4.com/wireguard/tun/wintun/iphlpapi
-golang.zx2c4.com/wireguard/tun/wintun/namespaceapi
-golang.zx2c4.com/wireguard/tun/wintun/nci
-golang.zx2c4.com/wireguard/tun/wintun/registry
-golang.zx2c4.com/wireguard/tun/wintun/setupapi
 # google.golang.org/protobuf v1.31.0
 ## explicit; go 1.11
 google.golang.org/protobuf/encoding/prototext
