@@ -492,14 +492,14 @@ github.com/skycoin/skycoin/src/cipher/ripemd160
 github.com/skycoin/skycoin/src/cipher/secp256k1-go
 github.com/skycoin/skycoin/src/cipher/secp256k1-go/secp256k1-go2
 github.com/skycoin/skycoin/src/util/logging
-# github.com/skycoin/skycoin-service-discovery v0.0.0-20231221001759-d1af6ec27db1 => github.com/skycoin/skycoin-service-discovery v0.0.0-20240306165129-2af10aca698e
+# github.com/skycoin/skycoin-service-discovery v0.0.0-20240306165129-2af10aca698e
 ## explicit; go 1.21
 github.com/skycoin/skycoin-service-discovery/cmd/service-discovery/commands
 github.com/skycoin/skycoin-service-discovery/internal/pg
 github.com/skycoin/skycoin-service-discovery/internal/sdmetrics
 github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/api
 github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/store
-# github.com/skycoin/skywire-services v0.0.0-20240207001624-ebee7346e526 => github.com/skycoin/skywire-services v0.0.0-20240306165304-177c854f4aec
+# github.com/skycoin/skywire-services v0.0.0-20240306165304-177c854f4aec
 ## explicit; go 1.21
 github.com/skycoin/skywire-services/cmd/address-resolver/commands
 github.com/skycoin/skywire-services/cmd/config-bootstrapper/commands
@@ -829,5 +829,3 @@ nhooyr.io/websocket/internal/bpool
 nhooyr.io/websocket/internal/errd
 nhooyr.io/websocket/internal/wsjs
 nhooyr.io/websocket/internal/xsync
-# github.com/skycoin/skywire-services => github.com/skycoin/skywire-services v0.0.0-20240306165304-177c854f4aec
-# github.com/skycoin/skycoin-service-discovery => github.com/skycoin/skycoin-service-discovery v0.0.0-20240306165129-2af10aca698e
