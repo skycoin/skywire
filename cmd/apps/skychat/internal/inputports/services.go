@@ -18,10 +18,10 @@ type Services struct {
 }
 
 // NewServices instantiates the services of input ports
-func NewServices(appServices app.Services) Services {
+func NewServices(appServices app.Services, httpPort string, rpcPort string) Services {
 	return Services{
-		HTTPServer: http.NewServer(appServices),
-		RPCServer:  rpc.NewServer(appServices),
-		RPCClient:  rpc.NewClient(appServices),
+		HTTPServer: http.NewServer(appServices, httpPort),
+		RPCServer:  rpc.NewServer(appServices, rpcPort),
+		RPCClient:  rpc.NewClient(appServices, rpcPort),
 	}
 }

@@ -26,11 +26,14 @@ var embededFiles embed.FS
 type Server struct {
 	appServices app.Services
 	router      *mux.Router
+	port        string
 }
 
 // NewServer HTTP Server constructor
-func NewServer(appServices app.Services) *Server {
+func NewServer(appServices app.Services, port string) *Server {
 	httpServer := &Server{appServices: appServices}
+	httpServer.port = port
+
 	httpServer.router = mux.NewRouter()
 	httpServer.router.Handle("/", http.FileServer(getFileSystem()))
 	httpServer.router.Handle("/favicon.ico", http.FileServer(getFileSystem()))
@@ -96,14 +99,15 @@ func (httpServer *Server) AddUserHTTPRoutes() {
 func (httpServer *Server) AddNotificationHTTPRoutes() {
 	const notificationHTTPRoutePath = "/notifications"
 	//
-	httpServer.router.HandleFunc(notificationHTTPRoutePath, notification.NewHandler(httpServer.appServices.NotificationService).SubscribeNotifications).Methods("GET")
+	httpServer.router.HandleFunc(notificationHTTPRoutePath, notification.NewHandler(httpServer.appServices.NotificationService).SubscribeNotificationsWebsocket).Methods("GET")
+	httpServer.router.HandleFunc(notificationHTTPRoutePath+"/"+"websocket", httpServer.getPort).Methods("GET")
 }
 
 // ListenAndServe Starts listening for requests
-func (httpServer *Server) ListenAndServe(addr *string) {
-	fmt.Println("Serving HTTP on", *addr)
+func (httpServer *Server) ListenAndServe() {
+	fmt.Println("Serving HTTP on", httpServer.port)
 	srv := &http.Server{
-		Addr:         *addr,
+		Addr:         httpServer.port,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
@@ -120,4 +124,14 @@ func getFileSystem() http.FileSystem {
 	}
 
 	return http.FS(fsys)
+}
+
+func (httpServer *Server) getPort(w http.ResponseWriter, _ *http.Request) {
+
+	_, err := w.Write([]byte(httpServer.port))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, err.Error())
+		return
+	}
 }

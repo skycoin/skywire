@@ -1,4 +1,4 @@
-package netcon
+package messengerimpl
 
 import (
 	"encoding/json"

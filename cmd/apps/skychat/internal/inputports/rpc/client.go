@@ -13,19 +13,19 @@ import (
 // Client represents the rpc client running for this service
 type Client struct {
 	appServices app.Services
+	rpcPort     string
 }
 
 // NewClient RPC Client constructor
-func NewClient(appServices app.Services) *Client {
-	rc := &Client{appServices: appServices}
+func NewClient(appServices app.Services, rpcPort string) *Client {
+	rc := &Client{appServices: appServices, rpcPort: rpcPort}
 	return rc
 }
 
 // SendTextMessage sends the command to send a message via rpc
 func (c *Client) SendTextMessage(VisorPk cipher.PubKey, ServerPk cipher.PubKey, RoomPk cipher.PubKey, Message string) error {
 
-	//TODO: fix so that rpc address is dynamic from cobra args here.
-	rpcClient, err := rpc.DialHTTP("tcp", ":4040")
+	rpcClient, err := rpc.DialHTTP("tcp", c.rpcPort)
 	if err != nil {
 		log.Fatal("Connection error: ", err)
 	}

@@ -346,10 +346,12 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
       if (!test) {
       return Promise.all([this.getUserInfo(),
               this.getUserSettings(),
-              this.getChatAll()
-            ]).then(([userInfo,userSettings,chats]) => {
+              this.getChatAll(),
+              this.getWebsocketPort()
+            ]).then(([userInfo,userSettings,chats,port]) => {
               this.user = new User(userInfo,userSettings);
               this.chats = chats
+              this.port = port
               return this.init()
             });
           }
@@ -376,8 +378,8 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
       if (this.chats != null){
         this.chats.forEach(r => this._addChat(r));
       }
-      
-      this.notificationsSubscribe();
+
+      this.notificationsSubscribe(this.port);
       return this;
     }
 
@@ -813,6 +815,7 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
     });
 
   }
+
   //// PUT
   setUserInfo(el){
   let info = new Info(this.user.info.pk, el[0].value.trim(), el[1].value.trim(), el[2].value.trim());
@@ -1251,9 +1254,25 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
 //// HTTP /notification
 /////////////////////////////////////////////////////////////
 //// Subscribe
-      notificationsSubscribe() {
-        const source = new EventSource('/notifications');
-        source.onmessage = async(event) => {
+
+
+      async getWebsocketPort() {
+          return fetch('notifications/websocket', { method: 'GET', body: null })
+            .then(async res => {
+              if (res.ok) {
+               return res.text().then(text => {
+                  return text;
+                });
+              } else {
+                res.text().then(text => alert(`Failed to get websocket`));
+              }
+            });
+      }
+
+      notificationsSubscribe(port) {
+        var socket = new WebSocket('ws://localhost'+ port + '/notifications');
+        
+        socket.onmessage = async(event) => {
           const data = JSON.parse(event.data);
           console.log(data)
           console.log("Notification DataType: " + data.type)
@@ -1303,8 +1322,14 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
                 break;
             }            
           }
-        source.onerror = async(event) => {
+        socket.onerror = async(event) => {
           console.error("EventSource failed:", event)
+        }
+        socket.onclose = async() => {
+          console.log("socket opened")
+        }
+        socket.onclose = async() => {
+          console.log("socket closed")
         }
       };
 

@@ -4,14 +4,13 @@ package messenger
 import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/info"
+	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/message"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/util"
 )
 
 // Service interface is the interface to the service
 type Service interface {
-	HandleConnection(pk cipher.PubKey)
-	DeleteConnFromHandled(pk cipher.PubKey) error //TODO: refactor to better handling -> this is not beautiful
-	Listen()
+	HandleReceivedMessage(message.Message) error
 
 	//only used as client/p2p
 	SendRouteRequestMessage(route util.PKRoute) error

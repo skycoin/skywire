@@ -11,11 +11,3 @@ func main() {
 	cli.Execute()
 
 }
-
-//TEST:
-// cd ..
-// cd ..
-// cd ..
-// mingw32-make build-windows
-// .\skywire-cli.exe config gen -i -r -o .\skywire-config.json
-// .\build\skywire-visor.exe -c .\skywire-config.json --loglvl debug

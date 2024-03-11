@@ -18,18 +18,19 @@ import (
 type Server struct {
 	appServices app.Services
 	router      *mux.Router
+	rpcPort     string
 }
 
 // NewServer RPC Server constructor
-func NewServer(appServices app.Services) *Server {
-	rpcServer := &Server{appServices: appServices}
+func NewServer(appServices app.Services, rpcPort string) *Server {
+	rpcServer := &Server{appServices: appServices, rpcPort: rpcPort}
 	rpcServer.router = mux.NewRouter()
 
 	return rpcServer
 }
 
 // ListenAndServe Starts listening for requests
-func (rpcServer *Server) ListenAndServe(port *string) {
+func (rpcServer *Server) ListenAndServe() {
 
 	api := chat.NewHandler(rpcServer.appServices.ChatServices)
 	err := rpc.Register(api)
@@ -39,10 +40,10 @@ func (rpcServer *Server) ListenAndServe(port *string) {
 
 	rpc.HandleHTTP()
 
-	fmt.Println("Serving RPC on", *port)
+	fmt.Println("Serving RPC on", rpcServer.rpcPort)
 
 	srv := &http.Server{
-		Addr:         *port,
+		Addr:         rpcServer.rpcPort,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}

@@ -45,17 +45,16 @@ var rootCmd = &cobra.Command{
 			interfaceadapters.InterfaceAdapterServices.NotificationService,
 			interfaceadapters.InterfaceAdapterServices.MessengerService)
 
-		inputports.InputportsServices = inputports.NewServices(app.AppServices)
+		inputports.InputportsServices = inputports.NewServices(app.AppServices, httpport, rpcport)
 
-		//messengerService listen
-		go interfaceadapters.InterfaceAdapterServices.MessengerService.Listen()
+		//connectionHandlerService listen
+		go interfaceadapters.InterfaceAdapterServices.ConnectionHandlerService.Listen()
 
 		//rpc-server for cli functionality
-		rpcport = ":4040"
-		go inputports.InputportsServices.RPCServer.ListenAndServe(&rpcport)
+		go inputports.InputportsServices.RPCServer.ListenAndServe()
 
 		//http-server for web-ui
-		inputports.InputportsServices.HTTPServer.ListenAndServe(&httpport)
+		inputports.InputportsServices.HTTPServer.ListenAndServe()
 	},
 }
 
@@ -70,6 +69,7 @@ func init() {
 	rootCmd.PersistentFlags().MarkHidden("help") //nolint
 
 	rootCmd.Flags().StringVar(&httpport, "httpport", ":8001", "port to bind")
+	rootCmd.Flags().StringVar(&rpcport, "rpcport", ":4040", "port to bind")
 }
 
 // Execute executes root CLI command.
