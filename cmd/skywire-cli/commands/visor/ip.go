@@ -39,10 +39,15 @@ var ipCmd = &cobra.Command{
 
 func getIPAddress() (string, error) {
 	var info ipInfo
+	var resp *http.Response
+	var err error
 
-	resp, err := http.Get("https://ip.skycoin.com/")
+	resp, err = http.Get("https://ip.skycoin.com/")
 	if err != nil {
-		return info.IP, err
+		resp, err = http.Get("https://ip.plaintext.ir/")
+		if err != nil {
+			return info.IP, err
+		}
 	}
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
