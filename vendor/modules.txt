@@ -451,7 +451,7 @@ github.com/rs/cors
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v1.3.18-0.20240226072009-86c43e8d4ca4 => github.com/skycoin/dmsg v1.3.18-0.20240306171838-3351bcc4e0ae
+# github.com/skycoin/dmsg v1.3.18-0.20240311074627-0ba753f65a88
 ## explicit; go 1.21
 github.com/skycoin/dmsg/cmd/dmsg-discovery/commands
 github.com/skycoin/dmsg/cmd/dmsg-server/commands
@@ -829,6 +829,5 @@ nhooyr.io/websocket/internal/bpool
 nhooyr.io/websocket/internal/errd
 nhooyr.io/websocket/internal/wsjs
 nhooyr.io/websocket/internal/xsync
-# github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.18-0.20240306171838-3351bcc4e0ae
 # github.com/skycoin/skywire-services => github.com/skycoin/skywire-services v0.0.0-20240306165304-177c854f4aec
 # github.com/skycoin/skycoin-service-discovery => github.com/skycoin/skycoin-service-discovery v0.0.0-20240306165129-2af10aca698e
