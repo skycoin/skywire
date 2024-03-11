@@ -3,10 +3,13 @@ package commands
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"log/syslog"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
@@ -40,7 +43,9 @@ func init() {
 
 // RootCmd contains the root command
 var RootCmd = &cobra.Command{
-	Use:   "nv",
+	Use: func() string {
+		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
+	}(),
 	Short: "Node Visualizer Server for skywire",
 	Long: `
 	┌┐┌┌─┐┌┬┐┌─┐  ┬  ┬┬┌─┐┬ ┬┌─┐┬  ┬┌─┐┌─┐┬─┐

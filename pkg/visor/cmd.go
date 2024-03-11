@@ -138,13 +138,13 @@ func init() {
 	for _, j := range hiddenflags {
 		RootCmd.Flags().MarkHidden(j) //nolint
 	}
-	RootCmd.SetUsageTemplate(help)
-
 }
 
 // RootCmd contains the help command & invocation flags
 var RootCmd = &cobra.Command{
-	Use:   "visor",
+	Use: func() string {
+		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
+	}(),
 	Short: "Skywire Visor",
 	Long: `
 	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
@@ -317,11 +317,10 @@ func initConfig() *visorconfig.V1 { //nolint
 	return conf
 }
 
-const help = "{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}" +
-	"{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}" +
-	"Available Commands:{{range .Commands}}{{if (or .IsAvailableCommand)}}" +
-	"{{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}" +
-	"Flags:\r\n" +
-	"{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}\r\n\r\n" +
-	"Global Flags:\r\n" +
-	"{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}\r\n\r\n"
+// Execute executes root CLI command.
+func Execute() {
+	if err := RootCmd.Execute(); err != nil {
+		log := mLog.PackageLogger("pre-run")
+		log.Fatal("Failed to execute command: ", err)
+	}
+}

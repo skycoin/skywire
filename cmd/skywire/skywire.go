@@ -11,47 +11,55 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	skychat "github.com/skycoin/skywire/cmd/apps/skychat/commands"
-	skysocksclient "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
-	skysocks "github.com/skycoin/skywire/cmd/apps/skysocks/commands"
-	vpnclient "github.com/skycoin/skywire/cmd/apps/vpn-client/commands"
-	vpnserver "github.com/skycoin/skywire/cmd/apps/vpn-server/commands"
-	setupnode "github.com/skycoin/skywire/cmd/setup-node/commands"
-	skywirecli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
+	sc "github.com/skycoin/skywire/cmd/apps/skychat/commands"
+	ssc "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
+	ss "github.com/skycoin/skywire/cmd/apps/skysocks/commands"
+	vpnc "github.com/skycoin/skywire/cmd/apps/vpn-client/commands"
+	vpns "github.com/skycoin/skywire/cmd/apps/vpn-server/commands"
+	sn "github.com/skycoin/skywire/cmd/setup-node/commands"
+	cli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
 func init() {
 	appsCmd.AddCommand(
-		vpnserver.RootCmd,
-		vpnclient.RootCmd,
-		skysocksclient.RootCmd,
-		skysocks.RootCmd,
-		skychat.RootCmd,
+		vpns.RootCmd,
+		vpnc.RootCmd,
+		ssc.RootCmd,
+		ss.RootCmd,
+		sc.RootCmd,
 	)
-	rootCmd.AddCommand(
+	RootCmd.AddCommand(
 		visor.RootCmd,
-		skywirecli.RootCmd,
-		setupnode.RootCmd,
+		cli.RootCmd,
+		sn.RootCmd,
 		appsCmd,
 	)
 	visor.RootCmd.Long = `
 	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐  ┬  ┬┬┌─┐┌─┐┬─┐
 	└─┐├┴┐└┬┘││││├┬┘├┤───└┐┌┘│└─┐│ │├┬┘
 	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘   └┘ ┴└─┘└─┘┴└─`
-	setupnode.RootCmd.Use = "sn"
+	visor.RootCmd.Use = "visor"
+	cli.RootCmd.Use = "cli"
+	sn.RootCmd.Use = "sn"
+	vpns.RootCmd.Use = "vpns"
+	vpnc.RootCmd.Use = "vpnc"
+	ssc.RootCmd.Use = "ssc"
+	ss.RootCmd.Use = "ss"
+	sc.RootCmd.Use = "sc"
 
 	var helpflag bool
-	rootCmd.SetUsageTemplate(help)
-	rootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+rootCmd.Use)
-	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
-	rootCmd.PersistentFlags().MarkHidden("help") //nolint
-	rootCmd.CompletionOptions.DisableDefaultCmd = true
-	rootCmd.SetUsageTemplate(help)
+	RootCmd.SetUsageTemplate(help)
+	RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+RootCmd.Use)
+	RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
+	RootCmd.PersistentFlags().MarkHidden("help") //nolint
+	RootCmd.CompletionOptions.DisableDefaultCmd = true
+	RootCmd.SetUsageTemplate(help)
 
 }
 
-var rootCmd = &cobra.Command{
+// RootCmd contains skywire-visor, skywire-cli, setup-node, and the visor native apps
+var RootCmd = &cobra.Command{
 	Use: "skywire",
 	Long: `
 	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
@@ -64,6 +72,7 @@ var rootCmd = &cobra.Command{
 	Version:               buildinfo.Version(),
 }
 
+// appsCmd contains the visor native apps
 var appsCmd = &cobra.Command{
 	Use:   "app",
 	Short: "skywire native applications",
@@ -78,34 +87,20 @@ var appsCmd = &cobra.Command{
 }
 
 func main() {
-	commands := []*cobra.Command{
-		setupnode.RootCmd,
-		visor.RootCmd,
-		skywirecli.RootCmd,
-		vpnserver.RootCmd,
-		vpnclient.RootCmd,
-		skysocksclient.RootCmd,
-		skysocks.RootCmd,
-		skychat.RootCmd,
-		appsCmd,
-		rootCmd,
-	}
-	for _, cmd := range commands {
-		cc.Init(&cc.Config{
-			RootCmd:         cmd,
-			Headings:        cc.HiBlue + cc.Bold,
-			Commands:        cc.HiBlue + cc.Bold,
-			CmdShortDescr:   cc.HiBlue,
-			Example:         cc.HiBlue + cc.Italic,
-			ExecName:        cc.HiBlue + cc.Bold,
-			Flags:           cc.HiBlue + cc.Bold,
-			FlagsDescr:      cc.HiBlue,
-			NoExtraNewlines: true,
-			NoBottomNewline: true,
-		})
-	}
 
-	if err := rootCmd.Execute(); err != nil {
+	cc.Init(&cc.Config{
+		RootCmd:         RootCmd,
+		Headings:        cc.HiBlue + cc.Bold,
+		Commands:        cc.HiBlue + cc.Bold,
+		CmdShortDescr:   cc.HiBlue,
+		Example:         cc.HiBlue + cc.Italic,
+		ExecName:        cc.HiBlue + cc.Bold,
+		Flags:           cc.HiBlue + cc.Bold,
+		FlagsDescr:      cc.HiBlue,
+		NoExtraNewlines: true,
+		NoBottomNewline: true,
+	})
+	if err := RootCmd.Execute(); err != nil {
 		fmt.Println(err)
 	}
 }
