@@ -9,15 +9,17 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+
+	clichat "github.com/skycoin/skywire/cmd/apps/skychat/cli/chat"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/inputports"
-	clichat "github.com/skycoin/skywire/cmd/apps/skychat/internal/inputports/cli/chat"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/interfaceadapters"
 )
 
 var httpport string
 var rpcport string
 
+// RootCmd is the root command for skychat
 var RootCmd = &cobra.Command{
 	Use:   "skychat",
 	Short: "skywire chat application",

@@ -4,7 +4,7 @@ package clichat
 import (
 	"github.com/spf13/cobra"
 
-	clichatsend "github.com/skycoin/skywire/cmd/apps/skychat/internal/inputports/cli/chat/send"
+	clichatsend "github.com/skycoin/skywire/cmd/apps/skychat/cli/chat/send"
 )
 
 // RootCmd is the sub-command so interact with the chats

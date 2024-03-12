@@ -42,7 +42,7 @@ import (
 	tps "github.com/skycoin/skywire-services/cmd/transport-setup/commands"
 	vpnmon "github.com/skycoin/skywire-services/cmd/vpn-monitor/commands"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	sc "github.com/skycoin/skywire/cmd/apps/skychat/internal/inputports/cli"
+	sc "github.com/skycoin/skywire/cmd/apps/skychat/cli"
 	ssc "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
 	ss "github.com/skycoin/skywire/cmd/apps/skysocks/commands"
 	vpnc "github.com/skycoin/skywire/cmd/apps/vpn-client/commands"
