@@ -134,11 +134,11 @@ func init() {
 	sn.RootCmd.Use = "sn"
 	scli.RootCmd.Use = "cli"
 	visor.RootCmd.Use = "visor"
-	vpns.RootCmd.Use = "vpns"
-	vpnc.RootCmd.Use = "vpnc"
-	ssc.RootCmd.Use = "ssc"
-	ss.RootCmd.Use = "ss"
-	sc.RootCmd.Use = "sc"
+	vpns.RootCmd.Use = "vpn-server"
+	vpnc.RootCmd.Use = "vpn-client"
+	ssc.RootCmd.Use = "skysocks-client"
+	ss.RootCmd.Use = "skysocks"
+	sc.RootCmd.Use = "skychat"
 
 	var helpflag bool
 	RootCmd.SetUsageTemplate(help)
