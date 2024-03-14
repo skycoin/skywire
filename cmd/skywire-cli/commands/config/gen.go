@@ -858,7 +858,7 @@ var genConfigCmd = &cobra.Command{
 				Binary:    visorconfig.SkychatName,
 				AutoStart: true,
 				Port:      routing.Port(skyenv.SkychatPort),
-				Args:      []string{"--addr", visorconfig.SkychatAddr},
+				Args:      []string{"--httpport=" + visorconfig.SkychatAddr},
 			},
 			{
 				Name:      visorconfig.SkysocksName,
@@ -1199,7 +1199,7 @@ const envfileLinux = `#
 #VERSION=''
 
 #--	Set app bin_path
-#BINPATH='./apps'
+#BINPATH='./build/apps'
 
 #--	Set server public key for proxy client to connect to
 #PROXYCLIENTPK=''
@@ -1308,7 +1308,7 @@ const envfileWindows = `#
 #$VERSION=''
 
 #--	Set app bin_path
-#$BINPATH='./apps'
+#$BINPATH='./build/apps'
 
 #--	Set server public key for proxy client to connect to
 #$PROXYCLIENTPK=''

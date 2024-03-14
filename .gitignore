@@ -26,7 +26,7 @@ pkg/visor/foo/
 
 /bin
 /node
-/users.db
+/*.db
 /hypervisor
 /*-node
 /*-visor

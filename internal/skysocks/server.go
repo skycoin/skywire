@@ -93,7 +93,7 @@ func (s *Server) Serve(l net.Listener) error {
 
 // ListenIPC starts named-pipe based connection server for windows or unix socket in Linux/Mac
 func (s *Server) ListenIPC(client *ipc.Client) {
-	listenIPC(client, skyenv.SkychatName, func() {
+	listenIPC(client, skyenv.SkysocksName, func() {
 		client.Close()
 		if err := s.Close(); err != nil {
 			fmt.Println("Error closing skysocks server: ", err.Error())

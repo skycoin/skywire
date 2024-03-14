@@ -1,0 +1,11 @@
+@startuml
+Main -> Main: flag.Parse()
+Main -> Main: init Services
+Main -> MessengerService.Listen: go
+activate MessengerService.Listen
+deactivate MessengerService.Listen
+
+Main -> HTTPServer: ListenAndServe
+activate HTTPServer
+deactivate
+@enduml

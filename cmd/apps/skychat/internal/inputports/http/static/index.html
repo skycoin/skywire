@@ -1,0 +1,50 @@
+<!doctype html>
+
+<html lang="en">
+
+<head>
+  <title>Skychat</title>
+  <link href="favicon.ico" rel="icon" type="image/x-icon" />
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="stylesheet.css">
+</head>
+
+<body>
+  <aside class="sidebar">
+    <div id="user" class="user"></div>
+    <div id="addLocal" class="addLocal"></div>
+    <div id="joinRemote" class="joinRemote"></div>
+    <ul id="chatList" class="chat-list"></ul>
+  </aside>
+
+  <main class="chatbox">
+    <div id="chatHeaderContainer" class="chat-header-container">
+      <div id="chatHeaderInformation" class="chat-header-information chat-header-column chat-header-column-left"></div>
+      <!-- three dot menu -->
+      <div id="chatButtonsContainer" class="dropdown hidden chat-header-column chat-header-column-right">
+        <!-- three dots -->
+        <ul class="dropbtn icons btn-right showLeft" onclick="showDropdown()">
+          <li></li>
+          <li></li>
+          <li></li>
+        </ul>
+        <!-- menu -->
+        <div id="myDropdown" class="dropdown-content">
+          <a href="#" onclick="app.leaveRemoteRoute(this);return false">Leave</a>
+          <a href="#" onclick="app.deleteRoute(this);return false">Delete</a>
+        </div>
+      </div>
+
+    </div>
+    <ul id="form"></ul>
+    <ul id="messages" class="message-list"></ul>
+
+    <form id="msgForm" class="message-form hidden" autocomplete="off" onsubmit="app.sendMessage(this); return false;">
+      <input id="msgField" type="text" placeholder="Write your message" />
+      <input type="submit" value="Send">
+    </form>
+  </main>
+  <script src="index.js"></script>
+</body>
+
+</html>

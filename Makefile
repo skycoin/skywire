@@ -223,8 +223,12 @@ example-apps: ## Build example apps
 	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)apps/ ./example/...
 
 host-apps-windows: ## build apps on windows
-	powershell -Command new-item $(BUILD_PATH)apps -itemtype directory -force
-	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)apps $$_.FullName }'
+	powershell -Command new-item $(BUILD_PATH)apps/ -itemtype directory -force
+	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)apps/ $$_.FullName }'
+
+host-apps-windows-appveyor: ## build apps on windows. `go build` with ${OPTS} for AppVeyor image
+	powershell -Command new-item $(BUILD_PATH)apps/ -itemtype directory -force
+	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build -o $(BUILD_PATH)apps/ $$_.FullName }'
 
 # Static Apps
 host-apps-static: ## Build app

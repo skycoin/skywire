@@ -245,7 +245,7 @@ func makeDefaultLauncherAppsConfig(dnsServer string) []appserver.AppConfig {
 			Binary:    SkychatName,
 			AutoStart: true,
 			Port:      routing.Port(skyenv.SkychatPort),
-			Args:      []string{"--addr", SkychatAddr},
+			Args:      []string{"--httpport=" + SkychatAddr},
 		},
 		{
 			Name:      SkysocksName,

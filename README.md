@@ -120,25 +120,29 @@ git checkout develop
 make build1
 ```
 
-To compile skywire directly from source archive, first download the latest source archive from the release section with your browser or another utility. Extract it with an archiving utility, enter the directory where the sources were extracted, and run `make build1`.
+To compile skywire directly from source archive, first download the latest source archive from the release section with your browser or another utility. Extract it with an archiving utility, enter the directory where the sources were extracted, and run `make build`.
 
 
-`make build1` builds the binaries and apps with `go build`
+`make build` builds the binaries and apps with `go build`
 
-`skywire-cli` and `skywire-visor` binaries will populate in the current directory; app binaries will populate the `apps` directory.
+`skywire-cli` and `skywire-visor` binaries will populate in the `build` directory; app binaries will populate the `build\apps` directory.
 
 Build output:
 
 ```
-├──skywire-cli
-└─┬skywire-visor
-  └─┬apps
-    ├──skychat
-    ├──skysocks
-    ├──skysocks-client
-    ├──vpn-client
-    ├──vpn-server
-    └──skychat
+build
+└─┬──setup-node
+  ├──skywire-cli
+  ├──skywire-systray
+  ├──skywire-visor
+  └─┬skywire
+    └─┬apps
+      ├──skychat
+      ├──skysocks
+      ├──skysocks-client
+      ├──vpn-client
+      ├──vpn-server
+      └──skychat
 ```
 
 'install' these executables to the `GOPATH`:
@@ -153,7 +157,7 @@ For more options, run `make help`.
 To run skywire from this point, first generate a config.
 
 ```
-./skywire-cli config gen -birx
+./build/skywire-cli config gen -birx
 ```
 `-b --bestproto` use the best protocol (dmsg | direct) to connect to the skywire production deployment
 `-i --ishv` create a  local hypervisor configuration

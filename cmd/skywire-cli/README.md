@@ -389,7 +389,7 @@ $ skywire-cli config gen -bpirxn --version 1.3.0
 		"service_discovery": "http://sd.skycoin.com",
 		"apps": null,
 		"server_addr": "localhost:5505",
-		"bin_path": "./apps",
+		"bin_path": "./build/apps",
 		"display_node_ip": false
 	},
 	"survey_whitelist": [
