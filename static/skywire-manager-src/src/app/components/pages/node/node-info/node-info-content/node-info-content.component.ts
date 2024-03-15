@@ -14,6 +14,8 @@ import { TransportService } from 'src/app/services/transport.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { OperationError } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
+import { RewardsAddressComponent, RewardsAddressConfigParams } from './rewards-address-config/rewards-address-config.component';
+import { TrafficData } from 'src/app/services/single-node-data.service';
 
 /**
  * Shows the basic info of a node.
@@ -42,6 +44,8 @@ export class NodeInfoContentComponent implements OnDestroy {
       this.nodeHealthClass = 'dot-outline-gray';
     }
   }
+
+  @Input() trafficData: TrafficData;
 
   node: Node;
   timeOnline: ElapsedTime;
@@ -80,6 +84,16 @@ export class NodeInfoContentComponent implements OnDestroy {
     });
   }
 
+  // Opens the modal window for changing the rewards address.
+  changeRewardsAddressConfig() {
+    const params: RewardsAddressConfigParams = {nodePk: this.node.localPk, currentAddress: this.node.rewardsAddress};
+    RewardsAddressComponent.openDialog(this.dialog, params).afterClosed().subscribe((changed: boolean) => {
+      if (changed) {
+        NodeComponent.refreshCurrentDisplayedData();
+      }
+    });
+  }
+
   changeRouterConfig() {
     const params: RouterConfigParams = {nodePk: this.node.localPk, minHops: this.node.minHops};
     RouterConfigComponent.openDialog(this.dialog, params).afterClosed().subscribe((changed: boolean) => {
@@ -87,6 +101,17 @@ export class NodeInfoContentComponent implements OnDestroy {
         NodeComponent.refreshCurrentDisplayedData();
       }
     });
+  }
+
+  /**
+   * Returns if the node is connected to a valid DMSG server PK.
+   */
+  hasDmsgServer() {
+    if (!this.node || this.node.dmsgServerPk.replace(/0/g, '').length === 0) {
+      return false;
+    }
+
+    return true;
   }
 
   /**

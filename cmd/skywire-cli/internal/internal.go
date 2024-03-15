@@ -2,10 +2,14 @@
 package internal
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
+	"time"
 
+	"github.com/bitfield/script"
 	"github.com/google/uuid"
 	"github.com/spf13/pflag"
 
@@ -40,6 +44,16 @@ func PrintFatalError(cmdFlags *pflag.FlagSet, err error) {
 		os.Exit(1)
 	}
 	log.Fatal(err)
+}
+
+// PrintFatalRPCError prints fatal RPC errors for skywire-cli commands packages
+func PrintFatalRPCError(cmdFlags *pflag.FlagSet, err error) {
+	PrintFatalError(cmdFlags, fmt.Errorf("Failed to connect to visor RPC or RPC method not found; is skywire running?: %v", err))
+}
+
+// PrintRPCError prints nonfatal RPC errors for skywire-cli commands packages
+func PrintRPCError(cmdFlags *pflag.FlagSet, err error) {
+	PrintError(cmdFlags, fmt.Errorf("Failed to connect to visor RPC or RPC method not found; is skywire running?: %v", err))
 }
 
 // PrintError prints errors for skywire-cli commands packages
@@ -102,4 +116,33 @@ func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output interface{}) {
 	if output != "" {
 		fmt.Print(output)
 	}
+}
+
+// GetData fetches data from the specified URL via http or from cached file
+func GetData(cachefile, thisurl string, cacheFilesAge int) (thisdata string) {
+	var shouldfetch bool
+	buf1 := new(bytes.Buffer)
+	cTime := time.Now()
+	if cachefile == "" {
+		thisdata, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).String() //nolint
+		return thisdata
+	}
+	if cachefile != "" {
+		if u, err := os.Stat(cachefile); err != nil {
+			shouldfetch = true
+		} else {
+			if cTime.Sub(u.ModTime()).Minutes() > float64(cacheFilesAge) {
+				shouldfetch = true
+			}
+		}
+		if shouldfetch {
+			_, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).Tee(buf1).WriteFile(cachefile) //nolint
+			thisdata = buf1.String()
+		} else {
+			thisdata, _ = script.File(cachefile).String() //nolint
+		}
+	} else {
+		thisdata, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).String() //nolint
+	}
+	return thisdata
 }

@@ -1,6 +1,7 @@
 //go:build !windows
 // +build !windows
 
+// Package cmdutil pkg/cmdutil/sysloghook_unix.go
 package cmdutil
 
 import (
@@ -9,6 +10,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
+
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 

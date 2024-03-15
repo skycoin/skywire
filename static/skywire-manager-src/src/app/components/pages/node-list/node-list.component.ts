@@ -5,7 +5,7 @@ import { Router, ActivatedRoute } from '@angular/router';
 import { catchError, mergeMap } from 'rxjs/operators';
 import { TranslateService } from '@ngx-translate/core';
 
-import { NodeService, BackendData, KnownHealthStatuses } from '../../../services/node.service';
+import { NodeService, KnownHealthStatuses } from '../../../services/node.service';
 import { Node } from '../../../app.datatypes';
 import { AuthService, AuthStates } from '../../../services/auth.service';
 import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
@@ -21,6 +21,10 @@ import { LabeledElementTextComponent } from '../../layout/labeled-element-text/l
 import { SortingModes, SortingColumn, DataSorter } from 'src/app/utils/lists/data-sorter';
 import { DataFilterer } from 'src/app/utils/lists/data-filterer';
 import { NodeData, UpdateAllComponent } from '../../layout/update-all/update-all.component';
+import { BulkRewardAddressChangerComponent, BulkRewardAddressParams, NodeToEditData } from '../../layout/bulk-reward-address-changer/bulk-reward-address-changer.component';
+import { MultipleNodeDataService, MultipleNodesBackendData } from 'src/app/services/multiple-node-data.service';
+import { PageBaseComponent } from 'src/app/utils/page-base';
+import { AppComponent } from 'src/app/app.component';
 
 /**
  * Page for showing the node list.
@@ -30,7 +34,10 @@ import { NodeData, UpdateAllComponent } from '../../layout/update-all/update-all
   templateUrl: './node-list.component.html',
   styleUrls: ['./node-list.component.scss'],
 })
-export class NodeListComponent implements OnInit, OnDestroy {
+export class NodeListComponent extends PageBaseComponent implements OnInit, OnDestroy {
+  // Keys for persisting the server data, to be able to restore the state after navigation.
+  private readonly persistentServerDataResponseKey = 'serv-dat-response';
+
   // Small texts for identifying the list, needed for the helper objects.
   private readonly nodesListId = 'nl';
   private readonly dmsgListId = 'dl';
@@ -128,6 +135,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
   constructor(
     private nodeService: NodeService,
+    private multipleNodeDataService: MultipleNodeDataService,
     private router: Router,
     private dialog: MatDialog,
     private authService: AuthService,
@@ -138,6 +146,8 @@ export class NodeListComponent implements OnInit, OnDestroy {
     private translateService: TranslateService,
     route: ActivatedRoute,
   ) {
+    super();
+
     // Configure the options menu shown in the top bar.
     this.updateOptionsMenu();
 
@@ -227,7 +237,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
     // Refresh the data after languaje changes, to ensure the labels used for filtering
     // are updated.
     this.languageSubscription = this.translateService.onLangChange.subscribe(() => {
-      this.nodeService.forceNodeListRefresh();
+      this.multipleNodeDataService.forceRefresh();
     });
   }
 
@@ -238,11 +248,19 @@ export class NodeListComponent implements OnInit, OnDestroy {
     this.options = [];
 
     this.options.push({
+      name: 'nodes.modify-rewards-all',
+      actionName: 'modifyRewardsAll',
+      icon: 'edit'
+    });
+
+    // TODO: remove if the option will not be added again. Delete the translatable strings too.
+    /*
+    this.options.push({
       name: 'nodes.update-all',
       actionName: 'updateAll',
       icon: 'get_app'
     });
-
+    */
     if (this.canLogOut) {
       this.options.push({
         name: 'common.logout',
@@ -254,8 +272,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     // Load the data.
-    this.nodeService.startRequestingNodeList();
-    this.startGettingData();
+    this.startGettingData(true);
 
     // Procedure to keep updated the variable that indicates how long ago the data was updated.
     this.ngZone.runOutsideAngular(() => {
@@ -264,10 +281,11 @@ export class NodeListComponent implements OnInit, OnDestroy {
           this.secondsSinceLastUpdate = Math.floor((Date.now() - this.lastUpdate) / 1000);
         }));
     });
+
+    return super.ngOnInit();
   }
 
   ngOnDestroy() {
-    this.nodeService.stopRequestingNodeList();
     this.authVerificationSubscription.unsubscribe();
     this.dataSubscription.unsubscribe();
     this.updateTimeSubscription.unsubscribe();
@@ -294,6 +312,8 @@ export class NodeListComponent implements OnInit, OnDestroy {
       this.logout();
     } else if (actionName === 'updateAll') {
       this.updateAll();
+    } else if (actionName === 'modifyRewardsAll') {
+      this.changeRewardsToAll();
     }
   }
 
@@ -347,65 +367,78 @@ export class NodeListComponent implements OnInit, OnDestroy {
       this.lastUpdateRequestedManually = true;
     }
 
-    this.nodeService.forceNodeListRefresh();
+    this.multipleNodeDataService.forceRefresh();
   }
 
   /**
    * Starts getting the data from the backend.
    */
-  private startGettingData() {
-    // Detect when the service is updating the data.
-    this.dataSubscription = this.nodeService.updatingNodeList.subscribe(val => this.updating = val);
+  private startGettingData(checkSavedData: boolean) {
+    // Use saved data or get from the server. If there is no saved data, savedData is null.
+    const savedData = checkSavedData ? this.getLocalValue(this.persistentServerDataResponseKey) : null;
+    let nextOperation: Observable<any> = this.multipleNodeDataService.startRequestingData();
+    if (savedData) {
+      nextOperation = of(JSON.parse(savedData.value));
+    }
 
-    this.ngZone.runOutsideAngular(() => {
-      // Get the node list.
-      this.dataSubscription.add(this.nodeService.nodeList.subscribe((result: BackendData) => {
-        this.ngZone.run(() => {
-          if (result) {
-            // If the data was obtained.
-            if (result.data && !result.error) {
-              this.allNodes = result.data as Node[];
+    // Get the node list.
+    this.dataSubscription = nextOperation.subscribe((result: MultipleNodesBackendData) => {        
+      if (!savedData) {
+        this.saveLocalValue(this.persistentServerDataResponseKey, JSON.stringify(result));
+      }
 
-              if (this.showDmsgInfo) {
-                // Add the label data to the array, to be able to use it for filtering and sorting.
-                this.allNodes.forEach(node => {
-                  node['dmsgServerPk_label'] =
-                    LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, node.dmsgServerPk);
-                });
-              }
-              this.dataFilterer.setData(this.allNodes);
+      this.updating = result ? result.updating : true;
 
-              this.loading = false;
-              // Close any previous temporary loading error msg.
-              this.snackbarService.closeCurrentIfTemporaryError();
+      if (result && !result.updating) {
+        // If the data was obtained.
+        if (result.data && !result.error) {
+          this.allNodes = result.data as Node[];
 
-              this.lastUpdate = result.momentOfLastCorrectUpdate;
-              this.secondsSinceLastUpdate = Math.floor((Date.now() - result.momentOfLastCorrectUpdate) / 1000);
-              this.errorsUpdating = false;
+          if (this.showDmsgInfo) {
+            // Add the label data to the array, to be able to use it for filtering and sorting.
+            this.allNodes.forEach(node => {
+              node['dmsgServerPk_label'] =
+                LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, node.dmsgServerPk);
+            });
+          }
+          this.dataFilterer.setData(this.allNodes);
 
-              if (this.lastUpdateRequestedManually) {
-                // Show a confirmation msg.
-                this.snackbarService.showDone('common.refreshed', null);
-                this.lastUpdateRequestedManually = false;
-              }
+          this.loading = false;
+          // Close any previous temporary loading error msg.
+          this.snackbarService.closeCurrentIfTemporaryError();
 
-            // If there was an error while obtaining the data.
-            } else if (result.error) {
-              // Show an error msg if it has not be done before during the current attempt to obtain the data.
-              if (!this.errorsUpdating) {
-                if (this.loading) {
-                  this.snackbarService.showError('common.loading-error', null, true, result.error);
-                } else {
-                  this.snackbarService.showError('nodes.error-load', null, true, result.error);
-                }
-              }
+          this.lastUpdate = result.momentOfLastCorrectUpdate;
+          this.secondsSinceLastUpdate = Math.floor((Date.now() - result.momentOfLastCorrectUpdate) / 1000);
+          this.errorsUpdating = false;
+          AppComponent.currentInstance.hideDataProblemMsg();
 
-              // Stop the loading indicator and show a warning icon.
-              this.errorsUpdating = true;
+          if (this.lastUpdateRequestedManually) {
+            // Show a confirmation msg.
+            this.snackbarService.showDone('common.refreshed', null);
+            this.lastUpdateRequestedManually = false;
+          }
+
+        // If there was an error while obtaining the data.
+        } else if (result.error) {
+          // Show an error msg if it has not be done before during the current attempt to obtain the data.
+          if (!this.errorsUpdating) {
+            if (this.loading) {
+              this.snackbarService.showError('common.loading-error', null, true, result.error);
+            } else {
+              this.snackbarService.showError('nodes.error-load', null, true, result.error);
             }
           }
-        });
-      }));
+
+          // Stop the loading indicator and show a warning icon.
+          this.errorsUpdating = true;
+          AppComponent.currentInstance.showDataProblemMsg();
+        }
+      }
+
+      // If old saved data was used, repeat the operation, ignoring the saved data.
+      if (savedData) {
+        this.startGettingData(false);
+      }
     });
   }
 
@@ -479,6 +512,30 @@ export class NodeListComponent implements OnInit, OnDestroy {
     });
 
     UpdateAllComponent.openDialog(this.dialog, updatableNodes, nonUpdatableNodes);
+  }
+
+  // Opens the modal window for changing the rewards address of all online nodes.
+  changeRewardsToAll() {
+    if (!this.dataSource || this.dataSource.length === 0) {
+      this.snackbarService.showError('nodes.no-visors-to-modify');
+
+      return;
+    }
+
+    const nodesToModify: NodeToEditData[] = [];
+    this.dataSource.forEach(node => {
+      if (node.online) {
+        const nodeData: NodeToEditData = {
+          key: node.localPk,
+          label: node.label,
+        };
+        nodesToModify.push(nodeData);
+      }
+    });
+
+    const params: BulkRewardAddressParams = { nodes: nodesToModify };
+
+    BulkRewardAddressChangerComponent.openDialog(this.dialog, params);
   }
 
   /**

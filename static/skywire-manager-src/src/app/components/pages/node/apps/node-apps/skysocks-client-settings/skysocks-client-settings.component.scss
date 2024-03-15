@@ -1,6 +1,26 @@
 @import "variables";
 @import "bootstrap_overrides";
 
+::ng-deep mat-tab-header {
+  border-bottom: solid 1px $grey-separator;
+
+  @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
+    & {
+      display: none !important;
+    }
+  }
+}
+
+app-tab-selector {
+  display: none;
+
+  @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
+    & {
+      display: block !important;
+    }
+  }
+}
+
 form {
   margin-top: 15px;
 }
@@ -13,7 +33,7 @@ form {
 
   mat-icon {
     position: relative;
-    top: 2px;
+    top: 5px;
   }
 }
 
@@ -30,6 +50,8 @@ form {
 
 .list-button {
   border-bottom: solid 1px $grey-separator;
+  height: auto;
+  justify-content: left;
 
   .filter-button-content {
     padding: 15px 0px;
@@ -102,11 +124,19 @@ form {
       }
     }
   }
+
+  .option-button-icon {
+    font-size: 14px;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
 }
 
 .paginator {
   float: right;
   margin-top: 15px;
+  display: flex;
+  align-items: center;
 
   > span {
     @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
@@ -118,17 +148,20 @@ form {
 
   button {
     margin-left: 5px;
+    display: flex;
   }
 }
 
 .settings-option {
-  margin: 15px 12px 10px 12px;
+  margin-top: 20px;
+
+  mat-checkbox {
+    margin-bottom: 15px;
+  }
 }
 
 .settings-changed-warning {
   font-size: 0.7rem;
   opacity: 0.7;
   position: relative;
-  top: -5px;
-  padding: 0px 12px;
 }

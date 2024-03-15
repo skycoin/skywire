@@ -43,7 +43,7 @@ func MakeLogEntry(ls LogStore, tpID uuid.UUID, log *logging.Logger) *LogEntry {
 	oldLogEntry, err := ls.Entry(tpID)
 	if err != nil {
 		log.Warn(err)
-		return &LogEntry{}
+		log.Warn(fmt.Errorf("new log entry will create for transport %s", tpID.String()))
 	}
 	newEntry := NewLogEntry()
 	if oldLogEntry != nil {
@@ -155,7 +155,7 @@ func (tls *inMemoryTransportLogStore) Entry(id uuid.UUID) (*LogEntry, error) {
 	entry, ok := tls.entries[id]
 	tls.mu.Unlock()
 	if !ok {
-		return entry, errors.New("transport log entry not found")
+		return nil, errors.New("transport log entry not found")
 	}
 
 	return entry, nil
@@ -180,7 +180,7 @@ type fileTransportLogStore struct {
 
 // FileTransportLogStore implements file TransportLogStore.
 func FileTransportLogStore(ctx context.Context, dir string, rInterval time.Duration, log *logging.Logger) (LogStore, error) {
-	if err := os.MkdirAll(dir, 0644); err != nil {
+	if err := os.MkdirAll(dir, 0755); err != nil { //nolint
 		return nil, err
 	}
 

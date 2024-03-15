@@ -15,7 +15,6 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/dmsgc"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -40,14 +39,14 @@ func init() {
 	uHiddenFlags = append(uHiddenFlags, "input")
 	updateCmd.PersistentFlags().StringVarP(&output, "output", "o", "", "config file to output")
 	if isRoot {
-		if _, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.ConfigJSON); err == nil {
-			updateCmd.PersistentFlags().BoolVarP(&isPkg, "pkg", "p", false, "update package config "+skyenv.SkywirePath+"/"+skyenv.ConfigJSON)
+		if _, err := os.Stat(visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON); err == nil {
+			updateCmd.PersistentFlags().BoolVarP(&isPkg, "pkg", "p", false, "update package config "+visorconfig.SkywirePath+"/"+visorconfig.ConfigJSON)
 			uHiddenFlags = append(uHiddenFlags, "pkg")
 		}
 	}
 	if !isRoot {
-		if _, err := os.Stat(skyenv.HomePath() + "/" + skyenv.ConfigName); err == nil {
-			updateCmd.PersistentFlags().BoolVarP(&isUsr, "user", "u", false, "update config at: $HOME/"+skyenv.ConfigName)
+		if _, err := os.Stat(visorconfig.HomePath() + "/" + visorconfig.ConfigName); err == nil {
+			updateCmd.PersistentFlags().BoolVarP(&isUsr, "user", "u", false, "update config at: $HOME/"+visorconfig.ConfigName)
 		}
 	}
 
@@ -120,8 +119,8 @@ var updateCmd = &cobra.Command{
 				AddressResolver: services.AddressResolver,    //utilenv.DefaultAddressResolverAddr,
 			}
 			conf.Routing = &visorconfig.Routing{
-				RouteFinder: services.RouteFinder, //utilenv.DefaultRouteFinderAddr,
-				SetupNodes:  services.SetupNodes,  //[]cipher.PubKey{utilenv.MustPK(utilenv.DefaultSetupPK)},
+				RouteFinder:     services.RouteFinder,     //utilenv.DefaultRouteFinderAddr,
+				RouteSetupNodes: services.RouteSetupNodes, //[]cipher.PubKey{utilenv.MustPK(utilenv.DefaultSetupPK)},
 			}
 			conf.Launcher = &visorconfig.Launcher{
 				ServiceDisc: services.ServiceDiscovery, //utilenv.DefaultServiceDiscAddr,
@@ -218,7 +217,7 @@ func initUpdate() (conf *visorconfig.V1) {
 func checkConfig() {
 	//set default output filename
 	if output == "" {
-		output = skyenv.ConfigName
+		output = visorconfig.ConfigName
 	}
 	var err error
 	if output, err = filepath.Abs(output); err != nil {
@@ -242,12 +241,12 @@ func setDefaults() {
 		output = input
 	}
 	if isPkg {
-		output = skyenv.SkywirePath + "/" + skyenv.ConfigJSON
-		input = skyenv.SkywirePath + "/" + skyenv.ConfigJSON
+		output = visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON
+		input = visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON
 	}
 	if isUsr {
-		output = skyenv.HomePath() + "/" + skyenv.ConfigName
-		input = skyenv.HomePath() + "/" + skyenv.ConfigName
+		output = visorconfig.HomePath() + "/" + visorconfig.ConfigName
+		input = visorconfig.HomePath() + "/" + visorconfig.ConfigName
 	}
 
 }
@@ -290,7 +289,7 @@ var skySocksClientUpdateCmd = &cobra.Command{
 		if addSkysocksClientSrv != "" {
 			keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(addSkysocksClientSrv))
 			if err != nil {
-				logger.WithError(err).Fatalf("Failed to parse hypervisor private key: %s.", addSkysocksClientSrv)
+				logger.WithError(err).Fatalf("Failed to parse public key: %s.", addSkysocksClientSrv)
 			}
 			changeAppsConfig(conf, "skysocks-client", "--srv", keyParsed.Hex())
 		}

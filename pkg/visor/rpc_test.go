@@ -17,7 +17,7 @@ import (
 )
 
 func baseConfig(t *testing.T) *visorconfig.V1 {
-	cc, err := visorconfig.NewCommon(nil, visorconfig.StdinName, nil)
+	cc, err := visorconfig.NewCommon(nil, visorconfig.Stdin, nil)
 	var services *visorconfig.Services
 	require.NoError(t, err)
 	return visorconfig.MakeBaseConfig(cc, false, true, services, nil)
@@ -30,8 +30,8 @@ func TestHealth(t *testing.T) {
 			Discovery: "foo",
 		}
 		c.Routing = &visorconfig.Routing{
-			RouteFinder: "foo",
-			SetupNodes:  []cipher.PubKey{c.PK},
+			RouteFinder:     "foo",
+			RouteSetupNodes: []cipher.PubKey{c.PK},
 		}
 
 		utClient := &utclient.MockAPIClient{}
@@ -93,6 +93,35 @@ func TestUptime(t *testing.T) {
 
 	assert.GreaterOrEqual(t, res, 1.0)
 }
+
+// func TestRegisterAndDeregisterApp(t *testing.T) {
+
+// 	pm := &appserver.MockProcManager{}
+// 	log := logging.MustGetLogger("test")
+// 	appL, err := launcher.NewLauncher(log, launcher.Config{}, nil, nil, pm)
+// 	require.NoError(t, err)
+// 	n := Visor{
+// 		procM: pm,
+// 		appL:  appL,
+// 	}
+// 	rpc := &RPC{visor: &n, log: logrus.New()}
+// 	time.Sleep(time.Second)
+
+// 	var procKey appcommon.ProcKey
+// 	procConfig := appcommon.ProcConfig{
+// 		AppName:     "foo",
+// 		AppSrvAddr:  "",
+// 		ProcKey:     appcommon.RandProcKey(),
+// 		ProcArgs:    nil,
+// 		ProcWorkDir: "",
+// 		VisorPK:     cipher.PubKey{},
+// 		RoutingPort: 0,
+// 		BinaryLoc:   "",
+// 	}
+// 	err = rpc.RegisterApp(&procConfig, &procKey)
+// 	require.NoError(t, err)
+
+// }
 
 // TODO(evanlinjin): These should be moved to /pkg/app/launcher
 //func TestListApps(t *testing.T) {
@@ -314,21 +343,6 @@ These tests have been commented out for the following reasons:
 //		})
 //	})
 //
-//	t.Run("Exec", func(t *testing.T) {
-//		command := "echo 1"
-//
-//		t.Run("RPCServer", func(t *testing.T) {
-//			var out []byte
-//			require.NoError(t, gateway.Exec(&command, &out))
-//			assert.Equal(t, []byte("1\net"), out)
-//		})
-//
-//		t.Run("API", func(t *testing.T) {
-//			out, err := client.Exec(command)
-//			require.NoError(t, err)
-//			assert.Equal(t, []byte("1\net"), out)
-//		})
-//	})
 //
 //	t.Run("Apps", func(t *testing.T) {
 //		test := func(t *testing.T, apps []*AppState) {

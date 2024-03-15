@@ -3,24 +3,33 @@ package visor
 
 import (
 	"context"
+	"embed"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/orandin/lumberjackrus"
+	"github.com/sirupsen/logrus"
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
-	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/syslog"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
@@ -32,12 +41,16 @@ import (
 )
 
 var (
+	// ErrVisorNotAvailable represents error for unavailable visor
+	ErrVisorNotAvailable = errors.New("no visor available")
 	// ErrAppProcNotRunning represents lookup error for App related calls.
 	ErrAppProcNotRunning = errors.New("no process of given app is running")
 	// ErrProcNotAvailable represents error for unavailable process manager
 	ErrProcNotAvailable = errors.New("no process manager available")
 	// ErrTrpMangerNotAvailable represents error for unavailable transport manager
 	ErrTrpMangerNotAvailable = errors.New("no transport manager available")
+	// ErrAppLauncherNotAvailable represents error for unavailable app launcher
+	ErrAppLauncherNotAvailable = errors.New("no app launcher available")
 )
 
 const (
@@ -46,7 +59,12 @@ const (
 	// moduleShutdownTimeout is the timeout given to a module to shutdown cleanly.
 	// Otherwise the shutdown logic will continue and report a timeout error.
 	moduleShutdownTimeout = time.Second * 4
+	runtimeLogMaxEntries  = 300
 )
+
+var uiAssets = initUI()
+
+var mLog = initLogger()
 
 // Visor provides messaging runtime for Apps by setting up all
 // necessary connections and performing messaging gateway functions.
@@ -58,7 +76,6 @@ type Visor struct {
 	logstore logstore.Store
 
 	startedAt     time.Time
-	restartCtx    *restart.Context
 	uptimeTracker utclient.APIClient
 
 	ebc          *appevent.Broadcaster // event broadcaster
@@ -80,7 +97,7 @@ type Visor struct {
 	rfClient rfclient.Client
 
 	procM       appserver.ProcManager // proc manager
-	appL        *launcher.Launcher    // app launcher
+	appL        *launcher.AppLauncher // app launcher
 	serviceDisc appdisc.Factory
 	initLock    *sync.RWMutex
 	// when module is failed it pushes its error to this channel
@@ -89,10 +106,18 @@ type Visor struct {
 	runtimeErrors chan error
 
 	isServicesHealthy    *internalHealthInfo
-	autoPeer             bool                   // autoPeer=true tells the visor to query the http endpoint of the hypervisor on the local network for the hypervisor's public key when connectio to the hypervisor is lost
-	autoPeerIP           string                 // autoPeerCmd is the command string used to return the public key of the hypervisor
 	remoteVisors         map[cipher.PubKey]Conn // remote hypervisors the visor is attempting to connect to
 	connectedHypervisors map[cipher.PubKey]bool // remote hypervisors the visor is currently connected to
+	allowedPorts         map[int]bool
+	allowedMX            *sync.RWMutex
+
+	pingConns    map[cipher.PubKey]ping
+	pingConnMx   *sync.Mutex
+	pingPcktSize int
+	logStorePath string
+
+	survey     visorconfig.Survey
+	surveyLock *sync.RWMutex
 }
 
 // todo: consider moving module closing to the module system
@@ -115,18 +140,122 @@ func (v *Visor) MasterLogger() *logging.MasterLogger {
 	return v.conf.MasterLogger()
 }
 
+func reload(v *Visor) error {
+	if confPath == visorconfig.Stdin {
+		v.log.Error("Cannot reload visor ; config was piped via stdin")
+		return nil
+	}
+	if err := v.Close(); err != nil {
+		v.log.WithError(err).Error("Visor closed with error.")
+		return err
+	}
+	v = nil
+	return run(nil)
+}
+
+// RunVisor runs the visor
+func run(conf *visorconfig.V1) error {
+	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
+	mLog.AddHook(hook)
+
+	// stopPProf := initPProf(mLog, pprofMode, pprofAddr)
+	// defer stopPProf()
+
+	if conf == nil {
+		conf = initConfig()
+	}
+
+	conf.MasterLogger().AddHook(hook)
+
+	if disableHypervisorPKs {
+		conf.Hypervisors = []cipher.PubKey{}
+	}
+
+	pubkey := cipher.PubKey{}
+	if remoteHypervisorPKs != "" {
+		hypervisorPKsSlice := strings.Split(remoteHypervisorPKs, ",")
+		for _, pubkeyString := range hypervisorPKsSlice {
+			if err := pubkey.Set(pubkeyString); err != nil {
+				mLog.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
+				continue
+			}
+			mLog.Infof("%s PK added as remote hypervisor PK", pubkeyString)
+			conf.Hypervisors = append(conf.Hypervisors, pubkey)
+		}
+	}
+
+	if logLvl != "" {
+		//validate & set log level
+		_, err := logging.LevelFromString(logLvl)
+		if err != nil {
+			mLog.WithError(err).Error("Invalid log level specified: ", logLvl)
+		} else {
+			conf.LogLevel = logLvl
+			mLog.Info("setting log level to: ", logLvl)
+		}
+	}
+
+	if conf.Hypervisor != nil {
+		conf.Hypervisor.UIAssets = *uiAssets
+	}
+
+	ctx, cancel := cmdutil.SignalContext(context.Background(), mLog)
+	vis, ok := NewVisor(ctx, conf)
+	if !ok {
+		select {
+		case <-ctx.Done():
+			mLog.Info("Visor closed early.")
+		default:
+			return fmt.Errorf("Failed to start visor.") //nolint
+		}
+		return nil
+	}
+
+	stopVisorFn = func() {
+		if err := vis.Close(); err != nil {
+			mLog.WithError(err).Error("Visor closed with error.") //nolint
+		}
+		cancel()
+	}
+	vis.SetLogstore(store)
+	//	vis.uiAssets = uiAssets
+	if launchBrowser {
+		if conf.Hypervisor == nil {
+			mLog.Errorln("Hypervisor not started - hypervisor UI unavailable")
+		}
+		runBrowser(conf.Hypervisor.HTTPAddr, conf.Hypervisor.EnableTLS)
+		launchBrowser = false
+	}
+	// Wait.
+	<-ctx.Done()
+	stopVisorFn()
+	return nil
+}
+
 // NewVisor constructs new Visor.
-func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Context, autoPeer bool, autoPeerIP string) (*Visor, bool) {
+func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
+	if conf == nil {
+		conf = initConfig()
+	}
+
+	if isForceColor {
+		setForceColor(conf)
+	}
 
 	v := &Visor{
 		log:                  conf.MasterLogger().PackageLogger("visor"),
 		conf:                 conf,
-		restartCtx:           restartCtx,
 		initLock:             new(sync.RWMutex),
+		allowedMX:            new(sync.RWMutex),
 		isServicesHealthy:    newInternalHealthInfo(),
 		dtmReady:             make(chan struct{}),
 		stunReady:            make(chan struct{}),
 		connectedHypervisors: make(map[cipher.PubKey]bool),
+		pingConns:            make(map[cipher.PubKey]ping),
+		pingConnMx:           new(sync.Mutex),
+		allowedPorts:         make(map[int]bool),
+		survey:               visorconfig.Survey{},
+		surveyLock:           new(sync.RWMutex),
 	}
 	v.isServicesHealthy.init()
 
@@ -136,18 +265,27 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Con
 		v.conf.MasterLogger().SetLevel(logLvl)
 	}
 
+	v.startedAt = time.Now()
+	if isStoreLog {
+		storeLog(conf)
+		v.logStorePath = conf.LocalPath
+	}
 	log := v.MasterLogger().PackageLogger("visor:startup")
 	log.WithField("public_key", conf.PK).
 		Info("Begin startup.")
-	v.startedAt = time.Now()
 	ctx = context.WithValue(ctx, visorKey, v)
 	v.runtimeErrors = make(chan error)
 	ctx = context.WithValue(ctx, runtimeErrsKey, v.runtimeErrors)
+	if dmsgServer != "" {
+		ctx = context.WithValue(ctx, "dmsgServer", dmsgServer) //nolint
+	}
 	registerModules(v.MasterLogger())
 	var mainModule visorinit.Module
 	if v.conf.Hypervisor == nil {
 		mainModule = vis
 	} else {
+		log.Info("main module set to hypervisor")
+
 		mainModule = hv
 	}
 	// run Transport module in a non blocking mode
@@ -180,10 +318,6 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, restartCtx *restart.Con
 	if !v.processRuntimeErrs() {
 		return nil, false
 	}
-	if autoPeer {
-		v.autoPeer = true
-		v.autoPeerIP = autoPeerIP
-	}
 	log.Info("Startup complete.")
 	return v, true
 }
@@ -210,12 +344,70 @@ func (v *Visor) isStunReady() bool {
 	}
 }
 
+func initLogger() *logging.MasterLogger {
+	mLog := logging.NewMasterLogger()
+	if syslogAddr != "" {
+		hook, err := syslog.SetupHook(syslogAddr, logTag)
+		if err != nil {
+			mLog.WithError(err).Error("Failed to connect to the syslog daemon.")
+		} else {
+			mLog.AddHook(hook)
+			mLog.Out = io.Discard
+		}
+	}
+	return mLog
+}
+
+// runBrowser opens the hypervisor interface in the browser
+func runBrowser(httpAddr string, enableTLS bool) {
+	log := mLog.PackageLogger("visor:launch-browser")
+
+	addr := httpAddr
+	if addr[0] == ':' {
+		addr = "localhost" + addr
+	}
+	if addr[:4] != "http" {
+		if enableTLS {
+			addr = "https://" + addr
+		} else {
+			addr = "http://" + addr
+		}
+	}
+	go func() {
+		if !isHvRunning(addr, 5) {
+			log.Error("Cannot open hypervisor in browser: status check failed")
+			return
+		}
+		if err := webbrowser.Open(addr); err != nil {
+			log.WithError(err).Error("webbrowser.Open failed")
+		}
+	}()
+}
+
+func isHvRunning(addr string, retries int) bool {
+	url := addr + "/api/ping"
+	for i := 0; i < retries; i++ {
+		time.Sleep(500 * time.Millisecond)
+		resp, err := http.Get(url) // nolint: gosec
+		if err != nil {
+			continue
+		}
+		err = resp.Body.Close()
+		if err != nil {
+			continue
+		}
+		if resp.StatusCode < 400 {
+			return true
+		}
+	}
+	return false
+}
+
 // Close safely stops spawned Apps and Visor.
 func (v *Visor) Close() error {
 	if v == nil {
 		return nil
 	}
-
 	// todo: with timout: wait for the module to initialize,
 	// then try to stop it
 	// don't need waitgroups this way because modules are concurrent anyway
@@ -224,6 +416,15 @@ func (v *Visor) Close() error {
 
 	log := v.MasterLogger().PackageLogger("visor:shutdown")
 	log.Info("Begin shutdown.")
+
+	// Cleanly close ongoing forward conns
+	for _, forwardConn := range appnet.GetAllForwardConns() {
+		err := forwardConn.Close()
+		if err != nil {
+			log.WithError(err).Warn("Forward conn stopped with unexpected result.")
+			continue
+		}
+	}
 
 	for i := len(v.closeStack) - 1; i >= 0; i-- {
 		cl := v.closeStack[i]
@@ -256,6 +457,7 @@ func (v *Visor) Close() error {
 	}
 	v.processRuntimeErrs()
 	log.Info("Shutdown complete. Goodbye!")
+	v = nil
 	return nil
 }
 
@@ -276,4 +478,109 @@ func (v *Visor) SetLogstore(store logstore.Store) {
 // tpDiscClient is a convenience function to obtain transport discovery client.
 func (v *Visor) tpDiscClient() transport.DiscoveryClient {
 	return v.tpM.Conf.DiscoveryClient
+}
+
+//go:embed static
+var ui embed.FS
+
+func initUI() *fs.FS {
+	//initialize the ui
+	uiFS, err := fs.Sub(ui, "static")
+	if err != nil {
+		mLog.WithError(err).Error("frontend not found")
+		//		return err
+	}
+	return &uiFS
+
+}
+
+func storeLog(conf *visorconfig.V1) {
+	hook, _ := lumberjackrus.NewHook( //nolint
+		&lumberjackrus.LogFile{
+			Filename:   conf.LocalPath + "/log/skywire.log",
+			MaxSize:    1,
+			MaxBackups: 1,
+			MaxAge:     1,
+			Compress:   false,
+			LocalTime:  false,
+		},
+		logrus.TraceLevel,
+		&logging.TextFormatter{
+			DisableColors:   true,
+			FullTimestamp:   true,
+			ForceFormatting: true,
+		},
+		&lumberjackrus.LogFileOpts{
+			logrus.InfoLevel: &lumberjackrus.LogFile{
+				Filename:   conf.LocalPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.WarnLevel: &lumberjackrus.LogFile{
+				Filename:   conf.LocalPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.TraceLevel: &lumberjackrus.LogFile{
+				Filename:   conf.LocalPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.ErrorLevel: &lumberjackrus.LogFile{
+				Filename:   conf.LocalPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.DebugLevel: &lumberjackrus.LogFile{
+				Filename:   conf.LocalPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.FatalLevel: &lumberjackrus.LogFile{
+				Filename:   conf.LocalPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+		},
+	)
+	mLog.Hooks.Add(hook)
+	conf.MasterLogger().Hooks.Add(hook)
+}
+
+func setForceColor(conf *visorconfig.V1) {
+	conf.MasterLogger().SetFormatter(&logging.TextFormatter{
+		FullTimestamp:      true,
+		AlwaysQuoteStrings: true,
+		QuoteEmptyFields:   true,
+		ForceFormatting:    true,
+		DisableColors:      false,
+		ForceColors:        true,
+	})
+
+	mLog.SetFormatter(&logging.TextFormatter{
+		FullTimestamp:      true,
+		AlwaysQuoteStrings: true,
+		QuoteEmptyFields:   true,
+		ForceFormatting:    true,
+		DisableColors:      false,
+		ForceColors:        true,
+	})
 }

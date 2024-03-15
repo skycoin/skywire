@@ -266,7 +266,7 @@
         align-self: center;
       }
 
-      .mat-spinner {
+      .mat-mdc-progress-spinner {
         display: inline-block;
         position: relative;
         top: 4px;
@@ -365,7 +365,7 @@
       text-shadow: 0px 0px 2px white;
     }
 
-    .mat-spinner {
+    .mat-mdc-progress-spinner {
       display: inline-block;
       margin-top: 50px;
       opacity: 0.5;
@@ -513,6 +513,7 @@
         margin-left: 5px;
         position: relative;
         top: 2px;
+        line-height: 1;
       }
     }
 

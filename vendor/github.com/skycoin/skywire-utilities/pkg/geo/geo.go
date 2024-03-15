@@ -1,3 +1,4 @@
+// Package geo pkg/geo/geo.go
 package geo
 
 import (
@@ -9,6 +10,7 @@ import (
 	"net/http"
 
 	"github.com/sirupsen/logrus"
+
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
@@ -36,7 +38,7 @@ type LocationData struct {
 type LocationDetails func(ip net.IP) (*LocationData, error)
 
 // MakeIPDetails returns a GeoFunc.
-func MakeIPDetails(log logrus.FieldLogger, apiKey string) LocationDetails {
+func MakeIPDetails(log logrus.FieldLogger, _ string) LocationDetails {
 	// Just in case.
 	if log == nil {
 		log = logging.MustGetLogger("geo")

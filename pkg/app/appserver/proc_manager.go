@@ -15,9 +15,10 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
-//go:generate mockery -name ProcManager -case underscore -inpkg
+//go:generate mockery --name ProcManager --case underscore --inpackage
 
 const (
 	// ProcStartTimeout represents the duration in which a proc should have started and connected with the app server.
@@ -37,6 +38,8 @@ var (
 type ProcManager interface {
 	io.Closer
 	Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
+	Register(conf appcommon.ProcConfig) (appcommon.ProcKey, error)
+	Deregister(key appcommon.ProcKey) error
 	ProcByName(appName string) (*Proc, bool)
 	SetError(appName, status string) error
 	ErrorByName(appName string) (string, bool)
@@ -46,6 +49,7 @@ type ProcManager interface {
 	Stats(appName string) (AppStats, error)
 	SetDetailedStatus(appName, status string) error
 	DetailedStatus(appName string) (string, error)
+	GetAppPort(appName string) (routing.Port, error)
 	ConnectionsSummary(appName string) ([]ConnectionSummary, error)
 	Addr() net.Addr
 }
@@ -69,10 +73,12 @@ type procManager struct {
 
 	mx   sync.RWMutex
 	done chan struct{}
+
+	logStorePath string
 }
 
 // NewProcManager constructs `ProcManager`.
-func NewProcManager(mLog *logging.MasterLogger, discF *appdisc.Factory, eb *appevent.Broadcaster, addr string) (ProcManager, error) {
+func NewProcManager(mLog *logging.MasterLogger, discF *appdisc.Factory, eb *appevent.Broadcaster, addr, logStorePath string) (ProcManager, error) {
 	if mLog == nil {
 		mLog = logging.NewMasterLogger()
 	}
@@ -89,16 +95,17 @@ func NewProcManager(mLog *logging.MasterLogger, discF *appdisc.Factory, eb *appe
 	}
 
 	procM := &procManager{
-		mLog:       mLog,
-		log:        mLog.PackageLogger("proc_manager"),
-		lis:        lis,
-		conns:      make(map[string]net.Conn),
-		discF:      discF,
-		procs:      make(map[string]*Proc),
-		procsByKey: make(map[appcommon.ProcKey]*Proc),
-		errors:     make(map[string]string),
-		eb:         eb,
-		done:       make(chan struct{}),
+		mLog:         mLog,
+		log:          mLog.PackageLogger("proc_manager"),
+		lis:          lis,
+		conns:        make(map[string]net.Conn),
+		discF:        discF,
+		procs:        make(map[string]*Proc),
+		procsByKey:   make(map[appcommon.ProcKey]*Proc),
+		errors:       make(map[string]string),
+		eb:           eb,
+		done:         make(chan struct{}),
+		logStorePath: logStorePath,
 	}
 
 	procM.connsWG.Add(1)
@@ -203,7 +210,7 @@ func (m *procManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 			Debug("No app discovery associated with app.")
 	}
 
-	proc := NewProc(m.mLog, conf, disc, m, conf.AppName)
+	proc := NewProc(nil, conf, disc, m, conf.AppName, m.logStorePath)
 	m.procs[conf.AppName] = proc
 	m.procsByKey[conf.ProcKey] = proc
 
@@ -215,6 +222,62 @@ func (m *procManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 	}
 	delete(m.errors, conf.AppName)
 	return appcommon.ProcID(proc.cmd.Process.Pid), nil
+}
+
+// Register registers a proc for an external app.
+func (m *procManager) Register(conf appcommon.ProcConfig) (appcommon.ProcKey, error) {
+	m.mx.Lock()
+	defer m.mx.Unlock()
+
+	log := m.mLog.PackageLogger("proc:" + conf.AppName + ":" + conf.ProcKey.String())
+
+	// isDone should be called within the protection of a mutex.
+	// Otherwise we may be able to start an app after calling Close.
+	if isDone(m.done) {
+		return appcommon.ProcKey{}, ErrClosed
+	}
+
+	if _, ok := m.procs[conf.AppName]; ok {
+		return appcommon.ProcKey{}, ErrAppAlreadyStarted
+	}
+
+	// Ensure proc key is unique (just in case - this is probably not necessary).
+	for {
+		if _, ok := m.procsByKey[conf.ProcKey]; ok {
+			conf.EnsureKey()
+			continue
+		}
+		break
+	}
+
+	disc, ok := m.discF.AppUpdater(conf)
+	if !ok {
+		log.WithField("appName", conf.AppName).
+			Debug("No app discovery associated with app.")
+	}
+
+	proc := NewProc(nil, conf, disc, m, conf.AppName, m.logStorePath)
+	m.procs[conf.AppName] = proc
+	m.procsByKey[conf.ProcKey] = proc
+	go func() {
+		if ok := proc.AwaitConn(); !ok {
+			log.WithField("appName", conf.AppName).
+				Warn("AwaitConn.")
+		}
+	}()
+	delete(m.errors, conf.AppName)
+	return proc.conf.ProcKey, nil
+}
+
+// Deregister de registers a proc used by an external app.
+func (m *procManager) Deregister(key appcommon.ProcKey) error {
+	m.mx.Lock()
+	proc := m.procsByKey[key]
+	m.mx.Unlock()
+
+	_, err := m.pop(proc.appName) //nolint:errcheck
+
+	return err
 }
 
 func (m *procManager) ProcByName(appName string) (*Proc, bool) {
@@ -330,6 +393,16 @@ func (m *procManager) SetError(appName, appErr string) error {
 	m.errors[appName] = appErr
 
 	return nil
+}
+
+// GetAppPort gets port of the app `appName`.
+func (m *procManager) GetAppPort(appName string) (routing.Port, error) {
+	p, err := m.get(appName)
+	if err != nil {
+		return routing.Port(0), err
+	}
+
+	return p.GetAppPort(), nil
 }
 
 // ConnectionsSummary gets connections info for the app `appName`.

@@ -1,0 +1,88 @@
+<app-dialog [headline]="'bulk-rewards.title' | translate" [dialog]="dialogRef" [disableDismiss]="disableDismiss">
+  <form [formGroup]="form">
+    <!-- Info. -->
+    <div class="text-container">
+      <span>{{ 'bulk-rewards.info' | translate }} </span>
+      <a href="https://github.com/skycoin/skywire/blob/master/mainnet_rules.md" target="_blank" rel="noreferrer nofollow noopener">
+        {{'bulk-rewards.more-info-link' | translate}}
+      </a>
+    </div>
+
+    <!-- Address field. -->
+    <mat-form-field>
+      <div class="field-container">
+        <label class="field-label" for="remoteKey">{{ 'rewards-address-config.address' | translate }}</label>
+        <input
+          [ngClass]="{'element-disabled' : processingStarted}"
+          formControlName="address"
+          maxlength="40"
+          matInput
+        >
+      </div>
+      <mat-error>
+        <span>{{ 'rewards-address-config.address-error' | translate }}</span>
+      </mat-error>
+    </mat-form-field>
+
+    <div class="text-container">
+      {{ 'bulk-rewards.select-visors' | translate }}
+    </div>
+
+    <div class="list-container" formArrayName="nodes">
+
+      <!-- Nodes list, before starting the procedure. -->
+      <div *ngFor="let node of nodesToEdit; let i = index;" class="list-element" [ngClass]="{'element-margin' : processingStarted}">
+        <ng-container *ngIf="!processingStarted" [formGroupName]="i">
+          <mat-checkbox color="primary" formControlName="selected">
+            <div>
+              <div class="contents">
+                {{ node.label }}
+              </div>
+              <div class="address contents">
+                <span class="address-label">{{ 'bulk-rewards.current-address' | translate }}</span>
+                <span class="blinking" *ngIf="node.currentAddress === null && !node.operationError"> {{ 'bulk-rewards.checking' | translate }}</span>
+                <span class="red-text" *ngIf="node.operationError">
+                  <span> {{ 'bulk-rewards.error-checking' | translate }}</span>
+                  <span> {{ node.operationError | translate }}</span>
+                </span>
+                <span *ngIf="node.currentAddress && !node.operationError"> {{ node.currentAddress }}</span>
+                <span *ngIf="node.currentAddress === '' && !node.operationError"> {{ 'bulk-rewards.not-registered' | translate }}</span>
+              </div>
+            </div>
+          </mat-checkbox>
+        </ng-container>
+
+        <!-- Nodes list, after starting the procedure. -->
+        <ng-container *ngIf="processingStarted">
+          <div class="left-area">-</div>
+          <div class="right-area contents">
+            {{ node.label }}
+            <div class="address">
+              <span class="blinking" *ngIf="node.processing && !node.operationError"> {{ 'bulk-rewards.processing' | translate }}</span>
+              <span class="red-text" *ngIf="node.operationError">
+                <span> {{ 'bulk-rewards.error-processing' | translate }}</span>
+                <span> {{ node.operationError | translate }}</span>
+              </span>
+              <span class="green-text" *ngIf="!node.processing && !node.operationError"> {{ 'bulk-rewards.done' | translate }}</span>
+            </div>
+          </div>
+        </ng-container>
+      </div>
+
+    </div>
+  </form>
+
+  <!-- Buttons. -->
+  <div class="buttons">
+    <app-button
+      #button
+      type="mat-raised-button"
+      color="primary"
+      (action)="!processingStarted ? checkBeforeProcessing() : closeModal()"
+      [disabled]="!formValid()"
+    >
+      <ng-container *ngIf="!processingStarted">{{ 'bulk-rewards.perform-changes' | translate }}</ng-container>
+      <ng-container *ngIf="processingStarted">{{ 'common.close' | translate }}</ng-container>
+    </app-button>
+  </div>
+</app-dialog>

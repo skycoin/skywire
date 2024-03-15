@@ -24,6 +24,7 @@ import { countriesList } from 'src/app/utils/countries-list';
 import { SkysocksClientPasswordComponent } from './skysocks-client-password/skysocks-client-password.component';
 import { ClipboardService } from 'src/app/services/clipboard.service';
 import { StorageService } from 'src/app/services/storage.service';
+import { MatTabGroup } from '@angular/material/tabs';
 
 /**
  * Data of the entries from the history.
@@ -69,10 +70,16 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   // How many elements to show per page on the proxy discovery tab.
   readonly maxElementsPerPage = 10;
 
+  tabLabels: string[] = [];
+  currentTab = 0;
+
   @ViewChild('button') button: ButtonComponent;
   @ViewChild('settingsButton') settingsButton: ButtonComponent;
   @ViewChild('firstInput') firstInput: ElementRef;
+  @ViewChild('tabGroup') tabGroup: MatTabGroup;
+
   form: UntypedFormGroup;
+  settingsForm: UntypedFormGroup;
   // Entries to show on the history.
   history: HistoryEntry[];
 
@@ -104,10 +111,11 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   // True if configuring Vpn-Client, false if configuring Skysocks-Client.
   configuringVpn = false;
 
-  // Indicates if the killswitch option is selected in the UI or not.
-  killswitch = false;
-  // Indicates if the killswitch is active in the backend or not.
+  // Indicates the value of the killswitch option in the backend the last time it was checked or changed.
   initialKillswitchSetting = false;
+
+  // Indicates the value of the dns option in the backend the last time it was checked or changed.
+  initialDnsSetting = '';
 
   // If the operation in currently being made.
   working = false;
@@ -140,6 +148,19 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   ) {
     if (data.name.toLocaleLowerCase().indexOf('vpn') !== -1) {
       this.configuringVpn = true;
+
+      this.tabLabels = [
+        'apps.vpn-socks-client-settings.remote-visor-tab',
+        'apps.vpn-socks-client-settings.discovery-tab',
+        'apps.vpn-socks-client-settings.history-tab',
+        'apps.vpn-socks-client-settings.settings-tab',
+      ];
+    } else {
+      this.tabLabels = [
+        'apps.vpn-socks-client-settings.remote-visor-tab',
+        'apps.vpn-socks-client-settings.discovery-tab',
+        'apps.vpn-socks-client-settings.history-tab',
+      ];
     }
   }
 
@@ -177,11 +198,22 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
           currentVal = this.data.args[i + 1];
         }
         if ((this.data.args[i] as string).toLowerCase().includes('-killswitch')) {
-          this.killswitch = (this.data.args[i] as string).toLowerCase().includes('true');
-          this.initialKillswitchSetting = this.killswitch;
+          this.initialKillswitchSetting = (this.data.args[i] as string).toLowerCase().includes('true');
+        }
+
+        if ((this.data.args[i] as string).toLowerCase().includes('-dns')) {
+          this.initialDnsSetting = (this.data.args[i + 1] as string);
         }
       }
     }
+
+    this.settingsForm = this.formBuilder.group({
+      killswitch: [this.initialKillswitchSetting, Validators.required],
+      dns: [this.initialDnsSetting, Validators.compose([
+        Validators.maxLength(15),
+        this.validateIp.bind(this)
+      ])]
+    });
 
     this.form = this.formBuilder.group({
       pk: [currentVal, Validators.compose([
@@ -226,14 +258,39 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
    * If true, all the ways provided by default by the UI for closing the modal window are disabled.
    */
   get disableDismiss(): boolean {
-    return this.button && this.settingsButton ? (this.button.isLoading || this.settingsButton.isLoading) : false;
+    return (this.button && this.button.isLoading) || (this.settingsButton && this.settingsButton.isLoading);
   }
 
-  // Used by the checkbox for the killswitch setting.
-  setKillswitch(event) {
-    if (!this.working) {
-      this.killswitch = event.checked ? true : false;
+  /**
+   * Called when the app-tab-selector asks for the tab to be changed in mat-tab-group.
+   */
+  tabChangeRequested(requestedTab: number) {
+    this.tabGroup.selectedIndex = requestedTab;
+  }
+
+  /**
+   * Called when the selected tab is changed in mat-tab-group.
+   */
+  tabIdexChanged() {
+    this.currentTab = this.tabGroup.selectedIndex;
+  }
+
+  // Validates an IPv4 address.
+  private validateIp() {
+    if (this.settingsForm) {
+      const value = this.settingsForm.get('dns').value as string;
+      const validOrEmpty = GeneralUtils.checkIfIpValidOrEmpty(value);
+
+      return validOrEmpty ? null : { invalid: true };
     }
+
+    return null;
+  }
+
+  // If the UI must tell the user that the changes made in the settings have not been saved.
+  get settingsChanged(): boolean {
+    return this.initialKillswitchSetting !== this.settingsForm.get('killswitch').value ||
+      this.initialDnsSetting !== this.settingsForm.get('dns').value ;
   }
 
   // Opens the modal window for selecting the filters.
@@ -529,7 +586,10 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const data = { killswitch: this.killswitch };
+    const data = {
+      killswitch: this.settingsForm.get('killswitch').value,
+      dns: this.settingsForm.get('dns').value,
+    };
 
     this.settingsButton.showLoading(false);
     this.button.showLoading(false);
@@ -541,7 +601,8 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
       data,
     ).subscribe(
       () => {
-        this.initialKillswitchSetting = this.killswitch;
+        this.initialKillswitchSetting = data.killswitch;
+        this.initialDnsSetting = data.dns;
 
         this.snackbarService.showDone('apps.vpn-socks-client-settings.changes-made');
 
@@ -585,7 +646,9 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
     }
 
     this.button.showLoading(false);
-    this.settingsButton.showLoading(false);
+    if (this.settingsButton) {
+      this.settingsButton.showLoading(false);
+    }
     this.working = true;
 
     const data = { pk: publicKey };
@@ -646,13 +709,17 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
     // Allow to continue using the component.
     this.working = false;
     this.button.reset(false);
-    this.settingsButton.reset(false);
+    if (this.settingsButton) {
+      this.settingsButton.reset(false);
+    }
   }
 
   private onServerDataChangeError(err: OperationError) {
     this.working = false;
     this.button.showError(false);
-    this.settingsButton.reset(false);
+    if (this.settingsButton) {
+      this.settingsButton.reset(false);
+    }
     err = processServiceError(err);
 
     this.snackbarService.showError(err);

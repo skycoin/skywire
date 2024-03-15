@@ -63,4 +63,27 @@ export default class GeneralUtils {
 
     return true;
   }
+
+  /**
+   * Validates an IPv4 address.
+   */
+   static checkIfIpValidOrEmpty(value: string): boolean {
+    if (!value) {
+      return true;
+    }
+
+    const parts = value.split('.');
+    if (parts.length !== 4) {
+      return false;
+    }
+
+    for (const part of parts) {
+      const number = Number.parseInt(part, 10);
+      if (isNaN(number) || (number + '') !== part || number < 0 || number > 255) {
+        return false;
+      }
+    }
+
+    return true;
+  }
 }

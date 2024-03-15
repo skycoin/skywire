@@ -1,0 +1,90 @@
+<app-dialog [headline]="'node.logs.title' | translate" [includeVerticalMargins]="false" [includeScrollableArea]="false" [dialog]="dialogRef">
+  <!-- Filter button. -->
+  <div *ngIf="!loading && logEntries && logEntries.length > 0" class="top-dialog-button" (click)="showFilters()">
+    <div class="top-dialog-button-content">
+      <div>
+        <span>{{ 'node.logs.selected-filter' | translate }} </span>
+        <span class="actual-value">{{ ('node.logs.' + levelDetails.get(currentMinimumLevel).levelFilterName) | translate }}</span>
+      </div>
+      <div *ngIf="logEntries.length > filteredLogEntries.length" class="small">
+        {{ 'node.logs.filter-ignored' | translate:{number: logEntries.length - filteredLogEntries.length} }}
+      </div>
+    </div>
+    <div class="top-dialog-button-margin"></div>
+  </div>
+
+  <mat-dialog-content #content>
+    <!-- Link for opening all the logs, if there are too much for the modal window. -->
+    <div *ngIf="!loading && hasMoreLogMessages" class="log-entry">
+      <a [href]="getFullLogsUrl()" target="_blank" class="view-raw-link">
+        {{ 'node.logs.view-rest' | translate:{number: totalLogs} }}
+      </a>
+    </div>
+
+    <!-- All entries. -->
+    <ng-container *ngIf="!loading">
+      <div *ngFor="let entry of filteredLogEntries" class="log-entry">
+        <!-- Basic fields. -->
+        <span class="transparent">
+          {{ entry.time }}
+        </span>
+        <span [class]="levelDetails.get(entry.level).colorClass">
+          {{ levelDetails.get(entry.level).name }}
+        </span>
+        [
+        <span class="transparent">
+          {{ entry.func }}
+        </span>
+        <span class="module-color">
+          {{ entry._module }}
+        </span>
+        ]<ng-container *ngIf="entry.msg">:</ng-container>
+        <span *ngIf="entry.msg">
+          {{ entry.msg }}
+        </span>
+
+        <!-- Extra fields. -->
+        <ng-container *ngFor="let extra of entry.extra">
+          <span class="extra-data-color">
+            {{ extra.name }}
+          </span>
+          <span>
+            ="{{ extra.value }}"
+          </span>
+        </ng-container>
+      </div>
+    </ng-container>
+
+    <!-- Link for opening all the logs. -->
+    <div *ngIf="!loading && logEntries && logEntries.length > 0" class="log-entry">
+      <a [href]="getFullLogsUrl()" target="_blank" class="view-raw-link">
+        <ng-container *ngIf="!hasMoreLogMessages">
+          {{ 'node.logs.view-all' | translate }}
+        </ng-container>
+        <ng-container *ngIf="hasMoreLogMessages">
+          {{ 'node.logs.view-rest' | translate:{number: totalLogs} }}
+        </ng-container>
+      </a>
+    </div>
+
+    <!-- Msg if there are no logs. -->
+    <div class="log-empty-msg" *ngIf="!loading && (!logEntries || logEntries.length === 0)">
+      {{ 'node.logs.no-logs' | translate }}
+    </div>
+    <!-- Msg if there are no logs with the current filter. -->
+    <div class="log-empty-msg" *ngIf="!loading && logEntries && logEntries.length > 0 && filteredLogEntries.length < 1">
+      {{ 'node.logs.no-logs-for-filter' | translate }}
+    </div>
+    <!-- Loading animation. -->
+    <app-loading-indicator [showWhite]="false" *ngIf="loading"></app-loading-indicator>
+
+    <!-- Update button. -->
+    <div class="update-button subtle-transparent-button" (click)="loadData(0)">
+      <div *ngIf="!loading" class="update-time">
+        <mat-icon *ngIf="!showAlert" class="icon" [inline]="true">refresh</mat-icon>
+        <span>{{ ('refresh-button.' + elapsedTime.translationVarName) | translate:{time: elapsedTime.elapsedTime} }}</span>
+      </div>
+    </div>
+  </mat-dialog-content>
+</app-dialog>
+

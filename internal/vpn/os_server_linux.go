@@ -51,14 +51,14 @@ func SetIPTablesForwardAcceptPolicy() error {
 
 // AllowIPToLocalNetwork allows all the packets coming from `source`
 // to private IP ranges.
-func AllowIPToLocalNetwork(src, dst net.IP) error {
+func AllowIPToLocalNetwork(src, dst net.IP) error { //nolint:all
 	cmd := fmt.Sprintf(allowIPToLocalNetCMDFmt, src, src)
 	return osutil.Run("sh", "-c", cmd)
 }
 
 // BlockIPToLocalNetwork blocks all the packets coming from `source`
 // to private IP ranges.
-func BlockIPToLocalNetwork(src, dst net.IP) error {
+func BlockIPToLocalNetwork(src, dst net.IP) error { //nolint:all
 	cmd := fmt.Sprintf(blockIPToLocalNetCMDFmt, src, src)
 	return osutil.Run("sh", "-c", cmd)
 }

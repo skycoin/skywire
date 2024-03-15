@@ -84,7 +84,7 @@ func NewManager(log *logging.Logger, arClient addrresolver.APIClient, ebc *appev
 // InitDmsgClient initilizes the dmsg client and also adds dmsgC to the factory
 func (tm *Manager) InitDmsgClient(ctx context.Context, dmsgC *dmsg.Client) {
 	tm.factory.DmsgC = dmsgC
-	tm.InitClient(ctx, network.DMSG)
+	tm.InitClient(ctx, network.DMSG, 0)
 }
 
 // Serve starts all network clients and starts accepting connections
@@ -146,9 +146,8 @@ func (tm *Manager) SetPTpsCache(pTps []PersistentTransports) {
 }
 
 // InitClient initilizes a network client
-func (tm *Manager) InitClient(ctx context.Context, netType network.Type) {
-
-	client, err := tm.factory.MakeClient(netType)
+func (tm *Manager) InitClient(ctx context.Context, netType network.Type, port int) {
+	client, err := tm.factory.MakeClient(netType, port)
 	if err != nil {
 		tm.Logger.Warnf("Cannot initialize %s transport client", netType)
 	}
@@ -480,6 +479,22 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 		// Close underlying transport.
 		tp.close()
 		delete(tm.tps, id)
+	}
+}
+
+// DeleteAllTransports deregisters all Transports in transport discovery and deletes them locally.
+func (tm *Manager) DeleteAllTransports() {
+	tm.mx.Lock()
+	defer tm.mx.Unlock()
+
+	if tm.isClosing() {
+		return
+	}
+
+	// Deregister transports before closing the underlying transport.
+	for _, tp := range tm.tps {
+		tp.close()
+		delete(tm.tps, tp.Entry.ID)
 	}
 }
 

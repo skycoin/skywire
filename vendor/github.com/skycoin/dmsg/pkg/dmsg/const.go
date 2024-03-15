@@ -1,3 +1,4 @@
+// Package dmsg pkg/dmsg/const.go
 package dmsg
 
 import "time"
@@ -13,4 +14,8 @@ const (
 	DefaultMaxSessions = 100
 
 	DefaultDmsgHTTPPort = uint16(80)
+
+	DefaultOfficialDmsgServerType = "official"
+
+	DefaultCommunityDmsgServerType = "community"
 )

@@ -12,6 +12,7 @@
 .vscode/
 
 /skywire.json
+/build/
 /apps/
 /skywire/
 /local/*
@@ -33,6 +34,7 @@ pkg/visor/foo/
 /*-server
 /*.json
 !/dmsghttp-config.json
+!/services-config.json
 /*.sh
 /*.log
 
@@ -61,3 +63,7 @@ skywire.msi
 /scripts/win_installer/build/
 goreleaser*
 gh*
+/musl-data
+releaseChangelog.md
+goreleaser.zip
+/goreleaser

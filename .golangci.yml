@@ -153,21 +153,17 @@ linters:
   enable:
     - revive
     - goimports
-    - unused
     - unparam
     - errcheck
     - gosimple
     - staticcheck
-    - unused
     - ineffassign
     - typecheck
     - gosec
     - megacheck
     - misspell
     - nakedret
-    - depguard
   enable-all: false
-  disable:
   disable-all: true
   presets:
   fast: false

@@ -1,17 +1,34 @@
 <app-dialog [headline]="'apps.log.title' | translate" [includeVerticalMargins]="false" [includeScrollableArea]="false" [dialog]="dialogRef">
-  <div class="filter-link-container">
-    <div class="filter-link subtle-transparent-button" (click)="filter()">
-      <span class="transparent">{{ 'apps.log.filter-button' | translate }}</span>&nbsp;
-      <span>{{ currentFilter.text | translate }}</span>
+  <!-- Filter button. -->
+  <div class="top-dialog-button" (click)="filter()">
+    <div class="top-dialog-button-content">
+      <div>
+        <span>{{ 'apps.log.filter-button' | translate }} </span>
+        <span class="actual-value">{{ currentFilter.text | translate }}</span>
+      </div>
     </div>
+    <div class="top-dialog-button-margin"></div>
   </div>
+
   <mat-dialog-content #content>
+    <!-- Button for opening all the logs. -->
+    <a [href]="getLogsUrl()" target="_blank">
+      <app-button *ngIf="hasMoreLogMessages" class="full-logs-button" color="primary">
+        <div class="text-container">
+          {{ 'apps.log.view-all' | translate:{ totalLogs: totalLogs } }}
+        </div>
+      </app-button>
+    </a>
+
+    <!-- All entries. -->
     <div *ngFor="let message of logMessages" class="app-log-message">
       <span class="transparent">
         {{ message.time }}
       </span>
       {{ message.msg }}
     </div>
+
+    <!-- Msg if empty. -->
     <div class="app-log-empty mt-3" *ngIf="!loading && (!logMessages || logMessages.length === 0)">
       {{ 'apps.log.empty' | translate }}
     </div>

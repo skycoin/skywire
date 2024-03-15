@@ -1,3 +1,4 @@
+// Package logging pkg/logging/formatter.go
 package logging
 
 import (

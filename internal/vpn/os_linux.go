@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/util/osutil"
 )
@@ -47,6 +48,17 @@ func (c *Client) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 		return fmt.Errorf("error setting interface up: %w", err)
 	}
 	c.releaseSysPrivileges()
+	if c.cfg.DNSAddr != "" {
+		if err := c.SetupDNS(); err != nil {
+			fmt.Printf("error setting dns for interface: %s", err)
+		}
+	}
+
+	// TODO (mrpalide): due to nmcli functionality, we should wait for reload network manager after use it for set DNS, then add routes
+	// if we skip this stop here for a little (5) seconds, we lost all routes that will add by ip command
+	// also we should fix it later, when nmcli guys add --preserved-external-ip flag due to this command:
+	// https://gitlab.freedesktop.org/NetworkManager/NetworkManager/-/issues/1167#note_1690288
+	time.Sleep(5 * time.Second)
 
 	if err := c.AddRoute(ip, gateway); err != nil {
 		return fmt.Errorf("error setting gateway for interface: %w", err)
@@ -99,6 +111,34 @@ func (c *Client) DeleteRoute(ip, gateway string) error {
 	}
 	defer c.releaseSysPrivileges()
 	return osutil.Run("ip", "r", "del", ip, "via", gateway)
+}
+
+// SetupDNS set dns address for TUN device on tun0
+func (c *Client) SetupDNS() error {
+	fmt.Printf("Set DNS on TUN %s\n", c.tun.Name())
+	if err := c.setSysPrivileges(); err != nil {
+		print(fmt.Sprintf("Failed to setup system privileges for AddDNS: %v\n", err))
+		return err
+	}
+	err := osutil.Run("nmcli", "dev", "mod", c.tun.Name(), "+ipv4.dns", c.cfg.DNSAddr)
+	c.releaseSysPrivileges()
+
+	return err
+}
+
+// RevertDNS trying to revert DNS values same as before starting vpn-client if it changed
+func (c *Client) RevertDNS() {
+	if c.cfg.DNSAddr != "" {
+		if err := c.setSysPrivileges(); err != nil {
+			print(fmt.Sprintf("Failed to setup system privileges for RevertDNS: %v\n", err))
+			return
+		}
+		err := osutil.Run("nmcli", "dev", "mod", c.tun.Name(), "-ipv4.dns", "0")
+		if err != nil {
+			print(fmt.Sprintf("Failed to revert DNS: %v\n", err))
+		}
+		c.releaseSysPrivileges()
+	}
 }
 
 // Server

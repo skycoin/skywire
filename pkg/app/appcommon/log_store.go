@@ -38,7 +38,7 @@ func NewProcLogger(conf ProcConfig, mLog *logging.MasterLogger) (log *logging.Ma
 // TimestampFromLog is an utility function for retrieving the timestamp from a log. This function should be modified
 // if the time layout is changed
 func TimestampFromLog(log string) string {
-	return log[1 : 1+len(timeLayout)]
+	return strings.Split(log[1:1+len(timeLayout)], "]")[0]
 }
 
 // LogStore stores logs from apps, for later consumption from the hypervisor
@@ -215,8 +215,7 @@ func (l *bBoltLogStore) Fire(entry *log.Entry) error {
 	}()
 
 	// time in RFC3339Nano is between the bytes 1 and 36. This will change if other time layout is in use
-	t := p[1 : 1+len(timeLayout)]
-
+	t := strings.Split(str[1:1+len(timeLayout)], "]")[0]
 	err = db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket(l.bucket)
 		return b.Put([]byte(t), []byte(str))

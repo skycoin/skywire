@@ -1,6 +1,6 @@
 @import "variables";
 
-.mat-dialog-content {
+.mat-mdc-dialog-content {
   font-size: $font-size-sm;
 }
 
@@ -21,22 +21,27 @@
   margin-bottom: $mat-dialog-padding;
 }
 
-.filter-link-container {
-  text-align: center;
-  margin: 15px 0;
+.top-dialog-button {
+  color: $light-gray !important;
 
-  .filter-link {
-    display: inline-block;
-    background: $white;
-    padding: 5px 10px;
-    border-radius: 1000px;
-    font-size: $font-size-sm;
+  .top-dialog-button-content {
     text-align: center;
-    color: $blue-medium;
-    cursor: pointer;
 
-    .transparent {
-      color: scale-color($blue-medium, $alpha: -50%);
+    .actual-value {
+      color: $black;
     }
+  }
+}
+
+.full-logs-button {
+  ::ng-deep button {
+    width: 100% !important;
+    display: block;
+    text-align: center;
+    margin-bottom: 15px;
+  }
+
+  .text-container {
+    width: 100%;
   }
 }

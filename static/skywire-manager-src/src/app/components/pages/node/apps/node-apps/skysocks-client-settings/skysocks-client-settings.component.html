@@ -2,39 +2,46 @@
   [headline]="('apps.vpn-socks-client-settings.' + ( configuringVpn ? 'vpn-title' : 'socks-title')) | translate"
   [dialog]="dialogRef"
   [disableDismiss]="disableDismiss"
+  [includeVerticalMargins]="false"
+  [includeScrollableArea]="false"
 >
-  <mat-tab-group>
+  <app-tab-selector [tabNames]="tabLabels" [selectedTab]="currentTab" (tabChanged)="tabChangeRequested($event)"></app-tab-selector>
+  <mat-dialog-content #content><mat-tab-group #tabGroup (selectedIndexChange)="tabIdexChanged()">
     <!-- Form. -->
-    <mat-tab [label]="'apps.vpn-socks-client-settings.remote-visor-tab' | translate">
+    <mat-tab [label]="tabLabels[0] | translate">
       <form [formGroup]="form">
         <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
-          <input
-            id="pk"
-            formControlName="pk"
-            maxlength="66"
-            [placeholder]="'apps.vpn-socks-client-settings.public-key' | translate"
-            #firstInput
-            matInput
-          >
+          <div class="field-container">
+            <label class="field-label" for="remoteKey">{{ 'apps.vpn-socks-client-settings.public-key' | translate }}</label>
+            <input
+              id="pk"
+              formControlName="pk"
+              maxlength="66"
+              #firstInput
+              matInput
+            >
+          </div>
           <mat-error>
             <ng-container *ngIf="!this.form.get('pk').hasError('pattern');else hexError">
-              {{ 'apps.vpn-socks-client-settings.remote-key-length-error' | translate }}
+              <span>{{ 'apps.vpn-socks-client-settings.remote-key-length-error' | translate }}</span>
             </ng-container>
           </mat-error>
           <ng-template #hexError>
-            {{ 'apps.vpn-socks-client-settings.remote-key-chars-error' | translate }}
+            <span>{{ 'apps.vpn-socks-client-settings.remote-key-chars-error' | translate }}</span>
           </ng-template>
         </mat-form-field>
 
         <mat-form-field *ngIf="configuringVpn" [ngClass]="{'element-disabled' : disableDismiss}">
-          <input
-            id="password"
-            type="password"
-            formControlName="password"
-            maxlength="100"
-            [placeholder]="'apps.vpn-socks-client-settings.password' | translate"
-            matInput
-          >
+          <div class="field-container">
+            <label class="field-label" for="remoteKey">{{ 'apps.vpn-socks-client-settings.password' | translate }}</label>
+            <input
+              id="password"
+              type="password"
+              formControlName="password"
+              maxlength="100"
+              matInput
+            >
+          </div>
         </mat-form-field>
 
         <div class="password-history-warning" *ngIf="form && form.get('password').value">
@@ -54,7 +61,7 @@
       </form>
     </mat-tab>
     <!-- Discovery. -->
-    <mat-tab [label]="'apps.vpn-socks-client-settings.discovery-tab' | translate">
+    <mat-tab [label]="tabLabels[1] | translate">
       <app-loading-indicator class="loading-indicator" [showWhite]="false" *ngIf="loadingFromDiscovery"></app-loading-indicator>
 
       <!-- No proxies in the discovery service msg. -->
@@ -100,6 +107,7 @@
           <button
             mat-button
             class="list-button grey-button-background w-100"
+            [ngClass]="{'element-disabled' : disableDismiss}"
             (click)="saveChanges(proxy.pk, null, false, proxy.location)"
           >
             <div class="button-content">
@@ -131,7 +139,7 @@
             (click)="copyPk(proxy.pk)"
             [matTooltip]="'apps.vpn-socks-client-settings.copy-pk-info' | translate"
           >
-            <mat-icon [inline]="true">filter_none</mat-icon>
+            <mat-icon class="option-button-icon" [inline]="true">filter_none</mat-icon>
           </button>
         </div>
       </ng-container>
@@ -149,7 +157,7 @@
       </div>
     </mat-tab>
     <!-- History. -->
-    <mat-tab [label]="'apps.vpn-socks-client-settings.history-tab' | translate">
+    <mat-tab [label]="tabLabels[2] | translate">
       <!-- Msg shown if there is no history. -->
       <div *ngIf="history.length === 0">
         <div class="info-text">
@@ -163,6 +171,7 @@
         <button
           mat-button
           class="list-button grey-button-background w-100 d-none d-md-inline"
+          [ngClass]="{'element-disabled' : disableDismiss}"
           (click)="useFromHistory(entry)"
         >
           <ng-container *ngTemplateOutlet="content"></ng-container>
@@ -173,7 +182,7 @@
           (click)="changeNote(entry)"
           [matTooltip]="'apps.vpn-socks-client-settings.change-note' | translate"
         >
-          <mat-icon [inline]="true">edit</mat-icon>
+          <mat-icon class="option-button-icon" [inline]="true">edit</mat-icon>
         </button>
         <button
           mat-button
@@ -181,13 +190,14 @@
           (click)="removeFromHistory(entry.key)"
           [matTooltip]="'apps.vpn-socks-client-settings.remove-entry' | translate"
         >
-          <mat-icon [inline]="true">close</mat-icon>
+          <mat-icon class="option-button-icon" [inline]="true">close</mat-icon>
         </button>
 
         <!-- Button for small screens. -->
         <button
           mat-button
           class="list-button grey-button-background w-100 d-md-none"
+          [ngClass]="{'element-disabled' : disableDismiss}"
           (click)="openHistoryOptions(entry)"
         >
           <ng-container *ngTemplateOutlet="content"></ng-container>
@@ -231,35 +241,50 @@
       </div>
     </mat-tab>
     <!-- Settings. -->
-    <mat-tab [label]="'apps.vpn-socks-client-settings.settings-tab' | translate">
-      <!-- Killswitch option. -->
-      <div class="main-theme settings-option">
-        <mat-checkbox
+    <mat-tab [label]="tabLabels[3] | translate" *ngIf="configuringVpn">
+      <form [formGroup]="settingsForm">
+        <!-- DNS option. -->
+        <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
+          <div class="field-container">
+            <label class="field-label" for="remoteKey">{{ 'apps.vpn-socks-client-settings.dns' | translate }}</label>
+            <input
+              formControlName="dns"
+              maxlength="15"
+              matInput
+            >
+          </div>
+          <mat-error>
+            <ng-container *ngIf="!settingsForm.get('dns').valid">
+              <span>{{ 'apps.vpn-socks-client-settings.dns-error' | translate }}</span>
+            </ng-container>
+          </mat-error>
+        </mat-form-field>
+
+        <!-- Killswitch option. -->
+        <div class="main-theme settings-option">
+          <mat-checkbox color="primary" formControlName="killswitch" [ngClass]="{'element-disabled' : disableDismiss}">
+            {{ 'apps.vpn-socks-client-settings.killswitch-check' | translate }}
+            <mat-icon [inline]="true" class="help-icon" [matTooltip]="'apps.vpn-socks-client-settings.killswitch-info' | translate">help</mat-icon>
+          </mat-checkbox>
+        </div>
+
+        <!-- Settings changed alert. -->
+        <div class="settings-changed-warning" *ngIf="settingsChanged">
+          <mat-icon [inline]="true">warning</mat-icon>
+          {{ 'apps.vpn-socks-client-settings.settings-changed-alert' | translate }}
+        </div>
+
+        <!-- Save button. -->
+        <app-button
+          #settingsButton
           color="primary"
-          [checked]="killswitch"
-          (change)="setKillswitch($event)"
+          class="float-right"
+          [disabled]="!settingsForm.valid || !settingsChanged || working"
+          (action)="saveSettings()"
         >
-          {{ 'apps.vpn-socks-client-settings.killswitch-check' | translate }}
-          <mat-icon [inline]="true" class="help-icon" [matTooltip]="'apps.vpn-socks-client-settings.killswitch-info' | translate">help</mat-icon>
-        </mat-checkbox>
-      </div>
-
-      <!-- Settings changed alert. -->
-      <div class="settings-changed-warning" *ngIf="killswitch !== initialKillswitchSetting">
-        <mat-icon [inline]="true">warning</mat-icon>
-        {{ 'apps.vpn-socks-client-settings.settings-changed-alert' | translate }}
-      </div>
-
-      <!-- Save button. -->
-      <app-button
-        #settingsButton
-        color="primary"
-        class="float-right"
-        [disabled]="killswitch === initialKillswitchSetting || working"
-        (action)="saveSettings()"
-      >
-        {{ 'apps.vpn-socks-client-settings.save-settings' | translate }}
-      </app-button>
+          {{ 'apps.vpn-socks-client-settings.save-settings' | translate }}
+        </app-button>
+      </form>
     </mat-tab>
-  </mat-tab-group>
+  </mat-tab-group></mat-dialog-content>
 </app-dialog>

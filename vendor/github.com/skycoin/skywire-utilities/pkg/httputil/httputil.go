@@ -1,3 +1,4 @@
+// Package httputil pkg/httputil/httputil.go
 package httputil
 
 import (
@@ -10,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/sirupsen/logrus"
+
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 

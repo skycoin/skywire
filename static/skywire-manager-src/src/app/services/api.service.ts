@@ -1,7 +1,7 @@
 import { Injectable, NgZone } from '@angular/core';
 import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { Observable, throwError } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { catchError, first, map, mergeMap } from 'rxjs/operators';
 import { webSocket } from 'rxjs/webSocket';
 import { Router } from '@angular/router';
 
@@ -22,6 +22,7 @@ export class RequestOptions {
   requestType = RequestTypes.Json;
   ignoreAuth = false;
   vpnKeyForAuth: string;
+  csrfToken: string;
 
   public constructor(init?: Partial<RequestOptions>) {
     Object.assign(this, init);
@@ -40,7 +41,7 @@ export class ApiService {
    * with the dev server using the http protocol, because the dev server proxy uses it to
    * route the request to the appropiate url.
    */
-  private readonly apiPrefix = !environment.production && location.protocol.indexOf('http:') !== -1 ?
+  public readonly apiPrefix = !environment.production && location.protocol.indexOf('http:') !== -1 ?
     'http-api/' : 'api/';
 
   /**
@@ -69,7 +70,12 @@ export class ApiService {
    * @param url Endpoint URL, after the "/api/" part.
    */
   post(url: string, body: any = {}, options: RequestOptions = null): Observable<any> {
-    return this.request('POST', url, body, options);
+    return this.getCsrf().pipe(first(), mergeMap(csrf => {
+      options = options ? options : new RequestOptions();
+      options.csrfToken = csrf;
+
+      return this.request('POST', url, body, options);
+    }));
   }
 
   /**
@@ -77,7 +83,12 @@ export class ApiService {
    * @param url Endpoint URL, after the "/api/" part.
    */
   put(url: string, body: any = {}, options: RequestOptions = null): Observable<any> {
-    return this.request('PUT', url, body, options);
+    return this.getCsrf().pipe(first(), mergeMap(csrf => {
+      options = options ? options : new RequestOptions();
+      options.csrfToken = csrf;
+
+      return this.request('PUT', url, body, options);
+    }));
   }
 
   /**
@@ -85,7 +96,19 @@ export class ApiService {
    * @param url Endpoint URL, after the "/api/" part.
    */
   delete(url: string, options: RequestOptions = null): Observable<any> {
-    return this.request('DELETE', url, {}, options);
+    return this.getCsrf().pipe(first(), mergeMap(csrf => {
+      options = options ? options : new RequestOptions();
+      options.csrfToken = csrf;
+
+      return this.request('DELETE', url, {}, options);
+    }));
+  }
+
+  /**
+   * Gets a csrf token from the node, to be able to make protected requests.
+   */
+  private getCsrf(): Observable<string> {
+    return this.get('csrf').pipe(map(response => response.csrf_token));
   }
 
   /**
@@ -136,6 +159,10 @@ export class ApiService {
 
     if (options.requestType === RequestTypes.Json) {
       requestOptions.headers = requestOptions.headers.append('Content-Type', 'application/json');
+    }
+
+    if (options.csrfToken) {
+      requestOptions.headers = requestOptions.headers.append('X-CSRF-Token', options.csrfToken);
     }
 
     return requestOptions;

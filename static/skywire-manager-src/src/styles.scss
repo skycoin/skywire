@@ -58,12 +58,78 @@ button:focus {
   outline: 0;
 }
 
-.tooltip-word-break {
-  word-break: break-word;
+.mat-mdc-button {
+  min-width: 40px !important;
+  padding: 0 16px !important;
+
+  .mat-icon {
+    height: auto !important;
+    width: auto !important;
+  }
 }
 
-.mat-button {
-  min-width: 40px !important;
+.mdc-snackbar__surface {
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.mat-mdc-form-field-infix {
+  display: flex;
+}
+
+.mdc-text-field--filled {
+  background-color: transparent !important;
+  padding: 0 !important;
+
+  .mat-mdc-form-field-focus-overlay {
+    opacity: 0 !important;
+  }
+
+  .mat-mdc-form-field-infix {
+    padding: 0 !important;
+    min-height: 45px !important;
+
+    .field-container {
+      width: 100%;
+      
+      .field-label {
+        margin: 0px;
+        font-size: $font-size-mini;
+        margin-bottom: 5px;
+        opacity: 0.55;
+      }
+    }
+
+    .mat-mdc-form-field-input-control {
+      font-family: $skywire-font-family !important;
+      font-size: $font-size-sm !important;
+    }
+  }
+}
+
+.mat-mdc-form-field-bottom-align {
+  margin-bottom: 15px;
+}
+
+.mat-mdc-form-field-bottom-align::before {
+  display: none !important;
+}
+
+.mat-mdc-form-field-error-wrapper {
+  padding: 0px !important;
+  position: inherit !important;
+  line-height: 1.2;
+  margin-top: 3px;
+}
+
+.mat-mdc-select {
+  display: flex !important;
+  font-family: $skywire-font-family !important;
+  font-size: $font-size-sm !important;
+
+  .mat-mdc-select-value {
+    line-height: 1.5;
+  }
 }
 
 .grey-button-background:hover {
@@ -75,7 +141,7 @@ button:focus {
   flex: 1;
 }
 
-.mat-snack-bar-container {
+.mat-mdc-snack-bar-container {
   max-width: 90vw !important;
 }
 
@@ -119,12 +185,30 @@ button:focus {
   background: transparent !important;
 }
 
-.mat-tooltip {
+.mdc-tooltip__surface {
   font-size: 11px !important;
   line-height: 1.8;
   padding: 7px 14px !important;
 }
 
-.mat-tooltip-panel {
+.mat-mdc-tooltip-panel {
   pointer-events: none !important;
+}
+
+.tooltip-word-break {
+  word-break: break-word;
+}
+
+.mat-mdc-button-touch-target {
+  height: 100% !important;
+}
+
+.mat-mdc-button:not(:disabled) {
+  color: $black;
+}
+
+.mat-accent {
+  .mdc-button__label {
+    color: white !important;
+  }
 }

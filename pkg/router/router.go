@@ -19,13 +19,12 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/setup/setupclient"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
-//go:generate mockery -name Router -case underscore -inpkg
+//go:generate mockery --name Router --case underscore --inpackage
 
 const (
 	// DefaultRouteKeepAlive is the default expiration interval for routes
@@ -67,7 +66,7 @@ type Config struct {
 	SecKey           cipher.SecKey
 	TransportManager *transport.Manager
 	RouteFinder      rfclient.Client
-	RouteGroupDialer setupclient.RouteGroupDialer
+	RouteGroupDialer RouteGroupDialer
 	SetupNodes       []cipher.PubKey
 	RulesGCInterval  time.Duration
 	MinHops          uint16
@@ -81,7 +80,7 @@ func (c *Config) SetDefaults() {
 	}
 
 	if c.RouteGroupDialer == nil {
-		c.RouteGroupDialer = setupclient.NewSetupNodeDialer()
+		c.RouteGroupDialer = NewSetupNodeDialer()
 	}
 
 	if c.RulesGCInterval <= 0 {
@@ -126,6 +125,7 @@ type Router interface {
 	// - Save to routing.Table and internal RouteGroup map.
 	// - Return RouteGroup if successful.
 	DialRoutes(ctx context.Context, rPK cipher.PubKey, lPort, rPort routing.Port, opts *DialOptions) (net.Conn, error)
+	PingRoute(ctx context.Context, rPK cipher.PubKey, lPort, rPort routing.Port, opts *DialOptions) (net.Conn, error)
 
 	// AcceptRoutes should block until we receive an AddRules packet from SetupNode
 	// that contains ConsumeRule(s) or ForwardRule(s).
@@ -304,6 +304,77 @@ func (r *router) DialRoutes(
 	return nrg, nil
 }
 
+// PingRoute dials to a given visor of 'rPK'.
+// 'lPort'/'rPort' specifies the local/remote ports respectively.
+// A nil 'opts' input results in a value of '1' for all DialOptions fields.
+// A single call to DialRoutes should perform the following:
+// - Find routes via RouteFinder (in one call).
+// - Setup routes via SetupNode (in one call).
+// - Save to routing.Table and internal RouteGroup map.
+// - Return RouteGroup if successful.
+func (r *router) PingRoute(
+	ctx context.Context,
+	rPK cipher.PubKey,
+	lPort, rPort routing.Port,
+	opts *DialOptions,
+) (net.Conn, error) {
+
+	if rPK.Null() {
+		err := ErrRemoteEmptyPK
+		r.logger.WithError(err).Error("Failed to dial routes.")
+		return nil, fmt.Errorf("failed to dial routes: %w", err)
+	}
+
+	lPK := r.conf.PubKey
+	forwardDesc := routing.NewRouteDescriptor(lPK, lPK, lPort, rPort)
+
+	// check if transports are available
+	ok := r.checkIfTransportAvailable()
+	if !ok {
+		return nil, ErrNoTransportFound
+	}
+	forwardPath, reversePath, err := r.fetchPingRoute(lPK, rPK, opts)
+	if err != nil {
+		return nil, fmt.Errorf("route finder: %w", err)
+	}
+
+	req := routing.BidirectionalRoute{
+		Desc:      forwardDesc,
+		KeepAlive: DefaultRouteKeepAlive,
+		Forward:   forwardPath,
+		Reverse:   reversePath,
+	}
+
+	rules, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.dmsgC, r.conf.SetupNodes, req)
+	if err != nil {
+		r.logger.WithError(err).Error("Error dialing route group")
+		return nil, err
+	}
+
+	if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
+		r.logger.WithError(err).Error("Error saving routing rules")
+		return nil, err
+	}
+
+	nsConf := noise.Config{
+		LocalPK:   r.conf.PubKey,
+		LocalSK:   r.conf.SecKey,
+		RemotePK:  r.conf.PubKey,
+		Initiator: true,
+	}
+
+	nrg, err := r.saveRouteGroupRules(rules, nsConf)
+	if err != nil {
+		return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
+	}
+
+	nrg.rg.startOffServiceLoops()
+
+	r.logger.Debugf("Created new routes to %s on port %d", lPK, lPort)
+
+	return nrg, nil
+}
+
 // AcceptRoutes should block until we receive an AddRules packet from SetupNode
 // that contains ConsumeRule(s) or ForwardRule(s).
 // Then the following should happen:
@@ -433,7 +504,6 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 	// we need to close currently existing wrapped rg if there's one
 	nrg, ok := r.rgsNs[rules.Desc]
 
-	r.logger.Debugf("Creating new route group rule with desc: %s", &rules.Desc)
 	rg := NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc, r.mLogger)
 	rg.appendRules(rules.Forward, rules.Reverse, r.tm.Transport(rules.Forward.NextTransportID()))
 	// we put raw rg so it can be accessible to the router when handshake packets come in
@@ -999,6 +1069,70 @@ fetchRoutesAgain:
 			time.Sleep(retryInterval)
 			goto fetchRoutesAgain
 		}
+	}
+
+	r.logger.Debugf("Found routes Forward: %s. Reverse %s", paths[forward], paths[backward])
+
+	return paths[forward][0], paths[backward][0], nil
+}
+
+func (r *router) fetchPingRoute(src, pingKey cipher.PubKey, opts *DialOptions) (fwd, rev []routing.Hop, err error) {
+	// TODO: use opts
+	if opts == nil {
+		opts = DefaultDialOptions() // nolint
+	}
+
+	r.logger.Debugf("Requesting new routes from %s to %s", src, src)
+
+	timer := time.NewTimer(retryDuration)
+	defer timer.Stop()
+
+	forward := [2]cipher.PubKey{src, src}
+	backward := [2]cipher.PubKey{src, src}
+
+fetchRoutesAgain:
+	ctx := context.Background()
+
+	paths, err := r.conf.RouteFinder.FindRoutes(ctx, []routing.PathEdges{forward, backward},
+		&rfclient.RouteOptions{MinHops: 0, MaxHops: 2})
+	if err == rfclient.ErrTransportNotFound {
+		return nil, nil, err
+	}
+
+	if err != nil {
+		select {
+		case <-timer.C:
+			return nil, nil, err
+		default:
+			time.Sleep(retryInterval)
+			goto fetchRoutesAgain
+		}
+	}
+
+	var hopTo, hopFrom bool
+	// check if the remote pk is present in both the hops
+	// [
+	// 	{
+	// 		"TpID":"<tp-id>",
+	// 		"From":"<local-pk>",
+	// 		"To":"<remote-pk>"
+	// 	},
+	// 	{
+	// 		"TpID":"<tp-id>",
+	// 		"From":"<remote-pk>",
+	// 		"To":"<local-pk>"
+	// 	}
+	// ]
+	for _, hop := range paths[forward][0] {
+		if hop.To == pingKey {
+			hopTo = true
+		}
+		if hop.From == pingKey {
+			hopFrom = true
+		}
+	}
+	if !hopTo && hopFrom {
+		return nil, nil, fmt.Errorf("Unable to fetch route with a hop from %v", pingKey)
 	}
 
 	r.logger.Debugf("Found routes Forward: %s. Reverse %s", paths[forward], paths[backward])

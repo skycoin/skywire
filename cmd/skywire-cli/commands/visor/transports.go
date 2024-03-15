@@ -53,7 +53,9 @@ var tpCmd = &cobra.Command{
 	Each Transport is represented as a unique 16 byte (128 bit)
 	UUID value called the Transport ID
 	and has a Transport Type that identifies
-	a specific implementation of the Transport.`,
+	a specific implementation of the Transport.
+
+	Types: stcp stcpr sudph dmsg`,
 }
 
 var lsTypesCmd = &cobra.Command{
@@ -201,25 +203,20 @@ var rmTpCmd = &cobra.Command{
 	Long:                  "\n    Remove transport(s) by id",
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
-		//TODO
-		//if removeAll {
-		//	var pks cipher.PubKeys
-		//	internal.Catch(cmd.Flags(), pks.Set(strings.Join(filterPubKeys, ",")))
-		//	tID, err := clirpc.Client(cmd.Flags()).Transports(filterTypes, pks, showLogs)
-		//	internal.Catch(cmd.Flags(), err)
-		//	internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).RemoveTransport(tID))
-		//} else {
-		if args[0] != "" {
-			tpID = args[0]
-		}
-		tID := internal.ParseUUID(cmd.Flags(), "transport-id", tpID)
 		rpcClient, err := clirpc.Client(cmd.Flags())
-		if err != nil {
-			os.Exit(1)
+		if removeAll {
+			internal.Catch(cmd.Flags(), rpcClient.RemoveAllTransports())
+			internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+		} else if tpID != "" {
+			tID := internal.ParseUUID(cmd.Flags(), "transport-id", tpID)
+			if err != nil {
+				os.Exit(1)
+			}
+			internal.Catch(cmd.Flags(), rpcClient.RemoveTransport(tID))
+			internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+		} else {
+			internal.PrintOutput(cmd.Flags(), "", cmd.Help())
 		}
-		internal.Catch(cmd.Flags(), rpcClient.RemoveTransport(tID))
-		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
-		//}
 	},
 }
 

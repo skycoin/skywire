@@ -96,6 +96,13 @@ import { VpnErrorComponent } from './components/vpn/pages/vpn-error/vpn-error.co
 import { VpnServerNameComponent } from './components/vpn/layout/vpn-server-name/vpn-server-name.component';
 import { EnterVpnServerPasswordComponent } from './components/vpn/pages/vpn-server-list/enter-vpn-server-password/enter-vpn-server-password.component';
 import { UpdateAllComponent } from './components/layout/update-all/update-all.component';
+import { VpnDnsConfigComponent } from './components/vpn/layout/vpn-dns-config/vpn-dns-config.component';
+import { RewardsAddressComponent } from './components/pages/node/node-info/node-info-content/rewards-address-config/rewards-address-config.component';
+import { BulkRewardAddressChangerComponent } from './components/layout/bulk-reward-address-changer/bulk-reward-address-changer.component';
+import { UserAppSettingsComponent } from './components/pages/node/apps/node-apps/user-app-settings/user-app-settings.component';
+import { NodeLogsComponent } from './components/pages/node/actions/node-logs/node-logs.component';
+import { SkychatSettingsComponent } from './components/pages/node/apps/node-apps/skychat-settings/skychat-settings.component';
+import { TabSelectorComponent } from './components/layout/tab-selector/tab-selector.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
   disabled: true,
@@ -168,6 +175,13 @@ const globalRippleConfig: RippleGlobalOptions = {
     VpnServerNameComponent,
     EnterVpnServerPasswordComponent,
     UpdateAllComponent,
+    VpnDnsConfigComponent,
+    RewardsAddressComponent,
+    BulkRewardAddressChangerComponent,
+    UserAppSettingsComponent,
+    NodeLogsComponent,
+    SkychatSettingsComponent,
+    TabSelectorComponent,
   ],
   imports: [
     BrowserModule,

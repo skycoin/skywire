@@ -1,7 +1,7 @@
 @use 'sass:math';
 
 @import 'variables';
-@import "~bootstrap/scss/functions";
+@import "bootstrap/scss/functions";
 @import "bootstrap_overrides";
 
 $top-bar-height: 56px;
@@ -119,14 +119,14 @@ $top-bar-height: 56px;
         min-width: 0px !important;
         background-color: $white;
         border-radius: 100%;
-        padding: 0;
+        padding: 0 !important;
         line-height: normal;
         color: #929292;
         font-size: 20px;
-        
-        ::ng-deep .mat-button-wrapper {
+
+        .icon-container {
           display: flex;
-          justify-content: center;
+          place-content: center;
         }
       }
     }
@@ -210,6 +210,7 @@ $top-bar-height: 56px;
           top: 1px;
           user-select: none;
           width: auto;
+          line-height: 1;
         }
 
         .state-icon {
@@ -279,6 +280,11 @@ $top-bar-height: 56px;
   display: flex;
   flex-direction: row-reverse;
   font-size: $font-size-mini-plus;
+
+  mat-icon {
+    position: relative;
+    top: 3px;
+  }
 
   .connection-error-msg-vpn {
     margin: -5px 5px 5px 10px;

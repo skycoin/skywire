@@ -16,11 +16,9 @@ import (
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/dmsgc"
-	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport/network"
-	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
 
 // MakeBaseConfig returns a visor config with 'enforced' fields only.
@@ -29,17 +27,19 @@ import (
 func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Services, dmsgHTTPServersList *DmsgHTTPServers) *V1 {
 	//check if any services were passed
 	if services == nil {
-		//fall back on skyenv defaults
+		//fall back on  defaults
 		if !testEnv {
 			services = &Services{
 				DmsgDiscovery:      utilenv.DmsgDiscAddr,
 				TransportDiscovery: utilenv.TpDiscAddr,
 				AddressResolver:    utilenv.AddressResolverAddr,
 				RouteFinder:        utilenv.RouteFinderAddr,
-				SetupNodes:         []cipher.PubKey{skyenv.MustPK(utilenv.SetupPK)},
+				RouteSetupNodes:    MustPKs(utilenv.RouteSetupPKs),
+				TransportSetupPKs:  MustPKs(utilenv.TPSetupPKs),
 				UptimeTracker:      utilenv.UptimeTrackerAddr,
 				ServiceDiscovery:   utilenv.ServiceDiscAddr,
 				StunServers:        utilenv.GetStunServers(),
+				DNSServer:          utilenv.DNSServer,
 			}
 		} else {
 			services = &Services{
@@ -47,10 +47,12 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 				TransportDiscovery: utilenv.TestTpDiscAddr,
 				AddressResolver:    utilenv.TestAddressResolverAddr,
 				RouteFinder:        utilenv.TestRouteFinderAddr,
-				SetupNodes:         []cipher.PubKey{skyenv.MustPK(utilenv.TestSetupPK)},
+				RouteSetupNodes:    MustPKs(utilenv.TestRouteSetupPKs),
+				TransportSetupPKs:  MustPKs(utilenv.TestTPSetupPKs),
 				UptimeTracker:      utilenv.TestUptimeTrackerAddr,
 				ServiceDiscovery:   utilenv.TestServiceDiscAddr,
 				StunServers:        utilenv.GetStunServers(),
+				DNSServer:          utilenv.DNSServer,
 			}
 		}
 	}
@@ -59,51 +61,53 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		conf.Common = common
 	}
 	conf.Dmsg = &dmsgc.DmsgConfig{
-		Discovery:     services.DmsgDiscovery, //utilenv.DmsgDiscAddr,
-		SessionsCount: 1,
-		Servers:       []*disc.Entry{},
+		Discovery:            services.DmsgDiscovery, //utilenv.DmsgDiscAddr,
+		SessionsCount:        1,
+		Servers:              []*disc.Entry{},
+		ConnectedServersType: "all",
 	}
 	conf.Transport = &Transport{
 		Discovery:         services.TransportDiscovery, //utilenv.TpDiscAddr,
 		AddressResolver:   services.AddressResolver,    //utilenv.AddressResolverAddr,
-		PublicAutoconnect: skyenv.PublicAutoconnect,
+		PublicAutoconnect: PublicAutoconnect,
 		LogStore: &LogStore{
 			Type:             FileLogStore,
-			Location:         skyenv.LocalPath + "/" + skyenv.TpLogStore,
+			Location:         LocalPath + "/" + TpLogStore,
 			RotationInterval: DefaultLogRotationInterval,
 		},
+		SudphPort: 0,
+		StcprPort: 0,
 	}
 	conf.Routing = &Routing{
-		RouteFinder:        services.RouteFinder, //utilenv.RouteFinderAddr,
-		SetupNodes:         services.SetupNodes,  //[]cipher.PubKey{utilenv.MustPK(utilenv.SetupPK)},
+		RouteFinder:        services.RouteFinder,     //utilenv.RouteFinderAddr,
+		RouteSetupNodes:    services.RouteSetupNodes, //[]cipher.PubKey{utilenv.MustPK(utilenv.SetupPK)},
 		RouteFinderTimeout: DefaultTimeout,
 	}
 	conf.Launcher = &Launcher{
 		ServiceDisc:   services.ServiceDiscovery, //utilenv.ServiceDiscAddr,
 		Apps:          nil,
-		ServerAddr:    skyenv.AppSrvAddr,
-		BinPath:       skyenv.AppBinPath,
+		ServerAddr:    AppSrvAddr,
+		BinPath:       AppBinPath,
 		DisplayNodeIP: false,
 	}
 	conf.UptimeTracker = &UptimeTracker{
 		Addr: services.UptimeTracker, //utilenv.UptimeTrackerAddr,
 	}
-	conf.CLIAddr = skyenv.RPCAddr
-	conf.LogLevel = skyenv.LogLevel
-	conf.LocalPath = skyenv.LocalPath
-	conf.CustomDmsgHTTPPath = skyenv.LocalPath + "/" + skyenv.Custom
+	conf.CLIAddr = RPCAddr
+	conf.LogLevel = LogLevel
+	conf.LocalPath = LocalPath
+	conf.DmsgHTTPServerPath = LocalPath + "/" + Custom
 	conf.StunServers = services.StunServers //utilenv.GetStunServers()
 	conf.ShutdownTimeout = DefaultTimeout
-	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
 
 	conf.Dmsgpty = &Dmsgpty{
-		DmsgPort: skyenv.DmsgPtyPort,
-		CLINet:   skyenv.DmsgPtyCLINet,
+		DmsgPort: DmsgPtyPort,
+		CLINet:   DmsgPtyCLINet,
 		CLIAddr:  dmsgpty.DefaultCLIAddr(),
 	}
 
 	conf.STCP = &network.STCPConfig{
-		ListeningAddress: skyenv.STCPAddr,
+		ListeningAddress: STCPAddr,
 		PKTable:          nil,
 	}
 	// Use dmsg urls for services and add dmsg-servers
@@ -128,7 +132,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 			}
 		}
 	}
-	conf.IsPublic = skyenv.IsPublic
+	conf.IsPublic = IsPublic
 	return conf
 }
 
@@ -146,10 +150,17 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 	}
 	var dmsgHTTPServersList *DmsgHTTPServers
 
+	dnsServer := utilenv.DNSServer
+	if services != nil {
+		if services.DNSServer != "" {
+			dnsServer = services.DNSServer
+		}
+	}
+
 	if dmsgHTTP {
-		dmsgHTTPPath := skyenv.DMSGHTTPName
+		dmsgHTTPPath := DMSGHTTPName
 		if pkgEnv {
-			dmsgHTTPPath = skyenv.SkywirePath + "/" + skyenv.DMSGHTTPName
+			dmsgHTTPPath = SkywirePath + "/" + DMSGHTTPName
 		}
 		serversListJSON, err := os.ReadFile(filepath.Clean(dmsgHTTPPath))
 		if err != nil {
@@ -163,7 +174,7 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 	// Actual config generation.
 	conf := MakeBaseConfig(cc, testEnv, dmsgHTTP, services, dmsgHTTPServersList)
 
-	conf.Launcher.Apps = makeDefaultLauncherAppsConfig()
+	conf.Launcher.Apps = makeDefaultLauncherAppsConfig(dnsServer)
 
 	conf.Hypervisors = make([]cipher.PubKey, 0)
 
@@ -188,26 +199,26 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 		}
 	}
 	if hypervisor {
-		config := hypervisorconfig.GenerateWorkDirConfig(false)
+		config := GenerateWorkDirConfig(false)
 		conf.Hypervisor = &config
 	}
 	if pkgEnv {
-		pkgConfig := skyenv.PackageConfig()
+		pkgConfig := PackageConfig()
 		conf.LocalPath = pkgConfig.LocalPath
-		conf.CustomDmsgHTTPPath = pkgConfig.LocalPath + "/" + skyenv.Custom
-		conf.Launcher.BinPath = pkgConfig.Launcher.BinPath
-		conf.Transport.LogStore.Location = pkgConfig.LocalPath + "/" + skyenv.TpLogStore
+		conf.DmsgHTTPServerPath = pkgConfig.LocalPath + "/" + Custom
+		conf.Launcher.BinPath = pkgConfig.LauncherBinPath
+		conf.Transport.LogStore.Location = pkgConfig.LocalPath + "/" + TpLogStore
 		if conf.Hypervisor != nil {
 			conf.Hypervisor.EnableAuth = pkgConfig.Hypervisor.EnableAuth
 			conf.Hypervisor.DBPath = pkgConfig.Hypervisor.DbPath
 		}
 	}
 	if usrEnv {
-		usrConfig := skyenv.UserConfig()
+		usrConfig := UserConfig()
 		conf.LocalPath = usrConfig.LocalPath
-		conf.CustomDmsgHTTPPath = usrConfig.LocalPath + "/" + skyenv.Custom
-		conf.Launcher.BinPath = usrConfig.Launcher.BinPath
-		conf.Transport.LogStore.Location = usrConfig.LocalPath + "/" + skyenv.TpLogStore
+		conf.DmsgHTTPServerPath = usrConfig.LocalPath + "/" + Custom
+		conf.Launcher.BinPath = usrConfig.LauncherBinPath
+		conf.Transport.LogStore.Location = usrConfig.LocalPath + "/" + TpLogStore
 		if conf.Hypervisor != nil {
 			conf.Hypervisor.EnableAuth = usrConfig.Hypervisor.EnableAuth
 			conf.Hypervisor.DBPath = usrConfig.Hypervisor.DbPath
@@ -220,31 +231,38 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 // makeDefaultLauncherAppsConfig creates default launcher config for apps,
 // for package based installation in other platform (Darwin, Windows) it only includes
 // the shipped apps for that platforms
-func makeDefaultLauncherAppsConfig() []appserver.AppConfig {
+func makeDefaultLauncherAppsConfig(dnsServer string) []appserver.AppConfig {
 	defaultConfig := []appserver.AppConfig{
 		{
-			Name:      skyenv.VPNClientName,
+			Name:      VPNClientName,
+			Binary:    VPNClientName,
 			AutoStart: false,
 			Port:      routing.Port(skyenv.VPNClientPort),
+			Args:      []string{"--dns", dnsServer},
 		},
 		{
-			Name:      skyenv.SkychatName,
+			Name:      SkychatName,
+			Binary:    SkychatName,
 			AutoStart: true,
 			Port:      routing.Port(skyenv.SkychatPort),
-			Args:      []string{"-addr", skyenv.SkychatAddr},
+			Args:      []string{"--addr", SkychatAddr},
 		},
 		{
-			Name:      skyenv.SkysocksName,
+			Name:      SkysocksName,
+			Binary:    SkysocksName,
 			AutoStart: true,
 			Port:      routing.Port(skyenv.SkysocksPort),
 		},
 		{
-			Name:      skyenv.SkysocksClientName,
+			Name:      SkysocksClientName,
+			Binary:    SkysocksClientName,
 			AutoStart: false,
 			Port:      routing.Port(skyenv.SkysocksClientPort),
+			Args:      []string{"--addr", SkysocksClientAddr},
 		},
 		{
-			Name:      skyenv.VPNServerName,
+			Name:      VPNServerName,
+			Binary:    VPNServerName,
 			AutoStart: false,
 			Port:      routing.Port(skyenv.VPNServerPort),
 		},

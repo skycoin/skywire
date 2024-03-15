@@ -1,12 +1,14 @@
 //go:build windows
 // +build windows
 
+// Package cmdutil pkg/cmdutil/sysloghook_windows.go
 package cmdutil
 
 import (
 	"strings"
 
 	"github.com/sirupsen/logrus"
+
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 

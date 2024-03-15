@@ -1,5 +1,3 @@
-/* eslint-disable prefer-arrow/prefer-arrow-functions */
-
 // NOTE: originally from the desktop wallet code, but with some minor changes to make it work
 // witht the manager.
 

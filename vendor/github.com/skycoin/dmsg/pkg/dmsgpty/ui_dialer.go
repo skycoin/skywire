@@ -1,3 +1,4 @@
+// Package dmsgpty pkg/dmsgpty/ui_dialer.go
 package dmsgpty
 
 import (

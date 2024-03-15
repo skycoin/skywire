@@ -12,11 +12,11 @@ import (
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
-	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var (
-	rewardFile           string = skyenv.PackageConfig().LocalPath + "/" + skyenv.RewardFile
+	rewardFile           string = visorconfig.PackageConfig().LocalPath + "/" + visorconfig.RewardFile
 	rewardAddress        string
 	defaultRewardAddress string
 	output               string
@@ -29,7 +29,6 @@ var (
 )
 
 func init() {
-
 	rewardCmd.Flags().SortFlags = false
 	if defaultRewardAddress == "" {
 		//default is genesis address for skycoin blockchain ; for testing
@@ -74,7 +73,7 @@ func longText() string {
 		if err != nil {
 			fmt.Errorf("    reward settings misconfigured!") //nolint
 		}
-		_, err = coincipher.DecodeBase58Address(string(reward))
+		_, err = coincipher.DecodeBase58Address(strings.TrimSpace(string(reward)))
 		if err != nil {
 			fmt.Errorf("    invalid address in reward config %v", err) //nolint
 		}
@@ -105,13 +104,37 @@ var rewardCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		//set default output file
 		if output == "" {
-			output = skyenv.PackageConfig().LocalPath + "/" + skyenv.RewardFile
+			output = visorconfig.PackageConfig().LocalPath + "/" + visorconfig.RewardFile
 		}
 		if isDeleteFile {
-			err := os.Remove(output)
+			_, err := os.Stat(output)
 			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error deleting file. err=%v", err))
+				out1 := "reward file does not exist - reward address not set\n"
+				internal.PrintOutput(cmd.Flags(), out1, out1)
+				os.Exit(0)
 			}
+		}
+		//using the rpc of the running visor avoids needing sudo permissions
+		client, clienterr := clirpc.Client(cmd.Flags())
+		if clienterr != nil {
+			internal.PrintError(cmd.Flags(), clienterr)
+		}
+
+		if isDeleteFile {
+			if clienterr == nil {
+				err := client.DeleteRewardAddress()
+				if err != nil {
+					internal.PrintError(cmd.Flags(), err)
+				}
+			}
+			if clienterr != nil {
+				err := os.Remove(rewardFile)
+				if err != nil {
+					internal.PrintError(cmd.Flags(), err)
+				}
+			}
+			os.Exit(1)
+			return
 		}
 		//print reward address and exit
 		if isRead {
@@ -139,21 +162,27 @@ var rewardCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid address specified: %v", err))
 		}
+
 		//using the rpc of the running visor avoids needing sudo permissions
-		client, err := clirpc.Client(cmd.Flags())
-		if err != nil {
+		if clienterr != nil {
 			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(cAddr.String()), 0644)) //nolint
 			readRewardFile(cmd.Flags())
 			return
 		}
-		rewardaddress, err := client.SetRewardAddress(rewardAddress)
-		if err != nil {
-			internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
+
+		if clienterr == nil {
+			rwdAdd, err := client.SetRewardAddress(rewardAddress)
+			if err != nil {
+				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err)) //nolint
+				return
+			}
+			output := fmt.Sprintf("Reward address:\n  %s\n", rwdAdd)
+			internal.PrintOutput(cmd.Flags(), output, output)
+		}
+		if clienterr != nil {
 			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(cAddr.String()), 0644)) //nolint
 			readRewardFile(cmd.Flags())
-			return
 		}
-		internal.PrintOutput(cmd.Flags(), rewardaddress, rewardaddress)
 	},
 }
 

@@ -13,6 +13,8 @@ import GeneralUtils from 'src/app/utils/generalUtils';
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
 import { TopBarComponent } from 'src/app/components/layout/top-bar/top-bar.component';
 import { RouterConfigComponent, RouterConfigParams } from 'src/app/components/pages/node/node-info/node-info-content/router-config/router-config.component';
+import { VpnDnsConfigComponent, VpnDnsConfigParams } from '../../layout/vpn-dns-config/vpn-dns-config.component';
+import { PageBaseComponent } from 'src/app/utils/page-base';
 
 /**
  * Options that VpnSettingsComponent might be changing asynchronously.
@@ -30,7 +32,7 @@ enum WorkingOptions {
   templateUrl: './vpn-settings.component.html',
   styleUrls: ['./vpn-settings.component.scss'],
 })
-export class VpnSettingsComponent implements OnDestroy {
+export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy {
   @ViewChild('topBarLoading') topBarLoading: TopBarComponent;
   @ViewChild('topBarLoaded') topBarLoaded: TopBarComponent;
 
@@ -64,6 +66,8 @@ export class VpnSettingsComponent implements OnDestroy {
     private dialog: MatDialog,
     route: ActivatedRoute,
   ) {
+    super();
+    
     this.navigationsSubscription = route.paramMap.subscribe(params => {
       // Get the PK of the current local visor.
       if (params.has('key')) {
@@ -238,5 +242,13 @@ export class VpnSettingsComponent implements OnDestroy {
   changeHops() {
     const params: RouterConfigParams = {nodePk: this.currentLocalPk, minHops: this.backendData.vpnClientAppData.minHops};
     RouterConfigComponent.openDialog(this.dialog, params).afterClosed().subscribe();
+  }
+
+  /**
+   * Opens the modal window for changing the dns configuration.
+   */
+   changeDns() {
+    const params: VpnDnsConfigParams = {nodePk: this.currentLocalPk, ip: this.backendData.vpnClientAppData.dns};
+    VpnDnsConfigComponent.openDialog(this.dialog, params).afterClosed().subscribe();
   }
 }

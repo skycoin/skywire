@@ -5,12 +5,14 @@ import { Observable, of, ReplaySubject, timer } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
 import { delay } from 'rxjs/operators';
 
-import { NodeService, BackendData } from '../../../services/node.service';
 import { Node } from '../../../app.datatypes';
 import { StorageService } from '../../../services/storage.service';
 import { TabButtonData } from '../../layout/top-bar/top-bar.component';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { NodeActionsHelper } from './actions/node-actions-helper';
+import { SingleNodeBackendData, SingleNodeDataService, TrafficData } from 'src/app/services/single-node-data.service';
+import { PageBaseComponent } from 'src/app/utils/page-base';
+import { AppComponent } from 'src/app/app.component';
 
 /**
  * Main page used for showing the details of a node. It is in charge of loading
@@ -22,7 +24,7 @@ import { NodeActionsHelper } from './actions/node-actions-helper';
   templateUrl: './node.component.html',
   styleUrls: ['./node.component.scss']
 })
-export class NodeComponent implements OnInit, OnDestroy {
+export class NodeComponent extends PageBaseComponent implements OnInit, OnDestroy {
   /**
    * Mantains a reference to the currently active instance of this page.
    */
@@ -35,8 +37,17 @@ export class NodeComponent implements OnInit, OnDestroy {
    * Lastest node data downloaded by the currently active instance of this page.
    */
   private static nodeSubject: ReplaySubject<Node>;
+  /**
+   * Lastest node traffic data downloaded by the currently active instance of this page.
+   */
+  private static trafficDataSubject: ReplaySubject<TrafficData>;
+
+
+  // Keys for persisting the server data, to be able to restore the state after navigation.
+  private readonly persistentDataResponseKey = 'serv-dat-response';
 
   node: Node;
+  trafficData: TrafficData;
   notFound = false;
 
   // Values for the tab bar.
@@ -103,16 +114,26 @@ export class NodeComponent implements OnInit, OnDestroy {
     return NodeComponent.nodeSubject.asObservable();
   }
 
+  /**
+   * Gets the lastest node traffic data downloaded by the currently active instance of this page.
+   */
+  public static get currentTrafficData(): Observable<TrafficData> {
+    return NodeComponent.trafficDataSubject.asObservable();
+  }
+
   constructor(
     public storageService: StorageService,
-    private nodeService: NodeService,
+    private singleNodeDataService: SingleNodeDataService,
     private route: ActivatedRoute,
     private ngZone: NgZone,
     private snackbarService: SnackbarService,
     private injector: Injector,
     router: Router,
   ) {
+    super();
+
     NodeComponent.nodeSubject = new ReplaySubject<Node>(1);
+    NodeComponent.trafficDataSubject = new ReplaySubject<TrafficData>(1);
     NodeComponent.currentInstanceInternal = this;
 
     this.navigationsSubscription = router.events.subscribe(event => {
@@ -139,6 +160,8 @@ export class NodeComponent implements OnInit, OnDestroy {
         this.processRouteUpdate();
       }
     });
+
+    return super.ngOnInit();
   }
 
   private processRouteUpdate() {
@@ -150,8 +173,7 @@ export class NodeComponent implements OnInit, OnDestroy {
     this.navigationsSubscription.unsubscribe();
 
     // Load the data.
-    this.nodeService.startRequestingSpecificNode(NodeComponent.currentNodeKey);
-    this.startGettingData();
+    this.startGettingData(true);
   }
 
   private updateTabBar() {
@@ -260,71 +282,86 @@ export class NodeComponent implements OnInit, OnDestroy {
       this.lastUpdateRequestedManually = true;
     }
 
-    this.nodeService.forceSpecificNodeRefresh();
+    this.singleNodeDataService.forceSpecificNodeRefresh(NodeComponent.currentNodeKey);
   }
 
   /**
    * Starts getting the data from the backend.
    */
-  private startGettingData() {
-    // Detect when the service is updating the data.
-    this.dataSubscription = this.nodeService.updatingSpecificNode.subscribe(val => this.updating = val);
+  private startGettingData(checkSavedData: boolean) {
+    // Use saved data or get from the server. If there is no saved data, savedData is null.
+    const savedData = checkSavedData ? this.getLocalValue(this.persistentDataResponseKey) : null;
+    let nextOperation: Observable<any> = this.singleNodeDataService.startRequestingData(NodeComponent.currentNodeKey);
+    if (savedData) {
+      nextOperation = of(JSON.parse(savedData.value));
+    }
 
-    this.ngZone.runOutsideAngular(() => {
-      // Get the node info.
-      this.dataSubscription.add(this.nodeService.specificNode.subscribe((result: BackendData) => {
-        this.ngZone.run(() => {
-          if (result) {
-            // If the data was obtained.
-            if (result.data && !result.error) {
-              this.node = result.data as Node;
-              NodeComponent.nodeSubject.next(this.node);
-              if (this.nodeActionsHelper) {
-                this.nodeActionsHelper.setCurrentNode(this.node);
-              }
+    // Get the node info.
+    this.dataSubscription = nextOperation.subscribe((result: SingleNodeBackendData) => {
+      if (!savedData) {
+        this.saveLocalValue(this.persistentDataResponseKey, JSON.stringify(result));
+      }
 
-              // Close any previous temporary loading error msg.
-              this.snackbarService.closeCurrentIfTemporaryError();
+      this.updating = result ? result.updating : true;
 
-              this.lastUpdate = result.momentOfLastCorrectUpdate;
-              this.secondsSinceLastUpdate = Math.floor((Date.now() - result.momentOfLastCorrectUpdate) / 1000);
-              this.errorsUpdating = false;
+      if (result && !result.updating) {
+        // If the data was obtained.
+        if (result.data && !result.error) {
+          this.node = result.data;
+          this.trafficData = result.trafficData;
+          NodeComponent.nodeSubject.next(this.node);
+          NodeComponent.trafficDataSubject.next(this.trafficData);
+          if (this.nodeActionsHelper) {
+            this.nodeActionsHelper.setCurrentNode(this.node);
+          }
 
-              if (this.lastUpdateRequestedManually) {
-                // Show a confirmation msg.
-                this.snackbarService.showDone('common.refreshed', null);
-                this.lastUpdateRequestedManually = false;
-              }
+          // Close any previous temporary loading error msg.
+          this.snackbarService.closeCurrentIfTemporaryError();
 
-            // If there was an error while obtaining the data.
-            } else if (result.error) {
-              // If the node was not found, show a msg telling the user and stop the operation.
-              if (result.error.originalError && ((result.error.originalError as HttpErrorResponse).status === 400)) {
-                this.notFound = true;
+          this.lastUpdate = result.momentOfLastCorrectUpdate;
+          this.secondsSinceLastUpdate = Math.floor((Date.now() - result.momentOfLastCorrectUpdate) / 1000);
+          this.errorsUpdating = false;
+          AppComponent.currentInstance.hideDataProblemMsg();
 
-                return;
-              }
+          if (this.lastUpdateRequestedManually) {
+            // Show a confirmation msg.
+            this.snackbarService.showDone('common.refreshed', null);
+            this.lastUpdateRequestedManually = false;
+          }
 
-              // Show an error msg if it has not be done before during the current attempt to obtain the data.
-              if (!this.errorsUpdating) {
-                if (!this.node) {
-                  this.snackbarService.showError('common.loading-error', null, true, result.error);
-                } else {
-                  this.snackbarService.showError('node.error-load', null, true, result.error);
-                }
-              }
+        // If there was an error while obtaining the data.
+        } else if (result.error) {
+          // If the node was not found, show a msg telling the user and stop the operation.
+          if (result.error.originalError && ((result.error.originalError as HttpErrorResponse).status === 400)) {
+            this.notFound = true;
 
-              // Stop the loading indicator and show a warning icon.
-              this.errorsUpdating = true;
+            return;
+          }
+
+          // Show an error msg if it has not be done before during the current attempt to obtain the data.
+          if (!this.errorsUpdating) {
+            if (!this.node) {
+              this.snackbarService.showError('common.loading-error', null, true, result.error);
+            } else {
+              this.snackbarService.showError('node.error-load', null, true, result.error);
             }
           }
-        });
-      }));
+
+          // Stop the loading indicator and show a warning icon.
+          this.errorsUpdating = true;
+          AppComponent.currentInstance.showDataProblemMsg();
+        }
+      }
+
+      // If old saved data was used, repeat the operation, ignoring the saved data.
+      if (savedData) {
+        this.startGettingData(false);
+      }
     });
   }
 
   ngOnDestroy() {
-    this.nodeService.stopRequestingSpecificNode();
+    this.singleNodeDataService.stopRequestingSpecificNode(NodeComponent.currentNodeKey);
 
     this.dataSubscription.unsubscribe();
     this.updateTimeSubscription.unsubscribe();
@@ -336,6 +373,9 @@ export class NodeComponent implements OnInit, OnDestroy {
 
     NodeComponent.nodeSubject.complete();
     NodeComponent.nodeSubject = undefined;
+
+    NodeComponent.trafficDataSubject.complete();
+    NodeComponent.trafficDataSubject = undefined;
 
     this.nodeActionsHelper.dispose();
   }

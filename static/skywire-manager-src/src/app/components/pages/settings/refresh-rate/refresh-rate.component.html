@@ -1,16 +1,19 @@
 <div class="rounded-elevated-box"><div class="box-internal-container overflow">
   <div class="white-form-help-icon-container">
-    <mat-icon [inline]="true" [matTooltip]="'settings.refresh-rate-help' | translate">
+    <mat-icon class="help-icon" [inline]="true" [matTooltip]="'settings.refresh-rate-help' | translate">
       help
     </mat-icon>
   </div>
   <form [formGroup]="form">
     <mat-form-field class="white-form-field">
-      <mat-select formControlName="refreshRate" [placeholder]="'settings.refresh-rate' | translate">
-        <mat-option *ngFor="let time of timesList" value="{{time}}">
-          {{ time }} {{ 'settings.seconds' | translate }}
-        </mat-option>
-      </mat-select>
+      <div class="field-container">
+        <label class="field-label" for="remoteKey">{{ 'settings.refresh-rate' | translate }}</label>
+        <mat-select formControlName="refreshRate">
+          <mat-option *ngFor="let time of timesList" value="{{time}}">
+            {{ time }} {{ 'settings.seconds' | translate }}
+          </mat-option>
+        </mat-select>
+      </div>
     </mat-form-field>
   </form>
 </div></div>

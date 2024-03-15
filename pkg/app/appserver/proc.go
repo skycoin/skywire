@@ -16,12 +16,14 @@ import (
 	"time"
 
 	ipc "github.com/james-barrow/golang-ipc"
+	"github.com/orandin/lumberjackrus"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
@@ -68,6 +70,9 @@ type Proc struct {
 	errMx sync.RWMutex
 	err   string
 
+	portMx sync.RWMutex
+	port   routing.Port
+
 	cmdStderr io.ReadCloser
 
 	readyCh   chan struct{} // push here when ready to start app disc - protected by 'readyOnce'
@@ -76,7 +81,7 @@ type Proc struct {
 
 // NewProc constructs `Proc`.
 func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc.Updater, m ProcManager,
-	appName string) *Proc {
+	appName, logStorePath string) *Proc {
 	if mLog == nil {
 		mLog = logging.NewMasterLogger()
 	}
@@ -89,18 +94,29 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	cmd.Env = append(os.Environ(), envs...)
 	cmd.Dir = conf.ProcWorkDir
 
-	appLog, appLogDB := appcommon.NewProcLogger(conf, mLog)
-	cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").WriterLevel(logrus.DebugLevel)
+	var appLogDB appcommon.LogStore
+	var appLog *logging.MasterLogger
+	var stderr io.ReadCloser
+	procLogger := mLog
+	if conf.LogDBLoc != "" {
+		appLog, appLogDB = appcommon.NewProcLogger(conf, mLog)
+		procLogger = appLog
+		if logStorePath != "" {
+			storeLog(appLog, logStorePath)
+		}
 
-	// we read the Stderr pipe in order to filter some false positive app errors
-	errorLog := appLog.WithField("_module", moduleName).WithField("func", "(STDERR)")
-	stderr, _ := cmd.StderrPipe() //nolint:errcheck
-	printStdErr(stderr, errorLog)
+		cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").WriterLevel(logrus.DebugLevel)
+
+		// we read the Stderr pipe in order to filter some false positive app errors
+		errorLog := appLog.WithField("_module", moduleName).WithField("func", "(STDERR)")
+		stderr, _ = cmd.StderrPipe() //nolint:errcheck
+		printStdErr(stderr, errorLog)
+	}
 
 	p := &Proc{
 		disc:      disc,
 		conf:      conf,
-		log:       mLog.PackageLogger(moduleName),
+		log:       procLogger.PackageLogger(moduleName),
 		logDB:     appLogDB,
 		cmd:       cmd,
 		connCh:    make(chan struct{}, 1),
@@ -159,7 +175,9 @@ func (p *Proc) InjectConn(conn net.Conn) bool {
 	return ok
 }
 
-func (p *Proc) awaitConn() bool {
+// AwaitConn waits for the connection.
+func (p *Proc) AwaitConn() bool {
+	<-p.connCh
 	rpcS := rpc.NewServer()
 	if err := rpcS.RegisterName(p.conf.ProcKey.String(), p.rpcGW); err != nil {
 		panic(err)
@@ -229,7 +247,7 @@ func (p *Proc) Start() error {
 		// here, the connection is established, so we're not blocked by awaiting it anymore,
 		// execution may be continued as usual.
 
-		if ok := p.awaitConn(); !ok {
+		if ok := p.AwaitConn(); !ok {
 			_ = p.cmd.Process.Kill() //nolint:errcheck
 			p.waitMx.Unlock()
 			return
@@ -375,6 +393,21 @@ func (p *Proc) SetError(appErr string) {
 	p.err = appErr
 }
 
+// SetAppPort sets the proc's connection port
+func (p *Proc) SetAppPort(port routing.Port) {
+	p.portMx.Lock()
+	defer p.portMx.Unlock()
+	p.port = port
+}
+
+// GetAppPort gets the proc's connection port
+func (p *Proc) GetAppPort() routing.Port {
+	p.portMx.Lock()
+	defer p.portMx.Unlock()
+
+	return p.port
+}
+
 // Error gets proc's error.
 func (p *Proc) Error() string {
 	p.errMx.RLock()
@@ -426,10 +459,10 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 			})
 			return true
 		}
-
 		summaries = append(summaries, ConnectionSummary{
-			IsAlive:            skywireConn.IsAlive(),
-			Latency:            skywireConn.Latency(),
+			IsAlive: skywireConn.IsAlive(),
+			// Latency in summary is expected to be in ms and not ns so we change the base to ms
+			Latency:            time.Duration(skywireConn.Latency().Milliseconds()),
 			UploadSpeed:        skywireConn.UploadSpeed(),
 			DownloadSpeed:      skywireConn.DownloadSpeed(),
 			BandwidthSent:      skywireConn.BandwidthSent(),
@@ -441,4 +474,74 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 	})
 
 	return summaries
+}
+
+func storeLog(log *logging.MasterLogger, localPath string) {
+	hook, _ := lumberjackrus.NewHook( //nolint
+		&lumberjackrus.LogFile{
+			Filename:   localPath + "/log/skywire.log",
+			MaxSize:    1,
+			MaxBackups: 1,
+			MaxAge:     1,
+			Compress:   false,
+			LocalTime:  false,
+		},
+		logrus.TraceLevel,
+		&logging.TextFormatter{
+			DisableColors:   true,
+			FullTimestamp:   true,
+			ForceFormatting: true,
+		},
+		&lumberjackrus.LogFileOpts{
+			logrus.InfoLevel: &lumberjackrus.LogFile{
+				Filename:   localPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.WarnLevel: &lumberjackrus.LogFile{
+				Filename:   localPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.TraceLevel: &lumberjackrus.LogFile{
+				Filename:   localPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.ErrorLevel: &lumberjackrus.LogFile{
+				Filename:   localPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.DebugLevel: &lumberjackrus.LogFile{
+				Filename:   localPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+			logrus.FatalLevel: &lumberjackrus.LogFile{
+				Filename:   localPath + "/log/skywire.log",
+				MaxSize:    1,
+				MaxBackups: 1,
+				MaxAge:     1,
+				Compress:   false,
+				LocalTime:  false,
+			},
+		},
+	)
+	log.Hooks.Add(hook)
 }

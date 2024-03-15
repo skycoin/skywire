@@ -1,3 +1,4 @@
+// Package dmsg pkg/dmsg/entity_common.go
 package dmsg
 
 import (
@@ -126,13 +127,9 @@ func (c *EntityCommon) setSession(ctx context.Context, dSes *SessionCommon) bool
 	return true
 }
 
-func (c *EntityCommon) delSession(ctx context.Context, pk cipher.PubKey, serverEndSession bool) {
+func (c *EntityCommon) delSession(ctx context.Context, pk cipher.PubKey) {
 	c.sessionsMx.Lock()
-	defer c.sessionsMx.Unlock()
 	delete(c.sessions, pk)
-	if serverEndSession {
-		return
-	}
 	if c.delSessionCallback != nil {
 		if err := c.delSessionCallback(ctx); err != nil {
 			c.log.
@@ -141,11 +138,12 @@ func (c *EntityCommon) delSession(ctx context.Context, pk cipher.PubKey, serverE
 				Warn("Callback returned non-nil error.")
 		}
 	}
+	c.sessionsMx.Unlock()
 }
 
 // updateServerEntry updates the dmsg server's entry within dmsg discovery.
 // If 'addr' is an empty string, the Entry.addr field will not be updated in discovery.
-func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, maxSessions int) (err error) {
+func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, maxSessions int, authPassphrase string) (err error) {
 	if addr == "" {
 		panic("updateServerEntry cannot accept empty 'addr' input") // this should never happen
 	}
@@ -172,6 +170,10 @@ func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, maxSe
 		return errors.New("entry in discovery is not of a dmsg server")
 	}
 
+	if authPassphrase != "" {
+		entry.Server.ServerType = authPassphrase
+	}
+
 	sessionsDelta := entry.Server.AvailableSessions != availableSessions
 	addrDelta := entry.Server.Address != addr
 
@@ -194,7 +196,7 @@ func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, maxSe
 	return c.dc.PutEntry(ctx, c.sk, entry)
 }
 
-func (c *EntityCommon) updateServerEntryLoop(ctx context.Context, addr string, maxSessions int) {
+func (c *EntityCommon) updateServerEntryLoop(ctx context.Context, addr string, maxSessions int, authPassphrase string) {
 	t := time.NewTimer(c.updateInterval)
 	defer t.Stop()
 
@@ -210,7 +212,7 @@ func (c *EntityCommon) updateServerEntryLoop(ctx context.Context, addr string, m
 			}
 
 			c.sessionsMx.Lock()
-			err := c.updateServerEntry(ctx, addr, maxSessions)
+			err := c.updateServerEntry(ctx, addr, maxSessions, authPassphrase)
 			c.sessionsMx.Unlock()
 
 			if err != nil {
@@ -223,7 +225,7 @@ func (c *EntityCommon) updateServerEntryLoop(ctx context.Context, addr string, m
 	}
 }
 
-func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}) (err error) {
+func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}, clientType string) (err error) {
 	if isClosed(done) {
 		return nil
 	}
@@ -243,12 +245,13 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 	entry, err := c.dc.Entry(ctx, c.pk)
 	if err != nil {
 		entry = disc.NewClientEntry(c.pk, 0, srvPKs)
+		entry.ClientType = clientType
 		if err := entry.Sign(c.sk); err != nil {
 			return err
 		}
 		return c.dc.PostEntry(ctx, entry)
 	}
-
+	entry.ClientType = clientType
 	entry.Client.DelegatedServers = srvPKs
 	c.log.WithField("entry", entry).Debug("Updating entry.")
 	return c.dc.PutEntry(ctx, c.sk, entry)

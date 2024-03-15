@@ -4,6 +4,7 @@ import { Subscription } from 'rxjs/internal/Subscription';
 
 import { VpnAuthGuardService } from 'src/app/services/vpn-auth-guard.service';
 import { VpnClientService } from 'src/app/services/vpn-client.service';
+import { PageBaseComponent } from 'src/app/utils/page-base';
 
 /**
  * Errors VpnErrorComponent can show.
@@ -26,7 +27,7 @@ enum KnownProblems {
   templateUrl: './vpn-error.component.html',
   styleUrls: ['./vpn-error.component.scss'],
 })
-export class VpnErrorComponent {
+export class VpnErrorComponent extends PageBaseComponent {
   private problem = null;
 
   private navigationsSubscription: Subscription;
@@ -36,6 +37,8 @@ export class VpnErrorComponent {
     private vpnAuthGuardService: VpnAuthGuardService,
     private vpnClientService: VpnClientService,
   ) {
+    super();
+    
     // Get the query string.
     this.navigationsSubscription = this.route.queryParamMap.subscribe(queryParams => {
       this.problem = queryParams.get('problem');

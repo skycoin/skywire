@@ -1,4 +1,4 @@
-import { Component, OnInit, Input, ViewChild, ElementRef, AfterViewInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, Input, ViewChild, ElementRef, AfterViewInit, OnDestroy, Output, EventEmitter } from '@angular/core';
 import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
@@ -21,6 +21,7 @@ import { processServiceError } from '../../../../utils/errors';
 export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('button') button: ButtonComponent;
   @ViewChild('firstInput') firstInput: ElementRef;
+  @Output() workingState = new EventEmitter<boolean>();
 
   /**
    * If true, the control is used for setting the password for the first time. If false,
@@ -76,6 +77,7 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
   changePassword() {
     if (this.form.valid && !this.button.disabled) {
       this.button.showLoading();
+      this.workingState.next(true);
 
       if (!this.forInitialConfig) {
         this.subscription = this.authService.changePassword(this.form.get('oldPassword').value, this.form.get('newPassword').value)
@@ -83,11 +85,13 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
             () => {
               this.router.navigate(['nodes']);
               this.snackbarService.showDone('settings.password.password-changed');
+              this.workingState.next(false);
             }, (err: OperationError) => {
               this.button.showError();
               err = processServiceError(err);
 
               this.snackbarService.showError(err);
+              this.workingState.next(false);
             },
           );
       } else {
@@ -95,12 +99,15 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
           () => {
             this.dialog.closeAll();
             this.snackbarService.showDone('settings.password.initial-config.done');
+            this.workingState.next(false);
           }, err => {
             this.button.showError();
             err = processServiceError(err);
 
             // The errors are marked as temporary to close the snackbar when closing the modal window.
             this.snackbarService.showError(err, null, true);
+
+            this.workingState.next(false);
           },
         );
       }

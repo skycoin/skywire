@@ -1,3 +1,4 @@
+// Package dmsg pkg/dmsg/session_common.go
 package dmsg
 
 import (
@@ -7,9 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hashicorp/yamux"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/yamux"
 
 	"github.com/skycoin/dmsg/pkg/noise"
 )

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -18,7 +19,8 @@ import (
 
 // APIClient implements uptime tracker API client.
 type APIClient interface {
-	UpdateVisorUptime(context.Context) error
+	UpdateVisorUptime(context.Context, string) error
+	FetchUptimes(context.Context, string) ([]byte, error)
 }
 
 // httpClient implements Client for uptime tracker API.
@@ -79,8 +81,8 @@ func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, erro
 }
 
 // UpdateVisorUptime updates visor uptime.
-func (c *httpClient) UpdateVisorUptime(ctx context.Context) error {
-	resp, err := c.Get(ctx, "/v4/update")
+func (c *httpClient) UpdateVisorUptime(ctx context.Context, version string) error {
+	resp, err := c.Get(ctx, fmt.Sprintf("/v4/update?version=%s", version))
 	if err != nil {
 		return err
 	}
@@ -96,4 +98,28 @@ func (c *httpClient) UpdateVisorUptime(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// FetchUptimes fetch uptimes data for all visors or specific one
+func (c *httpClient) FetchUptimes(ctx context.Context, pk string) ([]byte, error) {
+	url := "/uptimes?v=v2"
+	if pk != "" {
+		url += "&visors=" + pk
+	}
+
+	resp, err := c.Get(ctx, url)
+	if err != nil {
+		return []byte{}, err
+	}
+
+	if resp.Body != nil {
+		defer func() {
+			err = resp.Body.Close()
+			if err != nil {
+				return
+			}
+		}()
+	}
+
+	return io.ReadAll(resp.Body)
 }

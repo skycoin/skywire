@@ -38,12 +38,12 @@ if exist "%HOMEPATH%\skywire-config.json" (
 
 :: Generating new config file if not exist
 if not exist "skywire-config.json" (
-    skywire-cli config gen -birpw --os windows --disableapps skychat,skysocks,skysocks-client,vpn-server >nul 2>&1
+    skywire-cli config gen -birpw >nul 2>&1
 )
 
 :: Regenerating config file after update and install new version of Skywire
 if exist "new.update" (
-    skywire-cli config gen -birpwx --os windows --disableapps skychat,skysocks,skysocks-client,vpn-server >nul 2>&1
+    skywire-cli config gen -birpwx >nul 2>&1
     del new.update >nul 2>&1
 )
 

@@ -1,21 +1,21 @@
-<div class="small-rounded-elevated-box chart">
-  <app-line-chart [data]="data.sentHistory"></app-line-chart>
+<div class="small-rounded-elevated-box chart" *ngIf="trafficData">
+  <app-line-chart [data]="trafficData.sentHistory"></app-line-chart>
   <div class="info">
     <span class="text">{{ 'common.uploaded' | translate }}</span>
     <span class="rate">
-      <span class="value">{{ data.totalSent | autoScale:{ showValue: true } }}</span>
-      <span class="unit">{{ data.totalSent | autoScale:{ showUnit: true } }}</span>
+      <span class="value">{{ trafficData.totalSent | autoScale:{ showValue: true } }}</span>
+      <span class="unit">{{ trafficData.totalSent | autoScale:{ showUnit: true } }}</span>
     </span>
   </div>
 </div>
 
-<div class="small-rounded-elevated-box chart">
-  <app-line-chart [data]="data.receivedHistory"></app-line-chart>
+<div class="small-rounded-elevated-box chart" *ngIf="trafficData">
+  <app-line-chart [data]="trafficData.receivedHistory"></app-line-chart>
   <div class="info">
     <span class="text">{{ 'common.downloaded' | translate }}</span>
     <span class="rate">
-      <span class="value">{{ data.totalReceived | autoScale:{ showValue: true } }}</span>
-      <span class="unit">{{ data.totalReceived | autoScale:{ showUnit: true } }}</span>
+      <span class="value">{{ trafficData.totalReceived | autoScale:{ showValue: true } }}</span>
+      <span class="unit">{{ trafficData.totalReceived | autoScale:{ showUnit: true } }}</span>
     </span>
   </div>
 </div>

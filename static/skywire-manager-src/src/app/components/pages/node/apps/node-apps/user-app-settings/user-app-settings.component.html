@@ -1,0 +1,50 @@
+<app-dialog
+  [headline]="'apps.user-app-settings.title' | translate:{ name: appName }"
+  [dialog]="dialogRef"
+  [disableDismiss]="disableDismiss"
+>
+  <div class="info-container">{{ 'apps.user-app-settings.info' | translate }}</div>
+
+  <!-- Fields. -->
+  <form [formGroup]="form">
+    <ng-container formArrayName="settings" *ngFor="let st of settingsControls; let i = index;">
+      <div class="settings-row" [formGroupName]="i">
+        <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
+          <div class="field-container">
+            <label class="field-label" for="name">{{ 'apps.user-app-settings.name' | translate:{ number: i + 1 } }}</label>
+            <input id="name" formControlName="name" matInput />
+          </div>
+        </mat-form-field>
+        <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
+          <div class="field-container">
+            <label class="field-label" for="value">{{ 'apps.user-app-settings.value' | translate:{ number: i + 1 } }}</label>
+            <input id="value" formControlName="value" matInput>
+          </div>
+        </mat-form-field>
+        <button
+          mat-button
+          [matTooltip]="'apps.user-app-settings.remove' | translate"
+          class="transparent-button"
+          (click)="removeSetting(i)"
+        >
+          <mat-icon [inline]="true">close</mat-icon>
+        </button>
+      </div>
+    </ng-container>
+  </form>
+
+  <!-- Add mote link. -->
+  <div>
+    <a class="add-setting" (click)="addSetting()">+ {{ 'apps.user-app-settings.add' | translate }}</a>
+  </div>
+
+  <app-button
+    #button
+    (action)="saveChanges()"
+    [disabled]="!form.valid"
+    color="primary"
+    class="float-right"
+  >
+    {{ 'apps.user-app-settings.save' | translate }}
+  </app-button>
+</app-dialog>

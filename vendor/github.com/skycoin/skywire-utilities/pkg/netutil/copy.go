@@ -1,3 +1,4 @@
+// Package netutil pkg/netutil/copy.go
 package netutil
 
 import (

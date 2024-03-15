@@ -1,0 +1,101 @@
+@import "variables";
+
+.top-dialog-button {
+  color: $light-gray !important;
+
+  .top-dialog-button-content {
+    text-align: center;
+
+    .actual-value {
+      color: $black;
+    }
+
+    .small {
+      font-size: $font-size-mini-plus;
+    }
+  }
+}
+
+.log-entry {
+  margin-top: 15px;
+  word-break: break-word;
+
+  .transparent {
+    color: $lighter-gray;
+  }
+}
+
+.log-entry:first-of-type {
+  margin-top: 0px;
+}
+
+.log-entry:last-of-type {
+  margin-bottom: $mat-dialog-padding;
+}
+
+.log-empty-msg {
+  text-align: center;
+}
+
+.view-raw-link {
+  color: $blue-medium;
+}
+
+.update-button {
+  display: flex;
+  justify-content: center;
+  cursor: pointer;
+
+  mat-icon {
+    position: relative;
+    top: 5px;
+    margin-right: 5px;
+  }
+
+  .update-time {
+    text-align: center;
+    font-size: $font-size-mini;
+    color: $black;
+    margin: 0 5px;
+  }
+}
+
+.panic-level-color {
+  color: #ff0000;
+}
+
+.fatal-level-color {
+  color: #ff0000;
+}
+
+.error-level-color {
+  color: #d10000;
+}
+
+.warning-level-color {
+  color: #e27505;
+}
+
+.info-level-color {
+  color: #0d9519;
+}
+
+.debug-level-color {
+  color: #0065ff;
+}
+
+.trace-level-color {
+  color: #468cf5;
+}
+
+.unknown-level-color {
+  color: #e27505;
+}
+
+.module-color {
+  color: #a119fc;
+}
+
+.extra-data-color {
+  color: #ad8021;
+}

@@ -22,7 +22,7 @@ export class ButtonComponent implements OnDestroy {
   @Input() disabled = false;
   // Must be one of the colors defined on the default theme.
   @Input() color = '';
-  @Input() loadingSize = 24;
+  @Input() loadingSize = 20;
   // Click event.
   @Output() action = new EventEmitter();
   state = ButtonStates.Normal;

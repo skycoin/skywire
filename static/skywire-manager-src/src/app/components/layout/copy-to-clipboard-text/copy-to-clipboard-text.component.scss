@@ -6,8 +6,14 @@
   /* Needed because the tooltip blocks the ability to select the text. */
   @extend .reactivate-mouse;
 
+  .text-margin {
+    margin-right: 5px;
+  }
+
   mat-icon {
     font-size: $font-size-mini-plus;
     user-select: none;
+    flex-shrink: 0;
+    display: inline !important;
   }
 }

@@ -34,7 +34,7 @@ func NewClient(entries []*disc.Entry, log *logging.Logger) disc.APIClient {
 }
 
 // Entry retrieves an entry associated with the given public key from the entries field of directClient.
-func (c *directClient) Entry(ctx context.Context, pubKey cipher.PubKey) (*disc.Entry, error) {
+func (c *directClient) Entry(_ context.Context, pubKey cipher.PubKey) (*disc.Entry, error) {
 	c.mx.RLock()
 	defer c.mx.RUnlock()
 	for _, entry := range c.entries {
@@ -46,7 +46,7 @@ func (c *directClient) Entry(ctx context.Context, pubKey cipher.PubKey) (*disc.E
 }
 
 // PostEntry adds a new Entry to the entries field of directClient.
-func (c *directClient) PostEntry(ctx context.Context, entry *disc.Entry) error {
+func (c *directClient) PostEntry(_ context.Context, entry *disc.Entry) error {
 	c.mx.Lock()
 	defer c.mx.Unlock()
 	c.entries[entry.Static] = entry
@@ -54,7 +54,7 @@ func (c *directClient) PostEntry(ctx context.Context, entry *disc.Entry) error {
 }
 
 // DelEntry deletes an Entry from the entries field of directClient.
-func (c *directClient) DelEntry(ctx context.Context, entry *disc.Entry) error {
+func (c *directClient) DelEntry(_ context.Context, entry *disc.Entry) error {
 	c.mx.Lock()
 	defer c.mx.Unlock()
 	delete(c.entries, entry.Static)
@@ -62,7 +62,7 @@ func (c *directClient) DelEntry(ctx context.Context, entry *disc.Entry) error {
 }
 
 // PutEntry updates Entry in the entries field of directClient.
-func (c *directClient) PutEntry(ctx context.Context, _ cipher.SecKey, entry *disc.Entry) error {
+func (c *directClient) PutEntry(_ context.Context, _ cipher.SecKey, entry *disc.Entry) error {
 	c.mx.Lock()
 	defer c.mx.Unlock()
 	c.entries[entry.Static] = entry
@@ -70,7 +70,7 @@ func (c *directClient) PutEntry(ctx context.Context, _ cipher.SecKey, entry *dis
 }
 
 // AvailableServers returns list of available servers from the entries field of directClient.
-func (c *directClient) AvailableServers(ctx context.Context) (entries []*disc.Entry, err error) {
+func (c *directClient) AvailableServers(_ context.Context) (entries []*disc.Entry, err error) {
 	c.mx.RLock()
 	defer c.mx.RUnlock()
 	for _, entry := range c.entries {
@@ -82,13 +82,23 @@ func (c *directClient) AvailableServers(ctx context.Context) (entries []*disc.En
 }
 
 // AllServers return list of all servers from the entries field of directClient
-func (c *directClient) AllServers(ctx context.Context) (entries []*disc.Entry, err error) {
+func (c *directClient) AllServers(_ context.Context) (entries []*disc.Entry, err error) {
 	c.mx.RLock()
 	defer c.mx.RUnlock()
 	for _, entry := range c.entries {
 		if entry.Server != nil {
 			entries = append(entries, entry)
 		}
+	}
+	return entries, nil
+}
+
+// AllEntries return list of all entries of directClient
+func (c *directClient) AllEntries(_ context.Context) (entries []string, err error) {
+	c.mx.RLock()
+	defer c.mx.RUnlock()
+	for _, entry := range c.entries {
+		entries = append(entries, entry.Static.Hex())
 	}
 	return entries, nil
 }

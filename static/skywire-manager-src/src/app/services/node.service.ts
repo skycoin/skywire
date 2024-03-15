@@ -1,15 +1,11 @@
 import { Injectable } from '@angular/core';
-import { HttpErrorResponse } from '@angular/common/http';
-import { Observable, Subscription, BehaviorSubject, of } from 'rxjs';
-import { flatMap, map, delay, tap } from 'rxjs/operators';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import BigNumber from 'bignumber.js';
 
 import { StorageService } from './storage.service';
-import { Node, Transport } from '../app.datatypes';
+import { Node } from '../app.datatypes';
 import { ApiService } from './api.service';
-import { processServiceError } from '../utils/errors';
-import { OperationError } from '../utils/operation-error';
-import { AppConfig } from '../app.config';
 
 /**
  * Known statuses the API returns in the health property of the visors.
@@ -21,56 +17,9 @@ export enum KnownHealthStatuses {
 }
 
 /**
- * Response returned by the node and node list observables.
- */
-export interface BackendData {
-  /**
-   * Last obtained node or node list. If the last operation for getting the data ended in an
-   * error, this property may still have an previously obtained value.
-   */
-  data: Node[] | Node;
-  /**
-   * Error found while trying to get the data. If will only have a value if the last
-   * try ended in an error.
-   */
-  error: OperationError;
-  /**
-   * Unix time in which the data returned in the data property was obtained. If
-   * OperationError has a value, this property will still have a valid value if valid
-   * data was previously found.
-   */
-  momentOfLastCorrectUpdate: number;
-}
-
-/**
- * Response returned by specificNodeTrafficData.
- */
-export class TrafficData {
-  /**
-   * Total amount of data sent by the node since it was started.
-   */
-  totalSent = 0;
-  /**
-   * Total amount of data received by the node since it was started.
-   */
-  totalReceived = 0;
-  /**
-   * Array with historic values of the totalSent property. Each value will be separeted by
-   * the amount of time selected by the user for refreshing the data. It is not an exact history,
-   * but the service will try it best to provided good data.
-   */
-  sentHistory: number[] = [];
-  /**
-   * Array with historic values of the totalReceived property. Each value will be separeted by
-   * the amount of time selected by the user for refreshing the data. It is not an exact history,
-   * but the service will try it best to provided good data.
-   */
-  receivedHistory: number[] = [];
-}
-
-/**
  * Keys for saving custom settings for the calls to the updater API endpoints.
  */
+// TODO: remove after removing the old updater.
 export enum UpdaterStorageKeys {
   /**
    * If has a value, at least one of the other keys have a value.
@@ -89,385 +38,15 @@ export enum UpdaterStorageKeys {
   providedIn: 'root'
 })
 export class NodeService {
-
-  // How long the history arrays of the TrafficData instances will be.
-  private readonly maxTrafficHistorySlots = 10;
-
-  // Delay the service waits before requesting data.
-  private dataRefreshDelay: number;
-
-  // Vars related to the node list.
-  private nodeListSubject = new BehaviorSubject<BackendData>(null);
-  private updatingNodeListSubject = new BehaviorSubject<boolean>(false);
-  /**
-   * Subscription for getting the node list. If it has a value, indicates that the
-   * service is automatically refreshing the node list.
-   */
-  private nodeListRefreshSubscription: Subscription;
-  /**
-   * Subscription for the timer to stop refresing the node list. If it is valid, it means
-   * a call to stop updating the data was made, but it is still pending.
-   */
-  private nodeListStopSubscription: Subscription;
-
-  // Vars related to the specific node.
-  private specificNodeSubject = new BehaviorSubject<BackendData>(null);
-  private updatingSpecificNodeSubject = new BehaviorSubject<boolean>(false);
-  private specificNodeTrafficDataSubject = new BehaviorSubject<TrafficData>(null);
-  /**
-   * Public key of the specific node this service must retrieve.
-   */
-  private specificNodeKey = '';
-  /**
-   * Last moment in which the specific node info was obtained following the specific intervals
-   * defined by the user for updating the data. It allows to update the history data in a
-   * consistent way.
-   */
-  private lastScheduledHistoryUpdateTime = 0;
-
-  /**
-   * Subscription for getting the specific node. If it has a value, indicates that the
-   * service is automatically refreshing the node info.
-   */
-  private specificNodeRefreshSubscription: Subscription;
-  /**
-   * Subscription for the timer to stop refresing the specific node. If it is valid, it means
-   * a call to stop updating the data was made, but it is still pending.
-   */
-  private specificNodeStopSubscription: Subscription;
-
-  /**
-   * Allows to get the node list. The list is periodically updated. It may emit null.
-   */
-  get nodeList(): Observable<BackendData> {
-    return this.nodeListSubject.asObservable();
-  }
-  /**
-   * Allows to know if the service is currently updating the node list.
-   */
-  get updatingNodeList(): Observable<boolean> {
-    return this.updatingNodeListSubject.asObservable();
-  }
-  /**
-   * Allows to get the specific node. The info is periodically updated. It may emit null.
-   */
-  get specificNode(): Observable<BackendData> {
-    return this.specificNodeSubject.asObservable();
-  }
-  /**
-   * Allows to know if the service is currently updating the specific node.
-   */
-  get updatingSpecificNode(): Observable<boolean> {
-    return this.updatingSpecificNodeSubject.asObservable();
-  }
-  /**
-   * Allows to get details about the data traffic of the specific node. The info is
-   * periodically updated.
-   */
-  get specificNodeTrafficData(): Observable<TrafficData> {
-    return this.specificNodeTrafficDataSubject.asObservable();
-  }
-
   constructor(
     private apiService: ApiService,
     private storageService: StorageService,
-  ) {
-    // Get the data refresing time set by the user.
-    this.storageService.getRefreshTimeObservable().subscribe(val => {
-      this.dataRefreshDelay = val * 1000;
-
-      // If the service is currently automatically refreshing the data, restart the process.
-      if (this.nodeListRefreshSubscription) {
-        this.forceNodeListRefresh();
-      }
-      if (this.specificNodeRefreshSubscription) {
-        this.forceSpecificNodeRefresh();
-      }
-    });
-  }
-
-  /**
-   * Makes the service start updating the node list. You must call this function before
-   * using the nodeList observable.
-   */
-  startRequestingNodeList() {
-    // If the previous procedure is still valid, continue it.
-    if (this.nodeListStopSubscription && !this.nodeListStopSubscription.closed) {
-      this.nodeListStopSubscription.unsubscribe();
-      this.nodeListStopSubscription = null;
-
-      return;
-    }
-
-    // Get for how many ms the saved data is still valid.
-    const momentOfLastCorrectUpdate = this.nodeListSubject.value ? this.nodeListSubject.value.momentOfLastCorrectUpdate : 0;
-    let remainingTime = this.calculateRemainingTime(momentOfLastCorrectUpdate);
-    remainingTime = remainingTime > 0 ? remainingTime : 0;
-
-    // Use the data obtained the last time and schedule an update after the appropriate time.
-    this.startDataSubscription(remainingTime, true);
-  }
-
-  /**
-   * Makes the service start updating a specific node. You must call this function before
-   * using the specificNode observable.
-   * @param publicKey Public key of the specific node to consult.
-   */
-  startRequestingSpecificNode(publicKey: string) {
-    // If the previous procedure is still valid, continue it.
-    if (this.specificNodeStopSubscription && !this.specificNodeStopSubscription.closed && this.specificNodeKey === publicKey) {
-      this.specificNodeStopSubscription.unsubscribe();
-      this.specificNodeStopSubscription = null;
-
-      return;
-    }
-
-    // Get for how many ms the saved data is still valid.
-    const momentOfLastCorrectUpdate = this.specificNodeSubject.value ? this.specificNodeSubject.value.momentOfLastCorrectUpdate : 0;
-    const remainingTime = this.calculateRemainingTime(momentOfLastCorrectUpdate);
-
-    // Reset the predefined data update intervals.
-    this.lastScheduledHistoryUpdateTime = 0;
-
-    if (this.specificNodeKey !== publicKey || remainingTime === 0) {
-      // Get the data from the backend.
-      this.specificNodeKey = publicKey;
-      this.specificNodeTrafficDataSubject.next(new TrafficData());
-      this.specificNodeSubject.next(null);
-      this.startDataSubscription(0, false);
-    } else {
-      // Use the data obtained the last time and schedule an update after the appropriate time.
-      this.startDataSubscription(remainingTime, false);
-    }
-  }
-
-  /**
-   * Calculates for how many ms the saved data is still valid before an update should be made.
-   * @param momentOfLastCorrectUpdate Moment in which the data was saved.
-   */
-  private calculateRemainingTime(momentOfLastCorrectUpdate: number): number {
-    if (momentOfLastCorrectUpdate < 1) {
-      return 0;
-    }
-
-    let refreshDelay = this.dataRefreshDelay - (Date.now() - momentOfLastCorrectUpdate);
-    if (refreshDelay < 0) {
-      refreshDelay = 0;
-    }
-
-    return refreshDelay;
-  }
-
-  /**
-   * Makes the service stop updating the node list.
-   */
-  stopRequestingNodeList() {
-    if (this.nodeListRefreshSubscription) {
-      this.nodeListStopSubscription = of(1).pipe(delay(4000)).subscribe(() => {
-        this.nodeListRefreshSubscription.unsubscribe();
-        this.nodeListRefreshSubscription = null;
-      });
-    }
-  }
-
-  /**
-   * Makes the service stop updating the specific node.
-   */
-  stopRequestingSpecificNode() {
-    if (this.specificNodeRefreshSubscription) {
-      // The delay allows to recover the connection if the user returns to the node page.
-      this.specificNodeStopSubscription = of(1).pipe(delay(4000)).subscribe(() => {
-        this.specificNodeRefreshSubscription.unsubscribe();
-        this.specificNodeRefreshSubscription = null;
-      });
-    }
-  }
-
-  /**
-   * Starts periodically updating the node list or the specific node.
-   * @param delayMs Delay before loading the data.
-   * @param gettingNodeList True for getting the node list and false for getting the specific node.
-   */
-  private startDataSubscription(delayMs: number, gettingNodeList: boolean) {
-    let updatingSubject: BehaviorSubject<boolean>;
-    let dataSubject: BehaviorSubject<BackendData>;
-    let operation: Observable<any>;
-
-    if (gettingNodeList) {
-      updatingSubject = this.updatingNodeListSubject;
-      dataSubject = this.nodeListSubject;
-      operation = this.getNodes();
-
-      if (this.nodeListRefreshSubscription) {
-        this.nodeListRefreshSubscription.unsubscribe();
-      }
-    } else {
-      updatingSubject = this.updatingSpecificNodeSubject;
-      dataSubject = this.specificNodeSubject;
-      operation = this.getNode(this.specificNodeKey);
-
-      // Cancel any pending stop operation.
-      if (this.specificNodeStopSubscription) {
-        this.specificNodeStopSubscription.unsubscribe();
-        this.specificNodeStopSubscription = null;
-      }
-
-      if (this.specificNodeRefreshSubscription) {
-        this.specificNodeRefreshSubscription.unsubscribe();
-      }
-    }
-
-    const subscription = of(1).pipe(
-      // Wait the requested delay.
-      delay(delayMs),
-      // Additional steps for making sure the UI shows the animation (important in case of quick errors).
-      tap(() => updatingSubject.next(true)),
-      delay(120),
-      // Load the data.
-      flatMap(() => operation))
-    .subscribe(result => {
-      updatingSubject.next(false);
-
-      // Calculate the delay for the next update.
-      let refrestTime: number;
-      if (!gettingNodeList) {
-        // Update the history values.
-        this.updateTrafficData((result as Node).transports);
-
-        // Wait for the amount of time pending for the next scheduled data update. This is needed
-        // in case the data was updated before that by any reason.
-        refrestTime = this.calculateRemainingTime(this.lastScheduledHistoryUpdateTime);
-        if (refrestTime < 1000) {
-          // Wait the normal time if there is just very lite or no time left for the next update.
-          this.lastScheduledHistoryUpdateTime = Date.now();
-          refrestTime = this.dataRefreshDelay;
-        }
-      } else {
-        // Wait the normal time.
-        refrestTime = this.dataRefreshDelay;
-      }
-
-      const newData: BackendData = {
-        data: result,
-        error: null,
-        momentOfLastCorrectUpdate: Date.now(),
-      };
-
-      dataSubject.next(newData);
-
-      // Schedule the next update.
-      this.startDataSubscription(refrestTime, gettingNodeList);
-    }, err => {
-      updatingSubject.next(false);
-
-      err = processServiceError(err);
-      const newData: BackendData = {
-        data: dataSubject.value && dataSubject.value.data ? dataSubject.value.data : null,
-        error: err,
-        momentOfLastCorrectUpdate: dataSubject.value ? dataSubject.value.momentOfLastCorrectUpdate : -1,
-      };
-
-      // If the specific node was not found, stop updating the data.
-      const stopUpdating = !gettingNodeList && err.originalError && ((err.originalError as HttpErrorResponse).status === 400);
-
-      // Schedule the next update.
-      if (!stopUpdating) {
-        this.startDataSubscription(AppConfig.connectionRetryDelay, gettingNodeList);
-      }
-
-      dataSubject.next(newData);
-    });
-
-    if (gettingNodeList) {
-      this.nodeListRefreshSubscription = subscription;
-    } else {
-      this.specificNodeRefreshSubscription = subscription;
-    }
-  }
-
-  /**
-   * Updates the traffic data of the specific node.
-   * @param transports Transports of the specific node.
-   */
-  private updateTrafficData(transports: Transport[]) {
-    const currentData = this.specificNodeTrafficDataSubject.value;
-
-    // Update the total data values.
-    currentData.totalSent = 0;
-    currentData.totalReceived = 0;
-    if (transports && transports.length > 0) {
-      currentData.totalSent = transports.reduce((total, transport) => total + transport.sent, 0);
-      currentData.totalReceived = transports.reduce((total, transport) => total + transport.recv, 0);
-    }
-
-    // Update the history.
-    if (currentData.sentHistory.length === 0) {
-      // If the array is empty, just initialice the array with the only known value.
-      for (let i = 0; i < this.maxTrafficHistorySlots; i++) {
-        currentData.sentHistory[i] = currentData.totalSent;
-        currentData.receivedHistory[i] = currentData.totalReceived;
-      }
-    } else {
-      // Calculate how many slots should we move since the last time the history was updated.
-      // This makes the intervals work well in case of normal updates, forced updates and
-      // late updates due to errors.
-      const TimeSinceLastHistoryUpdate = Date.now() - this.lastScheduledHistoryUpdateTime;
-      let newSlotsNeeded =
-        new BigNumber(TimeSinceLastHistoryUpdate).dividedBy(this.dataRefreshDelay).decimalPlaces(0, BigNumber.ROUND_FLOOR).toNumber();
-
-      if (newSlotsNeeded > this.maxTrafficHistorySlots) {
-        newSlotsNeeded = this.maxTrafficHistorySlots;
-      }
-
-      // Save the data in the correct slots.
-      if (newSlotsNeeded === 0) {
-        currentData.sentHistory[currentData.sentHistory.length - 1] = currentData.totalSent;
-        currentData.receivedHistory[currentData.receivedHistory.length - 1] = currentData.totalReceived;
-      } else {
-        for (let i = 0; i < newSlotsNeeded; i++) {
-          currentData.sentHistory.push(currentData.totalSent);
-          currentData.receivedHistory.push(currentData.totalReceived);
-        }
-      }
-
-      // Limit the history elements.
-      if (currentData.sentHistory.length > this.maxTrafficHistorySlots) {
-        currentData.sentHistory.splice(0, currentData.sentHistory.length - this.maxTrafficHistorySlots);
-        currentData.receivedHistory.splice(0, currentData.receivedHistory.length - this.maxTrafficHistorySlots);
-      }
-    }
-
-    this.specificNodeTrafficDataSubject.next(currentData);
-  }
-
-  /**
-   * Makes the service immediately refresh the node list.
-   */
-  forceNodeListRefresh() {
-    if (this.nodeListSubject.value) {
-      // Make sure the current data is invalidated.
-      this.nodeListSubject.value.momentOfLastCorrectUpdate = -1;
-    }
-
-    this.startDataSubscription(0, true);
-  }
-
-  /**
-   * Makes the service immediately refresh the specific node.
-   */
-  forceSpecificNodeRefresh() {
-    if (this.specificNodeSubject.value) {
-      // Make sure the current data is invalidated.
-      this.specificNodeSubject.value.momentOfLastCorrectUpdate = -1;
-    }
-
-    this.startDataSubscription(0, false);
-  }
+  ) { }
 
   /**
    * Gets the list of the nodes connected to the hypervisor.
    */
-  private getNodes(): Observable<Node[]> {
+  public getNodes(): Observable<Node[]> {
     let nodes: Node[] = [];
 
     return this.apiService.get('visors-summary').pipe(map((result: any[]) => {
@@ -482,6 +61,7 @@ export class NodeService {
           node.version = response.overview.build_info.version;
           node.autoconnectTransports = response.public_autoconnect;
           node.buildTag = response.build_tag ? response.build_tag : '';
+          node.rewardsAddress = response.reward_address;
 
           // Ip.
           if (response.overview && response.overview.local_ip && (response.overview.local_ip as string).trim()) {
@@ -599,6 +179,7 @@ export class NodeService {
         node.isSymmeticNat = response.overview.is_symmetic_nat;
         node.publicIp = response.overview.public_ip;
         node.autoconnectTransports = response.public_autoconnect;
+        node.rewardsAddress = response.reward_address;
 
         // Ip.
         if (response.overview.local_ip && (response.overview.local_ip as string).trim()) {
@@ -734,10 +315,42 @@ export class NodeService {
   }
 
   /**
-   * Restarts a node.
+   * Sets the rewards address of the node.
    */
-  reboot(nodeKey: string): Observable<any> {
-    return this.apiService.post(`visors/${nodeKey}/restart`);
+  setRewardsAddress(nodeKey: string, address: string) {
+    const data = {
+      reward_address: address,
+    };
+
+    return this.apiService.put(`visors/${nodeKey}/reward`, data);
+  }
+
+  /**
+   * Gets the rewards address of the node.
+   */
+  getRewardsAddress(nodeKey: string) {
+    return this.apiService.get(`visors/${nodeKey}/reward`);
+  }
+
+  /**
+   * Gets the runtime logs of the node.
+   */
+  getRuntimeLogs(nodeKey: string) {
+    return this.apiService.get(`visors/${nodeKey}/runtime-logs`);
+  }
+
+  /**
+   * Removes the rewards address of the node.
+   */
+  deleteRewardsAddress(nodeKey: string) {
+    return this.apiService.delete(`visors/${nodeKey}/reward`);
+  }
+
+  /**
+   * Turns off a node.
+   */
+  shutdown(nodeKey: string): Observable<any> {
+    return this.apiService.post(`visors/${nodeKey}/shutdown`);
   }
 
   /**

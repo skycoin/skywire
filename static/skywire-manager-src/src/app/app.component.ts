@@ -2,7 +2,7 @@ import { Component } from '@angular/core';
 import { Router, NavigationEnd } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { of, Subscription } from 'rxjs';
-import { delay, flatMap } from 'rxjs/operators';
+import { delay, mergeMap } from 'rxjs/operators';
 
 import { StorageService } from './services/storage.service';
 import { SnackbarService } from './services/snackbar.service';
@@ -32,6 +32,8 @@ export class AppComponent {
   pkErrorShown = false;
   pkErrorsFound = 0;
 
+  showingDataProblemMsg = false;
+
   obtainPkSubscription: Subscription;
 
   constructor(
@@ -48,13 +50,17 @@ export class AppComponent {
     // Close the snackbar when opening a modal window.
     dialog.afterOpened.subscribe(() => snackbarService.closeCurrent());
 
+    // Prevent automatic scroll retoration during navigation.
+    if (history.scrollRestoration) {
+      history.scrollRestoration = 'manual';
+    }
+
     // Scroll to the top after navigating.
     // When navigating, scroll to the top and close the snackbar and all modal windows.
     router.events.subscribe(e => {
       if (e instanceof NavigationEnd) {
         snackbarService.closeCurrent();
         dialog.closeAll();
-        window.scrollTo(0, 0);
       }
     });
 
@@ -105,13 +111,27 @@ export class AppComponent {
   }
 
   /**
+   * Shows a box at the bottom-right corner indicating that there is a problem getting the data.
+   */
+  showDataProblemMsg() {
+    this.showingDataProblemMsg = true;
+  }
+
+  /**
+   * Hides the box at the bottom-right corner indicating that there is a problem getting the data.
+   */
+  hideDataProblemMsg() {
+    this.showingDataProblemMsg = false;
+  }
+
+  /**
    * Gets the pk of the hypervisor. After that, it initializes services and allows the app to start working.
    */
   private checkHypervisorPk(delayMs: number) {
     if (this.obtainPkSubscription) {
       this.obtainPkSubscription.unsubscribe();
     }
-    this.obtainPkSubscription = of(1).pipe(delay(delayMs), flatMap(() => this.apiService.get('about'))).subscribe(result => {
+    this.obtainPkSubscription = of(1).pipe(delay(delayMs), mergeMap(() => this.apiService.get('about'))).subscribe(result => {
       if (result.public_key) {
         this.finishStartup(result.public_key);
         this.hypervisorPkObtained = true;

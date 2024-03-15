@@ -13,6 +13,7 @@ import { processServiceError } from 'src/app/utils/errors';
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
 import { MenuOptionData } from 'src/app/components/layout/top-bar/top-bar.component';
 import { StorageService } from 'src/app/services/storage.service';
+import { NodeLogsComponent } from './node-logs/node-logs.component';
 
 /**
  * Helper object for managing the options shown in the menu while in the node details page.
@@ -26,15 +27,14 @@ export class NodeActionsHelper {
   private currentNode: Node;
   private currentNodeKey: string;
   private canBeUpdated = false;
-  private canBeRestarted = false;
   private canOpenTerminal = false;
 
   options: MenuOptionData[] = [];
 
   returnButtonText: string;
 
-  private rebootSubscription: Subscription;
   private updateSubscription: Subscription;
+  private shutdownSubscription: Subscription;
 
   // Services this class need.
   private dialog: MatDialog;
@@ -77,14 +77,14 @@ export class NodeActionsHelper {
       icon: 'subject',
     });
 
-    if (this.canBeRestarted) {
-      this.options.push({
-        name: 'actions.menu.reboot',
-        actionName: 'reboot',
-        icon: 'rotate_right'
-      });
-    }
+    this.options.push({
+      name: 'actions.menu.turn-off',
+      actionName: 'shutdown',
+      icon: 'power_settings_new'
+    });
 
+    // TODO: remove if the option will not be added again. Delete the translatable strings too.
+    /*
     if (this.canBeUpdated) {
       this.options.push({
         name: 'actions.menu.update',
@@ -92,6 +92,7 @@ export class NodeActionsHelper {
         icon: 'get_app',
       });
     }
+    */
   }
 
   /**
@@ -102,10 +103,8 @@ export class NodeActionsHelper {
 
     if (GeneralUtils.checkIfTagIsUpdatable(currentNode.buildTag)) {
       this.canBeUpdated = true;
-      this.canBeRestarted = true;
     } else {
       this.canBeUpdated = false;
-      this.canBeRestarted = false;
     }
 
     this.canOpenTerminal = GeneralUtils.checkIfTagCanOpenterminal(currentNode.buildTag);
@@ -131,9 +130,9 @@ export class NodeActionsHelper {
     } else if (actionName === 'update') {
       this.update();
     } else if (actionName === 'logs') {
-      window.open(window.location.origin + '/api/visors/' + nodePk + '/runtime-logs', '_blank');
-    } else if (actionName === 'reboot') {
-      this.reboot();
+      this.runtimeLogs();
+    } else if (actionName === 'shutdown') {
+      this.shutdown();
     } else if (actionName === null) {
       // Null is returned if the back button was pressed.
       this.back();
@@ -144,23 +143,25 @@ export class NodeActionsHelper {
    * Cleans the object. Must be called when the object is no longer needed.
    */
   dispose() {
-    if (this.rebootSubscription) {
-      this.rebootSubscription.unsubscribe();
-    }
     if (this.updateSubscription) {
       this.updateSubscription.unsubscribe();
     }
+    if (this.shutdownSubscription) {
+      this.shutdownSubscription.unsubscribe();
+    }
   }
 
-  reboot() {
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'actions.reboot.confirmation');
+  shutdown() {
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'actions.turn-off.confirmation');
 
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.componentInstance.showProcessing();
 
-      this.rebootSubscription = this.nodeService.reboot(this.currentNodeKey).subscribe(() => {
-        this.snackbarService.showDone('actions.reboot.done');
+      this.shutdownSubscription = this.nodeService.shutdown(this.currentNodeKey).subscribe(() => {
+        this.snackbarService.showDone('actions.turn-off.done');
         confirmationDialog.close();
+
+        this.router.navigate(['nodes']);
       }, (err: OperationError) => {
         err = processServiceError(err);
 
@@ -182,6 +183,8 @@ export class NodeActionsHelper {
   }
 
   terminal() {
+    // TODO: remove if the basic terminal is going to be removed definitely.
+    /*
     const options: SelectableOption[] = [
       {
         icon: 'launch',
@@ -207,6 +210,19 @@ export class NodeActionsHelper {
         });
       }
     });
+    */
+
+    // Open the complete terminal in a new tab.
+    const protocol = window.location.protocol;
+    const hostname = window.location.host.replace('localhost:4200', '127.0.0.1:8000');
+    window.open(protocol + '//' + hostname + '/pty/' + this.currentNodeKey, '_blank', 'noopener noreferrer');
+  }
+
+  /**
+   * Opens the modal window for checking the runtime logs of a node.
+   */
+  runtimeLogs() {
+    NodeLogsComponent.openDialog(this.dialog);
   }
 
   back() {
