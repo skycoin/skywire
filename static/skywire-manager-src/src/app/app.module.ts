@@ -107,6 +107,8 @@ import { CreateRemoteRevPortComponent } from './components/pages/node/routing/re
 import { CreateLocalFwdPortComponent } from './components/pages/node/routing/local-fwd-ports-list/create-local-fwd-port/create-local-fwd-port.component';
 import { AllLocalFwdPortsComponent } from './components/pages/node/routing/all-local-fwd-ports/all-local-fwd-ports.component';
 import { AllRemoteRevPortsComponent } from './components/pages/node/routing/all-remote-rev-ports/all-remote-rev-ports.component';
+import { SkychatSettingsComponent } from './components/pages/node/apps/node-apps/skychat-settings/skychat-settings.component';
+import { TabSelectorComponent } from './components/layout/tab-selector/tab-selector.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
   disabled: true,
@@ -190,6 +192,8 @@ const globalRippleConfig: RippleGlobalOptions = {
     CreateLocalFwdPortComponent,
     AllLocalFwdPortsComponent,
     AllRemoteRevPortsComponent,
+    SkychatSettingsComponent,
+    TabSelectorComponent,
   ],
   imports: [
     BrowserModule,

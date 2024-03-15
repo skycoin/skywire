@@ -363,10 +363,10 @@ export class NodeService {
   }
 
   /**
-   * Restarts a node.
+   * Turns off a node.
    */
-  reboot(nodeKey: string): Observable<any> {
-    return this.apiService.post(`visors/${nodeKey}/restart`);
+  shutdown(nodeKey: string): Observable<any> {
+    return this.apiService.post(`visors/${nodeKey}/shutdown`);
   }
 
   /**

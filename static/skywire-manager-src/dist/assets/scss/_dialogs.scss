@@ -80,3 +80,27 @@ app-dialog {
     }
   }
 }
+
+// Style for the button that is shown in some modals under the tittle and above the content.
+.top-dialog-button {
+  margin-left: -$mat-dialog-padding;
+  margin-right: -$mat-dialog-padding;
+  font-size: $font-size-smaller;
+  background-color: #d9deeb;
+  color: $black;
+  cursor: pointer;
+
+  &:hover {
+    background-color: darken(#d9deeb, 3%);
+  }
+
+  .top-dialog-button-content {
+    padding: 10px $mat-dialog-padding;
+  }
+
+  .top-dialog-button-margin {
+    height: 1px;
+    background-color: $modal-separator;
+    margin: 0 12px;
+  }
+}

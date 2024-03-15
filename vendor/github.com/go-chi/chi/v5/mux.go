@@ -156,7 +156,7 @@ func (mx *Mux) Head(pattern string, handlerFn http.HandlerFunc) {
 	mx.handle(mHEAD, pattern, handlerFn)
 }
 
-// Options adds the route `pattern` that matches a OPTIONS http method to
+// Options adds the route `pattern` that matches an OPTIONS http method to
 // execute the `handlerFn` http.HandlerFunc.
 func (mx *Mux) Options(pattern string, handlerFn http.HandlerFunc) {
 	mx.handle(mOPTIONS, pattern, handlerFn)
@@ -250,20 +250,19 @@ func (mx *Mux) With(middlewares ...func(http.Handler) http.Handler) Router {
 	return im
 }
 
-// Group creates a new inline-Mux with a fresh middleware stack. It's useful
+// Group creates a new inline-Mux with a copy of middleware stack. It's useful
 // for a group of handlers along the same routing path that use an additional
 // set of middlewares. See _examples/.
 func (mx *Mux) Group(fn func(r Router)) Router {
-	im := mx.With().(*Mux)
+	im := mx.With()
 	if fn != nil {
 		fn(im)
 	}
 	return im
 }
 
-// Route creates a new Mux with a fresh middleware stack and mounts it
-// along the `pattern` as a subrouter. Effectively, this is a short-hand
-// call to Mount. See _examples/.
+// Route creates a new Mux and mounts it along the `pattern` as a subrouter.
+// Effectively, this is a short-hand call to Mount. See _examples/.
 func (mx *Mux) Route(pattern string, fn func(r Router)) Router {
 	if fn == nil {
 		panic(fmt.Sprintf("chi: attempting to Route() a nil subrouter on '%s'", pattern))
@@ -378,11 +377,11 @@ func (mx *Mux) NotFoundHandler() http.HandlerFunc {
 
 // MethodNotAllowedHandler returns the default Mux 405 responder whenever
 // a method cannot be resolved for a route.
-func (mx *Mux) MethodNotAllowedHandler() http.HandlerFunc {
+func (mx *Mux) MethodNotAllowedHandler(methodsAllowed ...methodTyp) http.HandlerFunc {
 	if mx.methodNotAllowedHandler != nil {
 		return mx.methodNotAllowedHandler
 	}
-	return methodNotAllowedHandler
+	return methodNotAllowedHandler(methodsAllowed...)
 }
 
 // handle registers a http.Handler in the routing tree for a particular http method
@@ -445,7 +444,7 @@ func (mx *Mux) routeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if rctx.methodNotAllowed {
-		mx.MethodNotAllowedHandler().ServeHTTP(w, r)
+		mx.MethodNotAllowedHandler(rctx.methodsAllowed...).ServeHTTP(w, r)
 	} else {
 		mx.NotFoundHandler().ServeHTTP(w, r)
 	}
@@ -480,8 +479,14 @@ func (mx *Mux) updateRouteHandler() {
 }
 
 // methodNotAllowedHandler is a helper function to respond with a 405,
-// method not allowed.
-func methodNotAllowedHandler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(405)
-	w.Write(nil)
+// method not allowed. It sets the Allow header with the list of allowed
+// methods for the route.
+func methodNotAllowedHandler(methodsAllowed ...methodTyp) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		for _, m := range methodsAllowed {
+			w.Header().Add("Allow", reverseMethodMap[m])
+		}
+		w.WriteHeader(405)
+		w.Write(nil)
+	}
 }

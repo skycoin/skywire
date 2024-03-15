@@ -237,12 +237,7 @@
     "menu": {
       "terminal": "Terminal",
       "config": "Configuration",
-      "update": "Update",
-      "reboot": "Reboot"
-    },
-    "reboot": {
-      "confirmation": "Are you sure you want to reboot the visor?",
-      "done": "The visor is restarting."
+      "update": "Update"
     },
     "terminal-options": {
       "full": "Full terminal",

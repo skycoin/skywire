@@ -15,9 +15,10 @@ import (
 
 // DmsgConfig defines config for Dmsg network.
 type DmsgConfig struct {
-	Discovery     string        `json:"discovery"`
-	SessionsCount int           `json:"sessions_count"`
-	Servers       []*disc.Entry `json:"servers"`
+	Discovery            string        `json:"discovery"`
+	SessionsCount        int           `json:"sessions_count"`
+	Servers              []*disc.Entry `json:"servers"`
+	ConnectedServersType string        `json:"servers_type"`
 }
 
 // New makes new dmsg client from configuration
@@ -38,7 +39,9 @@ func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *Dms
 				_ = eb.Broadcast(context.Background(), event) //nolint:errcheck
 			},
 		},
+		ConnectedServersType: conf.ConnectedServersType,
 	}
+	dmsgConf.ClientType = "visor"
 	dmsgC := dmsg.NewClient(pk, sk, disc.NewHTTP(conf.Discovery, httpC, masterLogger.PackageLogger("dmsgC:disc")), dmsgConf)
 	dmsgC.SetLogger(masterLogger.PackageLogger("dmsgC"))
 	dmsgC.SetMasterLogger(masterLogger)

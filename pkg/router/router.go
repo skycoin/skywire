@@ -328,16 +328,6 @@ func (r *router) PingRoute(
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, lPK, lPort, rPort)
 
-	r.routeSetupHookMu.Lock()
-	defer r.routeSetupHookMu.Unlock()
-	if len(r.routeSetupHooks) != 0 {
-		for _, rsf := range r.routeSetupHooks {
-			if err := rsf(rPK, r.tm); err != nil {
-				return nil, err
-			}
-		}
-	}
-
 	// check if transports are available
 	ok := r.checkIfTransportAvailable()
 	if !ok {

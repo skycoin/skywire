@@ -4,10 +4,10 @@ package dmsg
 import (
 	"context"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
@@ -20,6 +20,8 @@ import (
 type ServerConfig struct {
 	MaxSessions    int
 	UpdateInterval time.Duration
+	LimitIP        int
+	AuthPassphrase string
 }
 
 // DefaultServerConfig returns the default server config.
@@ -49,6 +51,12 @@ type Server struct {
 	addrDone chan struct{}
 
 	maxSessions int
+
+	limitIP         int
+	ipCounter       map[string]int
+	ipCounterLocker sync.RWMutex
+
+	authPassphrase string
 }
 
 // NewServer creates a new dmsg server entity.
@@ -69,11 +77,14 @@ func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Serv
 	s.addrDone = make(chan struct{})
 	s.maxSessions = conf.MaxSessions
 	s.setSessionCallback = func(ctx context.Context) error {
-		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions)
+		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions, conf.AuthPassphrase)
 	}
 	s.delSessionCallback = func(ctx context.Context) error {
-		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions)
+		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions, conf.AuthPassphrase)
 	}
+	s.ipCounter = make(map[string]int)
+	s.limitIP = conf.LimitIP
+	s.authPassphrase = conf.AuthPassphrase
 	return s
 }
 
@@ -151,10 +162,21 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 				WithField("remote_tcp", conn.RemoteAddr()).
 				Debug("Max sessions is reached, but still accepting so clients who delegated us can still listen.")
 		}
-
+		connIP := strings.Split(conn.RemoteAddr().String(), ":")[0]
+		s.ipCounterLocker.Lock()
+		if s.ipCounter[connIP] >= s.limitIP {
+			log.Warnf("Maximum client per IP for %s reached.", connIP)
+			s.ipCounterLocker.Unlock()
+			continue
+		}
+		s.ipCounter[connIP]++
+		s.ipCounterLocker.Unlock()
 		s.wg.Add(1)
 		go func(conn net.Conn) {
 			defer func() {
+				s.ipCounterLocker.Lock()
+				s.ipCounter[connIP]--
+				s.ipCounterLocker.Unlock()
 				err := recover()
 				if err != nil {
 					log.Warnf("panic in handleSession: %+v", err)
@@ -168,13 +190,13 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 
 func (s *Server) startUpdateEntryLoop(ctx context.Context) error {
 	err := netutil.NewDefaultRetrier(s.log).Do(ctx, func() error {
-		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions)
+		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions, s.authPassphrase)
 	})
 	if err != nil {
 		return err
 	}
 
-	go s.updateServerEntryLoop(ctx, s.AdvertisedAddr(), s.maxSessions)
+	go s.updateServerEntryLoop(ctx, s.AdvertisedAddr(), s.maxSessions, s.authPassphrase)
 	return nil
 }
 
@@ -202,12 +224,12 @@ func (s *Server) Ready() <-chan struct{} {
 }
 
 func (s *Server) handleSession(conn net.Conn) {
-	log := logrus.FieldLogger(s.log.WithField("remote_tcp", conn.RemoteAddr()))
+	log := s.log.WithField("remote_tcp", conn.RemoteAddr())
 
 	dSes, err := makeServerSession(s.m, &s.EntityCommon, conn)
 	if err != nil {
 		if err := conn.Close(); err != nil {
-			log.WithError(err).Debug("On handleSession() failure, close connection resulted in error.")
+			log.WithError(err).Warn("On handleSession() failure, close connection resulted in error.")
 		}
 		return
 	}

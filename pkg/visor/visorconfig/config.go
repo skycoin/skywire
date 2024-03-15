@@ -16,7 +16,6 @@ import (
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/dmsgc"
-	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -62,9 +61,10 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		conf.Common = common
 	}
 	conf.Dmsg = &dmsgc.DmsgConfig{
-		Discovery:     services.DmsgDiscovery, //utilenv.DmsgDiscAddr,
-		SessionsCount: 1,
-		Servers:       []*disc.Entry{},
+		Discovery:            services.DmsgDiscovery, //utilenv.DmsgDiscAddr,
+		SessionsCount:        1,
+		Servers:              []*disc.Entry{},
+		ConnectedServersType: "all",
 	}
 	conf.Transport = &Transport{
 		Discovery:         services.TransportDiscovery, //utilenv.TpDiscAddr,
@@ -99,7 +99,6 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	conf.DmsgHTTPServerPath = LocalPath + "/" + Custom
 	conf.StunServers = services.StunServers //utilenv.GetStunServers()
 	conf.ShutdownTimeout = DefaultTimeout
-	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
 
 	conf.Dmsgpty = &Dmsgpty{
 		DmsgPort: DmsgPtyPort,
@@ -239,14 +238,14 @@ func makeDefaultLauncherAppsConfig(dnsServer string) []appserver.AppConfig {
 			Binary:    VPNClientName,
 			AutoStart: false,
 			Port:      routing.Port(skyenv.VPNClientPort),
-			Args:      []string{"-dns", dnsServer},
+			Args:      []string{"--dns", dnsServer},
 		},
 		{
 			Name:      SkychatName,
 			Binary:    SkychatName,
 			AutoStart: true,
 			Port:      routing.Port(skyenv.SkychatPort),
-			Args:      []string{"-addr", SkychatAddr},
+			Args:      []string{"--addr", SkychatAddr},
 		},
 		{
 			Name:      SkysocksName,
@@ -259,6 +258,7 @@ func makeDefaultLauncherAppsConfig(dnsServer string) []appserver.AppConfig {
 			Binary:    SkysocksClientName,
 			AutoStart: false,
 			Port:      routing.Port(skyenv.SkysocksClientPort),
+			Args:      []string{"--addr", SkysocksClientAddr},
 		},
 		{
 			Name:      VPNServerName,
