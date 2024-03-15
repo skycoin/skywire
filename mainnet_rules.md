@@ -2,12 +2,11 @@
 
 # Skywire Reward Eligibility Rules
 
-Notice: the [skywire whitelist](https://whitelist.skycoin.com) is deprecated since April 1st 2023.
-
 We have transitioned to a new system with daily reward distribution
 
 * The rules in this article may change at any time, depending on if there are problems
 * We will attempt to address any issues reported via [@skywire](https://t.me/skywire) Telegram channel
+* Reward corrections are not possible after the rewards for a day have been distributed.
 
 The required minimum Skywire version will be incremented periodically.
 
@@ -29,23 +28,36 @@ All information about rewards will be published here. Please ask for clarificati
 
 Reward distribution notifications are on telegram [@skywire_reward](https://t.me/skywire_reward).
 
+Information about reward distribution as well as other metrics for the skywire network can be found at [fiber.skywire.dev](https://fiber.skywire.dev)
+
 # Uptime Reward Pool
 
-408000 Skycoin are distributed annually to those visors which meet the mimimum uptime and the other requirements listed below
+408000 Skycoin are distributed annually to those visors which meet the mimimum uptime and the other requirements listed below.
 
-A total of up to ~1117.808 Skycoin are distributed daily; evenly divided among those eligible participants on the basis of having met uptime for the previous day.
+The reward amount for a day is evenly divided among those eligible participants on the basis of having met uptime and other requirements, for the previous day.
+
+A total of up to ~1117.808 Skycoin are distributed daily in non leap-years.
+
+A total of up to ~1114.754  Skycoin are distributed daily in leap-years.
 
 ## Rules & Requirements
 
-* **Minimum skywire version v1.3.8** - Cutoff July 1st 2023
+To obtain Skycoin rewards for running skywire, the following requirements must be met.
+The update deadlines specify the version of software required as of (i.e. on or before) the specified date in order to maintain reward eligibility:
 
-* The visor must be an **ARM architecture SBC running on approved [hardware](#hardware)**
+* **Minimum skywire version v1.3.17** - Cutoff March 1st 2024
 
-* Visors must be running on **[the skywire production deployment](https://conf.skywire.skycoin.com)**
+* **Minimum skywire version v1.3.19** - Cutoff April 1st 2024
 
-* **Up to 8 (eight) visors may each receive 1 reward share per location (ip address)**
+* The visor must be an **ARM or RISC architecture SBC running on approved [hardware](#hardware)**
 
-* **75% uptime per day** is required to be eligible to receive rewards
+* Visors must be running on **[the skywire production deployment](https://conf.skywire.skycoin.com)** with a config that is updated on every version.
+
+* **Only 1 (one) visor per machine**
+
+* **Up to 8 (eight) visors may each receive 1 (one) reward share per location (ip address)**
+
+* **75% uptime per day** minimum is required to be eligible to receive rewards
 
 * **A valid skycoin address** must be set for the visor
 
@@ -57,6 +69,23 @@ A total of up to ~1117.808 Skycoin are distributed daily; evenly divided among t
 
 * **The visor produces transport bandwidth logs** - needed for bandwidth-based rewards
 
+* **The visor produces a survey** when queried over dmsg by any keys in the survey_whitelist array
+
+### Exceptions for Deployment Changes with dmsghttp-config (Chinese users)
+
+All the production deployment services may be accessed by the visor over the dmsg network when the visor runs with a dmsghttp config.
+
+This type of config is generated automatically based on region (via `skywire-cli config gen -b --bestproto`), to circumvent ISP blocking of http requests.
+
+In order to bootstrap the visor's to connection to the dmsg network (via TCP connection to an individual dmsg server) the `dmsghttp-config.json` is provided with the skywire binary release.
+
+In the instance that the skywire production deployment changes - specifically the dmsg servers - it will be necessary to update to the next version or package release which fixes the dmsg servers - or else to manually update the `dmsghttp-config.json` which is provided by your skywire installation.
+
+Currently, **there is no mechanism for updating the dmsghttp-config.json which does not require an http request** ; a request which may be blocked depending on region.
+
+In this instance, the visor will not connect to any service because it is not connected to the dmsg network, so it will not be possible for the visor to accumulate uptime or for the reward system to collect the survey, which are prerequisite for reward eligibility.
+
+As a consequence of this; any visors running a dmsghttp-config, and hence any visors running in regions such as China, the minimum version requirement for obtaining rewards is not only the latest available version, but __the latest release of the package__ unless the dmsghttp-config.json is updated manually.
 
 ## Verifying Requirements & Eligibility
 
@@ -68,16 +97,26 @@ skywire-cli -v
 skywire-visor -v
 ```
 
-**The new reward system requires Skywire v1.3.8**
+**Reward eligibility after 3-1-2024 requires Skywire v1.3.17**
 
-Requirement established 5-25-2023
+Requirement established 2-1-2024
 
-Rewards Cutoff date for updating 7-1-2023
+Rewards Cutoff date for updating 3-1-2024
+
+**Reward eligibility after 4-1-2024 requires Skywire v1.3.19**
+
+Requirement established 3-14-2024
+
+Rewards Cutoff date for updating 4-1-2024
 
 ### Deployment
 
-The deployment your visor is running on can be verified by comparing the services configured in the visor's .json config against [conf.skywire.skycoin.com](https://conf.skywire.skycoin.com)
-It will be automatically updated any time a config is generated or regenerated.
+The deployment your visor is running on can be verified by comparing the services configured in the visor's `.json` config against [conf.skywire.skycoin.com](https://conf.skywire.skycoin.com)
+
+The service configuration will be automatically updated any time a config is generated or regenerated.
+
+For those visors in china or those running a dmsghttp-config, compare the dmsghttp-config of your current installation with the dmsghttp-config on the develop branch of [github.com/skycoin/skywire](https://github.com/skycoin/skywire)
+
 
 ### Uptime
 
@@ -103,13 +142,29 @@ or via the hypervisor UI.
 
 the example above shows the genesis address for the skycoin blockchain. **Please do not use the genesis address.**
 
+It is __highly recommended__ to set the reward address in the file `/etc/skywire.conf` by adding this line to the file:
+
+```
+REWARDSKYADDR=('')
+```
+
+Add your skycoin address there and run `skywire-autoconfig` on linux (assumes you have installed the package)
+
+If this file does not exist for you, it can be created with `skywire-cli config gen -q | tee /etc/skywire.conf`
+
+**If you do this, please uncomment `PKGENV=true` before saving the file**
+
 ### Connection to DMSG network - Survey & transport log collection
 
-For any given visor, the system survey and transport bandwidth logs should be downloaded **hourly** over dmsghttp.
+For any given visor, the system survey and transport bandwidth logs should be downloaded **hourly** over dmsghttp by the reward system.
 
 This can be verified by examinimg the visor's logging:
 
 ![image](https://github.com/skycoin/skywire/assets/36607567/eb66bca1-fc9e-4c80-a38a-e00a73f675d0)
+
+The collected file should be visible in the survey index here:
+
+[fiber.skywire.dev/log-collection/tree](https://fiber.magnetosphere.net/log-collection/tree)
 
 Note: the transport bandwidth logs will only exist if it was generated; i.e. if there were transports to that visor which handled traffic.
 
@@ -119,7 +174,7 @@ If your visor is not generating such logging, please reach out to us on telegram
 
 ### Verifying other requirements
 
-If the visor is not able to meet the other requirements, that is usually not the fault of the user nor is it something the user is expected to troubleshoot at this time. Please ask for assistance on telegram [@skywire](https://t.me/skywire)
+If the visor is not able to meet the other requirements, that is usually not the fault of the user nor is it something the user is expected to troubleshoot on their own at this time. Please ask for assistance on telegram [@skywire](https://t.me/skywire)
 
 ## Reward System overview
 
@@ -129,11 +184,16 @@ The skycoin reward address is in a text file contained in the "local" folder (lo
 
 The skycoin reward address is also included with the [system survey](https://github.com/skycoin/skywire/tree/develop/cmd/skywire-cli#survey) and served, along with transport logs, via dmsghttp.
 
-The system survey is fetched hourly with `skywire-cli log`; along with transport bandwidth logs.
+The system survey (`local/node-info.json`) is fetched hourly by the reward system via `skywire-cli log`; along with transport bandwidth logs.
+
+The index of the collected files may be viewed at [fiber.skywire.dev/log-collection/tree](https://fiber.skywire.dev/log-collection/tree)
+
 
 Once collected from the nodes, the surveys for those visors which met uptime are checked to verify hardware and other requirements, etc.
 
-The system survey is only made available to those keys which are whitelisted for survey collection, but is additionally available to any `hypervisor` or `dmsgpty_whitelist` keys set inthe config for a given visor.
+The system survey is only made available to those keys which are whitelisted for survey collection, but is additionally available to any `hypervisor` or `dmsgpty_whitelist` keys set in the config for a given visor.
+
+Setting a skycoin address is considered to be consent for collecting the survey.
 
 The public keys which require to be whitelisted in order to collect the surveys, for the purpose of reward eligibility verification, should populate in the visor's config automatically when the config is generated with visors of at least version 1.3.8.
 

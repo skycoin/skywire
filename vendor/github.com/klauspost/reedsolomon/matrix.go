@@ -175,8 +175,7 @@ func (m matrix) SwapRows(r1, r2 int) error {
 	return nil
 }
 
-// IsSquare will return true if the matrix is square
-// and nil if the matrix is square
+// IsSquare will return true if the matrix is square, otherwise false.
 func (m matrix) IsSquare() bool {
 	return len(m) == len(m[0])
 }
@@ -218,7 +217,10 @@ func (m matrix) gaussianElimination() error {
 		if m[r][r] == 0 {
 			for rowBelow := r + 1; rowBelow < rows; rowBelow++ {
 				if m[rowBelow][r] != 0 {
-					m.SwapRows(r, rowBelow)
+					err := m.SwapRows(r, rowBelow)
+					if err != nil {
+						return err
+					}
 					break
 				}
 			}

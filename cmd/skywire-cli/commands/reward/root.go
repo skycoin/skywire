@@ -29,7 +29,6 @@ var (
 )
 
 func init() {
-
 	rewardCmd.Flags().SortFlags = false
 	if defaultRewardAddress == "" {
 		//default is genesis address for skycoin blockchain ; for testing

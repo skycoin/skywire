@@ -97,11 +97,32 @@ date:
 commit:
 	@echo $(COMMIT)
 
-check: lint test ## Run linters and tests
+check: lint check-cg test ## Run linters and tests
+
+check-cg: ## Cursory check of the main help menu, offline dmsghttp config gen and offline config gen
+	@echo "checking help menu for compilation without errors"
+	@echo
+	go run cmd/skywire-deployment/skywire.go --help
+	@echo
+	@echo "checking dmsghttp offline config gen"
+	@echo
+	go run cmd/skywire-deployment/skywire.go cli config gen --nofetch -dnw
+	@echo
+	@echo "checking offline config gen"
+	@echo
+	go run cmd/skywire-deployment/skywire.go cli config gen --nofetch -nw
+	@echo
+	@echo "config gen succeeded without error"
+	@echo
+
 
 check-windows: lint-windows test-windows ## Run linters and tests on windows image
 
 build: host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
+
+build-merged: ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
+	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire ./cmd/skywire-deployment
+
 
 build-windows: host-apps-windows bin-windows ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
@@ -117,6 +138,10 @@ install-system-linux: build ## Install apps and binaries over those provided by 
 	sudo echo "sudo cache"
 	sudo install -Dm755 $(BUILD_PATH){skywire-cli,skywire-visor} /opt/skywire/bin/ & \
 	sudo install -Dm755 $(BUILD_PATH)apps/{vpn-server,vpn-client,skysocks-client,skysocks,skychat} /opt/skywire/apps/
+
+install-system-linux-merged: build-merged ## Install apps and binaries over those provided by the linux package - linux package must be installed first!
+	sudo echo "sudo cache"
+	sudo install -Dm755 $(BUILD_PATH)skywire /opt/skywire/bin/
 
 install-generate: ## Installs required execs for go generate.
 	${OPTS} go install github.com/mjibson/esc github.com/vektra/mockery/v2@latest
@@ -152,10 +177,13 @@ test: ## Run tests
 	-go clean -testcache &>/dev/null
 	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/...
 	${OPTS} go test ${TEST_OPTS}
+	go run cmd/skywire-deployment/skywire.go --help
+	go run cmd/skywire-deployment/skywire.go cli config gen -dnw
+	go run cmd/skywire-deployment/skywire.go cli config gen --nofetch -nw
 
 test-windows: ## Run tests on windows
 	@go clean -testcache
-	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/...
+	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/apps...
 
 install-linters: ## Install linters
 	- VERSION=latest ./ci_scripts/install-golangci-lint.sh
@@ -218,7 +246,7 @@ host-apps-race: ## Build app
 bin: fix-systray-vendor bin-fix unfix-systray-vendor
 
 bin-fix: ## Build `skywire-visor`, `skywire-cli`
-	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH) ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node
+	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH) ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node ./cmd/skywire-deployment
 
 fix-systray-vendor:
 	@if [ $(UNAME_S) = "Linux" ]; then\
@@ -316,8 +344,23 @@ prepare:
 	chmod +x ./apps/*
 	sudo echo "sudo cache"
 
+## Prepare to run skywire from source via cmd/skywire-deployment, without compiling binaries
+prepare1:
+	test -d apps && rm -r apps || true
+	mkdir -p apps
+	ln ./scripts/_merged-apps/skychat ./apps/
+	ln ./scripts/_merged-apps/skysocks ./apps/
+	ln ./scripts/_merged-apps/skysocks-client ./apps/
+	ln ./scripts/_merged-apps/vpn-server ./apps/
+	ln ./scripts/_merged-apps/vpn-client ./apps/
+	chmod +x ./apps/*
+	sudo echo "sudo cache"
+
 run-source: prepare ## Run skywire from source, without compiling binaries
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -in | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
+
+run-source-merged: prepare1 ## Run skywire from source, without compiling binaries
+	go run ./cmd/skywire-deployment/skywire.go cli config gen -in | sudo go run ./cmd/skywire-deployment/skywire.go visor -n || true
 
 run-systray: prepare ## Run skywire from source, with vpn server enabled
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -ni | sudo go run ./cmd/skywire-visor/skywire-visor.go -n --systray || true

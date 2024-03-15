@@ -20,7 +20,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/direct"
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
-	"github.com/skycoin/dmsg/pkg/dmsgget"
+	"github.com/skycoin/dmsg/pkg/dmsgcurl"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/skycoin/systray"
 	"github.com/toqueteos/webbrowser"
@@ -314,7 +314,7 @@ func getAvailPublicVPNServers(conf *visorconfig.V1, httpC *http.Client, logger *
 }
 
 func getSystrayHTTPClient(ctx context.Context, conf *visorconfig.V1, logger *logging.MasterLogger) *http.Client {
-	var serviceURL dmsgget.URL
+	var serviceURL dmsgcurl.URL
 	serviceURL.Fill(conf.Launcher.ServiceDisc) //nolint
 	if serviceURL.Scheme == "dmsg" {
 		var keys cipher.PubKeys
