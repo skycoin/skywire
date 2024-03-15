@@ -16,7 +16,6 @@ import (
 	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/dmsgc"
-	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -35,7 +34,8 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 				TransportDiscovery: utilenv.TpDiscAddr,
 				AddressResolver:    utilenv.AddressResolverAddr,
 				RouteFinder:        utilenv.RouteFinderAddr,
-				SetupNodes:         []cipher.PubKey{MustPK(utilenv.SetupPK)},
+				RouteSetupNodes:    MustPKs(utilenv.RouteSetupPKs),
+				TransportSetupPKs:  MustPKs(utilenv.TPSetupPKs),
 				UptimeTracker:      utilenv.UptimeTrackerAddr,
 				ServiceDiscovery:   utilenv.ServiceDiscAddr,
 				StunServers:        utilenv.GetStunServers(),
@@ -47,7 +47,8 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 				TransportDiscovery: utilenv.TestTpDiscAddr,
 				AddressResolver:    utilenv.TestAddressResolverAddr,
 				RouteFinder:        utilenv.TestRouteFinderAddr,
-				SetupNodes:         []cipher.PubKey{MustPK(utilenv.TestSetupPK)},
+				RouteSetupNodes:    MustPKs(utilenv.TestRouteSetupPKs),
+				TransportSetupPKs:  MustPKs(utilenv.TestTPSetupPKs),
 				UptimeTracker:      utilenv.TestUptimeTrackerAddr,
 				ServiceDiscovery:   utilenv.TestServiceDiscAddr,
 				StunServers:        utilenv.GetStunServers(),
@@ -60,9 +61,10 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		conf.Common = common
 	}
 	conf.Dmsg = &dmsgc.DmsgConfig{
-		Discovery:     services.DmsgDiscovery, //utilenv.DmsgDiscAddr,
-		SessionsCount: 1,
-		Servers:       []*disc.Entry{},
+		Discovery:            services.DmsgDiscovery, //utilenv.DmsgDiscAddr,
+		SessionsCount:        1,
+		Servers:              []*disc.Entry{},
+		ConnectedServersType: "all",
 	}
 	conf.Transport = &Transport{
 		Discovery:         services.TransportDiscovery, //utilenv.TpDiscAddr,
@@ -73,10 +75,12 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 			Location:         LocalPath + "/" + TpLogStore,
 			RotationInterval: DefaultLogRotationInterval,
 		},
+		SudphPort: 0,
+		StcprPort: 0,
 	}
 	conf.Routing = &Routing{
-		RouteFinder:        services.RouteFinder, //utilenv.RouteFinderAddr,
-		SetupNodes:         services.SetupNodes,  //[]cipher.PubKey{utilenv.MustPK(utilenv.SetupPK)},
+		RouteFinder:        services.RouteFinder,     //utilenv.RouteFinderAddr,
+		RouteSetupNodes:    services.RouteSetupNodes, //[]cipher.PubKey{utilenv.MustPK(utilenv.SetupPK)},
 		RouteFinderTimeout: DefaultTimeout,
 	}
 	conf.Launcher = &Launcher{
@@ -95,7 +99,6 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	conf.DmsgHTTPServerPath = LocalPath + "/" + Custom
 	conf.StunServers = services.StunServers //utilenv.GetStunServers()
 	conf.ShutdownTimeout = DefaultTimeout
-	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
 
 	conf.Dmsgpty = &Dmsgpty{
 		DmsgPort: DmsgPtyPort,
@@ -235,14 +238,14 @@ func makeDefaultLauncherAppsConfig(dnsServer string) []appserver.AppConfig {
 			Binary:    VPNClientName,
 			AutoStart: false,
 			Port:      routing.Port(skyenv.VPNClientPort),
-			Args:      []string{"-dns", dnsServer},
+			Args:      []string{"--dns", dnsServer},
 		},
 		{
 			Name:      SkychatName,
 			Binary:    SkychatName,
 			AutoStart: true,
 			Port:      routing.Port(skyenv.SkychatPort),
-			Args:      []string{"-addr", SkychatAddr},
+			Args:      []string{"--addr", SkychatAddr},
 		},
 		{
 			Name:      SkysocksName,
@@ -255,6 +258,7 @@ func makeDefaultLauncherAppsConfig(dnsServer string) []appserver.AppConfig {
 			Binary:    SkysocksClientName,
 			AutoStart: false,
 			Port:      routing.Port(skyenv.SkysocksClientPort),
+			Args:      []string{"--addr", SkysocksClientAddr},
 		},
 		{
 			Name:      VPNServerName,

@@ -3,6 +3,7 @@ package visorconfig
 
 import (
 	"fmt"
+	"math/rand"
 	"strings"
 	"sync"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/dmsgc"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
@@ -27,15 +29,15 @@ type V1 struct {
 	UptimeTracker *UptimeTracker      `json:"uptime_tracker,omitempty"`
 	Launcher      *Launcher           `json:"launcher"`
 
-	Hypervisors []cipher.PubKey `json:"hypervisors"`
-	CLIAddr     string          `json:"cli_addr"`
+	SurveyWhitelist []cipher.PubKey `json:"survey_whitelist"`
+	Hypervisors     []cipher.PubKey `json:"hypervisors"`
+	CLIAddr         string          `json:"cli_addr"`
 
 	LogLevel             string                           `json:"log_level"`
 	LocalPath            string                           `json:"local_path"`
 	DmsgHTTPServerPath   string                           `json:"dmsghttp_server_path"`
 	StunServers          []string                         `json:"stun_servers"`
-	ShutdownTimeout      Duration                         `json:"shutdown_timeout,omitempty"`    // time value, examples: 10s, 1m, etc
-	RestartCheckDelay    Duration                         `json:"restart_check_delay,omitempty"` // time value, examples: 10s, 1m, etc
+	ShutdownTimeout      Duration                         `json:"shutdown_timeout,omitempty"` // time value, examples: 10s, 1m, etc
 	IsPublic             bool                             `json:"is_public"`
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 
@@ -44,9 +46,10 @@ type V1 struct {
 
 // Dmsgpty configures the dmsgpty-host.
 type Dmsgpty struct {
-	DmsgPort uint16 `json:"dmsg_port"`
-	CLINet   string `json:"cli_network"`
-	CLIAddr  string `json:"cli_address"`
+	DmsgPort  uint16          `json:"dmsg_port"`
+	CLINet    string          `json:"cli_network"`
+	CLIAddr   string          `json:"cli_address"`
+	Whitelist []cipher.PubKey `json:"whitelist"`
 }
 
 // Transport defines a transport config.
@@ -54,8 +57,10 @@ type Transport struct {
 	Discovery         string          `json:"discovery"`
 	AddressResolver   string          `json:"address_resolver"`
 	PublicAutoconnect bool            `json:"public_autoconnect"`
-	TransportSetup    []cipher.PubKey `json:"transport_setup_nodes"`
+	TransportSetupPKs []cipher.PubKey `json:"transport_setup"`
 	LogStore          *LogStore       `json:"log_store"`
+	StcprPort         int             `json:"stcpr_port"`
+	SudphPort         int             `json:"sudph_port"`
 }
 
 // LogStore configures a LogStore.
@@ -68,7 +73,7 @@ type LogStore struct {
 
 // Routing configures routing.
 type Routing struct {
-	SetupNodes         []cipher.PubKey `json:"setup_nodes,omitempty"`
+	RouteSetupNodes    []cipher.PubKey `json:"route_setup_nodes,omitempty"`
 	RouteFinder        string          `json:"route_finder"`
 	RouteFinderTimeout Duration        `json:"route_finder_timeout,omitempty"`
 	MinHops            uint16          `json:"min_hops"`
@@ -231,6 +236,40 @@ func (v1 *V1) UpdatePublicAutoconnect(pAc bool) error {
 	v1.Transport.PublicAutoconnect = pAc
 	v1.mu.Unlock()
 
+	return v1.flush(v1)
+}
+
+// AddAppConfig add new config to apps if name was not same
+func (v1 *V1) AddAppConfig(launch *launcher.AppLauncher, appName, binaryName string) error {
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+
+	conf := v1.Launcher
+	busyPorts := map[routing.Port]bool{}
+	for _, app := range conf.Apps {
+		busyPorts[app.Port] = true
+		if app.Name == appName {
+			return fmt.Errorf("the app exist")
+		}
+	}
+	var randomNumber int
+	for {
+		min := 10
+		max := 99
+		randomNumber = rand.Intn(max-min+1) + min //nolint
+		if _, ok := busyPorts[routing.Port(randomNumber)]; !ok {
+			break
+		}
+	}
+
+	conf.Apps = append(conf.Apps, appserver.AppConfig{Name: appName, Binary: binaryName, Port: routing.Port(randomNumber)})
+
+	launch.ResetConfig(launcher.AppLauncherConfig{
+		VisorPK:       v1.PK,
+		Apps:          conf.Apps,
+		ServerAddr:    conf.ServerAddr,
+		DisplayNodeIP: conf.DisplayNodeIP,
+	})
 	return v1.flush(v1)
 }
 

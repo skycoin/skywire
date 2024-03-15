@@ -3,6 +3,7 @@ import { Subscription } from 'rxjs';
 
 import { Node } from '../../../../../app.datatypes';
 import { NodeComponent } from '../../node.component';
+import { PageBaseComponent } from 'src/app/utils/page-base';
 
 /**
  * Page for showing the complete list of the transports of a node.
@@ -12,7 +13,7 @@ import { NodeComponent } from '../../node.component';
   templateUrl: './all-transports.component.html',
   styleUrls: ['./all-transports.component.scss']
 })
-export class AllTransportsComponent implements OnInit, OnDestroy {
+export class AllTransportsComponent extends PageBaseComponent implements OnInit, OnDestroy {
   node: Node;
 
   private dataSubscription: Subscription;
@@ -20,6 +21,8 @@ export class AllTransportsComponent implements OnInit, OnDestroy {
   ngOnInit() {
     // Get the node data from the parent page.
     this.dataSubscription = NodeComponent.currentNode.subscribe((node: Node) => this.node = node);
+
+    return super.ngOnInit();
   }
 
   ngOnDestroy() {

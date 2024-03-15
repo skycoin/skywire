@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
+	"mime"
 	"net"
 	"net/http"
 	"os"
@@ -23,7 +25,7 @@ import (
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsgctrl"
-	"github.com/skycoin/dmsg/pkg/dmsgget"
+	"github.com/skycoin/dmsg/pkg/dmsgcurl"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
 
@@ -191,7 +193,7 @@ func initVisorConfig(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 */
 
-func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
 	var keys cipher.PubKeys
 	servers := v.conf.Dmsg.Servers
 
@@ -225,7 +227,7 @@ func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initEventBroadcaster(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initEventBroadcaster(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
 	const ebcTimeout = time.Second
 	ebc := appevent.NewBroadcaster(log, ebcTimeout)
 	v.pushCloseStack("event_broadcaster", ebc.Close)
@@ -269,7 +271,7 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 	return nil
 }
 
-func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
 	// Prepare app discovery factory.
 	factory := appdisc.Factory{
 		Log:  v.MasterLogger().PackageLogger("app_discovery"),
@@ -303,7 +305,7 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
 
 	sc := network.GetStunDetails(v.conf.StunServers, log)
 	v.initLock.Lock()
@@ -313,7 +315,7 @@ func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
+func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) { //nolint:all
 	if v.conf.Dmsg == nil {
 		return fmt.Errorf("cannot initialize dmsg: empty configuration")
 	}
@@ -376,7 +378,7 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	return nil
 }
 
-func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
 	dmsgC := v.dmsgC
 	if dmsgC == nil {
 		return fmt.Errorf("cannot initialize dmsg log server: dmsg not configured")
@@ -388,7 +390,21 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 		printLog = true
 	}
 
-	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, printLog)
+	//whitelist access to the surveys for the hypervisor, dmsggpty whitelist, and for the surveywhitelist of keys which is fetched from the conf service
+	var whitelistedPKs []cipher.PubKey
+	if v.conf.SurveyWhitelist != nil {
+		whitelistedPKs = append(whitelistedPKs, v.conf.SurveyWhitelist...)
+	}
+	if v.conf.Hypervisors != nil {
+		whitelistedPKs = append(whitelistedPKs, v.conf.Hypervisors...)
+	}
+	if v.conf.Dmsgpty != nil {
+		if v.conf.Dmsgpty.Whitelist != nil {
+			whitelistedPKs = append(whitelistedPKs, v.conf.Dmsgpty.Whitelist...)
+		}
+	}
+
+	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, whitelistedPKs, &v.survey, printLog)
 
 	lis, err := dmsgC.Listen(visorconfig.DmsgHTTPPort)
 	if err != nil {
@@ -433,12 +449,12 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 	return nil
 }
 
-func initSystemSurvey(ctx context.Context, v *Visor, log *logging.Logger) error {
-	go visorconfig.GenerateSurvey(v.conf, log, true, v.rawSurvey)
+func initSystemSurvey(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
+	go GenerateSurvey(v, log, true)
 	return nil
 }
 
-func initDmsgTrackers(ctx context.Context, v *Visor, _ *logging.Logger) error {
+func initDmsgTrackers(ctx context.Context, v *Visor, _ *logging.Logger) error { //nolint:all
 	dmsgC := v.dmsgC
 
 	dtm := dmsgtracker.NewDmsgTrackerManager(v.MasterLogger(), dmsgC, 0, 0)
@@ -454,7 +470,7 @@ func initDmsgTrackers(ctx context.Context, v *Visor, _ *logging.Logger) error {
 
 func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 
-	var serviceURL dmsgget.URL
+	var serviceURL dmsgcurl.URL
 	_ = serviceURL.Fill(v.conf.Transport.AddressResolver) //nolint:errcheck
 	// don't start sudph if we are connection to AR via dmsghttp
 	if serviceURL.Scheme == "dmsg" {
@@ -466,20 +482,20 @@ func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
 			log.Warnf("SUDPH transport wont be available as visor is under %v", v.stunClient.NATType.String())
 		default:
-			v.tpM.InitClient(ctx, network.SUDPH)
+			v.tpM.InitClient(ctx, network.SUDPH, v.conf.Transport.SudphPort)
 		}
 	}
 	return nil
 }
 
-func initStcprClient(ctx context.Context, v *Visor, log *logging.Logger) error {
-	v.tpM.InitClient(ctx, network.STCPR)
+func initStcprClient(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
+	v.tpM.InitClient(ctx, network.STCPR, v.conf.Transport.StcprPort)
 	return nil
 }
 
-func initStcpClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initStcpClient(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
 	if v.conf.STCP != nil {
-		v.tpM.InitClient(ctx, network.STCP)
+		v.tpM.InitClient(ctx, network.STCP, 0)
 	}
 	return nil
 }
@@ -567,7 +583,7 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 	ctx, cancel := context.WithCancel(ctx)
 	// To remove the block set by NewTransportListener if dmsg is not initialized
 	go func() {
-		ts, err := ts.NewTransportListener(ctx, v.conf.PK, v.conf.Transport.TransportSetup, v.dmsgC, v.tpM, v.MasterLogger())
+		ts, err := ts.NewTransportListener(ctx, v.conf.PK, v.conf.Transport.TransportSetupPKs, v.dmsgC, v.tpM, v.MasterLogger())
 		if err != nil {
 			log.Warn(err)
 			cancel()
@@ -971,7 +987,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		TransportManager: v.tpM,
 		RouteFinder:      rfClient,
 		RouteGroupDialer: router.NewSetupNodeDialer(),
-		SetupNodes:       conf.SetupNodes,
+		SetupNodes:       conf.RouteSetupNodes,
 		RulesGCInterval:  0, // TODO
 		MinHops:          v.conf.Routing.MinHops,
 	}
@@ -1003,7 +1019,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
 	conf := v.conf.Launcher
 
 	// Prepare proc manager.
@@ -1113,7 +1129,7 @@ func vpnEnvMaker(conf *visorconfig.V1, dmsgC, dmsgDC *dmsg.Client, tpRemoteAddrs
 	}
 }
 
-func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
 	if v.conf.CLIAddr == "" {
 		v.log.Debug("'cli_addr' is not configured, skipping.")
 		return nil
@@ -1136,7 +1152,7 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
 
 	hvErrs := make(map[cipher.PubKey]chan error, len(v.conf.Hypervisors))
 	for _, hv := range v.conf.Hypervisors {
@@ -1236,7 +1252,7 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 
 // advertise this visor as public in service discovery
 // this service is not considered critical and always returns true
-func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
+func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error { //nolint:all
 	if !v.conf.IsPublic {
 		// call Stop() method to clean service discovery for the situation that
 		// visor was public, then stop (not normal shutdown), then start as non-public
@@ -1302,11 +1318,16 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	wl := dmsgpty.NewMemoryWhitelist()
 
+	// Initialize the dmsgpty whitelist
+	if err := wl.Add(v.conf.Dmsgpty.Whitelist...); err != nil {
+		return err
+	}
+
 	// Ensure hypervisors are added to the whitelist.
 	if err := wl.Add(v.conf.Hypervisors...); err != nil {
 		return err
 	}
-	// add itself to the whitelist to allow local pty
+	// add the visor's own public key to the whitelist to allow local pty
 	if err := wl.Add(v.conf.PK); err != nil {
 		v.log.Errorf("Cannot add itself to the pty whitelist: %s", err)
 	}
@@ -1417,7 +1438,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 	return nil
 }
 
-func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
+func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error { //nolint:all
 	if v.conf.Hypervisor == nil {
 		v.log.Error("hypervisor config = nil")
 		return nil
@@ -1438,6 +1459,11 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	hv.serveDmsg(ctx, v.log)
 
 	// Serve HTTP(s).
+
+	// Needed to work with modern browsers when serving from windows, which need the correct mime type for javascript.
+	if err := mime.AddExtensionType(".js", "application/javascript"); err != nil {
+		log.Fatalln("Unable to register js mime type.")
+	}
 
 	v.log.WithField("addr", conf.HTTPAddr).
 		WithField("tls", conf.EnableTLS).
@@ -1563,7 +1589,7 @@ func getErrors(ctx context.Context) chan error {
 
 func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client, error) {
 
-	var serviceURL dmsgget.URL
+	var serviceURL dmsgcurl.URL
 	var delegatedServers []cipher.PubKey
 	err := serviceURL.Fill(service)
 
@@ -1576,7 +1602,10 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 		if err != nil {
 			return nil, fmt.Errorf("error getting AvailableServers: %w", err)
 		}
-
+		// randomize dmsg servers list
+		rand.Shuffle(len(servers), func(i, j int) {
+			servers[i], servers[j] = servers[j], servers[i]
+		})
 		for _, server := range servers {
 			delegatedServers = append(delegatedServers, server.Static)
 		}
@@ -1603,7 +1632,7 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 }
 
 func getPublicIP(v *Visor, service string) (string, error) {
-	var serviceURL dmsgget.URL
+	var serviceURL dmsgcurl.URL
 	var pIP string
 	err := serviceURL.Fill(service)
 	// only get the IP if the url is of dmsg
@@ -1637,13 +1666,19 @@ type ipAPI struct {
 
 // GetIP used for getting current IP of visor
 func GetIP() (string, error) {
-	req, err := http.Get("http://ip.skycoin.com")
-	if err != nil {
-		return "", err
-	}
-	defer req.Body.Close() // nolint
+	var resp *http.Response
+	var err error
 
-	body, err := io.ReadAll(req.Body)
+	resp, err = http.Get("https://ip.skycoin.com/")
+	if err != nil {
+		resp, err = http.Get("https://ip.plaintext.ir/")
+		if err != nil {
+			return "", err
+		}
+	}
+	defer resp.Body.Close() // nolint
+
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}

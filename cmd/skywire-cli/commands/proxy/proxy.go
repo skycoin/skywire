@@ -3,68 +3,125 @@ package skysocksc
 
 import (
 	"bytes"
+	"context"
 	"fmt"
-	"math/rand"
 	"os"
 	"strings"
 	"text/tabwriter"
 	"time"
 
+	"github.com/bitfield/script"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
+	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/app/appserver"
-	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 func init() {
 	RootCmd.PersistentFlags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
 	RootCmd.AddCommand(
-		proxyStartCmd,
-		proxyStopCmd,
-		proxyStatusCmd,
-		proxyListCmd,
+		startCmd,
+		stopCmd,
+		statusCmd,
+		listCmd,
 	)
 	version := buildinfo.Version()
 	if version == "unknown" {
-		version = ""
+		version = "" //nolint
 	}
-	proxyStartCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
-	proxyListCmd.Flags().StringVarP(&pk, "pk", "k", "", "check proxy service discovery for public key")
-	proxyListCmd.Flags().IntVarP(&count, "num", "n", 0, "number of results to return")
-	proxyListCmd.Flags().BoolVarP(&isUnFiltered, "unfilter", "u", false, "provide unfiltered results")
-	proxyListCmd.Flags().StringVarP(&ver, "ver", "v", version, "filter results by version")
-	proxyListCmd.Flags().StringVarP(&country, "country", "c", "", "filter results by country")
-	proxyListCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the results")
+	startCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
+	startCmd.Flags().StringVarP(&addr, "addr", "a", "", "address of proxy for use")
+	startCmd.Flags().StringVarP(&clientName, "name", "n", "", "name of skysocks client")
+	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks client")
+	stopCmd.Flags().StringVar(&clientName, "name", "", "specific skysocks client that want stop")
 }
 
-var proxyStartCmd = &cobra.Command{
+var startCmd = &cobra.Command{
 	Use:   "start",
-	Short: "start the proxy client",
-	//	Args:  cobra.MinimumNArgs(0),
+	Short: "start the " + serviceType + " client",
 	Run: func(cmd *cobra.Command, args []string) {
-		//check that a valid public key is provided
-		err := pubkey.Set(pk)
-		if err != nil {
-			if len(args) > 0 {
-				err := pubkey.Set(args[0])
-				if err != nil {
-					internal.PrintFatalError(cmd.Flags(), err)
-				}
-			} else {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
-			}
-		}
-		//connect to RPC
+
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
 		}
-		//TODO: implement operational timeout
-		internal.Catch(cmd.Flags(), rpcClient.StartSkysocksClient(pubkey.String()))
-		internal.PrintOutput(cmd.Flags(), nil, "Starting.")
+
+		if clientName != "" && pk != "" && addr != "" {
+			// add new app with -srv and -addr args, and if app was there just change -srv and -addr args and run it
+			err := pubkey.Set(pk)
+			if err != nil {
+				if len(args) > 0 {
+					err := pubkey.Set(args[0])
+					if err != nil {
+						internal.PrintFatalError(cmd.Flags(), err)
+					}
+				} else {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
+				}
+			}
+
+			arguments := map[string]string{}
+			arguments["srv"] = pubkey.String()
+			arguments["addr"] = addr
+
+			_, err = rpcClient.App(clientName)
+			if err == nil {
+				err = rpcClient.DoCustomSetting(clientName, arguments)
+				if err != nil {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error occurs during set args to custom skysocks client"))
+				}
+			} else {
+				err = rpcClient.AddApp(clientName, "skysocks-client")
+				if err != nil {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error during add new app"))
+				}
+				err = rpcClient.DoCustomSetting(clientName, arguments)
+				if err != nil {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error occurs during set args to custom skysocks client"))
+				}
+			}
+			internal.Catch(cmd.Flags(), rpcClient.StartApp(clientName))
+			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
+		} else if clientName != "" && pk == "" && addr == "" {
+			internal.Catch(cmd.Flags(), rpcClient.StartApp(clientName))
+			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
+		} else if pk != "" && clientName == "" && addr == "" {
+			err := pubkey.Set(pk)
+			if err != nil {
+				if len(args) > 0 {
+					err := pubkey.Set(args[0])
+					if err != nil {
+						internal.PrintFatalError(cmd.Flags(), err)
+					}
+				} else {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
+				}
+			}
+			internal.Catch(cmd.Flags(), rpcClient.StartSkysocksClient(pubkey.String()))
+			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
+			clientName = "skysocks-client"
+			// change defaul skysocks-proxy app -srv arg and run it
+		} else {
+			// error
+			return
+		}
+
+		ctx, cancel := cmdutil.SignalContext(context.Background(), &logrus.Logger{})
+		defer cancel()
+		go func() {
+			<-ctx.Done()
+			cancel()
+			rpcClient.StopApp(clientName) //nolint
+			os.Exit(1)
+		}()
+
 		startProcess := true
 		for startProcess {
 			time.Sleep(time.Second * 1)
@@ -77,7 +134,7 @@ var proxyStartCmd = &cobra.Command{
 			}
 
 			for _, state := range states {
-				if state.Name == "skysocks-client" {
+				if state.Name == stateName {
 					if state.Status == appserver.AppStatusRunning {
 						startProcess = false
 						internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintln("\nRunning!"))
@@ -95,27 +152,38 @@ var proxyStartCmd = &cobra.Command{
 	},
 }
 
-var proxyStopCmd = &cobra.Command{
+var stopCmd = &cobra.Command{
 	Use:   "stop",
-	Short: "stop the proxy client",
+	Short: "stop the " + serviceType + " client",
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
 		}
-		internal.Catch(cmd.Flags(), rpcClient.StopSkysocksClient())
-		internal.PrintOutput(cmd.Flags(), "OK", fmt.Sprintln("OK"))
+		if allClients && clientName != "" {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("cannot use both --all and --name flag in together"))
+		}
+		if !allClients && clientName == "" {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("you should use one of flags, --all or --name"))
+		}
+		if allClients {
+			internal.Catch(cmd.Flags(), rpcClient.StopSkysocksClients())
+			internal.PrintOutput(cmd.Flags(), "all skysocks client stopped", fmt.Sprintln("all skysocks clients stopped"))
+			return
+		}
+		internal.Catch(cmd.Flags(), rpcClient.StopApp(clientName))
+		internal.PrintOutput(cmd.Flags(), fmt.Sprintf("skysocks client %s stopped", clientName), fmt.Sprintf("skysocks client %s stopped\n", clientName))
 	},
 }
 
-var proxyStatusCmd = &cobra.Command{
+var statusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "proxy client(s) status",
+	Short: serviceType + " client status",
 	Run: func(cmd *cobra.Command, args []string) {
 		//TODO: check status of multiple clients
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
 		}
 		states, err := rpcClient.Apps()
 		internal.Catch(cmd.Flags(), err)
@@ -124,12 +192,16 @@ var proxyStatusCmd = &cobra.Command{
 		w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
 		internal.Catch(cmd.Flags(), err)
 		type appState struct {
-			Status string `json:"status"`
+			Name      string       `json:"name"`
+			Status    string       `json:"status"`
+			AutoStart bool         `json:"autostart"`
+			Args      []string     `json:"args"`
+			AppPort   routing.Port `json:"app_port"`
 		}
-		var jsonAppStatus appState
+		var jsonAppStatus []appState
+		fmt.Fprintf(w, "---- All Proxy List -----------------------------------------------------\n\n")
 		for _, state := range states {
-			if state.Name == "skysocks-client" {
-
+			if state.AppConfig.Binary == binaryName {
 				status := "stopped"
 				if state.Status == appserver.AppStatusRunning {
 					status = "running"
@@ -137,89 +209,122 @@ var proxyStatusCmd = &cobra.Command{
 				if state.Status == appserver.AppStatusErrored {
 					status = "errored"
 				}
-				jsonAppStatus = appState{
-					Status: status,
+				jsonAppStatus = append(jsonAppStatus, appState{
+					Name:      state.Name,
+					Status:    status,
+					AutoStart: state.AutoStart,
+					Args:      state.Args,
+					AppPort:   state.Port,
+				})
+				var tmpAddr string
+				var tmpSrv string
+				for idx, arg := range state.Args {
+					if arg == "-srv" {
+						tmpSrv = state.Args[idx+1]
+					}
+					if arg == "-addr" {
+						tmpAddr = "127.0.0.1" + state.Args[idx+1]
+					}
 				}
-				_, err = fmt.Fprintf(w, "%s\n", status)
+				_, err = fmt.Fprintf(w, "Name: %s\nStatus: %s\nServer: %s\nAddress: %s\nAppPort: %d\nAutoStart: %t\n\n", state.Name, status, tmpSrv, tmpAddr, state.Port, state.AutoStart)
 				internal.Catch(cmd.Flags(), err)
 			}
 		}
+		fmt.Fprintf(w, "-------------------------------------------------------------------------\n")
 		internal.Catch(cmd.Flags(), w.Flush())
 		internal.PrintOutput(cmd.Flags(), jsonAppStatus, b.String())
 	},
 }
 
-var proxyListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List servers",
-	Long:  "List proxy servers from service discovery\n http://sd.skycoin.com/api/services?type=proxy\n http://sd.skycoin.com/api/services?type=vpn&country=US",
-	Run: func(cmd *cobra.Command, args []string) {
-		if pk != "" {
-			err := pubkey.Set(pk)
-			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
-			}
-		}
-		rpcClient, err := clirpc.Client(cmd.Flags())
-		if err != nil {
-			internal.PrintFatalRPCError(cmd.Flags(), err)
-		}
-		if isUnFiltered {
-			ver = ""
-			country = ""
-		}
-		servers, err := rpcClient.ProxyServers(ver, country)
-		if err != nil {
-			internal.PrintFatalRPCError(cmd.Flags(), err)
-		}
-		if len(servers) == 0 {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("No Servers found"))
-		}
-		if isStats {
-			internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d Servers\n", len(servers)), fmt.Sprintf("%d Servers\n", len(servers)))
-		} else {
-			var msg string
-			var results []string
-			limit := len(servers)
-			if count > 0 && count < limit {
-				limit = count
-			}
-			if pk != "" {
-				for _, server := range servers {
-					if strings.Replace(server.Addr.String(), ":44", "", 1) == pk {
-						results = append(results, server.Addr.String())
-					}
-				}
-			} else {
-				for _, server := range servers {
-					results = append(results, server.Addr.String())
-				}
-			}
-			rand.Shuffle(len(results), func(i, j int) {
-				results[i], results[j] = results[j], results[i]
-			})
-			for i := 0; i < limit && i < len(results); i++ {
-				msg += strings.Replace(results[i], ":44", "", 1)
-				if server := findServerByPK(servers, results[i]); server != nil && server.Geo != nil {
-					if server.Geo.Country != "" {
-						msg += fmt.Sprintf(" | %s\n", server.Geo.Country)
-					} else {
-						msg += "\n"
-					}
-				} else {
-					msg += "\n"
-				}
-			}
-			internal.PrintOutput(cmd.Flags(), servers, msg)
-		}
-	},
+var isLabel bool
+
+func init() {
+	if version == "unknown" {
+		version = "" //nolint
+	}
+	version = strings.Split(version, "-")[0]
+	listCmd.Flags().StringVarP(&utURL, "uturl", "w", skyenv.UptimeTrackerAddr, "uptime tracker url")
+	listCmd.Flags().StringVarP(&sdURL, "sdurl", "a", skyenv.ServiceDiscAddr, "service discovery url")
+	listCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "print raw data")
+	listCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status in UT")
+	listCmd.Flags().StringVar(&cacheFileSD, "cfs", os.TempDir()+"/proxysd.json", "SD cache file location")
+	listCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location.")
+	listCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
+	listCmd.Flags().StringVarP(&pk, "pk", "k", "", "check "+serviceType+" service discovery for public key")
+	listCmd.Flags().BoolVarP(&isUnFiltered, "unfilter", "u", false, "provide unfiltered results")
+	listCmd.Flags().StringVarP(&ver, "ver", "v", version, "filter results by version")
+	listCmd.Flags().StringVarP(&country, "country", "c", "", "filter results by country")
+	listCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the results")
+	listCmd.Flags().BoolVarP(&isLabel, "label", "l", false, "label keys by country \033[91m(SLOW)\033[0m")
 }
 
-func findServerByPK(servers []servicedisc.Service, addr string) *servicedisc.Service {
-	for _, server := range servers {
-		if server.Addr.String() == addr {
-			return &server
+var listCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List servers",
+	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache file location to \"\" to avoid using cache files", serviceType, skyenv.ServiceDiscAddr, serviceType, skyenv.ServiceDiscAddr, serviceType),
+	Run: func(cmd *cobra.Command, args []string) {
+		sds := internal.GetData(cacheFileSD, sdURL+"/api/services?type="+serviceType, cacheFilesAge)
+		if rawData {
+			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout() //nolint
+			return
 		}
-	}
-	return nil
+		if pk != "" {
+			if isStats {
+				count, _ := script.Echo(sds).JQ(`map(select(.address == "`+pk+`:3"))`).Replace("\"", "").Replace(":", " ").Column(1).CountLines() //nolint
+				script.Echo(fmt.Sprintf("%v\n", count)).Stdout()                                                                                  //nolint
+				return
+			}
+			jsonOut, _ := script.Echo(sds).JQ(`map(select(.address == "` + pk + `:3"))`).Bytes() //nolint
+			script.Echo(string(pretty.Color(pretty.Pretty(jsonOut), nil))).Stdout()              //nolint
+			return
+		}
+		var sdJQ string
+		if !isUnFiltered {
+			if ver != "" && country == "" {
+				sdJQ = `select(.version == "` + ver + `")`
+			}
+			if country != "" && ver == "" {
+				sdJQ = `select(.geo.country == "` + country + `")`
+			}
+			if country != "" && ver != "" {
+				sdJQ = `select(.geo.country == "` + country + `" and .version == "` + ver + `")`
+			}
+		}
+		if sdJQ != "" {
+			sdJQ = `.[] | ` + sdJQ + ` | .address`
+		} else {
+			sdJQ = `.[] .address`
+		}
+		var sdkeys string
+		sdkeys, _ = script.Echo(sds).JQ(sdJQ).Replace("\"", "").Replace(":", " ").Column(1).String() //nolint
+		if noFilterOnline {
+			if isStats {
+				count, _ := script.Echo(sdkeys).CountLines()     //nolint
+				script.Echo(fmt.Sprintf("%v\n", count)).Stdout() //nolint
+				return
+			}
+			script.Echo(sdkeys).Stdout() //nolint
+			return
+		}
+		uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
+		utkeys, _ := script.Echo(uts).JQ(".[] | select(.on) | .pk").Replace("\"", "").String() //nolint
+		if isStats {
+			count, _ := script.Echo(sdkeys + utkeys).Freq().Match("2 ").Column(2).CountLines() //nolint
+			script.Echo(fmt.Sprintf("%v\n", count)).Stdout()                                   //nolint
+			return
+		}
+		if !isLabel {
+			script.Echo(sdkeys + utkeys).Freq().Match("2 ").Column(2).Stdout() //nolint
+		} else {
+			filteredKeys, _ := script.Echo(sdkeys + utkeys).Freq().Match("2 ").Column(2).Slice()                           //nolint
+			formattedoutput, _ := script.Echo(sds).JQ(".[] | \"\\(.address) \\(.geo.country)\"").Replace("\"", "").Slice() //nolint
+			// Very slow!
+			for _, fo := range formattedoutput {
+				for _, fk := range filteredKeys {
+					script.Echo(fo).Match(fk).Stdout() //nolint
+				}
+			}
+		}
+
+	},
 }

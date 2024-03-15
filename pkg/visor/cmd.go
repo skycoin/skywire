@@ -18,12 +18,10 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var (
-	restartCtx       = restart.CaptureContext()
 	pkgconfigexists  bool
 	userconfigexists bool
 	//	isAutoPeer           bool
@@ -37,6 +35,7 @@ var (
 	pprofAddr            string
 	confPath             string
 	stdin                bool
+	confArg              string
 	hypervisorUI         bool
 	noHypervisorUI       bool
 	remoteHypervisorPKs  string
@@ -45,6 +44,7 @@ var (
 	logTag               string
 	hiddenflags          []string
 	all                  bool
+	useCsrf              bool
 	pkg                  bool
 	usr                  bool
 	localIPs             []net.IP //  nolint:unused
@@ -54,7 +54,6 @@ var (
 	// visorBuildInfo holds information about the build
 	visorBuildInfo *buildinfo.Info
 	dmsgServer     string
-	rawSurvey      bool
 	isStoreLog     bool
 	isForceColor   bool
 )
@@ -65,6 +64,7 @@ func init() {
 	RootCmd.Flags().SortFlags = false
 	//the default is not set to fix the aesthetic of the help command
 	RootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use (default): "+visorconfig.ConfigName)
+	RootCmd.Flags().StringVarP(&confArg, "confarg", "C", "", "supply config as argument")
 	if ((visorconfig.OS == "linux") && !root) || ((visorconfig.OS == "mac") && !root) || (visorconfig.OS == "win") {
 		RootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
 	}
@@ -117,7 +117,6 @@ func init() {
 	hiddenflags = append(hiddenflags, "hv")
 	RootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors \u001b[0m*")
 	hiddenflags = append(hiddenflags, "xhv")
-	//	initAutoPeerFlags()
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "", "[ debug | warn | error | fatal | panic | trace ] \u001b[0m*")
 	hiddenflags = append(hiddenflags, "loglvl")
 	RootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "q", "", "[ cpu | mem | mutex | block | trace | http ]")
@@ -130,50 +129,22 @@ func init() {
 	hiddenflags = append(hiddenflags, "syslog")
 	RootCmd.Flags().StringVarP(&completion, "completion", "z", "", "[ bash | zsh | fish | powershell ]")
 	hiddenflags = append(hiddenflags, "completion")
-	RootCmd.Flags().BoolVar(&rawSurvey, "raw-survey", false, "survey will generate and store decrypted if pass this flag")
-	hiddenflags = append(hiddenflags, "raw-survey")
-	RootCmd.Flags().BoolVarP(&isStoreLog, "store-log", "l", false, "store all logs to file")
-	hiddenflags = append(hiddenflags, "store-log")
-	RootCmd.Flags().BoolVar(&isForceColor, "force-color", false, "set force coler true in loggers")
-	hiddenflags = append(hiddenflags, "force-color")
+	RootCmd.Flags().BoolVarP(&isStoreLog, "storelog", "l", false, "store all logs to file")
+	hiddenflags = append(hiddenflags, "storelog")
+	RootCmd.Flags().BoolVar(&isForceColor, "forcecolor", false, "force color logging when out is not STDOUT")
+	hiddenflags = append(hiddenflags, "forcecolor")
 	RootCmd.Flags().BoolVar(&all, "all", false, "show all flags")
+	RootCmd.Flags().BoolVar(&useCsrf, "csrf", true, "Request a CSRF token for sensitive hypervisor API requests")
 	for _, j := range hiddenflags {
 		RootCmd.Flags().MarkHidden(j) //nolint
 	}
-	RootCmd.SetUsageTemplate(help)
-
 }
-
-//omit due to possible panic
-/*
-func initAutoPeerFlags() {
-	localIPs, err := netutil.DefaultNetworkInterfaceIPs()
-	if err != nil {
-		logger.WithError(err).Warn("Could not determine network interface IP address")
-		if len(localIPs) == 0 {
-			localIPs = append(localIPs, net.ParseIP("192.168.0.1"))
-		}
-	}
-	RootCmd.Flags().StringVarP(&autoPeerIP, "hvip", "l", trimStringFromDot(localIPs[0].String())+".2:7998", "set hypervisor by ip")
-	hiddenflags = append(hiddenflags, "hvip")
-	isDefaultAutopeer := false
-	if os.Getenv("AUTOPEER") == "1" {
-		isDefaultAutopeer = true
-	}
-	RootCmd.Flags().BoolVarP(&isAutoPeer, "autopeer", "m", isDefaultAutopeer, "enable autopeering to remote hypervisor")
-	hiddenflags = append(hiddenflags, "autopeer")
-}
-func trimStringFromDot(s string) string {
-	if idx := strings.LastIndex(s, "."); idx != -1 {
-		return s[:idx]
-	}
-	return s
-}
-*/
 
 // RootCmd contains the help command & invocation flags
 var RootCmd = &cobra.Command{
-	Use:   "skywire-visor",
+	Use: func() string {
+		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
+	}(),
 	Short: "Skywire Visor",
 	Long: `
 	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
@@ -197,52 +168,56 @@ var RootCmd = &cobra.Command{
 		//log for initial checks
 		log := mLog.PackageLogger("pre-run")
 
-		if stdin {
-			confPath = visorconfig.Stdin
+		if confArg != "" {
+			confPath = "arg"
 		} else {
+			if stdin {
+				confPath = visorconfig.Stdin
+			} else {
 
-			//enforce conditions for pkg and user flags
-			if pkg {
-				if !root {
-					log.Fatal("root permissions required to use the specified config")
+				//enforce conditions for pkg and user flags
+				if pkg {
+					if !root {
+						log.Fatal("root permissions required to use the specified config")
+					}
+					if !pkgconfigexists {
+						log.Fatal("config not found")
+					}
 				}
-				if !pkgconfigexists {
-					log.Fatal("config not found")
+				if usr {
+					if root {
+						log.Fatal("cannot use specified config as root")
+					}
+					if !userconfigexists {
+						log.Fatal("config not found")
+					}
 				}
-			}
-			if usr {
-				if root {
-					log.Fatal("cannot use specified config as root")
-				}
-				if !userconfigexists {
-					log.Fatal("config not found")
-				}
-			}
 
-			//error on multiple configs from flags
-			if (pkg && usr) || ((pkg || usr) && (confPath != "")) {
-				log.Fatal("Error: multiple configs specified")
-			}
-			//use package config /opt/skywire/skywire.json
-			if pkg {
-				confPath = visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON
-			}
-			//userspace config in $HOME/.skywire/skywire-config.json
-			if usr {
-				confPath = visorconfig.HomePath() + "/" + visorconfig.ConfigName
-			}
-			if confPath == "" {
-				//default config in current dir ./skywire-config.json
-				confPath = visorconfig.ConfigName
-			}
-			//enforce .json extension
-			if !strings.HasSuffix(confPath, ".json") {
-				confPath = confPath + ".json"
-			}
-			//check for the config file
-			if _, err := os.Stat(confPath); err != nil {
-				//fail here on no config
-				log.WithError(err).Fatal("config file not found")
+				//error on multiple configs from flags
+				if (pkg && usr) || ((pkg || usr) && (confPath != "")) {
+					log.Fatal("Error: multiple configs specified")
+				}
+				//use package config /opt/skywire/skywire.json
+				if pkg {
+					confPath = visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON
+				}
+				//userspace config in $HOME/.skywire/skywire-config.json
+				if usr {
+					confPath = visorconfig.HomePath() + "/" + visorconfig.ConfigName
+				}
+				if confPath == "" {
+					//default config in current dir ./skywire-config.json
+					confPath = visorconfig.ConfigName
+				}
+				//enforce .json extension
+				if !strings.HasSuffix(confPath, ".json") {
+					confPath = confPath + ".json"
+				}
+				//check for the config file
+				if _, err := os.Stat(confPath); err != nil {
+					//fail here on no config
+					log.WithError(err).Fatal("config file not found")
+				}
 			}
 		}
 		logBuildInfo(mLog)
@@ -301,6 +276,10 @@ func initConfig() *visorconfig.V1 { //nolint
 	case visorconfig.Stdin:
 		log.Info("Reading config from STDIN.")
 		r = os.Stdin
+	case "arg":
+		log.Info("Reading config from supplied argument.")
+		confPath = visorconfig.Stdin
+		r = strings.NewReader(confArg)
 	case "":
 		fallthrough
 	default:
@@ -338,11 +317,10 @@ func initConfig() *visorconfig.V1 { //nolint
 	return conf
 }
 
-const help = "{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}" +
-	"{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}" +
-	"Available Commands:{{range .Commands}}{{if (or .IsAvailableCommand)}}" +
-	"{{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}" +
-	"Flags:\r\n" +
-	"{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}\r\n\r\n" +
-	"Global Flags:\r\n" +
-	"{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}\r\n\r\n"
+// Execute executes root CLI command.
+func Execute() {
+	if err := RootCmd.Execute(); err != nil {
+		log := mLog.PackageLogger("pre-run")
+		log.Fatal("Failed to execute command: ", err)
+	}
+}

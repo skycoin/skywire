@@ -47,7 +47,7 @@ var pingCmd = &cobra.Command{
 		internal.Catch(cmd.Flags(), err)
 
 		for _, latency := range latencies {
-			internal.PrintOutput(cmd.Flags(), fmt.Sprint(latency), fmt.Sprintf(fmt.Sprint(latency)+"\n"))
+			internal.PrintOutput(cmd.Flags(), latency, fmt.Sprintf("Latency: %0.2f ms | Speed: %0.3f KB/s\n", 1000*latency.Seconds(), float64(pcktSize)/float64(latency.Seconds())))
 		}
 		err = rpcClient.StopPing(pk)
 		internal.Catch(cmd.Flags(), err)

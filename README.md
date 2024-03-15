@@ -1,49 +1,55 @@
-[![Build Status](https://travis-ci.com/skycoin/skywire.svg?branch=master)](https://travis-ci.com/skycoin/skywire)
+[![Go Report Card](https://goreportcard.com/badge/github.com/skycoin/skywire)](https://goreportcard.com/report/github.com/skycoin/skywire)
+![Test](https://github.com/skycoin/skywire/actions/workflows/test.yml/badge.svg)
+![Deploy](https://github.com/skycoin/skywire/actions/workflows/deploy.yml/badge.svg)
+![Release](https://github.com/skycoin/skywire/actions/workflows/release.yml/badge.svg)
+[![GitHub release](https://img.shields.io/github/release/skycoin/skywire.svg)](https://github.com/skycoin/skywire/releases/)
+[![skywire](https://img.shields.io/aur/version/skywire?color=1793d1&label=skywire&logo=arch-linux)](https://aur.archlinux.org/packages/skywire/)
+[![skywire-bin](https://img.shields.io/aur/version/skywire-bin?color=1793d1&label=skywire-bin&logo=arch-linux)](https://aur.archlinux.org/packages/skywire-bin/)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/skycoin/skywire/badge)](https://api.securityscorecards.dev/projects/github.com/skycoin/skywire)
+[![go.mod](https://img.shields.io/github/go-mod/go-version/skycoin/skywire.svg)](https://github.com/skycoin/skywire)
+[![Telegram](https://img.shields.io/badge/Join-Telegram-blue?&logo=data:image/svg%2bxml;base64,PHN2ZyBlbmFibGUtYmFja2dyb3VuZD0ibmV3IDAgMCAyNCAyNCIgaGVpZ2h0PSI1MTIiIHZpZXdCb3g9IjAgMCAyNCAyNCIgd2lkdGg9IjUxMiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJtOS40MTcgMTUuMTgxLS4zOTcgNS41ODRjLjU2OCAwIC44MTQtLjI0NCAxLjEwOS0uNTM3bDIuNjYzLTIuNTQ1IDUuNTE4IDQuMDQxYzEuMDEyLjU2NCAxLjcyNS4yNjcgMS45OTgtLjkzMWwzLjYyMi0xNi45NzIuMDAxLS4wMDFjLjMyMS0xLjQ5Ni0uNTQxLTIuMDgxLTEuNTI3LTEuNzE0bC0yMS4yOSA4LjE1MWMtMS40NTMuNTY0LTEuNDMxIDEuMzc0LS4yNDcgMS43NDFsNS40NDMgMS42OTMgMTIuNjQzLTcuOTExYy41OTUtLjM5NCAxLjEzNi0uMTc2LjY5MS4yMTh6IiBmaWxsPSIjMDM5YmU1Ii8+PC9zdmc+)](https://t.me/skywire)
 
-Skywire requires a Golang version of `1.16` or higher.
+
+Compiling Skywire requires a Golang version of at least `1.16`.
 
 # Skywire
 
-  * [Commands and Subcommands](#commands-and-subcommands)
-  * [App documentation](#app-documentation)
-  * [Installing Skywire](#installing-skywire)
-  * [Dependencies](#dependencies)
-    * [Build Deps](#build-deps)
-    * [Runtime Deps](#runtime-deps)
-    * [Testing Deps](#testing-deps)
-  * [Testing](#testing)
-  * [Development](#development)
-  * [Run from source](#run-from-source)
-  * [Build docker image](#build-docker-image)
-  * [Files and folders created by skywire at runtime](#files-and-folders-created-by-skywire-at-runtime)
-  * [Skywire Configuration](#skywire-configuration)
-    * [Expose hypervisorUI](#expose-hypervisorui)
-    * [Add remote hypervisor](#add-remote-hypervisor)
-  * [Run skywire\-visor](#run-skywire-visor)
-    * [Using Skywire forwarding \- http server over skywire](#using-skywire-forwarding---http-server-over-skywire)
-    * [Transport setup](#transport-setup)
-    * [Routing Rules](#routing-rules)
-    * [Using the Skywire VPN](#using-the-skywire-vpn)
-    * [Using the Skywire SOCKS5 client](#using-the-skywire-socks5-client)
-  * [Package Build Overview](#package-build-overview)
-  * [Prepare \- path setup](#prepare---path-setup)
-  * [Build](#build)
-  * [Install](#install)
-  * [Skywire\-autoconfig](#skywire-autoconfig)
-    * [Package tree](#package-tree)
-  * [Creating a GitHub release](#creating-a-github-release)
-    * [How to create a GitHub release](#how-to-create-a-github-release)
+* [Commands and Subcommands](#commands-and-subcommands)
+* [App documentation](#app-documentation)
+* [Installing Skywire](#installing-skywire)
+* [Dependencies](#dependencies)
+  * [Build Deps](#build-deps)
+  * [Runtime Deps](#runtime-deps)
+  * [Testing Deps](#testing-deps)
+* [Testing](#testing)
+* [Compiling](#compiling)
+* [Config Gen](#config-gen)
+* [Build docker image](#build-docker-image)
+* [Skywire Configuration in\-depth](#skywire-configuration-in-depth)
+  * [Expose hypervisorUI](#expose-hypervisorui)
+  * [Add remote hypervisor](#add-remote-hypervisor)
+* [Files and folders created by skywire at runtime](#files-and-folders-created-by-skywire-at-runtime)
+* [Run skywire\-visor](#run-skywire-visor)
+* [Run from source](#run-from-source)
+  * [Port forwarding over skywire](#port-forwarding-over-skywire)
+  * [Transport setup](#transport-setup)
+  * [Routing Rules](#routing-rules)
+  * [Using the Skywire VPN](#using-the-skywire-vpn)
+  * [Using the Skywire SOCKS5 proxy client](#using-the-skywire-socks5-proxy-client)
+* [Skycoin Rewards](#skycoin-rewards)
+* [Linux Packages](#linux-packages)
+* [How to create a GitHub release](#how-to-create-a-github-release)
 
 ## Commands and Subcommands
 
-Documentation on skywire-cli interface as well as available flags for skywire-visor
+Documentation on skywire-cli interface as well as available flags for skywire-visor:
 
 * [skywire-cli](cmd/skywire-cli/README.md)
 * [skywire-visor](cmd/skywire-visor/README.md)
 
 ## App documentation
 
-Apps are not executed by the user, but hosted by the visor process
+Apps are not executed by the user, but hosted by the visor process.
 
 * [API](docs/skywire_app_api.md)
 * [skychat](cmd/apps/skychat/README.md)
@@ -54,15 +60,15 @@ Apps are not executed by the user, but hosted by the visor process
 * [example-server-app](example/example-server-app/README.md)
 * [example-client-app](example/example-client-app/README.md)
 
-further documentation can be found in the [skywire wiki](https://github.com/skycoin/skywire/wiki)
+Further documentation can be found in the [skywire wiki](https://github.com/skycoin/skywire/wiki).
 
 ## Installing Skywire
 
-Pre-compiled resouces
+Pre-compiled resouces:
 
-* [Windows installer](https://github.com/skycoin/skywire/releases/download/v1.3.6/skywire-installer-v1.3.6-windows-amd64.msi)
-* [MacOS amd64 package](https://github.com/skycoin/skywire/releases/download/v1.3.6/skywire-installer-v1.3.6-darwin-amd64.pkg)
-* [MacOS m1 / arm64](https://github.com/skycoin/skywire/releases/download/v1.3.6/skywire-installer-v1.3.6-darwin-arm64.pkg)
+* [Windows installer](https://github.com/skycoin/skywire/releases/download/v1.3.7/skywire-installer-v1.3.7-windows-amd64.msi)
+* [MacOS amd64 package](https://github.com/skycoin/skywire/releases/download/v1.3.7/skywire-installer-v1.3.7-darwin-amd64.pkg)
+* [MacOS m1 / arm64](https://github.com/skycoin/skywire/releases/download/v1.3.7/skywire-installer-v1.3.7-darwin-arm64.pkg)
 * [Debian Package Installation Guide](https://github.com/skycoin/skywire/wiki/Skywire-Package-Installation)
 * [Binary Releases](https://github.com/skycoin/skywire/releases)
 
@@ -71,9 +77,12 @@ Pre-compiled resouces
 ### Build Deps
 
 * `golang`
-* `git` (optional)
 
-basic setup of `go` is further described [here](https://github.com/skycoin/skycoin/blob/develop/INSTALLATION.md#setup-your-gopath)
+`golang` or `go` can be installed with your system package manager on most linux distributions. Alternatively, follow the procedure at [go.dev/doc/install](https://go.dev/doc/install) to install golang.
+
+Basic setup of the `go` environment is further described [here](https://github.com/skycoin/skycoin/blob/develop/INSTALLATION.md#setup-your-gopath).
+
+* `git` (optional)
 
 * `musl` and `kernel-headers-musl` or equivalent - _for static compilation_
 
@@ -97,22 +106,26 @@ Before pushing commits to a pull request, its customary in case of edits to any 
 make format check
 ```
 
-`make check` will run `make test` as well. To explicitly run tests, use `make test`
+`make check` will run `make test` as well. To explicitly run tests, use `make test`.
 
-## Development
+## Compiling
 
-To compile skywire directly from this repository for local testing and development
+To compile skywire directly from cloned git sources:
 
 ```
 git clone https://github.com/skycoin/skywire
 cd skywire
 #for the latest commits, check out the develop branch
 git checkout develop
-make build
+make build1
 ```
-`make build` builds the binaries and apps with `go build`
 
-`skywire-cli` and `skywire-visor` binaries will populate in the current directory; app binaries will populate the `apps` directory
+To compile skywire directly from source archive, first download the latest source archive from the release section with your browser or another utility. Extract it with an archiving utility, enter the directory where the sources were extracted, and run `make build1`.
+
+
+`make build1` builds the binaries and apps with `go build`
+
+`skywire-cli` and `skywire-visor` binaries will populate in the current directory; app binaries will populate the `apps` directory.
 
 Build output:
 
@@ -128,12 +141,16 @@ Build output:
     └──skychat
 ```
 
-'install' these executables to the `GOPATH`
+'install' these executables to the `GOPATH`:
 ```
 make install
 ```
 
-To run skywire from this point, first generate a config
+For more options, run `make help`.
+
+## Config Gen
+
+To run skywire from this point, first generate a config.
 
 ```
 ./skywire-cli config gen -birx
@@ -143,65 +160,22 @@ To run skywire from this point, first generate a config
 `-r --regen` regenerate a config which may already exist, retaining the keys
 `-x --retainhv` retain any remote hypervisors which are set in the config
 
-The visor can then be started with
-```
-cd ./build
-sudo ./skywire-visor
-```
+More options for configuration are displayed with `./skywire-cli config gen -all`.
 
-__Note: root permissions are currently required for vpn client and server applications__
-
-## Run from source
-
-Running from source as outlined in this section does not write the config to disk or explicitly compile any binaries. The config is piped from skywire-cli stdout to the visor stdin, and all are executed via `go run`.
-
-```
- git clone https://github.com/skycoin/skywire.git
- cd skywire
- #for the latest commits, check out the develop branch
- git checkout develop
- make run-source
-```
 
 ## Build docker image
 ```
 $ ./ci_scripts/docker-push.sh -t $(git rev-parse --abbrev-ref HEAD) -b
 ```
+## Skywire Configuration in-depth
 
-## Files and folders created by skywire at runtime
-note not all of these files will be created by default
-```
-├──skywire-config.json
-└─┬local
-  ├── apps-pid.txt
-  ├── node-info.json
-  ├── node-info.sha
-  ├── reward.txt
-  ├── skychat
-  ├── skychat_log.db
-  ├── skysocks
-  ├── skysocks-client
-  ├── skysocks-client_log.db
-  ├── skysocks_log.db
-  └── transport_logs
-      ├── 2023-03-06.csv
-      ├── 2023-03-07.csv
-      ├── 2023-03-08.csv
-      ├── 2023-03-09.csv
-      └── 2023-03-10.csv
-```
-
-Some of these files are served via the [dmsghttp logserver](https://github.com/skycoin/skywire/wiki/DMSGHTTP-logserver)
-
-## Skywire Configuration
-
-The skywire visor requires a config file to run. This config is a json-formatted file produced by `skywire-cli config gen`
+The skywire visor requires a config file to run. This config is a json-formatted file produced by `skywire-cli config gen`.
 
 The `skywire-autoconfig` script included with the skywire package handles config generation and updates for the user who has installed the package.
 
-Examples of config generation and command / flag documentation can be found in the [cmd/skywire-cli/README.md](cmd/skywire-cli/README.md) and [cmd/skywire-visor/README.md](cmd/skywire-visor/README.md)
+Examples of config generation and command / flag documentation can be found in the [cmd/skywire-cli/README.md](cmd/skywire-cli/README.md) and [cmd/skywire-visor/README.md](cmd/skywire-visor/README.md).
 
-The most important flags are noted below
+The most important flags are noted below.
 
 ### Expose hypervisorUI
 
@@ -228,12 +202,12 @@ hypervisor needs to be specified in the configuration file. You can add a remote
 ```
 skywire-cli config update --hypervisor-pks <public-key>
 ```
-or
+OR:
 ```
 skywire-cli config gen --hvpk <public-key>
 ```
 
-alternatively, this can be done with the skywire-autoconfg script
+Alternatively, this can be done with the skywire-autoconfg script included with the linux packages:
 ```
 skywire-autoconfig <public-key>
 ```
@@ -252,23 +226,50 @@ docker run --rm -v <YOUR_CONFIG_DIR>:/opt/skywire \
   skycoin/skywire:latest skywire-cli update-config hypervisor-pks <public-key>
 ```
 
-## Run `skywire-visor`
+
+## Files and folders created by skywire at runtime
+_Note: not all of these files will be created by default._
+```
+├──skywire-config.json
+└─┬local
+  ├── apps-pid.txt
+  ├── node-info.json
+  ├── node-info.sha
+  ├── reward.txt
+  ├── skychat
+  ├── skychat_log.db
+  ├── skysocks
+  ├── skysocks-client
+  ├── skysocks-client_log.db
+  ├── skysocks_log.db
+  └── transport_logs
+      ├── 2023-03-06.csv
+      ├── 2023-03-07.csv
+      ├── 2023-03-08.csv
+      ├── 2023-03-09.csv
+      └── 2023-03-10.csv
+```
+
+Some of these files are served via the [dmsghttp logserver](https://github.com/skycoin/skywire/wiki/DMSGHTTP-logserver).
+
+## Run skywire-visor
 
 `skywire-visor` hosts apps and is an applications gateway to the Skywire network.
 
-`skywire-visor` requires a valid configuration to be provided. If you want to run a VPN client locally, run the visor
-as `sudo`.
+`skywire-visor` requires a valid configuration to be provided.
 
+__Note: root permissions are currently required for vpn client and server applications!__
+
+Run the visor:
 ```
  sudo skywire-visor -c skywire-config.json
 ```
-if the default `skywire-config.json` exists in the current dir, this can be shortened to
+If the default `skywire-config.json` exists in the current dir, this can be shortened to:
 ```
  sudo skywire-visor
 ```
 
 Or from docker image:
-
 ```
 # with custom config mounted on docker volume
 docker run --rm -p 8000:8000 -v <YOUR_CONFIG_DIR>:/opt/skywire --name=skywire skycoin/skywire:test skywire-visor -c /opt/skywire/<YOUR_CONFIG_NAME>.json
@@ -277,47 +278,64 @@ docker run --rm -p 8000:8000 --name=skywire skycoin/skywire:test skywire-visor
 ```
 
 `skywire-visor` can be run on Windows. The setup requires additional setup steps that are specified
-in [the docs](docs/windows-setup.md) if not using the windows .msi
+in [the docs](docs/windows-setup.md) if not using the windows .msi.
 
-### Using Skywire forwarding - http server over skywire
+## Run from source
 
-The skywire-cli subcommand `skywire-cli fwd` is used to register and connect to http servers over the skywire connection
+Running from source as outlined in this section does not write the config to disk or explicitly compile any binaries. The config is piped from skywire-cli stdout to the visor stdin, and all are executed via `go run`.
+
+```
+git clone https://github.com/skycoin/skywire.git
+cd skywire
+#for the latest commits, check out the develop branch
+git checkout develop
+make run-source
+```
+
+### Port forwarding over skywire
+
+`skywire-cli fwd` is used to register and connect to http servers over the skywire connection
 
 - [skywire forwarding](docs/skywire_forwarding.md)
 
-assuming that the local application you wish to forward is running on port `8080`
+For example, if the local application you wish to forward is running on port `8080`:
 ```
 skywire-cli fwd -p 8080
 ```
 
-list forwarded ports
+List forwarded ports:
 ```
 skywire-cli fwd -l
 ```
 
-deregister a port / turn off forwarding
+Deregister a port / turn off forwarding:
 ```
 skywire-cli fwd -d 8080
 ```
 
-To consume the skyfwd connection / reverse proxy back to localhost use `skywire-cli rev`
+To consume the skyfwd connection (i.e. reverse proxy back to localhost) use `skywire-cli rev`
+A different port can be specified to proxy the remote port to:
 ```
 skywire-cli rev -p 8080 -r 8080 -k <public-key>
 ```
 
-list existing connections
+List existing connections:
 ```
 skywire-cli rev -l
 ```
 
-remove a configured connection
+Remove a configured connection:
 ```
 skywire-cli rev -d <id>
 ```
 
+_Note: skyfwd is a new feature and could work more robustly. Issues are welcome._
+
 ### Transport setup
 
-A Transport represents a bidirectional line of communication between two Skywire Visors
+_Note: transports should be set up automatically in most cases. The user should not need to do this manually._
+
+A Transport represents a bidirectional line of communication between two Skywire Visors:
 - [Transports](https://github.com/skycoin/skywire/wiki/Transports)
 
 Transports are automatically established when a client application connects to a server application.
@@ -335,12 +353,12 @@ https://ut.skywire.skycoin.com/uptimes
 skywire-cli visor tp add -t <transport-type> <public-key>
 ```
 
-view established transports
+View established transports:
 ```
 skywire-cli visor tp ls
 ```
 
-remove a transport
+Remove a transport:
 ```
 skywire-cli visor tp rm <transport-id>
 ```
@@ -360,7 +378,7 @@ https://ut.skywire.skycoin.com/uptimes
 skywire-cli visor route add-rule app <route-id> $(skywire-cli visor pk) <local-port> <public-key> <remote-port>
 ```
 
-to understand these arguments, observe the help menu for `skywire-cli visor route add-rule`
+To understand these arguments, observe the help menu for `skywire-cli visor route add-rule`:
 ```
 Usage:
   skywire-cli visor route add-rule app \
@@ -382,11 +400,11 @@ Global Flags:
       --keep-alive duration   timeout for rule expiration (default 30s)
 ```
 
-<local-port> <remote-port> and <route-id> are all just integers. it's suggested to create the first route with id 1, unless another route exists with that id
+<local-port> <remote-port> and <route-id> are all just integers. It's suggested to create the first route with id 1, unless another route exists with that id.
 
-the port numbers are similarly inconsequential.
+The port numbers are similarly inconsequential.
 
-__note: the skywire router is pending refactorization__
+__Note: the skywire router is pending refactorization!__
 
 ### Using the Skywire VPN
 
@@ -395,15 +413,15 @@ The following documentation exists for vpn server / client setup and usage:
 - [Setup the Skywire VPN server](https://github.com/skycoin/skywire/wiki/Skywire-VPN-Server)
 - [Package Installation Guide](https://github.com/skycoin/skywire/wiki/Skywire-Package-Installation)
 
-an example using the vpn with `skywire-cli`
+An example using the vpn with `skywire-cli`:
 
 ```
 skywire-cli vpn list
 ```
-this will query the service discovery for a list of vpn server public keys.
-https://sd.skycoin.com/api/services?type=vpn
+This will query the service discovery for a list of vpn server public keys.
+[sd.skycoin.com/api/services?type=vpn](https://sd.skycoin.com/api/services?type=vpn)
 
-sample output:
+Sample output:
 ```
 02836f9a39e38120f338dbc98c96ee2b1ffd73420259d1fb134a2d0a15c8b66ceb | NL
 0289a464f485ce9036f6267db10e5b6eaabd3972a25a7c2387f92b187d313aaf5e | GB
@@ -413,313 +431,131 @@ sample output:
 ...
 ```
 
-select a key and start the vpn with
+Select a key and start the vpn with:
 ```
 skywire-cli vpn start <public-key>
 ```
 
-view the status of the vpn
+View the status of the vpn:
 ```
 skywire-cli vpn status
 ```
 
-Check your ip address with ip.skywire.dev
-__note: ip.skycoin.com will only show your real ip address, not the ip address of the vpn connection__
+Check your ip address with ip.skywire.dev.
+__Note: ip.skycoin.com will only show your real ip address, not the ip address of the vpn connection.__
 
-stop the vpn
+Stop the vpn:
 ```
 skywire-cli vpn stop
 ```
 
-### Using the Skywire SOCKS5 client
+### Using the Skywire SOCKS5 proxy client
 
 
-The following wiki documentation exists on the SOCKS5 proxy
+The following wiki documentation exists on the SOCKS5 proxy:
 - [Skywire SOCKS5 Proxy User Guide](https://github.com/skycoin/skywire/wiki/Skywire-SOCKS5-Proxy-User-Guide)
 - [SSH over SOCKS5 Proxy](https://github.com/skycoin/skywire/wiki/SSH-over-SOCKS5-Proxy)
 
-The main difference between the vpn and the socks5 proxy is that the proxy is configured __per application__ while the vpn wraps the connections for the whole machine
+The main difference between the vpn and the socks5 proxy is that the proxy is configured __per application__ while the vpn wraps the connections for the whole machine.
 
 The socks client usage (from `skywire-cli`) is similar to the vpn, though the `skywire-cli` subcommands and flags do not currently match from the one application to the other. This will be rectified.
 
-To use the SOCKS5 proxy client via `skywire-cli`
-
-first, select a public key with a running socks5 proxy server from the service discovery here:
+To use the SOCKS5 proxy client via `skywire-cli`:
+```
+skywire-cli proxy list
+```
+This will query the service discovery for a list of visor public keys which are running the proxy server.
 [sd.skycoin.com/api/services?type=proxy](https://sd.skycoin.com/api/services?type=proxy)
 
-you can also filter by country code in the query, for example:
-[sd.skycoin.com/api/services?type=proxy&country=US](https://sd.skycoin.com/api/services?type=proxy&country=US)
+Sample output:
+```
+031a924f5fb38d26fd8d795a498ae53f14782bc9f036f8ff283c479ac41af95ebd:3 | ID
+024fdf44c126e122f09d591c8071a7355d4be9c561f85ea584e8ffe4e1ae8717f7:3 | ID
+03ae05142dcf5aad70d1b58ea142476bac49874bfaa67a1369f601e0eb2f5842df:3 | US
+0313a76e2c331669a0cb1a3b749930881f9881cca89b59ee52365d1c15141d9d83:3 | AU
+03022fa8a0c38d20fae9335ef6aa780f5d762e1e161e607882923dc0d5a890f094:3 | SG
+03e4b6326f9df0cff1372f52906a6d1ee03cf972338d532e17470e759362e45c87:3 | ID
+0230689d26e5450e8c44faaba91813b7c2b00c1add3ad251e2d62ecca8041a849d:3 | MY
+036ae558d5e6c5fc73cb6a329cb0006b4f659ecf9ae69c9e38996dfb65b1fb1c45:3 | ID
+03a35c742ed17506834235b2256bb2b0a687de992e5ded52ca4d54fba3b00b8dbe:3 | SG
+0259721a9e79e91ce8bc94bad52a6a381d50fcb05aaadc2c99201fd137fb71dfde:3 | CN
+...
+```
 
-start the socks5 client (starts on port 1080 by default)
+Select a key and start the proxy with:
 ```
-skywire-cli skysocksc start --pk <public-key>
+skywire-cli proxy start --pk <public-key>
 ```
 
-view the skysocks-client app status
+View the status of the proxy:
 ```
-skywire-cli skysocksc status
+skywire-cli proxy status
+```
+
+Check the ip address of the connection; for example, using `curl` via the socks5 proxy connection:
+```
+curl -Lx socks5h://127.0.0.1:1080 http://ip.skycoin.com/ | jq
 ```
 
 The connection may be consumed in a web browser via direct proxy configuration in browsers which support it, or using such extensions as `foxyproxy`.
 
 The connection may also be consumed in the terminal by setting `ALL_PROXY` environmental variable, or via the specific method used by a certain application.
 
-For example, to use `curl` via the socks5 proxy connection:
+Examples of `ssh` over the socks5 proxy:
+
+Using `openbsd-netcat`:
 ```
-curl -Lx socks5h://127.0.0.1:1080 http://ip.skycoin.com/ | jq
+ssh user@host -p 22 -o "ProxyCommand=nc -X 5 -x 127.0.0.1:1080 %h %p"
 ```
 
-examples of `ssh` over the socks5 proxy:
-
-using `openbsd-netcat`
-```
- ssh user@host -p 22 -o "ProxyCommand=nc -X 5 -x 127.0.0.1:1080 %h %p"
-```
-
-using `ncat` from `nmap`
+Using `ncat` from `nmap`:
 ```
 ssh user@host -p 22 -o "ProxyCommand=ncat --proxy-type socks5 --proxy 127.0.0.1:1080 %h %p"
 ```
 
-stop the socks5 proxy client
+Stop the socks5 proxy client:
 ```
-skywire-cli skysocksc stop
+skywire-cli proxy stop
 ```
 
-## Package Build Overview
+## Skycoin Rewards
 
-A high-level overview of the process for building skywire from source and the paths and files which comprise the package-based installation is contained in the [PKGBUILD](https://github.com/skycoin/AUR/blob/main/skywire/PKGBUILD)
+Running skywire on eligible hardware can earn rewards in skycoin. Currently, only package-based linux installations are supported for rewards.
+Review the [mainnet rules](/mainnet_rules.md) article for the details.
 
-this and other build variants, including the debian packages, can be built into a package with a single command, using `yay` on archlinux
+Set a reward address:
+```
+skywire-cli reward <skycoin-address>
+```
+Visors meeting uptime and eligability requirements will recieve daily skycoin rewards for up to 8 visors per location / ip address.
 
-installing [skywire-bin](https://aur.archlinux.org/packages/skywire-bin) from the AUR will install the release binaries provided by the release section of this repo
+## Linux Packages
+
+Built Debian packages are maintained for skywire, as well as several build variants for archlinux. All packages provide a virtually identical installation, regardless of the distro.
+
+Consider the [PKGBUILD](https://github.com/skycoin/AUR/blob/main/skywire/PKGBUILD) as a reference for building and installing skywire on any linux distribution.
+
+Installing [skywire-bin](https://aur.archlinux.org/packages/skywire-bin) from the AUR will install the release binaries provided by the release section of this repository:
 ```
 yay -S skywire-bin
 ```
 
-to build the debian packages using the release binaries
+To build the debian packages using the release binaries:
 ```
 yay --mflags " -p cc.deb.PKGBUILD " -S skywire-bin
 ```
 
-installing [skywire](https://aur.archlinux.org/packages/skywire) from the AUR will compile binaries using the source archive for the latest version release
+Installing [skywire](https://aur.archlinux.org/packages/skywire) from the AUR will compile binaries using the source archive for the latest version release:
 ```
 yay -S skywire
 ```
 
-build from git sources to the develop branch
+Build from git sources to the develop branch:
 ```
 yay --mflags " -p git.PKGBUILD " -S skywire
 ```
 
-## Prepare - path setup
-
-The standard procedure for building software with `go` uses the `GOPATH` which is conventionally `$HOME/go`
-
-Software sources are cloned via `git` to a path such as `$HOME/go/src/github.com/skycoin/skywire`
-
-Optionally, the source archive of a versioned release is downloaded from the [release section](https://github.com/skycoin/skywire/releases)
-
-The binaries which are compiled may optionally be placed in the `GOBIN` and then `GOBIN` may be added to the `PATH` in order that any binaries placed in the `GOBIN` will then become available as commands available to execute in the shell or terminal.
-
-**This setup is optional** but it is documented below, and other examples will refer to this
-
-```
-mkdir -p "${HOME}/go/src/github.com/skycoin/" "${HOME}"/go/bin "${HOME}"/go/apps || true
-cd "${HOME}/go/src/src/github.com/skycoin/"
-git clone https://github.com/skycoin/skywire
-#optionally checkout any branch
-git checkout develop
-```
-
-## Build
-
-the code below is a rough approximation of `make install` which is used in the build function of the skywire packages
-
-```
-export GOPATH="${HOME}/go"
-export GOBIN="${GOPATH}/bin"
-export _GOAPPS="${GOPATH}/apps"
-#optionally, use musl-gcc for static compilation
-#export CC=musl-gcc
-
-cd "${HOME}/go/src/github.com/skycoin/skywire"
-
-#binary versioning
-local _version=$(make version)
-DMSG_BASE="github.com/skycoin/dmsg"
-BUILDINFO_PATH="${DMSG_BASE}/buildinfo"
-BUILDINFO_VERSION="${BUILDINFO_PATH}.version=${_version}"
-BUILDINFO="${BUILDINFO_VERSION} ${BUILDINFO_DATE} ${BUILDINFO_COMMIT}"
-
-#create the skywire binaries
-_pkggopath=github.com/skycoin/skywire
-cd "${HOME}"/go/src/${_pkggopath}
-_cmddir="${HOME}"/go/src/${_pkggopath}/cmd
-cd "${_cmddir}"/apps
-_app="$(ls)"
-for _i in ${_app}; do
-echo "building ${_i} binary"
-cd "${_cmddir}/apps/${_i}"
-go build -trimpath --ldflags="" --ldflags "${BUILDINFO} -s -w -linkmode external -extldflags '-static' -buildid=" -o $_GOAPPS .
-done
-echo "building skywire-visor binary"
-cd "${_cmddir}"/skywire-visor
-go build -trimpath --ldflags="" --ldflags "${BUILDINFO} -s -w -linkmode external -extldflags '-static' -buildid=" -o $GOBIN .
-echo "building skywire-cli binary"
-cd "${_cmddir}"/skywire-cli
-go build -trimpath --ldflags="" --ldflags "${BUILDINFO} -s -w -linkmode external -extldflags '-static' -buildid=" -o $GOBIN .
-```
-
-## Install
-
-The installation paths for the skywire as present in the skywire linux packages are detailed below
-
-Note that `make install-system-linux` will place the binaries into the system where the package would install them, and is best used for quickly testing changes to ensure they work with the autoconfig script included with the package
-
-```
-#to install directly into the system, use "/"
-_pkgdir="/"
-
-#use the appropriate systemd unit installation path for your linux distribution (i.e. etc/systemd/system for .deb distros)
-_systemddir="usr/lib/systemd/system"
-
-#the base path where skywire is installed
-_dir="opt/skywire"
-
-#application binaries ; started by the visor process
-_apps="${_dir}/apps"
-
-#main binaries go here
-_bin="${_dir}/bin"
-
-#scripts included
-_scripts="${_dir}/scripts"
-
-#create the directories
-mkdir -p "${_pkgdir}/usr/bin"
-mkdir -p "${_pkgdir}/${_dir}/bin"
-mkdir -p "${_pkgdir}/${_dir}/apps"
-mkdir -p "${_pkgdir}/${_dir}/scripts"
-mkdir -p "${_pkgdir}/${_systemddir}"
-#the local folder is otherwise produced by the visor on startup
-mkdir -p "${_pkgdir}/${_dir}/local"
-
-# instal binaries - assumes nothing else was already in your GOBIN
- install -Dm755 "${GOBIN}"/* "${_pkgdir}/${_bin}/"
-
-#Symlink the binaries into the executable path
-for _i in "${_pkgdir}/${_bin}"/* ; do
-	ln -rTsf "${_i}" "${_pkgdir}/usr/bin/${_i##*/}"
-done
-
-#install the app binaries
-install -Dm755 "${_GOAPPS}"/* "${_pkgdir}/${_skyapps}/"
-#it is not necessary to symlink these binaries to the executable path but may be useful for debugging
-for _i in "${_pkgdir}/${_apps}"/* ; do
-	ln -rTsf "${_i}" "${_pkgdir}/usr/bin/${_i##*/}"
-done
-
-#install the dmsghttp-config.json'
-install -Dm644 "${HOME}"/go/src/${_pkggopath}/skywire/dmsghttp-config.json" "${_pkgdir}/${_dir}/dmsghttp-config.json"
-```
-
-Desktop integration, maintenance scripts, and systemd service files are included in the skywire package from the [skywire AUR](https://aur.archlinux.org/cgit/aur.git/tree/?h=skywire-bin) which is managed as a subtree from [github.com/skycoin/aur](https://github.com/skycoin/AUR/tree/main/skywire-bin)
-
-`${srcdir}` in the code below is in reference to the directory containing these other source files
-
-```
-#Install scripts
-install -Dm755 "${srcdir}"/skywire-autoconfig "${_pkgdir}/${_skyscripts}/"
-ln -rTsf "${_pkgdir}/${_skyscripts}/skywire-autoconfig" "${_pkgdir}"/usr/bin/skywire-autoconfig
-
-#Installing systemd services'
-install -Dm644 "${srcdir}"/*.service "${_pkgdir}/${_systemddir}/"
-
-# instal desktop files and icons
-mkdir -p "${_pkgdir}"/usr/share/applications/ "${_pkgdir}"/usr/share/icons/hicolor/48x48/apps/
-install -Dm644 "${srcdir}"/*.desktop "${_pkgdir}"/usr/share/applications/
-install -Dm644 "${srcdir}"/*.png "${_pkgdir}"/usr/share/icons/hicolor/48x48/apps/
-```
-
-## Skywire-autoconfig
-
-[skywire-autoconfig](https://github.com/skycoin/AUR/blob/main/skywire/skywire-autoconfig) is a script is provided with the package which is executed as part of the postinstall process. It serves as a utility for automating:
-
-* config management and updates
-* setting remote hypervisors
-* restarting the skywire process (via systemd)
-* printing helpful text for the user to know what is happening
-* generating configuration on boot (for skybian images / chroot installations of skywire)
-* setting config defaults from environmental variables
-* re-establishing skyfwd and skyrev connections (pending)
-
-for more information regarding this script and the skywire package installation, refer to [this wiki article](https://github.com/skycoin/AUR/wiki/skywire-bin)
-
-### Package tree
-```
-/
-├── etc
-│   └── skel
-│       └── .config
-│           └── systemd
-│               └── user
-│                   ├── skywire-autoconfig.service
-│                   └── skywire.service
-├── opt
-│   └── skywire
-│       ├── apps
-│       │   ├── skychat
-│       │   ├── skysocks
-│       │   ├── skysocks-client
-│       │   ├── vpn-client
-│       │   └── vpn-server
-│       ├── bin
-│       │   ├── skywire-cli
-│       │   └── skywire-visor
-│       ├── dmsghttp-config.json
-│       ├── local
-│       │   └── custom
-│       ├── scripts
-│       │   └── skywire-autoconfig
-│       └── skycoin.asc
-└── usr
-    ├── bin
-    │   ├── skychat -> ../../opt/skywire/apps/skychat
-    │   ├── skysocks -> ../../opt/skywire/apps/skysocks
-    │   ├── skysocks-client -> ../../opt/skywire/apps/skysocks-client
-    │   ├── skywire -> ../../opt/skywire/bin/skywire-visor
-    │   ├── skywire-autoconfig -> ../../opt/skywire/scripts/skywire-autoconfig
-    │   ├── skywire-cli -> ../../opt/skywire/bin/skywire-cli
-    │   ├── skywire-visor -> ../../opt/skywire/bin/skywire-visor
-    │   ├── vpn-client -> ../../opt/skywire/apps/vpn-client
-    │   └── vpn-server -> ../../opt/skywire/apps/vpn-server
-    ├── lib
-    │   └── systemd
-    │       └── system
-    │           ├── skywire-autoconfig.service
-    │           └── skywire.service
-    └── share
-        ├── applications
-        │   ├── skywire.desktop
-        │   └── skywirevpn.desktop
-        └── icons
-            └── hicolor
-                └── 48x48
-                    └── apps
-                        ├── skywire.png
-                        └── skywirevpn.png
-
-24 directories, 27 files
-```
-
-## Creating a GitHub release
-
-To maintain actual `skywire-visor` state on users' Skywire nodes we have a mechanism for updating `skywire-visor`
-binaries. Binaries for each version are uploaded to [GitHub releases](https://github.com/skycoin/skywire/releases/). We
-use [goreleaser](https://goreleaser.com) for creating them.
-
-### How to create a GitHub release
+## How to create a GitHub release
 
 1. Make sure that `git` and [goreleaser](https://goreleaser.com/install) are installed.
 2. Checkout to a commit you would like to create a release against.

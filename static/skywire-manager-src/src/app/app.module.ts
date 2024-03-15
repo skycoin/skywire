@@ -103,6 +103,8 @@ import { UserAppSettingsComponent } from './components/pages/node/apps/node-apps
 import { TransportToolsPageComponent } from './components/pages/tools/transport-tools-page/transport-tools-page.component';
 import { RoutePreviewComponent } from './components/pages/tools/transport-tools-page/route-preview/route-preview.component';
 import { NodeLogsComponent } from './components/pages/node/actions/node-logs/node-logs.component';
+import { SkychatSettingsComponent } from './components/pages/node/apps/node-apps/skychat-settings/skychat-settings.component';
+import { TabSelectorComponent } from './components/layout/tab-selector/tab-selector.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
   disabled: true,
@@ -182,6 +184,8 @@ const globalRippleConfig: RippleGlobalOptions = {
     TransportToolsPageComponent,
     RoutePreviewComponent,
     NodeLogsComponent,
+    SkychatSettingsComponent,
+    TabSelectorComponent,
   ],
   imports: [
     BrowserModule,

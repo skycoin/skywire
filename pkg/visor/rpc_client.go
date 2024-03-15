@@ -161,6 +161,14 @@ func (rc *rpcClient) StartApp(appName string) error {
 	return rc.Call("StartApp", &appName, &struct{}{})
 }
 
+// AddApp calls AddApp.
+func (rc *rpcClient) AddApp(appName, binaryName string) error {
+	return rc.Call("AddApp", &SetAppAddIn{
+		AppName:    appName,
+		BinaryName: binaryName,
+	}, &struct{}{})
+}
+
 // RegisterApp calls RegisterApp.
 func (rc *rpcClient) RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error) {
 	var procKey appcommon.ProcKey
@@ -188,14 +196,21 @@ func (rc *rpcClient) StopVPNClient(appName string) error {
 	return rc.Call("StopVPNClient", &appName, &struct{}{})
 }
 
+// FetchUptimeTrackerData calls FetchUptimeTrackerData.
+func (rc *rpcClient) FetchUptimeTrackerData(pk string) ([]byte, error) {
+	var data []byte
+	err := rc.Call("FetchUptimeTrackerData", pk, &data)
+	return data, err
+}
+
 // StartSkysocksClient calls StartSkysocksClient.
 func (rc *rpcClient) StartSkysocksClient(pk string) error {
 	return rc.Call("StartSkysocksClient", pk, &struct{}{})
 }
 
-// StopSkysocksClient calls StopSkysocksClient.
-func (rc *rpcClient) StopSkysocksClient() error {
-	return rc.Call("StopSkysocksClient", &struct{}{}, &struct{}{})
+// StopSkysocksCliens calls StopSkysocksCliens.
+func (rc *rpcClient) StopSkysocksClients() error {
+	return rc.Call("StopSkysocksClients", &struct{}{}, &struct{}{})
 }
 
 // SetAppDetailedStatus sets app's detailed state.
@@ -264,6 +279,14 @@ func (rc *rpcClient) SetAppSecure(appName string, isSecure bool) error {
 	return rc.Call("SetAppSecure", &SetAppBoolIn{
 		AppName: appName,
 		Val:     isSecure,
+	}, &struct{}{})
+}
+
+// SetAppAddress implements API.
+func (rc *rpcClient) SetAppAddress(appName string, address string) error {
+	return rc.Call("SetAppAddress", &SetAppStringIn{
+		AppName: appName,
+		Val:     address,
 	}, &struct{}{})
 }
 
@@ -371,6 +394,11 @@ func (rc *rpcClient) RemoveTransport(tid uuid.UUID) error {
 	return rc.Call("RemoveTransport", &tid, &struct{}{})
 }
 
+// RemoveAllTransports calls RemoveAllTransports.
+func (rc *rpcClient) RemoveAllTransports() error {
+	return rc.Call("RemoveAllTransports", &struct{}{}, &struct{}{})
+}
+
 func (rc *rpcClient) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error) {
 	entries := make([]*transport.Entry, 0)
 	err := rc.Call("DiscoverTransportsByPK", &pk, &entries)
@@ -417,11 +445,6 @@ func (rc *rpcClient) RouteGroups() ([]RouteGroupInfo, error) {
 	var routegroups []RouteGroupInfo
 	err := rc.Call("RouteGroups", &struct{}{}, &routegroups)
 	return routegroups, err
-}
-
-// Restart calls Restart.
-func (rc *rpcClient) Restart() error {
-	return rc.Call("Restart", &struct{}{}, &struct{}{})
 }
 
 // Reload calls Reload.
@@ -777,7 +800,7 @@ func (mc *mockRPCClient) Uptime() (float64, error) {
 }
 
 // SetRewardAddress implements API
-func (mc *mockRPCClient) SetRewardAddress(p string) (string, error) {
+func (mc *mockRPCClient) SetRewardAddress(p string) (string, error) { //nolint:all
 	return "", nil
 }
 
@@ -824,6 +847,11 @@ func (*mockRPCClient) StartApp(string) error {
 	return nil
 }
 
+// AddApp implement API.
+func (*mockRPCClient) AddApp(string, string) error {
+	return nil
+}
+
 // RegisterApp implements API.
 func (*mockRPCClient) RegisterApp(appcommon.ProcConfig) (appcommon.ProcKey, error) {
 	return appcommon.ProcKey{}, nil
@@ -849,13 +877,18 @@ func (*mockRPCClient) StopVPNClient(string) error {
 	return nil
 }
 
+// FetchUptimeTrackerData implements API.
+func (*mockRPCClient) FetchUptimeTrackerData(string) ([]byte, error) {
+	return []byte{}, nil
+}
+
 // StartSkysocksClient implements API.
 func (*mockRPCClient) StartSkysocksClient(string) error {
 	return nil
 }
 
-// StopSkysocksClient implements API.
-func (*mockRPCClient) StopSkysocksClient() error {
+// StopSkysocksClients implements API.
+func (*mockRPCClient) StopSkysocksClients() error {
 	return nil
 }
 
@@ -951,7 +984,7 @@ func (mc *mockRPCClient) SetAppPK(string, cipher.PubKey) error {
 }
 
 // SetAppKillswitch implements API.
-func (mc *mockRPCClient) SetAppKillswitch(appName string, killswitch bool) error {
+func (mc *mockRPCClient) SetAppKillswitch(appName string, killswitch bool) error { //nolint:all
 	return mc.do(true, func() error {
 		const socksName = "skysocks"
 
@@ -966,7 +999,7 @@ func (mc *mockRPCClient) SetAppKillswitch(appName string, killswitch bool) error
 }
 
 // SetAppSecure implements API.
-func (mc *mockRPCClient) SetAppSecure(appName string, isSecure bool) error {
+func (mc *mockRPCClient) SetAppSecure(appName string, isSecure bool) error { //nolint:all
 	return mc.do(true, func() error {
 		const socksName = "skysocks"
 
@@ -977,6 +1010,21 @@ func (mc *mockRPCClient) SetAppSecure(appName string, isSecure bool) error {
 		}
 
 		return fmt.Errorf("app of name '%s' does not exist", socksName)
+	})
+}
+
+// SetAppAddress implements API.
+func (mc *mockRPCClient) SetAppAddress(appName string, address string) error { //nolint:all
+	return mc.do(true, func() error {
+		const chatName = "skychat"
+
+		for i := range mc.o.Apps {
+			if mc.o.Apps[i].Name == chatName {
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", chatName)
 	})
 }
 
@@ -996,7 +1044,7 @@ func (mc *mockRPCClient) SetAppDNS(string, string) error {
 }
 
 // DoCustomSetting implents API.
-func (mc *mockRPCClient) DoCustomSetting(appName string, customSetting map[string]string) error {
+func (mc *mockRPCClient) DoCustomSetting(appName string, customSetting map[string]string) error { //nolint:all
 	return mc.do(true, func() error {
 		for i := range mc.o.Apps {
 			if mc.o.Apps[i].Name == appName {
@@ -1115,6 +1163,14 @@ func (mc *mockRPCClient) RemoveTransport(tid uuid.UUID) error {
 	})
 }
 
+// RemoveAllTransports implements API.
+func (mc *mockRPCClient) RemoveAllTransports() error {
+	return mc.do(true, func() error {
+		mc.o.Transports = []*TransportSummary{}
+		return nil
+	})
+}
+
 func (mc *mockRPCClient) DiscoverTransportsByPK(cipher.PubKey) ([]*transport.Entry, error) {
 	return nil, ErrNotImplemented
 }
@@ -1171,11 +1227,6 @@ func (mc *mockRPCClient) RouteGroups() ([]RouteGroupInfo, error) {
 	}
 
 	return routeGroups, nil
-}
-
-// Restart implements API.
-func (mc *mockRPCClient) Restart() error {
-	return nil
 }
 
 // Reload implements API.
@@ -1250,12 +1301,12 @@ func (mc *mockRPCClient) IsDMSGClientReady() (bool, error) {
 }
 
 // Connect implements API.
-func (mc *mockRPCClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
+func (mc *mockRPCClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) { //nolint:all
 	return uuid.UUID{}, nil
 }
 
 // Disconnect implements API.
-func (mc *mockRPCClient) Disconnect(id uuid.UUID) error {
+func (mc *mockRPCClient) Disconnect(id uuid.UUID) error { //nolint:all
 	return nil
 }
 
@@ -1265,12 +1316,12 @@ func (mc *mockRPCClient) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
 }
 
 // RegisterHTTPPort implements API.
-func (mc *mockRPCClient) RegisterHTTPPort(localPort int) error {
+func (mc *mockRPCClient) RegisterHTTPPort(localPort int) error { //nolint:all
 	return nil
 }
 
 // DeregisterHTTPPort implements API.
-func (mc *mockRPCClient) DeregisterHTTPPort(localPort int) error {
+func (mc *mockRPCClient) DeregisterHTTPPort(localPort int) error { //nolint:all
 	return nil
 }
 

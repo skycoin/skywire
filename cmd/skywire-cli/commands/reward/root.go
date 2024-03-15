@@ -29,7 +29,6 @@ var (
 )
 
 func init() {
-
 	rewardCmd.Flags().SortFlags = false
 	if defaultRewardAddress == "" {
 		//default is genesis address for skycoin blockchain ; for testing
@@ -74,7 +73,7 @@ func longText() string {
 		if err != nil {
 			fmt.Errorf("    reward settings misconfigured!") //nolint
 		}
-		_, err = coincipher.DecodeBase58Address(string(reward))
+		_, err = coincipher.DecodeBase58Address(strings.TrimSpace(string(reward)))
 		if err != nil {
 			fmt.Errorf("    invalid address in reward config %v", err) //nolint
 		}

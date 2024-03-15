@@ -306,7 +306,5 @@ $responsive-table-colors: (
 // Allows to remove the margin at the right of the last mat-icon element inside
 // generic-title-container, to make it be shown correctly when there is a paginator.
 .paginator-icons-fixer {
-  mat-icon:last-of-type {
-    margin-right: 0 !important;
-  }
+  margin-right: 0 !important;
 }

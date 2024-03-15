@@ -3,12 +3,15 @@
 
 skywire command line interface
 
-  * [skywire\-cli](#skywire-cli)
+* [skywire\-cli documentation](#skywire-cli-documentation)
+  * [cli](#cli)
   * [global flags](#global-flags)
   * [subcommand tree](#subcommand-tree)
     * [config](#config)
       * [config gen](#config-gen)
         * [Example for package / msi](#example-for-package--msi)
+      * [config gen\-keys](#config-gen-keys)
+      * [config check\-pk](#config-check-pk)
       * [config update](#config-update)
         * [config update hv](#config-update-hv)
         * [config update sc](#config-update-sc)
@@ -34,7 +37,6 @@ skywire command line interface
           * [visor app arg secure](#visor-app-arg-secure)
           * [visor app arg passcode](#visor-app-arg-passcode)
           * [visor app arg netifc](#visor-app-arg-netifc)
-      * [visor exec](#visor-exec)
       * [visor hv](#visor-hv)
         * [visor hv ui](#visor-hv-ui)
         * [visor hv cpk](#visor-hv-cpk)
@@ -43,8 +45,12 @@ skywire command line interface
       * [visor info](#visor-info)
       * [visor ver](#visor-ver)
       * [visor ports](#visor-ports)
+      * [visor ip](#visor-ip)
       * [visor ping](#visor-ping)
       * [visor test](#visor-test)
+      * [visor start](#visor-start)
+      * [visor reload](#visor-reload)
+      * [visor halt](#visor-halt)
       * [visor route](#visor-route)
         * [visor route ls\-rules](#visor-route-ls-rules)
         * [visor route rule](#visor-route-rule)
@@ -53,8 +59,6 @@ skywire command line interface
           * [visor route add\-rule app](#visor-route-add-rule-app)
           * [visor route add\-rule fwd](#visor-route-add-rule-fwd)
           * [visor route add\-rule intfwd](#visor-route-add-rule-intfwd)
-      * [visor halt](#visor-halt)
-      * [visor start](#visor-start)
       * [visor tp](#visor-tp)
         * [visor tp type](#visor-tp-type)
         * [visor tp ls](#visor-tp-ls)
@@ -63,27 +67,35 @@ skywire command line interface
         * [visor tp rm](#visor-tp-rm)
         * [visor tp disc](#visor-tp-disc)
     * [vpn](#vpn)
-      * [vpn list](#vpn-list)
-      * [vpn ui](#vpn-ui)
-      * [vpn url](#vpn-url)
       * [vpn start](#vpn-start)
       * [vpn stop](#vpn-stop)
       * [vpn status](#vpn-status)
+      * [vpn list](#vpn-list)
+      * [vpn ui](#vpn-ui)
+      * [vpn url](#vpn-url)
+    * [ut](#ut)
     * [fwd](#fwd)
     * [rev](#rev)
     * [reward](#reward)
+      * [reward calc](#reward-calc)
     * [survey](#survey)
     * [rtfind](#rtfind)
     * [mdisc](#mdisc)
       * [mdisc entry](#mdisc-entry)
       * [mdisc servers](#mdisc-servers)
     * [completion](#completion)
+    * [log](#log)
+    * [proxy](#proxy)
+      * [proxy start](#proxy-start)
+      * [proxy stop](#proxy-stop)
+      * [proxy status](#proxy-status)
+      * [proxy list](#proxy-list)
     * [tree](#tree)
     * [doc](#doc)
+    * [dmsghttp](#dmsghttp)
 
 
-
-## skywire-cli
+## cli
 
 ```
 
@@ -92,13 +104,14 @@ skywire command line interface
 	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘  └─┘┴─┘┴
 
 Usage:
-  skywire-cli
+  cli
 
 Available Commands:
   config                  Generate or update a skywire config
   dmsgpty                 Interact with remote visors
   visor                   Query the Skywire Visor
-  vpn                     controls for VPN client
+  vpn                     VPN client
+  ut                      query uptime tracker
   fwd                     Control skyforwarding
   rev                     reverse proxy skyfwd
   reward                  skycoin reward address
@@ -106,8 +119,12 @@ Available Commands:
   rtfind                  Query the Route Finder
   mdisc                   Query remote DMSG Discovery
   completion              Generate completion script
+  log                     survey & transport log collection
+  proxy                   Skysocks client
   tree                    subcommand tree
   doc                     generate markdown docs
+  dmsghttp                update dmsghttp-config.json file from config bootstrap service
+  services                update services-config.json file from config service
 
 
 ```
@@ -133,9 +150,11 @@ Global Flags:
 A tree representation of the skywire-cli subcommands
 
 ```
-└─┬skywire-cli
+└─┬cli
   ├─┬config
   │ ├──gen
+  │ ├──gen-keys
+  │ ├──check-pk
   │ └─┬update
   │   ├──hv
   │   ├──sc
@@ -161,7 +180,6 @@ A tree representation of the skywire-cli subcommands
   │ │   ├──secure
   │ │   ├──passcode
   │ │   └──netifc
-  │ ├──exec
   │ ├─┬hv
   │ │ ├──ui
   │ │ ├──cpk
@@ -170,8 +188,12 @@ A tree representation of the skywire-cli subcommands
   │ ├──info
   │ ├──ver
   │ ├──ports
+  │ ├──ip
   │ ├──ping
   │ ├──test
+  │ ├──start
+  │ ├──reload
+  │ ├──halt
   │ ├─┬route
   │ │ ├──ls-rules
   │ │ ├──rule
@@ -180,8 +202,6 @@ A tree representation of the skywire-cli subcommands
   │ │   ├──app
   │ │   ├──fwd
   │ │   └──intfwd
-  │ ├──halt
-  │ ├──start
   │ └─┬tp
   │   ├──type
   │   ├──ls
@@ -190,37 +210,47 @@ A tree representation of the skywire-cli subcommands
   │   ├──rm
   │   └──disc
   ├─┬vpn
-  │ ├──list
-  │ ├──ui
-  │ ├──url
   │ ├──start
   │ ├──stop
-  │ └──status
+  │ ├──status
+  │ ├──list
+  │ ├──ui
+  │ └──url
+  ├──ut
   ├──fwd
   ├──rev
-  ├──reward
+  ├─┬reward
+  │ └──calc
   ├──survey
   ├──rtfind
   ├─┬mdisc
   │ ├──entry
   │ └──servers
   ├──completion
+  ├──log
+  ├─┬proxy
+  │ ├──start
+  │ ├──stop
+  │ ├──status
+  │ └──list
   ├──tree
   ├──doc
-  └──
+  └──dmsghttp
 
 ```
 
 ### config
 
 ```
-A primary function of skywire-cli is generating and updating the config file used by skywire-visor.
+Generate or update the config file used by skywire-visor.
 
 Usage:
-  skywire-cli config
+  cli config
 
 Available Commands:
   gen                     Generate a config file
+  gen-keys                generate public / secret keypair
+  check-pk                check a skywire public key
   update                  Update a config file
 
 
@@ -231,41 +261,66 @@ Available Commands:
 ```
 Generate a config file
 
+	Config defaults file may also be specified with
+	SKYENV=/path/to/skywire.conf skywire-cli config gen
+
 Usage:
-  skywire-cli config gen [flags]
+  cli config gen [flags]
 
 Flags:
-  -a, --url string           services conf
-      --log-level string     level of logging in config (default "info")
-  -b, --bestproto            best protocol (dmsg | direct) based on location
-  -c, --noauth               disable authentication for hypervisor UI
-  -d, --dmsghttp             use dmsg connection to skywire services
-  -e, --auth                 enable auth on hypervisor UI
-  -f, --force                remove pre-existing config
-  -g, --disableapps string   comma separated list of apps to disable
-  -i, --ishv                 local hypervisor configuration
-  -j, --hvpks string         list of public keys to use as hypervisor
-  -k, --os string            (linux / mac / win) paths (default "linux")
-  -l, --publicip             allow display node ip in services
-  -m, --example-apps         add example apps to the config
-  -n, --stdout               write config to stdout
-  -o, --out string           output config: skywire-config.json
-  -p, --pkg                  use path for package: /opt/skywire
-  -q, --publicrpc            allow rpc requests from LAN
-  -r, --regen                re-generate existing config & retain keys
-  -s, --sk cipher.SecKey     a random key is generated if unspecified
+  -a, --url string               services conf url
+
+ (default "http://conf.skywire.skycoin.com")
+      --loglvl string            level of logging in config[0m (default "info")
+  -b, --bestproto                best protocol (dmsg | direct) based on location[0m
+  -c, --noauth                   disable authentication for hypervisor UI[0m
+  -d, --dmsghttp                 use dmsg connection to skywire services[0m
+  -e, --auth                     enable auth on hypervisor UI[0m
+  -f, --force                    remove pre-existing config[0m
+  -g, --disableapps string       comma separated list of apps to disable[0m
+  -i, --ishv                     local hypervisor configuration[0m
+  -j, --hvpks string             list of public keys to add as hypervisor
+      --dmsgpty string           add dmsgpty whitelist PKs
+      --survey string            add survey whitelist PKs
+      --routesetup string        add route setup node PKs
+      --tpsetup string           add transport setup node PKs
+  -k, --os string                (linux / mac / win) paths[0m (default "linux")
+  -l, --publicip                 allow display node ip in services[0m
+  -m, --example-apps             add example apps to the config[0m
+  -n, --stdout                   write config to stdout[0m
+  -o, --out string               output config: skywire-config.json[0m
+  -p, --pkg                      use path for package: /opt/skywire[0m
+  -u, --user                     use paths for user space: /home/d0mo[0m
+  -r, --regen                    re-generate existing config & retain keys
+  -s, --sk cipher.SecKey         a random key is generated if unspecified
 
  (default 0000000000000000000000000000000000000000000000000000000000000000)
-  -t, --testenv              use test deployment conf.skywire.dev
-  -u, --user                 use paths for user space: /home/d0mo
-  -v, --servevpn             enable vpn server
-  -w, --hide                 dont print the config to the terminal
-  -x, --retainhv             retain existing hypervisors with regen
-  -y, --autoconn             disable autoconnect to public visors
-  -z, --public               publicize visor in service discovery
-      --version string       custom version testing override
-      --all                  show all flags
-      --binpath string       set bin_path
+  -t, --testenv                  use test deployment conf.skywire.dev[0m
+  -v, --servevpn                 enable vpn server[0m
+  -w, --hide                     dont print the config to the terminal :: show errors with -n flag[0m
+  -x, --retainhv                 retain existing hypervisors with regen[0m
+  -y, --autoconn                 disable autoconnect to public visors[0m
+  -z, --public                   publicize visor in service discovery[0m
+      --stcpr int                set tcp transport listening port - 0 for random[0m
+      --sudph int                set udp transport listening port - 0 for random[0m
+      --all                      show all flags
+      --binpath string           set bin_path[0m
+      --proxyclientpk string     set server public key for proxy client
+      --startproxyclient         autostart proxy client
+      --noproxyserver            disable autostart of proxy server
+      --proxyserverpass string   set proxy server password
+      --proxyclientpass string   password for the proxy client to access the server (if needed)
+      --killsw string            vpn client killswitch
+      --addvpn string            set vpn server public key for vpn client
+      --vpnpass string           password for vpn client to access the vpn server (if needed)
+      --vpnserverpass string     set password to the vpn server
+      --secure string            change secure mode status of vpn server
+      --netifc string            VPN Server network interface (detected: eno1)
+  -q, --envs                     show the environmental variable settings
+      --nofetch                  do not fetch the services from the service conf url
+      --confpath string          path of config-service offline file
+      --nodefaults               do not use hardcoded defaults for production / test services
+      --version string           custom version testing override[0m
 
 
 ```
@@ -275,9 +330,9 @@ Flags:
 ```
 $ skywire-cli config gen -bpirxn --version 1.3.0
 {
-	"version": "fatal: No names found, cannot describe anything.\n",
-	"sk": "8111629add1de63c18f43dc052a76a4cdc948c978bf7847bd2ccb8e61f30a7f7",
-	"pk": "03643894e84e55e7d7915b7f971b090e582261609c9188066983c70c5d92a0b4ae",
+	"version": "v1.3.13",
+	"sk": "794ca4760d823e1a190d3aa19487a276944d54e8c1c8d29e16e6fbe6587eb51e",
+	"pk": "02d3879d36c5d8046a81247388af0fd7caef01884c73f9997ddc362ca96d4ff3d3",
 	"dmsg": {
 		"discovery": "http://dmsgd.skywire.skycoin.com",
 		"sessions_count": 1,
@@ -286,7 +341,8 @@ $ skywire-cli config gen -bpirxn --version 1.3.0
 	"dmsgpty": {
 		"dmsg_port": 22,
 		"cli_network": "unix",
-		"cli_address": "/tmp/dmsgpty.sock"
+		"cli_address": "/tmp/dmsgpty.sock",
+		"whitelist": []
 	},
 	"skywire-tcp": {
 		"pk_table": null,
@@ -296,16 +352,31 @@ $ skywire-cli config gen -bpirxn --version 1.3.0
 		"discovery": "http://tpd.skywire.skycoin.com",
 		"address_resolver": "http://ar.skywire.skycoin.com",
 		"public_autoconnect": true,
-		"transport_setup_nodes": null,
+		"transport_setup": [
+			"03530b786c670fc7f5ab9021478c7ec9cd06a03f3ea1416c50c4a8889ef5bba80e",
+			"03271c0de223b80400d9bd4b7722b536a245eb6c9c3176781ee41e7bac8f9bad21",
+			"03a792e6d960c88c6fb2184ee4f16714c58b55f0746840617a19f7dd6e021699d9",
+			"0313efedc579f57f05d4f5bc3fbf0261f31e51cdcfde7e568169acf92c78868926",
+			"025c7bbf23e3441a36d7e8a1e9d717921e2a49a2ce035680fec4808a048d244c8a",
+			"030eb6967f6e23e81db0d214f925fc5ce3371e1b059fb8379ae3eb1edfc95e0b46",
+			"02e582c0a5e5563aad47f561b272e4c3a9f7ac716258b58e58eb50afd83c286a7f",
+			"02ddc6c749d6ed067bb68df19c9bcb1a58b7587464043b1707398ffa26a9746b26",
+			"03aa0b1c4e23616872058c11c6efba777c130a85eaf909945d697399a1eb08426d",
+			"03adb2c924987d8deef04d02bd95236c5ae172fe5dfe7273e0461d96bf4bc220be"
+		],
 		"log_store": {
 			"type": "file",
 			"location": "./local/transport_logs",
 			"rotation_interval": "168h0m0s"
-		}
+		},
+		"stcpr_port": 0,
+		"sudph_port": 0
 	},
 	"routing": {
-		"setup_nodes": [
-			"0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557"
+		"route_setup_nodes": [
+			"0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557",
+			"024fbd3997d4260f731b01abcfce60b8967a6d4c6a11d1008812810ea1437ce438",
+			"03b87c282f6e9f70d97aeea90b07cf09864a235ef718725632d067873431dd1015"
 		],
 		"route_finder": "http://rf.skywire.skycoin.com",
 		"route_finder_timeout": "10s",
@@ -321,26 +392,56 @@ $ skywire-cli config gen -bpirxn --version 1.3.0
 		"bin_path": "./apps",
 		"display_node_ip": false
 	},
+	"survey_whitelist": [
+		"02b5ee5333aa6b7f5fc623b7d5f35f505cb7f974e98a70751cf41962f84c8c4637",
+		"03714c8bdaee0fb48f47babbc47c33e1880752b6620317c9d56b30f3b0ff58a9c3",
+		"020d35bbaf0a5abc8ec0ba33cde219fde734c63e7202098e1f9a6cf9daaeee55a9",
+		"027f7dec979482f418f01dfabddbd750ad036c579a16422125dd9a313eaa59c8e1",
+		"031d4cf1b7ab4c789b56c769f2888e4a61c778dfa5fe7e5cd0217fc41660b2eb65",
+		"0327e2cf1d2e516ecbfdbd616a87489cc92a73af97335d5c8c29eafb5d8882264a",
+		"03abbb3eff140cf3dce468b3fa5a28c80fa02c6703d7b952be6faaf2050990ebf4"
+	],
 	"hypervisors": [],
 	"cli_addr": "localhost:3435",
-	"log_level": "info",
+	"log_level": "",
 	"local_path": "./local",
-	"custom_dmsg_http_path": "./local/custom",
+	"dmsghttp_server_path": "./local/custom",
 	"stun_servers": [
-		"192.53.116.178:3478",
-		"172.105.114.227:3478",
-		"172.104.47.121:3478",
-		"172.104.185.252:3478",
-		"139.162.42.104:3478",
-		"192.53.172.10:3478",
-		"172.104.54.73:3478",
-		"139.162.21.168:3478"
+		"192.46.229.215:3478",
+		"172.104.61.116:3478",
+		"139.162.44.14:3478",
+		"172.104.57.11:3478",
+		"139.177.189.68:3478",
+		"192.46.229.112:3478",
+		"172.105.124.139:3478",
+		"172.105.124.145:3478"
 	],
 	"shutdown_timeout": "10s",
-	"restart_check_delay": "1s",
 	"is_public": false,
 	"persistent_transports": null
 }
+```
+
+#### config gen-keys
+
+```
+generate public / secret keypair
+
+Usage:
+  cli config gen-keys
+
+
+```
+
+#### config check-pk
+
+```
+check a skywire public key
+
+Usage:
+  cli config check-pk <public-key>
+
+
 ```
 
 #### config update
@@ -349,7 +450,7 @@ $ skywire-cli config gen -bpirxn --version 1.3.0
 Update a config file
 
 Usage:
-  skywire-cli config update [flags]
+  cli config update [flags]
 
 Available Commands:
   hv                      update hypervisor config
@@ -367,6 +468,7 @@ Flags:
       --set-minhop int           change min hops value (default -1)
   -i, --input string             path of input config file.
   -o, --output string            config file to output
+  -u, --user                     update config at: $HOME/skywire-config.json
 
 
 ```
@@ -377,7 +479,7 @@ Flags:
 update hypervisor config
 
 Usage:
-  skywire-cli config update hv [flags]
+  cli config update hv [flags]
 
 Flags:
   -+, --add-pks string   public keys of hypervisors that should be added to this visor
@@ -386,6 +488,7 @@ Flags:
 Global Flags:
   -i, --input string    path of input config file.
   -o, --output string   config file to output
+  -u, --user            update config at: $HOME/skywire-config.json
 
 
 ```
@@ -396,7 +499,7 @@ Global Flags:
 update skysocks-client config
 
 Usage:
-  skywire-cli config update sc [flags]
+  cli config update sc [flags]
 
 Flags:
   -+, --add-server string   add skysocks server address to skysock-client
@@ -405,6 +508,7 @@ Flags:
 Global Flags:
   -i, --input string    path of input config file.
   -o, --output string   config file to output
+  -u, --user            update config at: $HOME/skywire-config.json
 
 
 ```
@@ -415,7 +519,7 @@ Global Flags:
 update skysocks-server config
 
 Usage:
-  skywire-cli config update ss [flags]
+  cli config update ss [flags]
 
 Flags:
   -s, --passwd string   add passcode to skysocks server
@@ -424,6 +528,7 @@ Flags:
 Global Flags:
   -i, --input string    path of input config file.
   -o, --output string   config file to output
+  -u, --user            update config at: $HOME/skywire-config.json
 
 
 ```
@@ -434,7 +539,7 @@ Global Flags:
 update vpn-client config
 
 Usage:
-  skywire-cli config update vpnc [flags]
+  cli config update vpnc [flags]
 
 Flags:
   -x, --killsw string       change killswitch status of vpn-client
@@ -445,6 +550,7 @@ Flags:
 Global Flags:
   -i, --input string    path of input config file.
   -o, --output string   config file to output
+  -u, --user            update config at: $HOME/skywire-config.json
 
 
 ```
@@ -455,7 +561,7 @@ Global Flags:
 update vpn-server config
 
 Usage:
-  skywire-cli config update vpns [flags]
+  cli config update vpns [flags]
 
 Flags:
   -s, --passwd string      add passcode to vpn-server
@@ -467,6 +573,7 @@ Flags:
 Global Flags:
   -i, --input string    path of input config file.
   -o, --output string   config file to output
+  -u, --user            update config at: $HOME/skywire-config.json
 
 
 ```
@@ -477,7 +584,7 @@ Global Flags:
 Interact with remote visors
 
 Usage:
-  skywire-cli dmsgpty
+  cli dmsgpty
 
 Available Commands:
   ui                      Open dmsgpty UI in default browser
@@ -494,7 +601,7 @@ Available Commands:
 Open dmsgpty UI in default browser
 
 Usage:
-  skywire-cli dmsgpty ui [flags]
+  cli dmsgpty ui [flags]
 
 Flags:
   -i, --input string   read from specified config file
@@ -510,7 +617,7 @@ Flags:
 Show dmsgpty UI URL
 
 Usage:
-  skywire-cli dmsgpty url [flags]
+  cli dmsgpty url [flags]
 
 Flags:
   -i, --input string   read from specified config file
@@ -526,7 +633,7 @@ Flags:
 List connected visors
 
 Usage:
-  skywire-cli dmsgpty list [flags]
+  cli dmsgpty list [flags]
 
 Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -540,7 +647,7 @@ Flags:
 Start dmsgpty session
 
 Usage:
-  skywire-cli dmsgpty start <pk> [flags]
+  cli dmsgpty start <pk> [flags]
 
 Flags:
   -p, --port string   port of remote visor dmsgpty (default "22")
@@ -555,21 +662,21 @@ Flags:
 Query the Skywire Visor
 
 Usage:
-  skywire-cli visor [flags]
+  cli visor [flags]
 
 Available Commands:
   app                     App settings
-  exec                    Execute a command
   hv                      Hypervisor
   pk                      Public key of the visor
   info                    Summary of visor info
   ver                     Version and build info
   ports                   List of Ports
+  ip                      IP information of network
   ping                    Ping the visor with given pk
   test                    Test the visor with public visors on network
-  route                   View and set rules
+  start                   start visor
   halt                    Stop a running visor
-  start                   Start a visor
+  route                   View and set rules
   tp                      View and set transports
 
 Flags:
@@ -585,7 +692,7 @@ Flags:
   App settings
 
 Usage:
-  skywire-cli visor app [flags]
+  cli visor app [flags]
 
 Available Commands:
   ls                      List apps
@@ -609,7 +716,7 @@ Global Flags:
   List apps
 
 Usage:
-  skywire-cli visor app ls [flags]
+  cli visor app ls [flags]
 
 Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -624,7 +731,7 @@ Global Flags:
   Launch app
 
 Usage:
-  skywire-cli visor app start <name> [flags]
+  cli visor app start <name> [flags]
 
 Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -639,7 +746,7 @@ Global Flags:
   Halt app
 
 Usage:
-  skywire-cli visor app stop <name> [flags]
+  cli visor app stop <name> [flags]
 
 Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -654,7 +761,7 @@ Global Flags:
   Register app
 
 Usage:
-  skywire-cli visor app register [flags]
+  cli visor app register [flags]
 
 Flags:
   -a, --appname string     name of the app
@@ -673,7 +780,7 @@ Global Flags:
   Deregister app
 
 Usage:
-  skywire-cli visor app deregister [flags]
+  cli visor app deregister [flags]
 
 Flags:
   -k, --procKey string   proc key of the app to deregister
@@ -694,7 +801,7 @@ Global Flags:
   "beginning" is a special timestamp to fetch all the logs
 
 Usage:
-  skywire-cli visor app log <name> <timestamp> [flags]
+  cli visor app log <name> <timestamp> [flags]
 
 Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -708,7 +815,7 @@ Global Flags:
 App args
 
 Usage:
-  skywire-cli visor app arg [flags]
+  cli visor app arg [flags]
 
 Available Commands:
   autostart               Set app autostart
@@ -729,7 +836,7 @@ Global Flags:
 Set app autostart
 
 Usage:
-  skywire-cli visor app arg autostart <name> (true|false) [flags]
+  cli visor app arg autostart <name> (true|false) [flags]
 
 Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -744,7 +851,7 @@ Global Flags:
   Set app killswitch
 
 Usage:
-  skywire-cli visor app arg killswitch <name> (true|false) [flags]
+  cli visor app arg killswitch <name> (true|false) [flags]
 
 Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -759,7 +866,7 @@ Global Flags:
   Set app secure
 
 Usage:
-  skywire-cli visor app arg secure <name> (true|false) [flags]
+  cli visor app arg secure <name> (true|false) [flags]
 
 Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -777,7 +884,7 @@ Global Flags:
   "remove" is a special arg to remove the passcode
 
 Usage:
-  skywire-cli visor app arg passcode <name> <passcode> [flags]
+  cli visor app arg passcode <name> <passcode> [flags]
 
 Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -794,22 +901,7 @@ Set app network interface.
   "remove" is a special arg to remove the netifc
 
 Usage:
-  skywire-cli visor app arg netifc <name> <interface> [flags]
-
-Global Flags:
-      --rpc string   RPC server address (default "localhost:3435")
-
-
-```
-
-#### visor exec
-
-```
-
-  Execute a command
-
-Usage:
-  skywire-cli visor exec <command> [flags]
+  cli visor app arg netifc <name> <interface> [flags]
 
 Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -829,7 +921,7 @@ Global Flags:
   View remote hypervisor public key
 
 Usage:
-  skywire-cli visor hv [flags]
+  cli visor hv [flags]
 
 Available Commands:
   ui                      open Hypervisor UI in default browser
@@ -849,7 +941,7 @@ Global Flags:
   open Hypervisor UI in default browser
 
 Usage:
-  skywire-cli visor hv ui [flags]
+  cli visor hv ui [flags]
 
 Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -864,7 +956,7 @@ Global Flags:
   Public key of remote hypervisor(s) set in config
 
 Usage:
-  skywire-cli visor hv cpk [flags]
+  cli visor hv cpk [flags]
 
 Flags:
   -w, --http           serve public key via http
@@ -883,7 +975,7 @@ Global Flags:
 Public key of remote hypervisor(s) which are currently connected to
 
 Usage:
-  skywire-cli visor hv pk [flags]
+  cli visor hv pk [flags]
 
 Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -898,12 +990,12 @@ Global Flags:
   Public key of the visor
 
 Usage:
-  skywire-cli visor pk [flags]
+  cli visor pk [flags]
 
 Flags:
   -w, --http           serve public key via http
   -i, --input string   path of input config file.
-  -p, --pkg            read from /opt/skywire/skywire.json
+  -p, --pkg            read from {/opt/skywire/apps /opt/skywire/local {/opt/skywire/users.db true}}
   -x, --prt string     serve public key via http (default "7998")
 
 Global Flags:
@@ -919,7 +1011,7 @@ Global Flags:
   Summary of visor info
 
 Usage:
-  skywire-cli visor info [flags]
+  cli visor info [flags]
 
 Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -934,7 +1026,7 @@ Global Flags:
   Version and build info
 
 Usage:
-  skywire-cli visor ver [flags]
+  cli visor ver [flags]
 
 Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -949,7 +1041,22 @@ Global Flags:
   List of all ports used by visor services and apps
 
 Usage:
-  skywire-cli visor ports [flags]
+  cli visor ports [flags]
+
+Global Flags:
+      --rpc string   RPC server address (default "localhost:3435")
+
+
+```
+
+#### visor ip
+
+```
+
+  IP information of network
+
+Usage:
+  cli visor ip [flags]
 
 Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -961,10 +1068,10 @@ Global Flags:
 
 ```
 
-	Creates a route with the provided pk as a hop and returns latency on the conn
+  Creates a route with the provided pk as a hop and returns latency on the conn
 
 Usage:
-  skywire-cli visor ping <pk> [flags]
+  cli visor ping <pk> [flags]
 
 Flags:
   -s, --size int    Size of packet, in KB, default is 2KB (default 2)
@@ -980,15 +1087,61 @@ Global Flags:
 
 ```
 
-	Creates a route with public visors as a hop and returns latency on the conn
+  Creates a route with public visors as a hop and returns latency on the conn
 
 Usage:
-  skywire-cli visor test [flags]
+  cli visor test [flags]
 
 Flags:
   -c, --count int   Count of Public Visors for using in test. (default 2)
   -s, --size int    Size of packet, in KB, default is 2KB (default 2)
   -t, --tries int   Number of tries per public visors (default 1)
+
+Global Flags:
+      --rpc string   RPC server address (default "localhost:3435")
+
+
+```
+
+#### visor start
+
+```
+start visor
+
+Usage:
+  cli visor start [flags]
+
+Flags:
+  -s, --src   'go run' external commands from the skywire sources
+
+Global Flags:
+      --rpc string   RPC server address (default "localhost:3435")
+
+
+```
+
+#### visor reload
+
+```
+reload visor
+
+Usage:
+  cli visor reload [flags]
+
+Global Flags:
+      --rpc string   RPC server address (default "localhost:3435")
+
+
+```
+
+#### visor halt
+
+```
+
+  Stop a running visor
+
+Usage:
+  cli visor halt [flags]
 
 Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -1003,7 +1156,7 @@ Global Flags:
     View and set routing rules
 
 Usage:
-  skywire-cli visor route [flags]
+  cli visor route [flags]
 
 Available Commands:
   ls-rules                List routing rules
@@ -1024,7 +1177,7 @@ Global Flags:
     List routing rules
 
 Usage:
-  skywire-cli visor route ls-rules [flags]
+  cli visor route ls-rules [flags]
 
 Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -1039,7 +1192,7 @@ Global Flags:
     Return routing rule by route ID key
 
 Usage:
-  skywire-cli visor route rule <route-id> [flags]
+  cli visor route rule <route-id> [flags]
 
 Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -1054,7 +1207,7 @@ Global Flags:
     Remove routing rule
 
 Usage:
-  skywire-cli visor route rm-rule <route-id> [flags]
+  cli visor route rm-rule <route-id> [flags]
 
 Flags:
   -a, --all   remove all routing rules
@@ -1072,7 +1225,7 @@ Global Flags:
     Add routing rule
 
 Usage:
-  skywire-cli visor route add-rule ( app | fwd | intfwd ) [flags]
+  cli visor route add-rule ( app | fwd | intfwd ) [flags]
 
 Available Commands:
   app                     Add app/consume routing rule
@@ -1095,7 +1248,7 @@ Global Flags:
     Add app/consume routing rule
 
 Usage:
-  skywire-cli visor route add-rule app \
+  cli visor route add-rule app \
                <route-id> \
                <local-pk> \
                <local-port> \
@@ -1124,7 +1277,7 @@ Global Flags:
     Add forward routing rule
 
 Usage:
-  skywire-cli visor route add-rule fwd \
+  cli visor route add-rule fwd \
                <route-id> \
                <next-route-id> \
                <next-transport-id> \
@@ -1157,7 +1310,7 @@ Global Flags:
     Add intermediary forward routing rule
 
 Usage:
-  skywire-cli visor route add-rule intfwd \
+  cli visor route add-rule intfwd \
                <route-id> \
                <next-route-id> \
                <next-transport-id> \
@@ -1175,39 +1328,6 @@ Global Flags:
 
 ```
 
-#### visor halt
-
-```
-
-  Stop a running visor
-
-Usage:
-  skywire-cli visor halt [flags]
-
-Global Flags:
-      --rpc string   RPC server address (default "localhost:3435")
-
-
-```
-
-#### visor start
-
-```
-
-  Start a visor
-
-Usage:
-  skywire-cli visor start [flags]
-
-Flags:
-  -s, --src   'go run' external commands from the skywire sources
-
-Global Flags:
-      --rpc string   RPC server address (default "localhost:3435")
-
-
-```
-
 #### visor tp
 
 ```
@@ -1220,8 +1340,10 @@ Global Flags:
 	and has a Transport Type that identifies
 	a specific implementation of the Transport.
 
+	Types: stcp stcpr sudph dmsg
+
 Usage:
-  skywire-cli visor tp [flags]
+  cli visor tp [flags]
 
 Available Commands:
   type                    Transport types used by the local visor
@@ -1244,7 +1366,7 @@ Global Flags:
   Transport types used by the local visor
 
 Usage:
-  skywire-cli visor tp type
+  cli visor tp type
 
 Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -1261,7 +1383,7 @@ Global Flags:
     displays transports of the local visor
 
 Usage:
-  skywire-cli visor tp ls [flags]
+  cli visor tp ls [flags]
 
 Flags:
   -t, --types strings   show transport(s) type(s) comma-separated
@@ -1281,7 +1403,7 @@ Global Flags:
     Transport summary by id
 
 Usage:
-  skywire-cli visor tp id (-i) <transport-id>
+  cli visor tp id (-i) <transport-id>
 
 Flags:
   -i, --id string   transport ID
@@ -1303,7 +1425,7 @@ Global Flags:
     in the following order: skywire-tcp, stcpr, sudph, dmsg
 
 Usage:
-  skywire-cli visor tp add (-p) <remote-public-key>
+  cli visor tp add (-p) <remote-public-key>
 
 Flags:
   -r, --rpk string         remote public key.
@@ -1323,7 +1445,7 @@ Global Flags:
     Remove transport(s) by id
 
 Usage:
-  skywire-cli visor tp rm ( -a || -i ) <transport-id>
+  cli visor tp rm ( -a || -i ) <transport-id>
 
 Flags:
   -a, --all         remove all transports
@@ -1342,7 +1464,7 @@ Global Flags:
     Discover remote transport(s) by ID or public key
 
 Usage:
-  skywire-cli visor tp disc (--id=<transport-id> || --pk=<edge-public-key>)
+  cli visor tp disc (--id=<transport-id> || --pk=<edge-public-key>)
 
 Flags:
   -i, --id string   obtain transport of given ID
@@ -1357,20 +1479,65 @@ Global Flags:
 ### vpn
 
 ```
-controls for VPN client
+VPN client
 
 Usage:
-  skywire-cli vpn [flags]
+  cli vpn [flags]
 
 Available Commands:
-  list                    List public VPN servers
+  start                   start the vpn for <public-key>
+  stop                    stop the vpnclient
+  status                  vpn client status
+  list                    List vpn servers
   ui                      Open VPN UI in default browser
   url                     Show VPN UI URL
-  start                   start the vpn for <public-key>
-  stop                    stop the vpn
-  status                  vpn status
 
 Flags:
+      --rpc string   RPC server address (default "localhost:3435")
+
+
+```
+
+#### vpn start
+
+```
+start the vpn for <public-key>
+
+Usage:
+  cli vpn start <public-key> [flags]
+
+Flags:
+  -k, --pk string   server public key
+
+Global Flags:
+      --rpc string   RPC server address (default "localhost:3435")
+
+
+```
+
+#### vpn stop
+
+```
+stop the vpnclient
+
+Usage:
+  cli vpn stop [flags]
+
+Global Flags:
+      --rpc string   RPC server address (default "localhost:3435")
+
+
+```
+
+#### vpn status
+
+```
+vpn client status
+
+Usage:
+  cli vpn status [flags]
+
+Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
 
 
@@ -1379,15 +1546,22 @@ Flags:
 #### vpn list
 
 ```
-List public VPN servers
+List vpn servers from service discovery
+ http://sd.skycoin.com/api/services?type=vpn
+ http://sd.skycoin.com/api/services?type=vpn&country=US
 
 Usage:
-  skywire-cli vpn list [flags]
+  cli vpn list [flags]
 
 Flags:
   -c, --country string   filter results by country
-  -n, --nofilter         provide unfiltered results
+  -b, --direct           query service discovery directly
+  -n, --num int          number of results to return
+  -k, --pk string        check vpn service discovery for public key
   -s, --stats            return only a count of the results
+  -u, --unfilter         provide unfiltered results
+  -a, --url string       service discovery url default:
+                         http://sd.skycoin.com
   -v, --ver string       filter results by version
 
 Global Flags:
@@ -1402,11 +1576,11 @@ Global Flags:
 Open VPN UI in default browser
 
 Usage:
-  skywire-cli vpn ui [flags]
+  cli vpn ui [flags]
 
 Flags:
   -c, --config string   config path
-  -p, --pkg             use package config path
+  -p, --pkg             use package config path: /opt/skywire
 
 Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -1420,11 +1594,11 @@ Global Flags:
 Show VPN UI URL
 
 Usage:
-  skywire-cli vpn url [flags]
+  cli vpn url [flags]
 
 Flags:
   -c, --config string   config path
-  -p, --pkg             use package config path
+  -p, --pkg             use package config path: /opt/skywire
 
 Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -1432,44 +1606,26 @@ Global Flags:
 
 ```
 
-#### vpn start
+### ut
 
 ```
-start the vpn for <public-key>
+query uptime tracker
+ Check local visor daily uptime percent with:
+ skywire-cli ut -k $(skywire-cli visor pk)
 
 Usage:
-  skywire-cli vpn start <public-key> [flags]
+  cli ut [flags]
 
-Global Flags:
-      --rpc string   RPC server address (default "localhost:3435")
-
-
-```
-
-#### vpn stop
-
-```
-stop the vpn
-
-Usage:
-  skywire-cli vpn stop [flags]
-
-Global Flags:
-      --rpc string   RPC server address (default "localhost:3435")
-
-
-```
-
-#### vpn status
-
-```
-vpn status
-
-Usage:
-  skywire-cli vpn status [flags]
-
-Global Flags:
-      --rpc string   RPC server address (default "localhost:3435")
+Flags:
+      --dmsgAddr string     specific dmsg server address for dmsghttp query (default "030c83534af1041aee60c2f124b682a9d60c6421876db7c67fc83a73c5effdbd96")
+      --dmsgIP string       specific dmsg server ip for dmsghttp query (default "188.121.99.59:8081")
+  -n, --min int             list visors meeting minimum uptime (default 75)
+  -o, --on                  list currently online visors
+  -k, --pk string           check uptime for the specified key
+  -s, --stats               count the number of results
+  -u, --url string          specify alternative uptime tracker url
+                            default: http://ut.skywire.skycoin.com/uptimes?v=v2 (default "http://ut.skywire.skycoin.com/uptimes?v=v2")
+      --utDmsgAddr string   dmsg address of uptime tracker (default "dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80")
 
 
 ```
@@ -1481,7 +1637,7 @@ Control skyforwarding
  forward local ports over skywire
 
 Usage:
-  skywire-cli fwd [flags]
+  cli fwd [flags]
 
 Flags:
   -d, --deregister   deregister local port of the external (http) app
@@ -1497,7 +1653,7 @@ Flags:
 connect or disconnect from remote ports
 
 Usage:
-  skywire-cli rev [flags]
+  cli rev [flags]
 
 Flags:
   -l, --ls            list configured connections
@@ -1514,13 +1670,35 @@ Flags:
 ```
 
     skycoin reward address set to:
-    2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6
 
 Usage:
-  skywire-cli reward <address> || [flags]
+  cli reward <address> || [flags]
+
+Available Commands:
+  calc                    calculate rewards from uptime data & collected surveys
 
 Flags:
       --all   show all flags
+
+
+```
+
+#### reward calc
+
+```
+
+Collect surveys:  skywire-cli log
+Fetch uptimes:    skywire-cli ut > ut.txt
+
+Usage:
+  cli reward calc [flags]
+
+Flags:
+  -d, --date string     date for which to calculate reward (default "2023-12-09")
+  -n, --noarch string   disallowed architectures, comma separated (default "amd64")
+  -y, --year int        yearly total rewards (default 408000)
+  -u, --utfile string   uptime tracker data file (default "ut.txt")
+  -p, --path string     path to the surveys  (default "./log_collecting")
 
 
 ```
@@ -1531,7 +1709,7 @@ Flags:
 print the system survey
 
 Usage:
-  skywire-cli survey
+  cli survey
 
 Flags:
   -s, --sha   generate checksum of system survey
@@ -1541,18 +1719,18 @@ Flags:
 
 ```
 {
-	"public_key": "000000000000000000000000000000000000000000000000000000000000000000",
-	"skycoin_address": "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6",
+	"timestamp": "2023-12-10T06:29:35.498703111-06:00",
+	"public_key": "02d3879d36c5d8046a81247388af0fd7caef01884c73f9997ddc362ca96d4ff3d3",
 	"go_os": "linux",
 	"go_arch": "amd64",
 	"zcalusic_sysinfo": {
 		"sysinfo": {
-			"version": "0.9.5",
-			"timestamp": "2023-01-12T09:49:16.860941383-06:00"
+			"version": "1.0.1",
+			"timestamp": "2023-12-10T06:29:34.03472846-06:00"
 		},
 		"node": {
 			"hostname": "node",
-			"machineid": "0de8bf5b7b2d4637ac44c3de851fb93c",
+			"machineid": "2c67553a8df148bab214c604c13c48b3",
 			"timezone": "America/Chicago"
 		},
 		"os": {
@@ -1561,8 +1739,8 @@ Flags:
 			"architecture": "amd64"
 		},
 		"kernel": {
-			"release": "6.1.1-arch1-1",
-			"version": "#1 SMP PREEMPT_DYNAMIC Wed, 21 Dec 2022 22:27:55 +0000",
+			"release": "6.6.1-arch1-1",
+			"version": "#1 SMP PREEMPT_DYNAMIC Wed, 08 Nov 2023 16:05:38 +0000",
 			"architecture": "x86_64"
 		},
 		"product": {
@@ -1607,7 +1785,7 @@ Flags:
 				"driver": "sd",
 				"vendor": "ATA",
 				"model": "JAJS600M128C",
-				"serial": "30040655357",
+				"serial": "30040655310",
 				"size": 128
 			}
 		],
@@ -1622,7 +1800,7 @@ Flags:
 		]
 	},
 	"ip.skycoin.com": {
-		"ip_address": "70.121.6.231",
+		"ip_address": "173.172.1.120",
 		"latitude": 33.1371,
 		"longitude": -96.7488,
 		"postal_code": "75035",
@@ -1697,12 +1875,12 @@ Flags:
 					"prefixlen": 24,
 					"scope": "global",
 					"label": "eno1",
-					"valid_life_time": 81925,
-					"preferred_life_time": 81925
+					"valid_life_time": 85135,
+					"preferred_life_time": 85135
 				},
 				{
 					"family": "inet6",
-					"local": "fe80::419b:25f0:b69a:b34c",
+					"local": "fe80::a96c:eec6:9b8e:4951",
 					"prefixlen": 64,
 					"scope": "link",
 					"valid_life_time": 4294967295,
@@ -1724,8 +1902,8 @@ Flags:
 				"bus_path": "pci-0000:00:1f.2-ata-1.0",
 				"vendor": "ATA",
 				"model": "JAJS600M128C",
-				"serial_number": "30040655357",
-				"wwn": "0x5000000000003244",
+				"serial_number": "30040655310",
+				"wwn": "0x5000000000002e39",
 				"partitions": [
 					{
 						"name": "sda1",
@@ -1734,7 +1912,8 @@ Flags:
 						"size_bytes": 128033659904,
 						"type": "ext4",
 						"read_only": false,
-						"uuid": "514fad51-01"
+						"uuid": "4e9e35fd-01",
+						"filesystem_label": "endeavouros"
 					}
 				]
 			}
@@ -1751,14 +1930,14 @@ Flags:
 	},
 	"ghw_memoryinfo": {
 		"total_physical_bytes": 17179869184,
-		"total_usable_bytes": 16657915904,
+		"total_usable_bytes": 16654675968,
 		"supported_page_sizes": [
 			2097152
 		],
 		"modules": null
 	},
-	"uuid": "69573fd2-59c9-4cb2-ba77-7ad93f1b4bfa",
-	"skywire_version": "fatal: No names found, cannot describe anything.\n"
+	"uuid": "01743b29-be97-4b4f-ba3d-89a059afb066",
+	"skywire_version": "v1.3.13"
 }
 ```
 
@@ -1766,16 +1945,17 @@ Flags:
 
 ```
 Query the Route Finder
+Assumes the local visor public key as an argument if only one argument is given
 
 Usage:
-  skywire-cli rtfind <public-key-visor-1> <public-key-visor-2> [flags]
+  cli rtfind <public-key> | <public-key-visor-1> <public-key-visor-2> [flags]
 
 Flags:
-  -n, --min-hops uint16    minimum hops (default 1)
-  -x, --max-hops uint16    maximum hops (default 1000)
+  -n, --min uint16         minimum hops (default 1)
+  -x, --max uint16         maximum hops (default 1000)
   -t, --timeout duration   request timeout (default 10s)
   -a, --addr string        route finder service address
-                            (default "http://rf.skywire.skycoin.com")
+                           http://rf.skywire.skycoin.com
 
 
 ```
@@ -1786,7 +1966,7 @@ Flags:
 Query remote DMSG Discovery
 
 Usage:
-  skywire-cli mdisc
+  cli mdisc
 
 Available Commands:
   entry                   Fetch an entry
@@ -1801,11 +1981,11 @@ Available Commands:
 Fetch an entry
 
 Usage:
-  skywire-cli mdisc entry <visor-public-key> [flags]
+  cli mdisc entry <visor-public-key> [flags]
 
 Flags:
-      --addr string   address of DMSG discovery server
-                       (default "http://dmsgd.skywire.skycoin.com")
+  -a, --addr string   DMSG discovery server address
+                      http://dmsgd.skywire.skycoin.com
 
 
 ```
@@ -1816,7 +1996,7 @@ Flags:
 Fetch available servers
 
 Usage:
-  skywire-cli mdisc servers [flags]
+  cli mdisc servers [flags]
 
 Flags:
       --addr string   address of DMSG discovery server
@@ -1831,7 +2011,139 @@ Flags:
 Generate completion script
 
 Usage:
-  skywire-cli completion [bash|zsh|fish|powershell]
+  cli completion [bash|zsh|fish|powershell]
+
+
+```
+
+### log
+
+```
+Fetch health, survey, and transport logging from visors which are online in the uptime tracker
+http://ut.skywire.skycoin.com/uptimes?v=v2
+http://ut.skywire.skycoin.com/uptimes?v=v2&visors=<pk1>;<pk2>;<pk3>
+
+Usage:
+  cli log [flags]
+
+Flags:
+  -e, --env string                deployment to get uptimes from (default "prod")
+  -l, --log                       fetch only transport logs
+  -v, --survey                    fetch only surveys
+  -f, --file string               fetch only a specific file from all online visors
+  -k, --pks string                fetch only from specific public keys ; semicolon separated
+  -d, --dir string                save files to specified dir (default "log_collecting")
+  -c, --clean                     delete files and folders on errors
+      --minv string               minimum visor version to fetch from (default "v1.3.11")
+      --include-versions string   list of version that not satisfy our minimum version condition, but we want include them
+  -n, --duration int              number of days before today to fetch transport logs for
+      --all                       consider all visors ; no version filtering
+      --batchSize int             number of visor in each batch (default 50)
+      --maxfilesize int           maximum file size allowed to download during collecting logs, in KB (default 30)
+  -D, --dmsg-disc string          dmsg discovery url
+                                   (default "http://dmsgd.skywire.skycoin.com")
+  -u, --ut string                 custom uptime tracker url
+  -s, --sk cipher.SecKey          a random key is generated if unspecified
+
+ (default 0000000000000000000000000000000000000000000000000000000000000000)
+
+
+```
+
+### proxy
+
+```
+Skysocks client
+
+Usage:
+  cli proxy [flags]
+
+Available Commands:
+  start                   start the proxy client
+  stop                    stop the proxy client
+  status                  proxy client status
+  list                    List servers
+
+Flags:
+      --rpc string   RPC server address (default "localhost:3435")
+
+
+```
+
+#### proxy start
+
+```
+start the proxy client
+
+Usage:
+  cli proxy start [flags]
+
+Flags:
+  -a, --addr string   address of proxy for use
+  -n, --name string   name of skysocks client
+  -k, --pk string     server public key
+
+Global Flags:
+      --rpc string   RPC server address (default "localhost:3435")
+
+
+```
+
+#### proxy stop
+
+```
+stop the proxy client
+
+Usage:
+  cli proxy stop [flags]
+
+Flags:
+      --all           stop all skysocks client
+      --name string   specific skysocks client that want stop
+
+Global Flags:
+      --rpc string   RPC server address (default "localhost:3435")
+
+
+```
+
+#### proxy status
+
+```
+proxy client status
+
+Usage:
+  cli proxy status [flags]
+
+Global Flags:
+      --rpc string   RPC server address (default "localhost:3435")
+
+
+```
+
+#### proxy list
+
+```
+List proxy servers from service discovery
+ http://sd.skycoin.com/api/services?type=proxy
+ http://sd.skycoin.com/api/services?type=proxy&country=US
+
+Usage:
+  cli proxy list [flags]
+
+Flags:
+  -c, --country string   filter results by country
+  -b, --direct           query service discovery directly
+  -n, --num int          number of results to return (0 = all)
+  -k, --pk string        check proxy service discovery for public key
+  -s, --stats            return only a count of the results
+  -u, --unfilter         provide unfiltered results
+  -a, --url string       service discovery url default:
+                         http://sd.skycoin.com
+  -v, --ver string       filter results by version
+
+Global Flags:
+      --rpc string   RPC server address (default "localhost:3435")
 
 
 ```
@@ -1842,7 +2154,7 @@ Usage:
 subcommand tree
 
 Usage:
-  skywire-cli tree
+  cli tree
 
 
 ```
@@ -1861,13 +2173,35 @@ generate markdown docs
 	cat cmd/skywire-cli/README1.md | gh-md-toc
 
 Usage:
-  skywire-cli doc
+  cli doc
 
 
 ```
 
-###
+### dmsghttp
 
 ```
+update dmsghttp-config.json file from config bootstrap service
+
+Usage:
+  cli dmsghttp update [flags]
+
+Flags:
+  -p, --path string   path of dmsghttp-config file, default is for pkg installation (default "/opt/skywire/dmsghttp-config.json")
+
+
+```
+
+### services
+
+```
+update services-config.json file from config service
+
+Usage:
+  cli services update [flags]
+
+Flags:
+  -p, --path string   path of services-config file, default is for pkg installation (default "/opt/skywire/services-config.json")
+
 
 ```
