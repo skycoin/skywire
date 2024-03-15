@@ -102,6 +102,8 @@ import { BulkRewardAddressChangerComponent } from './components/layout/bulk-rewa
 import { UserAppSettingsComponent } from './components/pages/node/apps/node-apps/user-app-settings/user-app-settings.component';
 import { NodeLogsComponent } from './components/pages/node/actions/node-logs/node-logs.component';
 import { PingDialogComponent } from './components/pages/node/routing/ping-dialog/ping-dialog.component';
+import { SkychatSettingsComponent } from './components/pages/node/apps/node-apps/skychat-settings/skychat-settings.component';
+import { TabSelectorComponent } from './components/layout/tab-selector/tab-selector.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
   disabled: true,
@@ -180,6 +182,8 @@ const globalRippleConfig: RippleGlobalOptions = {
     UserAppSettingsComponent,
     NodeLogsComponent,
     PingDialogComponent,
+    SkychatSettingsComponent,
+    TabSelectorComponent,
   ],
   imports: [
     BrowserModule,

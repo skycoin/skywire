@@ -215,6 +215,8 @@ func (hv *Hypervisor) makeMux() chi.Router {
 
 			r.Get("/ping", hv.getPong())
 
+			r.Get("/csrf", hv.getCsrf())
+
 			if hv.c.EnableAuth {
 				r.Group(func(r chi.Router) {
 					r.Post("/create-account", hv.users.CreateAccount())
@@ -259,7 +261,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Delete("/visors/{pk}/routes/{rid}", hv.deleteRoute())
 				r.Delete("/visors/{pk}/routes/", hv.deleteRoutes())
 				r.Get("/visors/{pk}/routegroups", hv.getRouteGroups())
-				r.Post("/visors/{pk}/restart", hv.restart())
+				r.Post("/visors/{pk}/shutdown", hv.shutdown())
 				r.Get("/visors/{pk}/runtime-logs", hv.getRuntimeLogs())
 				r.Post("/visors/{pk}/min-hops", hv.postMinHops())
 				r.Get("/visors/{pk}/persistent-transports", hv.getPersistentTransports())
@@ -295,6 +297,29 @@ func (hv *Hypervisor) getPong() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if _, err := w.Write([]byte(`"PONG!"`)); err != nil {
 			hv.log(r).WithError(err).Warn("getPong: Failed to send PONG!")
+		}
+	}
+}
+
+// Csrf provides a temporal security token.
+type Csrf struct {
+	Token string `json:"csrf_token"`
+}
+
+func (hv *Hypervisor) getCsrf() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if useCsrf {
+			token, err := newCSRFToken()
+			if err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+
+			httputil.WriteJSON(w, r, http.StatusOK, Csrf{
+				Token: token,
+			})
+		} else {
+			httputil.WriteJSON(w, r, http.StatusOK, Csrf{Token: ""})
 		}
 	}
 }
@@ -598,6 +623,7 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 			AutoStart     *bool             `json:"autostart,omitempty"`
 			Killswitch    *bool             `json:"killswitch,omitempty"`
 			Secure        *bool             `json:"secure,omitempty"`
+			Address       *string           `json:"Address,omitempty"`
 			Status        *int              `json:"status,omitempty"`
 			Passcode      *string           `json:"passcode,omitempty"`
 			NetIfc        *string           `json:"netifc,omitempty"`
@@ -608,7 +634,7 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 
 		shouldRestartApp := func(r req) bool {
 			// we restart the app if one of these fields was changed
-			return r.Killswitch != nil || r.Secure != nil || r.Passcode != nil ||
+			return r.Killswitch != nil || r.Secure != nil || r.Address != nil || r.Passcode != nil ||
 				r.PK != nil || r.NetIfc != nil || r.CustomSetting != nil
 		}
 
@@ -655,6 +681,13 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 
 		if reqBody.Secure != nil {
 			if err := ctx.API.SetAppSecure(ctx.App.Name, *reqBody.Secure); err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		if reqBody.Address != nil {
+			if err := ctx.API.SetAppAddress(ctx.App.Name, *reqBody.Address); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
 			}
@@ -1138,14 +1171,12 @@ func (hv *Hypervisor) getRouteGroups() http.HandlerFunc {
 	})
 }
 
-// NOTE: Reply comes with a delay, because of check if new executable is started successfully.
-func (hv *Hypervisor) restart() http.HandlerFunc {
+func (hv *Hypervisor) shutdown() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		if err := ctx.API.Restart(); err != nil {
+		if err := ctx.API.Shutdown(); err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
-
 		httputil.WriteJSON(w, r, http.StatusOK, true)
 	})
 }
@@ -1344,6 +1375,21 @@ func (hv *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx
 	if err != nil {
 		httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 		return nil, false
+	}
+
+	if useCsrf && (r.Method == "POST" || r.Method == "PUT" || r.Method == "DELETE") {
+		csrfToken := r.Header.Get(CSRFHeaderName)
+		if csrfToken == "" {
+			errMsg := fmt.Errorf("no csrf token for %s request", r.Method)
+			httputil.WriteJSON(w, r, http.StatusForbidden, errMsg)
+			return nil, false
+		}
+
+		err = verifyCSRFToken(csrfToken)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusForbidden, err)
+			return nil, false
+		}
 	}
 
 	if pk != hv.c.PK {

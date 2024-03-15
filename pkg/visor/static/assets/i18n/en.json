@@ -20,7 +20,8 @@
     "no": "No",
     "unknown": "Unknown",
     "close": "Close",
-    "window-size-error": "The window is too narrow for the content."
+    "window-size-error": "The window is too narrow for the content.",
+    "data-update-problems": "Problem updating the data."
   },
 
   "labeled-element": {
@@ -336,15 +337,15 @@
       "terminal": "Terminal",
       "config": "Configuration",
       "update": "Update",
-      "reboot": "Reboot",
+      "turn-off": "Turn off",
       "logs": "View logs"
-    },
-    "reboot": {
-      "confirmation": "Are you sure you want to reboot the visor?",
-      "done": "The visor is restarting."
     },
     "update": {
       "confirmation": "A terminal will be opened in a new tab and the update procedure will be started automatically. Do you want to continue?"
+    },
+    "turn-off": {
+      "confirmation": "Are you sure you want to turn off the visor?",
+      "done": "The visor is shutting down."
     },
     "terminal-options": {
       "full": "Full terminal",
@@ -456,6 +457,15 @@
       "invalid-confirmation": "One or more settings do not have a name and will be ignored. Do you want to continue?",
       "empty-confirmation": "The settings list is empty. Do you really want to continue?",
       "changes-made": "The changes have been made."
+    },
+    "skychat-settings": {
+      "title": "Skychat Settings",
+      "localhost-only": "Allow access from the local machine only",
+      "port": "Port",
+      "save": "Save",
+      "changes-made": "The changes have been made.",
+      "port-error": "Must be a valid number between 1025 and 65536.",
+      "non-localhost-confirmation": "This will allow to use the app from anywhere on the internet. Are you sure you vant to continue?"
     },
     "vpn-socks-server-settings": {
       "socks-title": "Skysocks Settings",

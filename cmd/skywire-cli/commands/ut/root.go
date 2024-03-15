@@ -2,137 +2,57 @@
 package cliut
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"log"
-	"net/http"
 	"os"
-	"strconv"
-	"time"
 
+	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 )
 
+// RootCmd is utCmd
+var RootCmd = utCmd
+
 var (
-	pubkey  cipher.PubKey
-	pk      string
-	thisPk  string
-	online  bool
-	isStats bool
-	url     string
+	pk            string
+	online        bool
+	isStats       bool
+	utURL         string
+	cacheFileUT   string
+	cacheFilesAge int
 )
 
 var minUT int
 
 func init() {
-	RootCmd.Flags().StringVarP(&pk, "pk", "k", "", "check uptime for the specified key")
-	RootCmd.Flags().BoolVarP(&online, "on", "o", false, "list currently online visors")
-	RootCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "count the number of results")
-	RootCmd.Flags().IntVarP(&minUT, "min", "n", 75, "list visors meeting minimum uptime")
-	RootCmd.Flags().StringVarP(&url, "url", "u", "", "specify alternative uptime tracker url\ndefault: http://ut.skywire.skycoin.com/uptimes?v=v2")
+	utCmd.Flags().StringVarP(&pk, "pk", "k", "", "check uptime for the specified key")
+	utCmd.Flags().BoolVarP(&online, "on", "o", false, "list currently online visors")
+	utCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "count the number of results")
+	utCmd.Flags().IntVarP(&minUT, "min", "n", 75, "list visors meeting minimum uptime")
+	utCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location.")
+	utCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
+	utCmd.Flags().StringVarP(&utURL, "url", "u", utilenv.UptimeTrackerAddr, "specify alternative uptime tracker url")
 }
 
-// RootCmd contains commands that interact with the skywire-visor
-var RootCmd = &cobra.Command{
+var utCmd = &cobra.Command{
 	Use:   "ut",
 	Short: "query uptime tracker",
-	Long:  "query uptime tracker\n Check local visor daily uptime percent with:\n skywire-cli ut -k $(skywire-cli visor pk)",
+	Long:  fmt.Sprintf("query uptime tracker\n\n%v/uptimes?v=v2\n\nCheck local visor daily uptime percent with:\n skywire-cli ut -k $(skywire-cli visor pk)n\nSet cache file location to \"\" to avoid using cache files", utilenv.UptimeTrackerAddr),
 	Run: func(cmd *cobra.Command, _ []string) {
-		if url == "" {
-			url = "http://ut.skywire.skycoin.com/uptimes?v=v2"
-		}
-		now := time.Now()
-		if pk != "" {
-			err := pubkey.Set(pk)
-			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
-			} else {
-				url += "&visors=" + pubkey.String()
-			}
-		}
-		utClient := http.Client{
-			Timeout: time.Second * 15, // Timeout after 15 seconds
-		}
-
-		req, err := http.NewRequest(http.MethodGet, url, nil)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		res, getErr := utClient.Do(req)
-		if getErr != nil {
-			log.Fatal(getErr)
-		}
-
-		if res.Body != nil {
-			defer func() {
-				err := res.Body.Close()
-				if err != nil {
-					internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to close response body"))
-				}
-			}()
-		}
-
-		body, readErr := io.ReadAll(res.Body)
-		if readErr != nil {
-			log.Fatal(readErr)
-		}
-
-		startDate := time.Date(now.Year(), now.Month(), -1, 0, 0, 0, 0, now.Location()).Format("2006-01-02")
-		endDate := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, now.Location()).Add(-1 * time.Second).Format("2006-01-02")
-		uts := uptimes{}
-		jsonErr := json.Unmarshal(body, &uts)
-		if jsonErr != nil {
-			log.Fatal(jsonErr)
-		}
-		var msg []string
-		for _, j := range uts {
-			thisPk = j.Pk
-			if online {
-				if j.On {
-					msg = append(msg, fmt.Sprintf(thisPk+"\n"))
-				}
-			} else {
-				selectedDaily(j.Daily, startDate, endDate)
-			}
-		}
+		uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
 		if online {
+			utKeysOnline, _ := script.Echo(uts).JQ(".[] | select(.on) | .pk").Match(pk).Replace("\"", "").Slice() //nolint
 			if isStats {
-				internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d visors online\n", len(msg)), fmt.Sprintf("%d visors online\n", len(msg)))
-				os.Exit(0)
+				internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d visors online\n", len(utKeysOnline)), fmt.Sprintf("%d visors online\n", len(utKeysOnline)))
+				return
 			}
-			for _, i := range msg {
-				internal.PrintOutput(cmd.Flags(), i, i)
+			for _, i := range utKeysOnline {
+				internal.PrintOutput(cmd.Flags(), i+"\n", i+"\n")
 			}
+			return
 		}
+		script.Echo(uts).JQ(".[] | \"\\(.pk) \\(.daily | to_entries[] | select(.value | tonumber > "+fmt.Sprintf("%d", minUT)+") | \"\\(.key) \\(.value)\")\"").Match(pk).Replace("\"", "").Stdout() //nolint
 	},
-}
-
-func selectedDaily(data map[string]string, startDate, endDate string) {
-	for date, uptime := range data {
-		if date >= startDate && date <= endDate {
-			utfloat, err := strconv.ParseFloat(uptime, 64)
-			if err != nil {
-				log.Fatal(err)
-			}
-			if utfloat >= float64(minUT) {
-				fmt.Print(thisPk)
-				fmt.Print(" ")
-				fmt.Println(date, uptime)
-			}
-		}
-	}
-}
-
-type uptimes []struct {
-	Pk    string            `json:"pk"`
-	Up    int               `json:"up"`
-	Down  int               `json:"down"`
-	Pct   float64           `json:"pct"`
-	On    bool              `json:"on"`
-	Daily map[string]string `json:"daily,omitempty"`
 }

@@ -8,11 +8,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	coincipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -31,7 +29,7 @@ type API struct {
 }
 
 // New creates a new API.
-func New(log *logging.Logger, tpLogPath, localPath, customPath string, whitelistedPKs []cipher.PubKey, visorPK cipher.PubKey, printLog bool) *API {
+func New(log *logging.Logger, tpLogPath, localPath, customPath string, whitelistedPKs []cipher.PubKey, survey *visorconfig.Survey, printLog bool) *API {
 	api := &API{
 		logger:    log,
 		startedAt: time.Now(),
@@ -53,40 +51,13 @@ func New(log *logging.Logger, tpLogPath, localPath, customPath string, whitelist
 	if len(whitelistedPKs) > 0 {
 		authRoute.Use(whitelistAuth(whitelistedPKs))
 	}
-	// note that the survey FILE only exists / is generated if the reward address is set
-	authRoute.StaticFile("/"+visorconfig.NodeInfo, filepath.Join(localPath, visorconfig.NodeInfo)) // "/node-info.json"
 
 	// serve the file with the reward address - only exists if the reward address is set
 	authRoute.StaticFile("/"+visorconfig.RewardFile, filepath.Join(localPath, visorconfig.RewardFile)) // "/reward.txt"
 
 	// This survey endpoint generates the survey as a response
 	authRoute.GET("/node-info", func(c *gin.Context) {
-		var rewardAddress string
-		var cAddr coincipher.Address
-		//check for reward address
-		rewardAddressBytes, err := os.ReadFile(localPath + "/" + visorconfig.RewardFile) //nolint
-		if err == nil {
-			//remove any newlines & whitespace from rewardAddress string
-			rewardAddress = strings.TrimSpace(string(rewardAddressBytes))
-			//validate the skycoin address
-			cAddr, err = coincipher.DecodeBase58Address(rewardAddress)
-			if err != nil {
-				log.WithError(err).Error("Invalid skycoin reward address " + rewardAddress)
-			}
-			log.Debug("Skycoin reward address: ", cAddr.String())
-		}
-		survey, err := visorconfig.SystemSurvey()
-		if err != nil {
-			log.WithError(err).Error("Could not read system info.")
-		}
-		survey.PubKey = visorPK
-		survey.SkycoinAddress = cAddr.String()
-		// Print results.
-		s, err := json.MarshalIndent(survey, "", "\t")
-		if err != nil {
-			log.WithError(err).Error("Could not marshal system survey to json.")
-		}
-		c.JSON(http.StatusOK, s)
+		c.JSON(http.StatusOK, *survey)
 	})
 
 	r.GET("/health", func(c *gin.Context) {
@@ -109,6 +80,20 @@ func New(log *logging.Logger, tpLogPath, localPath, customPath string, whitelist
 		if err == nil {
 			c.File(filepath.Join(customPath, c.Param("file")))
 			return
+		}
+		// File not found, return 404
+		c.Writer.WriteHeader(http.StatusNotFound)
+	})
+	// serve transport log files
+	r.GET("/transport_logs/:file", func(c *gin.Context) {
+		// files with .csv extension are **likely** transport log files
+		if filepath.Ext(c.Param("file")) == ".csv" {
+			// check transport logs dir for the file, and serve it if it exists
+			_, err := os.Stat(filepath.Join(tpLogPath, c.Param("file")))
+			if err == nil {
+				c.File(filepath.Join(tpLogPath, c.Param("file")))
+				return
+			}
 		}
 		// File not found, return 404
 		c.Writer.WriteHeader(http.StatusNotFound)
@@ -146,10 +131,6 @@ func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {
 		remotePK, _, err := net.SplitHostPort(c.Request.RemoteAddr)
 		if err != nil {
 			c.Writer.WriteHeader(http.StatusInternalServerError)
-			_, err := c.Writer.Write([]byte("500 Internal Server Error"))
-			if err != nil {
-				httputil.GetLogger(c.Request).WithError(err).Errorf("write http response")
-			}
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
@@ -170,10 +151,6 @@ func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {
 		} else {
 			// Otherwise, return a 401 Unauthorized error.
 			c.Writer.WriteHeader(http.StatusUnauthorized)
-			_, err := c.Writer.Write([]byte("401 Unauthorized"))
-			if err != nil {
-				httputil.GetLogger(c.Request).WithError(err).Errorf("write http response")
-			}
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}

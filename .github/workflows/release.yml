@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v3
         with:
-          go-version: 1.19.x
+          go-version: 1.21.x
       - uses: actions/checkout@v3
       - name: Install Requirements
         run: |
@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v3
         with:
-          go-version: 1.19.x
+          go-version: 1.21.x
       - uses: actions/checkout@v3
       - name: Install Requirements
         run: |
@@ -48,12 +48,12 @@ jobs:
     steps:
       - uses: actions/setup-go@v3
         with:
-          go-version: 1.19.x
+          go-version: 1.21.x
       - uses: actions/checkout@v3
       - name: Install Requirements
         shell: pwsh
         run: |
-          Invoke-WebRequest "https://github.com/goreleaser/goreleaser/releases/download/v1.8.3/goreleaser_Windows_x86_64.zip" -o goreleaser.zip
+          Invoke-WebRequest "https://github.com/goreleaser/goreleaser/releases/download/v1.8.3/goreleaser_Windows_x86_64.zip" -OutFile goreleaser.zip
           Expand-Archive goreleaser.zip
           choco install make
       - name: Releasing

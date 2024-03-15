@@ -10,3 +10,9 @@
   <router-outlet *ngIf="hypervisorPkObtained || inLoginPage"></router-outlet>
   <app-loading-indicator class="h-100" *ngIf="!hypervisorPkObtained && !inLoginPage"></app-loading-indicator>
 </div>
+
+<div class="connection-problem-container" *ngIf="showingDataProblemMsg">
+  <span class="blinking">
+    <mat-icon [inline]="true">error_outline</mat-icon> {{ 'common.data-update-problems' | translate }}
+  </span>
+</div>

@@ -1,6 +1,7 @@
 package pterm
 
 import (
+	"io"
 	"strings"
 
 	"atomicgo.dev/cursor"
@@ -45,6 +46,11 @@ func (p AreaPrinter) WithFullscreen(b ...bool) *AreaPrinter {
 func (p AreaPrinter) WithCenter(b ...bool) *AreaPrinter {
 	p.Center = internal.WithBoolean(b)
 	return &p
+}
+
+// SetWriter sets the writer for the AreaPrinter.
+func (p *AreaPrinter) SetWriter(writer io.Writer) {
+
 }
 
 // Update overwrites the content of the AreaPrinter.
@@ -125,8 +131,8 @@ func (p *AreaPrinter) GenericStop() (*LivePrinter, error) {
 	return &lp, nil
 }
 
-// Wrapper function that clears the content of the Area.
-// Moves the cursor to the bottom of the terminal, clears n lines upwards from
+// Clear is a Wrapper function that clears the content of the Area
+// moves the cursor to the bottom of the terminal, clears n lines upwards from
 // the current position and moves the cursor again.
 func (p *AreaPrinter) Clear() {
 	p.area.Clear()
