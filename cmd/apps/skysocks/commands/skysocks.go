@@ -71,10 +71,10 @@ var RootCmd = &cobra.Command{
 		fmt.Println("Starting serving proxy server")
 
 		if runtime.GOOS == "windows" {
-			ipcClient, err := ipc.StartClient(visorconfig.VPNClientName, nil)
+			ipcClient, err := ipc.StartClient(visorconfig.SkysocksName, nil)
 			if err != nil {
 				setAppError(appCl, err)
-				print(fmt.Sprintf("Error creating ipc server for VPN client: %v\n", err))
+				print(fmt.Sprintf("Error creating ipc server for skysocks: %v\n", err))
 				os.Exit(1)
 			}
 			go srv.ListenIPC(ipcClient)
