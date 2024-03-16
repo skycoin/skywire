@@ -162,7 +162,7 @@ func (c *Client) close() {
 
 // ListenIPC starts named-pipe based connection server for windows or unix socket for other OSes
 func (c *Client) ListenIPC(client *ipc.Client) {
-	listenIPC(client, skyenv.SkychatName+"-client", func() {
+	listenIPC(client, skyenv.SkysocksClientName, func() {
 		client.Close()
 		if err := c.Close(); err != nil {
 			print(fmt.Sprintf("Error closing skysocks-client: %v\n", err))
