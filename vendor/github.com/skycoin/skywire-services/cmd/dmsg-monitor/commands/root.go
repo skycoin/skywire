@@ -5,13 +5,11 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"log/syslog"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
@@ -28,7 +26,6 @@ var (
 	utURL               string
 	addr                string
 	tag                 string
-	syslogAddr          string
 	logLvl              string
 	sleepDeregistration time.Duration
 	batchSize           int
@@ -42,7 +39,6 @@ func init() {
 	RootCmd.Flags().StringVarP(&dmsgURL, "dmsg-url", "d", "", "url to dmsg data.\033[0m")
 	RootCmd.Flags().StringVarP(&utURL, "ut-url", "u", "", "url to uptime tracker visor data.\033[0m")
 	RootCmd.Flags().StringVar(&tag, "tag", "dmsg_monitor", "logging tag\033[0m")
-	RootCmd.Flags().StringVar(&syslogAddr, "syslog", "", "syslog server address. E.g. localhost:514\033[0m")
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "set log level one of: info, error, warn, debug, trace, panic")
 }
 
@@ -88,13 +84,6 @@ var RootCmd = &cobra.Command{
 		srvURLs.UT = utURL
 
 		logger := mLogger.PackageLogger(tag)
-		if syslogAddr != "" {
-			hook, err := logrussyslog.NewSyslogHook("udp", syslogAddr, syslog.LOG_INFO, tag)
-			if err != nil {
-				logger.Fatalf("Unable to connect to syslog daemon on %v", syslogAddr)
-			}
-			logging.AddHook(hook)
-		}
 
 		logger.WithField("addr", addr).Info("Serving DMSG-Monitor API...")
 

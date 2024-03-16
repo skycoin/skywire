@@ -55,7 +55,7 @@ func (env *EnvConfig) AddVisor(visorName string, apps []appserver.AppConfig, rpc
 	env.AddVisorExplicitly(VisorConfig{
 		Name:   visorName,
 		Config: visorCfg,
-		Cmd:    _cmd(env.Runners.SkywireVisor, struct{ Name, Syslog string }{visorName, env.ExternalServices.SyslogAddress}),
+		Cmd:    _cmd(env.Runners.SkywireVisor, struct{ Name string }{visorName}),
 	})
 
 	return env
