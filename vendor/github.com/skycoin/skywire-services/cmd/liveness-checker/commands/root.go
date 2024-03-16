@@ -5,12 +5,10 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"log/syslog"
 	"os"
 	"path/filepath"
 	"strings"
 
-	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
@@ -27,20 +25,18 @@ const (
 )
 
 var (
-	confPath   string
-	addr       string
-	tag        string
-	syslogAddr string
-	logLvl     string
-	redisURL   string
-	testing    bool
+	confPath string
+	addr     string
+	tag      string
+	logLvl   string
+	redisURL string
+	testing  bool
 )
 
 func init() {
 	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9081", "address to bind to.\033[0m")
 	RootCmd.Flags().StringVarP(&confPath, "config", "c", "liveness-checker.json", "config file location.\033[0m")
 	RootCmd.Flags().StringVar(&tag, "tag", "liveness_checker", "logging tag\033[0m")
-	RootCmd.Flags().StringVar(&syslogAddr, "syslog", "", "syslog server address. E.g. localhost:514\033[0m")
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "set log level one of: info, error, warn, debug, trace, panic")
 	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store\033[0m")
 	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis\033[0m")
@@ -91,13 +87,6 @@ var RootCmd = &cobra.Command{
 		conf, confAPI := api.InitConfig(confPath, mLogger)
 
 		logger := mLogger.PackageLogger(tag)
-		if syslogAddr != "" {
-			hook, err := logrussyslog.NewSyslogHook("udp", syslogAddr, syslog.LOG_INFO, tag)
-			if err != nil {
-				logger.Fatalf("Unable to connect to syslog daemon on %v", syslogAddr)
-			}
-			logging.AddHook(hook)
-		}
 
 		ctx, cancel := cmdutil.SignalContext(context.Background(), logger)
 		defer cancel()

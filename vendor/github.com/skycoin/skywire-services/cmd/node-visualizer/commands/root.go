@@ -5,14 +5,12 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"log/syslog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
@@ -27,7 +25,6 @@ var (
 	addr        string
 	metricsAddr string
 	logEnabled  bool
-	syslogAddr  string
 	tag         string
 	testing     bool
 )
@@ -36,7 +33,6 @@ func init() {
 	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9081", "address to bind to\033[0m")
 	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to\033[0m")
 	RootCmd.Flags().BoolVarP(&logEnabled, "log", "l", true, "enable request logging\033[0m")
-	RootCmd.Flags().StringVar(&syslogAddr, "syslog", "", "syslog server address. E.g. localhost:514\033[0m")
 	RootCmd.Flags().StringVar(&tag, "tag", "node-visualizer", "logging tag\033[0m")
 	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis\033[0m")
 }
@@ -63,13 +59,6 @@ var RootCmd = &cobra.Command{
 
 		const loggerTag = "node_visualizer"
 		logger := logging.MustGetLogger(loggerTag)
-		if syslogAddr != "" {
-			hook, err := logrussyslog.NewSyslogHook("udp", syslogAddr, syslog.LOG_INFO, tag)
-			if err != nil {
-				logger.Fatalf("Unable to connect to syslog daemon on %v", syslogAddr)
-			}
-			logging.AddHook(hook)
-		}
 
 		metricsutil.ServeHTTPMetrics(logger, metricsAddr)
 

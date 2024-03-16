@@ -22,8 +22,6 @@ type ExternalServicesConfig struct {
 	RedisAddress   string `json:"redis,omitempty"`
 	RedisCmd       string `json:"redis_cmd,omitempty"`
 	MetricsAddress string `json:"metrics,omitempty"`
-	SyslogAddress  string `json:"syslog,omitempty"`
-	SyslogCmd      string `json:"syslog_cmd,omitempty"`
 }
 
 // RunnersConfig defines how each service is run
