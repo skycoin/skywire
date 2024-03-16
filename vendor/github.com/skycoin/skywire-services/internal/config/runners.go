@@ -81,23 +81,23 @@ func DefaultDockerRunners(network string) RunnersConfig {
 // DefaultLocalRunners returns set of default runners on localhost
 func DefaultLocalRunners() RunnersConfig {
 	return RunnersConfig{
-		DmsgDiscovery:      "dmsg-discovery --syslog {{.Syslog}} --tag {{.Name}}",
-		DmsgServer:         "dmsg-server {{.Name}}.json --syslog {{.Syslog}} --tag {{.Name}}",
-		TransportDiscovery: "transport-discovery {{.Name}}.json --syslog {{.Syslog}} --tag {{.Name}}",
-		RouteFinder:        "route-finder  --syslog {{.Syslog}} --tag {{.Name}}",
-		SetupNode:          "setup-node {{.Name}}.json --syslog {{.Syslog}} --tag {{.Name}}",
-		SkywireVisor:       "skywire-visor {{.Name}}.json --syslog {{.Syslog}} --tag {{.Name}}",
+		DmsgDiscovery:      "dmsg-discovery --tag {{.Name}}",
+		DmsgServer:         "dmsg-server {{.Name}}.json --tag {{.Name}}",
+		TransportDiscovery: "transport-discovery {{.Name}}.json --tag {{.Name}}",
+		RouteFinder:        "route-finder --tag {{.Name}}",
+		SetupNode:          "setup-node {{.Name}}.json --tag {{.Name}}",
+		SkywireVisor:       "skywire-visor {{.Name}}.json --tag {{.Name}}",
 	}
 }
 
 // DefaultSourceRunners returns set of default runners on localhost from source
 func DefaultSourceRunners() RunnersConfig {
 	return RunnersConfig{
-		DmsgDiscovery:      "go run ./cmd/dmsg-discovery --syslog {{.Syslog}} --tag {{.Name}}",
-		DmsgServer:         "go run ./cmd/dmsg-server {{.Name}}.json --syslog {{.Syslog}} --tag {{.Name}}",
-		TransportDiscovery: "go run ./cmd/transport-discovery {{.Name}}.json --syslog {{.Syslog}} --tag {{.Name}}",
-		RouteFinder:        "go run ./cmd/route-finder  --syslog {{.Syslog}} --tag {{.Name}}",
-		SetupNode:          "go run ./cmd/setup-node {{.Name}}.json --syslog {{.Syslog}} --tag {{.Name}}",
-		SkywireVisor:       "go run ./cmd/skywire-visor {{.Name}}.json --syslog {{.Syslog}} --tag {{.Name}}",
+		DmsgDiscovery:      "go run ./cmd/dmsg-discovery --tag {{.Name}}",
+		DmsgServer:         "go run ./cmd/dmsg-server {{.Name}}.json --tag {{.Name}}",
+		TransportDiscovery: "go run ./cmd/transport-discovery {{.Name}}.json --tag {{.Name}}",
+		RouteFinder:        "go run ./cmd/route-finder --tag {{.Name}}",
+		SetupNode:          "go run ./cmd/setup-node {{.Name}}.json --tag {{.Name}}",
+		SkywireVisor:       "go run ./cmd/skywire-visor {{.Name}}.json --tag {{.Name}}",
 	}
 }
