@@ -5,13 +5,11 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"log/syslog"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
 	"github.com/skycoin/dmsg/pkg/direct"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
@@ -35,7 +33,6 @@ var (
 	metricsAddr string
 	pgHost      string
 	pgPort      string
-	syslogAddr  string
 	logLvl      string
 	tag         string
 	testing     bool
@@ -49,7 +46,6 @@ func init() {
 	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to\033[0m")
 	RootCmd.Flags().StringVar(&pgHost, "pg-host", "localhost", "host of postgres\033[0m")
 	RootCmd.Flags().StringVar(&pgPort, "pg-port", "5432", "port of postgres\033[0m")
-	RootCmd.Flags().StringVar(&syslogAddr, "syslog", "", "syslog server address. E.g. localhost:514\033[0m")
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "set log level one of: info, error, warn, debug, trace, panic")
 	RootCmd.Flags().StringVar(&tag, "tag", "route_finder", "logging tag\033[0m")
 	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis\033[0m")
@@ -119,14 +115,6 @@ PG_USER="postgres" PG_DATABASE="rf" PG_PASSWORD="" route-finder  --addr ":9092" 
 		pk, err := sk.PubKey()
 		if err != nil {
 			logger.WithError(err).Warn("No SecKey found. Skipping serving on dmsghttp.")
-		}
-
-		if syslogAddr != "" {
-			hook, err := logrussyslog.NewSyslogHook("udp", syslogAddr, syslog.LOG_INFO, tag)
-			if err != nil && logger != nil {
-				logger.Fatalf("Unable to connect to syslog daemon on %v", syslogAddr)
-			}
-			logging.AddHook(hook)
 		}
 
 		metricsutil.ServeHTTPMetrics(logger, metricsAddr)
