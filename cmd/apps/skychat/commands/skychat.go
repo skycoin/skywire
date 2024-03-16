@@ -296,17 +296,26 @@ func getFileSystem() http.FileSystem {
 }
 
 func handleIPCSignal(client *ipc.Client) {
+	time.Sleep(5 * time.Second)
+	if client == nil {
+		print(fmt.Sprintln("Unable to create IPC Client: server is non-existent"))
+		return
+	}
 	for {
 		m, err := client.Read()
 		if err != nil {
-			fmt.Printf("%s IPC received error: %v", visorconfig.SkychatName, err)
+			print(fmt.Sprintf("%s IPC received error: %v\n", visorconfig.SkychatName, err))
 		}
-		if m.MsgType == visorconfig.IPCShutdownMessageType {
-			fmt.Println("Stopping " + visorconfig.SkychatName + " via IPC")
-			break
+
+		if m != nil {
+			if m.MsgType == visorconfig.IPCShutdownMessageType {
+				fmt.Println("Stopping " + visorconfig.SkychatName + " via IPC")
+				break
+			}
 		}
+
 	}
-	os.Exit(0)
+	client.Close()
 }
 
 func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
