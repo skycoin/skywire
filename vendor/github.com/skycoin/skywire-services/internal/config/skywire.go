@@ -103,8 +103,8 @@ func (env *EnvConfig) AddDmsgDiscovery(name string, address string) *EnvConfig {
 	env.Skywire.DmsgDiscovery = DmsgDiscoveryConfig{
 		Name:    name,
 		Address: address,
-		Cmd:     _cmd(env.Runners.DmsgDiscovery, struct{ Name, Address, Syslog string }{name, address, env.ExternalServices.SyslogAddress}),
-		// Cmd:     fmt.Sprintf("%v --address %v %v --tag %v", env.Runners.DmsgDiscovery, address, syslogParam(env), name),
+		Cmd:     _cmd(env.Runners.DmsgDiscovery, struct{ Name, Address string }{name, address}),
+		// Cmd:     fmt.Sprintf("%v --address %v --tag %v", env.Runners.DmsgDiscovery, address, name),
 	}
 	return env
 }
@@ -123,7 +123,7 @@ func (env *EnvConfig) AddDmsgServer(name string, publicAddress string, localAddr
 			LocalAddress:  localAddress,
 			LogLevel:      "info",
 		},
-		Cmd: _cmd(env.Runners.DmsgServer, struct{ Name, Syslog string }{name, env.ExternalServices.SyslogAddress}),
+		Cmd: _cmd(env.Runners.DmsgServer, struct{ Name string }{name}),
 	}
 	return env
 }
@@ -145,7 +145,7 @@ func EmptyDmsgServerConfig() msg.Config {
 func (env *EnvConfig) AddTransportDiscovery(name string, address string) *EnvConfig {
 	env.Skywire.TransportDiscovery = TransportDiscoveryConfig{
 		Name: name,
-		Cmd:  _cmd(env.Runners.TransportDiscovery, struct{ Name, Address, Syslog string }{name, address, env.ExternalServices.SyslogAddress}),
+		Cmd:  _cmd(env.Runners.TransportDiscovery, struct{ Name, Address string }{name, address}),
 	}
 	return env
 }
@@ -154,7 +154,7 @@ func (env *EnvConfig) AddTransportDiscovery(name string, address string) *EnvCon
 func (env *EnvConfig) AddRouteFinder(name string, address string) *EnvConfig {
 	env.Skywire.RouteFinder = RouteFinderConfig{
 		Name: name,
-		Cmd:  _cmd(env.Runners.RouteFinder, struct{ Name, Address, Syslog string }{name, address, env.ExternalServices.SyslogAddress}),
+		Cmd:  _cmd(env.Runners.RouteFinder, struct{ Name, Address string }{name, address}),
 	}
 	return env
 }
@@ -174,7 +174,7 @@ func (env *EnvConfig) AddSetupNode(name string) *EnvConfig {
 			TransportDiscovery: env.Skywire.TransportDiscovery.Address,
 			LogLevel:           "info",
 		},
-		Cmd: _cmd(env.Runners.SetupNode, struct{ Name, Syslog string }{name, env.ExternalServices.SyslogAddress}),
+		Cmd: _cmd(env.Runners.SetupNode, struct{ Name string }{name}),
 	}
 	return env
 }
@@ -183,7 +183,7 @@ func (env *EnvConfig) AddSetupNode(name string) *EnvConfig {
 func (env *EnvConfig) AddAddressResolver(name string, address string) *EnvConfig {
 	env.Skywire.AddressResolver = AddressResolverConfig{
 		Name: name,
-		Cmd:  _cmd(env.Runners.AddressResolver, struct{ Name, Address, Syslog string }{name, address, env.ExternalServices.SyslogAddress}),
+		Cmd:  _cmd(env.Runners.AddressResolver, struct{ Name, Address string }{name, address}),
 	}
 	return env
 }
