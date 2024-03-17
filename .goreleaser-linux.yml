@@ -17,7 +17,7 @@ before:
     - sed -i '/go conn.handleCall(msg)/c\conn.handleCall(msg)' ./vendor/github.com/godbus/dbus/v5/conn.go
 builds:
 
-  - id: skywire-deployment-amd64
+  - id: skywire-amd64
     binary: skywire
     goos:
       - linux
@@ -26,10 +26,10 @@ builds:
     env:
       - CGO_ENABLED=1
       - CC=/home/runner/work/skywire/skywire/musl-data/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
-    main: ./cmd/skywire-deployment/
+    main: ./cmd/skywire/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
-  - id: skywire-deployment-arm64
+  - id: skywire-arm64
     binary: skywire
     goos:
       - linux
@@ -38,10 +38,10 @@ builds:
     env:
       - CGO_ENABLED=1
       - CC=/home/runner/work/skywire/skywire/musl-data/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
-    main: ./cmd/skywire-deployment/
+    main: ./cmd/skywire/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
-  - id: skywire-deployment-arm
+  - id: skywire-arm
     binary: skywire
     goos:
       - linux
@@ -52,10 +52,10 @@ builds:
     env:
       - CGO_ENABLED=1
       - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
-    main: ./cmd/skywire-deployment/
+    main: ./cmd/skywire/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
-  - id: skywire-deployment-armhf
+  - id: skywire-armhf
     binary: skywire
     goos:
       - linux
@@ -66,10 +66,10 @@ builds:
     env:
       - CGO_ENABLED=1
       - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
-    main: ./cmd/skywire-deployment/
+    main: ./cmd/skywire/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
-  - id: skywire-deployment-riscv64
+  - id: skywire-riscv64
     binary: skywire
     goos:
       - linux
@@ -78,456 +78,8 @@ builds:
     env:
       - CGO_ENABLED=1
       - CC=/home/runner/work/skywire/skywire/musl-data/riscv64-linux-musl-cross/bin/riscv64-linux-musl-gcc
-    main: ./cmd/skywire-deployment/
+    main: ./cmd/skywire/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
-
-  - id: skywire-visor-amd64
-    binary: skywire-visor
-    goos:
-      - linux
-    goarch:
-      - amd64
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
-    main: ./cmd/skywire-visor/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
-
-  - id: skywire-visor-arm64
-    binary: skywire-visor
-    goos:
-      - linux
-    goarch:
-      - arm64
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
-    main: ./cmd/skywire-visor/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
-
-  - id: skywire-visor-arm
-    binary: skywire-visor
-    goos:
-      - linux
-    goarch:
-      - arm
-    goarm:
-      - 6
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
-    main: ./cmd/skywire-visor/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
-
-  - id: skywire-visor-armhf
-    binary: skywire-visor
-    goos:
-      - linux
-    goarch:
-      - arm
-    goarm:
-      - 7
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
-    main: ./cmd/skywire-visor/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
-
-  - id: skywire-visor-riscv64
-    binary: skywire-visor
-    goos:
-      - linux
-    goarch:
-      - riscv64
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/riscv64-linux-musl-cross/bin/riscv64-linux-musl-gcc
-    main: ./cmd/skywire-visor/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
-
-  - id: skywire-cli-amd64
-    binary: skywire-cli
-    goos:
-      - linux
-    goarch:
-      - amd64
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
-    main: ./cmd/skywire-cli/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
-
-  - id: skywire-cli-arm64
-    binary: skywire-cli
-    goos:
-      - linux
-    goarch:
-      - arm64
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
-    main: ./cmd/skywire-cli/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
-
-  - id: skywire-cli-arm
-    binary: skywire-cli
-    goos:
-      - linux
-    goarch:
-      - arm
-    goarm:
-      - 6
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
-    main: ./cmd/skywire-cli/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
-
-  - id: skywire-cli-armhf
-    binary: skywire-cli
-    goos:
-      - linux
-    goarch:
-      - arm
-    goarm:
-      - 7
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
-    main: ./cmd/skywire-cli/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
-
-  - id: skywire-cli-riscv64
-    binary: skywire-cli
-    goos:
-      - linux
-    goarch:
-      - riscv64
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/riscv64-linux-musl-cross/bin/riscv64-linux-musl-gcc
-    main: ./cmd/skywire-cli/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
-
-  - id: skychat-amd64
-    binary: apps/skychat
-    goos:
-      - linux
-    goarch:
-      - amd64
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
-    main: ./cmd/apps/skychat/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: skychat-arm64
-    binary: apps/skychat
-    goos:
-      - linux
-    goarch:
-      - arm64
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
-    main: ./cmd/apps/skychat/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: skychat-arm
-    binary: apps/skychat
-    goos:
-      - linux
-    goarch:
-      - arm
-    goarm:
-      - 6
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
-    main: ./cmd/apps/skychat/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: skychat-armhf
-    binary: apps/skychat
-    goos:
-      - linux
-    goarch:
-      - arm
-    goarm:
-      - 7
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
-    main: ./cmd/apps/skychat/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: skychat-riscv64
-    binary: apps/skychat
-    goos:
-      - linux
-    goarch:
-      - riscv64
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/riscv64-linux-musl-cross/bin/riscv64-linux-musl-gcc
-    main: ./cmd/apps/skychat/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: skysocks-amd64
-    binary: apps/skysocks
-    goos:
-      - linux
-    goarch:
-      - amd64
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
-    main: ./cmd/apps/skysocks/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: skysocks-arm64
-    binary: apps/skysocks
-    goos:
-      - linux
-    goarch:
-      - arm64
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
-    main: ./cmd/apps/skysocks/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: skysocks-arm
-    binary: apps/skysocks
-    goos:
-      - linux
-    goarch:
-      - arm
-    goarm:
-      - 6
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
-    main: ./cmd/apps/skysocks/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: skysocks-armhf
-    binary: apps/skysocks
-    goos:
-      - linux
-    goarch:
-      - arm
-    goarm:
-      - 7
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
-    main: ./cmd/apps/skysocks/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: skysocks-riscv64
-    binary: apps/skysocks
-    goos:
-      - linux
-    goarch:
-      - riscv64
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/riscv64-linux-musl-cross/bin/riscv64-linux-musl-gcc
-    main: ./cmd/apps/skysocks/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: skysocks-client-amd64
-    binary: apps/skysocks-client
-    goos:
-      - linux
-    goarch:
-      - amd64
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
-    main: ./cmd/apps/skysocks-client/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: skysocks-client-arm64
-    binary: apps/skysocks-client
-    goos:
-      - linux
-    goarch:
-      - arm64
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
-    main: ./cmd/apps/skysocks-client/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: skysocks-client-arm
-    binary: apps/skysocks-client
-    goos:
-      - linux
-    goarch:
-      - arm
-    goarm:
-      - 6
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
-    main: ./cmd/apps/skysocks-client/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: skysocks-client-armhf
-    binary: apps/skysocks-client
-    goos:
-      - linux
-    goarch:
-      - arm
-    goarm:
-      - 7
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
-    main: ./cmd/apps/skysocks-client/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: skysocks-client-riscv64
-    binary: apps/skysocks-client
-    goos:
-      - linux
-    goarch:
-      - riscv64
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/riscv64-linux-musl-cross/bin/riscv64-linux-musl-gcc
-    main: ./cmd/apps/skysocks-client/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: vpn-server-amd64
-    binary: apps/vpn-server
-    goos:
-      - linux
-    goarch:
-      - amd64
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
-    main: ./cmd/apps/vpn-server/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: vpn-server-arm64
-    binary: apps/vpn-server
-    goos:
-      - linux
-    goarch:
-      - arm64
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
-    main: ./cmd/apps/vpn-server/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: vpn-server-arm
-    binary: apps/vpn-server
-    goos:
-      - linux
-    goarch:
-      - arm
-    goarm:
-      - 6
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
-    main: ./cmd/apps/vpn-server/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: vpn-server-armhf
-    binary: apps/vpn-server
-    goos:
-      - linux
-    goarch:
-      - arm
-    goarm:
-      - 7
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
-    main: ./cmd/apps/vpn-server/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: vpn-server-riscv64
-    binary: apps/vpn-server
-    goos:
-      - linux
-    goarch:
-      - riscv64
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/riscv64-linux-musl-cross/bin/riscv64-linux-musl-gcc
-    main: ./cmd/apps/vpn-server/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: vpn-client-amd64
-    binary: apps/vpn-client
-    goos:
-      - linux
-    goarch:
-      - amd64
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
-    main: ./cmd/apps/vpn-client/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: vpn-client-arm64
-    binary: apps/vpn-client
-    goos:
-      - linux
-    goarch:
-      - arm64
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
-    main: ./cmd/apps/vpn-client/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: vpn-client-arm
-    binary: apps/vpn-client
-    goos:
-      - linux
-    goarch:
-      - arm
-    goarm:
-      - 6
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
-    main: ./cmd/apps/vpn-client/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: vpn-client-armhf
-    binary: apps/vpn-client
-    goos:
-      - linux
-    goarch:
-      - arm
-    goarm:
-      - 7
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
-    main: ./cmd/apps/vpn-client/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: vpn-client-riscv64
-    binary: apps/vpn-client
-    goos:
-      - linux
-    goarch:
-      - riscv64
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/riscv64-linux-musl-cross/bin/riscv64-linux-musl-gcc
-    main: ./cmd/apps/vpn-client/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
 archives:
   - id: amd64
@@ -538,13 +90,7 @@ archives:
       - dmsghttp-config.json
       - services-config.json
     builds:
-      - skywire-visor-amd64
-      - skywire-cli-amd64
-      - skysocks-amd64
-      - skysocks-client-amd64
-      - skychat-amd64
-      - vpn-server-amd64
-      - vpn-client-amd64
+      - skywire-amd64
 
   - id: arm64
     format: tar.gz
@@ -554,13 +100,7 @@ archives:
       - dmsghttp-config.json
       - services-config.json
     builds:
-      - skywire-visor-arm64
-      - skywire-cli-arm64
-      - skysocks-arm64
-      - skysocks-client-arm64
-      - skychat-arm64
-      - vpn-server-arm64
-      - vpn-client-arm64
+      - skywire-arm64
 
   - id: arm
     format: tar.gz
@@ -570,13 +110,7 @@ archives:
       - dmsghttp-config.json
       - services-config.json
     builds:
-      - skywire-visor-arm
-      - skywire-cli-arm
-      - skysocks-arm
-      - skysocks-client-arm
-      - skychat-arm
-      - vpn-server-arm
-      - vpn-client-arm
+      - skywire-arm
 
   - id: armhf
     format: tar.gz
@@ -586,13 +120,7 @@ archives:
       - dmsghttp-config.json
       - services-config.json
     builds:
-      - skywire-visor-armhf
-      - skywire-cli-armhf
-      - skysocks-armhf
-      - skysocks-client-armhf
-      - skychat-armhf
-      - vpn-server-armhf
-      - vpn-client-armhf
+      - skywire-armhf
 
   - id: riscv64
     format: tar.gz
@@ -602,63 +130,7 @@ archives:
       - dmsghttp-config.json
       - services-config.json
     builds:
-      - skywire-visor-riscv64
-      - skywire-cli-riscv64
-      - skysocks-riscv64
-      - skysocks-client-riscv64
-      - skychat-riscv64
-      - vpn-server-riscv64
-      - vpn-client-riscv64
-
-  - id: deployment-amd64
-    format: tar.gz
-    wrap_in_directory: false
-    name_template: 'skywire-deployment-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
-    files:
-      - dmsghttp-config.json
-      - services-config.json
-    builds:
-      - skywire-deployment-amd64
-
-  - id: deployment-arm64
-    format: tar.gz
-    wrap_in_directory: false
-    name_template: 'skywire-deployment-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
-    files:
-      - dmsghttp-config.json
-      - services-config.json
-    builds:
-      - skywire-deployment-arm64
-
-  - id: deployment-arm
-    format: tar.gz
-    wrap_in_directory: false
-    name_template: 'skywire-deployment-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
-    files:
-      - dmsghttp-config.json
-      - services-config.json
-    builds:
-      - skywire-deployment-arm
-
-  - id: deployment-armhf
-    format: tar.gz
-    wrap_in_directory: false
-    name_template: 'skywire-deployment-v{{ .Version }}-{{ .Os }}-{{ .Arch }}hf'
-    files:
-      - dmsghttp-config.json
-      - services-config.json
-    builds:
-      - skywire-deployment-armhf
-
-  - id: deployment-riscv64
-    format: tar.gz
-    wrap_in_directory: false
-    name_template: 'skywire-deployment-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
-    files:
-      - dmsghttp-config.json
-      - services-config.json
-    builds:
-      - skywire-deployment-riscv64
+      - skywire-riscv64
 
 checksum:
   name_template: 'checksums.txt'
