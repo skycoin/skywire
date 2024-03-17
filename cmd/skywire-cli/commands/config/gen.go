@@ -848,84 +848,41 @@ var genConfigCmd = &cobra.Command{
 		conf.Launcher.Apps = []appserver.AppConfig{
 			{
 				Name:      visorconfig.VPNClientName,
-				Binary:    visorconfig.VPNClientName,
+				Binary:    "skywire",
 				AutoStart: false,
 				Port:      routing.Port(skyenv.VPNClientPort),
-				Args:      []string{"--dns", dnsServer},
+				Args:      []string{"app", "vpn-client", "--dns", dnsServer},
 			},
 			{
 				Name:      visorconfig.SkychatName,
-				Binary:    visorconfig.SkychatName,
+				Binary:    "skywire",
 				AutoStart: true,
 				Port:      routing.Port(skyenv.SkychatPort),
-				Args:      []string{"--addr", visorconfig.SkychatAddr},
+				Args:      []string{"app", "skychat", "--addr", visorconfig.SkychatAddr},
 			},
 			{
 				Name:      visorconfig.SkysocksName,
-				Binary:    visorconfig.SkysocksName,
+				Binary:    "skywire",
 				AutoStart: true,
 				Port:      routing.Port(visorconfig.SkysocksPort),
+				Args:      []string{"app", "skysocks"},
 			},
 			{
 				Name:      visorconfig.SkysocksClientName,
-				Binary:    visorconfig.SkysocksClientName,
+				Binary:    "skywire",
 				AutoStart: false,
 				Port:      routing.Port(visorconfig.SkysocksClientPort),
-				Args:      []string{"--addr", visorconfig.SkysocksClientAddr},
+				Args:      []string{"app", "skysocks-client", "--addr", visorconfig.SkysocksClientAddr},
 			},
 			{
 				Name:      visorconfig.VPNServerName,
-				Binary:    visorconfig.VPNServerName,
+				Binary:    "skywire",
 				AutoStart: isVpnServerEnable,
+				Args:      []string{"app", "vpn-server"},
 				Port:      routing.Port(visorconfig.VPNServerPort),
 			},
 		}
 
-		skywire := os.Args[0]
-		isMatch := strings.Contains("/tmp/", skywire)
-		if (!isStdout) || (!isMatch) {
-			//binaries have .exe extension on windows
-			var exe string
-			if visorconfig.OS == "win" {
-				exe = ".exe"
-			}
-			// Disable apps not found at bin_path with above exceptions for go run and stdout
-			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "skychat" + exe); err != nil {
-				if disableApps == "" {
-					disableApps = "skychat"
-				} else {
-					disableApps = disableApps + ",skychat"
-				}
-			}
-			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "skysocks" + exe); err != nil {
-				if disableApps == "" {
-					disableApps = "skysocks"
-				} else {
-					disableApps = disableApps + ",skysocks"
-				}
-			}
-			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "skysocks-client" + exe); err != nil {
-				if disableApps == "" {
-					disableApps = "skysocks-client"
-				} else {
-					disableApps = disableApps + ",skysocks-client"
-				}
-			}
-			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "vpn-client" + exe); err != nil {
-				if disableApps == "" {
-					disableApps = "vpn-client"
-				} else {
-					disableApps = disableApps + ",vpn-client"
-				}
-			}
-			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "vpn-server" + exe); err != nil {
-				if disableApps == "" {
-					disableApps = "vpn-server"
-				} else {
-					disableApps = disableApps + ",vpn-server"
-				}
-			}
-		}
 		// Disable apps --disable-apps flag
 		if disableApps != "" {
 			apps := strings.Split(disableApps, ",")
