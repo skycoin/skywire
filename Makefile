@@ -124,7 +124,7 @@ build-merged: ## Install dependencies, build apps and binaries. `go build` with 
 	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire ./cmd/skywire
 
 build-merged-windows: clean-windows
-	powershell '${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire ./cmd/skywire'
+	powershell '${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire.exe ./cmd/skywire'
 
 build-windows: host-apps-windows bin-windows ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
