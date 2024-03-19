@@ -65,11 +65,7 @@ function BuildInstaller($arch)
     Write-Output "#       4. Preparing Environment for Wix...              #"
     Set-Location .\scripts\win_installer
     mkdir -p ".\build\apps" > $null
-    Move-Item ..\..\archive\skywire-visor.exe .\build\skywire-visor.exe
-    Move-Item ..\..\archive\skywire-cli.exe .\build\skywire-cli.exe
-    Move-Item ..\..\archive\apps\vpn-client.exe .\build\apps\vpn-client.exe
-    Move-Item ..\..\archive\apps\skysocks-client.exe .\build\apps\skysocks-client.exe
-    Move-Item ..\..\archive\apps\skysocks.exe .\build\apps\skysocks.exe
+    Move-Item ..\..\archive\skywire.exe .\build\skywire.exe
     Copy-Item ..\..\archive\dmsghttp-config.json .\build\dmsghttp-config.json
     Copy-Item ..\..\archive\services-config.json .\build\services-config.json
     Copy-Item skywire.bat .\build\skywire.bat

@@ -24,8 +24,7 @@
          <Directory Id="$(var.Program_Files)">
             <Directory Id="INSTALLDIR" Name="Skywire">
                <Component Id="ApplicationFiles" Guid="d6963d6c-acea-49a0-bd9b-610f8a8bce82">
-                    <File Id="SKYWIRE_CLI" Source=".\build\skywire-cli.exe"/>
-                    <File Id="SKYWIRE_VISOR" Source=".\build\skywire-visor.exe"/>
+                    <File Id="SKYWIRE" Source=".\build\skywire.exe"/>
                     <File Id="SKYWIRE" Source=".\build\skywire.bat"/>
                     <File Id="ICON" Source=".\images\ico.ico"/>
                     <File Id="WINTUN" Source=".\build\wintun.dll"/>
@@ -35,9 +34,6 @@
                </Component>
                <Directory Id="APPS" Name="apps">
                   <Component Id="AppsFiles" Guid="d6263d6c-acea-49a0-bd9b-610f8a8bce82">
-                     <File Id="VPN_CLIENT" Source=".\build\apps\vpn-client.exe"/>
-                     <File Id="SKYSOCKS_CLIENT" Source=".\build\apps\skysocks-client.exe"/>
-                     <File Id="SKYSOCKS" Source=".\build\apps\skysocks.exe"/>
                      <RemoveFolder Id="APPS" On="uninstall"/>
                   </Component>
                </Directory>

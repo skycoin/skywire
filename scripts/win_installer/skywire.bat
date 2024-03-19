@@ -38,12 +38,12 @@ if exist "%HOMEPATH%\skywire-config.json" (
 
 :: Generating new config file if not exist
 if not exist "skywire-config.json" (
-    skywire-cli config gen -birpw >nul 2>&1
+    skywire cli config gen -birpw >nul 2>&1
 )
 
 :: Regenerating config file after update and install new version of Skywire
 if exist "new.update" (
-    skywire-cli config gen -birpwx >nul 2>&1
+    skywire cli config gen -birpwx >nul 2>&1
     del new.update >nul 2>&1
 )
 
@@ -51,4 +51,4 @@ if exist "new.update" (
 start "" http://127.0.0.1:8000
 
 :: Running Skywire
-skywire-visor.exe -c "skywire-config.json" --systray >> local\logs\skywire_%start_time%.log
+skywire.exe visor -c "skywire-config.json" --systray >> local\logs\skywire_%start_time%.log
