@@ -128,7 +128,7 @@ build-merged-windows: clean-windows
 
 install-system-linux: build ## Install apps and binaries over those provided by the linux package - linux package must be installed first!
 	sudo echo "sudo cache"
-	sudo install -Dm755 $(BUILD_PATH){skywire} /opt/skywire/bin/ & \
+	sudo install -Dm755 $(BUILD_PATH)skywire /opt/skywire/bin/
 
 install-system-linux-merged: build-merged ## Install apps and binaries over those provided by the linux package - linux package must be installed first!
 	sudo echo "sudo cache"
