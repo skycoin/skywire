@@ -11,7 +11,6 @@ pkill -f skywire
 rm -rf /Users/"$USER"/Library/LaunchAgents/com.skycoin.skywire.logcleaner.plist
 rm -rf "${skywire_dir}"/local
 rm -rf "${log_dir}"
-unlink /usr/local/bin/skywire-cli
 
 pkgutil --forget com.skycoin.skywire.visor
 pkgutil --forget com.skycoin.skywire.updater

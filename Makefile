@@ -102,15 +102,15 @@ check: lint check-cg test ## Run linters and tests
 check-cg: ## Cursory check of the main help menu, offline dmsghttp config gen and offline config gen
 	@echo "checking help menu for compilation without errors"
 	@echo
-	go run cmd/skywire-deployment/skywire.go --help
+	go run cmd/skywire/skywire.go --help
 	@echo
 	@echo "checking dmsghttp offline config gen"
 	@echo
-	go run cmd/skywire-deployment/skywire.go cli config gen --nofetch -dnw
+	go run cmd/skywire/skywire.go cli config gen --nofetch -dnw
 	@echo
 	@echo "checking offline config gen"
 	@echo
-	go run cmd/skywire-deployment/skywire.go cli config gen --nofetch -nw
+	go run cmd/skywire/skywire.go cli config gen --nofetch -nw
 	@echo
 	@echo "config gen succeeded without error"
 	@echo
@@ -121,8 +121,10 @@ check-windows: lint-windows test-windows ## Run linters and tests on windows ima
 build: host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
 build-merged: ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
-	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire ./cmd/skywire-deployment
+	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire ./cmd/skywire
 
+build-merged-windows: clean-windows
+	powershell '${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire.exe ./cmd/skywire'
 
 build-windows: host-apps-windows bin-windows ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
@@ -177,9 +179,9 @@ test: ## Run tests
 	-go clean -testcache &>/dev/null
 	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/...
 	${OPTS} go test ${TEST_OPTS}
-	go run cmd/skywire-deployment/skywire.go --help
-	go run cmd/skywire-deployment/skywire.go cli config gen -dnw
-	go run cmd/skywire-deployment/skywire.go cli config gen --nofetch -nw
+	go run cmd/skywire/skywire.go --help
+	go run cmd/skywire/skywire.go cli config gen -dnw
+	go run cmd/skywire/skywire.go cli config gen --nofetch -nw
 
 test-windows: ## Run tests on windows
 	@go clean -testcache
@@ -246,7 +248,7 @@ host-apps-race: ## Build app
 bin: fix-systray-vendor bin-fix unfix-systray-vendor
 
 bin-fix: ## Build `skywire-visor`, `skywire-cli`
-	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH) ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node ./cmd/skywire-deployment
+	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH) ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node ./cmd/skywire
 
 fix-systray-vendor:
 	@if [ $(UNAME_S) = "Linux" ]; then\
@@ -360,7 +362,7 @@ run-source: prepare ## Run skywire from source, without compiling binaries
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -in | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
 
 run-source-merged: prepare1 ## Run skywire from source, without compiling binaries
-	go run ./cmd/skywire-deployment/skywire.go cli config gen -in | sudo go run ./cmd/skywire-deployment/skywire.go visor -n || true
+	go run ./cmd/skywire/skywire.go cli config gen -in | sudo go run ./cmd/skywire/skywire.go visor -n || true
 
 run-systray: prepare ## Run skywire from source, with vpn server enabled
 	go run ./cmd/skywire-cli/skywire-cli.go config gen -ni | sudo go run ./cmd/skywire-visor/skywire-visor.go -n --systray || true
