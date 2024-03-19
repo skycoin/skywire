@@ -225,7 +225,7 @@ unfix-systray-vendor:
 	fi
 
 build-windows: ## Build `skywire-visor`
-	powershell '${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH) ./cmd/skywire }'
+	powershell '${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH) ./cmd/skywire'
 
 # Static Bin
 build-static: ## Build `skywire-visor`, `skywire-cli`
