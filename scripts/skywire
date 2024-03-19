@@ -1,2 +1,2 @@
 #!/bin/bash
-go run ../../cmd/skywire-deployment/skywire.go $@
+go run ../../cmd/skywire/skywire.go $@
