@@ -294,8 +294,6 @@ func (l *AppLauncher) RestartApp(name, binary string) error {
 
 func makeProcConfig(lc AppLauncherConfig, ac appserver.AppConfig, envs []string) (appcommon.ProcConfig, error) {
 
-
-
 	procConf := appcommon.ProcConfig{
 		AppName:     ac.Name,
 		AppSrvAddr:  lc.ServerAddr,
