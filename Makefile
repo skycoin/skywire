@@ -295,6 +295,10 @@ run: ## Run skywire visor with skywire-config.json, and start a browser if runni
 ## Prepare to run skywire from source, without compiling binaries
 prepare:
 	test -d apps && rm -r apps || true
+	test -d build && rm -r build || true
+	mkdir -p build || true
+	ln ./scripts/skywire ./build/
+	chmod +x ./build/*
 	sudo echo "sudo cache"
 
 
