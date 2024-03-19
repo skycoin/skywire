@@ -293,10 +293,6 @@ func (l *AppLauncher) RestartApp(name, binary string) error {
 }
 
 func makeProcConfig(lc AppLauncherConfig, ac appserver.AppConfig, envs []string) (appcommon.ProcConfig, error) {
-	binPath := lc.BinPath
-	if ac.Binary == "skywire" {
-		binPath, _ = os.Getwd() //nolint
-	}
 
 	procConf := appcommon.ProcConfig{
 		AppName:     ac.Name,
@@ -307,7 +303,7 @@ func makeProcConfig(lc AppLauncherConfig, ac appserver.AppConfig, envs []string)
 		ProcWorkDir: filepath.Join(lc.LocalPath, ac.Name),
 		VisorPK:     lc.VisorPK,
 		RoutingPort: ac.Port,
-		BinaryLoc:   filepath.Join(binPath, ac.Binary),
+		BinaryLoc:   filepath.Join(lc.BinPath, ac.Binary),
 		LogDBLoc:    filepath.Join(lc.LocalPath, ac.Name+"_log.db"),
 	}
 	err := ensureDir(&procConf.ProcWorkDir)
