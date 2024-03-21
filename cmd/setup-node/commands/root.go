@@ -21,19 +21,16 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
-	"github.com/skycoin/skywire/pkg/syslog"
 )
 
 var (
 	metricsAddr  string
-	syslogAddr   string
 	tag          string
 	cfgFromStdin bool
 )
 
 func init() {
 	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
-	RootCmd.Flags().StringVar(&syslogAddr, "syslog", "", "syslog server address. E.g. localhost:514")
 	RootCmd.Flags().StringVar(&tag, "tag", "setup_node", "logging tag")
 	RootCmd.Flags().BoolVarP(&cfgFromStdin, "stdin", "i", false, "read config from STDIN")
 }
@@ -55,15 +52,6 @@ var RootCmd = &cobra.Command{
 
 		if _, err := buildinfo.Get().WriteTo(mLog.Out); err != nil {
 			mLog.Printf("Failed to output build info: %v", err)
-		}
-
-		if syslogAddr != "" {
-			hook, err := syslog.SetupHook(syslogAddr, tag)
-			if err != nil {
-				log.Fatalf("Error setting up syslog: %v", err)
-			}
-
-			logging.AddHook(hook)
 		}
 
 		var rdr io.Reader
