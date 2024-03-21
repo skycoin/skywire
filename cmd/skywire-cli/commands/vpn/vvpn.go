@@ -32,7 +32,7 @@ func init() {
 		listCmd,
 	)
 	startCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
-	startCmd.Flags().IntVarP(&startingTimeout, "timeout", "t", 30, "starting timeout value in second")
+	startCmd.Flags().IntVarP(&startingTimeout, "timeout", "t", 0, "starting timeout value in second")
 }
 
 var startCmd = &cobra.Command{
