@@ -23,7 +23,6 @@ require (
 	github.com/ivanpirog/coloredcobra v1.0.1
 	github.com/james-barrow/golang-ipc v1.2.4
 	github.com/jaypipes/ghw v0.12.0
-	github.com/konsorten/go-windows-terminal-sequences v1.0.3
 	github.com/lib/pq v1.10.9
 	github.com/orandin/lumberjackrus v1.0.1
 	github.com/pterm/pterm v0.12.66
