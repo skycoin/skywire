@@ -43,7 +43,6 @@ exit 0
 	}
 
 	uninstallScript := `
-if pgrep vpn-client; then skywire cli visor stop-app vpn-client; fi
 if pgrep skywire; then pkill -f skywire; fi
 pkgutil --forget ` + osxServiceIdentifier + `
 pkgutil --forget com.skycoin.skywire.updater
