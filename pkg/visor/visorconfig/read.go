@@ -39,9 +39,6 @@ func ReadRaw(raw []byte, confPath string) (*V1, error) {
 		return nil, err
 	}
 	conf := MakeBaseConfig(cc, false, true, nil, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create config template")
-	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	if err := dec.Decode(&conf); err != nil {
 		return nil, fmt.Errorf("failed to decode json: %w", err)

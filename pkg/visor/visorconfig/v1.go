@@ -168,6 +168,40 @@ func (v1 *V1) UpdateAppArg(launch *launcher.AppLauncher, appName, argName string
 	return v1.flush(v1)
 }
 
+// UpdateAppArgBatch updates the cli flag of the specified app config and also within the
+// The updated config gets flushed to file if there are any changes.
+// func (v1 *V1) UpdateAppArg(appName, argName string, value interface{}) error {
+func (v1 *V1) UpdateAppArgBatch(launch *launcher.AppLauncher, appName string, args map[string]any) error {
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+
+	conf := v1.Launcher
+
+	var configChanged bool
+
+	for arg, value := range args {
+		switch val := value.(type) {
+		case string:
+			configChanged = updateStringArg(conf, appName, arg, val)
+		case bool:
+			configChanged = updateBoolArg(conf, appName, arg, val)
+		default:
+			return fmt.Errorf("invalid arg type %T", value)
+		}
+	}
+
+	if !configChanged {
+		return nil
+	}
+	launch.ResetConfig(launcher.AppLauncherConfig{
+		VisorPK:       v1.PK,
+		Apps:          conf.Apps,
+		ServerAddr:    conf.ServerAddr,
+		DisplayNodeIP: conf.DisplayNodeIP,
+	})
+	return v1.flush(v1)
+}
+
 // DeleteAppArg Delete entire of args of a custom app
 func (v1 *V1) DeleteAppArg(launch *launcher.AppLauncher, appName string) error {
 	v1.mu.Lock()
