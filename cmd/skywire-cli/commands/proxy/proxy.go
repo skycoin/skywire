@@ -109,8 +109,9 @@ var startCmd = &cobra.Command{
 			clientName = "skysocks-client"
 			// change defaul skysocks-proxy app -srv arg and run it
 		} else {
-			// error
-			return
+			internal.Catch(cmd.Flags(), rpcClient.StartApp("skysocks-client"))
+			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
+			clientName = "skysocks-client"
 		}
 
 		ctx, cancel := cmdutil.SignalContext(context.Background(), &logrus.Logger{})
@@ -201,33 +202,35 @@ var statusCmd = &cobra.Command{
 		var jsonAppStatus []appState
 		fmt.Fprintf(w, "---- All Proxy List -----------------------------------------------------\n\n")
 		for _, state := range states {
-			if state.AppConfig.Binary == binaryName {
-				status := "stopped"
-				if state.Status == appserver.AppStatusRunning {
-					status = "running"
-				}
-				if state.Status == appserver.AppStatusErrored {
-					status = "errored"
-				}
-				jsonAppStatus = append(jsonAppStatus, appState{
-					Name:      state.Name,
-					Status:    status,
-					AutoStart: state.AutoStart,
-					Args:      state.Args,
-					AppPort:   state.Port,
-				})
-				var tmpAddr string
-				var tmpSrv string
-				for idx, arg := range state.Args {
-					if arg == "-srv" {
-						tmpSrv = state.Args[idx+1]
+			for _, v := range state.AppConfig.Args {
+				if v == binaryName {
+					status := "stopped"
+					if state.Status == appserver.AppStatusRunning {
+						status = "running"
 					}
-					if arg == "-addr" {
-						tmpAddr = "127.0.0.1" + state.Args[idx+1]
+					if state.Status == appserver.AppStatusErrored {
+						status = "errored"
 					}
+					jsonAppStatus = append(jsonAppStatus, appState{
+						Name:      state.Name,
+						Status:    status,
+						AutoStart: state.AutoStart,
+						Args:      state.Args,
+						AppPort:   state.Port,
+					})
+					var tmpAddr string
+					var tmpSrv string
+					for idx, arg := range state.Args {
+						if arg == "--srv" {
+							tmpSrv = state.Args[idx+1]
+						}
+						if arg == "--addr" {
+							tmpAddr = "127.0.0.1" + state.Args[idx+1]
+						}
+					}
+					_, err = fmt.Fprintf(w, "Name: %s\nStatus: %s\nServer: %s\nAddress: %s\nAppPort: %d\nAutoStart: %t\n\n", state.Name, status, tmpSrv, tmpAddr, state.Port, state.AutoStart)
+					internal.Catch(cmd.Flags(), err)
 				}
-				_, err = fmt.Fprintf(w, "Name: %s\nStatus: %s\nServer: %s\nAddress: %s\nAppPort: %d\nAutoStart: %t\n\n", state.Name, status, tmpSrv, tmpAddr, state.Port, state.AutoStart)
-				internal.Catch(cmd.Flags(), err)
 			}
 		}
 		fmt.Fprintf(w, "-------------------------------------------------------------------------\n")
