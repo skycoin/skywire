@@ -11,9 +11,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
+	"runtime"
 	"time"
 
 	"github.com/elazarl/goproxy"
+	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
@@ -43,7 +46,6 @@ func init() {
 	RootCmd.Flags().StringVar(&addr, "addr", visorconfig.SkysocksClientAddr, "Client address to listen on")
 	RootCmd.Flags().StringVar(&serverPK, "srv", "", "PubKey of the server to connect to")
 	RootCmd.Flags().StringVar(&httpAddr, "http", "", "http proxy mode")
-
 }
 
 // RootCmd is the root command for skysocks
@@ -83,41 +85,59 @@ var RootCmd = &cobra.Command{
 			setAppErr(appCl, err)
 			os.Exit(1)
 		}
+
 		defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
 		setAppPort(appCl, appCl.Config().RoutingPort)
-		for {
-			conn, err := dialServer(ctx, appCl, pk)
+
+		conn, err := dialServer(ctx, appCl, pk)
+		if err != nil {
+			print(fmt.Sprintf("Failed to dial to a server: %v\n", err))
+			setAppErr(appCl, err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("Connected to %v\n", pk)
+		client, err := skysocks.NewClient(conn, appCl)
+		if err != nil {
+			print(fmt.Sprintf("Failed to create a new client: %v\n", err))
+			setAppErr(appCl, err)
+			os.Exit(1)
+		}
+
+		if runtime.GOOS == "windows" {
+			ipcClient, err := ipc.StartClient(visorconfig.SkysocksName, nil)
 			if err != nil {
-				print(fmt.Sprintf("Failed to dial to a server: %v\n", err))
 				setAppErr(appCl, err)
+				print(fmt.Sprintf("Error creating ipc server for skysocks: %v\n", err))
 				os.Exit(1)
 			}
+			go client.ListenIPC(ipcClient)
+		} else {
+			termCh := make(chan os.Signal, 1)
+			signal.Notify(termCh, os.Interrupt)
+			go func() {
+				<-termCh
+				if err := client.Close(); err != nil {
+					print(fmt.Sprintf("%v\n", err))
+					os.Exit(1)
+				}
+			}()
+		}
 
-			fmt.Printf("Connected to %v\n", pk)
-			client, err := skysocks.NewClient(conn, appCl)
-			if err != nil {
-				print(fmt.Sprintf("Failed to create a new client: %v\n", err))
-				setAppErr(appCl, err)
-				os.Exit(1)
-			}
+		fmt.Printf("Serving proxy client %v\n", addr)
+		setAppStatus(appCl, appserver.AppDetailedStatusRunning)
+		httpCtx, httpCancel := context.WithCancel(ctx)
+		if httpAddr != "" {
+			go httpProxy(httpCtx, httpAddr, addr)
+		}
+		defer httpCancel()
 
-			fmt.Printf("Serving proxy client %v\n", addr)
-			setAppStatus(appCl, appserver.AppDetailedStatusRunning)
-			httpCtx, httpCancel := context.WithCancel(ctx)
-			if httpAddr != "" {
-				go httpProxy(httpCtx, httpAddr, addr)
-			}
-			if err := client.ListenAndServe(addr); err != nil {
-				print(fmt.Sprintf("Error serving proxy client: %v\n", err))
-			}
-			httpCancel()
-			// need to filter this out, cause usually client failure means app conn is already closed
-			if err := conn.Close(); err != nil && err != io.ErrClosedPipe {
-				print(fmt.Sprintf("Error closing app conn: %v\n", err))
-			}
-
-			fmt.Println("Reconnecting to skysocks server")
-			setAppStatus(appCl, appserver.AppDetailedStatusReconnecting)
+		if err := client.ListenAndServe(addr); err != nil {
+			print(fmt.Sprintf("Error serving proxy client: %v\n", err))
+		}
+		// need to filter this out, cause usually client failure means app conn is already closed
+		if err := conn.Close(); err != nil && err != io.ErrClosedPipe {
+			print(fmt.Sprintf("Error closing app conn: %v\n", err))
 		}
 	},
 }
