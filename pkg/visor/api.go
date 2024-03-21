@@ -637,8 +637,10 @@ func (v *Visor) StopSkysocksClients() error {
 	}
 	if v.procM != nil {
 		for _, app := range v.conf.Launcher.Apps {
-			if app.Binary == visorconfig.SkysocksClientName {
-				v.appL.StopApp(app.Name) //nolint
+			for _, args := range app.Args {
+				if args == visorconfig.SkysocksClientName {
+					v.appL.StopApp(app.Name) //nolint
+				}
 			}
 		}
 		return nil
