@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
@@ -103,7 +102,7 @@ var RootCmd = &cobra.Command{
 			setAppErr(appCl, err)
 			os.Exit(1)
 		}
-
+		var closeSignal bool
 		if runtime.GOOS == "windows" {
 			ipcClient, err := ipc.StartClient(visorconfig.SkysocksName, nil)
 			if err != nil {
@@ -111,7 +110,10 @@ var RootCmd = &cobra.Command{
 				print(fmt.Sprintf("Error creating ipc server for skysocks: %v\n", err))
 				os.Exit(1)
 			}
-			go client.ListenIPC(ipcClient)
+			go func() {
+				client.ListenIPC(ipcClient)
+				closeSignal = true
+			}()
 		} else {
 			termCh := make(chan os.Signal, 1)
 			signal.Notify(termCh, os.Interrupt)
@@ -121,6 +123,7 @@ var RootCmd = &cobra.Command{
 					print(fmt.Sprintf("%v\n", err))
 					os.Exit(1)
 				}
+				closeSignal = true
 			}()
 		}
 
@@ -131,13 +134,13 @@ var RootCmd = &cobra.Command{
 			go httpProxy(httpCtx, httpAddr, addr)
 		}
 		defer httpCancel()
-
-		if err := client.ListenAndServe(addr); err != nil {
-			print(fmt.Sprintf("Error serving proxy client: %v\n", err))
-		}
-		// need to filter this out, cause usually client failure means app conn is already closed
-		if err := conn.Close(); err != nil && err != io.ErrClosedPipe {
-			print(fmt.Sprintf("Error closing app conn: %v\n", err))
+		for {
+			if err := client.ListenAndServe(addr); err != nil {
+				print(fmt.Sprintf("Error serving proxy client: %v\n", err))
+			}
+			if closeSignal {
+				break
+			}
 		}
 	},
 }
