@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -41,6 +42,7 @@ func init() {
 	startCmd.Flags().StringVarP(&addr, "addr", "a", "", "address of proxy for use")
 	startCmd.Flags().StringVarP(&clientName, "name", "n", "", "name of skysocks client")
 	startCmd.Flags().IntVarP(&startingTimeout, "timeout", "t", 30, "timeout for starting proxy")
+	startCmd.Flags().StringVar(&httpAddr, "http", "", "address for http proxy")
 	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks client")
 	stopCmd.Flags().StringVar(&clientName, "name", "", "specific skysocks client that want stop")
 }
@@ -89,11 +91,21 @@ var startCmd = &cobra.Command{
 			}
 			arguments := map[string]string{}
 			arguments["app"] = "skysocks-client"
+
 			arguments["--srv"] = pubkey.String()
+
 			if addr == "" {
 				addr = visorconfig.SkysocksClientAddr
 			}
 			arguments["--addr"] = addr
+
+			if httpAddr == "" {
+				socksAddr, _ := strconv.Atoi(strings.Split(addr, ":")[1]) //nolint
+				socksAddr++
+				httpAddr = fmt.Sprintf(":%d", socksAddr)
+			}
+			arguments["--http"] = httpAddr
+
 			if clientName == "" {
 				clientName = "skysocks-client"
 			}
