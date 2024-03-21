@@ -70,6 +70,7 @@ var startCmd = &cobra.Command{
 			toutCancel()
 			cancel()
 			rpcClient.KillApp(clientName) //nolint
+			fmt.Print("\nStopped!")
 			os.Exit(1)
 		}()
 
