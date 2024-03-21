@@ -25,7 +25,7 @@
             <Directory Id="INSTALLDIR" Name="Skywire">
                <Component Id="ApplicationFiles" Guid="d6963d6c-acea-49a0-bd9b-610f8a8bce82">
                     <File Id="SKYWIRE" Source=".\build\skywire.exe"/>
-                    <File Id="SKYWIRE" Source=".\build\skywire.bat"/>
+                    <File Id="SKYWIREBAT" Source=".\build\skywire.bat"/>
                     <File Id="ICON" Source=".\images\ico.ico"/>
                     <File Id="WINTUN" Source=".\build\wintun.dll"/>
                     <File Id="DMSGHTTPCONFIG" Source=".\build\dmsghttp-config.json"/>
