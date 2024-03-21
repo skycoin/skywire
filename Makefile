@@ -118,7 +118,7 @@ check-cg: ## Cursory check of the main help menu, offline dmsghttp config gen an
 
 check-windows: lint-windows test-windows ## Run linters and tests on windows image
 
-build: build-merged ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
+build: clean build-merged ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
 build-merged: ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire ./cmd/skywire
@@ -130,12 +130,12 @@ install-system-linux: build ## Install apps and binaries over those provided by 
 	sudo echo "sudo cache"
 	sudo install -Dm755 $(BUILD_PATH)skywire /opt/skywire/bin/
 
-install-system-linux-merged: build-merged ## Install apps and binaries over those provided by the linux package - linux package must be installed first!
-	sudo echo "sudo cache"
-	sudo install -Dm755 $(BUILD_PATH)skywire /opt/skywire/bin/
 
 install-generate: ## Installs required execs for go generate.
 	${OPTS} go install github.com/mjibson/esc github.com/vektra/mockery/v2@latest
+
+	## TO DO: it may be unnecessary to install required execs for go generate into the path. An alternative method may exist which does not require this
+	## https://eli.thegreenplace.net/2021/a-comprehensive-guide-to-go-generate
 
 generate: ## Generate mocks and config README's
 	go generate ./...
