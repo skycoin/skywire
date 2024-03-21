@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -99,12 +98,9 @@ var startCmd = &cobra.Command{
 			}
 			arguments["--addr"] = addr
 
-			if httpAddr == "" {
-				socksAddr, _ := strconv.Atoi(strings.Split(addr, ":")[1]) //nolint
-				socksAddr++
-				httpAddr = fmt.Sprintf(":%d", socksAddr)
+			if httpAddr != "" {
+				arguments["--http"] = httpAddr
 			}
-			arguments["--http"] = httpAddr
 
 			if clientName == "" {
 				clientName = "skysocks-client"
