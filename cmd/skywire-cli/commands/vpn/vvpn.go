@@ -32,7 +32,7 @@ func init() {
 		listCmd,
 	)
 	startCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
-	startCmd.Flags().IntVarP(&startingTimeout, "timeout", "t", 20, "starting timeout value in second")
+	startCmd.Flags().IntVarP(&startingTimeout, "timeout", "t", 30, "starting timeout value in second")
 }
 
 var startCmd = &cobra.Command{
@@ -67,7 +67,8 @@ var startCmd = &cobra.Command{
 		go func() {
 			<-ctx.Done()
 			cancel()
-			rpcClient.StopVPNClient("vpn-client") //nolint
+			rpcClient.KillApp("vpn-client") //nolint
+			fmt.Print("\nStopped!")
 			os.Exit(1)
 		}()
 		startProcess := true

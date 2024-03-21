@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 func init() {
@@ -39,6 +40,8 @@ func init() {
 	startCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
 	startCmd.Flags().StringVarP(&addr, "addr", "a", "", "address of proxy for use")
 	startCmd.Flags().StringVarP(&clientName, "name", "n", "", "name of skysocks client")
+	startCmd.Flags().IntVarP(&startingTimeout, "timeout", "t", 30, "timeout for starting proxy")
+	startCmd.Flags().StringVar(&httpAddr, "http", "", "address for http proxy")
 	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks client")
 	stopCmd.Flags().StringVar(&clientName, "name", "", "specific skysocks client that want stop")
 }
@@ -53,8 +56,27 @@ var startCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
 		}
 
-		if clientName != "" && pk != "" && addr != "" {
-			// add new app with -srv and -addr args, and if app was there just change -srv and -addr args and run it
+		// stop possible running proxy before start it again
+		if clientName != "" {
+			rpcClient.StopApp(clientName) //nolint
+		} else {
+			rpcClient.StopApp("skysocks-client") //nolint
+		}
+
+		tCtx := context.Background() //nolint
+		if startingTimeout != 0 {
+			tCtx, _ = context.WithTimeout(context.Background(), time.Duration(startingTimeout)*time.Second) //nolint
+		}
+		ctx, cancel := cmdutil.SignalContext(tCtx, &logrus.Logger{})
+		go func() {
+			<-ctx.Done()
+			cancel()
+			rpcClient.KillApp(clientName) //nolint
+			fmt.Print("\nStopped!")
+			os.Exit(1)
+		}()
+
+		if pk != "" {
 			err := pubkey.Set(pk)
 			if err != nil {
 				if len(args) > 0 {
@@ -66,10 +88,23 @@ var startCmd = &cobra.Command{
 					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
 				}
 			}
+			arguments := map[string]any{}
+			arguments["app"] = "skysocks-client"
 
-			arguments := map[string]string{}
-			arguments["srv"] = pubkey.String()
-			arguments["addr"] = addr
+			arguments["--srv"] = pubkey.String()
+
+			if addr == "" {
+				addr = visorconfig.SkysocksClientAddr
+			}
+			arguments["--addr"] = addr
+
+			if httpAddr != "" {
+				arguments["--http"] = httpAddr
+			}
+
+			if clientName == "" {
+				clientName = "skysocks-client"
+			}
 
 			_, err = rpcClient.App(clientName)
 			if err == nil {
@@ -89,39 +124,13 @@ var startCmd = &cobra.Command{
 			}
 			internal.Catch(cmd.Flags(), rpcClient.StartApp(clientName))
 			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
-		} else if clientName != "" && pk == "" && addr == "" {
+		} else {
+			if clientName == "" {
+				clientName = "skysocks-client"
+			}
 			internal.Catch(cmd.Flags(), rpcClient.StartApp(clientName))
 			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
-		} else if pk != "" && clientName == "" && addr == "" {
-			err := pubkey.Set(pk)
-			if err != nil {
-				if len(args) > 0 {
-					err := pubkey.Set(args[0])
-					if err != nil {
-						internal.PrintFatalError(cmd.Flags(), err)
-					}
-				} else {
-					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
-				}
-			}
-			internal.Catch(cmd.Flags(), rpcClient.StartSkysocksClient(pubkey.String()))
-			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
-			clientName = "skysocks-client"
-			// change defaul skysocks-proxy app -srv arg and run it
-		} else {
-			internal.Catch(cmd.Flags(), rpcClient.StartApp("skysocks-client"))
-			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
-			clientName = "skysocks-client"
 		}
-
-		ctx, cancel := cmdutil.SignalContext(context.Background(), &logrus.Logger{})
-		defer cancel()
-		go func() {
-			<-ctx.Done()
-			cancel()
-			rpcClient.StopApp(clientName) //nolint
-			os.Exit(1)
-		}()
 
 		startProcess := true
 		for startProcess {
@@ -146,6 +155,13 @@ var startCmd = &cobra.Command{
 							AppError: state.DetailedStatus,
 						}
 						internal.PrintOutput(cmd.Flags(), out, fmt.Sprintln("\nError! > "+state.DetailedStatus))
+					}
+					if state.Status == appserver.AppStatusStopped {
+						startProcess = false
+						out := output{
+							AppError: state.DetailedStatus,
+						}
+						internal.PrintOutput(cmd.Flags(), out, fmt.Sprintln("\nStopped!"+state.DetailedStatus))
 					}
 				}
 			}

@@ -10,29 +10,28 @@ import (
 )
 
 var (
-	version        = buildinfo.Version()
-	binaryName     = "skysocks-client"
-	stateName      = "skysocks-client"
-	serviceType    = servicedisc.ServiceTypeProxy
-	isUnFiltered   bool
-	rawData        bool
-	utURL          string
-	sdURL          string
-	cacheFileSD    string
-	cacheFileUT    string
-	cacheFilesAge  int
-	ver            string
-	country        string
-	isStats        bool
-	pubkey         cipher.PubKey
-	pk             string
-	allClients     bool
-	noFilterOnline bool
-	clientName     string
-	addr           string
-
-// startingTimeout int
-// httpProxy       string
+	version         = buildinfo.Version()
+	binaryName      = "skysocks-client"
+	stateName       = "skysocks-client"
+	serviceType     = servicedisc.ServiceTypeProxy
+	isUnFiltered    bool
+	rawData         bool
+	utURL           string
+	sdURL           string
+	cacheFileSD     string
+	cacheFileUT     string
+	cacheFilesAge   int
+	ver             string
+	country         string
+	isStats         bool
+	pubkey          cipher.PubKey
+	pk              string
+	allClients      bool
+	noFilterOnline  bool
+	clientName      string
+	addr            string
+	startingTimeout int
+	httpAddr        string
 )
 
 // RootCmd contains commands that interact with the skywire-visor

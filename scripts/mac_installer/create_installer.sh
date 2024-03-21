@@ -75,14 +75,14 @@ function build_installer() {
   cp ./dmsghttp-config.json ${installer_package_dir}/Contents/MacOS/dmsghttp-config.json
   cp ./services-config.json ${installer_package_dir}/Contents/MacOS/services-config.json
 
-  cat <<EOF >${installer_package_dir}/Contents/MacOS/Skywire
+  cat <<EOF >${installer_package_dir}/Contents/MacOS/SkywireLauncher
 #!/bin/bash
 
 osascript -e "do shell script \"/Applications/Skywire.app/Contents/MacOS/skywire visor -c '/Users/\${USER}/Library/Application Support/Skywire/skywire-config.json' --systray > /Users/\${USER}/Library/Logs/skywire/visor.log\" with administrator privileges"
 
 EOF
 
-  chmod +x ${installer_package_dir}/Contents/MacOS/Skywire
+  chmod +x ${installer_package_dir}/Contents/MacOS/SkywireLauncher
 
   # https://stackoverflow.com/a/21210966
   if [ "$sign_binary" == true ]; then

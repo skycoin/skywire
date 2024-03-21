@@ -288,6 +288,13 @@ func (r *RPC) StopApp(name *string, _ *struct{}) (err error) {
 	return r.visor.StopApp(*name)
 }
 
+// KillApp kill App with provided name.
+func (r *RPC) KillApp(name *string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "KillApp", name)(nil, &err)
+
+	return r.visor.KillApp(*name)
+}
+
 // StartVPNClient starts VPNClient App
 func (r *RPC) StartVPNClient(pk *cipher.PubKey, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StartApp", pk)(nil, &err)
@@ -391,7 +398,7 @@ type SetAppStringIn struct {
 // SetAppMapIn is input for SetApp map[string]string flags
 type SetAppMapIn struct {
 	AppName string
-	Val     map[string]string
+	Val     map[string]any
 }
 
 // SetAppPK sets PK for the app.

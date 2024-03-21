@@ -620,16 +620,16 @@ func (hv *Hypervisor) getAppStats() http.HandlerFunc {
 func (hv *Hypervisor) putApp() http.HandlerFunc {
 	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		type req struct {
-			AutoStart     *bool             `json:"autostart,omitempty"`
-			Killswitch    *bool             `json:"killswitch,omitempty"`
-			Secure        *bool             `json:"secure,omitempty"`
-			Address       *string           `json:"Address,omitempty"`
-			Status        *int              `json:"status,omitempty"`
-			Passcode      *string           `json:"passcode,omitempty"`
-			NetIfc        *string           `json:"netifc,omitempty"`
-			DNSAddr       *string           `json:"dns,omitempty"`
-			PK            *cipher.PubKey    `json:"pk,omitempty"`
-			CustomSetting map[string]string `json:"custom_setting,omitempty"`
+			AutoStart     *bool          `json:"autostart,omitempty"`
+			Killswitch    *bool          `json:"killswitch,omitempty"`
+			Secure        *bool          `json:"secure,omitempty"`
+			Address       *string        `json:"Address,omitempty"`
+			Status        *int           `json:"status,omitempty"`
+			Passcode      *string        `json:"passcode,omitempty"`
+			NetIfc        *string        `json:"netifc,omitempty"`
+			DNSAddr       *string        `json:"dns,omitempty"`
+			PK            *cipher.PubKey `json:"pk,omitempty"`
+			CustomSetting map[string]any `json:"custom_setting,omitempty"`
 		}
 
 		shouldRestartApp := func(r req) bool {
