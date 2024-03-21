@@ -16,7 +16,7 @@ const (
 // PackageConfig contains installation paths (for mac)
 func PackageConfig() PkgConfig {
 	pkgConfig := PkgConfig{
-		LauncherBinPath: "/Applications/Skywire.app/Contents/MacOS/bin", //apps are now subcommands of the skywire binary "/Applications/Skywire.app/Contents/MacOS/apps",
+		LauncherBinPath: "/Applications/Skywire.app/Contents/MacOS", //apps are now subcommands of the skywire binary "/Applications/Skywire.app/Contents/MacOS/apps",
 		LocalPath:       "/Library/Application Support/Skywire/local",
 		Hypervisor: Hypervisor{
 			DbPath:     "/Library/Application Support/Skywire/users.db",
