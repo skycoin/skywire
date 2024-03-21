@@ -88,7 +88,7 @@ var startCmd = &cobra.Command{
 					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
 				}
 			}
-			arguments := map[string]string{}
+			arguments := map[string]any{}
 			arguments["app"] = "skysocks-client"
 
 			arguments["--srv"] = pubkey.String()

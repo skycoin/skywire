@@ -304,7 +304,7 @@ func (rc *rpcClient) SetAppDNS(appName string, dnsAddr string) error {
 }
 
 // DoCustomSetting implements API.
-func (rc *rpcClient) DoCustomSetting(appName string, customSetting map[string]string) error {
+func (rc *rpcClient) DoCustomSetting(appName string, customSetting map[string]any) error {
 	return rc.Call("DoCustomSetting", &SetAppMapIn{
 		AppName: appName,
 		Val:     customSetting,
@@ -1054,7 +1054,7 @@ func (mc *mockRPCClient) SetAppDNS(string, string) error {
 }
 
 // DoCustomSetting implents API.
-func (mc *mockRPCClient) DoCustomSetting(appName string, customSetting map[string]string) error { //nolint:all
+func (mc *mockRPCClient) DoCustomSetting(appName string, customSetting map[string]any) error { //nolint:all
 	return mc.do(true, func() error {
 		for i := range mc.o.Apps {
 			if mc.o.Apps[i].Name == appName {

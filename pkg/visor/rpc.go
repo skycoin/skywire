@@ -398,7 +398,7 @@ type SetAppStringIn struct {
 // SetAppMapIn is input for SetApp map[string]string flags
 type SetAppMapIn struct {
 	AppName string
-	Val     map[string]string
+	Val     map[string]any
 }
 
 // SetAppPK sets PK for the app.
