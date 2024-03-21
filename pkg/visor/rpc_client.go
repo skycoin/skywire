@@ -186,6 +186,11 @@ func (rc *rpcClient) StopApp(appName string) error {
 	return rc.Call("StopApp", &appName, &struct{}{})
 }
 
+// KillApp calls KillApp.
+func (rc *rpcClient) KillApp(appName string) error {
+	return rc.Call("KillApp", &appName, &struct{}{})
+}
+
 // StartVPNClient calls StartVPNClient.
 func (rc *rpcClient) StartVPNClient(pk cipher.PubKey) error {
 	return rc.Call("StartVPNClient", &pk, &struct{}{})
@@ -864,6 +869,11 @@ func (*mockRPCClient) DeregisterApp(appcommon.ProcKey) error {
 
 // StopApp implements API.
 func (*mockRPCClient) StopApp(string) error {
+	return nil
+}
+
+// KillApp implements API.
+func (*mockRPCClient) KillApp(string) error {
 	return nil
 }
 

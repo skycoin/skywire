@@ -66,6 +66,7 @@ type API interface {
 	RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error)
 	DeregisterApp(procKey appcommon.ProcKey) error
 	StopApp(appName string) error
+	KillApp(appName string) error
 	SetAppDetailedStatus(appName, state string) error
 	SetAppError(appName, stateErr string) error
 	RestartApp(appName string) error
@@ -506,6 +507,18 @@ func (v *Visor) StopApp(appName string) error {
 	if v.procM != nil {
 		_, err := v.appL.StopApp(appName) //nolint:errcheck
 		return err
+	}
+	return ErrProcNotAvailable
+}
+
+// KillApp implements API.
+func (v *Visor) KillApp(appName string) error {
+	// check process manager and app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
+	if v.procM != nil {
+		return v.appL.KillApp(appName) //nolint:errcheck
 	}
 	return ErrProcNotAvailable
 }

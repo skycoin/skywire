@@ -31,7 +31,8 @@ var (
 	clientName     string
 	addr           string
 
-// startingTimeout int
+	startingTimeout int
+
 // httpProxy       string
 )
 
