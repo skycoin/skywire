@@ -610,13 +610,13 @@ func (v *Visor) StartSkysocksClient(serverKey string) error {
 				// we set the args in memory and pass it in `v.appL.StartApp`
 				// unlike the api method `StartApp` where `nil` is passed in `v.appL.StartApp` as args
 				// but the args are set in the config
-				v.conf.Launcher.Apps[index].Args = []string{"--srv", pk.Hex()}
+				v.conf.Launcher.Apps[index].Args = []string{"app", "skysocks-client", "--srv", pk.Hex()}
 			} else {
 				var pk cipher.PubKey
 				if err := pk.Set(v.GetSkysocksClientAddress()); err != nil {
 					return err
 				}
-				v.conf.Launcher.Apps[index].Args = []string{"--srv", pk.Hex()}
+				v.conf.Launcher.Apps[index].Args = []string{"app", "skysocks-client", "--srv", pk.Hex()}
 			}
 
 			// check process manager availability
@@ -920,7 +920,7 @@ func (v *Visor) DoCustomSetting(appName string, customSetting map[string]string)
 	}
 
 	for field, value := range customSetting {
-		if err := v.conf.UpdateAppArg(v.appL, appName, fmt.Sprintf("--%s", field), value); err != nil {
+		if err := v.conf.UpdateAppArg(v.appL, appName, field, value); err != nil {
 			return err
 		}
 	}

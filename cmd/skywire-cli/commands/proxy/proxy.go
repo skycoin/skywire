@@ -68,8 +68,9 @@ var startCmd = &cobra.Command{
 			}
 
 			arguments := map[string]string{}
-			arguments["srv"] = pubkey.String()
-			arguments["addr"] = addr
+			arguments["app"] = "skysocks-client"
+			arguments["--srv"] = pubkey.String()
+			arguments["--addr"] = addr
 
 			_, err = rpcClient.App(clientName)
 			if err == nil {
