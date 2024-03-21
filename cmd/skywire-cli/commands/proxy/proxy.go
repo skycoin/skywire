@@ -78,7 +78,7 @@ var startCmd = &cobra.Command{
 					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error occurs during set args to custom skysocks client"))
 				}
 			} else {
-				err = rpcClient.AddApp(clientName, "skysocks-client")
+				err = rpcClient.AddApp(clientName, "skywire")
 				if err != nil {
 					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error during add new app"))
 				}
