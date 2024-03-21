@@ -62,12 +62,14 @@ var startCmd = &cobra.Command{
 			rpcClient.StopApp("skysocks-client") //nolint
 		}
 
-		toutCtx, toutCancel := context.WithTimeout(context.Background(), time.Duration(startingTimeout)*time.Second)
-		ctx, cancel := cmdutil.SignalContext(toutCtx, &logrus.Logger{})
+		tCtx := context.Background() //nolint
+		if startingTimeout != 0 {
+			tCtx, _ = context.WithTimeout(context.Background(), time.Duration(startingTimeout)*time.Second) //nolint
+		}
+		ctx, cancel := cmdutil.SignalContext(tCtx, &logrus.Logger{})
 		defer cancel()
 		go func() {
 			<-ctx.Done()
-			toutCancel()
 			cancel()
 			rpcClient.KillApp(clientName) //nolint
 			fmt.Print("\nStopped!")
