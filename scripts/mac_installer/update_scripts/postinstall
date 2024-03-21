@@ -21,6 +21,6 @@ if [[ -L /usr/local/bin/skywire-cli ]]; then
   unlink /usr/local/bin/skywire-cli
 fi
 
-/Applications/Skywire.app/Contents/MacOS/skywire-bin cli config gen -bprio "${skywire_dir}"/skywire-config.json
+/Applications/Skywire.app/Contents/MacOS/skywire cli config gen -bprio "${skywire_dir}"/skywire-config.json
 chown "${USER}" "${skywire_dir}"/skywire-config.json
 
