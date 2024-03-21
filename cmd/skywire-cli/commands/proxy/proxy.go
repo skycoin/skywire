@@ -67,7 +67,6 @@ var startCmd = &cobra.Command{
 			tCtx, _ = context.WithTimeout(context.Background(), time.Duration(startingTimeout)*time.Second) //nolint
 		}
 		ctx, cancel := cmdutil.SignalContext(tCtx, &logrus.Logger{})
-		defer cancel()
 		go func() {
 			<-ctx.Done()
 			cancel()

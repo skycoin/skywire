@@ -102,7 +102,6 @@ var RootCmd = &cobra.Command{
 			setAppErr(appCl, err)
 			os.Exit(1)
 		}
-		var closeSignal bool
 		if runtime.GOOS == "windows" {
 			ipcClient, err := ipc.StartClient(visorconfig.SkysocksClientName, nil)
 			if err != nil {
@@ -110,10 +109,7 @@ var RootCmd = &cobra.Command{
 				print(fmt.Sprintf("Error creating ipc server for skysocks: %v\n", err))
 				os.Exit(1)
 			}
-			go func() {
-				client.ListenIPC(ipcClient)
-				closeSignal = true
-			}()
+			go client.ListenIPC(ipcClient)
 		} else {
 			termCh := make(chan os.Signal, 1)
 			signal.Notify(termCh, os.Interrupt)
@@ -123,7 +119,6 @@ var RootCmd = &cobra.Command{
 					print(fmt.Sprintf("%v\n", err))
 					os.Exit(1)
 				}
-				closeSignal = true
 			}()
 		}
 
@@ -134,14 +129,10 @@ var RootCmd = &cobra.Command{
 			go httpProxy(httpCtx, httpAddr, addr)
 		}
 		defer httpCancel()
-		for {
-			if err := client.ListenAndServe(addr); err != nil {
-				print(fmt.Sprintf("Error serving proxy client: %v\n", err))
-			}
-			if closeSignal {
-				break
-			}
+		if err := client.ListenAndServe(addr); err != nil {
+			print(fmt.Sprintf("Error serving proxy client: %v\n", err))
 		}
+		setAppStatus(appCl, appserver.AppDetailedStatusStopped)
 	},
 }
 
