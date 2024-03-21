@@ -28,7 +28,6 @@ var (
 	//	autoPeerIP           string
 	stopVisorWg          sync.WaitGroup //nolint:unused
 	launchBrowser        bool
-	syslogAddr           string
 	logger               = logging.MustGetLogger("skywire-visor") //nolint:unused
 	logLvl               string
 	pprofMode            string
@@ -125,8 +124,6 @@ func init() {
 	hiddenflags = append(hiddenflags, "pprofaddr")
 	RootCmd.Flags().StringVarP(&logTag, "logtag", "t", "skywire", "logging tag")
 	hiddenflags = append(hiddenflags, "logtag")
-	RootCmd.Flags().StringVarP(&syslogAddr, "syslog", "y", "", "syslog server address. E.g. localhost:514")
-	hiddenflags = append(hiddenflags, "syslog")
 	RootCmd.Flags().StringVarP(&completion, "completion", "z", "", "[ bash | zsh | fish | powershell ]")
 	hiddenflags = append(hiddenflags, "completion")
 	RootCmd.Flags().BoolVarP(&isStoreLog, "storelog", "l", false, "store all logs to file")
