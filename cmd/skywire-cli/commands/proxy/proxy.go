@@ -53,6 +53,13 @@ var startCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
 		}
 
+		// stop possible running proxy before start it again
+		if clientName != "" {
+			rpcClient.StopApp(clientName) //nolint
+		} else {
+			rpcClient.StopApp("skysocks-client") //nolint
+		}
+
 		if clientName != "" && pk != "" && addr != "" {
 			// add new app with -srv and -addr args, and if app was there just change -srv and -addr args and run it
 			err := pubkey.Set(pk)
