@@ -104,7 +104,7 @@ var RootCmd = &cobra.Command{
 		}
 		var closeSignal bool
 		if runtime.GOOS == "windows" {
-			ipcClient, err := ipc.StartClient(visorconfig.SkysocksName, nil)
+			ipcClient, err := ipc.StartClient(visorconfig.SkysocksClientName, nil)
 			if err != nil {
 				setAppErr(appCl, err)
 				print(fmt.Sprintf("Error creating ipc server for skysocks: %v\n", err))
