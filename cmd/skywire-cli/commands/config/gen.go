@@ -208,8 +208,10 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "svcconf")
 	genConfigCmd.Flags().BoolVar(&noDefaults, "nodefaults", false, "do not use hardcoded defaults for production / test services")
 	gHiddenFlags = append(gHiddenFlags, "nodefaults")
-	genConfigCmd.Flags().BoolVar(&snConfig, "sn", false, "generate config for route setup-node")
-	gHiddenFlags = append(gHiddenFlags, "sn")
+	genConfigCmd.Flags().BoolVar(&rsnConfig, "rsn", false, "generate config for route setup-node")
+	gHiddenFlags = append(gHiddenFlags, "rsn")
+	genConfigCmd.Flags().BoolVar(&tpsnConfig, "tpsn", false, "generate config for transport setup-node")
+	gHiddenFlags = append(gHiddenFlags, "tpsn")
 	genConfigCmd.Flags().StringVar(&ver, "version", scriptExecString("${VERSION}"), "custom version testing override\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "version")
 	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
@@ -378,6 +380,9 @@ var genConfigCmd = &cobra.Command{
 					}
 				}
 			}
+		}
+		if rsnConfig && tpsnConfig {
+			log.Fatal("use of mutually exclusive flags --rsn and --tpsn")
 		}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
@@ -1025,8 +1030,14 @@ var genConfigCmd = &cobra.Command{
 			if err != nil {
 				log.WithError(err).Fatal("Failed to marshal config to indented JSON")
 			}
-			if snConfig {
+			if rsnConfig {
 				jsonData, err = script.Echo(string(jsonData)).JQ("{public_key: .pk, secret_key: .sk, dmsg: {discovery: .dmsg.discovery, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}, transport_discovery: .transport.discovery, log_level: .log_level}").Bytes()
+				if err != nil {
+					log.Fatalf("Failed to convert config to setup-node config format: %v", err)
+				}
+			}
+			if tpsnConfig {
+				jsonData, err = script.Echo(string(jsonData)).JQ("{public_key: .pk, secret_key: .sk, dmsg: {discovery: .dmsg.discovery, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}, log_level: .log_level}").Bytes()
 				if err != nil {
 					log.Fatalf("Failed to convert config to setup-node config format: %v", err)
 				}
@@ -1042,10 +1053,18 @@ var genConfigCmd = &cobra.Command{
 		if err != nil {
 			log.WithError(err).Fatal("Failed to marshal config to indented JSON")
 		}
-		if snConfig {
-			j, err = script.Echo(string(j)).JQ("{public_key: .pk, secret_key: .sk, dmsg: {discovery: .dmsg.discovery, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}, transport_discovery: .transport.discovery, log_level: .log_level}").Bytes()
-			if err != nil {
-				log.Fatalf("Failed to convert config to setup-node config format: %v", err)
+		if rsnConfig || tpsnConfig {
+			if rsnConfig {
+				j, err = script.Echo(string(j)).JQ("{public_key: .pk, secret_key: .sk, dmsg: {discovery: .dmsg.discovery, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}, transport_discovery: .transport.discovery, log_level: .log_level}").Bytes()
+				if err != nil {
+					log.Fatalf("Failed to convert config to setup-node config format: %v", err)
+				}
+			}
+			if tpsnConfig {
+				j, err = script.Echo(string(j)).JQ("{public_key: .pk, secret_key: .sk, dmsg: {discovery: .dmsg.discovery, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}, log_level: .log_level}").Bytes()
+				if err != nil {
+					log.Fatalf("Failed to convert config to setup-node config format: %v", err)
+				}
 			}
 			var data any
 			if err = json.Unmarshal(j, &data); err != nil {
