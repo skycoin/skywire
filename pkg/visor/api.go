@@ -543,7 +543,7 @@ func (v *Visor) StartVPNClient(pk cipher.PubKey) error {
 			// we set the args in memory and pass it in `v.appL.StartApp`
 			// unlike the api method `StartApp` where `nil` is passed in `v.appL.StartApp` as args
 			// but the args are set in the config
-			v.conf.Launcher.Apps[index].Args = []string{"--srv", pk.Hex()}
+			v.conf.Launcher.Apps[index].Args = []string{"app", "vpn-client", "--srv", pk.Hex()}
 			maker := vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.STCPRRemoteAddrs())
 			envs, err = maker()
 			if err != nil {
