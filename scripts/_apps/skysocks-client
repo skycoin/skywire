@@ -1,2 +1,0 @@
-#!/bin/bash
-go run ../../cmd/apps/skysocks-client/skysocks-client.go

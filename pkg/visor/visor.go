@@ -6,7 +6,6 @@ import (
 	"embed"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"net/http"
 	"strings"
@@ -29,7 +28,6 @@ import (
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
-	"github.com/skycoin/skywire/pkg/syslog"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
@@ -115,6 +113,9 @@ type Visor struct {
 	pingConnMx   *sync.Mutex
 	pingPcktSize int
 	logStorePath string
+
+	survey     visorconfig.Survey
+	surveyLock *sync.RWMutex
 }
 
 // todo: consider moving module closing to the module system
@@ -251,6 +252,8 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		pingConns:            make(map[cipher.PubKey]ping),
 		pingConnMx:           new(sync.Mutex),
 		allowedPorts:         make(map[int]bool),
+		survey:               visorconfig.Survey{},
+		surveyLock:           new(sync.RWMutex),
 	}
 	v.isServicesHealthy.init()
 
@@ -341,15 +344,6 @@ func (v *Visor) isStunReady() bool {
 
 func initLogger() *logging.MasterLogger {
 	mLog := logging.NewMasterLogger()
-	if syslogAddr != "" {
-		hook, err := syslog.SetupHook(syslogAddr, logTag)
-		if err != nil {
-			mLog.WithError(err).Error("Failed to connect to the syslog daemon.")
-		} else {
-			mLog.AddHook(hook)
-			mLog.Out = io.Discard
-		}
-	}
 	return mLog
 }
 

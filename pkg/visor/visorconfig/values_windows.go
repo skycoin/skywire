@@ -16,7 +16,7 @@ import (
 // UserConfig contains installation paths for running skywire as the user
 func UserConfig() skyenv.PkgConfig {
 	usrConfig := skyenv.PkgConfig{
-		LauncherBinPath: "C:/Program Files/Skywire/apps",
+		LauncherBinPath: "C:/Program Files/Skywire",
 		LocalPath:       HomePath() + "/.skywire/local",
 		Hypervisor: skyenv.Hypervisor{
 			DbPath:     HomePath() + "/.skywire/users.db",
@@ -39,6 +39,8 @@ type Survey struct {
 	Memory         *ghw.MemoryInfo  `json:"ghw_memoryinfo,omitempty"`
 	UUID           uuid.UUID        `json:"uuid,omitempty"`
 	SkywireVersion string           `json:"skywire_version,omitempty"`
+	ServicesURLs   Services         `json:"services,omitempty"`
+	DmsgServers    []string         `json:"dmsg_servers,omitempty"`
 }
 
 // SystemSurvey returns system survey

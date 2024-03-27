@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"mime"
 	"net"
 	"net/http"
@@ -403,7 +404,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 		}
 	}
 
-	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, whitelistedPKs, v.conf.PK, printLog)
+	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, whitelistedPKs, &v.survey, printLog)
 
 	lis, err := dmsgC.Listen(visorconfig.DmsgHTTPPort)
 	if err != nil {
@@ -449,7 +450,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 }
 
 func initSystemSurvey(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
-	go visorconfig.GenerateSurvey(v.conf, log, true)
+	go GenerateSurvey(v, log, true)
 	return nil
 }
 
@@ -1601,7 +1602,10 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 		if err != nil {
 			return nil, fmt.Errorf("error getting AvailableServers: %w", err)
 		}
-
+		// randomize dmsg servers list
+		rand.Shuffle(len(servers), func(i, j int) {
+			servers[i], servers[j] = servers[j], servers[i]
+		})
 		for _, server := range servers {
 			delegatedServers = append(delegatedServers, server.Static)
 		}
@@ -1662,13 +1666,19 @@ type ipAPI struct {
 
 // GetIP used for getting current IP of visor
 func GetIP() (string, error) {
-	req, err := http.Get("http://ip.skycoin.com")
-	if err != nil {
-		return "", err
-	}
-	defer req.Body.Close() // nolint
+	var resp *http.Response
+	var err error
 
-	body, err := io.ReadAll(req.Body)
+	resp, err = http.Get("https://ip.skycoin.com/")
+	if err != nil {
+		resp, err = http.Get("https://ip.plaintext.ir/")
+		if err != nil {
+			return "", err
+		}
+	}
+	defer resp.Body.Close() // nolint
+
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}

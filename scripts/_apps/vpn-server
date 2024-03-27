@@ -1,2 +1,0 @@
-#!/bin/bash
-sudo go run ../../cmd/apps/vpn-server/vpn-server.go

@@ -18,7 +18,7 @@ function CleanStage
 function InstallWix
 {
     Set-Location .\scripts\win_installer
-    Invoke-WebRequest "https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311-binaries.zip" -o wix.zip
+    Invoke-WebRequest "https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311-binaries.zip" -OutFile wix.zip
     Expand-Archive wix.zip
     Set-Location ../../
 }
@@ -51,12 +51,12 @@ function BuildInstaller($arch)
         $fileName = "skywire-v$version-windows-$arch"
         $msiName = "skywire-installer-v$version-windows-$arch"
         $downloadURL = "https://github.com/skycoin/skywire/releases/download/v$version/$filename.zip"
-        Invoke-WebRequest $downloadURL -o archive.zip -ErrorAction Stop
+        Invoke-WebRequest $downloadURL -OutFile archive.zip -ErrorAction Stop
     } else {
         $fileName = "skywire-$version-windows-$arch"
         $msiName = "skywire-installer-$version-windows-$arch"
         $downloadURL = "https://github.com/skycoin/skywire/releases/download/$version/$filename.zip"
-        Invoke-WebRequest $downloadURL -o archive.zip
+        Invoke-WebRequest $downloadURL -OutFile archive.zip
     }
 
     Write-Output "#       3. Extracing Downloaded Archive File...          #"
@@ -65,15 +65,13 @@ function BuildInstaller($arch)
     Write-Output "#       4. Preparing Environment for Wix...              #"
     Set-Location .\scripts\win_installer
     mkdir -p ".\build\apps" > $null
-    Move-Item ..\..\archive\skywire-visor.exe .\build\skywire-visor.exe
-    Move-Item ..\..\archive\skywire-cli.exe .\build\skywire-cli.exe
-    Move-Item ..\..\archive\apps\vpn-client.exe .\build\apps\vpn-client.exe
-    Move-Item ..\..\archive\apps\skysocks-client.exe .\build\apps\skysocks-client.exe
+    Move-Item ..\..\archive\skywire.exe .\build\skywire.exe
     Copy-Item ..\..\archive\dmsghttp-config.json .\build\dmsghttp-config.json
+    Copy-Item ..\..\archive\services-config.json .\build\services-config.json
     Copy-Item skywire.bat .\build\skywire.bat
     New-Item new.update  > $null
     Move-Item new.update .\build\new.update
-    Invoke-WebRequest "https://www.wintun.net/builds/wintun-0.14.1.zip" -o wintun.zip
+    Invoke-WebRequest "https://www.wintun.net/builds/wintun-0.14.1.zip" -OutFile wintun.zip
     Expand-Archive wintun.zip
     Copy-Item .\wintun\wintun\bin\$wintun_arch\wintun.dll .\build\wintun.dll
 

@@ -1,7 +1,9 @@
 // Package skyenv defines variables and constants
 package skyenv
 
-import "time"
+import (
+	"time"
+)
 
 const (
 	// config file constants
@@ -10,6 +12,8 @@ const (
 	ConfigName = "skywire-config.json"
 	// DMSGHTTPName is the default dmsghttp config name
 	DMSGHTTPName = "dmsghttp-config.json"
+	// SERVICESName is the default services config name - should be the same contents as conf.skywire.skycoin.com or hardcoded fallback in skywire-utilities/pkg/skyenv
+	SERVICESName = "services-config.json"
 
 	// Dmsg port constants.
 	// TODO(evanlinjin): Define these properly. These are currently random.
@@ -76,7 +80,7 @@ const (
 
 	AppSrvAddr                = "localhost:5505" // AppSrvAddr ...
 	ServiceDiscUpdateInterval = time.Minute      // ServiceDiscUpdateInterval ...
-	AppBinPath                = "./apps"         // AppBinPath ...
+	AppBinPath                = "./"             // AppBinPath ...
 	LogLevel                  = "info"           // LogLevel ...
 
 	// Routing constants
@@ -112,11 +116,6 @@ const (
 // SkywireConfig returns the full path to the package config
 func SkywireConfig() string {
 	return SkywirePath + "/" + ConfigJSON
-}
-
-// SkyEnvs returns the full path to the environmental variable file
-func SkyEnvs() string {
-	return SkyenvFilePath + "/" + SkyenvFile
 }
 
 // PkgConfig struct contains paths specific to the installation

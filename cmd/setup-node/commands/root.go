@@ -5,10 +5,13 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"log"
 	"os"
+	"path/filepath"
+	"strings"
 
-	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
@@ -18,26 +21,25 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
-	"github.com/skycoin/skywire/pkg/syslog"
 )
 
 var (
 	metricsAddr  string
-	syslogAddr   string
 	tag          string
 	cfgFromStdin bool
 )
 
 func init() {
 	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
-	RootCmd.Flags().StringVar(&syslogAddr, "syslog", "", "syslog server address. E.g. localhost:514")
 	RootCmd.Flags().StringVar(&tag, "tag", "setup_node", "logging tag")
 	RootCmd.Flags().BoolVarP(&cfgFromStdin, "stdin", "i", false, "read config from STDIN")
 }
 
 // RootCmd is the root command for setup node
 var RootCmd = &cobra.Command{
-	Use:   "setup-node [config.json]",
+	Use: func() string {
+		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", ""))+" [config.json]", " ")[0]
+	}(),
 	Short: "Route Setup Node for skywire",
 	Long: `
 	┌─┐┌─┐┌┬┐┬ ┬┌─┐   ┌┐┌┌─┐┌┬┐┌─┐
@@ -50,15 +52,6 @@ var RootCmd = &cobra.Command{
 
 		if _, err := buildinfo.Get().WriteTo(mLog.Out); err != nil {
 			mLog.Printf("Failed to output build info: %v", err)
-		}
-
-		if syslogAddr != "" {
-			hook, err := syslog.SetupHook(syslogAddr, tag)
-			if err != nil {
-				log.Fatalf("Error setting up syslog: %v", err)
-			}
-
-			logging.AddHook(hook)
 		}
 
 		var rdr io.Reader
@@ -124,20 +117,7 @@ func prepareMetrics(log logrus.FieldLogger) setupmetrics.Metrics {
 
 // Execute executes root CLI command.
 func Execute() {
-	cc.Init(&cc.Config{
-		RootCmd:         RootCmd,
-		Headings:        cc.HiBlue + cc.Bold,
-		Commands:        cc.HiBlue + cc.Bold,
-		CmdShortDescr:   cc.HiBlue,
-		Example:         cc.HiBlue + cc.Italic,
-		ExecName:        cc.HiBlue + cc.Bold,
-		Flags:           cc.HiBlue + cc.Bold,
-		FlagsDataType:   cc.HiBlue,
-		FlagsDescr:      cc.HiBlue,
-		NoExtraNewlines: true,
-		NoBottomNewline: true,
-	})
 	if err := RootCmd.Execute(); err != nil {
-		panic(err)
+		log.Fatal("Failed to execute command: ", err)
 	}
 }

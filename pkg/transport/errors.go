@@ -1,7 +1,9 @@
 // Package transport pkg/transport/errors.go
 package transport
 
-import "errors"
+import (
+	"errors"
+)
 
 // ErrWrongNetwork is returned if connection's network differs from
 // the one transport is awaiting.

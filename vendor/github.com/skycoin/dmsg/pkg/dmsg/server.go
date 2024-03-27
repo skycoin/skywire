@@ -21,6 +21,7 @@ type ServerConfig struct {
 	MaxSessions    int
 	UpdateInterval time.Duration
 	LimitIP        int
+	AuthPassphrase string
 }
 
 // DefaultServerConfig returns the default server config.
@@ -54,6 +55,8 @@ type Server struct {
 	limitIP         int
 	ipCounter       map[string]int
 	ipCounterLocker sync.RWMutex
+
+	authPassphrase string
 }
 
 // NewServer creates a new dmsg server entity.
@@ -74,13 +77,14 @@ func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Serv
 	s.addrDone = make(chan struct{})
 	s.maxSessions = conf.MaxSessions
 	s.setSessionCallback = func(ctx context.Context) error {
-		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions)
+		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions, conf.AuthPassphrase)
 	}
 	s.delSessionCallback = func(ctx context.Context) error {
-		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions)
+		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions, conf.AuthPassphrase)
 	}
 	s.ipCounter = make(map[string]int)
 	s.limitIP = conf.LimitIP
+	s.authPassphrase = conf.AuthPassphrase
 	return s
 }
 
@@ -186,13 +190,13 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 
 func (s *Server) startUpdateEntryLoop(ctx context.Context) error {
 	err := netutil.NewDefaultRetrier(s.log).Do(ctx, func() error {
-		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions)
+		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions, s.authPassphrase)
 	})
 	if err != nil {
 		return err
 	}
 
-	go s.updateServerEntryLoop(ctx, s.AdvertisedAddr(), s.maxSessions)
+	go s.updateServerEntryLoop(ctx, s.AdvertisedAddr(), s.maxSessions, s.authPassphrase)
 	return nil
 }
 

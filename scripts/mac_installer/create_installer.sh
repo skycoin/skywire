@@ -71,21 +71,18 @@ function build_installer() {
   cp ${mac_script_dir}/Entitlements.plist ${installer_build_dir}/entitlements.plist
 
   cp ${mac_script_dir}/icon.icns ${installer_package_dir}/Contents/Resources/icon.icns
-  mv ./skywire-visor ${installer_package_dir}/Contents/MacOS/skywire-visor
-  mv ./skywire-cli ${installer_package_dir}/Contents/MacOS/skywire-cli
-  mv ./apps/vpn-client ${installer_package_dir}/Contents/MacOS/apps/vpn-client
-  mv ./apps/skysocks-client ${installer_package_dir}/Contents/MacOS/apps/skysocks-client
-  mv ./apps/skychat ${installer_package_dir}/Contents/MacOS/apps/skychat
+  mv ./skywire ${installer_package_dir}/Contents/MacOS/skywire
   cp ./dmsghttp-config.json ${installer_package_dir}/Contents/MacOS/dmsghttp-config.json
+  cp ./services-config.json ${installer_package_dir}/Contents/MacOS/services-config.json
 
-  cat <<EOF >${installer_package_dir}/Contents/MacOS/Skywire
+  cat <<EOF >${installer_package_dir}/Contents/MacOS/SkywireLauncher
 #!/bin/bash
 
-osascript -e "do shell script \"/Applications/Skywire.app/Contents/MacOS/skywire-visor -c '/Users/\${USER}/Library/Application Support/Skywire/skywire-config.json' --systray > /Users/\${USER}/Library/Logs/skywire/visor.log\" with administrator privileges"
+osascript -e "do shell script \"/Applications/Skywire.app/Contents/MacOS/skywire visor -c '/Users/\${USER}/Library/Application Support/Skywire/skywire-config.json' --systray > /Users/\${USER}/Library/Logs/skywire/visor.log\" with administrator privileges"
 
 EOF
 
-  chmod +x ${installer_package_dir}/Contents/MacOS/Skywire
+  chmod +x ${installer_package_dir}/Contents/MacOS/SkywireLauncher
 
   # https://stackoverflow.com/a/21210966
   if [ "$sign_binary" == true ]; then

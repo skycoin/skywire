@@ -43,14 +43,12 @@ exit 0
 	}
 
 	uninstallScript := `
-if pgrep vpn-client; then skywire-cli visor stop-app vpn-client; fi
 if pgrep skywire; then pkill -f skywire; fi
 pkgutil --forget ` + osxServiceIdentifier + `
 pkgutil --forget com.skycoin.skywire.updater
 pkgutil --forget com.skycoin.skywire.remover
 
 rm -rf ` + filepath.Join(os.Getenv("HOME"), "Library", "Logs", "skywire") + `
-unlink /usr/local/bin/skywire-cli
 rm -rf /Applications/Skywire.app
 `
 

@@ -186,6 +186,11 @@ func (rc *rpcClient) StopApp(appName string) error {
 	return rc.Call("StopApp", &appName, &struct{}{})
 }
 
+// KillApp calls KillApp.
+func (rc *rpcClient) KillApp(appName string) error {
+	return rc.Call("KillApp", &appName, &struct{}{})
+}
+
 // StartVPNClient calls StartVPNClient.
 func (rc *rpcClient) StartVPNClient(pk cipher.PubKey) error {
 	return rc.Call("StartVPNClient", &pk, &struct{}{})
@@ -299,7 +304,7 @@ func (rc *rpcClient) SetAppDNS(appName string, dnsAddr string) error {
 }
 
 // DoCustomSetting implements API.
-func (rc *rpcClient) DoCustomSetting(appName string, customSetting map[string]string) error {
+func (rc *rpcClient) DoCustomSetting(appName string, customSetting map[string]any) error {
 	return rc.Call("DoCustomSetting", &SetAppMapIn{
 		AppName: appName,
 		Val:     customSetting,
@@ -392,6 +397,11 @@ func (rc *rpcClient) AddTransport(remote cipher.PubKey, tpType string, timeout t
 // RemoveTransport calls RemoveTransport.
 func (rc *rpcClient) RemoveTransport(tid uuid.UUID) error {
 	return rc.Call("RemoveTransport", &tid, &struct{}{})
+}
+
+// RemoveAllTransports calls RemoveAllTransports.
+func (rc *rpcClient) RemoveAllTransports() error {
+	return rc.Call("RemoveAllTransports", &struct{}{}, &struct{}{})
 }
 
 func (rc *rpcClient) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error) {
@@ -862,6 +872,11 @@ func (*mockRPCClient) StopApp(string) error {
 	return nil
 }
 
+// KillApp implements API.
+func (*mockRPCClient) KillApp(string) error {
+	return nil
+}
+
 // StartVPNClient implements API.
 func (*mockRPCClient) StartVPNClient(cipher.PubKey) error {
 	return nil
@@ -1039,7 +1054,7 @@ func (mc *mockRPCClient) SetAppDNS(string, string) error {
 }
 
 // DoCustomSetting implents API.
-func (mc *mockRPCClient) DoCustomSetting(appName string, customSetting map[string]string) error { //nolint:all
+func (mc *mockRPCClient) DoCustomSetting(appName string, customSetting map[string]any) error { //nolint:all
 	return mc.do(true, func() error {
 		for i := range mc.o.Apps {
 			if mc.o.Apps[i].Name == appName {
@@ -1155,6 +1170,14 @@ func (mc *mockRPCClient) RemoveTransport(tid uuid.UUID) error {
 			}
 		}
 		return fmt.Errorf("transport of id '%s' is not found", tid)
+	})
+}
+
+// RemoveAllTransports implements API.
+func (mc *mockRPCClient) RemoveAllTransports() error {
+	return mc.do(true, func() error {
+		mc.o.Transports = []*TransportSummary{}
+		return nil
 	})
 }
 
