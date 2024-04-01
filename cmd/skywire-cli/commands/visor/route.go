@@ -45,8 +45,6 @@ var (
 func init() {
 	RootCmd.AddCommand(routeCmd)
 	routeCmd.AddCommand(
-		lsRulesCmd,
-		ruleCmd,
 		rmRuleCmd,
 		addRuleCmd,
 	)
@@ -75,7 +73,8 @@ func init() {
 	fwdRuleCmd.Flags().StringVarP(&rPK, "rpk", "p", "", "remote pk")
 	appRuleCmd.Flags().StringVarP(&rPt, "rpt", "q", "", "remote port")
 	fwdRuleCmd.Flags().StringVarP(&rPt, "rpt", "q", "", "remote port")
-	lsRulesCmd.Flags().BoolVarP(&showNextRid, "nrid", "n", false, "display the next available route id")
+	routeCmd.Flags().BoolVarP(&showNextRid, "nrid", "n", false, "display the next available route id")
+	routeCmd.Flags().StringVarP(&rID, "rid", "i", "", "show routing rule matching route ID")
 	//TODO
 	//rmRuleCmd.Flags().BoolVarP(&removeAll, "all", "a", false, "remove all routing rules")
 }
@@ -84,35 +83,16 @@ var routeCmd = &cobra.Command{
 	Use:   "route",
 	Short: "View and set rules",
 	Long:  "\n    View and set routing rules",
-}
-
-var ruleCmd = &cobra.Command{
-	Use:   "rule <route-id>",
-	Short: "Return routing rule matching route ID",
-	Long:  "\n    Return routing rule matching route ID",
-	Args:  cobra.MinimumNArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		id, err := strconv.ParseUint(args[0], 10, 32)
-		internal.Catch(cmd.Flags(), err)
-		rpcClient, err := clirpc.Client(cmd.Flags())
-		if err != nil {
-			os.Exit(1)
-		}
-		rule, err := rpcClient.RoutingRule(routing.RouteID(id))
-		internal.Catch(cmd.Flags(), err)
-
-		printRoutingRules(cmd.Flags(), rule)
-	},
-}
-
-var lsRulesCmd = &cobra.Command{
-	Use:   "ls",
-	Short: "List routing rules",
-	Long:  "\n    List routing rules",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		if rID != "" {
+			rule, err := rpcClient.RoutingRule(routing.RouteID(parseUint(cmd.Flags(), "route id flag value -i --rid", rID, 32)))
+			internal.Catch(cmd.Flags(), err)
+			printRoutingRules(cmd.Flags(), rule)
+			return
 		}
 		rules, err := rpcClient.RoutingRules()
 		internal.Catch(cmd.Flags(), err)
