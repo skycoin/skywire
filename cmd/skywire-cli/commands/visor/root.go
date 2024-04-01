@@ -9,7 +9,6 @@ import (
 )
 
 var logger = logging.MustGetLogger("skywire-cli")
-var removeAll bool
 
 func init() {
 	RootCmd.PersistentFlags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
