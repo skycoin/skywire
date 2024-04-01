@@ -11,6 +11,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -21,11 +22,25 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
-var routeCmd = &cobra.Command{
-	Use:   "route",
-	Short: "View and set rules",
-	Long:  "\n    View and set routing rules",
-}
+var (
+	nrID        string
+	ntpID       string
+	rID         string
+	lPK         string
+	lPt         string
+	rPK         string
+	rPt         string
+	rule        routing.Rule
+	routeID     routing.RouteID
+	nextRouteID routing.RouteID
+	nextTpID    uuid.UUID
+	localPK     cipher.PubKey
+	localPort   routing.Port
+	remotePK    cipher.PubKey
+	remotePort  routing.Port
+	keepAlive   time.Duration
+	showNextRid bool
+)
 
 func init() {
 	RootCmd.AddCommand(routeCmd)
@@ -35,28 +50,46 @@ func init() {
 		rmRuleCmd,
 		addRuleCmd,
 	)
+	addRuleCmd.PersistentFlags().DurationVarP(&keepAlive, "keep-alive", "a", router.DefaultRouteKeepAlive, "timeout for rule expiration")
+	addRuleCmd.AddCommand(
+		appRuleCmd,
+		intFwdRuleCmd,
+		fwdRuleCmd,
+	)
+	appRuleCmd.Flags().SortFlags = false
+	fwdRuleCmd.Flags().SortFlags = false
+	intFwdRuleCmd.Flags().SortFlags = false
+
+	appRuleCmd.Flags().StringVarP(&rID, "rid", "i", "", "route id")
+	intFwdRuleCmd.Flags().StringVarP(&rID, "rid", "i", "", "route id")
+	fwdRuleCmd.Flags().StringVarP(&rID, "rid", "i", "", "route id")
+	intFwdRuleCmd.Flags().StringVarP(&nrID, "nrid", "j", "", "next route id")
+	fwdRuleCmd.Flags().StringVarP(&nrID, "nrid", "j", "", "next route id")
+	intFwdRuleCmd.Flags().StringVarP(&ntpID, "tpid", "k", "", "next transport id")
+	fwdRuleCmd.Flags().StringVarP(&ntpID, "tpid", "k", "", "next transport id")
+	appRuleCmd.Flags().StringVarP(&lPK, "lpk", "l", "", "local public key")
+	fwdRuleCmd.Flags().StringVarP(&lPK, "lpk", "l", "", "local public key")
+	appRuleCmd.Flags().StringVarP(&lPt, "lpt", "m", "", "local port")
+	fwdRuleCmd.Flags().StringVarP(&lPt, "lpt", "m", "", "local port")
+	appRuleCmd.Flags().StringVarP(&rPK, "rpk", "p", "", "remote pk")
+	fwdRuleCmd.Flags().StringVarP(&rPK, "rpk", "p", "", "remote pk")
+	appRuleCmd.Flags().StringVarP(&rPt, "rpt", "q", "", "remote port")
+	fwdRuleCmd.Flags().StringVarP(&rPt, "rpt", "q", "", "remote port")
+	lsRulesCmd.Flags().BoolVarP(&showNextRid, "nrid", "n", false, "display the next available route id")
+	//TODO
+	//rmRuleCmd.Flags().BoolVarP(&removeAll, "all", "a", false, "remove all routing rules")
 }
 
-var lsRulesCmd = &cobra.Command{
-	Use:   "ls-rules",
-	Short: "List routing rules",
-	Long:  "\n    List routing rules",
-	Run: func(cmd *cobra.Command, _ []string) {
-		rpcClient, err := clirpc.Client(cmd.Flags())
-		if err != nil {
-			os.Exit(1)
-		}
-		rules, err := rpcClient.RoutingRules()
-		internal.Catch(cmd.Flags(), err)
-
-		printRoutingRules(cmd.Flags(), rules...)
-	},
+var routeCmd = &cobra.Command{
+	Use:   "route",
+	Short: "View and set rules",
+	Long:  "\n    View and set routing rules",
 }
 
 var ruleCmd = &cobra.Command{
 	Use:   "rule <route-id>",
-	Short: "Return routing rule by route ID key",
-	Long:  "\n    Return routing rule by route ID key",
+	Short: "Return routing rule matching route ID",
+	Long:  "\n    Return routing rule matching route ID",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		id, err := strconv.ParseUint(args[0], 10, 32)
@@ -72,12 +105,27 @@ var ruleCmd = &cobra.Command{
 	},
 }
 
-func init() {
-	rmRuleCmd.Flags().BoolVarP(&removeAll, "all", "a", false, "remove all routing rules")
+var lsRulesCmd = &cobra.Command{
+	Use:   "ls",
+	Short: "List routing rules",
+	Long:  "\n    List routing rules",
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		rules, err := rpcClient.RoutingRules()
+		internal.Catch(cmd.Flags(), err)
+		if showNextRid {
+			fmt.Println(getNextAvailableRouteID(rules...))
+		} else {
+			printRoutingRules(cmd.Flags(), rules...)
+		}
+	},
 }
 
 var rmRuleCmd = &cobra.Command{
-	Use:   "rm-rule <route-id>",
+	Use:   "rm <route-id>",
 	Short: "Remove routing rule",
 	Long:  "\n    Remove routing rule",
 	//Args:  cobra.MinimumNArgs(1),
@@ -101,120 +149,39 @@ var rmRuleCmd = &cobra.Command{
 }
 
 var addRuleCmd = &cobra.Command{
-	Use:   "add-rule ( app | fwd | intfwd )",
+	Use:   "add ( app | fwd | intfwd )",
 	Short: "Add routing rule",
 	Long:  "\n    Add routing rule",
 }
 
-var keepAlive time.Duration
-
-var (
-	nrID  string
-	ntpID string
-	rID   string
-	lPK   string
-	lPt   string
-	rPK   string
-	rPt   string
-)
-
-//skywire-cli visor route add-rule app
-
-func init() {
-	addRuleCmd.PersistentFlags().DurationVar(&keepAlive, "keep-alive", router.DefaultRouteKeepAlive, "timeout for rule expiration")
-	addRuleCmd.AddCommand(
-		addAppRuleCmd,
-	)
-	addAppRuleCmd.Flags().SortFlags = false
-	addAppRuleCmd.Flags().StringVarP(&rID, "rid", "i", "", "route id")
-	addAppRuleCmd.Flags().StringVarP(&lPK, "lpk", "l", "", "local public key")
-	addAppRuleCmd.Flags().StringVarP(&lPt, "lpt", "m", "", "local port")
-	addAppRuleCmd.Flags().StringVarP(&rPK, "rpk", "p", "", "remote pk")
-	addAppRuleCmd.Flags().StringVarP(&rPt, "rpt", "q", "", "remote port")
-}
-
-var addAppRuleCmd = &cobra.Command{
-	Use:   "app \\\n               <route-id> \\\n               <local-pk> \\\n               <local-port> \\\n               <remote-pk> \\\n               <remote-port> \\\n               || ",
+var appRuleCmd = &cobra.Command{
+	Use:   "a",
 	Short: "Add app/consume routing rule",
 	Long:  "\n    Add app/consume routing rule",
-	Args: func(_ *cobra.Command, args []string) error {
-		if rID == "" && lPK == "" && lPt == "" && rPK == "" && rPt == "" {
-			if len(args) > 0 {
-				if len(args[0:]) == 5 {
-					return nil
-				}
-				return errors.New("expected 5 args after 'app'")
-			}
-			return errors.New("expected 5 args after 'app'")
+	PreRun: func(cmd *cobra.Command, _ []string) {
+		if rID == "" {
+			internal.PrintFatalError(cmd.Flags(), errors.New("missing route id flag value -i --rid"))
 		}
-		return nil
+		if lPK == "" {
+			internal.PrintFatalError(cmd.Flags(), errors.New("missing local public key flag value -l --lpk"))
+		}
+		if lPt == "" {
+			internal.PrintFatalError(cmd.Flags(), errors.New("missing local port flag value -m --lpt"))
+		}
+		if rPK == "" {
+			internal.PrintFatalError(cmd.Flags(), errors.New("missing remote pk flag value -p --rpk"))
+		}
+		if rPt == "" {
+			internal.PrintFatalError(cmd.Flags(), errors.New("missing remote port flag value -q --rpt"))
+		}
 	},
-	Run: func(cmd *cobra.Command, args []string) {
-		var (
-			rule       routing.Rule
-			routeID    routing.RouteID
-			localPK    cipher.PubKey
-			localPort  routing.Port
-			remotePK   cipher.PubKey
-			remotePort routing.Port
-		)
-		//use args if flags are empty strings
-		if rID == "" && lPK == "" && lPt == "" && rPK == "" && rPt == "" {
-			routeID = routing.RouteID(parseUint(cmd.Flags(), "route-id", args[0], 32))
-			localPK = internal.ParsePK(cmd.Flags(), "local-pk", args[1])
-			localPort = routing.Port(parseUint(cmd.Flags(), "local-port", args[2], 16))
-			remotePK = internal.ParsePK(cmd.Flags(), "remote-pk", args[3])
-			remotePort = routing.Port(parseUint(cmd.Flags(), "remote-port", args[4], 16))
-		} else {
-			//the presence of every flag is enforced on an individual basis
-			if rID != "" {
-				i, err := strconv.ParseUint(rID, 10, 32)
-				if err != nil {
-					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse <%s>: %v", rID, err))
-				}
-				routeID = routing.RouteID(i)
-			} else {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("required flag not specified"))
-			}
-
-			if lPK != "" {
-				internal.Catch(cmd.Flags(), localPK.Set(lPK))
-			} else {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("required flag not specified"))
-			}
-
-			if lPt != "" {
-				i, err := strconv.ParseUint(lPt, 10, 16)
-				if err != nil {
-					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse <%s>: %v", lPt, err))
-				}
-				localPort = routing.Port(i)
-			} else {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("required flag not specified"))
-			}
-
-			if rPK != "" {
-				internal.Catch(cmd.Flags(), remotePK.Set(rPK))
-			} else {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("required flag not specified"))
-			}
-
-			if rPt != "" {
-				i, err := strconv.ParseUint(rPt, 10, 16)
-				if err != nil {
-					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse <%s>: %v", rPt, err))
-				}
-				localPort = routing.Port(i)
-			} else {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("required flag not specified"))
-			}
-		}
-
+	Run: func(cmd *cobra.Command, _ []string) {
+		routeID = routing.RouteID(parseUint(cmd.Flags(), "route id flag value -i --rid", rID, 32))
+		localPK = internal.ParsePK(cmd.Flags(), "local public key flag value -l --lpk", lPK)
+		localPort = routing.Port(parseUint(cmd.Flags(), "local port flag value -m --lpt", lPt, 16))
+		remotePK = internal.ParsePK(cmd.Flags(), "remote pk flag value -p --rpk", rPK)
+		remotePort = routing.Port(parseUint(cmd.Flags(), "remote port flag value -q --rpt", rPt, 16))
 		rule = routing.ConsumeRule(keepAlive, routeID, localPK, remotePK, localPort, remotePort)
-		var rIDKey routing.RouteID
-		if rule != nil {
-			rIDKey = rule.KeyRouteID()
-		}
 
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -225,58 +192,49 @@ var addAppRuleCmd = &cobra.Command{
 		output := struct {
 			RoutingRuleKey routing.RouteID `json:"routing_route_key"`
 		}{
-			RoutingRuleKey: rIDKey,
+			RoutingRuleKey: routeID,
 		}
 
-		internal.PrintOutput(cmd.Flags(), output, fmt.Sprintf("Routing Rule Key: %v\n", rIDKey))
+		internal.PrintOutput(cmd.Flags(), output, fmt.Sprintf("Routing Rule Key: %v\n", routeID))
 	},
 }
 
-//skywire-cli visor route add-rule fwd
-
-func init() {
-	addRuleCmd.AddCommand(
-		addFwdRuleCmd,
-	)
-	addFwdRuleCmd.Flags().SortFlags = false
-	addFwdRuleCmd.Flags().StringVarP(&rID, "rid", "i", "", "route id")
-	addFwdRuleCmd.Flags().StringVarP(&nrID, "nrid", "j", "", "next route id")
-	addFwdRuleCmd.Flags().StringVarP(&ntpID, "ntpid", "k", "", "next transport id")
-	addFwdRuleCmd.Flags().StringVarP(&lPK, "lpk", "l", "", "local public key")
-	addFwdRuleCmd.Flags().StringVarP(&lPt, "lpt", "m", "", "local port")
-	addFwdRuleCmd.Flags().StringVarP(&rPK, "rpk", "p", "", "remote pk")
-	addFwdRuleCmd.Flags().StringVarP(&rPt, "rpt", "q", "", "remote port")
-}
-
-var addFwdRuleCmd = &cobra.Command{
-	Use:   "fwd \\\n               <route-id> \\\n               <next-route-id> \\\n               <next-transport-id> \\\n               <local-pk> \\\n               <local-port> \\\n               <remote-pk> \\\n               <remote-port> \\\n               || ",
+var fwdRuleCmd = &cobra.Command{
+	Use:   "c",
 	Short: "Add forward routing rule",
 	Long:  "\n    Add forward routing rule",
-	Args: func(_ *cobra.Command, args []string) error {
-		if len(args) > 0 {
-			if len(args[1:]) == 6 {
-				return nil
-			}
-			return errors.New("expected 6 args after 'fwd'")
+	PreRun: func(cmd *cobra.Command, _ []string) {
+		if rID == "" {
+			internal.PrintFatalError(cmd.Flags(), errors.New("missing route id flag value -i --rid"))
 		}
-		return errors.New("expected 6 args after 'fwd'")
+		if nrID == "" {
+			internal.PrintFatalError(cmd.Flags(), errors.New("missing next route id flag value -j --nrid"))
+		}
+		if ntpID == "" {
+			internal.PrintFatalError(cmd.Flags(), errors.New("missing next transport id flag value -k --tpid"))
+		}
+		if lPK == "" {
+			internal.PrintFatalError(cmd.Flags(), errors.New("missing local public key flag value -l --lpk"))
+		}
+		if lPt == "" {
+			internal.PrintFatalError(cmd.Flags(), errors.New("missing local port flag value -m --lpt"))
+		}
+		if rPK == "" {
+			internal.PrintFatalError(cmd.Flags(), errors.New("missing remote pk flag value -p --rpk"))
+		}
+		if rPt == "" {
+			internal.PrintFatalError(cmd.Flags(), errors.New("missing remote port flag value -q --rpt"))
+		}
 	},
-	Run: func(cmd *cobra.Command, args []string) {
-		var rule routing.Rule
-		var (
-			routeID     = routing.RouteID(parseUint(cmd.Flags(), "route-id", args[0], 32))
-			nextRouteID = routing.RouteID(parseUint(cmd.Flags(), "next-route-id", args[1], 32))
-			nextTpID    = internal.ParseUUID(cmd.Flags(), "next-transport-id", args[2])
-			localPK     = internal.ParsePK(cmd.Flags(), "local-pk", args[3])
-			localPort   = routing.Port(parseUint(cmd.Flags(), "local-port", args[4], 16))
-			remotePK    = internal.ParsePK(cmd.Flags(), "remote-pk", args[5])
-			remotePort  = routing.Port(parseUint(cmd.Flags(), "remote-port", args[6], 16))
-		)
+	Run: func(cmd *cobra.Command, _ []string) {
+		routeID = routing.RouteID(parseUint(cmd.Flags(), "route id flag value -i --rid", rID, 32))
+		nextRouteID = routing.RouteID(parseUint(cmd.Flags(), "next route id flag value -j --nrid", nrID, 32))
+		nextTpID = internal.ParseUUID(cmd.Flags(), "next transport id flag value -k --tpid", ntpID)
+		localPK = internal.ParsePK(cmd.Flags(), "local public key flag value -l --lpk", lPK)
+		localPort = routing.Port(parseUint(cmd.Flags(), "local port flag value -m --lpt", lPt, 16))
+		remotePK = internal.ParsePK(cmd.Flags(), "remote pk flag value -p --rpk", rPK)
+		remotePort = routing.Port(parseUint(cmd.Flags(), "remote port flag value -q --rpt", rPt, 16))
 		rule = routing.ForwardRule(keepAlive, routeID, nextRouteID, nextTpID, localPK, remotePK, localPort, remotePort)
-		var rIDKey routing.RouteID
-		if rule != nil {
-			rIDKey = rule.KeyRouteID()
-		}
 
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -287,49 +245,36 @@ var addFwdRuleCmd = &cobra.Command{
 		output := struct {
 			RoutingRuleKey routing.RouteID `json:"routing_route_key"`
 		}{
-			RoutingRuleKey: rIDKey,
+			RoutingRuleKey: routeID,
 		}
 
-		internal.PrintOutput(cmd.Flags(), output, fmt.Sprintf("Routing Rule Key: %v\n", rIDKey))
+		internal.PrintOutput(cmd.Flags(), output, fmt.Sprintf("Routing Rule Key: %v\n", routeID))
 	},
 }
 
-//skywire-cli visor route add-rule intfwd
-
-func init() {
-	addRuleCmd.AddCommand(
-		addIntFwdRuleCmd,
-	)
-	addIntFwdRuleCmd.Flags().SortFlags = false
-	addIntFwdRuleCmd.Flags().StringVarP(&rID, "rid", "i", "", "route id")
-	addIntFwdRuleCmd.Flags().StringVarP(&nrID, "nrid", "n", "", "next route id")
-	addIntFwdRuleCmd.Flags().StringVarP(&rPt, "tpid", "t", "", "next transport id")
-}
-
-var addIntFwdRuleCmd = &cobra.Command{
-	Use:   "intfwd \\\n               <route-id> \\\n               <next-route-id> \\\n               <next-transport-id> \\\n               || ",
+var intFwdRuleCmd = &cobra.Command{
+	Use:   "b",
 	Short: "Add intermediary forward routing rule",
 	Long:  "\n    Add intermediary forward routing rule",
-	Args: func(_ *cobra.Command, args []string) error {
-		if len(args) > 0 {
-			if len(args[0:]) == 3 {
-				return nil
-			}
-			return errors.New("expected 3 args after 'intfwd'")
+	PreRun: func(cmd *cobra.Command, _ []string) {
+		if rID == "" {
+			internal.PrintFatalError(cmd.Flags(), errors.New("missing route id flag value -i --rid"))
 		}
-		return errors.New("expected 3 args after 'intfwd'")
+		if nrID == "" {
+			internal.PrintFatalError(cmd.Flags(), errors.New("missing next route id flag value -j --nrid"))
+		}
+		if ntpID == "" {
+			internal.PrintFatalError(cmd.Flags(), errors.New("missing next transport id flag value -k --tpid"))
+		}
 	},
-	Run: func(cmd *cobra.Command, args []string) {
-		var rule routing.Rule
-		var (
-			routeID     = routing.RouteID(parseUint(cmd.Flags(), "route-id", args[0], 32))
-			nextRouteID = routing.RouteID(parseUint(cmd.Flags(), "next-route-id", args[1], 32))
-			nextTpID    = internal.ParseUUID(cmd.Flags(), "next-transport-id", args[2])
-		)
+	Run: func(cmd *cobra.Command, _ []string) {
+		routeID = routing.RouteID(parseUint(cmd.Flags(), "route id flag value -i --rid", rID, 32))
+		nextRouteID = routing.RouteID(parseUint(cmd.Flags(), "next route id flag value -j --nrid", nrID, 32))
+		nextTpID = internal.ParseUUID(cmd.Flags(), "next transport id flag value -k --tpid", ntpID)
+
 		rule = routing.IntermediaryForwardRule(keepAlive, routeID, nextRouteID, nextTpID)
-		var rIDKey routing.RouteID
 		if rule != nil {
-			rIDKey = rule.KeyRouteID()
+			routeID = rule.KeyRouteID()
 		}
 
 		rpcClient, err := clirpc.Client(cmd.Flags())
@@ -341,11 +286,21 @@ var addIntFwdRuleCmd = &cobra.Command{
 		output := struct {
 			RoutingRuleKey routing.RouteID `json:"routing_route_key"`
 		}{
-			RoutingRuleKey: rIDKey,
+			RoutingRuleKey: routeID,
 		}
 
-		internal.PrintOutput(cmd.Flags(), output, fmt.Sprintf("Routing Rule Key: %v\n", rIDKey))
+		internal.PrintOutput(cmd.Flags(), output, fmt.Sprintf("Routing Rule Key: %v\n", routeID))
 	},
+}
+
+func getNextAvailableRouteID(rules ...routing.Rule) routing.RouteID {
+	for _, rule := range rules {
+		id := rule.KeyRouteID()
+		if id > routeID {
+			routeID = id
+		}
+	}
+	return routeID + 1
 }
 
 func printRoutingRules(cmdFlags *pflag.FlagSet, rules ...routing.Rule) {
