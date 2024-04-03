@@ -55,6 +55,9 @@ func init() {
 	tpCmd.Flags().BoolVarP(&showLogs, "logs", "l", true, "show transport logs")
 	tpCmd.Flags().StringVarP(&tpID, "id", "i", "", "display transport matching ID")
 	tpCmd.Flags().BoolVarP(&tpTypes, "tptypes", "u", false, "display transport types used by the local visor")
+	tpCmd.Flags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
+	addTpCmd.Flags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
+	rmTpCmd.Flags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
 }
 
 // RootCmd contains commands that interact with the skywire-visor
@@ -104,26 +107,55 @@ var tpCmd = &cobra.Command{
 }
 
 var (
-	transportType string
-	timeout       time.Duration
-	rpk           string
+	sortedEdgeKeys []string
+	utURL          string
+	tpdURL         string
+	cacheFileTPD   string
+	cacheFileUT    string
+	padSpaces      int
+	isStats        bool
+	rawData        bool
+	refinedData    bool
+	noFilterOnline bool
+	transportType  string
+	timeout        time.Duration
+	rpk            string
+	sdURL          string
+	cacheFileSD    string
+	cacheFilesAge  int
+	forceAttempt   bool
+
+// queryHealth	bool
 )
 
 func init() {
 	addTpCmd.Flags().StringVarP(&rpk, "rpk", "r", "", "remote public key.")
 	addTpCmd.Flags().StringVarP(&transportType, "type", "t", "", "type of transport to add.")
 	addTpCmd.Flags().DurationVarP(&timeout, "timeout", "o", 0, "if specified, sets an operation timeout")
+	addTpCmd.Flags().StringVarP(&sdURL, "sdurl", "a", utilenv.ServiceDiscAddr, "service discovery url")
+	//TODO
+	//	listCmd.Flags().BoolVarP(&queryHealth, "health", "q", false, "check /health of remote visor over dmsg before creating transport")
+	addTpCmd.Flags().BoolVarP(&forceAttempt, "force", "f", false, "attempt transport creation without check of SD") // or visor /health over dmsg
+	addTpCmd.Flags().StringVar(&cacheFileSD, "cfs", os.TempDir()+"/pvisorsd.json", "SD cache file location")
+	addTpCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
 }
 
 var addTpCmd = &cobra.Command{
-	Use:                   "add",
-	Short:                 "Add a transport",
-	Long:                  "\n    Add a transport\n    \n    If the transport type is unspecified,\n    the visor will attempt to establish a transport\n    in the following order: skywire-tcp, stcpr, sudph, dmsg",
+	Use:   "add",
+	Short: "Add a transport",
+	Long: `
+    Add a transport
+		If the transport type is unspecified,
+		the visor will attempt to establish a transport
+		in the following order: stcpr, sudph, dmsg`,
 	Args:                  cobra.MinimumNArgs(1),
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
-
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
 		var pk cipher.PubKey
 
 		if rpk == "" {
@@ -132,13 +164,28 @@ var addTpCmd = &cobra.Command{
 			internal.Catch(cmd.Flags(), pk.Set(rpk))
 		}
 
+		var pvs string
+		var pvkeys []string
+		var foundPV bool
+		//check before connecting stcpr transport that the visor is in the public visor list unless forceAttempt == true
+		if (transportType == "" || transportType == "stcpr") && !forceAttempt {
+			pvs = internal.GetData(cacheFileSD, sdURL+"/api/services?type=visor", cacheFilesAge)
+			pvkeys, _ = script.Echo(pvs).JQ(".[].address").Replace(":", " ").Column(1).Slice() //nolint
+			for _, pvkey := range pvkeys {
+				if pk.String() == pvkey {
+					foundPV = true
+					break
+				}
+			}
+		}
+
+		if transportType == "stcpr" && !forceAttempt && !foundPV {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("cannot create stcpr transport ; public key not found in public visor service discovery.\nUse -f --force to force attempt transport creation"))
+		}
+
 		var tp *visor.TransportSummary
 
 		if transportType != "" {
-			rpcClient, err := clirpc.Client(cmd.Flags())
-			if err != nil {
-				os.Exit(1)
-			}
 			tp, err = rpcClient.AddTransport(pk, transportType, timeout)
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to establish %v transport: %v", transportType, err))
@@ -147,17 +194,20 @@ var addTpCmd = &cobra.Command{
 				logger.Infof("Established %v transport to %v", transportType, pk)
 			}
 		} else {
-			transportTypes := []network.Type{
-				network.STCPR,
-				network.SUDPH,
-				network.DMSG,
-				network.STCP,
+			var transportTypes []network.Type
+			if foundPV {
+				transportTypes = []network.Type{
+					network.STCPR,
+					network.SUDPH,
+					network.DMSG,
+				}
+			} else {
+				transportTypes = []network.Type{
+					network.SUDPH,
+					network.DMSG,
+				}
 			}
 			for _, transportType := range transportTypes {
-				rpcClient, err := clirpc.Client(cmd.Flags())
-				if err != nil {
-					os.Exit(1)
-				}
 				tp, err = rpcClient.AddTransport(pk, string(transportType), timeout)
 				if err == nil {
 					if !isJSON {
@@ -343,20 +393,6 @@ func (t *transportID) Set(s string) error {
 	*t = transportID(tID)
 	return nil
 }
-
-var (
-	sortedEdgeKeys []string
-	utURL          string
-	tpdURL         string
-	cacheFileTPD   string
-	cacheFileUT    string
-	cacheFilesAge  int
-	padSpaces      int
-	isStats        bool
-	rawData        bool
-	refinedData    bool
-	noFilterOnline bool
-)
 
 // RootCmd is tpCmd
 var RootCmd = tpCmd
