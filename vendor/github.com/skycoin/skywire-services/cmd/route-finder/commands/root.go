@@ -29,16 +29,17 @@ import (
 )
 
 var (
-	addr        string
-	metricsAddr string
-	pgHost      string
-	pgPort      string
-	logLvl      string
-	tag         string
-	testing     bool
-	dmsgDisc    string
-	sk          cipher.SecKey
-	dmsgPort    uint16
+	addr          string
+	metricsAddr   string
+	pgHost        string
+	pgPort        string
+	logLvl        string
+	tag           string
+	testing       bool
+	dmsgDisc      string
+	sk            cipher.SecKey
+	dmsgPort      uint16
+	pgMaxOpenConn int
 )
 
 func init() {
@@ -46,6 +47,7 @@ func init() {
 	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to\033[0m")
 	RootCmd.Flags().StringVar(&pgHost, "pg-host", "localhost", "host of postgres\033[0m")
 	RootCmd.Flags().StringVar(&pgPort, "pg-port", "5432", "port of postgres\033[0m")
+	RootCmd.Flags().IntVar(&pgMaxOpenConn, "pg-max-open-conn", 60, "maximum open connection of db")
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "set log level one of: info, error, warn, debug, trace, panic")
 	RootCmd.Flags().StringVar(&tag, "tag", "route_finder", "logging tag\033[0m")
 	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis\033[0m")
@@ -99,7 +101,7 @@ PG_USER="postgres" PG_DATABASE="rf" PG_PASSWORD="" route-finder  --addr ":9092" 
 				pgPassword,
 				pgDatabase)
 
-			gormDB, err = pg.Init(dsn)
+			gormDB, err = pg.Init(dsn, pgMaxOpenConn)
 			if err != nil {
 				logger.Fatalf("Failed to connect to database %v", err)
 			}
