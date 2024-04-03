@@ -2,6 +2,8 @@ package pgconn
 
 import (
 	"errors"
+	"fmt"
+
 	"github.com/jackc/pgproto3/v2"
 )
 
@@ -60,7 +62,11 @@ func (c *PgConn) gssAuth() error {
 		gssResponse := &pgproto3.GSSResponse{
 			Data: nextData,
 		}
-		_, err = c.conn.Write(gssResponse.Encode(nil))
+		buf, err := gssResponse.Encode(nil)
+		if err != nil {
+			return err
+		}
+		_, err = c.conn.Write(buf)
 		if err != nil {
 			return err
 		}
@@ -85,10 +91,13 @@ func (c *PgConn) rxGSSContinue() (*pgproto3.AuthenticationGSSContinue, error) {
 	if err != nil {
 		return nil, err
 	}
-	gssContinue, ok := msg.(*pgproto3.AuthenticationGSSContinue)
-	if ok {
-		return gssContinue, nil
+
+	switch m := msg.(type) {
+	case *pgproto3.AuthenticationGSSContinue:
+		return m, nil
+	case *pgproto3.ErrorResponse:
+		return nil, ErrorResponseToPgError(m)
 	}
 
-	return nil, errors.New("expected AuthenticationGSSContinue message but received unexpected message")
+	return nil, fmt.Errorf("expected AuthenticationGSSContinue message but received unexpected message %T", msg)
 }
