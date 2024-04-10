@@ -56,7 +56,7 @@ func init() {
 	if scriptExecString("${DMSGHTTP_SK}") != "" {
 		sk.Set(scriptExecString("${DMSGHTTP_SK}")) //nolint
 	}
-	pk, _ = sk.PubKey()
+	pk, _ = sk.PubKey() //nolint
 	uiCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
 }
 
@@ -178,7 +178,7 @@ func mainPage(c *gin.Context) {
 		return
 	}
 	c.Writer.WriteHeader(http.StatusOK)
-	c.Writer.Write((bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1)))
+	c.Writer.Write((bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1))) //nolint
 }
 
 var htmlRewardPageTemplate = `
@@ -244,7 +244,7 @@ func csvcheck(txid string) string {
 			return msg
 		}
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint
 
 	// Decode JSON response into Transaction struct
 	var tx Transaction
@@ -321,9 +321,9 @@ func rewardshtmlfunc() []byte {
 
 	l += fmt.Sprintf("%s",
 		shh(" _rainbowcal"))
-	mostrecentrewardfordate, _ := script.FindFiles(`rewards/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?.txt")).Last(1).Replace("/", " ").Replace(".txt", "").Column(3).String()
-	modTime, _ := os.Stat("rewards/transactions0.txt")
-	mostrecenttxid, _ := script.File("rewards/transactions0.txt").Last(1).String()
+	mostrecentrewardfordate, _ := script.FindFiles(`rewards/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?.txt")).Last(1).Replace("/", " ").Replace(".txt", "").Column(3).String() //nolint
+	modTime, _ := os.Stat("rewards/transactions0.txt")                                                                                                                                        //nolint
+	mostrecenttxid, _ := script.File("rewards/transactions0.txt").Last(1).String()                                                                                                            //nolint
 	l += fmt.Sprintf("<div style='float: right;'>\nreward distribution transaction for %s distributed on %s\n<a href='https://explorer.skycoin.com/app/transaction/%s'>%s</a>\n%s\nPrevious distributions:\n%s\n%s</div>",
 		mostrecentrewardfordate,
 		modTime.ModTime(),
@@ -524,20 +524,20 @@ func Server() {
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
 		c.Writer.WriteHeader(http.StatusOK)
 		c.Writer.Flush()
-		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Survey and Transport Log Collection</title></head>"))
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Survey and Transport Log Collection</title></head>")) //nolint
 		c.Writer.Flush()
-		c.Writer.Write([]byte("<body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n#latest-content-anchor {\n  visibility: hidden;\n}\n</style>\n<pre>"))
+		c.Writer.Write([]byte("<body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n#latest-content-anchor {\n  visibility: hidden;\n}\n</style>\n<pre>")) //nolint
 		c.Writer.Flush()
-		c.Writer.Write([]byte(navlinks))
+		c.Writer.Write([]byte(navlinks)) //nolint
 		c.Writer.Flush()
-		c.Writer.Write([]byte(fmt.Sprintf("%s\n", shh("_nextskywireclilogrun"))))
+		c.Writer.Write([]byte(fmt.Sprintf("%s\n", shh("_nextskywireclilogrun")))) //nolint
 		c.Writer.Flush()
 
 		// Initial line count
-		initialLineCount, _ := script.File("rewards/skywire-cli-log.txt").CountLines()
+		initialLineCount, _ := script.File("rewards/skywire-cli-log.txt").CountLines() //nolint
 		// Read and print the initial lines
-		initialContent, _ := script.File("rewards/skywire-cli-log.txt").First(initialLineCount).Bytes()
-		c.Writer.Write(ansihtml.ConvertToHTML(initialContent))
+		initialContent, _ := script.File("rewards/skywire-cli-log.txt").First(initialLineCount).Bytes() //nolint
+		c.Writer.Write(ansihtml.ConvertToHTML(initialContent))                                          //nolint
 		c.Writer.Flush()
 		for {
 			select {
@@ -548,23 +548,23 @@ func Server() {
 			// Sleep for a short duration
 			time.Sleep(100 * time.Millisecond)
 			// Get the current line count
-			currentLineCount, _ := script.File("rewards/skywire-cli-log.txt").CountLines()
+			currentLineCount, _ := script.File("rewards/skywire-cli-log.txt").CountLines() //nolint
 			// Check if there are new lines
 			if currentLineCount > initialLineCount {
-				newContent, _ := script.File("rewards/skywire-cli-log.txt").Last(currentLineCount - initialLineCount).Bytes()
+				newContent, _ := script.File("rewards/skywire-cli-log.txt").Last(currentLineCount - initialLineCount).Bytes() //nolint
 				initialLineCount = currentLineCount
-				c.Writer.Write(ansihtml.ConvertToHTML(newContent))
+				c.Writer.Write(ansihtml.ConvertToHTML(newContent)) //nolint
 				c.Writer.Flush()
 			}
-			finished, _ := script.File("rewards/skywire-cli-log.txt").Last(1).MatchRegexp(regexp.MustCompile(".*finished.*")).String()
+			finished, _ := script.File("rewards/skywire-cli-log.txt").Last(1).MatchRegexp(regexp.MustCompile(".*finished.*")).String() //nolint
 			if finished != "" {
 				break
 			}
 		}
 
-		c.Writer.Write([]byte(htmltoplink))
+		c.Writer.Write([]byte(htmltoplink)) //nolint
 		c.Writer.Flush()
-		c.Writer.Write([]byte(htmlend))
+		c.Writer.Write([]byte(htmlend)) //nolint
 		c.Writer.Flush()
 	})
 
@@ -572,19 +572,19 @@ func Server() {
 		c.Writer.Header().Set("Server", "")
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
 		c.Writer.WriteHeader(http.StatusOK)
-		c.Writer.Write([]byte("<!doctype html><html lang=en><head><meta charset='UTF-8'><title>Index of Skywire Surveys & Transport Logs</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"))
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><meta charset='UTF-8'><title>Index of Skywire Surveys & Transport Logs</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint
 		c.Writer.Flush()
-		c.Writer.Write([]byte(navlinks))
+		c.Writer.Write([]byte(navlinks)) //nolint
 		c.Writer.Flush()
-		surveycount, _ := script.FindFiles("rewards/log_backups/").Match("node-info.json").CountLines()
-		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))
+		surveycount, _ := script.FindFiles("rewards/log_backups/").Match("node-info.json").CountLines() //nolint
+		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))                         //nolint
 		c.Writer.Flush()
-		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups`).Bytes()
-		c.Writer.Write(ansihtml.ConvertToHTML(st))
+		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups`).Bytes() //nolint
+		c.Writer.Write(ansihtml.ConvertToHTML(st))                                //nolint
 		c.Writer.Flush()
-		c.Writer.Write([]byte(htmltoplink))
+		c.Writer.Write([]byte(htmltoplink)) //nolint
 		c.Writer.Flush()
-		c.Writer.Write([]byte(htmlend))
+		c.Writer.Write([]byte(htmlend)) //nolint
 		c.Writer.Flush()
 	})
 
@@ -600,19 +600,19 @@ func Server() {
 		c.Writer.Header().Set("Server", "")
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
 		c.Writer.WriteHeader(http.StatusOK)
-		c.Writer.Write([]byte("<!doctype html><html lang=en><head><meta charset='UTF-8'><title>Index of Skywire Surveys & Transport Logs</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"))
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><meta charset='UTF-8'><title>Index of Skywire Surveys & Transport Logs</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint
 		c.Writer.Flush()
-		c.Writer.Write([]byte(navlinks))
+		c.Writer.Write([]byte(navlinks)) //nolint
 		c.Writer.Flush()
 		surveycount, _ := script.FindFiles("rewards/log_backups/").Match("node-info.json").CountLines()
-		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))
+		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount))) //nolint
 		c.Writer.Flush()
 		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -p ` + c.Param("pk")).Bytes()
-		c.Writer.Write(ansihtml.ConvertToHTML(st))
+		c.Writer.Write(ansihtml.ConvertToHTML(st)) //nolint
 		c.Writer.Flush()
-		c.Writer.Write([]byte(htmltoplink))
+		c.Writer.Write([]byte(htmltoplink)) //nolint
 		c.Writer.Flush()
-		c.Writer.Write([]byte(htmlend))
+		c.Writer.Write([]byte(htmlend)) //nolint
 		c.Writer.Flush()
 		return
 	})
@@ -621,7 +621,7 @@ func Server() {
 		c.Writer.Header().Set("Server", "")
 		c.Writer.WriteHeader(http.StatusOK)
 		tploghtmlfunc()
-		c.Writer.Write([]byte(*tploghtml))
+		c.Writer.Write([]byte(*tploghtml)) //nolint
 		return
 	})
 
@@ -701,7 +701,7 @@ func Server() {
 			fmt.Println("error: ", err)
 		}
 
-		c.Writer.Write(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1))
+		c.Writer.Write(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1)) //nolint
 		c.Writer.Flush()
 		return
 	})
@@ -716,28 +716,28 @@ func Server() {
 		//override the behavior of `public fallback` for this endpoint
 		if len(wlkeys) == 0 {
 			c.Writer.WriteHeader(http.StatusUnauthorized)
-			c.Writer.Write([]byte("len(wlkeys) == 0"))
+			c.Writer.Write([]byte("len(wlkeys) == 0")) //nolint
 			return
 		}
 		// Read the request body
 		body, err := io.ReadAll(c.Request.Body)
 		if err != nil {
 			c.Writer.WriteHeader(http.StatusInternalServerError)
-			c.Writer.Write([]byte("io.ReadAll(c.Request.Body) :\n\n" + string(body) + "\n\nError:\n\n" + err.Error()))
+			c.Writer.Write([]byte("io.ReadAll(c.Request.Body) :\n\n" + string(body) + "\n\nError:\n\n" + err.Error())) //nolint
 			return
 		}
 		//check that wallet is running
 		status, err := script.Exec("skycoin-cli status").String()
 		if err != nil {
 			c.Writer.WriteHeader(http.StatusInternalServerError)
-			c.Writer.Write([]byte("skycoin-cli status:\n\n" + status + "\n\nskycoin-cli status error:\n\n" + err.Error()))
+			c.Writer.Write([]byte("skycoin-cli status:\n\n" + status + "\n\nskycoin-cli status error:\n\n" + err.Error())) //nolint
 			return
 		}
 		//find all transacion csvs
 		f, err := script.FindFiles("rewards/hist").MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice()
 		if err != nil {
 			c.Writer.WriteHeader(http.StatusInternalServerError)
-			c.Writer.Write([]byte(`script.FindFiles("rewards/hist").MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice():\n\n` + strings.Join(f, "\n") + "\n\nError:\n\n" + err.Error()))
+			c.Writer.Write([]byte(`script.FindFiles("rewards/hist").MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice():\n\n` + strings.Join(f, "\n") + "\n\nError:\n\n" + err.Error())) //nolint
 			return
 		}
 		//and range through the results
@@ -751,38 +751,38 @@ func Server() {
 				decoded, err := script.Exec("skycoin-cli decodeRawTransaction " + string(body)).String()
 				if err != nil {
 					c.Writer.WriteHeader(http.StatusBadRequest)
-					c.Writer.Write([]byte("skycoin-cli decodeRawTransaction:\n\n" + decoded + "\n\nskycoin-cli decodeRawTransaction error:\n\n" + err.Error()))
+					c.Writer.Write([]byte("skycoin-cli decodeRawTransaction:\n\n" + decoded + "\n\nskycoin-cli decodeRawTransaction error:\n\n" + err.Error())) //nolint
 					return
 				}
 				//if all is well, broadcast the transaction
 				txid, err := script.Exec("skycoin-cli broadcastTransaction " + string(body)).String()
 				if err != nil {
 					c.Writer.WriteHeader(http.StatusInternalServerError)
-					c.Writer.Write([]byte("skycoin-cli broadcastTransaction:\n\n" + txid + "\n\nskycoin-cli broadcastTransaction error:\n\n" + err.Error()))
+					c.Writer.Write([]byte("skycoin-cli broadcastTransaction:\n\n" + txid + "\n\nskycoin-cli broadcastTransaction error:\n\n" + err.Error())) //nolint
 					return
 				}
 				//record the transaction ID for that day's reward
 				_, err = script.Echo(txid).WriteFile(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1))
 				if err != nil {
 					c.Writer.WriteHeader(http.StatusInternalServerError)
-					c.Writer.Write([]byte(`script.Echo(txid).WriteFile(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1))\n\n` + txid + "\n\n" + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1) + "\n\nerror:\n\n" + err.Error()))
+					c.Writer.Write([]byte(`script.Echo(txid).WriteFile(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1))\n\n` + txid + "\n\n" + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1) + "\n\nerror:\n\n" + err.Error())) //nolint
 					return
 				}
 				//record the transaction ID for the reward notification system - append the file!
 				_, err = script.Echo(txid).AppendFile("rewards/transactions0.txt")
 				if err != nil {
 					c.Writer.WriteHeader(http.StatusInternalServerError)
-					c.Writer.Write([]byte(`script.Echo(txid).AppendFile("rewards/transactions0.txt")\n\n` + txid + "\n\nerror:\n\n" + err.Error()))
+					c.Writer.Write([]byte(`script.Echo(txid).AppendFile("rewards/transactions0.txt")\n\n` + txid + "\n\nerror:\n\n" + err.Error())) //nolint
 					return
 				}
 				c.Writer.WriteHeader(http.StatusOK)
-				c.Writer.Write([]byte(txid))
+				c.Writer.Write([]byte(txid)) //nolint
 				return
 			}
 		}
 		c.Writer.WriteHeader(http.StatusNotFound)
 		h, _ := script.FindFiles("rewards/hist").String()
-		c.Writer.Write([]byte("No undistributed rewards csv found.\n\n" + h))
+		c.Writer.Write([]byte("No undistributed rewards csv found.\n\n" + h)) //nolint
 		return
 	})
 
@@ -794,15 +794,13 @@ func Server() {
 			return
 		}
 		c.Writer.Header().Set("Server", "")
-		//		c.Writer.WriteHeader(http.StatusOK)
 		f, _ := script.FindFiles("rewards/hist").MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice()
 		for _, f1 := range f {
 			g, err := script.File(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String()
 			if err != nil || g == "" || g == "\n" || g == "test" || g == "test\n" {
 				c.Writer.Header().Set("Content-Type", "text/plain")
 				c.Writer.WriteHeader(http.StatusOK)
-				c.Writer.Write([]byte("skycoin-" + f1))
-				//		c.Redirect(http.StatusFound, "/skycoin-"+f1)
+				c.Writer.Write([]byte("skycoin-" + f1)) //nolint
 				return
 			}
 
@@ -840,9 +838,9 @@ func Server() {
 		}
 		c.Writer.Header().Set("Server", "")
 		c.Writer.Header().Set("Content-Type", "text/plain")
-		f, _ := script.FindFiles("rewards/hist").MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice()
+		f, _ := script.FindFiles("rewards/hist").MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice() //nolint
 		for _, f1 := range f {
-			g, _ := script.File(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String()
+			g, _ := script.File(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String() //nolint
 			if g != "" || g != "\n" {
 				c.Redirect(http.StatusFound, "/skycoin-"+f1)
 				return
@@ -864,7 +862,7 @@ func Server() {
 					c.Writer.Header().Set("Content-Type", "text/plain")
 					c.Writer.WriteHeader(http.StatusOK)
 					c.Writer.Flush()
-					c.Writer.Write(filetoserve)
+					c.Writer.Write(filetoserve) //nolint
 					c.Writer.Flush()
 					return
 				} else {
@@ -912,9 +910,9 @@ func Server() {
 		if err == nil {
 			l += "\n\nIneligible:\n"
 			for _, line := range l2 {
-				thispk, _ := script.Echo(line).Column(2).String()
-				architecture, _ := script.Echo(line).Column(6).String()
-				invalid, _ := script.Echo(line).Match(", , , ,").String()
+				thispk, _ := script.Echo(line).Column(2).String()         //nolint
+				architecture, _ := script.Echo(line).Column(6).String()   //nolint
+				invalid, _ := script.Echo(line).Match(", , , ,").String() //nolint
 				if invalid != "" {
 					_, err = script.IfExists("rewards/log_backups/" + thispk + "/node-info.json").Echo("").String()
 					if err != nil {
@@ -929,14 +927,14 @@ func Server() {
 		}
 		l += "</div>"
 
-		l1, _ = script.File("rewards/hist/" + c.Param("date") + "_stats.txt").String()
+		l1, _ = script.File("rewards/hist/" + c.Param("date") + "_stats.txt").String() //nolint
 		l += c.Param("date") + "_stats.txt\n" + l1 + "\n"
 
-		l2, _ = script.File("rewards/hist/"+c.Param("date")+"_rewardtxn0.csv").Replace(",", " ").Slice()
+		l2, _ = script.File("rewards/hist/"+c.Param("date")+"_rewardtxn0.csv").Replace(",", " ").Slice() //nolint
 		l += c.Param("date") + "_transaction0.csv\n\nSKY Address, Amount\n"
 		for _, line := range l2 {
-			skyaddr, _ := script.Echo(line).Column(1).String()
-			skyamt, _ := script.Echo(line).Column(2).String()
+			skyaddr, _ := script.Echo(line).Column(1).String() //nolint
+			skyamt, _ := script.Echo(line).Column(2).String()  //nolint
 			l += "<a id='" + strings.TrimRight(skyaddr, "\n") + "'>" + strings.TrimRight(skyaddr, "\n") + "</a>," + strings.TrimRight(skyamt, "\n") + "\n"
 		}
 
@@ -966,7 +964,7 @@ func Server() {
 
 		c.Writer.WriteHeader(http.StatusOK)
 		c.Writer.Flush()
-		c.Writer.Write(result.Bytes())
+		c.Writer.Write(result.Bytes()) //nolint
 		c.Writer.Flush()
 		return
 	})
@@ -976,7 +974,7 @@ func Server() {
 		//override the behavior of `public fallback` for this endpoint
 		if len(wlkeys) == 0 {
 			c.Writer.WriteHeader(http.StatusUnauthorized)
-			c.Writer.Write([]byte("len(wlkeys) == 0"))
+			c.Writer.Write([]byte("len(wlkeys) == 0")) //nolint
 			return
 		}
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
@@ -988,7 +986,7 @@ func Server() {
 					c.Writer.Header().Set("Content-Type", "text/plain")
 					c.Writer.WriteHeader(http.StatusOK)
 					c.Writer.Flush()
-					c.Writer.Write(filetoserve)
+					c.Writer.Write(filetoserve) //nolint
 					c.Writer.Flush()
 					return
 				} else {
@@ -999,15 +997,14 @@ func Server() {
 				}
 			}
 		}
-		rewardfiles, _ := script.FindFiles(`rewards/hist`).Match(c.Param("date")).Slice()
+		rewardfiles, _ := script.FindFiles(`rewards/hist`).Match(c.Param("date")).Slice() //nolint
 		if len(rewardfiles) == 0 {
-			fmt.Println("len rewardfiles == 0")
 			c.Writer.WriteHeader(http.StatusNotFound)
 			c.Writer.Flush()
 			return
 		}
 		l := ""
-		l1, _ := script.File("rewards/hist/" + c.Param("date") + "_stats.txt").String()
+		l1, _ := script.File("rewards/hist/" + c.Param("date") + "_stats.txt").String() //nolint
 		l += c.Param("date") + "_stats.txt\n" + l1 + "\n"
 		l1, err = script.File("rewards/hist/" + c.Param("date") + ".txt").String()
 		if err != nil {
@@ -1032,11 +1029,11 @@ func Server() {
 			l += "\n\nIneligible:\n" + l1
 		}
 
-		l2, _ := script.File("rewards/hist/"+c.Param("date")+"_rewardtxn0.csv").Replace(",", " ").Slice()
+		l2, _ := script.File("rewards/hist/"+c.Param("date")+"_rewardtxn0.csv").Replace(",", " ").Slice() //nolint
 		l += c.Param("date") + "_transaction0.csv\n\nSKY Address, Amount\n"
 		for _, line := range l2 {
-			skyaddr, _ := script.Echo(line).Column(1).String()
-			skyamt, _ := script.Echo(line).Column(2).String()
+			skyaddr, _ := script.Echo(line).Column(1).String() //nolint
+			skyamt, _ := script.Echo(line).Column(2).String()  //nolint
 			l += "<a id='" + strings.TrimRight(skyaddr, "\n") + "'>" + strings.TrimRight(skyaddr, "\n") + "</a>," + strings.TrimRight(skyamt, "\n") + "\n"
 		}
 
@@ -1066,7 +1063,7 @@ func Server() {
 
 		c.Writer.WriteHeader(http.StatusOK)
 		c.Writer.Flush()
-		c.Writer.Write(result.Bytes())
+		c.Writer.Write(result.Bytes()) //nolint
 		c.Writer.Flush()
 		return
 	})
@@ -1076,7 +1073,7 @@ func Server() {
 		//override the behavior of `public fallback` for this endpoint
 		if len(wlkeys) == 0 {
 			c.Writer.WriteHeader(http.StatusUnauthorized)
-			c.Writer.Write([]byte("len(wlkeys) == 0"))
+			c.Writer.Write([]byte("len(wlkeys) == 0")) //nolint
 			return
 		}
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
@@ -1088,7 +1085,7 @@ func Server() {
 		}
 		c.Writer.WriteHeader(http.StatusOK)
 		c.Writer.Flush()
-		c.Writer.Write(ni)
+		c.Writer.Write(ni) //nolint
 		c.Writer.Flush()
 		return
 	})
@@ -1169,10 +1166,10 @@ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA////
 //////////////////AAAH/gAAAH4AAAA4AAQAGAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAQA
 AgAAAIAAAACAAAABwAAAAfAAAAfwAAAP/gAAf/8AAH//AAB//4AB//+AA///wAP///AH///4H///
 //////////////8=`
-	faviconBuffer, _ := base64.StdEncoding.DecodeString(faviconBase64)
+	faviconBuffer, _ := base64.StdEncoding.DecodeString(faviconBase64) //nolint
 
 	r1.GET("/favicon.ico", func(c *gin.Context) {
-		_, _ = c.Writer.WriteString(string(faviconBuffer))
+		_, _ = c.Writer.WriteString(string(faviconBuffer)) //nolint
 	})
 
 	// Start the server using the custom Gin handler

@@ -434,6 +434,9 @@ github.com/quic-go/quic-go/quicvarint
 # github.com/rivo/uniseg v0.4.4
 ## explicit; go 1.18
 github.com/rivo/uniseg
+# github.com/robert-nix/ansihtml v1.0.1
+## explicit; go 1.15
+github.com/robert-nix/ansihtml
 # github.com/rs/cors v1.8.2
 ## explicit; go 1.13
 github.com/rs/cors
