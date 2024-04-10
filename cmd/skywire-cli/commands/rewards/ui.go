@@ -10,11 +10,9 @@ import (
 	"fmt"
 	htmpl "html/template"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -24,8 +22,6 @@ import (
 
 	"github.com/bitfield/script"
 	"github.com/gin-gonic/gin"
-	cc "github.com/ivanpirog/coloredcobra"
-	"github.com/pterm/pterm"
 	"github.com/robert-nix/ansihtml"
 	"github.com/skycoin/dmsg/pkg/disc"
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
@@ -39,47 +35,51 @@ import (
 
 var x = os.Args[0]
 
-func main() {
-	Execute()
-}
-
 func init() {
 	RootCmd.CompletionOptions.DisableDefaultCmd = true
 	RootCmd.AddCommand(
 		uiCmd,
 	)
-	uiCmd.AddCommand(
-		runCmd,
-		stCmd,
-	)
-	var helpflag bool
-	uiCmd.SetUsageTemplate(help)
-	rootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for "+rootCmd.Use)
-	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
-	rootCmd.PersistentFlags().MarkHidden("help") //nolint
+	uiCmd.Flags().UintVarP(&webPort, "port", "p", scriptExecUint("${WEBPORT:-80}"), "port to serve")
+	uiCmd.Flags().UintVarP(&dmsgPort, "dport", "d", scriptExecUint("${DMSGPORT:-80}"), "dmsg port to serve")
+	uiCmd.Flags().IntVarP(&dmsgSess, "dsess", "e", scriptExecInt("${DMSGSESSIONS:-1}"), "dmsg sessions")
+	msg := "add whitelist keys, comma separated to permit POST of reward transaction to be broadcast"
+	if scriptExecArray("${REWARDPKS[@]}") != "" {
+		msg += "\n\r"
+	}
+	uiCmd.Flags().StringVarP(&wl, "wl", "w", scriptExecArray("${REWARDPKS[@]}"), msg)
+	uiCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", "", "dmsg discovery url default:\n"+skyenv.DmsgDiscAddr)
+	uiCmd.Flags().StringVarP(&ensureOnlineURL, "ensure-online", "O", scriptExecString("${ENSUREONLINE}"), "Exit when the specified URL cannot be fetched;\ni.e. https://fiber.skywire.dev\n")
+	if os.Getenv("DMSGHTTP_SK") != "" {
+		sk.Set(os.Getenv("DMSGHTTP_SK")) //nolint
+	}
+	if scriptExecString("${DMSGHTTP_SK}") != "" {
+		sk.Set(scriptExecString("${DMSGHTTP_SK}")) //nolint
+	}
+	pk, _ = sk.PubKey()
+	uiCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
 }
 
 var uiCmd = &cobra.Command{
-	Use:   "fiber",
-	Short: "skycoin reward system and skywire network metrics",
-	Long: `
+	Use:   "ui",
+	Short: "reward system user interface",
+	Long: "skycoin reward system and skywire network metrics: https://fiber.skywire.dev\n" + `
 	┌─┐┬┌┐ ┌─┐┬─┐
 	├┤ │├┴┐├┤ ├┬┘
 	└  ┴└─┘└─┘┴└─
-	` + "skycoin reward system and skywire network metrics\nfiber.skywire.dev\n" + x,
-}
+	` + func() string {
+		if _, err := os.Stat(skyenvfile); err == nil {
+			return `run the web application
 
-var pubKey string
+skyenv file detected: ` + skyenvfile
+		}
+		return `run the web application
 
-func init() {
-	stCmd.Flags().StringVarP(&pubKey, "pk", "p", "", "public key to check")
-}
-
-var stCmd = &cobra.Command{
-	Use:   "st",
-	Short: "survey tree",
+.conf file may also be specified with
+SKYENV=/path/to/fiber.conf fiber run`
+	}(),
 	Run: func(_ *cobra.Command, _ []string) {
-		makeTree()
+		Server()
 	},
 }
 
@@ -87,25 +87,6 @@ var (
 	webPort1 int
 	whom     bool
 )
-
-func Execute() {
-	cc.Init(&cc.Config{
-		RootCmd:       rootCmd,
-		Headings:      cc.HiBlue + cc.Bold, //+ cc.Underline,
-		Commands:      cc.HiBlue + cc.Bold,
-		CmdShortDescr: cc.HiBlue,
-		Example:       cc.HiBlue + cc.Italic,
-		ExecName:      cc.HiBlue + cc.Bold,
-		Flags:         cc.HiBlue + cc.Bold,
-		//FlagsDataType: cc.HiBlue,
-		FlagsDescr:      cc.HiBlue,
-		NoExtraNewlines: true,
-		NoBottomNewline: true,
-	})
-	if err := rootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
-}
 
 const scriptfile = "fr.sh"
 
@@ -125,137 +106,6 @@ var (
 )
 
 var skyenvfile = os.Getenv("SKYENV")
-
-func init() {
-	runCmd.Flags().UintVarP(&webPort, "port", "p", scriptExecUint("${WEBPORT:-80}"), "port to serve")
-	runCmd.Flags().UintVarP(&dmsgPort, "dport", "d", scriptExecUint("${DMSGPORT:-80}"), "dmsg port to serve")
-	runCmd.Flags().IntVarP(&dmsgSess, "dsess", "e", scriptExecInt("${DMSGSESSIONS:-1}"), "dmsg sessions")
-	msg := "add whitelist keys, comma separated to permit POST `/reward` transaction to be broadcast"
-	if scriptExecArray("${REWARDPKS[@]}") != "" {
-		msg += "\n\r"
-	}
-	runCmd.Flags().StringVarP(&wl, "wl", "w", scriptExecArray("${REWARDPKS[@]}"), msg)
-	runCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", "", "dmsg discovery url default:\n"+skyenv.DmsgDiscAddr)
-	runCmd.Flags().StringVarP(&ensureOnlineURL, "ensure-online", "O", scriptExecString("${ENSUREONLINE}"), "Exit when the specified URL cannot be fetched;\ni.e. https://fiber.skywire.dev\n")
-	if os.Getenv("DMSGHTTP_SK") != "" {
-		sk.Set(os.Getenv("DMSGHTTP_SK")) //nolint
-	}
-	if scriptExecString("${DMSGHTTP_SK}") != "" {
-		sk.Set(scriptExecString("${DMSGHTTP_SK}")) //nolint
-	}
-	pk, _ = sk.PubKey()
-	runCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
-
-}
-
-var runCmd = &cobra.Command{
-	Use:   "run",
-	Short: "run the web application",
-	Long: func() string {
-		if _, err := os.Stat(skyenvfile); err == nil {
-			return `run the web application
-
-	skyenv file detected: ` + skyenvfile
-		}
-		return `run the web application
-
-	.conf file may also be specified with
-	SKYENV=/path/to/fiber.conf fiber run`
-	}(),
-	Run: func(_ *cobra.Command, _ []string) {
-		Server()
-	},
-}
-
-func makeTree() {
-	var tree pterm.TreeNode
-	rootDir := "rewards/log_backups/" + pubKey
-	if pubKey == "" {
-		tree = pterm.TreeNode{
-			Text:     "Index",
-			Children: getDirNodes(rootDir),
-		}
-	} else {
-		tree = pterm.TreeNode{
-			Text:     pterm.Cyan(pubKey),
-			Children: getDirChildren(rootDir),
-		}
-	}
-	pterm.DefaultTree.WithRoot(tree).Render()
-}
-
-func getDirNodes(dirPath string) []pterm.TreeNode {
-	nodes := []pterm.TreeNode{}
-
-	files, err := os.ReadDir(dirPath)
-	if err != nil {
-		fmt.Printf("Not found\n")
-		return nodes
-	}
-
-	for _, file := range files {
-		if file.IsDir() {
-			dirName := file.Name()
-			nodes = append(nodes, pterm.TreeNode{
-				Text:     pterm.Cyan(dirName),
-				Children: getDirChildren(filepath.Join(dirPath, dirName)),
-			})
-		}
-	}
-
-	return nodes
-}
-
-func getDirChildren(dirPath string) []pterm.TreeNode {
-	nodes := []pterm.TreeNode{}
-
-	files, err := os.ReadDir(dirPath)
-	if err != nil {
-		fmt.Printf("Not found\n")
-		return nodes
-	}
-
-	for _, file := range files {
-		fileName := file.Name()
-		if file.IsDir() {
-			nodes = append(nodes, pterm.TreeNode{
-				Text:     pterm.Cyan(fileName),
-				Children: getDirChildren(filepath.Join(dirPath, fileName)),
-			})
-		} else if fileName == "health.json" {
-			fileContents, err := os.ReadFile(filepath.Join(dirPath, fileName))
-			if err != nil {
-				fmt.Printf("Error reading file\n")
-				continue
-			}
-			// Get file information
-			fileInfo, err := os.Stat(filepath.Join(dirPath, fileName))
-			if err != nil {
-				fmt.Printf("Error stat-ing file\n")
-				continue
-			}
-			var coloredFile string
-			if time.Since(fileInfo.ModTime()) < time.Hour {
-				coloredFile = pterm.Green(fileName)
-			} else {
-				coloredFile = pterm.Red(fileName)
-			}
-			nodes = append(nodes, pterm.TreeNode{
-				Text: fmt.Sprintf("%s Age: %s %s", coloredFile, time.Since(fileInfo.ModTime()), string(fileContents)),
-			})
-		} else if fileName == "node-info.json" {
-			nodes = append(nodes, pterm.TreeNode{
-				Text: pterm.Blue(fileName),
-			})
-		} else {
-			nodes = append(nodes, pterm.TreeNode{
-				Text: pterm.Yellow(fileName),
-			})
-		}
-	}
-
-	return nodes
-}
 
 func tploghtmlfunc() {
 	l := "<!doctype html><html lang=en><head><title>Skywire Transport Bandwidth Logs By Day</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"
@@ -729,7 +579,7 @@ func Server() {
 		surveycount, _ := script.FindFiles("rewards/log_backups/").Match("node-info.json").CountLines()
 		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))
 		c.Writer.Flush()
-		st, _ := script.Exec(`bash -c 'go run fr.go st'`).Bytes()
+		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups`).Bytes()
 		c.Writer.Write(ansihtml.ConvertToHTML(st))
 		c.Writer.Flush()
 		c.Writer.Write([]byte(htmltoplink))
@@ -757,7 +607,7 @@ func Server() {
 		surveycount, _ := script.FindFiles("rewards/log_backups/").Match("node-info.json").CountLines()
 		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))
 		c.Writer.Flush()
-		st, _ := script.Exec(`bash -c 'go run fr.go st -p ` + c.Param("pk") + `'`).Bytes()
+		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -p ` + c.Param("pk")).Bytes()
 		c.Writer.Write(ansihtml.ConvertToHTML(st))
 		c.Writer.Flush()
 		c.Writer.Write([]byte(htmltoplink))
@@ -1027,7 +877,6 @@ func Server() {
 		}
 		rewardfiles, _ := script.FindFiles(`rewards/hist`).Match(c.Param("date")).Slice()
 		if len(rewardfiles) == 0 {
-			fmt.Println("len rewardfiles == 0")
 			c.Writer.WriteHeader(http.StatusNotFound)
 			c.Writer.Flush()
 			return
