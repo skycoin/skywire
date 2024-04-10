@@ -79,7 +79,7 @@ skyenv file detected: ` + skyenvfile
 SKYENV=/path/to/fiber.conf fiber run`
 	}(),
 	Run: func(_ *cobra.Command, _ []string) {
-		Server()
+		server()
 	},
 }
 
@@ -394,7 +394,7 @@ func sex(cmd string) string {
 var htmlPageTemplateData htmlTemplateData
 var tmpl *htmpl.Template
 
-func Server() {
+func server() {
 	fmt.Println("generating in-memory html")
 
 	if dmsgDisc == "" {
@@ -689,7 +689,7 @@ func Server() {
 		tmpl := tmpl0
 		htmlPageTemplateData1 := htmlTemplateData{
 			Title:   "Skycoin Reward Calculation and Distribution",
-			Content: htmpl.HTML(l),
+			Content: htmpl.HTML(l), //nolint
 		}
 		//	htmlPageTemplateData1.Content =
 		tmplData := map[string]interface{}{
@@ -830,7 +830,7 @@ func Server() {
 	})
 
 	r1.GET("/skycoin-rewards/csv/plain", func(c *gin.Context) {
-		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String()
+		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String() //nolint
 		if strings.TrimRight(active, "\n") == "active" {
 			c.Writer.Header().Set("Server", "")
 			c.Writer.WriteHeader(http.StatusNotFound)
@@ -900,9 +900,9 @@ func Server() {
 				if i == 0 {
 					continue
 				}
-				thispk, _ := script.Echo(line).Column(2).String()
-				share, _ := script.Echo(line).Column(3).String()
-				sky, _ := script.Echo(line).Column(4).String()
+				thispk, _ := script.Echo(line).Column(2).String() //nolint
+				share, _ := script.Echo(line).Column(3).String()  //nolint
+				sky, _ := script.Echo(line).Column(4).String()    //nolint
 				l += "<a id='" + strings.TrimRight(thispk, ",\n") + "'>" + strings.TrimRight(thispk, ",\n") + "</a>," + strings.TrimRight(share, "\n") + strings.Replace(sky, ",\n", "\n", -1)
 			}
 		}
@@ -950,7 +950,7 @@ func Server() {
 		tmpl := tmpl0
 		htmlPageTemplateData1 := htmlTemplateData{
 			Title:   "Skycoin Reward Calculation and Distribution",
-			Content: htmpl.HTML(l),
+			Content: htmpl.HTML(l), //nolint
 		}
 		//	htmlPageTemplateData1.Content =
 		tmplData := map[string]interface{}{
@@ -1049,7 +1049,7 @@ func Server() {
 		tmpl := tmpl0
 		htmlPageTemplateData1 := htmlTemplateData{
 			Title:   "Skycoin Reward Calculation and Distribution",
-			Content: htmpl.HTML(l),
+			Content: htmpl.HTML(l), //nolint
 		}
 
 		tmplData := map[string]interface{}{
@@ -1209,7 +1209,6 @@ AgAAAIAAAACAAAABwAAAAfAAAAfwAAAP/gAAf/8AAH//AAB//4AB//+AA///wAP///AH///4H///
 				}
 				if errCount >= 3 {
 					log.Fatalf("http server %v unreachable after %v tries ; exiting", ensureOnlineURL, errCount)
-					os.Exit(1)
 				}
 			}
 		}()
@@ -1326,21 +1325,21 @@ var (
 	shareshtml        *string
 	visorshtml        *string
 	// html snippets
-	htmlstart string = "<!doctype html><html lang=en><head></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"
-	n0        string = "<a id='top' class='anchor' aria-hidden='true' href='#top'></a>"
-	n1        string = "  <a href='/'>fiber</a>"
-	n2        string = "  <a href='/skycoin-rewards'>skycoin rewards</a>"
-	n3        string = "  <a href='/log-collection'>log collection</a>"
-	n4        string = "  <a href='/log-collection/tree'>survey index</a>"
-	n5        string = "  <a href='/log-collection/tplogs'>transport logging</a>"
+	htmlstart = "<!doctype html><html lang=en><head></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"
+	n0        = "<a id='top' class='anchor' aria-hidden='true' href='#top'></a>"
+	n1        = "  <a href='/'>fiber</a>"
+	n2        = "  <a href='/skycoin-rewards'>skycoin rewards</a>"
+	n3        = "  <a href='/log-collection'>log collection</a>"
+	n4        = "  <a href='/log-collection/tree'>survey index</a>"
+	n5        = "  <a href='/log-collection/tplogs'>transport logging</a>"
 
-	n8          string = "  <a href='https://ut.skywire.skycoin.com/uptimes?v=v2'>uptime tracker</a>"
-	n9          string = "\n<br>\n"
-	navlinks    string = n1 + n2 + n3 + n4 + n5 + n8 + n9
-	htmltoplink string = "<a href='#top'>top of page</a>\n"
-	htmlend     string = "</pre></body></html>"
-	htmlstyle   string = "<style>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n"
-	bodystyle   string = "<body style='background-color:black;color:white;'>\n"
+	n8          = "  <a href='https://ut.skywire.skycoin.com/uptimes?v=v2'>uptime tracker</a>"
+	n9          = "\n<br>\n"
+	navlinks    = n1 + n2 + n3 + n4 + n5 + n8 + n9
+	htmltoplink = "<a href='#top'>top of page</a>\n"
+	htmlend     = "</pre></body></html>"
+	htmlstyle   = "<style>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n"
+	bodystyle   = "<body style='background-color:black;color:white;'>\n"
 )
 
 const help = "Usage:\r\n" +
