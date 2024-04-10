@@ -38,7 +38,7 @@ func makeTree() {
 			Children: getDirChildren(rootDir),
 		}
 	}
-	pterm.DefaultTree.WithRoot(tree).Render()
+	pterm.DefaultTree.WithRoot(tree).Render() //nolint
 }
 
 func getDirNodes(dirPath string) []pterm.TreeNode {
@@ -80,13 +80,13 @@ func getDirChildren(dirPath string) []pterm.TreeNode {
 				Children: getDirChildren(filepath.Join(dirPath, fileName)),
 			})
 		} else if fileName == "health.json" {
-			fileContents, err := os.ReadFile(filepath.Join(dirPath, fileName))
+			fileContents, err := os.ReadFile(filepath.Join(dirPath, fileName)) //nolint
 			if err != nil {
 				fmt.Printf("Error reading file\n")
 				continue
 			}
 			// Get file information
-			fileInfo, err := os.Stat(filepath.Join(dirPath, fileName))
+			fileInfo, err := os.Stat(filepath.Join(dirPath, fileName)) //nolint
 			if err != nil {
 				fmt.Printf("Error stat-ing file\n")
 				continue

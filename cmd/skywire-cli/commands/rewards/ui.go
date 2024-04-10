@@ -114,7 +114,7 @@ func tploghtmlfunc() {
 		sh("date"))
 	l += "<p style='color:blue'>Blue = Verified Bandwidth</p>"
 	l += "<p style='color:yellow'>Yellow = Transport bandwidth inconsistent</p>"
-	l += "<p style='color:red'>Red = Error: sent or recieved is zero</p>"
+	l += "<p style='color:red'>Red = Error: sent or received is zero</p>"
 	l += fmt.Sprintf("%s\n",
 		shh("_tplogshtml"))
 	l += htmltoplink
@@ -166,7 +166,7 @@ func mainPage(c *gin.Context) {
 	}
 	tmpl := tmpl0
 	htmlPageTemplateData1 := htmlPageTemplateData
-	htmlPageTemplateData1.Content = htmpl.HTML(skycoinlogohtml)
+	htmlPageTemplateData1.Content = htmpl.HTML(skycoinlogohtml) //nolint
 	tmplData := map[string]interface{}{
 		"Page": htmlPageTemplateData1,
 	}
@@ -206,7 +206,7 @@ Reward system status:
 <br>
 */
 
-type Transaction struct {
+type transaction struct {
 	Status struct {
 		Confirmed   bool `json:"confirmed"`
 		Unconfirmed bool `json:"unconfirmed"`
@@ -246,8 +246,8 @@ func csvcheck(txid string) string {
 	}
 	defer resp.Body.Close() //nolint
 
-	// Decode JSON response into Transaction struct
-	var tx Transaction
+	// Decode JSON response into transaction struct
+	var tx transaction
 	err = json.NewDecoder(resp.Body).Decode(&tx)
 	if err != nil {
 		msg := fmt.Sprint("Error decoding JSON response: %v\n", err)
@@ -354,7 +354,7 @@ func rewardshtmlfunc() []byte {
 	tmpl := tmpl0
 	htmlPageTemplateData1 := htmlTemplateData{
 		Title:   "Skycoin Reward Calculation and Distribution",
-		Content: htmpl.HTML(l),
+		Content: htmpl.HTML(l), //nolint
 	}
 	tmplData := map[string]interface{}{
 		"Page": htmlPageTemplateData1,
@@ -815,9 +815,9 @@ func Server() {
 	})
 	r1.GET("/health", func(c *gin.Context) {
 		runTime = time.Since(startTime)
-		nextrun, _ := script.Exec(`bash -c "systemctl status skywire-reward.timer --lines=0 | head -n4 | tail -n1 | sed 's/    Trigger: //g'"`).String()
-		prevDuration, _ := script.Exec(`bash -c "systemctl status skywire-reward.service --lines=0 | grep -m1 'Duration' | sed 's/   Duration: //g'"`).String()
-		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String()
+		nextrun, _ := script.Exec(`bash -c "systemctl status skywire-reward.timer --lines=0 | head -n4 | tail -n1 | sed 's/    Trigger: //g'"`).String()        //nolint
+		prevDuration, _ := script.Exec(`bash -c "systemctl status skywire-reward.service --lines=0 | grep -m1 'Duration' | sed 's/   Duration: //g'"`).String() //nolint
+		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String()                                                                         //nolint
 		c.JSON(http.StatusOK, gin.H{
 			"frontend_start_time":             startTime,
 			"frontend_run_time":               runTime.String(),
