@@ -604,11 +604,11 @@ func Server() {
 		c.Writer.Flush()
 		c.Writer.Write([]byte(navlinks)) //nolint
 		c.Writer.Flush()
-		surveycount, _ := script.FindFiles("rewards/log_backups/").Match("node-info.json").CountLines()
-		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount))) //nolint
+		surveycount, _ := script.FindFiles("rewards/log_backups/").Match("node-info.json").CountLines() //nolint
+		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))                         //nolint
 		c.Writer.Flush()
-		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -p ` + c.Param("pk")).Bytes()
-		c.Writer.Write(ansihtml.ConvertToHTML(st)) //nolint
+		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -p ` + c.Param("pk")).Bytes() //nolint
+		c.Writer.Write(ansihtml.ConvertToHTML(st))                                                    //nolint
 		c.Writer.Flush()
 		c.Writer.Write([]byte(htmltoplink)) //nolint
 		c.Writer.Flush()
@@ -672,7 +672,7 @@ func Server() {
 
 		l += fmt.Sprintf("%s",
 			shh(" _rainbowcal"))
-		rewardtxncsvs, _ := script.FindFiles(`rewards/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Replace("rewards/hist/", "").Replace("_rewardtxn0.csv", "").Slice()
+		rewardtxncsvs, _ := script.FindFiles(`rewards/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Replace("rewards/hist/", "").Replace("_rewardtxn0.csv", "").Slice() //nolint
 		for i := len(rewardtxncsvs) - 1; i >= 0; i-- {
 			l += "<a href='/skycoin-rewards/hist/" + rewardtxncsvs[i] + "'>" + rewardtxncsvs[i] + "</a>\n"
 		}
@@ -781,20 +781,20 @@ func Server() {
 			}
 		}
 		c.Writer.WriteHeader(http.StatusNotFound)
-		h, _ := script.FindFiles("rewards/hist").String()
+		h, _ := script.FindFiles("rewards/hist").String()                     //nolint
 		c.Writer.Write([]byte("No undistributed rewards csv found.\n\n" + h)) //nolint
 		return
 	})
 
 	r1.GET("/skycoin-rewards/csv", func(c *gin.Context) {
-		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String()
+		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String() //nolint
 		if strings.TrimRight(active, "\n") == "active" {
 			c.Writer.Header().Set("Server", "")
 			c.Writer.WriteHeader(http.StatusNotFound)
 			return
 		}
 		c.Writer.Header().Set("Server", "")
-		f, _ := script.FindFiles("rewards/hist").MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice()
+		f, _ := script.FindFiles("rewards/hist").MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice() //nolint
 		for _, f1 := range f {
 			g, err := script.File(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String()
 			if err != nil || g == "" || g == "\n" || g == "test" || g == "test\n" {
@@ -810,7 +810,7 @@ func Server() {
 	})
 	//status of reward system hourly run.
 	r1.GET("/skycoin-rewards/s", func(c *gin.Context) {
-		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String()
+		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String() //nolint
 		c.JSON(http.StatusOK, gin.H{"active": strings.TrimRight(active, "\n")})
 	})
 	r1.GET("/health", func(c *gin.Context) {
@@ -873,7 +873,7 @@ func Server() {
 				}
 			}
 		}
-		rewardfiles, _ := script.FindFiles(`rewards/hist`).Match(c.Param("date")).Slice()
+		rewardfiles, _ := script.FindFiles(`rewards/hist`).Match(c.Param("date")).Slice() //nolint
 		if len(rewardfiles) == 0 {
 			c.Writer.WriteHeader(http.StatusNotFound)
 			c.Writer.Flush()
@@ -1183,7 +1183,7 @@ AgAAAIAAAACAAAABwAAAAfAAAAfwAAAP/gAAf/8AAH//AAB//4AB//+AA///wAP///AH///4H///
 	wg.Add(1)
 	go func() {
 		fmt.Printf("listening on http://127.0.0.1:%d using gin router\n", webPort)
-		r1.Run(fmt.Sprintf(":%d", webPort))
+		r1.Run(fmt.Sprintf(":%d", webPort)) //nolint
 		wg.Done()
 	}()
 
@@ -1564,7 +1564,7 @@ func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {
 		remotePK, _, err := net.SplitHostPort(c.Request.RemoteAddr)
 		if err != nil {
 			c.Writer.WriteHeader(http.StatusInternalServerError)
-			c.Writer.Write([]byte("500 Internal Server Error"))
+			c.Writer.Write([]byte("500 Internal Server Error")) //nolint
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
@@ -1585,7 +1585,7 @@ func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {
 		} else {
 			// Otherwise, return a 401 Unauthorized error.
 			c.Writer.WriteHeader(http.StatusUnauthorized)
-			c.Writer.Write([]byte("401 Unauthorized"))
+			c.Writer.Write([]byte("401 Unauthorized")) //nolint
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}
