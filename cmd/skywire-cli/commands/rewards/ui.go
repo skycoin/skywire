@@ -5,8 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/csv"
-	"encoding/json"
 	"fmt"
 	htmpl "html/template"
 	"io"
@@ -32,8 +30,6 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 )
-
-var x = os.Args[0]
 
 func init() {
 	RootCmd.CompletionOptions.DisableDefaultCmd = true
@@ -83,11 +79,6 @@ SKYENV=/path/to/fiber.conf fiber run`
 	},
 }
 
-var (
-	webPort1 int
-	whom     bool
-)
-
 const scriptfile = "fr.sh"
 
 var (
@@ -101,55 +92,23 @@ var (
 	wl              string
 	wlkeys          []cipher.PubKey
 	webPort         uint
-	logtxtdate      string
 	ensureOnlineURL string
 )
 
 var skyenvfile = os.Getenv("SKYENV")
 
-func tploghtmlfunc() {
-	l := "<!doctype html><html lang=en><head><title>Skywire Transport Bandwidth Logs By Day</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"
+func tploghtmlfunc() (l string) {
+	l = "<!doctype html><html lang=en><head><title>Skywire Transport Bandwidth Logs By Day</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"
 	l += navlinks
 	l += fmt.Sprintf("page updated: %s\n",
 		sh("date"))
 	l += "<p style='color:blue'>Blue = Verified Bandwidth</p>"
 	l += "<p style='color:yellow'>Yellow = Transport bandwidth inconsistent</p>"
 	l += "<p style='color:red'>Red = Error: sent or received is zero</p>"
-	l += fmt.Sprintf("%s\n",
-		shh("_tplogshtml"))
+	tp, _ := script.Exec(`skywire cli log tp -d rewards/log_backups`).String() //nolint
+
+	l += fmt.Sprintf("%s\n", tp)
 	l += htmltoplink
-	l += htmlend
-	tploghtml = &l
-}
-
-func rewardshisthtmlfunc(d string) string {
-	l := "<!doctype html><html lang=en><head><title>Rewards for " + d + "</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"
-	l += navlinks
-	if _, err := os.Stat(fmt.Sprintf("rewards/hist/%s.txt", d)); os.IsNotExist(err) {
-		l += "no data for date: " + d + "\n"
-	} else {
-
-		l += fmt.Sprintf("<div style='float: right;'>\nreward distribution transaction for %s \n<a href='https://explorer.skycoin.com/app/transaction/%s'>%s</a>\n%s\n</div>",
-			d,
-			shh(" _txidfromdate "+d),
-			shh(" _txidfromdate "+d),
-			shh(" _csvcheckdate "+d))
-		l += fmt.Sprintf("\nreward distribution CSV for %s\n\n%s\n",
-			d,
-			shh(" _localcsvcheckdate "+d))
-		l += htmltoplink
-	}
-	l += htmlend
-	return l
-}
-
-func transportstatshtml() string {
-	l := "<!doctype html><html lang=en><head><title>Skywire Transport Statistics</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"
-	l += navlinks
-	l += "<a href='/transports-map'>transports map</a>\n\n"
-	l += "<a href='/log-collection/tplogs'>transport logs</a>\n\n"
-	l += fmt.Sprintf("%s\n",
-		shh(" _tpstats"))
 	l += htmlend
 	return l
 }
@@ -204,7 +163,7 @@ Reward system status:
 {{.Page.NextSkywireCliLogRun}}
 {{.Page.MostRecentTxnInfo}}
 <br>
-*/
+
 
 type transaction struct {
 	Status struct {
@@ -277,96 +236,7 @@ func csvcheck(txid string) string {
 	}
 	return csvOutputBuilder.String()
 }
-func rewardshtmlfunc() []byte {
-
-	l := fmt.Sprintf("page updated: %s\n",
-		sh("date"))
-	l += fmt.Sprintf("<div style='float: right;'>%s</div>", func() string {
-		yearlyTotal := 408000.0
-		result := fmt.Sprintf("%g annual reward distribution\nReward total per month:\n", yearlyTotal)
-
-		currentMonth := time.Now().Month()
-		currentYear := time.Now().Year()
-
-		for month := time.January; month <= time.December; month++ {
-			daysInMonth := time.Date(currentYear, month+1, 0, 0, 0, 0, 0, time.UTC).Day()
-			monthlyRewards := (yearlyTotal / 365) * float64(daysInMonth)
-			format := "%g %d %s\n"
-			if currentMonth >= month {
-				format = "<strike>" + format + "</strike>"
-			}
-			result += fmt.Sprintf(format, monthlyRewards, currentYear, month)
-		}
-
-		firstDayOfNextYear := time.Date(currentYear+1, time.January, 1, 0, 0, 0, 0, time.UTC)
-		lastDayOfYear := firstDayOfNextYear.Add(-time.Second)
-		totalDaysInYear := int(lastDayOfYear.YearDay())
-
-		skycoinPerDay := yearlyTotal / float64(totalDaysInYear)
-		result += fmt.Sprintf("%g Skycoin per day\n", skycoinPerDay)
-
-		return result
-	}())
-	l += fmt.Sprintf("There are %d days in the month of %s.\n", time.Date(time.Now().Year(), time.Now().Month()+1, 0, 0, 0, 0, 0, time.UTC).Day(), time.Now().Month())
-
-	l += fmt.Sprintf("Today is %s %d.\n", time.Now().Month(), time.Now().Day())
-
-	l += fmt.Sprintf("There are %d days left in the month of %s.\n", time.Date(time.Now().Year(), time.Now().Month()+1, 0, 0, 0, 0, 0, time.UTC).Day()-time.Now().Day(), time.Now().Month())
-
-	l += fmt.Sprintf("%d days in the year %d.\n", time.Date(time.Now().Year(), time.December, 31, 0, 0, 0, 0, time.UTC).YearDay(), time.Now().Year())
-
-	l += fmt.Sprintf("Today is day %d.\n", time.Now().YearDay())
-
-	l += fmt.Sprintf("There are %d days remaining in %d\n", time.Date(time.Now().Year(), time.December, 31, 0, 0, 0, 0, time.UTC).YearDay()-time.Now().YearDay(), time.Now().Year())
-
-	l += fmt.Sprintf("%s",
-		shh(" _rainbowcal"))
-	mostrecentrewardfordate, _ := script.FindFiles(`rewards/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?.txt")).Last(1).Replace("/", " ").Replace(".txt", "").Column(3).String() //nolint
-	modTime, _ := os.Stat("rewards/transactions0.txt")                                                                                                                                        //nolint
-	mostrecenttxid, _ := script.File("rewards/transactions0.txt").Last(1).String()                                                                                                            //nolint
-	l += fmt.Sprintf("<div style='float: right;'>\nreward distribution transaction for %s distributed on %s\n<a href='https://explorer.skycoin.com/app/transaction/%s'>%s</a>\n%s\nPrevious distributions:\n%s\n%s</div>",
-		mostrecentrewardfordate,
-		modTime.ModTime(),
-		mostrecenttxid,
-		mostrecenttxid,
-		csvcheck(mostrecenttxid),
-		shh(" _alltxidlinks"),
-		htmltoplink)
-	l += fmt.Sprintf("\nreward distribution CSV for %s distributed on %s\n%s\n",
-		mostrecentrewardfordate,
-		shh(" _mostrecenttxiddate"),
-		shh(" _localcsvcheckwithanchor"))
-	l += fmt.Sprintf("Reward system status:\n%s\n%s\n",
-		shh(" _nextskywireclilogrun"),
-		shh(" _mostrecenttxninfo"))
-	mostrecenttxninfo := "most recent transaction info placeholder"
-	l += fmt.Sprintf("Upcoming distribution data: %s\n%s\n", mostrecentrewardfordate, mostrecenttxninfo)
-	l += htmltoplink
-
-	tmpl0, err1 := tmpl.Clone()
-	if err1 != nil {
-		fmt.Println("Error cloning template:", err1)
-	}
-	_, err1 = tmpl0.New("this").Parse(htmlRewardPageTemplate)
-	if err1 != nil {
-		fmt.Println("Error parsing Front Page template:", err1)
-	}
-	tmpl := tmpl0
-	htmlPageTemplateData1 := htmlTemplateData{
-		Title:   "Skycoin Reward Calculation and Distribution",
-		Content: htmpl.HTML(l), //nolint
-	}
-	tmplData := map[string]interface{}{
-		"Page": htmlPageTemplateData1,
-	}
-	var result bytes.Buffer
-	err = tmpl.Execute(&result, tmplData)
-	if err != nil {
-		fmt.Println("error: ", err)
-	}
-
-	return bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1)
-}
+*/
 
 func sh(cmd string) string {
 	return shHTML(fmt.Sprintf(`%s "%s"`, shcmd, cmd))
@@ -379,14 +249,6 @@ func shHTML(cmd string) string {
 	res, err = script.Exec(cmd).String()
 	if err != nil {
 		res += fmt.Sprintf("<br><p style='color:red'>error during script.Exec:\n<br> %v\n<br></p>command:\n<br>\n%s\n<br>\n%s", err, cmd, res)
-	}
-	return res
-}
-func sex(cmd string) string {
-	fmt.Printf("executing command: \n %s", cmd)
-	res, err = script.Exec(cmd).String()
-	if err != nil {
-		res = fmt.Sprintf("error during script.Exec:\n %v\nCommand:\n%s\nResult:\n%s\n", err, cmd, res)
 	}
 	return res
 }
@@ -620,8 +482,7 @@ func server() {
 	r1.GET("/log-collection/tplogs", func(c *gin.Context) {
 		c.Writer.Header().Set("Server", "")
 		c.Writer.WriteHeader(http.StatusOK)
-		tploghtmlfunc()
-		c.Writer.Write([]byte(*tploghtml)) //nolint
+		c.Writer.Write([]byte(ansihtml.ConvertToHTML([]byte(tploghtmlfunc())))) //nolint
 		return
 	})
 
@@ -865,12 +726,11 @@ func server() {
 					c.Writer.Write(filetoserve) //nolint
 					c.Writer.Flush()
 					return
-				} else {
-					fmt.Println("non nil script.File error")
-					c.Writer.WriteHeader(http.StatusNotFound)
-					c.Writer.Flush()
-					return
 				}
+				fmt.Println("non nil script.File error")
+				c.Writer.WriteHeader(http.StatusNotFound)
+				c.Writer.Flush()
+				return
 			}
 		}
 		rewardfiles, _ := script.FindFiles(`rewards/hist`).Match(c.Param("date")).Slice() //nolint
@@ -989,12 +849,11 @@ func server() {
 					c.Writer.Write(filetoserve) //nolint
 					c.Writer.Flush()
 					return
-				} else {
-					fmt.Println("non nil script.File error")
-					c.Writer.WriteHeader(http.StatusNotFound)
-					c.Writer.Flush()
-					return
 				}
+				fmt.Println("non nil script.File error")
+				c.Writer.WriteHeader(http.StatusNotFound)
+				c.Writer.Flush()
+				return
 			}
 		}
 		rewardfiles, _ := script.FindFiles(`rewards/hist`).Match(c.Param("date")).Slice() //nolint
@@ -1174,7 +1033,7 @@ AgAAAIAAAACAAAABwAAAAfAAAAfwAAAP/gAAf/8AAH//AAB//4AB//+AA///wAP///AH///4H///
 
 	// Start the server using the custom Gin handler
 	serve := &http.Server{
-		Handler:           &GinHandler{Router: r1},
+		Handler:           &ginHandler{Router: r1},
 		ReadHeaderTimeout: 3 * time.Second,
 	}
 
@@ -1217,11 +1076,11 @@ AgAAAIAAAACAAAABwAAAAfAAAAfwAAAP/gAAf/8AAH//AAB//4AB//+AA///wAP///AH///4H///
 	wg.Wait()
 }
 
-type GinHandler struct {
+type ginHandler struct {
 	Router *gin.Engine
 }
 
-func (h *GinHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *ginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Router.ServeHTTP(w, r)
 }
 
@@ -1316,41 +1175,18 @@ var (
 	err error
 	res string
 	cmd string
-	// vars that contain generated html pages
-	mainhtml          *string
-	logcollectinghtml *string
-	logtreehtml       *string
-	tploghtml         *string
-	rewardshtml       *string
-	shareshtml        *string
-	visorshtml        *string
 	// html snippets
-	htmlstart = "<!doctype html><html lang=en><head></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"
-	n0        = "<a id='top' class='anchor' aria-hidden='true' href='#top'></a>"
-	n1        = "  <a href='/'>fiber</a>"
-	n2        = "  <a href='/skycoin-rewards'>skycoin rewards</a>"
-	n3        = "  <a href='/log-collection'>log collection</a>"
-	n4        = "  <a href='/log-collection/tree'>survey index</a>"
-	n5        = "  <a href='/log-collection/tplogs'>transport logging</a>"
-
+	n1          = "  <a href='/'>fiber</a>"
+	n2          = "  <a href='/skycoin-rewards'>skycoin rewards</a>"
+	n3          = "  <a href='/log-collection'>log collection</a>"
+	n4          = "  <a href='/log-collection/tree'>survey index</a>"
+	n5          = "  <a href='/log-collection/tplogs'>transport logging</a>"
 	n8          = "  <a href='https://ut.skywire.skycoin.com/uptimes?v=v2'>uptime tracker</a>"
 	n9          = "\n<br>\n"
 	navlinks    = n1 + n2 + n3 + n4 + n5 + n8 + n9
 	htmltoplink = "<a href='#top'>top of page</a>\n"
 	htmlend     = "</pre></body></html>"
-	htmlstyle   = "<style>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n"
-	bodystyle   = "<body style='background-color:black;color:white;'>\n"
 )
-
-const help = "Usage:\r\n" +
-	"  {{.UseLine}}{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}\r\n\r\n" +
-	"{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}\r\n\r\n" +
-	"Available Commands:{{range .Commands}}{{if (or .IsAvailableCommand)}}\r\n  " +
-	"{{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}\r\n\r\n" +
-	"Flags:\r\n" +
-	"{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}\r\n\r\n" +
-	"Global Flags:\r\n" +
-	"{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}\r\n\r\n"
 
 func scriptExecString(s string) string {
 	if runtime.GOOS == "windows" {
@@ -1502,61 +1338,6 @@ func scriptExecUint(s string) uint {
 	return uint(0)
 }
 
-func shS(s string) string {
-	z, err := script.Exec(fmt.Sprintf(`bash -c '%s'`, skyenvfile, s)).String()
-	if err == nil {
-		return z
-	}
-	return ""
-}
-
-func shB(s string) bool {
-	z, err := script.Exec(fmt.Sprintf(`bash -c '%s'`, s)).String()
-	if err == nil {
-		b, err := strconv.ParseBool(z)
-		if err == nil {
-			return b
-		}
-	}
-
-	return false
-}
-
-func shA(s string) []string {
-	y, err := script.Exec(fmt.Sprintf(`bash -c '%s'`, s)).Slice()
-	if err == nil {
-		return y
-	}
-	return []string{}
-}
-
-func shI(s string) int {
-	z, err := script.Exec(fmt.Sprintf(`bash -c '%s'`, s)).String()
-	if err == nil {
-		if z == "" {
-			return 0
-		}
-		i, err := strconv.Atoi(z)
-		if err == nil {
-			return i
-		}
-	}
-	return 0
-}
-func shU(s string) uint {
-	z, err := script.Exec(fmt.Sprintf(`bash -c '%s'`, s)).String()
-	if err == nil {
-		if z == "" {
-			return 0
-		}
-		i, err := strconv.Atoi(z)
-		if err == nil {
-			return uint(i)
-		}
-	}
-	return uint(0)
-}
-
 func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Get the remote PK.
@@ -1614,21 +1395,6 @@ const htmlFrontPageTemplate = `
 ┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐  ┬─┐┌─┐┬ ┬┌─┐┬─┐┌┬┐┌─┐
 └─┐├┴┐└┬┘││││├┬┘├┤   ├┬┘├┤ │││├─┤├┬┘ ││└─┐
 └─┘┴ ┴ ┴ └┴┘┴┴└─└─┘  ┴└─└─┘└┴┘┴ ┴┴└──┴┘└─┘<br>
-{{.Page.Content}}
-`
-const htmlTransportStatsTemplate = `
-<a href='/transports-map'>transports map</a>
-<a href='/log-collection/tplogs'>transport logs</a>\n\n"
-{{.Page.Content}}
-`
-const htmlLogCollectingTemplate = `
-<a href='/transports-map'>transports map</a>
-<a href='/log-collection/tplogs'>transport logs</a>\n\n"
-{{.Page.Content}}
-`
-const htmlLogTreeTemplate = `
-<a href='/transports-map'>transports map</a>
-<a href='/log-collection/tplogs'>transport logs</a>\n\n"
 {{.Page.Content}}
 `
 

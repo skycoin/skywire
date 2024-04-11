@@ -28,7 +28,7 @@ var (
 
 func init() {
 	RootCmd.AddCommand(
-		stCmd,
+		stCmd, tpCmd,
 	)
 }
 
