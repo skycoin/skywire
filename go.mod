@@ -26,6 +26,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/orandin/lumberjackrus v1.0.1
 	github.com/pterm/pterm v0.12.66
+	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/skycoin/dmsg v1.3.20
 	github.com/skycoin/skycoin v0.27.1
