@@ -1198,7 +1198,7 @@ var (
 	n10         = "  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers'>all dmsg servers</a>"
 	n11         = "  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/available_servers'>available dmsg servers</a>"
 	n12         = "\n<br>\n"
-	navlinks    = n1 + n2 + n3 + n4 + n5 + n8 + n9 + n10 + n11 + n12
+	navlinks    = n1 + n2 + n3 + n4 + n5 + n6 + n7 + n8 + n9 + n10 + n11 + n12
 	htmltoplink = "<a href='#top'>top of page</a>\n"
 	htmlend     = "</pre></body></html>"
 )
