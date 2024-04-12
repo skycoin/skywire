@@ -52,7 +52,6 @@ func init() {
 	if scriptExecString("${DMSGHTTP_SK}") != "" {
 		sk.Set(scriptExecString("${DMSGHTTP_SK}")) //nolint
 	}
-	pk, _ = sk.PubKey() //nolint
 	uiCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
 }
 
@@ -85,7 +84,6 @@ var (
 	startTime       = time.Now()
 	runTime         time.Duration
 	sk              cipher.SecKey
-	pk              cipher.PubKey
 	dmsgDisc        string
 	dmsgPort        uint
 	dmsgSess        int
@@ -476,14 +474,12 @@ func server() {
 		c.Writer.Flush()
 		c.Writer.Write([]byte(htmlend)) //nolint
 		c.Writer.Flush()
-		return
 	})
 
 	r1.GET("/log-collection/tplogs", func(c *gin.Context) {
 		c.Writer.Header().Set("Server", "")
 		c.Writer.WriteHeader(http.StatusOK)
 		c.Writer.Write([]byte(ansihtml.ConvertToHTML([]byte(tploghtmlfunc())))) //nolint
-		return
 	})
 
 	r1.GET("/skycoin-rewards", func(c *gin.Context) {
@@ -531,8 +527,11 @@ func server() {
 
 		l += fmt.Sprintf("There are %d days remaining in %d\n", time.Date(time.Now().Year(), time.December, 31, 0, 0, 0, 0, time.UTC).YearDay()-time.Now().YearDay(), time.Now().Year())
 
-		l += fmt.Sprintf("%s",
-			shh(" _rainbowcal"))
+		calendar, err := script.Exec(`bash -c 'unbuffer cal --color | lolcat -f -F 0.5'`).String()
+		if err != nil {
+			calendar = cal()
+		}
+		l += string(ansihtml.ConvertToHTML([]byte(calendar)))
 		rewardtxncsvs, _ := script.FindFiles(`rewards/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Replace("rewards/hist/", "").Replace("_rewardtxn0.csv", "").Slice() //nolint
 		for i := len(rewardtxncsvs) - 1; i >= 0; i-- {
 			l += "<a href='/skycoin-rewards/hist/" + rewardtxncsvs[i] + "'>" + rewardtxncsvs[i] + "</a>\n"
@@ -564,7 +563,6 @@ func server() {
 
 		c.Writer.Write(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1)) //nolint
 		c.Writer.Flush()
-		return
 	})
 
 	authRoute := r1.Group("/")
@@ -644,7 +642,6 @@ func server() {
 		c.Writer.WriteHeader(http.StatusNotFound)
 		h, _ := script.FindFiles("rewards/hist").String()                     //nolint
 		c.Writer.Write([]byte("No undistributed rewards csv found.\n\n" + h)) //nolint
-		return
 	})
 
 	r1.GET("/skycoin-rewards/csv", func(c *gin.Context) {
@@ -667,7 +664,6 @@ func server() {
 
 		}
 		c.Writer.WriteHeader(http.StatusNotFound)
-		return
 	})
 	//status of reward system hourly run.
 	r1.GET("/skycoin-rewards/s", func(c *gin.Context) {
@@ -709,7 +705,6 @@ func server() {
 
 		}
 		c.Writer.WriteHeader(http.StatusNotFound)
-		return
 	})
 
 	r1.GET("/skycoin-rewards/hist/:date", func(c *gin.Context) {
@@ -826,7 +821,6 @@ func server() {
 		c.Writer.Flush()
 		c.Writer.Write(result.Bytes()) //nolint
 		c.Writer.Flush()
-		return
 	})
 
 	authRoute.GET("/skycoinrewards/hist/:date", func(c *gin.Context) {
@@ -924,7 +918,6 @@ func server() {
 		c.Writer.Flush()
 		c.Writer.Write(result.Bytes()) //nolint
 		c.Writer.Flush()
-		return
 	})
 
 	authRoute.GET("/node-info/:pk", func(c *gin.Context) {
@@ -946,7 +939,6 @@ func server() {
 		c.Writer.Flush()
 		c.Writer.Write(ni) //nolint
 		c.Writer.Flush()
-		return
 	})
 
 	faviconBase64 := `AAABAAEAICAAAAEAIACoEAAAFgAAACgAAAAgAAAAQAAAAAEAIAAAAAAAABAAACIuAAAiLgAAAAAA
@@ -1076,6 +1068,36 @@ AgAAAIAAAACAAAABwAAAAfAAAAfwAAAP/gAAf/8AAH//AAB//4AB//+AA///wAP///AH///4H///
 	wg.Wait()
 }
 
+func cal() (ret string) {
+	today := time.Now()
+	year, month, _ := today.Date()
+	firstOfMonth := time.Date(year, month, 1, 0, 0, 0, 0, time.Local)
+	startDayOfWeek := firstOfMonth.Weekday()
+	numDays := time.Date(year, month+1, 0, 0, 0, 0, 0, time.Local).Day()
+	header := fmt.Sprintf("%s %d", month.String(), year)
+	headerWidth := 20
+	padding := (headerWidth - len(header)) / 2
+	ret += fmt.Sprintf("%*s%s%*s\n", padding, "", header, headerWidth-len(header)-padding, "")
+	ret += fmt.Sprintf("Su Mo Tu We Th Fr Sa\n")
+	for i := 0; i < int(startDayOfWeek); i++ {
+		ret += fmt.Sprintf("   ")
+	}
+	day := 1
+	for day <= numDays {
+		for i := int(startDayOfWeek); i < 7 && day <= numDays; i++ {
+			if day == today.Day() {
+				ret += fmt.Sprintf("\x1b[7m%2d\x1b[0m ", day)
+			} else {
+				ret += fmt.Sprintf("%2d ", day)
+			}
+			day++
+		}
+		ret += "\n"
+		startDayOfWeek = 0
+	}
+	return ret
+}
+
 type ginHandler struct {
 	Router *gin.Engine
 }
@@ -1148,14 +1170,14 @@ func resetColor() string {
 	return reset
 }
 
-type consoleColorModeValue int
+type consoleColorModeValue int //nolint
 
-var consoleColorMode = autoColor
+var consoleColorMode = autoColor //nolint
 
 const (
-	autoColor consoleColorModeValue = iota
-	disableColor
-	forceColor
+	autoColor    consoleColorModeValue = iota //nolint
+	disableColor                              //nolint
+	forceColor                                //nolint
 )
 
 const (
@@ -1174,7 +1196,6 @@ const shcmd = `/usr/bin/bash -c`
 var (
 	err error
 	res string
-	cmd string
 	// html snippets
 	n1          = "  <a href='/'>fiber</a>"
 	n2          = "  <a href='/skycoin-rewards'>skycoin rewards</a>"
@@ -1213,38 +1234,6 @@ func scriptExecString(s string) string {
 		return strings.TrimSpace(z)
 	}
 	return ""
-}
-
-func scriptExecBool(s string) bool {
-	if runtime.GOOS == "windows" {
-		var variable string
-		if strings.Contains(s, ":-") {
-			parts := strings.SplitN(s, ":-", 2)
-			variable = parts[0] + "}"
-		} else {
-			variable = s
-		}
-		out, err := script.Exec(fmt.Sprintf(`powershell -c '$SKYENV = "%s"; if ($SKYENV -ne "" -and (Test-Path $SKYENV)) { . $SKYENV }; echo %s"`, skyenvfile, variable)).String()
-		if err == nil {
-			if (out == "") || (out == variable) {
-				return false
-			}
-			b, err := strconv.ParseBool(strings.TrimSpace(strings.TrimRight(out, "\n")))
-			if err == nil {
-				return b
-			}
-		}
-		return false
-	}
-	z, err := script.Exec(fmt.Sprintf(`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, skyenvfile, s)).String()
-	if err == nil {
-		b, err := strconv.ParseBool(z)
-		if err == nil {
-			return b
-		}
-	}
-
-	return false
 }
 
 func scriptExecArray(s string) string {
