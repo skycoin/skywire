@@ -527,11 +527,11 @@ func server() {
 
 		l += fmt.Sprintf("There are %d days remaining in %d\n", time.Date(time.Now().Year(), time.December, 31, 0, 0, 0, 0, time.UTC).YearDay()-time.Now().YearDay(), time.Now().Year())
 
-		calendar, err := script.Exec(`bash -c 'unbuffer cal --color | lolcat -f -F 0.5'`).String()
+		calendar, err := script.Exec(`bash -c 'set -o pipefail ; unbuffer cal --color | lolcat -f -F 0.5'`).String()
 		if err != nil {
 			calendar = cal()
 		}
-		l += string(ansihtml.ConvertToHTML([]byte(calendar)))
+		l += "\n" + string(ansihtml.ConvertToHTML([]byte(calendar)))
 		rewardtxncsvs, _ := script.FindFiles(`rewards/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Replace("rewards/hist/", "").Replace("_rewardtxn0.csv", "").Slice() //nolint
 		for i := len(rewardtxncsvs) - 1; i >= 0; i-- {
 			l += "<a href='/skycoin-rewards/hist/" + rewardtxncsvs[i] + "'>" + rewardtxncsvs[i] + "</a>\n"
