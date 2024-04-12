@@ -698,7 +698,7 @@ func server() {
 		f, _ := script.FindFiles("rewards/hist").MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice() //nolint
 		for _, f1 := range f {
 			g, _ := script.File(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String() //nolint
-			if (g != "") || (g != "\n") {
+			if g != "" && g != "\n" {
 				c.Redirect(http.StatusFound, "/skycoin-"+f1)
 				return
 			}
