@@ -1180,11 +1180,8 @@ const (
 	reset   = "\033[0m"
 )
 
-const shcmd = `/usr/bin/bash -c`
-
 var (
 	err error
-	res string
 	// html snippets
 	n1          = "  <a href='/'>fiber</a>"
 	n2          = "  <a href='/skycoin-rewards'>skycoin rewards</a>"
