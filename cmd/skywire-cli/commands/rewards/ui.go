@@ -698,7 +698,7 @@ func server() {
 		f, _ := script.FindFiles("rewards/hist").MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice() //nolint
 		for _, f1 := range f {
 			g, _ := script.File(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String() //nolint
-			if g != "" || g != "\n" {
+			if (g != "") || (g != "\n") {
 				c.Redirect(http.StatusFound, "/skycoin-"+f1)
 				return
 			}
@@ -1054,7 +1054,7 @@ AgAAAIAAAACAAAABwAAAAfAAAAfwAAAP/gAAf/8AAH//AAB//4AB//+AA///wAP///AH///4H///
 				_, err := script.NewPipe().WithHTTPClient(&http.Client{Timeout: 60 * time.Second}).Get(ensureOnlineURL).AppendFile("/dev/null")
 				if err != nil {
 					errCount++
-					log.WithError(err).Error(fmt.Sprintf("Error fetching %V\nError count: %v", ensureOnlineURL, errCount))
+					log.WithError(err).Error(fmt.Sprintf("Error fetching %v\nError count: %v", ensureOnlineURL, errCount))
 				} else {
 					errCount = 0
 				}
