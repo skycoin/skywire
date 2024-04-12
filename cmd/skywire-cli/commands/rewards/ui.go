@@ -236,21 +236,6 @@ func csvcheck(txid string) string {
 }
 */
 
-func sh(cmd string) string {
-	return shHTML(fmt.Sprintf(`%s "%s"`, shcmd, cmd))
-}
-func shh(cmd string) string {
-	return shHTML(fmt.Sprintf(`%s "source %s ; %s"`, shcmd, scriptfile, cmd))
-}
-
-func shHTML(cmd string) string {
-	res, err = script.Exec(cmd).String()
-	if err != nil {
-		res += fmt.Sprintf("<br><p style='color:red'>error during script.Exec:\n<br> %v\n<br></p>command:\n<br>\n%s\n<br>\n%s", err, cmd, res)
-	}
-	return res
-}
-
 var htmlPageTemplateData htmlTemplateData
 var tmpl *htmpl.Template
 
