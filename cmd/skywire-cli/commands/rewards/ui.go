@@ -1366,7 +1366,7 @@ const htmlMainPageTemplate = `
 {{ $page := .Page }}<!doctype html><html lang='en'>
 {{template "head" .}}
 <body title='' style='background-color:black;color:white;'>
-<pre><a id='top' class='anchor' aria-hidden='true' href='#top'></a>  <a href='/'>fiber</a>  <a href='/skycoin-rewards'>skycoin rewards</a>  <a href='/log-collection'>log collection</a>  <a href='/log-collection/tree'>survey index</a>  <a href='/log-collection/tplogs'>transport logging</a>  <a href='/transports'>transport stats</a>  <a href='/transports-map'>transport map</a>  <a href='https://ut.skywire.skycoin.com/uptimes?v=v2'>uptime tracker</a><br>
+<pre><a id='top' class='anchor' aria-hidden='true' href='#top'></a>  <a href='/'>fiber</a>  <a href='/skycoin-rewards'>skycoin rewards</a>  <a href='/log-collection'>log collection</a>  <a href='/log-collection/tree'>survey index</a>  <a href='/log-collection/tplogs'>transport logging</a>  <a href='/transports'>transport stats</a>  <a href='/transports-map'>transport map</a>  <a href='https://ut.skywire.skycoin.com/uptimes?v=v2'>uptime tracker</a>  <a href='https://ar.skywire.skycoin.com/transports'>Address Resolver</a>  <a href='https://tpd.skywire.skycoin.com/all-transports'>Transport Discovery</a>  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/entries'>DMSGD Entries</a>  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers'>All DMSG Servers</a>  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/available_servers'>Available DMSG Servers</a><br>
 <main>
 {{template "this" .}}
 </main>
