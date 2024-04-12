@@ -96,8 +96,6 @@ var skyenvfile = os.Getenv("SKYENV")
 func tploghtmlfunc() (l string) {
 	l = "<!doctype html><html lang=en><head><title>Skywire Transport Bandwidth Logs By Day</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"
 	l += navlinks
-	l += fmt.Sprintf("page updated: %s\n",
-		sh("date"))
 	l += "<p style='color:blue'>Blue = Verified Bandwidth</p>"
 	l += "<p style='color:yellow'>Yellow = Transport bandwidth inconsistent</p>"
 	l += "<p style='color:red'>Red = Error: sent or received is zero</p>"
@@ -481,9 +479,7 @@ func server() {
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
 		c.Writer.WriteHeader(http.StatusOK)
 		c.Writer.Flush()
-		l := fmt.Sprintf("page updated: %s\n",
-			sh("date"))
-		l += fmt.Sprintf("<div style='float: right;'>%s</div>", func() string {
+		l := fmt.Sprintf("<div style='float: right;'>%s</div>", func() string {
 			yearlyTotal := 408000.0
 			result := fmt.Sprintf("%g annual reward distribution\nReward total per month:\n", yearlyTotal)
 
