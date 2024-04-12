@@ -1078,9 +1078,9 @@ func cal() (ret string) {
 	headerWidth := 20
 	padding := (headerWidth - len(header)) / 2
 	ret += fmt.Sprintf("%*s%s%*s\n", padding, "", header, headerWidth-len(header)-padding, "")
-	ret += fmt.Sprintf("Su Mo Tu We Th Fr Sa\n")
+	ret += "Su Mo Tu We Th Fr Sa\n"
 	for i := 0; i < int(startDayOfWeek); i++ {
-		ret += fmt.Sprintf("   ")
+		ret += "   "
 	}
 	day := 1
 	for day <= numDays {

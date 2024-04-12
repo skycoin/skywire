@@ -20,7 +20,7 @@ var tpCmd = &cobra.Command{
 		if err != nil {
 			return
 		}
-		defer os.Remove(tmpFile.Name())
+		defer os.Remove(tmpFile.Name()) //nolint
 		if err := tmpFile.Close(); err != nil {
 			return
 		}
