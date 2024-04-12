@@ -45,7 +45,7 @@ func init() {
 	}
 	uiCmd.Flags().StringVarP(&wl, "wl", "w", scriptExecArray("${REWARDPKS[@]}"), msg)
 	uiCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", "", "dmsg discovery url default:\n"+skyenv.DmsgDiscAddr)
-	uiCmd.Flags().StringVarP(&ensureOnlineURL, "ensure-online", "O", scriptExecString("${ENSUREONLINE}"), "Exit when the specified URL cannot be fetched;\ni.e. https://fiber.skywire.dev\n")
+	uiCmd.Flags().StringVarP(&ensureOnlineURL, "ensure-online", "O", scriptExecString("${ENSUREONLINE}"), "Exit when the specified URL cannot be fetched;\ni.e. https://fiber.skywire.dev")
 	if os.Getenv("DMSGHTTP_SK") != "" {
 		sk.Set(os.Getenv("DMSGHTTP_SK")) //nolint
 	}
@@ -100,8 +100,7 @@ func tploghtmlfunc() (l string) {
 	l += "<p style='color:yellow'>Yellow = Transport bandwidth inconsistent</p>"
 	l += "<p style='color:red'>Red = Error: sent or received is zero</p>"
 	tp, _ := script.Exec(`skywire cli log tp -d rewards/log_backups`).String() //nolint
-
-	l += fmt.Sprintf("%s\n", tp)
+	l += fmt.Sprintf("%s\n", ansihtml.ConvertToHTML([]byte(tp)))
 	l += htmltoplink
 	l += htmlend
 	return l
@@ -471,7 +470,7 @@ func server() {
 	r1.GET("/log-collection/tplogs", func(c *gin.Context) {
 		c.Writer.Header().Set("Server", "")
 		c.Writer.WriteHeader(http.StatusOK)
-		c.Writer.Write([]byte(ansihtml.ConvertToHTML([]byte(tploghtmlfunc())))) //nolint
+		c.Writer.Write([]byte([]byte(tploghtmlfunc()))) //nolint
 	})
 
 	r1.GET("/skycoin-rewards", func(c *gin.Context) {
