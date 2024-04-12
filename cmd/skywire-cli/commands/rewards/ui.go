@@ -1192,11 +1192,11 @@ var (
 	n4          = "  <a href='/log-collection/tree'>survey index</a>"
 	n5          = "  <a href='/log-collection/tplogs'>transport logging</a>"
 	n6          = "  <a href='https://ut.skywire.skycoin.com/uptimes?v=v2'>uptime tracker</a>"
-	n7          = "  <a href='https://ar.skywire.skycoin.com/transports'>Address Resolver</a>"
-	n8          = "  <a href='https://tpd.skywire.skycoin.com/all-transports'>Transport Discovery</a>"
-	n9          = "  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/entries'>DMSGD Entries</a>"
-	n10         = "  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers'>All DMSG Servers</a>"
-	n11         = "  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/available_servers'>Available DMSG Servers</a>"
+	n7          = "  <a href='https://ar.skywire.skycoin.com/transports'>address resolver</a>"
+	n8          = "  <a href='https://tpd.skywire.skycoin.com/all-transports'>transport discovery</a>"
+	n9          = "  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/entries'>dmsgd entries</a>"
+	n10         = "  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers'>all dmsg servers</a>"
+	n11         = "  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/available_servers'>available dmsg servers</a>"
 	n12         = "\n<br>\n"
 	navlinks    = n1 + n2 + n3 + n4 + n5 + n8 + n9 + n10 + n11 + n12
 	htmltoplink = "<a href='#top'>top of page</a>\n"
@@ -1366,7 +1366,7 @@ const htmlMainPageTemplate = `
 {{ $page := .Page }}<!doctype html><html lang='en'>
 {{template "head" .}}
 <body title='' style='background-color:black;color:white;'>
-<pre><a id='top' class='anchor' aria-hidden='true' href='#top'></a>  <a href='/'>fiber</a>  <a href='/skycoin-rewards'>skycoin rewards</a>  <a href='/log-collection'>log collection</a>  <a href='/log-collection/tree'>survey index</a>  <a href='/log-collection/tplogs'>transport logging</a>  <a href='/transports'>transport stats</a>  <a href='/transports-map'>transport map</a>  <a href='https://ut.skywire.skycoin.com/uptimes?v=v2'>uptime tracker</a>  <a href='https://ar.skywire.skycoin.com/transports'>Address Resolver</a>  <a href='https://tpd.skywire.skycoin.com/all-transports'>Transport Discovery</a>  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/entries'>DMSGD Entries</a>  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers'>All DMSG Servers</a>  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/available_servers'>Available DMSG Servers</a><br>
+<pre><a id='top' class='anchor' aria-hidden='true' href='#top'></a>  <a href='/'>fiber</a>  <a href='/skycoin-rewards'>skycoin rewards</a>  <a href='/log-collection'>log collection</a>  <a href='/log-collection/tree'>survey index</a>  <a href='/log-collection/tplogs'>transport logging</a>  <a href='/transports'>transport stats</a>  <a href='/transports-map'>transport map</a>  <a href='https://ut.skywire.skycoin.com/uptimes?v=v2'>uptime tracker</a>  <a href='https://ar.skywire.skycoin.com/transports'>address resolver</a>  <a href='https://tpd.skywire.skycoin.com/all-transports'>transport discovery</a>  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/entries'>dmsgd entries</a>  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers'>all dmsg servers</a>  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/available_servers'>available dmsg servers</a><br>
 <main>
 {{template "this" .}}
 </main>
