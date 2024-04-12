@@ -78,8 +78,6 @@ SKYENV=/path/to/fiber.conf fiber run`
 	},
 }
 
-const scriptfile = "fr.sh"
-
 var (
 	startTime       = time.Now()
 	runTime         time.Duration
