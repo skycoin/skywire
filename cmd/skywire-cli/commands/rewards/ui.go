@@ -1191,9 +1191,14 @@ var (
 	n3          = "  <a href='/log-collection'>log collection</a>"
 	n4          = "  <a href='/log-collection/tree'>survey index</a>"
 	n5          = "  <a href='/log-collection/tplogs'>transport logging</a>"
-	n8          = "  <a href='https://ut.skywire.skycoin.com/uptimes?v=v2'>uptime tracker</a>"
-	n9          = "\n<br>\n"
-	navlinks    = n1 + n2 + n3 + n4 + n5 + n8 + n9
+	n6          = "  <a href='https://ut.skywire.skycoin.com/uptimes?v=v2'>uptime tracker</a>"
+	n7          = "  <a href='https://ar.skywire.skycoin.com/transports'>Address Resolver</a>"
+	n8          = "  <a href='https://tpd.skywire.skycoin.com/all-transports'>Transport Discovery</a>"
+	n9          = "  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/entries'>DMSGD Entries</a>"
+	n10         = "  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers'>All DMSG Servers</a>"
+	n11         = "  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/available_servers'>Available DMSG Servers</a>"
+	n12         = "\n<br>\n"
+	navlinks    = n1 + n2 + n3 + n4 + n5 + n8 + n9 + n10 + n11 + n12
 	htmltoplink = "<a href='#top'>top of page</a>\n"
 	htmlend     = "</pre></body></html>"
 )
