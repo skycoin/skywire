@@ -1275,7 +1275,10 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 			}
 			if tries == 3 {
 				log.WithError(err).Error("Visor is not transportable! 3 failed attempts ; exiting now")
-				v.Shutdown()
+				err = v.Shutdown()
+				if err != nil {
+					log.WithError(err).Fatal("Failed to shut down gracefully")
+				}
 			}
 		}
 	}()
