@@ -1,15 +1,11 @@
 [Unit]
 Description=Skywire
-Before=skywire-visor.service
-Conflicts=skywire-visor.service
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=root
-Group=root
 Environment="SYSTEMDCHILD=1"
-ExecStart=/usr/bin/skywire -p $AUTOPEERHV
+ExecStart=/usr/bin/skywire visor -p --loglvl debug
 Restart=always
 RestartSec=20
 TimeoutSec=30
