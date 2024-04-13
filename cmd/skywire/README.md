@@ -55,22 +55,7 @@ A tree representation of the skywire subcommands
   │ │ ├──test
   │ │ ├──start
   │ │ ├──reload
-  │ │ ├──halt
-  │ │ ├─┬route
-  │ │ │ ├──ls-rules
-  │ │ │ ├──rule
-  │ │ │ ├──rm-rule
-  │ │ │ └─┬add-rule
-  │ │ │   ├──app
-  │ │ │   ├──fwd
-  │ │ │   └──intfwd
-  │ │ └─┬tp
-  │ │   ├──type
-  │ │   ├──ls
-  │ │   ├──id
-  │ │   ├──add
-  │ │   ├──rm
-  │ │   └──disc
+  │ │ └──halt
   │ ├─┬vpn
   │ │ ├──start
   │ │ ├──stop
@@ -82,15 +67,28 @@ A tree representation of the skywire subcommands
   │ ├──fwd
   │ ├──rev
   │ ├──reward
-  │ ├──rewards
+  │ ├─┬rewards
+  │ │ └──ui
   │ ├──survey
-  │ ├──rtfind
-  │ ├──rtree
+  │ ├─┬route
+  │ │ ├──rm
+  │ │ ├─┬add
+  │ │ │ ├──a
+  │ │ │ ├──b
+  │ │ │ └──c
+  │ │ └──find
+  │ ├─┬tp
+  │ │ ├──add
+  │ │ ├──rm
+  │ │ ├──disc
+  │ │ └──tree
   │ ├─┬mdisc
   │ │ ├──entry
   │ │ └──servers
   │ ├──completion
-  │ ├──log
+  │ ├─┬log
+  │ │ ├──st
+  │ │ └──tp
   │ ├─┬proxy
   │ │ ├──start
   │ │ ├──stop
@@ -101,7 +99,10 @@ A tree representation of the skywire subcommands
   ├─┬svc
   │ ├──sn
   │ ├──tpd
-  │ ├──tps
+  │ ├─┬tps
+  │ │ ├──add
+  │ │ ├──rm
+  │ │ └──list
   │ ├──ar
   │ ├──rf
   │ ├──cb
@@ -148,8 +149,6 @@ A tree representation of the skywire subcommands
   ├──tree
   └──doc
 
-
-
 ```
 
 ### visor
@@ -193,8 +192,8 @@ Available Commands:
   reward                  skycoin reward address
   rewards                 calculate rewards from uptime data & collected surveys
   survey                  system survey
-  rtfind                  Query the Route Finder
-  rtree                   map of transports on the skywire network
+  route                   View and set rules
+  tp                      View and manage transports
   mdisc                   Query remote DMSG Discovery
   completion              Generate completion script
   log                     survey & transport log collection
@@ -324,6 +323,7 @@ Flags:
       --nofetch                  do not fetch the services from the service conf url
   -S, --svcconf string           fallback service configuration file[0m (default "services-config.json")
       --nodefaults               do not use hardcoded defaults for production / test services
+      --sn                       generate config for route setup-node
       --version string           custom version testing override[0m
       --all                      show all flags
 
@@ -335,9 +335,9 @@ Flags:
 ```
 $ skywire cli config gen -bpirxn
 {
-	"version": "v1.3.18",
-	"sk": "eab215b4851fb14cbcb856a0b763923bb0d21dde0ede41eeb7ff176327fe760a",
-	"pk": "03603bdd732230acfbbeaf769a92487b469176ff84d5cce1041bf36963cbbc1d69",
+	"version": "v1.3.20",
+	"sk": "edbfbaaf1f4341e0536ba26249a8ee5d372699dab7be53aa9b38f335e479ce67",
+	"pk": "038a737f250cbbb077bca10c2ed5b2ba698bb3ffa72c412e095a92e01b72bf4b6b",
 	"dmsg": {
 		"discovery": "http://dmsgd.skywire.skycoin.com",
 		"sessions_count": 2,
@@ -396,8 +396,10 @@ $ skywire cli config gen -bpirxn
 		"apps": [
 			{
 				"name": "vpn-client",
-				"binary": "vpn-client",
+				"binary": "skywire",
 				"args": [
+					"app",
+					"vpn-client",
 					"--dns",
 					"1.1.1.1"
 				],
@@ -406,8 +408,10 @@ $ skywire cli config gen -bpirxn
 			},
 			{
 				"name": "skychat",
-				"binary": "skychat",
+				"binary": "skywire",
 				"args": [
+					"app",
+					"skychat",
 					"--addr",
 					":8001"
 				],
@@ -416,14 +420,20 @@ $ skywire cli config gen -bpirxn
 			},
 			{
 				"name": "skysocks",
-				"binary": "skysocks",
+				"binary": "skywire",
+				"args": [
+					"app",
+					"skysocks"
+				],
 				"auto_start": true,
 				"port": 3
 			},
 			{
 				"name": "skysocks-client",
-				"binary": "skysocks-client",
+				"binary": "skywire",
 				"args": [
+					"app",
+					"skysocks-client",
 					"--addr",
 					":1080"
 				],
@@ -432,13 +442,17 @@ $ skywire cli config gen -bpirxn
 			},
 			{
 				"name": "vpn-server",
-				"binary": "vpn-server",
+				"binary": "skywire",
+				"args": [
+					"app",
+					"vpn-server"
+				],
 				"auto_start": false,
 				"port": 44
 			}
 		],
 		"server_addr": "localhost:5505",
-		"bin_path": "/opt/skywire/apps",
+		"bin_path": "/opt/skywire/bin",
 		"display_node_ip": false
 	},
 	"survey_whitelist": [
@@ -472,8 +486,8 @@ $ skywire cli config gen -bpirxn
 		"db_path": "/opt/skywire/users.db",
 		"enable_auth": true,
 		"cookies": {
-			"hash_key": "19a47254be4a7d9ce7664d20b4271bb402434eadfbb6c94dd59922d5cbf89ce3c03f1d54c320ca624fa44e8d85ad0b1df2a84acf607ef1ef7ea63bce99a50c53",
-			"block_key": "09df61d626fbda1632c91604620ca94c926125a109c4cf2f3d9bb608bd24b904",
+			"hash_key": "acce5f29bc86e280ecd58b78fc75401e1cfb94c3b613ed2fd6522d934cfb4f06c4ef932d7aec3b6d1c9a4974a2829bc464644731afb03412ecda2806502ea436",
+			"block_key": "c641019012c9313eb71800d9d7561edb93d393b8d2957ebb050d9864911c9477",
 			"expires_duration": 43200000000000,
 			"path": "/",
 			"domain": ""
@@ -759,8 +773,6 @@ Available Commands:
   test                    Test the visor with public visors on network
   start                   start visor
   halt                    Stop a running visor
-  route                   View and set rules
-  tp                      View and set transports
 
 Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -1070,7 +1082,7 @@ Global Flags:
 Flags:
   -w, --http           serve public key via http
   -i, --input string   path of input config file.
-  -p, --pkg            read from {/opt/skywire/apps /opt/skywire/local {/opt/skywire/users.db true}}
+  -p, --pkg            read from {/opt/skywire/bin /opt/skywire/local {/opt/skywire/users.db true}}
   -x, --prt string     serve public key via http (default "7998")
 
 Global Flags:
@@ -1215,288 +1227,6 @@ Global Flags:
 
 ```
 
-##### cli visor route
-
-```
-
-    View and set routing rules
-
-Available Commands:
-  ls-rules                List routing rules
-  rule                    Return routing rule by route ID key
-  rm-rule                 Remove routing rule
-  add-rule                Add routing rule
-
-Global Flags:
-      --rpc string   RPC server address (default "localhost:3435")
-
-
-```
-
-###### cli visor route ls-rules
-
-```
-
-    List routing rules
-
-
-
-Global Flags:
-      --rpc string   RPC server address (default "localhost:3435")
-
-
-```
-
-###### cli visor route rule
-
-```
-
-    Return routing rule by route ID key
-
-
-
-Global Flags:
-      --rpc string   RPC server address (default "localhost:3435")
-
-
-```
-
-###### cli visor route rm-rule
-
-```
-
-    Remove routing rule
-
-
-
-Flags:
-  -a, --all   remove all routing rules
-
-Global Flags:
-      --rpc string   RPC server address (default "localhost:3435")
-
-
-```
-
-###### cli visor route add-rule
-
-```
-
-    Add routing rule
-
-Available Commands:
-  app                     Add app/consume routing rule
-  fwd                     Add forward routing rule
-  intfwd                  Add intermediary forward routing rule
-
-Flags:
-      --keep-alive duration   timeout for rule expiration (default 30s)
-
-Global Flags:
-      --rpc string   RPC server address (default "localhost:3435")
-
-
-```
-
-###### cli visor route add-rule app
-
-```
-
-    Add routing rule
-
-Available Commands:
-  app                     Add app/consume routing rule
-  fwd                     Add forward routing rule
-  intfwd                  Add intermediary forward routing rule
-
-Flags:
-      --keep-alive duration   timeout for rule expiration (default 30s)
-
-Global Flags:
-      --rpc string   RPC server address (default "localhost:3435")
-
-
-```
-
-###### cli visor route add-rule fwd
-
-```
-
-    Add routing rule
-
-Available Commands:
-  app                     Add app/consume routing rule
-  fwd                     Add forward routing rule
-  intfwd                  Add intermediary forward routing rule
-
-Flags:
-      --keep-alive duration   timeout for rule expiration (default 30s)
-
-Global Flags:
-      --rpc string   RPC server address (default "localhost:3435")
-
-
-```
-
-###### cli visor route add-rule intfwd
-
-```
-
-    Add routing rule
-
-Available Commands:
-  app                     Add app/consume routing rule
-  fwd                     Add forward routing rule
-  intfwd                  Add intermediary forward routing rule
-
-Flags:
-      --keep-alive duration   timeout for rule expiration (default 30s)
-
-Global Flags:
-      --rpc string   RPC server address (default "localhost:3435")
-
-
-```
-
-##### cli visor tp
-
-```
-
-	Transports are bidirectional communication protocols
-	used between two Skywire Visors (or Transport Edges)
-
-	Each Transport is represented as a unique 16 byte (128 bit)
-	UUID value called the Transport ID
-	and has a Transport Type that identifies
-	a specific implementation of the Transport.
-
-	Types: stcp stcpr sudph dmsg
-
-Available Commands:
-  type                    Transport types used by the local visor
-  ls                      Available transports
-  id                      Transport summary by id
-  add                     Add a transport
-  rm                      Remove transport(s) by id
-  disc                    Discover remote transport(s)
-
-Global Flags:
-      --rpc string   RPC server address (default "localhost:3435")
-
-
-```
-
-###### cli visor tp type
-
-```
-
-  Transport types used by the local visor
-
-
-
-Global Flags:
-      --rpc string   RPC server address (default "localhost:3435")
-
-
-```
-
-###### cli visor tp ls
-
-```
-
-    Available transports
-
-    displays transports of the local visor
-
-
-
-Flags:
-  -t, --types strings   show transport(s) type(s) comma-separated
-  -p, --pks strings     show transport(s) for public key(s) comma-separated
-  -l, --logs            show transport logs (default true)
-
-Global Flags:
-      --rpc string   RPC server address (default "localhost:3435")
-
-
-```
-
-###### cli visor tp id
-
-```
-
-    Transport summary by id
-
-
-
-Flags:
-  -i, --id string   transport ID
-
-Global Flags:
-      --rpc string   RPC server address (default "localhost:3435")
-
-
-```
-
-###### cli visor tp add
-
-```
-
-    Add a transport
-
-    If the transport type is unspecified,
-    the visor will attempt to establish a transport
-    in the following order: skywire-tcp, stcpr, sudph, dmsg
-
-
-
-Flags:
-  -r, --rpk string         remote public key.
-  -o, --timeout duration   if specified, sets an operation timeout
-  -t, --type string        type of transport to add.
-
-Global Flags:
-      --rpc string   RPC server address (default "localhost:3435")
-
-
-```
-
-###### cli visor tp rm
-
-```
-
-    Remove transport(s) by id
-
-
-
-Flags:
-  -a, --all         remove all transports
-  -i, --id string   remove transport of given ID
-
-Global Flags:
-      --rpc string   RPC server address (default "localhost:3435")
-
-
-```
-
-###### cli visor tp disc
-
-```
-
-    Discover remote transport(s) by ID or public key
-
-
-
-Flags:
-  -i, --id string   obtain transport of given ID
-  -p, --pk string   obtain transports by public key
-
-Global Flags:
-      --rpc string   RPC server address (default "localhost:3435")
-
-
-```
-
 #### cli vpn
 
 ```
@@ -1525,7 +1255,7 @@ start the vpn for <public-key>
 
 Flags:
   -k, --pk string     server public key
-  -t, --timeout int   starting timeout value in second (default 20)
+  -t, --timeout int   starting timeout value in second
 
 Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -1704,10 +1434,11 @@ Flags:
 Collect surveys:  skywire-cli log
 Fetch uptimes:    skywire-cli ut > ut.txt
 
-
+Available Commands:
+  ui                      reward system user interface
 
 Flags:
-  -d, --date string     date for which to calculate reward (default "2024-03-12")
+  -d, --date string     date for which to calculate reward (default "2024-04-12")
   -k, --pk string       check reward for pubkey
   -n, --noarch string   disallowed architectures, comma separated (default "amd64")
   -y, --year int        yearly total rewards (default 408000)
@@ -1717,6 +1448,37 @@ Flags:
   -1, --h1              hide survey csv data
   -2, --h2              hide reward csv data
   -e, --err             account for non rewarded keys
+
+
+```
+
+##### cli rewards ui
+
+```
+skycoin reward system and skywire network metrics: https://fiber.skywire.dev
+
+	┌─┐┬┌┐ ┌─┐┬─┐
+	├┤ │├┴┐├┤ ├┬┘
+	└  ┴└─┘└─┘┴└─
+	run the web application
+
+.conf file may also be specified with
+SKYENV=/path/to/fiber.conf fiber run
+
+
+
+Flags:
+  -D, --dmsg-disc string       dmsg discovery url default:
+                               http://dmsgd.skywire.skycoin.com
+  -d, --dport uint             dmsg port to serve (default 80)
+  -e, --dsess int              dmsg sessions (default 1)
+  -O, --ensure-online string   Exit when the specified URL cannot be fetched;
+                               i.e. https://fiber.skywire.dev
+  -p, --port uint              port to serve (default 80)
+  -s, --sk cipher.SecKey       a random key is generated if unspecified
+
+ (default 0000000000000000000000000000000000000000000000000000000000000000)
+  -w, --wl string              add whitelist keys, comma separated to permit POST of reward transaction to be broadcast
 
 
 ```
@@ -1739,7 +1501,116 @@ unknown command "survey" for "skywire"
 
 ```
 
-#### cli rtfind
+#### cli route
+
+```
+
+    View and set routing rules
+
+Available Commands:
+  rm                      Remove routing rule
+  add                     Add routing rule
+  find                    Query the Route Finder
+
+Flags:
+  -n, --nrid         display the next available route id
+  -i, --rid string   show routing rule matching route ID
+
+
+```
+
+##### cli route rm
+
+```
+
+    Remove routing rule
+
+
+
+
+```
+
+##### cli route add
+
+```
+
+    Add routing rule
+
+Available Commands:
+  a                       Add app/consume routing rule
+  b                       Add intermediary forward routing rule
+  c                       Add forward routing rule
+
+Flags:
+  -a, --keep-alive duration   timeout for rule expiration (default 30s)
+
+
+```
+
+###### cli route add a
+
+```
+
+    Add app/consume routing rule
+
+
+
+Flags:
+  -i, --rid string   route id
+  -l, --lpk string   local public key
+  -m, --lpt string   local port
+  -p, --rpk string   remote pk
+  -q, --rpt string   remote port
+
+Global Flags:
+  -a, --keep-alive duration   timeout for rule expiration (default 30s)
+
+
+```
+
+###### cli route add b
+
+```
+
+    Add intermediary forward routing rule
+
+
+
+Flags:
+  -i, --rid string    route id
+  -j, --nrid string   next route id
+  -k, --tpid string   next transport id
+
+Global Flags:
+  -a, --keep-alive duration   timeout for rule expiration (default 30s)
+
+
+```
+
+###### cli route add c
+
+```
+
+    Add forward routing rule
+
+
+
+Flags:
+  -i, --rid string    route id
+  -j, --nrid string   next route id
+  -k, --tpid string   next transport id
+  -l, --lpk string    local public key
+  -m, --lpt string    local port
+  -p, --rpk string    remote pk
+  -q, --rpt string    remote port
+
+Global Flags:
+  -a, --keep-alive duration   timeout for rule expiration (default 30s)
+
+
+```
+
+##### cli route find
 
 ```
 Query the Route Finder
@@ -1757,7 +1628,94 @@ Flags:
 
 ```
 
-#### cli rtree
+#### cli tp
+
+```
+Display and manage transports of the local visor
+
+	Transports are bidirectional communication protocols
+	used between two Skywire Visors (or Transport Edges)
+
+	Each Transport is represented as a unique 16 byte (128 bit)
+	UUID value called the Transport ID
+	and has a Transport Type that identifies
+	a specific implementation of the Transport.
+
+	Types: stcp stcpr sudph dmsg
+
+Available Commands:
+  add                     Add a transport
+  rm                      Remove transport(s) by id
+  disc                    Discover remote transport(s)
+  tree                    tree map of transports on the skywire network
+
+Flags:
+  -t, --types strings   show transport(s) type(s) comma-separated
+  -p, --pks strings     show transport(s) for public key(s) comma-separated
+  -l, --logs            show transport logs (default true)
+  -i, --id string       display transport matching ID
+  -u, --tptypes         display transport types used by the local visor
+      --rpc string      RPC server address (default "localhost:3435")
+
+
+```
+
+##### cli tp add
+
+```
+
+    Add a transport
+		If the transport type is unspecified,
+		the visor will attempt to establish a transport
+		in the following order: stcpr, sudph, dmsg
+
+
+
+Flags:
+      --rpc string         RPC server address (default "localhost:3435")
+  -r, --rpk string         remote public key.
+  -t, --type string        type of transport to add.
+  -o, --timeout duration   if specified, sets an operation timeout
+  -a, --sdurl string       service discovery url (default "http://sd.skycoin.com")
+  -f, --force              attempt transport creation without check of SD
+      --cfs string         SD cache file location (default "/tmp/pvisorsd.json")
+  -m, --cfa int            update cache files if older than n minutes (default 5)
+
+
+```
+
+##### cli tp rm
+
+```
+
+    Remove transport(s) by id
+
+
+
+Flags:
+      --rpc string   RPC server address (default "localhost:3435")
+  -a, --all          remove all transports
+  -i, --id string    remove transport of given ID
+
+
+```
+
+##### cli tp disc
+
+```
+
+    Discover remote transport(s) by ID or public key
+
+
+
+Flags:
+  -i, --id string   obtain transport of given ID
+  -p, --pk string   obtain transports by public key
+
+
+```
+
+##### cli tp tree
 
 ```
 display a tree representation of transports from TPD
@@ -1769,16 +1727,16 @@ Set cache file location to "" to avoid using cache files
 
 
 Flags:
-  -m, --cfa int         update cache files if older than n minutes (default 5)
-      --cft string      TPD cache file location (default "/tmp/tpd.json")
-      --cfu string      UT cache file location. (default "/tmp/ut.json")
-  -o, --noton           do not filter by online status in UT
-  -P, --pad int         padding between tree and tpid (default 15)
-  -p, --pretty          print pretty json data
-  -r, --raw             print raw json data
-  -s, --stats           return only statistics
   -a, --tpdurl string   transport discovery url (default "http://tpd.skywire.skycoin.com")
   -w, --uturl string    uptime tracker url (default "http://ut.skywire.skycoin.com")
+  -r, --raw             print raw json data
+  -p, --pretty          print pretty json data
+  -o, --noton           do not filter by online status in UT
+      --cft string      TPD cache file location (default "/tmp/tpd.json")
+      --cfu string      UT cache file location. (default "/tmp/ut.json")
+  -m, --cfa int         update cache files if older than n minutes (default 5)
+  -P, --pad int         padding between tree and tpid (default 15)
+  -s, --stats           return only statistics
 
 
 ```
@@ -1840,7 +1798,9 @@ Fetch health, survey, and transport logging from visors which are online in the 
 http://ut.skywire.skycoin.com/uptimes?v=v2
 http://ut.skywire.skycoin.com/uptimes?v=v2&visors=<pk1>;<pk2>;<pk3>
 
-
+Available Commands:
+  st                      survey tree
+  tp                      display collected transport bandwidth logging
 
 Flags:
   -e, --env string                deployment to get uptimes from (default "prod")
@@ -1850,7 +1810,7 @@ Flags:
   -k, --pks string                fetch only from specific public keys ; semicolon separated
   -d, --dir string                save files to specified dir (default "log_collecting")
   -c, --clean                     delete files and folders on errors
-      --minv string               minimum visor version to fetch from (default "v1.3.15")
+      --minv string               minimum visor version to fetch from (default "v1.3.19")
       --include-versions string   list of version that not satisfy our minimum version condition, but we want include them
   -n, --duration int              number of days before today to fetch transport logs for
       --all                       consider all visors ; no version filtering
@@ -1862,6 +1822,33 @@ Flags:
   -s, --sk cipher.SecKey          a random key is generated if unspecified
 
  (default 0000000000000000000000000000000000000000000000000000000000000000)
+
+
+```
+
+##### cli log st
+
+```
+survey tree
+
+
+
+Flags:
+  -d, --dir string   path to surveys & transport bandwidth logging
+  -p, --pk string    public key to check
+
+
+```
+
+##### cli log tp
+
+```
+display collected transport bandwidth logging
+
+
+
+Flags:
+  -d, --dir string   path to surveys & transport bandwidth logging
 
 
 ```
@@ -1892,8 +1879,10 @@ start the proxy client
 
 Flags:
   -a, --addr string   address of proxy for use
+      --http string   address for http proxy
   -n, --name string   name of skysocks client
   -k, --pk string     server public key
+  -t, --timeout int   timeout for starting proxy
 
 Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -2032,7 +2021,6 @@ Available Commands:
 Flags:
   -m, --metrics string   address to bind metrics API to
   -i, --stdin            read config from STDIN
-      --syslog string    syslog server address. E.g. localhost:514
       --tag string       logging tag (default "setup_node")
 
 
@@ -2060,12 +2048,12 @@ Flags:
   -l, --loglvl string           set log level one of: info, error, warn, debug, trace, panic (default "info")
   -m, --metrics string          address to bind metrics API to[0m
       --pg-host string          host of postgres[0m (default "localhost")
+      --pg-max-open-conn int    maximum open connection of db (default 60)
       --pg-port string          port of postgres[0m (default "5432")
       --redis string            connections string for a redis store[0m (default "redis://localhost:6379")
       --redis-pool-size int     redis connection pool size[0m (default 10)
       --sk cipher.SecKey        dmsg secret key
  (default 0000000000000000000000000000000000000000000000000000000000000000)
-      --syslog string           syslog server address. E.g. localhost:514[0m
       --tag string              logging tag[0m (default "transport_discovery")
       --test-environment        distinguished between prod and test environment[0m
   -t, --testing                 enable testing to start without redis[0m
@@ -2082,11 +2070,77 @@ Flags:
 	 │ ├┬┘├─┤│││└─┐├─┘│ │├┬┘ │───└─┐├┤  │ │ │├─┘
 	 ┴ ┴└─┴ ┴┘└┘└─┘┴  └─┘┴└─ ┴   └─┘└─┘ ┴ └─┘┴
 
+Transport setup server for skywire
+Takes config in the following format:
+{
+    "dmsg": {
+        "discovery": "http://dmsgd.skywire.skycoin.com",
+        "servers": [],
+        "sessions_count": 2
+    },
+    "log_level": "",
+    "port":8080,
+    "public_key": "",
+    "secret_key": "",
+    "transport_discovery": "http://tpd.skywire.skycoin.com"
+}
 
+Available Commands:
+  add                     add transport to remote visor
+  rm                      remove transport from remote visor
+  list                    list transports of remote visor
 
 Flags:
   -c, --config string   path to config file[0m
-  -l, --loglvl string   set log level one of: info, error, warn, debug, trace, panic (default "info")
+  -l, --loglvl string   [info|error|warn|debug|trace|panic] (default "debug")
+
+
+```
+
+##### svc tps add
+
+```
+add transport to remote visor
+
+
+
+Flags:
+  -1, --from string   PK to request transport setup
+  -2, --to string     other transport edge PK
+  -t, --type string   transport type to request creation of [stcpr|sudph|dmsg]
+  -p, --pretty        pretty print result
+  -z, --addr string   address of the transport setup-node (default "http://127.0.0.1:8080")
+
+
+```
+
+##### svc tps rm
+
+```
+remove transport from remote visor
+
+
+
+Flags:
+  -1, --from string   PK to request transport takedown
+  -i, --tpid string   id of transport to remove
+  -p, --pretty        pretty print result
+  -z, --addr string   address of the transport setup-node (default "http://127.0.0.1:8080")
+
+
+```
+
+##### svc tps list
+
+```
+list transports of remote visor
+
+
+
+Flags:
+  -1, --from string   PK to request transport list
+  -p, --pretty        pretty print result
+  -z, --addr string   address of the transport setup-node (default "http://127.0.0.1:8080")
 
 
 ```
@@ -2119,7 +2173,6 @@ Flags:
       --redis-pool-size int     redis connection pool size[0m (default 10)
       --sk cipher.SecKey        dmsg secret key
  (default 0000000000000000000000000000000000000000000000000000000000000000)
-      --syslog string           syslog server address. E.g. localhost:514[0m
       --tag string              logging tag[0m (default "address_resolver")
       --test-environment        distinguished between prod and test environment[0m
   -t, --testing                 enable testing to start without redis[0m
@@ -2143,19 +2196,19 @@ PG_USER="postgres" PG_DATABASE="rf" PG_PASSWORD="" route-finder  --addr ":9092" 
 
 
 Flags:
-  -a, --addr string        address to bind to[0m (default ":9092")
-      --dmsg-disc string   url of dmsg-discovery[0m (default "http://dmsgd.skywire.skycoin.com")
-      --dmsgPort uint16    dmsg port value
+  -a, --addr string            address to bind to[0m (default ":9092")
+      --dmsg-disc string       url of dmsg-discovery[0m (default "http://dmsgd.skywire.skycoin.com")
+      --dmsgPort uint16        dmsg port value
  (default 80)
-  -l, --loglvl string      set log level one of: info, error, warn, debug, trace, panic (default "info")
-  -m, --metrics string     address to bind metrics API to[0m
-      --pg-host string     host of postgres[0m (default "localhost")
-      --pg-port string     port of postgres[0m (default "5432")
-      --sk cipher.SecKey   dmsg secret key
+  -l, --loglvl string          set log level one of: info, error, warn, debug, trace, panic (default "info")
+  -m, --metrics string         address to bind metrics API to[0m
+      --pg-host string         host of postgres[0m (default "localhost")
+      --pg-max-open-conn int   maximum open connection of db (default 60)
+      --pg-port string         port of postgres[0m (default "5432")
+      --sk cipher.SecKey       dmsg secret key
  (default 0000000000000000000000000000000000000000000000000000000000000000)
-      --syslog string      syslog server address. E.g. localhost:514[0m
-      --tag string         logging tag[0m (default "route_finder")
-  -t, --testing            enable testing to start without redis[0m
+      --tag string             logging tag[0m (default "route_finder")
+  -t, --testing                enable testing to start without redis[0m
 
 
 ```
@@ -2212,7 +2265,6 @@ Flags:
   -c, --config string   config file location.[0m (default "liveness-checker.json")
   -l, --loglvl string   set log level one of: info, error, warn, debug, trace, panic (default "info")
       --redis string    connections string for a redis store[0m (default "redis://localhost:6379")
-      --syslog string   syslog server address. E.g. localhost:514[0m
       --tag string      logging tag[0m (default "liveness_checker")
   -t, --testing         enable testing to start without redis[0m
 
@@ -2233,7 +2285,6 @@ Flags:
   -a, --addr string      address to bind to[0m (default ":9081")
   -l, --log              enable request logging[0m (default true)
   -m, --metrics string   address to bind metrics API to[0m
-      --syslog string    syslog server address. E.g. localhost:514[0m
       --tag string       logging tag[0m (default "node-visualizer")
   -t, --testing          enable testing to start without redis[0m
 
@@ -2345,7 +2396,6 @@ Flags:
       --redis-pool-size int             redis connection pool size[0m (default 10)
   -n, --sd-url string                   url to service discovery.[0m
       --sleep-deregistration duration   Sleep time for derigstration process in minutes[0m (default 10ns)
-      --syslog string                   syslog server address. E.g. localhost:514[0m
       --tag string                      logging tag[0m (default "network_monitor")
   -t, --testing                         enable testing to start without redis[0m
   -u, --ut-url string                   url to uptime tracker visor data.[0m
@@ -2829,7 +2879,6 @@ Flags:
   -d, --dmsg-url string                 url to dmsg data.[0m
   -l, --loglvl string                   set log level one of: info, error, warn, debug, trace, panic (default "info")
   -s, --sleep-deregistration duration   Sleep time for derigstration process in minutes[0m (default 60ns)
-      --syslog string                   syslog server address. E.g. localhost:514[0m
       --tag string                      logging tag[0m (default "dmsg_monitor")
   -u, --ut-url string                   url to uptime tracker visor data.[0m
 

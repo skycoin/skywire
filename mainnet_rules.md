@@ -45,9 +45,9 @@ A total of up to ~1114.754  Skycoin are distributed daily in leap-years.
 To obtain Skycoin rewards for running skywire, the following requirements must be met.
 The update deadlines specify the version of software required as of (i.e. on or before) the specified date in order to maintain reward eligibility:
 
-* **Minimum skywire version v1.3.17** - Cutoff March 1st 2024
-
 * **Minimum skywire version v1.3.19** - Cutoff April 1st 2024
+
+* **Minimum skywire version v1.3.21** - Cutoff May 1st 2024
 
 * The visor must be an **ARM or RISC architecture SBC running on approved [hardware](#hardware)**
 
@@ -97,17 +97,17 @@ skywire-cli -v
 skywire-visor -v
 ```
 
-**Reward eligibility after 3-1-2024 requires Skywire v1.3.17**
-
-Requirement established 2-1-2024
-
-Rewards Cutoff date for updating 3-1-2024
-
 **Reward eligibility after 4-1-2024 requires Skywire v1.3.19**
 
 Requirement established 3-14-2024
 
 Rewards Cutoff date for updating 4-1-2024
+
+**Reward eligibility after 5-1-2024 requires Skywire v1.3.21**
+
+Requirement established 3-13-2024
+
+Rewards Cutoff date for updating 5-1-2024
 
 ### Deployment
 
