@@ -1264,7 +1264,7 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 			if err != nil {
 				tries++
 				v.isServicesHealthy.unset()
-				log.WithError(err).Warn("Visor is not transportable! Attempt " + string(tries) + " of 3")
+				log.WithError(err).Warn(fmt.Sprintf("Visor is not transportable! Attempt %v of 3", tries))
 			} else {
 				tries = 0
 				v.isServicesHealthy.set()
