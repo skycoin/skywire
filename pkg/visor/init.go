@@ -93,6 +93,8 @@ var (
 	pty vinit.Module
 	// Dmsg module
 	dmsgC vinit.Module
+	// Transportability checker ensures the visor can accept transports by creating a self-transport or exiting after 3 failed attempts to create one
+	tc vinit.Module
 	// Transport manager
 	tr vinit.Module
 	// Transport setup
@@ -172,8 +174,9 @@ func registerModules(logger *logging.MasterLogger) {
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
 	skyFwd = maker("sky_forward_conn", initSkywireForwardConn, &dmsgC, &dmsgCtrl, &tr, &launch)
 	pi = maker("ping", initPing, &dmsgC, &tm)
+	tc = maker("transportable", initEnsureVisorIsTransportable, &dmsgC, &tm)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &systemSurvey)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &systemSurvey, &tc)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -1246,6 +1249,41 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 	v.initLock.Lock()
 	v.uptimeTracker = ut
 	v.initLock.Unlock()
+
+	return nil
+}
+
+func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.Logger) error {
+	const tickDuration = 5 * time.Minute
+	ticker := time.NewTicker(tickDuration)
+	go func() {
+		time.Sleep(time.Minute)
+		tries := 0
+		for range ticker.C {
+			tpsummary, err := v.AddTransport(v.conf.PK, "dmsg", 0)
+			if err != nil {
+				tries++
+				v.isServicesHealthy.unset()
+				log.WithError(err).Warn("Visor is not transportable! Attempt " + string(tries) + " of 3")
+			} else {
+				tries = 0
+				v.isServicesHealthy.set()
+				err = v.RemoveTransport(tpsummary.ID)
+				if err != nil {
+					log.WithError(err).Warn("Failed to remove self-transport")
+				}
+			}
+			if tries == 3 {
+				log.WithError(err).Error("Visor is not transportable! 3 failed attempts ; exiting now")
+				v.Shutdown()
+			}
+		}
+	}()
+
+	v.pushCloseStack("transportable", func() error {
+		ticker.Stop()
+		return nil
+	})
 
 	return nil
 }
