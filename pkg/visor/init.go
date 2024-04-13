@@ -1265,6 +1265,8 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 				tries++
 				v.isServicesHealthy.unset()
 				log.WithError(err).Warn(fmt.Sprintf("Visor is not transportable! Attempt %v of 3", tries))
+				//reduce tick duration on non nil error
+				ticker.Reset(time.Minute)
 			} else {
 				tries = 0
 				v.isServicesHealthy.set()
@@ -1272,6 +1274,7 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 				if err != nil {
 					log.WithError(err).Warn("Failed to remove self-transport")
 				}
+				ticker.Reset(tickDuration)
 			}
 			if tries == 3 {
 				log.WithError(err).Error("Visor is not transportable! 3 failed attempts ; exiting now")
