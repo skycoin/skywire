@@ -1345,7 +1345,7 @@ func initEnsureTPDConcurrency(ctx context.Context, v *Visor, log *logging.Logger
 						for _, rm := range rmtpids {
 							err = tpdC.DeleteTransport(ctx, rm)
 							if err != nil {
-								log.WithError(err).Warn("Failed to remove transport from discovery %v", rm)
+								log.WithError(err).Warn(fmt.Sprintf("Failed to remove transport from tpd %v", rm))
 							}
 						}
 					}
