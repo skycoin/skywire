@@ -314,20 +314,23 @@ var discTpCmd = &cobra.Command{
 	Short:                 "Discover remote transport(s)",
 	Long:                  "\n    Discover remote transport(s) by ID or public key",
 	DisableFlagsInUseLine: true,
-	Args: func(_ *cobra.Command, _ []string) error {
+	Run: func(cmd *cobra.Command, _ []string) {
 		if tpID == "" && tpPK == "" {
-			return errors.New("must specify either transport id or public key")
+			internal.PrintFatalError(cmd.Flags(), errors.New("must specify either transport id or public key"))
+			return
 		}
 		if tpID != "" && tpPK != "" {
-			return errors.New("cannot specify both transport id and public key")
+			internal.PrintFatalError(cmd.Flags(), errors.New("cannot specify both transport id and public key"))
+			return
 		}
-		return nil
-	},
-	Run: func(cmd *cobra.Command, _ []string) {
 		var tppk cipher.PubKey
 		var tpid transportID
-		internal.Catch(cmd.Flags(), tpid.Set(tpID))
-		internal.Catch(cmd.Flags(), tppk.Set(tpPK))
+		if tpID != "" {
+			internal.Catch(cmd.Flags(), tpid.Set(tpID))
+		}
+		if tpPK != "" {
+			internal.Catch(cmd.Flags(), tppk.Set(tpPK))
+		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			os.Exit(1)
