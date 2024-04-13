@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/ccding/go-stun/stun"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/direct"
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
@@ -95,6 +96,8 @@ var (
 	dmsgC vinit.Module
 	// Transportability checker ensures the visor can accept transports by creating a self-transport or exiting after 3 failed attempts to create one
 	tc vinit.Module
+	// TPD concurrency checker removes transports from tpd that the visor does not have registered locally
+	tpdco vinit.Module
 	// Transport manager
 	tr vinit.Module
 	// Transport setup
@@ -175,8 +178,9 @@ func registerModules(logger *logging.MasterLogger) {
 	skyFwd = maker("sky_forward_conn", initSkywireForwardConn, &dmsgC, &dmsgCtrl, &tr, &launch)
 	pi = maker("ping", initPing, &dmsgC, &tm)
 	tc = maker("transportable", initEnsureVisorIsTransportable, &dmsgC, &tm)
+	tpdco = maker("tpd_concurrency", initEnsureTPDConcurrency, &dmsgC, &tm)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &systemSurvey, &tc)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &systemSurvey, &tc, &tpdco)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -1291,6 +1295,70 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 		return nil
 	})
 
+	return nil
+}
+
+func initEnsureTPDConcurrency(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
+	const tickDuration = 5 * time.Minute
+	ticker := time.NewTicker(tickDuration)
+	go func() {
+		time.Sleep(time.Minute)
+		for range ticker.C {
+			entries, err := v.DiscoverTransportsByPK(v.conf.PK)
+			if err != nil {
+				v.isServicesHealthy.unset()
+				log.WithError(err).Warn("Cannot ensure concurrency with TPD")
+				//reduce tick duration on non nil error
+				ticker.Reset(time.Minute)
+			} else {
+				var dtpids []uuid.UUID
+				var rmtpids []uuid.UUID
+				var tpids []uuid.UUID
+				for _, e := range entries {
+					if e.Edges[0] != e.Edges[1] {
+						dtpids = append(dtpids, e.ID)
+					}
+				}
+				transports, err := v.Transports(nil, nil, false)
+				for _, t := range transports {
+					if t.Local != t.Remote {
+						tpids = append(tpids, t.ID)
+					}
+				}
+				for _, t := range dtpids {
+					var found bool
+					for _, tt := range tpids {
+						if tt == t {
+							found = true
+						}
+					}
+					if !found {
+						rmtpids = append(rmtpids, t)
+					}
+				}
+				if 0 < len(rmtpids) {
+					log.WithError(err).Warn(fmt.Sprintf("Found %v transports in transport discovery not registered locally", len(rmtpids)))
+					tpdC, err := connectToTpDisc(ctx, v, v.MasterLogger().PackageLogger("tpd_concurrency"))
+					if err != nil {
+						log.WithError(err).Warn("failed to create transport discovery client")
+					} else {
+						for _, rm := range rmtpids {
+							err = tpdC.DeleteTransport(ctx, rm)
+							if err != nil {
+								log.WithError(err).Warn(fmt.Sprintf("Failed to remove transport from tpd %v", rm))
+							}
+						}
+					}
+				}
+				ticker.Reset(tickDuration)
+			}
+		}
+	}()
+
+	v.pushCloseStack("tpd_concurrency", func() error {
+		ticker.Stop()
+		return nil
+	})
 	return nil
 }
 
