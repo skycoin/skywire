@@ -1253,7 +1253,7 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 	return nil
 }
 
-func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initEnsureVisorIsTransportable(v *Visor, log *logging.Logger) error {
 	const tickDuration = 5 * time.Minute
 	ticker := time.NewTicker(tickDuration)
 	go func() {
