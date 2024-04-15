@@ -1,0 +1,163 @@
+# Skycoin Reward System
+
+Skycoin rewards are the primary incentive for participation in the skywire network.
+
+This document details the administration of the reward system and distribution of rewards for the skywire network.
+
+User-facing details of this system can be found in the [mainnet rules article](mainnet_rules.md)
+
+This system replaces the [skywire whitelisting interface](https://whitelist.skycoin.com), and enables the daily distribution of rewards.
+
+### User Participation
+
+Eligible skywire visors based on the criteria outlined in the [mainnet rules](mainnet_rules.md) may receive rewards when the user sets a reward address; either from the hypervisor UI or from the CLI with:
+
+```
+skywire-cli reward <skycoin address>
+```
+
+**NOTE: in order for the setting to persist updates for package-based linux installations, it is recommended to set the reward address in /etc/skywire.conf and run `skywire-autoconfig` to update the setting**
+
+### System Survey `node-info.json`
+
+The reward address is set in a text file called reward.txt inside the local folder specified in the visor's config.
+
+It is possible to view the survey that would be generated with
+
+```
+skywire cli survey
+```
+
+**Setting the reward address will generate a system survey** inside the local folder called node-info.json.
+
+It should be noted that the system survey generation requires root for many of its fields, but no essential field currently requires root
+
+
+### Log & Survey Collection
+
+The log collection and [reward processing](#reward-processing) happens hourly.
+
+The log collection run can be viewed here:
+https://fiber.skywire.dev/log-collection
+_Data is updated when the page is reloaded_
+
+The surveys and transport logs are collected with
+
+```
+skywire cli log -s <secret-key-of-survey-whitelisted-public-key>
+```
+
+The surveys are only permitted to be collected by `survey_whitelist` keys which are specified in the visor's config.
+
+These `survey_whitelist` keys are specified by the [conf service](https://conf.skywwire.skycoin.com) and are fetched / included in the visor's config when the config is generated.
+
+The collected surveys are then checked and backed up.
+
+The collection of surveys and the reward calculation happens hourly - as configured by the systemd service and timer
+
+### Reward Processing
+
+The rewards are calculated by `skywire cli rewards calc` with the aid of a script to produce the reward distribution data for the previous day's uptime.
+
+### Per-IP reward limit
+
+The total share of rewards for any given ip address to 8 based on the following calculation:
+
+The fraction of reward shares for a skycoin addresses at a particular IP address equals the number of occurrences of a skycoin address at a specific IP address multiplied by the quotient of 8 divided by the number of visors at that IP address which are otherwise eligible based on their uptime.
+
+### MAC Address reward limit
+
+To avoid a user running multiple instances of skywire on virtual machines, the MAC addresses from the surveys are compared to the mac addresses in all other surveys. If any two visors list the same mac address for the first interface after `lo` these are considered the same machine and 1 reward share is divided evenly between all the visors which list the same MAC address.
+
+### Reward distribution transaction
+
+The reward system UI is served over dmsghttp. Keys which are whitelisted by the reward system are able to view the collected system surveys and other non-public reward system data. Additionally, these whitelisted keys are permitted to `POST` a signed raw transaction to the reward system, which will be broadcast by the reward system.
+
+This is accomplished by the following script:
+
+
+## Automation via systemd service
+
+/etc/systemd/system/skywire-reward.service
+```
+[Unit]
+Description=skywire reward service
+After=network.target
+
+[Service]
+Type=simple
+User=user
+Group=user
+WorkingDirectory=/path/to/github.com/reward/rewards
+ExecStart=/usr/bin/bash -c './getlogs.sh && ./reward.sh'
+
+[Install]
+WantedBy=multi-user.target
+
+```
+
+This service is called by a timer
+
+/etc/systemd/system/skywire-reward.timer
+```
+[Unit]
+Description=skywire reward timer
+After=network.target
+
+[Timer]
+OnUnitActiveSec=1h
+Unit=skywire-reward.service
+
+[Install]
+WantedBy=multi-user.target
+
+```
+
+## fiber.skywire.dev
+
+The 'frontend' of the reward system, which is currently running at [fiber.skywire.dev](https://fiber.skywire.dev) is reliant upon on the output of the scripts
+
+[`fr.go`](fr.go) serves the interface over http and dmsghttp.
+
+A wrapper script [`rewards/getlogs.sh`](/rewards/getlogs.sh) is used to redirect the output of `skywire-cli log` to a file, which is displayed here:
+
+https://fiber.skywire.dev/log-collection
+
+This endpoint displays visors which are included in the most recent reward distribution:
+
+https://fiber.skywire.dev/eligible-visors
+
+This endpoint shows the rewards per skycoin address for the most recent distribution as generated by the new system, as well as the upcoming distribution, if the data has been generated:
+
+https://fiber.skywire.dev/skycoin-rewards
+
+The frontend may be run either with flags or by using a conf file such as the following:
+fr.conf
+```
+WEBPORT=80
+#DMSGPORT=80
+REWARDPKS=('02114054bc4678537e1d07b459ca334a7515315676136dcedeb1fe99eadc4a52bf' '02b390f82db10067b05828b847ddbbf267c7bfb66046e2eb9b01ad81e097da7675' '026ccef9d8c87259579bc002ce1ffcf27ddd0ab1b6c08b39ad842b25e9da321c4f' '026ccef9d8c87259579bc002ce1ffcf27ddd0ab1b6c08b39ad842b25e9da321c4f' '03362e132beb963260cc4ccc5e13b611c30b6f143d53dc3fbcd1fed2247873dcc6')
+DMSGHTTP_SK=<reward-system-secret-key>
+
+```
+Invocation of the reward system frontend
+```
+SKYENV=/path/to/fiber.conf fiber run
+```
+
+## Remote Reward distribution
+
+The reward system frontend serves over dmsg as well as http. An endpoint is made available to whitelisted keys where a raw transaction may be posted using dmsgpost.
+
+The transaction is then broadcast, and it's transaction ID recorded in a file which is monitored by the reward telegram bot.
+
+```
+dmsgpost dmsg://036a70e6956061778e1883e928c1236189db14dfd446df23d83e45c321b330c91f:80/reward -d $(skycoin-cli createRawTransaction /home/user/.skycoin/wallets/2023_06_29.wlt --csv <(curl --silent -L http://fiber.skywire.dev/skycoin-rewards/csv) -a 24MGsKPDo3EJX4uF1h4CHcgmNNHmtGaLR5f) -s <secret-key-of-reward-whitelisted-pk>
+```
+
+This is included with a script [`sendrewards.sh`](/sendrewards.sh) with a corresponding .conf file which is `source`d by the script to set arguments
+
+
+## Known Issues
+
+...
