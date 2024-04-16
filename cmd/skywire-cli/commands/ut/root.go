@@ -19,6 +19,7 @@ var (
 	pk            string
 	online        bool
 	isStats       bool
+	isMoreStats       bool
 	utURL         string
 	cacheFileUT   string
 	cacheFilesAge int
@@ -30,6 +31,7 @@ func init() {
 	utCmd.Flags().StringVarP(&pk, "pk", "k", "", "check uptime for the specified key")
 	utCmd.Flags().BoolVarP(&online, "on", "o", false, "list currently online visors")
 	utCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "count the number of results")
+	utCmd.Flags().BoolVarP(&isMoreStats, "stats2", "t", false, "count of versions")
 	utCmd.Flags().IntVarP(&minUT, "min", "n", 75, "list visors meeting minimum uptime")
 	utCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location.")
 	utCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
@@ -45,7 +47,12 @@ var utCmd = &cobra.Command{
 		if online {
 			utKeysOnline, _ := script.Echo(uts).JQ(".[] | select(.on) | .pk").Match(pk).Replace("\"", "").Slice() //nolint
 			if isStats {
-				internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d visors online\n", len(utKeysOnline)), fmt.Sprintf("%d visors online\n", len(utKeysOnline)))
+				stats, _ := script.Echo(uts).JQ(".[] | select(.on) | .pk").CountLines() //nolint
+				internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d visors online\n", stats), fmt.Sprintf("%d visors online\n", stats))
+				return
+			}
+			if isMoreStats {
+				script.Echo(uts).JQ(".[] | select(.on) | .version").Freq().Replace("\"", "").Stdout() //nolint
 				return
 			}
 			for _, i := range utKeysOnline {
@@ -53,6 +60,16 @@ var utCmd = &cobra.Command{
 			}
 			return
 		}
+		if isStats {
+			stats, _ := script.Echo(uts).JQ(".[] | select(.on) | .pk").CountLines() //nolint
+			internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d visors online\n", stats), fmt.Sprintf("%d visors online\n", stats))
+			return
+		}
+		if isMoreStats {
+			script.Echo(uts).JQ(".[] | .version").Freq().Replace("\"", "").Stdout() //nolint
+			return
+		}
+
 		script.Echo(uts).JQ(".[] | \"\\(.pk) \\(.daily | to_entries[] | select(.value | tonumber > "+fmt.Sprintf("%d", minUT)+") | \"\\(.key) \\(.value)\")\"").Match(pk).Replace("\"", "").Stdout() //nolint
 	},
 }
