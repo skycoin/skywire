@@ -59,7 +59,7 @@ var RootCmd = &cobra.Command{
 			internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d dmsg clients\n", stats), fmt.Sprintf("%d dmsg clients\n", stats))
 			return
 		}
-		script.Echo(dmsgclientkeys).JQ(".[]").Replace("\"", "").Stdout() //nolint
+		script.Echo(dmsgclientkeys).JQ(".[]").Replace("\"", "").Freq().Column(2).Stdout() //nolint
 	},
 }
 
