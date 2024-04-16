@@ -6,15 +6,15 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"text/tabwriter"
 	"time"
-	"os"
 
+	"github.com/bitfield/script"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"github.com/bitfield/script"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
@@ -23,11 +23,12 @@ import (
 )
 
 var (
-	cacheFileDMSGD   string
-	cacheFilesAge int
-	mdURL string
-	isStats       bool
+	cacheFileDMSGD string
+	cacheFilesAge  int
+	mdURL          string
+	isStats        bool
 )
+
 // var allEntries bool
 var masterLogger = logging.NewMasterLogger()
 var packageLogger = masterLogger.PackageLogger("mdisc:disc")

@@ -19,7 +19,7 @@ var (
 	pk            string
 	online        bool
 	isStats       bool
-	isMoreStats       bool
+	isMoreStats   bool
 	utURL         string
 	cacheFileUT   string
 	cacheFilesAge int
