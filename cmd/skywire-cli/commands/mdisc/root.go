@@ -6,9 +6,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"text/tabwriter"
 	"time"
 
+	"github.com/bitfield/script"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/spf13/cobra"
@@ -20,7 +22,12 @@ import (
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 )
 
-var mdAddr string
+var (
+	cacheFileDMSGD string
+	cacheFilesAge  int
+	mdURL          string
+	isStats        bool
+)
 
 // var allEntries bool
 var masterLogger = logging.NewMasterLogger()
@@ -31,47 +38,47 @@ func init() {
 		entryCmd,
 		availableServersCmd,
 	)
-	entryCmd.PersistentFlags().StringVarP(&mdAddr, "addr", "a", "", "DMSG discovery server address\n"+utilenv.DmsgDiscAddr)
-	//	entryCmd.PersistentFlags().BoolVarP(&allEntries, "entries", "e", "", "get all entries")
-	availableServersCmd.PersistentFlags().StringVar(&mdAddr, "addr", utilenv.DmsgDiscAddr, "address of DMSG discovery server\n")
-	var helpflag bool
-	RootCmd.Flags().BoolVarP(&helpflag, "help", "h", false, "help for "+RootCmd.Use)
-	RootCmd.Flags().MarkHidden("help") //nolint
+	RootCmd.Flags().StringVar(&cacheFileDMSGD, "cfu", os.TempDir()+"/dmsgd.json", "DMSGD cache file location.")
+	RootCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache file if older than n minutes")
+	RootCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "count the number of results")
+	entryCmd.Flags().StringVar(&mdURL, "url", utilenv.DmsgDiscAddr, "specify alternative DMSG discovery url")
+	RootCmd.Flags().StringVar(&mdURL, "url", utilenv.DmsgDiscAddr, "specify alternative DMSG discovery url")
+	availableServersCmd.Flags().StringVar(&mdURL, "url", utilenv.DmsgDiscAddr, "specify alternative DMSG discovery url")
 }
 
 // RootCmd is the command that contains sub-commands which interacts with DMSG services.
 var RootCmd = &cobra.Command{
 	Use:   "mdisc",
-	Short: "Query remote DMSG Discovery",
+	Short: "Query DMSG Discovery",
+	Long: `Query DMSG Discovery
+	list entries in dmsg discovery`,
+	Run: func(cmd *cobra.Command, args []string) {
+		dmsgclientkeys := internal.GetData(cacheFileDMSGD, mdURL+"/dmsg-discovery/entries", cacheFilesAge)
+		if isStats {
+			stats, _ := script.Echo(dmsgclientkeys).JQ(".[]").CountLines() //nolint
+			internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d dmsg clients\n", stats), fmt.Sprintf("%d dmsg clients\n", stats))
+			return
+		}
+		script.Echo(dmsgclientkeys).JQ(".[]").Replace("\"", "").Freq().Column(2).Stdout() //nolint
+	},
 }
 
 var entryCmd = &cobra.Command{
 	Use:   "entry <visor-public-key>",
 	Short: "Fetch an entry",
-	//	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		//print help on no args
 		if len(args) == 0 {
 			cmd.Help() //nolint
-		} else {
-			if mdAddr == "" {
-				mdAddr = utilenv.DmsgDiscAddr
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-			defer cancel()
-			pk := internal.ParsePK(cmd.Flags(), "visor-public-key", args[0])
-
-			masterLogger.SetLevel(logrus.InfoLevel)
-
-			//TODO: fetch all entries
-			//		if allEntries {
-			//			entries, err := disc.NewHTTP(mdAddr, &http.Client{}, packageLogger).AvailableServers(ctx)
-			//		}
-
-			entry, err := disc.NewHTTP(mdAddr, &http.Client{}, packageLogger).Entry(ctx, pk)
-			internal.Catch(cmd.Flags(), err)
-			internal.PrintOutput(cmd.Flags(), entry, fmt.Sprintln(entry))
+			return
 		}
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+		defer cancel()
+		pk := internal.ParsePK(cmd.Flags(), "visor-public-key", args[0])
+
+		masterLogger.SetLevel(logrus.InfoLevel)
+		entry, err := disc.NewHTTP(mdURL, &http.Client{}, packageLogger).Entry(ctx, pk)
+		internal.Catch(cmd.Flags(), err)
+		internal.PrintOutput(cmd.Flags(), entry, fmt.Sprintln(entry))
 	},
 }
 
@@ -84,7 +91,7 @@ var availableServersCmd = &cobra.Command{
 
 		masterLogger.SetLevel(logrus.InfoLevel)
 
-		entries, err := disc.NewHTTP(mdAddr, &http.Client{}, packageLogger).AvailableServers(ctx)
+		entries, err := disc.NewHTTP(mdURL, &http.Client{}, packageLogger).AvailableServers(ctx)
 		internal.Catch(cmd.Flags(), err)
 		printAvailableServers(cmd.Flags(), entries)
 	},
@@ -93,7 +100,7 @@ var availableServersCmd = &cobra.Command{
 func printAvailableServers(cmdFlags *pflag.FlagSet, entries []*disc.Entry) {
 	var b bytes.Buffer
 	w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
-	_, err := fmt.Fprintln(w, "version\tregistered\tpublic-key\taddress\tavailable-sessions")
+	_, err := fmt.Fprintln(w, "version\tregistered\tpublic-key\taddress\tavail-sess")
 	internal.Catch(cmdFlags, err)
 
 	type serverEntry struct {
@@ -101,7 +108,7 @@ func printAvailableServers(cmdFlags *pflag.FlagSet, entries []*disc.Entry) {
 		Registered        int64         `json:"registered"`
 		PublicKey         cipher.PubKey `json:"public_key"`
 		Address           string        `json:"address"`
-		AvailableSessions int           `json:"available_sessions"`
+		AvailableSessions int           `json:"avail_sess"`
 	}
 
 	var serverEntries []serverEntry
