@@ -99,7 +99,7 @@ var availableServersCmd = &cobra.Command{
 func printAvailableServers(cmdFlags *pflag.FlagSet, entries []*disc.Entry) {
 	var b bytes.Buffer
 	w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
-	_, err := fmt.Fprintln(w, "version\tregistered\tpublic-key\taddress\tavailable-sessions")
+	_, err := fmt.Fprintln(w, "version\tregistered\tpublic-key\taddress\tavail-sess")
 	internal.Catch(cmdFlags, err)
 
 	type serverEntry struct {
@@ -107,7 +107,7 @@ func printAvailableServers(cmdFlags *pflag.FlagSet, entries []*disc.Entry) {
 		Registered        int64         `json:"registered"`
 		PublicKey         cipher.PubKey `json:"public_key"`
 		Address           string        `json:"address"`
-		AvailableSessions int           `json:"available_sessions"`
+		AvailableSessions int           `json:"avail_sess"`
 	}
 
 	var serverEntries []serverEntry
