@@ -73,7 +73,7 @@ func init() {
 	RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
 	RootCmd.PersistentFlags().MarkHidden("help") //nolint
 
-	RootCmd.Flags().StringVar(&httpport, "httpport", ":8001", "port to bind")
+	RootCmd.Flags().StringVar(&httpport, "addr", ":8001", "port to bind")
 	RootCmd.Flags().StringVar(&rpcport, "rpcport", ":4040", "port to bind")
 }
 

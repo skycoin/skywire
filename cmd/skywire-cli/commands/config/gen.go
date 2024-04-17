@@ -858,7 +858,7 @@ var genConfigCmd = &cobra.Command{
 				Binary:    visorconfig.SkychatName,
 				AutoStart: true,
 				Port:      routing.Port(skyenv.SkychatPort),
-				Args:      []string{"--httpport=" + visorconfig.SkychatAddr},
+				Args:      []string{"--addr", visorconfig.SkychatAddr},
 			},
 			{
 				Name:      visorconfig.SkysocksName,
