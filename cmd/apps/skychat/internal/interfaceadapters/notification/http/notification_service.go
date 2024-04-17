@@ -26,10 +26,8 @@ func (ns *NotificationService) Notify(notification notification.Notification) er
 	if err != nil {
 		return err
 	}
-
-	//TODO: pretty print
-	//fmt.Printf("Notify: \n")
-	//fmt.Printf("%s \n", jsonNotification)
+	fmt.Printf("Notify: \n")
+	fmt.Printf("%s \n", jsonNotification)
 	ns.GetChannel() <- string(jsonNotification)
 	return nil
 }

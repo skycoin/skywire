@@ -2,9 +2,9 @@
 package rpc
 
 import (
+	"log"
 	"net/rpc"
 
-	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/inputports/rpc/chat"
@@ -14,12 +14,11 @@ import (
 type Client struct {
 	appServices app.Services
 	rpcPort     string
-	log         *logging.Logger
 }
 
 // NewClient RPC Client constructor
 func NewClient(appServices app.Services, rpcPort string) *Client {
-	rc := &Client{appServices: appServices, rpcPort: rpcPort, log: logging.MustGetLogger("chat:rpc-client")}
+	rc := &Client{appServices: appServices, rpcPort: rpcPort}
 	return rc
 }
 
@@ -28,7 +27,7 @@ func (c *Client) SendTextMessage(VisorPk cipher.PubKey, ServerPk cipher.PubKey, 
 
 	rpcClient, err := rpc.DialHTTP("tcp", c.rpcPort)
 	if err != nil {
-		c.log.Fatal("Connection error: ", err)
+		log.Fatal("Connection error: ", err)
 	}
 
 	stmrm := chat.SendTextMessageRequestModel{
@@ -40,7 +39,7 @@ func (c *Client) SendTextMessage(VisorPk cipher.PubKey, ServerPk cipher.PubKey, 
 
 	err = rpcClient.Call(chat.SendTextMessageRPCParam, stmrm, nil)
 	if err != nil {
-		c.log.Fatal("Client invocation error: ", err)
+		log.Fatal("Client invocation error: ", err)
 	}
 
 	return nil

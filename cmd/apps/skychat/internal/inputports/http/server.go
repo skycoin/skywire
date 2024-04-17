@@ -5,12 +5,12 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"log"
 	"net/http"
 	"time"
 
 	"github.com/gorilla/mux"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/inputports/http/chat"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/inputports/http/notification.go"
@@ -27,15 +27,12 @@ type Server struct {
 	appServices app.Services
 	router      *mux.Router
 	port        string
-	log         *logging.Logger
 }
 
 // NewServer HTTP Server constructor
 func NewServer(appServices app.Services, port string) *Server {
 	httpServer := &Server{appServices: appServices}
 	httpServer.port = port
-
-	httpServer.log = logging.MustGetLogger("chat:http-server")
 
 	httpServer.router = mux.NewRouter()
 	httpServer.router.Handle("/", http.FileServer(getFileSystem()))
@@ -108,14 +105,14 @@ func (httpServer *Server) AddNotificationHTTPRoutes() {
 
 // ListenAndServe Starts listening for requests
 func (httpServer *Server) ListenAndServe() {
-	httpServer.log.Debugln("Serving HTTP on", httpServer.port)
+	fmt.Println("Serving HTTP on", httpServer.port)
 	srv := &http.Server{
 		Addr:         httpServer.port,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
 
-	httpServer.log.Fatal(srv.ListenAndServe())
+	log.Fatal(srv.ListenAndServe())
 
 }
 

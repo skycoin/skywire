@@ -2,6 +2,8 @@
 package interfaceadapters
 
 import (
+	"fmt"
+
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/connectionhandler"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/messenger"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/notification"
@@ -56,15 +58,15 @@ func NewServices() Services {
 func (s *Services) Close() error {
 	err := s.ClientRepository.Close()
 	if err != nil {
-		return err
+		fmt.Println(err)
 	}
 	err = s.UserRepository.Close()
 	if err != nil {
-		return err
+		fmt.Println(err)
 	}
 	err = s.VisorRepository.Close()
 	if err != nil {
-		return err
+		fmt.Println(err)
 	}
 	return err
 }

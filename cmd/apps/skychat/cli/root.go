@@ -2,11 +2,13 @@
 package cli
 
 import (
+	"fmt"
+	"log"
+
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 
 	clichat "github.com/skycoin/skywire/cmd/apps/skychat/cli/chat"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app"
@@ -17,9 +19,12 @@ import (
 var httpport string
 var rpcport string
 
+<<<<<<< HEAD
 // Applog is the logger for the skychat app chat:run
 var Applog *logging.Logger
 
+=======
+>>>>>>> parent of 05e0f5f70 (cleanup logging)
 // RootCmd is the root command for skychat
 var RootCmd = &cobra.Command{
 	Use:   "skychat",
@@ -35,15 +40,13 @@ var RootCmd = &cobra.Command{
 	Version:               buildinfo.Version(),
 	Run: func(cmd *cobra.Command, args []string) {
 
-		Applog = logging.MustGetLogger("chat:run")
-
 		//TODO: Setup Databases depending on flags/attributes
 
 		interfaceadapters.InterfaceAdapterServices = interfaceadapters.NewServices()
 		defer func() {
 			err := interfaceadapters.InterfaceAdapterServices.Close()
 			if err != nil {
-				Applog.Errorln(err)
+				fmt.Println(err.Error())
 			}
 		}()
 
@@ -97,7 +100,7 @@ func Execute() {
 	})
 
 	if err := RootCmd.Execute(); err != nil {
-		Applog.Fatal("Failed to execute command: ", err)
+		log.Fatal("Failed to execute command: ", err)
 	}
 }
 

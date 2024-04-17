@@ -1,6 +1,7 @@
 package notification
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 
@@ -20,7 +21,7 @@ var savedsocketreader []*appwebsocket
 
 // SubscribeNotificationsWebsocket sends all notifications from the app to a websocket
 func (c Handler) SubscribeNotificationsWebsocket(w http.ResponseWriter, r *http.Request) {
-	c.log.Debug("socket request")
+	log.Println("socket request")
 	if savedsocketreader == nil {
 		savedsocketreader = make([]*appwebsocket, 0)
 	}
@@ -28,17 +29,17 @@ func (c Handler) SubscribeNotificationsWebsocket(w http.ResponseWriter, r *http.
 	defer func() {
 		err := recover()
 		if err != nil {
-			c.log.Errorln(err)
+			log.Println(err)
 		}
 		err = r.Body.Close()
 		if err != nil {
-			c.log.Errorln(err)
+			log.Println(err)
 		}
 
 	}()
 	con, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		c.log.Errorln(err)
+		log.Println(err)
 	}
 
 	ptrSocketReader := &appwebsocket{
@@ -59,7 +60,7 @@ func (c Handler) SubscribeNotificationsWebsocket(w http.ResponseWriter, r *http.
 		select {
 		case msg, ok := <-c.ns.GetChannel():
 			if !ok {
-				c.log.Debugln("GetChannel not ok")
+				fmt.Println("GetChannel not ok")
 				return
 			}
 			err := ptrSocketReader.con.WriteMessage(websocket.TextMessage, []byte(msg))
@@ -67,7 +68,7 @@ func (c Handler) SubscribeNotificationsWebsocket(w http.ResponseWriter, r *http.
 				log.Println(err)
 			}
 		case <-r.Context().Done():
-			c.log.Debugln("SSE: connection was closed.")
+			fmt.Println("SSE: connection was closed.")
 			return
 		}
 	}

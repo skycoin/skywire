@@ -2,13 +2,14 @@
 package rpc
 
 import (
+	"fmt"
+	"log"
 	"net/http"
 	"net/rpc"
 	"time"
 
 	"github.com/gorilla/mux"
 
-	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/inputports/rpc/chat"
 )
@@ -18,12 +19,11 @@ type Server struct {
 	appServices app.Services
 	router      *mux.Router
 	rpcPort     string
-	log         *logging.Logger
 }
 
 // NewServer RPC Server constructor
 func NewServer(appServices app.Services, rpcPort string) *Server {
-	rpcServer := &Server{appServices: appServices, rpcPort: rpcPort, log: logging.MustGetLogger("chat:rpc-server")}
+	rpcServer := &Server{appServices: appServices, rpcPort: rpcPort}
 	rpcServer.router = mux.NewRouter()
 
 	return rpcServer
@@ -35,12 +35,12 @@ func (rpcServer *Server) ListenAndServe() {
 	api := chat.NewHandler(rpcServer.appServices.ChatServices)
 	err := rpc.Register(api)
 	if err != nil {
-		rpcServer.log.Fatal("error registering API", err)
+		log.Fatal("error registering API", err)
 	}
 
 	rpc.HandleHTTP()
 
-	rpcServer.log.Infoln("Serving RPC on", rpcServer.rpcPort)
+	fmt.Println("Serving RPC on", rpcServer.rpcPort)
 
 	srv := &http.Server{
 		Addr:         rpcServer.rpcPort,
@@ -48,5 +48,5 @@ func (rpcServer *Server) ListenAndServe() {
 		WriteTimeout: 10 * time.Second,
 	}
 
-	rpcServer.log.Fatal(srv.ListenAndServe())
+	log.Fatal(srv.ListenAndServe())
 }

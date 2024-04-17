@@ -4,7 +4,6 @@ package messengerimpl
 import (
 	"fmt"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/connectionhandler"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/notification"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/chat"
@@ -16,7 +15,6 @@ import (
 
 // MessengerService provides a netcon implementation of the Service
 type MessengerService struct {
-	log       *logging.Logger
 	ns        notification.Service
 	cliRepo   client.Repository
 	usrRepo   user.Repository
@@ -29,7 +27,6 @@ type MessengerService struct {
 func NewMessengerService(ns notification.Service, cR client.Repository, uR user.Repository, chR chat.Repository, ch connectionhandler.Service) *MessengerService {
 	ms := MessengerService{}
 
-	ms.log = logging.MustGetLogger("chat:msg-service")
 	ms.ns = ns
 	ms.cliRepo = cR
 	ms.usrRepo = uR

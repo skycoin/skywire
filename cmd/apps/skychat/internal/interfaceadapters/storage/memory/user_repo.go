@@ -5,26 +5,22 @@ import (
 	"fmt"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/user"
 )
 
 // UserRepo Implements the Repository Interface to provide an in-memory storage provider
 type UserRepo struct {
 	user user.User
-	log  *logging.Logger
 }
 
 // NewUserRepo Constructor
 func NewUserRepo(pk cipher.PubKey) *UserRepo {
 	r := UserRepo{}
 
-	r.log = logging.MustGetLogger("chat:user-repo")
-
 	err := r.NewUser()
 	r.user.GetInfo().SetPK(pk)
 	if err != nil {
-		r.log.Errorln(err)
+		fmt.Println(err)
 	}
 
 	return &r
