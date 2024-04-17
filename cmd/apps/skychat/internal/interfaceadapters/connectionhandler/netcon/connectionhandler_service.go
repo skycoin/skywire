@@ -10,6 +10,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/notification"
@@ -23,6 +24,7 @@ import (
 // ConnectionHandlerService provides a netcon implementation of the Service
 type ConnectionHandlerService struct {
 	ctx          context.Context
+	log          *logging.Logger
 	ns           notification.Service
 	cliRepo      client.Repository
 	visorRepo    chat.Repository
@@ -34,37 +36,39 @@ type ConnectionHandlerService struct {
 
 // NewConnectionHandlerService constructor for ConnectionHandlerService
 func NewConnectionHandlerService(ns notification.Service, cR client.Repository, chR chat.Repository, msgrx chan message.Message) *ConnectionHandlerService {
-	ms := ConnectionHandlerService{}
+	ch := ConnectionHandlerService{}
 
-	ms.ns = ns
-	ms.cliRepo = cR
-	ms.visorRepo = chR
+	ch.log = logging.MustGetLogger("chat:connhandler")
 
-	ms.msgrx = msgrx
+	ch.ns = ns
+	ch.cliRepo = cR
+	ch.visorRepo = chR
 
-	ms.conns = make(map[cipher.PubKey]net.Conn)
-	ms.errs = make(chan error, 1)
+	ch.msgrx = msgrx
 
-	return &ms
+	ch.conns = make(map[cipher.PubKey]net.Conn)
+	ch.errs = make(chan error, 1)
+
+	return &ch
 }
 
 // HandleConnection handles the connection to the given Pubkey and incoming messages
-func (ms ConnectionHandlerService) HandleConnection(pk cipher.PubKey) {
+func (ch ConnectionHandlerService) HandleConnection(pk cipher.PubKey) {
 
-	connection, err := ms.GetConnByPK(pk)
+	connection, err := ch.GetConnByPK(pk)
 	if err != nil {
-		ms.errs <- err
+		ch.errs <- err
 		return
 	}
 
-	if ms.ConnectionToPkHandled(pk) {
-		ms.errs <- fmt.Errorf("connection already handled")
+	if ch.ConnectionToPkHandled(pk) {
+		ch.errs <- fmt.Errorf("connection already handled")
 		return
 	}
 
-	err = ms.AddConnToHandled(pk, connection)
+	err = ch.AddConnToHandled(pk, connection)
 	if err != nil {
-		ms.errs <- err
+		ch.errs <- err
 		return
 	}
 
@@ -72,31 +76,33 @@ func (ms ConnectionHandlerService) HandleConnection(pk cipher.PubKey) {
 
 		messageLength, err := readMessageLengthFromConnection(connection)
 		if err != nil {
-			ms.errs <- err
+			ch.errs <- err
 			continue
 		}
 
 		messageBytes, err := readNBytesFromConnection(*messageLength, connection)
 		if err != nil {
-			ms.errs <- err
+			ch.errs <- err
 			continue
 		}
 
 		receivedMessage, err := decodeReceivedBytesToMessage(messageBytes)
 		if err != nil {
-			ms.errs <- err
+			ch.errs <- err
 			continue
 		}
 
-		ms.msgrx <- *receivedMessage
+		ch.log.Debugln(receivedMessage.PrettyPrint(false))
+
+		ch.msgrx <- *receivedMessage
 
 	}
 
 }
 
 // GetReceiveChannel returns the channel used to 'broadcast' received messages from the connectionhandler
-func (ms ConnectionHandlerService) GetReceiveChannel() chan message.Message {
-	return ms.msgrx
+func (ch ConnectionHandlerService) GetReceiveChannel() chan message.Message {
+	return ch.msgrx
 }
 
 // readMessageLengthFromConnection reads a prefix message of the connection to get the length of the upcoming message
@@ -155,14 +161,14 @@ func decodeReceivedBytesToMessage(messageBytes []byte) (*message.Message, error)
 	}
 
 	receivedMessage := message.NewMessage(receivedRawMessage)
-	receivedMessage.FmtPrint(false)
+
 	return &receivedMessage, nil
 }
 
 // DialPubKey dials the remote chat
-func (ms ConnectionHandlerService) DialPubKey(pk cipher.PubKey) (net.Conn, error) {
+func (ch ConnectionHandlerService) DialPubKey(pk cipher.PubKey) (net.Conn, error) {
 
-	chatClient, err := ms.cliRepo.GetClient()
+	chatClient, err := ch.cliRepo.GetClient()
 	if err != nil {
 		return nil, err
 	}
@@ -181,8 +187,8 @@ func (ms ConnectionHandlerService) DialPubKey(pk cipher.PubKey) (net.Conn, error
 	var r = netutil.NewRetrier(chatClient.GetLog(), 50*time.Millisecond, netutil.DefaultMaxBackoff, 2, 2)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ms.ctx = ctx
-	err = r.Do(ms.ctx, func() error {
+	ch.ctx = ctx
+	err = r.Do(ch.ctx, func() error {
 		//TODO: notify that dialing is happening, and even notify failed attempts?
 		conn, err = chatClient.GetAppClient().Dial(addr)
 		return err
@@ -210,14 +216,14 @@ func addP2PIfEmpty(v *chat.Visor) error {
 //
 // if addToDatabase is true the message will be saved locally, otherwise not.
 // Attention: a destination pkroute can also be a local destination so m.destination and pkroute can differ
-func (ms ConnectionHandlerService) SendMessage(pkroute util.PKRoute, m message.Message, addToDatabase bool) error {
+func (ch ConnectionHandlerService) SendMessage(pkroute util.PKRoute, m message.Message, addToDatabase bool) error {
 
-	v, err := ms.getVisorAndSetupIfNecessary(pkroute)
+	v, err := ch.getVisorAndSetupIfNecessary(pkroute)
 	if err != nil {
 		return err
 	}
 
-	m.FmtPrint(false)
+	ch.log.Debugln(m.PrettyPrint(false))
 
 	rm := message.NewRAWMessage(m)
 
@@ -226,24 +232,24 @@ func (ms ConnectionHandlerService) SendMessage(pkroute util.PKRoute, m message.M
 		return fmt.Errorf("failed to marshal json: %v ", err)
 	}
 
-	conn, err := ms.GetConnByPK(m.Dest.Visor)
+	conn, err := ch.GetConnByPK(m.Dest.Visor)
 	if err != nil {
-		conn, err = ms.DialPubKey(m.Dest.Visor)
+		conn, err = ch.DialPubKey(m.Dest.Visor)
 		if err != nil {
 			return err
 		}
-		err = ms.AddConn(pkroute.Visor, conn)
+		err = ch.AddConn(pkroute.Visor, conn)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("added conn %s	%s\n", conn.RemoteAddr().String(), conn.RemoteAddr().Network())
+		ch.log.Debugf("added conn %s	%s\n", conn.RemoteAddr().String(), conn.RemoteAddr().Network())
 
-		go ms.HandleConnection(pkroute.Visor) //nolint:errcheck
+		go ch.HandleConnection(pkroute.Visor) //nolint:errcheck
 	}
 
 	err = writeMessageLengthPrefixToConnection(bytes, conn)
 	if err != nil {
-		fmt.Printf("Failed to write message length")
+		ch.log.Errorln("Failed to write message length")
 	}
 
 	fmt.Printf("Write %d Bytes to Conn: %s \n", len(bytes), conn.LocalAddr())
@@ -254,8 +260,9 @@ func (ms ConnectionHandlerService) SendMessage(pkroute util.PKRoute, m message.M
 	}
 
 	if addToDatabase {
+		m.Status = message.MsgStatusSent
 		v.AddMessage(pkroute, m)
-		err = ms.visorRepo.Set(*v)
+		err = ch.visorRepo.Set(*v)
 		if err != nil {
 			return err
 		}
@@ -263,8 +270,8 @@ func (ms ConnectionHandlerService) SendMessage(pkroute util.PKRoute, m message.M
 	return nil
 }
 
-func (ms ConnectionHandlerService) getVisorAndSetupIfNecessary(pkroute util.PKRoute) (*chat.Visor, error) {
-	v, err := ms.getExistingVisorOrAddNewIfNotExists(pkroute)
+func (ch ConnectionHandlerService) getVisorAndSetupIfNecessary(pkroute util.PKRoute) (*chat.Visor, error) {
+	v, err := ch.getExistingVisorOrAddNewIfNotExists(pkroute)
 	if err != nil {
 		return nil, err
 	}
@@ -293,10 +300,10 @@ func (ms ConnectionHandlerService) getVisorAndSetupIfNecessary(pkroute util.PKRo
 	return v, nil
 }
 
-func (ms ConnectionHandlerService) getExistingVisorOrAddNewIfNotExists(pkroute util.PKRoute) (*chat.Visor, error) {
+func (ch ConnectionHandlerService) getExistingVisorOrAddNewIfNotExists(pkroute util.PKRoute) (*chat.Visor, error) {
 
-	if ms.visorExists(pkroute) {
-		return ms.visorRepo.GetByPK(pkroute.Visor)
+	if ch.visorExists(pkroute) {
+		return ch.visorRepo.GetByPK(pkroute.Visor)
 	}
 
 	var v chat.Visor
@@ -307,7 +314,7 @@ func (ms ConnectionHandlerService) getExistingVisorOrAddNewIfNotExists(pkroute u
 		v = chat.NewDefaultVisor(pkroute)
 	}
 
-	err := ms.visorRepo.Add(v)
+	err := ch.visorRepo.Add(v)
 	if err != nil {
 		return nil, err
 	}
@@ -315,112 +322,111 @@ func (ms ConnectionHandlerService) getExistingVisorOrAddNewIfNotExists(pkroute u
 
 }
 
-func (ms ConnectionHandlerService) visorExists(pkroute util.PKRoute) bool {
-	_, err := ms.visorRepo.GetByPK(pkroute.Visor)
+func (ch ConnectionHandlerService) visorExists(pkroute util.PKRoute) bool {
+	_, err := ch.visorRepo.GetByPK(pkroute.Visor)
 	return err == nil
 }
 
 // Listen is used to listen for new incoming connections and pass them to the HandleConnection routine
-func (ms ConnectionHandlerService) Listen() {
-	chatClient, err := ms.cliRepo.GetClient()
+func (ch ConnectionHandlerService) Listen() {
+	chatClient, err := ch.cliRepo.GetClient()
 	if err != nil {
-		fmt.Printf("error getting client from repository: %s", err)
+		ch.log.Errorf("error getting client from repository: %s", err)
 	}
 
 	listener, err := chatClient.GetAppClient().Listen(chatClient.GetNetType(), chatClient.GetPort())
 	if err != nil {
-		fmt.Printf("Error listening network %v on port %d: %v\n", chatClient.GetNetType(), chatClient.GetPort(), err)
+		ch.log.Errorf("Error listening network %v on port %d: %v\n", chatClient.GetNetType(), chatClient.GetPort(), err)
 		return
 	}
 
 	chatClient.SetAppPort(chatClient.GetAppClient(), chatClient.GetPort())
 
 	go func() {
-		if err := <-ms.errs; err != nil {
-			fmt.Printf("Error in go HandleConnection function: %s \n", err)
+		if err := <-ch.errs; err != nil {
+			ch.log.Errorf("Error in go HandleConnection function: %s \n", err)
 		}
 	}()
 
 	for {
-		fmt.Println("Accepting skychat conn...")
+		ch.log.Debugln("Accepting skychat conn...")
 		conn, err := listener.Accept()
 		if err != nil {
-			fmt.Println("Failed to accept conn:", err)
+			ch.log.Errorln("Failed to accept conn:", err)
 			return
 		}
-		fmt.Println("Accepted skychat conn")
 		raddr := conn.RemoteAddr().(appnet.Addr)
 
-		fmt.Printf("Accepted skychat conn on %s from %s\n", conn.LocalAddr(), raddr.PubKey)
+		ch.log.Debugf("Accepted skychat conn on %s from %s\n", conn.LocalAddr(), raddr.PubKey)
 
-		err = ms.AddConn(raddr.PubKey, conn)
+		err = ch.AddConn(raddr.PubKey, conn)
 		if err != nil {
-			fmt.Println(err)
+			ch.log.Error(err)
 		}
-		fmt.Printf("added conn %s	%s\n", conn.RemoteAddr().String(), conn.RemoteAddr().Network())
 
 		//error handling in anonymous go func above
-		go ms.HandleConnection(raddr.PubKey)
+		go ch.HandleConnection(raddr.PubKey)
 		defer func() {
-			err = ms.DeleteConnFromHandled(raddr.PubKey)
-			fmt.Println(err.Error())
+			err = ch.DeleteConnFromHandled(raddr.PubKey)
+			ch.log.Error(err.Error())
 		}()
 
 	}
 }
 
 // GetConnByPK returns the conn of the given visor pk or an error if there is no open connection to the requested visor
-func (ms *ConnectionHandlerService) GetConnByPK(pk cipher.PubKey) (net.Conn, error) {
+func (ch *ConnectionHandlerService) GetConnByPK(pk cipher.PubKey) (net.Conn, error) {
 	//check if conn already added
-	if conn, ok := ms.conns[pk]; ok {
+	if conn, ok := ch.conns[pk]; ok {
 		return conn, nil
 	}
 	return nil, fmt.Errorf("no conn available with the requested visor")
 }
 
 // AddConn adds the given net.Conn to the map to keep track of active connections
-func (ms *ConnectionHandlerService) AddConn(pk cipher.PubKey, conn net.Conn) error {
+func (ch *ConnectionHandlerService) AddConn(pk cipher.PubKey, conn net.Conn) error {
 	//check if conn already added
-	if _, ok := ms.conns[pk]; ok {
+	if _, ok := ch.conns[pk]; ok {
 		return fmt.Errorf("conn already added")
 	}
-	ms.conns[pk] = conn
+	ch.conns[pk] = conn
+	ch.log.Debugf("added conn %s	%s\n", conn.RemoteAddr().String(), conn.RemoteAddr().Network())
 	return nil
 }
 
 // DeleteConn removes the given net.Conn from the map
-func (ms *ConnectionHandlerService) DeleteConn(pk cipher.PubKey) error {
+func (ch *ConnectionHandlerService) DeleteConn(pk cipher.PubKey) error {
 	//check if conn is added
-	if _, ok := ms.conns[pk]; ok {
-		delete(ms.conns, pk)
+	if _, ok := ch.conns[pk]; ok {
+		delete(ch.conns, pk)
 		return nil
 	}
 	return fmt.Errorf("pk has no connection") //? handle as error?
 }
 
 // ConnectionToPkHandled returns if a connection to the given pk is handled in a go routine
-func (ms *ConnectionHandlerService) ConnectionToPkHandled(pk cipher.PubKey) bool {
-	if _, ok := ms.handledConns[pk]; ok {
+func (ch *ConnectionHandlerService) ConnectionToPkHandled(pk cipher.PubKey) bool {
+	if _, ok := ch.handledConns[pk]; ok {
 		return true
 	}
 	return false
 }
 
 // AddConnToHandled adds the given net.Conn to the map to keep track of handled connections
-func (ms *ConnectionHandlerService) AddConnToHandled(pk cipher.PubKey, conn net.Conn) error {
+func (ch *ConnectionHandlerService) AddConnToHandled(pk cipher.PubKey, conn net.Conn) error {
 	//check if conn already added
-	if _, ok := ms.handledConns[pk]; ok {
+	if _, ok := ch.handledConns[pk]; ok {
 		return fmt.Errorf("conn already added")
 	}
-	ms.conns[pk] = conn
+	ch.conns[pk] = conn
 	return nil
 }
 
 // DeleteConnFromHandled removes the given net.Conn from the handledConns map
-func (ms *ConnectionHandlerService) DeleteConnFromHandled(pk cipher.PubKey) error {
+func (ch *ConnectionHandlerService) DeleteConnFromHandled(pk cipher.PubKey) error {
 	//check if conn is added
-	if _, ok := ms.handledConns[pk]; ok {
-		delete(ms.handledConns, pk)
+	if _, ok := ch.handledConns[pk]; ok {
+		delete(ch.handledConns, pk)
 		return nil
 	}
 	return fmt.Errorf("pk has no connection") //? handle as error?

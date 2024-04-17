@@ -203,6 +203,13 @@ html {
     margin-top: 3px;
   }
 
+  .message-status {
+    font-size: 11px;
+    opacity: 0.9;
+    text-align: right;
+    margin-top: 3px;
+  }
+
   .message-form {
     flex-shrink: 0;
     display: flex;

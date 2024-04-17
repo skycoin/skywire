@@ -126,7 +126,7 @@ func (h leaveRemoteRouteRequestHandler) leaveServerRoute(route util.PKRoute) err
 
 	err = h.ms.SendLeaveRouteMessage(route)
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
 
 	return h.visorRepo.Set(*visor)
@@ -150,7 +150,7 @@ func (h leaveRemoteRouteRequestHandler) leaveRoomRoute(route util.PKRoute) error
 
 	err = h.ms.SendLeaveRouteMessage(route)
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
 
 	return nil

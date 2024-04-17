@@ -81,6 +81,14 @@ func (ms MessengerService) handleRemoteServerMessage(m message.Message) {
 	case message.CmdMsgType:
 		ms.errs <- fmt.Errorf("commands are not allowed on p2p chats")
 		return
+	case message.StatusMsgType:
+		//handle message
+		err := ms.handleRemoteStatusMsgType(m)
+		if err != nil {
+			ms.errs <- err
+			return
+		}
+		return
 	default:
 		ms.errs <- fmt.Errorf("incorrect data received")
 		return
@@ -320,4 +328,46 @@ func (ms MessengerService) handleRemoteRoomTextMsgType(m message.Message) error 
 	}
 
 	return nil
+}
+
+// handleRemoteStatusMsgType handles messages of type status of the remote chat
+func (ms MessengerService) handleRemoteStatusMsgType(m message.Message) error {
+	ms.log.Debugln("handleRemoteStatusMsgType")
+
+	pkroute := m.Root
+
+	v, err := ms.visorRepo.GetByPK(pkroute.Visor)
+	if err != nil {
+		return err
+	}
+
+	r, err := v.GetRoomByRoute(pkroute)
+	if err != nil {
+		return err
+	}
+
+	msg, err := r.GetMessageByID(string(m.Message))
+	if err != nil {
+		return err
+	}
+
+	msg.Status = m.MsgSubtype
+
+	v.UpdateMessage(pkroute, msg)
+
+	err = ms.visorRepo.Set(*v)
+	if err != nil {
+		return err
+	}
+
+	//notify about updated message
+	//TODO: UpdateMsgNotification
+	n := notification.NewMsgNotification(pkroute)
+	err = ms.ns.Notify(n)
+	if err != nil {
+		return err
+	}
+
+	return nil
+
 }

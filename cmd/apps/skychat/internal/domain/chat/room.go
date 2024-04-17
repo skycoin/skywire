@@ -81,11 +81,30 @@ func (r *Room) AddMessage(m message.Message) {
 	r.Msgs = append(r.Msgs, m)
 }
 
+// SetMessage sets the given message
+func (r *Room) SetMessage(m message.Message) {
+	for i, msg := range r.Msgs {
+		if msg.ID == m.ID {
+			r.Msgs[i] = m
+		}
+	}
+}
+
 //[]:SetMessages to update messages
 
 // GetMessages returns all messages
 func (r *Room) GetMessages() []message.Message {
 	return r.Msgs
+}
+
+// GetMessageByID returns the message with the given id
+func (r *Room) GetMessageByID(id string) (message.Message, error) {
+	for _, msg := range r.Msgs {
+		if msg.ID == id {
+			return msg, nil
+		}
+	}
+	return message.Message{}, fmt.Errorf("no message with given id")
 }
 
 // GetIsVisible returns if the room is visible

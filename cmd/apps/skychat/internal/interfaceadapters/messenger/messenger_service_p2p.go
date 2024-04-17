@@ -71,6 +71,14 @@ func (ms MessengerService) handleP2PMessage(m message.Message) {
 		err = ms.handleP2PInfoMsgType(visor, m)
 		if err != nil {
 			fmt.Println(err)
+			ms.errs <- err
+			return
+		}
+		//send message to let sender know we received his message
+		err = ms.SendMessageReceived(m)
+		if err != nil {
+			ms.errs <- err
+			return
 		}
 	case message.TxtMsgType:
 		//add the message to the p2p chat and update visor & repository
@@ -86,8 +94,22 @@ func (ms MessengerService) handleP2PMessage(m message.Message) {
 			ms.errs <- err
 			return
 		}
+		//send message to let sender know we received his message
+		err = ms.SendMessageReceived(m)
+		if err != nil {
+			ms.errs <- err
+			return
+		}
 	case message.CmdMsgType:
 		ms.errs <- fmt.Errorf("commands are not allowed on p2p chats")
+		return
+	case message.StatusMsgType:
+		//handle message
+		err := ms.handleP2PStatusMsgType(m)
+		if err != nil {
+			ms.errs <- err
+			return
+		}
 		return
 	default:
 		ms.errs <- fmt.Errorf("incorrect data received")
@@ -314,7 +336,7 @@ func (ms MessengerService) handleP2PTextMsgType(m message.Message) error {
 	fmt.Printf("Text:	%s \n", m.Message)
 	fmt.Println("---------------------------------------------------------------------------------------------------")
 
-	//notify about a new TextMessage
+	//notify about a new received TextMessage
 	n := notification.NewMsgNotification(pkroute)
 	err := ms.ns.Notify(n)
 	if err != nil {
@@ -322,4 +344,46 @@ func (ms MessengerService) handleP2PTextMsgType(m message.Message) error {
 	}
 
 	return nil
+}
+
+// handleP2PStatusMsgType handles messages of type status of the p2p chat
+func (ms MessengerService) handleP2PStatusMsgType(m message.Message) error {
+	ms.log.Debugln("handleP2PStatusMsgType")
+
+	pkroute := util.NewP2PRoute(m.Root.Visor)
+
+	v, err := ms.visorRepo.GetByPK(pkroute.Visor)
+	if err != nil {
+		return err
+	}
+
+	r, err := v.GetP2P()
+	if err != nil {
+		return err
+	}
+
+	msg, err := r.GetMessageByID(string(m.Message))
+	if err != nil {
+		return err
+	}
+
+	msg.Status = m.MsgSubtype
+
+	v.UpdateMessage(pkroute, msg)
+
+	err = ms.visorRepo.Set(*v)
+	if err != nil {
+		return err
+	}
+
+	//notify about updated message
+	//TODO: UpdateMsgNotification
+	n := notification.NewMsgNotification(pkroute)
+	err = ms.ns.Notify(n)
+	if err != nil {
+		return err
+	}
+
+	return nil
+
 }

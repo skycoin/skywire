@@ -107,12 +107,25 @@ func (ms MessengerService) handleLocalServerMessage(m message.Message) {
 		//handle the message
 		err = ms.handleLocalServerInfoMsgType(visor, m)
 		if err != nil {
-			fmt.Println(err)
+			ms.errs <- err
+			return
+		}
+		//send message to let sender know we received his message
+		err = ms.SendMessageReceived(m)
+		if err != nil {
+			ms.errs <- err
+			return
 		}
 	case message.TxtMsgType:
 		//add the message to the visor and update repository
 		visor.AddMessage(pkroute, m)
 		err = ms.visorRepo.Set(*visor)
+		if err != nil {
+			ms.errs <- err
+			return
+		}
+		//send message to let sender know we received his message
+		err = ms.SendMessageReceived(m)
 		if err != nil {
 			ms.errs <- err
 			return
@@ -765,6 +778,8 @@ func (ms MessengerService) sendMessageToPeers(v *chat.Visor, pkroute util.PKRout
 
 		//only send to remote peers and not to ourself
 		if peer.GetPK() != pkroute.Visor {
+		//only send to remote peers and not to ourself or originator
+		if peer.GetPK() != pkroute.Visor && peer.GetPK() != m.Origin {
 
 			m.Root = pkroute
 			m.Dest = util.NewP2PRoute(peer.GetPK())

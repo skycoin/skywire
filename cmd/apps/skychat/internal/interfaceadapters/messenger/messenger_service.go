@@ -83,22 +83,13 @@ func (ms MessengerService) sendMessageAndDontSaveItToDatabase(pkroute util.PKRou
 
 // sendMessageToRemoteRoute sends the given message to a remote route (as p2p and client)
 func (ms MessengerService) sendMessageToRemoteRoute(msg message.Message) error {
-	//if the message goes to p2p we save it in database, if not we wait for the remote server to send us our message
-	//this way we can see that the message was received by the remote server
-	if msg.IsFromLocalToRemoteP2P() {
-		err := ms.sendMessageAndSaveItToDatabase(msg.Dest, msg)
-		if err != nil {
-			return err
-		}
-	} else {
-		err := ms.sendMessageAndDontSaveItToDatabase(msg.Dest, msg)
-		if err != nil {
-			return err
-		}
+	err := ms.sendMessageAndSaveItToDatabase(msg.Dest, msg)
+	if err != nil {
+		return err
 	}
 
 	n := notification.NewMsgNotification(msg.Dest)
-	err := ms.ns.Notify(n)
+	err = ms.ns.Notify(n)
 	if err != nil {
 		return err
 	}
@@ -108,6 +99,7 @@ func (ms MessengerService) sendMessageToRemoteRoute(msg message.Message) error {
 
 // sendMessageToLocalRoute "sends" the message to local server, so local server handles it, as it was sent from a remote route (used for messages send from server host, but as client)
 func (ms MessengerService) sendMessageToLocalRoute(msg message.Message) error {
+	msg.Status = message.MsgStatusSent
 	go ms.handleLocalServerMessage(msg)
 
 	return nil

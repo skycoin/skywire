@@ -706,17 +706,31 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
           const liClassName = msg.origin === c.info.pk  ? 'content-right' : 'content-left';
           const containerClassName = msg.origin === c.info.pk ? 'msg-sent' : 'msg-received';
 
+          let statusSymbol
+          if (msg.status == 1){
+            statusSymbol = '>'
+          }
+          if (msg.status == 2){
+            statusSymbol = '>>'
+          }
+          if (msg.status == 3){
+            statusSymbol = 'xx'
+          }
+          if (liClassName == 'content-left'){
+            statusSymbol = ''
+          }
+
           let msgArea = document.getElementById('messages');
           let mustScroll = (msgArea.scrollHeight - msgArea.scrollTop) === msgArea.userHeight;
 
           if (route.visor == route.server){
           //P2P-Chat
           document.getElementById('messages').innerHTML +=
-            `<li class="${liClassName}"><div class="msg-container ${containerClassName}"><div>${msg.message}</div><div class="message-time">${msg.ts}</div></div></li>`;
+            `<li class="${liClassName}"><div class="msg-container ${containerClassName}"><div>${msg.message}</div><div class="message-time">${msg.ts}</div><div class="message-status">${statusSymbol}</div></div></li>`;
           }
           else{
             document.getElementById('messages').innerHTML +=
-            `<li class="${liClassName}"><div class="msg-container ${containerClassName}"><div class="msg-alias">${this.getAliasFromPKAndRoute(msg.origin,route)}</div><div class="message-pk">${msg.origin}</div><div>${msg.message}</div><div class="message-time">${msg.ts}</div></div></li>`;
+            `<li class="${liClassName}"><div class="msg-container ${containerClassName}"><div class="msg-alias">${this.getAliasFromPKAndRoute(msg.origin,route)}</div><div class="message-pk">${msg.origin}</div><div>${msg.message}</div><div class="message-time">${msg.ts}</div><div class="message-status">${statusSymbol}</div></div></li>`;
           }
           if (mustScroll) {
             msgArea.scrollTop = msgArea.scrollHeight;
