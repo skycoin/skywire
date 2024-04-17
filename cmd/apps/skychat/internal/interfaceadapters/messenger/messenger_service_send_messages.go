@@ -291,18 +291,6 @@ func (ms MessengerService) SendChatRejectMessage(root util.PKRoute, dest util.PK
 	return nil
 }
 
-// SendMessageReceived sends a message to let a peer know that his message was received correctly
-func (ms MessengerService) SendMessageReceived(msg message.Message) error {
-
-	m := message.NewStatusMessage(msg.Dest.Visor, msg.Dest, msg.Root, msg.ID, message.MsgStatusReceived)
-
-	err := ms.sendMessageAndDontSaveItToDatabase(msg.Root, m)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 // SendLeaveRouteMessage sends a leave-message from the root to the destination
 func (ms MessengerService) SendLeaveRouteMessage(pkroute util.PKRoute) error {
 	usr, err := ms.usrRepo.GetUser()
@@ -314,6 +302,18 @@ func (ms MessengerService) SendLeaveRouteMessage(pkroute util.PKRoute) error {
 
 	m := message.NewChatLeaveMessage(root, pkroute)
 	err = ms.sendMessageAndDontSaveItToDatabase(pkroute, m)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// SendMessageReceived sends a message to let a peer know that his message was received correctly
+func (ms MessengerService) SendMessageReceived(msg message.Message) error {
+
+	m := message.NewStatusMessage(msg.Dest.Visor, msg.Dest, msg.Root, msg.ID, message.MsgStatusReceived)
+
+	err := ms.sendMessageAndDontSaveItToDatabase(msg.Root, m)
 	if err != nil {
 		return err
 	}

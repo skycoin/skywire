@@ -136,6 +136,14 @@ func (ms MessengerService) handleLocalServerMessage(m message.Message) {
 			ms.errs <- err
 			return
 		}
+		/*
+			TODO: SendMessageDistributed
+			//send message to let sender know we distributed his message
+			err = ms.SendMessageReceived(m)
+			if err != nil {
+				ms.errs <- err
+				return
+			}*/
 	default:
 		ms.errs <- fmt.Errorf("incorrect data received")
 		return
@@ -764,8 +772,6 @@ func (ms MessengerService) sendMessageToPeers(v *chat.Visor, pkroute util.PKRout
 
 	for _, peer := range members {
 
-		//only send to remote peers and not to ourself
-		if peer.GetPK() != pkroute.Visor {
 		//only send to remote peers and not to ourself or originator
 		if peer.GetPK() != pkroute.Visor && peer.GetPK() != m.Origin {
 
