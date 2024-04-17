@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 
 	clichat "github.com/skycoin/skywire/cmd/apps/skychat/cli/chat"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app"
@@ -19,12 +20,9 @@ import (
 var httpport string
 var rpcport string
 
-<<<<<<< HEAD
 // Applog is the logger for the skychat app chat:run
 var Applog *logging.Logger
 
-=======
->>>>>>> parent of 05e0f5f70 (cleanup logging)
 // RootCmd is the root command for skychat
 var RootCmd = &cobra.Command{
 	Use:   "skychat",

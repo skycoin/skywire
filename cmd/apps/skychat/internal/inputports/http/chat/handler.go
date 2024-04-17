@@ -705,7 +705,6 @@ type SendTextMessageRequestModel struct {
 
 // SendTextMessage sends a message to the provided pk
 func (c Handler) SendTextMessage(w http.ResponseWriter, r *http.Request) {
-	fmt.Println(formatRequest(r))
 	var msgToSend SendTextMessageRequestModel
 	decodeErr := json.NewDecoder(r.Body).Decode(&msgToSend)
 	if decodeErr != nil {
@@ -817,12 +816,7 @@ func (c Handler) GetAllMessagesFromRoomByRoute(w http.ResponseWriter, r *http.Re
 }
 
 // GetAllVisors Returns all available visors
-<<<<<<< HEAD
 func (c Handler) GetAllVisors(w http.ResponseWriter, _ *http.Request) {
-=======
-func (c Handler) GetAllVisors(w http.ResponseWriter, r *http.Request) {
-	fmt.Println(formatRequest(r))
->>>>>>> parent of 05e0f5f70 (cleanup logging)
 	visors, err := c.chatServices.Queries.GetAllVisorsHandler.Handle()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -953,7 +947,6 @@ const GetVisorByPKURLParam = "getVisor"
 
 // GetVisorByPK Returns the chat with the provided pk
 func (c Handler) GetVisorByPK(w http.ResponseWriter, r *http.Request) {
-	fmt.Println(formatRequest(r))
 	vars := mux.Vars(r)
 	pk := cipher.PubKey{}
 	err := pk.Set(vars[GetVisorByPKURLParam])
