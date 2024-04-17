@@ -177,7 +177,7 @@ func (v *Visor) AddMessage(pkroute util.PKRoute, m message.Message) {
 	v.Server[pkroute.Server] = s
 }
 
-// Update Message updates the given message
+// UpdateMessage updates the given message
 func (v *Visor) UpdateMessage(pkroute util.PKRoute, m message.Message) {
 	if pkroute.Server == pkroute.Visor {
 		v.P2P.SetMessage(m)

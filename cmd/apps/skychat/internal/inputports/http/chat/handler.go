@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/gorilla/mux"
 
@@ -816,7 +815,7 @@ func (c Handler) GetAllMessagesFromRoomByRoute(w http.ResponseWriter, r *http.Re
 }
 
 // GetAllVisors Returns all available visors
-func (c Handler) GetAllVisors(w http.ResponseWriter, r *http.Request) {
+func (c Handler) GetAllVisors(w http.ResponseWriter, _ *http.Request) {
 	visors, err := c.chatServices.Queries.GetAllVisorsHandler.Handle()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -977,6 +976,7 @@ func (c Handler) GetVisorByPK(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+/*
 // formatRequest generates ascii representation of a request
 func formatRequest(r *http.Request) string {
 	// Create return string
@@ -1000,3 +1000,4 @@ func formatRequest(r *http.Request) string {
 	request = append(request, "--------------------------------------\n")
 	return strings.Join(request, "\n")
 }
+*/

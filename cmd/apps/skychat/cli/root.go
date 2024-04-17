@@ -17,6 +17,7 @@ import (
 var httpport string
 var rpcport string
 
+// Applog is the logger for the skychat app chat:run
 var Applog *logging.Logger
 
 // RootCmd is the root command for skychat
