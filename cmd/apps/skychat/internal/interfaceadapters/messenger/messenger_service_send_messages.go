@@ -2,7 +2,6 @@ package messengerimpl
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/notification"
@@ -19,7 +18,6 @@ func (ms MessengerService) SendRouteRequestMessage(route util.PKRoute) error {
 
 	usr, err := ms.usrRepo.GetUser()
 	if err != nil {
-		fmt.Printf("Error getting user from repository: %s", err)
 		return err
 	}
 
@@ -44,7 +42,6 @@ func (ms MessengerService) SendTextMessage(route util.PKRoute, msg []byte) error
 
 	usr, err := ms.usrRepo.GetUser()
 	if err != nil {
-		fmt.Printf("Error getting user from repository: %s", err)
 		return err
 	}
 
@@ -69,13 +66,11 @@ func (ms MessengerService) SendTextMessage(route util.PKRoute, msg []byte) error
 func (ms MessengerService) SendAddRoomMessage(route util.PKRoute, info info.Info) error {
 	usr, err := ms.usrRepo.GetUser()
 	if err != nil {
-		fmt.Printf("Error getting user from repository: %s", err)
 		return err
 	}
 
 	bytes, err := json.Marshal(info)
 	if err != nil {
-		fmt.Printf("Failed to marshal json: %v", err)
 		return err
 	}
 
@@ -102,7 +97,6 @@ func (ms MessengerService) SendAddRoomMessage(route util.PKRoute, info info.Info
 func (ms MessengerService) SendDeleteRoomMessage(route util.PKRoute) error {
 	usr, err := ms.usrRepo.GetUser()
 	if err != nil {
-		fmt.Printf("Error getting user from repository: %s", err)
 		return err
 	}
 
@@ -129,13 +123,11 @@ func (ms MessengerService) SendDeleteRoomMessage(route util.PKRoute) error {
 func (ms MessengerService) SendMutePeerMessage(pkroute util.PKRoute, pk cipher.PubKey) error {
 	usr, err := ms.usrRepo.GetUser()
 	if err != nil {
-		fmt.Printf("Error getting user from repository: %s", err)
 		return err
 	}
 
 	bytes, err := json.Marshal(pk)
 	if err != nil {
-		fmt.Printf("Failed to marshal json: %v", err)
 		return err
 	}
 
@@ -161,13 +153,11 @@ func (ms MessengerService) SendMutePeerMessage(pkroute util.PKRoute, pk cipher.P
 func (ms MessengerService) SendUnmutePeerMessage(pkroute util.PKRoute, pk cipher.PubKey) error {
 	usr, err := ms.usrRepo.GetUser()
 	if err != nil {
-		fmt.Printf("Error getting user from repository: %s", err)
 		return err
 	}
 
 	bytes, err := json.Marshal(pk)
 	if err != nil {
-		fmt.Printf("Failed to marshal json: %v", err)
 		return err
 	}
 
@@ -193,13 +183,11 @@ func (ms MessengerService) SendUnmutePeerMessage(pkroute util.PKRoute, pk cipher
 func (ms MessengerService) SendHireModeratorMessage(pkroute util.PKRoute, pk cipher.PubKey) error {
 	usr, err := ms.usrRepo.GetUser()
 	if err != nil {
-		fmt.Printf("Error getting user from repository: %s", err)
 		return err
 	}
 
 	bytes, err := json.Marshal(pk)
 	if err != nil {
-		fmt.Printf("Failed to marshal json: %v", err)
 		return err
 	}
 
@@ -225,13 +213,11 @@ func (ms MessengerService) SendHireModeratorMessage(pkroute util.PKRoute, pk cip
 func (ms MessengerService) SendFireModeratorMessage(pkroute util.PKRoute, pk cipher.PubKey) error {
 	usr, err := ms.usrRepo.GetUser()
 	if err != nil {
-		fmt.Printf("Error getting user from repository: %s", err)
 		return err
 	}
 
 	bytes, err := json.Marshal(pk)
 	if err != nil {
-		fmt.Printf("Failed to marshal json: %v", err)
 		return err
 	}
 
@@ -257,13 +243,11 @@ func (ms MessengerService) SendFireModeratorMessage(pkroute util.PKRoute, pk cip
 func (ms MessengerService) SendInfoMessage(pkroute util.PKRoute, root util.PKRoute, dest util.PKRoute, info info.Info) error {
 	usr, err := ms.usrRepo.GetUser()
 	if err != nil {
-		fmt.Printf("Error getting user from repository: %s", err)
 		return err
 	}
 
 	bytes, err := json.Marshal(info)
 	if err != nil {
-		fmt.Printf("Failed to marshal json: %v", err)
 		return err
 	}
 
@@ -323,7 +307,6 @@ func (ms MessengerService) SendMessageReceived(msg message.Message) error {
 func (ms MessengerService) SendLeaveRouteMessage(pkroute util.PKRoute) error {
 	usr, err := ms.usrRepo.GetUser()
 	if err != nil {
-		fmt.Printf("Error getting user from repository: %s", err)
 		return err
 	}
 
