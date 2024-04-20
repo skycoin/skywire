@@ -13,7 +13,7 @@ import (
 
 // handleP2PMessage handles messages received as direct message
 func (ms MessengerService) handleP2PMessage(m message.Message) {
-	fmt.Println("handleP2PMessage")
+	ms.log.Debugln("handleP2PMessage")
 
 	pkroute := util.NewP2PRoute(m.Root.Visor)
 
@@ -70,7 +70,6 @@ func (ms MessengerService) handleP2PMessage(m message.Message) {
 		//handle the message
 		err = ms.handleP2PInfoMsgType(visor, m)
 		if err != nil {
-			fmt.Println(err)
 			ms.errs <- err
 			return
 		}
@@ -121,7 +120,7 @@ func (ms MessengerService) handleP2PMessage(m message.Message) {
 // handleP2PConnMsgType handles an incoming connection message and either accepts it and sends back the own info as message
 // or if the public key is in the blacklist rejects the chat request.
 func (ms MessengerService) handleP2PConnMsgType(m message.Message) error {
-	fmt.Println("handleP2PConnMsgType")
+	ms.log.Debugln("handleP2PConnMsgType")
 
 	pkroute := util.NewP2PRoute(m.Root.Visor)
 
@@ -143,7 +142,7 @@ func (ms MessengerService) handleP2PConnMsgType(m message.Message) error {
 			v, err := ms.visorRepo.GetByPK(pkroute.Visor)
 			if err != nil {
 				//make new default visor with a default p2p-room and save it in the visor repository
-				fmt.Println("Make new P2P visor")
+				ms.log.Debugln("Make new P2P visor")
 				v2 := chat.NewDefaultP2PVisor(pkroute.Visor)
 				err = ms.visorRepo.Add(v2)
 				if err != nil {
@@ -155,7 +154,7 @@ func (ms MessengerService) handleP2PConnMsgType(m message.Message) error {
 			//check if p2p already exists in repository
 			if v.P2PIsEmpty() {
 				//make new default p2p room and add it to the visor
-				fmt.Println("Make new P2P room")
+				ms.log.Debugln("Make new P2P room")
 				p2p := chat.NewDefaultP2PRoom(pkroute.Visor)
 				err = v.AddP2P(p2p)
 				if err != nil {
@@ -287,7 +286,7 @@ func (ms MessengerService) handleP2PConnMsgType(m message.Message) error {
 
 // handleP2PInfoMsgType handles messages of type info of the p2p chat
 func (ms MessengerService) handleP2PInfoMsgType(v *chat.Visor, m message.Message) error {
-	fmt.Println("handleP2PInfoMsgType")
+	ms.log.Debugln("handleP2PInfoMsgType")
 
 	pkroute := util.NewP2PRoute(m.Root.Visor)
 
@@ -295,15 +294,10 @@ func (ms MessengerService) handleP2PInfoMsgType(v *chat.Visor, m message.Message
 	i := info.Info{}
 	err := json.Unmarshal(m.Message, &i)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal json message: %v", err)
+		return err
 	}
-	fmt.Println("---------------------------------------------------------------------------------------------------")
-	fmt.Printf("InfoMessage: \n")
-	fmt.Printf("Pk:		%s \n", i.Pk.Hex())
-	fmt.Printf("Alias:	%s \n", i.Alias)
-	fmt.Printf("Desc:	%s \n", i.Desc)
-	//fmt.Printf("Img:	%s \n", i.Img)
-	fmt.Println("---------------------------------------------------------------------------------------------------")
+
+	ms.log.Debugln(i.PrettyPrint())
 
 	//update the info of the p2p
 	err = v.SetRouteInfo(pkroute, i)
@@ -325,16 +319,17 @@ func (ms MessengerService) handleP2PInfoMsgType(v *chat.Visor, m message.Message
 	return nil
 }
 
-// handleP2PTextMstType handles messages of type text of the p2p chat
+// handleP2PTextMsgType handles messages of type text of the p2p chat
 func (ms MessengerService) handleP2PTextMsgType(m message.Message) error {
-	fmt.Println("handleP2PTextMsgType")
+	ms.log.Debugln("handleP2PTextMsgType")
 
 	pkroute := util.NewP2PRoute(m.Root.Visor)
 
-	fmt.Println("---------------------------------------------------------------------------------------------------")
-	fmt.Printf("TextMessage: \n")
-	fmt.Printf("Text:	%s \n", m.Message)
-	fmt.Println("---------------------------------------------------------------------------------------------------")
+	ms.log.Debugln("---------------------------------------------------------------------------------------------------")
+	ms.log.Debugf("TextMessage: \n")
+	ms.log.Debugf("Text:	%s \n", m.Message)
+	ms.log.Debugf("Status: %d \n", m.Status)
+	ms.log.Debugln("---------------------------------------------------------------------------------------------------")
 
 	//notify about a new received TextMessage
 	n := notification.NewMsgNotification(pkroute)

@@ -2,6 +2,8 @@
 package info
 
 import (
+	"fmt"
+
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
@@ -82,4 +84,18 @@ const DefaultImage = "iVBORw0KGgoAAAANSUhEUgAAAPoAAAD6CAIAAAAHjs1qAAAAGXRFWHRTb2
 // IsEmpty checks if info is empty
 func (i *Info) IsEmpty() bool {
 	return *i == Info{}
+}
+
+// PrettyPrint returns the info as a pretty formated string
+func (i *Info) PrettyPrint() string {
+	prettyPrint := ""
+	prettyPrint = fmt.Sprintf(prettyPrint + "---------------------------------------------------------------------------------------------------\n")
+	prettyPrint = fmt.Sprintf(prettyPrint + "InfoMessage: \n")
+	prettyPrint = fmt.Sprintf(prettyPrint+"Pk:		%s \n", i.Pk.Hex())
+	prettyPrint = fmt.Sprintf(prettyPrint+"Alias:	%s \n", i.Alias)
+	prettyPrint = fmt.Sprintf(prettyPrint+"Desc:	%s \n", i.Desc)
+	//prettyPrint = fmt.Sprintf(prettyPrint + "Img:	%s \n", i.Img)
+	prettyPrint = fmt.Sprintf(prettyPrint + "---------------------------------------------------------------------------------------------------\n")
+
+	return prettyPrint
 }

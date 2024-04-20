@@ -76,7 +76,6 @@ type JoinRemoteRouteRequestModel struct {
 
 // JoinRemoteRoute adds the provided route
 func (c Handler) JoinRemoteRoute(w http.ResponseWriter, r *http.Request) {
-	//fmt.Println(formatRequest(r))
 	var routeToJoin JoinRemoteRouteRequestModel
 	decodeErr := json.NewDecoder(r.Body).Decode(&routeToJoin)
 	if decodeErr != nil {

@@ -3,9 +3,9 @@ package chat
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	chatservices "github.com/skycoin/skywire/cmd/apps/skychat/internal/app/chat"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/chat/commands"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/util"
@@ -14,11 +14,12 @@ import (
 // Handler chat request handler
 type Handler struct {
 	chatServices chatservices.ChatServices
+	log          *logging.Logger
 }
 
 // NewHandler Constructor returns *Handler
 func NewHandler(cs chatservices.ChatServices) *Handler {
-	return &Handler{chatServices: cs}
+	return &Handler{chatServices: cs, log: logging.MustGetLogger("chat:rpc")}
 }
 
 // SendTextMessageRPCParam contains the parameter identifier to be parsed by the handler
@@ -35,14 +36,14 @@ type SendTextMessageRequestModel struct {
 // SendTextMessage sends a text message to the given route
 func (c Handler) SendTextMessage(r SendTextMessageRequestModel, _ *int) error {
 
-	fmt.Println("RPC: SendTextMessage via cli (rpc)")
-	fmt.Printf("RPC: Message: %s\n v: %s\n s: %s\n r: %s\n", r.Msg, r.VisorPk.Hex(), r.ServerPk.Hex(), r.RoomPk.Hex())
+	c.log.Debugln("SendTextMessage via cli")
+	c.log.Debugln("Message: %s\n v: %s\n s: %s\n r: %s\n", r.Msg, r.VisorPk.Hex(), r.ServerPk.Hex(), r.RoomPk.Hex())
 
 	//TODO: maybe check if route is available first and depending on result first send join remote route
 
 	bytes, err := json.Marshal(r.Msg)
 	if err != nil {
-		fmt.Printf("Failed to marshal json: %v", err)
+		c.log.Errorf("Failed to marshal json: %v", err)
 		return err
 	}
 

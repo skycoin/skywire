@@ -3,11 +3,11 @@ package boltdb
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/boltdb/bolt"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/user"
 )
 
@@ -16,17 +16,20 @@ const USERBUCKET = "users"
 
 // UserRepo Implements the Repository Interface to provide an in-memory storage provider
 type UserRepo struct {
-	pk cipher.PubKey
-	db *bolt.DB
+	pk  cipher.PubKey
+	db  *bolt.DB
+	log *logging.Logger
 }
 
 // NewUserRepo Constructor
 func NewUserRepo(pk cipher.PubKey) *UserRepo {
 	r := UserRepo{}
 
+	r.log = logging.MustGetLogger("chat:user-repo")
+
 	db, err := bolt.Open("user.db", 0600, nil)
 	if err != nil {
-		fmt.Println(err.Error())
+		r.log.Errorln(err)
 	}
 	r.db = db
 
@@ -34,7 +37,7 @@ func NewUserRepo(pk cipher.PubKey) *UserRepo {
 
 	err = r.NewUser()
 	if err != nil {
-		fmt.Println(err)
+		r.log.Errorln(err)
 	}
 
 	return &r
