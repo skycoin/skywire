@@ -113,7 +113,8 @@ func NewClient() *Client {
 
 	c.log = logging.MustGetLogger("chat")
 	c.conns = make(map[cipher.PubKey]net.Conn)
-	c.netType = appnet.TypeSkynet
+	//c.netType = appnet.TypeSkynet
+	c.netType = appnet.TypeDmsg
 	c.port = routing.Port(1)
 
 	c.clientCh = make(chan string)
