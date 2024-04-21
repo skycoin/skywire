@@ -514,7 +514,7 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
           </div> -->
         </a></li>`;
 
-      if (this.chat = r.pk){
+      if (this.chat == r.pk){
         document.getElementById('messages').innerHTML = '';
         this.getMessagesFromRoute(r.route).forEach(msg => this._showMessage(msg,r.route));
         document.getElementById('chatButtonsContainer').classList.remove('hidden');
