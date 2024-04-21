@@ -110,10 +110,10 @@ var (
 	sortedEdgeKeys []string
 	utURL          string
 	tpdURL         string
-	rootNode         string
-	lastNode         string
-	rootnode         cipher.PubKey
-	lastnode         cipher.PubKey
+	rootNode       string
+	lastNode       string
+	rootnode       cipher.PubKey
+	lastnode       cipher.PubKey
 	cacheFileTPD   string
 	cacheFileUT    string
 	padSpaces      int
@@ -121,7 +121,7 @@ var (
 	rawData        bool
 	refinedData    bool
 	noFilterOnline bool
-	onlyOnline bool
+	onlyOnline     bool
 	transportType  string
 	timeout        time.Duration
 	rpk            string
@@ -129,6 +129,7 @@ var (
 	cacheFileSD    string
 	cacheFilesAge  int
 	forceAttempt   bool
+
 // queryHealth	bool
 )
 
@@ -486,13 +487,13 @@ var treeCmd = &cobra.Command{
 					}
 				}
 				if found {
-					onlineSortedEdgeKeys = append(onlineSortedEdgeKeys,sortedEdgeKeys[i])
+					onlineSortedEdgeKeys = append(onlineSortedEdgeKeys, sortedEdgeKeys[i])
 				} else {
 					usedkeys = append(usedkeys, sortedEdgeKeys[i])
 				}
 			}
-				sortedEdgeKeys = onlineSortedEdgeKeys
-			}
+			sortedEdgeKeys = onlineSortedEdgeKeys
+		}
 
 		fmt.Printf("Tree        *Online        %s        %s      %s      %s    TPID                                 Type\n", pterm.Black(pterm.BgRed.Sprint("*Offline")), pterm.Red("*Not in UT"), pterm.Blue(pterm.BgMagenta.Sprint("*source")), pterm.Magenta(pterm.BgBlue.Sprint("*dest")))
 		leveledList := pterm.LeveledList{}
@@ -508,7 +509,7 @@ var treeCmd = &cobra.Command{
 				for i := x; i > 0; i-- {
 					sortedEdgeKeys[i] = sortedEdgeKeys[i-1]
 				}
-				sortedEdgeKeys[0] = `"`+rootnode.String()+`"`
+				sortedEdgeKeys[0] = `"` + rootnode.String() + `"`
 			}
 			if sortedEdgeKeys[0] != `"`+rootnode.String()+`"` {
 				internal.PrintFatalError(cmd.Flags(), errors.New("specified source or root node public key does not have any transports!"))
@@ -593,14 +594,14 @@ var treeCmd = &cobra.Command{
 			}
 		}
 		if rootNode == "" && !onlyOnline {
-		l, _ := script.Echo(tps).JQ(".[] | select(.edges[0] == .edges[1]) | .edges[0] + \""+strings.Repeat(" ", padSpaces)+"\" + .t_id + \" \" + .type").Replace("\"", "").Slice() //nolint
-		if len(l) > 0 {
-			pterm.Println(pterm.Red("Self-transports"))
-			for _, m := range l {
-				pterm.Println(filterOnlineStatus(utkeys, offlinekeys, m))
+			l, _ := script.Echo(tps).JQ(".[] | select(.edges[0] == .edges[1]) | .edges[0] + \""+strings.Repeat(" ", padSpaces)+"\" + .t_id + \" \" + .type").Replace("\"", "").Slice() //nolint
+			if len(l) > 0 {
+				pterm.Println(pterm.Red("Self-transports"))
+				for _, m := range l {
+					pterm.Println(filterOnlineStatus(utkeys, offlinekeys, m))
+				}
 			}
 		}
-	}
 	},
 }
 
