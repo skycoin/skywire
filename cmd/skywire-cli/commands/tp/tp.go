@@ -515,6 +515,24 @@ var treeCmd = &cobra.Command{
 				internal.PrintFatalError(cmd.Flags(), errors.New("specified source or root node public key does not have any transports!"))
 			}
 		}
+		if lastNode != "" {
+			x := -1
+			for i, v := range sortedEdgeKeys {
+				if v == `"`+rootnode.String()+`"` {
+					x = i
+					break
+				}
+			}
+			if x != -1 {
+				for i := x; i > 1; i-- {
+					sortedEdgeKeys[i] = sortedEdgeKeys[i-1]
+				}
+				sortedEdgeKeys[1] = `"` + lastnode.String() + `"`
+			}
+			if sortedEdgeKeys[1] != `"`+lastnode.String()+`"` {
+				internal.PrintFatalError(cmd.Flags(), errors.New("specified dest or last node public key does not have any transports!"))
+			}
+		}
 		edgeKey := sortedEdgeKeys[0]
 		leveledList = append(leveledList, pterm.LeveledListItem{Level: 0, Text: filterOnlineStatus(utkeys, offlinekeys, edgeKey)})
 
@@ -555,32 +573,15 @@ var treeCmd = &cobra.Command{
 		}
 		lvl(1, edgeKey)
 		pterm.DefaultTree.WithRoot(putils.TreeFromLeveledList(leveledList)).Render() //nolint
-		if lastNode != "" {
-			found := false
-			for _, usedKey := range usedkeys {
-				if strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(usedKey, " ", ""), "\t", ""), "\n", ""), "\"", "") == strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(`"`+lastnode.String()+`"`, " ", ""), "\t", ""), "\n", ""), "\"", "") {
-					found = true
-					break
-				}
-			}
-			if found {
-				return
-			} else {
-				leveledList := pterm.LeveledList{}
-				edgeKey = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(`"`+lastnode.String()+`"`, " ", ""), "\t", ""), "\n", ""), "\"", "")
-				leveledList = append(leveledList, pterm.LeveledListItem{Level: 0, Text: filterOnlineStatus(utkeys, offlinekeys, edgeKey)})
-				usedkeys = append(usedkeys, edgeKey)
-				lvl(1, edgeKey)
-				pterm.DefaultTree.WithRoot(putils.TreeFromLeveledList(leveledList)).Render() //nolint
-				pterm.Println(pterm.Red("no route from source to destination"))
-				return
-			}
-		}
 
 		for _, edgeKey := range sortedEdgeKeys {
 			found := false
 			for _, usedKey := range usedkeys {
 				if usedKey == edgeKey {
+					found = true
+					break
+				}
+				if lastNode != "" && strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(usedKey, " ", ""), "\t", ""), "\n", ""), "\"", "") == strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(`"`+lastnode.String()+`"`, " ", ""), "\t", ""), "\n", ""), "\"", "") {
 					found = true
 					break
 				}
@@ -591,6 +592,10 @@ var treeCmd = &cobra.Command{
 				usedkeys = append(usedkeys, edgeKey)
 				lvl(1, edgeKey)
 				pterm.DefaultTree.WithRoot(putils.TreeFromLeveledList(leveledList)).Render() //nolint
+				if lastNode != "" {
+					pterm.Println(pterm.Red("No route from source to dest"))
+					return
+				}
 			}
 		}
 		if rootNode == "" && !onlyOnline {
