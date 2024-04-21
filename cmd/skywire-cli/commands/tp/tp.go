@@ -591,12 +591,77 @@ var treeCmd = &cobra.Command{
 				leveledList = append(leveledList, pterm.LeveledListItem{Level: 0, Text: filterOnlineStatus(utkeys, offlinekeys, edgeKey)})
 				usedkeys = append(usedkeys, edgeKey)
 				lvl(1, edgeKey)
-				pterm.DefaultTree.WithRoot(putils.TreeFromLeveledList(leveledList)).Render() //nolint
+				if len(leveledList) > 1 {
+					pterm.DefaultTree.WithRoot(putils.TreeFromLeveledList(leveledList)).Render() //nolint
+				}
 				if lastNode != "" {
 					pterm.Println(pterm.Red("No route from source to dest"))
 					return
 				}
 			}
+		}
+		if lastNode != "" && rootNode != "" {
+			x := -1
+			for i, v := range usedkeys {
+				if v == `"`+rootnode.String()+`"` {
+					x = i
+					break
+				}
+			}
+			if x != -1 {
+				for i := x; i > 0; i-- {
+					usedkeys[i] = usedkeys[i-1]
+				}
+				usedkeys[0] = `"` + rootnode.String() + `"`
+			}
+			if usedkeys[0] != `"`+rootnode.String()+`"` {
+				internal.PrintFatalError(cmd.Flags(), errors.New("specified source or root node public key does not have any transports!"))
+			}
+			if lastNode != "" {
+				x := -1
+				for i, v := range usedkeys {
+					if v == `"`+rootnode.String()+`"` {
+						x = i
+						break
+					}
+				}
+				if x != -1 {
+					for i := x; i > 1; i-- {
+						usedkeys[i] = usedkeys[i-1]
+					}
+					usedkeys[1] = `"` + lastnode.String() + `"`
+				}
+				if usedkeys[1] != `"`+lastnode.String()+`"` {
+					internal.PrintFatalError(cmd.Flags(), errors.New("specified dest or last node public key does not have any transports!"))
+				}
+			}
+			l, _ := script.Echo(tps).JQ("[.[] | select(.edges | contains([" + usedkeys[0] + "," + usedkeys[1] + "]))]").Slice() //nolint
+			if len(l) > 0 {
+				pterm.Println(pterm.Red("Direct route:"))
+				for _, m := range l {
+					script.Echo(string(pretty.Color(pretty.Pretty([]byte(m)), nil))).Stdout() //nolint
+				}
+			}
+			/*
+						var tM tpdMaps
+						for i, v := range usedkeys {
+							tM[i].PK = v
+						}
+						for i, v := range tM {
+							l, _ := script.Echo(tps).JQ(".[] | select(.edges[] == " + v + ") | .edges[] | select(. != " + v + ")").Slice() //nolint
+							for _, m := range l {
+								if m == v {
+									continue
+								}
+								tM[i].Edges = append(tM[i].Edges,v)
+							}
+						}
+						for i, v := range tM {
+							for j, w := range v.Edges {
+
+					}
+				}
+			*/
 		}
 		if rootNode == "" && !onlyOnline {
 			l, _ := script.Echo(tps).JQ(".[] | select(.edges[0] == .edges[1]) | .edges[0] + \""+strings.Repeat(" ", padSpaces)+"\" + .t_id + \" \" + .type").Replace("\"", "").Slice() //nolint
@@ -609,6 +674,13 @@ var treeCmd = &cobra.Command{
 		}
 	},
 }
+
+type tpdMap struct {
+	PK    string
+	Edges []string
+}
+
+type tpdMaps []tpdMap
 
 func filterOnlineStatus(utkeys, offlinekeys []string, key string) (lvlN string) {
 	isOnline, isOffline := false, false
