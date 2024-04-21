@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skycoin/src/util/logging"
+
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/notification"

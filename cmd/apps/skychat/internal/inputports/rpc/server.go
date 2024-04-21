@@ -9,6 +9,7 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/skycoin/skycoin/src/util/logging"
+
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/inputports/rpc/chat"
 )
