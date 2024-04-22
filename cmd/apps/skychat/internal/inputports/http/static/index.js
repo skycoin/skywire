@@ -726,11 +726,23 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
           if (route.visor == route.server){
           //P2P-Chat
           document.getElementById('messages').innerHTML +=
-            `<li class="${liClassName}"><div class="msg-container ${containerClassName}"><div>${msg.message}</div><div class="message-time">${msg.ts}</div><div class="message-status">${statusSymbol}</div></div></li>`;
+            `<li class="${liClassName}">
+              <div class="msg-container ${containerClassName}">
+                <div>${msg.message}</div>
+                <div class="message-infos">${msg.ts} ${statusSymbol}</div>
+              </div>
+            </li>`;
           }
           else{
             document.getElementById('messages').innerHTML +=
-            `<li class="${liClassName}"><div class="msg-container ${containerClassName}"><div class="msg-alias">${this.getAliasFromPKAndRoute(msg.origin,route)}</div><div class="message-pk">${msg.origin}</div><div>${msg.message}</div><div class="message-time">${msg.ts}</div><div class="message-status">${statusSymbol}</div></div></li>`;
+            `<li class="${liClassName}">
+              <div class="msg-container ${containerClassName}">
+                <div class="msg-alias">${this.getAliasFromPKAndRoute(msg.origin,route)}</div>
+                <div class="message-pk">${msg.origin}</div>
+                <div>${msg.message}</div>
+                <div class="message-infos">${msg.ts} ${statusSymbol}</div>
+              </div>
+            </li>`;
           }
           if (mustScroll) {
             msgArea.scrollTop = msgArea.scrollHeight;
