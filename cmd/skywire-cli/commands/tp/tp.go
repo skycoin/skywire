@@ -512,7 +512,7 @@ var treeCmd = &cobra.Command{
 				sortedEdgeKeys[0] = `"` + rootnode.String() + `"`
 			}
 			if sortedEdgeKeys[0] != `"`+rootnode.String()+`"` {
-				internal.PrintFatalError(cmd.Flags(), errors.New("specified source or root node public key does not have any transports!"))
+				internal.PrintFatalError(cmd.Flags(), errors.New("specified source or root node public key does not have any transports"))
 			}
 		}
 		if lastNode != "" {
@@ -530,7 +530,7 @@ var treeCmd = &cobra.Command{
 				sortedEdgeKeys[1] = `"` + lastnode.String() + `"`
 			}
 			if sortedEdgeKeys[1] != `"`+lastnode.String()+`"` {
-				internal.PrintFatalError(cmd.Flags(), errors.New("specified dest or last node public key does not have any transports!"))
+				internal.PrintFatalError(cmd.Flags(), errors.New("specified dest or last node public key does not have any transports"))
 			}
 		}
 		edgeKey := sortedEdgeKeys[0]
@@ -615,7 +615,7 @@ var treeCmd = &cobra.Command{
 				usedkeys[0] = `"` + rootnode.String() + `"`
 			}
 			if usedkeys[0] != `"`+rootnode.String()+`"` {
-				internal.PrintFatalError(cmd.Flags(), errors.New("specified source or root node public key does not have any transports!"))
+				internal.PrintFatalError(cmd.Flags(), errors.New("specified source or root node public key does not have any transports"))
 			}
 			if lastNode != "" {
 				x := -1
@@ -632,7 +632,7 @@ var treeCmd = &cobra.Command{
 					usedkeys[1] = `"` + lastnode.String() + `"`
 				}
 				if usedkeys[1] != `"`+lastnode.String()+`"` {
-					internal.PrintFatalError(cmd.Flags(), errors.New("specified dest or last node public key does not have any transports!"))
+					internal.PrintFatalError(cmd.Flags(), errors.New("specified dest or last node public key does not have any transports"))
 				}
 			}
 			l, _ := script.Echo(tps).JQ("[.[] | select(.edges | contains([" + usedkeys[0] + "," + usedkeys[1] + "]))]").Slice() //nolint
@@ -675,13 +675,14 @@ var treeCmd = &cobra.Command{
 	},
 }
 
-type tpdMap struct {
-	PK    string
-	Edges []string
-}
+/*
+	type tpdMap struct {
+		PK    string
+		Edges []string
+	}
 
 type tpdMaps []tpdMap
-
+*/
 func filterOnlineStatus(utkeys, offlinekeys []string, key string) (lvlN string) {
 	isOnline, isOffline := false, false
 	lvlN = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(key, " ", ""), "\t", ""), "\n", ""), "\"", "")
