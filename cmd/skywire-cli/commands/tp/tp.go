@@ -110,6 +110,10 @@ var (
 	sortedEdgeKeys []string
 	utURL          string
 	tpdURL         string
+	rootNode       string
+	lastNode       string
+	rootnode       cipher.PubKey
+	lastnode       cipher.PubKey
 	cacheFileTPD   string
 	cacheFileUT    string
 	padSpaces      int
@@ -117,6 +121,7 @@ var (
 	rawData        bool
 	refinedData    bool
 	noFilterOnline bool
+	onlyOnline     bool
 	transportType  string
 	timeout        time.Duration
 	rpk            string
@@ -401,11 +406,15 @@ func (t *transportID) Set(s string) error {
 var RootCmd = tpCmd
 
 func init() {
+
+	treeCmd.Flags().StringVarP(&rootNode, "source", "k", "", "root node ; defaults to visor with most transports")
+	treeCmd.Flags().StringVarP(&lastNode, "dest", "d", "", "map route between source and dest")
 	treeCmd.Flags().StringVarP(&tpdURL, "tpdurl", "a", utilenv.TpDiscAddr, "transport discovery url")
 	treeCmd.Flags().StringVarP(&utURL, "uturl", "w", utilenv.UptimeTrackerAddr, "uptime tracker url")
 	treeCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "print raw json data")
 	treeCmd.Flags().BoolVarP(&refinedData, "pretty", "p", false, "print pretty json data")
 	treeCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status in UT")
+	treeCmd.Flags().BoolVarP(&onlyOnline, "good", "g", false, "do not display transports for offline visors")
 	treeCmd.Flags().StringVar(&cacheFileTPD, "cft", os.TempDir()+"/tpd.json", "TPD cache file location")
 	treeCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location.")
 	treeCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
@@ -419,6 +428,22 @@ var treeCmd = &cobra.Command{
 	Short: "tree map of transports on the skywire network",
 	Long:  fmt.Sprintf("display a tree representation of transports from TPD\n\n%v/all-transports\n\nSet cache file location to \"\" to avoid using cache files", utilenv.TpDiscAddr),
 	Run: func(cmd *cobra.Command, args []string) {
+		if rootNode != "" {
+			err := rootnode.Set(rootNode)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), errors.New("invalid source or root node public key"))
+			}
+			if lastNode != "" {
+				err := lastnode.Set(lastNode)
+				if err != nil {
+					internal.PrintFatalError(cmd.Flags(), errors.New("invalid dest or last node public key"))
+				}
+			}
+		} else {
+			if lastNode != "" {
+				internal.PrintFatalError(cmd.Flags(), errors.New("must specify source or root node public key if dest or last node key is specified"))
+			}
+		}
 		tps := internal.GetData(cacheFileTPD, tpdURL+"/all-transports", cacheFilesAge)
 		if rawData {
 			script.Echo(tps).Stdout() //nolint
@@ -450,13 +475,67 @@ var treeCmd = &cobra.Command{
 			return
 		}
 
-		fmt.Printf("Tree        *Online        %s        %s                            TPID                                 Type\n", pterm.Black(pterm.BgRed.Sprint("*Offline")), pterm.Red("*Not in UT"))
+		var usedkeys []string
+		if onlyOnline {
+			var onlineSortedEdgeKeys []string
+			for i, v := range sortedEdgeKeys {
+				found := false
+				for _, k := range utkeys {
+					if strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(k, " ", ""), "\t", ""), "\n", ""), "\"", "") == strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(v, " ", ""), "\t", ""), "\n", ""), "\"", "") {
+						found = true
+						break
+					}
+				}
+				if found {
+					onlineSortedEdgeKeys = append(onlineSortedEdgeKeys, sortedEdgeKeys[i])
+				} else {
+					usedkeys = append(usedkeys, sortedEdgeKeys[i])
+				}
+			}
+			sortedEdgeKeys = onlineSortedEdgeKeys
+		}
 
+		fmt.Printf("Tree        *Online        %s        %s      %s      %s    TPID                                 Type\n", pterm.Black(pterm.BgRed.Sprint("*Offline")), pterm.Red("*Not in UT"), pterm.Blue(pterm.BgMagenta.Sprint("*source")), pterm.Magenta(pterm.BgBlue.Sprint("*dest")))
 		leveledList := pterm.LeveledList{}
+		if rootNode != "" {
+			x := -1
+			for i, v := range sortedEdgeKeys {
+				if v == `"`+rootnode.String()+`"` {
+					x = i
+					break
+				}
+			}
+			if x != -1 {
+				for i := x; i > 0; i-- {
+					sortedEdgeKeys[i] = sortedEdgeKeys[i-1]
+				}
+				sortedEdgeKeys[0] = `"` + rootnode.String() + `"`
+			}
+			if sortedEdgeKeys[0] != `"`+rootnode.String()+`"` {
+				internal.PrintFatalError(cmd.Flags(), errors.New("specified source or root node public key does not have any transports"))
+			}
+		}
+		if lastNode != "" {
+			x := -1
+			for i, v := range sortedEdgeKeys {
+				if v == `"`+rootnode.String()+`"` {
+					x = i
+					break
+				}
+			}
+			if x != -1 {
+				for i := x; i > 1; i-- {
+					sortedEdgeKeys[i] = sortedEdgeKeys[i-1]
+				}
+				sortedEdgeKeys[1] = `"` + lastnode.String() + `"`
+			}
+			if sortedEdgeKeys[1] != `"`+lastnode.String()+`"` {
+				internal.PrintFatalError(cmd.Flags(), errors.New("specified dest or last node public key does not have any transports"))
+			}
+		}
 		edgeKey := sortedEdgeKeys[0]
 		leveledList = append(leveledList, pterm.LeveledListItem{Level: 0, Text: filterOnlineStatus(utkeys, offlinekeys, edgeKey)})
 
-		var usedkeys []string
 		usedkeys = append(usedkeys, edgeKey)
 		var lvl func(n int, k string)
 		lvl = func(n int, k string) {
@@ -493,12 +572,16 @@ var treeCmd = &cobra.Command{
 			}
 		}
 		lvl(1, edgeKey)
-
 		pterm.DefaultTree.WithRoot(putils.TreeFromLeveledList(leveledList)).Render() //nolint
+
 		for _, edgeKey := range sortedEdgeKeys {
 			found := false
 			for _, usedKey := range usedkeys {
 				if usedKey == edgeKey {
+					found = true
+					break
+				}
+				if lastNode != "" && strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(usedKey, " ", ""), "\t", ""), "\n", ""), "\"", "") == strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(`"`+lastnode.String()+`"`, " ", ""), "\t", ""), "\n", ""), "\"", "") {
 					found = true
 					break
 				}
@@ -508,19 +591,98 @@ var treeCmd = &cobra.Command{
 				leveledList = append(leveledList, pterm.LeveledListItem{Level: 0, Text: filterOnlineStatus(utkeys, offlinekeys, edgeKey)})
 				usedkeys = append(usedkeys, edgeKey)
 				lvl(1, edgeKey)
-				pterm.DefaultTree.WithRoot(putils.TreeFromLeveledList(leveledList)).Render() //nolint
+				if len(leveledList) > 1 {
+					pterm.DefaultTree.WithRoot(putils.TreeFromLeveledList(leveledList)).Render() //nolint
+				}
+				if lastNode != "" {
+					pterm.Println(pterm.Red("No route from source to dest"))
+					return
+				}
 			}
 		}
-		l, _ := script.Echo(tps).JQ(".[] | select(.edges[0] == .edges[1]) | .edges[0] + \""+strings.Repeat(" ", padSpaces)+"\" + .t_id + \" \" + .type").Replace("\"", "").Slice() //nolint
-		if len(l) > 0 {
-			pterm.Println(pterm.Red("Self-transports"))
-			for _, m := range l {
-				pterm.Println(filterOnlineStatus(utkeys, offlinekeys, m))
+		if lastNode != "" && rootNode != "" {
+			x := -1
+			for i, v := range usedkeys {
+				if v == `"`+rootnode.String()+`"` {
+					x = i
+					break
+				}
+			}
+			if x != -1 {
+				for i := x; i > 0; i-- {
+					usedkeys[i] = usedkeys[i-1]
+				}
+				usedkeys[0] = `"` + rootnode.String() + `"`
+			}
+			if usedkeys[0] != `"`+rootnode.String()+`"` {
+				internal.PrintFatalError(cmd.Flags(), errors.New("specified source or root node public key does not have any transports"))
+			}
+			if lastNode != "" {
+				x := -1
+				for i, v := range usedkeys {
+					if v == `"`+rootnode.String()+`"` {
+						x = i
+						break
+					}
+				}
+				if x != -1 {
+					for i := x; i > 1; i-- {
+						usedkeys[i] = usedkeys[i-1]
+					}
+					usedkeys[1] = `"` + lastnode.String() + `"`
+				}
+				if usedkeys[1] != `"`+lastnode.String()+`"` {
+					internal.PrintFatalError(cmd.Flags(), errors.New("specified dest or last node public key does not have any transports"))
+				}
+			}
+			l, _ := script.Echo(tps).JQ("[.[] | select(.edges | contains([" + usedkeys[0] + "," + usedkeys[1] + "]))]").Slice() //nolint
+			if len(l) > 0 {
+				pterm.Println(pterm.Red("Direct route:"))
+				for _, m := range l {
+					script.Echo(string(pretty.Color(pretty.Pretty([]byte(m)), nil))).Stdout() //nolint
+				}
+			}
+			/*
+						var tM tpdMaps
+						for i, v := range usedkeys {
+							tM[i].PK = v
+						}
+						for i, v := range tM {
+							l, _ := script.Echo(tps).JQ(".[] | select(.edges[] == " + v + ") | .edges[] | select(. != " + v + ")").Slice() //nolint
+							for _, m := range l {
+								if m == v {
+									continue
+								}
+								tM[i].Edges = append(tM[i].Edges,v)
+							}
+						}
+						for i, v := range tM {
+							for j, w := range v.Edges {
+
+					}
+				}
+			*/
+		}
+		if rootNode == "" && !onlyOnline {
+			l, _ := script.Echo(tps).JQ(".[] | select(.edges[0] == .edges[1]) | .edges[0] + \""+strings.Repeat(" ", padSpaces)+"\" + .t_id + \" \" + .type").Replace("\"", "").Slice() //nolint
+			if len(l) > 0 {
+				pterm.Println(pterm.Red("Self-transports"))
+				for _, m := range l {
+					pterm.Println(filterOnlineStatus(utkeys, offlinekeys, m))
+				}
 			}
 		}
 	},
 }
 
+/*
+	type tpdMap struct {
+		PK    string
+		Edges []string
+	}
+
+type tpdMaps []tpdMap
+*/
 func filterOnlineStatus(utkeys, offlinekeys []string, key string) (lvlN string) {
 	isOnline, isOffline := false, false
 	lvlN = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(key, " ", ""), "\t", ""), "\n", ""), "\"", "")
@@ -543,10 +705,16 @@ func filterOnlineStatus(utkeys, offlinekeys []string, key string) (lvlN string) 
 		isOnline, isOffline = true, false
 	}
 	if !isOnline && !isOffline {
-		lvlN = pterm.Red(strings.ReplaceAll(key, "\"", ""))
+		lvlN = pterm.Red(lvlN)
 	}
 	if isOffline {
-		lvlN = pterm.Black(pterm.BgRed.Sprint(strings.ReplaceAll(key, "\"", "")))
+		lvlN = pterm.Black(pterm.BgRed.Sprint(lvlN))
+	}
+	if lastNode != "" && strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(`"`+lastnode.String()+`"`, " ", ""), "\t", ""), "\n", ""), "\"", "") == strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(key, " ", ""), "\t", ""), "\n", ""), "\"", "") {
+		lvlN = pterm.Magenta(pterm.BgBlue.Sprint(lvlN))
+	}
+	if rootNode != "" && strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(`"`+rootnode.String()+`"`, " ", ""), "\t", ""), "\n", ""), "\"", "") == strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(key, " ", ""), "\t", ""), "\n", ""), "\"", "") {
+		lvlN = pterm.Blue(pterm.BgMagenta.Sprint(lvlN))
 	}
 	return lvlN
 }
