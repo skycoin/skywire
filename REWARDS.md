@@ -56,20 +56,21 @@ The collection of surveys and the reward calculation happens hourly - as configu
 
 ### Reward Processing
 
-The rewards are calculated by `skywire cli rewards calc` with the aid of a script to produce the reward distribution data for the previous day's uptime.
+The rewards are calculated by `skywire cli rewards calc` with the aid of [reward.sh](scripts/rewards/reward.sh) to produce the reward distribution data for the previous day's uptime.
 
 ### Per-IP reward limit
 
-The total share of rewards for any given ip address to 8 based on the following calculation:
+The total share of rewards for any given ip address is limited to 8, or one share per visor which met uptime and other requirements.
 
-The fraction of reward shares for a skycoin addresses at a particular IP address equals the number of occurrences of a skycoin address at a specific IP address multiplied by the quotient of 8 divided by the number of visors at that IP address which are otherwise eligible based on their uptime.
+If there are more than 8 visors which meet uptime and other requirements,the reward shares are divided among those skycoin addresses set in the survey for the reward eligible visors at that ip address
 
 ### MAC Address reward limit
 
 To avoid a user running multiple instances of skywire on virtual machines, the MAC addresses from the surveys are compared to the mac addresses in all other surveys. If any two visors list the same mac address for the first interface after `lo` these are considered the same machine and 1 reward share is divided evenly between all the visors which list the same MAC address.
 
-
 ## Automation via systemd service
+
+Automation of the hourly log & survey collection is accomplished via systemd service and timer executing [getlogs.sh](scripts/rewards/getlogs.sh) and [reward.sh](scripts/rewards/reward.sh)
 
 /etc/systemd/system/skywire-reward.service
 ```
@@ -88,6 +89,8 @@ ExecStart=/usr/bin/bash -c './getlogs.sh && ./reward.sh'
 WantedBy=multi-user.target
 
 ```
+
+**Note: change the user and working directory in the above systemd service**
 
 This service is called by a timer
 
@@ -137,6 +140,8 @@ DMSGHTTP_SK=<reward-system-secret-key>
 
 `REWARDPKS` are public keys permitted to access the non public data generated & collected by the reward system; these keys are permitted as well to `POST` the raw transaction to be distributed.
 
+
+
 ### Reward distribution transaction
 
 The reward system UI is served over dmsghttp. Keys which are whitelisted by the reward system are able to view the collected system surveys and other non-public reward system data. Additionally, these whitelisted keys are permitted to `POST` a signed raw transaction to the reward system, which will be broadcast by the reward system. In this way, it is possible to avoid having funds on the same machine as is running the reward system.
@@ -159,12 +164,7 @@ REWARD_WL_SK=<secret-key-of-whitelisted-public-key>
 REWARD_SYS_URL="dmsg://<reward-system-public-key>:80"
 ```
 
-before the script is run and the transaction is attempted to be broadcast, it's crucial to check that the hourly log collection and reward calculation is not ongoing.
+before the script is run and the transaction is attempted to be broadcast, it's crucial to check that the hourly [log collection and reward calculation](https://fiber.skywire.dev/log-collection) is not ongoing.
 
 
-When the transaction is then broadcast, it's transaction ID recorded in a file which is monitored by the reward telegram bot, which generates a notification in https://t.me/skywire_reward. Note: this will eventually be supplemented with or replaced by a notification via skychat.
-
-
-## Known Issues
-
-...
+When the transaction is then broadcast, it's transaction ID recorded in a file which is monitored by the reward telegram bot, which generates a notification in https://t.me/skywire_reward. **Note: this will eventually be supplemented with or replaced by a notification via skychat.**
