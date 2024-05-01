@@ -1,4 +1,4 @@
-// Package clilog cmd/skywire-cli/commands/log/clist.go
+// Package clilog cmd/skywire-cli/commands/log/st.go
 package clilog
 
 import (
@@ -12,6 +12,7 @@ import (
 )
 
 func init() {
+	RootCmd.AddCommand(stCmd)
 	stCmd.Flags().StringVarP(&pubKey, "pk", "p", "", "public key to check")
 	stCmd.Flags().StringVarP(&lcDir, "dir", "d", "", "path to surveys & transport bandwidth logging ")
 }
@@ -20,13 +21,27 @@ var stCmd = &cobra.Command{
 	Use:   "st",
 	Short: "survey tree",
 	Run: func(_ *cobra.Command, _ []string) {
-		makeTree()
+		makeTree(lcDir)
 	},
 }
 
-func makeTree() {
+func init() {
+	RootCmd.AddCommand(tpsnCmd)
+	tpsnCmd.Flags().StringVarP(&pubKey, "pk", "p", "", "public key to check")
+	tpsnCmd.Flags().StringVarP(&tpsnDir, "dir", "d", "", "path to surveys & transport bandwidth logging ")
+}
+
+var tpsnCmd = &cobra.Command{
+	Use:   "tpsn",
+	Short: "transport setup survey tree",
+	Run: func(_ *cobra.Command, _ []string) {
+		makeTree(tpsnDir)
+	},
+}
+
+func makeTree(dir string) {
 	var tree pterm.TreeNode
-	rootDir := lcDir + "/" + pubKey
+	rootDir := dir + "/" + pubKey
 	if pubKey == "" {
 		tree = pterm.TreeNode{
 			Text:     "Index",
@@ -79,7 +94,7 @@ func getDirChildren(dirPath string) []pterm.TreeNode {
 				Text:     pterm.Cyan(fileName),
 				Children: getDirChildren(filepath.Join(dirPath, fileName)),
 			})
-		} else if fileName == "health.json" {
+		} else if fileName == "health.json" || fileName == "tp.json" {
 			fileContents, err := os.ReadFile(filepath.Join(dirPath, fileName)) //nolint
 			if err != nil {
 				fmt.Printf("Error reading file\n")

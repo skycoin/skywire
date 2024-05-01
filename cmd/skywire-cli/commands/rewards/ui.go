@@ -235,7 +235,6 @@ var htmlPageTemplateData htmlTemplateData
 var tmpl *htmpl.Template
 
 func server() {
-	fmt.Println("generating in-memory html")
 
 	if dmsgDisc == "" {
 		dmsgDisc = skyenv.DmsgDiscAddr
@@ -357,6 +356,24 @@ func server() {
 			return
 		})
 	*/
+
+	r1.GET("/tpsn", func(c *gin.Context) {
+		c.Writer.Header().Set("Server", "")
+		c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
+		c.Writer.Header().Set("Transfer-Encoding", "chunked")
+		c.Writer.WriteHeader(http.StatusOK)
+		c.Writer.Flush()
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport Setup Node</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"))
+		c.Writer.Flush()
+		c.Writer.Write([]byte(navlinks))
+		c.Writer.Flush()
+		tpsntree, _ := script.Exec(`skywire cli log st -d rewards/tp_setup`).Bytes() //nolint
+		c.Writer.Write(ansihtml.ConvertToHTML(tpsntree))
+		c.Writer.Flush()
+		c.Writer.Write([]byte(htmlend))
+		c.Writer.Flush()
+		return
+	})
 
 	r1.GET("/log-collection", func(c *gin.Context) {
 		c.Writer.Header().Set("Server", "")

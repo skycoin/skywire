@@ -1,4 +1,4 @@
-// Package clilog cmd/skywire-cli/commands/log/root.go
+// Package clilog cmd/skywire-cli/commands/log/log.go
 package clilog
 
 import (

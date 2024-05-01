@@ -19,7 +19,8 @@
 /local*/*
 /transport_logs
 /dmsgpty
-
+rewards
+rewards/
 pkg/visor/apps/
 pkg/visor/bar/
 pkg/visor/foo/

@@ -24,13 +24,8 @@ var (
 	fetchFrom      string
 	writeDir       string
 	lcDir          string
+	tpsnDir        string
 )
-
-func init() {
-	RootCmd.AddCommand(
-		stCmd, tpCmd,
-	)
-}
 
 // RootCmd is logCmd
 var RootCmd = logCmd
