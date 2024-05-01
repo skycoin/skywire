@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/pterm/pterm"
@@ -113,7 +114,7 @@ func getDirChildren(dirPath string) []pterm.TreeNode {
 				coloredFile = pterm.Red(fileName)
 			}
 			nodes = append(nodes, pterm.TreeNode{
-				Text: fmt.Sprintf("%s Age: %s %s", coloredFile, time.Since(fileInfo.ModTime()), string(fileContents)),
+				Text: fmt.Sprintf("%s Age: %s %s", coloredFile, time.Since(fileInfo.ModTime()), strings.TrimSuffix(string(fileContents), "\n")),
 			})
 		} else if fileName == "node-info.json" {
 			nodes = append(nodes, pterm.TreeNode{
