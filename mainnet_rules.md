@@ -45,19 +45,17 @@ A total of up to ~1114.754  Skycoin are distributed daily in leap-years.
 To obtain Skycoin rewards for running skywire, the following requirements must be met.
 The update deadlines specify the version of software required as of (i.e. on or before) the specified date in order to maintain reward eligibility:
 
-* **Minimum skywire version v1.3.14** - Cutoff January 1st 2024
+* **Minimum skywire version v1.3.19** - Cutoff April 1st 2024
 
-* **Minimum skywire version v1.3.15** - Cutoff February 1st 2024
+* **Minimum skywire version v1.3.21** - Cutoff May 1st 2024
 
-* **Minimum skywire version v1.3.17** - Cutoff March 1st 2024
-
-* The visor must be an **ARM architecture SBC running on approved [hardware](#hardware)**
+* The visor must be an **ARM or RISC architecture SBC running on approved [hardware](#hardware)**
 
 * Visors must be running on **[the skywire production deployment](https://conf.skywire.skycoin.com)** with a config that is updated on every version.
 
 * **Only 1 (one) visor per machine**
 
-* **Up to 8 (eight) visors may each receive 1 reward share per location (ip address)**
+* **Up to 8 (eight) visors may each receive 1 (one) reward share per location (ip address)**
 
 * **75% uptime per day** minimum is required to be eligible to receive rewards
 
@@ -99,19 +97,17 @@ skywire-cli -v
 skywire-visor -v
 ```
 
+**Reward eligibility after 4-1-2024 requires Skywire v1.3.19**
 
+Requirement established 3-14-2024
 
-**Reward eligibility after 2-1-2024 requires Skywire v1.3.15**
+Rewards Cutoff date for updating 4-1-2024
 
-Requirement established 12-18-2023
+**Reward eligibility after 5-1-2024 requires Skywire v1.3.21**
 
-Rewards Cutoff date for updating 2-1-2024
+Requirement established 3-13-2024
 
-**Reward eligibility after 3-1-2024 requires Skywire v1.3.17**
-
-Requirement established 2-1-2023
-
-Rewards Cutoff date for updating 3-1-2024
+Rewards Cutoff date for updating 5-1-2024
 
 ### Deployment
 
@@ -156,7 +152,7 @@ Add your skycoin address there and run `skywire-autoconfig` on linux (assumes yo
 
 If this file does not exist for you, it can be created with `skywire-cli config gen -q | tee /etc/skywire.conf`
 
-If you do this, please uncomment `PKGENV=true` before saving the file
+**If you do this, please uncomment `PKGENV=true` before saving the file**
 
 ### Connection to DMSG network - Survey & transport log collection
 

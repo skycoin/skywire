@@ -102,15 +102,15 @@ check: lint check-cg test ## Run linters and tests
 check-cg: ## Cursory check of the main help menu, offline dmsghttp config gen and offline config gen
 	@echo "checking help menu for compilation without errors"
 	@echo
-	go run cmd/skywire-deployment/skywire.go --help
+	go run cmd/skywire/skywire.go --help
 	@echo
 	@echo "checking dmsghttp offline config gen"
 	@echo
-	go run cmd/skywire-deployment/skywire.go cli config gen --nofetch -dnw
+	go run cmd/skywire/skywire.go cli config gen --nofetch -dnw
 	@echo
 	@echo "checking offline config gen"
 	@echo
-	go run cmd/skywire-deployment/skywire.go cli config gen --nofetch -nw
+	go run cmd/skywire/skywire.go cli config gen --nofetch -nw
 	@echo
 	@echo "config gen succeeded without error"
 	@echo
@@ -118,33 +118,24 @@ check-cg: ## Cursory check of the main help menu, offline dmsghttp config gen an
 
 check-windows: lint-windows test-windows ## Run linters and tests on windows image
 
-build: host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
+build: clean build-merged ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
 build-merged: ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
-	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire ./cmd/skywire-deployment
+	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire ./cmd/skywire
 
-
-build-windows: host-apps-windows bin-windows ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
-
-build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
-
-build-static-wos: host-apps-static bin-static-wos ## Build apps and binaries. `go build` with ${OPTS}
-
-build-example: host-apps example-apps bin ## Build apps, example apps and binaries. `go build` with ${OPTS}
-
-installer: mac-installer ## Builds MacOS installer for skywire-visor
+build-merged-windows: clean-windows
+	powershell '${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire.exe ./cmd/skywire'
 
 install-system-linux: build ## Install apps and binaries over those provided by the linux package - linux package must be installed first!
 	sudo echo "sudo cache"
-	sudo install -Dm755 $(BUILD_PATH){skywire-cli,skywire-visor} /opt/skywire/bin/ & \
-	sudo install -Dm755 $(BUILD_PATH)apps/{vpn-server,vpn-client,skysocks-client,skysocks,skychat} /opt/skywire/apps/
-
-install-system-linux-merged: build-merged ## Install apps and binaries over those provided by the linux package - linux package must be installed first!
-	sudo echo "sudo cache"
 	sudo install -Dm755 $(BUILD_PATH)skywire /opt/skywire/bin/
+
 
 install-generate: ## Installs required execs for go generate.
 	${OPTS} go install github.com/mjibson/esc github.com/vektra/mockery/v2@latest
+
+	## TO DO: it may be unnecessary to install required execs for go generate into the path. An alternative method may exist which does not require this
+	## https://eli.thegreenplace.net/2021/a-comprehensive-guide-to-go-generate
 
 generate: ## Generate mocks and config README's
 	go generate ./...
@@ -157,13 +148,13 @@ clean-windows: ## Clean project: remove created binaries and apps
 	powershell -Command "If (Test-Path ./build) { Remove-Item -Path ./build -Force -Recurse }"
 
 install: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
-	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node
+	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire
 
 install-windows: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go install ${BUILD_OPTS} ./ $$_.FullName }'
 
 install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
-	${STATIC_OPTS} go install -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node
+	${STATIC_OPTS} go install -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' ./cmd/skywire
 
 lint: ## Run linters. Use make install-linters first
 	golangci-lint --version
@@ -177,13 +168,13 @@ test: ## Run tests
 	-go clean -testcache &>/dev/null
 	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/...
 	${OPTS} go test ${TEST_OPTS}
-	go run cmd/skywire-deployment/skywire.go --help
-	go run cmd/skywire-deployment/skywire.go cli config gen -dnw
-	go run cmd/skywire-deployment/skywire.go cli config gen --nofetch -nw
+	go run cmd/skywire/skywire.go --help
+	go run cmd/skywire/skywire.go cli config gen -dnw
+	go run cmd/skywire/skywire.go cli config gen --nofetch -nw
 
 test-windows: ## Run tests on windows
 	@go clean -testcache
-	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/apps...
+	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/skywire... ./cmd/apps...
 
 install-linters: ## Install linters
 	- VERSION=latest ./ci_scripts/install-golangci-lint.sh
@@ -214,43 +205,14 @@ snapshot-linux: ## 	goreleaser --snapshot --config .goreleaser-linux.yml --skip-
 snapshot-clean: ## Cleans snapshot / release
 	rm -rf ./dist
 
-host-apps: ## Build app
-	test -d $(BUILD_PATH) && rm -r $(BUILD_PATH) || true
-	mkdir -p $(BUILD_PATH)apps
-	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)apps/ ./cmd/apps/...
-
 example-apps: ## Build example apps
 	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)apps/ ./example/...
-
-host-apps-windows: ## build apps on windows
-	powershell -Command new-item $(BUILD_PATH)apps/ -itemtype directory -force
-	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)apps/ $$_.FullName }'
-
-host-apps-windows-appveyor: ## build apps on windows. `go build` with ${OPTS} for AppVeyor image
-	powershell -Command new-item $(BUILD_PATH)apps/ -itemtype directory -force
-	powershell 'Get-ChildItem .\cmd\apps | % { ${OPTS} go build -o $(BUILD_PATH)apps/ $$_.FullName }'
-
-# Static Apps
-host-apps-static: ## Build app
-	test -d apps && rm -r apps || true
-	mkdir -p ./apps
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH)apps/ ./cmd/apps/...
-
-host-apps-deploy: ## Build app
-	test -d apps && rm -r apps || true
-	mkdir -p ./apps
-	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o $(BUILD_PATH)apps/ ./cmd/apps/...
-
-host-apps-race: ## Build app
-	test -d apps && rm -r apps || true
-	mkdir -p ./apps
-	CGO_ENABLED=1${OPTS} go build ${BUILD_OPTS} -race -o $(BUILD_PATH)apps/ ./cmd/apps/...
 
 # Bin
 bin: fix-systray-vendor bin-fix unfix-systray-vendor
 
-bin-fix: ## Build `skywire-visor`, `skywire-cli`
-	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH) ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node ./cmd/skywire-deployment
+bin-fix: ## Build `skywire`
+	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH) ./cmd/skywire
 
 fix-systray-vendor:
 	@if [ $(UNAME_S) = "Linux" ]; then\
@@ -262,25 +224,22 @@ unfix-systray-vendor:
 		sed -i '/conn.handleCall(msg)/c\			go conn.handleCall(msg)' ./vendor/github.com/godbus/dbus/v5/conn.go ;\
 	fi
 
-bin-windows: ## Build `skywire-visor`, `skywire-cli`
-	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH) $$_.FullName }'
+build-windows: ## Build `skywire-visor`
+	powershell '${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH) ./cmd/skywire'
 
 # Static Bin
-bin-static: ## Build `skywire-visor`, `skywire-cli`
-	${STATIC_OPTS} go build 8 -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH) ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node
+build-static: ## Build `skywire-visor`, `skywire-cli`
+	${STATIC_OPTS} go build 8 -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH) ./cmd/skywire
 
 # Static Bin without Systray
-bin-static-wos: ## Build `skywire-visor`, `skywire-cli`
-	${STATIC_OPTS} go build -tags withoutsystray -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH)skywire-visor ./cmd/skywire-visor
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH)  ./cmd/skywire-cli ./cmd/setup-node
+build-static-wos: ## Build `skywire-visor`, `skywire-cli`
+	${STATIC_OPTS} go build -tags withoutsystray -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH)skywire-visor ./cmd/skywire
 
-build-deploy: host-apps-deploy ## Build for deployment Docker images
-	${OPTS} go build -tags netgo ${BUILD_OPTS_DEPLOY} -o /release/skywire-visor ./cmd/skywire-visor
-	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/skywire-cli ./cmd/skywire-cli
+build-deploy: ## Build for deployment Docker images
+	${OPTS} go build -tags netgo ${BUILD_OPTS_DEPLOY} -o /release/skywire ./cmd/skywire
 
-build-race: host-apps-race ## Build for testing Docker images
-	CGO_ENABLED=1 ${OPTS} go build -tags netgo ${BUILD_OPTS} -race -o /release/skywire-visor ./cmd/skywire-visor
-	CGO_ENABLED=1 ${OPTS} go build ${BUILD_OPTS} -race -o /release/skywire-cli ./cmd/skywire-cli
+build-race: ## Build for testing Docker images
+	CGO_ENABLED=1 ${OPTS} go build -tags netgo ${BUILD_OPTS} -race -o /release/skywire ./cmd/skywire
 
 github-prepare-release:
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags | cut -c 2-6))
@@ -288,9 +247,6 @@ github-prepare-release:
 
 github-release: github-prepare-release
 	goreleaser --rm-dist --config .goreleaser-linux.yml --release-notes releaseChangelog.md
-
-github-release-archlinux: github-prepare-release
-	goreleaser --rm-dist --config .goreleaser-archlinux.yml --release-notes releaseChangelog.md
 
 github-release-darwin:
 	goreleaser --rm-dist  --config .goreleaser-darwin.yml --skip-publish
@@ -339,59 +295,27 @@ run: ## Run skywire visor with skywire-config.json, and start a browser if runni
 ## Prepare to run skywire from source, without compiling binaries
 prepare:
 	test -d apps && rm -r apps || true
-	mkdir -p apps
-	ln ./scripts/_apps/skychat ./apps/
-	ln ./scripts/_apps/skysocks ./apps/
-	ln ./scripts/_apps/skysocks-client ./apps/
-	ln ./scripts/_apps/vpn-server ./apps/
-	ln ./scripts/_apps/vpn-client ./apps/
-	chmod +x ./apps/*
+	test -d build && rm -r build || true
+	mkdir -p build || true
+	ln ./scripts/skywire ./build/
+	chmod +x ./build/*
 	sudo echo "sudo cache"
 
-## Prepare to run skywire from source via cmd/skywire-deployment, without compiling binaries
-prepare1:
-	test -d apps && rm -r apps || true
-	mkdir -p apps
-	ln ./scripts/_merged-apps/skychat ./apps/
-	ln ./scripts/_merged-apps/skysocks ./apps/
-	ln ./scripts/_merged-apps/skysocks-client ./apps/
-	ln ./scripts/_merged-apps/vpn-server ./apps/
-	ln ./scripts/_merged-apps/vpn-client ./apps/
-	chmod +x ./apps/*
-	sudo echo "sudo cache"
 
 run-source: prepare ## Run skywire from source, without compiling binaries
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -in | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
-
-run-source-merged: prepare1 ## Run skywire from source, without compiling binaries
-	go run ./cmd/skywire-deployment/skywire.go cli config gen -in | sudo go run ./cmd/skywire-deployment/skywire.go visor -n || true
+	go run ./cmd/skywire/skywire.go cli config gen -in | sudo go run ./cmd/skywire/skywire.go visor -n || true
 
 run-systray: prepare ## Run skywire from source, with vpn server enabled
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -ni | sudo go run ./cmd/skywire-visor/skywire-visor.go -n --systray || true
+	go run ./cmd/skywire/skywire.go cli config gen -ni | sudo go run ./cmd/skywire/skywire.go visor -n --systray || true
 
 run-vpnsrv: prepare ## Run skywire from source, without compiling binaries
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -in --servevpn | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
-
-run-source-test: prepare ## Run skywire from source with test endpoints
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -nit | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
-
-run-vpnsrv-test: prepare ## Run skywire from source, with vpn server enabled
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -nit --servevpn | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
-
-run-systray-test: prepare ## Run skywire from source, with vpn server enabled
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -nit | sudo go run ./cmd/skywire-visor/skywire-visor.go --systray -n || true
+	go run ./cmd/skywire/skywire.go cli config gen -in --servevpn | sudo go run ./cmd/skywire/skywire.go visor -n || true
 
 run-source-dmsghttp: prepare ## Run skywire from source with dmsghttp config
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -din | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
+	go run ./cmd/skywire/skywire.go cli config gen -din | sudo go run ./cmd/skywire/skywire.go visor -n || true
 
 run-vpnsrv-dmsghttp: prepare ## Run skywire from source with dmsghttp config and vpn server
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -din --servevpn | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
-
-run-source-dmsghttp-test: prepare ## Run skywire from source with dmsghttp config and test endpoints
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -dint | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
-
-run-vpnsrv-dmsghttp-test: prepare ## Run skywire from source with dmsghttp config, vpn server, and test endpoints
-	go run ./cmd/skywire-cli/skywire-cli.go config gen -dint --servevpn | sudo go run ./cmd/skywire-visor/skywire-visor.go -n || true
+	go run ./cmd/skywire/skywire.go cli config gen -din --servevpn | sudo go run ./cmd/skywire/skywire.go visor -n || true
 
 lint-ui:  ## Lint the UI code
 	cd $(MANAGER_UI_DIR) && npm run lint
@@ -408,6 +332,8 @@ build-ui-windows: install-deps-ui ## Builds the UI on windows
 	powershell 'Remove-Item -Recurse -Force -Path ${MANAGER_UI_BUILT_DIR}'
 	powershell 'New-Item -Path ${MANAGER_UI_BUILT_DIR} -ItemType Directory'
 	powershell 'Copy-Item -Recurse ${MANAGER_UI_DIR}\dist\* ${MANAGER_UI_BUILT_DIR}'
+
+installer: mac-installer ## Builds MacOS installer for skywire-visor
 
 mac-installer: ## Create unsigned and not-notarized application, run make mac-installer-help for more
 	./scripts/mac_installer/create_installer.sh

@@ -15,8 +15,8 @@ before:
   hooks:
     - go mod tidy
 builds:
-  - id: skywire-visor
-    binary: skywire-visor
+  - id: skywire
+    binary: skywire
     goos:
       - windows
     goarch:
@@ -24,44 +24,9 @@ builds:
       - 386
     env:
       - CGO_ENABLED=1
-    main: ./cmd/skywire-visor/
+    main: ./cmd/skywire/
     ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}
 
-  - id: skywire-cli
-    binary: skywire-cli
-    goos:
-      - windows
-    goarch:
-      - amd64
-      - 386
-    env:
-      - CGO_ENABLED=0
-    main: ./cmd/skywire-cli/
-    ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: vpn-client
-    binary: apps/vpn-client
-    goos:
-      - windows
-    goarch:
-      - amd64
-      - 386
-    env:
-      - CGO_ENABLED=0
-    main: ./cmd/apps/vpn-client/
-    ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
-
-  - id: skysocks-client
-    binary: apps/skysocks-client
-    goos:
-      - windows
-    goarch:
-      - amd64
-      - 386
-    env:
-      - CGO_ENABLED=0
-    main: ./cmd/apps/skysocks-client/
-    ldflags: -s -w -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}}
 
 archives:
   - id: archive
@@ -72,10 +37,7 @@ archives:
       - dmsghttp-config.json
       - services-config.json
     builds:
-      - skywire-visor
-      - skywire-cli
-      - vpn-client
-      - skysocks-client
+      - skywire
     allow_different_binary_count: true
 
 checksum:

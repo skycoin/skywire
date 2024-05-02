@@ -16,8 +16,12 @@ import (
 // The StreamID is the ID of a QUIC stream.
 type StreamID = protocol.StreamID
 
+// A Version is a QUIC version number.
+type Version = protocol.Version
+
 // A VersionNumber is a QUIC version number.
-type VersionNumber = protocol.VersionNumber
+// Deprecated: VersionNumber was renamed to Version.
+type VersionNumber = Version
 
 const (
 	// Version1 is RFC 9000
@@ -159,6 +163,9 @@ type Connection interface {
 	OpenStream() (Stream, error)
 	// OpenStreamSync opens a new bidirectional QUIC stream.
 	// It blocks until a new stream can be opened.
+	// There is no signaling to the peer about new streams:
+	// The peer can only accept the stream after data has been sent on the stream,
+	// or the stream has been reset or closed.
 	// If the error is non-nil, it satisfies the net.Error interface.
 	// If the connection was closed due to a timeout, Timeout() will be true.
 	OpenStreamSync(context.Context) (Stream, error)
@@ -187,10 +194,14 @@ type Connection interface {
 	// Warning: This API should not be considered stable and might change soon.
 	ConnectionState() ConnectionState
 
-	// SendMessage sends a message as a datagram, as specified in RFC 9221.
-	SendMessage([]byte) error
-	// ReceiveMessage gets a message received in a datagram, as specified in RFC 9221.
-	ReceiveMessage(context.Context) ([]byte, error)
+	// SendDatagram sends a message using a QUIC datagram, as specified in RFC 9221.
+	// There is no delivery guarantee for DATAGRAM frames, they are not retransmitted if lost.
+	// The payload of the datagram needs to fit into a single QUIC packet.
+	// In addition, a datagram may be dropped before being sent out if the available packet size suddenly decreases.
+	// If the payload is too large to be sent at the current time, a DatagramTooLargeError is returned.
+	SendDatagram(payload []byte) error
+	// ReceiveDatagram gets a message received in a datagram, as specified in RFC 9221.
+	ReceiveDatagram(context.Context) ([]byte, error)
 }
 
 // An EarlyConnection is a connection that is handshaking.
@@ -211,6 +222,9 @@ type EarlyConnection interface {
 
 // StatelessResetKey is a key used to derive stateless reset tokens.
 type StatelessResetKey [32]byte
+
+// TokenGeneratorKey is a key used to encrypt session resumption tokens.
+type TokenGeneratorKey = handshake.TokenProtectorKey
 
 // A ConnectionID is a QUIC Connection ID, as defined in RFC 9000.
 // It is not able to handle QUIC Connection IDs longer than 20 bytes,
@@ -248,9 +262,10 @@ type Config struct {
 	GetConfigForClient func(info *ClientHelloInfo) (*Config, error)
 	// The QUIC versions that can be negotiated.
 	// If not set, it uses all versions available.
-	Versions []VersionNumber
+	Versions []Version
 	// HandshakeIdleTimeout is the idle timeout before completion of the handshake.
-	// Specifically, if we don't receive any packet from the peer within this time, the connection attempt is aborted.
+	// If we don't receive any packet from the peer within this time, the connection attempt is aborted.
+	// Additionally, if the handshake doesn't complete in twice this time, the connection attempt is also aborted.
 	// If this value is zero, the timeout is set to 5 seconds.
 	HandshakeIdleTimeout time.Duration
 	// MaxIdleTimeout is the maximum duration that may pass without any incoming network activity.
@@ -259,18 +274,6 @@ type Config struct {
 	// If the timeout is exceeded, the connection is closed.
 	// If this value is zero, the timeout is set to 30 seconds.
 	MaxIdleTimeout time.Duration
-	// RequireAddressValidation determines if a QUIC Retry packet is sent.
-	// This allows the server to verify the client's address, at the cost of increasing the handshake latency by 1 RTT.
-	// See https://datatracker.ietf.org/doc/html/rfc9000#section-8 for details.
-	// If not set, every client is forced to prove its remote address.
-	RequireAddressValidation func(net.Addr) bool
-	// MaxRetryTokenAge is the maximum age of a Retry token.
-	// If not set, it defaults to 5 seconds. Only valid for a server.
-	MaxRetryTokenAge time.Duration
-	// MaxTokenAge is the maximum age of the token presented during the handshake,
-	// for tokens that were issued on a previous connection.
-	// If not set, it defaults to 24 hours. Only valid for a server.
-	MaxTokenAge time.Duration
 	// The TokenStore stores tokens received from the server.
 	// Tokens are used to skip address validation on future connection attempts.
 	// The key used to store tokens is the ServerName from the tls.Config, if set
@@ -322,20 +325,23 @@ type Config struct {
 	// Path MTU discovery is only available on systems that allow setting of the Don't Fragment (DF) bit.
 	// If unavailable or disabled, packets will be at most 1252 (IPv4) / 1232 (IPv6) bytes in size.
 	DisablePathMTUDiscovery bool
-	// DisableVersionNegotiationPackets disables the sending of Version Negotiation packets.
-	// This can be useful if version information is exchanged out-of-band.
-	// It has no effect for a client.
-	DisableVersionNegotiationPackets bool
 	// Allow0RTT allows the application to decide if a 0-RTT connection attempt should be accepted.
 	// Only valid for the server.
 	Allow0RTT bool
 	// Enable QUIC datagram support (RFC 9221).
 	EnableDatagrams bool
-	Tracer          func(context.Context, logging.Perspective, ConnectionID) logging.ConnectionTracer
+	Tracer          func(context.Context, logging.Perspective, ConnectionID) *logging.ConnectionTracer
 }
 
+// ClientHelloInfo contains information about an incoming connection attempt.
 type ClientHelloInfo struct {
+	// RemoteAddr is the remote address on the Initial packet.
+	// Unless AddrVerified is set, the address is not yet verified, and could be a spoofed IP address.
 	RemoteAddr net.Addr
+	// AddrVerified says if the remote address was verified using QUIC's Retry mechanism.
+	// Note that the Retry mechanism costs one network roundtrip,
+	// and is not performed unless Transport.MaxUnvalidatedHandshakes is surpassed.
+	AddrVerified bool
 }
 
 // ConnectionState records basic details about a QUIC connection
@@ -345,10 +351,12 @@ type ConnectionState struct {
 	// SupportsDatagrams says if support for QUIC datagrams (RFC 9221) was negotiated.
 	// This requires both nodes to support and enable the datagram extensions (via Config.EnableDatagrams).
 	// If datagram support was negotiated, datagrams can be sent and received using the
-	// SendMessage and ReceiveMessage methods on the Connection.
+	// SendDatagram and ReceiveDatagram methods on the Connection.
 	SupportsDatagrams bool
 	// Used0RTT says if 0-RTT resumption was used.
 	Used0RTT bool
 	// Version is the QUIC version of the QUIC connection.
-	Version VersionNumber
+	Version Version
+	// GSO says if generic segmentation offload is used
+	GSO bool
 }

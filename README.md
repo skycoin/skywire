@@ -42,14 +42,15 @@ Compiling Skywire requires a Golang version of at least `1.16`.
 
 ## Commands and Subcommands
 
-Documentation on skywire-cli interface as well as available flags for skywire-visor:
+Documentation of all commands and subcommands is available in the command documentation README:
 
+* [skywire](cmd/skywire/README.md)
 * [skywire-cli](cmd/skywire-cli/README.md)
 * [skywire-visor](cmd/skywire-visor/README.md)
 
-## App documentation
+## Visor Native Applications
 
-Apps are not executed by the user, but hosted by the visor process.
+Visor apps are not executed directly by the user, but hosted by the visor process.
 
 * [API](docs/skywire_app_api.md)
 * [skychat](cmd/apps/skychat/README.md)
@@ -62,15 +63,13 @@ Apps are not executed by the user, but hosted by the visor process.
 
 Further documentation can be found in the [skywire wiki](https://github.com/skycoin/skywire/wiki).
 
-## Installing Skywire
+## Installing Skywire from Release
 
-Pre-compiled resouces:
+Releases for windows & macOS are available from the [release section](https://github.com/skycoin/skywire/releases/)
 
-* [Windows installer](https://github.com/skycoin/skywire/releases/download/v1.3.7/skywire-installer-v1.3.7-windows-amd64.msi)
-* [MacOS amd64 package](https://github.com/skycoin/skywire/releases/download/v1.3.7/skywire-installer-v1.3.7-darwin-amd64.pkg)
-* [MacOS m1 / arm64](https://github.com/skycoin/skywire/releases/download/v1.3.7/skywire-installer-v1.3.7-darwin-arm64.pkg)
-* [Debian Package Installation Guide](https://github.com/skycoin/skywire/wiki/Skywire-Package-Installation)
-* [Binary Releases](https://github.com/skycoin/skywire/releases)
+Install as a package on debian or arch linux: [Package Installation Guide](https://github.com/skycoin/skywire/wiki/Skywire-Package-Installation)
+
+[Binary Releases](https://github.com/skycoin/skywire/releases) for many platforms and architectures are provided if none of the other installation methods are preferred.
 
 ## Dependencies
 
@@ -117,37 +116,20 @@ git clone https://github.com/skycoin/skywire
 cd skywire
 #for the latest commits, check out the develop branch
 git checkout develop
-make build1
+make build
 ```
 
-To compile skywire directly from source archive, first download the latest source archive from the release section with your browser or another utility. Extract it with an archiving utility, enter the directory where the sources were extracted, and run `make build`.
+To compile skywire directly from source archive, first download the latest source archive from the release section with your browser or another utility. Extract it with an archiving utility, enter the directory where the sources were extracted, and run `make build-merged` or `make build-merged-windows`.
 
 
-`make build` builds the binaries and apps with `go build`
+`make build-merged` and `make build-merged-windows` builds a single binary containing all utilities and apps with `go build`
 
-`skywire-cli` and `skywire-visor` binaries will populate in the `build` directory; app binaries will populate the `build\apps` directory.
+the `skywire` binary will populate in the current directory.
 
 Build output:
 
 ```
-build
-└─┬──setup-node
-  ├──skywire-cli
-  ├──skywire-systray
-  ├──skywire-visor
-  └─┬skywire
-    └─┬apps
-      ├──skychat
-      ├──skysocks
-      ├──skysocks-client
-      ├──vpn-client
-      ├──vpn-server
-      └──skychat
-```
-
-'install' these executables to the `GOPATH`:
-```
-make install
+└──skywire
 ```
 
 For more options, run `make help`.
@@ -157,14 +139,14 @@ For more options, run `make help`.
 To run skywire from this point, first generate a config.
 
 ```
-./build/skywire-cli config gen -birx
+./skywire cli config gen -birx
 ```
 `-b --bestproto` use the best protocol (dmsg | direct) to connect to the skywire production deployment
 `-i --ishv` create a  local hypervisor configuration
 `-r --regen` regenerate a config which may already exist, retaining the keys
 `-x --retainhv` retain any remote hypervisors which are set in the config
 
-More options for configuration are displayed with `./skywire-cli config gen -all`.
+More options for configuration are displayed with `./skywire cli config gen -all`.
 
 
 ## Build docker image
@@ -173,9 +155,9 @@ $ ./ci_scripts/docker-push.sh -t $(git rev-parse --abbrev-ref HEAD) -b
 ```
 ## Skywire Configuration in-depth
 
-The skywire visor requires a config file to run. This config is a json-formatted file produced by `skywire-cli config gen`.
+The skywire visor requires a config file to run. This config is a json-formatted file produced by `skywire cli config gen`.
 
-The `skywire-autoconfig` script included with the skywire package handles config generation and updates for the user who has installed the package.
+The `skywire-autoconfig` script included with the skywire package handles config generation and updates for the user who installed the package.
 
 Examples of config generation and command / flag documentation can be found in the [cmd/skywire-cli/README.md](cmd/skywire-cli/README.md) and [cmd/skywire-visor/README.md](cmd/skywire-visor/README.md).
 
@@ -186,14 +168,14 @@ The most important flags are noted below.
 In order to expose the hypervisor UI, generate a config file with `--is-hypervisor` or `-i` flag:
 
 ```
- skywire-cli config gen -i
+ skywire cli config gen -i
 ```
 
 Docker container will create config automatically for you. To run it manually:
 
 ```
  docker run --rm -v <YOUR_CONFIG_DIR>:/opt/skywire \
-  skycoin/skywire:test skywire-cli config gen -i
+  skycoin/skywire:test skywire cli config gen -i
 ```
 
 After starting up the visor, the UI will be exposed by default on `localhost:8000`.
@@ -204,30 +186,25 @@ Every visor can be controlled by one or more hypervisors. To allow a hypervisor 
 hypervisor needs to be specified in the configuration file. You can add a remote hypervisor to the config with:
 
 ```
-skywire-cli config update --hypervisor-pks <public-key>
+skywire cli config update --hypervisor-pks <public-key>
 ```
 OR:
 ```
-skywire-cli config gen --hvpk <public-key>
-```
-
-Alternatively, this can be done with the skywire-autoconfg script included with the linux packages:
-```
-skywire-autoconfig <public-key>
+skywire cli config gen --hvpk <public-key>
 ```
 
 Or from docker image:
 
 ```
 docker run --rm -v <YOUR_CONFIG_DIR>:/opt/skywire \
-  skycoin/skywire:test skywire-cli config update hypervisor-pks <public-key>
+  skycoin/skywire:test skywire cli config update hypervisor-pks <public-key>
 ```
 
 Or from docker image:/* #nosec */
 
 ```
 docker run --rm -v <YOUR_CONFIG_DIR>:/opt/skywire \
-  skycoin/skywire:latest skywire-cli update-config hypervisor-pks <public-key>
+  skycoin/skywire:latest skywire cli update-config hypervisor-pks <public-key>
 ```
 
 
@@ -256,81 +233,81 @@ _Note: not all of these files will be created by default._
 
 Some of these files are served via the [dmsghttp logserver](https://github.com/skycoin/skywire/wiki/DMSGHTTP-logserver).
 
-## Run skywire-visor
+## Run `skywire visor`
 
-`skywire-visor` hosts apps and is an applications gateway to the Skywire network.
+`skywire visor` hosts apps and is an applications gateway to the Skywire network.
 
-`skywire-visor` requires a valid configuration to be provided.
+`skywire visor` requires a valid configuration to be provided.
 
 __Note: root permissions are currently required for vpn client and server applications!__
 
 Run the visor:
 ```
- sudo skywire-visor -c skywire-config.json
+ sudo skywire visor -c skywire-config.json
 ```
 If the default `skywire-config.json` exists in the current dir, this can be shortened to:
 ```
- sudo skywire-visor
+ sudo skywire visor
 ```
 
 Or from docker image:
 ```
 # with custom config mounted on docker volume
-docker run --rm -p 8000:8000 -v <YOUR_CONFIG_DIR>:/opt/skywire --name=skywire skycoin/skywire:test skywire-visor -c /opt/skywire/<YOUR_CONFIG_NAME>.json
+docker run --rm -p 8000:8000 -v <YOUR_CONFIG_DIR>:/opt/skywire --name=skywire skycoin/skywire:test skywire visor -c /opt/skywire/<YOUR_CONFIG_NAME>.json
 # without custom config (config is automatically generated)
-docker run --rm -p 8000:8000 --name=skywire skycoin/skywire:test skywire-visor
+docker run --rm -p 8000:8000 --name=skywire skycoin/skywire:test skywire visor
 ```
 
-`skywire-visor` can be run on Windows. The setup requires additional setup steps that are specified
+`skywire visor` can be run on Windows. The setup requires additional setup steps that are specified
 in [the docs](docs/windows-setup.md) if not using the windows .msi.
 
 ## Run from source
 
-Running from source as outlined in this section does not write the config to disk or explicitly compile any binaries. The config is piped from skywire-cli stdout to the visor stdin, and all are executed via `go run`.
+Running from source as outlined in this section does not write the config to disk or explicitly compile any binaries. The config is piped from skywire cli stdout to the visor stdin, and all are executed via `go run`.
 
 ```
 git clone https://github.com/skycoin/skywire.git
 cd skywire
 #for the latest commits, check out the develop branch
 git checkout develop
-make run-source
+make run-source-merged
 ```
 
 ### Port forwarding over skywire
 
-`skywire-cli fwd` is used to register and connect to http servers over the skywire connection
+`skywire cli fwd` is used to register and connect to http servers over the skywire connection
 
 - [skywire forwarding](docs/skywire_forwarding.md)
 
 For example, if the local application you wish to forward is running on port `8080`:
 ```
-skywire-cli fwd -p 8080
+skywire cli fwd -p 8080
 ```
 
 List forwarded ports:
 ```
-skywire-cli fwd -l
+skywire cli fwd -l
 ```
 
 Deregister a port / turn off forwarding:
 ```
-skywire-cli fwd -d 8080
+skywire cli fwd -d 8080
 ```
 
-To consume the skyfwd connection (i.e. reverse proxy back to localhost) use `skywire-cli rev`
+To consume the skyfwd connection (i.e. reverse proxy back to localhost) use `skywire cli rev`
 A different port can be specified to proxy the remote port to:
 ```
-skywire-cli rev -p 8080 -r 8080 -k <public-key>
+skywire cli rev -p 8080 -r 8080 -k <public-key>
 ```
 
 List existing connections:
 ```
-skywire-cli rev -l
+skywire cli rev -l
 ```
 
 Remove a configured connection:
 ```
-skywire-cli rev -d <id>
+skywire cli rev -d <id>
 ```
 
 _Note: skyfwd is a new feature and could work more robustly. Issues are welcome._
@@ -354,17 +331,17 @@ To create a transport, first copy the public key of an online visor from the upt
 https://ut.skywire.skycoin.com/uptimes
 
 ```
-skywire-cli visor tp add -t <transport-type> <public-key>
+skywire cli visor tp add -t <transport-type> <public-key>
 ```
 
 View established transports:
 ```
-skywire-cli visor tp ls
+skywire cli visor tp ls
 ```
 
 Remove a transport:
 ```
-skywire-cli visor tp rm <transport-id>
+skywire cli visor tp rm <transport-id>
 ```
 
 ### Routing Rules
@@ -379,13 +356,13 @@ To create a route, first copy the public key of an online visor from the uptime 
 https://ut.skywire.skycoin.com/uptimes
 
 ```
-skywire-cli visor route add-rule app <route-id> $(skywire-cli visor pk) <local-port> <public-key> <remote-port>
+skywire cli visor route add-rule app <route-id> $(skywire cli visor pk) <local-port> <public-key> <remote-port>
 ```
 
-To understand these arguments, observe the help menu for `skywire-cli visor route add-rule`:
+To understand these arguments, observe the help menu for `skywire cli visor route add-rule`:
 ```
 Usage:
-  skywire-cli visor route add-rule app \
+  skywire cli visor route add-rule app \
                <route-id> \
                <local-pk> \
                <local-port> \
@@ -417,10 +394,10 @@ The following documentation exists for vpn server / client setup and usage:
 - [Setup the Skywire VPN server](https://github.com/skycoin/skywire/wiki/Skywire-VPN-Server)
 - [Package Installation Guide](https://github.com/skycoin/skywire/wiki/Skywire-Package-Installation)
 
-An example using the vpn with `skywire-cli`:
+An example using the vpn with `skywire cli`:
 
 ```
-skywire-cli vpn list
+skywire cli vpn list
 ```
 This will query the service discovery for a list of vpn server public keys.
 [sd.skycoin.com/api/services?type=vpn](https://sd.skycoin.com/api/services?type=vpn)
@@ -437,12 +414,12 @@ Sample output:
 
 Select a key and start the vpn with:
 ```
-skywire-cli vpn start <public-key>
+skywire cli vpn start <public-key>
 ```
 
 View the status of the vpn:
 ```
-skywire-cli vpn status
+skywire cli vpn status
 ```
 
 Check your ip address with ip.skywire.dev.
@@ -450,7 +427,7 @@ __Note: ip.skycoin.com will only show your real ip address, not the ip address o
 
 Stop the vpn:
 ```
-skywire-cli vpn stop
+skywire cli vpn stop
 ```
 
 ### Using the Skywire SOCKS5 proxy client
@@ -462,11 +439,11 @@ The following wiki documentation exists on the SOCKS5 proxy:
 
 The main difference between the vpn and the socks5 proxy is that the proxy is configured __per application__ while the vpn wraps the connections for the whole machine.
 
-The socks client usage (from `skywire-cli`) is similar to the vpn, though the `skywire-cli` subcommands and flags do not currently match from the one application to the other. This will be rectified.
+The socks client usage (from `skywire cli`) is similar to the vpn, though the `skywire cli` subcommands and flags do not currently match from the one application to the other. This will be rectified.
 
-To use the SOCKS5 proxy client via `skywire-cli`:
+To use the SOCKS5 proxy client via `skywire cli`:
 ```
-skywire-cli proxy list
+skywire cli proxy list
 ```
 This will query the service discovery for a list of visor public keys which are running the proxy server.
 [sd.skycoin.com/api/services?type=proxy](https://sd.skycoin.com/api/services?type=proxy)
@@ -488,12 +465,12 @@ Sample output:
 
 Select a key and start the proxy with:
 ```
-skywire-cli proxy start --pk <public-key>
+skywire cli proxy start --pk <public-key>
 ```
 
 View the status of the proxy:
 ```
-skywire-cli proxy status
+skywire cli proxy status
 ```
 
 Check the ip address of the connection; for example, using `curl` via the socks5 proxy connection:
@@ -519,7 +496,7 @@ ssh user@host -p 22 -o "ProxyCommand=ncat --proxy-type socks5 --proxy 127.0.0.1:
 
 Stop the socks5 proxy client:
 ```
-skywire-cli proxy stop
+skywire cli proxy stop
 ```
 
 ## Skycoin Rewards
@@ -529,7 +506,7 @@ Review the [mainnet rules](/mainnet_rules.md) article for the details.
 
 Set a reward address:
 ```
-skywire-cli reward <skycoin-address>
+skywire cli reward <skycoin-address>
 ```
 Visors meeting uptime and eligability requirements will recieve daily skycoin rewards for up to 8 visors per location / ip address.
 
