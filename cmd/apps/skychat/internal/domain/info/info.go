@@ -89,13 +89,12 @@ func (i *Info) IsEmpty() bool {
 // PrettyPrint returns the info as a pretty formated string
 func (i *Info) PrettyPrint() string {
 	prettyPrint := ""
-	prettyPrint = fmt.Sprintf(prettyPrint + "---------------------------------------------------------------------------------------------------\n")
-	prettyPrint = fmt.Sprintf(prettyPrint + "InfoMessage: \n")
-	prettyPrint = fmt.Sprintf(prettyPrint+"Pk:		%s \n", i.Pk.Hex())
-	prettyPrint = fmt.Sprintf(prettyPrint+"Alias:	%s \n", i.Alias)
-	prettyPrint = fmt.Sprintf(prettyPrint+"Desc:	%s \n", i.Desc)
-	//prettyPrint = fmt.Sprintf(prettyPrint + "Img:	%s \n", i.Img)
-	prettyPrint = fmt.Sprintf(prettyPrint + "---------------------------------------------------------------------------------------------------\n")
+	prettyPrint = fmt.Sprintf(prettyPrint + "InfoMessage:	--------------------------------------------------------------------------------------------------\n")
+	prettyPrint = fmt.Sprintf(prettyPrint+"InfoMessage:	Pk:		%s \n", i.Pk.Hex())
+	prettyPrint = fmt.Sprintf(prettyPrint+"InfoMessage:	Alias:	%s \n", i.Alias)
+	prettyPrint = fmt.Sprintf(prettyPrint+"InfoMessage:	Desc:	%s \n", i.Desc)
+	//prettyPrint = fmt.Sprintf(prettyPrint + "InfoMessage:	Img:	%s \n", i.Img)
+	prettyPrint = fmt.Sprintf(prettyPrint + "InfoMessage:	---------------------------------------------------------------------------------------------------\n")
 
 	return prettyPrint
 }

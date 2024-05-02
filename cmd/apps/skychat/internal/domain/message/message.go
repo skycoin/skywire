@@ -332,27 +332,37 @@ func (m *Message) IsFromRemoteToLocalServer(localPK cipher.PubKey) bool {
 // PrettyPrint uses fmt.Prints for beautiful representation of message
 func (m *Message) PrettyPrint(printMessageBytes bool) string {
 	prettyPrint := ""
-	prettyPrint = fmt.Sprintf(prettyPrint + "---------------------------------------------------------------------------------------------------\n")
-	prettyPrint = fmt.Sprintf(prettyPrint + "Message: \n")
-	prettyPrint = fmt.Sprintf(prettyPrint+"ID: 		%s \n", m.ID)
-	prettyPrint = fmt.Sprintf(prettyPrint+"Origin:		%s \n", m.Origin)
-	prettyPrint = fmt.Sprintf(prettyPrint+"Time:		%s \n", m.Time)
-	prettyPrint = fmt.Sprintf(prettyPrint+"Root:		pkVisor:  %s \n", m.Root.Visor.Hex())
-	prettyPrint = fmt.Sprintf(prettyPrint+"			pkServer: %s \n", m.Root.Server.Hex())
-	prettyPrint = fmt.Sprintf(prettyPrint+"			pkRoom:   %s \n", m.Root.Room.Hex())
-	prettyPrint = fmt.Sprintf(prettyPrint+"Dest:		pkVisor:  %s \n", m.Dest.Visor.Hex())
-	prettyPrint = fmt.Sprintf(prettyPrint+"			pkServer: %s \n", m.Dest.Server.Hex())
-	prettyPrint = fmt.Sprintf(prettyPrint+"			pkRoom:   %s \n", m.Dest.Room.Hex())
-	prettyPrint = fmt.Sprintf(prettyPrint+"MsgType:		%d \n", m.MsgType)
-	prettyPrint = fmt.Sprintf(prettyPrint+"MsgSubType:	%d \n", m.MsgSubtype)
+	prettyPrint = fmt.Sprintf(prettyPrint + "Message:	---------------------------------------------------------------------------------------------------\n")
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:	ID: 		%s \n", m.ID)
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:	Origin:		%s \n", m.Origin)
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:	Time:		%s \n", m.Time)
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:	Root:		pkVisor:  %s \n", m.Root.Visor.Hex())
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:			pkServer: %s \n", m.Root.Server.Hex())
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:			pkRoom:   %s \n", m.Root.Room.Hex())
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:	Dest:		pkVisor:  %s \n", m.Dest.Visor.Hex())
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:			pkServer: %s \n", m.Dest.Server.Hex())
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:			pkRoom:   %s \n", m.Dest.Room.Hex())
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:	MsgType:	%d \n", m.MsgType)
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:	MsgSubType:	%d \n", m.MsgSubtype)
 
 	if printMessageBytes {
-		prettyPrint = fmt.Sprintf(prettyPrint+"Message:		%s \n", string(m.Message))
+		prettyPrint = fmt.Sprintf(prettyPrint+"Message:	Message:		%s \n", string(m.Message))
 	}
 
-	prettyPrint = fmt.Sprintf(prettyPrint+"Status:		%d \n", m.Status)
-	prettyPrint = fmt.Sprintf(prettyPrint+"Seen:		%t \n", m.Seen)
-	prettyPrint = fmt.Sprintf(prettyPrint + "---------------------------------------------------------------------------------------------------\n")
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:	Status:		%d \n", m.Status)
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:	Seen:		%t \n", m.Seen)
+	prettyPrint = fmt.Sprintf(prettyPrint + "Message:	---------------------------------------------------------------------------------------------------\n")
+
+	return prettyPrint
+}
+
+// PrettyPrintTextMessage uses fmt.Prints for beautiful representation of a TextMessage
+func (m *Message) PrettyPrintTextMessage() string {
+	prettyPrint := ""
+	prettyPrint = fmt.Sprintf(prettyPrint + "TextMessage: ---------------------------------------------------------------------------------------------------")
+	prettyPrint = fmt.Sprintf(prettyPrint+"TextMessage:	Text:	%s \n", m.Message)
+	prettyPrint = fmt.Sprintf(prettyPrint+"TextMessage:	Status: %d \n", m.Status)
+	prettyPrint = fmt.Sprintf(prettyPrint + "TextMessage: ---------------------------------------------------------------------------------------------------")
 
 	return prettyPrint
 }

@@ -312,10 +312,7 @@ func (ms MessengerService) handleRemoteRoomTextMsgType(m message.Message) error 
 
 	pkroute := util.NewRoomRoute(m.GetRootVisor(), m.GetRootServer(), m.GetRootRoom())
 
-	ms.log.Debugln("---------------------------------------------------------------------------------------------------")
-	ms.log.Debugf("TextMessage: \n")
-	ms.log.Debugf("Text:	%s \n", m.Message)
-	ms.log.Debugln("---------------------------------------------------------------------------------------------------")
+	ms.log.Debugln(m.PrettyPrintTextMessage())
 
 	//notify about a new TextMessage
 	n := notification.NewMsgNotification(pkroute)

@@ -46,6 +46,7 @@ func (ms MessengerService) handleP2PMessage(m message.Message) {
 			ms.errs <- err
 			return
 		}
+		//TODO:If this is the last active connection to the remote we have to unhandle the connection
 		ms.errs <- fmt.Errorf("Message rejected from " + m.Root.Visor.String())
 		return
 	}
@@ -136,7 +137,7 @@ func (ms MessengerService) handleP2PConnMsgType(m message.Message) error {
 
 	switch m.MsgSubtype {
 	case message.ConnMsgTypeRequest:
-		//check if sender is in blacklist, if not send accetp and info messages back, else send reject message
+		//check if sender is in blacklist, if not send accept and info messages back, else send reject message
 		if !usr.GetSettings().InBlacklist(pkroute.Visor) {
 			// check if visor exists in repository -> it is possible that we already have got the peer visor saved as a host of a server
 			v, err := ms.visorRepo.GetByPK(pkroute.Visor)
@@ -205,6 +206,8 @@ func (ms MessengerService) handleP2PConnMsgType(m message.Message) error {
 				return nil
 			}
 
+			//TODO:If this is the last active connection to the remote we have to unhandle the connection
+
 			//deletes the visor from the repository if no other servers of the visor are saved
 			err = ms.visorRepo.Delete(pkroute.Visor)
 			if err != nil {
@@ -252,6 +255,8 @@ func (ms MessengerService) handleP2PConnMsgType(m message.Message) error {
 			return err
 		}
 
+		//TODO:If this is the last active connection to the remote we have to unhandle the connection
+
 		n := notification.NewMsgNotification(pkroute)
 		err = ms.ns.Notify(n)
 		if err != nil {
@@ -264,14 +269,16 @@ func (ms MessengerService) handleP2PConnMsgType(m message.Message) error {
 			return err
 		}
 
-		//add request message to visor route
+		//add delete/leave message to visor route
 		v.AddMessage(pkroute, m)
 		err = ms.visorRepo.Set(*v)
 		if err != nil {
 			return err
 		}
 
-		//notify that we received an accept message
+		//TODO:If this is the last active connection to the remote we have to unhandle the connection
+
+		//notify that we received a delete/leave message
 		n := notification.NewMsgNotification(pkroute)
 		err = ms.ns.Notify(n)
 		if err != nil {
@@ -325,11 +332,7 @@ func (ms MessengerService) handleP2PTextMsgType(m message.Message) error {
 
 	pkroute := util.NewP2PRoute(m.Root.Visor)
 
-	ms.log.Debugln("---------------------------------------------------------------------------------------------------")
-	ms.log.Debugf("TextMessage: \n")
-	ms.log.Debugf("Text:	%s \n", m.Message)
-	ms.log.Debugf("Status: %d \n", m.Status)
-	ms.log.Debugln("---------------------------------------------------------------------------------------------------")
+	ms.log.Debugln(m.PrettyPrintTextMessage())
 
 	//notify about a new received TextMessage
 	n := notification.NewMsgNotification(pkroute)

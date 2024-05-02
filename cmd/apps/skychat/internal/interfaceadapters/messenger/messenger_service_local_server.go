@@ -707,6 +707,8 @@ func (ms MessengerService) handleLocalServerInfoMsgType(v *chat.Visor, m message
 func (ms MessengerService) handleLocalRoomTextMsgType(visor *chat.Visor, m message.Message) error {
 	ms.log.Debugln("handleLocalRoomTextMsgType")
 
+	ms.log.Debugln(m.PrettyPrintTextMessage())
+
 	pkroute := util.NewRoomRoute(m.GetDestinationVisor(), m.GetDestinationServer(), m.GetDestinationRoom())
 
 	server, err := visor.GetServerByPK(m.Dest.Server)
