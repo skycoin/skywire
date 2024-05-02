@@ -2,14 +2,12 @@
 // this source code is governed by a BSD-style license that can be found in the
 // LICENSE file.
 
-//go:build !appengine
 // +build !appengine
 
 package websocket
 
 import "unsafe"
 
-// #nosec G103 -- (CWE-242) Has been audited
 const wordSize = int(unsafe.Sizeof(uintptr(0)))
 
 func maskBytes(key [4]byte, pos int, b []byte) int {
@@ -23,7 +21,6 @@ func maskBytes(key [4]byte, pos int, b []byte) int {
 	}
 
 	// Mask one byte at a time to word boundary.
-	//#nosec G103 -- (CWE-242) Has been audited
 	if n := int(uintptr(unsafe.Pointer(&b[0]))) % wordSize; n != 0 {
 		n = wordSize - n
 		for i := range b[:n] {
@@ -38,13 +35,11 @@ func maskBytes(key [4]byte, pos int, b []byte) int {
 	for i := range k {
 		k[i] = key[(pos+i)&3]
 	}
-	//#nosec G103 -- (CWE-242) Has been audited
 	kw := *(*uintptr)(unsafe.Pointer(&k))
 
 	// Mask one word at a time.
 	n := (len(b) / wordSize) * wordSize
 	for i := 0; i < n; i += wordSize {
-		//#nosec G103 -- (CWE-242) Has been audited
 		*(*uintptr)(unsafe.Pointer(uintptr(unsafe.Pointer(&b[0])) + uintptr(i))) ^= kw
 	}
 
