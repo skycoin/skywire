@@ -52,7 +52,12 @@ func makeTree(dir string) {
 					} else {
 						coloredFile = pterm.Red(filepath.Base(kid))
 					}
-					nodes = append(nodes, pterm.TreeNode{Text: fmt.Sprintf("%s Age: %s %s", coloredFile, time.Since(fileInfo.ModTime()), strings.TrimSuffix(string(fileContents), "\n"))})
+					if filepath.Base(kid) == "health.json" {
+						nodes = append(nodes, pterm.TreeNode{Text: fmt.Sprintf("%s     Age: %s %s", coloredFile, time.Since(fileInfo.ModTime()).Truncate(time.Second).String(), strings.TrimSuffix(string(fileContents), "\n"))})
+					}
+					if filepath.Base(kid) == "tp.json" {
+						nodes = append(nodes, pterm.TreeNode{Text: fmt.Sprintf("%s         Age: %s %s", coloredFile, time.Since(fileInfo.ModTime()).Truncate(time.Second).String(), strings.TrimSuffix(string(fileContents), "\n"))})
+					}
 				} else if filepath.Base(kid) == "node-info.json" {
 					nodes = append(nodes, pterm.TreeNode{Text: pterm.Blue(filepath.Base(kid))})
 				} else {
