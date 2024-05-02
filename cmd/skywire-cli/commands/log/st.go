@@ -43,10 +43,10 @@ func makeTree(dir string) {
 			kids, _ := script.Echo(children + children1).Slice()
 			nodes := []pterm.TreeNode{}
 			for _, kid := range kids {
+				var coloredFile string
 				if filepath.Base(kid) == "health.json" || filepath.Base(kid) == "tp.json" {
 					fileContents, _ := script.File(kid).String() //nolint
 					fileInfo, _ := os.Stat(kid)                  //nolint
-					var coloredFile string
 					if time.Since(fileInfo.ModTime()) < time.Hour {
 						coloredFile = pterm.Green(filepath.Base(kid))
 					} else {
@@ -56,10 +56,24 @@ func makeTree(dir string) {
 						nodes = append(nodes, pterm.TreeNode{Text: fmt.Sprintf("%s     Age: %s %s", coloredFile, time.Since(fileInfo.ModTime()).Truncate(time.Second).String(), strings.TrimSuffix(string(fileContents), "\n"))})
 					}
 					if filepath.Base(kid) == "tp.json" {
+						_, err := script.Echo(strings.TrimSuffix(string(fileContents), "\n")).JQ(".[]").String() //nolint
+						if err != nil {
+							fileContents = pterm.Red(strings.TrimSuffix(string(fileContents), "\n"))
+							coloredFile = pterm.Red(filepath.Base(kid))
+						}
 						nodes = append(nodes, pterm.TreeNode{Text: fmt.Sprintf("%s         Age: %s %s", coloredFile, time.Since(fileInfo.ModTime()).Truncate(time.Second).String(), strings.TrimSuffix(string(fileContents), "\n"))})
 					}
 				} else if filepath.Base(kid) == "node-info.json" {
-					nodes = append(nodes, pterm.TreeNode{Text: pterm.Blue(filepath.Base(kid))})
+					coloredFile = pterm.Blue(filepath.Base(kid))
+					fileContents, err := script.File(kid).JQ(".").String() //nolint
+					if err != nil {
+						fileContents = pterm.Red(strings.TrimSuffix(string(fileContents), "\n"))
+						coloredFile = pterm.Red(filepath.Base(kid))
+						nodes = append(nodes, pterm.TreeNode{Text: fmt.Sprintf("%s          %s", coloredFile, strings.TrimSuffix(string(fileContents), "\n"))})
+					} else {
+						nodes = append(nodes, pterm.TreeNode{Text: coloredFile})
+					}
+
 				} else {
 					nodes = append(nodes, pterm.TreeNode{Text: pterm.Yellow(filepath.Base(kid))})
 				}
