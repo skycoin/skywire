@@ -6,7 +6,6 @@ import (
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
@@ -30,17 +29,10 @@ type cryptoStreamImpl struct {
 
 	writeOffset protocol.ByteCount
 	writeBuf    []byte
-
-	// Reassemble TLS handshake messages before returning them from GetCryptoData.
-	// This is only needed because crypto/tls doesn't correctly handle post-handshake messages.
-	onlyCompleteMsg bool
 }
 
-func newCryptoStream(onlyCompleteMsg bool) cryptoStream {
-	return &cryptoStreamImpl{
-		queue:           newFrameSorter(),
-		onlyCompleteMsg: onlyCompleteMsg,
-	}
+func newCryptoStream() cryptoStream {
+	return &cryptoStreamImpl{queue: newFrameSorter()}
 }
 
 func (s *cryptoStreamImpl) HandleCryptoFrame(f *wire.CryptoFrame) error {
@@ -63,7 +55,7 @@ func (s *cryptoStreamImpl) HandleCryptoFrame(f *wire.CryptoFrame) error {
 		// could e.g. be a retransmission
 		return nil
 	}
-	s.highestOffset = utils.Max(s.highestOffset, highestOffset)
+	s.highestOffset = max(s.highestOffset, highestOffset)
 	if err := s.queue.Push(f.Data, f.Offset, nil); err != nil {
 		return err
 	}
@@ -78,20 +70,6 @@ func (s *cryptoStreamImpl) HandleCryptoFrame(f *wire.CryptoFrame) error {
 
 // GetCryptoData retrieves data that was received in CRYPTO frames
 func (s *cryptoStreamImpl) GetCryptoData() []byte {
-	if s.onlyCompleteMsg {
-		if len(s.msgBuf) < 4 {
-			return nil
-		}
-		msgLen := 4 + int(s.msgBuf[1])<<16 + int(s.msgBuf[2])<<8 + int(s.msgBuf[3])
-		if len(s.msgBuf) < msgLen {
-			return nil
-		}
-		msg := make([]byte, msgLen)
-		copy(msg, s.msgBuf[:msgLen])
-		s.msgBuf = s.msgBuf[msgLen:]
-		return msg
-	}
-
 	b := s.msgBuf
 	s.msgBuf = nil
 	return b
@@ -120,7 +98,7 @@ func (s *cryptoStreamImpl) HasData() bool {
 
 func (s *cryptoStreamImpl) PopCryptoFrame(maxLen protocol.ByteCount) *wire.CryptoFrame {
 	f := &wire.CryptoFrame{Offset: s.writeOffset}
-	n := utils.Min(f.MaxDataLen(maxLen), protocol.ByteCount(len(s.writeBuf)))
+	n := min(f.MaxDataLen(maxLen), protocol.ByteCount(len(s.writeBuf)))
 	f.Data = s.writeBuf[:n]
 	s.writeBuf = s.writeBuf[n:]
 	s.writeOffset += n

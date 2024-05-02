@@ -37,6 +37,13 @@ func (s *Server) AddMessage(pkroute util.PKRoute, m message.Message) {
 	s.Rooms[pkroute.Room] = r
 }
 
+// SetMessage sets a message inside the server
+func (s *Server) SetMessage(pkroute util.PKRoute, m message.Message) {
+	r := s.Rooms[pkroute.Room]
+	r.SetMessage(m)
+	s.Rooms[pkroute.Room] = r
+}
+
 // SetRouteInfo sets the info of the given room inside the server
 func (s *Server) SetRouteInfo(pkroute util.PKRoute, info info.Info) error {
 	if pkroute.Server == pkroute.Room {

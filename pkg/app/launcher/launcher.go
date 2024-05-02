@@ -274,6 +274,18 @@ func (l *AppLauncher) StopApp(name string) (*appserver.Proc, error) {
 	return proc, nil
 }
 
+// KillApp stop an app, by its name | We use it on stop apps during its running steps by cli.
+func (l *AppLauncher) KillApp(name string) error {
+	log := l.log.WithField("func", "KillApp").WithField("app_name", name)
+
+	if err := l.killApp(name); err != nil {
+		log.WithError(err).Warn("Failed to kill app.")
+		return err
+	}
+
+	return nil
+}
+
 // RestartApp restarts a running app.
 func (l *AppLauncher) RestartApp(name, binary string) error {
 	l.log.WithField("func", "RestartApp").WithField("app_name", name).
@@ -293,6 +305,7 @@ func (l *AppLauncher) RestartApp(name, binary string) error {
 }
 
 func makeProcConfig(lc AppLauncherConfig, ac appserver.AppConfig, envs []string) (appcommon.ProcConfig, error) {
+
 	procConf := appcommon.ProcConfig{
 		AppName:     ac.Name,
 		AppSrvAddr:  lc.ServerAddr,
@@ -409,4 +422,52 @@ func (l *AppLauncher) killHangingProc(appName string, pid int) {
 		return
 	}
 	log.Info("Killed hanging child process that ran previously with this visor.")
+}
+
+func (l *AppLauncher) killApp(appName string) error {
+	log := l.log.WithField("func", "killHangingProcesses")
+
+	pidF, err := l.pidFile()
+	if err != nil {
+		return err
+	}
+	filename := pidF.Name()
+	log = log.WithField("pid_file", filename)
+
+	scan := bufio.NewScanner(pidF)
+	for scan.Scan() {
+		appInfo := strings.Split(scan.Text(), " ")
+		if len(appInfo) != 2 {
+			err := errors.New("line should be: [app name] [pid]")
+			log.WithError(err).Fatal("Failed parsing pid file.")
+		}
+
+		pid, err := strconv.Atoi(appInfo[1])
+		if err != nil {
+			log.WithError(err).Fatal("Failed parsing pid file.")
+		}
+		if appInfo[0] == appName {
+			l.killArbitraryProc(appInfo[0], pid)
+		}
+	}
+
+	return nil
+}
+
+func (l *AppLauncher) killArbitraryProc(appName string, pid int) {
+	log := l.log.WithField("app_name", appName).WithField("pid", pid)
+
+	p, err := os.FindProcess(pid)
+	if err != nil {
+		if runtime.GOOS != "windows" {
+			log.Info("Process not found.")
+		}
+		return
+	}
+
+	err = p.Signal(syscall.SIGKILL)
+	if err != nil {
+		return
+	}
+	log.Info("Killed process.")
 }

@@ -16,7 +16,7 @@ import (
 // UserConfig contains installation paths for running skywire as the user
 func UserConfig() skyenv.PkgConfig {
 	usrConfig := skyenv.PkgConfig{
-		LauncherBinPath: "C:/Program Files/Skywire/build/apps",
+		LauncherBinPath: "C:/Program Files/Skywire",
 		LocalPath:       HomePath() + "/.skywire/local",
 		Hypervisor: skyenv.Hypervisor{
 			DbPath:     HomePath() + "/.skywire/users.db",

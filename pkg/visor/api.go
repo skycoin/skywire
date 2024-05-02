@@ -66,6 +66,7 @@ type API interface {
 	RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error)
 	DeregisterApp(procKey appcommon.ProcKey) error
 	StopApp(appName string) error
+	KillApp(appName string) error
 	SetAppDetailedStatus(appName, state string) error
 	SetAppError(appName, stateErr string) error
 	RestartApp(appName string) error
@@ -77,7 +78,7 @@ type API interface {
 	SetAppKillswitch(appName string, killswitch bool) error
 	SetAppNetworkInterface(appName string, netifc string) error
 	SetAppDNS(appName string, dnsaddr string) error
-	DoCustomSetting(appName string, customSetting map[string]string) error
+	DoCustomSetting(appName string, customSetting map[string]any) error
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)
@@ -510,6 +511,18 @@ func (v *Visor) StopApp(appName string) error {
 	return ErrProcNotAvailable
 }
 
+// KillApp implements API.
+func (v *Visor) KillApp(appName string) error {
+	// check process manager and app launcher availability
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
+	if v.procM != nil {
+		return v.appL.KillApp(appName) //nolint:errcheck
+	}
+	return ErrProcNotAvailable
+}
+
 // StartVPNClient implements API.
 func (v *Visor) StartVPNClient(pk cipher.PubKey) error {
 	var envs []string
@@ -530,7 +543,7 @@ func (v *Visor) StartVPNClient(pk cipher.PubKey) error {
 			// we set the args in memory and pass it in `v.appL.StartApp`
 			// unlike the api method `StartApp` where `nil` is passed in `v.appL.StartApp` as args
 			// but the args are set in the config
-			v.conf.Launcher.Apps[index].Args = []string{"--srv", pk.Hex()}
+			v.conf.Launcher.Apps[index].Args = []string{"app", "vpn-client", "--srv", pk.Hex()}
 			maker := vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.STCPRRemoteAddrs())
 			envs, err = maker()
 			if err != nil {
@@ -610,13 +623,13 @@ func (v *Visor) StartSkysocksClient(serverKey string) error {
 				// we set the args in memory and pass it in `v.appL.StartApp`
 				// unlike the api method `StartApp` where `nil` is passed in `v.appL.StartApp` as args
 				// but the args are set in the config
-				v.conf.Launcher.Apps[index].Args = []string{"--srv", pk.Hex()}
+				v.conf.Launcher.Apps[index].Args = []string{"app", "skysocks-client", "--srv", pk.Hex(), "--addr", visorconfig.SkysocksClientAddr}
 			} else {
 				var pk cipher.PubKey
 				if err := pk.Set(v.GetSkysocksClientAddress()); err != nil {
 					return err
 				}
-				v.conf.Launcher.Apps[index].Args = []string{"--srv", pk.Hex()}
+				v.conf.Launcher.Apps[index].Args = []string{"app", "skysocks-client", "--srv", pk.Hex(), "--addr", visorconfig.SkysocksClientAddr}
 			}
 
 			// check process manager availability
@@ -637,8 +650,10 @@ func (v *Visor) StopSkysocksClients() error {
 	}
 	if v.procM != nil {
 		for _, app := range v.conf.Launcher.Apps {
-			if app.Binary == visorconfig.SkysocksClientName {
-				v.appL.StopApp(app.Name) //nolint
+			for _, args := range app.Args {
+				if args == visorconfig.SkysocksClientName {
+					v.appL.StopApp(app.Name) //nolint
+				}
 			}
 		}
 		return nil
@@ -906,7 +921,7 @@ func (v *Visor) SetAppDNS(appName string, dnsAddr string) error {
 }
 
 // DoCustomSetting implents API.
-func (v *Visor) DoCustomSetting(appName string, customSetting map[string]string) error {
+func (v *Visor) DoCustomSetting(appName string, customSetting map[string]any) error {
 
 	v.log.Infof("Changing %s Settings to %q", appName, customSetting)
 	if v.appL == nil {
@@ -917,10 +932,8 @@ func (v *Visor) DoCustomSetting(appName string, customSetting map[string]string)
 		return err
 	}
 
-	for field, value := range customSetting {
-		if err := v.conf.UpdateAppArg(v.appL, appName, fmt.Sprintf("--%s", field), value); err != nil {
-			return err
-		}
+	if err := v.conf.UpdateAppArgBatch(v.appL, appName, customSetting); err != nil {
+		return err
 	}
 
 	v.log.Info("Updated Settings.")

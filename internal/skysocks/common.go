@@ -3,6 +3,7 @@ package skysocks
 
 import (
 	"fmt"
+	"time"
 
 	ipc "github.com/james-barrow/golang-ipc"
 
@@ -10,15 +11,24 @@ import (
 )
 
 func listenIPC(ipcClient *ipc.Client, appName string, onClose func()) {
+	time.Sleep(5 * time.Second)
+	if ipcClient == nil {
+		print(fmt.Sprintln("Unable to create IPC Client: server is non-existent"))
+		return
+	}
 	for {
 		m, err := ipcClient.Read()
 		if err != nil {
-			fmt.Printf("%s IPC received error: %v", appName, err)
+			print(fmt.Sprintf("%s IPC received error: %v\n", appName, err))
 		}
-		if m.MsgType == skyenv.IPCShutdownMessageType {
-			fmt.Println("Stopping " + appName + " via IPC")
-			break
+
+		if m != nil {
+			if m.MsgType == skyenv.IPCShutdownMessageType {
+				fmt.Println("Stopping " + appName + " via IPC")
+				break
+			}
 		}
+
 	}
 	onClose()
 }

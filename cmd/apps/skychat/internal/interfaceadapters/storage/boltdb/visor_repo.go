@@ -9,6 +9,7 @@ import (
 	"github.com/boltdb/bolt"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/chat"
 )
 
@@ -19,15 +20,18 @@ const VISORBUCKET = "visors"
 type VisorRepo struct {
 	db       *bolt.DB
 	visorsMu sync.Mutex
+	log      *logging.Logger
 }
 
 // NewVisorRepo Constructor
 func NewVisorRepo() *VisorRepo {
 	r := VisorRepo{}
 
+	r.log = logging.MustGetLogger("chat:visor-repo")
+
 	db, err := bolt.Open("chats.db", 0600, nil)
 	if err != nil {
-		fmt.Println(err.Error())
+		r.log.Errorln(err)
 	}
 	r.db = db
 

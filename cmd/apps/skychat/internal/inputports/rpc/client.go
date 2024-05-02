@@ -2,8 +2,9 @@
 package rpc
 
 import (
-	"log"
 	"net/rpc"
+
+	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app"
@@ -14,11 +15,12 @@ import (
 type Client struct {
 	appServices app.Services
 	rpcPort     string
+	log         *logging.Logger
 }
 
 // NewClient RPC Client constructor
 func NewClient(appServices app.Services, rpcPort string) *Client {
-	rc := &Client{appServices: appServices, rpcPort: rpcPort}
+	rc := &Client{appServices: appServices, rpcPort: rpcPort, log: logging.MustGetLogger("chat:rpc-client")}
 	return rc
 }
 
@@ -27,7 +29,7 @@ func (c *Client) SendTextMessage(VisorPk cipher.PubKey, ServerPk cipher.PubKey, 
 
 	rpcClient, err := rpc.DialHTTP("tcp", c.rpcPort)
 	if err != nil {
-		log.Fatal("Connection error: ", err)
+		c.log.Fatal("Connection error: ", err)
 	}
 
 	stmrm := chat.SendTextMessageRequestModel{
@@ -39,7 +41,7 @@ func (c *Client) SendTextMessage(VisorPk cipher.PubKey, ServerPk cipher.PubKey, 
 
 	err = rpcClient.Call(chat.SendTextMessageRPCParam, stmrm, nil)
 	if err != nil {
-		log.Fatal("Client invocation error: ", err)
+		c.log.Fatal("Client invocation error: ", err)
 	}
 
 	return nil

@@ -4,6 +4,7 @@ package chatservices
 import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/chat/commands"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/chat/queries"
+	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/connectionhandler"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/messenger"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/notification"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/chat"
@@ -41,7 +42,7 @@ type ChatServices struct {
 }
 
 // NewServices Bootstraps Application Layer dependencies
-func NewServices(visorRepo chat.Repository, userRepo user.Repository, ms messenger.Service, ns notification.Service) ChatServices {
+func NewServices(visorRepo chat.Repository, userRepo user.Repository, ch connectionhandler.Service, ms messenger.Service, ns notification.Service) ChatServices {
 	return ChatServices{
 		Queries: Queries{
 			GetRoomByRouteHandler:         queries.NewGetRoomByRouteRequestHandler(visorRepo),
@@ -53,7 +54,7 @@ func NewServices(visorRepo chat.Repository, userRepo user.Repository, ms messeng
 		Commands: Commands{
 			AddLocalServerHandler:           commands.NewAddLocalServerRequestHandler(visorRepo, userRepo, ns),
 			JoinRemoteRouteHandler:          commands.NewJoinRemoteRouteRequestHandler(visorRepo, ms),
-			DeleteRouteHandler:              commands.NewDeleteRouteRequestHandler(ms, visorRepo, userRepo),
+			DeleteRouteHandler:              commands.NewDeleteRouteRequestHandler(ch, ms, visorRepo, userRepo),
 			LeaveRemoteRouteHandler:         commands.NewLeaveRemoteRouteRequestHandler(ms, visorRepo, userRepo),
 			SendAddRoomMessageHandler:       commands.NewSendAddRoomMessageRequestHandler(ms),
 			SendDeleteRoomMessageHandler:    commands.NewSendDeleteRoomMessageRequestHandler(ms),

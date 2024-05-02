@@ -4,6 +4,7 @@ package messengerimpl
 import (
 	"fmt"
 
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/connectionhandler"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/notification"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/chat"
@@ -15,6 +16,7 @@ import (
 
 // MessengerService provides a netcon implementation of the Service
 type MessengerService struct {
+	log       *logging.Logger
 	ns        notification.Service
 	cliRepo   client.Repository
 	usrRepo   user.Repository
@@ -27,6 +29,7 @@ type MessengerService struct {
 func NewMessengerService(ns notification.Service, cR client.Repository, uR user.Repository, chR chat.Repository, ch connectionhandler.Service) *MessengerService {
 	ms := MessengerService{}
 
+	ms.log = logging.MustGetLogger("chat:messengerservice")
 	ms.ns = ns
 	ms.cliRepo = cR
 	ms.usrRepo = uR
@@ -34,6 +37,12 @@ func NewMessengerService(ns notification.Service, cR client.Repository, uR user.
 	ms.ch = ch
 
 	ms.errs = make(chan error, 1)
+
+	go func() {
+		if err := <-ms.errs; err != nil {
+			ms.log.Errorf("Error in go MessengerService function: %s \n", err)
+		}
+	}()
 
 	go ms.HandleReceivedMessages()
 
@@ -83,22 +92,13 @@ func (ms MessengerService) sendMessageAndDontSaveItToDatabase(pkroute util.PKRou
 
 // sendMessageToRemoteRoute sends the given message to a remote route (as p2p and client)
 func (ms MessengerService) sendMessageToRemoteRoute(msg message.Message) error {
-	//if the message goes to p2p we save it in database, if not we wait for the remote server to send us our message
-	//this way we can see that the message was received by the remote server
-	if msg.IsFromLocalToRemoteP2P() {
-		err := ms.sendMessageAndSaveItToDatabase(msg.Dest, msg)
-		if err != nil {
-			return err
-		}
-	} else {
-		err := ms.sendMessageAndDontSaveItToDatabase(msg.Dest, msg)
-		if err != nil {
-			return err
-		}
+	err := ms.sendMessageAndSaveItToDatabase(msg.Dest, msg)
+	if err != nil {
+		return err
 	}
 
 	n := notification.NewMsgNotification(msg.Dest)
-	err := ms.ns.Notify(n)
+	err = ms.ns.Notify(n)
 	if err != nil {
 		return err
 	}
@@ -108,6 +108,7 @@ func (ms MessengerService) sendMessageToRemoteRoute(msg message.Message) error {
 
 // sendMessageToLocalRoute "sends" the message to local server, so local server handles it, as it was sent from a remote route (used for messages send from server host, but as client)
 func (ms MessengerService) sendMessageToLocalRoute(msg message.Message) error {
+	msg.Status = message.MsgStatusSent
 	go ms.handleLocalServerMessage(msg)
 
 	return nil

@@ -22,6 +22,8 @@ const (
 	InfoMsgType
 	// CmdMsgType is used to control a server (e.g. send ban-peer or delete-msg commands)
 	CmdMsgType
+	// StatusMsgType is used to let peers know if their message was received/rejected ...
+	StatusMsgType
 )
 
 // subtypes of ConnMsgType
@@ -59,10 +61,12 @@ const (
 const (
 	// MsgStatusInitial is used handle message status Initial
 	MsgStatusInitial = iota
-	// ConnMsgTypeRequest is used handle message status Sent
+	// MsgStatusSent is used handle message status Sent
 	MsgStatusSent
-	// ConnMsgTypeRequest is used handle message status Received
+	// MsgStatusReceived is used handle message status Received
 	MsgStatusReceived
+	// MsgStatusRejected is used to handle message status Rejected
+	MsgStatusRejected
 )
 
 // types fo CmdMsgType
@@ -90,7 +94,7 @@ const (
 
 // Message defines a message
 type Message struct {
-	ID         int           `json:"Id"`         //an identifier for p2p chats and groups, Id is set by the receiver/server
+	ID         string        `json:"Id"`         //an identifier for p2p chats and groups
 	Origin     cipher.PubKey `json:"Origin"`     //the originator of the Message
 	Time       time.Time     `json:"Time"`       //the utc+0 timestamp of the Message
 	Root       util.PKRoute  `json:"Root"`       //the root from where the Message was received (e.g. peer/group)
@@ -104,7 +108,7 @@ type Message struct {
 
 // RAWMessage defines a raw json message
 type RAWMessage struct {
-	ID         int             `json:"Id"`
+	ID         string          `json:"Id"`
 	Origin     cipher.PubKey   `json:"Origin"`
 	Time       time.Time       `json:"Time"`
 	Root       util.PKRoute    `json:"Root"`
@@ -118,7 +122,7 @@ type RAWMessage struct {
 
 // JSONMessage defines a json message
 type JSONMessage struct {
-	ID         int           `json:"Id"`
+	ID         string        `json:"Id"`
 	Origin     cipher.PubKey `json:"Origin"`
 	Time       time.Time     `json:"Time"`
 	Root       util.PKRoute  `json:"Root"`
@@ -236,7 +240,7 @@ func (m *Message) UnmarshalJSON(b []byte) error {
 }
 
 // GetID returns message ID
-func (m *Message) GetID() int {
+func (m *Message) GetID() string {
 	return m.ID
 }
 
@@ -325,23 +329,40 @@ func (m *Message) IsFromRemoteToLocalServer(localPK cipher.PubKey) bool {
 	return m.GetDestinationVisor() == localPK && m.GetDestinationVisor() != m.GetDestinationServer() && m.GetDestinationServer() != m.GetDestinationRoom()
 }
 
-// FmtPrint uses fmt.Print for beautiful representation of message
-func (m *Message) FmtPrint(printMessageBytes bool) {
-	fmt.Println("---------------------------------------------------------------------------------------------------")
-	fmt.Printf("Message: \n")
-	fmt.Printf("ID: 		%d \n", m.ID)
-	fmt.Printf("Origin:		%s \n", m.Origin)
-	fmt.Printf("Time:		%s \n", m.Time)
-	fmt.Printf("Root:		%s \n", m.Root.String())
-	fmt.Printf("Dest:		%s \n", m.Dest.String())
-	fmt.Printf("MsgType:	%d \n", m.MsgType)
-	fmt.Printf("MsgSubType:	%d \n", m.MsgSubtype)
+// PrettyPrint uses fmt.Prints for beautiful representation of message
+func (m *Message) PrettyPrint(printMessageBytes bool) string {
+	prettyPrint := ""
+	prettyPrint = fmt.Sprintf(prettyPrint + "Message:	---------------------------------------------------------------------------------------------------\n")
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:	ID: 		%s \n", m.ID)
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:	Origin:		%s \n", m.Origin)
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:	Time:		%s \n", m.Time)
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:	Root:		pkVisor:  %s \n", m.Root.Visor.Hex())
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:			pkServer: %s \n", m.Root.Server.Hex())
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:			pkRoom:   %s \n", m.Root.Room.Hex())
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:	Dest:		pkVisor:  %s \n", m.Dest.Visor.Hex())
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:			pkServer: %s \n", m.Dest.Server.Hex())
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:			pkRoom:   %s \n", m.Dest.Room.Hex())
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:	MsgType:	%d \n", m.MsgType)
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:	MsgSubType:	%d \n", m.MsgSubtype)
 
 	if printMessageBytes {
-		fmt.Printf("Message:		%s \n", string(m.Message))
+		prettyPrint = fmt.Sprintf(prettyPrint+"Message:	Message:		%s \n", string(m.Message))
 	}
 
-	fmt.Printf("Status:		%d \n", m.Status)
-	fmt.Printf("Seen:		%t \n", m.Seen)
-	fmt.Println("---------------------------------------------------------------------------------------------------")
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:	Status:		%d \n", m.Status)
+	prettyPrint = fmt.Sprintf(prettyPrint+"Message:	Seen:		%t \n", m.Seen)
+	prettyPrint = fmt.Sprintf(prettyPrint + "Message:	---------------------------------------------------------------------------------------------------\n")
+
+	return prettyPrint
+}
+
+// PrettyPrintTextMessage uses fmt.Prints for beautiful representation of a TextMessage
+func (m *Message) PrettyPrintTextMessage() string {
+	prettyPrint := ""
+	prettyPrint = fmt.Sprintf(prettyPrint + "TextMessage: ---------------------------------------------------------------------------------------------------")
+	prettyPrint = fmt.Sprintf(prettyPrint+"TextMessage:	Text:	%s \n", m.Message)
+	prettyPrint = fmt.Sprintf(prettyPrint+"TextMessage:	Status: %d \n", m.Status)
+	prettyPrint = fmt.Sprintf(prettyPrint + "TextMessage: ---------------------------------------------------------------------------------------------------")
+
+	return prettyPrint
 }

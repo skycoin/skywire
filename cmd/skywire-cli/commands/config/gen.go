@@ -208,6 +208,8 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "svcconf")
 	genConfigCmd.Flags().BoolVar(&noDefaults, "nodefaults", false, "do not use hardcoded defaults for production / test services")
 	gHiddenFlags = append(gHiddenFlags, "nodefaults")
+	genConfigCmd.Flags().BoolVar(&snConfig, "sn", false, "generate config for route setup-node")
+	gHiddenFlags = append(gHiddenFlags, "sn")
 	genConfigCmd.Flags().StringVar(&ver, "version", scriptExecString("${VERSION}"), "custom version testing override\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "version")
 	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
@@ -848,84 +850,41 @@ var genConfigCmd = &cobra.Command{
 		conf.Launcher.Apps = []appserver.AppConfig{
 			{
 				Name:      visorconfig.VPNClientName,
-				Binary:    visorconfig.VPNClientName,
+				Binary:    "skywire",
 				AutoStart: false,
 				Port:      routing.Port(skyenv.VPNClientPort),
-				Args:      []string{"--dns", dnsServer},
+				Args:      []string{"app", "vpn-client", "--dns", dnsServer},
 			},
 			{
 				Name:      visorconfig.SkychatName,
-				Binary:    visorconfig.SkychatName,
+				Binary:    "skywire",
 				AutoStart: true,
 				Port:      routing.Port(skyenv.SkychatPort),
-				Args:      []string{"--httpport=" + visorconfig.SkychatAddr},
+				Args:      []string{"app", "skychat", "--addr", visorconfig.SkychatAddr},
 			},
 			{
 				Name:      visorconfig.SkysocksName,
-				Binary:    visorconfig.SkysocksName,
+				Binary:    "skywire",
 				AutoStart: true,
 				Port:      routing.Port(visorconfig.SkysocksPort),
+				Args:      []string{"app", "skysocks"},
 			},
 			{
 				Name:      visorconfig.SkysocksClientName,
-				Binary:    visorconfig.SkysocksClientName,
+				Binary:    "skywire",
 				AutoStart: false,
 				Port:      routing.Port(visorconfig.SkysocksClientPort),
-				Args:      []string{"--addr", visorconfig.SkysocksClientAddr},
+				Args:      []string{"app", "skysocks-client", "--addr", visorconfig.SkysocksClientAddr},
 			},
 			{
 				Name:      visorconfig.VPNServerName,
-				Binary:    visorconfig.VPNServerName,
+				Binary:    "skywire",
 				AutoStart: isVpnServerEnable,
+				Args:      []string{"app", "vpn-server"},
 				Port:      routing.Port(visorconfig.VPNServerPort),
 			},
 		}
 
-		skywire := os.Args[0]
-		isMatch := strings.Contains("/tmp/", skywire)
-		if (!isStdout) || (!isMatch) {
-			//binaries have .exe extension on windows
-			var exe string
-			if visorconfig.OS == "win" {
-				exe = ".exe"
-			}
-			// Disable apps not found at bin_path with above exceptions for go run and stdout
-			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "skychat" + exe); err != nil {
-				if disableApps == "" {
-					disableApps = "skychat"
-				} else {
-					disableApps = disableApps + ",skychat"
-				}
-			}
-			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "skysocks" + exe); err != nil {
-				if disableApps == "" {
-					disableApps = "skysocks"
-				} else {
-					disableApps = disableApps + ",skysocks"
-				}
-			}
-			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "skysocks-client" + exe); err != nil {
-				if disableApps == "" {
-					disableApps = "skysocks-client"
-				} else {
-					disableApps = disableApps + ",skysocks-client"
-				}
-			}
-			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "vpn-client" + exe); err != nil {
-				if disableApps == "" {
-					disableApps = "vpn-client"
-				} else {
-					disableApps = disableApps + ",vpn-client"
-				}
-			}
-			if _, err := os.Stat(conf.Launcher.BinPath + "/" + "vpn-server" + exe); err != nil {
-				if disableApps == "" {
-					disableApps = "vpn-server"
-				} else {
-					disableApps = disableApps + ",vpn-server"
-				}
-			}
-		}
 		// Disable apps --disable-apps flag
 		if disableApps != "" {
 			apps := strings.Split(disableApps, ",")
@@ -1064,7 +1023,13 @@ var genConfigCmd = &cobra.Command{
 			// Marshal the modified config to JSON with indentation
 			jsonData, err := json.MarshalIndent(conf, "", "  ")
 			if err != nil {
-				log.Fatalf("Failed to marshal config to JSON: %v", err)
+				log.WithError(err).Fatal("Failed to marshal config to indented JSON")
+			}
+			if snConfig {
+				jsonData, err = script.Echo(string(jsonData)).JQ("{public_key: .pk, secret_key: .sk, dmsg: {discovery: .dmsg.discovery, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}, transport_discovery: .transport.discovery, log_level: .log_level}").Bytes()
+				if err != nil {
+					log.Fatalf("Failed to convert config to setup-node config format: %v", err)
+				}
 			}
 			// Write the JSON data back to the file
 			err = os.WriteFile(confPath, jsonData, 0644) //nolint
@@ -1075,7 +1040,21 @@ var genConfigCmd = &cobra.Command{
 		// Print results.
 		j, err := json.MarshalIndent(conf, "", "\t")
 		if err != nil {
-			log.WithError(err).Fatal("Could not unmarshal json.")
+			log.WithError(err).Fatal("Failed to marshal config to indented JSON")
+		}
+		if snConfig {
+			j, err = script.Echo(string(j)).JQ("{public_key: .pk, secret_key: .sk, dmsg: {discovery: .dmsg.discovery, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}, transport_discovery: .transport.discovery, log_level: .log_level}").Bytes()
+			if err != nil {
+				log.Fatalf("Failed to convert config to setup-node config format: %v", err)
+			}
+			var data any
+			if err = json.Unmarshal(j, &data); err != nil {
+				log.Fatalf("Failed to convert config to setup-node config format: %v", err)
+			}
+			j, err = json.MarshalIndent(data, "", "    ")
+			if err != nil {
+				log.WithError(err).Fatal("Failed to marshal config to indented JSON")
+			}
 		}
 		//print config to stdout, omit logging messages, exit
 		if isStdout {

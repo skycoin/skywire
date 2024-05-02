@@ -3,6 +3,7 @@ package app
 
 import (
 	chatservices "github.com/skycoin/skywire/cmd/apps/skychat/internal/app/chat"
+	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/connectionhandler"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/messenger"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/notification"
 	userservices "github.com/skycoin/skywire/cmd/apps/skychat/internal/app/user"
@@ -21,9 +22,9 @@ type Services struct {
 }
 
 // NewServices Bootstraps Application Layer dependencies
-func NewServices(usrRepo user.Repository, visorRepo chat.Repository, notifyService notification.Service, ms messenger.Service) Services {
+func NewServices(usrRepo user.Repository, visorRepo chat.Repository, notifyService notification.Service, ms messenger.Service, ch connectionhandler.Service) Services {
 	return Services{
 		NotificationService: notifyService,
-		ChatServices:        chatservices.NewServices(visorRepo, usrRepo, ms, notifyService),
+		ChatServices:        chatservices.NewServices(visorRepo, usrRepo, ch, ms, notifyService),
 		UserServices:        userservices.NewServices(usrRepo, ms, visorRepo)}
 }

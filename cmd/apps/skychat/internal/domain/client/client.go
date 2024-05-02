@@ -2,8 +2,6 @@
 package client
 
 import (
-	"fmt"
-	"net"
 	"os"
 	"os/signal"
 	"reflect"
@@ -12,7 +10,6 @@ import (
 	ipc "github.com/james-barrow/golang-ipc"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -23,13 +20,13 @@ import (
 
 // Client defines a chat client
 type Client struct {
-	appCl    *app.Client                // Skywire app client
-	ipcCl    *ipc.Client                // IPC client
-	netType  appnet.Type                // app netType
-	port     routing.Port               // app port
-	log      *logging.Logger            // app logger
-	conns    map[cipher.PubKey]net.Conn // active connections
-	clientCh chan string                // client channel
+	appCl   *app.Client     // Skywire app client
+	ipcCl   *ipc.Client     // IPC client
+	netType appnet.Type     // app netType
+	port    routing.Port    // app port
+	log     *logging.Logger // app logger
+	//conns    map[cipher.PubKey]net.Conn // active connections
+	clientCh chan string // client channel
 }
 
 // Getter
@@ -49,6 +46,7 @@ func (c *Client) GetPort() routing.Port {
 	return c.port
 }
 
+/*
 // GetConns returns a map of active connections
 func (c *Client) GetConns() map[cipher.PubKey]net.Conn {
 	return c.conns
@@ -90,6 +88,7 @@ func (c *Client) DeleteConn(pk cipher.PubKey) error {
 	}
 	return fmt.Errorf("pk has no connection") //? handle as error?
 }
+*/
 
 // GetLog returns *logging.Logger
 func (c *Client) GetLog() *logging.Logger {
@@ -104,16 +103,18 @@ func (c *Client) GetChannel() chan string {
 // NewClient returns *Client
 func NewClient() *Client {
 	c := Client{}
+	c.log = logging.MustGetLogger("chat")
+
 	c.appCl = app.NewClient(nil)
 	//defer c.appCl.Close()
 
 	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
-		fmt.Printf("Failed to output build info: %v", err)
+		c.log.Error("Failed to output build info: %v", err)
 	}
 
-	c.log = logging.MustGetLogger("chat")
-	c.conns = make(map[cipher.PubKey]net.Conn)
-	c.netType = appnet.TypeSkynet
+	//c.conns = make(map[cipher.PubKey]net.Conn)
+	//c.netType = appnet.TypeSkynet
+	c.netType = appnet.TypeDmsg
 	c.port = routing.Port(1)
 
 	c.clientCh = make(chan string)
@@ -127,11 +128,11 @@ func NewClient() *Client {
 		var err error
 		c.ipcCl, err = ipc.StartClient(visorconfig.SkychatName, nil)
 		if err != nil {
-			fmt.Printf("Error creating ipc server for skychat client: %v\n", err)
+			c.log.Error("Error creating ipc server for skychat client: %v\n", err)
 			c.SetAppError(err)
 			os.Exit(1)
 		}
-		go handleIPCSignal(c.ipcCl)
+		go c.handleIPCSignal()
 	}
 
 	if runtime.GOOS != "windows" {
@@ -157,7 +158,7 @@ func (c *Client) IsEmpty() bool {
 func (c *Client) SetAppStatus(status appserver.AppDetailedStatus) {
 	err := c.appCl.SetDetailedStatus(string(status))
 	if err != nil {
-		fmt.Printf("Failed to set status %v: %v\n", status, err)
+		c.log.Error("Failed to set status %v: %v\n", status, err)
 	}
 }
 
@@ -165,26 +166,26 @@ func (c *Client) SetAppStatus(status appserver.AppDetailedStatus) {
 func (c *Client) SetAppError(appErr error) {
 	err := c.appCl.SetError(appErr.Error())
 	if err != nil {
-		fmt.Printf("Failed to set error %v: %v\n", appErr, err)
+		c.log.Error("Failed to set error %v: %v\n", appErr, err)
 	}
 }
 
 // SetAppPort sets the appPort
 func (c *Client) SetAppPort(appCl *app.Client, port routing.Port) {
 	if err := appCl.SetAppPort(port); err != nil {
-		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
+		c.log.Errorf("Failed to set port %v: %v\n", port, err)
 	}
 }
 
 // handleIPCSignal handles the ipc signal
-func handleIPCSignal(client *ipc.Client) {
+func (c *Client) handleIPCSignal() {
 	for {
-		m, err := client.Read()
+		m, err := c.ipcCl.Read()
 		if err != nil {
-			fmt.Printf("%s IPC received error: %v", visorconfig.SkychatName, err)
+			c.log.Errorf("%s IPC received error: %v", visorconfig.SkychatName, err)
 		}
 		if m.MsgType == visorconfig.IPCShutdownMessageType {
-			fmt.Println("Stopping " + visorconfig.SkychatName + " via IPC")
+			c.log.Errorf("Stopping " + visorconfig.SkychatName + " via IPC")
 			break
 		}
 	}

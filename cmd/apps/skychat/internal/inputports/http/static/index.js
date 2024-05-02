@@ -175,7 +175,7 @@ dummyChatGroupLocal1Message1Root = new Route(dummyPeer1PK,dummyPeer1PK,dummyPeer
 dummyChatGroupLocal1Message1Dest = new Route(dummyChatGroupLocal1Visor,dummyChatGroupLocal1Server,dummyChatGroupLocal1Room)
 dummyChatGroupLocal1Message1Type = TxtMsgType
 dummyChatGroupLocal1Message1Subtype = 0
-dummyChatGroupLocal1Message1Message = "Hello I am Peer 1"
+dummyChatGroupLocal1Message1Message = "Hello I am \n Peer 1"
 dummyChatGroupLocal1Message1Status = MsgStatusReceived
 dummyChatGroupLocal1Message1Seen = true
 dummyChatGroupLocal1Message1 = new Message(dummyChatGroupLocal1Message1Id,dummyChatGroupLocal1Message1Origin,dummyChatGroupLocal1Message1Ts,dummyChatGroupLocal1Message1Root,dummyChatGroupLocal1Message1Dest,dummyChatGroupLocal1Message1Type,dummyChatGroupLocal1Message1Subtype,dummyChatGroupLocal1Message1Message,dummyChatGroupLocal1Message1Status,dummyChatGroupLocal1Message1Seen)
@@ -270,9 +270,21 @@ dummyChatP2P1Message2Message = "Hello Back"
 dummyChatP2P1Message2Status = MsgStatusSent
 dummyChatP2P1Message2Seen = true
 dummyChatP2P1Message2 = new Message(dummyChatP2P1Message2Id,dummyChatP2P1Message2Origin,dummyChatP2P1Message2Ts,dummyChatP2P1Message2Root,dummyChatP2P1Message2Dest,dummyChatP2P1Message2Type,dummyChatP2P1Message2Subtype,dummyChatP2P1Message2Message,dummyChatP2P1Message2Status,dummyChatP2P1Message2Seen)
+///---Message 2
+dummyChatP2P1Message3Id = 3
+dummyChatP2P1Message3Origin = dummyUserPK
+dummyChatP2P1Message3Ts = "2022-11-29 19:05:02"
+dummyChatP2P1Message3Root = new Route(dummyUserPK,dummyUserPK,dummyUserPK)
+dummyChatP2P1Message3Dest = new Route(dummyPeer1PK,dummyPeer1PK,dummyPeer1PK)
+dummyChatP2P1Message3Type = TxtMsgType
+dummyChatP2P1Message3Subtype = 0
+dummyChatP2P1Message3Message = "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet."
+dummyChatP2P1Message3Status = MsgStatusSent
+dummyChatP2P1Message3Seen = true
+dummyChatP2P1Message3 = new Message(dummyChatP2P1Message3Id,dummyChatP2P1Message3Origin,dummyChatP2P1Message3Ts,dummyChatP2P1Message3Root,dummyChatP2P1Message3Dest,dummyChatP2P1Message3Type,dummyChatP2P1Message3Subtype,dummyChatP2P1Message3Message,dummyChatP2P1Message3Status,dummyChatP2P1Message3Seen)
 
 
-dummyChatP2P1Messages = [dummyChatP2P1Message1,dummyChatP2P1Message2]
+dummyChatP2P1Messages = [dummyChatP2P1Message1,dummyChatP2P1Message2,dummyChatP2P1Message3]
 ///--isVisible
 dummyChatP2P1IsVisible = true
 ///--Type
@@ -514,7 +526,7 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
           </div> -->
         </a></li>`;
 
-      if (this.chat = r.pk){
+      if (this.chat == r.pk){
         document.getElementById('messages').innerHTML = '';
         this.getMessagesFromRoute(r.route).forEach(msg => this._showMessage(msg,r.route));
         document.getElementById('chatButtonsContainer').classList.remove('hidden');
@@ -706,17 +718,43 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
           const liClassName = msg.origin === c.info.pk  ? 'content-right' : 'content-left';
           const containerClassName = msg.origin === c.info.pk ? 'msg-sent' : 'msg-received';
 
+          let statusSymbol
+          if (msg.status == 1){
+            statusSymbol = '>'
+          }
+          if (msg.status == 2){
+            statusSymbol = '>>'
+          }
+          if (msg.status == 3){
+            statusSymbol = 'xx'
+          }
+          if (liClassName == 'content-left'){
+            statusSymbol = ''
+          }
+
           let msgArea = document.getElementById('messages');
           let mustScroll = (msgArea.scrollHeight - msgArea.scrollTop) === msgArea.userHeight;
 
           if (route.visor == route.server){
           //P2P-Chat
           document.getElementById('messages').innerHTML +=
-            `<li class="${liClassName}"><div class="msg-container ${containerClassName}"><div>${msg.message}</div><div class="message-time">${msg.ts}</div></div></li>`;
+            `<li class="${liClassName}">
+              <div class="msg-container ${containerClassName}">
+                <div>${msg.message}</div>
+                <div class="message-infos">${msg.ts} ${statusSymbol}</div>
+              </div>
+            </li>`;
           }
           else{
             document.getElementById('messages').innerHTML +=
-            `<li class="${liClassName}"><div class="msg-container ${containerClassName}"><div class="msg-alias">${this.getAliasFromPKAndRoute(msg.origin,route)}</div><div class="message-pk">${msg.origin}</div><div>${msg.message}</div><div class="message-time">${msg.ts}</div></div></li>`;
+            `<li class="${liClassName}">
+              <div class="msg-container ${containerClassName}">
+                <div class="msg-alias">${this.getAliasFromPKAndRoute(msg.origin,route)}</div>
+                <div class="message-pk">${msg.origin}</div>
+                <div>${msg.message}</div>
+                <div class="message-infos">${msg.ts} ${statusSymbol}</div>
+              </div>
+            </li>`;
           }
           if (mustScroll) {
             msgArea.scrollTop = msgArea.scrollHeight;
@@ -751,6 +789,8 @@ dummyChatP2P2 = new Room(dummyChatP2P2Route,dummyChatP2P2Info,dummyChatP2P2Messa
       this._hideSettings();
       this._hideInAddLocal();
       this._hideInJoinRemote();
+
+      document.getElementById('msgField').value = '';
 
       this.chat = pk;
       document.querySelectorAll('.destination').forEach(item => {

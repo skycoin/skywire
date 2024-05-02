@@ -2,13 +2,11 @@
 package cli
 
 import (
-	"fmt"
-	"log"
-
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 
 	clichat "github.com/skycoin/skywire/cmd/apps/skychat/cli/chat"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app"
@@ -18,6 +16,9 @@ import (
 
 var httpport string
 var rpcport string
+
+// Applog is the logger for the skychat app chat:run
+var Applog *logging.Logger
 
 // RootCmd is the root command for skychat
 var RootCmd = &cobra.Command{
@@ -34,13 +35,15 @@ var RootCmd = &cobra.Command{
 	Version:               buildinfo.Version(),
 	Run: func(cmd *cobra.Command, args []string) {
 
+		Applog = logging.MustGetLogger("chat:run")
+
 		//TODO: Setup Databases depending on flags/attributes
 
 		interfaceadapters.InterfaceAdapterServices = interfaceadapters.NewServices()
 		defer func() {
 			err := interfaceadapters.InterfaceAdapterServices.Close()
 			if err != nil {
-				fmt.Println(err.Error())
+				Applog.Errorln(err)
 			}
 		}()
 
@@ -48,7 +51,8 @@ var RootCmd = &cobra.Command{
 			interfaceadapters.InterfaceAdapterServices.UserRepository,
 			interfaceadapters.InterfaceAdapterServices.VisorRepository,
 			interfaceadapters.InterfaceAdapterServices.NotificationService,
-			interfaceadapters.InterfaceAdapterServices.MessengerService)
+			interfaceadapters.InterfaceAdapterServices.MessengerService,
+			interfaceadapters.InterfaceAdapterServices.ConnectionHandlerService)
 
 		inputports.InputportsServices = inputports.NewServices(app.AppServices, httpport, rpcport)
 
@@ -73,7 +77,7 @@ func init() {
 	RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
 	RootCmd.PersistentFlags().MarkHidden("help") //nolint
 
-	RootCmd.Flags().StringVar(&httpport, "httpport", ":8001", "port to bind")
+	RootCmd.Flags().StringVar(&httpport, "addr", ":8001", "port to bind")
 	RootCmd.Flags().StringVar(&rpcport, "rpcport", ":4040", "port to bind")
 }
 
@@ -94,7 +98,7 @@ func Execute() {
 	})
 
 	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
+		Applog.Fatal("Failed to execute command: ", err)
 	}
 }
 

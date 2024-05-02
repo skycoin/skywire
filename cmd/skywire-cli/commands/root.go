@@ -22,11 +22,11 @@ import (
 	cliskysocksc "github.com/skycoin/skywire/cmd/skywire-cli/commands/proxy"
 	clireward "github.com/skycoin/skywire/cmd/skywire-cli/commands/reward"
 	clirewards "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards"
-	clirtfind "github.com/skycoin/skywire/cmd/skywire-cli/commands/rtfind"
-	clirtree "github.com/skycoin/skywire/cmd/skywire-cli/commands/rtree"
+	cliroute "github.com/skycoin/skywire/cmd/skywire-cli/commands/route"
 	cliskyfwd "github.com/skycoin/skywire/cmd/skywire-cli/commands/skyfwd"
 	cliskyrev "github.com/skycoin/skywire/cmd/skywire-cli/commands/skyrev"
 	clisurvey "github.com/skycoin/skywire/cmd/skywire-cli/commands/survey"
+	clitp "github.com/skycoin/skywire/cmd/skywire-cli/commands/tp"
 	cliut "github.com/skycoin/skywire/cmd/skywire-cli/commands/ut"
 	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 	clivpn "github.com/skycoin/skywire/cmd/skywire-cli/commands/vpn"
@@ -45,8 +45,8 @@ func init() {
 		clireward.RootCmd,
 		clirewards.RootCmd,
 		clisurvey.RootCmd,
-		clirtfind.RootCmd,
-		clirtree.RootCmd,
+		cliroute.RootCmd,
+		clitp.RootCmd,
 		climdisc.RootCmd,
 		clicompletion.RootCmd,
 		clilog.RootCmd,

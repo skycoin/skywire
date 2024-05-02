@@ -8,8 +8,7 @@ import (
 // DefaultExternalServices returns default externalServices configuration for localhost environments
 func (env *EnvConfig) DefaultExternalServices() *EnvConfig {
 	env.ExternalServices = ExternalServicesConfig{
-		RedisAddress:  "localhost:6379",
-		SyslogAddress: "localhost:514",
+		RedisAddress: "localhost:6379",
 	}
 	return env
 }

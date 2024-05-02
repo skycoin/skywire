@@ -17,7 +17,7 @@ import (
 // handleLocalServerMessage handles messages received to a local route (server/room)
 // these can also be locally sent messages from the user to his own local route
 func (ms MessengerService) handleLocalServerMessage(m message.Message) {
-	fmt.Println("handleLocalServerMessage")
+	ms.log.Debugln("handleLocalServerMessage")
 
 	pkroute := util.NewRoomRoute(m.GetDestinationVisor(), m.GetDestinationServer(), m.GetDestinationRoom())
 
@@ -107,12 +107,25 @@ func (ms MessengerService) handleLocalServerMessage(m message.Message) {
 		//handle the message
 		err = ms.handleLocalServerInfoMsgType(visor, m)
 		if err != nil {
-			fmt.Println(err)
+			ms.errs <- err
+			return
+		}
+		//send message to let sender know we received his message
+		err = ms.SendMessageReceived(m)
+		if err != nil {
+			ms.errs <- err
+			return
 		}
 	case message.TxtMsgType:
 		//add the message to the visor and update repository
 		visor.AddMessage(pkroute, m)
 		err = ms.visorRepo.Set(*visor)
+		if err != nil {
+			ms.errs <- err
+			return
+		}
+		//send message to let sender know we received his message
+		err = ms.SendMessageReceived(m)
 		if err != nil {
 			ms.errs <- err
 			return
@@ -123,6 +136,14 @@ func (ms MessengerService) handleLocalServerMessage(m message.Message) {
 			ms.errs <- err
 			return
 		}
+		/*
+			TODO: SendMessageDistributed
+			//send message to let sender know we distributed his message
+			err = ms.SendMessageReceived(m)
+			if err != nil {
+				ms.errs <- err
+				return
+			}*/
 	default:
 		ms.errs <- fmt.Errorf("incorrect data received")
 		return
@@ -133,7 +154,7 @@ func (ms MessengerService) handleLocalServerMessage(m message.Message) {
 // handleLocalServerConnMsgType handles an incoming connection message and either accepts it and sends back the own info as message
 // or if the public key is in the blacklist rejects the chat request.
 func (ms MessengerService) handleLocalServerConnMsgType(visor *chat.Visor, m message.Message) error {
-	fmt.Println("handleLocalServerConnMsgType")
+	ms.log.Debugln("handleLocalServerConnMsgType")
 
 	pkroute := util.NewRoomRoute(m.GetDestinationVisor(), m.GetDestinationServer(), m.GetDestinationRoom())
 
@@ -174,7 +195,7 @@ func (ms MessengerService) handleLocalServerConnMsgType(visor *chat.Visor, m mes
 				//add remote peer to server
 				err = server.AddMember(*dummyPeer)
 				if err != nil {
-					fmt.Println(err)
+					return err
 				}
 				//add remote peer to room
 				err = room.AddMember(*dummyPeer)
@@ -221,7 +242,6 @@ func (ms MessengerService) handleLocalServerConnMsgType(visor *chat.Visor, m mes
 
 				bytes, err := json.Marshal(members)
 				if err != nil {
-					fmt.Printf("Failed to marshal json: %v", err)
 					return err
 				}
 
@@ -276,7 +296,6 @@ func (ms MessengerService) handleLocalServerConnMsgType(visor *chat.Visor, m mes
 
 			bytes, err := json.Marshal(members)
 			if err != nil {
-				fmt.Printf("Failed to marshal json: %v", err)
 				return err
 			}
 
@@ -315,7 +334,7 @@ func (ms MessengerService) handleLocalServerConnMsgType(visor *chat.Visor, m mes
 
 // handleLocalServerCmdMsgType handles messages of type cmd of peers(admins/moderators)
 func (ms MessengerService) handleLocalServerCmdMsgType(visor *chat.Visor, m message.Message) error {
-	fmt.Println("handleLocalServerCmdMsgType")
+	ms.log.Debugln("handleLocalServerCmdMsgType")
 
 	pkroute := util.NewRoomRoute(m.GetDestinationVisor(), m.GetDestinationServer(), m.GetDestinationRoom())
 
@@ -328,7 +347,6 @@ func (ms MessengerService) handleLocalServerCmdMsgType(visor *chat.Visor, m mess
 	//get user
 	usr, err := ms.usrRepo.GetUser()
 	if err != nil {
-		fmt.Printf("Error getting user from repository: %s", err)
 		return err
 	}
 
@@ -343,7 +361,7 @@ func (ms MessengerService) handleLocalServerCmdMsgType(visor *chat.Visor, m mess
 		i := info.Info{}
 		err = json.Unmarshal(m.Message, &i)
 		if err != nil {
-			return fmt.Errorf("failed to unmarshal json message: %v", err)
+			return err
 		}
 
 		// make a new route
@@ -415,7 +433,7 @@ func (ms MessengerService) handleLocalServerCmdMsgType(visor *chat.Visor, m mess
 			pk := cipher.PubKey{}
 			err = json.Unmarshal(m.Message, &pk)
 			if err != nil {
-				return fmt.Errorf("failed to unmarshal json message: %v", err)
+				return err
 			}
 			err = room.AddMuted(pk)
 			if err != nil {
@@ -447,7 +465,6 @@ func (ms MessengerService) handleLocalServerCmdMsgType(visor *chat.Visor, m mess
 			muted := room.GetAllMuted()
 			bytes, err := json.Marshal(muted)
 			if err != nil {
-				fmt.Printf("Failed to marshal json: %v", err)
 				return err
 			}
 			msg := message.NewRoomMutedMessage(pkroute, pkroute, bytes)
@@ -473,7 +490,7 @@ func (ms MessengerService) handleLocalServerCmdMsgType(visor *chat.Visor, m mess
 			pk := cipher.PubKey{}
 			err = json.Unmarshal(m.Message, &pk)
 			if err != nil {
-				return fmt.Errorf("failed to unmarshal json message: %v", err)
+				return err
 			}
 			err = room.DeleteMuted(pk)
 			if err != nil {
@@ -498,7 +515,6 @@ func (ms MessengerService) handleLocalServerCmdMsgType(visor *chat.Visor, m mess
 			muted := room.GetAllMuted()
 			bytes, err := json.Marshal(muted)
 			if err != nil {
-				fmt.Printf("Failed to marshal json: %v", err)
 				return err
 			}
 			msg := message.NewRoomMutedMessage(pkroute, pkroute, bytes)
@@ -523,7 +539,7 @@ func (ms MessengerService) handleLocalServerCmdMsgType(visor *chat.Visor, m mess
 			pk := cipher.PubKey{}
 			err = json.Unmarshal(m.Message, &pk)
 			if err != nil {
-				return fmt.Errorf("failed to unmarshal json message: %v", err)
+				return err
 			}
 			err = room.AddMod(pk)
 			if err != nil {
@@ -547,7 +563,6 @@ func (ms MessengerService) handleLocalServerCmdMsgType(visor *chat.Visor, m mess
 			muted := room.GetAllMods()
 			bytes, err := json.Marshal(muted)
 			if err != nil {
-				fmt.Printf("Failed to marshal json: %v", err)
 				return err
 			}
 			msg := message.NewRoomModsMessage(pkroute, pkroute, bytes)
@@ -572,7 +587,7 @@ func (ms MessengerService) handleLocalServerCmdMsgType(visor *chat.Visor, m mess
 			pk := cipher.PubKey{}
 			err = json.Unmarshal(m.Message, &pk)
 			if err != nil {
-				return fmt.Errorf("failed to unmarshal json message: %v", err)
+				return err
 			}
 			err = room.DeleteMod(pk)
 			if err != nil {
@@ -615,7 +630,7 @@ func (ms MessengerService) handleLocalServerCmdMsgType(visor *chat.Visor, m mess
 
 // handleLocalServerInfoMsgType handles messages of type info of peers
 func (ms MessengerService) handleLocalServerInfoMsgType(v *chat.Visor, m message.Message) error {
-	fmt.Println("handleLocalServerInfoMsgType")
+	ms.log.Debugln("handleLocalServerInfoMsgType")
 
 	pkroute := util.NewRoomRoute(m.GetDestinationVisor(), m.GetDestinationServer(), m.GetDestinationRoom())
 
@@ -625,13 +640,8 @@ func (ms MessengerService) handleLocalServerInfoMsgType(v *chat.Visor, m message
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal json message: %v", err)
 	}
-	fmt.Println("---------------------------------------------------------------------------------------------------")
-	fmt.Printf("InfoMessage: \n")
-	fmt.Printf("Pk:		%s \n", i.Pk.Hex())
-	fmt.Printf("Alias:	%s \n", i.Alias)
-	fmt.Printf("Desc:	%s \n", i.Desc)
-	//fmt.Printf("Img:	%s \n", i.Img)
-	fmt.Println("---------------------------------------------------------------------------------------------------")
+
+	ms.log.Debugln(i.PrettyPrint())
 
 	//get server from visor
 	s, err := v.GetServerByPK(pkroute.Server)
@@ -679,7 +689,6 @@ func (ms MessengerService) handleLocalServerInfoMsgType(v *chat.Visor, m message
 
 	bytes, err := json.Marshal(members)
 	if err != nil {
-		fmt.Printf("Failed to marshal json: %v", err)
 		return err
 	}
 
@@ -696,7 +705,9 @@ func (ms MessengerService) handleLocalServerInfoMsgType(v *chat.Visor, m message
 
 // handleLocalRoomTextMstType handles messages of type text of the p2p chat
 func (ms MessengerService) handleLocalRoomTextMsgType(visor *chat.Visor, m message.Message) error {
-	fmt.Println("handleLocalRoomTextMsgType")
+	ms.log.Debugln("handleLocalRoomTextMsgType")
+
+	ms.log.Debugln(m.PrettyPrintTextMessage())
 
 	pkroute := util.NewRoomRoute(m.GetDestinationVisor(), m.GetDestinationServer(), m.GetDestinationRoom())
 
@@ -738,7 +749,7 @@ func (ms MessengerService) handleLocalRoomTextMsgType(visor *chat.Visor, m messa
 
 // sendMessageToPeers sends the given message to all peers of the given route
 func (ms MessengerService) sendMessageToPeers(v *chat.Visor, pkroute util.PKRoute, m message.Message) error {
-	fmt.Println("sendMessageToPeers")
+	ms.log.Debugln("sendMessageToPeers")
 
 	server, err := v.GetServerByPK(pkroute.Server)
 	if err != nil {
@@ -763,8 +774,8 @@ func (ms MessengerService) sendMessageToPeers(v *chat.Visor, pkroute util.PKRout
 
 	for _, peer := range members {
 
-		//only send to remote peers and not to ourself
-		if peer.GetPK() != pkroute.Visor {
+		//only send to remote peers and not to ourself or originator
+		if peer.GetPK() != pkroute.Visor && peer.GetPK() != m.Origin {
 
 			m.Root = pkroute
 			m.Dest = util.NewP2PRoute(peer.GetPK())
@@ -783,7 +794,6 @@ func (ms MessengerService) sendMessageToPeers(v *chat.Visor, pkroute util.PKRout
 func (ms MessengerService) sendLocalRouteInfoToPeer(pkroute util.PKRoute, dest util.PKRoute, info info.Info) error {
 	bytes, err := json.Marshal(info)
 	if err != nil {
-		fmt.Printf("Failed to marshal json: %v", err)
 		return err
 	}
 

@@ -15,7 +15,7 @@ import (
 
 // handleRemoteServerMessage handles all messages from a remote server/room
 func (ms MessengerService) handleRemoteServerMessage(m message.Message) {
-	fmt.Println("handleRemoteServerMessage")
+	ms.log.Debugln("handleRemoteServerMessage")
 
 	pkroute := util.NewRoomRoute(m.GetRootVisor(), m.GetRootServer(), m.GetRootRoom())
 
@@ -49,7 +49,8 @@ func (ms MessengerService) handleRemoteServerMessage(m message.Message) {
 		//handle the message
 		err = ms.handleRemoteRoomConnMsgType(m)
 		if err != nil {
-			fmt.Println(err)
+			ms.errs <- err
+			return
 		}
 	case message.InfoMsgType:
 		//add the message to the visor and update repository
@@ -62,7 +63,8 @@ func (ms MessengerService) handleRemoteServerMessage(m message.Message) {
 		//handle the message
 		err = ms.handleRemoteRoomInfoMsgType(visor, m)
 		if err != nil {
-			fmt.Println(err)
+			ms.errs <- err
+			return
 		}
 	case message.TxtMsgType:
 		//add the message to the visor and update repository
@@ -79,7 +81,15 @@ func (ms MessengerService) handleRemoteServerMessage(m message.Message) {
 			return
 		}
 	case message.CmdMsgType:
-		ms.errs <- fmt.Errorf("commands are not allowed on p2p chats")
+		ms.errs <- fmt.Errorf("commands are not allowed from remote server chats")
+		return
+	case message.StatusMsgType:
+		//handle message
+		err := ms.handleRemoteStatusMsgType(m)
+		if err != nil {
+			ms.errs <- err
+			return
+		}
 		return
 	default:
 		ms.errs <- fmt.Errorf("incorrect data received")
@@ -90,7 +100,7 @@ func (ms MessengerService) handleRemoteServerMessage(m message.Message) {
 
 // handleRemoteRoomConnMsgType handles all messages of type ConnMsgtype of remote servers
 func (ms MessengerService) handleRemoteRoomConnMsgType(m message.Message) error {
-	fmt.Println("handleRemoteRoomConnMsgType")
+	ms.log.Debugln("handleRemoteRoomConnMsgType")
 
 	pkroute := util.NewRoomRoute(m.GetRootVisor(), m.GetRootServer(), m.GetRootRoom())
 
@@ -180,7 +190,7 @@ func (ms MessengerService) removeOwnPkfromRoomForMessageFiltering(m message.Mess
 
 // handleRemoteRoomInfoMsgType handles messages of type info of peers
 func (ms MessengerService) handleRemoteRoomInfoMsgType(v *chat.Visor, m message.Message) error {
-	fmt.Println("handleRemoteRoomInfoMsgType")
+	ms.log.Debugln("handleRemoteRoomInfoMsgType")
 
 	pkroute := util.NewRoomRoute(m.GetRootVisor(), m.GetRootServer(), m.GetRootRoom())
 
@@ -191,15 +201,10 @@ func (ms MessengerService) handleRemoteRoomInfoMsgType(v *chat.Visor, m message.
 		i := info.Info{}
 		err := json.Unmarshal(m.Message, &i)
 		if err != nil {
-			return fmt.Errorf("failed to unmarshal json message: %v", err)
+			return err
 		}
-		fmt.Println("---------------------------------------------------------------------------------------------------")
-		fmt.Printf("InfoMessage: \n")
-		fmt.Printf("Pk:		%s \n", i.Pk.Hex())
-		fmt.Printf("Alias:	%s \n", i.Alias)
-		fmt.Printf("Desc:	%s \n", i.Desc)
-		//fmt.Printf("Img:	%s \n", i.Img)
-		fmt.Println("---------------------------------------------------------------------------------------------------")
+
+		ms.log.Debugln(i.PrettyPrint())
 
 		err = v.SetRouteInfo(pkroute, i)
 		if err != nil {
@@ -222,7 +227,7 @@ func (ms MessengerService) handleRemoteRoomInfoMsgType(v *chat.Visor, m message.
 		members := map[cipher.PubKey]peer.Peer{}
 		err := json.Unmarshal(m.Message, &members)
 		if err != nil {
-			return fmt.Errorf("failed to unmarshal json message: %v", err)
+			return err
 		}
 		server, err := v.GetServerByPK(pkroute.Server)
 		if err != nil {
@@ -262,7 +267,7 @@ func (ms MessengerService) handleRemoteRoomInfoMsgType(v *chat.Visor, m message.
 		muted := map[cipher.PubKey]bool{}
 		err := json.Unmarshal(m.Message, &muted)
 		if err != nil {
-			return fmt.Errorf("failed to unmarshal json message: %v", err)
+			return err
 		}
 		server, err := v.GetServerByPK(pkroute.Server)
 		if err != nil {
@@ -303,14 +308,11 @@ func (ms MessengerService) handleRemoteRoomInfoMsgType(v *chat.Visor, m message.
 
 // handleRemoteRoomTextMsgType handles messages of type text of the remote chat
 func (ms MessengerService) handleRemoteRoomTextMsgType(m message.Message) error {
-	fmt.Println("handleRemoteRoomTextMsgType")
+	ms.log.Debugln("handleRemoteRoomTextMsgType")
 
 	pkroute := util.NewRoomRoute(m.GetRootVisor(), m.GetRootServer(), m.GetRootRoom())
 
-	fmt.Println("---------------------------------------------------------------------------------------------------")
-	fmt.Printf("TextMessage: \n")
-	fmt.Printf("Text:	%s \n", m.Message)
-	fmt.Println("---------------------------------------------------------------------------------------------------")
+	ms.log.Debugln(m.PrettyPrintTextMessage())
 
 	//notify about a new TextMessage
 	n := notification.NewMsgNotification(pkroute)
@@ -320,4 +322,46 @@ func (ms MessengerService) handleRemoteRoomTextMsgType(m message.Message) error 
 	}
 
 	return nil
+}
+
+// handleRemoteStatusMsgType handles messages of type status of the remote chat
+func (ms MessengerService) handleRemoteStatusMsgType(m message.Message) error {
+	ms.log.Debugln("handleRemoteStatusMsgType")
+
+	pkroute := m.Root
+
+	v, err := ms.visorRepo.GetByPK(pkroute.Visor)
+	if err != nil {
+		return err
+	}
+
+	r, err := v.GetRoomByRoute(pkroute)
+	if err != nil {
+		return err
+	}
+
+	msg, err := r.GetMessageByID(string(m.Message))
+	if err != nil {
+		return err
+	}
+
+	msg.Status = m.MsgSubtype
+
+	v.UpdateMessage(pkroute, msg)
+
+	err = ms.visorRepo.Set(*v)
+	if err != nil {
+		return err
+	}
+
+	//notify about updated message
+	//TODO: UpdateMsgNotification
+	n := notification.NewMsgNotification(pkroute)
+	err = ms.ns.Notify(n)
+	if err != nil {
+		return err
+	}
+
+	return nil
+
 }

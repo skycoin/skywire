@@ -3,6 +3,8 @@ package message
 import (
 	"time"
 
+	"github.com/rs/xid"
+
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/util"
 )
@@ -18,9 +20,29 @@ func getUTCTimeStamp() time.Time {
 	return now
 }
 
+func newID() string {
+	return xid.New().String()
+}
+
+// NewStatusMessage returns a status Message
+func NewStatusMessage(pkOrigin cipher.PubKey, routeRoot util.PKRoute, routeDestination util.PKRoute, id string, status int) Message {
+	m := Message{}
+	m.ID = newID()
+	m.Origin = pkOrigin
+	m.Root = routeRoot
+	m.Dest = routeDestination
+	m.MsgType = StatusMsgType
+	m.MsgSubtype = status
+	m.Message = []byte(id)
+	m.Status = MsgStatusInitial
+	m.Time = getUTCTimeStamp()
+	return m
+}
+
 // NewTextMessage returns a Message
 func NewTextMessage(pkOrigin cipher.PubKey, routeDestination util.PKRoute, msg []byte) Message {
 	m := Message{}
+	m.ID = newID()
 	m.Origin = pkOrigin
 	m.Root = util.NewP2PRoute(pkOrigin)
 	m.Dest = routeDestination
@@ -35,6 +57,7 @@ func NewTextMessage(pkOrigin cipher.PubKey, routeDestination util.PKRoute, msg [
 // NewRouteRequestMessage returns a request Message
 func NewRouteRequestMessage(pkOrigin cipher.PubKey, routeDestination util.PKRoute) Message {
 	m := Message{}
+	m.ID = newID()
 	m.Origin = pkOrigin
 	m.Root = util.NewP2PRoute(pkOrigin)
 	m.Dest = routeDestination
@@ -50,6 +73,7 @@ func NewRouteRequestMessage(pkOrigin cipher.PubKey, routeDestination util.PKRout
 // pk is the users pk to set the messages root
 func NewChatAcceptMessage(root util.PKRoute, dest util.PKRoute) Message {
 	m := Message{}
+	m.ID = newID()
 	m.Origin = root.Visor
 	m.Root = root
 	m.Dest = dest
@@ -64,6 +88,7 @@ func NewChatAcceptMessage(root util.PKRoute, dest util.PKRoute) Message {
 // NewChatRejectMessage returns new chat rejected message
 func NewChatRejectMessage(root util.PKRoute, dest util.PKRoute) Message {
 	m := Message{}
+	m.ID = newID()
 	m.Origin = root.Visor
 	m.Root = root
 	m.Dest = dest
@@ -78,6 +103,7 @@ func NewChatRejectMessage(root util.PKRoute, dest util.PKRoute) Message {
 // NewChatLeaveMessage returns new chat leave message
 func NewChatLeaveMessage(root util.PKRoute, dest util.PKRoute) Message {
 	m := Message{}
+	m.ID = newID()
 	m.Origin = root.Visor
 	m.Root = root
 	m.Dest = dest
@@ -92,6 +118,7 @@ func NewChatLeaveMessage(root util.PKRoute, dest util.PKRoute) Message {
 // NewRouteDeletedMessage returns new message to info about deleted route
 func NewRouteDeletedMessage(root util.PKRoute, dest util.PKRoute) Message {
 	m := Message{}
+	m.ID = newID()
 	m.Origin = root.Visor
 	m.Root = root
 	m.Dest = dest
@@ -106,6 +133,7 @@ func NewRouteDeletedMessage(root util.PKRoute, dest util.PKRoute) Message {
 // NewChatInfoMessage returns new chat info
 func NewChatInfoMessage(root util.PKRoute, dest util.PKRoute, info []byte) Message {
 	m := Message{}
+	m.ID = newID()
 	m.Origin = root.Visor
 	m.Root = root
 	m.Dest = dest
@@ -120,6 +148,7 @@ func NewChatInfoMessage(root util.PKRoute, dest util.PKRoute, info []byte) Messa
 // NewAddRoomMessage returns a Message
 func NewAddRoomMessage(root util.PKRoute, dest util.PKRoute, info []byte) Message {
 	m := Message{}
+	m.ID = newID()
 	m.Origin = root.Visor
 	m.Root = root
 	m.Dest = dest
@@ -134,6 +163,7 @@ func NewAddRoomMessage(root util.PKRoute, dest util.PKRoute, info []byte) Messag
 // NewDeleteRoomMessage returns a Message
 func NewDeleteRoomMessage(root util.PKRoute, dest util.PKRoute) Message {
 	m := Message{}
+	m.ID = newID()
 	m.Origin = root.Visor
 	m.Root = root
 	m.Dest = dest
@@ -148,6 +178,7 @@ func NewDeleteRoomMessage(root util.PKRoute, dest util.PKRoute) Message {
 // NewRoomMembersMessage returns a Message of room members
 func NewRoomMembersMessage(root util.PKRoute, dest util.PKRoute, members []byte) Message {
 	m := Message{}
+	m.ID = newID()
 	m.Origin = root.Visor
 	m.Root = root
 	m.Dest = dest
@@ -162,6 +193,7 @@ func NewRoomMembersMessage(root util.PKRoute, dest util.PKRoute, members []byte)
 // NewRoomModsMessage returns a Message of room moderators
 func NewRoomModsMessage(root util.PKRoute, dest util.PKRoute, moderators []byte) Message {
 	m := Message{}
+	m.ID = newID()
 	m.Origin = root.Visor
 	m.Root = root
 	m.Dest = dest
@@ -176,6 +208,7 @@ func NewRoomModsMessage(root util.PKRoute, dest util.PKRoute, moderators []byte)
 // NewRoomMutedMessage returns a Message of muted pks of room
 func NewRoomMutedMessage(root util.PKRoute, dest util.PKRoute, muted []byte) Message {
 	m := Message{}
+	m.ID = newID()
 	m.Origin = root.Visor
 	m.Root = root
 	m.Dest = dest
@@ -190,6 +223,7 @@ func NewRoomMutedMessage(root util.PKRoute, dest util.PKRoute, muted []byte) Mes
 // NewMutePeerMessage returns a Message to mute a peer
 func NewMutePeerMessage(root util.PKRoute, dest util.PKRoute, pk []byte) Message {
 	m := Message{}
+	m.ID = newID()
 	m.Origin = root.Visor
 	m.Root = root
 	m.Dest = dest
@@ -204,6 +238,7 @@ func NewMutePeerMessage(root util.PKRoute, dest util.PKRoute, pk []byte) Message
 // NewUnmutePeerMessage returns a Message to mute a peer
 func NewUnmutePeerMessage(root util.PKRoute, dest util.PKRoute, pk []byte) Message {
 	m := Message{}
+	m.ID = newID()
 	m.Origin = root.Visor
 	m.Root = root
 	m.Dest = dest
@@ -218,6 +253,7 @@ func NewUnmutePeerMessage(root util.PKRoute, dest util.PKRoute, pk []byte) Messa
 // NewHireModeratorMessage returns a Message to hire a peer as moderator
 func NewHireModeratorMessage(root util.PKRoute, dest util.PKRoute, pk []byte) Message {
 	m := Message{}
+	m.ID = newID()
 	m.Origin = root.Visor
 	m.Root = root
 	m.Dest = dest
@@ -232,6 +268,7 @@ func NewHireModeratorMessage(root util.PKRoute, dest util.PKRoute, pk []byte) Me
 // NewFireModeratorMessage returns a Message to fire a moderator
 func NewFireModeratorMessage(root util.PKRoute, dest util.PKRoute, pk []byte) Message {
 	m := Message{}
+	m.ID = newID()
 	m.Origin = root.Visor
 	m.Root = root
 	m.Dest = dest

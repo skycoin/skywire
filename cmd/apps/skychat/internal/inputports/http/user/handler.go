@@ -9,6 +9,7 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	userservices "github.com/skycoin/skywire/cmd/apps/skychat/internal/app/user"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/user/commands"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/info"
@@ -18,11 +19,12 @@ import (
 // Handler User http request handler
 type Handler struct {
 	userServices userservices.UserServices
+	log          *logging.Logger
 }
 
 // NewHandler Constructor
 func NewHandler(app userservices.UserServices) *Handler {
-	return &Handler{userServices: app}
+	return &Handler{userServices: app, log: logging.MustGetLogger("chat:http")}
 }
 
 // AddPeerURLParam contains the parameter identifier to be parsed by the handler
@@ -80,7 +82,7 @@ func (c Handler) DeletePeer(w http.ResponseWriter, r *http.Request) {
 	pk := cipher.PubKey{}
 	err := pk.Set(vars[DeletePeerURLParam])
 	if err != nil {
-		fmt.Println("could not convert pubkey")
+		c.log.Errorln("could not convert pubkey")
 	}
 
 	peerDeleteCommand := commands.DeletePeerRequest{PK: pk}
