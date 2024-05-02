@@ -357,24 +357,6 @@ func server() {
 		})
 	*/
 
-	r1.GET("/tpsn", func(c *gin.Context) {
-		c.Writer.Header().Set("Server", "")
-		c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
-		c.Writer.Header().Set("Transfer-Encoding", "chunked")
-		c.Writer.WriteHeader(http.StatusOK)
-		c.Writer.Flush()
-		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport Setup Node</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"))
-		c.Writer.Flush()
-		c.Writer.Write([]byte(navlinks))
-		c.Writer.Flush()
-		tpsntree, _ := script.Exec(`skywire cli log st -d rewards/tp_setup`).Bytes() //nolint
-		c.Writer.Write(ansihtml.ConvertToHTML(tpsntree))
-		c.Writer.Flush()
-		c.Writer.Write([]byte(htmlend))
-		c.Writer.Flush()
-		return
-	})
-
 	r1.GET("/log-collection", func(c *gin.Context) {
 		c.Writer.Header().Set("Server", "")
 		c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
@@ -447,8 +429,8 @@ func server() {
 		surveycount, _ := script.FindFiles("rewards/log_backups/").Match("node-info.json").CountLines() //nolint
 		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))                         //nolint
 		c.Writer.Flush()
-		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups`).Bytes() //nolint
-		c.Writer.Write(ansihtml.ConvertToHTML(st))                                //nolint
+		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -e rewards/tp_setup`).Bytes() //nolint
+		c.Writer.Write(ansihtml.ConvertToHTML(st))                                                    //nolint
 		c.Writer.Flush()
 		c.Writer.Write([]byte(htmltoplink)) //nolint
 		c.Writer.Flush()
@@ -475,8 +457,8 @@ func server() {
 		surveycount, _ := script.FindFiles("rewards/log_backups/").Match("node-info.json").CountLines() //nolint
 		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))                         //nolint
 		c.Writer.Flush()
-		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -p ` + c.Param("pk")).Bytes() //nolint
-		c.Writer.Write(ansihtml.ConvertToHTML(st))                                                    //nolint
+		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -e rewards/tp_setup -p ` + c.Param("pk")).Bytes() //nolint
+		c.Writer.Write(ansihtml.ConvertToHTML(st))                                                                        //nolint
 		c.Writer.Flush()
 		c.Writer.Write([]byte(htmltoplink)) //nolint
 		c.Writer.Flush()
