@@ -24,15 +24,15 @@ import (
 
 // ConnectionHandlerService provides a netcon implementation of the Service
 type ConnectionHandlerService struct {
-	ctx          context.Context
-	log          *logging.Logger
-	ns           notification.Service
-	cliRepo      client.Repository
-	visorRepo    chat.Repository
-	msgrx        chan message.Message // out-channel for this servie (when the connection received a message and wants to send it to other services)
-	errs         chan error
-	conns        map[cipher.PubKey]net.Conn
-	handledConns map[cipher.PubKey]net.Conn
+	ctx       context.Context
+	log       *logging.Logger
+	ns        notification.Service
+	cliRepo   client.Repository
+	visorRepo chat.Repository
+	msgrx     chan message.Message // out-channel for this service (when the connection received a message and wants to send it to other services)
+	errs      chan error
+	conns     map[cipher.PubKey]net.Conn
+	stop      chan cipher.PubKey
 }
 
 // NewConnectionHandlerService constructor for ConnectionHandlerService
@@ -49,56 +49,71 @@ func NewConnectionHandlerService(ns notification.Service, cR client.Repository, 
 
 	ch.conns = make(map[cipher.PubKey]net.Conn)
 	ch.errs = make(chan error, 1)
+	ch.stop = make(chan cipher.PubKey)
 
 	return &ch
 }
 
 // HandleConnection handles the connection to the given Pubkey and incoming messages
-func (ch ConnectionHandlerService) HandleConnection(pk cipher.PubKey) {
+func (ch ConnectionHandlerService) HandleConnection(conn net.Conn, stop chan cipher.PubKey) {
 
-	connection, err := ch.GetConnByPK(pk)
+	raddr := conn.RemoteAddr().(appnet.Addr)
+	ch.log.Debugf("Handling skychat conn on %s from %s network:%s\n", conn.LocalAddr(), raddr.PubKey, conn.RemoteAddr().Network())
+
+	err := ch.AddConn(raddr.PubKey, conn)
 	if err != nil {
 		ch.errs <- err
-		return
+		//return
 	}
 
-	if ch.ConnectionToPkHandled(pk) {
-		ch.errs <- fmt.Errorf("connection already handled")
-		return
-	}
+	defer func() {
+		err = ch.DeleteConn(raddr.PubKey)
+		ch.log.Errorln(err)
 
-	err = ch.AddConnToHandled(pk, connection)
-	if err != nil {
-		ch.errs <- err
-		return
-	}
+		err = conn.Close()
+		if err != nil {
+			ch.log.Errorln(fmt.Errorf("failed to close conn: %v", err))
+		}
+	}()
 
 	for {
+		select {
+		case pk := <-stop:
+			if pk == raddr.PubKey {
+				return
+			}
+		default:
+			messageLength, err := ch.readMessageLengthFromConnection(conn)
+			if err != nil {
+				ch.errs <- err
+				continue
+			}
 
-		messageLength, err := readMessageLengthFromConnection(connection)
-		if err != nil {
-			ch.errs <- err
-			continue
+			messageBytes, err := ch.readNBytesFromConnection(*messageLength, conn)
+			if err != nil {
+				ch.errs <- err
+				continue
+			}
+
+			receivedMessage, err := ch.decodeReceivedBytesToMessage(messageBytes)
+			if err != nil {
+				ch.errs <- err
+				continue
+			}
+
+			ch.log.Debugln(receivedMessage.PrettyPrint(false))
+
+			ch.msgrx <- *receivedMessage
+
 		}
-
-		messageBytes, err := readNBytesFromConnection(*messageLength, connection)
-		if err != nil {
-			ch.errs <- err
-			continue
-		}
-
-		receivedMessage, err := decodeReceivedBytesToMessage(messageBytes)
-		if err != nil {
-			ch.errs <- err
-			continue
-		}
-
-		ch.log.Debugln(receivedMessage.PrettyPrint(false))
-
-		ch.msgrx <- *receivedMessage
-
 	}
 
+}
+
+// UnhandleConnection removes connection from being handled
+func (ch *ConnectionHandlerService) UnhandleConnection(pk cipher.PubKey) error {
+	ch.stop <- pk
+	return nil
 }
 
 // GetReceiveChannel returns the channel used to 'broadcast' received messages from the connectionhandler
@@ -107,21 +122,21 @@ func (ch ConnectionHandlerService) GetReceiveChannel() chan message.Message {
 }
 
 // readMessageLengthFromConnection reads a prefix message of the connection to get the length of the upcoming message
-func readMessageLengthFromConnection(conn net.Conn) (*uint32, error) {
+func (ch *ConnectionHandlerService) readMessageLengthFromConnection(conn net.Conn) (*uint32, error) {
 	prefixMessage := make([]byte, 4)
 	_, err := io.ReadFull(conn, prefixMessage)
 	if err != nil {
 		return nil, err
 	}
 	messageLength := binary.BigEndian.Uint32(prefixMessage)
-	fmt.Printf("readMessageLengthFromConnection - Message Length:	%d \n", messageLength)
+	ch.log.Debugln("readMessageLengthFromConnection - Message Length:	%d \n", messageLength)
 	return &messageLength, nil
 }
 
-func writeMessageLengthPrefixToConnection(message []byte, conn net.Conn) error {
+func (ch *ConnectionHandlerService) writeMessageLengthPrefixToConnection(message []byte, conn net.Conn) error {
 	prefix := make([]byte, 4)
 	binary.BigEndian.PutUint32(prefix, uint32(len(message)))
-	fmt.Printf("Write prefix with %d Bytes to Conn: %s \n", len(prefix), conn.LocalAddr())
+	ch.log.Debugf("Write prefix with %d Bytes to Conn: %s \n", len(prefix), conn.LocalAddr())
 	_, err := conn.Write(prefix)
 	if err != nil {
 		return fmt.Errorf("failed to write prefix: %v", err)
@@ -130,7 +145,7 @@ func writeMessageLengthPrefixToConnection(message []byte, conn net.Conn) error {
 }
 
 // readNBytesFromConnection reads n bytes from the given connection if a max. packetSize of 1024
-func readNBytesFromConnection(n uint32, conn net.Conn) ([]byte, error) {
+func (ch *ConnectionHandlerService) readNBytesFromConnection(n uint32, conn net.Conn) ([]byte, error) {
 	packetBuffer := make([]byte, 1024)
 
 	receivedBytes := make([]byte, 0)
@@ -139,22 +154,22 @@ func readNBytesFromConnection(n uint32, conn net.Conn) ([]byte, error) {
 		packetSize, err := conn.Read(packetBuffer)
 		if err != nil {
 			if err != io.EOF {
-				fmt.Printf("Read error - %s\n", err)
+				ch.log.Errorf("Read error - %s\n", err)
 				return nil, err
 			}
 			break
 		}
 		receivedBytes = append(receivedBytes, packetBuffer[:packetSize]...)
 		recievedBytesCounter += packetSize
-		fmt.Printf("Data:	%d/%d		(PacketSize: %d) \n", recievedBytesCounter, n, packetSize)
+		ch.log.Debugf("Data:	%d/%d		(PacketSize: %d) \n", recievedBytesCounter, n, packetSize)
 	}
-	fmt.Printf("Received %d bytes \n", recievedBytesCounter)
+	ch.log.Debugf("Received %d bytes \n", recievedBytesCounter)
 
 	return receivedBytes, nil
 }
 
 // decodeReceivedBytesToMessage decodes the given bytes to a message.Message
-func decodeReceivedBytesToMessage(messageBytes []byte) (*message.Message, error) {
+func (ch *ConnectionHandlerService) decodeReceivedBytesToMessage(messageBytes []byte) (*message.Message, error) {
 	receivedRawMessage := message.RAWMessage{}
 	err := json.Unmarshal(messageBytes, &receivedRawMessage)
 	if err != nil {
@@ -174,10 +189,7 @@ func (ch ConnectionHandlerService) DialPubKey(pk cipher.PubKey) (net.Conn, error
 		return nil, err
 	}
 
-	conn, err := chatClient.GetConnByPK(pk)
-	if err == nil {
-		return conn, nil
-	}
+	var conn net.Conn
 
 	addr := appnet.Addr{
 		Net:    chatClient.GetNetType(),
@@ -239,18 +251,13 @@ func (ch ConnectionHandlerService) SendMessage(pkroute util.PKRoute, m message.M
 		if err != nil {
 			return err
 		}
-		err = ch.AddConn(pkroute.Visor, conn)
-		if err != nil {
-			return err
-		}
-		ch.log.Debugf("added conn %s	%s\n", conn.RemoteAddr().String(), conn.RemoteAddr().Network())
 
-		go ch.HandleConnection(pkroute.Visor) //nolint:errcheck
+		go ch.HandleConnection(conn, ch.stop) //nolint:errcheck
 	}
 
-	err = writeMessageLengthPrefixToConnection(bytes, conn)
+	err = ch.writeMessageLengthPrefixToConnection(bytes, conn)
 	if err != nil {
-		ch.log.Errorln("Failed to write message length")
+		ch.log.Errorln("failed to write message length")
 	}
 
 	fmt.Printf("Write %d Bytes to Conn: %s \n", len(bytes), conn.LocalAddr())
@@ -356,22 +363,7 @@ func (ch ConnectionHandlerService) Listen() {
 			ch.log.Errorln("Failed to accept conn:", err)
 			return
 		}
-		raddr := conn.RemoteAddr().(appnet.Addr)
-
-		ch.log.Debugf("Accepted skychat conn on %s from %s\n", conn.LocalAddr(), raddr.PubKey)
-
-		err = ch.AddConn(raddr.PubKey, conn)
-		if err != nil {
-			ch.log.Error(err)
-		}
-
-		//error handling in anonymous go func above
-		go ch.HandleConnection(raddr.PubKey)
-		defer func() {
-			err = ch.DeleteConnFromHandled(raddr.PubKey)
-			ch.log.Error(err.Error())
-		}()
-
+		go ch.HandleConnection(conn, ch.stop)
 	}
 }
 
@@ -400,11 +392,13 @@ func (ch *ConnectionHandlerService) DeleteConn(pk cipher.PubKey) error {
 	//check if conn is added
 	if _, ok := ch.conns[pk]; ok {
 		delete(ch.conns, pk)
+		ch.log.Debugln("deleted conn")
 		return nil
 	}
 	return fmt.Errorf("pk has no connection") //? handle as error?
 }
 
+/*
 // ConnectionToPkHandled returns if a connection to the given pk is handled in a go routine
 func (ch *ConnectionHandlerService) ConnectionToPkHandled(pk cipher.PubKey) bool {
 	if _, ok := ch.handledConns[pk]; ok {
@@ -432,3 +426,4 @@ func (ch *ConnectionHandlerService) DeleteConnFromHandled(pk cipher.PubKey) erro
 	}
 	return fmt.Errorf("pk has no connection") //? handle as error?
 }
+*/

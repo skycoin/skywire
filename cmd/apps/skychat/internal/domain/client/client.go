@@ -2,8 +2,6 @@
 package client
 
 import (
-	"fmt"
-	"net"
 	"os"
 	"os/signal"
 	"reflect"
@@ -12,7 +10,6 @@ import (
 	ipc "github.com/james-barrow/golang-ipc"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -23,13 +20,13 @@ import (
 
 // Client defines a chat client
 type Client struct {
-	appCl    *app.Client                // Skywire app client
-	ipcCl    *ipc.Client                // IPC client
-	netType  appnet.Type                // app netType
-	port     routing.Port               // app port
-	log      *logging.Logger            // app logger
-	conns    map[cipher.PubKey]net.Conn // active connections
-	clientCh chan string                // client channel
+	appCl   *app.Client     // Skywire app client
+	ipcCl   *ipc.Client     // IPC client
+	netType appnet.Type     // app netType
+	port    routing.Port    // app port
+	log     *logging.Logger // app logger
+	//conns    map[cipher.PubKey]net.Conn // active connections
+	clientCh chan string // client channel
 }
 
 // Getter
@@ -49,6 +46,7 @@ func (c *Client) GetPort() routing.Port {
 	return c.port
 }
 
+/*
 // GetConns returns a map of active connections
 func (c *Client) GetConns() map[cipher.PubKey]net.Conn {
 	return c.conns
@@ -90,6 +88,7 @@ func (c *Client) DeleteConn(pk cipher.PubKey) error {
 	}
 	return fmt.Errorf("pk has no connection") //? handle as error?
 }
+*/
 
 // GetLog returns *logging.Logger
 func (c *Client) GetLog() *logging.Logger {
@@ -113,7 +112,7 @@ func NewClient() *Client {
 		c.log.Error("Failed to output build info: %v", err)
 	}
 
-	c.conns = make(map[cipher.PubKey]net.Conn)
+	//c.conns = make(map[cipher.PubKey]net.Conn)
 	//c.netType = appnet.TypeSkynet
 	c.netType = appnet.TypeDmsg
 	c.port = routing.Port(1)

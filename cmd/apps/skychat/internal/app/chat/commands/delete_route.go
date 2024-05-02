@@ -4,6 +4,7 @@ package commands
 import (
 	"fmt"
 
+	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/connectionhandler"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/app/messenger"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/chat"
 	"github.com/skycoin/skywire/cmd/apps/skychat/internal/domain/user"
@@ -21,14 +22,19 @@ type DeleteRouteRequestHandler interface {
 }
 
 type deleteRouteRequestHandler struct {
-	messengerService messenger.Service
-	visorRepo        chat.Repository
-	usrRepo          user.Repository
+	connectionhandlerService connectionhandler.Service
+	messengerService         messenger.Service
+	visorRepo                chat.Repository
+	usrRepo                  user.Repository
 }
 
 // NewDeleteRouteRequestHandler Initializes an AddCommandHandler
-func NewDeleteRouteRequestHandler(messengerService messenger.Service, visorRepo chat.Repository, usrRepo user.Repository) DeleteRouteRequestHandler {
-	return deleteRouteRequestHandler{messengerService: messengerService, visorRepo: visorRepo, usrRepo: usrRepo}
+func NewDeleteRouteRequestHandler(connectionhandlerService connectionhandler.Service, messengerService messenger.Service, visorRepo chat.Repository, usrRepo user.Repository) DeleteRouteRequestHandler {
+	return deleteRouteRequestHandler{
+		connectionhandlerService: connectionhandlerService,
+		messengerService:         messengerService,
+		visorRepo:                visorRepo,
+		usrRepo:                  usrRepo}
 }
 
 // Handle Handles the DeleteRouteRequest
@@ -66,7 +72,6 @@ func (h deleteRouteRequestHandler) routeIsOfOwnVisor(route util.PKRoute) bool {
 
 func (h deleteRouteRequestHandler) deleteLocalRoute(command DeleteRouteRequest) error {
 	if command.isDeleteServerRouteCommand() {
-		//TODO: Send_Route_Deleted_Message
 		err := h.deleteServerRoute(command.Route)
 		if err != nil {
 			return err
@@ -79,7 +84,6 @@ func (h deleteRouteRequestHandler) deleteLocalRoute(command DeleteRouteRequest) 
 	}
 
 	if command.isDeleteRoomRouteCommand() {
-		//TODO: Send_Route_Deleted_Message
 		err := h.deleteRoomRoute(command.Route)
 		if err != nil {
 			return err
@@ -159,7 +163,10 @@ func (h deleteRouteRequestHandler) deleteVisorIfEmpty(route util.PKRoute) error 
 	}
 
 	if len(visor.GetAllServer()) == 0 && visor.P2PIsEmpty() {
-		//TODO: delete connection to Visor in client struct
+		err = h.connectionhandlerService.UnhandleConnection(route.Visor)
+		if err != nil {
+			return err
+		}
 		return h.visorRepo.Delete(route.Visor)
 	}
 
@@ -178,11 +185,7 @@ func (h deleteRouteRequestHandler) deleteServerIfEmpty(route util.PKRoute) error
 	}
 
 	if len(server.GetAllRooms()) == 0 {
-		err = visor.DeleteServer(route.Server)
-		if err != nil {
-			return err
-		}
-		return h.visorRepo.Set(*visor)
+		return h.deleteServerRoute(route)
 	}
 
 	return nil

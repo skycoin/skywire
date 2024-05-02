@@ -9,8 +9,8 @@ import (
 
 // Service interface is the interface to the service
 type Service interface {
-	HandleConnection(pk cipher.PubKey)
-	DeleteConnFromHandled(pk cipher.PubKey) error //TODO: refactor to better handling -> this is not beautiful
+	//HandleConnection(pk cipher.PubKey)
+	UnhandleConnection(pk cipher.PubKey) error
 	Listen()
 
 	GetReceiveChannel() chan message.Message

@@ -38,6 +38,12 @@ func NewMessengerService(ns notification.Service, cR client.Repository, uR user.
 
 	ms.errs = make(chan error, 1)
 
+	go func() {
+		if err := <-ms.errs; err != nil {
+			ms.log.Errorf("Error in go MessengerService function: %s \n", err)
+		}
+	}()
+
 	go ms.HandleReceivedMessages()
 
 	return &ms

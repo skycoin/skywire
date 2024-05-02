@@ -51,7 +51,8 @@ var RootCmd = &cobra.Command{
 			interfaceadapters.InterfaceAdapterServices.UserRepository,
 			interfaceadapters.InterfaceAdapterServices.VisorRepository,
 			interfaceadapters.InterfaceAdapterServices.NotificationService,
-			interfaceadapters.InterfaceAdapterServices.MessengerService)
+			interfaceadapters.InterfaceAdapterServices.MessengerService,
+			interfaceadapters.InterfaceAdapterServices.ConnectionHandlerService)
 
 		inputports.InputportsServices = inputports.NewServices(app.AppServices, httpport, rpcport)
 
