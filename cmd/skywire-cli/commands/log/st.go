@@ -33,14 +33,14 @@ func makeTree(dir string) {
 	rootDir := lcDir + "/" + pubKey
 	otherDir := tpsnDir + "/" + pubKey
 	if pubKey == "" {
-		dn, _ := script.ListFiles(rootDir).String()
-		dn1, _ := script.ListFiles(otherDir).String()
-		dirNodes, _ := script.Echo(dn + dn1).Basename().Freq().Column(2).Slice()
+		dn, _ := script.ListFiles(rootDir).String()                              //nolint
+		dn1, _ := script.ListFiles(otherDir).String()                            //nolint
+		dirNodes, _ := script.Echo(dn + dn1).Basename().Freq().Column(2).Slice() //nolint
 		nodes1 := []pterm.TreeNode{}
 		for _, dirNode := range dirNodes {
-			children, _ := script.ListFiles(rootDir + "/" + dirNode).String()
-			children1, _ := script.ListFiles(otherDir + "/" + dirNode).String()
-			kids, _ := script.Echo(children + children1).Slice()
+			children, _ := script.ListFiles(rootDir + "/" + dirNode).String()   //nolint
+			children1, _ := script.ListFiles(otherDir + "/" + dirNode).String() //nolint
+			kids, _ := script.Echo(children + children1).Slice()                //nolint
 			nodes := []pterm.TreeNode{}
 			for _, kid := range kids {
 				var coloredFile string

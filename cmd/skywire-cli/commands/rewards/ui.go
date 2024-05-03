@@ -323,16 +323,15 @@ func server() {
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
 		c.Writer.WriteHeader(http.StatusOK)
 		c.Writer.Flush()
-		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport statistics</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"))
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport statistics</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint
 		c.Writer.Flush()
-		c.Writer.Write([]byte(navlinks))
+		c.Writer.Write([]byte(navlinks)) //nolint
 		c.Writer.Flush()
-		tpstats, _ := script.Exec("skywire cli tp tree -gs").Bytes()
-		c.Writer.Write(ansihtml.ConvertToHTML(tpstats))
+		tpstats, _ := script.Exec("skywire cli tp tree -gs").Bytes() //nolint
+		c.Writer.Write(ansihtml.ConvertToHTML(tpstats))              //nolint
 		c.Writer.Flush()
-		c.Writer.Write([]byte(htmlend))
+		c.Writer.Write([]byte(htmlend)) //nolint
 		c.Writer.Flush()
-		//	c.Writer.Write([]byte(transportstatshtml()))
 		return
 	})
 
@@ -347,7 +346,7 @@ func server() {
 			c.Writer.Flush()
 			c.Writer.Write([]byte(navlinks))
 			c.Writer.Flush()
-			tpTree, _ := script.Exec("skywire-cli rtree").Bytes()
+			tpTree, _ := script.Exec("skywire cli tp tree").Bytes()
 			c.Writer.Write(ansihtml.ConvertToHTML(tpTree))
 			c.Writer.Flush()
 			c.Writer.Write([]byte(htmlend))
