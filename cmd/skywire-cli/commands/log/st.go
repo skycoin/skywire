@@ -92,7 +92,7 @@ func makeTree() {
 	pterm.DefaultTree.WithRoot(tree).Render() //nolint
 }
 
-func getDirNodes(dirPath string) []pterm.TreeNode {  //nolint
+func getDirNodes(dirPath string) []pterm.TreeNode { //nolint
 	nodes := []pterm.TreeNode{}
 
 	files, err := os.ReadDir(dirPath)

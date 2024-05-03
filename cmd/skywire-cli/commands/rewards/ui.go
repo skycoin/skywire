@@ -332,7 +332,6 @@ func server() {
 		c.Writer.Flush()
 		c.Writer.Write([]byte(htmlend)) //nolint
 		c.Writer.Flush()
-		return
 	})
 
 	/* //consumes too much resources when network is hevily transported
