@@ -24,11 +24,11 @@ var stCmd = &cobra.Command{
 	Use:   "st",
 	Short: "survey tree",
 	Run: func(_ *cobra.Command, _ []string) {
-		makeTree(lcDir)
+		makeTree()
 	},
 }
 
-func makeTree(dir string) {
+func makeTree() {
 	var tree pterm.TreeNode
 	rootDir := lcDir + "/" + pubKey
 	otherDir := tpsnDir + "/" + pubKey
@@ -92,7 +92,7 @@ func makeTree(dir string) {
 	pterm.DefaultTree.WithRoot(tree).Render() //nolint
 }
 
-func getDirNodes(dirPath string) []pterm.TreeNode {
+func getDirNodes(dirPath string) []pterm.TreeNode {  //nolint
 	nodes := []pterm.TreeNode{}
 
 	files, err := os.ReadDir(dirPath)
