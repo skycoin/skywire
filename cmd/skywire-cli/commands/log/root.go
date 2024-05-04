@@ -25,6 +25,9 @@ var (
 	writeDir       string
 	lcDir          string
 	tpsnDir        string
+	hideErr        bool
+	showUT         bool
+	pubKeys        []cipher.PubKey
 )
 
 // RootCmd is logCmd
