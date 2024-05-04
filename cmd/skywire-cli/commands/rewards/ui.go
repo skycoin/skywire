@@ -427,8 +427,8 @@ func server() {
 		surveycount, _ := script.FindFiles("rewards/log_backups/").Match("node-info.json").CountLines() //nolint
 		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))                         //nolint
 		c.Writer.Flush()
-		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -e rewards/tp_setup`).Bytes() //nolint
-		c.Writer.Write(ansihtml.ConvertToHTML(st))                                                    //nolint
+		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -e rewards/tp_setup -r`).Bytes() //nolint
+		c.Writer.Write(ansihtml.ConvertToHTML(st))                                                       //nolint
 		c.Writer.Flush()
 		c.Writer.Write([]byte(htmltoplink)) //nolint
 		c.Writer.Flush()
@@ -438,11 +438,22 @@ func server() {
 
 	r1.GET("/log-collection/tree/:pk", func(c *gin.Context) {
 		c.Writer.Header().Set("Server", "")
-		var checkKey cipher.PubKey
-		err := checkKey.Set(c.Param("pk"))
-		if err != nil {
+		if c.Param("pk") == "" {
 			c.Writer.WriteHeader(http.StatusBadRequest)
+			c.Writer.Write([]byte("must specify public key")) //nolint
+			c.Writer.Flush()
 			return
+		}
+		pks := strings.Split(c.Param("pk"), ",")
+		for _, pk := range pks {
+			var pK cipher.PubKey
+			err := pK.Set(pk)
+			if err != nil {
+				c.Writer.WriteHeader(http.StatusBadRequest)
+				c.Writer.Write([]byte("invalid public key: " + pk + " " + err.Error())) //nolint
+				c.Writer.Flush()
+				return
+			}
 		}
 		c.Writer.WriteHeader(http.StatusOK)
 		c.Writer.Header().Set("Server", "")
@@ -455,8 +466,8 @@ func server() {
 		surveycount, _ := script.FindFiles("rewards/log_backups/").Match("node-info.json").CountLines() //nolint
 		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))                         //nolint
 		c.Writer.Flush()
-		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -e rewards/tp_setup -p ` + c.Param("pk")).Bytes() //nolint
-		c.Writer.Write(ansihtml.ConvertToHTML(st))                                                                        //nolint
+		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -e rewards/tp_setup -rup ` + c.Param("pk")).Bytes() //nolint
+		c.Writer.Write(ansihtml.ConvertToHTML(st))                                                                          //nolint
 		c.Writer.Flush()
 		c.Writer.Write([]byte(htmltoplink)) //nolint
 		c.Writer.Flush()
