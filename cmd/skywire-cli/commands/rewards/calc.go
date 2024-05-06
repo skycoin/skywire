@@ -18,7 +18,8 @@ const yearlyTotalRewards int = 408000
 
 var (
 	yearlyTotal           int
-	surveyPath            string
+	hwSurveyPath          string
+	tpsnSurveyPath        string
 	wdate                 = time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 	wDate                 time.Time
 	utfile                string
@@ -40,6 +41,7 @@ type nodeinfo struct {
 	Share      float64 `json:"reward_share"`
 	Reward     float64 `json:"reward_amount"`
 	MacAddr    string
+	TPSN       string
 }
 
 type counting struct {
@@ -60,7 +62,8 @@ func init() {
 	RootCmd.Flags().StringVarP(&disallowArchitectures, "noarch", "n", "amd64", "disallowed architectures, comma separated")
 	RootCmd.Flags().IntVarP(&yearlyTotal, "year", "y", yearlyTotalRewards, "yearly total rewards")
 	RootCmd.Flags().StringVarP(&utfile, "utfile", "u", "ut.txt", "uptime tracker data file")
-	RootCmd.Flags().StringVarP(&surveyPath, "path", "p", "log_collecting", "path to the surveys")
+	RootCmd.Flags().StringVarP(&hwSurveyPath, "lpath", "p", "log_collecting", "path to the surveys")
+	RootCmd.Flags().StringVarP(&tpsnSurveyPath, "tpath", "t", "tp_setup", "path to the transport setup-node surveys")
 	RootCmd.Flags().BoolVarP(&h0, "h0", "0", false, "hide statistical data")
 	RootCmd.Flags().BoolVarP(&h1, "h1", "1", false, "hide survey csv data")
 	RootCmd.Flags().BoolVarP(&h2, "h2", "2", false, "hide reward csv data")
@@ -81,7 +84,11 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 			log.Fatal("Error parsing date:", err)
 			return
 		}
-		_, err = os.Stat(surveyPath)
+		_, err = os.Stat(hwSurveyPath)
+		if os.IsNotExist(err) {
+			log.Fatal("the path to the surveys does not exist\n", err, "\nfetch the surveys with:\n$ skywire-cli log")
+		}
+		_, err = os.Stat(tpsnSurveyPath)
 		if os.IsNotExist(err) {
 			log.Fatal("the path to the surveys does not exist\n", err, "\nfetch the surveys with:\n$ skywire-cli log")
 		}
@@ -111,7 +118,8 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 		var nodesInfos []nodeinfo
 		var grrInfos []nodeinfo
 		for _, pk := range res {
-			nodeInfo := fmt.Sprintf("%s/%s/node-info.json", surveyPath, pk)
+			nodeInfo := fmt.Sprintf("%s/%s/node-info.json", hwSurveyPath, pk)
+			tpsn, tpsnErr := script.File(fmt.Sprintf("%s/%s/tp.json", tpsnSurveyPath, pk)).JQ(`.`).String()              //nolint
 			ip, _ := script.File(nodeInfo).JQ(`."ip.skycoin.com".ip_address`).Replace(" ", "").Replace(`"`, "").String() //nolint
 			ip = strings.TrimRight(ip, "\n")
 			sky, _ := script.File(nodeInfo).JQ(".skycoin_address").Replace(" ", "").Replace(`"`, "").String() //nolint
@@ -142,8 +150,10 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 				Interfaces: ifc,
 				MacAddr:    macs[0],
 				UUID:       uu,
+				TPSN:       tpsn,
 			}
-			if _, disallowed := archMap[arch]; !disallowed && ip != "" && strings.Count(ip, ".") == 3 && sky != "" && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" {
+			//enforce all requirements for rewards
+			if _, disallowed := archMap[arch]; !disallowed && ip != "" && strings.Count(ip, ".") == 3 && sky != "" && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" && tpsnErr == nil {
 				nodesInfos = append(nodesInfos, ni)
 			} else {
 				if grr {
@@ -240,7 +250,7 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 		}
 
 		if !h0 {
-			fmt.Printf("Visors meeting uptime & architecture requirements: %d\n", len(nodesInfos))
+			fmt.Printf("Visors meeting uptime & other requirements: %d\n", len(nodesInfos))
 			fmt.Printf("Unique mac addresses for first interface after lo: %d\n", len(uniqueMac))
 			fmt.Printf("Unique Ip Addresses: %d\n", len(uniqueIP))
 			fmt.Printf("Unique UUIDs: %d\n", len(uniqueUUID))

@@ -42,7 +42,7 @@ A total of up to ~1114.754  Skycoin are distributed daily in leap-years.
 
 ## Rules & Requirements
 
-To obtain Skycoin rewards for running skywire, the following requirements must be met.
+To receive Skycoin rewards for running skywire, the following requirements must be met.
 The update deadlines specify the version of software required as of (i.e. on or before) the specified date in order to maintain reward eligibility:
 
 * **Minimum skywire version v1.3.19** - Cutoff April 1st 2024
@@ -51,7 +51,7 @@ The update deadlines specify the version of software required as of (i.e. on or 
 
 * The visor must be an **ARM or RISC architecture SBC running on approved [hardware](#hardware)**
 
-* Visors must be running on **[the skywire production deployment](https://conf.skywire.skycoin.com)** with a config that is updated on every version.
+* Visors must be running on **[the skywire production deployment](https://conf.skywire.skycoin.com)** with a config that is updated on every version. No default keys or addresses of this configuration may be removed - but you can add keys
 
 * **Only 1 (one) visor per machine**
 
@@ -65,11 +65,15 @@ The update deadlines specify the version of software required as of (i.e. on or 
 
 * **Transports can be established to the visor**
 
+* **The visor responds to Transport Setup-Node requests**
+
 * **The visor responds to pings** - needed for latency-based rewards
 
 * **The visor produces transport bandwidth logs** - needed for bandwidth-based rewards
 
 * **The visor produces a survey** when queried over dmsg by any keys in the survey_whitelist array
+
+* **Rewards are only tendered to visors which have a valid recent response to transport setup-node requests relative to the time of reward calculation** - note that this can be more simply understood as: Rewards will only be tendered to currently online visors according to the transport setup-node and dmsg connection.
 
 ### Exceptions for Deployment Changes with dmsghttp-config (Chinese users)
 
@@ -154,7 +158,7 @@ If this file does not exist for you, it can be created with `skywire-cli config 
 
 **If you do this, please uncomment `PKGENV=true` before saving the file**
 
-### Connection to DMSG network - Survey & transport log collection
+### Connection to DMSG network - hardware survey, transport setup-node survey, transport bandwidth log collection
 
 For any given visor, the system survey and transport bandwidth logs should be downloaded **hourly** over dmsghttp by the reward system.
 
@@ -170,7 +174,9 @@ Note: the transport bandwidth logs will only exist if it was generated; i.e. if 
 
 Note: the system survey (node-info.json) will only exist if the reward address is set.
 
-If your visor is not generating such logging, please reach out to us on telegram [@skywire](https://t.me/skywire) for assistance
+In addition to the above responses and logging which are collected, a survey of transports is conducted by the transport setup-node. This file `tp.json` and it's contents should be visible at the above survey index for any given visor.
+
+If your visor is not generating such logging or errors are indicated, please reach out to us on telegram [@skywire](https://t.me/skywire) for assistance
 
 ### Verifying other requirements
 
