@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -441,7 +442,7 @@ var treeCmd = &cobra.Command{
 			}
 		} else {
 			if lastNode != "" {
-				internal.PrintFatalError(cmd.Flags(), errors.New("must specify source or root node public key if dest or last node key is specified"))
+				internal.PrintFatalError(cmd.Flags(), errors.New("-k, --source <public-key> is missing ; required with -d, --dest <public-key>"))
 			}
 		}
 		tps := internal.GetData(cacheFileTPD, tpdURL+"/all-transports", cacheFilesAge)
@@ -635,12 +636,38 @@ var treeCmd = &cobra.Command{
 					internal.PrintFatalError(cmd.Flags(), errors.New("specified dest or last node public key does not have any transports"))
 				}
 			}
-			l, _ := script.Echo(tps).JQ("[.[] | select(.edges | contains([" + usedkeys[0] + "," + usedkeys[1] + "]))]").Slice() //nolint
-			if len(l) > 0 {
+			l, _ := script.Echo(tps).JQ("[.[] | select(.edges | contains([" + sortedEdgeKeys[0] + "," + sortedEdgeKeys[1] + "]))]").Slice() //nolint
+			if len(l) > 0 && fmt.Sprintf("%v", l) != "[[]]" {
 				pterm.Println(pterm.Red("Direct route:"))
 				for _, m := range l {
 					script.Echo(string(pretty.Color(pretty.Pretty([]byte(m)), nil))).Stdout() //nolint
 				}
+				return
+			}
+			var routeSlice []string
+			var listLevel int
+			re := regexp.MustCompile(`\s+`)
+			for i := len(leveledList) - 1; i >= 0; i-- {
+				if len(routeSlice) == 0 && strings.Contains(leveledList[i].Text, lastnode.String()) {
+					rStepTpid, _ := script.Echo(fmt.Sprintf("%v", leveledList[i].Text)).ReplaceRegexp(re, " ").Column(2).Replace("\n", "").String()       //nolint
+					rStepTp, _ := script.Echo(tps).JQ(".[] | select(.t_id == "+`"`+strings.TrimRight(rStepTpid, "\n")+`"`+")").Replace("\n", "").String() //nolint
+					routeSlice = append(routeSlice, rStepTp)
+					listLevel = leveledList[i].Level
+				}
+				if len(routeSlice) > 0 && leveledList[i].Level == (listLevel-1) {
+					rStepTpid, _ := script.Echo(fmt.Sprintf("%v", leveledList[i].Text)).ReplaceRegexp(re, " ").Column(2).Replace("\n", "").String()       //nolint
+					rStepTp, _ := script.Echo(tps).JQ(".[] | select(.t_id == "+`"`+strings.TrimRight(rStepTpid, "\n")+`"`+")").Replace("\n", "").String() //nolint
+					routeSlice = append(routeSlice, rStepTp)
+					listLevel = leveledList[i].Level
+				}
+			}
+			pterm.Println(pterm.Red("Forward Route:"))
+			for i := len(routeSlice) - 1; i >= 0; i-- {
+				fmt.Printf("%v\n", routeSlice[i])
+			}
+			pterm.Println(pterm.Red("Reverse Route:"))
+			for _, r := range routeSlice {
+				fmt.Printf("%v\n", r)
 			}
 			/*
 						var tM tpdMaps
