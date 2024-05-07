@@ -24,13 +24,11 @@ var (
 	fetchFrom      string
 	writeDir       string
 	lcDir          string
+	tpsnDir        string
+	hideErr        bool
+	showUT         bool
+	pubKeys        []cipher.PubKey
 )
-
-func init() {
-	RootCmd.AddCommand(
-		stCmd, tpCmd,
-	)
-}
 
 // RootCmd is logCmd
 var RootCmd = logCmd
