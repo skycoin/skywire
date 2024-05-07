@@ -1,4 +1,4 @@
-// Package clilog cmd/skywire-cli/commands/log/clist.go
+// Package clilog cmd/skywire-cli/commands/log/log.go
 package clilog
 
 import (
@@ -9,6 +9,9 @@ import (
 )
 
 func init() {
+	if _, err := os.Stat("/bin/bash"); err == nil {
+		RootCmd.AddCommand(tpCmd)
+	}
 	tpCmd.Flags().StringVarP(&lcDir, "dir", "d", "", "path to surveys & transport bandwidth logging ")
 }
 

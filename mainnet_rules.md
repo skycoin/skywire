@@ -12,11 +12,20 @@ The required minimum Skywire version will be incremented periodically.
 
 #### Table of Contents
 * [Introduction](#introduction)
+* [Uptime Reward Pool](#uptime-reward-pool)
 * [Rules & Requirements](#rules--requirements)
 * [Rewards](#rewards)
-  * [How it works](#how-it-works)
-  * [Reward Tiers](#reward-tiers)
-* [Hardware](#hardware)
+* [Exceptions](#exceptions-for-deployment-changes-with-dmsghttp-config-chinese-users)
+* [Verifying Requirements & Eligibility](#verifying-requirements--eligibility)
+  * [Version](#version)
+  * [Deployment](#deployment)
+  * [Uptime](#uptime)
+  * [Deployment](#deployment)
+  * [Skycoin Address](#skycoin-address)
+  * [Connection to DMSG network](#connection-to-dmsg-network)
+  * [Verifying other requirements](#verifying-other-requirements)
+* [Reward System Overview](#reward-system-overview)
+* ~~[Hardware](#hardware)~~
 
 ## Introduction
 
@@ -42,7 +51,7 @@ A total of up to ~1114.754  Skycoin are distributed daily in leap-years.
 
 ## Rules & Requirements
 
-To obtain Skycoin rewards for running skywire, the following requirements must be met.
+To receive Skycoin rewards for running skywire, the following requirements must be met.
 The update deadlines specify the version of software required as of (i.e. on or before) the specified date in order to maintain reward eligibility:
 
 * **Minimum skywire version v1.3.19** - Cutoff April 1st 2024
@@ -51,7 +60,7 @@ The update deadlines specify the version of software required as of (i.e. on or 
 
 * The visor must be an **ARM or RISC architecture SBC running on approved [hardware](#hardware)**
 
-* Visors must be running on **[the skywire production deployment](https://conf.skywire.skycoin.com)** with a config that is updated on every version.
+* Visors must be running on **[the skywire production deployment](https://conf.skywire.skycoin.com)** with a config that is updated on every version. No default keys or addresses of this configuration may be removed - but you can add keys
 
 * **Only 1 (one) visor per machine**
 
@@ -65,11 +74,14 @@ The update deadlines specify the version of software required as of (i.e. on or 
 
 * **Transports can be established to the visor**
 
+* **The visor responds to Transport Setup-Node requests**
+
 * **The visor responds to pings** - needed for latency-based rewards
 
 * **The visor produces transport bandwidth logs** - needed for bandwidth-based rewards
 
 * **The visor produces a survey** when queried over dmsg by any keys in the survey_whitelist array
+
 
 ### Exceptions for Deployment Changes with dmsghttp-config (Chinese users)
 
@@ -154,23 +166,37 @@ If this file does not exist for you, it can be created with `skywire-cli config 
 
 **If you do this, please uncomment `PKGENV=true` before saving the file**
 
-### Connection to DMSG network - Survey & transport log collection
+### Connection to DMSG network
 
-For any given visor, the system survey and transport bandwidth logs should be downloaded **hourly** over dmsghttp by the reward system.
+For any given visor, the system hardware survey, transport setup-node survey, and transport bandwidth logs are collected **hourly** by the reward system over dmsg.
 
-This can be verified by examinimg the visor's logging:
+This can be verified by examining the visor's logging:
 
 ![image](https://github.com/skycoin/skywire/assets/36607567/eb66bca1-fc9e-4c80-a38a-e00a73f675d0)
 
-The collected file should be visible in the survey index here:
+The collected surveys and transport bandwidth log files should be visible in the survey index here:
 
-[fiber.skywire.dev/log-collection/tree](https://fiber.magnetosphere.net/log-collection/tree)
+[fiber.skywire.dev/log-collection/tree](https://fiber.skywire.dev/log-collection/tree)
 
-Note: the transport bandwidth logs will only exist if it was generated; i.e. if there were transports to that visor which handled traffic.
+An example of one such entry:
+```
+├─┬025e3e4e324a3ac2771e32b798ca3d8859e585ac36938b15a31d20982de6aa31fc
+│ ├──2024-05-02.csv
+│ ├──2024-05-03.csv
+│ ├──2024-05-04.csv
+│ ├──2024-05-05.csv
+│ ├──2024-05-06.csv
+│ ├──2024-05-07.csv
+│ ├──health.json     Age: 13m5s {"build_info":{"version":"v1.3.21","commit":"5131943","date":"2024-04-13T15:03:26Z"},"started_at":"2024-05-07T08:52:09.895919222Z"}
+│ ├──node-info.json          "v1.3.21"
+│ └──tp.json         Age: 6m56s []
+```
+
+Note: the transport bandwidth logging CSV files will only exist if it was generated; i.e. if there were transports to that visor which handled traffic.
 
 Note: the system survey (node-info.json) will only exist if the reward address is set.
 
-If your visor is not generating such logging, please reach out to us on telegram [@skywire](https://t.me/skywire) for assistance
+If your visor is not generating such logging or errors are indicated, please reach out to us on telegram [@skywire](https://t.me/skywire) for assistance
 
 ### Verifying other requirements
 
@@ -178,28 +204,31 @@ If the visor is not able to meet the other requirements, that is usually not the
 
 ## Reward System overview
 
-The skycoin reward address may be set for each visor using skywire-cli or for all visors connected to a hypervisor from the hypervisor UI
+The skycoin reward address may be set for each visor using `skywire cli` or for all visors connected to a hypervisor from the hypervisor UI
 
 The skycoin reward address is in a text file contained in the "local" folder (local_path in the skywire config file) i.e `local/reward.txt`.
 
-The skycoin reward address is also included with the [system survey](https://github.com/skycoin/skywire/tree/develop/cmd/skywire-cli#survey) and served, along with transport logs, via dmsghttp.
+The skycoin reward address is also included with the [system hardware survey](https://github.com/skycoin/skywire/tree/develop/cmd/skywire/README.md#survey) and served, along with transport logs, via dmsghttp.
 
 The system survey (`local/node-info.json`) is fetched hourly by the reward system via `skywire-cli log`; along with transport bandwidth logs.
 
-The index of the collected files may be viewed at [fiber.skywire.dev/log-collection/tree](https://fiber.skywire.dev/log-collection/tree)
+A survey of transports which have been set by transport setup-nodes are also collected hourly, from all visors which have had surveys collected
 
+The index of the collected files may be viewed at [fiber.skywire.dev/log-collection/tree](https://fiber.skywire.dev/log-collection/tree)
 
 Once collected from the nodes, the surveys for those visors which met uptime are checked to verify hardware and other requirements, etc.
 
 The system survey is only made available to those keys which are whitelisted for survey collection, but is additionally available to any `hypervisor` or `dmsgpty_whitelist` keys set in the config for a given visor.
 
-Setting a skycoin address is considered to be consent for collecting the survey.
+**Setting a skycoin address is considered as consent for collecting the survey.**
 
-The public keys which require to be whitelisted in order to collect the surveys, for the purpose of reward eligibility verification, should populate in the visor's config automatically when the config is generated with visors of at least version 1.3.8.
+The public keys which require to be whitelisted in order to collect the surveys, for the purpose of reward eligibility verification, should populate in the visor's config automatically when the config is generated.
 
 ## Hardware
 
-**VM's, servers or personal computers are not permitted to collect rewards**
+**Virtual Machines, servers, and personal computers are currently not eligible to collect rewards**
+
+_NOTE: this list of hardware was used with the old reward system which required an application with pictures to be submitted. This no longer applies. The new reward system does not differentiate hardware except by architecture - only x86_64 / amd64 hardware is excluded from rewards currently. Every visor will receive the same reward amount, regardless of the hardware specs. It should be noted that the main difference between using cheap or low-end hardware and high-end hardware is the ease of maintenance and speed of updates for the node operator._
 
 The following hardware is eligible for rewards:
 
