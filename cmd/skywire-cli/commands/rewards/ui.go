@@ -235,7 +235,6 @@ var htmlPageTemplateData htmlTemplateData
 var tmpl *htmpl.Template
 
 func server() {
-	fmt.Println("generating in-memory html")
 
 	if dmsgDisc == "" {
 		dmsgDisc = skyenv.DmsgDiscAddr
@@ -318,26 +317,24 @@ func server() {
 
 	r1.GET("/index.html", mainPage)
 
-	/* //consumes too much resources when network is hevily transported
-		r1.GET("/transports", func(c *gin.Context) {
-			c.Writer.Header().Set("Server", "")
-			c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
-			c.Writer.Header().Set("Transfer-Encoding", "chunked")
-				c.Writer.WriteHeader(http.StatusOK)
-				c.Writer.Flush()
-			c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport statistics</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"))
-				c.Writer.Flush()
-				c.Writer.Write([]byte(navlinks))
-				c.Writer.Flush()
-				tpstats, _ := script.Exec("skywire-cli rtree --stats").Bytes()
-				c.Writer.Write(ansihtml.ConvertToHTML(tpstats))
-				c.Writer.Flush()
-				c.Writer.Write([]byte(htmlend))
-				c.Writer.Flush()
-	//	c.Writer.Write([]byte(transportstatshtml()))
-			return
-		})
+	r1.GET("/transports", func(c *gin.Context) {
+		c.Writer.Header().Set("Server", "")
+		c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
+		c.Writer.Header().Set("Transfer-Encoding", "chunked")
+		c.Writer.WriteHeader(http.StatusOK)
+		c.Writer.Flush()
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport statistics</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint
+		c.Writer.Flush()
+		c.Writer.Write([]byte(navlinks)) //nolint
+		c.Writer.Flush()
+		tpstats, _ := script.Exec("skywire cli tp tree -gs").Bytes() //nolint
+		c.Writer.Write(ansihtml.ConvertToHTML(tpstats))              //nolint
+		c.Writer.Flush()
+		c.Writer.Write([]byte(htmlend)) //nolint
+		c.Writer.Flush()
+	})
 
+	/* //consumes too much resources when network is hevily transported
 		r1.GET("/transports-map", func(c *gin.Context) {
 	  c.Writer.Header().Set("Server", "")
 		c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
@@ -348,7 +345,7 @@ func server() {
 			c.Writer.Flush()
 			c.Writer.Write([]byte(navlinks))
 			c.Writer.Flush()
-			tpTree, _ := script.Exec("skywire-cli rtree").Bytes()
+			tpTree, _ := script.Exec("skywire cli tp tree").Bytes()
 			c.Writer.Write(ansihtml.ConvertToHTML(tpTree))
 			c.Writer.Flush()
 			c.Writer.Write([]byte(htmlend))
@@ -419,6 +416,67 @@ func server() {
 		c.Writer.Flush()
 	})
 
+	r1.GET("/tpsn", func(c *gin.Context) {
+		c.Writer.Header().Set("Server", "")
+		c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
+		c.Writer.Header().Set("Transfer-Encoding", "chunked")
+		c.Writer.WriteHeader(http.StatusOK)
+		c.Writer.Flush()
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport Setup-Node</title></head>")) //nolint
+		c.Writer.Flush()
+		c.Writer.Write([]byte("<body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n#latest-content-anchor {\n  visibility: hidden;\n}\n</style>\n<pre>")) //nolint
+		c.Writer.Flush()
+		c.Writer.Write([]byte(navlinks)) //nolint
+		c.Writer.Flush()
+		tmpFile, err := os.CreateTemp(os.TempDir(), "*.sh")
+		if err != nil {
+			return
+		}
+		if err := tmpFile.Close(); err != nil {
+			return
+		}
+		_, _ = script.Exec(`chmod +x ` + tmpFile.Name()).String()                                         //nolint
+		_, _ = script.Echo(nextlogrun).WriteFile(tmpFile.Name())                                          //nolint
+		res, _ := script.Exec(`bash -c 'source ` + tmpFile.Name() + ` ; _nextskywireclilogrun'`).String() //nolint
+		os.Remove(tmpFile.Name())                                                                         //nolint
+		c.Writer.Write([]byte(fmt.Sprintf("%s\n", res)))                                                  //nolint
+		c.Writer.Flush()
+
+		// Initial line count
+		initialLineCount, _ := script.File("rewards/transport-setup-node.txt").CountLines() //nolint
+		// Read and print the initial lines
+		initialContent, _ := script.File("rewards/transport-setup-node.txt").First(initialLineCount).Bytes() //nolint
+		c.Writer.Write(ansihtml.ConvertToHTML(initialContent))                                               //nolint
+		c.Writer.Flush()
+		for {
+			select {
+			case <-c.Writer.CloseNotify():
+				return
+			default:
+			}
+			// Sleep for a short duration
+			time.Sleep(100 * time.Millisecond)
+			// Get the current line count
+			currentLineCount, _ := script.File("rewards/transport-setup-node.txt").CountLines() //nolint
+			// Check if there are new lines
+			if currentLineCount > initialLineCount {
+				newContent, _ := script.File("rewards/transport-setup-node.txt").Last(currentLineCount - initialLineCount).Bytes() //nolint
+				initialLineCount = currentLineCount
+				c.Writer.Write(ansihtml.ConvertToHTML(newContent)) //nolint
+				c.Writer.Flush()
+			}
+			finished, _ := script.Exec("bash -c 'systemctl is-active --quiet skywire-reward.service || echo true'").String() //nolint
+			if finished != "" {
+				break
+			}
+		}
+
+		c.Writer.Write([]byte(htmltoplink)) //nolint
+		c.Writer.Flush()
+		c.Writer.Write([]byte(htmlend)) //nolint
+		c.Writer.Flush()
+	})
+
 	r1.GET("/log-collection/tree", func(c *gin.Context) {
 		c.Writer.Header().Set("Server", "")
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
@@ -430,8 +488,8 @@ func server() {
 		surveycount, _ := script.FindFiles("rewards/log_backups/").Match("node-info.json").CountLines() //nolint
 		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))                         //nolint
 		c.Writer.Flush()
-		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups`).Bytes() //nolint
-		c.Writer.Write(ansihtml.ConvertToHTML(st))                                //nolint
+		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -e rewards/tp_setup -r`).Bytes() //nolint
+		c.Writer.Write(ansihtml.ConvertToHTML(st))                                                       //nolint
 		c.Writer.Flush()
 		c.Writer.Write([]byte(htmltoplink)) //nolint
 		c.Writer.Flush()
@@ -441,11 +499,22 @@ func server() {
 
 	r1.GET("/log-collection/tree/:pk", func(c *gin.Context) {
 		c.Writer.Header().Set("Server", "")
-		var checkKey cipher.PubKey
-		err := checkKey.Set(c.Param("pk"))
-		if err != nil {
+		if c.Param("pk") == "" {
 			c.Writer.WriteHeader(http.StatusBadRequest)
+			c.Writer.Write([]byte("must specify public key")) //nolint
+			c.Writer.Flush()
 			return
+		}
+		pks := strings.Split(c.Param("pk"), ",")
+		for _, pk := range pks {
+			var pK cipher.PubKey
+			err := pK.Set(pk)
+			if err != nil {
+				c.Writer.WriteHeader(http.StatusBadRequest)
+				c.Writer.Write([]byte("invalid public key: " + pk + " " + err.Error())) //nolint
+				c.Writer.Flush()
+				return
+			}
 		}
 		c.Writer.WriteHeader(http.StatusOK)
 		c.Writer.Header().Set("Server", "")
@@ -458,8 +527,8 @@ func server() {
 		surveycount, _ := script.FindFiles("rewards/log_backups/").Match("node-info.json").CountLines() //nolint
 		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))                         //nolint
 		c.Writer.Flush()
-		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -p ` + c.Param("pk")).Bytes() //nolint
-		c.Writer.Write(ansihtml.ConvertToHTML(st))                                                    //nolint
+		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -e rewards/tp_setup -rup ` + c.Param("pk")).Bytes() //nolint
+		c.Writer.Write(ansihtml.ConvertToHTML(st))                                                                          //nolint
 		c.Writer.Flush()
 		c.Writer.Write([]byte(htmltoplink)) //nolint
 		c.Writer.Flush()
@@ -1363,7 +1432,7 @@ const htmlMainPageTemplate = `
 {{ $page := .Page }}<!doctype html><html lang='en'>
 {{template "head" .}}
 <body title='' style='background-color:black;color:white;'>
-<pre><a id='top' class='anchor' aria-hidden='true' href='#top'></a>  <a href='/'>fiber</a>  <a href='/skycoin-rewards'>skycoin rewards</a>  <a href='/log-collection'>log collection</a>  <a href='/log-collection/tree'>survey index</a>  <a href='/log-collection/tplogs'>transport logging</a>  <a href='/transports'>transport stats</a>  <a href='/transports-map'>transport map</a>  <a href='https://ut.skywire.skycoin.com/uptimes?v=v2'>uptime tracker</a>  <a href='https://ar.skywire.skycoin.com/transports'>address resolver</a>  <a href='https://tpd.skywire.skycoin.com/all-transports'>transport discovery</a>  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/entries'>dmsgd entries</a>  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers'>all dmsg servers</a>  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/available_servers'>available dmsg servers</a><br>
+<pre><a id='top' class='anchor' aria-hidden='true' href='#top'></a>  <a href='/'>fiber</a>  <a href='/skycoin-rewards'>skycoin rewards</a>  <a href='/log-collection'>log collection</a>  <a href='/log-collection/tree'>survey index</a>  <a href='/log-collection/tplogs'>transport logging</a>  <a href='/transports'>transport stats</a>  <a href='https://ut.skywire.skycoin.com/uptimes?v=v2'>uptime tracker</a>  <a href='https://ar.skywire.skycoin.com/transports'>address resolver</a>  <a href='https://tpd.skywire.skycoin.com/all-transports'>transport discovery</a>  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/entries'>dmsgd entries</a>  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers'>all dmsg servers</a>  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/available_servers'>available dmsg servers</a><br>
 <main>
 {{template "this" .}}
 </main>
