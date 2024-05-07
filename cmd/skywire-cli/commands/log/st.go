@@ -159,35 +159,5 @@ func makeTree() {
 		nodes1 = append(nodes1, pterm.TreeNode{Text: pterm.Cyan(dirNode), Children: nodes})
 	}
 	tree = pterm.TreeNode{Text: pterm.Cyan("Index"), Children: nodes1}
-	//	} else {
-	//		children := getDirChildren(rootDir)
-	//		children = append(children, getDirChildren(otherDir)...)
-	//		tree = pterm.TreeNode{
-	//			Text:     pterm.Cyan(pubKey),
-	//			Children: children,
-	//		}
-	//	}
 	pterm.DefaultTree.WithRoot(tree).Render() //nolint
-}
-
-func getDirNodes(dirPath string) []pterm.TreeNode { //nolint
-	nodes := []pterm.TreeNode{}
-
-	files, err := os.ReadDir(dirPath)
-	if err != nil {
-		fmt.Printf("Not found\n")
-		return nodes
-	}
-
-	for _, file := range files {
-		if file.IsDir() {
-			dirName := file.Name()
-			nodes = append(nodes, pterm.TreeNode{
-				Text:     pterm.Cyan(dirName),
-				Children: getDirChildren(filepath.Join(dirPath, dirName)),
-			})
-		}
-	}
-
-	return nodes
 }

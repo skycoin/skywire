@@ -416,6 +416,67 @@ func server() {
 		c.Writer.Flush()
 	})
 
+	r1.GET("/tpsn", func(c *gin.Context) {
+		c.Writer.Header().Set("Server", "")
+		c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
+		c.Writer.Header().Set("Transfer-Encoding", "chunked")
+		c.Writer.WriteHeader(http.StatusOK)
+		c.Writer.Flush()
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport Setup-Node</title></head>")) //nolint
+		c.Writer.Flush()
+		c.Writer.Write([]byte("<body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n#latest-content-anchor {\n  visibility: hidden;\n}\n</style>\n<pre>")) //nolint
+		c.Writer.Flush()
+		c.Writer.Write([]byte(navlinks)) //nolint
+		c.Writer.Flush()
+		tmpFile, err := os.CreateTemp(os.TempDir(), "*.sh")
+		if err != nil {
+			return
+		}
+		if err := tmpFile.Close(); err != nil {
+			return
+		}
+		_, _ = script.Exec(`chmod +x ` + tmpFile.Name()).String()                                         //nolint
+		_, _ = script.Echo(nextlogrun).WriteFile(tmpFile.Name())                                          //nolint
+		res, _ := script.Exec(`bash -c 'source ` + tmpFile.Name() + ` ; _nextskywireclilogrun'`).String() //nolint
+		os.Remove(tmpFile.Name())                                                                         //nolint
+		c.Writer.Write([]byte(fmt.Sprintf("%s\n", res)))                                                  //nolint
+		c.Writer.Flush()
+
+		// Initial line count
+		initialLineCount, _ := script.File("rewards/transport-setup-node.txt").CountLines() //nolint
+		// Read and print the initial lines
+		initialContent, _ := script.File("rewards/transport-setup-node.txt").First(initialLineCount).Bytes() //nolint
+		c.Writer.Write(ansihtml.ConvertToHTML(initialContent))                                               //nolint
+		c.Writer.Flush()
+		for {
+			select {
+			case <-c.Writer.CloseNotify():
+				return
+			default:
+			}
+			// Sleep for a short duration
+			time.Sleep(100 * time.Millisecond)
+			// Get the current line count
+			currentLineCount, _ := script.File("rewards/transport-setup-node.txt").CountLines() //nolint
+			// Check if there are new lines
+			if currentLineCount > initialLineCount {
+				newContent, _ := script.File("rewards/transport-setup-node.txt").Last(currentLineCount - initialLineCount).Bytes() //nolint
+				initialLineCount = currentLineCount
+				c.Writer.Write(ansihtml.ConvertToHTML(newContent)) //nolint
+				c.Writer.Flush()
+			}
+			finished, _ := script.Exec("bash -c 'systemctl is-active --quiet skywire-reward.service || echo true'").String() //nolint
+			if finished != "" {
+				break
+			}
+		}
+
+		c.Writer.Write([]byte(htmltoplink)) //nolint
+		c.Writer.Flush()
+		c.Writer.Write([]byte(htmlend)) //nolint
+		c.Writer.Flush()
+	})
+
 	r1.GET("/log-collection/tree", func(c *gin.Context) {
 		c.Writer.Header().Set("Server", "")
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
