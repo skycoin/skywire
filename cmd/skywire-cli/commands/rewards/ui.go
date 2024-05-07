@@ -439,7 +439,6 @@ func server() {
 			}
 		}
 
-
 		c.Writer.Write([]byte(htmltoplink)) //nolint
 		c.Writer.Flush()
 		c.Writer.Write([]byte(htmlend)) //nolint
