@@ -569,8 +569,9 @@ func server() {
 			totalDaysInYear := int(lastDayOfYear.YearDay())
 
 			skycoinPerDay := yearlyTotal / float64(totalDaysInYear)
-			result += fmt.Sprintf("%g Skycoin per day\n", skycoinPerDay)
-
+			result += fmt.Sprintf("%g Skycoin per day\n<br><br>", skycoinPerDay)
+			utstats, _ := script.Exec(`skywire cli ut -t`).String() //nolint
+			result += fmt.Sprintf("Uptime tracker version statistics:\n%s", utstats)
 			return result
 		}())
 		l += fmt.Sprintf("There are %d days in the month of %s.\n", time.Date(time.Now().Year(), time.Now().Month()+1, 0, 0, 0, 0, 0, time.UTC).Day(), time.Now().Month())
@@ -592,7 +593,11 @@ func server() {
 		l += "\n" + string(ansihtml.ConvertToHTML([]byte(calendar)))
 		rewardtxncsvs, _ := script.FindFiles(`rewards/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Replace("rewards/hist/", "").Replace("_rewardtxn0.csv", "").Slice() //nolint
 		for i := len(rewardtxncsvs) - 1; i >= 0; i-- {
-			l += "<a href='/skycoin-rewards/hist/" + rewardtxncsvs[i] + "'>" + rewardtxncsvs[i] + "</a>\n"
+			if _, err := os.Stat("rewards/hist/" + rewardtxncsvs[i] + ".txt"); err == nil {
+				l += "<a href='/skycoin-rewards/hist/" + rewardtxncsvs[i] + "'>" + rewardtxncsvs[i] + "</a> <span style='color: green'>&#10004;</span>\n"
+			} else {
+				l += "<a href='/skycoin-rewards/hist/" + rewardtxncsvs[i] + "'>" + rewardtxncsvs[i] + "</a> <span style='color: red;'>&#10060;</span>\n"
+			}
 		}
 
 		l += "<br>" + htmltoplink
@@ -793,6 +798,9 @@ func server() {
 			return
 		}
 		l := ""
+		l3, _ := os.Stat("rewards/hist/" + c.Param("date") + "_rewardtxn0.csv")
+		l += "Reward data generated: " + l3.ModTime().Format("2006-01-02 15:04:05") + "\n\n"
+
 		l1, err := script.File("rewards/hist/" + c.Param("date") + ".txt").String()
 		if err != nil {
 			l += "Rewards not distributed yet\n\n"
@@ -804,6 +812,7 @@ func server() {
 				l += "Explorer link:\n<a href='https://explorer.skycoin.com/app/transaction/" + l1 + "''>" + l1 + "</a>\n\n"
 			}
 		}
+
 		l2, err := script.File("rewards/hist/" + c.Param("date") + "_shares.csv").Slice()
 		if err != nil {
 			l += "<div style='float: right;'>PK,Share,SKY Amount\nReward shares file not found\nerror: " + err.Error() + "\n\n"
