@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"time"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
@@ -89,6 +90,17 @@ func (c *stcprClient) serve() {
 		c.log.Errorf("Failed to bind STCPR: %v", err)
 		return
 	}
+	// simple heartbeat process for stcpr
+	go func() {
+		for {
+			time.Sleep(5 * time.Minute)
+			if err := c.ar.BindSTCPR(context.Background(), port); err != nil {
+				c.log.Errorf("Failed to bind STCPR: %v", err)
+				continue
+			}
+			c.log.Infof("STCPR rebinded in heartbeating process")
+		}
+	}()
 	c.log.Debugf("Successfully bound stcpr to port %s", port)
 	c.acceptTransports(lis)
 }
