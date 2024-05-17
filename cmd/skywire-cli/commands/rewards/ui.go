@@ -488,8 +488,8 @@ func server() {
 		surveycount, _ := script.FindFiles("rewards/log_backups/").Match("node-info.json").CountLines() //nolint
 		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))                         //nolint
 		c.Writer.Flush()
-		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -e rewards/tp_setup -r`).Bytes() //nolint
-		c.Writer.Write(ansihtml.ConvertToHTML(st))                                                       //nolint
+		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -e rewards/tp_setup -x rewards/proxy_test/proxies.csv -r`).Bytes() //nolint
+		c.Writer.Write(ansihtml.ConvertToHTML(st))                                                                                         //nolint
 		c.Writer.Flush()
 		c.Writer.Write([]byte(htmltoplink)) //nolint
 		c.Writer.Flush()
@@ -591,15 +591,16 @@ func server() {
 			calendar = cal()
 		}
 		l += "\n" + string(ansihtml.ConvertToHTML([]byte(calendar)))
+		l += "\n\nRewardDate SKY/VISOR [<span style='color: red;'>&#10060;</span>/<span style='color: green'>&#10004;</span>]distributed\n"
 		rewardtxncsvs, _ := script.FindFiles(`rewards/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Replace("rewards/hist/", "").Replace("_rewardtxn0.csv", "").Slice() //nolint
 		for i := len(rewardtxncsvs) - 1; i >= 0; i-- {
+			skycoinpershare, _ := script.File("rewards/hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share: ").Replace("Skycoin Per Share: ", "").String() //nolint
 			if _, err := os.Stat("rewards/hist/" + rewardtxncsvs[i] + ".txt"); err == nil {
-				l += "<a href='/skycoin-rewards/hist/" + rewardtxncsvs[i] + "'>" + rewardtxncsvs[i] + "</a> <span style='color: green'>&#10004;</span>\n"
+				l += "<a href='/skycoin-rewards/hist/" + rewardtxncsvs[i] + "'>" + rewardtxncsvs[i] + "</a>  " + strings.ReplaceAll(skycoinpershare, "\n", "") + "   <span style='color: green'>&#10004;</span>\n"
 			} else {
-				l += "<a href='/skycoin-rewards/hist/" + rewardtxncsvs[i] + "'>" + rewardtxncsvs[i] + "</a> <span style='color: red;'>&#10060;</span>\n"
+				l += "<a href='/skycoin-rewards/hist/" + rewardtxncsvs[i] + "'>" + rewardtxncsvs[i] + "</a>  " + strings.ReplaceAll(skycoinpershare, "\n", "") + "   <span style='color: red;'>&#10060;</span>\n"
 			}
 		}
-
 		l += "<br>" + htmltoplink
 		tmpl0, err1 := tmpl.Clone()
 		if err1 != nil {
@@ -1547,7 +1548,7 @@ const skycoinlogohtml = `<table border="0" cellpadding="0" cellspacing="0" summa
 const nextlogrun = `#!/bin/bash
 _nextskywireclilogrun() {
 	if systemctl is-active --quiet skywire-reward >/dev/null; then
-		printf "%s ;\nTimeout is 30 minutes\n" "$(systemctl status skywire-reward.service --lines=0 | grep active |  sed 's/Active: active (running) since/Running since:\n/g' )"
+		printf "%s" "$(systemctl status skywire-reward.service --lines=0 | grep active |  sed 's/Active: active (running) since/Running since:\n/g' )"
 	else
 		systemctl status skywire-reward.timer --lines=0 | head -n4 | tail -n1 | sed 's/Trigger:/Next Log Collection Run:\n/g'
 		printf 'Previous Run%s\n' "$(systemctl status skywire-reward.service --lines=0 | grep -m1 'Duration')"

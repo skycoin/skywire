@@ -28,6 +28,7 @@ var (
 	hideErr        bool
 	showUT         bool
 	pubKeys        []cipher.PubKey
+	proxyCSV       string
 )
 
 // RootCmd is logCmd
