@@ -369,7 +369,6 @@ func server() {
 		}
 		c.Writer.Write([]byte(htmlend)) //nolint
 		c.Writer.Flush()
-		return
 	})
 
 	r1.GET("/log-collection", func(c *gin.Context) {
