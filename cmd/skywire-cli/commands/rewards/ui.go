@@ -346,7 +346,7 @@ func server() {
 		c.Writer.Flush()
 	})
 
-	/* //consumes excessive server resources when network is heavily transported	*/
+	/* //consumes excessive server resources when network is heavily transported*/
 	r1.GET("/transports-map", func(c *gin.Context) {
 		c.Writer.Header().Set("Server", "")
 		c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
@@ -364,7 +364,7 @@ func server() {
 			c.Writer.Write(ansihtml.ConvertToHTML(tpTree)) //nolint
 			c.Writer.Flush()
 		} else {
-			c.Writer.Write([]byte(fmt.Sprintf("Transport count: %v exceeds server resources to map"))) //nolint
+			c.Writer.Write([]byte(fmt.Sprintf("Transport count: %v exceeds server resources to map", tpcount))) //nolint
 			c.Writer.Flush()
 		}
 		c.Writer.Write([]byte(htmlend)) //nolint
