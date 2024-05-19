@@ -9,7 +9,7 @@ require (
 	github.com/VictoriaMetrics/metrics v1.24.0
 	github.com/alecthomas/chroma v0.10.0
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
-	github.com/bitfield/script v0.22.0
+	github.com/bitfield/script v0.22.1
 	github.com/blang/semver/v4 v4.0.0
 	github.com/ccding/go-stun/stun v0.0.0-20200514191101-4dc67bcdb029
 	github.com/cloudfoundry-attic/jibber_jabber v0.0.0-20151120183258-bcc4c8345a21

@@ -104,10 +104,10 @@ func FindFiles(dir string) *Pipe {
 	return Slice(paths)
 }
 
-// Get creates a pipe that makes an HTTP GET request to URL, and produces the
+// Get creates a pipe that makes an HTTP GET request to url, and produces the
 // response. See [Pipe.Do] for how the HTTP response status is interpreted.
-func Get(URL string) *Pipe {
-	return NewPipe().Get(URL)
+func Get(url string) *Pipe {
+	return NewPipe().Get(url)
 }
 
 // IfExists tests whether path exists, and creates a pipe whose error status
@@ -169,11 +169,11 @@ func NewPipe() *Pipe {
 	}
 }
 
-// Post creates a pipe that makes an HTTP POST request to URL, with an empty
+// Post creates a pipe that makes an HTTP POST request to url, with an empty
 // body, and produces the response. See [Pipe.Do] for how the HTTP response
 // status is interpreted.
-func Post(URL string) *Pipe {
-	return NewPipe().Post(URL)
+func Post(url string) *Pipe {
+	return NewPipe().Post(url)
 }
 
 // Slice creates a pipe containing each element of s, one per line.
@@ -514,7 +514,8 @@ func (p *Pipe) FilterScan(filter func(string, io.Writer)) *Pipe {
 
 // First produces only the first n lines of the pipe's contents, or all the
 // lines if there are less than n. If n is zero or negative, there is no output
-// at all.
+// at all. When n lines have been produced, First stops reading its input and
+// sends EOF to its output.
 func (p *Pipe) First(n int) *Pipe {
 	if p.Error() != nil {
 		return p
@@ -522,13 +523,15 @@ func (p *Pipe) First(n int) *Pipe {
 	if n <= 0 {
 		return NewPipe()
 	}
-	i := 0
-	return p.FilterScan(func(line string, w io.Writer) {
-		if i >= n {
-			return
+	return p.Filter(func(r io.Reader, w io.Writer) error {
+		scanner := newScanner(r)
+		for i := 0; i < n && scanner.Scan(); i++ {
+			_, err := fmt.Fprintln(w, scanner.Text())
+			if err != nil {
+				return err
+			}
 		}
-		fmt.Fprintln(w, line)
-		i++
+		return scanner.Err()
 	})
 }
 
@@ -584,11 +587,11 @@ func (p *Pipe) Freq() *Pipe {
 	})
 }
 
-// Get makes an HTTP GET request to URL, sending the contents of the pipe as
+// Get makes an HTTP GET request to url, sending the contents of the pipe as
 // the request body, and produces the server's response. See [Pipe.Do] for how
 // the HTTP response status is interpreted.
-func (p *Pipe) Get(URL string) *Pipe {
-	req, err := http.NewRequest(http.MethodGet, URL, p.Reader)
+func (p *Pipe) Get(url string) *Pipe {
+	req, err := http.NewRequest(http.MethodGet, url, p.Reader)
 	if err != nil {
 		return p.WithError(err)
 	}
@@ -693,11 +696,11 @@ func (p *Pipe) MatchRegexp(re *regexp.Regexp) *Pipe {
 	})
 }
 
-// Post makes an HTTP POST request to URL, using the contents of the pipe as
+// Post makes an HTTP POST request to url, using the contents of the pipe as
 // the request body, and produces the server's response. See [Pipe.Do] for how
 // the HTTP response status is interpreted.
-func (p *Pipe) Post(URL string) *Pipe {
-	req, err := http.NewRequest(http.MethodPost, URL, p.Reader)
+func (p *Pipe) Post(url string) *Pipe {
+	req, err := http.NewRequest(http.MethodPost, url, p.Reader)
 	if err != nil {
 		return p.WithError(err)
 	}
@@ -731,8 +734,8 @@ func (p *Pipe) Replace(search, replace string) *Pipe {
 }
 
 // ReplaceRegexp replaces all matches of the compiled regexp re with the string
-// re. $x variables in the replace string are interpreted as by
-// [regexp.Expand]; for example, $1 represents the text of the first submatch.
+// replace. $x variables in the replace string are interpreted as by
+// [regexp#Regexp.Expand]; for example, $1 represents the text of the first submatch.
 func (p *Pipe) ReplaceRegexp(re *regexp.Regexp, replace string) *Pipe {
 	return p.FilterLine(func(line string) string {
 		return re.ReplaceAllString(line, replace)
@@ -849,7 +852,7 @@ func (p *Pipe) Tee(writers ...io.Writer) *Pipe {
 // useful for waiting until concurrent filters have completed (see
 // [Pipe.Filter]).
 func (p *Pipe) Wait() {
-	_, err := io.ReadAll(p)
+	_, err := io.Copy(io.Discard, p)
 	if err != nil {
 		p.SetError(err)
 	}
@@ -905,7 +908,7 @@ func (p *Pipe) writeOrAppendFile(path string, mode int) (int64, error) {
 	if p.Error() != nil {
 		return 0, p.Error()
 	}
-	out, err := os.OpenFile(path, mode, 0666)
+	out, err := os.OpenFile(path, mode, 0o666)
 	if err != nil {
 		p.SetError(err)
 		return 0, err
@@ -942,7 +945,7 @@ func (ra ReadAutoCloser) Close() error {
 	if ra.r == nil {
 		return nil
 	}
-	return ra.r.(io.Closer).Close()
+	return ra.r.Close()
 }
 
 // Read reads up to len(b) bytes from ra's reader into b. It returns the number

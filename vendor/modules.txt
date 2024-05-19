@@ -81,8 +81,8 @@ github.com/anatol/smart.go
 # github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 ## explicit
 github.com/armon/go-socks5
-# github.com/bitfield/script v0.22.0
-## explicit; go 1.12
+# github.com/bitfield/script v0.22.1
+## explicit; go 1.18
 github.com/bitfield/script
 # github.com/blang/semver/v4 v4.0.0
 ## explicit; go 1.14
@@ -526,7 +526,7 @@ github.com/shirou/gopsutil/process
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v1.3.22-0.20240502214137-b684f7064155
+# github.com/skycoin/dmsg v1.3.22-0.20240502214137-b684f7064155 => github.com/skycoin/dmsg v1.3.22-0.20240519222927-631b9e049304
 ## explicit; go 1.21
 github.com/skycoin/dmsg/cmd/dmsg-discovery/commands
 github.com/skycoin/dmsg/cmd/dmsg-server/commands
@@ -920,3 +920,4 @@ nhooyr.io/websocket/internal/bpool
 nhooyr.io/websocket/internal/errd
 nhooyr.io/websocket/internal/wsjs
 nhooyr.io/websocket/internal/xsync
+# github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.22-0.20240519222927-631b9e049304
