@@ -353,21 +353,21 @@ func server() {
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
 		c.Writer.WriteHeader(http.StatusOK)
 		c.Writer.Flush()
-		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport Map</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"))
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport Map</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint
 		c.Writer.Flush()
-		c.Writer.Write([]byte(navlinks))
+		c.Writer.Write([]byte(navlinks)) //nolint
 		c.Writer.Flush()
 		tpstats, _ := script.Exec("skywire cli tp tree -s").Match("Count of transports:").Replace("Count of transports: ", "").Replace("\n", "").String() //nolint
 		tpcount, _ := strconv.Atoi(tpstats)                                                                                                               //nolint
 		if tpcount < 400 {
 			tpTree, _ := script.Exec("skywire cli tp tree").Bytes()
-			c.Writer.Write(ansihtml.ConvertToHTML(tpTree))
+			c.Writer.Write(ansihtml.ConvertToHTML(tpTree)) //nolint
 			c.Writer.Flush()
 		} else {
-			c.Writer.Write([]byte(fmt.Sprintf("Transport count: %v exceeds server resources to map")))
+			c.Writer.Write([]byte(fmt.Sprintf("Transport count: %v exceeds server resources to map"))) //nolint
 			c.Writer.Flush()
 		}
-		c.Writer.Write([]byte(htmlend))
+		c.Writer.Write([]byte(htmlend)) //nolint
 		c.Writer.Flush()
 		return
 	})
@@ -552,8 +552,8 @@ func server() {
 			if records[j+1][0] == "self_transport" {
 				return false
 			}
-			val1, _ := strconv.ParseFloat(strings.TrimSuffix(records[i+1][2], "s"), 64)
-			val2, _ := strconv.ParseFloat(strings.TrimSuffix(records[j+1][2], "s"), 64)
+			val1, _ := strconv.ParseFloat(strings.TrimSuffix(records[i+1][2], "s"), 64) //nolint
+			val2, _ := strconv.ParseFloat(strings.TrimSuffix(records[j+1][2], "s"), 64) //nolint
 			return val1 < val2
 		})
 
