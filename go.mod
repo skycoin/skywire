@@ -7,8 +7,9 @@ toolchain go1.21.5
 require (
 	github.com/AudriusButkevicius/pfilter v0.0.11
 	github.com/VictoriaMetrics/metrics v1.24.0
+	github.com/alecthomas/chroma v0.10.0
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
-	github.com/bitfield/script v0.22.0
+	github.com/bitfield/script v0.22.1
 	github.com/blang/semver/v4 v4.0.0
 	github.com/ccding/go-stun/stun v0.0.0-20200514191101-4dc67bcdb029
 	github.com/cloudfoundry-attic/jibber_jabber v0.0.0-20151120183258-bcc4c8345a21
@@ -32,7 +33,7 @@ require (
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/shibukawa/configdir v0.0.0-20170330084843-e180dbdc8da0
 	github.com/sirupsen/logrus v1.9.3
-	github.com/skycoin/dmsg v1.3.22-0.20240502214137-b684f7064155
+	github.com/skycoin/dmsg v1.3.22-0.20240519222927-631b9e049304
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/skycoin-service-discovery v0.0.0-20240306165129-2af10aca698e
 	github.com/skycoin/skywire-services v0.0.0-20240403004908-50ccbbf07004
@@ -80,6 +81,7 @@ require (
 	github.com/dgraph-io/ristretto v0.1.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/distatus/battery v0.10.0 // indirect
+	github.com/dlclark/regexp2 v1.4.0 // indirect
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/fatih/color v1.15.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.2 // indirect
