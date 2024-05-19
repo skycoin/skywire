@@ -67,7 +67,7 @@ var uiCmd = &cobra.Command{
 	├┤ │├┴┐├┤ ├┬┘
 	└  ┴└─┘└─┘┴└─
 	` + func() string {
-		if _, err := os.Stat(skyenvfile); err == nil {
+		if _, err := os.Stat(skyenvfile); err == nil { //nolint
 			return `run the web application
 
 skyenv file detected: ` + skyenvfile
@@ -875,7 +875,7 @@ func server() {
 			return
 		}
 		l := ""
-		l3, _ := os.Stat("rewards/hist/" + c.Param("date") + "_rewardtxn0.csv")
+		l3, _ := os.Stat("rewards/hist/" + c.Param("date") + "_rewardtxn0.csv") //nolint
 		l += "Reward data generated: " + l3.ModTime().Format("2006-01-02 15:04:05") + "\n\n"
 
 		l1, err := script.File("rewards/hist/" + c.Param("date") + ".txt").String()
