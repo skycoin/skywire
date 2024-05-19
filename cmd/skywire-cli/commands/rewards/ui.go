@@ -360,7 +360,7 @@ func server() {
 		tpstats, _ := script.Exec("skywire cli tp tree -s").Match("Count of transports:").Replace("Count of transports: ", "").Replace("\n", "").String() //nolint
 		tpcount, _ := strconv.Atoi(tpstats)                                                                                                               //nolint
 		if tpcount < 400 {
-			tpTree, _ := script.Exec("skywire cli tp tree").Bytes()
+			tpTree, _ := script.Exec("skywire cli tp tree").Bytes()  //nolint
 			c.Writer.Write(ansihtml.ConvertToHTML(tpTree)) //nolint
 			c.Writer.Flush()
 		} else {
@@ -1261,7 +1261,7 @@ func serveSyntaxHighlighted(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusOK)
-	c.Writer.Write(buf.Bytes())
+	c.Writer.Write(buf.Bytes())  //nolint
 }
 
 type ginHandler struct {
