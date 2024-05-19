@@ -5,19 +5,23 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/csv"
 	"fmt"
 	htmpl "html/template"
 	"io"
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/alecthomas/chroma/quick"
 	"github.com/bitfield/script"
 	"github.com/gin-gonic/gin"
 	"github.com/robert-nix/ansihtml"
@@ -317,6 +321,14 @@ func server() {
 
 	r1.GET("/index.html", mainPage)
 
+	// endpoint for testing minimum response time of curl via socks5 proxy / stand-in for latency test
+	// https://dev.to/tigt/making-the-worlds-fastest-website-and-other-mistakes-56na
+	// This is the fastest web page. You may not like it, but this is what peak performance looks like.
+	r1.GET("/204", func(c *gin.Context) {
+		c.Writer.Header().Set("Server", "")
+		c.Status(http.StatusNoContent)
+	})
+
 	r1.GET("/transports", func(c *gin.Context) {
 		c.Writer.Header().Set("Server", "")
 		c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
@@ -327,33 +339,38 @@ func server() {
 		c.Writer.Flush()
 		c.Writer.Write([]byte(navlinks)) //nolint
 		c.Writer.Flush()
-		tpstats, _ := script.Exec("skywire cli tp tree -gs").Bytes() //nolint
-		c.Writer.Write(ansihtml.ConvertToHTML(tpstats))              //nolint
+		tpstats, _ := script.Exec("skywire cli tp tree -s").Bytes() //nolint
+		c.Writer.Write(ansihtml.ConvertToHTML(tpstats))             //nolint
 		c.Writer.Flush()
 		c.Writer.Write([]byte(htmlend)) //nolint
 		c.Writer.Flush()
 	})
 
-	/* //consumes too much resources when network is hevily transported
-		r1.GET("/transports-map", func(c *gin.Context) {
-	  c.Writer.Header().Set("Server", "")
+	/* //consumes excessive server resources when network is heavily transported	*/
+	r1.GET("/transports-map", func(c *gin.Context) {
+		c.Writer.Header().Set("Server", "")
 		c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
-			c.Writer.WriteHeader(http.StatusOK)
-			c.Writer.Flush()
+		c.Writer.WriteHeader(http.StatusOK)
+		c.Writer.Flush()
 		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport Map</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"))
-			c.Writer.Flush()
-			c.Writer.Write([]byte(navlinks))
-			c.Writer.Flush()
+		c.Writer.Flush()
+		c.Writer.Write([]byte(navlinks))
+		c.Writer.Flush()
+		tpstats, _ := script.Exec("skywire cli tp tree -s").Match("Count of transports:").Replace("Count of transports: ", "").Replace("\n", "").String() //nolint
+		tpcount, _ := strconv.Atoi(tpstats)                                                                                                               //nolint
+		if tpcount < 400 {
 			tpTree, _ := script.Exec("skywire cli tp tree").Bytes()
 			c.Writer.Write(ansihtml.ConvertToHTML(tpTree))
 			c.Writer.Flush()
-			c.Writer.Write([]byte(htmlend))
+		} else {
+			c.Writer.Write([]byte(fmt.Sprintf("Transport count: %v exceeds server resources to map")))
 			c.Writer.Flush()
-	//		c.Writer.Write([]byte(transportsmaphtml()))
-			return
-		})
-	*/
+		}
+		c.Writer.Write([]byte(htmlend))
+		c.Writer.Flush()
+		return
+	})
 
 	r1.GET("/log-collection", func(c *gin.Context) {
 		c.Writer.Header().Set("Server", "")
@@ -495,6 +512,65 @@ func server() {
 		c.Writer.Flush()
 		c.Writer.Write([]byte(htmlend)) //nolint
 		c.Writer.Flush()
+	})
+	r1.GET("/proxy-test", func(c *gin.Context) {
+		c.Writer.Header().Set("Server", "")
+		c.Writer.Header().Set("Transfer-Encoding", "chunked")
+		c.Writer.WriteHeader(http.StatusOK)
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><meta charset='UTF-8'><title>Proxy Tests</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint
+		c.Writer.Flush()
+		c.Writer.Write([]byte(navlinks)) //nolint
+		c.Writer.Flush()
+		c.Writer.Write([]byte("<a href='/rewards/testproxies.sh'>testproxies.sh</a>\n")) //nolint
+		c.Writer.Flush()
+		proxytestcsvdata, _ := script.File("rewards/proxy_test/proxies.csv").Replace("00pk", "server_pk").String() //nolint
+		proxytestdata := ""
+		reader := csv.NewReader(strings.NewReader(proxytestcsvdata))
+		records, err := reader.ReadAll()
+		if err != nil {
+			c.Writer.Write([]byte(htmltoplink + htmlend)) //nolint
+			c.Writer.Flush()
+		}
+		maxWidths := make([]int, len(records[0]))
+		for _, record := range records {
+			for i, field := range record {
+				if len(field) > maxWidths[i] {
+					maxWidths[i] = len(field)
+				}
+			}
+		}
+		sort.Slice(records[1:], func(i, j int) bool {
+			if records[i+1][0] == "N/A" {
+				return true
+			}
+			if records[j+1][0] == "N/A" {
+				return false
+			}
+			if records[i+1][0] == "self_transport" {
+				return true
+			}
+			if records[j+1][0] == "self_transport" {
+				return false
+			}
+			val1, _ := strconv.ParseFloat(strings.TrimSuffix(records[i+1][2], "s"), 64)
+			val2, _ := strconv.ParseFloat(strings.TrimSuffix(records[j+1][2], "s"), 64)
+			return val1 < val2
+		})
+
+		for _, record := range records {
+			for i, field := range record {
+				proxytestdata += fmt.Sprintf("%*s ", maxWidths[i], field)
+			}
+			proxytestdata += "\n"
+		}
+		c.Writer.Write([]byte(proxytestdata)) //nolint
+		c.Writer.Flush()
+		c.Writer.Write([]byte(htmltoplink + htmlend)) //nolint
+		c.Writer.Flush()
+	})
+
+	r1.GET("/rewards/testproxies.sh", func(c *gin.Context) {
+		serveSyntaxHighlighted(c)
 	})
 
 	r1.GET("/log-collection/tree/:pk", func(c *gin.Context) {
@@ -1166,6 +1242,29 @@ func cal() (ret string) {
 	return ret
 }
 
+func serveSyntaxHighlighted(c *gin.Context) {
+	c.Set("Content-Type", "text/html;charset=utf-8")
+	data, err := script.File(strings.TrimLeft(c.Request.URL.Path, "/")).String()
+	if err != nil {
+		fmt.Println("error in function serveSyntaxHighlighted ; error on script.File: ", err)
+		c.Status(http.StatusNotFound)
+		return
+	}
+	lang := strings.TrimLeft(filepath.Ext(strings.TrimLeft(c.Request.URL.Path, "/")), ".")
+	if lang == "sh" {
+		lang = "bash"
+	}
+	var buf bytes.Buffer
+	err = quick.Highlight(&buf, data, lang, "html", "monokai")
+	if err != nil {
+		fmt.Println("error in function serveSyntaxHighlighted ; error on quick.Highlight: ", err)
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	c.Status(http.StatusOK)
+	c.Writer.Write(buf.Bytes())
+}
+
 type ginHandler struct {
 	Router *gin.Engine
 }
@@ -1442,7 +1541,7 @@ const htmlMainPageTemplate = `
 {{ $page := .Page }}<!doctype html><html lang='en'>
 {{template "head" .}}
 <body title='' style='background-color:black;color:white;'>
-<pre><a id='top' class='anchor' aria-hidden='true' href='#top'></a>  <a href='/'>fiber</a>  <a href='/skycoin-rewards'>skycoin rewards</a>  <a href='/log-collection'>log collection</a>  <a href='/log-collection/tree'>survey index</a>  <a href='/log-collection/tplogs'>transport logging</a>  <a href='/transports'>transport stats</a>  <a href='https://ut.skywire.skycoin.com/uptimes?v=v2'>uptime tracker</a>  <a href='https://ar.skywire.skycoin.com/transports'>address resolver</a>  <a href='https://tpd.skywire.skycoin.com/all-transports'>transport discovery</a>  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/entries'>dmsgd entries</a>  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers'>all dmsg servers</a>  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/available_servers'>available dmsg servers</a><br>
+<pre><a id='top' class='anchor' aria-hidden='true' href='#top'></a>  <a href='/'>fiber</a>  <a href='/skycoin-rewards'>skycoin rewards</a>  <a href='/log-collection'>log collection</a>  <a href='/log-collection/tree'>survey index</a>  <a href='/log-collection/tplogs'>transport logging</a>  <a href='/transports'>transport stats</a>  <a href='/transports-map'>transport map</a>  <a href='https://ut.skywire.skycoin.com/uptimes?v=v2'>uptime tracker</a>  <a href='https://ar.skywire.skycoin.com/transports'>address resolver</a>  <a href='https://tpd.skywire.skycoin.com/all-transports'>transport discovery</a>  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/entries'>dmsgd entries</a>  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers'>all dmsg servers</a>  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/available_servers'>available dmsg servers</a><br>
 <main>
 {{template "this" .}}
 </main>

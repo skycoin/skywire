@@ -39,6 +39,8 @@ github.com/VictoriaMetrics/metrics v1.24.0 h1:ILavebReOjYctAGY5QU2F9X0MYvkcrG3aE
 github.com/VictoriaMetrics/metrics v1.24.0/go.mod h1:eFT25kvsTidQFHb6U0oa0rTrDRdz4xTYjpL8+UPohys=
 github.com/VividCortex/ewma v1.2.0 h1:f58SaIzcDXrSy3kWaHNvuJgJ3Nmz59Zji6XoJR/q1ow=
 github.com/VividCortex/ewma v1.2.0/go.mod h1:nz4BbCtbLyFDeC9SUHbtcT5644juEuWfUAUnGx7j5l4=
+github.com/alecthomas/chroma v0.10.0 h1:7XDcGkCQopCNKjZHfYrNLraA+M7e0fMiJ/Mfikbfjek=
+github.com/alecthomas/chroma v0.10.0/go.mod h1:jtJATyUxlIORhUOFNA9NZDWGAQ8wpxQQqNSB4rjA/1s=
 github.com/anatol/smart.go v0.0.0-20220917195147-c0b00d90f8cc h1:UH+K+oojIu7jWqJrmPXCb33A/ZIfCLBIorj3KQGJxgs=
 github.com/anatol/smart.go v0.0.0-20220917195147-c0b00d90f8cc/go.mod h1:H/rz4ePNwdNiEdxv+NRWuqONKHe2N5n7rCQftsmStNE=
 github.com/anatol/vmtest v0.0.0-20220413190228-7a42f1f6d7b8 h1:t4JGeY9oaF5LB4Rdx9e2wARRRPAYt8Ow4eCf5SwO3fA=
@@ -106,6 +108,8 @@ github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f h1:lO4WD4F/r
 github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f/go.mod h1:cuUVRXasLTGF7a8hSLbxyZXjz+1KgoB3wDUb6vlszIc=
 github.com/distatus/battery v0.10.0 h1:YbizvmV33mqqC1fPCAEaQGV3bBhfYOfM+2XmL+mvt5o=
 github.com/distatus/battery v0.10.0/go.mod h1:STnSvFLX//eEpkaN7qWRxCWxrWOcssTDgnG4yqq9BRE=
+github.com/dlclark/regexp2 v1.4.0 h1:F1rxgk7p4uKjwIQxBs9oAXe5CqrXlCduYEJvrF4u93E=
+github.com/dlclark/regexp2 v1.4.0/go.mod h1:2pZnwuY/m+8K6iRw6wQdMtk+rH5tNGR1i55kozfMjCc=
 github.com/droundy/goopt v0.0.0-20220217183150-48d6390ad4d1 h1:6PKU05V7zJIJlTBq7AnEIrLVEUIYF4NjTU2a28Ho6ko=
 github.com/droundy/goopt v0.0.0-20220217183150-48d6390ad4d1/go.mod h1:ytRJ64WkuW4kf6/tuYqBATBCRFUP8X9+LDtgcvE+koI=
 github.com/dustin/go-humanize v1.0.0 h1:VSnTsYCnlFHaM2/igO1h6X3HA71jcobQuxemgkq4zYo=

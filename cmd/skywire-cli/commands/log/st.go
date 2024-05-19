@@ -105,7 +105,7 @@ func makeTree() {
 			var coloredFile string
 			if kid == "proxy" {
 				testtime, _ := script.File(proxyCSV).Match(dirNode).Replace(",", " ").Column(2).String()
-				testres, _ := script.File(proxyCSV).Match(dirNode).Replace(",", " ").Column(9).String()
+				testres, _ := script.File(proxyCSV).Match(dirNode).Replace(",", " ").Column(3).String()
 				if testtime != "" && testres != "" {
 					coloredFile = fmt.Sprintf("%s           %s	%s", pterm.Green("proxy"), strings.ReplaceAll(testtime, "\n", ""), strings.ReplaceAll(testres, "\n", ""))
 				} else {

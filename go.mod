@@ -7,6 +7,7 @@ toolchain go1.21.5
 require (
 	github.com/AudriusButkevicius/pfilter v0.0.11
 	github.com/VictoriaMetrics/metrics v1.24.0
+	github.com/alecthomas/chroma v0.10.0
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/bitfield/script v0.22.0
 	github.com/blang/semver/v4 v4.0.0
@@ -80,6 +81,7 @@ require (
 	github.com/dgraph-io/ristretto v0.1.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/distatus/battery v0.10.0 // indirect
+	github.com/dlclark/regexp2 v1.4.0 // indirect
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/fatih/color v1.15.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.2 // indirect
