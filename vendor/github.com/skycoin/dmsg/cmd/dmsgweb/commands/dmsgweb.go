@@ -12,11 +12,14 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/bitfield/script"
 	"github.com/confiant-inc/go-socks5"
 	"github.com/gin-gonic/gin"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
@@ -32,17 +35,6 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 )
 
-// RootCmd contains commands that interact with the config of local skywire-visor
-var genKeysCmd = &cobra.Command{
-	Use:   "gen-keys",
-	Short: "generate public / secret keypair",
-	Run: func(cmd *cobra.Command, args []string) {
-		pk, sk := cipher.GenerateKeyPair()
-		fmt.Println(pk)
-		fmt.Println(sk)
-	},
-}
-
 type customResolver struct{}
 
 func (r *customResolver) Resolve(ctx context.Context, name string) (context.Context, net.IP, error) {
@@ -55,7 +47,7 @@ func (r *customResolver) Resolve(ctx context.Context, name string) (context.Cont
 			return ctx, nil, fmt.Errorf("failed to parse IP address")
 		}
 		// Modify the context to include the desired port
-		ctx = context.WithValue(ctx, "port", webPort) //nolint
+		ctx = context.WithValue(ctx, "port", strconv.Itoa(webPort)) //nolint
 		return ctx, ip, nil
 	}
 	// Use default name resolution for other domains
@@ -70,27 +62,37 @@ var (
 	sk                 cipher.SecKey
 	dmsgWebLog         *logging.Logger
 	logLvl             string
-	webPort            string
-	proxyPort          string
+	webPort            int
+	proxyPort          uint
 	addProxy           string
 	resolveDmsgAddr    string
 	wg                 sync.WaitGroup
+	isEnvs             bool
 )
 
+const envname = "DMSGWEB"
+
+var envfile = os.Getenv(envname)
+
 func init() {
-	RootCmd.AddCommand(genKeysCmd)
+
 	RootCmd.Flags().StringVarP(&filterDomainSuffix, "filter", "f", ".dmsg", "domain suffix to filter")
-	RootCmd.Flags().StringVarP(&proxyPort, "socks", "q", "4445", "port to serve the socks5 proxy")
-	RootCmd.Flags().StringVarP(&addProxy, "proxy", "r", "", "configure additional socks5 proxy for dmsgweb (i.e. 127.0.0.1:1080)")
-	RootCmd.Flags().StringVarP(&webPort, "port", "p", "8080", "port to serve the web application")
-	RootCmd.Flags().StringVarP(&resolveDmsgAddr, "resolve", "t", "", "resolve the specified dmsg address:port on the local port & disable proxy")
-	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "d", "", "dmsg discovery url default:\n"+skyenv.DmsgDiscAddr)
-	RootCmd.Flags().IntVarP(&dmsgSessions, "sess", "e", 1, "number of dmsg servers to connect to")
+	RootCmd.Flags().UintVarP(&proxyPort, "socks", "q", scriptExecUint("${PROXYPORT:-4445}"), "port to serve the socks5 proxy")
+	RootCmd.Flags().StringVarP(&addProxy, "proxy", "r", scriptExecString("${ADDPROXY}"), "configure additional socks5 proxy for dmsgweb (i.e. 127.0.0.1:1080)")
+	RootCmd.Flags().IntVarP(&webPort, "port", "p", scriptExecInt("${WEBPORT:-8080}"), "port to serve the web application")
+	RootCmd.Flags().StringVarP(&resolveDmsgAddr, "resolve", "t", scriptExecString("${RESOLVEPK}"), "resolve the specified dmsg address:port on the local port & disable proxy")
+	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "d", skyenv.DmsgDiscAddr, "dmsg discovery url")
+	RootCmd.Flags().IntVarP(&dmsgSessions, "sess", "e", scriptExecInt("${DMSGSESSIONS:-1}"), "number of dmsg servers to connect to")
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "", "[ debug | warn | error | fatal | panic | trace | info ]\033[0m")
-	if os.Getenv("DMSGGET_SK") != "" {
-		sk.Set(os.Getenv("DMSGGET_SK")) //nolint
+	if os.Getenv("DMSGWEB_SK") != "" {
+		sk.Set(os.Getenv("DMSGWEB_SK")) //nolint
+	}
+	if scriptExecString("${DMSGWEB_SK}") != "" {
+		sk.Set(scriptExecString("${DMSGWEB_SK}")) //nolint
 	}
 	RootCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
+	RootCmd.Flags().BoolVarP(&isEnvs, "envs", "z", false, "show example .conf file")
+
 }
 
 // RootCmd contains the root command for dmsgweb
@@ -103,13 +105,30 @@ var RootCmd = &cobra.Command{
 	┌┬┐┌┬┐┌─┐┌─┐┬ ┬┌─┐┌┐
 	 │││││└─┐│ ┬│││├┤ ├┴┐
 	─┴┘┴ ┴└─┘└─┘└┴┘└─┘└─┘
-DMSG resolving proxy & browser client - access websites over dmsg`,
+DMSG resolving proxy & browser client - access websites over dmsg` + func() string {
+		if _, err := os.Stat(envfile); err == nil {
+			return `
+dmsgweb env file detected: ` + envfile
+		}
+		return `
+.conf file may also be specified with
+` + envname + `=/path/to/dmsgweb.conf skywire dmsg web`
+	}(),
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
 	Run: func(cmd *cobra.Command, _ []string) {
+		if isEnvs {
+			if runtime.GOOS == "windows" {
+				envfile = envfileWindows
+			} else {
+				envfile = envfileLinux
+			}
+			fmt.Println(envfile)
+			os.Exit(0)
+		}
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, os.Interrupt, syscall.SIGTERM) //nolint
 		go func() {
@@ -168,7 +187,7 @@ DMSG resolving proxy & browser client - access websites over dmsg`,
 					if match {
 						port, ok := ctx.Value("port").(string)
 						if !ok {
-							port = webPort
+							port = strconv.Itoa(webPort)
 						}
 						addr = "localhost:" + port
 					} else {
@@ -187,7 +206,7 @@ DMSG resolving proxy & browser client - access websites over dmsg`,
 			}
 
 			// Start the SOCKS5 server
-			socksAddr := "127.0.0.1:" + proxyPort
+			socksAddr := fmt.Sprintf("127.0.0.1:%v", proxyPort)
 			log.Printf("SOCKS5 proxy server started on %s", socksAddr)
 
 			server, err := socks5.New(conf)
@@ -227,36 +246,25 @@ DMSG resolving proxy & browser client - access websites over dmsg`,
 				}
 				urlStr = fmt.Sprintf("dmsg://%s:%s%s", strings.TrimRight(hostParts[0], filterDomainSuffix), dmsgp, c.Param("path"))
 			}
-
-			maxSize := int64(1024)
-
 			req, err := http.NewRequest(http.MethodGet, urlStr, nil)
 			if err != nil {
 				c.String(http.StatusInternalServerError, "Failed to create HTTP request")
 				return
 			}
-
 			resp, err := httpC.Do(req)
 			if err != nil {
 				c.String(http.StatusInternalServerError, "Failed to connect to HTTP server")
 				return
 			}
 			defer resp.Body.Close() //nolint
-
-			if maxSize > 0 {
-				if resp.ContentLength > maxSize*1024 {
-					c.String(http.StatusRequestEntityTooLarge, "Requested file size exceeds the allowed limit")
-					return
-				}
-			}
 			c.Status(http.StatusOK)
 			io.Copy(c.Writer, resp.Body) //nolint
 		})
 		wg.Add(1)
 		go func() {
-			dmsgWebLog.Debug("Serving http on " + webPort)
-			r.Run(":" + webPort) //nolint
-			dmsgWebLog.Debug("Stopped serving http on " + webPort)
+			dmsgWebLog.Debug(fmt.Sprintf("Serving http on: http://127.0.0.1:%v", webPort))
+			r.Run(":" + strconv.Itoa(webPort)) //nolint
+			dmsgWebLog.Debug(fmt.Sprintf("Stopped serving http on: http://127.0.0.1:%v", webPort))
 			wg.Done()
 		}()
 		wg.Wait()
@@ -304,7 +312,7 @@ func loggingMiddleware() gin.HandlerFunc {
 		methodColor := getMethodColor(method)
 		// Print the logging in a custom format which includes the publickeyfrom c.Request.RemoteAddr ex.:
 		// [DMSGHTTP] 2023/05/18 - 19:43:15 | 200 |    10.80885ms |                 | 02b5ee5333aa6b7f5fc623b7d5f35f505cb7f974e98a70751cf41962f84c8c4637:49153 | GET      /node-info.json
-		fmt.Printf("[DMSGHTTP] %s |%s %3d %s| %13v | %15s | %72s |%s %-7s %s %s\n",
+		fmt.Printf("[DMSGWEB] %s |%s %3d %s| %13v | %15s | %72s |%s %-7s %s %s\n",
 			time.Now().Format("2006/01/02 - 15:04:05"),
 			statusCodeBackgroundColor,
 			statusCode,
@@ -374,3 +382,150 @@ func Execute() {
 		log.Fatal("Failed to execute command: ", err)
 	}
 }
+
+func scriptExecString(s string) string {
+	if runtime.GOOS == "windows" {
+		var variable, defaultvalue string
+		if strings.Contains(s, ":-") {
+			parts := strings.SplitN(s, ":-", 2)
+			variable = parts[0] + "}"
+			defaultvalue = strings.TrimRight(parts[1], "}")
+		} else {
+			variable = s
+			defaultvalue = ""
+		}
+		out, err := script.Exec(fmt.Sprintf(`powershell -c '$SKYENV = "%s"; if ($SKYENV -ne "" -and (Test-Path $SKYENV)) { . $SKYENV }; echo %s"`, envfile, variable)).String()
+		if err == nil {
+			if (out == "") || (out == variable) {
+				return defaultvalue
+			}
+			return strings.TrimRight(out, "\n")
+		}
+		return defaultvalue
+	}
+	z, err := script.Exec(fmt.Sprintf(`sh -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, envfile, s)).String()
+	if err == nil {
+		return strings.TrimSpace(z)
+	}
+	return ""
+}
+
+func scriptExecInt(s string) int {
+	if runtime.GOOS == "windows" {
+		var variable string
+		if strings.Contains(s, ":-") {
+			parts := strings.SplitN(s, ":-", 2)
+			variable = parts[0] + "}"
+		} else {
+			variable = s
+		}
+		out, err := script.Exec(fmt.Sprintf(`powershell -c '$SKYENV = "%s"; if ($SKYENV -ne "" -and (Test-Path $SKYENV)) { . $SKYENV }; echo %s"`, envfile, variable)).String()
+		if err == nil {
+			if (out == "") || (out == variable) {
+				return 0
+			}
+			i, err := strconv.Atoi(strings.TrimSpace(strings.TrimRight(out, "\n")))
+			if err == nil {
+				return i
+			}
+			return 0
+		}
+		return 0
+	}
+	z, err := script.Exec(fmt.Sprintf(`sh -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, envfile, s)).String()
+	if err == nil {
+		if z == "" {
+			return 0
+		}
+		i, err := strconv.Atoi(z)
+		if err == nil {
+			return i
+		}
+	}
+	return 0
+}
+func scriptExecUint(s string) uint {
+	if runtime.GOOS == "windows" {
+		var variable string
+		if strings.Contains(s, ":-") {
+			parts := strings.SplitN(s, ":-", 2)
+			variable = parts[0] + "}"
+		} else {
+			variable = s
+		}
+		out, err := script.Exec(fmt.Sprintf(`powershell -c '$SKYENV = "%s"; if ($SKYENV -ne "" -and (Test-Path $SKYENV)) { . $SKYENV }; echo %s"`, envfile, variable)).String()
+		if err == nil {
+			if (out == "") || (out == variable) {
+				return 0
+			}
+			i, err := strconv.Atoi(strings.TrimSpace(strings.TrimRight(out, "\n")))
+			if err == nil {
+				return uint(i)
+			}
+			return 0
+		}
+		return 0
+	}
+	z, err := script.Exec(fmt.Sprintf(`sh -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, envfile, s)).String()
+	if err == nil {
+		if z == "" {
+			return 0
+		}
+		i, err := strconv.Atoi(z)
+		if err == nil {
+			return uint(i)
+		}
+	}
+	return uint(0)
+}
+
+const envfileLinux = `
+#########################################################################
+#	DMSGWEB CONFIG TEMPLATE
+#		Defaults shown
+#		Uncomment to change default value
+#########################################################################
+
+#--	Set port for proxy interface
+#PROXYPORT=4445
+
+#--	Configure additional proxy for dmsgvlc to use
+#ADDPROXY='127.0.0.1:1080'
+
+#--	Web Interface Port
+#WEBPORT=8080
+
+#--	Resove a specific PK to the web port (also disables proxy)
+#RESOLVEPK=''
+
+#--	Number of dmsg servers to connect to (0 unlimits)
+#DMSGSESSIONS=1
+
+#--	Set secret key
+#DMSGWEB_SK=''
+`
+const envfileWindows = `
+#########################################################################
+#	DMSGWEB CONFIG TEMPLATE
+#		Defaults shown
+#		Uncomment to change default value
+#########################################################################
+
+#--	Set port for proxy interface
+#$PROXYPORT=4445
+
+#--	Configure additional proxy for dmsgvlc to use
+#$ADDPROXY='127.0.0.1:1080'
+
+#--	Web Interface Port
+#$WEBPORT=8080
+
+#--	Resove a specific PK to the web port (also disables proxy)
+#$RESOLVEPK=''
+
+#--	Number of dmsg servers to connect to (0 unlimits)
+#$DMSGSESSIONS=1
+
+#--	Set secret key
+#$DMSGWEB_SK=''
+`
