@@ -33,7 +33,7 @@ require (
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/shibukawa/configdir v0.0.0-20170330084843-e180dbdc8da0
 	github.com/sirupsen/logrus v1.9.3
-	github.com/skycoin/dmsg v1.3.22-0.20240519222927-631b9e049304
+	github.com/skycoin/dmsg v1.3.22-0.20240520184015-5d7616ee506a
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/skycoin-service-discovery v0.0.0-20240306165129-2af10aca698e
 	github.com/skycoin/skywire-services v0.0.0-20240403004908-50ccbbf07004
