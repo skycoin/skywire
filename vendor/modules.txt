@@ -526,7 +526,7 @@ github.com/shirou/gopsutil/process
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v1.3.22-0.20240519222927-631b9e049304
+# github.com/skycoin/dmsg v1.3.22-0.20240520184015-5d7616ee506a
 ## explicit; go 1.21
 github.com/skycoin/dmsg/cmd/dmsg-discovery/commands
 github.com/skycoin/dmsg/cmd/dmsg-server/commands
