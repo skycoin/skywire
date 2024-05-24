@@ -35,7 +35,7 @@ It should be noted that the system survey generation requires root for many of i
 
 ### Log & Survey Collection
 
-The log collection and [reward processing](#reward-processing) happens hourly.
+The log collection and [reward processing](#reward-processing) happens hourly via [skywire-reward.service](/scripts/rewards/services/skywire-reward.service) - triggered to run hourly by [skywire-reward.timer](/scripts/rewards/services/skywire-reward.timer).
 
 The log collection run can be viewed here:
 https://fiber.skywire.dev/log-collection
@@ -52,11 +52,16 @@ These `survey_whitelist` keys are specified by the [conf service](https://conf.s
 
 The collected surveys are then checked and backed up.
 
-The collection of surveys and the reward calculation happens hourly - as configured by the systemd service and timer
+The following scripts are used by the reward system:
+
+[`getlogs.sh`](/scripts/rewards/getlogs.sh) - a wrapper script for survey and transport bandwidth log collection via `skywire cli log`
+[`reward.sh`](/scripts/rewards/reward.sh) - a wrapper script for reward calculation via `skywire cli rewards`
+[`gettps.sh`](/scripts/rewards/gettps.sh) - a wrapper script for collecting responses to transport setup-node requests via `skywire svc tps ls`
+[`testproxies.sh`](/scripts/rewards/testproxies.sh) - WIP - a wrapper script for testing curl response time over the skywire socks5 proxy (not used for reward calculation)
 
 ### Reward Processing
 
-The rewards are calculated by `skywire cli rewards calc` with the aid of [reward.sh](scripts/rewards/reward.sh) to produce the reward distribution data for the previous day's uptime.
+The rewards are calculated by `skywire cli rewards calc` with the aid of [`reward.sh`](scripts/rewards/reward.sh) to produce the reward distribution data for the previous day's uptime.
 
 ### Per-IP reward limit
 
@@ -70,53 +75,27 @@ To avoid a user running multiple instances of skywire on virtual machines, the M
 
 ## Automation via systemd service
 
-Automation of the hourly log & survey collection is accomplished via systemd service and timer executing [getlogs.sh](scripts/rewards/getlogs.sh) and [reward.sh](scripts/rewards/reward.sh)
+Automation of the hourly log & survey collection is accomplished via systemd service and timer
 
-/etc/systemd/system/skywire-reward.service
-```
-[Unit]
-Description=skywire reward service
-After=network.target
-
-[Service]
-Type=simple
-User=user
-Group=user
-WorkingDirectory=/path/to/github.com/reward/rewards
-ExecStart=/usr/bin/bash -c './getlogs.sh && ./reward.sh'
-
-[Install]
-WantedBy=multi-user.target
-
-```
+/etc/systemd/system/[`skywire-reward.service`](/scripts/rewards/services/skywire-reward.service)
 
 **Note: change the user and working directory in the above systemd service**
 
-This service is called by a timer
+This service is called by a timer which triggers it to run hourly
 
-/etc/systemd/system/skywire-reward.timer
-```
-[Unit]
-Description=skywire reward timer
-After=network.target
-
-[Timer]
-OnUnitActiveSec=1h
-Unit=skywire-reward.service
-
-[Install]
-WantedBy=multi-user.target
-
-```
+/etc/systemd/system/[`skywire-reward.timer`](/scripts/rewards/services/skywire-reward.timer).
 
 
 ## fiber.skywire.dev
 
-The 'frontend' of the reward system, is currently running at [fiber.skywire.dev](https://fiber.skywire.dev) and is reliant upon on the output of certain cli commands and some scripts
+The 'frontend' of the reward system, is currently running at [fiber.skywire.dev](https://fiber.skywire.dev) and is reliant upon on the output of certain cli commands ~~and some scripts~~
 
 [`skywire cli rewards ui`](cmd/skywire-cli/commands/rewards/ui.go) serves the reward system frontend or user interface - via http and dmsghttp.
 
-A wrapper script [`scripts/getlogs.sh`](scripts/getlogs.sh) is used to redirect the output of `skywire cli log` to a file, which is displayed at:
+The service which runs the reward system UI:
+/etc/systemd/system/[`fiberreward.service`](/scripts/rewards/services/fiberreward.service)
+
+A wrapper script [`getlogs.sh`](scripts/rewards/getlogs.sh) is used to redirect the output of `skywire cli log` to a file, which is displayed at:
 
 https://fiber.skywire.dev/log-collection
 
@@ -126,7 +105,7 @@ Here shows links to the reward calculations and distribution data by day:
 
 https://fiber.skywire.dev/skycoin-rewards
 
-on each linked page, the distribution data is displayed, and a link to the explorer for that transaction if it was broadcast. Also displayed are the public keys and their reward shares, or the reason why they were not rewarded
+on each linked page, the distribution data is displayed with a link to the explorer for that transaction if it was broadcast. Also displayed are the public keys and their reward shares, or the reason why they were not rewarded
 
 The frontend may be run either with flags or by using a conf file such as the following:
 fr.conf
@@ -166,5 +145,6 @@ REWARD_SYS_URL="dmsg://<reward-system-public-key>:80"
 
 before the script is run and the transaction is attempted to be broadcast, it's crucial to check that the hourly [log collection and reward calculation](https://fiber.skywire.dev/log-collection) is not ongoing.
 
+### Reward Notifications
 
-When the transaction is then broadcast, it's transaction ID recorded in a file which is monitored by the reward telegram bot, which generates a notification in https://t.me/skywire_reward. **Note: this will eventually be supplemented with or replaced by a notification via skychat.**
+When the transaction is broadcast by the reward system, it's transaction ID is recorded by appending a file which is monitored by the reward telegram bot. The telegram bot will then generate a notification in https://t.me/skywire_reward when a change to that file is detected. **Note: this will eventually be supplemented with or replaced by a notification via skychat.**
