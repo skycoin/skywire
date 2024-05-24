@@ -360,8 +360,8 @@ func server() {
 		tpstats, _ := script.Exec("skywire cli tp tree -s").Match("Count of transports:").Replace("Count of transports: ", "").Replace("\n", "").String() //nolint
 		tpcount, _ := strconv.Atoi(tpstats)                                                                                                               //nolint
 		if tpcount < 400 {
-			tpTree, _ := script.Exec("skywire cli tp tree").Bytes()  //nolint
-			c.Writer.Write(ansihtml.ConvertToHTML(tpTree)) //nolint
+			tpTree, _ := script.Exec("skywire cli tp tree").Bytes() //nolint
+			c.Writer.Write(ansihtml.ConvertToHTML(tpTree))          //nolint
 			c.Writer.Flush()
 		} else {
 			c.Writer.Write([]byte(fmt.Sprintf("Transport count: %v exceeds server resources to map", tpcount))) //nolint
@@ -851,7 +851,9 @@ func server() {
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
 		_, err := time.Parse("2006-01-02", c.Param("date"))
 		if err != nil {
-			if strings.Contains(c.Param("date"), "_rewardtxn0.csv") {
+			_, err1 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), "_rewardtxn0.csv", "", -1))
+			_, err2 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), "_stats.txt", "", -1))
+			if err1 != nil || err2 != nil {
 				filetoserve, err := script.File("rewards/hist/" + c.Param("date")).Bytes()
 				if err == nil {
 					c.Writer.Header().Set("Content-Type", "text/plain")
@@ -1261,7 +1263,7 @@ func serveSyntaxHighlighted(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusOK)
-	c.Writer.Write(buf.Bytes())  //nolint
+	c.Writer.Write(buf.Bytes()) //nolint
 }
 
 type ginHandler struct {

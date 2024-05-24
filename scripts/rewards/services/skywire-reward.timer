@@ -1,0 +1,10 @@
+[Unit]
+Description=skywire reward timer
+After=network.target
+
+[Timer]
+OnUnitActiveSec=1h
+Unit=skywire-reward.service
+
+[Install]
+WantedBy=multi-user.target

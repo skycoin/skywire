@@ -1,10 +1,13 @@
 #!/usr/bin/bash
-timeout 30.0m unbuffer skywire-cli log --minv v1.3.19 -s $(tail -n1 survey-wl.conf) | tee skywire-cli-log.txt
+timeout 30.0m unbuffer skywire-cli log --minv v1.3.21 -s $(tail -n1 survey-wl.conf) | tee skywire-cli-log.txt
 #echo -e "skywire survey and transport log collection $(date)\n\n$(cat skywire-cli-log.txt)\n"
  echo -e "skywire survey and transport log collection $(date)\n\n$(cat skywire-cli-log.txt)\n" | tee skywire-cli-log0.txt >> /dev/null
 echo "finished "$(date) | tee -a skywire-cli-log0.txt
 mv skywire-cli-log0.txt skywire-cli-log.txt
 
+#Delete json files more than 1 week old
+find log_backups/*/*.json -type f -mmin +$((168 * 60)) -delete
+find log_collecting/*/*.json -type f -mmin +$((168 * 60)) -delete
 #remove empty files and dirs
 find log_collecting/*/ -empty -type f -delete && printf "removed empty files... \n"  || true
 find log_collecting/*/ -type f -size 19c -delete && printf "removed files with http 404 errors... \n" || true
@@ -22,20 +25,8 @@ find log_collecting/*/$(date +'%Y-%m-%d').csv -type f -print | while read _file 
 find log_collecting/*/$(date --date="yesterday" +'%Y-%m-%d').csv -type f -print | while read _file ; do [[ $(head -n 1 $_file) == *"tp_id,recv,sent,time_stamp"* ]] && sed -i '1d' $_file ; done || true
 find log_backups/*/$(date +'%Y-%m-%d').csv -type f -print | while read _file ; do [[ $(head -n 1 $_file) == *"tp_id,recv,sent,time_stamp"* ]] && sed -i '1d' $_file ; done || true
 find log_backups/*/$(date --date="yesterday" +'%Y-%m-%d').csv -type f -print | while read _file ; do [[ $(head -n 1 $_file) == *"tp_id,recv,sent,time_stamp"* ]] && sed -i '1d' $_file ; done || true
-grep -l "404 page not found" log_collecting/*/$(date +'%Y-%m-%d').csv | xargs rm -f || true
-grep -l "404 page not found" log_collecting/*/$(date --date="yesterday" +'%Y-%m-%d').csv | xargs rm -f || true
-grep -l "404 page not found" log_backups/*/$(date +'%Y-%m-%d').csv | xargs rm -f || true
-grep -l "404 page not found" log_backups/*/$(date --date="yesterday" +'%Y-%m-%d').csv | xargs rm -f || true
-
-
-#check / decrypt surveys
-printf "checking surveys... \n"
-find log_collecting/*/node-info.json -type f -print | xargs grep -l "404 page not found" | parallel rm || true
-find log_collecting/*/node-info.json -type f -print | xargs grep -l "Not Found" | parallel rm || true
-find log_collecting/*/node-info.json -type f -print | xargs grep -l "PGP MESSAGE" | parallel rm  || true #xargs -I {} ./decrypt.sh {} #./decrypt.sh
-find log_backups/*/node-info.json -type f -print | xargs grep -l "404 page not found" | parallel rm || true
-find log_backups/*/node-info.json -type f -print | xargs grep -l "Not Found" | parallel rm || true
-find log_backups/*/node-info.json -type f -print | xargs grep -l "PGP MESSAGE" | parallel rm || true #xargs -I {} ./decrypt.sh {} #./decrypt.sh
+find log_collecting/*/*.json -type f -print | while read _file; do if ! jq '.' "$_file" >/dev/null 2>&1; then echo "invalid json $_file" ; rm $_file; fi; done
+find log_backups/*/*.json -type f -print | while read _file; do if ! jq '.' "$_file" >/dev/null 2>&1; then echo "invalid json $_file" ; rm $_file; fi; done
 
 printf "checking tp logs... \n"
 [[ -f log_collecting/*/$(date +'%Y-%m-%d').csv ]] && find log_collecting/*/$(date +'%Y-%m-%d').csv -type f -print | xargs grep -l "404 page not found" | parallel rm || true
@@ -46,6 +37,7 @@ printf "checking tp logs... \n"
 [[ -f log_collecting/*/log_collecting/*/$(date --date="yesterday" +'%Y-%m-%d').csv ]] && find log_backups/*/$(date --date="yesterday" +'%Y-%m-%d').csv -type f -print | xargs grep -l "404 page not found" | parallel rm  || true
 [[ -f log_collecting/*/$(date +'%Y-%m-%d').csv ]] && find log_backups/*/$(date +'%Y-%m-%d').csv -type f -print | xargs grep -l "Not Found" | parallel rm || true
 [[ -f log_collecting/*/log_collecting/*/$(date --date="yesterday" +'%Y-%m-%d').csv ]] && find log_backups/*/$(date --date="yesterday" +'%Y-%m-%d').csv -type f -print | xargs grep -l "Not Found" | parallel rm || true
+
 
 #back up the collected files
 rsync -r log_collecting/ log_backups || true

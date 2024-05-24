@@ -1,0 +1,17 @@
+[Unit]
+Description=skywire cli rewards ui
+After=network.target network-online.target
+
+[Service]
+Type=simple
+User=youruser
+Group=youruser
+WorkingDirectory=/path/to/reward
+Environment='SKYENV=fr.conf'
+ExecStart=/usr/bin/bash -c 'skywire cli rewards ui'
+Restart=always
+RestartSec=20
+TimeoutSec=30
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+[Unit]
+Description=skywire reward service
+After=network.target
+
+[Service]
+Type=simple
+User=youruser
+Group=youruser
+WorkingDirectory=/path/to/reward/rewards
+ExecStart=/bin/bash -c '(unbuffer skywire svc tps -l debug -c /etc/tpsn.json  | tee transport-setup-node.txt) & (./getlogs.sh && ./gettps.sh && ./reward.sh ; exit 0)'
+
+[Install]
+WantedBy=multi-user.target
