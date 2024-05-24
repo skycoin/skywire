@@ -1,0 +1,3 @@
+# Setup Node
+
+The *Setup Node* (located within the `skywire/pkg/node` module) uses *Transport Manager* internally and is responsible for propagation of routing rules to nodes along the *Route*. *Setup Node* should be only addressed by a public key and should work over messaging transport using multiple channels. Each channel can be used to issue route setup commands by initiator. For *Loop* setup requests *Node* will be an initiator, for *Rule* setup related operations *Setup Node* will be a channel initiator. *Setup Node* is only responsible for handling *Foundational Packets* and doesn't perform any forwarding functions.

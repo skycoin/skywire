@@ -55,6 +55,7 @@ require (
 	golang.org/x/sync v0.3.0
 	golang.org/x/sys v0.17.0
 	golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675
+	gopkg.in/telebot.v3 v3.2.1
 )
 
 require (

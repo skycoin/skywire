@@ -1,0 +1,17 @@
+[Unit]
+Description=reward notification bot
+After=network.target network-online.target
+
+[Service]
+Type=simple
+User=youruser
+Group=youruser
+Environment=TG_BOT_TOKEN="<bot-token>" TG_CHAT_ID="-1001751553086"
+WorkingDirectory=/path/to/reward-tgbot
+ExecStart=/usr/bin/go run main.go
+Restart=on-failure
+RestartSec=20
+TimeoutSec=30
+
+[Install]
+WantedBy=multi-user.target
