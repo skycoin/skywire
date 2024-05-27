@@ -1586,7 +1586,7 @@ Route-finder modifies this algorithm by keeping track of all the nodes that reac
 
 ## Code Structure
 
-The code should be in the `watercompany/skywire` repository;
+The code should be in the `skycoin/skywire` repository;
 
 - `/cmd/route-finder/route-finder.go` is the main executable for the *Route Finder*.
 - `/pkg/route-finder/api/` contains the RESTFUL API definitions.
