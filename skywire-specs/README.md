@@ -88,17 +88,33 @@ The Skywire specifications.
 
 # Overview
 
-Skywire is a decentralized *SDN* (software defined network) which attempts to replace the current internet. The *Skywire Network* is made up of hardware (*Skywire Nodes*) running a *Skywire Visor*. There are currently two types of *Skywire Nodes*; *App Node* or *Skywire Visor* and *Route Setup Node*.
+Before the overview of the Skywire SDN, it's important to understand the *Dmsg Network*. The *Dmsg Network* allows any dmsg client to connect to any other *Dmsg Client* via a *Dmsg Server*. The connection is encrypted to the recipient public key. The ip address of one client is not known to another client. Read more in the [Dmsg Section](#Dmsg).
+
+Skywire is a decentralized *SDN* (software defined network) built on top of the *Dmsg Network* which attempts to replace the current internet. The *Skywire Network* is made up of hardware (*Skywire Nodes*) running a *Skywire Visor*. There are currently two types of *Skywire Nodes*; *App Node* or *Skywire Visor* and *Route Setup Node*.
 
 Each instance of a *Skywire Visor* is represented by a unique public key. Connections made to that *Skywire Visor* are encrypted to the recipient public key.
 
 A bidirectional & reusable line of communication between two *Skywire Visors* is called a *Transport*. Each *Transport* is represented by a unique *Transport ID* which is of a certain *Transport Type*, and the two *Skywire Visors* that are connected via the *Transport* are the *Transport Edges* or *Edge Keys*.
 
 *Transport Types* include the following:
-* SUDPH (or *Skywire-UDP*) transports use a custom UDP-type protocol, for flexible, fast, low-latency connections
+
 * STCPR (or *Skywire-TCP*) transports use a custom TCP-type protocol, are typically established by the public auto-connect when running a *Public Visor*
 * STCP (or *Skywire-TCP*) transports also use a custom TCP-type protocol, but are manually configured in the visor's .json config file
+
+For the above TCP-type transports, **it is required to forward or otherwise expose the requisite port for the visor to accept such transports. Such transports may only be created to the visor with said configuration**.
+
+For a visor which may accept STCPR transports, the *Address Resolver* provides the ip address and the port for the underlying TCP connection / STCPR transport.
+Once established, the transport will continue to work if the connection to the address resolver or other services goes down.
+
+* SUDPH (or *Skywire-UDP*) transports use a custom UDP-type protocol, for flexible, fast, low-latency connections
+
+For a visor which may accept SUDPH transports, the *Address Resolver* provides the ip address and the port for the underlying UDP connection / SUDPH transport.
+Additionally, the visor must initially connect to the address resolver via UDP for this to work.
+Once established, the transport will continue to work if the connection to the address resolver or other services goes down.
+
 * DMSG transports are mediated by dmsg servers. In a technical sense, dmsg transports actually consist of two TCP-type transports which are seamlessly considered as one.
+
+For a visor which may accept DMSG transports, the *Dmsg Server* acts as a direct intermediary of those transports without directly providing the ip address / port to the connecting visor. The visor must maintain it's connection to the dmsgh server via TCP for this to work. The transport will fail immediately if the connection to the *Dmsg Server* is lost or breaks.
 
 *Transports* enable direct p2p communication between visors. However, **critical to note** that any dmsg transports or connections will use a *Dmsg Server* as an intermediary in that connection or transport. A few implications of the previous statement must be understood:
 
@@ -110,7 +126,7 @@ A *Route* is unidirectional(**?**) and delivers data units called *Packets*. A *
 
 **? Maintainer Review Note: In the current implementation routes seem bidirectional by default**
 
-* A multi-hop route consisting of more than one dmsg transport between visors connected to the same dmsg server may transit the same dmsg server multiple times - because currently the dmsg server public key is not accounted for in the transports.
+* A multi-hop route consisting of more than one dmsg transport between visors connected to the same dmsg server may transit the same dmsg server multiple times - because currently the dmsg server public key is not accounted for in the transports. [#1826](https://github.com/skycoin/skywire/issues/1826)
 * A multi-hop route can make it difficult if not impossible to determine what traffic is going where. Traffic correlation becomes even more difficult when a transport is used by more than one client.
 * Skywire routing is wholly dependent on the *Route Setup Node*
 
@@ -119,7 +135,7 @@ A *Packet* is prefixed with a *Route ID* which lets a *Skywire Visor* identify h
 In summary,
 
 - *Transports* are responsible for single-hop communication between two *Skywire Visors* and are bidirectional (this may change later on).
-- *Transport Setup Nodes* are permissioned to request remote visors to establish transports.
+- *Transport Setup Nodes* are dmsg clients permissioned to request remote visors to establish transports to other remote visors.
 - *Routes* are responsible for multi-hop communication between two *Skywire Visors* and are ~~unidirectional~~ may be configured bidirectionally or unidirectionally.
 - *Route Setup Nodes* are responsible for setting up routes.
 - *Loops* are responsible for communication between two *Skywire Apps* and are bidirectional (**Maintainer Review Inquiry: Configured where? Special type of route?**).
@@ -1826,9 +1842,9 @@ Each loop is to be symmetrically encrypted with [Noise](http://noiseprotocol.org
 
 The *Route Setup Node* (located within the `skywire/pkg/node` module) uses *Transport Manager* internally and is responsible for propagation of routing rules to nodes along the *Route*. *Route Setup Node* should be only addressed by a public key and should work over dmsg transport using multiple channels. Each channel can be used to issue route setup commands by initiator. For *Loop* setup requests *Visor* will be an initiator, for *Rule* setup related operations *Route Setup Node* will be a channel initiator. *Route Setup Node* is only responsible for handling *Foundational Packets* and doesn't perform any forwarding functions.
 
-# App Node
+# App Node or Skywire Visor
 
-An App Node is a node that is part of the Skywire network and is represented by a key pair (using the `secp256k1` curve). It handles Transports to remote nodes, sets up routes and loops (via Routing Rules and interaction with the *Route Setup Node*), and manages Apps.
+An App Node or Skywire Visor is a node that is part of the Skywire network and is represented by a key pair (using the `secp256k1` curve). It handles Transports to remote nodes, sets up routes and loops (via Routing Rules and interaction with the *Route Setup Node*), and manages Apps.
 
 Each App is it's own executable that communicates with an *App Node* using a pair of *POSIX* pipes. Piped connection is setup on *App* startup and inherited by a forked *App* process using file descriptor `3` and `4`. Setup process for a forked *App* is handled by the `app` package.
 
