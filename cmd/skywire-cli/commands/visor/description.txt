@@ -94,3 +94,5 @@ Config files, layouts, and color schemes are searched for (in order):
 More information and detailed documentation can found at
 https://github.com/xxxserxxx/gotop`
 	
+Note:
+On MacOS Disk info https://github.com/xxxserxxx/gotop/issues/244 and Temp https://github.com/xxxserxxx/gotop/issues/240 do not work.
