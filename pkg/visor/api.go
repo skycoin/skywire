@@ -121,7 +121,7 @@ type API interface {
 	ListHTTPPorts() ([]int, error)
 	Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
 	Disconnect(id uuid.UUID) error
-	List() (map[uuid.UUID]*appnet.ForwardConn, error)
+	List() (map[uuid.UUID]*appnet.ConnectConn, error)
 	DialPing(config PingConfig) error
 	Ping(config PingConfig) ([]time.Duration, error)
 	StopPing(pk cipher.PubKey) error
@@ -1631,20 +1631,20 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid
 		v.log.WithError(fmt.Errorf(*sErr)).Error("Server closed with error")
 		return uuid.UUID{}, fmt.Errorf(*sErr)
 	}
-	forwardConn := appnet.NewForwardConn(v.log, remoteConn, remotePort, localPort)
-	forwardConn.Serve()
-	return forwardConn.ID, nil
+	connectConn := appnet.NewConnectConn(v.log, remoteConn, remotePort, localPort)
+	connectConn.Serve()
+	return connectConn.ID, nil
 }
 
 // Disconnect implements API.
 func (v *Visor) Disconnect(id uuid.UUID) error {
-	forwardConn := appnet.GetForwardConn(id)
-	return forwardConn.Close()
+	connectConn := appnet.GetConnectConn(id)
+	return connectConn.Close()
 }
 
 // List implements API.
-func (v *Visor) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
-	return appnet.GetAllForwardConns(), nil
+func (v *Visor) List() (map[uuid.UUID]*appnet.ConnectConn, error) {
+	return appnet.GetAllConnectConns(), nil
 }
 
 func isPortAvailable(log *logging.Logger, port int) bool {

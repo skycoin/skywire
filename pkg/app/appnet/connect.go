@@ -17,42 +17,42 @@ import (
 
 // nolint: gochecknoglobals
 var (
-	forwardConns   = make(map[uuid.UUID]*ForwardConn)
-	forwardConnsMu sync.Mutex
+	connectConns   = make(map[uuid.UUID]*ConnectConn)
+	connectConnsMu sync.Mutex
 )
 
-// AddForwarding adds ForwardConn to with it's ID
-func AddForwarding(fwd *ForwardConn) {
-	forwardConnsMu.Lock()
-	defer forwardConnsMu.Unlock()
-	forwardConns[fwd.ID] = fwd
+// AddConnect adds ConnectConn to with it's ID
+func AddConnect(fwd *ConnectConn) {
+	connectConnsMu.Lock()
+	defer connectConnsMu.Unlock()
+	connectConns[fwd.ID] = fwd
 }
 
-// GetForwardConn get's a ForwardConn by ID
-func GetForwardConn(id uuid.UUID) *ForwardConn {
-	forwardConnsMu.Lock()
-	defer forwardConnsMu.Unlock()
+// GetConnectConn get's a ConnectConn by ID
+func GetConnectConn(id uuid.UUID) *ConnectConn {
+	connectConnsMu.Lock()
+	defer connectConnsMu.Unlock()
 
-	return forwardConns[id]
+	return connectConns[id]
 }
 
-// GetAllForwardConns gets all ForwardConns
-func GetAllForwardConns() map[uuid.UUID]*ForwardConn {
-	forwardConnsMu.Lock()
-	defer forwardConnsMu.Unlock()
+// GetAllConnectConns gets all ConnectConns
+func GetAllConnectConns() map[uuid.UUID]*ConnectConn {
+	connectConnsMu.Lock()
+	defer connectConnsMu.Unlock()
 
-	return forwardConns
+	return connectConns
 }
 
-// RemoveForwardConn removes a ForwardConn by ID
-func RemoveForwardConn(id uuid.UUID) {
-	forwardConnsMu.Lock()
-	defer forwardConnsMu.Unlock()
-	delete(forwardConns, id)
+// RemoveConnectConn removes a ConnectConn by ID
+func RemoveConnectConn(id uuid.UUID) {
+	connectConnsMu.Lock()
+	defer connectConnsMu.Unlock()
+	delete(connectConns, id)
 }
 
-// ForwardConn ...
-type ForwardConn struct {
+// ConnectConn represents a connection that is published on the skywire network
+type ConnectConn struct {
 	ID         uuid.UUID
 	LocalPort  int
 	RemotePort int
@@ -63,8 +63,8 @@ type ForwardConn struct {
 	log        *logging.Logger
 }
 
-// NewForwardConn creates a new forwarding conn
-func NewForwardConn(log *logging.Logger, remoteConn net.Conn, remotePort, localPort int) *ForwardConn {
+// NewConnectConn creates a new ConnectConn
+func NewConnectConn(log *logging.Logger, remoteConn net.Conn, remotePort, localPort int) *ConnectConn {
 	closeChan := make(chan struct{})
 	var once sync.Once
 	handler := http.NewServeMux()
@@ -78,7 +78,7 @@ func NewForwardConn(log *logging.Logger, remoteConn net.Conn, remotePort, localP
 		WriteTimeout:   10 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
-	fwdConn := &ForwardConn{
+	fwdConn := &ConnectConn{
 		ID:         uuid.New(),
 		remoteConn: remoteConn,
 		srv:        srv,
@@ -87,12 +87,12 @@ func NewForwardConn(log *logging.Logger, remoteConn net.Conn, remotePort, localP
 		closeChan:  closeChan,
 		log:        log,
 	}
-	AddForwarding(fwdConn)
+	AddConnect(fwdConn)
 	return fwdConn
 }
 
 // Serve serves a HTTP forward conn that accepts all requests and forwards them directly to the remote server over the specified net.Conn.
-func (f *ForwardConn) Serve() {
+func (f *ConnectConn) Serve() {
 	go func() {
 		err := f.srv.ListenAndServe()
 		if err != nil {
@@ -113,11 +113,11 @@ func (f *ForwardConn) Serve() {
 }
 
 // Close closes the server and remote connection.
-func (f *ForwardConn) Close() (err error) {
+func (f *ConnectConn) Close() (err error) {
 	f.closeOnce.Do(func() {
 		err = f.srv.Close()
 		err = f.remoteConn.Close()
-		RemoveForwardConn(f.ID)
+		RemoveConnectConn(f.ID)
 	})
 	return err
 }

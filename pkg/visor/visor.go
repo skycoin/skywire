@@ -407,7 +407,7 @@ func (v *Visor) Close() error {
 	log.Info("Begin shutdown.")
 
 	// Cleanly close ongoing forward conns
-	for _, forwardConn := range appnet.GetAllForwardConns() {
+	for _, forwardConn := range appnet.GetAllConnectConns() {
 		err := forwardConn.Close()
 		if err != nil {
 			log.WithError(err).Warn("Forward conn stopped with unexpected result.")
