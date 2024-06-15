@@ -1,5 +1,5 @@
-// Package skyrev cmd/skywire-cli/commands/skyfwd/root.go
-package skyrev
+// Package net cmd/skywire-cli/commands/net/connect.go
+package net
 
 import (
 	"bytes"
@@ -25,18 +25,19 @@ var (
 )
 
 func init() {
-	RootCmd.Flags().IntVarP(&remotePort, "remote", "r", 0, "remote port to read from")
-	RootCmd.Flags().StringVarP(&remotePk, "pk", "k", "", "remote public key to connect to")
-	RootCmd.Flags().IntVarP(&localPort, "port", "p", 0, "local port to reverse proxy")
-	RootCmd.Flags().BoolVarP(&lsPorts, "ls", "l", false, "list configured connections")
-	RootCmd.Flags().StringVarP(&disconnect, "stop", "d", "", "disconnect from specified <id>")
+	conCmd.Flags().IntVarP(&remotePort, "remote", "r", 0, "remote port to read from")
+	conCmd.Flags().StringVarP(&remotePk, "pk", "k", "", "remote public key to connect to")
+	conCmd.Flags().IntVarP(&localPort, "port", "p", 0, "local port to reverse proxy")
+	conCmd.Flags().BoolVarP(&lsPorts, "ls", "l", false, "list configured connections")
+	conCmd.Flags().StringVarP(&disconnect, "stop", "d", "", "disconnect from specified <id>")
+	RootCmd.AddCommand(conCmd)
 }
 
-// RootCmd contains commands that interact with the skyforwarding
-var RootCmd = &cobra.Command{
-	Use:   "rev",
-	Short: "reverse proxy skyfwd",
-	Long:  "connect or disconnect from remote ports",
+// conCmd contains commands to connect to a published port on the skywire network
+var conCmd = &cobra.Command{
+	Use:   "con",
+	Short: "Connect to a published port on the skywire network",
+	Long:  "Connect to a published port on the skywire network\nConnect to a remote port on the skywire network. This will allow you to access the remote port via the skywire network.",
 	Args:  cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 

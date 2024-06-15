@@ -1,5 +1,5 @@
-// Package skyfwd cmd/skywire-cli/commands/skyfwd/root.go
-package skyfwd
+// Package net cmd/skywire-cli/commands/net/publish.go
+package net
 
 import (
 	"bytes"
@@ -17,21 +17,20 @@ import (
 var (
 	portNo     int
 	deregister bool
-	lsPorts    bool
 )
 
 func init() {
-	RootCmd.PersistentFlags().IntVarP(&portNo, "port", "p", 0, "local port of the external (http) app")
-	RootCmd.PersistentFlags().BoolVarP(&deregister, "deregister", "d", false, "deregister local port of the external (http) app")
-	RootCmd.PersistentFlags().BoolVarP(&lsPorts, "ls", "l", false, "list registered local ports")
-
+	pubCmd.PersistentFlags().IntVarP(&portNo, "port", "p", 0, "local port of the external (http) app")
+	pubCmd.PersistentFlags().BoolVarP(&deregister, "deregister", "d", false, "deregister local port of the external (http) app")
+	pubCmd.PersistentFlags().BoolVarP(&lsPorts, "ls", "l", false, "list published local ports")
+	RootCmd.AddCommand(pubCmd)
 }
 
-// RootCmd contains commands that interact with the skyforwarding
-var RootCmd = &cobra.Command{
-	Use:   "fwd",
-	Short: "Control skyforwarding",
-	Long:  "Control skyforwarding\n forward local ports over skywire",
+// pubCmd contains commands to publish over the skywire network
+var pubCmd = &cobra.Command{
+	Use:   "pub",
+	Short: "Publish over skywire network",
+	Long:  "Publish over skywire network\nPublish a local port over the skywire network. This will allow other nodes to access the local port via the skywire network.",
 	Args:  cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 
