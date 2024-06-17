@@ -78,11 +78,15 @@ var pubCmd = &cobra.Command{
 
 		if deregister {
 			err = rpcClient.DeregisterHTTPPort(portNo)
+			internal.Catch(cmd.Flags(), err)
+
 		} else {
 			err = rpcClient.RegisterHTTPPort(portNo)
+			internal.Catch(cmd.Flags(), err)
+			id, err := rpcClient.Publish(portNo)
+			internal.Catch(cmd.Flags(), err)
+			internal.PrintOutput(cmd.Flags(), "id: %v\n", fmt.Sprintln(id))
 		}
-		internal.Catch(cmd.Flags(), err)
-		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 
 	},
 }

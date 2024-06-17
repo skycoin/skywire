@@ -770,6 +770,22 @@ func (r *RPC) Disconnect(id *uuid.UUID, _ *struct{}) (err error) {
 	return err
 }
 
+// Connect creates a connection with the remote visor to listen on the remote port and serve that on the local port
+func (r *RPC) Publish(localPort *int, out *uuid.UUID) (err error) {
+	defer rpcutil.LogCall(r.log, "Publish", localPort)(out, &err)
+
+	id, err := r.visor.Publish(*localPort)
+	*out = id
+	return err
+}
+
+// Disconnect breaks the connection with the given id
+func (r *RPC) Depublish(id *uuid.UUID, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "Depublish", id)(nil, &err)
+	err = r.visor.Depublish(*id)
+	return err
+}
+
 // List returns all the ongoing skyforwarding connections
 func (r *RPC) List(_ *struct{}, out *map[uuid.UUID]*appnet.ConnectConn) (err error) {
 	defer rpcutil.LogCall(r.log, "List", nil)(out, &err)

@@ -119,6 +119,8 @@ type API interface {
 	RegisterHTTPPort(localPort int) error
 	DeregisterHTTPPort(localPort int) error
 	ListHTTPPorts() ([]int, error)
+	Publish(localPort int) (uuid.UUID, error)
+	Depublish(id uuid.UUID) error
 	Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
 	Disconnect(id uuid.UUID) error
 	List() (map[uuid.UUID]*appnet.ConnectConn, error)
@@ -1582,6 +1584,7 @@ func (v *Visor) ListHTTPPorts() ([]int, error) {
 
 // Connect implements API.
 func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
+	v.log.Errorf("Connecting to %v:%v via %v", remotePK, remotePort, localPort)
 	ok := isPortAvailable(v.log, localPort)
 	if !ok {
 		return uuid.UUID{}, fmt.Errorf(":%v local port already in use", localPort)
@@ -1589,7 +1592,7 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid
 	connApp := appnet.Addr{
 		Net:    appnet.TypeSkynet,
 		PubKey: remotePK,
-		Port:   routing.Port(skyenv.SkyForwardingServerPort),
+		Port:   routing.Port(remotePort),
 	}
 	conn, err := appnet.Dial(connApp)
 	if err != nil {
@@ -1600,38 +1603,7 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid
 		return uuid.UUID{}, err
 	}
 
-	cMsg := clientMsg{
-		Port: remotePort,
-	}
-
-	clientMsg, err := json.Marshal(cMsg)
-	if err != nil {
-		return uuid.UUID{}, err
-	}
-	_, err = remoteConn.Write([]byte(clientMsg))
-	if err != nil {
-		return uuid.UUID{}, err
-	}
-	v.log.Debugf("Msg sent %s", clientMsg)
-
-	buf := make([]byte, 32*1024)
-	n, err := remoteConn.Read(buf)
-	if err != nil {
-		return uuid.UUID{}, err
-	}
-	var sReply serverReply
-	err = json.Unmarshal(buf[:n], &sReply)
-	if err != nil {
-		return uuid.UUID{}, err
-	}
-	v.log.Debugf("Received: %v", sReply)
-
-	if sReply.Error != nil {
-		sErr := sReply.Error
-		v.log.WithError(fmt.Errorf(*sErr)).Error("Server closed with error")
-		return uuid.UUID{}, fmt.Errorf(*sErr)
-	}
-	connectConn := appnet.NewConnectConn(v.log, remoteConn, remotePort, localPort)
+	connectConn := appnet.NewConnectConn(v.log, remoteConn, remotePK, remotePort, localPort)
 	connectConn.Serve()
 	return connectConn.ID, nil
 }
@@ -1640,6 +1612,36 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid
 func (v *Visor) Disconnect(id uuid.UUID) error {
 	connectConn := appnet.GetConnectConn(id)
 	return connectConn.Close()
+}
+
+// Publish implements API.
+func (v *Visor) Publish(localPort int) (uuid.UUID, error) {
+	v.log.Errorf("Publishing on %v:%v", v.conf.PK, localPort)
+	ok := isPortAvailable(v.log, localPort)
+	if ok {
+		return uuid.UUID{}, fmt.Errorf(":%v local port not in use", localPort)
+	}
+	connApp := appnet.Addr{
+		Net:    appnet.TypeSkynet,
+		PubKey: v.conf.PK,
+		Port:   routing.Port(localPort),
+	}
+
+	lis, err := appnet.Listen(connApp)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+
+	publishLis := appnet.NewPublishListener(v.log, lis, localPort)
+	publishLis.Listen()
+
+	return publishLis.ID, nil
+}
+
+// Depublish implements API.
+func (v *Visor) Depublish(id uuid.UUID) error {
+	forwardConn := appnet.GetConnectConn(id)
+	return forwardConn.Close()
 }
 
 // List implements API.

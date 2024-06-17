@@ -572,6 +572,19 @@ func (rc *rpcClient) Disconnect(id uuid.UUID) error {
 	return err
 }
 
+// Publish calls Publish.
+func (rc *rpcClient) Publish(localPort int) (uuid.UUID, error) {
+	var out uuid.UUID
+	err := rc.Call("Publish", &localPort, &out)
+	return out, err
+}
+
+// Depublish calls Depublish.
+func (rc *rpcClient) Depublish(id uuid.UUID) error {
+	err := rc.Call("Depublish", &id, &struct{}{})
+	return err
+}
+
 // List calls List.
 func (rc *rpcClient) List() (map[uuid.UUID]*appnet.ConnectConn, error) {
 	var out map[uuid.UUID]*appnet.ConnectConn
@@ -1317,6 +1330,16 @@ func (mc *mockRPCClient) Connect(remotePK cipher.PubKey, remotePort, localPort i
 
 // Disconnect implements API.
 func (mc *mockRPCClient) Disconnect(id uuid.UUID) error { //nolint:all
+	return nil
+}
+
+// Publish implements API.
+func (mc *mockRPCClient) Publish(localPort int) (uuid.UUID, error) { //nolint:all
+	return uuid.UUID{}, nil
+}
+
+// Depublish implements API.
+func (mc *mockRPCClient) Depublish(id uuid.UUID) error { //nolint:all
 	return nil
 }
 

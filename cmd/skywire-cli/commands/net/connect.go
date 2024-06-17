@@ -56,7 +56,7 @@ var conCmd = &cobra.Command{
 			internal.Catch(cmd.Flags(), err)
 
 			for _, connectConn := range connectConns {
-				_, err = fmt.Fprintf(w, "%s\t%s\t%s\n", connectConn.ID, strconv.Itoa(int(connectConn.LocalPort)),
+				_, err = fmt.Fprintf(w, "%s\t%s\t%s\n", connectConn.ID, strconv.Itoa(int(connectConn.WebPort)),
 					strconv.Itoa(int(connectConn.RemotePort)))
 				internal.Catch(cmd.Flags(), err)
 			}
@@ -97,7 +97,6 @@ var conCmd = &cobra.Command{
 		if 65536 < remotePort || 65536 < localPort {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("port cannot be greater than 65535"))
 		}
-
 		id, err := rpcClient.Connect(remotePK, remotePort, localPort)
 		internal.Catch(cmd.Flags(), err)
 		internal.PrintOutput(cmd.Flags(), id, fmt.Sprintln(id))
