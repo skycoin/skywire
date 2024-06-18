@@ -20,9 +20,7 @@ jobs:
       - name: Releasing
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          make dmsghttp-update
-          make github-release
+        run: make github-release
   
   darwin:
     needs: linux
@@ -41,7 +39,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          make dmsghttp-update
           make github-release-darwin
           make mac-installer-release
   
@@ -63,6 +60,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          make dmsghttp-update
           make github-release-windows
           make windows-installer-release
