@@ -88,7 +88,7 @@ func (f *PublishLis) Listen() {
 	f.log.Debugf("Serving HTTP on dmsg port %v with DMSG listener %s", f.LocalPort, f.lis.Addr().String())
 }
 
-// Close closes the server and remote publishion.
+// Close closes the server and publish listner.
 func (f *PublishLis) Close() (err error) {
 	f.closeOnce.Do(func() {
 		err = f.srv.Close()
