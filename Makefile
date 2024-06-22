@@ -358,6 +358,10 @@ windows-installer-release:
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-windows-amd64.msi
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-windows-386.msi
 
+# useful commands
+dmsghttp-update: ## update dmsghttp config
+	go run cmd/skywire/skywire.go cli config update dmsghttp -p dmsghttp-config.json
+
 help: ## `make help` menu
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
