@@ -95,7 +95,6 @@ func NewPublishListener(log *logging.Logger, lis net.Listener, localPort int) *p
 	srv := &http.Server{
 		Handler:           &ginHandler{Router: r1},
 		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
 	}
 
