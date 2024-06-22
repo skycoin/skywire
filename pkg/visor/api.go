@@ -1545,11 +1545,7 @@ func (v *Visor) IsDMSGClientReady() (bool, error) {
 
 // Connect implements API.
 func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
-	v.log.Errorf("Connecting to %v:%v via %v", remotePK, remotePort, localPort)
-	ok := isPortAvailable(v.log, localPort)
-	if !ok {
-		return uuid.UUID{}, fmt.Errorf(":%v local port already in use", localPort)
-	}
+
 	connApp := appnet.Addr{
 		Net:    appnet.TypeSkynet,
 		PubKey: remotePK,
@@ -1564,14 +1560,15 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid
 		return uuid.UUID{}, err
 	}
 
-	connectConn := appnet.NewConnectConn(v.log, remoteConn, remotePK, remotePort, localPort)
+	connectConn := appnet.NewConnectConn(v.log, v.nM, remoteConn, remotePK, remotePort, localPort)
 	connectConn.Serve()
+
 	return connectConn.ID, nil
 }
 
 // Disconnect implements API.
 func (v *Visor) Disconnect(id uuid.UUID) error {
-	connectConn := appnet.GetConnectConn(id)
+	connectConn := v.nM.GetConnectConn(id)
 	return connectConn.Close()
 }
 
@@ -1588,11 +1585,7 @@ func (v *Visor) ListHTTPPorts() ([]int, error) {
 
 // Publish implements API.
 func (v *Visor) Publish(localPort int) (uuid.UUID, error) {
-	v.log.Errorf("Publishing on %v:%v", v.conf.PK, localPort)
-	ok := isPortAvailable(v.log, localPort)
-	if ok {
-		return uuid.UUID{}, fmt.Errorf(":%v local port not in use", localPort)
-	}
+
 	connApp := appnet.Addr{
 		Net:    appnet.TypeSkynet,
 		PubKey: v.conf.PK,
@@ -1604,7 +1597,11 @@ func (v *Visor) Publish(localPort int) (uuid.UUID, error) {
 		return uuid.UUID{}, err
 	}
 
-	publishLis := appnet.NewPublishListener(v.log, lis, localPort)
+	publishLis, err := appnet.NewPublishListener(v.log, v.nM, lis, localPort)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+
 	publishLis.Listen()
 
 	return publishLis.ID, nil
@@ -1612,37 +1609,11 @@ func (v *Visor) Publish(localPort int) (uuid.UUID, error) {
 
 // Depublish implements API.
 func (v *Visor) Depublish(id uuid.UUID) error {
-	forwardConn := appnet.GetConnectConn(id)
-	return forwardConn.Close()
+	publishConn := v.nM.GetPublishListener(id)
+	return publishConn.Close()
 }
 
 // List implements API.
 func (v *Visor) List() (map[uuid.UUID]*appnet.ConnectConn, error) {
-	return appnet.GetAllConnectConns(), nil
-}
-
-func isPortAvailable(log *logging.Logger, port int) bool {
-	timeout := time.Second
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf(":%v", port), timeout)
-	if err != nil {
-		return true
-	}
-	if conn != nil {
-		defer closeConn(log, conn)
-		return false
-	}
-	return true
-}
-
-func isPortRegistered(port int, v *Visor) bool {
-	ports, err := v.ListHTTPPorts()
-	if err != nil {
-		return false
-	}
-	for _, p := range ports {
-		if p == port {
-			return true
-		}
-	}
-	return false
+	return v.nM.GetAllConnectConns(), nil
 }

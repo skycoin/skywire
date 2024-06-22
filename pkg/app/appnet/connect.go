@@ -1,4 +1,4 @@
-// Package appnet pkg/app/appnet/forwarding.go
+// Package appnet pkg/app/appnet/connect.go
 package appnet
 
 import (
@@ -16,42 +16,6 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
-// nolint: gochecknoglobals
-var (
-	connectConns   = make(map[uuid.UUID]*ConnectConn)
-	connectConnsMu sync.Mutex
-)
-
-// AddConnect adds ConnectConn to with it's ID
-func AddConnect(fwd *ConnectConn) {
-	connectConnsMu.Lock()
-	defer connectConnsMu.Unlock()
-	connectConns[fwd.ID] = fwd
-}
-
-// GetConnectConn get's a ConnectConn by ID
-func GetConnectConn(id uuid.UUID) *ConnectConn {
-	connectConnsMu.Lock()
-	defer connectConnsMu.Unlock()
-
-	return connectConns[id]
-}
-
-// GetAllConnectConns gets all ConnectConns
-func GetAllConnectConns() map[uuid.UUID]*ConnectConn {
-	connectConnsMu.Lock()
-	defer connectConnsMu.Unlock()
-
-	return connectConns
-}
-
-// RemoveConnectConn removes a ConnectConn by ID
-func RemoveConnectConn(id uuid.UUID) {
-	connectConnsMu.Lock()
-	defer connectConnsMu.Unlock()
-	delete(connectConns, id)
-}
-
 // ConnectConn represents a connection that is published on the skywire network
 type ConnectConn struct {
 	ID         uuid.UUID
@@ -60,12 +24,12 @@ type ConnectConn struct {
 	remoteConn net.Conn
 	r          *gin.Engine
 	closeOnce  sync.Once
-	closeChan  chan struct{}
 	log        *logging.Logger
+	nm         *NetManager
 }
 
 // NewConnectConn creates a new ConnectConn
-func NewConnectConn(log *logging.Logger, remoteConn net.Conn, remotePK cipher.PubKey, remotePort, webPort int) *ConnectConn {
+func NewConnectConn(log *logging.Logger, nm *NetManager, remoteConn net.Conn, remotePK cipher.PubKey, remotePort, webPort int) *ConnectConn {
 
 	httpC := &http.Client{Transport: MakeHTTPTransport(remoteConn, log)}
 	mu := new(sync.Mutex)
@@ -78,6 +42,11 @@ func NewConnectConn(log *logging.Logger, remoteConn net.Conn, remotePK cipher.Pu
 
 	r.Any("/*path", handleConnectFunc(httpC, remotePK, remotePort, mu))
 
+	// srv := &http.Server{
+	// 	Addr:    ":8080",
+	// 	Handler: r,
+	// }
+
 	fwdConn := &ConnectConn{
 		ID:         uuid.New(),
 		remoteConn: remoteConn,
@@ -85,9 +54,10 @@ func NewConnectConn(log *logging.Logger, remoteConn net.Conn, remotePK cipher.Pu
 		RemotePort: remotePort,
 		log:        log,
 		r:          r,
+		nm:         nm,
 	}
 
-	AddConnect(fwdConn)
+	nm.AddConnect(fwdConn)
 	return fwdConn
 }
 
@@ -102,13 +72,6 @@ func (f *ConnectConn) Serve() {
 			}
 		}
 	}()
-	go func() {
-		<-f.closeChan
-		err := f.Close()
-		if err != nil {
-			f.log.Error(err)
-		}
-	}()
 	f.log.Debugf("Serving on localhost:%v", f.WebPort)
 }
 
@@ -116,7 +79,7 @@ func (f *ConnectConn) Serve() {
 func (f *ConnectConn) Close() (err error) {
 	f.closeOnce.Do(func() {
 		err = f.remoteConn.Close()
-		RemoveConnectConn(f.ID)
+		f.nm.RemoveConnectConn(f.ID)
 	})
 	return err
 }
