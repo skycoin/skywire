@@ -116,11 +116,9 @@ type API interface {
 	RouteGroups() ([]RouteGroupInfo, error)
 	SetMinHops(uint16) error
 
-	RegisterHTTPPort(localPort int) error
-	DeregisterHTTPPort(localPort int) error
-	ListHTTPPorts() ([]int, error)
 	Publish(localPort int) (uuid.UUID, error)
 	Depublish(id uuid.UUID) error
+	ListHTTPPorts() ([]int, error)
 	Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
 	Disconnect(id uuid.UUID) error
 	List() (map[uuid.UUID]*appnet.ConnectConn, error)
@@ -1545,43 +1543,6 @@ func (v *Visor) IsDMSGClientReady() (bool, error) {
 	return false, errors.New("dmsg client is not ready")
 }
 
-// RegisterHTTPPort implements API.
-func (v *Visor) RegisterHTTPPort(localPort int) error {
-	v.allowedMX.Lock()
-	defer v.allowedMX.Unlock()
-	ok := isPortAvailable(v.log, localPort)
-	if ok {
-		return fmt.Errorf("No connection on local port :%v", localPort)
-	}
-	if v.allowedPorts[localPort] {
-		return fmt.Errorf("Port :%v already registered", localPort)
-	}
-	v.allowedPorts[localPort] = true
-	return nil
-}
-
-// DeregisterHTTPPort implements API.
-func (v *Visor) DeregisterHTTPPort(localPort int) error {
-	v.allowedMX.Lock()
-	defer v.allowedMX.Unlock()
-	if !v.allowedPorts[localPort] {
-		return fmt.Errorf("Port :%v not registered", localPort)
-	}
-	delete(v.allowedPorts, localPort)
-	return nil
-}
-
-// ListHTTPPorts implements API.
-func (v *Visor) ListHTTPPorts() ([]int, error) {
-	v.allowedMX.Lock()
-	defer v.allowedMX.Unlock()
-	keys := make([]int, 0, len(v.allowedPorts))
-	for k := range v.allowedPorts {
-		keys = append(keys, k)
-	}
-	return keys, nil
-}
-
 // Connect implements API.
 func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
 	v.log.Errorf("Connecting to %v:%v via %v", remotePK, remotePort, localPort)
@@ -1612,6 +1573,17 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid
 func (v *Visor) Disconnect(id uuid.UUID) error {
 	connectConn := appnet.GetConnectConn(id)
 	return connectConn.Close()
+}
+
+// ListHTTPPorts implements API.
+func (v *Visor) ListHTTPPorts() ([]int, error) {
+	v.allowedMX.Lock()
+	defer v.allowedMX.Unlock()
+	keys := make([]int, 0, len(v.allowedPorts))
+	for k := range v.allowedPorts {
+		keys = append(keys, k)
+	}
+	return keys, nil
 }
 
 // Publish implements API.

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"text/tabwriter"
 
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
@@ -15,13 +16,13 @@ import (
 )
 
 var (
-	portNo     int
-	deregister bool
+	portNo    int
+	depublish string
 )
 
 func init() {
 	pubCmd.PersistentFlags().IntVarP(&portNo, "port", "p", 0, "local port of the external (http) app")
-	pubCmd.PersistentFlags().BoolVarP(&deregister, "deregister", "d", false, "deregister local port of the external (http) app")
+	pubCmd.PersistentFlags().StringVarP(&depublish, "depublish", "d", "", "deregister local port of the external (http) app with id")
 	pubCmd.PersistentFlags().BoolVarP(&lsPorts, "ls", "l", false, "list published local ports")
 	RootCmd.AddCommand(pubCmd)
 }
@@ -76,12 +77,13 @@ var pubCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("port cannot be greater than 65535"))
 		}
 
-		if deregister {
-			err = rpcClient.DeregisterHTTPPort(portNo)
+		if depublish != "" {
+			id, err := uuid.Parse(disconnect)
+			internal.Catch(cmd.Flags(), err)
+			err = rpcClient.Depublish(id)
 			internal.Catch(cmd.Flags(), err)
 
 		} else {
-			err = rpcClient.RegisterHTTPPort(portNo)
 			internal.Catch(cmd.Flags(), err)
 			id, err := rpcClient.Publish(portNo)
 			internal.Catch(cmd.Flags(), err)
