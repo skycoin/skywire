@@ -400,7 +400,7 @@ func (v *Visor) DeleteRewardAddress() error {
 	path := v.conf.LocalPath + "/" + visorconfig.RewardFile
 	err := os.Remove(path)
 	if err != nil {
-		return fmt.Errorf("Error deleting file. err=%v", err)
+		return fmt.Errorf("error deleting file. err=%v", err)
 	}
 	return nil
 }
@@ -585,7 +585,7 @@ func (v *Visor) FetchUptimeTrackerData(pk string) ([]byte, error) {
 	if pk != "" {
 		err := pubkey.Set(pk)
 		if err != nil {
-			return body, fmt.Errorf("Invalid or missing public key")
+			return body, fmt.Errorf("invalid or missing public key")
 		}
 	}
 	if v.uptimeTracker == nil {
@@ -611,7 +611,7 @@ func (v *Visor) StartSkysocksClient(serverKey string) error {
 	for index, app := range v.conf.Launcher.Apps {
 		if app.Name == visorconfig.SkysocksClientName {
 			if v.GetSkysocksClientAddress() == "" && serverKey == "" {
-				return errors.New("Skysocks server pub key is missing")
+				return errors.New("skysocks server pub key is missing")
 			}
 
 			if serverKey != "" {
@@ -1279,7 +1279,7 @@ func (v *Visor) DialPing(conf PingConfig) error {
 
 	skywireConn, isSkywireConn := conn.(*appnet.SkywireConn)
 	if !isSkywireConn {
-		return fmt.Errorf("Can't get such info from this conn")
+		return fmt.Errorf("can't get such info from this conn")
 	}
 	v.pingConnMx.Lock()
 	v.pingConns[conf.PK] = ping{
