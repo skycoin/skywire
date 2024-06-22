@@ -68,6 +68,7 @@ type ConnectConn struct {
 func NewConnectConn(log *logging.Logger, remoteConn net.Conn, remotePK cipher.PubKey, remotePort, webPort int) *ConnectConn {
 
 	httpC := &http.Client{Transport: MakeHTTPTransport(remoteConn, log)}
+	mu := new(sync.Mutex)
 
 	r := gin.New()
 
@@ -75,7 +76,7 @@ func NewConnectConn(log *logging.Logger, remoteConn net.Conn, remotePK cipher.Pu
 
 	r.Use(loggingMiddleware())
 
-	r.Any("/*path", handleConnectFunc(httpC, remotePK, remotePort))
+	r.Any("/*path", handleConnectFunc(httpC, remotePK, remotePort, mu))
 
 	fwdConn := &ConnectConn{
 		ID:         uuid.New(),
@@ -120,8 +121,11 @@ func (f *ConnectConn) Close() (err error) {
 	return err
 }
 
-func handleConnectFunc(httpC *http.Client, remotePK cipher.PubKey, remotePort int) func(c *gin.Context) {
+func handleConnectFunc(httpC *http.Client, remotePK cipher.PubKey, remotePort int, mu *sync.Mutex) func(c *gin.Context) {
 	return func(c *gin.Context) {
+		mu.Lock()
+		defer mu.Unlock()
+
 		var urlStr string
 		urlStr = fmt.Sprintf("sky://%s:%v%s", remotePK, remotePort, c.Param("path"))
 		if c.Request.URL.RawQuery != "" {
