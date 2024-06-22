@@ -23,7 +23,7 @@ type ConnectConn struct {
 	WebPort    int
 	Addr       Addr
 	remoteConn net.Conn
-	r          *gin.Engine
+	srv        *http.Server
 	closeOnce  sync.Once
 	log        *logging.Logger
 	nm         *NetManager
@@ -43,10 +43,10 @@ func NewConnectConn(log *logging.Logger, nm *NetManager, remoteConn net.Conn, ad
 
 	r.Any("/*path", handleConnectFunc(httpC, addr.PK(), addr.GetPort(), mu))
 
-	// srv := &http.Server{
-	// 	Addr:    ":8080",
-	// 	Handler: r,
-	// }
+	srv := &http.Server{
+		Addr:    fmt.Sprint(":", webPort),
+		Handler: r,
+	}
 
 	fwdConn := &ConnectConn{
 		ID:         uuid.New(),
@@ -54,7 +54,7 @@ func NewConnectConn(log *logging.Logger, nm *NetManager, remoteConn net.Conn, ad
 		WebPort:    webPort,
 		Addr:       addr,
 		log:        log,
-		r:          r,
+		srv:        srv,
 		nm:         nm,
 	}
 
@@ -65,7 +65,7 @@ func NewConnectConn(log *logging.Logger, nm *NetManager, remoteConn net.Conn, ad
 // Serve serves a HTTP forward conn that accepts all requests and forwards them directly to the remote server over the specified net.Conn.
 func (f *ConnectConn) Serve() {
 	go func() {
-		err := f.r.Run(":" + fmt.Sprintf("%v", f.WebPort)) //nolint
+		err := f.srv.ListenAndServe() //nolint
 		if err != nil {
 			// don't print error if local server is closed
 			if !errors.Is(err, http.ErrServerClosed) {
@@ -80,6 +80,7 @@ func (f *ConnectConn) Serve() {
 func (f *ConnectConn) Close() (err error) {
 	f.closeOnce.Do(func() {
 		err = f.remoteConn.Close()
+		err = f.srv.Close()
 		f.nm.RemoveConnectConn(f.ID)
 	})
 	return err
