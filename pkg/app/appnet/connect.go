@@ -14,13 +14,14 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 // ConnectConn represents a connection that is published on the skywire network
 type ConnectConn struct {
 	ID         uuid.UUID
 	WebPort    int
-	RemotePort int
+	Addr       Addr
 	remoteConn net.Conn
 	r          *gin.Engine
 	closeOnce  sync.Once
@@ -29,7 +30,7 @@ type ConnectConn struct {
 }
 
 // NewConnectConn creates a new ConnectConn
-func NewConnectConn(log *logging.Logger, nm *NetManager, remoteConn net.Conn, remotePK cipher.PubKey, remotePort, webPort int) *ConnectConn {
+func NewConnectConn(log *logging.Logger, nm *NetManager, remoteConn net.Conn, addr Addr, webPort int) *ConnectConn {
 
 	httpC := &http.Client{Transport: MakeHTTPTransport(remoteConn, log)}
 	mu := new(sync.Mutex)
@@ -40,7 +41,7 @@ func NewConnectConn(log *logging.Logger, nm *NetManager, remoteConn net.Conn, re
 
 	r.Use(loggingMiddleware())
 
-	r.Any("/*path", handleConnectFunc(httpC, remotePK, remotePort, mu))
+	r.Any("/*path", handleConnectFunc(httpC, addr.PK(), addr.GetPort(), mu))
 
 	// srv := &http.Server{
 	// 	Addr:    ":8080",
@@ -51,7 +52,7 @@ func NewConnectConn(log *logging.Logger, nm *NetManager, remoteConn net.Conn, re
 		ID:         uuid.New(),
 		remoteConn: remoteConn,
 		WebPort:    webPort,
-		RemotePort: remotePort,
+		Addr:       addr,
 		log:        log,
 		r:          r,
 		nm:         nm,
@@ -84,7 +85,7 @@ func (f *ConnectConn) Close() (err error) {
 	return err
 }
 
-func handleConnectFunc(httpC *http.Client, remotePK cipher.PubKey, remotePort int, mu *sync.Mutex) func(c *gin.Context) {
+func handleConnectFunc(httpC *http.Client, remotePK cipher.PubKey, remotePort routing.Port, mu *sync.Mutex) func(c *gin.Context) {
 	return func(c *gin.Context) {
 		mu.Lock()
 		defer mu.Unlock()

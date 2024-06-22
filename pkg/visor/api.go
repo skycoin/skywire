@@ -118,10 +118,10 @@ type API interface {
 
 	Publish(localPort int) (uuid.UUID, error)
 	Depublish(id uuid.UUID) error
-	ListHTTPPorts() ([]int, error)
+	ListPublished() (map[uuid.UUID]*appnet.PublishLis, error)
 	Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
 	Disconnect(id uuid.UUID) error
-	List() (map[uuid.UUID]*appnet.ConnectConn, error)
+	ListConnected() (map[uuid.UUID]*appnet.ConnectConn, error)
 	DialPing(config PingConfig) error
 	Ping(config PingConfig) ([]time.Duration, error)
 	StopPing(pk cipher.PubKey) error
@@ -1544,14 +1544,14 @@ func (v *Visor) IsDMSGClientReady() (bool, error) {
 }
 
 // Connect implements API.
-func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
+func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, webPort int) (uuid.UUID, error) {
 
-	connApp := appnet.Addr{
+	addr := appnet.Addr{
 		Net:    appnet.TypeSkynet,
 		PubKey: remotePK,
 		Port:   routing.Port(remotePort),
 	}
-	conn, err := appnet.Dial(connApp)
+	conn, err := appnet.Dial(addr)
 	if err != nil {
 		return uuid.UUID{}, err
 	}
@@ -1560,7 +1560,7 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid
 		return uuid.UUID{}, err
 	}
 
-	connectConn := appnet.NewConnectConn(v.log, v.nM, remoteConn, remotePK, remotePort, localPort)
+	connectConn := appnet.NewConnectConn(v.log, v.nM, remoteConn, addr, webPort)
 	connectConn.Serve()
 
 	return connectConn.ID, nil
@@ -1569,30 +1569,27 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid
 // Disconnect implements API.
 func (v *Visor) Disconnect(id uuid.UUID) error {
 	connectConn := v.nM.GetConnectConn(id)
+	if connectConn == nil {
+		return ErrNotFound
+	}
 	return connectConn.Close()
 }
 
 // ListHTTPPorts implements API.
-func (v *Visor) ListHTTPPorts() ([]int, error) {
-	v.allowedMX.Lock()
-	defer v.allowedMX.Unlock()
-	keys := make([]int, 0, len(v.allowedPorts))
-	for k := range v.allowedPorts {
-		keys = append(keys, k)
-	}
-	return keys, nil
+func (v *Visor) ListConnected() (map[uuid.UUID]*appnet.ConnectConn, error) {
+	return v.nM.GetAllConnectConns(), nil
 }
 
 // Publish implements API.
 func (v *Visor) Publish(localPort int) (uuid.UUID, error) {
 
-	connApp := appnet.Addr{
+	addr := appnet.Addr{
 		Net:    appnet.TypeSkynet,
 		PubKey: v.conf.PK,
 		Port:   routing.Port(localPort),
 	}
 
-	lis, err := appnet.Listen(connApp)
+	lis, err := appnet.Listen(addr)
 	if err != nil {
 		return uuid.UUID{}, err
 	}
@@ -1610,10 +1607,13 @@ func (v *Visor) Publish(localPort int) (uuid.UUID, error) {
 // Depublish implements API.
 func (v *Visor) Depublish(id uuid.UUID) error {
 	publishConn := v.nM.GetPublishListener(id)
+	if publishConn == nil {
+		return ErrNotFound
+	}
 	return publishConn.Close()
 }
 
-// List implements API.
-func (v *Visor) List() (map[uuid.UUID]*appnet.ConnectConn, error) {
-	return v.nM.GetAllConnectConns(), nil
+// ListPublished implements API.
+func (v *Visor) ListPublished() (map[uuid.UUID]*appnet.PublishLis, error) {
+	return v.nM.GetAllPublishListeners(), nil
 }

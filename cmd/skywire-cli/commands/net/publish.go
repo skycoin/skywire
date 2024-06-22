@@ -40,19 +40,28 @@ var pubCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		if depublish != "" {
+			id, err := uuid.Parse(depublish)
+			internal.Catch(cmd.Flags(), err)
+			err = rpcClient.Depublish(id)
+			internal.Catch(cmd.Flags(), err)
+			internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+			os.Exit(0)
+		}
+
 		if lsPorts {
-			ports, err := rpcClient.ListHTTPPorts()
+			liss, err := rpcClient.ListPublished()
 			internal.Catch(cmd.Flags(), err)
 			var b bytes.Buffer
 			w := tabwriter.NewWriter(&b, 0, 0, 2, ' ', tabwriter.TabIndent)
 			_, err = fmt.Fprintln(w, "id\tlocal_port")
 			internal.Catch(cmd.Flags(), err)
-			for id, port := range ports {
-				_, err = fmt.Fprintf(w, "%v\t%v\n", id, port)
+			for id, lis := range liss {
+				_, err = fmt.Fprintf(w, "%v\t%v\n", id, lis.LocalPort)
 				internal.Catch(cmd.Flags(), err)
 			}
 			internal.Catch(cmd.Flags(), w.Flush())
-			internal.PrintOutput(cmd.Flags(), ports, b.String())
+			internal.PrintOutput(cmd.Flags(), liss, b.String())
 			os.Exit(0)
 		}
 
@@ -77,18 +86,10 @@ var pubCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("port cannot be greater than 65535"))
 		}
 
-		if depublish != "" {
-			id, err := uuid.Parse(disconnect)
-			internal.Catch(cmd.Flags(), err)
-			err = rpcClient.Depublish(id)
-			internal.Catch(cmd.Flags(), err)
-
-		} else {
-			internal.Catch(cmd.Flags(), err)
-			id, err := rpcClient.Publish(portNo)
-			internal.Catch(cmd.Flags(), err)
-			internal.PrintOutput(cmd.Flags(), "id: %v\n", fmt.Sprintln(id))
-		}
+		internal.Catch(cmd.Flags(), err)
+		id, err := rpcClient.Publish(portNo)
+		internal.Catch(cmd.Flags(), err)
+		internal.PrintOutput(cmd.Flags(), "id: %v\n", fmt.Sprintln(id))
 
 	},
 }

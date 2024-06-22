@@ -727,14 +727,6 @@ func (r *RPC) IsDMSGClientReady(_ *struct{}, out *bool) (err error) {
 	return err
 }
 
-// ListHTTPPorts lists all the local por that can be accessed by remote visors
-func (r *RPC) ListHTTPPorts(_ *struct{}, out *[]int) (err error) {
-	defer rpcutil.LogCall(r.log, "ListHTTPPorts", nil)(out, &err)
-	ports, err := r.visor.ListHTTPPorts()
-	*out = ports
-	return err
-}
-
 // ConnectIn is input for Connect.
 type ConnectIn struct {
 	RemotePK   cipher.PubKey
@@ -758,6 +750,14 @@ func (r *RPC) Disconnect(id *uuid.UUID, _ *struct{}) (err error) {
 	return err
 }
 
+// ListConnected lists all the sky connections that are connected
+func (r *RPC) ListConnected(_ *struct{}, out *map[uuid.UUID]*appnet.ConnectConn) (err error) {
+	defer rpcutil.LogCall(r.log, "ListConnected", nil)(out, &err)
+	conns, err := r.visor.ListConnected()
+	*out = conns
+	return err
+}
+
 // Connect creates a connection with the remote visor to listen on the remote port and serve that on the local port
 func (r *RPC) Publish(localPort *int, out *uuid.UUID) (err error) {
 	defer rpcutil.LogCall(r.log, "Publish", localPort)(out, &err)
@@ -774,11 +774,11 @@ func (r *RPC) Depublish(id *uuid.UUID, _ *struct{}) (err error) {
 	return err
 }
 
-// List returns all the ongoing skyforwarding connections
-func (r *RPC) List(_ *struct{}, out *map[uuid.UUID]*appnet.ConnectConn) (err error) {
-	defer rpcutil.LogCall(r.log, "List", nil)(out, &err)
-	proxies, err := r.visor.List()
-	*out = proxies
+// ListPublished lists all the local ports that are being published
+func (r *RPC) ListPublished(_ *struct{}, out *map[uuid.UUID]*appnet.PublishLis) (err error) {
+	defer rpcutil.LogCall(r.log, "ListPublished", nil)(out, &err)
+	liss, err := r.visor.ListPublished()
+	*out = liss
 	return err
 }
 

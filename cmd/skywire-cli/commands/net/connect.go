@@ -47,17 +47,17 @@ var conCmd = &cobra.Command{
 		}
 
 		if lsPorts {
-			connectConns, err := rpcClient.List()
+			connectConns, err := rpcClient.ListConnected()
 			internal.Catch(cmd.Flags(), err)
 
 			var b bytes.Buffer
 			w := tabwriter.NewWriter(&b, 0, 0, 3, ' ', tabwriter.TabIndent)
-			_, err = fmt.Fprintln(w, "id\tlocal_port\tremote_port")
+			_, err = fmt.Fprintln(w, "id\taddr\tweb_port")
 			internal.Catch(cmd.Flags(), err)
 
 			for _, connectConn := range connectConns {
-				_, err = fmt.Fprintf(w, "%s\t%s\t%s\n", connectConn.ID, strconv.Itoa(int(connectConn.WebPort)),
-					strconv.Itoa(int(connectConn.RemotePort)))
+				_, err = fmt.Fprintf(w, "%s\t%s\t%s\n", connectConn.ID, connectConn.Addr.String(),
+					strconv.Itoa(int(connectConn.WebPort)))
 				internal.Catch(cmd.Flags(), err)
 			}
 			internal.Catch(cmd.Flags(), w.Flush())

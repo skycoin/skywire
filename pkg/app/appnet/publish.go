@@ -17,8 +17,8 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
-// publishListener represents a publishion that is published on the skywire network
-type publishListener struct {
+// PublishLis represents a publishion that is published on the skywire network
+type PublishLis struct {
 	ID        uuid.UUID
 	LocalPort int
 	lis       net.Listener
@@ -37,7 +37,7 @@ func (h *ginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // NewPublishListener creates a new publishListener
-func NewPublishListener(log *logging.Logger, nm *NetManager, lis net.Listener, localPort int) (*publishListener, error) {
+func NewPublishListener(log *logging.Logger, nm *NetManager, lis net.Listener, localPort int) (*PublishLis, error) {
 
 	r1 := gin.New()
 	r1.Use(gin.Recovery())
@@ -62,7 +62,7 @@ func NewPublishListener(log *logging.Logger, nm *NetManager, lis net.Listener, l
 		WriteTimeout:      10 * time.Second,
 	}
 
-	pubLis := &publishListener{
+	pubLis := &PublishLis{
 		ID:        uuid.New(),
 		srv:       srv,
 		lis:       lis,
@@ -75,7 +75,7 @@ func NewPublishListener(log *logging.Logger, nm *NetManager, lis net.Listener, l
 }
 
 // Serve serves a HTTP forward Lis that accepts all requests and forwards them directly to the remote server over the specified net.Lis.
-func (f *publishListener) Listen() {
+func (f *PublishLis) Listen() {
 	go func() {
 		err := f.srv.Serve(f.lis)
 		if err != nil {
@@ -89,7 +89,7 @@ func (f *publishListener) Listen() {
 }
 
 // Close closes the server and remote publishion.
-func (f *publishListener) Close() (err error) {
+func (f *PublishLis) Close() (err error) {
 	f.closeOnce.Do(func() {
 		err = f.srv.Close()
 		err = f.lis.Close()

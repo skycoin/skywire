@@ -12,20 +12,20 @@ import (
 )
 
 type NetManager struct {
-	listeners map[uuid.UUID]*publishListener
+	listeners map[uuid.UUID]*PublishLis
 	conns     map[uuid.UUID]*ConnectConn
 	mu        sync.Mutex
 }
 
 func NewNetManager() *NetManager {
 	return &NetManager{
-		listeners: make(map[uuid.UUID]*publishListener),
+		listeners: make(map[uuid.UUID]*PublishLis),
 		conns:     make(map[uuid.UUID]*ConnectConn),
 	}
 }
 
 // AddPublish adds publishListener to with it's ID
-func (nm *NetManager) AddPublish(lis *publishListener) {
+func (nm *NetManager) AddPublish(lis *PublishLis) {
 	nm.mu.Lock()
 	defer nm.mu.Unlock()
 
@@ -33,7 +33,7 @@ func (nm *NetManager) AddPublish(lis *publishListener) {
 }
 
 // GetpublishListenertner get's a publishListener by ID
-func (nm *NetManager) GetPublishListener(id uuid.UUID) *publishListener {
+func (nm *NetManager) GetPublishListener(id uuid.UUID) *PublishLis {
 	nm.mu.Lock()
 	defer nm.mu.Unlock()
 
@@ -41,7 +41,7 @@ func (nm *NetManager) GetPublishListener(id uuid.UUID) *publishListener {
 }
 
 // GetAllpublishListenertners gets all publishListeners
-func (nm *NetManager) GetAllPublishListeners() map[uuid.UUID]*publishListener {
+func (nm *NetManager) GetAllPublishListeners() map[uuid.UUID]*PublishLis {
 	nm.mu.Lock()
 	defer nm.mu.Unlock()
 

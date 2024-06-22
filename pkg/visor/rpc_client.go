@@ -585,17 +585,17 @@ func (rc *rpcClient) Depublish(id uuid.UUID) error {
 	return err
 }
 
-// List calls List.
-func (rc *rpcClient) List() (map[uuid.UUID]*appnet.ConnectConn, error) {
-	var out map[uuid.UUID]*appnet.ConnectConn
-	err := rc.Call("List", &struct{}{}, &out)
+// ListPublished calls ListPublished.
+func (rc *rpcClient) ListPublished() (map[uuid.UUID]*appnet.PublishLis, error) {
+	var out map[uuid.UUID]*appnet.PublishLis
+	err := rc.Call("ListPublished", &struct{}{}, &out)
 	return out, err
 }
 
-// ListHTTPPorts calls ListHTTPPorts.
-func (rc *rpcClient) ListHTTPPorts() ([]int, error) {
-	var out []int
-	err := rc.Call("ListHTTPPorts", &struct{}{}, &out)
+// ListConnected calls ListConnected.
+func (rc *rpcClient) ListConnected() (map[uuid.UUID]*appnet.ConnectConn, error) {
+	var out map[uuid.UUID]*appnet.ConnectConn
+	err := rc.Call("ListConnected", &struct{}{}, &out)
 	return out, err
 }
 
@@ -1333,12 +1333,12 @@ func (mc *mockRPCClient) Depublish(id uuid.UUID) error { //nolint:all
 }
 
 // List implements API.
-func (mc *mockRPCClient) List() (map[uuid.UUID]*appnet.ConnectConn, error) {
+func (mc *mockRPCClient) ListConnected() (map[uuid.UUID]*appnet.ConnectConn, error) {
 	return nil, nil
 }
 
 // ListHTTPPorts implements API.
-func (mc *mockRPCClient) ListHTTPPorts() ([]int, error) {
+func (mc *mockRPCClient) ListPublished() (map[uuid.UUID]*appnet.PublishLis, error) {
 	return nil, nil
 }
 
