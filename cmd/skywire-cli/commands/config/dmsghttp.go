@@ -16,17 +16,19 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 )
 
+var dmsghttpPath string
+
 func init() {
 	updateCmd.AddCommand(dmsghttpCmd)
 	dmsghttpCmd.Flags().SortFlags = false
 	//TODO: fix path for non linux package defaults
-	dmsghttpCmd.Flags().StringVarP(&path, "path", "p", "/opt/skywire/dmsghttp-config.json", "path of dmsghttp-config file, default is for pkg installation")
+	dmsghttpCmd.Flags().StringVarP(&dmsghttpPath, "path", "p", "/opt/skywire/dmsghttp-config.json", "path of dmsghttp-config file, default is for pkg installation")
 }
 
 var dmsghttpCmd = &cobra.Command{
 	Use:   "dmsghttp",
 	Short: "update dmsghttp-config.json file from config bootstrap service",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, args []string) { //nolint
 		log := logging.MustGetLogger("dmsghttp_updater")
 
 		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
@@ -36,7 +38,6 @@ var dmsghttpCmd = &cobra.Command{
 			cancel()
 			os.Exit(1)
 		}()
-
 		dmsghttpConf, err := fetchDmsghttpConf()
 		if err != nil {
 			log.WithError(err).Error("Cannot fetching updated dmsghttp-config data")
@@ -47,9 +48,9 @@ var dmsghttpCmd = &cobra.Command{
 			log.WithError(err).Error("Error accurs during marshal content to json file")
 		}
 
-		err = os.WriteFile(path, file, 0600)
+		err = os.WriteFile(dmsghttpPath, file, 0600)
 		if err != nil {
-			log.WithError(err).Errorf("Cannot save new dmsghttp-config.json file at %s", path)
+			log.WithError(err).Errorf("Cannot save new dmsghttp-config.json file at %s", dmsghttpPath)
 		}
 	},
 }
