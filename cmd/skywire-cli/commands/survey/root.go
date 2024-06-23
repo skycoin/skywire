@@ -8,7 +8,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -16,19 +15,16 @@ import (
 
 var (
 	logger   = logging.MustGetLogger("skywire-visor") //nolint:unused
-	isCksum  bool
 	mLog     = logging.NewMasterLogger()
 	log      = mLog.PackageLogger("survey")
 	confPath string
 	//	stdin                bool
 	//	confArg              string
-	visorBuildInfo   *buildinfo.Info
 	pkg              bool
 	usr              bool
 	pkgconfigexists  bool
 	userconfigexists bool
 	conf             *visorconfig.V1
-	useConf          bool
 )
 
 func init() {
@@ -78,7 +74,7 @@ var surveyCmd = &cobra.Command{
 
 		if confPath != "" {
 			//			conf = initConfig()
-			confJSON, err := os.ReadFile(confPath)
+			confJSON, err := os.ReadFile(confPath) //nolint
 			if err != nil {
 				log.WithError(err).Fatal("Failed to read config file: %v", err)
 			}
