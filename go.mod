@@ -36,7 +36,7 @@ require (
 	github.com/skycoin/dmsg v1.3.22-0.20240622174622-39e439d5679d
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/skycoin-service-discovery v0.0.0-20240623180153-a8ad1c33ec6b
-	github.com/skycoin/skywire-services v0.0.0-20240403004908-50ccbbf07004
+	github.com/skycoin/skywire-services v0.0.0-20240623180621-d0bc8fd4da3d
 	github.com/skycoin/skywire-utilities v1.3.18-0.20240208220612-9f31eda72f33
 	github.com/skycoin/systray v1.10.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
