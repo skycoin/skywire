@@ -35,7 +35,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/skycoin/dmsg v1.3.22-0.20240622174622-39e439d5679d
 	github.com/skycoin/skycoin v0.27.1
-	github.com/skycoin/skycoin-service-discovery v0.0.0-20240306165129-2af10aca698e
+	github.com/skycoin/skycoin-service-discovery v0.0.0-20240623180153-a8ad1c33ec6b
 	github.com/skycoin/skywire-services v0.0.0-20240403004908-50ccbbf07004
 	github.com/skycoin/skywire-utilities v1.3.18-0.20240208220612-9f31eda72f33
 	github.com/skycoin/systray v1.10.0
