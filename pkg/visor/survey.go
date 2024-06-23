@@ -32,29 +32,32 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 				log.Info("Skycoin reward address: ", cAddr.String())
 				//generate the system survey
 				pathutil.EnsureDir(v.conf.LocalPath) //nolint
-				generatedSurvey, err := visconf.SystemSurvey()
+				survey, err := visconf.SystemSurvey()
 				if err != nil {
 					log.WithError(err).Error("Could not read system info.")
 					return
 				}
-				generatedSurvey.PubKey = v.conf.PK
-				generatedSurvey.SkycoinAddress = cAddr.String()
-
-				generatedSurvey.ServicesURLs.TransportDiscovery = v.conf.Transport.Discovery
-				generatedSurvey.ServicesURLs.AddressResolver = v.conf.Transport.AddressResolver
-				generatedSurvey.ServicesURLs.RouteFinder = v.conf.Routing.RouteFinder
-				generatedSurvey.ServicesURLs.RouteSetupNodes = v.conf.Routing.RouteSetupNodes
-				generatedSurvey.ServicesURLs.UptimeTracker = v.conf.UptimeTracker.Addr
-				generatedSurvey.ServicesURLs.ServiceDiscovery = v.conf.Launcher.ServiceDisc
-				generatedSurvey.DmsgServers = v.dmsgC.ConnectedServersPK()
+				survey.PubKey = v.conf.PK
+				survey.SkycoinAddress = cAddr.String()
+				survey.ServicesURLs.DmsgDiscovery = v.conf.Dmsg.Discovery
+				survey.ServicesURLs.TransportDiscovery = v.conf.Transport.Discovery
+				survey.ServicesURLs.AddressResolver = v.conf.Transport.AddressResolver
+				survey.ServicesURLs.RouteFinder = v.conf.Routing.RouteFinder
+				survey.ServicesURLs.RouteSetupNodes = v.conf.Routing.RouteSetupNodes
+				survey.ServicesURLs.TransportSetupPKs = v.conf.Transport.TransportSetupPKs
+				survey.ServicesURLs.UptimeTracker = v.conf.UptimeTracker.Addr
+				survey.ServicesURLs.ServiceDiscovery = v.conf.Launcher.ServiceDisc
+				survey.ServicesURLs.SurveyWhitelist = v.conf.SurveyWhitelist
+				survey.ServicesURLs.StunServers = v.conf.StunServers
+				survey.DmsgServers = v.dmsgC.ConnectedServersPK()
 
 				log.Info("Generating system survey")
 				v.surveyLock.Lock()
-				v.survey = generatedSurvey
+				v.survey = survey
 				v.surveyLock.Unlock()
 
 				// Save survey as file
-				s, err := json.MarshalIndent(generatedSurvey, "", "\t")
+				s, err := json.MarshalIndent(survey, "", "\t")
 				if err != nil {
 					log.WithError(err).Error("Could not marshal json.")
 					return
