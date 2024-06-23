@@ -76,7 +76,7 @@ var surveyCmd = &cobra.Command{
 			//			conf = initConfig()
 			confJSON, err := os.ReadFile(confPath) //nolint
 			if err != nil {
-				log.WithError(err).Fatal("Failed to read config file: %v", err)
+				log.WithError(err).Fatal("Failed to read config file")
 			}
 			err = json.Unmarshal(confJSON, &conf)
 			if err != nil {
