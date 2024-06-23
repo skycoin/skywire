@@ -1,7 +1,9 @@
 // Package dmsgctrl pkg/dmsgctrl/serve_listener.go
 package dmsgctrl
 
-import "net"
+import (
+	"net"
+)
 
 // ServeListener serves a listener with dmsgctrl.Control.
 // It returns a channel for incoming Controls.
