@@ -4,7 +4,9 @@
 // Package dmsgpty pkg/dmsgpty/ui_windows.go
 package dmsgpty
 
-import "golang.org/x/sys/windows"
+import (
+	"golang.org/x/sys/windows"
+)
 
 func (ui *UI) uiStartSize(ptyC *PtyClient) error {
 	ws, err := NewWinSize(&windows.Coord{

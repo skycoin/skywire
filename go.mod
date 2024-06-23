@@ -33,7 +33,7 @@ require (
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/shibukawa/configdir v0.0.0-20170330084843-e180dbdc8da0
 	github.com/sirupsen/logrus v1.9.3
-	github.com/skycoin/dmsg v1.3.22-0.20240520184015-5d7616ee506a
+	github.com/skycoin/dmsg v1.3.22-0.20240622174622-39e439d5679d
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/skycoin-service-discovery v0.0.0-20240306165129-2af10aca698e
 	github.com/skycoin/skywire-services v0.0.0-20240403004908-50ccbbf07004
@@ -191,3 +191,12 @@ replace github.com/xxxserxxx/gotop/v4 => github.com/ersonp/gotop/v4 v4.2.1
 // replace github.com/skycoin/skywire-services => ../skywire-services
 // replace github.com/skycoin/skycoin-service-discovery => ../skycoin-service-discovery
 // replace github.com/skycoin/skywire-utilities => ../skywire-utilities
+
+// Uncomment to update other skywire deps to specific commit hash.
+// run `go mod tidy ; go mod vendor`
+// copy the changed line to the correct place in the above
+// then, re-comment the line before saving.
+// replace github.com/skycoin/dmsg => github.com/skycoin/dmsg <commit-hash>
+// replace github.com/skycoin/skywire-services => github.com/skycoin/skywire-services <commit-hash>
+// replace github.com/skycoin/skycoin-service-discovery => github.com/skycoin/skycoin-service-discovery <commit-hash>
+// replace github.com/skycoin/skywire-utilities => github.com/skycoin/skywire-utilities <commit-hash>
