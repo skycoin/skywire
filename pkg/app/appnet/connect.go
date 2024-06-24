@@ -17,70 +17,96 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
+type ConnectInfo struct {
+	ID         uuid.UUID `json:"id"`
+	WebPort    int       `json:"web_port"`
+	RemoteAddr Addr      `json:"remote_addr"`
+	AppType    AppType   `json:"app_type"`
+}
+
 // ConnectConn represents a connection that is published on the skywire network
 type ConnectConn struct {
-	ID         uuid.UUID
-	WebPort    int
-	Addr       Addr
-	remoteConn net.Conn
-	srv        *http.Server
-	closeOnce  sync.Once
-	log        *logging.Logger
-	nm         *NetManager
+	ConnectInfo
+	skyConn   net.Conn
+	srv       *http.Server
+	lis       net.Listener
+	closeOnce sync.Once
+	log       *logging.Logger
+	nm        *NetManager
 }
 
 // NewConnectConn creates a new ConnectConn
-func NewConnectConn(log *logging.Logger, nm *NetManager, remoteConn net.Conn, addr Addr, webPort int) *ConnectConn {
+func NewConnectConn(log *logging.Logger, nm *NetManager, remoteConn net.Conn, remoteAddr Addr, webPort int, appType AppType) (*ConnectConn, error) {
+	var srv *http.Server
+	var lis net.Listener
 
-	httpC := &http.Client{Transport: MakeHTTPTransport(remoteConn, log)}
-	mu := new(sync.Mutex)
-
-	r := gin.New()
-
-	r.Use(gin.Recovery())
-
-	r.Use(loggingMiddleware())
-
-	r.Any("/*path", handleConnectFunc(httpC, addr.PK(), addr.GetPort(), mu))
-
-	srv := &http.Server{
-		Addr:    fmt.Sprint(":", webPort),
-		Handler: r,
+	switch appType {
+	case HTTP:
+		srv = newHTTPConnectServer(log, remoteConn, remoteAddr, webPort)
+	case TCP:
+		// lis = newTCPConnectListner(log, webPort)
+		return nil, errors.New("app type TCP is not supported yet")
+	case UDP:
+		return nil, errors.New("app type UDP is not supported yet")
 	}
 
-	fwdConn := &ConnectConn{
-		ID:         uuid.New(),
-		remoteConn: remoteConn,
-		WebPort:    webPort,
-		Addr:       addr,
-		log:        log,
-		srv:        srv,
-		nm:         nm,
+	conn := &ConnectConn{
+		ConnectInfo: ConnectInfo{
+			ID:         uuid.New(),
+			WebPort:    webPort,
+			RemoteAddr: remoteAddr,
+			AppType:    appType,
+		},
+		skyConn: remoteConn,
+		log:     log,
+		srv:     srv,
+		lis:     lis,
+		nm:      nm,
 	}
 
-	nm.AddConnect(fwdConn)
-	return fwdConn
+	nm.AddConnect(conn)
+	return conn, nil
 }
 
 // Serve serves a HTTP forward conn that accepts all requests and forwards them directly to the remote server over the specified net.Conn.
-func (f *ConnectConn) Serve() {
-	go func() {
-		err := f.srv.ListenAndServe() //nolint
-		if err != nil {
-			// don't print error if local server is closed
-			if !errors.Is(err, http.ErrServerClosed) {
-				f.log.WithError(err).Error("Error listening and serving app forwarding.")
+func (f *ConnectConn) Serve() error {
+	switch f.AppType {
+	case HTTP:
+		go func() {
+			err := f.srv.ListenAndServe() //nolint
+			if err != nil {
+				// don't print error if local server is closed
+				if !errors.Is(err, http.ErrServerClosed) {
+					f.log.WithError(err).Error("Error listening and serving app forwarding.")
+				}
 			}
-		}
-	}()
+		}()
+	case TCP:
+		// go func() {
+		// 	handleConnectTCPConnection(f.lis, f.remoteConn, f.log)
+		// }()
+		return errors.New("app type TCP is not supported yet")
+	case UDP:
+		return errors.New("app type UDP is not supported yet")
+	}
 	f.log.Debugf("Serving on localhost:%v", f.WebPort)
+	return nil
 }
 
 // Close closes the server and remote connection.
 func (f *ConnectConn) Close() (err error) {
 	f.closeOnce.Do(func() {
-		err = f.remoteConn.Close()
-		err = f.srv.Close()
+
+		switch f.AppType {
+		case HTTP:
+			err = f.srv.Close()
+		case TCP:
+			// err = f.lis.Close()
+			return
+		case UDP:
+			return
+		}
+		err = f.skyConn.Close()
 		f.nm.RemoveConnectConn(f.ID)
 	})
 	return err
@@ -129,5 +155,63 @@ func handleConnectFunc(httpC *http.Client, remotePK cipher.PubKey, remotePort ro
 			c.String(http.StatusInternalServerError, "Failed to copy response body")
 			fmt.Printf("Error copying response body: %v\n", err)
 		}
+	}
+}
+
+func newHTTPConnectServer(log *logging.Logger, remoteConn net.Conn, remoteAddr Addr, webPort int) *http.Server {
+
+	httpC := &http.Client{Transport: MakeHTTPTransport(remoteConn, log)}
+	mu := new(sync.Mutex)
+
+	r := gin.New()
+
+	r.Use(gin.Recovery())
+
+	r.Use(loggingMiddleware())
+
+	r.Any("/*path", handleConnectFunc(httpC, remoteAddr.PK(), remoteAddr.GetPort(), mu))
+
+	srv := &http.Server{
+		Addr:    fmt.Sprint(":", webPort),
+		Handler: r,
+	}
+	return srv
+}
+
+func newTCPConnectListner(log *logging.Logger, webPort int) net.Listener {
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", webPort))
+	if err != nil {
+		log.Errorf("Failed to start TCP listener on port %d: %v", webPort, err)
+	}
+	return listener
+}
+
+func handleConnectTCPConnection(listener net.Listener, remoteConn net.Conn, log *logging.Logger) {
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Printf("Failed to accept connection: %v", err)
+			continue
+		}
+
+		go func(conn net.Conn) {
+			defer conn.Close() //nolint
+
+			go func() {
+				_, err := io.Copy(remoteConn, conn)
+				if err != nil {
+					log.Printf("Error copying data to dmsg server: %v", err)
+				}
+				remoteConn.Close() //nolint
+			}()
+
+			go func() {
+				_, err := io.Copy(conn, remoteConn)
+				if err != nil {
+					log.Printf("Error copying data from dmsg server: %v", err)
+				}
+				conn.Close() //nolint
+			}()
+		}(conn)
 	}
 }

@@ -732,13 +732,14 @@ type ConnectIn struct {
 	RemotePK   cipher.PubKey
 	RemotePort int
 	LocalPort  int
+	AppType    appnet.AppType
 }
 
 // Connect creates a connection with the remote visor to listen on the remote port and serve that on the local port
 func (r *RPC) Connect(in *ConnectIn, out *uuid.UUID) (err error) {
 	defer rpcutil.LogCall(r.log, "Connect", in)(out, &err)
 
-	id, err := r.visor.Connect(in.RemotePK, in.RemotePort, in.LocalPort)
+	id, err := r.visor.Connect(in.RemotePK, in.RemotePort, in.LocalPort, in.AppType)
 	*out = id
 	return err
 }
@@ -758,16 +759,23 @@ func (r *RPC) ListConnected(_ *struct{}, out *map[uuid.UUID]*appnet.ConnectConn)
 	return err
 }
 
-// Connect creates a connection with the remote visor to listen on the remote port and serve that on the local port
-func (r *RPC) Publish(localPort *int, out *uuid.UUID) (err error) {
-	defer rpcutil.LogCall(r.log, "Publish", localPort)(out, &err)
+// PublishIn is input for Publish.
+type PublishIn struct {
+	LocalPort int
+	SkyPort   int
+	AppType   appnet.AppType
+}
 
-	id, err := r.visor.Publish(*localPort)
+// Publish publishes a listner for the local port to the skyport
+func (r *RPC) Publish(in *PublishIn, out *uuid.UUID) (err error) {
+	defer rpcutil.LogCall(r.log, "Publish", in)(out, &err)
+
+	id, err := r.visor.Publish(in.LocalPort, in.SkyPort, in.AppType)
 	*out = id
 	return err
 }
 
-// Disconnect breaks the connection with the given id
+// Depublish removes the published port with the given id
 func (r *RPC) Depublish(id *uuid.UUID, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "Depublish", id)(nil, &err)
 	err = r.visor.Depublish(*id)

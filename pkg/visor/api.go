@@ -116,10 +116,10 @@ type API interface {
 	RouteGroups() ([]RouteGroupInfo, error)
 	SetMinHops(uint16) error
 
-	Publish(localPort int) (uuid.UUID, error)
+	Publish(localPort, skyPort int, appType appnet.AppType) (uuid.UUID, error)
 	Depublish(id uuid.UUID) error
 	ListPublished() (map[uuid.UUID]*appnet.PublishLis, error)
-	Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
+	Connect(remotePK cipher.PubKey, remotePort, localPort int, appType appnet.AppType) (uuid.UUID, error)
 	Disconnect(id uuid.UUID) error
 	ListConnected() (map[uuid.UUID]*appnet.ConnectConn, error)
 	DialPing(config PingConfig) error
@@ -1544,14 +1544,15 @@ func (v *Visor) IsDMSGClientReady() (bool, error) {
 }
 
 // Connect implements API.
-func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, webPort int) (uuid.UUID, error) {
+func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, webPort int, appType appnet.AppType) (uuid.UUID, error) {
 
-	addr := appnet.Addr{
+	remoteAddr := appnet.Addr{
 		Net:    appnet.TypeSkynet,
 		PubKey: remotePK,
 		Port:   routing.Port(remotePort),
 	}
-	conn, err := appnet.Dial(addr)
+
+	conn, err := appnet.Dial(remoteAddr)
 	if err != nil {
 		return uuid.UUID{}, err
 	}
@@ -1560,8 +1561,14 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, webPort int) (uuid.U
 		return uuid.UUID{}, err
 	}
 
-	connectConn := appnet.NewConnectConn(v.log, v.nM, remoteConn, addr, webPort)
-	connectConn.Serve()
+	connectConn, err := appnet.NewConnectConn(v.log, v.nM, remoteConn, remoteAddr, webPort, appType)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+	err = connectConn.Serve()
+	if err != nil {
+		return uuid.UUID{}, err
+	}
 
 	return connectConn.ID, nil
 }
@@ -1581,12 +1588,12 @@ func (v *Visor) ListConnected() (map[uuid.UUID]*appnet.ConnectConn, error) {
 }
 
 // Publish implements API.
-func (v *Visor) Publish(localPort int) (uuid.UUID, error) {
+func (v *Visor) Publish(localPort, skyPort int, appType appnet.AppType) (uuid.UUID, error) {
 
 	addr := appnet.Addr{
 		Net:    appnet.TypeSkynet,
 		PubKey: v.conf.PK,
-		Port:   routing.Port(localPort),
+		Port:   routing.Port(skyPort),
 	}
 
 	lis, err := appnet.Listen(addr)
@@ -1594,12 +1601,15 @@ func (v *Visor) Publish(localPort int) (uuid.UUID, error) {
 		return uuid.UUID{}, err
 	}
 
-	publishLis, err := appnet.NewPublishListener(v.log, v.nM, lis, localPort)
+	publishLis, err := appnet.NewPublishListener(v.log, v.nM, lis, addr, appType)
 	if err != nil {
 		return uuid.UUID{}, err
 	}
 
-	publishLis.Listen()
+	err = publishLis.Listen()
+	if err != nil {
+		return uuid.UUID{}, err
+	}
 
 	return publishLis.ID, nil
 }

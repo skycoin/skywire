@@ -11,12 +11,26 @@ import (
 	"github.com/google/uuid"
 )
 
+// AppType is the type of the network of the external app that is being published or connected to
+type AppType string
+
+const (
+	// TCP is the type of network of the external app that is being published or connected to
+	TCP AppType = "TCP"
+	// UDP is the type of network of the external app that is being published or connected to
+	UDP AppType = "UDP"
+	// HTTP is the type of network of the external app that is being published or connected to
+	HTTP AppType = "HTTP"
+)
+
+// NetManager manages all the connections and listeners
 type NetManager struct {
 	listeners map[uuid.UUID]*PublishLis
 	conns     map[uuid.UUID]*ConnectConn
 	mu        sync.Mutex
 }
 
+// NewNetManager creates a new NetManager
 func NewNetManager() *NetManager {
 	return &NetManager{
 		listeners: make(map[uuid.UUID]*PublishLis),

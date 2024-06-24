@@ -556,12 +556,13 @@ func (rc *rpcClient) IsDMSGClientReady() (bool, error) {
 }
 
 // Connect calls Connect.
-func (rc *rpcClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
+func (rc *rpcClient) Connect(remotePK cipher.PubKey, remotePort, localPort int, appType appnet.AppType) (uuid.UUID, error) {
 	var out uuid.UUID
 	err := rc.Call("Connect", &ConnectIn{
 		RemotePK:   remotePK,
 		RemotePort: remotePort,
 		LocalPort:  localPort,
+		AppType:    appType,
 	}, &out)
 	return out, err
 }
@@ -573,9 +574,13 @@ func (rc *rpcClient) Disconnect(id uuid.UUID) error {
 }
 
 // Publish calls Publish.
-func (rc *rpcClient) Publish(localPort int) (uuid.UUID, error) {
+func (rc *rpcClient) Publish(localPort int, skyPort int, appType appnet.AppType) (uuid.UUID, error) {
 	var out uuid.UUID
-	err := rc.Call("Publish", &localPort, &out)
+	err := rc.Call("Publish", &PublishIn{
+		LocalPort: localPort,
+		SkyPort:   skyPort,
+		AppType:   appType,
+	}, &out)
 	return out, err
 }
 
@@ -1313,7 +1318,7 @@ func (mc *mockRPCClient) IsDMSGClientReady() (bool, error) {
 }
 
 // Connect implements API.
-func (mc *mockRPCClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) { //nolint:all
+func (mc *mockRPCClient) Connect(remotePK cipher.PubKey, remotePort, localPort int, appType appnet.AppType) (uuid.UUID, error) { //nolint:all
 	return uuid.UUID{}, nil
 }
 
@@ -1323,7 +1328,7 @@ func (mc *mockRPCClient) Disconnect(id uuid.UUID) error { //nolint:all
 }
 
 // Publish implements API.
-func (mc *mockRPCClient) Publish(localPort int) (uuid.UUID, error) { //nolint:all
+func (mc *mockRPCClient) Publish(localPort int, skyPort int, appType appnet.AppType) (uuid.UUID, error) { //nolint:all
 	return uuid.UUID{}, nil
 }
 

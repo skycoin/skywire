@@ -14,6 +14,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 )
 
 var (
@@ -29,6 +30,7 @@ func init() {
 	conCmd.Flags().StringVarP(&remotePk, "pk", "k", "", "remote public key to connect to")
 	conCmd.Flags().IntVarP(&localPort, "port", "p", 0, "local port to reverse proxy")
 	conCmd.Flags().BoolVarP(&lsPorts, "ls", "l", false, "list configured connections")
+	conCmd.Flags().StringVarP(&netType, "type", "t", "http", "type of the remote app connection (http, tcp, udp)")
 	conCmd.Flags().StringVarP(&disconnect, "stop", "d", "", "disconnect from specified <id>")
 	RootCmd.AddCommand(conCmd)
 }
@@ -56,7 +58,7 @@ var conCmd = &cobra.Command{
 			internal.Catch(cmd.Flags(), err)
 
 			for _, connectConn := range connectConns {
-				_, err = fmt.Fprintf(w, "%s\t%s\t%s\n", connectConn.ID, connectConn.Addr.String(),
+				_, err = fmt.Fprintf(w, "%s\t%s\t%s\n", connectConn.ID, connectConn.RemoteAddr.String(),
 					strconv.Itoa(int(connectConn.WebPort)))
 				internal.Catch(cmd.Flags(), err)
 			}
@@ -97,15 +99,29 @@ var conCmd = &cobra.Command{
 		if 65536 < remotePort || 65536 < localPort {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("port cannot be greater than 65535"))
 		}
-		id, err := rpcClient.Connect(remotePK, remotePort, localPort)
+
+		var appType appnet.AppType
+
+		switch netType {
+		case "http":
+			appType = appnet.HTTP
+		case "tcp":
+			appType = appnet.TCP
+		case "udp":
+			appType = appnet.UDP
+		default:
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid type"))
+		}
+
+		id, err := rpcClient.Connect(remotePK, remotePort, localPort, appType)
 		internal.Catch(cmd.Flags(), err)
 
 		jsonOptout := struct {
-			ID   string `json:"id"`
-			Addr string `json:"addr"`
+			ID         string `json:"id"`
+			RemoteAddr string `json:"addr"`
 		}{
-			ID:   id.String(),
-			Addr: fmt.Sprintf(remotePk + ":" + strconv.Itoa(remotePort)),
+			ID:         id.String(),
+			RemoteAddr: fmt.Sprintf(remotePk + ":" + strconv.Itoa(remotePort)),
 		}
 		internal.PrintOutput(cmd.Flags(), jsonOptout, fmt.Sprintf("Connected to %s:%d with ID: %s\n", remotePK, remotePort, id.String()))
 	},

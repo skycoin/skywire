@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"strconv"
 	"text/tabwriter"
 
 	"github.com/google/uuid"
@@ -13,16 +12,20 @@ import (
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 )
 
 var (
-	portNo    int
 	depublish string
+	netType   string
+	skyPort   int
 )
 
 func init() {
-	pubCmd.PersistentFlags().IntVarP(&portNo, "port", "p", 0, "local port of the external (http) app")
-	pubCmd.PersistentFlags().StringVarP(&depublish, "depublish", "d", "", "deregister local port of the external (http) app with id")
+	pubCmd.PersistentFlags().IntVarP(&localPort, "port", "p", 0, "local port of the external (http, tcp, udp) app")
+	pubCmd.PersistentFlags().IntVarP(&skyPort, "skyport", "s", localPort, "skywire port for the external (http, tcp, udp) app")
+	pubCmd.PersistentFlags().StringVarP(&depublish, "depublish", "d", "", "deregister local port of the external (http, tcp, udp) app with id")
+	pubCmd.PersistentFlags().StringVarP(&netType, "type", "t", "http", "type of the external app connection (http, tcp, udp)")
 	pubCmd.PersistentFlags().BoolVarP(&lsPorts, "ls", "l", false, "list published local ports")
 	RootCmd.AddCommand(pubCmd)
 }
@@ -33,7 +36,7 @@ var pubCmd = &cobra.Command{
 	Short: "Publish over skywire network",
 	Long:  "Publish over skywire network\nPublish a local port over the skywire network. This will allow other nodes to access the local port via the skywire network.",
 	Args:  cobra.MinimumNArgs(0),
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -57,7 +60,7 @@ var pubCmd = &cobra.Command{
 			_, err = fmt.Fprintln(w, "id\tlocal_port")
 			internal.Catch(cmd.Flags(), err)
 			for id, lis := range liss {
-				_, err = fmt.Fprintf(w, "%v\t%v\n", id, lis.LocalPort)
+				_, err = fmt.Fprintf(w, "%v\t%v\n", id, lis.LocalAddr.GetPort())
 				internal.Catch(cmd.Flags(), err)
 			}
 			internal.Catch(cmd.Flags(), w.Flush())
@@ -65,29 +68,45 @@ var pubCmd = &cobra.Command{
 			os.Exit(0)
 		}
 
-		if len(args) == 0 && portNo == 0 {
+		if skyPort == 0 {
+			skyPort = localPort
+		}
+
+		if localPort == 0 && skyPort == 0 {
 			cmd.Help() //nolint
 			os.Exit(0)
 		}
 
-		//if port is specified via flag, argument will override
-		if len(args) > 0 {
-			portNo, err = strconv.Atoi(args[0])
-			internal.Catch(cmd.Flags(), err)
-		}
-
 		//port 0 is reserved / not usable
-		if portNo == 0 {
+		if localPort == 0 {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("port cannot be 0"))
 		}
 
+		//skyPort 0 is reserved / not usable
+		if skyPort == 0 {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("skyPort cannot be 0"))
+		}
+
 		//65535 is the highest TCP port number
-		if 65536 < portNo {
+		if 65536 < localPort {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("port cannot be greater than 65535"))
 		}
 
+		var appType appnet.AppType
+
+		switch netType {
+		case "http":
+			appType = appnet.HTTP
+		case "tcp":
+			appType = appnet.TCP
+		case "udp":
+			appType = appnet.UDP
+		default:
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid type"))
+		}
+
 		internal.Catch(cmd.Flags(), err)
-		id, err := rpcClient.Publish(portNo)
+		id, err := rpcClient.Publish(localPort, skyPort, appType)
 		internal.Catch(cmd.Flags(), err)
 		internal.PrintOutput(cmd.Flags(), "id: %v\n", fmt.Sprintln(id))
 
