@@ -725,8 +725,8 @@ github.com/sirupsen/logrus v1.6.0/go.mod h1:7uNnSEd1DgxDLC74fIahvMZmmYsHGZGEOFrf
 github.com/sirupsen/logrus v1.9.0/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
 github.com/sirupsen/logrus v1.9.3 h1:dueUQJ1C2q9oE3F7wvmSGAaVtTmUizReu6fjN8uqzbQ=
 github.com/sirupsen/logrus v1.9.3/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
-github.com/skycoin/dmsg v1.3.22-0.20240622174622-39e439d5679d h1:nop/q3XL7GDMP9QpyuBV1fi5Y0rnI7iZeRdHtLfMNt4=
-github.com/skycoin/dmsg v1.3.22-0.20240622174622-39e439d5679d/go.mod h1:QMd7NXzarhpTJrdmJLCnqBqI0hMj0RIou9DI9s1e5mo=
+github.com/skycoin/dmsg v1.3.22-0.20240624173430-27926d97ea3f h1:Cq9cqZGYvOXe/hC4YzecW6EqqkTADCrA2SZlsS94yMc=
+github.com/skycoin/dmsg v1.3.22-0.20240624173430-27926d97ea3f/go.mod h1:v56TVWnlz18J4qrVFxjOyjzg153XSuay9Y76AUb35ac=
 github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6 h1:1Nc5EBY6pjfw1kwW0duwyG+7WliWz5u9kgk1h5MnLuA=
 github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6/go.mod h1:UXghlricA7J3aRD/k7p/zBObQfmBawwCxIVPVjz2Q3o=
 github.com/skycoin/skycoin v0.27.1 h1:HatxsRwVSPaV4qxH6290xPBmkH/HgiuAoY2qC+e8C9I=
@@ -735,8 +735,8 @@ github.com/skycoin/skycoin-service-discovery v0.0.0-20240623180153-a8ad1c33ec6b 
 github.com/skycoin/skycoin-service-discovery v0.0.0-20240623180153-a8ad1c33ec6b/go.mod h1:FeOj6UmWl3fHf09yndIljAznZeAFiu95eUjNW/nIIHs=
 github.com/skycoin/skywire-services v0.0.0-20240623180621-d0bc8fd4da3d h1:KZT7CjyFy465RLjEZyPU0NzEa2pQY6wH38EOkWH7HL8=
 github.com/skycoin/skywire-services v0.0.0-20240623180621-d0bc8fd4da3d/go.mod h1:61gfVmHyIAZexpeGKqaYrwelKW4VUIgjmtg5QpG2sf0=
-github.com/skycoin/skywire-utilities v1.3.18-0.20240208220612-9f31eda72f33 h1:BzhyKolEWT8cnXZJMxC0TYGCvu3wMYdI6NOpvToN+uQ=
-github.com/skycoin/skywire-utilities v1.3.18-0.20240208220612-9f31eda72f33/go.mod h1:yFKWpL1bDRPKU3uK+cTF4PnYUMe+eyIj5N2bk4sF5Cw=
+github.com/skycoin/skywire-utilities v1.3.18-0.20240624172427-aeaf6f14fbdc h1:VCsz6iF8Eah3D+wHuSWT+Veb8C4XsYMQx+e0WtS6AAY=
+github.com/skycoin/skywire-utilities v1.3.18-0.20240624172427-aeaf6f14fbdc/go.mod h1:yFKWpL1bDRPKU3uK+cTF4PnYUMe+eyIj5N2bk4sF5Cw=
 github.com/skycoin/systray v1.10.0 h1:fQZJHMylpVvfmOOTLvUssfyHVDoC8Idx6Ba2BlLEuGg=
 github.com/skycoin/systray v1.10.0/go.mod h1:/i17Eni5GxFiboIZceeamY5LktDSFFRCvd3fBMerQ+4=
 github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8 h1:TG/diQgUe0pntT/2D9tmUCz4VNwm9MfrtPr0SU2qSX8=
