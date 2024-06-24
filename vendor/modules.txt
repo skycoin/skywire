@@ -577,14 +577,14 @@ github.com/skycoin/skycoin/src/cipher/ripemd160
 github.com/skycoin/skycoin/src/cipher/secp256k1-go
 github.com/skycoin/skycoin/src/cipher/secp256k1-go/secp256k1-go2
 github.com/skycoin/skycoin/src/util/logging
-# github.com/skycoin/skycoin-service-discovery v0.0.0-20240623180153-a8ad1c33ec6b
+# github.com/skycoin/skycoin-service-discovery v0.0.0-20240624174514-b0fc35086c3c
 ## explicit; go 1.21
 github.com/skycoin/skycoin-service-discovery/cmd/service-discovery/commands
 github.com/skycoin/skycoin-service-discovery/internal/pg
 github.com/skycoin/skycoin-service-discovery/internal/sdmetrics
 github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/api
 github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/store
-# github.com/skycoin/skywire-services v0.0.0-20240623180621-d0bc8fd4da3d
+# github.com/skycoin/skywire-services v0.0.0-20240624175050-7c26af2eca3e
 ## explicit; go 1.21
 github.com/skycoin/skywire-services/cmd/address-resolver/commands
 github.com/skycoin/skywire-services/cmd/config-bootstrapper/commands

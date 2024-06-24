@@ -731,10 +731,10 @@ github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6 h1:1Nc5EBY6pjfw1kwW0
 github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6/go.mod h1:UXghlricA7J3aRD/k7p/zBObQfmBawwCxIVPVjz2Q3o=
 github.com/skycoin/skycoin v0.27.1 h1:HatxsRwVSPaV4qxH6290xPBmkH/HgiuAoY2qC+e8C9I=
 github.com/skycoin/skycoin v0.27.1/go.mod h1:78nHjQzd8KG0jJJVL/j0xMmrihXi70ti63fh8vXScJw=
-github.com/skycoin/skycoin-service-discovery v0.0.0-20240623180153-a8ad1c33ec6b h1:5HUw+Uckv5mZORdcSC1TLmAu2ICRYjouoqATa8mTp74=
-github.com/skycoin/skycoin-service-discovery v0.0.0-20240623180153-a8ad1c33ec6b/go.mod h1:FeOj6UmWl3fHf09yndIljAznZeAFiu95eUjNW/nIIHs=
-github.com/skycoin/skywire-services v0.0.0-20240623180621-d0bc8fd4da3d h1:KZT7CjyFy465RLjEZyPU0NzEa2pQY6wH38EOkWH7HL8=
-github.com/skycoin/skywire-services v0.0.0-20240623180621-d0bc8fd4da3d/go.mod h1:61gfVmHyIAZexpeGKqaYrwelKW4VUIgjmtg5QpG2sf0=
+github.com/skycoin/skycoin-service-discovery v0.0.0-20240624174514-b0fc35086c3c h1:AE5wVxIf9RE32kA6zvJzs/vnCXppiaLmSIJWxD+4cso=
+github.com/skycoin/skycoin-service-discovery v0.0.0-20240624174514-b0fc35086c3c/go.mod h1:cidPb7mQW0CsTYYu7XSziuIoFVrFE8wwPab9vq4lyg8=
+github.com/skycoin/skywire-services v0.0.0-20240624175050-7c26af2eca3e h1:RFDCii8Jpo5MDFHyok8TagWIV4AUvxQzztlxM3yziho=
+github.com/skycoin/skywire-services v0.0.0-20240624175050-7c26af2eca3e/go.mod h1:CaQby+q5UmKzJ/ZPQmhkPntELXNf94ztN232/u7Dvus=
 github.com/skycoin/skywire-utilities v1.3.18-0.20240624172427-aeaf6f14fbdc h1:VCsz6iF8Eah3D+wHuSWT+Veb8C4XsYMQx+e0WtS6AAY=
 github.com/skycoin/skywire-utilities v1.3.18-0.20240624172427-aeaf6f14fbdc/go.mod h1:yFKWpL1bDRPKU3uK+cTF4PnYUMe+eyIj5N2bk4sF5Cw=
 github.com/skycoin/systray v1.10.0 h1:fQZJHMylpVvfmOOTLvUssfyHVDoC8Idx6Ba2BlLEuGg=

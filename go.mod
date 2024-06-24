@@ -35,8 +35,8 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/skycoin/dmsg v1.3.22-0.20240624173430-27926d97ea3f
 	github.com/skycoin/skycoin v0.27.1
-	github.com/skycoin/skycoin-service-discovery v0.0.0-20240623180153-a8ad1c33ec6b
-	github.com/skycoin/skywire-services v0.0.0-20240623180621-d0bc8fd4da3d
+	github.com/skycoin/skycoin-service-discovery v0.0.0-20240624174514-b0fc35086c3c
+	github.com/skycoin/skywire-services v0.0.0-20240624175050-7c26af2eca3e
 	github.com/skycoin/skywire-utilities v1.3.18-0.20240624172427-aeaf6f14fbdc
 	github.com/skycoin/systray v1.10.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
