@@ -1546,6 +1546,10 @@ func (v *Visor) IsDMSGClientReady() (bool, error) {
 // Connect implements API.
 func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, webPort int, appType appnet.AppType) (uuid.UUID, error) {
 
+	if err := v.nM.IsConnectPortAvailable(webPort); err != nil {
+		return uuid.UUID{}, err
+	}
+
 	remoteAddr := appnet.Addr{
 		Net:    appnet.TypeSkynet,
 		PubKey: remotePK,
@@ -1594,6 +1598,10 @@ func (v *Visor) Publish(localPort, skyPort int, appType appnet.AppType) (uuid.UU
 		Net:    appnet.TypeSkynet,
 		PubKey: v.conf.PK,
 		Port:   routing.Port(skyPort),
+	}
+
+	if err := v.nM.IsPublishPortAvailable(addr, appType); err != nil {
+		return uuid.UUID{}, err
 	}
 
 	lis, err := appnet.Listen(addr)

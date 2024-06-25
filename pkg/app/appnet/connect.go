@@ -37,6 +37,7 @@ type ConnectConn struct {
 
 // NewConnectConn creates a new ConnectConn
 func NewConnectConn(log *logging.Logger, nm *NetManager, remoteConn net.Conn, remoteAddr Addr, webPort int, appType AppType) (*ConnectConn, error) {
+
 	var srv *http.Server
 	var lis net.Listener
 
@@ -64,7 +65,10 @@ func NewConnectConn(log *logging.Logger, nm *NetManager, remoteConn net.Conn, re
 		nm:      nm,
 	}
 
-	nm.AddConnect(conn)
+	if err := nm.AddConnect(conn); err != nil {
+		return nil, err
+	}
+
 	return conn, nil
 }
 

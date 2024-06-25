@@ -38,12 +38,35 @@ func NewNetManager() *NetManager {
 	}
 }
 
-// AddPublish adds publishListener to with it's ID
-func (nm *NetManager) AddPublish(lis *PublishLis) {
+func (nm *NetManager) isPublishPortAvailable(addr Addr, appType AppType) error {
+
+	for _, l := range nm.listeners {
+		if l.LocalAddr.GetPort() == addr.GetPort() {
+			return fmt.Errorf("port %d is already in use for app type %v", addr.GetPort(), appType)
+		}
+	}
+	return nil
+}
+
+// isPublishPortAvailable checks if a port and apptype is available for publishing
+func (nm *NetManager) IsPublishPortAvailable(addr Addr, appType AppType) error {
 	nm.mu.Lock()
 	defer nm.mu.Unlock()
 
+	return nm.isPublishPortAvailable(addr, appType)
+}
+
+// AddPublish adds publishListener to with it's ID
+func (nm *NetManager) AddPublish(lis *PublishLis) error {
+	nm.mu.Lock()
+	defer nm.mu.Unlock()
+
+	if err := nm.isPublishPortAvailable(lis.LocalAddr, lis.AppType); err != nil {
+		return err
+	}
+
 	nm.listeners[lis.ID] = lis
+	return nil
 }
 
 // GetpublishListenertner get's a publishListener by ID
@@ -70,12 +93,35 @@ func (nm *NetManager) RemovePublishListener(id uuid.UUID) {
 	delete(nm.listeners, id)
 }
 
-// AddConnect adds ConnectConn to with it's ID
-func (nm *NetManager) AddConnect(conn *ConnectConn) {
+func (nm *NetManager) isConnectPortAvailable(webPort int) error {
+
+	for _, c := range nm.conns {
+		if c.WebPort == webPort {
+			return fmt.Errorf("web port %d is already in use", webPort)
+		}
+	}
+	return nil
+}
+
+// IsConnectPortAvailable checks if a web port is available
+func (nm *NetManager) IsConnectPortAvailable(webPort int) error {
 	nm.mu.Lock()
 	defer nm.mu.Unlock()
 
+	return nm.isConnectPortAvailable(webPort)
+}
+
+// AddConnect adds ConnectConn to with it's ID
+func (nm *NetManager) AddConnect(conn *ConnectConn) error {
+	nm.mu.Lock()
+	defer nm.mu.Unlock()
+
+	if err := nm.isConnectPortAvailable(conn.WebPort); err != nil {
+		return err
+	}
+
 	nm.conns[conn.ID] = conn
+	return nil
 }
 
 // GetConnectConn get's a ConnectConn by ID

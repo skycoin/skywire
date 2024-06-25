@@ -37,6 +37,7 @@ type PublishLis struct {
 
 // NewPublishListener creates a new publishListener
 func NewPublishListener(log *logging.Logger, nm *NetManager, skyLis net.Listener, addr Addr, appType AppType) (*PublishLis, error) {
+
 	var srv *http.Server
 	var conn net.Conn
 	switch appType {
@@ -48,6 +49,7 @@ func NewPublishListener(log *logging.Logger, nm *NetManager, skyLis net.Listener
 	case UDP:
 		return nil, errors.New("app type UDP is not supported yet")
 	}
+
 	pubLis := &PublishLis{
 		PublishInfo: PublishInfo{
 			ID:        uuid.New(),
@@ -60,7 +62,11 @@ func NewPublishListener(log *logging.Logger, nm *NetManager, skyLis net.Listener
 		log:    log,
 		nm:     nm,
 	}
-	nm.AddPublish(pubLis)
+
+	if err := nm.AddPublish(pubLis); err != nil {
+		return nil, err
+	}
+
 	return pubLis, nil
 }
 
