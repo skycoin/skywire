@@ -11,7 +11,7 @@
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
    <Product Id="*" UpgradeCode="cd7955bc-304e-470f-9c24-eb9f429a8085"
             Name="Skywire"
-            Version="1.3.20"
+            Version="1.3.22"
             Manufacturer="Skycoin"
             Language="1033">
 
