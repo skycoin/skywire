@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/google/uuid"
@@ -18,29 +19,24 @@ import (
 )
 
 var (
-	remotePort int
-	remotePk   string
-	localPort  int
-	lsPorts    bool
-	disconnect string
+	localPort int
 )
 
 func init() {
-	conCmd.Flags().IntVarP(&remotePort, "remote", "r", 0, "remote port to read from")
-	conCmd.Flags().StringVarP(&remotePk, "pk", "k", "", "remote public key to connect to")
-	conCmd.Flags().IntVarP(&localPort, "port", "p", 0, "local port to reverse proxy")
-	conCmd.Flags().BoolVarP(&lsPorts, "ls", "l", false, "list configured connections")
+	conCmd.Flags().IntVarP(&localPort, "port", "p", 0, "local port to serve the remote app on")
 	conCmd.Flags().StringVarP(&netType, "type", "t", "http", "type of the remote app connection (http, tcp, udp)")
-	conCmd.Flags().StringVarP(&disconnect, "stop", "d", "", "disconnect from specified <id>")
+
+	conCmd.AddCommand(lsCmd)
+	conCmd.AddCommand(stopCmd)
 	RootCmd.AddCommand(conCmd)
 }
 
-// conCmd contains commands to connect to a published port on the skywire network
+// conCmd contains commands to connect to a published app on the skywire network
 var conCmd = &cobra.Command{
-	Use:   "con",
-	Short: "Connect to a published port on the skywire network",
-	Long:  "Connect to a published port on the skywire network\nConnect to a remote port on the skywire network. This will allow you to access the remote port via the skywire network.",
-	Args:  cobra.MinimumNArgs(0),
+	Use:   "con <remote_pk:remote_port> [flags]",
+	Short: "Connect to a published app on the skywire network",
+	Long:  "Connect to a published app on the skywire network.\n This will allow you to access the remote app via the skywire network.",
+	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 
 		rpcClient, err := clirpc.Client(cmd.Flags())
@@ -48,48 +44,25 @@ var conCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		if lsPorts {
-			connectConns, err := rpcClient.ListConnected()
-			internal.Catch(cmd.Flags(), err)
-
-			var b bytes.Buffer
-			w := tabwriter.NewWriter(&b, 0, 0, 3, ' ', tabwriter.TabIndent)
-			_, err = fmt.Fprintln(w, "id\taddr\tweb_port")
-			internal.Catch(cmd.Flags(), err)
-
-			for _, connectConn := range connectConns {
-				_, err = fmt.Fprintf(w, "%s\t%s\t%s\n", connectConn.ID, connectConn.RemoteAddr.String(),
-					strconv.Itoa(int(connectConn.WebPort)))
-				internal.Catch(cmd.Flags(), err)
-			}
-			internal.Catch(cmd.Flags(), w.Flush())
-			internal.PrintOutput(cmd.Flags(), connectConns, b.String())
-			os.Exit(0)
-		}
-
-		if disconnect != "" {
-			id, err := uuid.Parse(disconnect)
-			internal.Catch(cmd.Flags(), err)
-			err = rpcClient.Disconnect(id)
-			internal.Catch(cmd.Flags(), err)
-			internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
-			os.Exit(0)
-		}
-
-		if len(args) == 0 && remotePk == "" {
+		if len(args) == 0 {
 			cmd.Help() //nolint
 			os.Exit(0)
 		}
 
 		var remotePK cipher.PubKey
+		var remotePort int
 
-		//if pk is specified via flag, argument will override
-		if len(args) > 0 {
-			internal.Catch(cmd.Flags(), remotePK.Set(args[0]))
-		} else {
-			if remotePk != "" {
-				internal.Catch(cmd.Flags(), remotePK.Set(remotePk))
-			}
+		parts := strings.Split(args[0], ":")
+
+		if len(parts) != 2 {
+			cmd.Help() //nolint
+			os.Exit(0)
+		}
+
+		internal.Catch(cmd.Flags(), remotePK.Set(parts[0]))
+
+		if remotePort, err = strconv.Atoi(parts[1]); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid port: %s", parts[1]))
 		}
 
 		if remotePort == 0 || localPort == 0 {
@@ -124,5 +97,67 @@ var conCmd = &cobra.Command{
 			RemoteAddr: connInfo.RemoteAddr.String(),
 		}
 		internal.PrintOutput(cmd.Flags(), jsonOptout, fmt.Sprintf("Connected to %s with ID: %s\n", connInfo.RemoteAddr.String(), connInfo.ID.String()))
+	},
+}
+
+// lsCmd contains commands to list connected apps on the skywire network
+var lsCmd = &cobra.Command{
+	Use:   "ls",
+	Short: "List connected apps on the skywire network",
+	Long:  "List connected apps on the skywire network.\nThis will show you the ID, address, and web port of the connected apps.",
+	Args:  cobra.MinimumNArgs(0),
+	Run: func(cmd *cobra.Command, args []string) {
+
+		if len(args) != 0 {
+			cmd.Help() //nolint
+			os.Exit(0)
+		}
+
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+
+		connectConns, err := rpcClient.ListConnected()
+		internal.Catch(cmd.Flags(), err)
+
+		var b bytes.Buffer
+		w := tabwriter.NewWriter(&b, 0, 0, 3, ' ', tabwriter.TabIndent)
+		_, err = fmt.Fprintln(w, "id\taddr\tweb_port\tapp_type")
+		internal.Catch(cmd.Flags(), err)
+
+		for _, connectConn := range connectConns {
+			_, err = fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", connectConn.ID, connectConn.RemoteAddr,
+				connectConn.WebPort, connectConn.AppType)
+			internal.Catch(cmd.Flags(), err)
+		}
+		internal.Catch(cmd.Flags(), w.Flush())
+		internal.PrintOutput(cmd.Flags(), connectConns, b.String())
+	},
+}
+
+// stopCmd contains commands to stop a connection to a published app on the skywire network
+var stopCmd = &cobra.Command{
+	Use:   "stop <id>",
+	Short: "Stop a connection to a published app on the skywire network",
+	Long:  "Stop a connection to a published app on the skywire network.\nThis will disconnect you from the remote app.",
+	Args:  cobra.MinimumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+
+		if len(args) == 0 {
+			cmd.Help() //nolint
+			os.Exit(0)
+		}
+
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+
+		id, err := uuid.Parse(args[0])
+		internal.Catch(cmd.Flags(), err)
+		err = rpcClient.Disconnect(id)
+		internal.Catch(cmd.Flags(), err)
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
