@@ -69,17 +69,17 @@ builds:
     main: ./cmd/skywire/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
-  - id: skywire-riscv64
-    binary: skywire
-    goos:
-      - linux
-    goarch:
-      - riscv64
-    env:
-      - CGO_ENABLED=1
-      - CC=/home/runner/work/skywire/skywire/musl-data/riscv64-linux-musl-cross/bin/riscv64-linux-musl-gcc
-    main: ./cmd/skywire/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
+  # - id: skywire-riscv64
+  #   binary: skywire
+  #   goos:
+  #     - linux
+  #   goarch:
+  #     - riscv64
+  #   env:
+  #     - CGO_ENABLED=1
+  #     - CC=/home/runner/work/skywire/skywire/musl-data/riscv64-linux-musl-cross/bin/riscv64-linux-musl-gcc
+  #   main: ./cmd/skywire/
+  #   ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
 archives:
   - id: amd64
@@ -122,15 +122,15 @@ archives:
     builds:
       - skywire-armhf
 
-  - id: riscv64
-    format: tar.gz
-    wrap_in_directory: false
-    name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
-    files:
-      - dmsghttp-config.json
-      - services-config.json
-    builds:
-      - skywire-riscv64
+  # - id: riscv64
+  #   format: tar.gz
+  #   wrap_in_directory: false
+  #   name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
+  #   files:
+  #     - dmsghttp-config.json
+  #     - services-config.json
+  #   builds:
+  #     - skywire-riscv64
 
 checksum:
   name_template: 'checksums.txt'
