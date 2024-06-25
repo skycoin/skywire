@@ -10,7 +10,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"sync"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -141,9 +140,7 @@ func newHTTPPublishServer(localPort int) *http.Server {
 	})
 
 	srv := &http.Server{
-		Handler:           r,
-		ReadHeaderTimeout: 5 * time.Second,
-		WriteTimeout:      10 * time.Second,
+		Handler: r,
 	}
 
 	return srv
