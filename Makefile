@@ -196,11 +196,11 @@ format-windows: tidy ## Formats the code. Must have goimports and goimports-revi
 dep: tidy ## Sorts dependencies
 	${OPTS} go mod vendor -v
 
-snapshot: ## goreleaser --snapshot --skip-publish --clean
-	goreleaser --snapshot --skip-publish --clean
+snapshot: ## goreleaser --snapshot --clean --skip=publish
+	goreleaser --snapshot --clean --skip=publish
 
-snapshot-linux: ## 	goreleaser --snapshot --config .goreleaser-linux.yml --skip-publish --clean
-	goreleaser --snapshot --config .goreleaser-linux.yml --skip-publish --clean
+snapshot-linux: ## 	goreleaser --snapshot --config .goreleaser-linux.yml --clean --skip=publish
+	goreleaser --snapshot --config .goreleaser-linux.yml --clean --skip=publish
 
 snapshot-clean: ## Cleans snapshot / release
 	rm -rf ./dist
@@ -249,7 +249,7 @@ github-release: github-prepare-release
 	goreleaser --clean --config .goreleaser-linux.yml --release-notes releaseChangelog.md
 
 github-release-darwin:
-	goreleaser --clean  --config .goreleaser-darwin.yml --skip-publish
+	goreleaser --clean  --config .goreleaser-darwin.yml --skip=publish
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags))
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-darwin-amd64.tar.gz
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-darwin-arm64.tar.gz
@@ -258,7 +258,7 @@ github-release-darwin:
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} --clobber ./checksums.txt
 
 github-release-windows:
-	.\goreleaser\goreleaser.exe --clean  --config .goreleaser-windows.yml --skip-publish
+	.\goreleaser\goreleaser.exe --clean  --config .goreleaser-windows.yml --skip=publish
 	$(eval GITHUB_TAG=$(shell powershell git describe --abbrev=0 --tags))
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-windows-amd64.zip
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-windows-386.zip
