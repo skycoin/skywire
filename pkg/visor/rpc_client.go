@@ -556,8 +556,8 @@ func (rc *rpcClient) IsDMSGClientReady() (bool, error) {
 }
 
 // Connect calls Connect.
-func (rc *rpcClient) Connect(remotePK cipher.PubKey, remotePort, localPort int, appType appnet.AppType) (uuid.UUID, error) {
-	var out uuid.UUID
+func (rc *rpcClient) Connect(remotePK cipher.PubKey, remotePort, localPort int, appType appnet.AppType) (appnet.ConnectInfo, error) {
+	var out appnet.ConnectInfo
 	err := rc.Call("Connect", &ConnectIn{
 		RemotePK:   remotePK,
 		RemotePort: remotePort,
@@ -574,8 +574,8 @@ func (rc *rpcClient) Disconnect(id uuid.UUID) error {
 }
 
 // Publish calls Publish.
-func (rc *rpcClient) Publish(localPort int, skyPort int, appType appnet.AppType) (uuid.UUID, error) {
-	var out uuid.UUID
+func (rc *rpcClient) Publish(localPort int, skyPort int, appType appnet.AppType) (appnet.PublishInfo, error) {
+	var out appnet.PublishInfo
 	err := rc.Call("Publish", &PublishIn{
 		LocalPort: localPort,
 		SkyPort:   skyPort,
@@ -591,15 +591,15 @@ func (rc *rpcClient) Depublish(id uuid.UUID) error {
 }
 
 // ListPublished calls ListPublished.
-func (rc *rpcClient) ListPublished() (map[uuid.UUID]*appnet.PublishLis, error) {
-	var out map[uuid.UUID]*appnet.PublishLis
+func (rc *rpcClient) ListPublished() ([]appnet.PublishInfo, error) {
+	var out []appnet.PublishInfo
 	err := rc.Call("ListPublished", &struct{}{}, &out)
 	return out, err
 }
 
 // ListConnected calls ListConnected.
-func (rc *rpcClient) ListConnected() (map[uuid.UUID]*appnet.ConnectConn, error) {
-	var out map[uuid.UUID]*appnet.ConnectConn
+func (rc *rpcClient) ListConnected() ([]appnet.ConnectInfo, error) {
+	var out []appnet.ConnectInfo
 	err := rc.Call("ListConnected", &struct{}{}, &out)
 	return out, err
 }
@@ -1318,8 +1318,8 @@ func (mc *mockRPCClient) IsDMSGClientReady() (bool, error) {
 }
 
 // Connect implements API.
-func (mc *mockRPCClient) Connect(remotePK cipher.PubKey, remotePort, localPort int, appType appnet.AppType) (uuid.UUID, error) { //nolint:all
-	return uuid.UUID{}, nil
+func (mc *mockRPCClient) Connect(remotePK cipher.PubKey, remotePort, localPort int, appType appnet.AppType) (appnet.ConnectInfo, error) { //nolint:all
+	return appnet.ConnectInfo{}, nil
 }
 
 // Disconnect implements API.
@@ -1328,8 +1328,8 @@ func (mc *mockRPCClient) Disconnect(id uuid.UUID) error { //nolint:all
 }
 
 // Publish implements API.
-func (mc *mockRPCClient) Publish(localPort int, skyPort int, appType appnet.AppType) (uuid.UUID, error) { //nolint:all
-	return uuid.UUID{}, nil
+func (mc *mockRPCClient) Publish(localPort int, skyPort int, appType appnet.AppType) (appnet.PublishInfo, error) { //nolint:all
+	return appnet.PublishInfo{}, nil
 }
 
 // Depublish implements API.
@@ -1338,12 +1338,12 @@ func (mc *mockRPCClient) Depublish(id uuid.UUID) error { //nolint:all
 }
 
 // List implements API.
-func (mc *mockRPCClient) ListConnected() (map[uuid.UUID]*appnet.ConnectConn, error) {
+func (mc *mockRPCClient) ListConnected() ([]appnet.ConnectInfo, error) {
 	return nil, nil
 }
 
 // ListHTTPPorts implements API.
-func (mc *mockRPCClient) ListPublished() (map[uuid.UUID]*appnet.PublishLis, error) {
+func (mc *mockRPCClient) ListPublished() ([]appnet.PublishInfo, error) {
 	return nil, nil
 }
 

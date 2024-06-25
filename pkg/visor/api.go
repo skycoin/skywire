@@ -116,12 +116,12 @@ type API interface {
 	RouteGroups() ([]RouteGroupInfo, error)
 	SetMinHops(uint16) error
 
-	Publish(localPort, skyPort int, appType appnet.AppType) (uuid.UUID, error)
+	Publish(localPort, skyPort int, appType appnet.AppType) (appnet.PublishInfo, error)
 	Depublish(id uuid.UUID) error
-	ListPublished() (map[uuid.UUID]*appnet.PublishLis, error)
-	Connect(remotePK cipher.PubKey, remotePort, localPort int, appType appnet.AppType) (uuid.UUID, error)
+	ListPublished() ([]appnet.PublishInfo, error)
+	Connect(remotePK cipher.PubKey, remotePort, localPort int, appType appnet.AppType) (appnet.ConnectInfo, error)
 	Disconnect(id uuid.UUID) error
-	ListConnected() (map[uuid.UUID]*appnet.ConnectConn, error)
+	ListConnected() ([]appnet.ConnectInfo, error)
 	DialPing(config PingConfig) error
 	Ping(config PingConfig) ([]time.Duration, error)
 	StopPing(pk cipher.PubKey) error
@@ -1544,10 +1544,10 @@ func (v *Visor) IsDMSGClientReady() (bool, error) {
 }
 
 // Connect implements API.
-func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, webPort int, appType appnet.AppType) (uuid.UUID, error) {
+func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, webPort int, appType appnet.AppType) (appnet.ConnectInfo, error) {
 
 	if err := v.nM.IsConnectPortAvailable(webPort); err != nil {
-		return uuid.UUID{}, err
+		return appnet.ConnectInfo{}, err
 	}
 
 	remoteAddr := appnet.Addr{
@@ -1558,23 +1558,23 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, webPort int, appType
 
 	conn, err := appnet.Dial(remoteAddr)
 	if err != nil {
-		return uuid.UUID{}, err
+		return appnet.ConnectInfo{}, err
 	}
 	remoteConn, err := appnet.WrapConn(conn)
 	if err != nil {
-		return uuid.UUID{}, err
+		return appnet.ConnectInfo{}, err
 	}
 
 	connectConn, err := appnet.NewConnectConn(v.log, v.nM, remoteConn, remoteAddr, webPort, appType)
 	if err != nil {
-		return uuid.UUID{}, err
+		return appnet.ConnectInfo{}, err
 	}
 	err = connectConn.Serve()
 	if err != nil {
-		return uuid.UUID{}, err
+		return appnet.ConnectInfo{}, err
 	}
 
-	return connectConn.ID, nil
+	return connectConn.ConnectInfo, nil
 }
 
 // Disconnect implements API.
@@ -1587,12 +1587,17 @@ func (v *Visor) Disconnect(id uuid.UUID) error {
 }
 
 // ListHTTPPorts implements API.
-func (v *Visor) ListConnected() (map[uuid.UUID]*appnet.ConnectConn, error) {
-	return v.nM.GetAllConnectConns(), nil
+func (v *Visor) ListConnected() ([]appnet.ConnectInfo, error) {
+	cons := v.nM.GetAllConnectConns()
+	var connectInfos []appnet.ConnectInfo
+	for _, con := range cons {
+		connectInfos = append(connectInfos, con.ConnectInfo)
+	}
+	return connectInfos, nil
 }
 
 // Publish implements API.
-func (v *Visor) Publish(localPort, skyPort int, appType appnet.AppType) (uuid.UUID, error) {
+func (v *Visor) Publish(localPort, skyPort int, appType appnet.AppType) (appnet.PublishInfo, error) {
 
 	addr := appnet.Addr{
 		Net:    appnet.TypeSkynet,
@@ -1601,25 +1606,25 @@ func (v *Visor) Publish(localPort, skyPort int, appType appnet.AppType) (uuid.UU
 	}
 
 	if err := v.nM.IsPublishPortAvailable(addr, appType); err != nil {
-		return uuid.UUID{}, err
+		return appnet.PublishInfo{}, err
 	}
 
 	lis, err := appnet.Listen(addr)
 	if err != nil {
-		return uuid.UUID{}, err
+		return appnet.PublishInfo{}, err
 	}
 
 	publishLis, err := appnet.NewPublishListener(v.log, v.nM, lis, addr, appType)
 	if err != nil {
-		return uuid.UUID{}, err
+		return appnet.PublishInfo{}, err
 	}
 
 	err = publishLis.Listen()
 	if err != nil {
-		return uuid.UUID{}, err
+		return appnet.PublishInfo{}, err
 	}
 
-	return publishLis.ID, nil
+	return publishLis.PublishInfo, nil
 }
 
 // Depublish implements API.
@@ -1632,6 +1637,11 @@ func (v *Visor) Depublish(id uuid.UUID) error {
 }
 
 // ListPublished implements API.
-func (v *Visor) ListPublished() (map[uuid.UUID]*appnet.PublishLis, error) {
-	return v.nM.GetAllPublishListeners(), nil
+func (v *Visor) ListPublished() ([]appnet.PublishInfo, error) {
+	liss := v.nM.GetAllPublishListeners()
+	var publishInfos []appnet.PublishInfo
+	for _, lis := range liss {
+		publishInfos = append(publishInfos, lis.PublishInfo)
+	}
+	return publishInfos, nil
 }

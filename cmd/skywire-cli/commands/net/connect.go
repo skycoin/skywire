@@ -113,16 +113,16 @@ var conCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid type"))
 		}
 
-		id, err := rpcClient.Connect(remotePK, remotePort, localPort, appType)
+		connInfo, err := rpcClient.Connect(remotePK, remotePort, localPort, appType)
 		internal.Catch(cmd.Flags(), err)
 
 		jsonOptout := struct {
 			ID         string `json:"id"`
 			RemoteAddr string `json:"addr"`
 		}{
-			ID:         id.String(),
-			RemoteAddr: fmt.Sprintf(remotePk + ":" + strconv.Itoa(remotePort)),
+			ID:         connInfo.ID.String(),
+			RemoteAddr: connInfo.RemoteAddr.String(),
 		}
-		internal.PrintOutput(cmd.Flags(), jsonOptout, fmt.Sprintf("Connected to %s:%d with ID: %s\n", remotePK, remotePort, id.String()))
+		internal.PrintOutput(cmd.Flags(), jsonOptout, fmt.Sprintf("Connected to %s with ID: %s\n", connInfo.RemoteAddr.String(), connInfo.ID.String()))
 	},
 }

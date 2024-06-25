@@ -63,7 +63,7 @@ func main() {
 
 	skyPort := port
 
-	id, err := rpcClient.Publish(port, skyPort, appnet.HTTP)
+	pubInfo, err := rpcClient.Publish(port, skyPort, appnet.HTTP)
 	if err != nil {
 		log.Errorf("error closing server: %v", err)
 	}
@@ -73,7 +73,7 @@ func main() {
 	if err != nil {
 		log.Errorf("error closing server: %v", err)
 	}
-	err = rpcClient.Depublish(id)
+	err = rpcClient.Depublish(pubInfo.ID)
 	if err != nil {
 		log.Errorf("error closing server: %v", err)
 	}

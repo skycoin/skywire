@@ -736,7 +736,7 @@ type ConnectIn struct {
 }
 
 // Connect creates a connection with the remote visor to listen on the remote port and serve that on the local port
-func (r *RPC) Connect(in *ConnectIn, out *uuid.UUID) (err error) {
+func (r *RPC) Connect(in *ConnectIn, out *appnet.ConnectInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "Connect", in)(out, &err)
 
 	id, err := r.visor.Connect(in.RemotePK, in.RemotePort, in.LocalPort, in.AppType)
@@ -752,7 +752,7 @@ func (r *RPC) Disconnect(id *uuid.UUID, _ *struct{}) (err error) {
 }
 
 // ListConnected lists all the sky connections that are connected
-func (r *RPC) ListConnected(_ *struct{}, out *map[uuid.UUID]*appnet.ConnectConn) (err error) {
+func (r *RPC) ListConnected(_ *struct{}, out *[]appnet.ConnectInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "ListConnected", nil)(out, &err)
 	conns, err := r.visor.ListConnected()
 	*out = conns
@@ -767,7 +767,7 @@ type PublishIn struct {
 }
 
 // Publish publishes a listner for the local port to the skyport
-func (r *RPC) Publish(in *PublishIn, out *uuid.UUID) (err error) {
+func (r *RPC) Publish(in *PublishIn, out *appnet.PublishInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "Publish", in)(out, &err)
 
 	id, err := r.visor.Publish(in.LocalPort, in.SkyPort, in.AppType)
@@ -783,7 +783,7 @@ func (r *RPC) Depublish(id *uuid.UUID, _ *struct{}) (err error) {
 }
 
 // ListPublished lists all the local ports that are being published
-func (r *RPC) ListPublished(_ *struct{}, out *map[uuid.UUID]*appnet.PublishLis) (err error) {
+func (r *RPC) ListPublished(_ *struct{}, out *[]appnet.PublishInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "ListPublished", nil)(out, &err)
 	liss, err := r.visor.ListPublished()
 	*out = liss

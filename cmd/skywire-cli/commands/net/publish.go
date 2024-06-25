@@ -106,9 +106,17 @@ var pubCmd = &cobra.Command{
 		}
 
 		internal.Catch(cmd.Flags(), err)
-		id, err := rpcClient.Publish(localPort, skyPort, appType)
+		pubInfo, err := rpcClient.Publish(localPort, skyPort, appType)
 		internal.Catch(cmd.Flags(), err)
-		internal.PrintOutput(cmd.Flags(), "id: %v\n", fmt.Sprintln(id))
+
+		jsonOptout := struct {
+			ID        string `json:"id"`
+			LocalAddr string `json:"addr"`
+		}{
+			ID:        pubInfo.ID.String(),
+			LocalAddr: pubInfo.LocalAddr.String(),
+		}
+		internal.PrintOutput(cmd.Flags(), jsonOptout, fmt.Sprintf("Published on %s with ID: %s\n", pubInfo.LocalAddr.String(), pubInfo.ID.String()))
 
 	},
 }
