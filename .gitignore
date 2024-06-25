@@ -70,3 +70,7 @@ gh*
 ./releaseChangelog.md
 ./goreleaser.zip
 ./goreleaser
+
+# Fix dirty error on release
+releaseChangelog.md
+musl-data
