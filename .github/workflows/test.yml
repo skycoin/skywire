@@ -4,7 +4,7 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v4
         with:
           go-version: 1.21.x
       - uses: actions/checkout@v4
@@ -23,7 +23,7 @@ jobs:
   darwin:
     runs-on: macos-latest
     steps:
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v4
         with:
           go-version: 1.21.x
       - uses: actions/checkout@v4
@@ -42,7 +42,7 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v4
         with:
           go-version: 1.21.x
       - uses: actions/checkout@v4
