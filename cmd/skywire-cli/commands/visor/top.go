@@ -1,3 +1,6 @@
+//go:build ignore
+// +build ignore
+
 // Package clivisor cmd/skywire-cli/commands/visor/info.go
 package clivisor
 
