@@ -10,7 +10,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"sync"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -142,10 +141,10 @@ func newHTTPPublishServer(localPort int) *http.Server {
 		}
 		proxy.ServeHTTP(c.Writer, c.Request)
 	})
-
+	// #nosec G112 -- Ignoring potential Slowloris attacks as it the connection to close if the skynet connect is too slow to send the request
 	srv := &http.Server{
-		Handler:           r,
-		ReadHeaderTimeout: 5 * time.Second,
+		Handler: r,
+		// todo(ersonp): Consider setting ReadHeaderTimeout to a reasonable value to address the Slowloris attack vector
 	}
 
 	return srv
