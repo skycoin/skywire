@@ -21,7 +21,8 @@ import (
 // PublishInfo represents the information of a published listener
 type PublishInfo struct {
 	ID        uuid.UUID `json:"id"`
-	LocalAddr Addr      `json:"local_addr"`
+	SkyAddr   Addr      `json:"sky_addr"`
+	LocalPort int       `json:"local_port"`
 	AppType   AppType   `json:"app_type"`
 }
 
@@ -37,15 +38,15 @@ type PublishLis struct {
 }
 
 // NewPublishListener creates a new publishListener
-func NewPublishListener(log *logging.Logger, nm *NetManager, skyLis net.Listener, addr Addr, appType AppType) (*PublishLis, error) {
+func NewPublishListener(log *logging.Logger, nm *NetManager, skyLis net.Listener, localPort int, skyAddr Addr, appType AppType) (*PublishLis, error) {
 
 	var srv *http.Server
 	var conn net.Conn
 	switch appType {
 	case HTTP:
-		srv = newHTTPPublishServer(int(addr.GetPort()))
+		srv = newHTTPPublishServer(localPort)
 	case TCP:
-		// conn = newTCPPublishConn(log, webPort)
+		// conn = newTCPPublishConn(log, localPort)
 		return nil, errors.New("app type TCP is not supported yet")
 	case UDP:
 		return nil, errors.New("app type UDP is not supported yet")
@@ -54,7 +55,8 @@ func NewPublishListener(log *logging.Logger, nm *NetManager, skyLis net.Listener
 	pubLis := &PublishLis{
 		PublishInfo: PublishInfo{
 			ID:        uuid.New(),
-			LocalAddr: addr,
+			SkyAddr:   skyAddr,
+			LocalPort: localPort,
 			AppType:   appType,
 		},
 		skyLis: skyLis,
@@ -101,7 +103,7 @@ func (f *PublishLis) Listen() error {
 		return errors.New("app type UDP is not supported yet")
 	}
 
-	f.log.Debugf("Serving HTTP on sky port %v with SKY listener %s", f.LocalAddr.GetPort(), f.skyLis.Addr().String())
+	f.log.Debugf("Serving local HTTP port: %v on SKY Addr %s", f.LocalPort, f.skyLis.Addr().String())
 	return nil
 }
 

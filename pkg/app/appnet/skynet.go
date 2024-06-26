@@ -38,22 +38,25 @@ func NewNetManager() *NetManager {
 	}
 }
 
-func (nm *NetManager) isPublishPortAvailable(addr Addr, appType AppType) error {
+func (nm *NetManager) isPublishPortAvailable(addr Addr, localPort int, appType AppType) error {
 
 	for _, l := range nm.listeners {
-		if l.LocalAddr.GetPort() == addr.GetPort() {
-			return fmt.Errorf("port %d is already in use for app type %v", addr.GetPort(), appType)
+		if l.SkyAddr.GetPort() == addr.GetPort() {
+			return fmt.Errorf("skyport %d is already in use for app type %v", addr.GetPort(), appType)
+		}
+		if l.LocalPort == localPort {
+			return fmt.Errorf("local port %d is already in use for app type %v", localPort, appType)
 		}
 	}
 	return nil
 }
 
 // IsPublishPortAvailable checks if a port and apptype is available for publishing
-func (nm *NetManager) IsPublishPortAvailable(addr Addr, appType AppType) error {
+func (nm *NetManager) IsPublishPortAvailable(addr Addr, localPort int, appType AppType) error {
 	nm.mu.Lock()
 	defer nm.mu.Unlock()
 
-	return nm.isPublishPortAvailable(addr, appType)
+	return nm.isPublishPortAvailable(addr, localPort, appType)
 }
 
 // AddPublish adds publishListener to the NetManager
@@ -61,7 +64,7 @@ func (nm *NetManager) AddPublish(lis *PublishLis) error {
 	nm.mu.Lock()
 	defer nm.mu.Unlock()
 
-	if err := nm.isPublishPortAvailable(lis.LocalAddr, lis.AppType); err != nil {
+	if err := nm.isPublishPortAvailable(lis.SkyAddr, lis.LocalPort, lis.AppType); err != nil {
 		return err
 	}
 

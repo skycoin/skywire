@@ -1605,7 +1605,7 @@ func (v *Visor) Publish(localPort, skyPort int, appType appnet.AppType) (appnet.
 		Port:   routing.Port(skyPort),
 	}
 
-	if err := v.nM.IsPublishPortAvailable(addr, appType); err != nil {
+	if err := v.nM.IsPublishPortAvailable(addr, localPort, appType); err != nil {
 		return appnet.PublishInfo{}, err
 	}
 
@@ -1614,7 +1614,7 @@ func (v *Visor) Publish(localPort, skyPort int, appType appnet.AppType) (appnet.
 		return appnet.PublishInfo{}, err
 	}
 
-	publishLis, err := appnet.NewPublishListener(v.log, v.nM, lis, addr, appType)
+	publishLis, err := appnet.NewPublishListener(v.log, v.nM, lis, localPort, addr, appType)
 	if err != nil {
 		return appnet.PublishInfo{}, err
 	}
