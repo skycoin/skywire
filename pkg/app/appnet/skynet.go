@@ -48,7 +48,7 @@ func (nm *NetManager) isPublishPortAvailable(addr Addr, appType AppType) error {
 	return nil
 }
 
-// isPublishPortAvailable checks if a port and apptype is available for publishing
+// IsPublishPortAvailable checks if a port and apptype is available for publishing
 func (nm *NetManager) IsPublishPortAvailable(addr Addr, appType AppType) error {
 	nm.mu.Lock()
 	defer nm.mu.Unlock()
@@ -56,7 +56,7 @@ func (nm *NetManager) IsPublishPortAvailable(addr Addr, appType AppType) error {
 	return nm.isPublishPortAvailable(addr, appType)
 }
 
-// AddPublish adds publishListener to with it's ID
+// AddPublish adds publishListener to the NetManager
 func (nm *NetManager) AddPublish(lis *PublishLis) error {
 	nm.mu.Lock()
 	defer nm.mu.Unlock()
@@ -69,7 +69,7 @@ func (nm *NetManager) AddPublish(lis *PublishLis) error {
 	return nil
 }
 
-// GetpublishListenertner get's a publishListener by ID
+// GetPublishListener get's a publishListener by ID
 func (nm *NetManager) GetPublishListener(id uuid.UUID) *PublishLis {
 	nm.mu.Lock()
 	defer nm.mu.Unlock()
@@ -77,7 +77,7 @@ func (nm *NetManager) GetPublishListener(id uuid.UUID) *PublishLis {
 	return nm.listeners[id]
 }
 
-// GetAllpublishListenertners gets all publishListeners
+// GetAllPublishListeners gets all publishListeners
 func (nm *NetManager) GetAllPublishListeners() map[uuid.UUID]*PublishLis {
 	nm.mu.Lock()
 	defer nm.mu.Unlock()
@@ -85,7 +85,7 @@ func (nm *NetManager) GetAllPublishListeners() map[uuid.UUID]*PublishLis {
 	return nm.listeners
 }
 
-// RemovepublishListener removes a publishListener by ID
+// RemovePublishListener removes a publishListener by ID
 func (nm *NetManager) RemovePublishListener(id uuid.UUID) {
 	nm.mu.Lock()
 	defer nm.mu.Unlock()
@@ -111,7 +111,7 @@ func (nm *NetManager) IsConnectPortAvailable(webPort int) error {
 	return nm.isConnectPortAvailable(webPort)
 }
 
-// AddConnect adds ConnectConn to with it's ID
+// AddConnect adds ConnectConn to the NetManager
 func (nm *NetManager) AddConnect(conn *ConnectConn) error {
 	nm.mu.Lock()
 	defer nm.mu.Unlock()
@@ -148,7 +148,7 @@ func (nm *NetManager) RemoveConnectConn(id uuid.UUID) {
 	delete(nm.conns, id)
 }
 
-// RemoveConnectConn removes a ConnectConn by ID
+// Close closes all the connections and listeners
 func (nm *NetManager) Close() error {
 	nm.mu.Lock()
 	defer nm.mu.Unlock()
@@ -186,8 +186,8 @@ func loggingMiddleware() gin.HandlerFunc {
 		// Get the method color
 		methodColor := getMethodColor(method)
 		// Print the logging in a custom format which includes the publickeyfrom c.Request.RemoteAddr ex.:
-		// [DMSGHTTP] 2023/05/18 - 19:43:15 | 200 |    10.80885ms |                 | 02b5ee5333aa6b7f5fc623b7d5f35f505cb7f974e98a70751cf41962f84c8c4637:49153 | GET      /node-info.json
-		fmt.Printf("[DMSGWEB] %s |%s %3d %s| %13v | %15s | %72s |%s %-7s %s %s\n",
+		// [SKYNET] 2023/05/18 - 19:43:15 | 200 |    10.80885ms |                 | 02b5ee5333aa6b7f5fc623b7d5f35f505cb7f974e98a70751cf41962f84c8c4637:49153 | GET      /node-info.json
+		fmt.Printf("[SKYNET] %s |%s %3d %s| %13v | %15s | %72s |%s %-7s %s %s\n",
 			time.Now().Format("2006/01/02 - 15:04:05"),
 			statusCodeBackgroundColor,
 			statusCode,

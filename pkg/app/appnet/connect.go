@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -17,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
+// ConnectInfo represents the information of a connected connection
 type ConnectInfo struct {
 	ID         uuid.UUID `json:"id"`
 	WebPort    int       `json:"web_port"`
@@ -24,7 +26,7 @@ type ConnectInfo struct {
 	AppType    AppType   `json:"app_type"`
 }
 
-// ConnectConn represents a connection that is published on the skywire network
+// ConnectConn represents a connection that is connected to a published app
 type ConnectConn struct {
 	ConnectInfo
 	skyConn   net.Conn
@@ -37,7 +39,6 @@ type ConnectConn struct {
 
 // NewConnectConn creates a new ConnectConn
 func NewConnectConn(log *logging.Logger, nm *NetManager, remoteConn net.Conn, remoteAddr Addr, webPort int, appType AppType) (*ConnectConn, error) {
-
 	var srv *http.Server
 	var lis net.Listener
 
@@ -72,7 +73,7 @@ func NewConnectConn(log *logging.Logger, nm *NetManager, remoteConn net.Conn, re
 	return conn, nil
 }
 
-// Serve serves a HTTP forward conn that accepts all requests and forwards them directly to the remote server over the specified net.Conn.
+// Serve starts the server based on the AppType of the ConnectConn.
 func (f *ConnectConn) Serve() error {
 	switch f.AppType {
 	case HTTP:
@@ -97,7 +98,7 @@ func (f *ConnectConn) Serve() error {
 	return nil
 }
 
-// Close closes the server and remote connection.
+// Close closes the server, listener and remote connection.
 func (f *ConnectConn) Close() (err error) {
 	f.closeOnce.Do(func() {
 
@@ -176,8 +177,9 @@ func newHTTPConnectServer(log *logging.Logger, remoteConn net.Conn, remoteAddr A
 	r.Any("/*path", handleConnectFunc(httpC, remoteAddr.PK(), remoteAddr.GetPort(), mu))
 
 	srv := &http.Server{
-		Addr:    fmt.Sprint(":", webPort),
-		Handler: r,
+		Addr:              fmt.Sprint(":", webPort),
+		ReadHeaderTimeout: 5 * time.Second,
+		Handler:           r,
 	}
 	return srv
 }

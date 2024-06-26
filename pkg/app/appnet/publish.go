@@ -10,6 +10,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -17,6 +18,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
+// PublishInfo represents the information of a published listener
 type PublishInfo struct {
 	ID        uuid.UUID `json:"id"`
 	LocalAddr Addr      `json:"local_addr"`
@@ -69,7 +71,7 @@ func NewPublishListener(log *logging.Logger, nm *NetManager, skyLis net.Listener
 	return pubLis, nil
 }
 
-// Serve serves a HTTP forward Lis that accepts all requests and forwards them directly to the remote server over the specified net.Lis.
+// Listen initializes the server based on AppType of the PublishLis.
 func (f *PublishLis) Listen() error {
 	switch f.AppType {
 	case HTTP:
@@ -140,7 +142,8 @@ func newHTTPPublishServer(localPort int) *http.Server {
 	})
 
 	srv := &http.Server{
-		Handler: r,
+		Handler:           r,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	return srv
