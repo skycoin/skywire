@@ -611,14 +611,12 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 }
 
 func initSkywireNet(ctx context.Context, v *Visor, log *logging.Logger) error {
-	ctx, cancel := context.WithCancel(ctx)
 	// waiting for at least one transport to initialize
 	<-v.tpM.Ready()
 
 	nM := appnet.NewNetManager()
 
 	v.pushCloseStack("sky_net", func() error {
-		cancel()
 		if cErr := nM.Close(); cErr != nil {
 			log.WithError(cErr).Error("Error closing listener.")
 		}
