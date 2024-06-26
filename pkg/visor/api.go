@@ -1586,7 +1586,7 @@ func (v *Visor) Disconnect(id uuid.UUID) error {
 	return connectConn.Close()
 }
 
-// ListHTTPPorts implements API.
+// ListConnected implements API.
 func (v *Visor) ListConnected() ([]appnet.ConnectInfo, error) {
 	cons := v.nM.GetAllConnectConns()
 	var connectInfos []appnet.ConnectInfo

@@ -610,7 +610,7 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 	return nil
 }
 
-func initSkywireNet(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initSkywireNet(_ context.Context, v *Visor, log *logging.Logger) error {
 	// waiting for at least one transport to initialize
 	<-v.tpM.Ready()
 
