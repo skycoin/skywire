@@ -84,14 +84,7 @@ var pubCmd = &cobra.Command{
 		pubInfo, err := rpcClient.Publish(localPort, skyPort, appType)
 		internal.Catch(cmd.Flags(), err)
 
-		jsonOptout := struct {
-			ID        string `json:"id"`
-			LocalAddr string `json:"addr"`
-		}{
-			ID:        pubInfo.ID.String(),
-			LocalAddr: pubInfo.LocalAddr.String(),
-		}
-		internal.PrintOutput(cmd.Flags(), jsonOptout, fmt.Sprintf("Published on %s with ID: %s\n", pubInfo.LocalAddr.String(), pubInfo.ID.String()))
+		internal.PrintOutput(cmd.Flags(), pubInfo, fmt.Sprintf("Published on %s with ID: %s\n", pubInfo.SkyAddr.String(), pubInfo.ID.String()))
 
 	},
 }
@@ -118,10 +111,10 @@ var lsPubCmd = &cobra.Command{
 		internal.Catch(cmd.Flags(), err)
 		var b bytes.Buffer
 		w := tabwriter.NewWriter(&b, 0, 0, 2, ' ', tabwriter.TabIndent)
-		_, err = fmt.Fprintln(w, "id\tlocal_port\tapp_type")
+		_, err = fmt.Fprintln(w, "id\tsky_port\tlocal_port\tapp_type")
 		internal.Catch(cmd.Flags(), err)
 		for _, lis := range liss {
-			_, err = fmt.Fprintf(w, "%v\t%v\t%v\n", lis.ID, lis.LocalAddr.GetPort(), lis.AppType)
+			_, err = fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", lis.ID, lis.SkyAddr.GetPort(), lis.LocalPort, lis.AppType)
 			internal.Catch(cmd.Flags(), err)
 		}
 		internal.Catch(cmd.Flags(), w.Flush())

@@ -89,14 +89,8 @@ var conCmd = &cobra.Command{
 		connInfo, err := rpcClient.Connect(remotePK, remotePort, localPort, appType)
 		internal.Catch(cmd.Flags(), err)
 
-		jsonOptout := struct {
-			ID         string `json:"id"`
-			RemoteAddr string `json:"addr"`
-		}{
-			ID:         connInfo.ID.String(),
-			RemoteAddr: connInfo.RemoteAddr.String(),
-		}
-		internal.PrintOutput(cmd.Flags(), jsonOptout, fmt.Sprintf("Connected to %s with ID: %s\n", connInfo.RemoteAddr.String(), connInfo.ID.String()))
+		internal.PrintOutput(cmd.Flags(), connInfo, fmt.Sprintf("Connected to %s with ID: %s\n", connInfo.RemoteAddr.String(), connInfo.ID.String()))
+		internal.PrintOutput(cmd.Flags(), connInfo, fmt.Sprintf("%v avaialble on localhost:%d\n", connInfo.AppType, connInfo.WebPort))
 	},
 }
 
