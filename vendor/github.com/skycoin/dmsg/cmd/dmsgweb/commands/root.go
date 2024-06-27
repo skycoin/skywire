@@ -171,7 +171,14 @@ func scriptExecBoolSlice(s, envfile string) []bool {
 		y, err := script.Exec(fmt.Sprintf(`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; for _i in %s ; do echo "$_i" ; done'`, envfile, s)).Slice()
 		if err == nil {
 			for _, item := range y {
-				result = append(result, item != "")
+				switch strings.ToLower(item) {
+				case "true":
+					result = append(result, true)
+				case "false":
+					result = append(result, false)
+				default:
+					result = append(result, false)
+				}
 			}
 			return result
 		}
