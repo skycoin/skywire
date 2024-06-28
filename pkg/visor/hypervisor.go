@@ -62,6 +62,7 @@ type Hypervisor struct {
 	dmsgC        *dmsg.Client
 	users        *usermanager.UserManager
 	mu           *sync.RWMutex
+	vsMu         *sync.RWMutex
 	selfConn     Conn
 	logger       *logging.Logger
 }
@@ -95,6 +96,7 @@ func NewHypervisor(config visorconfig.HypervisorConfig, visor *Visor, dmsgC *dms
 		dmsgC:        dmsgC,
 		users:        usermanager.NewUserManager(mLogger, singleUserDB, config.Cookies),
 		mu:           new(sync.RWMutex),
+		vsMu:         new(sync.RWMutex),
 		selfConn:     selfConn,
 		logger:       mLogger.PackageLogger("hypervisor"),
 	}
@@ -562,7 +564,9 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 				} else {
 					log.Trace("Obtained summary via RPC.")
 					resp := makeSummaryResp(err == nil, false, summary)
+					hv.vsMu.Lock()
 					summaries = append(summaries, resp)
+					hv.vsMu.Unlock()
 				}
 				wg.Done()
 			}(pk, c)
