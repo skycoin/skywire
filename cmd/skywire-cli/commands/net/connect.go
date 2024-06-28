@@ -90,7 +90,7 @@ var conCmd = &cobra.Command{
 		internal.Catch(cmd.Flags(), err)
 
 		internal.PrintOutput(cmd.Flags(), connInfo, fmt.Sprintf("Connected to %s with ID: %s\n", connInfo.RemoteAddr.String(), connInfo.ID.String()))
-		internal.PrintOutput(cmd.Flags(), connInfo, fmt.Sprintf("%v avaialble on localhost:%d\n", connInfo.AppType, connInfo.WebPort))
+		internal.PrintOutput(cmd.Flags(), connInfo, fmt.Sprintf("%v available on localhost:%d\n", connInfo.AppType, connInfo.WebPort))
 	},
 }
 
