@@ -43,7 +43,7 @@
   ]
  },
  "prod": {
-  "dmsg_discovery": "http://dmsgd.skywire.skycoin.com",
+  "dmsg_discovery": "http://dmsgd.skywire.dev",
   "transport_discovery": "http://tpd.skywire.skycoin.com",
   "address_resolver": "http://ar.skywire.skycoin.com",
   "route_finder": "http://rf.skywire.skycoin.com",
