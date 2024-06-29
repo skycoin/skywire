@@ -262,6 +262,7 @@ github-release-windows:
 	$(eval GITHUB_TAG=$(shell powershell git describe --abbrev=0 --tags))
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-windows-amd64.zip
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-windows-386.zip
+	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-windows-arm64.zip
 	gh release download ${GITHUB_TAG} --repo skycoin/skywire --pattern 'checksums*'
 	cat ./dist/checksums.txt >> ./checksums.txt
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} --clobber ./checksums.txt
