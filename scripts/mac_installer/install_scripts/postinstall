@@ -55,3 +55,6 @@ if [[ ! -d /usr/local/bin ]]; then
   mkdir /usr/local/bin
 fi
 
+if [[ ! -L /usr/local/bin/skywire ]]; then
+  ln -s /Applications/Skywire.app/Contents/MacOS/skywire /usr/local/bin/skywire
+fi
