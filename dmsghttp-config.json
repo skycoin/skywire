@@ -20,12 +20,12 @@
        }
       }
      ],
-     "dmsg_discovery": "022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80",
-     "transport_discovery": "02703cf828ea11d25b2c8eb0796132ecc7e53b22325b20ce3674ce5cd8693e4fb6:80",
-     "address_resolver": "030eb7d8cf6eac40c19bbc433de6d6b9bb7a47f2e1d7095c6a01aa676471670ad2:80",
-     "route_finder": "02ece5b69eaee13ef967b7eb67ca93f1dfddad3a51c9cb1808c4bd0d8d8aa32053:80",
-     "uptime_tracker": "022c788cca11f208cdfd83ed0c2a8c7b661221736c461adc7c6738a2c1b041c7f8:80",
-     "service_discovery": "038f751df4af75fb3d51f6693602bfe8289145e633ffdd1e67d686bea595f84d55:80"
+     "dmsg_discovery": "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80",
+     "transport_discovery": "dmsg://02703cf828ea11d25b2c8eb0796132ecc7e53b22325b20ce3674ce5cd8693e4fb6:80",
+     "address_resolver": "dmsg://030eb7d8cf6eac40c19bbc433de6d6b9bb7a47f2e1d7095c6a01aa676471670ad2:80",
+     "route_finder": "dmsg://02ece5b69eaee13ef967b7eb67ca93f1dfddad3a51c9cb1808c4bd0d8d8aa32053:80",
+     "uptime_tracker": "dmsg://022c788cca11f208cdfd83ed0c2a8c7b661221736c461adc7c6738a2c1b041c7f8:80",
+     "service_discovery": "dmsg://038f751df4af75fb3d51f6693602bfe8289145e633ffdd1e67d686bea595f84d55:80"
     },
     "prod": {
      "dmsg_servers": [
@@ -72,12 +72,11 @@
        }
       }
      ],
-     "dmsg_discovery": "024a7b9b7db1626d46777e5c665333afa57f48934b57652305fc7a2b19dc4c65d4:80",
-     "transport_discovery": "02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80",
-     "address_resolver": "03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80",
-     "route_finder": "039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80",
-     "uptime_tracker": "022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80",
-     "service_discovery": "0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80"
+     "dmsg_discovery": "dmsg://024a7b9b7db1626d46777e5c665333afa57f48934b57652305fc7a2b19dc4c65d4:80",
+     "transport_discovery": "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80",
+     "address_resolver": "dmsg://03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80",
+     "route_finder": "dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80",
+     "uptime_tracker": "dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80",
+     "service_discovery": "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80"
     }
    }
-   

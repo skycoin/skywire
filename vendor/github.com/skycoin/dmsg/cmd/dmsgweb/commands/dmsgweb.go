@@ -177,15 +177,19 @@ dmsgweb conf file detected: ` + dmsgwebconffile
 		if err != nil {
 			pk, sk = cipher.GenerateKeyPair()
 		}
-		dmsgWebLog.Info("dmsg client pk: %v", pk.String())
-
+		dmsgWebLog.Info("dmsg client pk: ", pk.String())
 		if len(resolveDmsgAddr) > 0 {
+			dialPK = make([]cipher.PubKey, len(resolveDmsgAddr))
+			dmsgPorts = make([]uint, dmsgSessions)
 			for i, dmsgaddr := range resolveDmsgAddr {
+				dmsgWebLog.Info("dmsg address to dial: ", dmsgaddr)
 				dmsgAddr = strings.Split(dmsgaddr, ":")
-				err = dialPK[i].Set(dmsgAddr[0])
+				var setpk cipher.PubKey
+				err := setpk.Set(dmsgAddr[0])
 				if err != nil {
 					log.Fatalf("failed to parse dmsg <address>:<port> : %v", err)
 				}
+				dialPK[i] = setpk
 				if len(dmsgAddr) > 1 {
 					dport, err := strconv.ParseUint(dmsgAddr[1], 10, 64)
 					if err != nil {
@@ -197,6 +201,7 @@ dmsgweb conf file detected: ` + dmsgwebconffile
 				}
 			}
 		}
+		dmsgWebLog.Info("test")
 		dmsgC, closeDmsg, err := startDmsg(ctx, pk, sk)
 		if err != nil {
 			dmsgWebLog.WithError(err).Fatal("failed to start dmsg")
@@ -347,19 +352,31 @@ func proxyHTTPConn(n int) {
 	})
 	wg.Add(1)
 	go func() {
-		dmsgWebLog.Debug(fmt.Sprintf("Serving http on: http://127.0.0.1:%v", webPort))
-		r.Run(":" + fmt.Sprintf("%v", webPort)) //nolint
-		dmsgWebLog.Debug(fmt.Sprintf("Stopped serving http on: http://127.0.0.1:%v", webPort))
+		var thiswebport uint
+		if n == -1 {
+			thiswebport = webPort[0]
+		} else {
+			thiswebport = webPort[n]
+		}
+		dmsgWebLog.Debug(fmt.Sprintf("Serving http on: http://127.0.0.1:%v", thiswebport))
+		r.Run(":" + fmt.Sprintf("%v", thiswebport)) //nolint
+		dmsgWebLog.Debug(fmt.Sprintf("Stopped serving http on: http://127.0.0.1:%v", thiswebport))
 		wg.Done()
 	}()
 }
 func proxyTCPConn(n int) {
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", webPort[n]))
+	var thiswebport uint
+	if n == -1 {
+		thiswebport = webPort[0]
+	} else {
+		thiswebport = webPort[n]
+	}
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%v", thiswebport))
 	if err != nil {
-		log.Fatalf("Failed to start TCP listener on port %d: %v", webPort[n], err)
+		dmsgWebLog.Fatalf("Failed to start TCP listener on port %v: %v", thiswebport, err)
 	}
 	defer listener.Close() //nolint
-	log.Printf("Serving TCP on 127.0.0.1:%d", webPort[n])
+	log.Printf("Serving TCP on 127.0.0.1:%v", thiswebport)
 
 	for {
 		conn, err := listener.Accept()
