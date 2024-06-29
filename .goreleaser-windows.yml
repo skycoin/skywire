@@ -22,6 +22,7 @@ builds:
     goarch:
       - amd64
       - 386
+      - arm64
     env:
       - CGO_ENABLED=1
     main: ./cmd/skywire/
