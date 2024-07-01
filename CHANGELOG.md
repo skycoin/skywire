@@ -6,6 +6,47 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+
+## 1.3.23
+
+-   Increment minimum version requirement to v1.3.23
+-   add windows arm64 archive to release  [#1852](https://github.com/skycoin/skywire/pull/1852)
+-   fix bearer token issue  [#1851](https://github.com/skycoin/skywire/pull/1851)
+-   fix Windows release pipeline issue  [#1850](https://github.com/skycoin/skywire/pull/1850)
+-   update service-config.json values  [#1849](https://github.com/skycoin/skywire/pull/1849)
+-   fix missing `skywire` command in MacOS  [#1848](https://github.com/skycoin/skywire/pull/1848)
+-   fix datarace in hv  [#1847](https://github.com/skycoin/skywire/pull/1847)
+-   update deps  [#1846](https://github.com/skycoin/skywire/pull/1846)
+-   add missing dmsg:// to dmsg services addresses  [#1845](https://github.com/skycoin/skywire/pull/1845)
+-   build constraint to ignore gotop  [#1844](https://github.com/skycoin/skywire/pull/1844)
+
+## 1.3.22
+
+-   ready for release 5  [#1843](https://github.com/skycoin/skywire/pull/1843)
+-   ready for release 4  [#1842](https://github.com/skycoin/skywire/pull/1842)
+-   readey for release 3  [#1841](https://github.com/skycoin/skywire/pull/1841)
+-   ready to release 2 for v1.3.22  [#1840](https://github.com/skycoin/skywire/pull/1840)
+-   ready to release  [#1839](https://github.com/skycoin/skywire/pull/1839)
+-   fix release pipeline issues  [#1838](https://github.com/skycoin/skywire/pull/1838)
+-   a little change on dmsghttp-config.json  [#1837](https://github.com/skycoin/skywire/pull/1837)
+-   replace dmsg disc public key values  [#1836](https://github.com/skycoin/skywire/pull/1836)
+-   update deps  [#1835](https://github.com/skycoin/skywire/pull/1835)
+-   Include more of the deployment config in the survey  [#1834](https://github.com/skycoin/skywire/pull/1834)
+-   update dmsghttp-config.json  [#1833](https://github.com/skycoin/skywire/pull/1833)
+-   fix: mac os build error  [#1829](https://github.com/skycoin/skywire/pull/1829)
+-   Update Skywire Specifications document  [#1827](https://github.com/skycoin/skywire/pull/1827)
+-   minor optimizations to reward system backend and UI  [#1825](https://github.com/skycoin/skywire/pull/1825)
+-   Update dmsg  [#1823](https://github.com/skycoin/skywire/pull/1823)
+-   Reward System UI improvements  [#1822](https://github.com/skycoin/skywire/pull/1822)
+-   add heartbeat logic for stcpr and dmsg  [#1821](https://github.com/skycoin/skywire/pull/1821)
+-   Transport setup-node request logging integration with reward system UI  [#1820](https://github.com/skycoin/skywire/pull/1820)
+-   improve `skywire cli tp tree`  [#1818](https://github.com/skycoin/skywire/pull/1818)
+-   improve `skywire cli tp tree`  [#1817](https://github.com/skycoin/skywire/pull/1817)
+-   system monitor - `skywire cli visor top`  [#1813](https://github.com/skycoin/skywire/pull/1813)
+-   More statistics for UT &amp; dmsg discovery  [#1812](https://github.com/skycoin/skywire/pull/1812)
+-   Reward System Documentation  [#1811](https://github.com/skycoin/skywire/pull/1811)
+-   Update CHANGELOG.md  [#1810](https://github.com/skycoin/skywire/pull/1810)
+
 ## 1.3.21
 -   Update documentation ; increment min version requirement  [#1809](https://github.com/skycoin/skywire/pull/1809)
 -   TPD concurrency  [#1808](https://github.com/skycoin/skywire/pull/1808)
