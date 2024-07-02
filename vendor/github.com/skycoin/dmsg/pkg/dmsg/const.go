@@ -3,11 +3,13 @@ package dmsg
 
 import (
 	"time"
+
+	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 )
 
 // Constants.
 const (
-	DefaultDiscAddr = "http://dmsgd.skywire.skycoin.com"
+	DefaultDiscAddr = skyenv.DmsgDiscAddr
 
 	DefaultMinSessions = 1
 
