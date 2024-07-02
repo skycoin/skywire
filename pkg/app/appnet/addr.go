@@ -44,6 +44,11 @@ func (a Addr) PK() cipher.PubKey {
 	return a.PubKey
 }
 
+// GetPort returns port in the Addr.
+func (a Addr) GetPort() routing.Port {
+	return a.Port
+}
+
 // ConvertAddr asserts type of the passed `net.Addr` and converts it
 // to `Addr` if possible.
 func ConvertAddr(addr net.Addr) (Addr, error) {

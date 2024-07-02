@@ -93,6 +93,7 @@ type Visor struct {
 	arClient addrresolver.APIClient
 	router   router.Router
 	rfClient rfclient.Client
+	nM       *appnet.NetManager
 
 	procM       appserver.ProcManager // proc manager
 	appL        *launcher.AppLauncher // app launcher
@@ -405,15 +406,6 @@ func (v *Visor) Close() error {
 
 	log := v.MasterLogger().PackageLogger("visor:shutdown")
 	log.Info("Begin shutdown.")
-
-	// Cleanly close ongoing forward conns
-	for _, forwardConn := range appnet.GetAllForwardConns() {
-		err := forwardConn.Close()
-		if err != nil {
-			log.WithError(err).Warn("Forward conn stopped with unexpected result.")
-			continue
-		}
-	}
 
 	for i := len(v.closeStack) - 1; i >= 0; i-- {
 		cl := v.closeStack[i]

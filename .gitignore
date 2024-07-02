@@ -7,17 +7,18 @@
 *.out
 .DS_Store
 *.pem
+*.db
 
 .idea/
 .vscode/
 
+./skywire-config.json
 ./skywire.json
 ./build/
 build/
 ./apps/
 ./skywire/
-./local/*
-./local*/*
+local*/
 ./transport_logs
 ./dmsgpty
 ./rewards
@@ -26,16 +27,16 @@ rewards
 ./pkg/visor/apps/
 ./pkg/visor/bar/
 ./pkg/visor/foo/
+./skywire-config.json
 
 ./bin
 ./node
-./users.db
 ./hypervisor
 ./*-node
 ./*-visor
 ./*-cli
 ./*-server
-./*.json
+*.json
 !/dmsghttp-config.json
 !/services-config.json
 ./*.sh
