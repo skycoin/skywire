@@ -30,7 +30,6 @@ import (
 
 func init() {
 	logCmd.Flags().SortFlags = false
-	logCmd.Flags().StringVarP(&env, "env", "e", "prod", "deployment to get uptimes from")
 	logCmd.Flags().BoolVarP(&logOnly, "log", "l", false, "fetch only transport logs")
 	logCmd.Flags().BoolVarP(&surveyOnly, "survey", "v", false, "fetch only surveys")
 	logCmd.Flags().StringVarP(&fetchFile, "file", "f", "", "fetch only a specific file from all online visors")
@@ -44,7 +43,7 @@ func init() {
 	logCmd.Flags().IntVar(&batchSize, "batchSize", 50, "number of visor in each batch")
 	logCmd.Flags().Int64Var(&maxFileSize, "maxfilesize", 1024, "maximum file size allowed to download during collecting logs, in KB")
 	logCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", skyenv.DmsgDiscAddr, "dmsg discovery url\n")
-	logCmd.Flags().StringVarP(&utAddr, "ut", "u", "", "custom uptime tracker url")
+	logCmd.Flags().StringVarP(&utAddr, "ut", "u", skyenv.UptimeTrackerAddr, "uptime tracker url\n")
 	if os.Getenv("DMSGCURL_SK") != "" {
 		sk.Set(os.Getenv("DMSGCURL_SK")) //nolint
 	}
@@ -91,17 +90,10 @@ var logCmd = &cobra.Command{
 		flag.Parse()
 
 		// Set the uptime tracker to fetch data from
-		endpoint := skyenv.UptimeTrackerAddr
-		if env == "test" {
-			endpoint = skyenv.TestUptimeTrackerAddr
-		}
-		endpoint = endpoint + "/uptimes?v=v2"
-		if utAddr != "" {
-			endpoint = utAddr
-		}
+		endpoint := utAddr + "/uptimes?v=v2"
 
 		if fetchFrom != "" {
-			endpoint = endpoint + "&visors=" + fetchFrom
+			endpoint = utAddr + "&visors=" + fetchFrom
 		}
 
 		//Fetch the uptime data over http
