@@ -7,7 +7,6 @@ import (
 
 var (
 	pubKey         string
-	env            string
 	duration       int
 	minv           string
 	allVisors      bool
