@@ -48,7 +48,7 @@ type Survey struct {
 }
 
 // SystemSurvey returns system survey
-func SystemSurvey(dmsgDisc string) (Survey, error) {
+func SystemSurvey() (Survey, error) {
 	var si sysinfo.SysInfo
 	si.GetSysInfo()
 	disks, err := ghw.Block(ghw.WithDisableWarnings())
