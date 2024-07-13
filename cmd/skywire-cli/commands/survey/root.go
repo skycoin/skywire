@@ -10,9 +10,9 @@ import (
 
 	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
-	"github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/skyenv"
@@ -81,10 +81,10 @@ var surveyCmd = &cobra.Command{
 				log.WithError(err).Fatal("Failed to unmarshal old config json")
 			}
 		}
-		if conf != nil {
-			dmsgDisc = conf.Dmsg.Discovery
-		}
-		survey, err := visorconfig.SystemSurvey(dmsgDisc)
+		//		if conf != nil {
+		//			dmsgDisc = conf.Dmsg.Discovery
+		//		}
+		survey, err := visorconfig.SystemSurvey()
 		if err != nil {
 			internal.Catch(cmd.Flags(), fmt.Errorf("Failed to generate system survey: %v", err))
 		}
@@ -106,10 +106,10 @@ var surveyCmd = &cobra.Command{
 			survey.ServicesURLs.StunServers = conf.StunServers
 			//survey.DmsgServers = v.dmsgC.ConnectedServersPK()
 		}
-		if dmsgdisc != "" {
-			ipAddr, err = FetchIP(dmsgDisc)
+		if dmsgDisc != "" {
+			ipAddr, err := FetchIP(dmsgDisc)
 			if err == nil {
-				survey.IPAddr = ipAddr.String()
+				survey.IPAddr = ipAddr
 			}
 		}
 
