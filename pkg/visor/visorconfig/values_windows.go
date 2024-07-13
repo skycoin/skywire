@@ -44,7 +44,7 @@ type Survey struct {
 }
 
 // SystemSurvey returns system survey
-func SystemSurvey() (Survey, error) {
+func SystemSurvey(dmsgDisc string) (Survey, error) {
 	disks, err := ghw.Block(ghw.WithDisableWarnings())
 	if err != nil {
 		return Survey{}, err
@@ -57,8 +57,18 @@ func SystemSurvey() (Survey, error) {
 	if err != nil {
 		return Survey{}, err
 	}
+	var ipInfo IPSkycoin
+	fetchedIPInfo, err := IPSkycoinFetch()
+	if err != nil {
+		ipValue, err := IPSkycoinFetchDmsg(dmsgDisc)
+		if err == nil {
+			ipInfo.IPAddress = ipValue
+		}
+	} else {
+		ipInfo = *fetchedIPInfo
+	}
 	s := Survey{
-		IPInfo:         IPSkycoinFetch(),
+		IPInfo:         &ipInfo,
 		GOOS:           runtime.GOOS,
 		GOARCH:         runtime.GOARCH,
 		UUID:           uuid.New(),
