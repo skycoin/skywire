@@ -29,7 +29,7 @@ require (
 	github.com/pterm/pterm v0.12.66
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.3
-	github.com/skycoin/dmsg v1.3.22-0.20240702162730-1c2fcecd4bb6
+	github.com/skycoin/dmsg v1.3.24
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/skycoin-service-discovery v0.0.0-20240627171358-7f59a951fa29
 	github.com/skycoin/skywire-services v0.0.0-20240627171623-87edf49d9025
