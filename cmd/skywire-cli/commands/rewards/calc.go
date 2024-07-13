@@ -3,7 +3,6 @@ package clirewards
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"sort"
 	"strconv"
@@ -12,6 +11,9 @@ import (
 
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
+
+	"github.com/skycoin/skywire-utilities/pkg/logging"
+	tgbot "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards/tgbot"
 )
 
 const yearlyTotalRewards int = 408000
@@ -29,6 +31,8 @@ var (
 	h2                    bool
 	grr                   bool
 	pubkey                string
+	logLvl                string
+	log                   *logging.Logger
 )
 
 type nodeinfo struct {
@@ -56,7 +60,11 @@ type rewardData struct {
 }
 
 func init() {
+	RootCmd.AddCommand(
+		tgbot.RootCmd,
+	)
 	RootCmd.Flags().SortFlags = false
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "info", "[ debug | warn | error | fatal | panic | trace ] \u001b[0m*")
 	RootCmd.Flags().StringVarP(&wdate, "date", "d", wdate, "date for which to calculate reward")
 	RootCmd.Flags().StringVarP(&pubkey, "pk", "k", pubkey, "check reward for pubkey")
 	RootCmd.Flags().StringVarP(&disallowArchitectures, "noarch", "n", "amd64", "disallowed architectures, comma separated")
@@ -79,6 +87,15 @@ Collect surveys:  skywire-cli log
 Fetch uptimes:    skywire-cli ut > ut.txt`,
 	Run: func(cmd *cobra.Command, args []string) {
 		var err error
+		if log == nil {
+			log = logging.MustGetLogger("rewards")
+		}
+		if logLvl != "" {
+			if lvl, err := logging.LevelFromString(logLvl); err == nil {
+				logging.SetLevel(lvl)
+			}
+		}
+
 		wDate, err = time.Parse("2006-01-02", wdate)
 		if err != nil {
 			log.Fatal("Error parsing date:", err)
@@ -119,25 +136,42 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 		var grrInfos []nodeinfo
 		for _, pk := range res {
 			nodeInfo := fmt.Sprintf("%s/%s/node-info.json", hwSurveyPath, pk)
-			tpsn, tpsnErr := script.File(fmt.Sprintf("%s/%s/tp.json", tpsnSurveyPath, pk)).JQ(`.`).String() //nolint
-			ip, _ := script.File(nodeInfo).JQ(`.ip_address`).Replace(" ", "").Replace(`"`, "").String()     //nolint
+			_, err = os.Stat(nodeInfo)
+			if os.IsNotExist(err) {
+				log.Debug(err.Error())
+				continue
+			}
+			var (
+				tpsn    string
+				tpsnErr error
+				ip      string
+				sky     string
+				arch    string
+				uu      string
+				ifc     string
+				ifc1    string
+				macs    []string
+				macs1   []string
+			)
+			tpsn, tpsnErr = script.File(fmt.Sprintf("%s/%s/tp.json", tpsnSurveyPath, pk)).JQ(`.`).String() //nolint
+			ip, _ = script.File(nodeInfo).JQ(`.ip_address`).Replace(" ", "").Replace(`"`, "").String()     //nolint
 			ip = strings.TrimRight(ip, "\n")
-			if ip == "" {
+			if strings.Count(ip, ".") != 3 {
 				ip, _ = script.File(nodeInfo).JQ(`."ip.skycoin.com".ip_address`).Replace(" ", "").Replace(`"`, "").String() //nolint
 				ip = strings.TrimRight(ip, "\n")
 			}
-			sky, _ := script.File(nodeInfo).JQ(".skycoin_address").Replace(" ", "").Replace(`"`, "").String() //nolint
+			sky, _ = script.File(nodeInfo).JQ(".skycoin_address").Replace(" ", "").Replace(`"`, "").String() //nolint
 			sky = strings.TrimRight(sky, "\n")
-			arch, _ := script.File(nodeInfo).JQ(".go_arch").Replace(" ", "").Replace(`"`, "").String() //nolint
+			arch, _ = script.File(nodeInfo).JQ(".go_arch").Replace(" ", "").Replace(`"`, "").String() //nolint
 			arch = strings.TrimRight(arch, "\n")
-			uu, _ := script.File(nodeInfo).JQ(".uuid").Replace(" ", "").Replace(`"`, "").String() //nolint
+			uu, _ = script.File(nodeInfo).JQ(".uuid").Replace(" ", "").Replace(`"`, "").String() //nolint
 			uu = strings.TrimRight(uu, "\n")
-			ifc, _ := script.File(nodeInfo).JQ(`[.ip_addr[]? | select(.ifname != "lo") | {address: .address, ifname: .ifname}]`).Replace(" ", "").Replace(`"`, "").String() //nolint
+			ifc, _ = script.File(nodeInfo).JQ(`[.ip_addr[]? | select(.ifname != "lo") | {address: .address, ifname: .ifname}]`).Replace(" ", "").Replace(`"`, "").String() //nolint
 			ifc = strings.TrimRight(ifc, "\n")
-			ifc1, _ := script.File(nodeInfo).JQ(`[.zcalusic_sysinfo.network[] | {address: .macaddress, ifname: .name}]`).Replace(" ", "").Replace(`"`, "").String() //nolint
+			ifc1, _ = script.File(nodeInfo).JQ(`[.zcalusic_sysinfo.network[] | {address: .macaddress, ifname: .name}]`).Replace(" ", "").Replace(`"`, "").String() //nolint
 			ifc1 = strings.TrimRight(ifc1, "\n")
-			macs, _ := script.File(nodeInfo).JQ(`.ip_addr[]? | select(.ifname != "lo") | .address`).Replace(" ", "").Replace(`"`, "").Slice() //nolint
-			macs1, _ := script.File(nodeInfo).JQ(`.zcalusic_sysinfo.network[] | .macaddress`).Replace(" ", "").Replace(`"`, "").Slice()       //nolint
+			macs, _ = script.File(nodeInfo).JQ(`.ip_addr[]? | select(.ifname != "lo") | .address`).Replace(" ", "").Replace(`"`, "").Slice() //nolint
+			macs1, _ = script.File(nodeInfo).JQ(`.zcalusic_sysinfo.network[] | .macaddress`).Replace(" ", "").Replace(`"`, "").Slice()       //nolint
 			if ifc == "[]" && ifc1 != "[]" {
 				ifc = ifc1
 			}
