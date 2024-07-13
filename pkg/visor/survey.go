@@ -60,7 +60,7 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 						tries--
 						continue
 					}
-					survey.IPAddr = ipAddr
+					survey.IPAddr = ipAddr.String()
 					break
 				}
 
