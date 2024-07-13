@@ -32,7 +32,7 @@ type Survey struct {
 	SkycoinAddress string           `json:"skycoin_address,omitempty"`
 	GOOS           string           `json:"go_os,omitempty"`
 	GOARCH         string           `json:"go_arch,omitempty"`
-	IPAddr         string           `json:"ip_addr,omitempty"`
+	IPAddr         string           `json:"ip_address,omitempty"`
 	Disks          *ghw.BlockInfo   `json:"ghw_blockinfo,omitempty"`
 	Product        *ghw.ProductInfo `json:"ghw_productinfo,omitempty"`
 	Memory         *ghw.MemoryInfo  `json:"ghw_memoryinfo,omitempty"`
