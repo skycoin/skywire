@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"context"
 
 	coincipher "github.com/skycoin/skycoin/src/cipher"
 
@@ -54,7 +55,7 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 				//use the existing dmsg client of the visor to get ip from dmsg server
 				tries := 8
 				for tries > 0 {
-					ipAddr, err := v.dmsgC.LookupIP(ctx, nil)
+					ipAddr, err := v.dmsgC.LookupIP(context.Background(), nil)
 					if err != nil {
 						tries--
 						continue
