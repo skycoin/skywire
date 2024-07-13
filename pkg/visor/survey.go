@@ -52,10 +52,9 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 				survey.DmsgServers = v.dmsgC.ConnectedServersPK()
 
 				//use the existing dmsg client of the visor to get ip from dmsg server
-				var ipAddr string
 				tries := 8
 				for tries > 0 {
-					ipAddr, err = v.dmsgC.LookupIP(ctx, nil)
+					ipAddr, err := v.dmsgC.LookupIP(ctx, nil)
 					if err != nil {
 						tries--
 						continue
