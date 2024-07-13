@@ -1,0 +1,77 @@
+{
+	"version": "v1.3.18",
+	"sk": "c365053d93e3db5e87e23cdd0861ffe4a388928663e72dca038f09bd56f4701e",
+	"pk": "035cfb7461d076691f8959526d00c48d6aa9d0c7372a7624aa65920238ce2e3a82",
+	"dmsg": {
+		"discovery": "http://dmsg-discovery:9090",
+		"sessions_count": 1,
+		"servers": []
+	},
+	"dmsgpty": {
+		"dmsg_port": 22,
+		"cli_network": "unix",
+		"cli_address": "/tmp/dmsgpty.sock",
+		"whitelist": null
+	},
+	"skywire-tcp": {
+		"pk_table": null,
+		"listening_address": ":7777"
+	},
+	"transport": {
+		"discovery": "http://transport-discovery:9091",
+		"address_resolver": "http://address-resolver:9093",
+		"public_autoconnect": false,
+		"transport_setup_nodes": [
+			"0277dda8a284d43b4d5ee2a4152771e76131e9437c47be5d8e835aafe02c45a9ae"
+		],
+		"log_store": {
+			"type": "file",
+			"location": "./local/transport_logs",
+			"rotation_interval": "168h0m0s"
+		},
+		"stcpr_port": 40552,
+		"sudph_port": 40562
+	},
+	"routing": {
+		"route_setup_nodes": [
+			"02603d53d49b6575a0b8cee05b70dd23c86e42cd6cba99af769d61a6196ea2bcb1"
+		],
+		"route_finder": "http://route-finder:9092",
+		"route_finder_timeout": "10s",
+		"min_hops": 0
+	},
+	"uptime_tracker": {
+		"addr": "http://uptime-tracker:9096"
+	},
+	"launcher": {
+		"service_discovery": "http://service-discovery:9098",
+		"apps": [{
+			"name":"skysocks-client",
+			"binary":"skywire",
+			"args": [
+				"app",
+				"skysocks-client",
+				"--srv",
+				"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
+				"--addr",
+				":9022"
+			],
+			"auto_start":true,
+			"port":90
+		}],
+		"server_addr": ":5507",
+		"bin_path": ".",
+		"display_node_ip": false
+	},
+	"survey_whitelist": null,
+	"hypervisors": [],
+	"cli_addr": "0.0.0.0:3439",
+	"log_level": "debug",
+	"local_path": "./local",
+	"dmsghttp_server_path": "./local/custom",
+	"stun_servers": null,
+	"shutdown_timeout": "30s",
+	"restart_check_delay": "1s",
+	"is_public": false,
+	"persistent_transports": null
+}

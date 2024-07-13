@@ -366,6 +366,78 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	return nil, ErrCannotConnectToDelegated
 }
 
+// LookupIP dails to dmsg servers for public IP of the client.
+func (ce *Client) LookupIP(ctx context.Context, servers []cipher.PubKey) (myIP net.IP, err error) {
+
+	cancellabelCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	if servers == nil {
+		entries, err := ce.discoverServers(cancellabelCtx, true)
+		if err != nil {
+			return nil, err
+		}
+		for _, entry := range entries {
+			servers = append(servers, entry.Static)
+		}
+	}
+
+	// Range client's delegated servers.
+	// See if we are already connected to a delegated server.
+	for _, srvPK := range servers {
+		if dSes, ok := ce.clientSession(ce.porter, srvPK); ok {
+			ip, err := dSes.LookupIP(Addr{PK: dSes.RemotePK(), Port: 1})
+			if err != nil {
+				ce.log.WithError(err).WithField("server_pk", srvPK).Warn("Failed to dial server for IP.")
+				continue
+			}
+
+			// If the client is test client then ignore Public IP check
+			if ce.conf.ClientType == "test" {
+				return ip, nil
+			}
+
+			// Check if the IP is public
+			if !netutil.IsPublicIP(ip) {
+				return nil, errors.New("received non-public IP address from dmsg server")
+			}
+			return ip, nil
+		}
+	}
+
+	// Range client's delegated servers.
+	// Attempt to connect to a delegated server.
+	// And Close it after getting the IP.
+	for _, srvPK := range servers {
+		dSes, err := ce.EnsureAndObtainSession(ctx, srvPK)
+		if err != nil {
+			continue
+		}
+		ip, err := dSes.LookupIP(Addr{PK: dSes.RemotePK(), Port: 1})
+		if err != nil {
+			ce.log.WithError(err).WithField("server_pk", srvPK).Warn("Failed to dial server for IP.")
+			continue
+		}
+		err = dSes.Close()
+		if err != nil {
+			ce.log.WithError(err).WithField("server_pk", srvPK).Warn("Failed to close session")
+		}
+
+		// If the client is test client then ignore Public IP check
+		if ce.conf.ClientType == "test" {
+			return ip, nil
+		}
+
+		// Check if the IP is public
+		if !netutil.IsPublicIP(ip) {
+			return nil, errors.New("received non-public IP address from dmsg server")
+		}
+		return ip, nil
+	}
+
+	return nil, ErrCannotConnectToDelegated
+}
+
 // Session obtains an established session.
 func (ce *Client) Session(pk cipher.PubKey) (ClientSession, bool) {
 	return ce.clientSession(ce.porter, pk)
@@ -403,7 +475,6 @@ func (ce *Client) EnsureAndObtainSession(ctx context.Context, srvPK cipher.PubKe
 	if err != nil {
 		return ClientSession{}, err
 	}
-
 	return ce.dialSession(ctx, srvEntry)
 }
 

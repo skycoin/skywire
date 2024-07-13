@@ -87,6 +87,29 @@ func (s *Stream) writeRequest(rAddr Addr) (req StreamRequest, err error) {
 	return
 }
 
+func (s *Stream) writeIPRequest(rAddr Addr) (req StreamRequest, err error) {
+	// Reserve stream in porter.
+	var lPort uint16
+	if lPort, s.close, err = s.ses.porter.ReserveEphemeral(context.Background(), s); err != nil {
+		return
+	}
+
+	// Prepare fields.
+	s.prepareFields(true, Addr{PK: s.ses.LocalPK(), Port: lPort}, rAddr)
+
+	req = StreamRequest{
+		Timestamp: time.Now().UnixNano(),
+		SrcAddr:   s.lAddr,
+		DstAddr:   s.rAddr,
+		IPinfo:    true,
+	}
+	obj := MakeSignedStreamRequest(&req, s.ses.localSK())
+
+	// Write request.
+	err = s.ses.writeObject(s.yStr, obj)
+	return
+}
+
 func (s *Stream) readRequest() (req StreamRequest, err error) {
 	var obj SignedObject
 	if obj, err = s.ses.readObject(s.yStr); err != nil {
@@ -156,6 +179,21 @@ func (s *Stream) readResponse(req StreamRequest) error {
 		return err
 	}
 	return s.ns.ProcessHandshakeMessage(resp.NoiseMsg)
+}
+
+func (s *Stream) readIPResponse(req StreamRequest) (net.IP, error) {
+	obj, err := s.ses.readObject(s.yStr)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := obj.ObtainStreamResponse()
+	if err != nil {
+		return nil, err
+	}
+	if err := resp.Verify(req); err != nil {
+		return nil, err
+	}
+	return resp.IP, nil
 }
 
 func (s *Stream) prepareFields(init bool, lAddr, rAddr Addr) {
