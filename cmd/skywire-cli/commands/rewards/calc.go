@@ -119,9 +119,13 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 		var grrInfos []nodeinfo
 		for _, pk := range res {
 			nodeInfo := fmt.Sprintf("%s/%s/node-info.json", hwSurveyPath, pk)
-			tpsn, tpsnErr := script.File(fmt.Sprintf("%s/%s/tp.json", tpsnSurveyPath, pk)).JQ(`.`).String()              //nolint
-			ip, _ := script.File(nodeInfo).JQ(`."ip.skycoin.com".ip_address`).Replace(" ", "").Replace(`"`, "").String() //nolint
+			tpsn, tpsnErr := script.File(fmt.Sprintf("%s/%s/tp.json", tpsnSurveyPath, pk)).JQ(`.`).String() //nolint
+			ip, _ := script.File(nodeInfo).JQ(`.ip_address`).Replace(" ", "").Replace(`"`, "").String()     //nolint
 			ip = strings.TrimRight(ip, "\n")
+			if ip == "" {
+				ip, _ = script.File(nodeInfo).JQ(`."ip.skycoin.com".ip_address`).Replace(" ", "").Replace(`"`, "").String() //nolint
+				ip = strings.TrimRight(ip, "\n")
+			}
 			sky, _ := script.File(nodeInfo).JQ(".skycoin_address").Replace(" ", "").Replace(`"`, "").String() //nolint
 			sky = strings.TrimRight(sky, "\n")
 			arch, _ := script.File(nodeInfo).JQ(".go_arch").Replace(" ", "").Replace(`"`, "").String() //nolint
