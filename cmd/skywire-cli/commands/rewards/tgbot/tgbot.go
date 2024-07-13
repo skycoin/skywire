@@ -1,5 +1,5 @@
-// Package clirewards cmd/skywire-cli/commands/rewards/tgbot.go
-package clirewards
+// Package clirewardstgbot cmd/skywire-cli/commands/rewards/tgbot/tgbot.go
+package clirewardstgbot
 
 import (
 	"fmt"
@@ -17,14 +17,13 @@ import (
 var filePath string
 
 func init() {
-	RootCmd.AddCommand(
-		tgbotCmd,
-	)
-	tgbotCmd.Flags().StringVarP(&filePath, "watch", "w", "../reward/rewards/transactions0.txt", "File to watch - file where reward transaction IDs are recorded")
+
+	RootCmd.Flags().StringVarP(&filePath, "watch", "w", "../reward/rewards/transactions0.txt", "File to watch - file where reward transaction IDs are recorded")
 
 }
 
-var tgbotCmd = &cobra.Command{
+// RootCmd contains the reward telegram bot command
+var RootCmd = &cobra.Command{
 	Use:   "bot",
 	Short: "reward notification telegram bot",
 	Long:  "reward notification telegram bot",
