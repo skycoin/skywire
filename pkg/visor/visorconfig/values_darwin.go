@@ -46,15 +46,15 @@ func SystemSurvey(dmsgDisc string) (Survey, error) {
 	if err != nil {
 		return Survey{}, err
 	}
-	var ipAddr string
-	for {
-		ipAddr, err = FetchIP(dmsgDisc)
-		if err == nil {
-			break
-		}
-	}
+	//	var ipAddr string
+	//	for {
+	//		ipAddr, err = FetchIP(dmsgDisc)
+	//		if err == nil {
+	//			break
+	//		}
+	//	}
 	s := Survey{
-		IPAddr:         ipAddr,
+		//		IPAddr:         ipAddr,
 		GOOS:           runtime.GOOS,
 		GOARCH:         runtime.GOARCH,
 		UUID:           uuid.New(),

@@ -51,6 +51,19 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 				survey.ServicesURLs.StunServers = v.conf.StunServers
 				survey.DmsgServers = v.dmsgC.ConnectedServersPK()
 
+				//use the existing dmsg client of the visor to get ip from dmsg server
+				var ipAddr string
+				tries = 8
+				for tries > 0 {
+					ipAddr, err = v.dmsgC.LookupIP(ctx, nil)
+					if err != nil {
+						tries--
+						continue
+					}
+					survey.IPAddr = ipAddr
+					break
+				}
+
 				log.Info("Generating system survey")
 				v.surveyLock.Lock()
 				v.survey = survey
