@@ -32,8 +32,7 @@ type Survey struct {
 	SkycoinAddress string           `json:"skycoin_address,omitempty"`
 	GOOS           string           `json:"go_os,omitempty"`
 	GOARCH         string           `json:"go_arch,omitempty"`
-	IPInfo         *IPSkycoin       `json:"ip.skycoin.com,omitempty"`
-	IPAddr         *IPAddr          `json:"ip_addr,omitempty"`
+	IPAddr         string           `json:"ip_address,omitempty"`
 	Disks          *ghw.BlockInfo   `json:"ghw_blockinfo,omitempty"`
 	Product        *ghw.ProductInfo `json:"ghw_productinfo,omitempty"`
 	Memory         *ghw.MemoryInfo  `json:"ghw_memoryinfo,omitempty"`
@@ -44,7 +43,7 @@ type Survey struct {
 }
 
 // SystemSurvey returns system survey
-func SystemSurvey() (Survey, error) {
+func SystemSurvey(dmsgDisc string) (Survey, error) {
 	disks, err := ghw.Block(ghw.WithDisableWarnings())
 	if err != nil {
 		return Survey{}, err
@@ -57,8 +56,16 @@ func SystemSurvey() (Survey, error) {
 	if err != nil {
 		return Survey{}, err
 	}
+	var ipAddr string
+	for {
+		ipAddr, err = FetchIP(dmsgDisc)
+		if err == nil {
+			break
+		}
+	}
+
 	s := Survey{
-		IPInfo:         IPSkycoinFetch(),
+		IPAddr:         ipAddr,
 		GOOS:           runtime.GOOS,
 		GOARCH:         runtime.GOARCH,
 		UUID:           uuid.New(),

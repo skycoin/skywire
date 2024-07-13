@@ -4,6 +4,7 @@ package dmsg
 import (
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -167,6 +168,7 @@ type StreamRequest struct {
 	Timestamp int64
 	SrcAddr   Addr
 	DstAddr   Addr
+	IPinfo    bool
 	NoiseMsg  []byte
 
 	raw SignedObject `enc:"-"` // back reference.
@@ -203,6 +205,7 @@ func (req StreamRequest) Verify(lastTimestamp int64) error {
 type StreamResponse struct {
 	ReqHash  cipher.SHA256 // Hash of associated dial request.
 	Accepted bool          // Whether the request is accepted.
+	IP       net.IP        // IP address of the node.
 	ErrCode  errorCode     // Check if not accepted.
 	NoiseMsg []byte
 
