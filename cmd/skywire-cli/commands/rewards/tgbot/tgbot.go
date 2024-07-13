@@ -22,6 +22,7 @@ func init() {
 
 }
 
+// Root command contains the reward telegram bot command
 var RootCmd = &cobra.Command{
 	Use:   "bot",
 	Short: "reward notification telegram bot",
