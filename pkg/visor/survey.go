@@ -32,7 +32,7 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 				log.Info("Skycoin reward address: ", cAddr.String())
 				//generate the system survey
 				pathutil.EnsureDir(v.conf.LocalPath) //nolint
-				survey, err := visconf.SystemSurvey()
+				survey, err := visconf.SystemSurvey(v.conf.Dmsg.Discovery)
 				if err != nil {
 					log.WithError(err).Error("Could not read system info.")
 					return

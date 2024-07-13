@@ -2,22 +2,23 @@
 package visorconfig
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/bitfield/script"
+	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
@@ -231,92 +232,45 @@ func IsRoot() bool {
 	return userLvl.Username == "root"
 }
 
-// IPAddr struct of `ip --json addr`
-type IPAddr []struct {
-	Ifindex   int      `json:"ifindex"`
-	Ifname    string   `json:"ifname"`
-	Flags     []string `json:"flags"`
-	Mtu       int      `json:"mtu"`
-	Qdisc     string   `json:"qdisc"`
-	Operstate string   `json:"operstate"`
-	Group     string   `json:"group"`
-	Txqlen    int      `json:"txqlen"`
-	LinkType  string   `json:"link_type"`
-	Address   string   `json:"address"`
-	Broadcast string   `json:"broadcast"`
-	AddrInfo  []struct {
-		Family            string `json:"family"`
-		Local             string `json:"local"`
-		Prefixlen         int    `json:"prefixlen"`
-		Scope             string `json:"scope"`
-		Label             string `json:"label,omitempty"`
-		ValidLifeTime     int64  `json:"valid_life_time"`
-		PreferredLifeTime int64  `json:"preferred_life_time"`
-	} `json:"addr_info"`
+// FetchIP fetches the ip address by dmsg servers
+func FetchIP(dmsgDisc string) (string, error) {
+	log := logging.MustGetLogger("ip_skycoin_fetch_dmsg")
+	ctx, cancel := cmdutil.SignalContext(context.Background(), nil)
+	defer cancel()
+
+	pk, sk := cipher.GenerateKeyPair()
+
+	dmsgC, closeDmsg, err := startDmsg(ctx, log, pk, sk, dmsgDisc)
+	if err != nil {
+		return "", fmt.Errorf("failed to start dmsg")
+	}
+	defer closeDmsg()
+
+	ip, err := dmsgC.LookupIP(ctx, nil)
+	return ip.String(), err
 }
 
-// IPA returns IPAddr struct filled in with the json response from `ip --json addr` command ; fail silently on errors
-func IPA() (ip *IPAddr) {
-	//non-critical logic implemented with bitfield/script
-	ipa, err := script.Exec(`ip --json addr`).String()
-	if err != nil {
-		return nil
-	}
-	err = json.Unmarshal([]byte(ipa), &ip)
-	if err != nil {
-		return nil
-	}
-	return ip
-}
+func startDmsg(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, dmsgDisc string) (dmsgC *dmsg.Client, stop func(), err error) {
+	dmsgC = dmsg.NewClient(pk, sk, disc.NewHTTP(dmsgDisc, &http.Client{}, log), &dmsg.Config{MinSessions: dmsg.DefaultMinSessions})
+	go dmsgC.Serve(context.Background())
 
-// IPSkycoin struct of ip.skycoin.com json
-type IPSkycoin struct {
-	IPAddress     string  `json:"ip_address"`
-	Latitude      float64 `json:"latitude"`
-	Longitude     float64 `json:"longitude"`
-	PostalCode    string  `json:"postal_code"`
-	ContinentCode string  `json:"continent_code"`
-	CountryCode   string  `json:"country_code"`
-	CountryName   string  `json:"country_name"`
-	RegionCode    string  `json:"region_code"`
-	RegionName    string  `json:"region_name"`
-	ProvinceCode  string  `json:"province_code"`
-	ProvinceName  string  `json:"province_name"`
-	CityName      string  `json:"city_name"`
-	Timezone      string  `json:"timezone"`
-}
+	stop = func() {
+		err := dmsgC.Close()
+		log.WithError(err).Debug("Disconnected from dmsg network.")
+		fmt.Printf("\n")
+	}
+	log.WithField("public_key", pk.String()).WithField("dmsg_disc", dmsgDisc).
+		Debug("Connecting to dmsg network...")
 
-// IPSkycoinFetch fetches the json response from ip.skycoin.com
-func IPSkycoinFetch() (ipskycoin *IPSkycoin) {
+	select {
+	case <-ctx.Done():
+		stop()
+		return nil, nil, ctx.Err()
 
-	url := fmt.Sprint("http://", "ip.skycoin.com")
-	client := http.Client{
-		Timeout: time.Second * 45, // Timeout after 45 seconds
+	case <-dmsgC.Ready():
+		log.Debug("Dmsg network ready.")
+		return dmsgC, stop, nil
 	}
-	//create the http request
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return nil
-	}
-	req.Header.Add("Cache-Control", "no-cache")
-	//check for errors in the response
-	res, err := client.Do(req)
-	if err != nil {
-		return nil
-	}
-	if res.Body != nil {
-		defer res.Body.Close() //nolint
-	}
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return nil
-	}
-	//fill in IPSkycoin struct with the response
-	err = json.Unmarshal(body, &ipskycoin)
-	if err != nil {
-		return nil
-	}
-	return ipskycoin
 }
 
 var (
