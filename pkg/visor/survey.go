@@ -2,6 +2,7 @@
 package visor
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"strings"
@@ -32,7 +33,7 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 				log.Info("Skycoin reward address: ", cAddr.String())
 				//generate the system survey
 				pathutil.EnsureDir(v.conf.LocalPath) //nolint
-				survey, err := visconf.SystemSurvey(v.conf.Dmsg.Discovery)
+				survey, err := visconf.SystemSurvey()
 				if err != nil {
 					log.WithError(err).Error("Could not read system info.")
 					return
@@ -50,6 +51,18 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 				survey.ServicesURLs.SurveyWhitelist = v.conf.SurveyWhitelist
 				survey.ServicesURLs.StunServers = v.conf.StunServers
 				survey.DmsgServers = v.dmsgC.ConnectedServersPK()
+
+				//use the existing dmsg client of the visor to get ip from dmsg server
+				tries := 8
+				for tries > 0 {
+					ipAddr, err := v.dmsgC.LookupIP(context.Background(), nil)
+					if err != nil {
+						tries--
+						continue
+					}
+					survey.IPAddr = ipAddr.String()
+					break
+				}
 
 				log.Info("Generating system survey")
 				v.surveyLock.Lock()
@@ -71,7 +84,7 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 				v.surveyLock.Lock()
 				v.survey = visconf.Survey{}
 				v.surveyLock.Unlock()
-				log.Debug("Removed hadware survey for visor not seeking rewards")
+				log.Debug("Removed survey for visor not seeking rewards")
 			}
 			// break loop for generate each 24hours if just reward address chenged
 			if !routine {

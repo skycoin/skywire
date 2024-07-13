@@ -48,7 +48,7 @@ type Survey struct {
 }
 
 // SystemSurvey returns system survey
-func SystemSurvey(dmsgDisc string) (Survey, error) {
+func SystemSurvey() (Survey, error) {
 	var si sysinfo.SysInfo
 	si.GetSysInfo()
 	disks, err := ghw.Block(ghw.WithDisableWarnings())
@@ -63,16 +63,16 @@ func SystemSurvey(dmsgDisc string) (Survey, error) {
 	if err != nil && !strings.Contains(err.Error(), "Could not determine total usable bytes of memory") {
 		return Survey{}, err
 	}
-	var ipAddr string
-	for {
-		ipAddr, err = FetchIP(dmsgDisc)
-		if err == nil {
-			break
-		}
-	}
+	//	var ipAddr string
+	//	for {
+	//		ipAddr, err = FetchIP(dmsgDisc)
+	//		if err == nil {
+	//			break
+	//		}
+	//	}
 	s := Survey{
-		Timestamp:      time.Now(),
-		IPAddr:         ipAddr,
+		Timestamp: time.Now(),
+		//		IPAddr:         ipAddr,
 		GOOS:           runtime.GOOS,
 		GOARCH:         runtime.GOARCH,
 		SYSINFO:        si,
