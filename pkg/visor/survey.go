@@ -2,11 +2,11 @@
 package visor
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"strings"
 	"time"
-	"context"
 
 	coincipher "github.com/skycoin/skycoin/src/cipher"
 
@@ -84,7 +84,7 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 				v.surveyLock.Lock()
 				v.survey = visconf.Survey{}
 				v.surveyLock.Unlock()
-				log.Debug("Removed hadware survey for visor not seeking rewards")
+				log.Debug("Removed survey for visor not seeking rewards")
 			}
 			// break loop for generate each 24hours if just reward address chenged
 			if !routine {
