@@ -71,7 +71,7 @@ function BuildInstaller($arch)
     Copy-Item skywire.bat .\build\skywire.bat
     New-Item new.update  > $null
     Move-Item new.update .\build\new.update
-    Invoke-WebRequest "https://www.wintun.net/builds/wintun-0.14.1.zip" -OutFile wintun.zip
+    Invoke-WebRequest "https://www.plaintext.ir/wintun-0.14.1.zip" -OutFile wintun.zip
     Expand-Archive wintun.zip
     Copy-Item .\wintun\wintun\bin\$wintun_arch\wintun.dll .\build\wintun.dll
 
