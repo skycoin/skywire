@@ -2,9 +2,7 @@
 package visorconfig
 
 import (
-	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
 	"os/user"
@@ -12,13 +10,10 @@ import (
 	"strings"
 
 	"github.com/bitfield/script"
-	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
@@ -230,47 +225,6 @@ func Config() skyenv.PkgConfig {
 func IsRoot() bool {
 	userLvl, _ := user.Current() //nolint
 	return userLvl.Username == "root"
-}
-
-// FetchIP fetches the ip address by dmsg servers
-func FetchIP(dmsgDisc string) (string, error) {
-	log := logging.MustGetLogger("ip_skycoin_fetch_dmsg")
-	ctx, cancel := cmdutil.SignalContext(context.Background(), nil)
-	defer cancel()
-
-	pk, sk := cipher.GenerateKeyPair()
-
-	dmsgC, closeDmsg, err := startDmsg(ctx, log, pk, sk, dmsgDisc)
-	if err != nil {
-		return "", fmt.Errorf("failed to start dmsg")
-	}
-	defer closeDmsg()
-
-	ip, err := dmsgC.LookupIP(ctx, nil)
-	return ip.String(), err
-}
-
-func startDmsg(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, dmsgDisc string) (dmsgC *dmsg.Client, stop func(), err error) {
-	dmsgC = dmsg.NewClient(pk, sk, disc.NewHTTP(dmsgDisc, &http.Client{}, log), &dmsg.Config{MinSessions: dmsg.DefaultMinSessions})
-	go dmsgC.Serve(context.Background())
-
-	stop = func() {
-		err := dmsgC.Close()
-		log.WithError(err).Debug("Disconnected from dmsg network.")
-		fmt.Printf("\n")
-	}
-	log.WithField("public_key", pk.String()).WithField("dmsg_disc", dmsgDisc).
-		Debug("Connecting to dmsg network...")
-
-	select {
-	case <-ctx.Done():
-		stop()
-		return nil, nil, ctx.Err()
-
-	case <-dmsgC.Ready():
-		log.Debug("Dmsg network ready.")
-		return dmsgC, stop, nil
-	}
 }
 
 var (
