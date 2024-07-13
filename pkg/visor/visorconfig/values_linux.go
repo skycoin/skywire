@@ -65,18 +65,16 @@ func SystemSurvey(dmsgDisc string) (Survey, error) {
 		return Survey{}, err
 	}
 	var ipInfo IPSkycoin
-	for {
-		fetchedIPInfo, err := IPSkycoinFetch()
-		if err != nil {
-			ipValue, err := IPSkycoinFetchDmsg(dmsgDisc)
-			if err == nil {
-				ipInfo.IPAddress = ipValue
-				break
-			}
+	fetchedIPInfo, err := IPSkycoinFetch()
+	if err != nil {
+		ipValue, err := IPSkycoinFetchDmsg(dmsgDisc)
+		if err == nil {
+			ipInfo.IPAddress = ipValue
 		}
+	} else {
 		ipInfo = *fetchedIPInfo
-		break //nolint
 	}
+
 	s := Survey{
 		Timestamp:      time.Now(),
 		IPInfo:         &ipInfo,
