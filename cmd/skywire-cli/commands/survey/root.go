@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -31,7 +32,7 @@ var (
 func init() {
 	surveyCmd.Flags().SortFlags = false
 	surveyCmd.Flags().StringVarP(&confPath, "config", "c", "", "optionl config file to use (i.e.: "+visorconfig.ConfigName+")")
-	surveyCmd.Flags().StringVarP(&dmsgDisc, "dmsgdisc", "d", "http://dmsgd.skywire.skycoin.com", "value of dmsg discovery")
+	surveyCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", skyenv.DmsgDiscAddr, "value of dmsg discovery")
 	//	surveyCmd.Flags().StringVarP(&confArg, "confarg", "C", "", "supply config as argument")
 	//	surveyCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
 	if _, err := os.Stat(visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON); err == nil {
