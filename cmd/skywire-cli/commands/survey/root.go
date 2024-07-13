@@ -18,6 +18,7 @@ var (
 	mLog     = logging.NewMasterLogger()
 	log      = mLog.PackageLogger("survey")
 	confPath string
+	dmsgDisc string
 	//	stdin                bool
 	//	confArg              string
 	pkg              bool
@@ -30,6 +31,7 @@ var (
 func init() {
 	surveyCmd.Flags().SortFlags = false
 	surveyCmd.Flags().StringVarP(&confPath, "config", "c", "", "optionl config file to use (i.e.: "+visorconfig.ConfigName+")")
+	surveyCmd.Flags().StringVarP(&dmsgDisc, "dmsgdisc", "d", "http://dmsgd.skywire.skycoin.com", "value of dmsg discovery")
 	//	surveyCmd.Flags().StringVarP(&confArg, "confarg", "C", "", "supply config as argument")
 	//	surveyCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
 	if _, err := os.Stat(visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON); err == nil {
@@ -83,7 +85,10 @@ var surveyCmd = &cobra.Command{
 				log.WithError(err).Fatal("Failed to unmarshal old config json")
 			}
 		}
-		survey, err := visorconfig.SystemSurvey()
+		if conf != nil {
+			dmsgDisc = conf.Dmsg.Discovery
+		}
+		survey, err := visorconfig.SystemSurvey(dmsgDisc)
 		if err != nil {
 			internal.Catch(cmd.Flags(), fmt.Errorf("Failed to generate system survey: %v", err))
 		}

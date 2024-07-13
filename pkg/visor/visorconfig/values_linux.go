@@ -49,7 +49,7 @@ type Survey struct {
 }
 
 // SystemSurvey returns system survey
-func SystemSurvey() (Survey, error) {
+func SystemSurvey(dmsgDisc string) (Survey, error) {
 	var si sysinfo.SysInfo
 	si.GetSysInfo()
 	disks, err := ghw.Block(ghw.WithDisableWarnings())
@@ -64,15 +64,22 @@ func SystemSurvey() (Survey, error) {
 	if err != nil && !strings.Contains(err.Error(), "Could not determine total usable bytes of memory") {
 		return Survey{}, err
 	}
+	var ipInfo IPSkycoin
 	for {
-		ipInfo := IPSkycoinFetch()
-		if ipInfo != nil {
-			break
+		fetchedIPInfo, err := IPSkycoinFetch()
+		if err != nil {
+			ipValue, err := IPSkycoinFetchDmsg(dmsgDisc)
+			if err == nil {
+				ipInfo.IPAddress = ipValue
+				break
+			}
 		}
+		ipInfo = *fetchedIPInfo
+		break //nolint
 	}
 	s := Survey{
 		Timestamp:      time.Now(),
-		IPInfo:         IPSkycoinFetch(),
+		IPInfo:         &ipInfo,
 		IPAddr:         IPA(),
 		GOOS:           runtime.GOOS,
 		GOARCH:         runtime.GOARCH,

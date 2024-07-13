@@ -2,6 +2,7 @@
 package visorconfig
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,13 +12,15 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/bitfield/script"
+	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
@@ -286,37 +289,73 @@ type IPSkycoin struct {
 	Timezone      string  `json:"timezone"`
 }
 
-// IPSkycoinFetch fetches the json response from ip.skycoin.com
-func IPSkycoinFetch() (ipskycoin *IPSkycoin) {
+// IPSkycoinFetch fetches the json response from ip.skycoin.com or ip.plaintext.ir
+func IPSkycoinFetch() (*IPSkycoin, error) {
+	var ipskycoin *IPSkycoin
+	var resp *http.Response
+	var err error
 
-	url := fmt.Sprint("http://", "ip.skycoin.com")
-	client := http.Client{
-		Timeout: time.Second * 45, // Timeout after 45 seconds
-	}
-	//create the http request
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	resp, err = http.Get("http://ip.skycoin.com/")
 	if err != nil {
-		return nil
+		resp, err = http.Get("http://ip.plaintext.ir/")
+		if err != nil {
+			return ipskycoin, err
+		}
 	}
-	req.Header.Add("Cache-Control", "no-cache")
-	//check for errors in the response
-	res, err := client.Do(req)
+	if resp.Body != nil {
+		defer resp.Body.Close() //nolint
+	}
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil
-	}
-	if res.Body != nil {
-		defer res.Body.Close() //nolint
-	}
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return nil
+		return nil, err
 	}
 	//fill in IPSkycoin struct with the response
 	err = json.Unmarshal(body, &ipskycoin)
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return ipskycoin
+	return ipskycoin, nil
+}
+
+// IPSkycoinFetchDmsg fetches the ip address from dmsg
+func IPSkycoinFetchDmsg(dmsgDisc string) (string, error) {
+	log := logging.MustGetLogger("ip_skycoin_fetch_dmsg")
+	ctx, cancel := cmdutil.SignalContext(context.Background(), nil)
+	defer cancel()
+
+	pk, sk := cipher.GenerateKeyPair()
+
+	dmsgC, closeDmsg, err := startDmsg(ctx, log, pk, sk, dmsgDisc)
+	if err != nil {
+		return "", fmt.Errorf("failed to start dmsg")
+	}
+	defer closeDmsg()
+
+	ip, err := dmsgC.LookupIP(ctx, nil)
+	return ip.String(), err
+}
+
+func startDmsg(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, dmsgDisc string) (dmsgC *dmsg.Client, stop func(), err error) {
+	dmsgC = dmsg.NewClient(pk, sk, disc.NewHTTP(dmsgDisc, &http.Client{}, log), &dmsg.Config{MinSessions: dmsg.DefaultMinSessions})
+	go dmsgC.Serve(context.Background())
+
+	stop = func() {
+		err := dmsgC.Close()
+		log.WithError(err).Debug("Disconnected from dmsg network.")
+		fmt.Printf("\n")
+	}
+	log.WithField("public_key", pk.String()).WithField("dmsg_disc", dmsgDisc).
+		Debug("Connecting to dmsg network...")
+
+	select {
+	case <-ctx.Done():
+		stop()
+		return nil, nil, ctx.Err()
+
+	case <-dmsgC.Ready():
+		log.Debug("Dmsg network ready.")
+		return dmsgC, stop, nil
+	}
 }
 
 var (
