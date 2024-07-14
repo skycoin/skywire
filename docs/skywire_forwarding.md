@@ -36,8 +36,8 @@ func client() (visor.API, error) {
 ```
 And then use the created RPC conn to register and deregister the server
 ```
-err = rpcClient.RegisterHTTPPort(port)
-err = rpcClient.DeregisterHTTPPort(port)
+id, err := rpcClient.Publish(port)
+err = rpcClient.Depublish(id)
 ```
 [Example](../example/http-server/README.md)
 

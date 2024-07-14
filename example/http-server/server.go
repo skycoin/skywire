@@ -12,6 +12,7 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/example/http-server/html"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
@@ -60,7 +61,9 @@ func main() {
 		fmt.Printf("error serving: %v\n", err)
 	}
 
-	err = rpcClient.RegisterHTTPPort(port)
+	skyPort := port
+
+	pubInfo, err := rpcClient.Publish(port, skyPort, appnet.HTTP)
 	if err != nil {
 		log.Errorf("error closing server: %v", err)
 	}
@@ -70,7 +73,7 @@ func main() {
 	if err != nil {
 		log.Errorf("error closing server: %v", err)
 	}
-	err = rpcClient.DeregisterHTTPPort(port)
+	err = rpcClient.Depublish(pubInfo.ID)
 	if err != nil {
 		log.Errorf("error closing server: %v", err)
 	}

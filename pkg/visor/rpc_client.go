@@ -556,12 +556,13 @@ func (rc *rpcClient) IsDMSGClientReady() (bool, error) {
 }
 
 // Connect calls Connect.
-func (rc *rpcClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
-	var out uuid.UUID
+func (rc *rpcClient) Connect(remotePK cipher.PubKey, remotePort, localPort int, appType appnet.AppType) (appnet.ConnectInfo, error) {
+	var out appnet.ConnectInfo
 	err := rc.Call("Connect", &ConnectIn{
 		RemotePK:   remotePK,
 		RemotePort: remotePort,
 		LocalPort:  localPort,
+		AppType:    appType,
 	}, &out)
 	return out, err
 }
@@ -572,28 +573,34 @@ func (rc *rpcClient) Disconnect(id uuid.UUID) error {
 	return err
 }
 
-// List calls List.
-func (rc *rpcClient) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
-	var out map[uuid.UUID]*appnet.ForwardConn
-	err := rc.Call("List", &struct{}{}, &out)
+// Publish calls Publish.
+func (rc *rpcClient) Publish(localPort int, skyPort int, appType appnet.AppType) (appnet.PublishInfo, error) {
+	var out appnet.PublishInfo
+	err := rc.Call("Publish", &PublishIn{
+		LocalPort: localPort,
+		SkyPort:   skyPort,
+		AppType:   appType,
+	}, &out)
 	return out, err
 }
 
-// RegisterHTTPPort calls RegisterHTTPPort.
-func (rc *rpcClient) RegisterHTTPPort(localPort int) error {
-	return rc.Call("RegisterHTTPPort", &localPort, &struct{}{})
-}
-
-// DeregisterHTTPPort calls DeregisterHTTPPort.
-func (rc *rpcClient) DeregisterHTTPPort(localPort int) error {
-	err := rc.Call("DeregisterHTTPPort", &localPort, &struct{}{})
+// Depublish calls Depublish.
+func (rc *rpcClient) Depublish(id uuid.UUID) error {
+	err := rc.Call("Depublish", &id, &struct{}{})
 	return err
 }
 
-// ListHTTPPorts calls ListHTTPPorts.
-func (rc *rpcClient) ListHTTPPorts() ([]int, error) {
-	var out []int
-	err := rc.Call("ListHTTPPorts", &struct{}{}, &out)
+// ListPublished calls ListPublished.
+func (rc *rpcClient) ListPublished() ([]appnet.PublishInfo, error) {
+	var out []appnet.PublishInfo
+	err := rc.Call("ListPublished", &struct{}{}, &out)
+	return out, err
+}
+
+// ListConnected calls ListConnected.
+func (rc *rpcClient) ListConnected() ([]appnet.ConnectInfo, error) {
+	var out []appnet.ConnectInfo
+	err := rc.Call("ListConnected", &struct{}{}, &out)
 	return out, err
 }
 
@@ -1311,8 +1318,8 @@ func (mc *mockRPCClient) IsDMSGClientReady() (bool, error) {
 }
 
 // Connect implements API.
-func (mc *mockRPCClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) { //nolint:all
-	return uuid.UUID{}, nil
+func (mc *mockRPCClient) Connect(remotePK cipher.PubKey, remotePort, localPort int, appType appnet.AppType) (appnet.ConnectInfo, error) { //nolint:all
+	return appnet.ConnectInfo{}, nil
 }
 
 // Disconnect implements API.
@@ -1320,23 +1327,23 @@ func (mc *mockRPCClient) Disconnect(id uuid.UUID) error { //nolint:all
 	return nil
 }
 
+// Publish implements API.
+func (mc *mockRPCClient) Publish(localPort int, skyPort int, appType appnet.AppType) (appnet.PublishInfo, error) { //nolint:all
+	return appnet.PublishInfo{}, nil
+}
+
+// Depublish implements API.
+func (mc *mockRPCClient) Depublish(id uuid.UUID) error { //nolint:all
+	return nil
+}
+
 // List implements API.
-func (mc *mockRPCClient) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
+func (mc *mockRPCClient) ListConnected() ([]appnet.ConnectInfo, error) {
 	return nil, nil
 }
 
-// RegisterHTTPPort implements API.
-func (mc *mockRPCClient) RegisterHTTPPort(localPort int) error { //nolint:all
-	return nil
-}
-
-// DeregisterHTTPPort implements API.
-func (mc *mockRPCClient) DeregisterHTTPPort(localPort int) error { //nolint:all
-	return nil
-}
-
 // ListHTTPPorts implements API.
-func (mc *mockRPCClient) ListHTTPPorts() ([]int, error) {
+func (mc *mockRPCClient) ListPublished() ([]appnet.PublishInfo, error) {
 	return nil, nil
 }
 

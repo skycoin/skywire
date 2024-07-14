@@ -116,12 +116,12 @@ type API interface {
 	RouteGroups() ([]RouteGroupInfo, error)
 	SetMinHops(uint16) error
 
-	RegisterHTTPPort(localPort int) error
-	DeregisterHTTPPort(localPort int) error
-	ListHTTPPorts() ([]int, error)
-	Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
+	Publish(localPort, skyPort int, appType appnet.AppType) (appnet.PublishInfo, error)
+	Depublish(id uuid.UUID) error
+	ListPublished() ([]appnet.PublishInfo, error)
+	Connect(remotePK cipher.PubKey, remotePort, localPort int, appType appnet.AppType) (appnet.ConnectInfo, error)
 	Disconnect(id uuid.UUID) error
-	List() (map[uuid.UUID]*appnet.ForwardConn, error)
+	ListConnected() ([]appnet.ConnectInfo, error)
 	DialPing(config PingConfig) error
 	Ping(config PingConfig) ([]time.Duration, error)
 	StopPing(pk cipher.PubKey) error
@@ -400,7 +400,7 @@ func (v *Visor) DeleteRewardAddress() error {
 	path := v.conf.LocalPath + "/" + visorconfig.RewardFile
 	err := os.Remove(path)
 	if err != nil {
-		return fmt.Errorf("Error deleting file. err=%v", err)
+		return fmt.Errorf("error deleting file. err=%v", err)
 	}
 	return nil
 }
@@ -585,7 +585,7 @@ func (v *Visor) FetchUptimeTrackerData(pk string) ([]byte, error) {
 	if pk != "" {
 		err := pubkey.Set(pk)
 		if err != nil {
-			return body, fmt.Errorf("Invalid or missing public key")
+			return body, fmt.Errorf("invalid or missing public key")
 		}
 	}
 	if v.uptimeTracker == nil {
@@ -611,7 +611,7 @@ func (v *Visor) StartSkysocksClient(serverKey string) error {
 	for index, app := range v.conf.Launcher.Apps {
 		if app.Name == visorconfig.SkysocksClientName {
 			if v.GetSkysocksClientAddress() == "" && serverKey == "" {
-				return errors.New("Skysocks server pub key is missing")
+				return errors.New("skysocks server pub key is missing")
 			}
 
 			if serverKey != "" {
@@ -1279,7 +1279,7 @@ func (v *Visor) DialPing(conf PingConfig) error {
 
 	skywireConn, isSkywireConn := conn.(*appnet.SkywireConn)
 	if !isSkywireConn {
-		return fmt.Errorf("Can't get such info from this conn")
+		return fmt.Errorf("can't get such info from this conn")
 	}
 	v.pingConnMx.Lock()
 	v.pingConns[conf.PK] = ping{
@@ -1543,132 +1543,105 @@ func (v *Visor) IsDMSGClientReady() (bool, error) {
 	return false, errors.New("dmsg client is not ready")
 }
 
-// RegisterHTTPPort implements API.
-func (v *Visor) RegisterHTTPPort(localPort int) error {
-	v.allowedMX.Lock()
-	defer v.allowedMX.Unlock()
-	ok := isPortAvailable(v.log, localPort)
-	if ok {
-		return fmt.Errorf("No connection on local port :%v", localPort)
-	}
-	if v.allowedPorts[localPort] {
-		return fmt.Errorf("Port :%v already registered", localPort)
-	}
-	v.allowedPorts[localPort] = true
-	return nil
-}
-
-// DeregisterHTTPPort implements API.
-func (v *Visor) DeregisterHTTPPort(localPort int) error {
-	v.allowedMX.Lock()
-	defer v.allowedMX.Unlock()
-	if !v.allowedPorts[localPort] {
-		return fmt.Errorf("Port :%v not registered", localPort)
-	}
-	delete(v.allowedPorts, localPort)
-	return nil
-}
-
-// ListHTTPPorts implements API.
-func (v *Visor) ListHTTPPorts() ([]int, error) {
-	v.allowedMX.Lock()
-	defer v.allowedMX.Unlock()
-	keys := make([]int, 0, len(v.allowedPorts))
-	for k := range v.allowedPorts {
-		keys = append(keys, k)
-	}
-	return keys, nil
-}
-
 // Connect implements API.
-func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
-	ok := isPortAvailable(v.log, localPort)
-	if !ok {
-		return uuid.UUID{}, fmt.Errorf(":%v local port already in use", localPort)
+func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, webPort int, appType appnet.AppType) (appnet.ConnectInfo, error) {
+
+	if err := v.nM.IsConnectPortAvailable(webPort); err != nil {
+		return appnet.ConnectInfo{}, err
 	}
-	connApp := appnet.Addr{
+
+	remoteAddr := appnet.Addr{
 		Net:    appnet.TypeSkynet,
 		PubKey: remotePK,
-		Port:   routing.Port(skyenv.SkyForwardingServerPort),
+		Port:   routing.Port(remotePort),
 	}
-	conn, err := appnet.Dial(connApp)
+
+	conn, err := appnet.Dial(remoteAddr)
 	if err != nil {
-		return uuid.UUID{}, err
+		return appnet.ConnectInfo{}, err
 	}
 	remoteConn, err := appnet.WrapConn(conn)
 	if err != nil {
-		return uuid.UUID{}, err
+		return appnet.ConnectInfo{}, err
 	}
 
-	cMsg := clientMsg{
-		Port: remotePort,
+	connectConn, err := appnet.NewConnectConn(v.log, v.nM, remoteConn, remoteAddr, webPort, appType)
+	if err != nil {
+		return appnet.ConnectInfo{}, err
+	}
+	err = connectConn.Serve()
+	if err != nil {
+		return appnet.ConnectInfo{}, err
 	}
 
-	clientMsg, err := json.Marshal(cMsg)
-	if err != nil {
-		return uuid.UUID{}, err
-	}
-	_, err = remoteConn.Write([]byte(clientMsg))
-	if err != nil {
-		return uuid.UUID{}, err
-	}
-	v.log.Debugf("Msg sent %s", clientMsg)
-
-	buf := make([]byte, 32*1024)
-	n, err := remoteConn.Read(buf)
-	if err != nil {
-		return uuid.UUID{}, err
-	}
-	var sReply serverReply
-	err = json.Unmarshal(buf[:n], &sReply)
-	if err != nil {
-		return uuid.UUID{}, err
-	}
-	v.log.Debugf("Received: %v", sReply)
-
-	if sReply.Error != nil {
-		sErr := sReply.Error
-		v.log.WithError(fmt.Errorf(*sErr)).Error("Server closed with error")
-		return uuid.UUID{}, fmt.Errorf(*sErr)
-	}
-	forwardConn := appnet.NewForwardConn(v.log, remoteConn, remotePort, localPort)
-	forwardConn.Serve()
-	return forwardConn.ID, nil
+	return connectConn.ConnectInfo, nil
 }
 
 // Disconnect implements API.
 func (v *Visor) Disconnect(id uuid.UUID) error {
-	forwardConn := appnet.GetForwardConn(id)
-	return forwardConn.Close()
+	connectConn := v.nM.GetConnectConn(id)
+	if connectConn == nil {
+		return ErrNotFound
+	}
+	return connectConn.Close()
 }
 
-// List implements API.
-func (v *Visor) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
-	return appnet.GetAllForwardConns(), nil
+// ListConnected implements API.
+func (v *Visor) ListConnected() ([]appnet.ConnectInfo, error) {
+	cons := v.nM.GetAllConnectConns()
+	var connectInfos []appnet.ConnectInfo
+	for _, con := range cons {
+		connectInfos = append(connectInfos, con.ConnectInfo)
+	}
+	return connectInfos, nil
 }
 
-func isPortAvailable(log *logging.Logger, port int) bool {
-	timeout := time.Second
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf(":%v", port), timeout)
+// Publish implements API.
+func (v *Visor) Publish(localPort, skyPort int, appType appnet.AppType) (appnet.PublishInfo, error) {
+
+	addr := appnet.Addr{
+		Net:    appnet.TypeSkynet,
+		PubKey: v.conf.PK,
+		Port:   routing.Port(skyPort),
+	}
+
+	if err := v.nM.IsPublishPortAvailable(addr, localPort, appType); err != nil {
+		return appnet.PublishInfo{}, err
+	}
+
+	lis, err := appnet.Listen(addr)
 	if err != nil {
-		return true
+		return appnet.PublishInfo{}, err
 	}
-	if conn != nil {
-		defer closeConn(log, conn)
-		return false
+
+	publishLis, err := appnet.NewPublishListener(v.log, v.nM, lis, localPort, addr, appType)
+	if err != nil {
+		return appnet.PublishInfo{}, err
 	}
-	return true
+
+	err = publishLis.Listen()
+	if err != nil {
+		return appnet.PublishInfo{}, err
+	}
+
+	return publishLis.PublishInfo, nil
 }
 
-func isPortRegistered(port int, v *Visor) bool {
-	ports, err := v.ListHTTPPorts()
-	if err != nil {
-		return false
+// Depublish implements API.
+func (v *Visor) Depublish(id uuid.UUID) error {
+	publishConn := v.nM.GetPublishListener(id)
+	if publishConn == nil {
+		return ErrNotFound
 	}
-	for _, p := range ports {
-		if p == port {
-			return true
-		}
+	return publishConn.Close()
+}
+
+// ListPublished implements API.
+func (v *Visor) ListPublished() ([]appnet.PublishInfo, error) {
+	liss := v.nM.GetAllPublishListeners()
+	var publishInfos []appnet.PublishInfo
+	for _, lis := range liss {
+		publishInfos = append(publishInfos, lis.PublishInfo)
 	}
-	return false
+	return publishInfos, nil
 }
