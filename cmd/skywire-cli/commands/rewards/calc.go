@@ -21,7 +21,7 @@ const yearlyTotalRewards int = 408000
 var (
 	yearlyTotal           int
 	hwSurveyPath          string
-	tpsnSurveyPath        string
+	dmsghttpConfig        string
 	wdate                 = time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 	wDate                 time.Time
 	utfile                string
@@ -33,6 +33,7 @@ var (
 	pubkey                string
 	logLvl                string
 	log                   *logging.Logger
+	svcConfig								string
 )
 
 type nodeinfo struct {
@@ -45,7 +46,7 @@ type nodeinfo struct {
 	Share      float64 `json:"reward_share"`
 	Reward     float64 `json:"reward_amount"`
 	MacAddr    string
-	TPSN       string
+	SvcConf       bool
 }
 
 type counting struct {
@@ -71,7 +72,8 @@ func init() {
 	RootCmd.Flags().IntVarP(&yearlyTotal, "year", "y", yearlyTotalRewards, "yearly total rewards")
 	RootCmd.Flags().StringVarP(&utfile, "utfile", "u", "ut.txt", "uptime tracker data file")
 	RootCmd.Flags().StringVarP(&hwSurveyPath, "lpath", "p", "log_collecting", "path to the surveys")
-	RootCmd.Flags().StringVarP(&tpsnSurveyPath, "tpath", "t", "tp_setup", "path to the transport setup-node surveys")
+	RootCmd.Flags().StringVarP(&svcConfig, "svcconf", "f", "/opt/skywire/services-config.json", "path to the services-config.json")
+	RootCmd.Flags().StringVarP(&dmsghttpConfig, "dmsghttpconf", "g", "/opt/skywire/dmsghttp-config.json", "path to the dmsghttp-config.json")
 	RootCmd.Flags().BoolVarP(&h0, "h0", "0", false, "hide statistical data")
 	RootCmd.Flags().BoolVarP(&h1, "h1", "1", false, "hide survey csv data")
 	RootCmd.Flags().BoolVarP(&h2, "h2", "2", false, "hide reward csv data")
@@ -105,14 +107,16 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 		if os.IsNotExist(err) {
 			log.Fatal("the path to the surveys does not exist\n", err, "\nfetch the surveys with:\n$ skywire-cli log")
 		}
-		_, err = os.Stat(tpsnSurveyPath)
-		if os.IsNotExist(err) {
-			log.Fatal("the path to the surveys does not exist\n", err, "\nfetch the surveys with:\n$ skywire-cli log")
-		}
+//		_, err = os.Stat(tpsnSurveyPath)
+//		if os.IsNotExist(err) {
+//			log.Fatal("the path to the surveys does not exist\n", err, "\nfetch the surveys with:\n$ skywire-cli log")
+//		}
 		_, err = os.Stat(utfile)
 		if os.IsNotExist(err) {
 			log.Fatal("uptime tracker data file not found\n", err, "\nfetch the uptime tracker data with:\n$ skywire-cli ut > ut.txt")
 		}
+//		tpsn, tpsnErr = script.File(svcConfig).JQ(`.`).String() //nolint
+
 
 		archMap := make(map[string]struct{})
 		for _, disallowedarch := range strings.Split(disallowArchitectures, ",") {
@@ -142,8 +146,6 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 				continue
 			}
 			var (
-				tpsn    string
-				tpsnErr error
 				ip      string
 				sky     string
 				arch    string
@@ -153,7 +155,7 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 				macs    []string
 				macs1   []string
 			)
-			tpsn, tpsnErr = script.File(fmt.Sprintf("%s/%s/tp.json", tpsnSurveyPath, pk)).JQ(`.`).String() //nolint
+//			tpsn, tpsnErr = script.File(fmt.Sprintf("%s/%s/tp.json", tpsnSurveyPath, pk)).JQ(`.`).String() //nolint
 			ip, _ = script.File(nodeInfo).JQ(`.ip_address`).Replace(" ", "").Replace(`"`, "").String()     //nolint
 			ip = strings.TrimRight(ip, "\n")
 			if strings.Count(ip, ".") != 3 {
@@ -188,10 +190,10 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 				Interfaces: ifc,
 				MacAddr:    macs[0],
 				UUID:       uu,
-				TPSN:       tpsn,
+//				TPSN:       tpsn,
 			}
 			//enforce all requirements for rewards
-			if _, disallowed := archMap[arch]; !disallowed && ip != "" && strings.Count(ip, ".") == 3 && sky != "" && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" && tpsnErr == nil {
+			if _, disallowed := archMap[arch]; !disallowed && ip != "" && strings.Count(ip, ".") == 3 && sky != "" && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" {
 				nodesInfos = append(nodesInfos, ni)
 			} else {
 				if grr {
