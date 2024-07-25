@@ -15,6 +15,15 @@ import (
     "github.com/skycoin/skywire-utilities/pkg/cipher"
 )
 
+var (
+  misconfigured bool
+  nodeInfo []byte
+  sConf []byte
+  dConf []byte
+  sConfig string
+  dConfig string
+)
+
 func init() {
     RootCmd.AddCommand(
         testCmd,
@@ -23,8 +32,8 @@ func init() {
     testCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "info", "[ debug | warn | error | fatal | panic | trace ] \u001b[0m*")
     testCmd.Flags().StringVarP(&pubkey, "pk", "k", pubkey, "verify services in survey for pubkey")
     testCmd.Flags().StringVarP(&hwSurveyPath, "lpath", "p", "log_collecting", "path to the surveys")
-    testCmd.Flags().StringVarP(&svcConfig, "svcconf", "f", "/opt/skywire/services-config.json", "path to the services-config.json")
-    testCmd.Flags().StringVarP(&dmsghttpConfig, "dmsghttpconf", "g", "/opt/skywire/dmsghttp-config.json", "path to the dmsghttp-config.json")
+    testCmd.Flags().StringVarP(&sConfig, "svcconf", "f", "/opt/skywire/services-config.json", "path to the services-config.json")
+    testCmd.Flags().StringVarP(&dConfig, "dmsghttpconf", "g", "/opt/skywire/dmsghttp-config.json", "path to the dmsghttp-config.json")
 }
 
 var testCmd = &cobra.Command{
@@ -47,43 +56,37 @@ var testCmd = &cobra.Command{
             log.Fatal("invalid public key\n", err)
         }
 
-        checkFileExists(hwSurveyPath)
-        checkFileExists(svcConfig)
-        checkFileExists(dmsghttpConfig)
+        mustExist(hwSurveyPath)
+        mustExist(fmt.Sprintf("%s/%s/node-info.json", hwSurveyPath, pubkey))
+        mustExist(sConfig)
+        mustExist(dConfig)
 
-        if pubkey == "" {
-            log.Fatal("must specify public key\n")
-        }
-
-        nodeInfo := fmt.Sprintf("%s/%s/node-info.json", hwSurveyPath, pubkey)
-        checkFileExists(nodeInfo)
-
-        nodeInfoData, err := script.File(nodeInfo).JQ(`.services`).Bytes()
+        //stun_servers does not currently match between conf.skywire.skycoin.com & https://github.com/skycoin/skywire/blob/develop/services-config.json ; omit checking them until next version
+        nodeInfo, err = script.File(fmt.Sprintf("%s/%s/node-info.json", hwSurveyPath, pubkey)).JQ(`.services | del(.stun_servers)`).Bytes()
         if err != nil {
-            log.Fatal("error on script.File(", nodeInfo, ").JQ(`.services`):\n", err)
+            log.Fatal("error parsing json with jq:\n", err)
         }
 
-        svcConfigData, err := script.File(svcConfig).JQ(`.prod`).Bytes()
+        sConf, err := script.File(sConfig).JQ(`.prod  | del(.stun_servers)`).Bytes()
         if err != nil {
-            log.Fatal("error on script.File(", svcConfig, ").JQ(`.prod`):\n", err)
+          log.Fatal("error parsing json with jq:\n", err)
         }
 
-        dmsghttpConfigData, err := script.File(dmsghttpConfig).JQ(`.prod`).Bytes()
-        if err != nil {
-            log.Fatal("error on script.File(", dmsghttpConfig, ").JQ(`.prod`):\n", err)
-        }
+//        dConf, err := script.File(dConfig).JQ(`.prod`).Bytes()
+//        if err != nil {
+//            log.Fatal("error parsing json with jq:\n", err)
+//        }
 
         // Pretty print the original files for reference
-        fmt.Printf("%s\n", pretty.Color(pretty.Pretty(nodeInfoData), nil))
-        fmt.Printf("%s\n", pretty.Color(pretty.Pretty(svcConfigData), nil))
-        fmt.Printf("%s\n", pretty.Color(pretty.Pretty(dmsghttpConfigData), nil))
+//        fmt.Printf("%s\n", pretty.Color(pretty.Pretty(nodeInfo), nil))
+//        fmt.Printf("%s\n", pretty.Color(pretty.Pretty(sConf), nil))
+//        fmt.Printf("%s\n", pretty.Color(pretty.Pretty(dConf), nil))
 
-        // Compare the services from node-info.json with services-config.json
-        compareAndPrintDiffs(nodeInfoData, svcConfigData)
+        compareAndPrintDiffs(nodeInfo, sConf)
     },
 }
 
-func checkFileExists(path string) {
+func mustExist(path string) {
     _, err := os.Stat(path)
     if os.IsNotExist(err) {
         log.Fatal("the path to the file does not exist: ", path, "\n", err)
@@ -107,25 +110,45 @@ func compareAndPrintDiffs(nodeInfoData, svcConfigData []byte) {
     compareMaps(nodeInfoServices, svcConfigServices)
 }
 
-func compareMaps(map1, map2 map[string]interface{}) {
-    for key, value1 := range map1 {
-        if value2, ok := map2[key]; ok {
-            if !reflect.DeepEqual(value1, value2) {
+func compareMaps(nodeInfoServices, svcConfigServices map[string]interface{}) {
+    for key, value1 := range nodeInfoServices {
+        if value2, ok := svcConfigServices[key]; ok {
+            if reflect.TypeOf(value1).Kind() == reflect.Slice && reflect.TypeOf(value2).Kind() == reflect.Slice {
+                slice1 := value1.([]interface{})
+                slice2 := value2.([]interface{})
+                if !sliceContains(slice1, slice2) {
+                    printDifference(key, value1, value2)
+                    misconfigured = true
+                }
+            } else if !reflect.DeepEqual(value1, value2) {
                 printDifference(key, value1, value2)
-            } else {
-                printSame(key, value1)
+                misconfigured = true
             }
-        } else {
-            printMissingInSecondMap(key, value1)
         }
     }
-
-    for key, value2 := range map2 {
-        if _, ok := map1[key]; !ok {
-            printMissingInFirstMap(key, value2)
-        }
+    if !misconfigured {
+        log.Info("services are configured correctly")
+        fmt.Printf("%s\n", pretty.Color(pretty.Pretty(nodeInfo), nil))
+        return
     }
 }
+
+func sliceContains(slice1, slice2 []interface{}) bool {
+    for _, v2 := range slice2 {
+        found := false
+        for _, v1 := range slice1 {
+            if reflect.DeepEqual(v1, v2) {
+                found = true
+                break
+            }
+        }
+        if !found {
+            return false
+        }
+    }
+    return true
+}
+
 
 func toJSON(value interface{}) string {
     jsonData, err := json.MarshalIndent(value, "", "  ")
@@ -138,18 +161,4 @@ func toJSON(value interface{}) string {
 func printDifference(key string, value1, value2 interface{}) {
     red := color.New(color.FgRed).SprintFunc()
     fmt.Printf("%s: %s != %s\n", key, red(toJSON(value1)), red(toJSON(value2)))
-}
-
-func printSame(key string, value interface{}) {
-    fmt.Printf("%s: %s\n", key, toJSON(value))
-}
-
-func printMissingInSecondMap(key string, value1 interface{}) {
-    red := color.New(color.FgRed).SprintFunc()
-    fmt.Printf("%s: %s (missing in second map)\n", key, red(toJSON(value1)))
-}
-
-func printMissingInFirstMap(key string, value2 interface{}) {
-    red := color.New(color.FgRed).SprintFunc()
-    fmt.Printf("%s: %s (missing in first map)\n", key, red(toJSON(value2)))
 }
