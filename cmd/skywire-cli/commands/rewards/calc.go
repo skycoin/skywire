@@ -33,7 +33,7 @@ var (
 	pubkey                string
 	logLvl                string
 	log                   *logging.Logger
-	svcConfig								string
+	svcConfig             string
 )
 
 type nodeinfo struct {
@@ -46,7 +46,7 @@ type nodeinfo struct {
 	Share      float64 `json:"reward_share"`
 	Reward     float64 `json:"reward_amount"`
 	MacAddr    string
-	SvcConf       bool
+	SvcConf    bool
 }
 
 type counting struct {
@@ -107,16 +107,15 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 		if os.IsNotExist(err) {
 			log.Fatal("the path to the surveys does not exist\n", err, "\nfetch the surveys with:\n$ skywire-cli log")
 		}
-//		_, err = os.Stat(tpsnSurveyPath)
-//		if os.IsNotExist(err) {
-//			log.Fatal("the path to the surveys does not exist\n", err, "\nfetch the surveys with:\n$ skywire-cli log")
-//		}
+		//		_, err = os.Stat(tpsnSurveyPath)
+		//		if os.IsNotExist(err) {
+		//			log.Fatal("the path to the surveys does not exist\n", err, "\nfetch the surveys with:\n$ skywire-cli log")
+		//		}
 		_, err = os.Stat(utfile)
 		if os.IsNotExist(err) {
 			log.Fatal("uptime tracker data file not found\n", err, "\nfetch the uptime tracker data with:\n$ skywire-cli ut > ut.txt")
 		}
-//		tpsn, tpsnErr = script.File(svcConfig).JQ(`.`).String() //nolint
-
+		//		tpsn, tpsnErr = script.File(svcConfig).JQ(`.`).String() //nolint
 
 		archMap := make(map[string]struct{})
 		for _, disallowedarch := range strings.Split(disallowArchitectures, ",") {
@@ -146,17 +145,17 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 				continue
 			}
 			var (
-				ip      string
-				sky     string
-				arch    string
-				uu      string
-				ifc     string
-				ifc1    string
-				macs    []string
-				macs1   []string
+				ip    string
+				sky   string
+				arch  string
+				uu    string
+				ifc   string
+				ifc1  string
+				macs  []string
+				macs1 []string
 			)
-//			tpsn, tpsnErr = script.File(fmt.Sprintf("%s/%s/tp.json", tpsnSurveyPath, pk)).JQ(`.`).String() //nolint
-			ip, _ = script.File(nodeInfo).JQ(`.ip_address`).Replace(" ", "").Replace(`"`, "").String()     //nolint
+			//			tpsn, tpsnErr = script.File(fmt.Sprintf("%s/%s/tp.json", tpsnSurveyPath, pk)).JQ(`.`).String() //nolint
+			ip, _ = script.File(nodeInfo).JQ(`.ip_address`).Replace(" ", "").Replace(`"`, "").String() //nolint
 			ip = strings.TrimRight(ip, "\n")
 			if strings.Count(ip, ".") != 3 {
 				ip, _ = script.File(nodeInfo).JQ(`."ip.skycoin.com".ip_address`).Replace(" ", "").Replace(`"`, "").String() //nolint
@@ -190,7 +189,7 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 				Interfaces: ifc,
 				MacAddr:    macs[0],
 				UUID:       uu,
-//				TPSN:       tpsn,
+				//				TPSN:       tpsn,
 			}
 			//enforce all requirements for rewards
 			if _, disallowed := archMap[arch]; !disallowed && ip != "" && strings.Count(ip, ".") == 3 && sky != "" && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" {
