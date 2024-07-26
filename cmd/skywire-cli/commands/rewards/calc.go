@@ -37,10 +37,9 @@ var (
 	pubkey                string
 	logLvl                string
 	log                   *logging.Logger
-	sConf                 []byte
-	dConf                 []byte
 	sConfig               string
 	dConfig               string
+	nodeInfoSvc           []byte
 )
 
 type nodeinfo struct {
@@ -152,8 +151,8 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 		var nodesInfos []nodeinfo
 		var grrInfos []nodeinfo
 		for _, pk := range res {
-			nodeInfoDotJson := fmt.Sprintf("%s/%s/node-info.json", hwSurveyPath, pk)
-			_, err = os.Stat(nodeInfoDotJson)
+			nodeInfoDotJSON := fmt.Sprintf("%s/%s/node-info.json", hwSurveyPath, pk)
+			_, err = os.Stat(nodeInfoDotJSON)
 			if os.IsNotExist(err) {
 				log.Debug(err.Error())
 				continue
@@ -171,13 +170,13 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 			)
 
 			//stun_servers does not currently match between conf.skywire.skycoin.com & https://github.com/skycoin/skywire/blob/develop/services-config.json ; omit checking them until next version
-			nodeInfoSvc, err = script.File(nodeInfoDotJson).JQ(`.services | del(.stun_servers)`).Bytes()
+			nodeInfoSvc, err = script.File(nodeInfoDotJSON).JQ(`.services | del(.stun_servers)`).Bytes()
 			if err != nil {
 				log.Debug(err.Error())
 				continue
 			}
 
-			confType, _ := script.File(nodeInfoDotJson).JQ(`.services.dmsg_discovery`).Replace("\"", "").String() //nolint
+			confType, _ := script.File(nodeInfoDotJSON).JQ(`.services.dmsg_discovery`).Replace("\"", "").String() //nolint
 			if err != nil {
 				log.Debug(err.Error())
 				continue
@@ -189,24 +188,24 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 				svcconf = compareAndPrintDiffs(nodeInfoSvc, dConf, true)
 			}
 
-			ip, _ = script.File(nodeInfoDotJson).JQ(`.ip_address`).Replace(" ", "").Replace(`"`, "").String() //nolint
+			ip, _ = script.File(nodeInfoDotJSON).JQ(`.ip_address`).Replace(" ", "").Replace(`"`, "").String() //nolint
 			ip = strings.TrimRight(ip, "\n")
 			if strings.Count(ip, ".") != 3 {
-				ip, _ = script.File(nodeInfoDotJson).JQ(`."ip.skycoin.com".ip_address`).Replace(" ", "").Replace(`"`, "").String() //nolint
+				ip, _ = script.File(nodeInfoDotJSON).JQ(`."ip.skycoin.com".ip_address`).Replace(" ", "").Replace(`"`, "").String() //nolint
 				ip = strings.TrimRight(ip, "\n")
 			}
-			sky, _ = script.File(nodeInfoDotJson).JQ(".skycoin_address").Replace(" ", "").Replace(`"`, "").String() //nolint
+			sky, _ = script.File(nodeInfoDotJSON).JQ(".skycoin_address").Replace(" ", "").Replace(`"`, "").String() //nolint
 			sky = strings.TrimRight(sky, "\n")
-			arch, _ = script.File(nodeInfoDotJson).JQ(".go_arch").Replace(" ", "").Replace(`"`, "").String() //nolint
+			arch, _ = script.File(nodeInfoDotJSON).JQ(".go_arch").Replace(" ", "").Replace(`"`, "").String() //nolint
 			arch = strings.TrimRight(arch, "\n")
-			uu, _ = script.File(nodeInfoDotJson).JQ(".uuid").Replace(" ", "").Replace(`"`, "").String() //nolint
+			uu, _ = script.File(nodeInfoDotJSON).JQ(".uuid").Replace(" ", "").Replace(`"`, "").String() //nolint
 			uu = strings.TrimRight(uu, "\n")
-			ifc, _ = script.File(nodeInfoDotJson).JQ(`[.ip_addr[]? | select(.ifname != "lo") | {address: .address, ifname: .ifname}]`).Replace(" ", "").Replace(`"`, "").String() //nolint
+			ifc, _ = script.File(nodeInfoDotJSON).JQ(`[.ip_addr[]? | select(.ifname != "lo") | {address: .address, ifname: .ifname}]`).Replace(" ", "").Replace(`"`, "").String() //nolint
 			ifc = strings.TrimRight(ifc, "\n")
-			ifc1, _ = script.File(nodeInfoDotJson).JQ(`[.zcalusic_sysinfo.network[] | {address: .macaddress, ifname: .name}]`).Replace(" ", "").Replace(`"`, "").String() //nolint
+			ifc1, _ = script.File(nodeInfoDotJSON).JQ(`[.zcalusic_sysinfo.network[] | {address: .macaddress, ifname: .name}]`).Replace(" ", "").Replace(`"`, "").String() //nolint
 			ifc1 = strings.TrimRight(ifc1, "\n")
-			macs, _ = script.File(nodeInfoDotJson).JQ(`.ip_addr[]? | select(.ifname != "lo") | .address`).Replace(" ", "").Replace(`"`, "").Slice() //nolint
-			macs1, _ = script.File(nodeInfoDotJson).JQ(`.zcalusic_sysinfo.network[] | .macaddress`).Replace(" ", "").Replace(`"`, "").Slice()       //nolint
+			macs, _ = script.File(nodeInfoDotJSON).JQ(`.ip_addr[]? | select(.ifname != "lo") | .address`).Replace(" ", "").Replace(`"`, "").Slice() //nolint
+			macs1, _ = script.File(nodeInfoDotJSON).JQ(`.zcalusic_sysinfo.network[] | .macaddress`).Replace(" ", "").Replace(`"`, "").Slice()       //nolint
 			if ifc == "[]" && ifc1 != "[]" {
 				ifc = ifc1
 			}
@@ -392,11 +391,6 @@ func mustExist(path string) {
 	}
 }
 
-var (
-	misconfigured bool
-	nodeInfoSvc   []byte
-)
-
 func init() {
 	RootCmd.AddCommand(
 		testCmd,
@@ -458,21 +452,19 @@ var testCmd = &cobra.Command{
 		if strings.HasPrefix(confType, "http://") {
 			if !compareAndPrintDiffs(nodeInfoSvc, sConf, false) {
 				log.Fatal("services are not configured correctly for http")
-			} else {
-				log.Info("services are configured correctly for http")
-				fmt.Printf("%s\n", pretty.Color(pretty.Pretty(nodeInfoSvc), nil))
-				return
 			}
+			log.Info("services are configured correctly for http")
+			fmt.Printf("%s\n", pretty.Color(pretty.Pretty(nodeInfoSvc), nil))
+			return
 		}
 
 		if strings.HasPrefix(confType, "dmsg://") {
 			if !compareAndPrintDiffs(nodeInfoSvc, dConf, false) {
 				log.Fatal("services are not configured correctly for dmsghttp")
-			} else {
-				log.Info("services are configured correctly for dmsghttp")
-				fmt.Printf("%s\n", pretty.Color(pretty.Pretty(nodeInfoSvc), nil))
-				return
 			}
+			log.Info("services are configured correctly for dmsghttp")
+			fmt.Printf("%s\n", pretty.Color(pretty.Pretty(nodeInfoSvc), nil))
+			return
 		}
 
 		if !strings.HasPrefix(confType, "http://") && !strings.HasPrefix(confType, "dmsg://") {
