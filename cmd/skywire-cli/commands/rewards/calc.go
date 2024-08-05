@@ -2,16 +2,21 @@
 package clirewards
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/bitfield/script"
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"github.com/tidwall/pretty"
 
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	tgbot "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards/tgbot"
 )
@@ -21,7 +26,6 @@ const yearlyTotalRewards int = 408000
 var (
 	yearlyTotal           int
 	hwSurveyPath          string
-	tpsnSurveyPath        string
 	wdate                 = time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 	wDate                 time.Time
 	utfile                string
@@ -33,6 +37,9 @@ var (
 	pubkey                string
 	logLvl                string
 	log                   *logging.Logger
+	sConfig               string
+	dConfig               string
+	nodeInfoSvc           []byte
 )
 
 type nodeinfo struct {
@@ -45,7 +52,7 @@ type nodeinfo struct {
 	Share      float64 `json:"reward_share"`
 	Reward     float64 `json:"reward_amount"`
 	MacAddr    string
-	TPSN       string
+	SvcConf    bool
 }
 
 type counting struct {
@@ -71,7 +78,8 @@ func init() {
 	RootCmd.Flags().IntVarP(&yearlyTotal, "year", "y", yearlyTotalRewards, "yearly total rewards")
 	RootCmd.Flags().StringVarP(&utfile, "utfile", "u", "ut.txt", "uptime tracker data file")
 	RootCmd.Flags().StringVarP(&hwSurveyPath, "lpath", "p", "log_collecting", "path to the surveys")
-	RootCmd.Flags().StringVarP(&tpsnSurveyPath, "tpath", "t", "tp_setup", "path to the transport setup-node surveys")
+	RootCmd.Flags().StringVarP(&sConfig, "svcconf", "f", "/opt/skywire/services-config.json", "path to the services-config.json")
+	RootCmd.Flags().StringVarP(&dConfig, "dmsghttpconf", "g", "/opt/skywire/dmsghttp-config.json", "path to the dmsghttp-config.json")
 	RootCmd.Flags().BoolVarP(&h0, "h0", "0", false, "hide statistical data")
 	RootCmd.Flags().BoolVarP(&h1, "h1", "1", false, "hide survey csv data")
 	RootCmd.Flags().BoolVarP(&h2, "h2", "2", false, "hide reward csv data")
@@ -95,6 +103,17 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 				logging.SetLevel(lvl)
 			}
 		}
+		mustExist(sConfig)
+		mustExist(dConfig)
+
+		sConf, err := script.File(sConfig).JQ(`.prod  | del(.stun_servers)`).Bytes()
+		if err != nil {
+			log.Fatal("error parsing json with jq:\n", err)
+		}
+		dConf, err := script.File(dConfig).JQ(`.prod`).Bytes()
+		if err != nil {
+			log.Fatal("error parsing json with jq:\n", err)
+		}
 
 		wDate, err = time.Parse("2006-01-02", wdate)
 		if err != nil {
@@ -105,10 +124,7 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 		if os.IsNotExist(err) {
 			log.Fatal("the path to the surveys does not exist\n", err, "\nfetch the surveys with:\n$ skywire-cli log")
 		}
-		_, err = os.Stat(tpsnSurveyPath)
-		if os.IsNotExist(err) {
-			log.Fatal("the path to the surveys does not exist\n", err, "\nfetch the surveys with:\n$ skywire-cli log")
-		}
+
 		_, err = os.Stat(utfile)
 		if os.IsNotExist(err) {
 			log.Fatal("uptime tracker data file not found\n", err, "\nfetch the uptime tracker data with:\n$ skywire-cli ut > ut.txt")
@@ -135,15 +151,13 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 		var nodesInfos []nodeinfo
 		var grrInfos []nodeinfo
 		for _, pk := range res {
-			nodeInfo := fmt.Sprintf("%s/%s/node-info.json", hwSurveyPath, pk)
-			_, err = os.Stat(nodeInfo)
+			nodeInfoDotJSON := fmt.Sprintf("%s/%s/node-info.json", hwSurveyPath, pk)
+			_, err = os.Stat(nodeInfoDotJSON)
 			if os.IsNotExist(err) {
 				log.Debug(err.Error())
 				continue
 			}
 			var (
-				tpsn    string
-				tpsnErr error
 				ip      string
 				sky     string
 				arch    string
@@ -152,26 +166,46 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 				ifc1    string
 				macs    []string
 				macs1   []string
+				svcconf bool
 			)
-			tpsn, tpsnErr = script.File(fmt.Sprintf("%s/%s/tp.json", tpsnSurveyPath, pk)).JQ(`.`).String() //nolint
-			ip, _ = script.File(nodeInfo).JQ(`.ip_address`).Replace(" ", "").Replace(`"`, "").String()     //nolint
+
+			//stun_servers does not currently match between conf.skywire.skycoin.com & https://github.com/skycoin/skywire/blob/develop/services-config.json ; omit checking them until next version
+			nodeInfoSvc, err = script.File(nodeInfoDotJSON).JQ(`.services | del(.stun_servers)`).Bytes()
+			if err != nil {
+				log.Debug(err.Error())
+				continue
+			}
+
+			confType, _ := script.File(nodeInfoDotJSON).JQ(`.services.dmsg_discovery`).Replace("\"", "").String() //nolint
+			if err != nil {
+				log.Debug(err.Error())
+				continue
+			}
+			if strings.HasPrefix(confType, "http://") {
+				svcconf = compareAndPrintDiffs(nodeInfoSvc, sConf, true)
+			}
+			if strings.HasPrefix(confType, "dmsg://") {
+				svcconf = compareAndPrintDiffs(nodeInfoSvc, dConf, true)
+			}
+
+			ip, _ = script.File(nodeInfoDotJSON).JQ(`.ip_address`).Replace(" ", "").Replace(`"`, "").String() //nolint
 			ip = strings.TrimRight(ip, "\n")
 			if strings.Count(ip, ".") != 3 {
-				ip, _ = script.File(nodeInfo).JQ(`."ip.skycoin.com".ip_address`).Replace(" ", "").Replace(`"`, "").String() //nolint
+				ip, _ = script.File(nodeInfoDotJSON).JQ(`."ip.skycoin.com".ip_address`).Replace(" ", "").Replace(`"`, "").String() //nolint
 				ip = strings.TrimRight(ip, "\n")
 			}
-			sky, _ = script.File(nodeInfo).JQ(".skycoin_address").Replace(" ", "").Replace(`"`, "").String() //nolint
+			sky, _ = script.File(nodeInfoDotJSON).JQ(".skycoin_address").Replace(" ", "").Replace(`"`, "").String() //nolint
 			sky = strings.TrimRight(sky, "\n")
-			arch, _ = script.File(nodeInfo).JQ(".go_arch").Replace(" ", "").Replace(`"`, "").String() //nolint
+			arch, _ = script.File(nodeInfoDotJSON).JQ(".go_arch").Replace(" ", "").Replace(`"`, "").String() //nolint
 			arch = strings.TrimRight(arch, "\n")
-			uu, _ = script.File(nodeInfo).JQ(".uuid").Replace(" ", "").Replace(`"`, "").String() //nolint
+			uu, _ = script.File(nodeInfoDotJSON).JQ(".uuid").Replace(" ", "").Replace(`"`, "").String() //nolint
 			uu = strings.TrimRight(uu, "\n")
-			ifc, _ = script.File(nodeInfo).JQ(`[.ip_addr[]? | select(.ifname != "lo") | {address: .address, ifname: .ifname}]`).Replace(" ", "").Replace(`"`, "").String() //nolint
+			ifc, _ = script.File(nodeInfoDotJSON).JQ(`[.ip_addr[]? | select(.ifname != "lo") | {address: .address, ifname: .ifname}]`).Replace(" ", "").Replace(`"`, "").String() //nolint
 			ifc = strings.TrimRight(ifc, "\n")
-			ifc1, _ = script.File(nodeInfo).JQ(`[.zcalusic_sysinfo.network[] | {address: .macaddress, ifname: .name}]`).Replace(" ", "").Replace(`"`, "").String() //nolint
+			ifc1, _ = script.File(nodeInfoDotJSON).JQ(`[.zcalusic_sysinfo.network[] | {address: .macaddress, ifname: .name}]`).Replace(" ", "").Replace(`"`, "").String() //nolint
 			ifc1 = strings.TrimRight(ifc1, "\n")
-			macs, _ = script.File(nodeInfo).JQ(`.ip_addr[]? | select(.ifname != "lo") | .address`).Replace(" ", "").Replace(`"`, "").Slice() //nolint
-			macs1, _ = script.File(nodeInfo).JQ(`.zcalusic_sysinfo.network[] | .macaddress`).Replace(" ", "").Replace(`"`, "").Slice()       //nolint
+			macs, _ = script.File(nodeInfoDotJSON).JQ(`.ip_addr[]? | select(.ifname != "lo") | .address`).Replace(" ", "").Replace(`"`, "").Slice() //nolint
+			macs1, _ = script.File(nodeInfoDotJSON).JQ(`.zcalusic_sysinfo.network[] | .macaddress`).Replace(" ", "").Replace(`"`, "").Slice()       //nolint
 			if ifc == "[]" && ifc1 != "[]" {
 				ifc = ifc1
 			}
@@ -188,10 +222,10 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 				Interfaces: ifc,
 				MacAddr:    macs[0],
 				UUID:       uu,
-				TPSN:       tpsn,
+				SvcConf:    svcconf,
 			}
 			//enforce all requirements for rewards
-			if _, disallowed := archMap[arch]; !disallowed && ip != "" && strings.Count(ip, ".") == 3 && sky != "" && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" && tpsnErr == nil {
+			if _, disallowed := archMap[arch]; !disallowed && ip != "" && strings.Count(ip, ".") == 3 && sky != "" && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" {
 				nodesInfos = append(nodesInfos, ni)
 			} else {
 				if grr {
@@ -345,4 +379,169 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 
 		}
 	},
+}
+
+func mustExist(path string) {
+	_, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		log.Fatal("the path to the file does not exist: ", path, "\n", err)
+	}
+	if err != nil {
+		log.Fatal("error on os.Stat(", path, "):\n", err)
+	}
+}
+
+func init() {
+	RootCmd.AddCommand(
+		testCmd,
+	)
+	testCmd.Flags().SortFlags = false
+	testCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "info", "[ debug | warn | error | fatal | panic | trace ] \u001b[0m*")
+	testCmd.Flags().StringVarP(&pubkey, "pk", "k", pubkey, "verify services in survey for pubkey")
+	testCmd.Flags().StringVarP(&hwSurveyPath, "lpath", "p", "log_collecting", "path to the surveys")
+	testCmd.Flags().StringVarP(&sConfig, "svcconf", "f", "/opt/skywire/services-config.json", "path to the services-config.json")
+	testCmd.Flags().StringVarP(&dConfig, "dmsghttpconf", "g", "/opt/skywire/dmsghttp-config.json", "path to the dmsghttp-config.json")
+}
+
+var testCmd = &cobra.Command{
+	Use:   "svc",
+	Short: "verify services in survey",
+	Run: func(cmd *cobra.Command, args []string) {
+		var err error
+		if log == nil {
+			log = logging.MustGetLogger("rewards")
+		}
+		if logLvl != "" {
+			if lvl, err := logging.LevelFromString(logLvl); err == nil {
+				logging.SetLevel(lvl)
+			}
+		}
+
+		var pk1 cipher.PubKey
+		err = pk1.Set(pubkey)
+		if err != nil {
+			log.Fatal("invalid public key\n", err)
+		}
+
+		mustExist(hwSurveyPath)
+		mustExist(fmt.Sprintf("%s/%s/node-info.json", hwSurveyPath, pubkey))
+		mustExist(sConfig)
+		mustExist(dConfig)
+
+		//stun_servers does not currently match between conf.skywire.skycoin.com & https://github.com/skycoin/skywire/blob/develop/services-config.json ; omit checking them until next version
+		nodeInfoSvc, err = script.File(fmt.Sprintf("%s/%s/node-info.json", hwSurveyPath, pubkey)).JQ(`.services | del(.stun_servers)`).Bytes()
+		if err != nil {
+			log.Fatal("error parsing json with jq:\n", err)
+		}
+
+		sConf, err := script.File(sConfig).JQ(`.prod  | del(.stun_servers)`).Bytes()
+		if err != nil {
+			log.Fatal("error parsing json with jq:\n", err)
+		}
+
+		dConf, err := script.File(dConfig).JQ(`.prod`).Bytes()
+		if err != nil {
+			log.Fatal("error parsing json with jq:\n", err)
+		}
+
+		confType, err := script.File(fmt.Sprintf("%s/%s/node-info.json", hwSurveyPath, pubkey)).JQ(`.services.dmsg_discovery`).Replace("\"", "").String()
+		if err != nil {
+			log.Fatal("could not determine config type ; error parsing json with jq:\n", err)
+		}
+
+		if strings.HasPrefix(confType, "http://") {
+			if !compareAndPrintDiffs(nodeInfoSvc, sConf, false) {
+				log.Fatal("services are not configured correctly for http")
+			}
+			log.Info("services are configured correctly for http")
+			fmt.Printf("%s\n", pretty.Color(pretty.Pretty(nodeInfoSvc), nil))
+			return
+		}
+
+		if strings.HasPrefix(confType, "dmsg://") {
+			if !compareAndPrintDiffs(nodeInfoSvc, dConf, false) {
+				log.Fatal("services are not configured correctly for dmsghttp")
+			}
+			log.Info("services are configured correctly for dmsghttp")
+			fmt.Printf("%s\n", pretty.Color(pretty.Pretty(nodeInfoSvc), nil))
+			return
+		}
+
+		if !strings.HasPrefix(confType, "http://") && !strings.HasPrefix(confType, "dmsg://") {
+			fmt.Printf("%s\n", pretty.Color(pretty.Pretty(nodeInfoSvc), nil))
+			log.Fatal("could not determine config type from dmsg_discovery value ; invalid service configuration")
+		}
+	},
+}
+
+func compareAndPrintDiffs(nodeInfoData, configData []byte, noLogging bool) bool {
+	var nodeInfoServices map[string]interface{}
+	var configServices map[string]interface{}
+
+	if err := json.Unmarshal(nodeInfoData, &nodeInfoServices); err != nil {
+		if !noLogging {
+			log.Fatal("error unmarshalling nodeInfoData: ", err)
+		}
+		return false
+	}
+	if err := json.Unmarshal(configData, &configServices); err != nil {
+		if !noLogging {
+			log.Fatal("error unmarshalling configData: ", err)
+		}
+		return false
+	}
+
+	return compareMaps(nodeInfoServices, configServices, noLogging)
+}
+
+func compareMaps(nodeInfoServices, configServices map[string]interface{}, noLogging bool) bool {
+	for key, value1 := range nodeInfoServices {
+		if value2, ok := configServices[key]; ok {
+			if reflect.TypeOf(value1).Kind() == reflect.Slice && reflect.TypeOf(value2).Kind() == reflect.Slice {
+				slice1 := value1.([]interface{})
+				slice2 := value2.([]interface{})
+				if !sliceContains(slice1, slice2) {
+					if !noLogging {
+						printDifference(key, value1, value2)
+					}
+					return false
+				}
+			} else if !reflect.DeepEqual(value1, value2) {
+				if !noLogging {
+					printDifference(key, value1, value2)
+				}
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func sliceContains(slice1, slice2 []interface{}) bool {
+	for _, v2 := range slice2 {
+		found := false
+		for _, v1 := range slice1 {
+			if reflect.DeepEqual(v1, v2) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+func toJSON(value interface{}) string {
+	jsonData, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return fmt.Sprintf("%v", value)
+	}
+	return string(jsonData)
+}
+
+func printDifference(key string, value1, value2 interface{}) {
+	red := color.New(color.FgRed).SprintFunc()
+	fmt.Printf("%s: %s != %s\n", key, red(toJSON(value1)), red(toJSON(value2)))
 }
