@@ -90,7 +90,6 @@ func (env *Env) newServer(ctx context.Context, updateInterval time.Duration) (*d
 	conf := dmsg.ServerConfig{
 		MaxSessions:    maxSessions,
 		UpdateInterval: updateInterval,
-		LimitIP:        200,
 	}
 	srv := dmsg.NewServer(pk, sk, env.d, &conf, nil)
 	env.s[pk] = srv
