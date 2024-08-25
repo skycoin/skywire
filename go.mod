@@ -34,7 +34,7 @@ require (
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/skycoin-service-discovery v0.0.0-20240627171358-7f59a951fa29
 	github.com/skycoin/skywire-services v0.0.0-20240627171623-87edf49d9025
-	github.com/skycoin/skywire-utilities v1.3.18-0.20240624172427-aeaf6f14fbdc
+	github.com/skycoin/skywire-utilities v1.3.18-0.20240825131426-201fde7a3d30
 	github.com/skycoin/systray v1.10.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.7.0

@@ -694,6 +694,8 @@ github.com/skycoin/skywire-services v0.0.0-20240627171623-87edf49d9025 h1:48nukM
 github.com/skycoin/skywire-services v0.0.0-20240627171623-87edf49d9025/go.mod h1:007npHSDcpTeQiG7e3h36W5IMl2+YT8N6nUB0pwtSYs=
 github.com/skycoin/skywire-utilities v1.3.18-0.20240624172427-aeaf6f14fbdc h1:VCsz6iF8Eah3D+wHuSWT+Veb8C4XsYMQx+e0WtS6AAY=
 github.com/skycoin/skywire-utilities v1.3.18-0.20240624172427-aeaf6f14fbdc/go.mod h1:yFKWpL1bDRPKU3uK+cTF4PnYUMe+eyIj5N2bk4sF5Cw=
+github.com/skycoin/skywire-utilities v1.3.18-0.20240825131426-201fde7a3d30 h1:f9/vhzEY05L1wnBC1+5VY32AgkQFVpZWB/GxyCQk4lU=
+github.com/skycoin/skywire-utilities v1.3.18-0.20240825131426-201fde7a3d30/go.mod h1:yFKWpL1bDRPKU3uK+cTF4PnYUMe+eyIj5N2bk4sF5Cw=
 github.com/skycoin/systray v1.10.0 h1:fQZJHMylpVvfmOOTLvUssfyHVDoC8Idx6Ba2BlLEuGg=
 github.com/skycoin/systray v1.10.0/go.mod h1:/i17Eni5GxFiboIZceeamY5LktDSFFRCvd3fBMerQ+4=
 github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8 h1:TG/diQgUe0pntT/2D9tmUCz4VNwm9MfrtPr0SU2qSX8=

@@ -576,7 +576,7 @@ github.com/skycoin/skywire-services/pkg/transport-discovery/store
 github.com/skycoin/skywire-services/pkg/transport-setup/api
 github.com/skycoin/skywire-services/pkg/transport-setup/config
 github.com/skycoin/skywire-services/pkg/vpn-monitor/api
-# github.com/skycoin/skywire-utilities v1.3.18-0.20240624172427-aeaf6f14fbdc
+# github.com/skycoin/skywire-utilities v1.3.18-0.20240825131426-201fde7a3d30
 ## explicit; go 1.21
 github.com/skycoin/skywire-utilities/pkg/buildinfo
 github.com/skycoin/skywire-utilities/pkg/cipher
