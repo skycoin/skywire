@@ -5,7 +5,7 @@ package skyenv
 const (
 	ServiceConfAddr     = "http://conf.skywire.skycoin.com"
 	TpDiscAddr          = "http://tpd.skywire.skycoin.com"
-	DmsgDiscAddr        = "http://dmsgd.skywire.dev"
+	DmsgDiscAddr        = "http://dmsgd.skywire.skycoin.com"
 	ServiceDiscAddr     = "http://sd.skycoin.com"
 	RouteFinderAddr     = "http://rf.skywire.skycoin.com"
 	UptimeTrackerAddr   = "http://ut.skywire.skycoin.com"
@@ -21,7 +21,7 @@ const (
 const (
 	TestServiceConfAddr     = "http://conf.skywire.dev"
 	TestTpDiscAddr          = "http://tpd.skywire.dev"
-	TestDmsgDiscAddr        = "http://dmsgd.skywire.skycoin.com"
+	TestDmsgDiscAddr        = "http://dmsgd.skywire.dev"
 	TestServiceDiscAddr     = "http://sd.skywire.dev"
 	TestRouteFinderAddr     = "http://rf.skywire.dev"
 	TestUptimeTrackerAddr   = "http://ut.skywire.dev"
@@ -31,7 +31,6 @@ const (
 	TestNetworkMonitorPKs   = "0380ea88f0ad0aa4d93c330ba5f97aabca1d892190b94db69eee140b549d2817dd,0283bddb4357e2c4de0d470032cd809966aec65ce57e1188143ab32c7b589b38b6,02f4e33b75307267229b0c3d679d08dd23374333f558288cfcb114311a52199358,02090f03cb26c71779b8327067e2e37314d2db3e31dfe4f8f3cdd8e088a98eb7ec,03ff8dc39ed8d84be17a15b6a243edbcef1a5fd425209243fd7a9a28f0d23ddbea,02b9aa8276907db6f6ea8626d5d26aa6e119dd89d88bb222ce868376c5367d7b4c"
 	TestSurveyWhitelistPKs  = "0327e2cf1d2e516ecbfdbd616a87489cc92a73af97335d5c8c29eafb5d8882264a,03abbb3eff140cf3dce468b3fa5a28c80fa02c6703d7b952be6faaf2050990ebf4,02b5ee5333aa6b7f5fc623b7d5f35f505cb7f974e98a70751cf41962f84c8c4637,03714c8bdaee0fb48f47babbc47c33e1880752b6620317c9d56b30f3b0ff58a9c3,020d35bbaf0a5abc8ec0ba33cde219fde734c63e7202098e1f9a6cf9daaeee55a9,027f7dec979482f418f01dfabddbd750ad036c579a16422125dd9a313eaa59c8e1,031d4cf1b7ab4c789b56c769f2888e4a61c778dfa5fe7e5cd0217fc41660b2eb65"
 	TestRewardSystemPKs     = "036a70e6956061778e1883e928c1236189db14dfd446df23d83e45c321b330c91f"
-
 )
 
 // GetStunServers gives back default Stun Servers
