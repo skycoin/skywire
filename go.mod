@@ -2,7 +2,7 @@ module github.com/skycoin/skywire
 
 go 1.21
 
-toolchain go1.21.5
+toolchain go1.21.12
 
 require (
 	github.com/AudriusButkevicius/pfilter v0.0.11
