@@ -28,13 +28,11 @@ import (
 
 var (
 	sf             cmdutil.ServiceFlags
-	limitIP        int
 	authPassphrase string
 )
 
 func init() {
 	sf.Init(RootCmd, "dmsg_srv", dmsgserver.DefaultConfigPath)
-	RootCmd.Flags().IntVar(&limitIP, "limit-ip", 15, "set limitation of IPs want connect to specific dmsg-server, default value is 15")
 	RootCmd.Flags().StringVar(&authPassphrase, "auth", "", "auth passphrase as simple auth for official dmsg servers registration")
 }
 
@@ -94,7 +92,6 @@ var RootCmd = &cobra.Command{
 		srvConf := dmsg.ServerConfig{
 			MaxSessions:    conf.MaxSessions,
 			UpdateInterval: conf.UpdateInterval,
-			LimitIP:        limitIP,
 			AuthPassphrase: authPassphrase,
 		}
 		srv := dmsg.NewServer(conf.PubKey, conf.SecKey, disc.NewHTTP(conf.Discovery, &http.Client{}, log), &srvConf, m)

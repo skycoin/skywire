@@ -30,24 +30,6 @@
     "prod": {
      "dmsg_servers": [
       {
-       "static": "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd",
-       "server": {
-        "address": "139.144.183.24:30082"
-       }
-      },
-      {
-       "static": "02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0",
-       "server": {
-        "address": "139.144.183.24:30081"
-       }
-      },
-      {
-       "static": "03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4",
-       "server": {
-        "address": "139.144.183.24:30083"
-       }
-      },
-      {
        "static": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
        "server": {
         "address": "139.162.160.227:30087"
@@ -70,9 +52,21 @@
        "server": {
         "address": "139.162.160.227:30086"
        }
+      },
+      {
+       "static": "03d5b55d1133b26485c664cf8b95cff6746d1e321c34e48c9fed293eff0d6d49e5",
+       "server": {
+        "address": "170.187.228.44:30083"
+       }
+      },
+      {
+       "static": "0228af3fd99c8d86a882495c8e0202bdd4da78c69e013065d8634286dd4a0ac098",
+       "server": {
+        "address": "170.187.228.178:30084"
+       }
       }
      ],
-     "dmsg_discovery": "dmsg://024a7b9b7db1626d46777e5c665333afa57f48934b57652305fc7a2b19dc4c65d4:80",
+     "dmsg_discovery": "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80",
      "transport_discovery": "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80",
      "address_resolver": "dmsg://03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80",
      "route_finder": "dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80",
