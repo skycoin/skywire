@@ -43,7 +43,7 @@
   ]
  },
  "prod": {
-  "dmsg_discovery": "http://dmsgd.skywire.dev",
+  "dmsg_discovery": "http://dmsgd.skywire.skycoin.com",
   "transport_discovery": "http://tpd.skywire.skycoin.com",
   "address_resolver": "http://ar.skywire.skycoin.com",
   "route_finder": "http://rf.skywire.skycoin.com",
@@ -67,14 +67,14 @@
   "uptime_tracker": "http://ut.skywire.skycoin.com",
   "service_discovery": "http://sd.skycoin.com",
   "stun_servers": [
-    "192.53.117.238:3478",
+    "139.162.30.112:3478",
+    "192.53.118.31:3478",
+    "192.53.118.61:3478",
     "170.187.228.44:3478",
-    "192.53.117.237:3478",
-    "192.53.117.146:3478",
-    "192.53.117.60:3478",
-    "192.53.117.124:3478",
     "170.187.228.178:3478",
-    "170.187.225.246:3478"
+    "139.162.30.129:3478",
+    "192.53.118.134:3478",
+    "192.53.118.209:3478"
   ],
   "dns_server": "1.1.1.1",
   "survey_whitelist": [
