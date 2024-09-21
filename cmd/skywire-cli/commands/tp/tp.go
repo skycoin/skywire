@@ -22,7 +22,6 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -37,9 +36,22 @@ var (
 	logger        = logging.MustGetLogger("skywire-cli")
 	removeAll     bool
 	tpTypes       bool
+	tpDiscURL string
+	sdURL string
+	utURL string
 )
 
 func init() {
+	log := logging.MustGetLogger("skywire-cli")
+	var envServices skywire.EnvServices
+	var services skywire.Services
+	if err := json.Unmarshal([]byte(jsonData), &envServices); err == nil {
+		if err := json.Unmarshal(envServices.Prod, &services); err == nil {
+			tpDiscURL = services.TransportDiscovery
+			sdURL = services.ServiceDiscovery
+			utURL = services.UptimeTracker
+		}
+	}
 	tpCmd.Flags().SortFlags = false
 	addTpCmd.Flags().SortFlags = false
 	rmTpCmd.Flags().SortFlags = false
@@ -138,7 +150,7 @@ func init() {
 	addTpCmd.Flags().StringVarP(&rpk, "rpk", "r", "", "remote public key.")
 	addTpCmd.Flags().StringVarP(&transportType, "type", "t", "", "type of transport to add.")
 	addTpCmd.Flags().DurationVarP(&timeout, "timeout", "o", 0, "if specified, sets an operation timeout")
-	addTpCmd.Flags().StringVarP(&sdURL, "sdurl", "a", utilenv.ServiceDiscAddr, "service discovery url")
+	addTpCmd.Flags().StringVarP(&sdURL, "sdurl", "a", sdURL, "service discovery url")
 	//TODO
 	//	listCmd.Flags().BoolVarP(&queryHealth, "health", "q", false, "check /health of remote visor over dmsg before creating transport")
 	addTpCmd.Flags().BoolVarP(&forceAttempt, "force", "f", false, "attempt transport creation without check of SD") // or visor /health over dmsg
@@ -410,8 +422,8 @@ func init() {
 
 	treeCmd.Flags().StringVarP(&rootNode, "source", "k", "", "root node ; defaults to visor with most transports")
 	treeCmd.Flags().StringVarP(&lastNode, "dest", "d", "", "map route between source and dest")
-	treeCmd.Flags().StringVarP(&tpdURL, "tpdurl", "a", utilenv.TpDiscAddr, "transport discovery url")
-	treeCmd.Flags().StringVarP(&utURL, "uturl", "w", utilenv.UptimeTrackerAddr, "uptime tracker url")
+	treeCmd.Flags().StringVarP(&tpdURL, "tpdurl", "a", tpDiscURL, "transport discovery url")
+	treeCmd.Flags().StringVarP(&utURL, "uturl", "w", utURL, "uptime tracker url")
 	treeCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "print raw json data")
 	treeCmd.Flags().BoolVarP(&refinedData, "pretty", "p", false, "print pretty json data")
 	treeCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status in UT")
@@ -427,7 +439,7 @@ func init() {
 var treeCmd = &cobra.Command{
 	Use:   "tree",
 	Short: "tree map of transports on the skywire network",
-	Long:  fmt.Sprintf("display a tree representation of transports from TPD\n\n%v/all-transports\n\nSet cache file location to \"\" to avoid using cache files", utilenv.TpDiscAddr),
+	Long:  fmt.Sprintf("display a tree representation of transports from TPD\n\n%v/all-transports\n\nSet cache file location to \"\" to avoid using cache files", tpDiscURL),
 	Run: func(cmd *cobra.Command, args []string) {
 		if rootNode != "" {
 			err := rootnode.Set(rootNode)

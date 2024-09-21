@@ -33,7 +33,7 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
-	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
+	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
@@ -1516,8 +1516,15 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 		return nil
 	}
 	serviceDisc := v.conf.Launcher.ServiceDisc
-	if serviceDisc == "" {
-		serviceDisc = utilenv.ServiceDiscAddr
+	if serviceDisc == "" { //it might be intentionally blank ; consider revising.
+		var envServices skywire.EnvServices
+		var services skywire.Services
+		var sdURL string
+		if err := json.Unmarshal([]byte(jsonData), &envServices); err == nil {
+			if err := json.Unmarshal(envServices.Prod, &services); err == nil {
+				serviceDisc = services.ServiceDiscovery
+			}
+		}
 	}
 
 	// todo: refactor updatedisc: split connecting to services in updatedisc and

@@ -18,27 +18,38 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
-var frAddr string
-var frMinHops, frMaxHops uint16
-var timeout time.Duration
-var skywireconfig string
+var (
+	frAddr string
+ frMinHops, frMaxHops uint16
+ timeout time.Duration
+ skywireconfig string
+ rfURL string
+)
 
 func init() {
+	log := logging.MustGetLogger("skywire-cli")
+	var envServices skywire.EnvServices
+	var services skywire.Services
+	if err := json.Unmarshal([]byte(jsonData), &envServices); err == nil {
+		if err := json.Unmarshal(envServices.Prod, &services); err == nil {
+			rfURL = services.RouteFinderAddr
+		}
+	}
 	findCmd.Flags().SortFlags = false
 	findCmd.Flags().Uint16VarP(&frMinHops, "min", "n", 1, "minimum hops")
 	findCmd.Flags().Uint16VarP(&frMaxHops, "max", "x", 1000, "maximum hops")
 	findCmd.Flags().DurationVarP(&timeout, "timeout", "t", 10*time.Second, "request timeout")
-	findCmd.Flags().StringVarP(&frAddr, "addr", "a", "", "route finder service address\n"+utilenv.RouteFinderAddr)
+	findCmd.Flags().StringVarP(&frAddr, "addr", "a", rfURL, "route finder service address")
 }
 
 // RootCmd is the command that queries the route finder.
@@ -58,7 +69,7 @@ Assumes the local visor public key as an argument if only one argument is given`
 		}
 		//set the routefinder address. It's not used as the default value to fix the display of the help command
 		if frAddr == "" {
-			frAddr = utilenv.RouteFinderAddr
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Route Finder URL not specified"))
 		}
 		//assume the local public key as the first argument if only 1 argument is given ; resize args array to 2 and move the first argument to the second one
 		if len(args) == 1 {

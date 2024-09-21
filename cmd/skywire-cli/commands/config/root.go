@@ -12,7 +12,6 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -55,7 +54,9 @@ var (
 	selectedOS                  string
 	disableApps                 string
 	isBestProtocol              bool
-	serviceConfURL              string
+	serviceConfURL              = "http://conf.skywire.skycoin.com"
+	testServiceConfURL              = "http://conf.skywire.dev"
+	dnsServer = "1.1.1.1"
 	services                    visorconfig.Services
 	servicesConfig              servicesConf
 	isForce                     bool
@@ -64,8 +65,6 @@ var (
 	isOutUnset                  bool
 	ver                         string
 	isRoot                      = visorconfig.IsRoot()
-	svcConf                     = strings.ReplaceAll(utilenv.ServiceConfAddr, "http://", "")     //visorconfig.DefaultServiceConfAddr
-	testConf                    = strings.ReplaceAll(utilenv.TestServiceConfAddr, "http://", "") //visorconfig.DefaultServiceConfAddr
 	gHiddenFlags                []string
 	uHiddenFlags                []string
 	binPath                     string

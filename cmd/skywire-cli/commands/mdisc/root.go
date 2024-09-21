@@ -18,7 +18,6 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 )
 
@@ -27,6 +26,8 @@ var (
 	cacheFilesAge  int
 	mdURL          string
 	isStats        bool
+	dmsgDiscURL string
+
 )
 
 // var allEntries bool
@@ -34,6 +35,15 @@ var masterLogger = logging.NewMasterLogger()
 var packageLogger = masterLogger.PackageLogger("mdisc:disc")
 
 func init() {
+	log := logging.MustGetLogger("skywire-cli")
+	var envServices skywire.EnvServices
+	var services skywire.Services
+	if err := json.Unmarshal([]byte(jsonData), &envServices); err == nil {
+		if err := json.Unmarshal(envServices.Prod, &services); err == nil {
+			dmsgDiscURL = services.DmsgDiscovery
+			utURL = services.UptimeTracker
+		}
+	}
 	RootCmd.AddCommand(
 		entryCmd,
 		availableServersCmd,
@@ -41,9 +51,9 @@ func init() {
 	RootCmd.Flags().StringVar(&cacheFileDMSGD, "cfu", os.TempDir()+"/dmsgd.json", "DMSGD cache file location.")
 	RootCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache file if older than n minutes")
 	RootCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "count the number of results")
-	entryCmd.Flags().StringVar(&mdURL, "url", utilenv.DmsgDiscAddr, "specify alternative DMSG discovery url")
-	RootCmd.Flags().StringVar(&mdURL, "url", utilenv.DmsgDiscAddr, "specify alternative DMSG discovery url")
-	availableServersCmd.Flags().StringVar(&mdURL, "url", utilenv.DmsgDiscAddr, "specify alternative DMSG discovery url")
+	entryCmd.Flags().StringVar(&mdURL, "url", dmsgDiscURL, "specify alternative DMSG discovery url")
+	RootCmd.Flags().StringVar(&mdURL, "url", dmsgDiscURL, "specify alternative DMSG discovery url")
+	availableServersCmd.Flags().StringVar(&mdURL, "url", dmsgDiscURL, "specify alternative DMSG discovery url")
 }
 
 // RootCmd is the command that contains sub-commands which interacts with DMSG services.

@@ -32,10 +32,17 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 )
 
 func init() {
+	log := logging.MustGetLogger("skywire-cli")
+	var envServices skywire.EnvServices
+	var services skywire.Services
+	if err := json.Unmarshal([]byte(jsonData), &envServices); err == nil {
+		if err := json.Unmarshal(envServices.Prod, &services); err == nil {
+			dmsgDiscURL = services.DmsgDiscovery
+		}
+	}
 	RootCmd.CompletionOptions.DisableDefaultCmd = true
 	RootCmd.AddCommand(
 		uiCmd,
@@ -48,7 +55,7 @@ func init() {
 		msg += "\n\r"
 	}
 	uiCmd.Flags().StringVarP(&wl, "wl", "w", scriptExecArray("${REWARDPKS[@]}"), msg)
-	uiCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", "", "dmsg discovery url default:\n"+skyenv.DmsgDiscAddr)
+	uiCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", "", "dmsg discovery url default:\n"+dmsgDiscURL)
 	uiCmd.Flags().StringVarP(&ensureOnlineURL, "ensure-online", "O", scriptExecString("${ENSUREONLINE}"), "Exit when the specified URL cannot be fetched;\ni.e. https://fiber.skywire.dev")
 	if os.Getenv("DMSGHTTP_SK") != "" {
 		sk.Set(os.Getenv("DMSGHTTP_SK")) //nolint
@@ -93,6 +100,8 @@ var (
 	wlkeys          []cipher.PubKey
 	webPort         uint
 	ensureOnlineURL string
+	dmsgDiscURL string
+
 )
 
 var skyenvfile = os.Getenv("SKYENV")
@@ -240,10 +249,10 @@ var tmpl *htmpl.Template
 
 func server() {
 
-	if dmsgDisc == "" {
-		dmsgDisc = skyenv.DmsgDiscAddr
-	}
 	log := logging.MustGetLogger("dmsghttp")
+	if dmsgDisc == "" {
+		log.Fatal("Dmsg Discovery URL not specified")
+	}
 
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 	defer cancel()
