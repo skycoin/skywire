@@ -32,8 +32,7 @@ var (
 	addr            string
 	startingTimeout int
 	httpAddr        string
-	svcDiscURL string
-	utURL string
+	svcDiscURL      string
 )
 
 // RootCmd contains commands that interact with the skywire-visor

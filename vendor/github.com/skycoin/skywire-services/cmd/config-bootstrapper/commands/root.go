@@ -25,13 +25,14 @@ import (
 )
 
 var (
-	addr     string
-	tag      string
-	stunPath string
-	domain   string
-	dmsgDisc string
-	sk       cipher.SecKey
-	dmsgPort uint16
+	addr           string
+	tag            string
+	stunPath       string
+	domain         string
+	dmsgDisc       string
+	sk             cipher.SecKey
+	dmsgPort       uint16
+	dmsgServerType string
 )
 
 func init() {
@@ -42,6 +43,7 @@ func init() {
 	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", "http://dmsgd.skywire.skycoin.com", "url of dmsg-discovery\033[0m")
 	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\r")
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\r")
+	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
 }
 
 // RootCmd contains the root command
@@ -86,14 +88,15 @@ var RootCmd = &cobra.Command{
 		defer cancel()
 
 		if !pk.Null() {
-			servers := dmsghttp.GetServers(ctx, dmsgDisc, logger)
+			servers := dmsghttp.GetServers(ctx, dmsgDisc, dmsgServerType, logger)
 
 			var keys cipher.PubKeys
 			keys = append(keys, pk)
 			dClient := direct.NewClient(direct.GetAllEntries(keys, servers), logger)
 			config := &dmsg.Config{
-				MinSessions:    0, // listen on all available servers
-				UpdateInterval: dmsg.DefaultUpdateInterval,
+				MinSessions:          0, // listen on all available servers
+				UpdateInterval:       dmsg.DefaultUpdateInterval,
+				ConnectedServersType: dmsgServerType,
 			}
 
 			dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, logger, pk, sk, dClient, config)
@@ -103,7 +106,7 @@ var RootCmd = &cobra.Command{
 
 			defer closeDmsgDC()
 
-			go dmsghttp.UpdateServers(ctx, dClient, dmsgDisc, dmsgDC, logger)
+			go dmsghttp.UpdateServers(ctx, dClient, dmsgDisc, dmsgDC, dmsgServerType, logger)
 
 			go func() {
 				if err := dmsghttp.ListenAndServe(ctx, sk, conAPI, dClient, dmsg.DefaultDmsgHTTPPort, dmsgDC, logger); err != nil {

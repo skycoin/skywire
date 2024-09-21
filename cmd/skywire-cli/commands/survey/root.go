@@ -12,6 +12,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
@@ -32,14 +33,13 @@ var (
 	pkgconfigexists  bool
 	userconfigexists bool
 	conf             *visorconfig.V1
-	dmsgDiscURL string
+	dmsgDiscURL      string
 )
 
 func init() {
-	log := logging.MustGetLogger("skywire-cli")
 	var envServices skywire.EnvServices
 	var services skywire.Services
-	if err := json.Unmarshal([]byte(jsonData), &envServices); err == nil {
+	if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err == nil {
 		if err := json.Unmarshal(envServices.Prod, &services); err == nil {
 			dmsgDiscURL = services.DmsgDiscovery
 		}

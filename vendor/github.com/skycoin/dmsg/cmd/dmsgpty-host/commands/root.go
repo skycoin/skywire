@@ -35,7 +35,7 @@ var json = jsoniter.ConfigFastest
 // variables
 var (
 	// persistent flags
-	dmsgDisc     = dmsg.DefaultDiscAddr
+	dmsgDisc     = dmsg.DmsgDiscAddr(false)
 	dmsgSessions = dmsg.DefaultMinSessions
 	dmsgPort     = dmsgpty.DefaultPort
 	cliNet       = dmsgpty.DefaultCLINet
@@ -275,7 +275,7 @@ func fillConfigFromENV(conf dmsgpty.Config) (dmsgpty.Config, error) {
 }
 
 func fillConfigFromFlags(conf dmsgpty.Config) dmsgpty.Config {
-	if dmsgDisc != dmsg.DefaultDiscAddr {
+	if dmsgDisc != dmsg.DmsgDiscAddr(false) {
 		conf.DmsgDisc = dmsgDisc
 	}
 

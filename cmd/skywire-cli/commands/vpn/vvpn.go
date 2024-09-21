@@ -4,6 +4,7 @@ package clivpn
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
+	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
@@ -162,15 +164,11 @@ var statusCmd = &cobra.Command{
 }
 
 var isLabel bool
-var utURL         string
-var sdURL string
-
 
 func init() {
-	log := logging.MustGetLogger("skywire-cli")
 	var envServices skywire.EnvServices
 	var services skywire.Services
-	if err := json.Unmarshal([]byte(jsonData), &envServices); err == nil {
+	if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err == nil {
 		if err := json.Unmarshal(envServices.Prod, &services); err == nil {
 			sdURL = services.ServiceDiscovery
 			utURL = services.UptimeTracker

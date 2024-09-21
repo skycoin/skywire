@@ -29,17 +29,18 @@ import (
 )
 
 var (
-	addr          string
-	metricsAddr   string
-	pgHost        string
-	pgPort        string
-	logLvl        string
-	tag           string
-	testing       bool
-	dmsgDisc      string
-	sk            cipher.SecKey
-	dmsgPort      uint16
-	pgMaxOpenConn int
+	addr           string
+	metricsAddr    string
+	pgHost         string
+	pgPort         string
+	logLvl         string
+	tag            string
+	testing        bool
+	dmsgDisc       string
+	sk             cipher.SecKey
+	dmsgPort       uint16
+	dmsgServerType string
+	pgMaxOpenConn  int
 )
 
 func init() {
@@ -54,6 +55,7 @@ func init() {
 	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", "http://dmsgd.skywire.skycoin.com", "url of dmsg-discovery\033[0m")
 	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\r")
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\r")
+	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
 }
 
 // RootCmd contains the root command
@@ -144,14 +146,15 @@ PG_USER="postgres" PG_DATABASE="rf" PG_PASSWORD="" route-finder  --addr ":9092" 
 		}()
 
 		if !pk.Null() {
-			servers := dmsghttp.GetServers(ctx, dmsgDisc, logger)
+			servers := dmsghttp.GetServers(ctx, dmsgDisc, dmsgServerType, logger)
 
 			var keys cipher.PubKeys
 			keys = append(keys, pk)
 			dClient := direct.NewClient(direct.GetAllEntries(keys, servers), logger)
 			config := &dmsg.Config{
-				MinSessions:    0, // listen on all available servers
-				UpdateInterval: dmsg.DefaultUpdateInterval,
+				MinSessions:          0, // listen on all available servers
+				UpdateInterval:       dmsg.DefaultUpdateInterval,
+				ConnectedServersType: dmsgServerType,
 			}
 
 			dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, logger, pk, sk, dClient, config)
@@ -168,7 +171,7 @@ PG_USER="postgres" PG_DATABASE="rf" PG_PASSWORD="" route-finder  --addr ":9092" 
 				}
 			}()
 
-			go dmsghttp.UpdateServers(ctx, dClient, dmsgDisc, dmsgDC, logger)
+			go dmsghttp.UpdateServers(ctx, dClient, dmsgDisc, dmsgDC, dmsgServerType, logger)
 
 			go func() {
 				if err := dmsghttp.ListenAndServe(ctx, sk, rfAPI, dClient, dmsg.DefaultDmsgHTTPPort, dmsgDC, logger); err != nil {

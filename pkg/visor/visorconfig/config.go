@@ -11,10 +11,10 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 
+	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/app/appserver"
-	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -28,12 +28,11 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 
 	//check if any services were passed
 	if services == nil {
-		var envServices EnvServices
-		if err := json.Unmarshal([]byte(jsonData), &envServices); err != nil {
+		var envServices skywire.EnvServices
+		if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err != nil {
 			return nil
 		}
 		if !testEnv {
-			var prodServices Services
 			if err := json.Unmarshal(envServices.Prod, &services); err != nil {
 				return nil
 			}
@@ -135,9 +134,22 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 	if err != nil {
 		return nil, err
 	}
+	dnsServer := ""
 	var dmsgHTTPServersList *DmsgHTTPServers
-
-	dnsServer := utilenv.DNSServer
+	var envServices skywire.EnvServices
+	var svcs skywire.Services
+	if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err != nil {
+		return nil, nil
+	}
+	if !testEnv {
+		if err := json.Unmarshal(envServices.Prod, &svcs); err != nil {
+			dnsServer = svcs.DNSServer
+		}
+	} else {
+		if err := json.Unmarshal(envServices.Test, &svcs); err != nil {
+			dnsServer = svcs.DNSServer
+		}
+	}
 	if services != nil {
 		if services.DNSServer != "" {
 			dnsServer = services.DNSServer

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	htmpl "html/template"
 	"io"
@@ -29,16 +30,16 @@ import (
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 )
 
 func init() {
-	log := logging.MustGetLogger("skywire-cli")
 	var envServices skywire.EnvServices
 	var services skywire.Services
-	if err := json.Unmarshal([]byte(jsonData), &envServices); err == nil {
+	if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err == nil {
 		if err := json.Unmarshal(envServices.Prod, &services); err == nil {
 			dmsgDiscURL = services.DmsgDiscovery
 		}
@@ -100,8 +101,7 @@ var (
 	wlkeys          []cipher.PubKey
 	webPort         uint
 	ensureOnlineURL string
-	dmsgDiscURL string
-
+	dmsgDiscURL     string
 )
 
 var skyenvfile = os.Getenv("SKYENV")

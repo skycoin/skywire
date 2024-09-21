@@ -3,6 +3,7 @@ package clitp
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/tidwall/pretty"
 
+	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
@@ -36,16 +38,15 @@ var (
 	logger        = logging.MustGetLogger("skywire-cli")
 	removeAll     bool
 	tpTypes       bool
-	tpDiscURL string
-	sdURL string
-	utURL string
+	tpDiscURL     string
+	sdURL         string
+	utURL         string
 )
 
 func init() {
-	log := logging.MustGetLogger("skywire-cli")
 	var envServices skywire.EnvServices
 	var services skywire.Services
-	if err := json.Unmarshal([]byte(jsonData), &envServices); err == nil {
+	if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err == nil {
 		if err := json.Unmarshal(envServices.Prod, &services); err == nil {
 			tpDiscURL = services.TransportDiscovery
 			sdURL = services.ServiceDiscovery
@@ -121,7 +122,6 @@ var tpCmd = &cobra.Command{
 
 var (
 	sortedEdgeKeys []string
-	utURL          string
 	tpdURL         string
 	rootNode       string
 	lastNode       string
@@ -138,7 +138,6 @@ var (
 	transportType  string
 	timeout        time.Duration
 	rpk            string
-	sdURL          string
 	cacheFileSD    string
 	cacheFilesAge  int
 	forceAttempt   bool

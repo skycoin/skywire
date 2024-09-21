@@ -2,12 +2,14 @@
 package cliut
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 )
 
@@ -27,10 +29,9 @@ var (
 var minUT int
 
 func init() {
-	log := logging.MustGetLogger("skywire-cli")
 	var envServices skywire.EnvServices
 	var services skywire.Services
-	if err := json.Unmarshal([]byte(jsonData), &envServices); err == nil {
+	if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err == nil {
 		if err := json.Unmarshal(envServices.Prod, &services); err == nil {
 			utURL = services.UptimeTracker
 		}
@@ -48,7 +49,7 @@ func init() {
 var utCmd = &cobra.Command{
 	Use:   "ut",
 	Short: "query uptime tracker",
-	Long:  fmt.Sprintf("query uptime tracker\n\n%v/uptimes?v=v2\n\nCheck local visor daily uptime percent with:\n skywire-cli ut -k $(skywire-cli visor pk)n\nSet cache file location to \"\" to avoid using cache files", utilenv.UptimeTrackerAddr),
+	Long:  fmt.Sprintf("query uptime tracker\n\n%v/uptimes?v=v2\n\nCheck local visor daily uptime percent with:\n skywire-cli ut -k $(skywire-cli visor pk)n\nSet cache file location to \"\" to avoid using cache files", utURL),
 	Run: func(cmd *cobra.Command, _ []string) {
 		uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
 		if online {

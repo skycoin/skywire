@@ -30,10 +30,10 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
 
+	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
-	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
@@ -1519,8 +1519,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 	if serviceDisc == "" { //it might be intentionally blank ; consider revising.
 		var envServices skywire.EnvServices
 		var services skywire.Services
-		var sdURL string
-		if err := json.Unmarshal([]byte(jsonData), &envServices); err == nil {
+		if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err == nil {
 			if err := json.Unmarshal(envServices.Prod, &services); err == nil {
 				serviceDisc = services.ServiceDiscovery
 			}

@@ -55,8 +55,8 @@ var (
 	disableApps                 string
 	isBestProtocol              bool
 	serviceConfURL              = "http://conf.skywire.skycoin.com"
-	testServiceConfURL              = "http://conf.skywire.dev"
-	dnsServer = "1.1.1.1"
+	testServiceConfURL          = "http://conf.skywire.dev"
+	dnsServer                   = "1.1.1.1"
 	services                    visorconfig.Services
 	servicesConfig              servicesConf
 	isForce                     bool

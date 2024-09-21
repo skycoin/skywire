@@ -29,18 +29,12 @@ import (
 
 	ar "github.com/skycoin/skywire-services/cmd/address-resolver/commands"
 	confbs "github.com/skycoin/skywire-services/cmd/config-bootstrapper/commands"
-	dmsgmon "github.com/skycoin/skywire-services/cmd/dmsg-monitor/commands"
 	kg "github.com/skycoin/skywire-services/cmd/keys-gen/commands"
-	lc "github.com/skycoin/skywire-services/cmd/liveness-checker/commands"
-	nwmon "github.com/skycoin/skywire-services/cmd/network-monitor/commands"
 	nv "github.com/skycoin/skywire-services/cmd/node-visualizer/commands"
-	pvmon "github.com/skycoin/skywire-services/cmd/public-visor-monitor/commands"
 	rf "github.com/skycoin/skywire-services/cmd/route-finder/commands"
-	ssmon "github.com/skycoin/skywire-services/cmd/skysocks-monitor/commands"
 	se "github.com/skycoin/skywire-services/cmd/sw-env/commands"
 	tpd "github.com/skycoin/skywire-services/cmd/transport-discovery/commands"
 	tps "github.com/skycoin/skywire-services/cmd/transport-setup/commands"
-	vpnmon "github.com/skycoin/skywire-services/cmd/vpn-monitor/commands"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	sc "github.com/skycoin/skywire/cmd/apps/skychat/commands"
 	ssc "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
@@ -66,7 +60,6 @@ func init() {
 		dmsgcurl.RootCmd,
 		dmsgweb.RootCmd,
 		dmsgsocks.RootCmd,
-		dmsgmon.RootCmd,
 	)
 	svcCmd.AddCommand(
 		sn.RootCmd,
@@ -76,14 +69,9 @@ func init() {
 		rf.RootCmd,
 		confbs.RootCmd,
 		kg.RootCmd,
-		lc.RootCmd,
 		nv.RootCmd,
 		se.RootCmd,
 		sd.RootCmd,
-		nwmon.RootCmd,
-		pvmon.RootCmd,
-		ssmon.RootCmd,
-		vpnmon.RootCmd,
 	)
 	appsCmd.AddCommand(
 		vpns.RootCmd,
@@ -116,19 +104,13 @@ func init() {
 	dmsgcurl.RootCmd.Use = "curl"
 	dmsgweb.RootCmd.Use = "web"
 	dmsgsocks.RootCmd.Use = "socks"
-	dmsgmon.RootCmd.Use = "mon"
 	tpd.RootCmd.Use = "tpd"
 	tps.RootCmd.Use = "tps"
 	ar.RootCmd.Use = "ar"
 	rf.RootCmd.Use = "rf"
 	confbs.RootCmd.Use = "cb"
 	kg.RootCmd.Use = "kg"
-	lc.RootCmd.Use = "lc"
 	nv.RootCmd.Use = "nv"
-	vpnmon.RootCmd.Use = "vpnm"
-	pvmon.RootCmd.Use = "pvm"
-	ssmon.RootCmd.Use = "ssm"
-	nwmon.RootCmd.Use = "nwmon"
 	se.RootCmd.Use = "se"
 	sd.RootCmd.Use = "sd"
 	sn.RootCmd.Use = "sn"

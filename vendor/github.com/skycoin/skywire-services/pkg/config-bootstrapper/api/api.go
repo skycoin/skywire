@@ -13,11 +13,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -62,22 +62,26 @@ type Config struct {
 
 // New creates a new api.
 func New(log *logging.Logger, conf Config, domain, dmsgAddr string) *API {
+	var envServices skywire.EnvServices
+	var svcs skywire.Services
+	json.Unmarshal([]byte(skywire.ServicesJSON), &envServices) //nolint
+	json.Unmarshal(envServices.Prod, &svcs)                    //nolint
 
-	sd := strings.Replace(skyenv.ServiceDiscAddr, "skycoin.com", domain, -1)
+	sd := strings.Replace(svcs.ServiceDiscovery, "skycoin.com", domain, -1)
 	if domain == "skywire.skycoin.com" {
-		sd = skyenv.ServiceDiscAddr
+		sd = svcs.ServiceDiscovery
 	}
 
 	services := &visorconfig.Services{
-		DmsgDiscovery:      strings.Replace(skyenv.DmsgDiscAddr, "skywire.skycoin.com", domain, -1),
-		TransportDiscovery: strings.Replace(skyenv.TpDiscAddr, "skywire.skycoin.com", domain, -1),
-		AddressResolver:    strings.Replace(skyenv.AddressResolverAddr, "skywire.skycoin.com", domain, -1),
-		RouteFinder:        strings.Replace(skyenv.RouteFinderAddr, "skywire.skycoin.com", domain, -1),
+		DmsgDiscovery:      strings.Replace(svcs.DmsgDiscovery, "skywire.skycoin.com", domain, -1),
+		TransportDiscovery: strings.Replace(svcs.TransportDiscovery, "skywire.skycoin.com", domain, -1),
+		AddressResolver:    strings.Replace(svcs.AddressResolver, "skywire.skycoin.com", domain, -1),
+		RouteFinder:        strings.Replace(svcs.RouteFinder, "skywire.skycoin.com", domain, -1),
 		RouteSetupNodes:    conf.SetupNodes,
-		UptimeTracker:      strings.Replace(skyenv.UptimeTrackerAddr, "skywire.skycoin.com", domain, -1),
+		UptimeTracker:      strings.Replace(svcs.UptimeTracker, "skywire.skycoin.com", domain, -1),
 		ServiceDiscovery:   sd,
 		StunServers:        conf.StunServers,
-		DNSServer:          skyenv.DNSServer,
+		DNSServer:          svcs.DNSServer,
 		SurveyWhitelist:    conf.SurveyWhitelist,
 		TransportSetupPKs:  conf.TransportSetupPKs,
 	}

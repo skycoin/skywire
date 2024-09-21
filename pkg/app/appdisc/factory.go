@@ -7,9 +7,9 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -35,7 +35,7 @@ func (f *Factory) setDefaults() {
 		var envServices skywire.EnvServices
 		var services skywire.Services
 		var sdURL string
-		if err := json.Unmarshal([]byte(jsonData), &envServices); err == nil {
+		if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err == nil {
 			if err := json.Unmarshal(envServices.Prod, &services); err == nil {
 				sdURL = services.ServiceDiscovery
 			}

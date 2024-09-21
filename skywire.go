@@ -1,8 +1,19 @@
 // Package skywire skywire.go
 package skywire
 
+import (
+	_ "embed"
+	"encoding/json"
+
+	"github.com/skycoin/skywire-utilities/pkg/cipher"
+)
+
 /*
-workaround to avoid go module errors.
+Embedded Deployment Defaults
+
+Change the contents of the files to embed updated values
+
+Vendor the commit of the change in any repo which depends on them
 */
 
 //go:embed services-config.json
@@ -16,6 +27,11 @@ type EnvServices struct {
 	Test json.RawMessage `json:"test"`
 	Prod json.RawMessage `json:"prod"`
 }
+
+const (
+	ConfService     = "http://conf.skywire.skycoin.com"
+	ConfServiceTest = "http://conf.skywire.dev"
+)
 
 // Services are subdomains and IP addresses of the skywire services
 type Services struct {

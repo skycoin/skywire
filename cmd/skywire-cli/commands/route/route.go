@@ -3,6 +3,7 @@ package cliroute
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -17,32 +18,31 @@ import (
 	"github.com/spf13/pflag"
 	"golang.org/x/net/context"
 
+	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var (
-	frAddr string
- frMinHops, frMaxHops uint16
- timeout time.Duration
- skywireconfig string
- rfURL string
+	frAddr               string
+	frMinHops, frMaxHops uint16
+	timeout              time.Duration
+	skywireconfig        string
+	rfURL                string
 )
 
 func init() {
-	log := logging.MustGetLogger("skywire-cli")
 	var envServices skywire.EnvServices
 	var services skywire.Services
-	if err := json.Unmarshal([]byte(jsonData), &envServices); err == nil {
+	if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err == nil {
 		if err := json.Unmarshal(envServices.Prod, &services); err == nil {
-			rfURL = services.RouteFinderAddr
+			rfURL = services.RouteFinder
 		}
 	}
 	findCmd.Flags().SortFlags = false
