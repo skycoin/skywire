@@ -8,19 +8,19 @@ import (
 
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 )
 
 const (
+	defaultDiscoveryURL  = skyenv.DmsgDiscAddr
 	defaultPublicAddress = "127.0.0.1:8081"
 	defaultLocalAddress  = ":8081"
 	defaultHTTPAddress   = ":8082"
 	// DefaultConfigPath default path of config file
 	DefaultConfigPath = "config.json"
 	// DefaultDiscoverURLTest default URL for discovery in test env
+	DefaultDiscoverURLTest = skyenv.TestDmsgDiscAddr
 )
-var defaultDiscoveryURL  = dmsg.DmsgDiscAddr(false)
-var DefaultDiscoverURLTest = dmsg.DmsgDiscAddr(true)
 
 // Config is structure of config file
 type Config struct {

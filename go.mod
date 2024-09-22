@@ -168,13 +168,10 @@ require (
 replace github.com/xxxserxxx/gotop/v4 => github.com/ersonp/gotop/v4 v4.2.1
 
 // Uncomment for tests with local sources of other skywire repos
-replace github.com/skycoin/dmsg => ../dmsg
-
-replace github.com/skycoin/skywire-services => ../skywire-services
-
-replace github.com/skycoin/skycoin-service-discovery => ../skycoin-service-discovery
-
-replace github.com/skycoin/skywire-utilities => ../skywire-utilities
+//replace github.com/skycoin/dmsg => ../dmsg
+//replace github.com/skycoin/skywire-services => ../skywire-services
+//replace github.com/skycoin/skycoin-service-discovery => ../skycoin-service-discovery
+//replace github.com/skycoin/skywire-utilities => ../skywire-utilities
 
 // Uncomment to update other skywire deps to specific commit hash.
 // run `go mod tidy ; go mod vendor`

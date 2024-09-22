@@ -1,9 +1,7 @@
 // Package tpdiscmetrics internal/tpdiscmetrics/empty.go
 package tpdiscmetrics
 
-import (
-	"github.com/skycoin/skywire/pkg/transport/network"
-)
+import "github.com/skycoin/skywire/pkg/transport/network"
 
 // NewEmpty constructs new empty metrics.
 func NewEmpty() Empty {

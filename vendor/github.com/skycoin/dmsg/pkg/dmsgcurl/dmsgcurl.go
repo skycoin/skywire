@@ -22,7 +22,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 )
 
-var jsonite = jsoniter.ConfigFastest
+var json = jsoniter.ConfigFastest
 
 // DmsgCurl contains the logic for dmsgcurl (curl over dmsg).
 type DmsgCurl struct {
@@ -58,7 +58,7 @@ func (dg *DmsgCurl) String() string {
 	for _, fg := range dg.flagGroups() {
 		m[fg.Name()] = fg
 	}
-	j, err := jsonite.Marshal(m)
+	j, err := json.Marshal(m)
 	if err != nil {
 		panic(err)
 	}

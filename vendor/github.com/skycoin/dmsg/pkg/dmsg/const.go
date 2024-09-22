@@ -3,13 +3,13 @@ package dmsg
 
 import (
 	"time"
-	"encoding/json"
-	"github.com/skycoin/skywire"
+
+	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 )
 
 // Constants.
 const (
-
+	DefaultDiscAddr = skyenv.DmsgDiscAddr
 
 	DefaultMinSessions = 1
 
@@ -23,20 +23,3 @@ const (
 
 	DefaultCommunityDmsgServerType = "community"
 )
-
-func DmsgDiscAddr(testenv bool) string {
-	var envServices skywire.EnvServices
-	var services skywire.Services
-	if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err == nil {
-		if testenv {
-			if err := json.Unmarshal(envServices.Prod, &services); err == nil {
-				return services.DmsgDiscovery
-			}
-		} else {
-			if err := json.Unmarshal(envServices.Test, &services); err == nil {
-				return services.DmsgDiscovery
-			}
-		}
-	}
-	return ""
-}

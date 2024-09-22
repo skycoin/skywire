@@ -1,8 +1,6 @@
 package config
 
-import (
-	"fmt"
-)
+import "fmt"
 
 const (
 	// DockerRedisCmdTemplate is a template for running dockerized redis
