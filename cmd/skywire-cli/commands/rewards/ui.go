@@ -49,7 +49,7 @@ func init() {
 		uiCmd,
 	)
 	uiCmd.Flags().UintVarP(&webPort, "port", "p", scriptExecUint("${WEBPORT:-80}"), "port to serve")
-	uiCmd.Flags().UintVarP(&dmsgPort, "dport", "d", scriptExecUint("${DMSGPORT:-80}"), "dmsg port to serve")
+	uiCmd.Flags().Uint16VarP(&dmsgPort, "dport", "d", scriptExecUint16("${DMSGPORT:-80}"), "dmsg port to serve")
 	uiCmd.Flags().IntVarP(&dmsgSess, "dsess", "e", scriptExecInt("${DMSGSESSIONS:-1}"), "dmsg sessions")
 	msg := "add whitelist keys, comma separated to permit POST of reward transaction to be broadcast"
 	if scriptExecArray("${REWARDPKS[@]}") != "" {
@@ -95,7 +95,7 @@ var (
 	runTime         time.Duration
 	sk              cipher.SecKey
 	dmsgDisc        string
-	dmsgPort        uint
+	dmsgPort        uint16
 	dmsgSess        int
 	wl              string
 	wlkeys          []cipher.PubKey
@@ -1504,6 +1504,47 @@ func scriptExecUint(s string) uint {
 		}
 	}
 	return uint(0)
+}
+
+func scriptExecUint16(s string) uint16 {
+	if runtime.GOOS == "windows" {
+		var variable string
+		if strings.Contains(s, ":-") {
+			parts := strings.SplitN(s, ":-", 2)
+			variable = parts[0] + "}"
+		} else {
+			variable = s
+		}
+		out, err := script.Exec(fmt.Sprintf(`powershell -c '$SKYENV = "%s"; if ($SKYENV -ne "" -and (Test-Path $SKYENV)) { . $SKYENV }; echo %s"`, skyenvfile, variable)).String()
+		if err == nil {
+			if (out == "") || (out == variable) {
+				return 0
+			}
+			i, err := strconv.Atoi(strings.TrimSpace(strings.TrimRight(out, "\n")))
+			if err == nil {
+				if i >= 0 && i <= 65535 {
+					return uint16(i) //nolint
+				}
+				return 0
+			}
+			return 0
+		}
+		return 0
+	}
+	z, err := script.Exec(fmt.Sprintf(`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, skyenvfile, s)).String()
+	if err == nil {
+		if z == "" {
+			return 0
+		}
+		i, err := strconv.Atoi(z)
+		if err == nil {
+			if i >= 0 && i <= 65535 {
+				return uint16(i) //nolint
+			}
+			return 0
+		}
+	}
+	return uint16(0)
 }
 
 func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {

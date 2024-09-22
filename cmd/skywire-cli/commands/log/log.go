@@ -63,7 +63,7 @@ var logCmd = &cobra.Command{
 	Use:   "log",
 	Short: "survey & transport log collection",
 	Long:  "Fetch health, survey, and transport logging from visors which are online in the uptime tracker\nhttp://ut.skywire.skycoin.com/uptimes?v=v2\nhttp://ut.skywire.skycoin.com/uptimes?v=v2&visors=<pk1>;<pk2>;<pk3>",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		log := logging.MustGetLogger("log-collecting")
 		fver, err := version.NewVersion("v1.3.17")
 		if err != nil {

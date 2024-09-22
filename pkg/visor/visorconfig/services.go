@@ -52,13 +52,13 @@ func Fetch(mLog *logging.MasterLogger, serviceConf string, stdout bool) (service
 	return services
 }
 
-// Wrapper struct for the outer JSON
+// EnvServices is the struct for the outer JSON
 type EnvServices struct {
 	Test json.RawMessage `json:"test"`
 	Prod json.RawMessage `json:"prod"`
 }
 
-// Services are subdomains and IP addresses of the skywire services
+// Services is subdomains and IP addresses of the skywire services
 type Services struct {
 	DmsgDiscovery      string          `json:"dmsg_discovery,omitempty"`
 	TransportDiscovery string          `json:"transport_discovery,omitempty"`

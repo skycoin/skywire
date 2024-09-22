@@ -25,7 +25,7 @@ func init() {
 var servicesCmd = &cobra.Command{
 	Use:   "svc",
 	Short: "update services-config.json file from config bootstrap service",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		log := logging.MustGetLogger("services_updater")
 
 		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
@@ -56,7 +56,7 @@ var servicesCmd = &cobra.Command{
 func fetchServicesConf() (servicesConf, error) {
 	var newConf servicesConf
 	var prodConf visorconfig.Services
-	prodResp, err := http.Get(serviceConfURL)
+	prodResp, err := http.Get(serviceConfURL) //nolint
 	if err != nil {
 		return newConf, err
 	}
@@ -72,7 +72,7 @@ func fetchServicesConf() (servicesConf, error) {
 	newConf.Prod = prodConf
 
 	var testConf visorconfig.Services
-	testResp, err := http.Get(testServiceConfURL)
+	testResp, err := http.Get(testServiceConfURL) //nolint
 	if err != nil {
 		return newConf, err
 	}

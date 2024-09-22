@@ -61,7 +61,7 @@ var RootCmd = &cobra.Command{
 	Short: "Query DMSG Discovery",
 	Long: `Query DMSG Discovery
 	list entries in dmsg discovery`,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		dmsgclientkeys := internal.GetData(cacheFileDMSGD, mdURL+"/dmsg-discovery/entries", cacheFilesAge)
 		if isStats {
 			stats, _ := script.Echo(dmsgclientkeys).JQ(".[]").CountLines() //nolint
