@@ -1,5 +1,6 @@
 {
  "test": {
+  "conf": "http://conf.skywire.dev",
   "dmsg_discovery": "http://dmsgd.skywire.dev",
   "transport_discovery": "http://tpd.skywire.dev",
   "address_resolver": "http://ar.skywire.dev",
@@ -43,6 +44,7 @@
   ]
  },
  "prod": {
+  "conf": "http://conf.skywire.skycoin.com",
   "dmsg_discovery": "http://dmsgd.skywire.skycoin.com",
   "transport_discovery": "http://tpd.skywire.skycoin.com",
   "address_resolver": "http://ar.skywire.skycoin.com",
