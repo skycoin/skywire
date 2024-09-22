@@ -20,7 +20,6 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/metricsutil"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/dmsg/internal/discmetrics"
@@ -124,12 +123,6 @@ skywire dmsg disc --sk $(tail -n1 dmsgd-config.json)`,
 		var whitelistPKs []string
 		if whitelistKeys != "" {
 			whitelistPKs = strings.Split(whitelistKeys, ",")
-		} else {
-			if testEnvironment {
-				whitelistPKs = strings.Split(skyenv.TestNetworkMonitorPKs, ",")
-			} else {
-				whitelistPKs = strings.Split(skyenv.NetworkMonitorPKs, ",")
-			}
 		}
 
 		for _, v := range whitelistPKs {

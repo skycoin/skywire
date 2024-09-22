@@ -2,10 +2,11 @@
 package dmsgcurl
 
 import (
+	"encoding/json"
 	"flag"
 
+	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 )
 
 // ExecName contains the execution name.
@@ -39,7 +40,14 @@ type dmsgFlags struct {
 func (f *dmsgFlags) Name() string { return "Dmsg" }
 
 func (f *dmsgFlags) Init(fs *flag.FlagSet) {
-	fs.StringVar(&f.Disc, "dmsg-disc", skyenv.DmsgDiscAddr, "dmsg discovery `URL`")
+	var envServices skywire.EnvServices
+	var services skywire.Services
+	if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err == nil {
+		if err := json.Unmarshal(envServices.Prod, &services); err == nil {
+			f.Disc = services.DmsgDiscovery
+		}
+	}
+	fs.StringVar(&f.Disc, "dmsg-disc", f.Disc, "dmsg discovery `URL`")
 	fs.IntVar(&f.Sessions, "dmsg-sessions", 1, "connect to `NUMBER` of dmsg servers")
 }
 
