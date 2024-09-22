@@ -11,9 +11,7 @@ import (
 /*
 Embedded Deployment Defaults
 
-Change the contents of the files to embed updated values
-
-Vendor the commit of the change in any repo which depends on them
+Change the contents of services-config.json and / or dmsghttp-config.json to embed updated values
 */
 
 //go:embed services-config.json
@@ -28,12 +26,7 @@ type EnvServices struct {
 	Prod json.RawMessage `json:"prod"`
 }
 
-const (
-	ConfService     = "http://conf.skywire.skycoin.com"
-	ConfServiceTest = "http://conf.skywire.dev"
-)
-
-// Services are subdomains and IP addresses of the skywire services
+// Services are URLs, IP addresses, and public keys of the skywire services as deployed
 type Services struct {
 	DmsgDiscovery      string          `json:"dmsg_discovery,omitempty"`
 	TransportDiscovery string          `json:"transport_discovery,omitempty"`
@@ -46,4 +39,45 @@ type Services struct {
 	StunServers        []string        `json:"stun_servers,omitempty"`
 	DNSServer          string          `json:"dns_server,omitempty"`
 	SurveyWhitelist    []cipher.PubKey `json:"survey_whitelist,omitempty"`
+}
+
+// Conf is the configuration URL for the deployment which may be fetched on `skywire cli config gen`
+type Conf struct {
+	Conf      string          `json:"conf,omitempty"`
+}
+
+//Prod is the production deployment services
+var Prod Services
+
+//ProdConf is the service configuration address / URL for the skywire production deployment
+var ProdConf Conf
+
+//Test is the test deployment services
+var Test Services
+
+//TestConf is the service configuration address / URL for the skywire test deployment
+var TestConf Conf
+
+func init() {
+	var envServices EnvServices
+	err := json.Unmarshal(ServicesJSON, &envServices)
+	if err != nil {
+		panic(err)
+	}
+	err = json.Unmarshal(envServices.Prod, &Prod)
+	if err != nil {
+		panic(err)
+	}
+	err = json.Unmarshal(envServices.Prod, &ProdConf)
+	if err != nil {
+		panic(err)
+	}
+	err = json.Unmarshal(envServices.Test, &Test)
+	if err != nil {
+		panic(err)
+	}
+	err = json.Unmarshal(envServices.Test, &TestConf)
+	if err != nil {
+		panic(err)
+	}
 }
