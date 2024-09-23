@@ -525,7 +525,7 @@ github.com/skycoin/skycoin-service-discovery/internal/pg
 github.com/skycoin/skycoin-service-discovery/internal/sdmetrics
 github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/api
 github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/store
-# github.com/skycoin/skywire-services v1.3.25
+# github.com/skycoin/skywire-services v1.3.26-0.20240923193909-50d313921778
 ## explicit; go 1.21
 github.com/skycoin/skywire-services/cmd/address-resolver/commands
 github.com/skycoin/skywire-services/cmd/config-bootstrapper/commands
@@ -561,7 +561,6 @@ github.com/skycoin/skywire-utilities/pkg/logging
 github.com/skycoin/skywire-utilities/pkg/metricsutil
 github.com/skycoin/skywire-utilities/pkg/netutil
 github.com/skycoin/skywire-utilities/pkg/networkmonitor
-github.com/skycoin/skywire-utilities/pkg/skyenv
 github.com/skycoin/skywire-utilities/pkg/storeconfig
 github.com/skycoin/skywire-utilities/pkg/tcpproxy
 # github.com/skycoin/systray v1.10.0

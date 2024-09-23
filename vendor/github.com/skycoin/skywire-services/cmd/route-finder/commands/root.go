@@ -29,17 +29,18 @@ import (
 )
 
 var (
-	addr          string
-	metricsAddr   string
-	pgHost        string
-	pgPort        string
-	logLvl        string
-	tag           string
-	testing       bool
-	dmsgDisc      string
-	sk            cipher.SecKey
-	dmsgPort      uint16
-	pgMaxOpenConn int
+	addr           string
+	metricsAddr    string
+	pgHost         string
+	pgPort         string
+	logLvl         string
+	tag            string
+	testing        bool
+	dmsgDisc       string
+	sk             cipher.SecKey
+	dmsgPort       uint16
+	dmsgServerType string
+	pgMaxOpenConn  int
 )
 
 func init() {
@@ -47,13 +48,14 @@ func init() {
 	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to\033[0m")
 	RootCmd.Flags().StringVar(&pgHost, "pg-host", "localhost", "host of postgres\033[0m")
 	RootCmd.Flags().StringVar(&pgPort, "pg-port", "5432", "port of postgres\033[0m")
-	RootCmd.Flags().IntVar(&pgMaxOpenConn, "pg-max-open-conn", 60, "maximum open connection of db")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "set log level one of: info, error, warn, debug, trace, panic")
+	RootCmd.Flags().IntVar(&pgMaxOpenConn, "pg-max-open-conn", 60, "maximum open connection of db\033[0m")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\033[0m")
 	RootCmd.Flags().StringVar(&tag, "tag", "route_finder", "logging tag\033[0m")
 	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis\033[0m")
-	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", "http://dmsgd.skywire.skycoin.com", "url of dmsg-discovery\033[0m")
-	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\r")
-	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\r")
+	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsg.DiscAddr(false), "url of dmsg discovery\033[0m")
+	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\033[0m\n\r")
+	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\033[0m")
+	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler\033[0m")
 }
 
 // RootCmd contains the root command
@@ -144,14 +146,15 @@ PG_USER="postgres" PG_DATABASE="rf" PG_PASSWORD="" route-finder  --addr ":9092" 
 		}()
 
 		if !pk.Null() {
-			servers := dmsghttp.GetServers(ctx, dmsgDisc, logger)
+			servers := dmsghttp.GetServers(ctx, dmsgDisc, dmsgServerType, logger)
 
 			var keys cipher.PubKeys
 			keys = append(keys, pk)
 			dClient := direct.NewClient(direct.GetAllEntries(keys, servers), logger)
 			config := &dmsg.Config{
-				MinSessions:    0, // listen on all available servers
-				UpdateInterval: dmsg.DefaultUpdateInterval,
+				MinSessions:          0, // listen on all available servers
+				UpdateInterval:       dmsg.DefaultUpdateInterval,
+				ConnectedServersType: dmsgServerType,
 			}
 
 			dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, logger, pk, sk, dClient, config)
@@ -168,7 +171,7 @@ PG_USER="postgres" PG_DATABASE="rf" PG_PASSWORD="" route-finder  --addr ":9092" 
 				}
 			}()
 
-			go dmsghttp.UpdateServers(ctx, dClient, dmsgDisc, dmsgDC, logger)
+			go dmsghttp.UpdateServers(ctx, dClient, dmsgDisc, dmsgDC, dmsgServerType, logger)
 
 			go func() {
 				if err := dmsghttp.ListenAndServe(ctx, sk, rfAPI, dClient, dmsg.DefaultDmsgHTTPPort, dmsgDC, logger); err != nil {
