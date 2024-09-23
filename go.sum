@@ -688,8 +688,8 @@ github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6 h1:1Nc5EBY6pjfw1kwW0
 github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6/go.mod h1:UXghlricA7J3aRD/k7p/zBObQfmBawwCxIVPVjz2Q3o=
 github.com/skycoin/skycoin v0.27.1 h1:HatxsRwVSPaV4qxH6290xPBmkH/HgiuAoY2qC+e8C9I=
 github.com/skycoin/skycoin v0.27.1/go.mod h1:78nHjQzd8KG0jJJVL/j0xMmrihXi70ti63fh8vXScJw=
-github.com/skycoin/skycoin-service-discovery v1.3.25 h1:vnB4Is0/+rYuE9pH3+pBdnTbKQYQV3h9BvzxHZi7GB8=
-github.com/skycoin/skycoin-service-discovery v1.3.25/go.mod h1:D/4UQpOMdv8In2IY3P7+pLJUgJDqrpq7vpjX7dQEPng=
+github.com/skycoin/skycoin-service-discovery v1.3.26-0.20240923193126-2175869a0af5 h1:YuUEIh0ZxpprE6cHgTks3nsA9W0h6MAeTiTYzvRvlyY=
+github.com/skycoin/skycoin-service-discovery v1.3.26-0.20240923193126-2175869a0af5/go.mod h1:vfFU+qDJkxdf2AgPPem/WbKRxm2dNsWy1d+HJ3mluSM=
 github.com/skycoin/skywire-services v1.3.25 h1:LzUsNx7CNBTodkhkyl6fmJ1pbHY7WALiS4mNw8PKPe0=
 github.com/skycoin/skywire-services v1.3.25/go.mod h1:gRucqzsrQmzyPYBfYLJYFgi3+o98j+04oVFY0jRLScs=
 github.com/skycoin/skywire-utilities v1.3.25 h1:mk8dUonFdhVopFF3d9wbOyXXoiuAO+mN1y+ve6SzgX4=
