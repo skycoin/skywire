@@ -42,20 +42,20 @@ func init() {
 	rmTPCmd.Flags().SortFlags = false
 	listTPCmd.Flags().SortFlags = false
 	RootCmd.Flags().StringVarP(&configFile, "config", "c", "", "path to config file\033[0m")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "debug", "[info|error|warn|debug|trace|panic]")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "debug", "[info|error|warn|debug|trace|panic]\033[0m")
 	RootCmd.AddCommand(addTPCmd, rmTPCmd, listTPCmd)
-	addTPCmd.Flags().StringVarP(&fromPK, "from", "1", "", "PK to request transport setup")
-	addTPCmd.Flags().StringVarP(&toPK, "to", "2", "", "other transport edge PK")
-	addTPCmd.Flags().StringVarP(&tpType, "type", "t", "", "transport type to request creation of [stcpr|sudph|dmsg]")
-	rmTPCmd.Flags().StringVarP(&fromPK, "from", "1", "", "PK to request transport takedown")
-	rmTPCmd.Flags().StringVarP(&tpID, "tpid", "i", "", "id of transport to remove")
-	listTPCmd.Flags().StringVarP(&fromPK, "from", "1", "", "PK to request transport list")
-	addTPCmd.Flags().BoolVarP(&nice, "pretty", "p", false, "pretty print result")
-	rmTPCmd.Flags().BoolVarP(&nice, "pretty", "p", false, "pretty print result")
-	listTPCmd.Flags().BoolVarP(&nice, "pretty", "p", false, "pretty print result")
-	addTPCmd.Flags().StringVarP(&tpsnAddr, "addr", "z", "http://127.0.0.1:8080", "address of the transport setup-node")
-	rmTPCmd.Flags().StringVarP(&tpsnAddr, "addr", "z", "http://127.0.0.1:8080", "address of the transport setup-node")
-	listTPCmd.Flags().StringVarP(&tpsnAddr, "addr", "z", "http://127.0.0.1:8080", "address of the transport setup-node")
+	addTPCmd.Flags().StringVarP(&fromPK, "from", "1", "", "PK to request transport setup\033[0m")
+	addTPCmd.Flags().StringVarP(&toPK, "to", "2", "", "other transport edge PK\033[0m")
+	addTPCmd.Flags().StringVarP(&tpType, "type", "t", "", "transport type to request creation of [stcpr|sudph|dmsg]\033[0m")
+	rmTPCmd.Flags().StringVarP(&fromPK, "from", "1", "", "PK to request transport takedown\033[0m")
+	rmTPCmd.Flags().StringVarP(&tpID, "tpid", "i", "", "id of transport to remove\033[0m")
+	listTPCmd.Flags().StringVarP(&fromPK, "from", "1", "", "PK to request transport list\033[0m")
+	addTPCmd.Flags().BoolVarP(&nice, "pretty", "p", false, "pretty print result\033[0m")
+	rmTPCmd.Flags().BoolVarP(&nice, "pretty", "p", false, "pretty print result\033[0m")
+	listTPCmd.Flags().BoolVarP(&nice, "pretty", "p", false, "pretty print result\033[0m")
+	addTPCmd.Flags().StringVarP(&tpsnAddr, "addr", "z", "http://127.0.0.1:8080", "address of the transport setup-node\033[0m")
+	rmTPCmd.Flags().StringVarP(&tpsnAddr, "addr", "z", "http://127.0.0.1:8080", "address of the transport setup-node\033[0m")
+	listTPCmd.Flags().StringVarP(&tpsnAddr, "addr", "z", "http://127.0.0.1:8080", "address of the transport setup-node\033[0m")
 }
 
 // RootCmd contains the root command
@@ -88,7 +88,7 @@ Takes config in the following format:
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
-	Run: func(_ *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		if configFile == "" {
 			log.Fatal("please specify config file")
 		}
@@ -122,7 +122,7 @@ var addTPCmd = &cobra.Command{
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
-	Run: func(_ *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		err := pk1.Set(fromPK)
 		if err != nil {
 			log.Fatalf("-1 invalid public key: %v\n", err)
@@ -163,7 +163,7 @@ var rmTPCmd = &cobra.Command{
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
-	Run: func(_ *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		err := pk1.Set(fromPK)
 		if err != nil {
 			log.Fatalf("invalid public key: %v\n", err)
@@ -199,7 +199,7 @@ var listTPCmd = &cobra.Command{
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
-	Run: func(_ *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		res, err := script.Get(tpsnAddr + "/" + fromPK + "/transports").String()
 		if err != nil {
 			log.Fatal("something unexpected happened: ", err, res)

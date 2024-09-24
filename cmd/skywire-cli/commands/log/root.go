@@ -6,6 +6,8 @@ import (
 )
 
 var (
+	dmsgDiscURL    string
+	utURL          string
 	pubKey         string
 	duration       int
 	minv           string

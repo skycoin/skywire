@@ -12,6 +12,7 @@ import (
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/dmsgc"
@@ -31,8 +32,8 @@ func init() {
 	updateCmd.Flags().SortFlags = false
 	updateCmd.Flags().BoolVarP(&isUpdateEndpoints, "endpoints", "a", false, "update server endpoints")
 	updateCmd.Flags().StringVar(&logLevel, "log-level", "", "level of logging in config")
-	updateCmd.Flags().StringVarP(&serviceConfURL, "url", "b", "", "service config URL: "+svcConf)
-	updateCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", false, "use test deployment: "+testConf)
+	updateCmd.Flags().StringVarP(&serviceConfURL, "url", "b", skywire.ProdConf.Conf, "service config URL")
+	updateCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", false, "use test deployment")
 	updateCmd.Flags().StringVar(&setPublicAutoconnect, "public-autoconn", "", "change public autoconnect configuration")
 	updateCmd.Flags().IntVar(&minHops, "set-minhop", -1, "change min hops value")
 	updateCmd.PersistentFlags().StringVarP(&input, "input", "i", "", "path of input config file.")
@@ -91,9 +92,9 @@ var updateCmd = &cobra.Command{
 	PreRun: func(_ *cobra.Command, _ []string) {
 		if isUpdateEndpoints && (serviceConfURL == "") {
 			if !isTestEnv {
-				serviceConfURL = svcConf
+				serviceConfURL = skywire.ProdConf.Conf
 			} else {
-				serviceConfURL = testConf
+				serviceConfURL = skywire.TestConf.Conf
 			}
 		}
 		setDefaults()
@@ -106,7 +107,7 @@ var updateCmd = &cobra.Command{
 		conf = initUpdate()
 		if isUpdateEndpoints {
 			if isTestEnv {
-				serviceConfURL = testConf
+				serviceConfURL = skywire.TestConf.Conf
 			}
 			mLog := logging.NewMasterLogger()
 			mLog.SetLevel(logrus.InfoLevel)

@@ -63,7 +63,6 @@ var Test Services
 // TestConf is the service configuration address / URL for the skywire test deployment
 var TestConf Conf
 
-// initialize the embedded files into variables
 func init() {
 	var js interface{}
 	err := json.Unmarshal([]byte(ServicesJSON), &js)

@@ -4,13 +4,11 @@ package dmsg
 import (
 	"time"
 
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
+	"github.com/skycoin/skywire"
 )
 
 // Constants.
 const (
-	DefaultDiscAddr = skyenv.DmsgDiscAddr
-
 	DefaultMinSessions = 1
 
 	DefaultUpdateInterval = time.Minute
@@ -23,3 +21,12 @@ const (
 
 	DefaultCommunityDmsgServerType = "community"
 )
+
+// DiscAddr returns the address of the dmsg discovery
+func DiscAddr(testenv bool) string {
+	if testenv {
+		return skywire.Prod.DmsgDiscovery
+
+	}
+	return skywire.Test.DmsgDiscovery
+}

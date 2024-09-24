@@ -3,6 +3,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -13,10 +14,10 @@ import (
 	"time"
 
 	socks5 "github.com/confiant-inc/go-socks5"
+	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/dmsg/pkg/disc"
@@ -40,13 +41,20 @@ func Execute() {
 	}
 }
 func init() {
+	var envServices skywire.EnvServices
+	var services skywire.Services
+	if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err == nil {
+		if err := json.Unmarshal(envServices.Prod, &services); err == nil {
+			dmsgDisc = services.DmsgDiscovery
+		}
+	}
 	RootCmd.AddCommand(
 		serveCmd,
 		proxyCmd,
 	)
 	serveCmd.Flags().Uint16VarP(&dmsgPort, "dport", "q", 1081, "dmsg port to serve socks5")
 	serveCmd.Flags().StringVarP(&wl, "wl", "w", "", "whitelist keys, comma separated")
-	serveCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", skyenv.DmsgDiscAddr, "dmsg discovery url")
+	serveCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsgDisc, "dmsg discovery url")
 	if os.Getenv("DMSGSK") != "" {
 		sk.Set(os.Getenv("DMSGSK")) //nolint
 	}
@@ -55,7 +63,7 @@ func init() {
 	proxyCmd.Flags().IntVarP(&proxyPort, "port", "p", 1081, "TCP port to serve SOCKS5 proxy locally")
 	proxyCmd.Flags().Uint16VarP(&dmsgPort, "dport", "q", 1081, "dmsg port to connect to socks5 server")
 	proxyCmd.Flags().StringVarP(&pubk, "pk", "k", "", "dmsg socks5 proxy server public key to connect to")
-	proxyCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", skyenv.DmsgDiscAddr, "dmsg discovery url")
+	proxyCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsgDisc, "dmsg discovery url")
 	if os.Getenv("DMSGSK") != "" {
 		sk.Set(os.Getenv("DMSGSK")) //nolint
 	}
@@ -181,7 +189,7 @@ var proxyCmd = &cobra.Command{
 		if err != nil {
 			pk, sk = cipher.GenerateKeyPair()
 		}
-		initC := dmsg.NewClient(pk, sk, disc.NewHTTP(skyenv.DmsgDiscAddr, &http.Client{}, log), dmsg.DefaultConfig())
+		initC := dmsg.NewClient(pk, sk, disc.NewHTTP(dmsgDisc, &http.Client{}, log), dmsg.DefaultConfig())
 		go initC.Serve(context.Background())
 		initL, err := initC.Listen(dmsgPort)
 		if err != nil {

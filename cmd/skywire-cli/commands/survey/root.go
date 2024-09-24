@@ -12,10 +12,10 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -33,12 +33,20 @@ var (
 	pkgconfigexists  bool
 	userconfigexists bool
 	conf             *visorconfig.V1
+	dmsgDiscURL      string
 )
 
 func init() {
+	var envServices skywire.EnvServices
+	var services skywire.Services
+	if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err == nil {
+		if err := json.Unmarshal(envServices.Prod, &services); err == nil {
+			dmsgDiscURL = services.DmsgDiscovery
+		}
+	}
 	surveyCmd.Flags().SortFlags = false
 	surveyCmd.Flags().StringVarP(&confPath, "config", "c", "", "optionl config file to use (i.e.: "+visorconfig.ConfigName+")")
-	surveyCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", skyenv.DmsgDiscAddr, "value of dmsg discovery")
+	surveyCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsgDiscURL, "value of dmsg discovery")
 	//	surveyCmd.Flags().StringVarP(&confArg, "confarg", "C", "", "supply config as argument")
 	//	surveyCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
 	if _, err := os.Stat(visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON); err == nil {
@@ -63,7 +71,7 @@ var surveyCmd = &cobra.Command{
 	DisableFlagsInUseLine: true,
 	Short:                 "system survey",
 	Long:                  "print the system survey",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		if pkg {
 			confPath = visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON
 		}

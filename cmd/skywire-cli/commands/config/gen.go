@@ -22,7 +22,6 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
-	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -36,7 +35,7 @@ var checkPKCmd = &cobra.Command{
 	Use:   "check-pk <public-key>",
 	Short: "check a skywire public key",
 	Args:  cobra.ExactArgs(1), // Require exactly one argument
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		if len(args) == 0 {
 			return
 		}
@@ -53,7 +52,7 @@ var checkPKCmd = &cobra.Command{
 var genKeysCmd = &cobra.Command{
 	Use:   "gen-keys",
 	Short: "generate public / secret keypair",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		pk, sk := cipher.GenerateKeyPair()
 		fmt.Println(pk)
 		fmt.Println(sk)
@@ -72,7 +71,7 @@ func init() {
 	genConfigCmd.Flags().SortFlags = false
 	RootCmd.AddCommand(genConfigCmd, genKeysCmd, checkPKCmd)
 
-	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", scriptExecArray(fmt.Sprintf("${SVCCONFADDR[@]-%s}", utilenv.ServiceConfAddr)), "services conf url\n\r")
+	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", scriptExecArray(fmt.Sprintf("${SVCCONFADDR[@]-%s}", serviceConfURL)), "services conf url\n\r")
 	gHiddenFlags = append(gHiddenFlags, "url")
 	genConfigCmd.Flags().StringVar(&logLevel, "loglvl", scriptExecString("${LOGLVL:-info}"), "level of logging in config\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "loglvl")
@@ -159,7 +158,7 @@ func init() {
 	}
 	genConfigCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
 	gHiddenFlags = append(gHiddenFlags, "sk")
-	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", scriptExecBool("${TESTENV:-false}"), "use test deployment "+testConf+"\033[0m")
+	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", scriptExecBool("${TESTENV:-false}"), "use test deployment\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "testenv")
 	genConfigCmd.Flags().BoolVarP(&isVpnServerEnable, "servevpn", "v", scriptExecBool("${VPNSERVER:-false}"), "enable vpn server\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "servevpn")
@@ -302,7 +301,7 @@ var genConfigCmd = &cobra.Command{
 		}
 		//use test deployment
 		if isTestEnv {
-			serviceConfURL = utilenv.TestServiceConfAddr
+			serviceConfURL = testServiceConfURL
 		}
 		var err error
 		if isDmsgHTTP {
@@ -380,7 +379,7 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 	},
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 
 		log := logger
 		wasStdout := isStdout
@@ -391,13 +390,19 @@ var genConfigCmd = &cobra.Command{
 			isStdout = false
 		}
 
-		if !noFetch {
+		//determine best protocol
+		if isBestProtocol && netutil.LocalProtocol() {
+			disablePublicAutoConn = true
+			isDmsgHTTP = true
+		}
+
+		if !noFetch && !isDmsgHTTP {
 			// create an http client to fetch the services
 			client := http.Client{
 				Timeout: time.Second * 15, // Timeout after 15 seconds
 			}
 			if serviceConfURL == "" {
-				serviceConfURL = utilenv.ServiceConfAddr
+				serviceConfURL = "http://"
 			}
 			if !isStdout {
 				log.Infof("Fetching service endpoints from %s", serviceConfURL)
@@ -516,11 +521,6 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 
-		//determine best protocol
-		if isBestProtocol && netutil.LocalProtocol() {
-			disablePublicAutoConn = true
-			isDmsgHTTP = true
-		}
 		//generate the common config containing public & secret keys
 		u := buildinfo.Version()
 		x := u
@@ -545,8 +545,6 @@ var genConfigCmd = &cobra.Command{
 		conf.Common.Version = x
 		conf.Common.SK = sk
 		conf.Common.PK = pk
-
-		dnsServer := utilenv.DNSServer
 
 		if services.DNSServer != "" {
 			dnsServer = services.DNSServer
@@ -581,12 +579,8 @@ var genConfigCmd = &cobra.Command{
 		// If nothing was fetched
 		if services.SurveyWhitelist == nil {
 			// By default
-			if !noDefaults {
-				// set the hardcoded defaults from skywire-utilities for the service public keys
-				if err := surveyWlPKs.Set(utilenv.SurveyWhitelistPKs); err != nil {
-					log.Fatalf("Failed to unmarshal survey whitelist public keys: %v", err)
-				}
-			}
+			log.Error("Services were not fetched from default conf service URL")
+
 		}
 		//if the flag is not empty
 		if surveyWhitelistPKs != "" {
@@ -597,109 +591,29 @@ var genConfigCmd = &cobra.Command{
 		}
 		services.SurveyWhitelist = append(services.SurveyWhitelist, surveyWlPKs...)
 
-		if !isTestEnv {
-			if services.DmsgDiscovery == "" {
-				services.DmsgDiscovery = utilenv.DmsgDiscAddr
+		if services.DmsgDiscovery == "" {
+			log.Fatalf("Dmsg Discovery not set")
+		}
+		if services.TransportDiscovery == "" {
+			log.Fatalf("Transport Discovery not set")
+		}
+		if routeSetupNodes != "" {
+			if err := routeSetupPKs.Set(routeSetupNodes); err != nil {
+				log.Fatalf("bad key set for route setup node flag: %v", err)
 			}
-			if services.DmsgDiscovery == "" {
-				services.DmsgDiscovery = utilenv.DmsgDiscAddr
+		}
+		services.RouteSetupNodes = append(services.RouteSetupNodes, routeSetupPKs...)
+		if services.RouteSetupNodes == nil {
+			log.Fatalf("Route Setup node not set")
+		}
+		if transportSetupPKs != "" {
+			if err := tpSetupPKs.Set(transportSetupPKs); err != nil {
+				log.Fatalf("bad key set for transport setup node flag: %v", err)
 			}
-			if services.TransportDiscovery == "" {
-				services.TransportDiscovery = utilenv.TpDiscAddr
-			}
-			if services.AddressResolver == "" {
-				services.AddressResolver = utilenv.AddressResolverAddr
-			}
-			if services.RouteFinder == "" {
-				services.RouteFinder = utilenv.RouteFinderAddr
-			}
-			if services.UptimeTracker == "" {
-				services.UptimeTracker = utilenv.UptimeTrackerAddr
-			}
-			if services.ServiceDiscovery == "" {
-				services.ServiceDiscovery = utilenv.ServiceDiscAddr
-			}
-			if services.StunServers == nil {
-				services.StunServers = utilenv.GetStunServers()
-			}
-			if services.DNSServer == "" {
-				services.DNSServer = utilenv.DNSServer
-			}
-			if routeSetupNodes != "" {
-				if err := routeSetupPKs.Set(routeSetupNodes); err != nil {
-					log.Fatalf("bad key set for route setup node flag: %v", err)
-				}
-			}
-			if services.RouteSetupNodes == nil {
-				if !noDefaults {
-					if err := routeSetupPKs.Set(utilenv.RouteSetupPKs); err != nil {
-						log.Fatalf("Failed to unmarshal route setup-node public keys: %v", err)
-					}
-				}
-			}
-			services.RouteSetupNodes = append(services.RouteSetupNodes, routeSetupPKs...)
-			if transportSetupPKs != "" {
-				if err := tpSetupPKs.Set(transportSetupPKs); err != nil {
-					log.Fatalf("bad key set for transport setup node flag: %v", err)
-				}
-			}
-			if services.TransportSetupPKs == nil {
-				if !noDefaults {
-					if err := tpSetupPKs.Set(utilenv.TPSetupPKs); err != nil {
-						log.Fatalf("Failed to unmarshal transport setup-node public keys: %v", err)
-					}
-				}
-			}
-			services.TransportSetupPKs = append(services.TransportSetupPKs, tpSetupPKs...)
-		} else {
-			if services.DmsgDiscovery == "" {
-				services.DmsgDiscovery = utilenv.TestDmsgDiscAddr
-			}
-			if services.TransportDiscovery == "" {
-				services.TransportDiscovery = utilenv.TestTpDiscAddr
-			}
-			if services.AddressResolver == "" {
-				services.AddressResolver = utilenv.TestAddressResolverAddr
-			}
-			if services.RouteFinder == "" {
-				services.RouteFinder = utilenv.TestRouteFinderAddr
-			}
-			if services.UptimeTracker == "" {
-				services.UptimeTracker = utilenv.TestUptimeTrackerAddr
-			}
-			if services.ServiceDiscovery == "" {
-				services.ServiceDiscovery = utilenv.TestServiceDiscAddr
-			}
-			if services.StunServers == nil {
-				services.StunServers = utilenv.GetStunServers()
-			}
-			if services.DNSServer == "" {
-				services.DNSServer = utilenv.DNSServer
-			}
-			if routeSetupNodes != "" {
-				if err := routeSetupPKs.Set(routeSetupNodes); err != nil {
-					log.Fatalf("bad key set for route setup node flag: %v", err)
-				}
-			}
-			if services.RouteSetupNodes == nil {
-				if err := routeSetupPKs.Set(utilenv.TestRouteSetupPKs); err != nil {
-					log.Fatalf("Failed to unmarshal route setup-node public keys: %v", err)
-				}
-			}
-			services.RouteSetupNodes = append(services.RouteSetupNodes, routeSetupPKs...)
-			if transportSetupPKs != "" {
-				if err := tpSetupPKs.Set(transportSetupPKs); err != nil {
-					log.Fatalf("bad key set for transport setup node flag: %v", err)
-				}
-			}
-			if services.TransportSetupPKs == nil {
-				if !noDefaults {
-					if err := tpSetupPKs.Set(utilenv.TestTPSetupPKs); err != nil {
-						log.Fatalf("Failed to unmarshal transport setup-node public keys: %v", err)
-					}
-				}
-			}
-			services.TransportSetupPKs = append(services.TransportSetupPKs, tpSetupPKs...)
+		}
+		services.TransportSetupPKs = append(services.TransportSetupPKs, tpSetupPKs...)
+		if services.TransportSetupPKs == nil {
+			log.Fatalf("Route Setup node not set")
 		}
 
 		conf.Dmsg = &dmsgc.DmsgConfig{

@@ -38,7 +38,7 @@ func (a *API) AddToCache(p *PollResult) error {
 	err := a.cache.View(func(txn *badger.Txn) error {
 		for k, v := range p.Nodes {
 			_, err := txn.Get([]byte("nodes/" + k))
-			if err != nil && errors.Is(badger.ErrKeyNotFound, err) {
+			if err != nil && errors.Is(err, badger.ErrKeyNotFound) {
 				b, err := json.Marshal(v)
 				if err != nil {
 					return err
@@ -52,7 +52,7 @@ func (a *API) AddToCache(p *PollResult) error {
 		}
 		for _, v := range p.Edges {
 			_, err := txn.Get([]byte("edges/" + v.ID.URN()))
-			if err != nil && errors.Is(badger.ErrKeyNotFound, err) {
+			if err != nil && errors.Is(err, badger.ErrKeyNotFound) {
 				b, err := json.Marshal(v)
 				if err != nil {
 					return err
