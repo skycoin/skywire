@@ -65,7 +65,7 @@ func (r Rule) assertLen(l int) {
 // KeepAlive returns rule's keep-alive timeout.
 func (r Rule) KeepAlive() time.Duration {
 	r.assertLen(RuleHeaderSize)
-	return time.Duration(binary.BigEndian.Uint64(r[0:8]))
+	return time.Duration(binary.BigEndian.Uint64(r[0:8])) //nolint
 }
 
 // setKeepAlive sets rule's keep-alive timeout.

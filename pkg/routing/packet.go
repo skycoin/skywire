@@ -105,7 +105,7 @@ func MakeDataPacket(id RouteID, payload []byte) (Packet, error) {
 
 	packet[PacketTypeOffset] = byte(DataPacket)
 	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
-	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(len(payload)))
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(len(payload))) //nolint
 	copy(packet[PacketPayloadOffset:], payload)
 
 	return packet, nil
@@ -187,7 +187,7 @@ func MakeErrorPacket(id RouteID, errPayload []byte) (Packet, error) {
 
 	packet[PacketTypeOffset] = byte(ErrorPacket)
 	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
-	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(len(errPayload)))
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(len(errPayload))) //nolint
 	copy(packet[PacketPayloadOffset:], errPayload)
 
 	return packet, nil

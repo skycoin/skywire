@@ -43,7 +43,7 @@ func (m *VictoriaMetrics) RecordRequest() func(rules *routing.EdgeRules, err *er
 	start := time.Now()
 	m.activeRequests.Inc()
 
-	return func(rules *routing.EdgeRules, err *error) {
+	return func(_ *routing.EdgeRules, err *error) {
 		if *err == nil {
 			m.reqDurationsSuccesses.UpdateDuration(start)
 		} else {

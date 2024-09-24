@@ -26,7 +26,7 @@ type Config struct {
 // DefaultConfig is used to populate the config struct with its default values
 func DefaultConfig() Config {
 	return Config{
-		DmsgDisc:     dmsg.DefaultDiscAddr,
+		DmsgDisc:     dmsg.DiscAddr(false),
 		DmsgSessions: dmsg.DefaultMinSessions,
 		DmsgPort:     DefaultPort,
 		CLINet:       DefaultCLINet,

@@ -92,7 +92,7 @@ func (mt *memTable) reserveKeysImpl(n int) (first, last RouteID, err error) {
 	}
 
 	first = mt.nextID + 1
-	mt.nextID += RouteID(n)
+	mt.nextID += RouteID(n) //nolint
 	last = mt.nextID
 
 	return first, last, nil

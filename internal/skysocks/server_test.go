@@ -70,7 +70,7 @@ func TestProxy(t *testing.T) {
 	proxyDial, err := proxy.SOCKS5("tcp", ":10080", nil, proxy.Direct)
 	require.NoError(t, err)
 
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, err := fmt.Fprintln(w, "Hello, client")
 		require.NoError(t, err)
 	}))
