@@ -11,26 +11,11 @@ import (
 	"github.com/bitfield/script"
 	"github.com/pterm/pterm"
 	"github.com/pterm/pterm/putils"
-	dmsgdisc "github.com/skycoin/dmsg/cmd/dmsg-discovery/commands"
-	dmsgserver "github.com/skycoin/dmsg/cmd/dmsg-server/commands"
-	dmsgsocks "github.com/skycoin/dmsg/cmd/dmsg-socks5/commands"
-	dmsgcurl "github.com/skycoin/dmsg/cmd/dmsgcurl/commands"
-	dmsghttp "github.com/skycoin/dmsg/cmd/dmsghttp/commands"
-	dmsgptycli "github.com/skycoin/dmsg/cmd/dmsgpty-cli/commands"
-	dmsgptyhost "github.com/skycoin/dmsg/cmd/dmsgpty-host/commands"
-	dmsgptyui "github.com/skycoin/dmsg/cmd/dmsgpty-ui/commands"
-	dmsgweb "github.com/skycoin/dmsg/cmd/dmsgweb/commands"
+	dmsg "github.com/skycoin/dmsg/cmd/dmsg/commands"
 	sd "github.com/skycoin/skycoin-service-discovery/cmd/service-discovery/commands"
 	"github.com/spf13/cobra"
 
-	ar "github.com/skycoin/skywire-services/cmd/address-resolver/commands"
-	confbs "github.com/skycoin/skywire-services/cmd/config-bootstrapper/commands"
-	kg "github.com/skycoin/skywire-services/cmd/keys-gen/commands"
-	nv "github.com/skycoin/skywire-services/cmd/node-visualizer/commands"
-	rf "github.com/skycoin/skywire-services/cmd/route-finder/commands"
-	se "github.com/skycoin/skywire-services/cmd/sw-env/commands"
-	tpd "github.com/skycoin/skywire-services/cmd/transport-discovery/commands"
-	tps "github.com/skycoin/skywire-services/cmd/transport-setup/commands"
+	services "github.com/skycoin/skywire-services/cmd/skywire-services/commands"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	sc "github.com/skycoin/skywire/cmd/apps/skychat/commands"
 	ssc "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
@@ -43,32 +28,7 @@ import (
 )
 
 func init() {
-	dmsgptyCmd.AddCommand(
-		dmsgptycli.RootCmd,
-		dmsgptyhost.RootCmd,
-		dmsgptyui.RootCmd,
-	)
-	dmsgCmd.AddCommand(
-		dmsgptyCmd,
-		dmsgdisc.RootCmd,
-		dmsgserver.RootCmd,
-		dmsghttp.RootCmd,
-		dmsgcurl.RootCmd,
-		dmsgweb.RootCmd,
-		dmsgsocks.RootCmd,
-	)
-	svcCmd.AddCommand(
-		sn.RootCmd,
-		tpd.RootCmd,
-		tps.RootCmd,
-		ar.RootCmd,
-		rf.RootCmd,
-		confbs.RootCmd,
-		kg.RootCmd,
-		nv.RootCmd,
-		se.RootCmd,
-		sd.RootCmd,
-	)
+
 	appsCmd.AddCommand(
 		vpns.RootCmd,
 		vpnc.RootCmd,
@@ -76,11 +36,15 @@ func init() {
 		ss.RootCmd,
 		sc.RootCmd,
 	)
+	services.RootCmd.AddCommand(
+		sd.RootCmd,
+		sn.RootCmd,
+	)
 	RootCmd.AddCommand(
 		visor.RootCmd,
 		scli.RootCmd,
-		svcCmd,
-		dmsgCmd,
+		services.RootCmd,
+		dmsg.RootCmd,
 		appsCmd,
 		treeCmd,
 		docCmd,
@@ -89,25 +53,8 @@ func init() {
 	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐  ┬  ┬┬┌─┐┌─┐┬─┐
 	└─┐├┴┐└┬┘││││├┬┘├┤───└┐┌┘│└─┐│ │├┬┘
 	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘   └┘ ┴└─┘└─┘┴└─`
-	dmsgcurl.RootCmd.Use = "curl"
-	dmsgweb.RootCmd.Use = "web"
-	dmsgptycli.RootCmd.Use = "cli"
-	dmsgptyhost.RootCmd.Use = "host"
-	dmsgptyui.RootCmd.Use = "ui"
-	dmsgdisc.RootCmd.Use = "disc"
-	dmsgserver.RootCmd.Use = "server"
-	dmsghttp.RootCmd.Use = "http"
-	dmsgcurl.RootCmd.Use = "curl"
-	dmsgweb.RootCmd.Use = "web"
-	dmsgsocks.RootCmd.Use = "socks"
-	tpd.RootCmd.Use = "tpd"
-	tps.RootCmd.Use = "tps"
-	ar.RootCmd.Use = "ar"
-	rf.RootCmd.Use = "rf"
-	confbs.RootCmd.Use = "cb"
-	kg.RootCmd.Use = "kg"
-	nv.RootCmd.Use = "nv"
-	se.RootCmd.Use = "se"
+	dmsg.RootCmd.Use = "dmsg"
+	services.RootCmd.Use = "svc"
 	sd.RootCmd.Use = "sd"
 	sn.RootCmd.Use = "sn"
 	scli.RootCmd.Use = "cli"
@@ -135,47 +82,6 @@ var RootCmd = &cobra.Command{
 	Version:               buildinfo.Version(),
 }
 
-// RootCmd contains all subcommands
-var svcCmd = &cobra.Command{
-	Use:   "svc",
-	Short: "Skywire services",
-	Long: `
-	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐  ┌─┐┌─┐┬─┐┬  ┬┬┌─┐┌─┐┌─┐
-	└─┐├┴┐└┬┘││││├┬┘├┤───└─┐├┤ ├┬┘└┐┌┘││  ├┤ └─┐
-	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘  └─┘└─┘┴└─ └┘ ┴└─┘└─┘└─┘`,
-	SilenceErrors:         true,
-	SilenceUsage:          true,
-	DisableSuggestions:    true,
-	DisableFlagsInUseLine: true,
-	Version:               buildinfo.Version(),
-}
-
-// RootCmd contains all binaries which may be separately compiled as subcommands
-var dmsgCmd = &cobra.Command{
-	Use:   "dmsg",
-	Short: "Dmsg services & utilities",
-	Long: `
-	┌┬┐┌┬┐┌─┐┌─┐
-	 │││││└─┐│ ┬
-	─┴┘┴ ┴└─┘└─┘ `,
-	SilenceErrors:         true,
-	SilenceUsage:          true,
-	DisableSuggestions:    true,
-	DisableFlagsInUseLine: true,
-}
-
-var dmsgptyCmd = &cobra.Command{
-	Use:   "pty",
-	Short: "Dmsg pseudoterminal (pty)",
-	Long: `
-	┌─┐┌┬┐┬ ┬
-	├─┘ │ └┬┘
-	┴   ┴  ┴ `,
-	SilenceErrors:         true,
-	SilenceUsage:          true,
-	DisableSuggestions:    true,
-	DisableFlagsInUseLine: true,
-}
 var appsCmd = &cobra.Command{
 	Use:   "app",
 	Short: "skywire native applications",
