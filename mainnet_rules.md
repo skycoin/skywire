@@ -54,7 +54,7 @@ A total of up to ~1114.754  Skycoin are distributed daily in leap-years.
 To receive Skycoin rewards for running skywire, the following requirements must be met:
 
 
-* 1) **Minimum skywire version v1.3.25** - Cutoff September 1st 2024
+* 1) **Minimum skywire version v1.3.26** - Cutoff October 1st 2024
 
 * 2) **75% [uptime](#uptime) per day** minimum is required to be eligible to receive rewards
 
@@ -109,11 +109,6 @@ skywire visor -v
 
 The update deadlines specify the version of software required as of (i.e. on or before) the specified date in order to maintain reward eligibility:
 
-**Reward eligibility after 7-1-2024 requires Skywire v1.3.23**
-
-Requirement established 6-25-2024
-
-Rewards Cutoff date for updating 7-1-2024
 
 **Reward eligibility after 9-1-2024 requires Skywire v1.3.25**
 
@@ -121,6 +116,11 @@ Requirement established 8-21-2024
 
 Rewards Cutoff date for updating 9-1-2024
 
+**Reward eligibility after 10-1-2024 requires Skywire v1.3.26**
+
+Requirement established 9-24-2024
+
+Rewards Cutoff date for updating 10-1-2024
 
 ### Deployment
 
@@ -431,4 +431,4 @@ The following hardware is eligible for rewards:
 #### ZTE
      - ZXV10 B860H
 
-**If you would like to use other boards please contact the team first for approval ; only the boards on the list are guaranteed to be eligible for rewards.**
+~~If you would like to use other boards please contact the team first for approval ; only the boards on the list are guaranteed to be eligible for rewards.~~
