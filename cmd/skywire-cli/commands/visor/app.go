@@ -142,7 +142,7 @@ var registerAppCmd = &cobra.Command{
 	Use:   "register",
 	Short: "Register app",
 	Long:  "\n  Register app",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			os.Exit(1)
@@ -175,7 +175,7 @@ var deregisterAppCmd = &cobra.Command{
 	Use:   "deregister",
 	Short: "Deregister app",
 	Long:  "\n  Deregister app",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			os.Exit(1)

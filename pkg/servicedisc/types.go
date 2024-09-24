@@ -82,7 +82,7 @@ func (a *SWAddr) UnmarshalText(text []byte) error {
 	if err != nil {
 		return err
 	}
-	binary.BigEndian.PutUint16(a[len(a)-2:], uint16(port))
+	binary.BigEndian.PutUint16(a[len(a)-2:], uint16(port)) //nolint
 	return nil
 }
 

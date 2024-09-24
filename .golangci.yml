@@ -45,7 +45,7 @@ run:
 # output configuration options
 output:
   # colored-line-number|line-number|json|tab|checkstyle, default is "colored-line-number"
-  format: colored-line-number
+  formats: colored-line-number
 
   # print lines of code with issue, default is true
   print-issued-lines: true
@@ -66,8 +66,7 @@ linters-settings:
     check-blank: true
   govet:
     # report about shadowed variables
-    check-shadowing: true
-
+    shadow: true
     # Obtain type information from installed (to $GOPATH/pkg) package files:
     # golangci-lint will execute `go install -i` and `go test -i` for analyzed packages
     # before analyzing them.
@@ -160,7 +159,6 @@ linters:
     - ineffassign
     - typecheck
     - gosec
-    - megacheck
     - misspell
     - nakedret
   enable-all: false

@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/skycoin/dmsg/pkg/direct"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
@@ -20,7 +19,6 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/httpauth"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire-utilities/pkg/metricsutil"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire-utilities/pkg/storeconfig"
 	"github.com/skycoin/skywire-utilities/pkg/tcpproxy"
 	"github.com/spf13/cobra"
@@ -49,6 +47,7 @@ var (
 	testEnvironment bool
 	sk              cipher.SecKey
 	dmsgPort        uint16
+	dmsgServerType  string
 )
 
 func init() {
@@ -56,19 +55,15 @@ func init() {
 	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to\033[0m")
 	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store\033[0m")
 	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size\033[0m")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "set log level one of: info, error, warn, debug, trace, panic")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\033[0m")
 	RootCmd.Flags().StringVar(&tag, "tag", "address_resolver", "logging tag\033[0m")
 	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis\033[0m")
-	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", "http://dmsgd.skywire.skycoin.com", "url of dmsg-discovery\033[0m")
+	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscAddr(false), "url of dmsg discovery\033[0m")
 	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "list of whitelisted keys of network monitor used for deregistration\033[0m")
 	RootCmd.Flags().BoolVar(&testEnvironment, "test-environment", false, "distinguished between prod and test environment\033[0m")
-	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\r")
-	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\r")
-	var helpflag bool
-	RootCmd.SetUsageTemplate(help)
-	RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help for address-resolver")
-	RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
-	RootCmd.PersistentFlags().MarkHidden("help") //nolint
+	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\033[0m\n\r")
+	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\033[0m")
+	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler\033[0m")
 }
 
 // RootCmd contains the root command
@@ -131,14 +126,7 @@ skywire svc ar --addr ":9093" --redis "redis://localhost:6379" --sk $(tail -n1 a
 		var whitelistPKs []string
 		if whitelistKeys != "" {
 			whitelistPKs = strings.Split(whitelistKeys, ",")
-		} else {
-			if testEnvironment {
-				whitelistPKs = strings.Split(skyenv.TestNetworkMonitorPKs, ",")
-			} else {
-				whitelistPKs = strings.Split(skyenv.NetworkMonitorPKs, ",")
-			}
 		}
-
 		for _, v := range whitelistPKs {
 			api.WhitelistPKs.Set(v)
 		}
@@ -189,14 +177,15 @@ skywire svc ar --addr ":9093" --redis "redis://localhost:6379" --sk $(tail -n1 a
 		}()
 
 		if !pk.Null() {
-			servers := dmsghttp.GetServers(ctx, dmsgDisc, logger)
+			servers := dmsghttp.GetServers(ctx, dmsgDisc, dmsgServerType, logger)
 
 			var keys cipher.PubKeys
 			keys = append(keys, pk)
 			dClient := direct.NewClient(direct.GetAllEntries(keys, servers), logger)
 			config := &dmsg.Config{
-				MinSessions:    0, // listen on all available servers
-				UpdateInterval: dmsg.DefaultUpdateInterval,
+				MinSessions:          0, // listen on all available servers
+				UpdateInterval:       dmsg.DefaultUpdateInterval,
+				ConnectedServersType: dmsgServerType,
 			}
 
 			dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, logger, pk, sk, dClient, config)
@@ -213,7 +202,7 @@ skywire svc ar --addr ":9093" --redis "redis://localhost:6379" --sk $(tail -n1 a
 				}
 			}()
 
-			go dmsghttp.UpdateServers(ctx, dClient, dmsgDisc, dmsgDC, logger)
+			go dmsghttp.UpdateServers(ctx, dClient, dmsgDisc, dmsgDC, dmsgServerType, logger)
 
 			go func() {
 				if err := dmsghttp.ListenAndServe(ctx, sk, arAPI, dClient, dmsg.DefaultDmsgHTTPPort, dmsgDC, logger); err != nil {
@@ -229,33 +218,9 @@ skywire svc ar --addr ":9093" --redis "redis://localhost:6379" --sk $(tail -n1 a
 	},
 }
 
-// Execute executes root CLI command.
+// Execute executes root CLI command
 func Execute() {
-	cc.Init(&cc.Config{
-		RootCmd:       RootCmd,
-		Headings:      cc.HiBlue + cc.Bold, //+ cc.Underline,
-		Commands:      cc.HiBlue + cc.Bold,
-		CmdShortDescr: cc.HiBlue,
-		Example:       cc.HiBlue + cc.Italic,
-		ExecName:      cc.HiBlue + cc.Bold,
-		Flags:         cc.HiBlue + cc.Bold,
-		//FlagsDataType: cc.HiBlue,
-		FlagsDescr:      cc.HiBlue,
-		NoExtraNewlines: true,
-		NoBottomNewline: true,
-	})
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
-
 	}
 }
-
-const help = "Usage:\r\n" +
-	"  {{.UseLine}}{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}\r\n\r\n" +
-	"{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}\r\n\r\n" +
-	"Available Commands:{{range .Commands}}{{if (or .IsAvailableCommand)}}\r\n  " +
-	"{{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}\r\n\r\n" +
-	"Flags:\r\n" +
-	"{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}\r\n\r\n" +
-	"Global Flags:\r\n" +
-	"{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}\r\n\r\n"

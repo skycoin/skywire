@@ -64,7 +64,7 @@ type Handshake func(conn net.Conn, deadline time.Time) (lAddr, rAddr dmsg.Addr, 
 
 // InitiatorHandshake creates the handshake logic on the initiator's side.
 func InitiatorHandshake(lSK cipher.SecKey, localAddr, remoteAddr dmsg.Addr) Handshake {
-	return handshakeMiddleware(func(conn net.Conn, deadline time.Time) (lAddr, rAddr dmsg.Addr, err error) {
+	return handshakeMiddleware(func(conn net.Conn, _ time.Time) (lAddr, rAddr dmsg.Addr, err error) {
 		if err = writeFrame0(conn); err != nil {
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
@@ -113,7 +113,8 @@ func MakeF2PortChecker(portChecker func(port uint16) error) CheckF2 {
 
 // ResponderHandshake creates the handshake logic on the responder's side.
 func ResponderHandshake(checkF2 CheckF2) Handshake {
-	return handshakeMiddleware(func(conn net.Conn, deadline time.Time) (lAddr, rAddr dmsg.Addr, err error) {
+	//	return handshakeMiddleware(func(conn net.Conn, deadline time.Time) (lAddr, rAddr dmsg.Addr, err error) {
+	return handshakeMiddleware(func(conn net.Conn, _ time.Time) (lAddr, rAddr dmsg.Addr, err error) {
 		if err = readFrame0(conn); err != nil {
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}

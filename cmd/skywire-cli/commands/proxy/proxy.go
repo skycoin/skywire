@@ -4,6 +4,7 @@ package skysocksc
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -15,9 +16,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
+	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -172,7 +173,7 @@ var startCmd = &cobra.Command{
 var stopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "stop the " + serviceType + " client",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
@@ -196,7 +197,7 @@ var stopCmd = &cobra.Command{
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: serviceType + " client status",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		//TODO: check status of multiple clients
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -216,7 +217,10 @@ var statusCmd = &cobra.Command{
 			AppPort   routing.Port `json:"app_port"`
 		}
 		var jsonAppStatus []appState
-		fmt.Fprintf(w, "---- All Proxy List -----------------------------------------------------\n\n")
+		_, err = fmt.Fprintf(w, "---- All Proxy List -----------------------------------------------------\n\n")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error on fmt.Fprintf: %w", err))
+		}
 		for _, state := range states {
 			for _, v := range state.AppConfig.Args {
 				if v == binaryName {
@@ -249,7 +253,10 @@ var statusCmd = &cobra.Command{
 				}
 			}
 		}
-		fmt.Fprintf(w, "-------------------------------------------------------------------------\n")
+		_, err = fmt.Fprintf(w, "-------------------------------------------------------------------------\n")
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error on fmt.Fprintf: %w", err))
+		}
 		internal.Catch(cmd.Flags(), w.Flush())
 		internal.PrintOutput(cmd.Flags(), jsonAppStatus, b.String())
 	},
@@ -258,12 +265,20 @@ var statusCmd = &cobra.Command{
 var isLabel bool
 
 func init() {
+	var envServices skywire.EnvServices
+	var services skywire.Services
+	if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err == nil {
+		if err := json.Unmarshal(envServices.Prod, &services); err == nil {
+			svcDiscURL = services.DmsgDiscovery
+			utURL = services.UptimeTracker
+		}
+	}
 	if version == "unknown" {
 		version = "" //nolint
 	}
 	version = strings.Split(version, "-")[0]
-	listCmd.Flags().StringVarP(&utURL, "uturl", "w", skyenv.UptimeTrackerAddr, "uptime tracker url")
-	listCmd.Flags().StringVarP(&sdURL, "sdurl", "a", skyenv.ServiceDiscAddr, "service discovery url")
+	listCmd.Flags().StringVarP(&utURL, "uturl", "w", utURL, "uptime tracker url")
+	listCmd.Flags().StringVarP(&sdURL, "sdurl", "a", svcDiscURL, "service discovery url")
 	listCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "print raw data")
 	listCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status in UT")
 	listCmd.Flags().StringVar(&cacheFileSD, "cfs", os.TempDir()+"/proxysd.json", "SD cache file location")
@@ -280,8 +295,8 @@ func init() {
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List servers",
-	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache file location to \"\" to avoid using cache files", serviceType, skyenv.ServiceDiscAddr, serviceType, skyenv.ServiceDiscAddr, serviceType),
-	Run: func(cmd *cobra.Command, args []string) {
+	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache file location to \"\" to avoid using cache files", serviceType, svcDiscURL, serviceType, svcDiscURL, serviceType),
+	Run: func(_ *cobra.Command, _ []string) {
 		sds := internal.GetData(cacheFileSD, sdURL+"/api/services?type="+serviceType, cacheFilesAge)
 		if rawData {
 			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout() //nolint

@@ -449,7 +449,7 @@ func (rg *RouteGroup) sendPing() error {
 
 	throughput := rg.networkStats.RemoteThroughput()
 	timestamp := time.Now().UTC().UnixNano() / int64(time.Millisecond)
-	rg.networkStats.SetDownloadSpeed(uint32(throughput))
+	rg.networkStats.SetDownloadSpeed(uint32(throughput)) //nolint
 
 	packet := routing.MakePingPacket(rule.NextRouteID(), timestamp, throughput)
 
@@ -697,7 +697,7 @@ func (rg *RouteGroup) handleErrorPacket(packet routing.Packet) error {
 		return nil
 	}
 
-	rg.SetError(fmt.Errorf(string(packet.Payload())))
+	rg.SetError(fmt.Errorf("%v", string(packet.Payload())))
 	return nil
 }
 
@@ -723,9 +723,9 @@ func (rg *RouteGroup) handlePingPacket(packet routing.Packet) error {
 
 	rg.logger.WithField("func", "RouteGroup.handlePingPacket").Tracef("Throughput is around %d", throughput)
 
-	rg.networkStats.SetUploadSpeed(uint32(throughput))
+	rg.networkStats.SetUploadSpeed(uint32(throughput)) //nolint
 
-	return rg.sendPong(int64(timestamp))
+	return rg.sendPong(int64(timestamp)) //nolint
 }
 
 func (rg *RouteGroup) handlePongPacket(packet routing.Packet) error {
@@ -734,13 +734,13 @@ func (rg *RouteGroup) handlePongPacket(packet routing.Packet) error {
 	sentAtMs := binary.BigEndian.Uint64(payload)
 
 	ms := sentAtMs % 1000
-	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond)).UTC()
+	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond)).UTC() //nolint
 
 	latency := time.Now().UTC().Sub(sentAt).Milliseconds()
 
 	rg.logger.WithField("func", "RouteGroup.handlePongPacket").Tracef("Latency is around %d ms", latency)
 
-	rg.networkStats.SetLatency(uint32(latency))
+	rg.networkStats.SetLatency(uint32(latency)) //nolint
 
 	return nil
 }
