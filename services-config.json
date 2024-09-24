@@ -38,7 +38,7 @@
         ]
     },
     "prod": {
-        "conf": "http://conf.skywire.skycoin.com"
+        "conf": "http://conf.skywire.skycoin.com",
         "dmsg_discovery": "http://dmsgd.skywire.skycoin.com",
         "transport_discovery": "http://tpd.skywire.skycoin.com",
         "address_resolver": "http://ar.skywire.skycoin.com",
@@ -75,6 +75,6 @@
             "031d4cf1b7ab4c789b56c769f2888e4a61c778dfa5fe7e5cd0217fc41660b2eb65",
             "0327e2cf1d2e516ecbfdbd616a87489cc92a73af97335d5c8c29eafb5d8882264a",
             "03abbb3eff140cf3dce468b3fa5a28c80fa02c6703d7b952be6faaf2050990ebf4"
-        ],
+        ]
     }
 }
