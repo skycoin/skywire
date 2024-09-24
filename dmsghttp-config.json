@@ -54,15 +54,15 @@
        }
       },
       {
-       "static": "03d5b55d1133b26485c664cf8b95cff6746d1e321c34e48c9fed293eff0d6d49e5",
+       "static": "03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4",
        "server": {
-        "address": "170.187.228.44:30083"
+        "address": "139.162.173.101:30083"
        }
       },
       {
-       "static": "0228af3fd99c8d86a882495c8e0202bdd4da78c69e013065d8634286dd4a0ac098",
+       "static": "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd",
        "server": {
-        "address": "170.187.228.178:30084"
+        "address": "139.162.173.101:30082"
        }
       }
      ],
