@@ -67,7 +67,7 @@ var RootCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 
 		appCl = app.NewClient(nil)
 		defer appCl.Close()
@@ -277,8 +277,10 @@ func sseHandler(w http.ResponseWriter, req *http.Request) {
 			if !ok {
 				return
 			}
-			_, _ = fmt.Fprintf(w, "data: %s\n\n", msg)
-			f.Flush()
+			_, err := fmt.Fprintf(w, "data: %s\n\n", msg)
+			if err == nil {
+				f.Flush()
+			}
 
 		case <-req.Context().Done():
 			fmt.Print("SSE connection were closed.")

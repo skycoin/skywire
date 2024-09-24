@@ -123,10 +123,10 @@ func TestRPCGateway_ReserveIDs(t *testing.T) {
 
 		gateway := NewRPCGateway(r, mlog)
 
-		var gotIds []routing.RouteID
-		err := gateway.ReserveIDs(uint8(n), &gotIds)
+		var gotIDs []routing.RouteID
+		err := gateway.ReserveIDs(uint8(n), &gotIDs) //nolint
 		require.NoError(t, err)
-		require.Equal(t, ids, gotIds)
+		require.Equal(t, ids, gotIDs)
 	})
 
 	t.Run("fail reserving keys", func(t *testing.T) {
@@ -140,9 +140,9 @@ func TestRPCGateway_ReserveIDs(t *testing.T) {
 			Msg:  testhelpers.Err.Error(),
 		}
 
-		var gotIds []routing.RouteID
-		err := gateway.ReserveIDs(uint8(n), &gotIds)
+		var gotIDs []routing.RouteID
+		err := gateway.ReserveIDs(uint8(n), &gotIDs) //nolint
 		require.Equal(t, wantErr, err)
-		require.Nil(t, gotIds)
+		require.Nil(t, gotIDs)
 	})
 }

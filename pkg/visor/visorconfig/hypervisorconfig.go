@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/util/pathutil"
 )
 
@@ -112,24 +112,34 @@ func (c *HypervisorConfig) FillDefaults(testEnv bool) {
 	}
 
 	if c.DmsgDiscovery == "" {
-		if testEnv {
-			c.DmsgDiscovery = utilenv.TestDmsgDiscAddr
-		} else {
-			c.DmsgDiscovery = utilenv.DmsgDiscAddr
-		}
-	}
-	if c.DmsgPort == 0 {
-		c.DmsgPort = DmsgHypervisorPort
-	}
-	if c.HTTPAddr == "" {
-		c.HTTPAddr = httpAddr
-	}
-	c.Cookies.FillDefaults()
-	c.EnableAuth = EnableAuth
-	c.EnableTLS = EnableTLS
-	c.TLSCertFile = TLSCert
-	c.TLSKeyFile = TLSKey
+		var envServices EnvServices
+		var services Services
+		if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err == nil {
+			if testEnv {
+				if err := json.Unmarshal(envServices.Test, &services); err != nil {
+					return
+				}
+			} else {
+				if err := json.Unmarshal(envServices.Prod, &services); err != nil {
+					return
+				}
+			}
 
+			c.DmsgDiscovery = services.DmsgDiscovery
+		}
+		if c.DmsgPort == 0 {
+			c.DmsgPort = DmsgHypervisorPort
+		}
+		if c.HTTPAddr == "" {
+			c.HTTPAddr = httpAddr
+		}
+		c.Cookies.FillDefaults()
+		c.EnableAuth = EnableAuth
+		c.EnableTLS = EnableTLS
+		c.TLSCertFile = TLSCert
+		c.TLSKeyFile = TLSKey
+
+	}
 }
 
 // Parse parses the file in path, and decodes to the config.

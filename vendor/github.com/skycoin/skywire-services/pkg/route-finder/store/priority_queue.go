@@ -1,6 +1,8 @@
 package store
 
-import "container/heap"
+import (
+	"container/heap"
+)
 
 // implementation from https://rosettacode.org/wiki/Dijkstra%27s_algorithm#Go
 // A priorityQueue implements heap.Interface and holds Items.
