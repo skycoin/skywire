@@ -6,6 +6,27 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.26
+
+-   Embed Deployment Configuration  [#1873](https://github.com/skycoin/skywire/pull/1873)
+-   Remove hardcoded services  [#1872](https://github.com/skycoin/skywire/pull/1872)
+-   Update dmsg server ip address in dmsghttp-config.json [#1868](https://github.com/skycoin/skywire/pull/1868)
+
+## 1.3.25
+
+-   update skywire-services and skycoin-service-discovery to v1.3.25  [#1864](https://github.com/skycoin/skywire/pull/1864)
+-   make ready for v1.3.25  [#1863](https://github.com/skycoin/skywire/pull/1863)
+-   update skywire-utilties  [#1862](https://github.com/skycoin/skywire/pull/1862)
+-   Update Reward Calculation  [#1859](https://github.com/skycoin/skywire/pull/1859)
+
+## 1.3.24
+
+-   fix Windows installer script  [#1858](https://github.com/skycoin/skywire/pull/1858)
+-   fix reward calculation  [#1857](https://github.com/skycoin/skywire/pull/1857)
+-   fix survey &amp; reward calculation  [#1856](https://github.com/skycoin/skywire/pull/1856)
+-   Fix IP issue on survey  [#1855](https://github.com/skycoin/skywire/pull/1855)
+-   Fix skywire cli log / update dmsg dep  [#1853](https://github.com/skycoin/skywire/pull/1853)
+-   add windows arm64 archive to release  [#1852](https://github.com/skycoin/skywire/pull/1852)
 
 ## 1.3.23
 
