@@ -31,7 +31,7 @@ require (
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/skycoin/dmsg v1.3.26-0.20240924024628-ed5195787d40
-	github.com/skycoin/skycoin v0.27.1
+	github.com/skycoin/skycoin v0.28.0
 	github.com/skycoin/skycoin-service-discovery v1.3.26-0.20240923193126-2175869a0af5
 	github.com/skycoin/skywire-services v1.3.26-0.20240924025250-cb6c2e8fe08f
 	github.com/skycoin/skywire-utilities v1.3.25
