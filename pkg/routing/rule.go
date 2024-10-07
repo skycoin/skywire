@@ -76,7 +76,7 @@ func (r Rule) setKeepAlive(keepAlive time.Duration) {
 		keepAlive = 0
 	}
 
-	binary.BigEndian.PutUint64(r[0:8], uint64(keepAlive))
+	binary.BigEndian.PutUint64(r[0:8], uint64(keepAlive)) //nolint
 }
 
 // Type returns type of a rule.
