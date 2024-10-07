@@ -1487,7 +1487,7 @@ func scriptExecUint(s string) uint {
 			}
 			i, err := strconv.Atoi(strings.TrimSpace(strings.TrimRight(out, "\n")))
 			if err == nil {
-				return uint(i)
+				return uint(i) //nolint
 			}
 			return 0
 		}
@@ -1500,7 +1500,7 @@ func scriptExecUint(s string) uint {
 		}
 		i, err := strconv.Atoi(z)
 		if err == nil {
-			return uint(i)
+			return uint(i) //nolint
 		}
 	}
 	return uint(0)
