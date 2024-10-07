@@ -141,8 +141,8 @@ func MakePingPacket(id RouteID, timestamp, throughput int64) Packet {
 	packet[PacketTypeOffset] = byte(PingPacket)
 	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
 	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(16))
-	binary.BigEndian.PutUint64(packet[PacketPayloadOffset:], uint64(timestamp))
-	binary.BigEndian.PutUint64(packet[PacketPayloadOffset+8:], uint64(throughput))
+	binary.BigEndian.PutUint64(packet[PacketPayloadOffset:], uint64(timestamp))    //nolint
+	binary.BigEndian.PutUint64(packet[PacketPayloadOffset+8:], uint64(throughput)) //nolint
 
 	return packet
 }
@@ -154,7 +154,7 @@ func MakePongPacket(id RouteID, timestamp int64) Packet {
 	packet[PacketTypeOffset] = byte(PongPacket)
 	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
 	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(16))
-	binary.BigEndian.PutUint64(packet[PacketPayloadOffset:], uint64(timestamp))
+	binary.BigEndian.PutUint64(packet[PacketPayloadOffset:], uint64(timestamp)) //nolint
 
 	return packet
 }
