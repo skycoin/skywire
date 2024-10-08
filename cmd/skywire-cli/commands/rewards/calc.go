@@ -196,7 +196,7 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 			}
 			sky, _ = script.File(nodeInfoDotJSON).JQ(".skycoin_address").Replace(" ", "").Replace(`"`, "").String() //nolint
 			sky = strings.TrimRight(sky, "\n")
-			arch, _ = script.File(nodeInfoDotJSON).JQ(`if .zcalusic_sysinfo.os.architecture == null or .go_arch == .zcalusic_sysinfo.os.architecture then .go_arch else null end`).Replace(" ", "").Replace(`"`, "").String() //nolint
+			arch, _ = script.File(nodeInfoDotJSON).JQ(`.go_arch`).Replace(" ", "").Replace(`"`, "").String() //nolint
 			arch = strings.TrimRight(arch, "\n")
 			uu, _ = script.File(nodeInfoDotJSON).JQ(".uuid").Replace(" ", "").Replace(`"`, "").String() //nolint
 			uu = strings.TrimRight(uu, "\n")
