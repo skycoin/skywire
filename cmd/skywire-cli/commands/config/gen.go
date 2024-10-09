@@ -304,12 +304,12 @@ var genConfigCmd = &cobra.Command{
 			serviceConfURL = testServiceConfURL
 		}
 		var err error
-		if isDmsgHTTP {
-			if isPkgEnv {
-				if dmsgHTTPPath == visorconfig.DMSGHTTPName {
-					dmsgHTTPPath = visorconfig.SkywirePath + "/" + visorconfig.DMSGHTTPName //nolint
-				}
+		if isPkgEnv {
+			if dmsgHTTPPath == visorconfig.DMSGHTTPName {
+				dmsgHTTPPath = visorconfig.SkywirePath + "/" + visorconfig.DMSGHTTPName //nolint
 			}
+		}
+		if isDmsgHTTP {
 			if _, err := os.Stat(dmsgHTTPPath); err == nil {
 				if !isStdout {
 					log.Info("Found Dmsghttp config: ", dmsgHTTPPath)
