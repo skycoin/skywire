@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/csv"
-	"encoding/json"
 	"fmt"
 	htmpl "html/template"
 	"io"
@@ -37,13 +36,6 @@ import (
 )
 
 func init() {
-	var envServices skywire.EnvServices
-	var services skywire.Services
-	if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err == nil {
-		if err := json.Unmarshal(envServices.Prod, &services); err == nil {
-			dmsgDiscURL = services.DmsgDiscovery
-		}
-	}
 	RootCmd.CompletionOptions.DisableDefaultCmd = true
 	RootCmd.AddCommand(
 		uiCmd,
@@ -56,7 +48,7 @@ func init() {
 		msg += "\n\r"
 	}
 	uiCmd.Flags().StringVarP(&wl, "wl", "w", scriptExecArray("${REWARDPKS[@]}"), msg)
-	uiCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", "", "dmsg discovery url default:\n"+dmsgDiscURL)
+	uiCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", skywire.Prod.DmsgDiscovery, "dmsg discovery url")
 	uiCmd.Flags().StringVarP(&ensureOnlineURL, "ensure-online", "O", scriptExecString("${ENSUREONLINE}"), "Exit when the specified URL cannot be fetched;\ni.e. https://fiber.skywire.dev")
 	if os.Getenv("DMSGHTTP_SK") != "" {
 		sk.Set(os.Getenv("DMSGHTTP_SK")) //nolint
@@ -1376,17 +1368,53 @@ var (
 	n3          = "  <a href='/log-collection'>log collection</a>"
 	n4          = "  <a href='/log-collection/tree'>survey index</a>"
 	n5          = "  <a href='/log-collection/tplogs'>transport logging</a>"
-	n6          = "  <a href='https://ut.skywire.skycoin.com/uptimes?v=v2'>uptime tracker</a>"
-	n7          = "  <a href='https://ar.skywire.skycoin.com/transports'>address resolver</a>"
-	n8          = "  <a href='https://tpd.skywire.skycoin.com/all-transports'>transport discovery</a>"
-	n9          = "  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/entries'>dmsgd entries</a>"
-	n10         = "  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers'>all dmsg servers</a>"
-	n11         = "  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/available_servers'>available dmsg servers</a>"
+	n6          = "  <a href='" + strings.ReplaceAll(skywire.Prod.UptimeTracker, "http://", "https://") + "/uptimes?v=v2'>uptime tracker</a>"
+	n7					= "  <a href='" + strings.ReplaceAll(skywire.Prod.AddressResolver, "http://", "https://") + "'>address resolver</a>"
+	n8          = "  <a href='" + strings.ReplaceAll(skywire.Prod.TransportDiscovery, "http://", "https://") + "/all-transports'>transport discovery</a>"
+	n9          = "  <a href='" + strings.ReplaceAll(skywire.Prod.DmsgDiscovery, "http://", "https://") + "/dmsg-discovery/entries'>dmsgd entries</a>"
+	n10         = "  <a href='" + strings.ReplaceAll(skywire.Prod.DmsgDiscovery, "http://", "https://") + "/dmsg-discovery/all_servers'>all dmsg servers</a>"
+	n11         = "  <a href='" + strings.ReplaceAll(skywire.Prod.DmsgDiscovery, "http://", "https://") + "/dmsg-discovery/available_servers'>available dmsg servers</a>"
 	n12         = "\n<br>\n"
 	navlinks    = n1 + n2 + n3 + n4 + n5 + n6 + n7 + n8 + n9 + n10 + n11 + n12
 	htmltoplink = "<a href='#top'>top of page</a>\n"
 	htmlend     = "</pre></body></html>"
 )
+
+var htmlHeaderTemplate = `
+<header>
+  <nav class='absolute' style='white-space: nowrap;'>
+    <ul id='menu' style='background-color: black;'>
+      <li class='tui-dropdown' style='background-color: black;'></li>
+      <li class='tui-dropdown'>
+        <a title='fiber' href='/'>fiber</a>
+      </li>&nbsp;
+      <li class='tui-dropdown'>
+        <details>
+          <summary title='dropdown menu'>telegram</summary>
+          <ul>
+            <li><a title='@skywire telegram' href='https://t.me/skywire'>skywire</a></li>
+            <li><a title='@skywire_reward telegram' href='https://t.me/skywire_reward'>reward notifications</a></li>
+            <li><a title='@skycoinblockchain telegram' href='https://t.me/SkycoinBlockchain'>skycoin transactions</a></li>
+            <li><a title='@skycoin telegram' href='https://t.me/skycoin'>skycoin</a></li>
+            <li><a title='@skycoingithub telegram' href='https://t.me/SkycoinGithub'>github commits</a></li>
+          </ul>
+        </details>
+      </li>
+    </ul>
+    <a href='/skycoin-rewards'>skycoin rewards</a>
+    <a href='/log-collection'>log collection</a>
+    <a href='/log-collection/tree'>survey index</a>
+    <a href='/log-collection/tplogs'>transport logging</a>
+    <a href='` + strings.ReplaceAll(skywire.Prod.UptimeTracker, "http://", "https://") + `/uptimes?v=v2'>uptime tracker</a>
+    <a href='` + strings.ReplaceAll(skywire.Prod.AddressResolver, "http://", "https://") + `'>address resolver</a>
+    <a href='` + strings.ReplaceAll(skywire.Prod.TransportDiscovery, "http://", "https://") + `/all-transports'>transport discovery</a>
+    <a href='` + strings.ReplaceAll(skywire.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/entries'>dmsgd entries</a>
+    <a href='` + strings.ReplaceAll(skywire.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/all_servers'>all dmsg servers</a>
+    <a href='` + strings.ReplaceAll(skywire.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/available_servers'>available dmsg servers</a>
+  </nav>
+</header>
+`
+
 
 func scriptExecString(s string) string {
 	if runtime.GOOS == "windows" {
@@ -1588,11 +1616,28 @@ type htmlTemplateData struct {
 }
 
 // {{template "header" .}}
-const htmlMainPageTemplate = `
+var htmlMainPageTemplate = `
 {{ $page := .Page }}<!doctype html><html lang='en'>
 {{template "head" .}}
 <body title='' style='background-color:black;color:white;'>
-<pre><a id='top' class='anchor' aria-hidden='true' href='#top'></a>  <a href='/'>fiber</a>  <a href='/skycoin-rewards'>skycoin rewards</a>  <a href='/log-collection'>log collection</a>  <a href='/log-collection/tree'>survey index</a>  <a href='/log-collection/tplogs'>transport logging</a>  <a href='/transports'>transport stats</a>  <a href='/transports-map'>transport map</a>  <a href='https://ut.skywire.skycoin.com/uptimes?v=v2'>uptime tracker</a>  <a href='https://ar.skywire.skycoin.com/transports'>address resolver</a>  <a href='https://tpd.skywire.skycoin.com/all-transports'>transport discovery</a>  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/entries'>dmsgd entries</a>  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers'>all dmsg servers</a>  <a href='https://dmsgd.skywire.skycoin.com/dmsg-discovery/available_servers'>available dmsg servers</a><br>
+<a id='top' class='anchor' aria-hidden='true' href='#top'></a><header>
+  <nav class='absolute' style='white-space: nowrap;'>
+  <a href='/skycoin-rewards'>skycoin rewards</a>
+  <a href='/log-collection'>log collection</a>
+  <a href='/log-collection/tree'>survey index</a>
+  <a href='/log-collection/tplogs'>transport logging</a>
+  <a href='` + strings.ReplaceAll(skywire.Prod.UptimeTracker, "http://", "https://") + `/uptimes?v=v2'>uptime tracker</a>
+  <a href='` + strings.ReplaceAll(skywire.Prod.AddressResolver, "http://", "https://") + `'>address resolver</a>
+  <a href='` + strings.ReplaceAll(skywire.Prod.TransportDiscovery, "http://", "https://") + `/all-transports'>transport discovery</a>
+  <a href='` + strings.ReplaceAll(skywire.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/entries'>dmsgd entries</a>
+  <a href='` + strings.ReplaceAll(skywire.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/all_servers'>all dmsg servers</a>
+  <a href='` + strings.ReplaceAll(skywire.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/available_servers'>available dmsg servers</a>
+	<a title='@skywire telegram' href='https://t.me/skywire'>skywire telegram</a>
+	<a title='@skywire_reward telegram' href='https://t.me/skywire_reward'>reward notifications</a>
+  </nav>
+</header>
+<br>
+<pre>
 <main>
 {{template "this" .}}
 </main>
