@@ -62,7 +62,7 @@ const longtext = `
 	Sets the skycoin reward address for the visor.
 	The address is written to the root of the default 'local' directory specified in the visor's config
 
-	This file is parsed by the visor at runtime, and the skycoin addresed is included in the survey which is served via dmsghttp along with transport logs
+	This file is parsed by the visor at runtime, and the skycoin address is included in the survey which is served via dmsghttp along with transport logs
 	and the system hardware survey for automating reward distribution
 
 	By setting a skycoin reward address, you consent to collection of the survey from the visors where the reward address is set.

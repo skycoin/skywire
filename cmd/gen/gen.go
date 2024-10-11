@@ -87,7 +87,7 @@ func main() {
 		NoExtraNewlines: true,
 		NoBottomNewline: true,
 	})
-	rootCmd.Execute()
+	rootCmd.Execute() //nolint
 }
 
 const help = "{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}\r\n\r\n" +

@@ -13,15 +13,17 @@ import (
 
 	"github.com/bitfield/script"
 	"github.com/fatih/color"
+	coincipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
+	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	tgbot "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards/tgbot"
 )
 
-const yearlyTotalRewards int = 408000
+const yearlyTotalRewardsPerPool int = 408000
 
 var (
 	yearlyTotal           int
@@ -29,14 +31,15 @@ var (
 	wdate                 = time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 	wDate                 time.Time
 	utfile                string
-	disallowArchitectures string
+	disallowArchitectures []string
+	allowArchitectures    []string
 	h0                    bool
 	h1                    bool
 	h2                    bool
 	grr                   bool
 	pubkey                string
 	logLvl                string
-	log                   *logging.Logger
+	log                   = logging.MustGetLogger("rewards")
 	sConfig               string
 	dConfig               string
 	nodeInfoSvc           []byte
@@ -74,8 +77,23 @@ func init() {
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "info", "[ debug | warn | error | fatal | panic | trace ] \u001b[0m*")
 	RootCmd.Flags().StringVarP(&wdate, "date", "d", wdate, "date for which to calculate reward")
 	RootCmd.Flags().StringVarP(&pubkey, "pk", "k", pubkey, "check reward for pubkey")
-	RootCmd.Flags().StringVarP(&disallowArchitectures, "noarch", "n", "amd64,null", "disallowed architectures, comma separated")
-	RootCmd.Flags().IntVarP(&yearlyTotal, "year", "y", yearlyTotalRewards, "yearly total rewards")
+	RootCmd.Flags().StringSliceVarP(&disallowArchitectures, "noarch", "n", []string{"null"}, "disallowed architectures, comma separated")
+	RootCmd.Flags().StringSliceVarP(&allowArchitectures, "yesarch", "o", func(all []string, dis []string) (res []string) {
+		for _, v := range all {
+			allow := true
+			for _, d := range dis {
+				if v == d {
+					allow = false
+					break
+				}
+			}
+			if allow {
+				res = append(res, v)
+			}
+		}
+		return res
+	}(skywire.Architectures, []string{"wasm"}), "allowed architectures, comma separated")
+	RootCmd.Flags().IntVarP(&yearlyTotal, "year", "y", yearlyTotalRewardsPerPool, "yearly total rewards for calculation pool")
 	RootCmd.Flags().StringVarP(&utfile, "utfile", "u", "ut.txt", "uptime tracker data file")
 	RootCmd.Flags().StringVarP(&hwSurveyPath, "lpath", "p", "log_collecting", "path to the surveys")
 	RootCmd.Flags().StringVarP(&sConfig, "svcconf", "f", "/opt/skywire/services-config.json", "path to the services-config.json")
@@ -92,7 +110,17 @@ var RootCmd = &cobra.Command{
 	Short: "calculate rewards from uptime data & collected surveys",
 	Long: `
 Collect surveys:  skywire-cli log
-Fetch uptimes:    skywire-cli ut > ut.txt`,
+Fetch uptimes:    skywire-cli ut > ut.txt
+
+Architectures:
+` + fmt.Sprintf("%v", append(skywire.Architectures, "null", "all")) + `
+
+Calculate rewards for pool 1
+skywire cli reward -n 386,amd64
+
+Calculate rewards for pool 2
+skywire cli reward -o 386,amd64
+`,
 	Run: func(_ *cobra.Command, _ []string) {
 		var err error
 		if log == nil {
@@ -130,12 +158,63 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 			log.Fatal("uptime tracker data file not found\n", err, "\nfetch the uptime tracker data with:\n$ skywire-cli ut > ut.txt")
 		}
 
-		archMap := make(map[string]struct{})
-		for _, disallowedarch := range strings.Split(disallowArchitectures, ",") {
-			if disallowedarch != "" {
-				archMap[disallowedarch] = struct{}{}
+		validArchMap := make(map[string]struct{})
+		for _, arch := range skywire.Architectures {
+			validArchMap[arch] = struct{}{}
+		}
+
+		validCount := 0
+		for _, disallowedArch := range disallowArchitectures {
+			if _, isValid := validArchMap[disallowedArch]; isValid || disallowedArch == "null" {
+				disallowArchitectures[validCount] = disallowedArch
+				validCount++
 			}
 		}
+		disallowArchitectures = disallowArchitectures[:validCount]
+
+		foundAll := false
+		for _, arch := range allowArchitectures {
+			if arch == "all" {
+				foundAll = true
+				break
+			}
+		}
+
+		if foundAll {
+			allowArchitectures = make([]string, len(skywire.Architectures))
+			for i := range skywire.Architectures {
+				copy(allowArchitectures[i:i+1], skywire.Architectures[i:i+1])
+			}
+		} else {
+			validCount = 0
+			for _, allowedArch := range allowArchitectures {
+				if _, isValid := validArchMap[allowedArch]; isValid || allowedArch == "null" {
+					allowArchitectures[validCount] = allowedArch
+					validCount++
+				}
+			}
+			allowArchitectures = allowArchitectures[:validCount]
+		}
+
+		disallowedMap := make(map[string]struct{})
+		for _, disallowedArch := range disallowArchitectures {
+			disallowedMap[disallowedArch] = struct{}{}
+		}
+
+		finalArchitectures := []string{}
+		for _, allowedArch := range allowArchitectures {
+			if _, isDisallowed := disallowedMap[allowedArch]; !isDisallowed {
+				finalArchitectures = append(finalArchitectures, allowedArch)
+			}
+		}
+
+		allowArchMap := make(map[string]struct{})
+		for _, allowarch := range finalArchitectures {
+			if allowarch != "" {
+				allowArchMap[allowarch] = struct{}{}
+			}
+		}
+
 		var res []string
 		if pubkey == "" {
 			res, _ = script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Slice() //nolint
@@ -190,10 +269,6 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 
 			ip, _ = script.File(nodeInfoDotJSON).JQ(`.ip_address`).Replace(" ", "").Replace(`"`, "").String() //nolint
 			ip = strings.TrimRight(ip, "\n")
-			if strings.Count(ip, ".") != 3 {
-				ip, _ = script.File(nodeInfoDotJSON).JQ(`."ip.skycoin.com".ip_address`).Replace(" ", "").Replace(`"`, "").String() //nolint
-				ip = strings.TrimRight(ip, "\n")
-			}
 			sky, _ = script.File(nodeInfoDotJSON).JQ(".skycoin_address").Replace(" ", "").Replace(`"`, "").String() //nolint
 			sky = strings.TrimRight(sky, "\n")
 			arch, _ = script.File(nodeInfoDotJSON).JQ(`.go_arch`).Replace(" ", "").Replace(`"`, "").String() //nolint
@@ -225,7 +300,10 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 				SvcConf:    svcconf,
 			}
 			//enforce all requirements for rewards
-			if _, disallowed := archMap[arch]; !disallowed && ip != "" && strings.Count(ip, ".") == 3 && sky != "" && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" {
+			_, allowed := allowArchMap[arch]
+			_, err := coincipher.DecodeBase58Address(sky)
+
+			if allowed && strings.Count(ip, ".") == 3 && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" && err == nil {
 				nodesInfos = append(nodesInfos, ni)
 			} else {
 				if grr {

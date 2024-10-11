@@ -1,5 +1,4 @@
 // Package clireward cmd/skywire-cli/reward/rules.go
-
 package clireward
 
 import (
