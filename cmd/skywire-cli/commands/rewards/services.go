@@ -87,13 +87,13 @@ must be run with sufficient permissions to write to output path`,
 		fmt.Println("Wrote to: " + outPath)
 
 		// Create a new template and parse the service file template into it
-		tmpl, err = template.New("").Parse(fiberRewardSvcTpl)
+		tmpl1, err := template.New("").Parse(fiberRewardSvcTpl)
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		// Execute the template with the data and output the result to stdout
-		err = tmpl.Execute(&renderedServiceFile1, serviceConfig)
+		err = tmpl1.Execute(&renderedServiceFile1, serviceConfig)
 		if err != nil {
 			log.Fatal(err)
 		}
