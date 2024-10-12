@@ -18,6 +18,7 @@ var (
 	workingDir string
 	skyenvConf string
 	outputPath string
+	outPath    string
 )
 
 func init() {
@@ -67,16 +68,23 @@ must be run with sufficient permissions to write to output path`,
 		}
 
 		var renderedServiceFile bytes.Buffer
+		var renderedServiceFile1 bytes.Buffer
 		err = tmpl.Execute(&renderedServiceFile, serviceConfig)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		_, err = script.Echo(renderedServiceFile.String()).Tee().WriteFile(outputPath + "/skywire-reward.service")
+		outPath = outputPath
+
+		if outputPath != "/dev/stdout" {
+			outPath = outputPath + "/skywire-reward.service"
+		}
+
+		_, err = script.Echo(renderedServiceFile.String()).Tee().WriteFile(outPath)
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println("Wrote to:" + outputPath + "/skywire-reward.service")
+		fmt.Println("Wrote to: " + outPath)
 
 		// Create a new template and parse the service file template into it
 		tmpl, err = template.New("").Parse(fiberRewardSvcTpl)
@@ -85,22 +93,33 @@ must be run with sufficient permissions to write to output path`,
 		}
 
 		// Execute the template with the data and output the result to stdout
-		err = tmpl.Execute(&renderedServiceFile, serviceConfig)
+		err = tmpl.Execute(&renderedServiceFile1, serviceConfig)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		_, err = script.Echo(renderedServiceFile.String()).Tee().WriteFile(outputPath + "/fiberreward.service")
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Println("Wrote to:" + outputPath + "/fiberreward.service")
+		outPath = outputPath
 
-		_, err = script.Echo(skywireRewardTimerTpl).Tee().WriteFile(outputPath + "/skywire-reward.timer")
+		if outputPath != "/dev/stdout" {
+			outPath = outputPath + "/fiberreward.service"
+		}
+
+		_, err = script.Echo(renderedServiceFile1.String()).Tee().WriteFile(outPath)
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println("Wrote to:" + outputPath + "/skywire-reward.timer")
+		fmt.Println("Wrote to: " + outPath)
+
+		outPath = outputPath
+
+		if outputPath != "/dev/stdout" {
+			outPath = outputPath + "/skywire-reward.timer"
+		}
+		_, err = script.Echo(skywireRewardTimerTpl).Tee().WriteFile(outPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println("Wrote to: " + outPath)
 
 	},
 }
@@ -128,12 +147,11 @@ After=network.target
 [Service]
 Type=simple
 User={{.User}}
-WorkingDirectory={{.Dir}}
+WorkingDirectory={{.Dir}}/rewards
 ExecStart=/bin/bash -c './getlogs.sh && ./reward.sh ; exit 0'
 
 [Install]
 WantedBy=multi-user.target
-
 `
 
 // UI / Frontend
@@ -146,7 +164,7 @@ After=network.target
 Type=simple
 User={{.User}}
 WorkingDirectory={{.Dir}}
-Environment={{.Conf}}
+Environment='SKYENV={{.Conf}}''
 ExecStart=/usr/bin/bash -c 'skywire cli rewards ui'
 Restart=always
 RestartSec=20
@@ -154,7 +172,6 @@ TimeoutSec=30
 
 [Install]
 WantedBy=multi-user.target
-
 `
 
 type svcConfig struct {
