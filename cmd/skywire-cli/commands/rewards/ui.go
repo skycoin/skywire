@@ -1369,7 +1369,7 @@ var (
 	n4          = "  <a href='/log-collection/tree'>survey index</a>"
 	n5          = "  <a href='/log-collection/tplogs'>transport logging</a>"
 	n6          = "  <a href='" + strings.ReplaceAll(skywire.Prod.UptimeTracker, "http://", "https://") + "/uptimes?v=v2'>uptime tracker</a>"
-	n7					= "  <a href='" + strings.ReplaceAll(skywire.Prod.AddressResolver, "http://", "https://") + "'>address resolver</a>"
+	n7          = "  <a href='" + strings.ReplaceAll(skywire.Prod.AddressResolver, "http://", "https://") + "'>address resolver</a>"
 	n8          = "  <a href='" + strings.ReplaceAll(skywire.Prod.TransportDiscovery, "http://", "https://") + "/all-transports'>transport discovery</a>"
 	n9          = "  <a href='" + strings.ReplaceAll(skywire.Prod.DmsgDiscovery, "http://", "https://") + "/dmsg-discovery/entries'>dmsgd entries</a>"
 	n10         = "  <a href='" + strings.ReplaceAll(skywire.Prod.DmsgDiscovery, "http://", "https://") + "/dmsg-discovery/all_servers'>all dmsg servers</a>"
@@ -1414,7 +1414,6 @@ var htmlHeaderTemplate = `
   </nav>
 </header>
 `
-
 
 func scriptExecString(s string) string {
 	if runtime.GOOS == "windows" {

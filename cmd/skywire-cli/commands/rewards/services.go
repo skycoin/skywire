@@ -2,25 +2,24 @@
 package clirewards
 
 import (
-	"fmt"
 	"bytes"
-
+	"fmt"
 	"os"
 	"os/user"
-	"text/template"
 	"syscall"
-
+	"text/template"
 
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 )
 
 var (
-	userName string
+	userName   string
 	workingDir string
 	skyenvConf string
 	outputPath string
 )
+
 func init() {
 	RootCmd.AddCommand(
 		systemdServicesCmd,
@@ -46,21 +45,18 @@ func init() {
 	systemdServicesCmd.Flags().StringVarP(&outputPath, "out", "o", "/etc/systemd/system", "path to output systemd services")
 }
 
-
 var systemdServicesCmd = &cobra.Command{
 	Use:   "systemd",
 	Short: "set up systemd services for reward system",
-	Long:  `set up systemd services for reward system
+	Long: `set up systemd services for reward system
 must be run with sufficient permissions to write to output path`,
 	Run: func(_ *cobra.Command, _ []string) {
 		// Get the current user
 
-
-
 		// Prepare the data for the template
 		serviceConfig := svcConfig{
-			User:            userName,
-			Dir: workingDir,
+			User: userName,
+			Dir:  workingDir,
 			Conf: skyenvConf,
 		}
 
@@ -76,12 +72,11 @@ must be run with sufficient permissions to write to output path`,
 			log.Fatal(err)
 		}
 
-		_, err = script.Echo(renderedServiceFile.String()).Tee().WriteFile(outputPath+"/skywire-reward.service")
+		_, err = script.Echo(renderedServiceFile.String()).Tee().WriteFile(outputPath + "/skywire-reward.service")
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println("Wrote to:"+outputPath+"/skywire-reward.service")
-
+		fmt.Println("Wrote to:" + outputPath + "/skywire-reward.service")
 
 		// Create a new template and parse the service file template into it
 		tmpl, err = template.New("").Parse(fiberRewardSvcTpl)
@@ -95,23 +90,20 @@ must be run with sufficient permissions to write to output path`,
 			log.Fatal(err)
 		}
 
-		_, err = script.Echo(renderedServiceFile.String()).Tee().WriteFile(outputPath+"/fiberreward.service")
+		_, err = script.Echo(renderedServiceFile.String()).Tee().WriteFile(outputPath + "/fiberreward.service")
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println("Wrote to:"+outputPath+"/fiberreward.service")
+		fmt.Println("Wrote to:" + outputPath + "/fiberreward.service")
 
-		_, err = script.Echo(skywireRewardTimerTpl).Tee().WriteFile(outputPath+"/skywire-reward.timer")
+		_, err = script.Echo(skywireRewardTimerTpl).Tee().WriteFile(outputPath + "/skywire-reward.timer")
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println("Wrote to:"+outputPath+"/skywire-reward.timer")
-
+		fmt.Println("Wrote to:" + outputPath + "/skywire-reward.timer")
 
 	},
 }
-
-
 
 // Timer for log collection & reward calculation
 
@@ -164,8 +156,9 @@ TimeoutSec=30
 WantedBy=multi-user.target
 
 `
+
 type svcConfig struct {
-	User            string
-	Dir string
+	User string
+	Dir  string
 	Conf string
 }
