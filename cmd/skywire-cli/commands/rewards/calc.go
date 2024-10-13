@@ -337,7 +337,7 @@ Architectures:
 			fmt.Printf("days this month: %d\n", daysThisMonth)
 			fmt.Printf("days in the year: %d\n", daysThisYear)
 			fmt.Printf("this month's rewards: %.6f\n", monthReward)
-			fmt.Printf("reward total: %.6f\n", dayReward)
+			fmt.Printf("reward total per pool: %.6f\n", dayReward)
 		}
 		uniqueIP, _ := script.Echo(func() string { //nolint
 			var inputStr strings.Builder
