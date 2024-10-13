@@ -164,7 +164,7 @@ After=network.target
 Type=simple
 User={{.User}}
 WorkingDirectory={{.Dir}}
-Environment='SKYENV={{.Conf}}''
+Environment='SKYENV={{.Conf}}'
 ExecStart=/usr/bin/bash -c 'skywire cli rewards ui'
 Restart=always
 RestartSec=20
