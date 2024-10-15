@@ -67,7 +67,6 @@ linters-settings:
   govet:
     # report about shadowed variables
     shadow: true
-
     # Obtain type information from installed (to $GOPATH/pkg) package files:
     # golangci-lint will execute `go install -i` and `go test -i` for analyzed packages
     # before analyzing them.

@@ -74,7 +74,7 @@ func init() {
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "info", "[ debug | warn | error | fatal | panic | trace ] \u001b[0m*")
 	RootCmd.Flags().StringVarP(&wdate, "date", "d", wdate, "date for which to calculate reward")
 	RootCmd.Flags().StringVarP(&pubkey, "pk", "k", pubkey, "check reward for pubkey")
-	RootCmd.Flags().StringVarP(&disallowArchitectures, "noarch", "n", "amd64", "disallowed architectures, comma separated")
+	RootCmd.Flags().StringVarP(&disallowArchitectures, "noarch", "n", "amd64,null", "disallowed architectures, comma separated")
 	RootCmd.Flags().IntVarP(&yearlyTotal, "year", "y", yearlyTotalRewards, "yearly total rewards")
 	RootCmd.Flags().StringVarP(&utfile, "utfile", "u", "ut.txt", "uptime tracker data file")
 	RootCmd.Flags().StringVarP(&hwSurveyPath, "lpath", "p", "log_collecting", "path to the surveys")
@@ -196,7 +196,7 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 			}
 			sky, _ = script.File(nodeInfoDotJSON).JQ(".skycoin_address").Replace(" ", "").Replace(`"`, "").String() //nolint
 			sky = strings.TrimRight(sky, "\n")
-			arch, _ = script.File(nodeInfoDotJSON).JQ(".go_arch").Replace(" ", "").Replace(`"`, "").String() //nolint
+			arch, _ = script.File(nodeInfoDotJSON).JQ(`.go_arch`).Replace(" ", "").Replace(`"`, "").String() //nolint
 			arch = strings.TrimRight(arch, "\n")
 			uu, _ = script.File(nodeInfoDotJSON).JQ(".uuid").Replace(" ", "").Replace(`"`, "").String() //nolint
 			uu = strings.TrimRight(uu, "\n")

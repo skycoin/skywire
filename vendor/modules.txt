@@ -192,6 +192,18 @@ github.com/go-chi/chi/v5/middleware
 # github.com/go-chi/cors v1.2.1
 ## explicit; go 1.14
 github.com/go-chi/cors
+# github.com/go-chi/httprate v0.9.0
+## explicit; go 1.17
+github.com/go-chi/httprate
+# github.com/go-echarts/go-echarts/v2 v2.3.3
+## explicit; go 1.18
+github.com/go-echarts/go-echarts/v2/actions
+github.com/go-echarts/go-echarts/v2/charts
+github.com/go-echarts/go-echarts/v2/datasets
+github.com/go-echarts/go-echarts/v2/opts
+github.com/go-echarts/go-echarts/v2/render
+github.com/go-echarts/go-echarts/v2/templates
+github.com/go-echarts/go-echarts/v2/types
 # github.com/go-ole/go-ole v1.3.0
 ## explicit; go 1.12
 github.com/go-ole/go-ole
@@ -206,15 +218,6 @@ github.com/go-playground/universal-translator
 # github.com/go-playground/validator/v10 v10.15.1
 ## explicit; go 1.18
 github.com/go-playground/validator/v10
-# github.com/go-redis/redis v6.15.9+incompatible
-## explicit
-github.com/go-redis/redis
-github.com/go-redis/redis/internal
-github.com/go-redis/redis/internal/consistenthash
-github.com/go-redis/redis/internal/hashtag
-github.com/go-redis/redis/internal/pool
-github.com/go-redis/redis/internal/proto
-github.com/go-redis/redis/internal/util
 # github.com/go-redis/redis/v8 v8.11.5
 ## explicit; go 1.17
 github.com/go-redis/redis/v8
@@ -486,15 +489,17 @@ github.com/rs/cors
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v1.3.25
+# github.com/skycoin/dmsg v1.3.29-0.20241004205035-c45754b16934
 ## explicit; go 1.21
 github.com/skycoin/dmsg/cmd/dmsg-discovery/commands
 github.com/skycoin/dmsg/cmd/dmsg-server/commands
 github.com/skycoin/dmsg/cmd/dmsg-server/commands/config
 github.com/skycoin/dmsg/cmd/dmsg-server/commands/start
 github.com/skycoin/dmsg/cmd/dmsg-socks5/commands
+github.com/skycoin/dmsg/cmd/dmsg/commands
 github.com/skycoin/dmsg/cmd/dmsgcurl/commands
 github.com/skycoin/dmsg/cmd/dmsghttp/commands
+github.com/skycoin/dmsg/cmd/dmsgip/commands
 github.com/skycoin/dmsg/cmd/dmsgpty-cli/commands
 github.com/skycoin/dmsg/cmd/dmsgpty-host/commands
 github.com/skycoin/dmsg/cmd/dmsgpty-ui/commands
@@ -519,63 +524,50 @@ github.com/skycoin/dmsg/pkg/noise
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 ## explicit
 github.com/skycoin/noise
-# github.com/skycoin/skycoin v0.27.1
-## explicit
+# github.com/skycoin/skycoin v0.28.0
+## explicit; go 1.14
 github.com/skycoin/skycoin/src/cipher
 github.com/skycoin/skycoin/src/cipher/base58
 github.com/skycoin/skycoin/src/cipher/ripemd160
 github.com/skycoin/skycoin/src/cipher/secp256k1-go
 github.com/skycoin/skycoin/src/cipher/secp256k1-go/secp256k1-go2
 github.com/skycoin/skycoin/src/util/logging
-# github.com/skycoin/skycoin-service-discovery v1.3.25
+# github.com/skycoin/skycoin-service-discovery v1.3.28
 ## explicit; go 1.21
 github.com/skycoin/skycoin-service-discovery/cmd/service-discovery/commands
 github.com/skycoin/skycoin-service-discovery/internal/pg
 github.com/skycoin/skycoin-service-discovery/internal/sdmetrics
 github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/api
 github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/store
-# github.com/skycoin/skywire-services v1.3.25
+# github.com/skycoin/skywire-services v1.3.28
 ## explicit; go 1.21
 github.com/skycoin/skywire-services/cmd/address-resolver/commands
 github.com/skycoin/skywire-services/cmd/config-bootstrapper/commands
-github.com/skycoin/skywire-services/cmd/dmsg-monitor/commands
 github.com/skycoin/skywire-services/cmd/keys-gen/commands
-github.com/skycoin/skywire-services/cmd/liveness-checker/commands
-github.com/skycoin/skywire-services/cmd/network-monitor/commands
 github.com/skycoin/skywire-services/cmd/node-visualizer/commands
-github.com/skycoin/skywire-services/cmd/public-visor-monitor/commands
 github.com/skycoin/skywire-services/cmd/route-finder/commands
-github.com/skycoin/skywire-services/cmd/skysocks-monitor/commands
+github.com/skycoin/skywire-services/cmd/skywire-services/commands
 github.com/skycoin/skywire-services/cmd/sw-env/commands
 github.com/skycoin/skywire-services/cmd/transport-discovery/commands
 github.com/skycoin/skywire-services/cmd/transport-setup/commands
-github.com/skycoin/skywire-services/cmd/vpn-monitor/commands
+github.com/skycoin/skywire-services/cmd/uptime-tracker/commands
 github.com/skycoin/skywire-services/internal/armetrics
 github.com/skycoin/skywire-services/internal/config
-github.com/skycoin/skywire-services/internal/lc
-github.com/skycoin/skywire-services/internal/nm
-github.com/skycoin/skywire-services/internal/nmmetrics
 github.com/skycoin/skywire-services/internal/pg
 github.com/skycoin/skywire-services/internal/tpdiscmetrics
-github.com/skycoin/skywire-services/internal/vpn
+github.com/skycoin/skywire-services/internal/utmetrics
 github.com/skycoin/skywire-services/pkg/address-resolver/api
 github.com/skycoin/skywire-services/pkg/address-resolver/store
 github.com/skycoin/skywire-services/pkg/config-bootstrapper/api
-github.com/skycoin/skywire-services/pkg/dmsg-monitor/api
-github.com/skycoin/skywire-services/pkg/liveness-checker/api
-github.com/skycoin/skywire-services/pkg/liveness-checker/store
-github.com/skycoin/skywire-services/pkg/network-monitor/api
-github.com/skycoin/skywire-services/pkg/network-monitor/store
 github.com/skycoin/skywire-services/pkg/node-visualizer/api
-github.com/skycoin/skywire-services/pkg/public-visor-monitor/api
 github.com/skycoin/skywire-services/pkg/route-finder/api
 github.com/skycoin/skywire-services/pkg/route-finder/store
-github.com/skycoin/skywire-services/pkg/skysocks-monitor/api
 github.com/skycoin/skywire-services/pkg/transport-discovery/api
 github.com/skycoin/skywire-services/pkg/transport-discovery/store
 github.com/skycoin/skywire-services/pkg/transport-setup/api
 github.com/skycoin/skywire-services/pkg/transport-setup/config
-github.com/skycoin/skywire-services/pkg/vpn-monitor/api
+github.com/skycoin/skywire-services/pkg/uptime-tracker/api
+github.com/skycoin/skywire-services/pkg/uptime-tracker/store
 # github.com/skycoin/skywire-utilities v1.3.25
 ## explicit; go 1.21
 github.com/skycoin/skywire-utilities/pkg/buildinfo

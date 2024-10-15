@@ -277,8 +277,10 @@ func sseHandler(w http.ResponseWriter, req *http.Request) {
 			if !ok {
 				return
 			}
-			_, _ = fmt.Fprintf(w, "data: %s\n\n", msg) //nolint: errcheck
-			f.Flush()
+			_, err := fmt.Fprintf(w, "data: %s\n\n", msg)
+			if err == nil {
+				f.Flush()
+			}
 
 		case <-req.Context().Done():
 			fmt.Print("SSE connection were closed.")

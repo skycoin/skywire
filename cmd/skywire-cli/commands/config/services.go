@@ -12,7 +12,6 @@ import (
 
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -57,7 +56,7 @@ var servicesCmd = &cobra.Command{
 func fetchServicesConf() (servicesConf, error) {
 	var newConf servicesConf
 	var prodConf visorconfig.Services
-	prodResp, err := http.Get(skyenv.ServiceConfAddr)
+	prodResp, err := http.Get(serviceConfURL) //nolint
 	if err != nil {
 		return newConf, err
 	}
@@ -73,7 +72,7 @@ func fetchServicesConf() (servicesConf, error) {
 	newConf.Prod = prodConf
 
 	var testConf visorconfig.Services
-	testResp, err := http.Get(skyenv.TestServiceConfAddr)
+	testResp, err := http.Get(testServiceConfURL) //nolint
 	if err != nil {
 		return newConf, err
 	}
