@@ -58,7 +58,7 @@ var testCmd = &cobra.Command{
 	Use:   "test",
 	Short: "Test the visor with public visors on network",
 	Long:  "\n  Creates a route with public visors as a hop and returns latency on the conn",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		pingConfig := visor.PingConfig{Tries: tries, PcktSize: pcktSize, PubVisCount: pubVisCount}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {

@@ -93,7 +93,7 @@ var RootCmd = &cobra.Command{
 	Long: `
 Collect surveys:  skywire-cli log
 Fetch uptimes:    skywire-cli ut > ut.txt`,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		var err error
 		if log == nil {
 			log = logging.MustGetLogger("rewards")
@@ -406,7 +406,7 @@ func init() {
 var testCmd = &cobra.Command{
 	Use:   "svc",
 	Short: "verify services in survey",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		var err error
 		if log == nil {
 			log = logging.MustGetLogger("rewards")

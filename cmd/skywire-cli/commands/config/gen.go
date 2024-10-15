@@ -36,7 +36,7 @@ var checkPKCmd = &cobra.Command{
 	Use:   "check-pk <public-key>",
 	Short: "check a skywire public key",
 	Args:  cobra.ExactArgs(1), // Require exactly one argument
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		if len(args) == 0 {
 			return
 		}
@@ -53,7 +53,7 @@ var checkPKCmd = &cobra.Command{
 var genKeysCmd = &cobra.Command{
 	Use:   "gen-keys",
 	Short: "generate public / secret keypair",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		pk, sk := cipher.GenerateKeyPair()
 		fmt.Println(pk)
 		fmt.Println(sk)
@@ -380,7 +380,7 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 	},
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 
 		log := logger
 		wasStdout := isStdout

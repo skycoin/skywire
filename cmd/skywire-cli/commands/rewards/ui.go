@@ -287,7 +287,7 @@ func server() {
 	case <-dmsgclient.Ready():
 	}
 
-	lis, err := dmsgclient.Listen(uint16(dmsgPort))
+	lis, err := dmsgclient.Listen(uint16(dmsgPort)) //nolint: gosec
 	if err != nil {
 		log.WithError(err).Fatal()
 	}
@@ -1478,7 +1478,7 @@ func scriptExecUint(s string) uint {
 			}
 			i, err := strconv.Atoi(strings.TrimSpace(strings.TrimRight(out, "\n")))
 			if err == nil {
-				return uint(i)
+				return uint(i) //nolint: gosec
 			}
 			return 0
 		}
@@ -1491,7 +1491,7 @@ func scriptExecUint(s string) uint {
 		}
 		i, err := strconv.Atoi(z)
 		if err == nil {
-			return uint(i)
+			return uint(i) //nolint: gosec
 		}
 	}
 	return uint(0)

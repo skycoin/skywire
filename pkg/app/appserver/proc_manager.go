@@ -221,7 +221,7 @@ func (m *procManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 		return 0, err
 	}
 	delete(m.errors, conf.AppName)
-	return appcommon.ProcID(proc.cmd.Process.Pid), nil
+	return appcommon.ProcID(proc.cmd.Process.Pid), nil //nolint: gosec
 }
 
 // Register registers a proc for an external app.

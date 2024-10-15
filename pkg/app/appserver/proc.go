@@ -439,7 +439,7 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 	}
 
 	var summaries []ConnectionSummary
-	rpcGW.cm.DoRange(func(id uint16, v interface{}) bool {
+	rpcGW.cm.DoRange(func(_ uint16, v interface{}) bool {
 		if v == nil {
 			summaries = append(summaries, ConnectionSummary{})
 			return true
