@@ -101,7 +101,7 @@ func TestRegisterTransportResponses(t *testing.T) {
 	}{
 		{
 			"StatusCreated",
-			func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusCreated) },
+			func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusCreated) },
 			func(err error) { require.NoError(t, err) },
 		},
 		// TODO(evaninjin): Not sure why this is failing and why this is expected behavior.
@@ -112,12 +112,12 @@ func TestRegisterTransportResponses(t *testing.T) {
 		//},
 		{
 			"StatusInternalServerError",
-			func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusInternalServerError) },
+			func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusInternalServerError) },
 			func(err error) { require.Error(t, err) },
 		},
 		{
 			"JSONError",
-			func(w http.ResponseWriter, r *http.Request) {
+			func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
 				require.NoError(t, json.NewEncoder(w).Encode(JSONError{Error: "boom"}))
 			},
@@ -129,7 +129,7 @@ func TestRegisterTransportResponses(t *testing.T) {
 		},
 		{
 			"NonJSONError",
-			func(w http.ResponseWriter, r *http.Request) {
+			func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
 				_, err := fmt.Fprintf(w, "boom")
 				require.NoError(t, err)
@@ -142,7 +142,7 @@ func TestRegisterTransportResponses(t *testing.T) {
 		},
 		{
 			"Request",
-			func(w http.ResponseWriter, r *http.Request) {
+			func(_ http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, http.MethodPost, r.Method)
 				assert.Equal(t, "/transports/", r.URL.String())
 			},
@@ -229,7 +229,7 @@ func authHandler(t *testing.T, next http.Handler) http.Handler {
 	r := chi.NewRouter()
 
 	r.Handle("/security/nonces/{pk}", http.HandlerFunc(
-		func(w http.ResponseWriter, r *http.Request) {
+		func(w http.ResponseWriter, _ *http.Request) {
 			require.NoError(t, json.NewEncoder(w).Encode(&httpauth.NextNonceResponse{Edge: testPubKey, NextNonce: 1}))
 		},
 	))

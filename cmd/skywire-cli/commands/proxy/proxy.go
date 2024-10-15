@@ -172,7 +172,7 @@ var startCmd = &cobra.Command{
 var stopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "stop the " + serviceType + " client",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
@@ -196,7 +196,7 @@ var stopCmd = &cobra.Command{
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: serviceType + " client status",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		//TODO: check status of multiple clients
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -216,7 +216,7 @@ var statusCmd = &cobra.Command{
 			AppPort   routing.Port `json:"app_port"`
 		}
 		var jsonAppStatus []appState
-		fmt.Fprintf(w, "---- All Proxy List -----------------------------------------------------\n\n")
+		fmt.Fprintf(w, "---- All Proxy List -----------------------------------------------------\n\n") //nolint: errcheck
 		for _, state := range states {
 			for _, v := range state.AppConfig.Args {
 				if v == binaryName {
@@ -249,7 +249,7 @@ var statusCmd = &cobra.Command{
 				}
 			}
 		}
-		fmt.Fprintf(w, "-------------------------------------------------------------------------\n")
+		fmt.Fprintf(w, "-------------------------------------------------------------------------\n") //nolint: errcheck
 		internal.Catch(cmd.Flags(), w.Flush())
 		internal.PrintOutput(cmd.Flags(), jsonAppStatus, b.String())
 	},
@@ -281,7 +281,7 @@ var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List servers",
 	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache file location to \"\" to avoid using cache files", serviceType, skyenv.ServiceDiscAddr, serviceType, skyenv.ServiceDiscAddr, serviceType),
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		sds := internal.GetData(cacheFileSD, sdURL+"/api/services?type="+serviceType, cacheFilesAge)
 		if rawData {
 			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout() //nolint
