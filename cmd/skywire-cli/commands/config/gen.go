@@ -22,7 +22,6 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/netutil"
-	utilenv "github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -72,7 +71,7 @@ func init() {
 	genConfigCmd.Flags().SortFlags = false
 	RootCmd.AddCommand(genConfigCmd, genKeysCmd, checkPKCmd)
 
-	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", scriptExecArray(fmt.Sprintf("${SVCCONFADDR[@]-%s}", utilenv.ServiceConfAddr)), "services conf url\n\r")
+	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", scriptExecArray(fmt.Sprintf("${SVCCONFADDR[@]-%s}", serviceConfURL)), "services conf url\033[0m\n\r")
 	gHiddenFlags = append(gHiddenFlags, "url")
 	genConfigCmd.Flags().StringVar(&logLevel, "loglvl", scriptExecString("${LOGLVL:-info}"), "level of logging in config\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "loglvl")
@@ -92,39 +91,39 @@ func init() {
 	genConfigCmd.Flags().StringVarP(&disableApps, "disableapps", "g", "", "comma separated list of apps to disable\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "disableapps")
 	genConfigCmd.Flags().BoolVarP(&isHypervisor, "ishv", "i", scriptExecBool("${ISHYPERVISOR:-false}"), "local hypervisor configuration\033[0m")
-	msg = "list of public keys to add as hypervisor"
+	msg = "list of public keys to add as hypervisor\033[0m"
 	if scriptExecArray("${HYPERVISORPKS[@]}") != "" {
 		msg += "\n\r"
 	}
 	genConfigCmd.Flags().StringVarP(&hypervisorPKs, "hvpks", "j", scriptExecArray("${HYPERVISORPKS[@]}"), msg)
-	msg = "add dmsgpty whitelist PKs"
+	msg = "add dmsgpty whitelist PKs\033[0m"
 	if scriptExecArray("${DMSGPTYPKS[@]}") != "" {
 		msg += "\n\r"
 	}
 	genConfigCmd.Flags().StringVar(&dmsgptyWlPKs, "dmsgpty", scriptExecArray("${DMSGPTYPKS[@]}"), msg)
-	msg = "add survey whitelist PKs"
+	msg = "add survey whitelist PKs\033[0m"
 	if scriptExecArray("${SURVEYPKS[@]}") != "" {
 		msg += "\n\r"
 	}
 
 	genConfigCmd.Flags().StringVar(&surveyWhitelistPKs, "survey", scriptExecArray("${SURVEYPKS[@]}"), msg)
 	gHiddenFlags = append(gHiddenFlags, "survey")
-	msg = "add route setup node PKs"
+	msg = "add route setup node PKs\033[0m"
 	if scriptExecArray("${ROUTESETUPPKS[@]}") != "" {
 		msg += "\n\r"
 	}
 	genConfigCmd.Flags().StringVar(&routeSetupNodes, "routesetup", scriptExecArray("${ROUTESETUPPKS[@]}"), msg)
 	gHiddenFlags = append(gHiddenFlags, "routesetup")
-	msg = "add transport setup node PKs"
-	if scriptExecArray("${ROUTESETUPPKS[@]}") != "" {
+	msg = "add transport setup node PKs\033[0m"
+	if scriptExecArray("${TPSETUPPKS[@]}") != "" {
 		msg += "\n\r"
 	}
-	genConfigCmd.Flags().StringVar(&transportSetupPKs, "tpsetup", scriptExecArray("${ROUTESETUPPKS[@]}"), msg)
+	genConfigCmd.Flags().StringVar(&transportSetupPKs, "tpsetup", scriptExecArray("${TPSETUPPKS[@]}"), msg)
 	gHiddenFlags = append(gHiddenFlags, "tpsetup")
 
 	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", visorconfig.OS, "(linux / mac / win) paths\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "os")
-	genConfigCmd.Flags().BoolVarP(&isDisplayNodeIP, "publicip", "l", scriptExecBool("${DISPLAYNODEIP:-false}"), "allow display node ip in services\033[0m")
+	genConfigCmd.Flags().BoolVarP(&isDisplayNodeIP, "publicip", "l", scriptExecBool("${DISPLAYNODEIP:-false}"), "display visor ip in service discovery\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "publicip")
 	genConfigCmd.Flags().BoolVarP(&addExampleApps, "example-apps", "m", false, "add example apps to the config\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "example-apps")
@@ -132,7 +131,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "stdout")
 	genConfigCmd.Flags().BoolVarP(&isSquash, "squash", "N", false, "output config without whitespace or newlines\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "squash")
-	genConfigCmd.Flags().BoolVarP(&isEnvs, "envs", "q", false, "show the environmental variable settings")
+	genConfigCmd.Flags().BoolVarP(&isEnvs, "envs", "q", false, "show the environmental variable settings\033[0m")
 	msg = "output config"
 	if scriptExecString("${OUTPUT}") == "" {
 		msg += ": " + visorconfig.ConfigName
@@ -153,13 +152,13 @@ func init() {
 
 		genConfigCmd.Flags().BoolVarP(&isUsrEnv, "user", "u", scriptExecBool("${USRENV:-false}"), "use paths for user space: "+homepath+"\033[0m")
 	}
-	genConfigCmd.Flags().BoolVarP(&isRegen, "regen", "r", false, "re-generate existing config & retain keys")
+	genConfigCmd.Flags().BoolVarP(&isRegen, "regen", "r", false, "re-generate existing config & retain keys\033[0m")
 	if scriptExecString("${SK:-0000000000000000000000000000000000000000000000000000000000000000}") != "0000000000000000000000000000000000000000000000000000000000000000" {
 		sk.Set(scriptExecString("${SK:-0000000000000000000000000000000000000000000000000000000000000000}")) //nolint
 	}
-	genConfigCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
+	genConfigCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\033[0m\n\r")
 	gHiddenFlags = append(gHiddenFlags, "sk")
-	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", scriptExecBool("${TESTENV:-false}"), "use test deployment "+testConf+"\033[0m")
+	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", scriptExecBool("${TESTENV:-false}"), "use test deployment\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "testenv")
 	genConfigCmd.Flags().BoolVarP(&isVpnServerEnable, "servevpn", "v", scriptExecBool("${VPNSERVER:-false}"), "enable vpn server\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "servevpn")
@@ -175,44 +174,44 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "stcpr")
 	genConfigCmd.Flags().IntVar(&sudphPort, "sudph", scriptExecInt("${SUDPHPORT:-0}"), "set udp transport listening port - 0 for random\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "sudph")
-	genConfigCmd.Flags().StringVar(&binPath, "binpath", scriptExecString("${BINPATH}"), "set bin_path for visor vative apps\033[0m")
+	genConfigCmd.Flags().StringVar(&binPath, "binpath", scriptExecString("${BINPATH}"), "set bin_path for visor native apps\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "binpath")
-	genConfigCmd.Flags().StringVar(&addSkysocksClientSrv, "proxyclientpk", scriptExecString("${PROXYCLIENTPK}"), "set server public key for proxy client")
+	genConfigCmd.Flags().StringVar(&addSkysocksClientSrv, "proxyclientpk", scriptExecString("${PROXYCLIENTPK}"), "set server public key for proxy client\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "proxyclientpk")
-	genConfigCmd.Flags().BoolVar(&enableProxyClientAutostart, "startproxyclient", scriptExecBool("${STARTPROXYCLIENT:-false}"), "autostart proxy client")
+	genConfigCmd.Flags().BoolVar(&enableProxyClientAutostart, "startproxyclient", scriptExecBool("${STARTPROXYCLIENT:-false}"), "autostart proxy client\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "startproxyclient")
-	genConfigCmd.Flags().BoolVar(&disableProxyServerAutostart, "noproxyserver", scriptExecBool("${NOPROXYSERVER:-false}"), "disable autostart of proxy server")
+	genConfigCmd.Flags().BoolVar(&disableProxyServerAutostart, "noproxyserver", scriptExecBool("${NOPROXYSERVER:-false}"), "disable autostart of proxy server\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "noproxyserver")
-	genConfigCmd.Flags().StringVar(&proxyServerPass, "proxyserverpass", scriptExecString("${PROXYSEVERPASS}"), "set proxy server password")
+	genConfigCmd.Flags().StringVar(&proxyServerPass, "proxyserverpass", scriptExecString("${PROXYSEVERPASS}"), "set proxy server password\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "proxyserverpass")
-	genConfigCmd.Flags().StringVar(&proxyClientPass, "proxyclientpass", scriptExecString("${PROXYCLIENTPASS}"), "password for the proxy client to access the server (if needed)")
+	genConfigCmd.Flags().StringVar(&proxyClientPass, "proxyclientpass", scriptExecString("${PROXYCLIENTPASS}"), "password for the proxy client to access the server (if needed)\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "proxyclientpass")
 	// TODO: Password for accessing proxy client
 	// TODO: VPN client killswitch should be handled as boolean, not string
-	genConfigCmd.Flags().StringVar(&setVPNClientKillswitch, "killsw", scriptExecString("${VPNKS}"), "vpn client killswitch")
+	genConfigCmd.Flags().StringVar(&setVPNClientKillswitch, "killsw", scriptExecString("${VPNKS}"), "vpn client killswitch\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "killsw")
-	genConfigCmd.Flags().StringVar(&addVPNClientSrv, "addvpn", scriptExecString("${ADDVPNPK}"), "set vpn server public key for vpn client")
+	genConfigCmd.Flags().StringVar(&addVPNClientSrv, "addvpn", scriptExecString("${ADDVPNPK}"), "set vpn server public key for vpn client\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "addvpn")
-	genConfigCmd.Flags().StringVar(&addVPNClientPasscode, "vpnpass", scriptExecString("${VPNCLIENTPASS}"), "password for vpn client to access the vpn server (if needed)")
+	genConfigCmd.Flags().StringVar(&addVPNClientPasscode, "vpnpass", scriptExecString("${VPNCLIENTPASS}"), "password for vpn client to access the vpn server (if needed)\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "vpnpass")
-	genConfigCmd.Flags().StringVar(&addVPNServerPasscode, "vpnserverpass", scriptExecString("${VPNSEVERPASS}"), "set password to the vpn server")
+	genConfigCmd.Flags().StringVar(&addVPNServerPasscode, "vpnserverpass", scriptExecString("${VPNSEVERPASS}"), "set password to the vpn server\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "vpnserverpass")
-	genConfigCmd.Flags().StringVar(&setVPNServerSecure, "secure", scriptExecString("${VPNSEVERSECURE}"), "change secure mode status of vpn server")
+	genConfigCmd.Flags().StringVar(&setVPNServerSecure, "secure", scriptExecString("${VPNSEVERSECURE}"), "change secure mode status of vpn server\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "secure")
-	genConfigCmd.Flags().StringVar(&setVPNServerNetIfc, "netifc", scriptExecString("${VPNSEVERNETIFC}"), "VPN Server network interface (detected: "+getInterfaceNames()+")")
+	genConfigCmd.Flags().StringVar(&setVPNServerNetIfc, "netifc", scriptExecString("${VPNSEVERNETIFC}"), "VPN Server network interface (detected: "+getInterfaceNames()+")\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "netifc")
-	genConfigCmd.Flags().BoolVar(&noFetch, "nofetch", false, "do not fetch the services from the service conf url")
+	genConfigCmd.Flags().BoolVar(&noFetch, "nofetch", false, "do not fetch the services from the service conf url\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "nofetch")
 	//TODO: visorconfig.SvcConfName
 	genConfigCmd.Flags().StringVarP(&configServicePath, "svcconf", "S", scriptExecString(fmt.Sprintf("${SVCCONF:-%s}", visorconfig.SERVICESName)), "fallback service configuration file\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "svcconf")
-	genConfigCmd.Flags().BoolVar(&noDefaults, "nodefaults", false, "do not use hardcoded defaults for production / test services")
+	genConfigCmd.Flags().BoolVar(&noDefaults, "nodefaults", false, "do not use hardcoded defaults for services\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "nodefaults")
-	genConfigCmd.Flags().BoolVar(&snConfig, "sn", false, "generate config for route setup-node")
+	genConfigCmd.Flags().BoolVar(&snConfig, "sn", false, "generate config for route setup node\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "sn")
 	genConfigCmd.Flags().StringVar(&ver, "version", scriptExecString("${VERSION}"), "custom version testing override\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "version")
-	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
+	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags\033[0m")
 
 	//show all flags on help
 	if os.Getenv("UNHIDEFLAGS") != "1" {
@@ -302,15 +301,15 @@ var genConfigCmd = &cobra.Command{
 		}
 		//use test deployment
 		if isTestEnv {
-			serviceConfURL = utilenv.TestServiceConfAddr
+			serviceConfURL = testServiceConfURL
 		}
 		var err error
-		if isDmsgHTTP {
-			if isPkgEnv {
-				if dmsgHTTPPath == visorconfig.DMSGHTTPName {
-					dmsgHTTPPath = visorconfig.SkywirePath + "/" + visorconfig.DMSGHTTPName //nolint
-				}
+		if isPkgEnv {
+			if dmsgHTTPPath == visorconfig.DMSGHTTPName {
+				dmsgHTTPPath = visorconfig.SkywirePath + "/" + visorconfig.DMSGHTTPName //nolint
 			}
+		}
+		if isDmsgHTTP {
 			if _, err := os.Stat(dmsgHTTPPath); err == nil {
 				if !isStdout {
 					log.Info("Found Dmsghttp config: ", dmsgHTTPPath)
@@ -379,107 +378,96 @@ var genConfigCmd = &cobra.Command{
 				}
 			}
 		}
+		if isPkgEnv && configServicePath == visorconfig.SERVICESName {
+			configServicePath = visorconfig.SkywirePath + "/" + visorconfig.SERVICESName
+		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
 
 		log := logger
 		wasStdout := isStdout
-		var body []byte
 		var err error
 		// enable errors from service conf fetch from the combination of these flags
 		if isStdout && isHide {
 			isStdout = false
 		}
 
-		if !noFetch {
-			// create an http client to fetch the services
-			client := http.Client{
-				Timeout: time.Second * 15, // Timeout after 15 seconds
-			}
+		//determine best protocol
+		if isBestProtocol && netutil.LocalProtocol() {
+			disablePublicAutoConn = true
+			isDmsgHTTP = true
+		}
+
+		if !noFetch && !isDmsgHTTP {
+			client := http.Client{Timeout: 15 * time.Second}
 			if serviceConfURL == "" {
-				serviceConfURL = utilenv.ServiceConfAddr
+				serviceConfURL = "http://"
 			}
 			if !isStdout {
 				log.Infof("Fetching service endpoints from %s", serviceConfURL)
 			}
-			// Make the HTTP GET request
-			res, err := client.Get(fmt.Sprint(serviceConfURL))
+			res, err := client.Get(serviceConfURL)
 			if err != nil {
-				//silence errors for stdout
 				if !isStdout {
-					log.WithError(err).Error("Failed to fetch servers\n")
+					log.WithError(err).Error("Failed to fetch servers")
 					log.Warn("Falling back on services-config.json")
 				}
-				body, err = os.ReadFile(configServicePath)
+				body, err := os.ReadFile(configServicePath)
 				if err != nil {
 					if !isStdout {
-						log.WithError(err).Error("Failed to read config service from file\n")
+						log.WithError(err).Error("Failed to read config service from file")
 						log.Warn("Falling back on hardcoded servers")
 					}
-				} else {
-					//fill in services struct with the response
-					err = json.Unmarshal(body, &servicesConfig)
-					if err != nil {
-						if !isStdout {
-							log.WithError(err).Error("Failed to unmarshal services-config.json file\n")
-						}
-					} else {
-						services = servicesConfig.Prod
-						if isTestEnv {
-							services = servicesConfig.Test
-						}
-					}
-
+					return
 				}
-			} else {
-				//nil error on service conf fetch
-				if res.Body != nil {
-					defer res.Body.Close() //nolint
-				}
-				body, err = io.ReadAll(res.Body)
-				if err != nil {
-					log.WithError(err).Error("Failed to read http response\n")
-				}
-				//fill in services struct with the response
-				err = json.Unmarshal(body, &services)
-				if err != nil {
+				if err := json.Unmarshal(body, &servicesConfig); err != nil {
 					if !isStdout {
-						log.WithError(err).Error("Failed to unmarshal json response to services struct\n")
+						log.WithError(err).Error("Failed to unmarshal services-config.json file")
 						log.Warn("Falling back on hardcoded servers")
 					}
-				} else {
-					if !isStdout {
-						log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
-					}
-				}
-			}
-		} else {
-			if isPkgEnv {
-				if configServicePath == visorconfig.SERVICESName {
-					configServicePath = visorconfig.SkywirePath + "/" + visorconfig.SERVICESName
-				}
-			}
-			body, err = os.ReadFile(configServicePath)
-			if err != nil {
-				if !isStdout {
-					log.WithError(err).Error("Failed to read config service from file\n")
-					log.Warn("Falling back on hardcoded servers")
-				}
-			} else {
-				//fill in services struct with the response
-				err = json.Unmarshal(body, &servicesConfig)
-				if err != nil {
-					if !isStdout {
-						log.WithError(err).Error("Failed to unmarshal json response to services struct\n")
-						log.Warn("Falling back on hardcoded servers")
-					}
+					return
 				}
 				services = servicesConfig.Prod
 				if isTestEnv {
 					services = servicesConfig.Test
 				}
+			} else {
+				defer res.Body.Close() //nolint
+				body, err := io.ReadAll(res.Body)
+				if err != nil {
+					log.WithError(err).Error("Failed to read HTTP response")
+					return
+				}
+				if err := json.Unmarshal(body, &services); err != nil {
+					if !isStdout {
+						log.WithError(err).Error("Failed to unmarshal JSON response to services struct")
+						log.Warn("Falling back on hardcoded servers")
+					}
+					return
+				} else if !isStdout {
+					log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
+				}
 			}
-
+		} else {
+			body, err := os.ReadFile(configServicePath)
+			if err != nil {
+				if !isStdout {
+					log.WithError(err).Error("Failed to read config service from file")
+					log.Warn("Falling back on hardcoded servers")
+				}
+				return
+			}
+			if err := json.Unmarshal(body, &servicesConfig); err != nil {
+				if !isStdout {
+					log.WithError(err).Error("Failed to unmarshal services-config.json file")
+					log.Warn("Falling back on hardcoded servers")
+				}
+				return
+			}
+			services = servicesConfig.Prod
+			if isTestEnv {
+				services = servicesConfig.Test
+			}
 		}
 
 		// reset the state of isStdout
@@ -516,11 +504,6 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 
-		//determine best protocol
-		if isBestProtocol && netutil.LocalProtocol() {
-			disablePublicAutoConn = true
-			isDmsgHTTP = true
-		}
 		//generate the common config containing public & secret keys
 		u := buildinfo.Version()
 		x := u
@@ -545,8 +528,6 @@ var genConfigCmd = &cobra.Command{
 		conf.Common.Version = x
 		conf.Common.SK = sk
 		conf.Common.PK = pk
-
-		dnsServer := utilenv.DNSServer
 
 		if services.DNSServer != "" {
 			dnsServer = services.DNSServer
@@ -581,12 +562,8 @@ var genConfigCmd = &cobra.Command{
 		// If nothing was fetched
 		if services.SurveyWhitelist == nil {
 			// By default
-			if !noDefaults {
-				// set the hardcoded defaults from skywire-utilities for the service public keys
-				if err := surveyWlPKs.Set(utilenv.SurveyWhitelistPKs); err != nil {
-					log.Fatalf("Failed to unmarshal survey whitelist public keys: %v", err)
-				}
-			}
+			log.Error("Services were not fetched from default conf service URL")
+
 		}
 		//if the flag is not empty
 		if surveyWhitelistPKs != "" {
@@ -597,109 +574,29 @@ var genConfigCmd = &cobra.Command{
 		}
 		services.SurveyWhitelist = append(services.SurveyWhitelist, surveyWlPKs...)
 
-		if !isTestEnv {
-			if services.DmsgDiscovery == "" {
-				services.DmsgDiscovery = utilenv.DmsgDiscAddr
+		if services.DmsgDiscovery == "" {
+			log.Fatalf("Dmsg Discovery not set")
+		}
+		if services.TransportDiscovery == "" {
+			log.Fatalf("Transport Discovery not set")
+		}
+		if routeSetupNodes != "" {
+			if err := routeSetupPKs.Set(routeSetupNodes); err != nil {
+				log.Fatalf("bad key set for route setup node flag: %v", err)
 			}
-			if services.DmsgDiscovery == "" {
-				services.DmsgDiscovery = utilenv.DmsgDiscAddr
+		}
+		services.RouteSetupNodes = append(services.RouteSetupNodes, routeSetupPKs...)
+		if services.RouteSetupNodes == nil {
+			log.Fatalf("Route Setup node not set")
+		}
+		if transportSetupPKs != "" {
+			if err := tpSetupPKs.Set(transportSetupPKs); err != nil {
+				log.Fatalf("bad key set for transport setup node flag: %v", err)
 			}
-			if services.TransportDiscovery == "" {
-				services.TransportDiscovery = utilenv.TpDiscAddr
-			}
-			if services.AddressResolver == "" {
-				services.AddressResolver = utilenv.AddressResolverAddr
-			}
-			if services.RouteFinder == "" {
-				services.RouteFinder = utilenv.RouteFinderAddr
-			}
-			if services.UptimeTracker == "" {
-				services.UptimeTracker = utilenv.UptimeTrackerAddr
-			}
-			if services.ServiceDiscovery == "" {
-				services.ServiceDiscovery = utilenv.ServiceDiscAddr
-			}
-			if services.StunServers == nil {
-				services.StunServers = utilenv.GetStunServers()
-			}
-			if services.DNSServer == "" {
-				services.DNSServer = utilenv.DNSServer
-			}
-			if routeSetupNodes != "" {
-				if err := routeSetupPKs.Set(routeSetupNodes); err != nil {
-					log.Fatalf("bad key set for route setup node flag: %v", err)
-				}
-			}
-			if services.RouteSetupNodes == nil {
-				if !noDefaults {
-					if err := routeSetupPKs.Set(utilenv.RouteSetupPKs); err != nil {
-						log.Fatalf("Failed to unmarshal route setup-node public keys: %v", err)
-					}
-				}
-			}
-			services.RouteSetupNodes = append(services.RouteSetupNodes, routeSetupPKs...)
-			if transportSetupPKs != "" {
-				if err := tpSetupPKs.Set(transportSetupPKs); err != nil {
-					log.Fatalf("bad key set for transport setup node flag: %v", err)
-				}
-			}
-			if services.TransportSetupPKs == nil {
-				if !noDefaults {
-					if err := tpSetupPKs.Set(utilenv.TPSetupPKs); err != nil {
-						log.Fatalf("Failed to unmarshal transport setup-node public keys: %v", err)
-					}
-				}
-			}
-			services.TransportSetupPKs = append(services.TransportSetupPKs, tpSetupPKs...)
-		} else {
-			if services.DmsgDiscovery == "" {
-				services.DmsgDiscovery = utilenv.TestDmsgDiscAddr
-			}
-			if services.TransportDiscovery == "" {
-				services.TransportDiscovery = utilenv.TestTpDiscAddr
-			}
-			if services.AddressResolver == "" {
-				services.AddressResolver = utilenv.TestAddressResolverAddr
-			}
-			if services.RouteFinder == "" {
-				services.RouteFinder = utilenv.TestRouteFinderAddr
-			}
-			if services.UptimeTracker == "" {
-				services.UptimeTracker = utilenv.TestUptimeTrackerAddr
-			}
-			if services.ServiceDiscovery == "" {
-				services.ServiceDiscovery = utilenv.TestServiceDiscAddr
-			}
-			if services.StunServers == nil {
-				services.StunServers = utilenv.GetStunServers()
-			}
-			if services.DNSServer == "" {
-				services.DNSServer = utilenv.DNSServer
-			}
-			if routeSetupNodes != "" {
-				if err := routeSetupPKs.Set(routeSetupNodes); err != nil {
-					log.Fatalf("bad key set for route setup node flag: %v", err)
-				}
-			}
-			if services.RouteSetupNodes == nil {
-				if err := routeSetupPKs.Set(utilenv.TestRouteSetupPKs); err != nil {
-					log.Fatalf("Failed to unmarshal route setup-node public keys: %v", err)
-				}
-			}
-			services.RouteSetupNodes = append(services.RouteSetupNodes, routeSetupPKs...)
-			if transportSetupPKs != "" {
-				if err := tpSetupPKs.Set(transportSetupPKs); err != nil {
-					log.Fatalf("bad key set for transport setup node flag: %v", err)
-				}
-			}
-			if services.TransportSetupPKs == nil {
-				if !noDefaults {
-					if err := tpSetupPKs.Set(utilenv.TestTPSetupPKs); err != nil {
-						log.Fatalf("Failed to unmarshal transport setup-node public keys: %v", err)
-					}
-				}
-			}
-			services.TransportSetupPKs = append(services.TransportSetupPKs, tpSetupPKs...)
+		}
+		services.TransportSetupPKs = append(services.TransportSetupPKs, tpSetupPKs...)
+		if services.TransportSetupPKs == nil {
+			log.Fatalf("Route Setup node not set")
 		}
 
 		conf.Dmsg = &dmsgc.DmsgConfig{
@@ -1116,51 +1013,7 @@ const envfileLinux = `#
 #		Uncomment to change default value
 #########################################################################
 
-#--	Other Visors will automatically establish transports to this visor
-#	requires port forwarding or public ip
-#VISORISPUBLIC=true
-
-#--	Autostart vpn server for this visor
-#VPNSERVER=true
-
-#--	Use test deployment
-#TESTENV=true
-
-#--	Automatically determine the best protocol (dmsg or http)
-#	based on location to connect to the deployment servers
-#BESTPROTO=true
-
-#--	Set custom service conf URLs
-#SVCCONFADDR=('')
-
-#--	fallback service conf path
-#SVCCONF="services-config.json"
-
-#--	Set visor runtime log level.
-#	Default is info ; uncomment for debug logging
-#LOGLVL=debug
-
-#--	dmsghttp config path
-#DMSGCONF="dmsghttp-config.json"
-
-#--	Use dmsghttp to connect to the production deployment
-#DMSGHTTP=true
-
-#--	Number of dmsg serverts to connect to (0 unlimits)
-#MINDMSGSESS=8
-
-#--	Start the hypervisor interface for this visor
-#ISHYPERVISOR=true
-
-#--	Output path of the config file
-#OUTPUT='./skywire-config.json'
-
-#--	Display the node ip in the service discovery
-#	for any public services this visor is running
-#DISPLAYNODEIP=true
-
-#--	Set remote hypervisor public keys
-#HYPERVISORPKS=('')
+### Installation path ###################################################
 
 #--	Default config paths for the installer or package (system paths)
 #PKGENV=true
@@ -1168,17 +1021,87 @@ const envfileLinux = `#
 #--	Default config paths for the current userspace
 #USRENV=true
 
-#--	Set secret key
-#SK=''
+#--	fallback service conf path
+#SVCCONF="services-config.json"
 
-#--	Disable auto-transports to public visors
-#DISABLEPUBLICAUTOCONN=true
+#--	dmsghttp config path
+#DMSGCONF="dmsghttp-config.json"
 
-#--	Custom config version override
-#VERSION=''
+#--	Output path of the config file
+#OUTPUT='./skywire-config.json'
 
 #--	Set app bin_path
 #BINPATH='./apps'
+
+### Deployment ##########################################################
+
+#--	Set custom service conf URLs
+#SVCCONFADDR=('')
+
+#--	Use test deployment
+#TESTENV=true
+
+#--	Use dmsghttp to connect to the production deployment ; overrides BESTPROTO=true
+#DMSGHTTP=true
+
+#--	Number of dmsg serverts to connect to (0 unlimits)
+#MINDMSGSESS=8
+
+#--	Automatically determine the best protocol (dmsg or http)
+#	based on location to connect to the deployment servers
+#BESTPROTO=true
+
+### Transports ##########################################################
+
+#--	Other Visors will automatically establish transports to this visor
+#	requires port forwarding or public ip
+#VISORISPUBLIC=true
+
+#--	Disable auto-transports to public visors from this visor
+#DISABLEPUBLICAUTOCONN=true
+
+#-- Add transport setup public keys
+#TPSETUPPKS('')
+
+### Ports ###############################################################
+
+#- set port for UDP connections / SUDPH transports
+#SUDPHPORT=0
+
+#- set port for TCP connections / STCPR or STCP transports
+#STCPRPORT=0
+
+### Routing #############################################################
+
+#-- Add route setup-node public keys
+#ROUTESETUPPKS('')
+
+### Remote Access #######################################################
+
+#--	Set remote hypervisor public keys
+#HYPERVISORPKS=('')
+
+#--	Grant access to pseudoterminal (pty) for public keys
+#DMSGPTYPKS('')
+
+### Survey Access #######################################################
+
+#--	Grant access for survey collection to these public keys
+#SURVEYPKS('')
+
+### Hypervisor UI #######################################################
+
+#--	Start the hypervisor interface for this visor
+#ISHYPERVISOR=true
+
+### Apps ################################################################
+
+#--	Display the node ip in the service discovery
+#	for any public services this visor is running
+#DISPLAYNODEIP=true
+
+#--	Autostart vpn server for this visor
+#VPNSERVER=true
 
 #--	Set server public key for proxy client to connect to
 #PROXYCLIENTPK=''
@@ -1192,7 +1115,8 @@ const envfileLinux = `#
 #--	Set a password for the proxy server
 #PROXYSEVERPASS=''
 
-#--	Password for the proxy client to access the server (if password is set for the server)
+#--	Password for the proxy client to access the server
+# (if password is set for the server)
 #PROXYCLIENTPASS=''
 
 #--	Set VPN client killswitch
@@ -1201,7 +1125,8 @@ const envfileLinux = `#
 #--	Set vpn server public key for the vpn client to use
 #ADDVPNPK=''
 
-#--	Password for vpn client to access the server (if password is set forthe server)
+#--	Password for vpn client to access the server
+# (if password is set for the server)
 #VPNCLIENTPASS=''
 
 #--	Set password to the vpn server
@@ -1210,13 +1135,25 @@ const envfileLinux = `#
 #--	Change secure mode status of vpn server
 #VPNSEVERSECURE=''
 
-#--	Set VPN Server network interface
+#--	Set VPN Server network interface - i.e. eth0
 #VPNSEVERNETIFC=''
 
+### Miscellaneous #######################################################
+
+#--	Set secret key
+#SK=''
+
+#--	Custom config version override
+#VERSION=''
+
+#--	Set visor runtime log level.
+#	Default is info ; uncomment for debug logging
+#LOGLVL=debug
 
 `
+
 const envfileWindows = `#
-# C:\ProgramData\skywire.ps1
+# C:\ProgramData\skywire.conf
 #
 #########################################################################
 #	SKYWIRE CONFIG TEMPLATE
@@ -1224,79 +1161,104 @@ const envfileWindows = `#
 #		Uncomment to change default value
 #########################################################################
 
-#--	Other Visors will automatically establish transports to this visor
-#	requires port forwarding or public ip
-#$VISORISPUBLIC=true
+### Installation path ###################################################
 
-#--	Autostart vpn server for this visor
-#$VPNSERVER=true
+#--	Default config paths for the installer or package (system paths)
+#$PKGENV=$true
+
+#--	Default config paths for the current userspace
+#$USRENV=$true
+
+#--	fallback service conf path
+#$SVCCONF="services-config.json"
+
+#--	dmsghttp config path
+#$DMSGCONF="dmsghttp-config.json"
+
+#--	Output path of the config file
+#$OUTPUT='C:\\ProgramData\\skywire-config.json'
+
+#--	Set app bin_path
+#$BINPATH='C:\\ProgramData\\apps'
+
+### Deployment ##########################################################
+
+#--	Set custom service conf URLs
+#$SVCCONFADDR=@('')
 
 #--	Use test deployment
-#$TESTENV=true
+#$TESTENV=$true
+
+#--	Use dmsghttp to connect to the production deployment ; overrides BESTPROTO=$true
+#$DMSGHTTP=$true
+
+#--	Number of dmsg servers to connect to (0 unlimits)
+#$MINDMSGSESS=8
 
 #--	Automatically determine the best protocol (dmsg or http)
 #	based on location to connect to the deployment servers
-#$BESTPROTO=true
+#$BESTPROTO=$true
 
-#--	Set custom service conf URLs
-#$SVCCONFADDR= @('')
+### Transports ##########################################################
 
-#--	fallback service conf path
-#$SVCCONF='services-config.json'
+#--	Other Visors will automatically establish transports to this visor
+#	requires port forwarding or public IP
+#$VISORISPUBLIC=$true
 
-#--	Set visor runtime log level.
-#	Default is info ; uncomment for debug logging
-#$LOGLVL=debug
+#--	Disable auto-transports to public visors from this visor
+#$DISABLEPUBLICAUTOCONN=$true
 
-#--	dmsghttp config path
-#$DMSGCONF='dmsghttp-config.json'
+#--	Add transport setup public keys
+#$TPSETUPPKS=@('')
 
-#--	Use dmsghttp to connect to the production deployment
-#$DMSGHTTP=true
+### Ports ###############################################################
 
-#--	Number of dmsg serverts to connect to (0 unlimits)
-#$MINDMSGSESS=8
+#- set port for UDP connections / SUDPH transports
+#$SUDPHPORT=0
 
-#--	Start the hypervisor interface for this visor
-#$ISHYPERVISOR=true
+#- set port for TCP connections / STCPR or STCP transports
+#$STCPRPORT=0
 
-#--	Output path of the config file
-#$OUTPUT='./skywire-config.json'
+### Routing #############################################################
 
-#--	Display the node ip in the service discovery
-#	for any public services this visor is running
-#$DISPLAYNODEIP=true
+#--	Add route setup-node public keys
+#$ROUTESETUPPKS=@('')
+
+### Remote Access #######################################################
 
 #--	Set remote hypervisor public keys
-#$HYPERVISORPKS= @('')
-#$HYPERVISORPKS= @('','')
+#$HYPERVISORPKS=@('')
 
-#--	Default config paths for the installer or package (system paths)
-#$PKGENV=true
+#--	Grant access to pseudoterminal (pty) for public keys
+#$DMSGPTYPKS=@('')
 
-#--	Default config paths for the current userspace
-#$USRENV=true
+### Survey Access #######################################################
 
-#--	Set secret key
-#$SK=''
+#--	Grant access for survey collection to these public keys
+#$SURVEYPKS=@('')
 
-#--	Disable auto-transports to public visors
-#$DISABLEPUBLICAUTOCONN=true
+### Hypervisor UI #######################################################
 
-#--	Custom config version override
-#$VERSION=''
+#--	Start the hypervisor interface for this visor
+#$ISHYPERVISOR=$true
 
-#--	Set app bin_path
-#$BINPATH='./apps'
+### Apps ################################################################
+
+#--	Display the node IP in the service discovery
+#	for any public services this visor is running
+#$DISPLAYNODEIP=$true
+
+#--	Autostart VPN server for this visor
+#$VPNSERVER=$true
 
 #--	Set server public key for proxy client to connect to
 #$PROXYCLIENTPK=''
 
 #--	Enable autostart of the proxy client
-#$STARTPROXYCLIENT=true
+#$STARTPROXYCLIENT=$true
 
 #--	Disable autostart of proxy server
-#$NOPROXYSERVER=true
+#$NOPROXYSERVER=$true
 
 #--	Set a password for the proxy server
 #$PROXYSEVERPASS=''
@@ -1305,20 +1267,32 @@ const envfileWindows = `#
 #$PROXYCLIENTPASS=''
 
 #--	Set VPN client killswitch
-#$VPNKS=true
+#$VPNKS=$true
 
-#--	Set vpn server public key for the vpn client to use
+#--	Set VPN server public key for the VPN client to use
 #$ADDVPNPK=''
 
-#--	Password for vpn client to access the server (if password is set forthe server)
+#--	Password for VPN client to access the server (if password is set for the server)
 #$VPNCLIENTPASS=''
 
-#--	Set password to the vpn server
+#--	Set password to the VPN server
 #$VPNSEVERPASS=''
 
-#--	Change secure mode status of vpn server
+#--	Change secure mode status of VPN server
 #$VPNSEVERSECURE=''
 
-#--	Set VPN Server network interface
+#--	Set VPN Server network interface, e.g., 'Ethernet'
 #$VPNSEVERNETIFC=''
+
+### Miscellaneous #######################################################
+
+#--	Set secret key
+#$SK=''
+
+#--	Custom config version override
+#$VERSION=''
+
+#--	Set visor runtime log level.
+#	Default is info ; uncomment for debug logging
+#$LOGLVL='debug'
 `

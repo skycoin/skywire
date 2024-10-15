@@ -1,76 +1,64 @@
 {
-    "test": {
-     "dmsg_servers": [
+  "test": {
+    "dmsg_servers": [
       {
-       "static": "024716428e6315d954356e9ad72bea32bb2b41aab5a54a9b5cb4313964016e64d8",
-       "server": {
-        "address": "139.144.183.24:30080"
-       }
-      },
-      {
-       "static": "0228af3fd99c8d86a882495c8e0202bdd4da78c69e013065d8634286dd4a0ac098",
-       "server": {
-        "address": "139.162.55.79:30084"
-       }
-      },
-      {
-       "static": "03d5b55d1133b26485c664cf8b95cff6746d1e321c34e48c9fed293eff0d6d49e5",
-       "server": {
-        "address": "170.187.228.44:30083"
-       }
+        "static": "024716428e6315d954356e9ad72bea32bb2b41aab5a54a9b5cb4313964016e64d8",
+        "server": {
+          "address": "139.144.183.24:30080"
+        }
       }
-     ],
-     "dmsg_discovery": "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80",
-     "transport_discovery": "dmsg://02703cf828ea11d25b2c8eb0796132ecc7e53b22325b20ce3674ce5cd8693e4fb6:80",
-     "address_resolver": "dmsg://030eb7d8cf6eac40c19bbc433de6d6b9bb7a47f2e1d7095c6a01aa676471670ad2:80",
-     "route_finder": "dmsg://02ece5b69eaee13ef967b7eb67ca93f1dfddad3a51c9cb1808c4bd0d8d8aa32053:80",
-     "uptime_tracker": "dmsg://022c788cca11f208cdfd83ed0c2a8c7b661221736c461adc7c6738a2c1b041c7f8:80",
-     "service_discovery": "dmsg://038f751df4af75fb3d51f6693602bfe8289145e633ffdd1e67d686bea595f84d55:80"
-    },
-    "prod": {
-     "dmsg_servers": [
+    ],
+    "dmsg_discovery": "dmsg://024a7b9b7db1626d46777e5c665333afa57f48934b57652305fc7a2b19dc4c65d4:80",
+    "transport_discovery": "dmsg://02703cf828ea11d25b2c8eb0796132ecc7e53b22325b20ce3674ce5cd8693e4fb6:80",
+    "address_resolver": "dmsg://030eb7d8cf6eac40c19bbc433de6d6b9bb7a47f2e1d7095c6a01aa676471670ad2:80",
+    "route_finder": "dmsg://02ece5b69eaee13ef967b7eb67ca93f1dfddad3a51c9cb1808c4bd0d8d8aa32053:80",
+    "uptime_tracker": "dmsg://022c788cca11f208cdfd83ed0c2a8c7b661221736c461adc7c6738a2c1b041c7f8:80",
+    "service_discovery": "dmsg://038f751df4af75fb3d51f6693602bfe8289145e633ffdd1e67d686bea595f84d55:80"
+  },
+  "prod": {
+    "dmsg_servers": [
       {
-       "static": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
-       "server": {
-        "address": "139.162.160.227:30087"
-       }
+        "static": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
+        "server": {
+          "address": "139.162.160.227:30087"
+        }
       },
       {
-       "static": "030c83534af1041aee60c2f124b682a9d60c6421876db7c67fc83a73c5effdbd96",
-       "server": {
-        "address": "188.121.99.59:8081"
-       }
+        "static": "030c83534af1041aee60c2f124b682a9d60c6421876db7c67fc83a73c5effdbd96",
+        "server": {
+          "address": "188.121.99.59:8081"
+        }
       },
       {
-       "static": "0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7",
-       "server": {
-        "address": "70.121.23.42:9083"
-       }
+        "static": "0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7",
+        "server": {
+          "address": "70.121.13.123:9083"
+        }
       },
       {
-       "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
-       "server": {
-        "address": "139.162.160.227:30086"
-       }
+        "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+        "server": {
+          "address": "139.162.160.227:30086"
+        }
       },
       {
-       "static": "03d5b55d1133b26485c664cf8b95cff6746d1e321c34e48c9fed293eff0d6d49e5",
-       "server": {
-        "address": "170.187.228.44:30083"
-       }
+        "static": "03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4",
+        "server": {
+          "address": "139.162.173.101:30083"
+        }
       },
       {
-       "static": "0228af3fd99c8d86a882495c8e0202bdd4da78c69e013065d8634286dd4a0ac098",
-       "server": {
-        "address": "170.187.228.178:30084"
-       }
+        "static": "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd",
+        "server": {
+          "address": "139.162.173.101:30082"
+        }
       }
-     ],
-     "dmsg_discovery": "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80",
-     "transport_discovery": "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80",
-     "address_resolver": "dmsg://03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80",
-     "route_finder": "dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80",
-     "uptime_tracker": "dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80",
-     "service_discovery": "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80"
-    }
-   }
+    ],
+    "dmsg_discovery": "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80",
+    "transport_discovery": "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80",
+    "address_resolver": "dmsg://03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80",
+    "route_finder": "dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80",
+    "uptime_tracker": "dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80",
+    "service_discovery": "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80"
+  }
+}

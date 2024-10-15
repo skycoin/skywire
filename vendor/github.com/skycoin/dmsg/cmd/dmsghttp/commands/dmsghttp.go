@@ -18,7 +18,6 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/dmsg/pkg/disc"
@@ -38,7 +37,7 @@ func init() {
 	RootCmd.Flags().StringVarP(&serveDir, "dir", "d", ".", "local dir to serve via dmsghttp")
 	RootCmd.Flags().UintVarP(&dmsgPort, "port", "p", 80, "dmsg port to serve from")
 	RootCmd.Flags().StringVarP(&wl, "wl", "w", "", "whitelist keys, comma separated")
-	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", "", "dmsg discovery url default:\n"+skyenv.DmsgDiscAddr)
+	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsg.DiscAddr(false), "dmsg discovery url")
 	if os.Getenv("DMSGHTTP_SK") != "" {
 		sk.Set(os.Getenv("DMSGHTTP_SK")) //nolint
 	}
@@ -62,14 +61,12 @@ DMSG http file server`,
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
-	PreRun: func(cmd *cobra.Command, args []string) {
-		if dmsgDisc == "" {
-			dmsgDisc = skyenv.DmsgDiscAddr
-		}
-	},
+
 	Run: func(cmd *cobra.Command, args []string) {
 		log := logging.MustGetLogger("dmsghttp")
-
+		if dmsgDisc == "" {
+			log.Fatal("Dmsg Discovery URL not specified")
+		}
 		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 		defer cancel()
 		pk, err := sk.PubKey()

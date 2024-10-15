@@ -526,7 +526,8 @@ func (a *API) ListenUDP(listener net.Listener) {
 func (a *API) sudphConnHandshake(conn net.Conn) {
 	remoteAddr := conn.RemoteAddr().String()
 
-	hs := handshake.ResponderHandshake(func(f2 handshake.Frame2) error { return nil })
+	//	hs := handshake.ResponderHandshake(func(f2 handshake.Frame2) error { return nil })
+	hs := handshake.ResponderHandshake(func(_ handshake.Frame2) error { return nil })
 
 	wrapped, err := network.DoHandshake(conn, hs, network.SUDPH, a.log)
 	if err != nil {

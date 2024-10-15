@@ -1111,7 +1111,7 @@ func (hv *Hypervisor) deleteRoutes() http.HandlerFunc {
 				}
 				continue
 			}
-			routeID := routing.RouteID(ridUint64)
+			routeID := routing.RouteID(ridUint64) //nolint
 			contains := false
 			for _, rule := range rules {
 				if rule.KeyRouteID() == routeID {
@@ -1502,7 +1502,7 @@ func ridFromParam(r *http.Request, key string) (routing.RouteID, error) {
 		return 0, errors.New("invalid route ID provided")
 	}
 
-	return routing.RouteID(rid), nil
+	return routing.RouteID(rid), nil //nolint
 }
 
 func strSliceFromQuery(r *http.Request, key string, defaultVal []string) []string {
