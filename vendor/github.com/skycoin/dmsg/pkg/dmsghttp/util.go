@@ -13,7 +13,7 @@ import (
 )
 
 // GetServers is used to get all the available servers from the dmsg-discovery.
-func GetServers(ctx context.Context, dmsgDisc string, log *logging.Logger) (entries []*disc.Entry) {
+func GetServers(ctx context.Context, dmsgDisc string, dmsgServerType string, log *logging.Logger) (entries []*disc.Entry) {
 	dmsgclient := disc.NewHTTP(dmsgDisc, &http.Client{}, log)
 	ticker := time.NewTicker(time.Second * 10)
 	defer ticker.Stop()
@@ -21,6 +21,15 @@ func GetServers(ctx context.Context, dmsgDisc string, log *logging.Logger) (entr
 		servers, err := dmsgclient.AllServers(ctx)
 		if err != nil {
 			log.WithError(err).Fatal("Error getting dmsg-servers.")
+		}
+		if dmsgServerType != "" {
+			var filteredServers []*disc.Entry
+			for _, server := range servers {
+				if server.Server.ServerType == dmsgServerType {
+					filteredServers = append(filteredServers, server)
+				}
+			}
+			servers = filteredServers
 		}
 		if len(servers) > 0 {
 			return servers
@@ -30,13 +39,13 @@ func GetServers(ctx context.Context, dmsgDisc string, log *logging.Logger) (entr
 		case <-ctx.Done():
 			return []*disc.Entry{}
 		case <-ticker.C:
-			GetServers(ctx, dmsgDisc, log)
+			GetServers(ctx, dmsgDisc, dmsgServerType, log)
 		}
 	}
 }
 
 // UpdateServers is used to update the servers in the direct client.
-func UpdateServers(ctx context.Context, dClient disc.APIClient, dmsgDisc string, dmsgC *dmsg.Client, log *logging.Logger) (entries []*disc.Entry) {
+func UpdateServers(ctx context.Context, dClient disc.APIClient, dmsgDisc string, dmsgC *dmsg.Client, dmsgServerType string, log *logging.Logger) (entries []*disc.Entry) {
 	dmsgclient := disc.NewHTTP(dmsgDisc, &http.Client{}, log)
 	ticker := time.NewTicker(time.Minute * 10)
 	defer ticker.Stop()
@@ -51,6 +60,15 @@ func UpdateServers(ctx context.Context, dClient disc.APIClient, dmsgDisc string,
 				break
 			}
 			log.Debugf("Servers found : %v.", len(servers))
+			if dmsgServerType != "" {
+				var filteredServers []*disc.Entry
+				for _, server := range servers {
+					if server.Server.ServerType == dmsgServerType {
+						filteredServers = append(filteredServers, server)
+					}
+				}
+				servers = filteredServers
+			}
 			for _, server := range servers {
 				dClient.PostEntry(ctx, server) //nolint
 				err := dmsgC.EnsureSession(ctx, server)

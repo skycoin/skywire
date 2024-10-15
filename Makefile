@@ -97,6 +97,18 @@ date:
 commit:
 	@echo $(COMMIT)
 
+services: ## update services-config.json
+	scripts/services.sh
+
+dig-services: ## show IP addresses for the services
+	scripts/dig-services.sh
+
+dmsghttp: ## update dmsghttp-config.json
+	scripts/dmsghttp.sh
+
+count-dmsg-disc-entries:
+	curl -sL $(jq -r '.prod.dmsg_discovery' services-config.json)/dmsg-discovery/entries | jq '. | length'
+
 check: lint check-cg test ## Run linters and tests
 
 check-cg: ## Cursory check of the main help menu, offline dmsghttp config gen and offline config gen
@@ -129,6 +141,8 @@ build-merged-windows: clean-windows
 install-system-linux: build ## Install apps and binaries over those provided by the linux package - linux package must be installed first!
 	sudo echo "sudo cache"
 	sudo install -Dm755 $(BUILD_PATH)skywire /opt/skywire/bin/
+	sudo install -Dm644 services-config.json /opt/skywire/
+	sudo install -Dm644 dmsghttp-config.json /opt/skywire/
 
 
 install-generate: ## Installs required execs for go generate.
@@ -158,7 +172,10 @@ install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 
 lint: ## Run linters. Use make install-linters first
 	golangci-lint --version
-	${OPTS} golangci-lint run -c .golangci.yml ./...
+	${OPTS} golangci-lint run -c .golangci.yml skywire.go	#break down the linter run over smaller sections of the source code
+	${OPTS} golangci-lint run -c .golangci.yml ./cmd/...
+	${OPTS} golangci-lint run -c .golangci.yml ./pkg/...
+	${OPTS} golangci-lint run -c .golangci.yml	 ./...
 
 lint-windows: ## Run linters. Use make install-linters-windows first
 	powershell 'golangci-lint --version'
@@ -360,8 +377,8 @@ windows-installer-release:
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-windows-386.msi
 
 # useful commands
-dmsghttp-update: ## update dmsghttp config
-	go run cmd/skywire/skywire.go cli config update dmsghttp -p dmsghttp-config.json
+#dmsghttp-update: ## update dmsghttp config
+#	go run cmd/skywire/skywire.go cli config update dmsghttp -p dmsghttp-config.json
 
 help: ## `make help` menu
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'

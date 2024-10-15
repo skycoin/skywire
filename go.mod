@@ -28,10 +28,10 @@ require (
 	github.com/pterm/pterm v0.12.66
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.3
-	github.com/skycoin/dmsg v1.3.25
-	github.com/skycoin/skycoin v0.27.1
-	github.com/skycoin/skycoin-service-discovery v1.3.25
-	github.com/skycoin/skywire-services v1.3.25
+	github.com/skycoin/dmsg v1.3.29-0.20241004205035-c45754b16934
+	github.com/skycoin/skycoin v0.28.0
+	github.com/skycoin/skycoin-service-discovery v1.3.28
+	github.com/skycoin/skywire-services v1.3.28
 	github.com/skycoin/skywire-utilities v1.3.25
 	github.com/skycoin/systray v1.10.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
@@ -78,11 +78,12 @@ require (
 	github.com/gin-contrib/sse v0.1.0 // indirect
 	github.com/go-chi/chi v4.1.2+incompatible // indirect
 	github.com/go-chi/cors v1.2.1 // indirect
+	github.com/go-chi/httprate v0.9.0 // indirect
+	github.com/go-echarts/go-echarts/v2 v2.3.3 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.15.1 // indirect
-	github.com/go-redis/redis v6.15.9+incompatible // indirect
 	github.com/go-redis/redis/v8 v8.11.5 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/goccy/go-json v0.10.2 // indirect
@@ -167,10 +168,10 @@ require (
 replace github.com/xxxserxxx/gotop/v4 => github.com/ersonp/gotop/v4 v4.2.1
 
 // Uncomment for tests with local sources of other skywire repos
-// replace github.com/skycoin/dmsg => ../dmsg
-// replace github.com/skycoin/skywire-services => ../skywire-services
-// replace github.com/skycoin/skycoin-service-discovery => ../skycoin-service-discovery
-// replace github.com/skycoin/skywire-utilities => ../skywire-utilities
+//replace github.com/skycoin/dmsg => ../dmsg
+//replace github.com/skycoin/skywire-services => ../skywire-services
+//replace github.com/skycoin/skycoin-service-discovery => ../skycoin-service-discovery
+//replace github.com/skycoin/skywire-utilities => ../skywire-utilities
 
 // Uncomment to update other skywire deps to specific commit hash.
 // run `go mod tidy ; go mod vendor`
@@ -178,5 +179,7 @@ replace github.com/xxxserxxx/gotop/v4 => github.com/ersonp/gotop/v4 v4.2.1
 // then, re-comment the line before saving.
 // replace github.com/skycoin/dmsg => github.com/skycoin/dmsg <commit-hash>
 // replace github.com/skycoin/skywire-services => github.com/skycoin/skywire-services <commit-hash>
+//replace github.com/skycoin/skywire-services => github.com/skycoin/skywire-services <commit-hash>
+
 // replace github.com/skycoin/skycoin-service-discovery => github.com/skycoin/skycoin-service-discovery <commit-hash>
 // replace github.com/skycoin/skywire-utilities => github.com/skycoin/skywire-utilities <commit-hash>

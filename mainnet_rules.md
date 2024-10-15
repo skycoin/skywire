@@ -39,26 +39,28 @@ Reward distribution notifications are on telegram [@skywire_reward](https://t.me
 
 Information about reward distribution as well as other metrics for the skywire network can be found at [fiber.skywire.dev](https://fiber.skywire.dev)
 
-# Uptime Reward Pool
+# Uptime Reward Pools
 
-408000 Skycoin are distributed annually to those visors which meet the mimimum uptime and the other requirements listed below.
+816000 Skycoin are distributed annually to those visors which meet the mimimum uptime and the other requirements listed below, in two equally sized reward pools.
 
-The reward amount for a day is evenly divided among those eligible participants on the basis of having met uptime and other requirements, for the previous day.
+The reward amount for a day is evenly divided among those eligible participants for a given reward pool on the basis of having met uptime and other requirements, for the previous day.
 
-A total of up to ~1117.808 Skycoin are distributed daily in non leap-years.
+A total of up to ~1117.808 Skycoin __per pool__ are distributed daily in non leap-years.
 
-A total of up to ~1114.754  Skycoin are distributed daily in leap-years.
+A total of up to ~1114.754  Skycoin __per pool__ are distributed daily in leap-years.
+
+The two reward pools are differentiated by architecture ; one pool for ARM / RISC / MIPS architectures, the other pool for AMD64 / x86_64 / i686 architecture machines. The requirements are otherwise identical for reward eligibility in these pools.
 
 ## Rules & Requirements
 
 To receive Skycoin rewards for running skywire, the following requirements must be met:
 
 
-* 1) **Minimum skywire version v1.3.25** - Cutoff September 1st 2024
+* 1) **Minimum skywire version v1.3.26** - Cutoff October 1st 2024
 
 * 2) **75% [uptime](#uptime) per day** minimum is required to be eligible to receive rewards
 
-* 3) The visor must be an **ARM or RISC architecture SBC** ~running on approved [hardware](#hardware)~
+* 3) ~The visor must be an **ARM or RISC architecture SBC** running on approved [hardware](#hardware)~
 
 * 4) Visors must be running on **[the skywire production deployment](#deployment)** with a config that is updated on every version. No default keys or addresses of this configuration may be removed - but you can add keys where applicable.
 
@@ -109,11 +111,6 @@ skywire visor -v
 
 The update deadlines specify the version of software required as of (i.e. on or before) the specified date in order to maintain reward eligibility:
 
-**Reward eligibility after 7-1-2024 requires Skywire v1.3.23**
-
-Requirement established 6-25-2024
-
-Rewards Cutoff date for updating 7-1-2024
 
 **Reward eligibility after 9-1-2024 requires Skywire v1.3.25**
 
@@ -121,6 +118,11 @@ Requirement established 8-21-2024
 
 Rewards Cutoff date for updating 9-1-2024
 
+**Reward eligibility after 10-1-2024 requires Skywire v1.3.26**
+
+Requirement established 9-24-2024
+
+Rewards Cutoff date for updating 10-1-2024
 
 ### Deployment
 
@@ -431,4 +433,4 @@ The following hardware is eligible for rewards:
 #### ZTE
      - ZXV10 B860H
 
-**If you would like to use other boards please contact the team first for approval ; only the boards on the list are guaranteed to be eligible for rewards.**
+~~If you would like to use other boards please contact the team first for approval ; only the boards on the list are guaranteed to be eligible for rewards.~~
