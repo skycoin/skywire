@@ -67,7 +67,7 @@ var RootCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 
 		appCl = app.NewClient(nil)
 		defer appCl.Close()
@@ -277,7 +277,7 @@ func sseHandler(w http.ResponseWriter, req *http.Request) {
 			if !ok {
 				return
 			}
-			_, _ = fmt.Fprintf(w, "data: %s\n\n", msg)
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", msg) //nolint: errcheck
 			f.Flush()
 
 		case <-req.Context().Done():

@@ -105,7 +105,7 @@ func MakeDataPacket(id RouteID, payload []byte) (Packet, error) {
 
 	packet[PacketTypeOffset] = byte(DataPacket)
 	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
-	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(len(payload)))
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(len(payload))) //nolint: gosec
 	copy(packet[PacketPayloadOffset:], payload)
 
 	return packet, nil
@@ -141,8 +141,8 @@ func MakePingPacket(id RouteID, timestamp, throughput int64) Packet {
 	packet[PacketTypeOffset] = byte(PingPacket)
 	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
 	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(16))
-	binary.BigEndian.PutUint64(packet[PacketPayloadOffset:], uint64(timestamp))
-	binary.BigEndian.PutUint64(packet[PacketPayloadOffset+8:], uint64(throughput))
+	binary.BigEndian.PutUint64(packet[PacketPayloadOffset:], uint64(timestamp))    //nolint: gosec
+	binary.BigEndian.PutUint64(packet[PacketPayloadOffset+8:], uint64(throughput)) //nolint: gosec
 
 	return packet
 }
@@ -154,7 +154,7 @@ func MakePongPacket(id RouteID, timestamp int64) Packet {
 	packet[PacketTypeOffset] = byte(PongPacket)
 	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
 	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(16))
-	binary.BigEndian.PutUint64(packet[PacketPayloadOffset:], uint64(timestamp))
+	binary.BigEndian.PutUint64(packet[PacketPayloadOffset:], uint64(timestamp)) //nolint: gosec
 
 	return packet
 }
@@ -187,7 +187,7 @@ func MakeErrorPacket(id RouteID, errPayload []byte) (Packet, error) {
 
 	packet[PacketTypeOffset] = byte(ErrorPacket)
 	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
-	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(len(errPayload)))
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(len(errPayload))) //nolint: gosec
 	copy(packet[PacketPayloadOffset:], errPayload)
 
 	return packet, nil

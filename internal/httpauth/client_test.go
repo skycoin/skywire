@@ -101,14 +101,14 @@ func checkResp(t *testing.T, headers http.Header, body []byte, pk cipher.PubKey,
 	require.Equal(t, pk.Hex(), headers.Get("Sw-Public"))
 	sig := cipher.Sig{}
 	require.NoError(t, sig.UnmarshalText([]byte(headers.Get("Sw-Sig"))))
-	require.NoError(t, cipher.VerifyPubKeySignedPayload(pk, sig, PayloadWithNonce(body, Nonce(nonce))))
+	require.NoError(t, cipher.VerifyPubKeySignedPayload(pk, sig, PayloadWithNonce(body, Nonce(nonce)))) //nolint: gosec
 }
 
 func newTestServer(t *testing.T, pk cipher.PubKey, headerCh chan<- http.Header) *httptest.Server {
 	nonce := 1
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.String() == fmt.Sprintf("/security/nonces/%s", pk) {
-			require.NoError(t, json.NewEncoder(w).Encode(&NextNonceResponse{pk, Nonce(nonce)}))
+			require.NoError(t, json.NewEncoder(w).Encode(&NextNonceResponse{pk, Nonce(nonce)})) //nolint: gosec
 		} else {
 			body, err := io.ReadAll(r.Body)
 			if body != nil {

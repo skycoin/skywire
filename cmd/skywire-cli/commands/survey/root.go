@@ -63,7 +63,7 @@ var surveyCmd = &cobra.Command{
 	DisableFlagsInUseLine: true,
 	Short:                 "system survey",
 	Long:                  "print the system survey",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		if pkg {
 			confPath = visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON
 		}

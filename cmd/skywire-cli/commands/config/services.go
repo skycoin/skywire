@@ -26,7 +26,7 @@ func init() {
 var servicesCmd = &cobra.Command{
 	Use:   "svc",
 	Short: "update services-config.json file from config bootstrap service",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		log := logging.MustGetLogger("services_updater")
 
 		ctx, cancel := cmdutil.SignalContext(context.Background(), log)

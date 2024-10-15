@@ -290,13 +290,13 @@ func (v1 *V1) AddAppConfig(launch *launcher.AppLauncher, appName, binaryName str
 	for {
 		min := 10
 		max := 99
-		randomNumber = rand.Intn(max-min+1) + min //nolint
-		if _, ok := busyPorts[routing.Port(randomNumber)]; !ok {
+		randomNumber = rand.Intn(max-min+1) + min                //nolint: gosec
+		if _, ok := busyPorts[routing.Port(randomNumber)]; !ok { //nolint: gosec
 			break
 		}
 	}
 
-	conf.Apps = append(conf.Apps, appserver.AppConfig{Name: appName, Binary: binaryName, Port: routing.Port(randomNumber)})
+	conf.Apps = append(conf.Apps, appserver.AppConfig{Name: appName, Binary: binaryName, Port: routing.Port(randomNumber)}) //nolint: gosec
 
 	launch.ResetConfig(launcher.AppLauncherConfig{
 		VisorPK:       v1.PK,

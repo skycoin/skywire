@@ -179,7 +179,7 @@ func (hv *Hypervisor) AddMockData(config MockConfig) error {
 		hv.remoteVisors[pk] = Conn{
 			Addr: dmsg.Addr{
 				PK:   pk,
-				Port: uint16(i),
+				Port: uint16(i), //nolint: gosec
 			},
 			API: client,
 		}

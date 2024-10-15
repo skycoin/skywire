@@ -240,7 +240,7 @@ var rmTpCmd = &cobra.Command{
 	Short:                 "Remove transport(s) by id",
 	Long:                  "\n    Remove transport(s) by id",
 	DisableFlagsInUseLine: true,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if removeAll {
 			internal.Catch(cmd.Flags(), rpcClient.RemoveAllTransports())
@@ -428,7 +428,7 @@ var treeCmd = &cobra.Command{
 	Use:   "tree",
 	Short: "tree map of transports on the skywire network",
 	Long:  fmt.Sprintf("display a tree representation of transports from TPD\n\n%v/all-transports\n\nSet cache file location to \"\" to avoid using cache files", utilenv.TpDiscAddr),
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		if rootNode != "" {
 			err := rootnode.Set(rootNode)
 			if err != nil {

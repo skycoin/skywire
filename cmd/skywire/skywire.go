@@ -228,7 +228,7 @@ var treeCmd = &cobra.Command{
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		// You can use a LeveledList here, for easy generation.
 		leveledList := pterm.LeveledList{}
 		leveledList = append(leveledList, pterm.LeveledListItem{Level: 0, Text: RootCmd.Use})
@@ -288,7 +288,7 @@ var docCmd = &cobra.Command{
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		fmt.Printf("\n# %s\n", "skywire documentation")
 		fmt.Printf("\n## %s\n", "subcommand tree")
 		fmt.Printf("\n%s\n", "A tree representation of the skywire subcommands")

@@ -37,7 +37,7 @@ func init() {
 var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "start visor",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		var output string
 		var err error
 		if !sourcerun {
@@ -71,7 +71,7 @@ var reloadCmd = &cobra.Command{
 	Use:    "reload",
 	Short:  "reload visor",
 	Hidden: true,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			os.Exit(1)
@@ -97,12 +97,12 @@ var shutdownCmd = &cobra.Command{
 	Use:   "halt",
 	Short: "Stop a running visor",
 	Long:  "\n  Stop a running visor",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			os.Exit(1)
 		}
-		rpcClient.Shutdown() //nolint
+		rpcClient.Shutdown() //nolint: errcheck, gosec
 		internal.PrintOutput(cmd.Flags(), "Visor was shut down", fmt.Sprintln("Visor was shut down"))
 	},
 }
