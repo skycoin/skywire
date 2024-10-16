@@ -13,15 +13,17 @@ import (
 
 	"github.com/bitfield/script"
 	"github.com/fatih/color"
+	coincipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
+	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	tgbot "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards/tgbot"
 )
 
-const yearlyTotalRewards int = 408000
+const yearlyTotalRewardsPerPool int = 408000
 
 var (
 	yearlyTotal           int
@@ -29,14 +31,16 @@ var (
 	wdate                 = time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 	wDate                 time.Time
 	utfile                string
-	disallowArchitectures string
+	disallowArchitectures []string
+	allowArchitectures1   []string
+	allowArchitectures2   []string
 	h0                    bool
 	h1                    bool
 	h2                    bool
 	grr                   bool
 	pubkey                string
 	logLvl                string
-	log                   *logging.Logger
+	log                   = logging.MustGetLogger("rewards")
 	sConfig               string
 	dConfig               string
 	nodeInfoSvc           []byte
@@ -74,8 +78,39 @@ func init() {
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "info", "[ debug | warn | error | fatal | panic | trace ] \u001b[0m*")
 	RootCmd.Flags().StringVarP(&wdate, "date", "d", wdate, "date for which to calculate reward")
 	RootCmd.Flags().StringVarP(&pubkey, "pk", "k", pubkey, "check reward for pubkey")
-	RootCmd.Flags().StringVarP(&disallowArchitectures, "noarch", "n", "amd64,null", "disallowed architectures, comma separated")
-	RootCmd.Flags().IntVarP(&yearlyTotal, "year", "y", yearlyTotalRewards, "yearly total rewards")
+	RootCmd.Flags().StringSliceVarP(&disallowArchitectures, "noarch", "n", []string{"null", "wasm"}, "disallowed architectures, comma separated")
+	RootCmd.Flags().StringSliceVarP(&allowArchitectures1, "a1", "w", func(all []string, dis []string) (res []string) {
+		for _, v := range all {
+			allow := true
+			for _, d := range dis {
+				if v == d {
+					allow = false
+					break
+				}
+			}
+			if allow {
+				res = append(res, v)
+			}
+		}
+		return res
+	}(skywire.Architectures, []string{"wasm", "amd64", "386"}), "pool 1 allowed arch, comma separated")
+
+	RootCmd.Flags().StringSliceVarP(&allowArchitectures2, "a2", "x", func(all []string, dis []string) (res []string) {
+		for _, v := range all {
+			allow := true
+			for _, d := range dis {
+				if v == d {
+					allow = false
+					break
+				}
+			}
+			if allow {
+				res = append(res, v)
+			}
+		}
+		return res
+	}(skywire.Architectures, []string{"wasm", "arm64", "arm", "ppc64", "riscv64", "loong64", "mips", "mips64", "mips64le", "mipsle", "ppc64le", "s390x"}), "pool 2 allowed arch, comma separated")
+	RootCmd.Flags().IntVarP(&yearlyTotal, "year", "y", yearlyTotalRewardsPerPool, "yearly total rewards per pool")
 	RootCmd.Flags().StringVarP(&utfile, "utfile", "u", "ut.txt", "uptime tracker data file")
 	RootCmd.Flags().StringVarP(&hwSurveyPath, "lpath", "p", "log_collecting", "path to the surveys")
 	RootCmd.Flags().StringVarP(&sConfig, "svcconf", "f", "/opt/skywire/services-config.json", "path to the services-config.json")
@@ -92,7 +127,12 @@ var RootCmd = &cobra.Command{
 	Short: "calculate rewards from uptime data & collected surveys",
 	Long: `
 Collect surveys:  skywire-cli log
-Fetch uptimes:    skywire-cli ut > ut.txt`,
+Fetch uptimes:    skywire-cli ut > ut.txt
+
+Architectures:
+` + fmt.Sprintf("%v", append(skywire.Architectures, "null", "all")) + `
+
+`,
 	Run: func(_ *cobra.Command, _ []string) {
 		var err error
 		if log == nil {
@@ -130,12 +170,54 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 			log.Fatal("uptime tracker data file not found\n", err, "\nfetch the uptime tracker data with:\n$ skywire-cli ut > ut.txt")
 		}
 
-		archMap := make(map[string]struct{})
-		for _, disallowedarch := range strings.Split(disallowArchitectures, ",") {
-			if disallowedarch != "" {
-				archMap[disallowedarch] = struct{}{}
+		// Create a map for disallowed architectures
+		disallowedMap := make(map[string]struct{})
+		for _, disallowedArch := range disallowArchitectures {
+			disallowedMap[disallowedArch] = struct{}{}
+		}
+
+		// Create maps for allowed architectures for pool 1 and pool 2
+		allowArchMap1 := make(map[string]struct{})
+		allowArchMap2 := make(map[string]struct{})
+
+		// Create a map for quick lookup of skywire architectures
+		supportedArchitecturesMap := make(map[string]struct{})
+		for _, arch := range skywire.Architectures {
+			supportedArchitecturesMap[arch] = struct{}{}
+		}
+
+		// Populate allowed architecture maps for pool 1 and pool 2, excluding disallowed ones
+		for _, arch := range allowArchitectures1 {
+			if _, isDisallowed := disallowedMap[arch]; !isDisallowed {
+				allowArchMap1[arch] = struct{}{}
 			}
 		}
+		for _, arch := range allowArchitectures2 {
+			if _, isDisallowed := disallowedMap[arch]; !isDisallowed {
+				allowArchMap2[arch] = struct{}{}
+			}
+		}
+
+		// Check for common architectures between the two allowed slices
+		for arch := range allowArchMap1 {
+			if _, exists := allowArchMap2[arch]; exists {
+				log.Fatal("Error: Architecture cannot be specified in both pools: " + arch)
+			}
+		}
+
+		// Validate each allowed architecture against the supported architectures
+		for arch := range allowArchMap1 {
+			if _, isValid := supportedArchitecturesMap[arch]; !isValid {
+				log.Fatal("Error: Architecture is not valid: ", arch)
+			}
+		}
+
+		for arch := range allowArchMap2 {
+			if _, isValid := supportedArchitecturesMap[arch]; !isValid {
+				log.Fatal("Error: Architecture is not valid: ", arch)
+			}
+		}
+
 		var res []string
 		if pubkey == "" {
 			res, _ = script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Slice() //nolint
@@ -148,7 +230,8 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 				log.Fatal("Specified key " + pubkey + "\n did not achieve minimum uptime on " + wdate + " !")
 			}
 		}
-		var nodesInfos []nodeinfo
+		var nodesInfos1 []nodeinfo
+		var nodesInfos2 []nodeinfo
 		var grrInfos []nodeinfo
 		for _, pk := range res {
 			nodeInfoDotJSON := fmt.Sprintf("%s/%s/node-info.json", hwSurveyPath, pk)
@@ -190,10 +273,6 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 
 			ip, _ = script.File(nodeInfoDotJSON).JQ(`.ip_address`).Replace(" ", "").Replace(`"`, "").String() //nolint
 			ip = strings.TrimRight(ip, "\n")
-			if strings.Count(ip, ".") != 3 {
-				ip, _ = script.File(nodeInfoDotJSON).JQ(`."ip.skycoin.com".ip_address`).Replace(" ", "").Replace(`"`, "").String() //nolint
-				ip = strings.TrimRight(ip, "\n")
-			}
 			sky, _ = script.File(nodeInfoDotJSON).JQ(".skycoin_address").Replace(" ", "").Replace(`"`, "").String() //nolint
 			sky = strings.TrimRight(sky, "\n")
 			arch, _ = script.File(nodeInfoDotJSON).JQ(`.go_arch`).Replace(" ", "").Replace(`"`, "").String() //nolint
@@ -225,8 +304,17 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 				SvcConf:    svcconf,
 			}
 			//enforce all requirements for rewards
-			if _, disallowed := archMap[arch]; !disallowed && ip != "" && strings.Count(ip, ".") == 3 && sky != "" && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" {
-				nodesInfos = append(nodesInfos, ni)
+			_, allowed1 := allowArchMap1[arch]
+			_, allowed2 := allowArchMap2[arch]
+			_, err := coincipher.DecodeBase58Address(sky)
+
+			if (allowed1 || allowed2) && strings.Count(ip, ".") == 3 && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" && err == nil {
+				if allowed1 {
+					nodesInfos1 = append(nodesInfos1, ni)
+				}
+				if allowed2 {
+					nodesInfos2 = append(nodesInfos2, ni)
+				}
 			} else {
 				if grr {
 					grrInfos = append(grrInfos, ni)
@@ -249,11 +337,14 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 			fmt.Printf("days this month: %d\n", daysThisMonth)
 			fmt.Printf("days in the year: %d\n", daysThisYear)
 			fmt.Printf("this month's rewards: %.6f\n", monthReward)
-			fmt.Printf("reward total: %.6f\n", dayReward)
+			fmt.Printf("reward total per pool: %.6f\n", dayReward)
 		}
 		uniqueIP, _ := script.Echo(func() string { //nolint
 			var inputStr strings.Builder
-			for _, ni := range nodesInfos {
+			for _, ni := range nodesInfos1 {
+				inputStr.WriteString(fmt.Sprintf("%s\n", ni.IPAddr))
+			}
+			for _, ni := range nodesInfos2 {
 				inputStr.WriteString(fmt.Sprintf("%s\n", ni.IPAddr))
 			}
 			return inputStr.String()
@@ -273,7 +364,10 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 		}
 		uniqueUUID, _ := script.Echo(func() string { //nolint
 			var inputStr strings.Builder
-			for _, ni := range nodesInfos {
+			for _, ni := range nodesInfos1 {
+				inputStr.WriteString(fmt.Sprintf("%s\n", ni.UUID))
+			}
+			for _, ni := range nodesInfos2 {
 				inputStr.WriteString(fmt.Sprintf("%s\n", ni.UUID))
 			}
 			return inputStr.String()
@@ -282,7 +376,10 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 		// look at the first non loopback interface macaddress
 		uniqueMac, _ := script.Echo(func() string { //nolint
 			var inputStr strings.Builder
-			for _, ni := range nodesInfos {
+			for _, ni := range nodesInfos1 {
+				inputStr.WriteString(fmt.Sprintf("%s\n", ni.MacAddr))
+			}
+			for _, ni := range nodesInfos2 {
 				inputStr.WriteString(fmt.Sprintf("%s\n", ni.MacAddr))
 			}
 			return inputStr.String()
@@ -303,8 +400,11 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 			}
 		}
 
-		totalValidShares := 0.0
-		for _, ni := range nodesInfos {
+		totalValidShares1 := 0.0
+		totalValidShares2 := 0.0
+
+		// Calculate shares and rewards for nodesInfos1
+		for _, ni := range nodesInfos1 {
 			share := 1.0
 			for _, ipCount := range ipCounts {
 				if ni.IPAddr == ipCount.Name {
@@ -318,42 +418,89 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 					share = share / float64(macCount.Count)
 				}
 			}
-			totalValidShares += share
+			totalValidShares1 += share
 		}
 
-		if !h0 {
-			fmt.Printf("Visors meeting uptime & other requirements: %d\n", len(nodesInfos))
-			fmt.Printf("Unique mac addresses for first interface after lo: %d\n", len(uniqueMac))
-			fmt.Printf("Unique Ip Addresses: %d\n", len(uniqueIP))
-			fmt.Printf("Unique UUIDs: %d\n", len(uniqueUUID))
-			fmt.Printf("Total valid shares: %.6f\n", totalValidShares)
-			fmt.Printf("Skycoin Per Share: %.6f\n", dayReward/totalValidShares)
-		}
-		for i, ni := range nodesInfos {
-			nodesInfos[i].Share = 1.0
+		// Calculate shares and rewards for nodesInfos2
+		for _, ni := range nodesInfos2 {
+			share := 1.0
 			for _, ipCount := range ipCounts {
 				if ni.IPAddr == ipCount.Name {
 					if ipCount.Count >= 8 {
-						nodesInfos[i].Share = 8.0 / float64(ipCount.Count)
+						share = 8.0 / float64(ipCount.Count)
 					}
 				}
 			}
 			for _, macCount := range macCounts {
 				if macCount.Name == ni.MacAddr {
-					nodesInfos[i].Share = nodesInfos[i].Share / float64(macCount.Count)
+					share = share / float64(macCount.Count)
 				}
 			}
-			nodesInfos[i].Reward = nodesInfos[i].Share * dayReward / float64(totalValidShares)
+			totalValidShares2 += share
 		}
+
+		// Output information for both pools
+		if !h0 {
+			fmt.Printf("Visors meeting uptime & other requirements (Pool 1): %d\n", len(nodesInfos1))
+			fmt.Printf("Visors meeting uptime & other requirements (Pool 2): %d\n", len(nodesInfos2))
+			fmt.Printf("Unique mac addresses for first interface after lo: %d\n", len(uniqueMac))
+			fmt.Printf("Unique IP Addresses: %d\n", len(uniqueIP))
+			fmt.Printf("Unique UUIDs: %d\n", len(uniqueUUID))
+			fmt.Printf("Total valid shares (Pool 1): %.6f\n", totalValidShares1)
+			fmt.Printf("Total valid shares (Pool 2): %.6f\n", totalValidShares2)
+			fmt.Printf("Skycoin Per Share (Pool 1): %.6f\n", dayReward/totalValidShares1)
+			fmt.Printf("Skycoin Per Share (Pool 2): %.6f\n", dayReward/totalValidShares2)
+		}
+
+		// Calculate rewards for nodesInfos1
+		for i, ni := range nodesInfos1 {
+			nodesInfos1[i].Share = 1.0
+			for _, ipCount := range ipCounts {
+				if ni.IPAddr == ipCount.Name {
+					if ipCount.Count >= 8 {
+						nodesInfos1[i].Share = 8.0 / float64(ipCount.Count)
+					}
+				}
+			}
+			for _, macCount := range macCounts {
+				if macCount.Name == ni.MacAddr {
+					nodesInfos1[i].Share = nodesInfos1[i].Share / float64(macCount.Count)
+				}
+			}
+			nodesInfos1[i].Reward = nodesInfos1[i].Share * dayReward / float64(totalValidShares1)
+		}
+
+		// Calculate rewards for nodesInfos2
+		for i, ni := range nodesInfos2 {
+			nodesInfos2[i].Share = 1.0
+			for _, ipCount := range ipCounts {
+				if ni.IPAddr == ipCount.Name {
+					if ipCount.Count >= 8 {
+						nodesInfos2[i].Share = 8.0 / float64(ipCount.Count)
+					}
+				}
+			}
+			for _, macCount := range macCounts {
+				if macCount.Name == ni.MacAddr {
+					nodesInfos2[i].Share = nodesInfos2[i].Share / float64(macCount.Count)
+				}
+			}
+			nodesInfos2[i].Reward = nodesInfos2[i].Share * dayReward / float64(totalValidShares2)
+		}
+
+		// Combine nodesInfos1 and nodesInfos2 for output
+		combinedNodesInfos := append(nodesInfos1, nodesInfos2...)
 
 		if !h1 {
 			fmt.Println("Skycoin Address, Skywire Public Key, Reward Shares, Reward SKY Amount, IP, Architecture, UUID, Interfaces")
-			for _, ni := range nodesInfos {
+			for _, ni := range combinedNodesInfos {
 				fmt.Printf("%s, %s, %.6f, %.6f, %s, %s, %s, %s \n", ni.SkyAddr, ni.PK, ni.Share, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces)
 			}
 		}
+
+		// Calculate reward sum by Skycoin Address
 		rewardSumBySkyAddr := make(map[string]float64)
-		for _, ni := range nodesInfos {
+		for _, ni := range combinedNodesInfos {
 			rewardSumBySkyAddr[ni.SkyAddr] += ni.Reward
 		}
 		var sortedSkyAddrs []rewardData
@@ -376,7 +523,6 @@ Fetch uptimes:    skywire-cli ut > ut.txt`,
 			for _, skyAddrReward := range sortedSkyAddrs {
 				fmt.Printf("%s, %.6f\n", skyAddrReward.SkyAddr, skyAddrReward.Reward)
 			}
-
 		}
 	},
 }
