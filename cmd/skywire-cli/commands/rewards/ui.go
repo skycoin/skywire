@@ -626,10 +626,8 @@ func server() {
 		l := fmt.Sprintf("<div style='float: right;'>%s</div>", func() string {
 			yearlyTotal := 408000.0
 			result := fmt.Sprintf("%g annual reward distribution\nReward total per month:\n", yearlyTotal)
-
 			currentMonth := time.Now().Month()
 			currentYear := time.Now().Year()
-
 			for month := time.January; month <= time.December; month++ {
 				daysInMonth := time.Date(currentYear, month+1, 0, 0, 0, 0, 0, time.UTC).Day()
 				monthlyRewards := (yearlyTotal / 365) * float64(daysInMonth)
@@ -639,45 +637,70 @@ func server() {
 				}
 				result += fmt.Sprintf(format, monthlyRewards, currentYear, month)
 			}
-
 			firstDayOfNextYear := time.Date(currentYear+1, time.January, 1, 0, 0, 0, 0, time.UTC)
 			lastDayOfYear := firstDayOfNextYear.Add(-time.Second)
 			totalDaysInYear := int(lastDayOfYear.YearDay())
-
 			skycoinPerDay := yearlyTotal / float64(totalDaysInYear)
 			result += fmt.Sprintf("%g Skycoin per day\n<br><br>", skycoinPerDay)
 			utstats, _ := script.Exec(`skywire cli ut -t`).String() //nolint
-			result += fmt.Sprintf("Uptime tracker version statistics:\n%s", utstats)
+			result += fmt.Sprintf("Uptime tracker version statistics:\n%s\n", utstats)
 			return result
+
 		}())
 		l += fmt.Sprintf("There are %d days in the month of %s.\n", time.Date(time.Now().Year(), time.Now().Month()+1, 0, 0, 0, 0, 0, time.UTC).Day(), time.Now().Month())
-
 		l += fmt.Sprintf("Today is %s %d.\n", time.Now().Month(), time.Now().Day())
-
 		l += fmt.Sprintf("There are %d days left in the month of %s.\n", time.Date(time.Now().Year(), time.Now().Month()+1, 0, 0, 0, 0, 0, time.UTC).Day()-time.Now().Day(), time.Now().Month())
-
 		l += fmt.Sprintf("%d days in the year %d.\n", time.Date(time.Now().Year(), time.December, 31, 0, 0, 0, 0, time.UTC).YearDay(), time.Now().Year())
-
 		l += fmt.Sprintf("Today is day %d.\n", time.Now().YearDay())
-
 		l += fmt.Sprintf("There are %d days remaining in %d\n", time.Date(time.Now().Year(), time.December, 31, 0, 0, 0, 0, time.UTC).YearDay()-time.Now().YearDay(), time.Now().Year())
-
 		calendar, err := script.Exec(`bash -c 'set -o pipefail ; unbuffer cal --color | lolcat -f -F 0.5'`).String()
 		if err != nil {
 			calendar = cal()
 		}
 		l += "\n" + string(ansihtml.ConvertToHTML([]byte(calendar)))
-		l += "\n\nRewardDate SKY/VISOR [<span style='color: red;'>&#10060;</span>/<span style='color: green'>&#10004;</span>]distributed\n"
+		l += "\n\n<table style='border-collapse: collapse; width: auto;'>\n"
+		l += "\n\n<table style='border-collapse: collapse; width: auto;'>\n"
+		l += "<thead>\n"
+		l += "<tr>\n"
+		l += "<th style='text-align: center;'> <br> RewardDate </th><th style='text-align: center;'> Pool 1 <br> SKY/VISOR </th><th style='text-align: center;'> Pool 2 <br> SKY/VISOR </th><th style='text-align: center;'> Distributed <br> [<span style='color: red;'>&#10060;</span>/<span style='color: green;'>&#10004;</span>] </th>\n"
+		l += "</tr>\n"
+		l += "</thead>\n"
+		l += "<tbody>\n"
 		rewardtxncsvs, _ := script.FindFiles(`rewards/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Replace("rewards/hist/", "").Replace("_rewardtxn0.csv", "").Slice() //nolint
 		for i := len(rewardtxncsvs) - 1; i >= 0; i-- {
-			skycoinpershare, _ := script.File("rewards/hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share: ").Replace("Skycoin Per Share: ", "").String() //nolint
-			if _, err := os.Stat("rewards/hist/" + rewardtxncsvs[i] + ".txt"); err == nil {
-				l += "<a href='/skycoin-rewards/hist/" + rewardtxncsvs[i] + "'>" + rewardtxncsvs[i] + "</a>  " + strings.ReplaceAll(skycoinpershare, "\n", "") + "   <span style='color: green'>&#10004;</span>\n"
-			} else {
-				l += "<a href='/skycoin-rewards/hist/" + rewardtxncsvs[i] + "'>" + rewardtxncsvs[i] + "</a>  " + strings.ReplaceAll(skycoinpershare, "\n", "") + "   <span style='color: red;'>&#10060;</span>\n"
-			}
+		    skycoinpershare, _ := script.File("rewards/hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share: ").Replace("Skycoin Per Share: ", "").String() //nolint
+		    skycoinpershare1 := ""
+		    skycoinpershare2 := ""
+		    if strings.TrimSpace(skycoinpershare) == "" {
+		        skycoinpershare1, _ = script.File("rewards/hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 1): ").Replace("Skycoin Per Share (Pool 1): ", "").String() //nolint
+		        skycoinpershare2, _ = script.File("rewards/hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 2): ").Replace("Skycoin Per Share (Pool 2): ", "").String() //nolint
+		        skycoinpershare1 = strings.TrimSpace(skycoinpershare1)
+		        skycoinpershare2 = strings.TrimSpace(skycoinpershare2)
+		    } else {
+		        skycoinpershare1 = strings.TrimSpace(skycoinpershare)
+		        skycoinpershare2 = ""
+		    }
+
+		    var distributedIcon string
+		    if _, err := os.Stat("rewards/hist/" + rewardtxncsvs[i] + ".txt"); err == nil {
+		        distributedIcon = "<span style='color: green;'>&#10004;</span>"
+		    } else {
+		        distributedIcon = "<span style='color: red;'>&#10060;</span>"
+		    }
+		    l += "<tr>\n"
+		    l += "<td style='text-align: center;'><a href='/skycoin-rewards/hist/" + rewardtxncsvs[i] + "'>" + rewardtxncsvs[i] + "</a></td>\n"
+		    l += "<td style='text-align: center;'>" + skycoinpershare1 + "</td>\n"
+		    if skycoinpershare2 != "" {
+		        l += "<td style='text-align: center;'>" + skycoinpershare2 + "</td>\n"
+		    } else {
+		        l += "<td style='text-align: center;'></td>\n"
+		    }
+		    l += "<td style='text-align: center;'>" + distributedIcon + "</td>\n"
+		    l += "</tr>\n"
 		}
+		l += "</tbody>\n</table>\n"
 		l += "<br>" + htmltoplink
+
 		tmpl0, err1 := tmpl.Clone()
 		if err1 != nil {
 			fmt.Println("Error cloning template:", err1)
@@ -691,7 +714,6 @@ func server() {
 			Title:   "Skycoin Reward Calculation and Distribution",
 			Content: htmpl.HTML(l), //nolint
 		}
-		//	htmlPageTemplateData1.Content =
 		tmplData := map[string]interface{}{
 			"Page": htmlPageTemplateData1,
 		}
@@ -812,9 +834,9 @@ func server() {
 	})
 	r1.GET("/health", func(c *gin.Context) {
 		runTime = time.Since(startTime)
-		nextrun, _ := script.Exec(`bash -c "systemctl status skywire-reward.timer --lines=0 | head -n4 | tail -n1 | sed 's/    Trigger: //g'"`).String()        //nolint
-		prevDuration, _ := script.Exec(`bash -c "systemctl status skywire-reward.service --lines=0 | grep -m1 'Duration' | sed 's/   Duration: //g'"`).String() //nolint
-		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String()                                                                         //nolint
+		nextrun, _ := script.Exec(`systemctl status skywire-reward.timer --lines=0`).First(5).Last(1).Replace("    Trigger: ", "").String() //nolint
+		prevDuration, _ := script.Exec(`systemctl status skywire-reward.service --lines=0`).Match("Duration").First(1).String()             //nolint
+		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String()                                                     //nolint
 		c.JSON(http.StatusOK, gin.H{
 			"frontend_start_time":             startTime,
 			"frontend_run_time":               runTime.String(),
@@ -1621,6 +1643,7 @@ var htmlMainPageTemplate = `
 <body title='' style='background-color:black;color:white;'>
 <a id='top' class='anchor' aria-hidden='true' href='#top'></a><header>
   <nav class='absolute' style='white-space: nowrap;'>
+  <a href='/'>fiber</a>
   <a href='/skycoin-rewards'>skycoin rewards</a>
   <a href='/log-collection'>log collection</a>
   <a href='/log-collection/tree'>survey index</a>
