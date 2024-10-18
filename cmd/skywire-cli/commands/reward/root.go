@@ -60,10 +60,13 @@ const longtext = `
 	reward address setting
 
 	Sets the skycoin reward address for the visor.
-	The config is written to the root of the default local directory
+	The address is written to the root of the default 'local' directory specified in the visor's config
 
-	this config is served via dmsghttp along with transport logs
-	and the system hardware survey for automating reward distribution`
+	This file is parsed by the visor at runtime, and the skycoin address is included in the survey which is served via dmsghttp along with transport logs
+	and the system hardware survey for automating reward distribution
+
+	By setting a skycoin reward address, you consent to collection of the survey from the visors where the reward address is set.
+	The survey is ONLY for verification of reward eligibility. We respect your privacy.`
 
 func longText() string {
 	//show configured reward address if valid configuration exists
