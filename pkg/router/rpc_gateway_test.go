@@ -124,7 +124,7 @@ func TestRPCGateway_ReserveIDs(t *testing.T) {
 		gateway := NewRPCGateway(r, mlog)
 
 		var gotIDs []routing.RouteID
-		err := gateway.ReserveIDs(uint8(n), &gotIDs) //nolint
+		err := gateway.ReserveIDs(uint8(n), &gotIDs) //nolint: gosec
 		require.NoError(t, err)
 		require.Equal(t, ids, gotIDs)
 	})
@@ -141,7 +141,7 @@ func TestRPCGateway_ReserveIDs(t *testing.T) {
 		}
 
 		var gotIDs []routing.RouteID
-		err := gateway.ReserveIDs(uint8(n), &gotIDs) //nolint
+		err := gateway.ReserveIDs(uint8(n), &gotIDs) //nolint: gosec
 		require.Equal(t, wantErr, err)
 		require.Nil(t, gotIDs)
 	})
