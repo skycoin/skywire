@@ -429,8 +429,12 @@ func server() {
 		surveycount, _ := script.FindFiles("rewards/log_backups/").Match("node-info.json").CountLines() //nolint
 		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))                         //nolint
 		c.Writer.Flush()
-		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -e rewards/tp_setup -x rewards/proxy_test/proxies.csv -r`).Bytes() //nolint
-		c.Writer.Write(ansihtml.ConvertToHTML(st))                                                                                         //nolint
+		st, err := script.Exec(`skywire cli log st -d rewards/log_backups -r`).Bytes() //nolint
+		if err != nil {
+			log.WithError(err).Error()
+			c.Writer.Write([]byte(err.Error())) //nolint
+		}
+		c.Writer.Write(ansihtml.ConvertToHTML(st)) //nolint
 		c.Writer.Flush()
 		c.Writer.Write([]byte(htmltoplink)) //nolint
 		c.Writer.Flush()
@@ -480,18 +484,18 @@ func server() {
 	r1.GET("/log-collection/tplogs", func(c *gin.Context) {
 		c.Writer.Header().Set("Server", "")
 		c.Writer.WriteHeader(http.StatusOK)
-		c.Writer.Write([]byte(func() (l string) {
-				l = "<!doctype html><html lang=en><head><title>Skywire Transport Bandwidth Logs By Day</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"
-				l += navlinks
-				l += "<p style='color:blue'>Blue = Verified Bandwidth</p>"
-				l += "<p style='color:yellow'>Yellow = Transport bandwidth inconsistent</p>"
-				l += "<p style='color:red'>Red = Error: sent or received is zero</p>"
-				tp, _ := script.Exec(`skywire cli log tp -d rewards/log_backups`).String() //nolint
-				l += fmt.Sprintf("%s\n", ansihtml.ConvertToHTML([]byte(tp)))
-				l += htmltoplink
-				l += htmlend
-				return l
-			}())) //nolint
+		c.Writer.Write([]byte(func() (l string) { //nolint
+			l = "<!doctype html><html lang=en><head><title>Skywire Transport Bandwidth Logs By Day</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"
+			l += navlinks
+			l += "<p style='color:blue'>Blue = Verified Bandwidth</p>"
+			l += "<p style='color:yellow'>Yellow = Transport bandwidth inconsistent</p>"
+			l += "<p style='color:red'>Red = Error: sent or received is zero</p>"
+			tp, _ := script.Exec(`skywire cli log tp -d rewards/log_backups`).String() //nolint
+			l += fmt.Sprintf("%s\n", ansihtml.ConvertToHTML([]byte(tp)))
+			l += htmltoplink
+			l += htmlend
+			return l
+		}())) //nolint
 	})
 
 	r1.GET("/skycoin-rewards", func(c *gin.Context) {
@@ -520,6 +524,16 @@ func server() {
 			result += fmt.Sprintf("%g Skycoin per day\n<br><br>", skycoinPerDay)
 			utstats, _ := script.Exec(`skywire cli ut -t`).String() //nolint
 			result += fmt.Sprintf("Uptime tracker version statistics:\n%s\n", utstats)
+			nis, _ := script.FindFiles("rewards/log_backups").Match("node-info.json").Slice() //nolint
+			var surveyarches string
+			for _, ni := range nis {
+				surveyarch, err := script.File(ni).JQ(".go_arch").Reject("null").String()
+				if err == nil {
+					surveyarches += surveyarch
+				}
+			}
+			archstats, _ := script.Echo(surveyarches).Freq().String() //nolint
+			result += fmt.Sprintf("Survey architecture statistics:\n%s\n", archstats)
 			return result
 
 		}())

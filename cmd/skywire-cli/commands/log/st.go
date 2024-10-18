@@ -20,8 +20,6 @@ func init() {
 	RootCmd.AddCommand(stCmd)
 	stCmd.Flags().StringVarP(&pubKey, "pk", "p", "", "public key(s) to check ; comma separated")
 	stCmd.Flags().StringVarP(&lcDir, "lcdir", "d", "", "path to surveys & transport bandwidth logging ")
-	stCmd.Flags().StringVarP(&tpsnDir, "tpsndir", "e", "", "path to transport setup-node surveys")
-	stCmd.Flags().StringVarP(&proxyCSV, "proxycsv", "x", "", "path to proxy test csv")
 	stCmd.Flags().BoolVarP(&hideErr, "noerr", "r", false, "hide error logging from output")
 	stCmd.Flags().BoolVarP(&showUT, "ut", "u", false, "show uptime percentage for the past two days and current online status")
 }
@@ -50,19 +48,14 @@ func makeTree() {
 	utData, utDataErr := script.File("/tmp/ut.json").String()
 	var tree pterm.TreeNode
 	rootDir := lcDir
-	otherDir := tpsnDir
 	dn, err := script.ListFiles(rootDir).String()
 	if err != nil && !hideErr {
 		errstring := "script.ListFiles(" + rootDir + ").String()"
 		log.Printf("%v error: %v\n", errstring, err)
 	}
-	dn1, err := script.ListFiles(otherDir).String()
+	dirNodes, err := script.Echo(dn).Basename().Freq().Column(2).Slice()
 	if err != nil && !hideErr {
-		log.Printf("script.ListFiles("+otherDir+").String() error: %v\n", err)
-	}
-	dirNodes, err := script.Echo(dn + dn1).Basename().Freq().Column(2).Slice()
-	if err != nil && !hideErr {
-		log.Printf("script.Echo(dn + dn1).Basename().Freq().Column(2).Slice() error: %v\n", err)
+		log.Printf("script.Echo(dn).Basename().Freq().Column(2).Slice() error: %v\n", err)
 	}
 	if len(pubKeys) > 0 {
 		var checkTheseKeys string
@@ -82,19 +75,11 @@ func makeTree() {
 			errstring := fmt.Sprintf("script.ListFiles(\"%v\"/\"%v\").String()", rootDir, dirNode)
 			log.Printf("%v error: %v\n", errstring, err)
 		}
-		children1, err := script.ListFiles(otherDir + "/" + dirNode).String()
-		if err != nil && !hideErr {
-			errstring := fmt.Sprintf("script.ListFiles(\"%v\"/\"%v\").String()", otherDir, dirNode)
-			log.Printf("%v error: %v\n", errstring, err)
-		}
 		var ks string
 		if showUT {
-			ks = fmt.Sprintf("uptime\n%s\n%s", children, children1)
+			ks = fmt.Sprintf("uptime\n%s", children)
 		} else {
-			ks = fmt.Sprintf("%s\n%s", children, children1)
-		}
-		if proxyCSV != "" {
-			ks = fmt.Sprintf("%s\nproxy", ks)
+			ks = children
 		}
 		kids, err := script.Echo(ks).Slice()
 		if err != nil && !hideErr {
@@ -103,17 +88,6 @@ func makeTree() {
 		nodes := []pterm.TreeNode{}
 		for _, kid := range kids {
 			var coloredFile string
-			if kid == "proxy" {
-				testtime, _ := script.File(proxyCSV).Match(dirNode).Replace(",", " ").Column(2).String() //nolint
-				testres, _ := script.File(proxyCSV).Match(dirNode).Replace(",", " ").Column(3).String()  //nolint
-				if testtime != "" && testres != "" {
-					coloredFile = fmt.Sprintf("%s           %s	%s", pterm.Green("proxy"), strings.ReplaceAll(testtime, "\n", ""), strings.ReplaceAll(testres, "\n", ""))
-				} else {
-					coloredFile = fmt.Sprintf("%s           No data", pterm.Red("proxy"))
-				}
-				nodes = append(nodes, pterm.TreeNode{Text: coloredFile})
-				continue
-			}
 			if kid == "uptime" {
 				if utFileInfoErr != nil || utDataErr != nil {
 					continue
@@ -134,7 +108,7 @@ func makeTree() {
 				nodes = append(nodes, pterm.TreeNode{Text: fmt.Sprintf("%s     Age: %s %s", coloredFile, time.Since(utFileInfo.ModTime()).Truncate(time.Second).String(), strings.TrimSuffix(pkUt, "\n"))})
 				continue
 			}
-			if filepath.Base(kid) == "health.json" || filepath.Base(kid) == "tp.json" {
+			if filepath.Base(kid) == "health.json" {
 				fileContents, _ := script.File(kid).String() //nolint
 				fileInfo, _ := os.Stat(kid)                  //nolint
 				if time.Since(fileInfo.ModTime()) < time.Hour {
@@ -144,14 +118,6 @@ func makeTree() {
 				}
 				if filepath.Base(kid) == "health.json" {
 					nodes = append(nodes, pterm.TreeNode{Text: fmt.Sprintf("%s     Age: %s %s", coloredFile, time.Since(fileInfo.ModTime()).Truncate(time.Second).String(), strings.TrimSuffix(string(fileContents), "\n"))})
-				}
-				if filepath.Base(kid) == "tp.json" {
-					_, err := script.Echo(strings.TrimSuffix(string(fileContents), "\n")).JQ(".[]").String() //nolint
-					if err != nil {
-						fileContents = pterm.Red(strings.TrimSuffix(string(fileContents), "\n"))
-						coloredFile = pterm.Red(filepath.Base(kid))
-					}
-					nodes = append(nodes, pterm.TreeNode{Text: fmt.Sprintf("%s         Age: %s %s", coloredFile, time.Since(fileInfo.ModTime()).Truncate(time.Second).String(), strings.TrimSuffix(string(fileContents), "\n"))})
 				}
 				continue
 			}
