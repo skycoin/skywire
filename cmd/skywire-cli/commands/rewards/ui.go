@@ -505,7 +505,7 @@ func server() {
 		c.Writer.Flush()
 		l := fmt.Sprintf("<div style='float: right;'>%s</div>", func() string {
 			yearlyTotal := 408000.0
-			result := fmt.Sprintf("%g annual reward distribution\nReward total per month:\n", yearlyTotal)
+			result := fmt.Sprintf("<u>Annual reward distribution per pool:</u>\n%g Skycoin\n<u>Monthly rewards per pool:</u>\n", yearlyTotal)
 			currentMonth := time.Now().Month()
 			currentYear := time.Now().Year()
 			for month := time.January; month <= time.December; month++ {
@@ -521,20 +521,144 @@ func server() {
 			lastDayOfYear := firstDayOfNextYear.Add(-time.Second)
 			totalDaysInYear := int(lastDayOfYear.YearDay())
 			skycoinPerDay := yearlyTotal / float64(totalDaysInYear)
-			result += fmt.Sprintf("%g Skycoin per day\n<br><br>", skycoinPerDay)
-			utstats, _ := script.Exec(`skywire cli ut -t`).String() //nolint
-			result += fmt.Sprintf("Uptime tracker version statistics:\n%s\n", utstats)
-			nis, _ := script.FindFiles("rewards/log_backups").Match("node-info.json").Slice() //nolint
-			var surveyarches string
-			for _, ni := range nis {
-				surveyarch, err := script.File(ni).JQ(".go_arch").Reject("null").String()
-				if err == nil {
-					surveyarches += surveyarch
-				}
+			result += fmt.Sprintf("%g Skycoin per day\n<br>", skycoinPerDay)
+			utstats, err := script.Exec(`skywire cli ut -t`).String()
+			if err == nil {
+				result += fmt.Sprintf("<u>Uptime tracker version statistics:</u>\n%s\n<br>", utstats)
 			}
-			archstats, _ := script.Echo(surveyarches).Freq().String() //nolint
-			result += fmt.Sprintf("Survey architecture statistics:\n%s\n", archstats)
-			return result
+			nis, err := script.FindFiles("rewards/log_backups").Match("node-info.json").Slice() //nolint
+			if err == nil {
+				var surveyarches string
+				for _, ni := range nis {
+					surveyarch, err := script.File(ni).JQ(".go_arch").Replace(`"`, "").String()
+					if err == nil {
+						surveyarches += surveyarch
+					}
+				}
+				archstats, err := script.Echo(surveyarches).Freq().String() //nolint
+				if err == nil {
+					result += fmt.Sprintf("<u>Survey architecture statistics:</u>\n%s\n<br>", archstats)
+				}
+				var surveyOSNames string
+				for _, ni := range nis {
+					surveyOSName, err := script.File(ni).JQ(".zcalusic_sysinfo.os.name").Replace(`"`, "").String()
+					if err == nil {
+						surveyOSNames += surveyOSName
+					}
+				}
+				namestats, err := script.Echo(surveyOSNames).Freq().String() //nolint
+				if err == nil {
+					result += fmt.Sprintf("<u>Survey OS name statistics:</u>\n%s\n<br>", namestats)
+				}
+				var surveycpus string
+				for _, ni := range nis {
+					surveycpu, err := script.File(ni).JQ(".zcalusic_sysinfo.cpu.model").Replace(`"`, "").String()
+					if err == nil {
+						surveycpus += surveycpu
+					}
+				}
+				cpustats, err := script.Echo(surveycpus).Freq().String() //nolint
+				if err == nil {
+					result += fmt.Sprintf("<u>Survey CPU statistics:</u>\n%s\n<br>", cpustats)
+				}
+
+				var surveyTotalByteSize string
+				var totalBytes int64
+				for _, ni := range nis {
+				    surveytbs, err := script.File(ni).JQ(".ghw_blockinfo.total_size_bytes").Reject("null").Replace(`"`, "").String()
+				    if err == nil {
+				        surveyTotalByteSize += surveytbs
+							if surveytbs != "\n" && surveytbs != "" {
+								byteValue, err := strconv.ParseInt(strings.TrimRight(surveytbs, "\n"), 10, 64)
+								if err != nil {
+									result += fmt.Sprintf("Non nil error from strconv.ParseInt: %v\n", err)
+								}
+								totalBytes += byteValue
+							}
+				    }
+				}
+
+				// Get stats for terabytes and gigabytes
+				bsstatsTB, _ := script.Echo(surveyTotalByteSize).ExecForEach("numfmt --to=iec {{.}}").Reject("G").Freq().Slice() //nolint
+				bsstatsGB, _ := script.Echo(surveyTotalByteSize).ExecForEach("numfmt --to=iec {{.}}").Reject("T").Freq().Slice() //nolint
+				formattedTotal, err := script.Echo(fmt.Sprintf("%d", totalBytes)).ExecForEach("numfmt --to=iec {{.}}").String()
+				if err != nil {
+					result += fmt.Sprintf("%v\n", err)
+				}
+				result += fmt.Sprintf("<u>Survey total byte size (cumulative):</u> %s\n", formattedTotal)
+				result += "<u>Survey total byte size statistics:</u>\n"
+				result += `<table style="width:100%; text-align:center;">` + "\n"
+				result += "<tr><th>GB</th><th>TB</th></tr>\n"
+
+				maxLen := len(bsstatsGB)
+				if len(bsstatsTB) > maxLen {
+				    maxLen = len(bsstatsTB)
+				}
+				for i := 0; i < maxLen; i++ {
+				    result += "<tr>\n"
+				    if i < len(bsstatsGB) {
+				        result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", bsstatsGB[i])
+				    } else {
+				        result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
+				    }
+				    if i < len(bsstatsTB) {
+				        result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", bsstatsTB[i])
+				    } else {
+				        result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
+				    }
+				    result += "</tr>\n"
+				}
+				result += "</table>\n<br>"
+
+				var surveyTotalUsableBytes string
+				var totalramBytes int64
+				for _, ni := range nis {
+				    surveymem, err := script.File(ni).JQ(".ghw_memoryinfo.total_usable_bytes").Reject("null").Replace(`"`, "").String()
+				    if err == nil {
+				        surveyTotalUsableBytes += surveymem
+							if surveymem != "\n" && surveymem != "" {
+								byteValue, err := strconv.ParseInt(strings.TrimRight(surveymem, "\n"), 10, 64)
+								if err != nil {
+									result += fmt.Sprintf("Non nil error from strconv.ParseInt: %v\n", err)
+								}
+								totalramBytes += byteValue
+							}
+				    }
+				}
+
+				statsMB, _ := script.Echo(surveyTotalUsableBytes).ExecForEach("numfmt --to=iec {{.}}").Reject("G").Freq().Slice() //nolint
+				statsGB, _ := script.Echo(surveyTotalUsableBytes).ExecForEach("numfmt --to=iec {{.}}").Reject("M").Freq().Slice() //nolint
+				ramTotal, err := script.Echo(fmt.Sprintf("%d", totalramBytes)).ExecForEach("numfmt --to=iec {{.}}").String()
+				if err != nil {
+					result += fmt.Sprintf("%v\n", err)
+				}
+				result += fmt.Sprintf("<u>Survey total RAM byte size (cumulative):</u> %s\n", ramTotal)
+				result += "<u>Survey total usable ram byte size statistics:</u>\n"
+				result += `<table style="width:100%; text-align:center;">` + "\n"
+				result += "<tr><th>GB</th><th>MB</th></tr>\n"
+
+				maxLen = len(statsGB)
+				if len(statsMB) > maxLen {
+				    maxLen = len(statsMB)
+				}
+				for i := 0; i < maxLen; i++ {
+				    result += "<tr>\n"
+				    if i < len(statsGB) {
+				        result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", statsGB[i])
+				    } else {
+				        result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
+				    }
+				    if i < len(statsMB) {
+				        result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", statsMB[i])
+				    } else {
+				        result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
+				    }
+				    result += "</tr>\n"
+				}
+				result += "</table>\n<br>"
+
+			}
+			return result + "<br>" + htmltoplink
 
 		}())
 		l += fmt.Sprintf("There are %d days in the month of %s.\n", time.Date(time.Now().Year(), time.Now().Month()+1, 0, 0, 0, 0, 0, time.UTC).Day(), time.Now().Month())
@@ -542,7 +666,7 @@ func server() {
 		l += fmt.Sprintf("There are %d days left in the month of %s.\n", time.Date(time.Now().Year(), time.Now().Month()+1, 0, 0, 0, 0, 0, time.UTC).Day()-time.Now().Day(), time.Now().Month())
 		l += fmt.Sprintf("%d days in the year %d.\n", time.Date(time.Now().Year(), time.December, 31, 0, 0, 0, 0, time.UTC).YearDay(), time.Now().Year())
 		l += fmt.Sprintf("Today is day %d.\n", time.Now().YearDay())
-		l += fmt.Sprintf("There are %d days remaining in %d\n", time.Date(time.Now().Year(), time.December, 31, 0, 0, 0, 0, time.UTC).YearDay()-time.Now().YearDay(), time.Now().Year())
+		l += fmt.Sprintf("There are %d days remaining in %d<br>", time.Date(time.Now().Year(), time.December, 31, 0, 0, 0, 0, time.UTC).YearDay()-time.Now().YearDay(), time.Now().Year())
 		calendar, err := script.Exec(`bash -c 'set -o pipefail ; unbuffer cal --color | lolcat -f -F 0.5'`).String()
 		if err != nil {
 			calendar = cal()
@@ -552,7 +676,7 @@ func server() {
 		l += "\n\n<table style='border-collapse: collapse; width: auto;'>\n"
 		l += "<thead>\n"
 		l += "<tr>\n"
-		l += "<th style='text-align: center;'> <br> RewardDate </th><th style='text-align: center;'> Pool 1 <br> SKY/VISOR </th><th style='text-align: center;'> Pool 2 <br> SKY/VISOR </th><th style='text-align: center;'> Distributed <br> [<span style='color: red;'>&#10060;</span>/<span style='color: green;'>&#10004;</span>] </th>\n"
+		l += "<th style='text-align: center;'> <br> <u>RewardDate</u> </th><th style='text-align: center;'> Pool 1 <br> <u>SKY/VISOR</u> </th><th style='text-align: center;'> Pool 2 <br> <u>SKY/VISOR</u> </th><th style='text-align: center;'> Distributed <br> <u>[<span style='color: red;'>&#10060;</span>/<span style='color: green;'>&#10004;</span>]</u> </th>\n"
 		l += "</tr>\n"
 		l += "</thead>\n"
 		l += "<tbody>\n"
@@ -1144,7 +1268,7 @@ func cal() (ret string) {
 	for day <= numDays {
 		for i := int(startDayOfWeek); i < 7 && day <= numDays; i++ {
 			if day == today.Day() {
-				ret += fmt.Sprintf("\x1b[7m%2d\x1b[0m ", day)
+				ret += fmt.Sprintf("\x1b[30;47m%2d\x1b[0m ", day)
 			} else {
 				ret += fmt.Sprintf("%2d ", day)
 			}
