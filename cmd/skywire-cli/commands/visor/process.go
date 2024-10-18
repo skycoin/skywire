@@ -102,7 +102,7 @@ var shutdownCmd = &cobra.Command{
 		if err != nil {
 			os.Exit(1)
 		}
-		rpcClient.Shutdown() //nolint
+		rpcClient.Shutdown() //nolint: errcheck, gosec
 		internal.PrintOutput(cmd.Flags(), "Visor was shut down", fmt.Sprintln("Visor was shut down"))
 	},
 }

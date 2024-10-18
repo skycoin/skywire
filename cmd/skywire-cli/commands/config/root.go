@@ -10,7 +10,6 @@ import (
 	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -24,7 +23,6 @@ var (
 		Test: visorconfig.DmsgHTTPServersData{DMSGServers: []*disc.Entry{}},
 		Prod: visorconfig.DmsgHTTPServersData{DMSGServers: []*disc.Entry{}},
 	}
-	emdeddedSvcConf             = skywire.Prod
 	path                        string
 	noFetch                     bool
 	noDefaults                  bool

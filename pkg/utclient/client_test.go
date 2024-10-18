@@ -67,7 +67,6 @@ func TestClientAuth(t *testing.T) {
 func TestUpdateVisorUptime(t *testing.T) {
 	urlCh := make(chan string, 1)
 
-	//	srv := httptest.NewServer(authHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	srv := httptest.NewServer(authHandler(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		urlCh <- r.URL.String()
 	})))
@@ -87,7 +86,6 @@ func authHandler(next http.Handler) http.Handler {
 	r := chi.NewRouter()
 	log := logging.MustGetLogger("utclient")
 	r.Handle("/security/nonces/{pk}", http.HandlerFunc(
-		//		func(w http.ResponseWriter, r *http.Request) {
 		func(w http.ResponseWriter, _ *http.Request) {
 			if err := json.NewEncoder(w).Encode(&httpauth.NextNonceResponse{Edge: testPubKey, NextNonce: 1}); err != nil {
 				log.WithError(err).Error("Failed to encode nonce response")

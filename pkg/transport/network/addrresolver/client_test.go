@@ -95,7 +95,6 @@ func authHandler(next http.Handler) http.Handler {
 	r := chi.NewRouter()
 
 	r.Handle("/security/nonces/{pk}", http.HandlerFunc(
-		//		func(w http.ResponseWriter, r *http.Request) {
 		func(w http.ResponseWriter, _ *http.Request) {
 			if err := json.NewEncoder(w).Encode(&httpauth.NextNonceResponse{Edge: testPubKey, NextNonce: 1}); err != nil {
 				log.WithError(err).Error("Failed to encode nonce response")

@@ -63,7 +63,7 @@ func WriteHello(w io.Writer, hello Hello) error {
 
 	raw := make([]byte, 2+len(helloRaw))
 	size := len(helloRaw)
-	binary.BigEndian.PutUint16(raw[:2], uint16(size)) //nolint
+	binary.BigEndian.PutUint16(raw[:2], uint16(size)) //nolint: gosec
 	if n := copy(raw[2:], helloRaw); n != size {
 		panic("hello write does not add up")
 	}

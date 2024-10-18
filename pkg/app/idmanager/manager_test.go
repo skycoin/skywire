@@ -426,7 +426,7 @@ func TestManager_DoRange(t *testing.T) {
 	}
 
 	for i, v := range vals {
-		_, err := m.Add(uint16(i), v) //nolint
+		_, err := m.Add(uint16(i), v) //nolint: gosec
 		require.NoError(t, err)
 	}
 

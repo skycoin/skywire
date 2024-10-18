@@ -374,7 +374,7 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 		return err
 	}
 	if n > routing.PacketHeaderSize {
-		mt.logSent(uint64(n - routing.PacketHeaderSize)) //nolint
+		mt.logSent(uint64(n - routing.PacketHeaderSize)) //nolint: gosec
 	}
 	return nil
 }
@@ -412,7 +412,7 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 
 	packet = append(h, p...)
 	if n := len(packet); n > routing.PacketHeaderSize {
-		mt.logRecv(uint64(n - routing.PacketHeaderSize)) //nolint
+		mt.logRecv(uint64(n - routing.PacketHeaderSize)) //nolint: gosec
 	}
 
 	log.WithField("type", packet.Type().String()).
