@@ -8,7 +8,6 @@ require (
 	github.com/AudriusButkevicius/pfilter v0.0.11
 	github.com/MichaelMure/go-term-markdown v0.1.4
 	github.com/VictoriaMetrics/metrics v1.35.1
-	github.com/alecthomas/chroma v0.10.0
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/bitfield/script v0.23.0
 	github.com/blang/semver/v4 v4.0.0
@@ -64,6 +63,7 @@ require (
 	github.com/MichaelMure/go-term-text v0.3.1 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/StackExchange/wmi v1.2.1 // indirect
+	github.com/alecthomas/chroma v0.10.0 // indirect
 	github.com/bytedance/sonic v1.12.3 // indirect
 	github.com/bytedance/sonic/loader v0.2.0 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
