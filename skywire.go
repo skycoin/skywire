@@ -1,4 +1,6 @@
-// Package skywire skywire.go
+// Package skywire github.com/skycoin/skywire/skywire.go
+//
+//go:generate go run cmd/gen/gen.go -jo arches.json
 package skywire
 
 import (
@@ -24,6 +26,22 @@ var ServicesJSON []byte
 //
 //go:embed dmsghttp-config.json
 var DmsghttpJSON []byte
+
+// ArchesJSON is the embedded arches.json file
+// go run cmd/gen/gen.go -jo arches.json
+// ["amd64","arm64","386","arm","ppc64","riscv64","wasm","loong64","mips","mips64","mips64le","mipsle","ppc64le","s390x"]
+//
+//go:embed arches.json
+var ArchesJSON []byte
+
+// Architectures is an array of GOARCH architectures
+var Architectures []string
+
+// MainnetRules is the mainnet_rules.md ; it shouldn't have to be embedded here but goland doesn't allow 'embed ../../../../mainnet_rules.md'
+// print the mainnet rules with `skywire cli reward rules`
+//
+//go:embed mainnet_rules.md
+var MainnetRules string
 
 // EnvServices is the wrapper struct for the outer JSON - i.e. 'prod' or 'test' deployment config
 type EnvServices struct {
@@ -64,8 +82,12 @@ var Test Services
 var TestConf Conf
 
 func init() {
+	err := json.Unmarshal(ArchesJSON, &Architectures)
+	if err != nil {
+		log.Panic("arches.json ", err)
+	}
 	var js interface{}
-	err := json.Unmarshal([]byte(ServicesJSON), &js)
+	err = json.Unmarshal([]byte(ServicesJSON), &js)
 	if err != nil {
 		log.Panic("services-config.json ", err)
 	}

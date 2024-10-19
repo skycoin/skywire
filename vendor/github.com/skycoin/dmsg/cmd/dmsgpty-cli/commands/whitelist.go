@@ -19,7 +19,7 @@ func init() {
 var whitelistCmd = &cobra.Command{
 	Use:   "whitelist",
 	Short: "lists all whitelisted public keys",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, _ []string) error {
 		wlC, err := cli.WhitelistClient()
 		if err != nil {
 			return err

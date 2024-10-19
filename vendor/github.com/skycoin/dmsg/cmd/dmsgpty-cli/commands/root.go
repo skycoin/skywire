@@ -104,7 +104,7 @@ DMSG pseudoterminal command line interface`,
 			remoteAddr.Port = dmsgpty.DefaultPort
 		}
 	},
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, _ []string) error {
 		if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
 			log.Printf("Failed to output build info: %v", err)
 		}

@@ -97,7 +97,7 @@ var serveCmd = &cobra.Command{
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		log := logging.MustGetLogger("ssh-proxy")
 		interrupt := make(chan os.Signal, 1)
 		signal.Notify(interrupt, os.Interrupt)
@@ -178,7 +178,7 @@ var serveCmd = &cobra.Command{
 var proxyCmd = &cobra.Command{
 	Use:   "client",
 	Short: "socks5 proxy client for dmsg socks5 proxy server",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		log := logging.MustGetLogger("ssh-proxy-client")
 		var pubKey cipher.PubKey
 		err := pubKey.Set(pubk)

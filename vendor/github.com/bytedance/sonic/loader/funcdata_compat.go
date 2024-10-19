@@ -1,5 +1,5 @@
-//go:build !go1.16
-// +build !go1.16
+//go:build !go1.17
+// +build !go1.17
 
 /*
  * Copyright 2021 ByteDance Inc.
@@ -24,7 +24,7 @@ import (
    `unsafe`
    `sort`
 
-   `github.com/bytedance/sonic/internal/rt`
+   `github.com/bytedance/sonic/loader/internal/rt`
 )
 
 const (

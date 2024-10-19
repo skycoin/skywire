@@ -14,7 +14,6 @@ import (
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire-utilities/pkg/skyenv"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/dmsg/pkg/disc"
@@ -22,20 +21,20 @@ import (
 )
 
 var (
-	dmsgDisc    string
+	dmsgDisc    = dmsg.DiscAddr(false)
 	sk          cipher.SecKey
 	logLvl      string
 	dmsgServers []string
 )
 
 func init() {
-	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "c", "", "dmsg discovery url default:\n"+skyenv.DmsgDiscAddr)
+	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "c", dmsgDisc, "dmsg discovery url\033[0m")
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "fatal", "[ debug | warn | error | fatal | panic | trace | info ]\033[0m")
 	if os.Getenv("DMSGIP_SK") != "" {
 		sk.Set(os.Getenv("DMSGIP_SK")) //nolint
 	}
-	RootCmd.Flags().StringSliceVarP(&dmsgServers, "srv", "d", []string{}, "dmsg server public keys\n\r")
-	RootCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
+	RootCmd.Flags().StringSliceVarP(&dmsgServers, "srv", "d", []string{}, "dmsg server public keys\n\r\033[0m")
+	RootCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r\033[0m")
 }
 
 // RootCmd containsa the root dmsgcurl command
@@ -54,12 +53,7 @@ DMSG ip utility`,
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
-	PreRun: func(cmd *cobra.Command, args []string) {
-		if dmsgDisc == "" {
-			dmsgDisc = skyenv.DmsgDiscAddr
-		}
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, _ []string) error {
 		log := logging.MustGetLogger("dmsgip")
 
 		if logLvl != "" {

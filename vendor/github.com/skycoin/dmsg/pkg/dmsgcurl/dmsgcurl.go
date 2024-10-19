@@ -43,10 +43,10 @@ func New(fs *flag.FlagSet) *DmsgCurl {
 
 	w := fs.Output()
 	flag.Usage = func() {
-		_, _ = fmt.Fprintf(w, "Skycoin %s %s, wget over dmsg.\n", ExecName, Version)
-		_, _ = fmt.Fprintf(w, "Usage: %s [OPTION]... [URL]\n\n", ExecName)
+		_, _ = fmt.Fprintf(w, "Skycoin %s %s, wget over dmsg.\n", ExecName, Version) //nolint
+		_, _ = fmt.Fprintf(w, "Usage: %s [OPTION]... [URL]\n\n", ExecName)           //nolint
 		flag.PrintDefaults()
-		_, _ = fmt.Fprintln(w, "")
+		_, _ = fmt.Fprintln(w, "") //nolint
 	}
 
 	return dg

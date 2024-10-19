@@ -87,17 +87,21 @@ To receive Skycoin rewards for running skywire, the following requirements must 
 
 All the production deployment services may be accessed by the visor over the dmsg network when the visor runs with a dmsghttp config.
 
-This type of config is generated automatically based on region (via `skywire cli config gen -b --bestproto`), to circumvent ISP blocking of http requests.
+This type of config is generated automatically based on region via:
+```
+skywire cli config gen -b --bestproto
+```
+to circumvent ISP blocking of http requests.
 
-In order to bootstrap the visor's to connection to the dmsg network (via TCP connection to an individual dmsg server) the `dmsghttp-config.json` is provided with the skywire binary release.
+In order to bootstrap the visor's to connection to the dmsg network (via TCP connection to an individual dmsg server) the [dmsghttp-config.json](/dmsghttp-config.json) is provided with the skywire binary release.
 
-In the instance that the skywire production deployment changes - specifically the dmsg servers - it will be necessary to update to the next version or package release which fixes the dmsg servers - or else to manually update the `dmsghttp-config.json` which is provided by your skywire installation.
+In the instance that the skywire production deployment changes - specifically the dmsg servers - it will be necessary to update to the next version or package release which fixes the dmsg servers - or else to manually update the [dmsghttp-config.json](/dmsghttp-config.json) which is provided by your skywire installation.
 
 Currently, **there is no mechanism for updating the dmsghttp-config.json which does not require an http request** ; a request which may be blocked depending on region.
 
-In this instance, the visor will not connect to any service because it is not connected to the dmsg network, so it will not be possible for the visor to accumulate uptime or for the reward system to collect the survey, which are prerequisite for reward eligibility.
+In this instance, the visor will not connect to any service because it is not connected to the dmsg network, so it will not be possible for the visor to accumulate uptime or for the reward system to collect the survey, which are prerequisites for reward eligibility.
 
-As a consequence of this; any visors running a dmsghttp-config, and hence any visors running in regions such as China, the minimum version requirement for obtaining rewards is not only the latest available version, but __the latest release of the package__ unless the dmsghttp-config.json is updated manually.
+As a consequence of this; any visors running a dmsghttp-config, and hence any visors running in regions such as China, the minimum version requirement for obtaining rewards is not only the latest available version, but __the latest release of the package__ unless the dmsghttp-config.json is updated manually within your installation.
 
 ## Verifying Requirements & Eligibility
 
@@ -126,7 +130,7 @@ Rewards Cutoff date for updating 10-1-2024
 
 ### Deployment
 
-The deployment your visor is running on can be verified by comparing the services configured in the visor's `.json` config against [conf.skywire.skycoin.com](https://conf.skywire.skycoin.com)
+The deployment your visor is running on can be verified by comparing the services configured in the visor's .json config against [conf.skywire.skycoin.com](https://conf.skywire.skycoin.com)
 
 ```
 cat /opt/skywire/skywire.json
@@ -136,13 +140,25 @@ The service configuration will be automatically updated any time a config is gen
 
 For those visors in china or those running a dmsghttp-config, compare the dmsghttp-config of your current installation with the dmsghttp-config on the develop branch of [github.com/skycoin/skywire](https://github.com/skycoin/skywire)
 
+The same data in a different format should be displayed in the [dmsg-discovery all_servers](https://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers) page. Ensure that the dmsghttp-config.json in your installation has the same ip addresses and ports for the dmsg server keys. The data from the dmsg discovery should be considered authoritative or current.
 
 ### Uptime
 
 Daily uptime statistics for all visors may be accessed via the
+
 - [uptime tracker](https://ut.skywire.skycoin.com/uptimes?v=v2)
+
 or using skywire cli
-- `skywire cli ut -n0 -k <public-key>`
+
+```
+skywire cli ut -n0 -k <public-key>
+```
+
+For example with a locally running visor:
+```
+skywire cli ut -n0 -k $(skywire cli visor pk)
+```
+
 
 ### Skycoin Address
 
@@ -155,23 +171,76 @@ skywire cli reward <skycoin-address>
 ![image](https://user-images.githubusercontent.com/36607567/213941582-f57213b8-2acd-4c9a-a2c0-9089a8c2604e.png)
 
 
+```
+$ skywire cli reward --help
+
+	reward address setting
+
+	Sets the skycoin reward address for the visor.
+	The config is written to the root of the default local directory
+
+	this config is served via dmsghttp along with transport logs
+	and the system hardware survey for automating reward distribution
+
+Flags:
+      --all   show all flags
+
+```
+
+```
+$ skywire cli reward 2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6
+Reward address:
+  2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6
+```
+
+```
+$ skywire cli reward --help
+
+    skycoin reward address set to:
+    2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6
+
+Flags:
+      --all   show all flags
+```
+
 or via the hypervisor UI.
 
 ![image](https://user-images.githubusercontent.com/36607567/213941478-34c81493-9c3c-40c2-ac22-e33e3683a16f.png)
 
 the example above shows the genesis address for the skycoin blockchain. **Please do not use the genesis address.**
 
-It is __highly recommended__ to set the reward address in the file `/etc/skywire.conf` by adding this line to the file:
+It is __highly recommended__ to set the reward address in the file '/etc/skywire.conf' by adding this line to the file:
 
 ```
-REWARDSKYADDR=('')
+echo "REWARDSKYADDR=('2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6')" | sudo tee -a /etc/skywire.conf
 ```
 
-Add your skycoin address there and run `skywire-autoconfig` on linux (assumes you have installed the package)
+**PLEASE DO NOT USE THE GENESIS ADDRESS!**
 
-If this file does not exist for you, it can be created with `skywire cli config gen -q | tee /etc/skywire.conf`
 
-**If you do this, please uncomment `PKGENV=true` before saving the file**
+Add your skycoin address there and run:
+```
+skywire-autoconfig
+```
+
+on linux (assumes you have installed the package)
+
+If this file does not exist for you, it can be created with
+```
+skywire cli config gen -q | sudo tee /etc/skywire.conf
+```
+
+**If you do this, YOU MUST UNCOMMENT THE FOLLOWING LINES OF THE FILE:**
+```
+PKGENV=true
+BESTPROTO=TRUE
+```
+
+you can open the file in an editor to make that change, for instance nano
+
+```
+sudo nano /etc/skywire.conf
+```
 
 ### Connection to DMSG network
 
@@ -180,6 +249,12 @@ For any given visor, the system hardware survey, transport setup-node survey, an
 This can be verified by examining the visor's logging:
 
 ![image](https://github.com/skycoin/skywire/assets/36607567/eb66bca1-fc9e-4c80-a38a-e00a73f675d0)
+
+```
+[DMSGHTTP] 2024/10/09 - 22:31:45 | 200 |        47.2µs |                 | 03714c8bdaee0fb48f47babbc47c33e1880752b6620317c9d56b30f3b0ff58a9c3:51405 | GET      /health
+[DMSGHTTP] 2024/10/09 - 22:31:46 | 200 |     193.325µs |                 | 03714c8bdaee0fb48f47babbc47c33e1880752b6620317c9d56b30f3b0ff58a9c3:51457 | GET      /node-info
+[DMSGHTTP] 2024/10/09 - 22:31:47 | 200 |       98.93µs |                 | 03714c8bdaee0fb48f47babbc47c33e1880752b6620317c9d56b30f3b0ff58a9c3:51503 | GET      /2024-10-10.csv
+```
 
 The collected surveys and transport bandwidth log files should be visible in the survey index here:
 
@@ -227,11 +302,20 @@ In the future, it is anticipated that the transport bandwidth logs and ping metr
 
 ### Survey
 
-On setting the skycoin reward address, the visor will generate and serve a sysytem survey over dmsg. Only keys which are whitelisted in the survey_whitelist array of the visor's config will have access to collect the survey.
+On setting the skycoin reward address, the visor will generate and serve a system survey over dmsg.
 
-To print the survey (approximately) as it would be served, one can use `skywire cli survey`
+Only keys which are whitelisted in the survey_whitelist array of the visor's config will have access to collect the survey.
+
+To print the survey (approximately) as it would be served, one can use:
+```
+skywire cli survey -p
+```
 
 **The purpose of the survey is strictly for checking [eligibility requirements](#rules--requirements) numbers 3 through 7.**
+
+**Setting a skycoin address is considered as consent for collecting the survey ; the survey is not generated unless you set a skycoin address**
+
+We respect your privacy.
 
 ### Verifying other requirements
 
@@ -245,9 +329,13 @@ The skycoin reward address is in a text file contained in the "local" folder (lo
 
 The skycoin reward address is also included with the [system hardware survey](https://github.com/skycoin/skywire/tree/develop/cmd/skywire/README.md#survey) and served, along with transport logs, via dmsghttp.
 
-The system survey (`local/node-info.json`) is fetched hourly by the reward system via `skywire cli log`; along with transport bandwidth logs.
+The system survey ('local/node-info.json') is fetched hourly by the reward system via
+```
+skywire cli log
+```
+along with transport bandwidth logs.
 
-A survey of transports which have been set by transport setup-nodes are also collected hourly, from all visors which have had surveys collected
+~~A survey of transports which have been set by transport setup-nodes are also collected hourly, from all visors which have had surveys collected~~
 
 The index of the collected files may be viewed at [fiber.skywire.dev/log-collection/tree](https://fiber.skywire.dev/log-collection/tree)
 
@@ -261,7 +349,7 @@ The public keys which require to be whitelisted in order to collect the surveys,
 
 ## Reward System Funding & Distributions
 
-The reward system is funded on a monthly basis. Sometimes there are unexpected or unavoidable delays in the funding. In these instances, rewards will be distributed based on the data generated wen the system is funded
+The reward system is funded on a monthly basis. **Sometimes there are unexpected or unavoidable delays in the funding.** In these instances, rewards will be distributed based on the data generated when the system is funded. In some instances, it's necessary to discard previous reward data and do multiple distributions to handle backlog of reward system funds. We do our best to ensure fair reward distribution, but the system itself is not infinitely flexible. If there is no good way to rectify historical or undistributed rewards backlog, it will be distributed going forward as multiple distributions on the same day.
 
 ## Deployment Outages
 
@@ -271,166 +359,4 @@ The policy for handling rewards in the instance of a deployment outage is to rep
 
 ## Hardware
 
-**Virtual Machines, servers, and personal computers are currently not eligible to collect rewards**
-
-_NOTE: this list of hardware was used with the initial implementation of the reward system - which required an application with pictures to be submitted. This no longer applies. The new reward system does not differentiate hardware except by architecture - only x86_64 / amd64 hardware is excluded from rewards currently. Every visor will receive the same reward amount, regardless of the hardware specs. It should be noted that the main difference between using cheap or low-end hardware and high-end hardware is the ease of maintenance and speed of updates for the node operator._
-
-The following hardware is eligible for rewards:
-
-#### Orange Pi
-     - Prime
-     - 2G-IOT
-     - 4G-IOT
-     - i96
-     - Lite
-     - Lite2
-     - One
-     - One-Plus
-     - PC
-     - PC-Plus
-     - PC2
-     - Plus
-     - Plus2
-     - Plus2E
-     - RK3399
-     - Win
-     - Win-Plus
-     - Zero
-     - Zero LTS
-     - Zero-Plus
-     - Zero-Plus2
-     - 3
-
-#### Raspberry Pi
-     - 1-Model-A+
-     - 1-Model-B+
-     - 2-Model-B
-     - 3-Model-B
-     - 3-Model-B+
-     - 4-Model-B
-     - Compute Module 3
-     - Compute Module 4
-     - Zero-W
-     - Zero
-
-#### Asus
-     - Tinkerboard
-
-#### Banana Pi
-     - BPI-D1
-     - BPI-G1
-     - BPI-M1
-     - BPI-M1+
-     - BPI-M2
-     - BPI-M2+
-     - BPI-M2-Berry
-     - BPI-M2M
-     - BPI-M2U
-     - BPI-M64
-     - BPI-R2
-     - BPI-R3
-     - BPI-Zero
-
-#### Beelink
-     - X2
-
-#### Cubieboard
-     - Cubietruck
-     - Cubietruck-Plus
-     - 1
-     - 2
-     - 4
-
-#### Geniatech
-     - Developer Board IV
-
-#### Helios
-     - 4
-
-#### Libre Computer
-     - Le-Potato-AML-S905X-CC
-     - Renegade-ROC-RK3328-CC
-     - Tritium-ALL-H3-CC
-
-#### MQMaker
-     - MiQi
-
-#### NanoPi
-     - NanoPi
-     - 2
-     - 2-Fire
-     - A64
-     - K2
-     - M1
-     - M1-plus
-     - M2
-     - M2A
-     - M3
-     - M4
-     - NEO
-     - NEO-Air
-     - NEO-Core
-     - NEO-Core2
-     - NEO2
-     - NEO2-Black
-     - S2
-     - Smart4418
-
-#### Odroid
-     - C2
-     - C4
-     - HC1
-     - HC2
-     - MC1
-     - XU4
-
-#### Olimex
-     - Lime1
-     - Lime2
-     - Lime2-eMMC
-     - LimeA33
-     - Micro
-
-#### Pine
-     - Pine-A64
-     - Pinebook-A64
-     - Sopine-A64
-     - Rock64
-     - ROCKPro64
-
-#### ROCKPI
-     - Rockpi 4
-     - Rockpi S
-     - Rockpi E
-     - Rockpi N10
-
-#### SolidRun
-     - CuBox-i
-     - CuBox-Pulse
-     - Humming-Board
-     - Humming-Board-Pulse
-     - ClearCloud-8K
-     - ClearFog-A38
-     - ClearFog-GT-8K
-
-#### Udoo
-     - Blu
-     - Bricks
-     - Dual
-     - Neo
-     - Quad
-     - X86
-
-#### X96 Android TV Box
-     - X96 mini
-
-#### Dolamee
-     - A95X F1 Smart TV Box
-
-#### Radxa
-     - ROCK Pi S
-
-#### ZTE
-     - ZXV10 B860H
-
-~~If you would like to use other boards please contact the team first for approval ; only the boards on the list are guaranteed to be eligible for rewards.~~
+As of November 2024, skywire rewards are open to all computer hardware and architectures.

@@ -85,7 +85,7 @@ func (err *expectedStartEndError) Error() string {
 
 type lengthMismatchError struct{}
 
-func (err *lengthMismatchError) Error() string {
+func (*lengthMismatchError) Error() string {
 	return "length mismatch"
 }
 
@@ -163,7 +163,6 @@ func (err *func2WrapError) Error() string {
 type exitCodeError struct {
 	value any
 	code  int
-	halt  bool
 }
 
 func (err *exitCodeError) Error() string {
@@ -171,10 +170,6 @@ func (err *exitCodeError) Error() string {
 		return "error: " + s
 	}
 	return "error: " + jsonMarshal(err.value)
-}
-
-func (err *exitCodeError) IsEmptyError() bool {
-	return err.value == nil
 }
 
 func (err *exitCodeError) Value() any {
@@ -185,8 +180,28 @@ func (err *exitCodeError) ExitCode() int {
 	return err.code
 }
 
-func (err *exitCodeError) IsHaltError() bool {
-	return err.halt
+// HaltError is an error emitted by halt and halt_error functions.
+// It implements [ValueError], and if the value is nil, discard the error
+// and stop the iteration. Consider a query like "1, halt, 2";
+// the first value is 1, and the second value is a HaltError with nil value.
+// You might think the iterator should not emit an error this case, but it
+// should so that we can recognize the halt error to stop the outer loop
+// of iterating input values; echo 1 2 3 | gojq "., halt".
+type HaltError exitCodeError
+
+func (err *HaltError) Error() string {
+	return "halt " + (*exitCodeError)(err).Error()
+}
+
+// Value returns the value of the error. This implements [ValueError],
+// but halt error is not catchable by try-catch.
+func (err *HaltError) Value() any {
+	return (*exitCodeError)(err).Value()
+}
+
+// ExitCode returns the exit code of the error.
+func (err *HaltError) ExitCode() int {
+	return (*exitCodeError)(err).ExitCode()
 }
 
 type flattenDepthError struct {
@@ -207,7 +222,7 @@ func (err *joinTypeError) Error() string {
 
 type timeArrayError struct{}
 
-func (err *timeArrayError) Error() string {
+func (*timeArrayError) Error() string {
 	return "expected an array of 8 numbers"
 }
 
@@ -264,7 +279,7 @@ func (err *formatRowError) Error() string {
 
 type tooManyVariableValuesError struct{}
 
-func (err *tooManyVariableValuesError) Error() string {
+func (*tooManyVariableValuesError) Error() string {
 	return "too many variable values provided"
 }
 
@@ -301,7 +316,7 @@ func (err *breakError) Error() string {
 	return "label not defined: " + err.n
 }
 
-func (err *breakError) ExitCode() int {
+func (*breakError) ExitCode() int {
 	return 3
 }
 

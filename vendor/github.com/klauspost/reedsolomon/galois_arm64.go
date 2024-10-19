@@ -1,10 +1,11 @@
-//go:build !noasm && !appengine && !gccgo
-// +build !noasm,!appengine,!gccgo
+//go:build !noasm && !appengine && !gccgo && !nopshufb
 
 // Copyright 2015, Klaus Post, see LICENSE for details.
 // Copyright 2017, Minio, Inc.
 
 package reedsolomon
+
+const pshufb = true
 
 //go:noescape
 func galMulNEON(low, high, in, out []byte)
@@ -12,8 +13,19 @@ func galMulNEON(low, high, in, out []byte)
 //go:noescape
 func galMulXorNEON(low, high, in, out []byte)
 
-//go:noescape
-func galXorNEON(in, out []byte)
+func getVectorLength() (vl, pl uint64)
+
+func init() {
+	if defaultOptions.useSVE {
+		if vl, _ := getVectorLength(); vl <= 256 {
+			// set vector length in bytes
+			defaultOptions.vectorLength = int(vl) >> 3
+		} else {
+			// disable SVE for hardware implementatons over 256 bits (only know to be Fujitsu A64FX atm)
+			defaultOptions.useSVE = false
+		}
+	}
+}
 
 func galMulSlice(c byte, in, out []byte, o *options) {
 	if c == 1 {
@@ -21,8 +33,12 @@ func galMulSlice(c byte, in, out []byte, o *options) {
 		return
 	}
 	var done int
-	galMulNEON(mulTableLow[c][:], mulTableHigh[c][:], in, out)
 	done = (len(in) >> 5) << 5
+	if raceEnabled {
+		raceReadSlice(in[:done])
+		raceWriteSlice(out[:done])
+	}
+	galMulNEON(mulTableLow[c][:], mulTableHigh[c][:], in, out)
 
 	remain := len(in) - done
 	if remain > 0 {
@@ -38,29 +54,18 @@ func galMulSliceXor(c byte, in, out []byte, o *options) {
 		sliceXor(in, out, o)
 		return
 	}
-	var done int
+	done := (len(in) >> 5) << 5
+	if raceEnabled {
+		raceReadSlice(in[:done])
+		raceWriteSlice(out[:done])
+	}
 	galMulXorNEON(mulTableLow[c][:], mulTableHigh[c][:], in, out)
-	done = (len(in) >> 5) << 5
 
 	remain := len(in) - done
 	if remain > 0 {
 		mt := mulTable[c][:256]
 		for i := done; i < len(in); i++ {
 			out[i] ^= mt[in[i]]
-		}
-	}
-}
-
-// simple slice xor
-func sliceXor(in, out []byte, o *options) {
-
-	galXorNEON(in, out)
-	done := (len(in) >> 5) << 5
-
-	remain := len(in) - done
-	if remain > 0 {
-		for i := done; i < len(in); i++ {
-			out[i] ^= in[i]
 		}
 	}
 }
@@ -90,7 +95,7 @@ func fftDIT2(x, y []byte, log_m ffe, o *options) {
 	// Reference version:
 	refMulAdd(x, y, log_m)
 	// 64 byte aligned, always full.
-	galXorNEON(x, y)
+	xorSliceNEON(x, y)
 }
 
 // 2-way butterfly forward
@@ -103,7 +108,7 @@ func fftDIT28(x, y []byte, log_m ffe8, o *options) {
 // 2-way butterfly
 func ifftDIT2(x, y []byte, log_m ffe, o *options) {
 	// 64 byte aligned, always full.
-	galXorNEON(x, y)
+	xorSliceNEON(x, y)
 	// Reference version:
 	refMulAdd(x, y, log_m)
 }
