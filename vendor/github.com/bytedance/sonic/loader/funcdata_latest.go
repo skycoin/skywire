@@ -1,5 +1,5 @@
-// go:build go1.18 && !go1.22
-// +build go1.18,!go1.22
+// go:build go1.18 && !go1.24
+// +build go1.18,!go1.24
 
 /*
  * Copyright 2021 ByteDance Inc.
@@ -24,7 +24,7 @@ import (
     `sort`
     `unsafe`
 
-    `github.com/bytedance/sonic/internal/rt`
+    `github.com/bytedance/sonic/loader/internal/rt`
 )
 
 type funcTab struct {

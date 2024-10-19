@@ -1,39 +1,6 @@
 package opts
 
-// BarChart
-// https://echarts.apache.org/en/option.html#series-bar
-type BarChart struct {
-	Type string
-	// Name of stack. On the same category axis, the series with the
-	// same stack name would be put on top of each other.
-	Stack string
-
-	// The gap between bars between different series, is a percent value like '30%',
-	// which means 30% of the bar width.
-	// Set barGap as '-100%' can overlap bars that belong to different series,
-	// which is useful when putting a series of bar as background.
-	// In a single coordinate system, this attribute is shared by multiple 'bar' series.
-	// This attribute should be set on the last 'bar' series in the coordinate system,
-	// then it will be adopted by all 'bar' series in the coordinate system.
-	BarGap string
-
-	// The bar gap of a single series, defaults to be 20% of the category gap,
-	// can be set as a fixed value.
-	// In a single coordinate system, this attribute is shared by multiple 'bar' series.
-	// This attribute should be set on the last 'bar' series in the coordinate system,
-	// then it will be adopted by all 'bar' series in the coordinate system.
-	BarCategoryGap string
-
-	// Index of x axis to combine with, which is useful for multiple x axes in one chart.
-	XAxisIndex int
-
-	// Index of y axis to combine with, which is useful for multiple y axes in one chart.
-	YAxisIndex int
-
-	ShowBackground bool
-	RoundCap       bool
-	CoordSystem    string
-}
+import "github.com/go-echarts/go-echarts/v2/types"
 
 // SunburstChart
 // https://echarts.apache.org/en/option.html#series-sunburst
@@ -43,11 +10,11 @@ type SunburstChart struct {
 	// Sorting method that sectors use based on value
 	Sort string `json:"sort,omitempty"`
 	// If there is no name, whether need to render it.
-	RenderLabelForZeroData bool `json:"renderLabelForZeroData"`
+	RenderLabelForZeroData types.Bool `json:"renderLabelForZeroData,omitempty"`
 	// Selected mode
-	SelectedMode bool `json:"selectedMode"`
+	SelectedMode types.Bool `json:"selectedMode,omitempty"`
 	// Whether to enable animation.
-	Animation bool `json:"animation"`
+	Animation types.Bool `json:"animation,omitempty"`
 	// Whether to set graphic number threshold to animation
 	AnimationThreshold int `json:"animationThreshold,omitempty"`
 	// Duration of the first animation
@@ -62,25 +29,6 @@ type SunburstChart struct {
 	AnimationEasingUpdate string `json:"animationEasingUpdate,omitempty"`
 	// Delay before updating animation
 	AnimationDelayUpdate int `json:"animationDelayUpdate,omitempty"`
-}
-
-// BarData
-// https://echarts.apache.org/en/option.html#series-bar.data
-type BarData struct {
-	// Name of data item.
-	Name string `json:"name,omitempty"`
-
-	// Value of a single data item.
-	Value interface{} `json:"value,omitempty"`
-
-	// The style setting of the text label in a single bar.
-	Label *Label `json:"label,omitempty"`
-
-	// ItemStyle settings in this series data.
-	ItemStyle *ItemStyle `json:"itemStyle,omitempty"`
-
-	// Tooltip settings in this series data.
-	Tooltip *Tooltip `json:"tooltip,omitempty"`
 }
 
 // Bar3DChart is the option set for a 3D bar chart.
@@ -118,16 +66,6 @@ type BoxPlotData struct {
 
 	// Tooltip settings in this series data.
 	Tooltip *Tooltip `json:"tooltip,omitempty"`
-}
-
-// EffectScatterData
-// https://echarts.apache.org/en/option.html#series-effectScatter.data
-type EffectScatterData struct {
-	// Name of data item.
-	Name string `json:"name,omitempty"`
-
-	// Value of a single data item.
-	Value interface{} `json:"value,omitempty"`
 }
 
 // FunnelData
@@ -175,7 +113,7 @@ type GraphChart struct {
 	// Whether to enable mouse zooming and translating. false by default.
 	// If either zooming or translating is wanted, it can be set to 'scale' or 'move'.
 	// Otherwise, set it to be true to enable both.
-	Roam bool
+	Roam types.Bool
 
 	// EdgeSymbol is the symbols of two ends of edge line.
 	// * 'circle'
@@ -189,10 +127,10 @@ type GraphChart struct {
 	EdgeSymbolSize interface{}
 
 	// Draggable allows you to move the nodes with the mouse if they are not fixed.
-	Draggable bool
+	Draggable types.Bool
 
 	// Whether to focus/highlight the hover node and it's adjacencies.
-	FocusNodeAdjacency bool
+	FocusNodeAdjacency types.Bool
 
 	// The categories of node, which is optional. If there is a classification of nodes,
 	// the category of each node can be assigned through data[i].category.
@@ -203,7 +141,7 @@ type GraphChart struct {
 	EdgeLabel *EdgeLabel `json:"edgeLabel"`
 
 	// SymbolKeepAspect is whether to keep aspect for symbols in the form of path://.
-	SymbolKeepAspect bool
+	SymbolKeepAspect types.Bool
 }
 
 // GraphNode represents a data node in graph chart.
@@ -222,7 +160,7 @@ type GraphNode struct {
 	Value float32 `json:"value,omitempty"`
 
 	// If node are fixed when doing force directed layout.
-	Fixed bool `json:"fixed,omitempty"`
+	Fixed types.Bool `json:"fixed,omitempty"`
 
 	// Index of category which the data item belongs to.
 	Category interface{} `json:"category,omitempty"`
@@ -258,6 +196,9 @@ type GraphLink struct {
 
 	// Label for this link.
 	Label *EdgeLabel `json:"label,omitempty"`
+
+	// LineStyle settings in this series data.
+	LineStyle *LineStyle `json:"lineStyle,omitempty"`
 }
 
 // GraphCategory represents a category for data nodes.
@@ -268,6 +209,9 @@ type GraphLink struct {
 type GraphCategory struct {
 	// Name of category, which is used to correspond with legend and the content of tooltip.
 	Name string `json:"name"`
+
+	// The style of this node.
+	ItemStyle *ItemStyle `json:"itemStyle,omitempty"`
 
 	// The label style of node in this category.
 	Label *Label `json:"label,omitempty"`
@@ -303,51 +247,7 @@ type KlineData struct {
 	Value interface{} `json:"value,omitempty"`
 }
 
-// LineChart is the options set for a line chart.
-// https://echarts.apache.org/en/option.html#series-line
-type LineChart struct {
-	// If stack the value. On the same category axis, the series with the same stack name would be put on top of each other.
-	// The effect of the below example could be seen through stack switching of toolbox on the top right corner:
-	Stack string
-
-	// Whether to show as smooth curve.
-	// If is typed in boolean, then it means whether to enable smoothing. If is
-	// typed in number, valued from 0 to 1, then it means smoothness. A smaller value makes it less smooth.
-	Smooth bool
-
-	// Whether to show as a step line. It can be true, false. Or 'start', 'middle', 'end'.
-	// Which will configure the turn point of step line.
-	Step interface{}
-
-	// Index of x axis to combine with, which is useful for multiple x axes in one chart.
-	XAxisIndex int
-
-	// Index of y axis to combine with, which is useful for multiple y axes in one chart.
-	YAxisIndex int
-
-	// Whether to connect the line across null points.
-	ConnectNulls bool
-
-	// Whether to show symbol. It would be shown during tooltip hover.
-	ShowSymbol bool
-
-	// Icon types provided by ECharts includes
-	//  'circle', 'rect', 'roundRect', 'triangle', 'diamond', 'pin', 'arrow', 'none'
-	// Full documentation: https://echarts.apache.org/en/option.html#series-line.symbol
-	Symbol string
-
-	// symbol size. It can be set to single numbers like 10, or use an array to represent width and height. For example, [20, 10] means symbol width is 20, and height is10.
-	// Full documentation: https://echarts.apache.org/en/option.html#series-line.symbolSize
-	SymbolSize interface{}
-
-	// color for Line series. it affects Line series including symbols, unlike LineStyle.Color
-	Color string
-
-	// SymbolKeepAspect is whether to keep aspect for symbols in the form of path://.
-	SymbolKeepAspect bool
-}
-
-// LineChart is the options set for a chandlestick chart.
+// KlineChart is the options set for a chandlestick chart.
 // https://echarts.apache.org/en/option.html#series-candlestick
 type KlineChart struct {
 	// Specify bar width. Absolute value (like 10) or percentage (like '20%', according to band width) can be used. Auto adapt by default.
@@ -360,31 +260,6 @@ type KlineChart struct {
 	BarMaxWidth string
 }
 
-// LineData
-// https://echarts.apache.org/en/option.html#series-line.data
-type LineData struct {
-	// Name of data item.
-	Name string `json:"name,omitempty"`
-
-	// Value of a single data item.
-	Value interface{} `json:"value,omitempty"`
-
-	// Symbol of single data.
-	// Icon types provided by ECharts includes 'circle', 'rect', 'roundRect', 'triangle', 'diamond', 'pin', 'arrow', 'none'
-	// It can be set to an image with 'image://url' , in which URL is the link to an image, or dataURI of an image.
-	Symbol string `json:"symbol,omitempty"`
-
-	// single data symbol size. It can be set to single numbers like 10, or
-	// use an array to represent width and height. For example, [20, 10] means symbol width is 20, and height is10
-	SymbolSize int `json:"symbolSize,omitempty"`
-
-	// Index of x axis to combine with, which is useful for multiple x axes in one chart.
-	XAxisIndex int
-
-	// Index of y axis to combine with, which is useful for multiple y axes in one chart.
-	YAxisIndex int
-}
-
 // LiquidChart
 // reference https://github.com/ecomfe/echarts-liquidfill
 type LiquidChart struct {
@@ -394,10 +269,10 @@ type LiquidChart struct {
 	Shape string
 
 	// Whether to show outline
-	IsShowOutline bool
+	IsShowOutline types.Bool
 
 	// Whether to stop animation
-	IsWaveAnimation bool
+	IsWaveAnimation types.Bool
 }
 
 // LiquidData
@@ -423,66 +298,6 @@ type MapData struct {
 // ParallelData
 // https://echarts.apache.org/en/option.html#series-parallel.data
 type ParallelData struct {
-	// Name of data item.
-	Name string `json:"name,omitempty"`
-
-	// Value of a single data item.
-	Value interface{} `json:"value,omitempty"`
-}
-
-// PieChart is the option set for a pie chart.
-// https://echarts.apache.org/en/option.html#series-pie
-type PieChart struct {
-	// Whether to show as Nightingale chart, which distinguishes data through radius. There are 2 optional modes:
-	// * 'radius' Use central angle to show the percentage of data, radius to show data size.
-	// * 'area' All the sectors will share the same central angle, the data size is shown only through radiuses.
-	RoseType string
-
-	// Center position of Pie chart, the first of which is the horizontal position, and the second is the vertical position.
-	// Percentage is supported. When set in percentage, the item is relative to the container width,
-	// and the second item to the height.
-	//
-	// Example:
-	//
-	// Set to absolute pixel values ->> center: [400, 300]
-	// Set to relative percent ->> center: ['50%', '50%']
-	Center interface{}
-
-	// Radius of Pie chart. Value can be:
-	// * number: Specify outside radius directly.
-	// * string: For example, '20%', means that the outside radius is 20% of the viewport
-	// size (the little one between width and height of the chart container).
-	//
-	// Array.<number|string>: The first item specifies the inside radius, and the
-	// second item specifies the outside radius. Each item follows the definitions above.
-	Radius interface{}
-}
-
-// PieData
-// https://echarts.apache.org/en/option.html#series-pie.data
-type PieData struct {
-	// Name of data item.
-	Name string `json:"name,omitempty"`
-
-	// Value of a single data item.
-	Value interface{} `json:"value,omitempty"`
-
-	// Whether the data item is selected.
-	Selected bool `json:"selected,omitempty"`
-
-	// The label configuration of a single sector.
-	Label *Label `json:"label,omitempty"`
-
-	// Graphic style of , emphasis is the style when it is highlighted, like being hovered by mouse, or highlighted via legend connect.
-	ItemStyle *ItemStyle `json:"itemStyle,omitempty"`
-
-	// tooltip settings in this series data.
-	Tooltip *Tooltip `json:"tooltip,omitempty"`
-}
-
-// RadarData
-// https://echarts.apache.org/en/option.html#series-radar
-type RadarData struct {
 	// Name of data item.
 	Name string `json:"name,omitempty"`
 
@@ -519,44 +334,6 @@ type SankeyNode struct {
 	ItemStyle *ItemStyle `json:"itemStyle,omitempty"`
 }
 
-// ScatterChart is the option set for a scatter chart.
-// https://echarts.apache.org/en/option.html#series-scatter
-type ScatterChart struct {
-	// Index of x axis to combine with, which is useful for multiple x axes in one chart.
-	XAxisIndex int
-
-	// Index of x axis to combine with, which is useful for multiple y axes in one chart.
-	YAxisIndex int
-
-	// SymbolKeepAspect is whether to keep aspect for symbols in the form of path://.
-	SymbolKeepAspect bool
-}
-
-// ScatterData
-// https://echarts.apache.org/en/option.html#series-scatter.data
-type ScatterData struct {
-	// Name of data item.
-	Name string `json:"name,omitempty"`
-
-	// Value of a single data item.
-	Value interface{} `json:"value,omitempty"`
-
-	// Symbol
-	Symbol string `json:"symbol,omitempty"`
-
-	// SymbolSize
-	SymbolSize int `json:"symbolSize,omitempty"`
-
-	// SymbolRotate
-	SymbolRotate int `json:"symbolRotate,omitempty"`
-
-	// Index of x axis to combine with, which is useful for multiple x axes in one chart.
-	XAxisIndex int `json:"xAxisIndex,omitempty"`
-
-	// Index of y axis to combine with, which is useful for multiple y axes in one chart.
-	YAxisIndex int `json:"yAxisIndex,omitempty"`
-}
-
 // ThemeRiverData
 // https://echarts.apache.org/en/option.html#series-themeRiver
 type ThemeRiverData struct {
@@ -588,7 +365,6 @@ type WordCloudChart struct {
 	RotationRange []float32
 }
 
-// WordCloudData
 type WordCloudData struct {
 	// Name of data item.
 	Name string `json:"name,omitempty"`
@@ -628,10 +404,10 @@ type TreeChart struct {
 	// Whether to enable mouse zooming and translating. false by default.
 	// If either zooming or translating is wanted, it can be set to 'scale' or 'move'.
 	// Otherwise, set it to be true to enable both.
-	Roam bool `json:"roam"`
+	Roam types.Bool `json:"roam,omitempty"`
 
 	// Subtree collapses and expands interaction, default true.
-	ExpandAndCollapse bool `json:"expandAndCollapse,omitempty"`
+	ExpandAndCollapse types.Bool `json:"expandAndCollapse,omitempty"`
 
 	// The initial level (depth) of the tree. The root node is the 0th layer, then the first layer, the second layer, ... , until the leaf node.
 	// This configuration item is primarily used in conjunction with collapsing and expansion interactions.
@@ -653,7 +429,7 @@ type TreeChart struct {
 	Bottom string `json:"bottom,omitempty"`
 
 	// SymbolKeepAspect is whether to keep aspect for symbols in the form of path://.
-	SymbolKeepAspect bool
+	SymbolKeepAspect types.Bool
 }
 
 type TreeData struct {
@@ -661,7 +437,7 @@ type TreeData struct {
 	Name string `json:"name,omitempty"`
 
 	// Value of the data item.
-	Value int `json:"value,omitempty"`
+	Value interface{} `json:"value,omitempty"`
 
 	Children []*TreeData `json:"children,omitempty"`
 
@@ -676,7 +452,7 @@ type TreeData struct {
 	SymbolSize interface{} `json:"symbolSize,omitempty"`
 
 	// If set as `true`, the node is collapsed in the initialization.
-	Collapsed bool `json:"collapsed,omitempty"`
+	Collapsed types.Bool `json:"collapsed,omitempty"`
 
 	// LineStyle settings in this series data.
 	LineStyle *LineStyle `json:"lineStyle,omitempty"`
@@ -687,14 +463,14 @@ type TreeData struct {
 
 type TreeMapChart struct {
 	// Whether to enable animation.
-	Animation bool `json:"animation"`
+	Animation types.Bool `json:"animation,omitempty"`
 
 	// leafDepth represents how many levels are shown at most. For example, when leafDepth is set to 1, only one level will be shown.
 	// leafDepth is null/undefined by default, which means that "drill down" is disabled.
 	LeafDepth int `json:"leafDeapth,omitempty"`
 
 	// Roam describes whether to enable mouse zooming and translating. false by default.
-	Roam bool `json:"roam"`
+	Roam types.Bool `json:"roam,omitempty"`
 
 	// Label decribes the style of the label in each node.
 	Label *Label `json:"label,omitempty"`
@@ -748,7 +524,38 @@ type CustomChart struct {
 
 	// Custom series requires developers to write a render logic by themselves in JavaScript.
 	// This render logic is called RenderItem. Use opts.FuncOpts to embed JavaScript.
-	RenderItem string
+	RenderItem types.FuncStr
+}
+
+// Progress is the options set for progress.
+type Progress struct {
+	// Wether to show the progress
+	Show types.Bool `json:"show,omitempty"`
+	// Width of the progress in px
+	Width int `json:"width,omitempty"`
+}
+
+// Detail is the options set for detail (e.g. on a gauge).
+type Detail struct {
+	// The content formatter of value
+	//
+	// 1. String template
+	// The template variable is {value}.
+	//
+	// 2. Callback function
+	// The format of callback function:
+	// (value: number) => string
+	Formatter types.FuncStr `json:"formatter,omitempty"`
+
+	// Font size of the value in px
+	FontSize int `json:"fontSize,omitempty"`
+
+	// Value position relative to the center of chart
+	// OffceCenter is provided as [x, y] where x and y are either a number (px, provided
+	// as string) or a percentage.
+	// Positive values move the chart value to [right, bottom], negative values vice
+	// versa.
+	OffsetCenter []string `json:"offsetCenter,omitempty"`
 }
 
 // CustomData

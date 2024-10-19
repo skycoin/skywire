@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"html/template"
 
-	"github.com/go-echarts/go-echarts/v2/actions"
+	"github.com/go-echarts/go-echarts/v2/event"
+	"github.com/go-echarts/go-echarts/v2/types"
+	"github.com/go-echarts/go-echarts/v2/util"
+
 	"github.com/go-echarts/go-echarts/v2/datasets"
 	"github.com/go-echarts/go-echarts/v2/opts"
 	"github.com/go-echarts/go-echarts/v2/render"
@@ -13,9 +16,6 @@ import (
 
 // GlobalOpts sets the Global options for charts.
 type GlobalOpts func(bc *BaseConfiguration)
-
-// GlobalActions sets the Global actions for charts
-type GlobalActions func(ba *BaseActions)
 
 // BaseConfiguration represents an option set needed by all chart types.
 type BaseConfiguration struct {
@@ -55,14 +55,25 @@ type BaseConfiguration struct {
 	Colors      []string
 	appendColor []string // append customize color to the Colors(reverse order)
 
+	// Animation configs
 	// Animation whether enable the animation, default true
-	Animation bool `json:"animation" default:"true"`
+	Animation          types.Bool `json:"animation,omitempty"`
+	AnimationThreshold types.Int  `json:"animationThreshold,omitempty"`
+	// AnimationDuration defined as types.FuncStr for more flexibilities, so are other related options
+	AnimationDuration       types.FuncStr `json:"animationDuration,omitempty"`
+	AnimationEasing         string        `json:"animationEasing,omitempty"`
+	AnimationDelay          types.FuncStr `json:"animationDelay,omitempty"`
+	AnimationDurationUpdate types.FuncStr `json:"animationDurationUpdate,omitempty"`
+	AnimationEasingUpdate   string        `json:"animationEasingUpdate,omitempty"`
+	AnimationDelayUpdate    types.FuncStr `json:"animationDelayUpdate,omitempty"`
 
 	// Array of datasets, managed by AddDataset()
 	DatasetList []opts.Dataset `json:"dataset,omitempty"`
 
 	DataZoomList  []opts.DataZoom  `json:"datazoom,omitempty"`
 	VisualMapList []opts.VisualMap `json:"visualmap,omitempty"`
+
+	EventListeners []event.Listener `json:"-"`
 
 	// ParallelAxisList represents the component list which is the coordinate axis for parallel coordinate.
 	ParallelAxisList []opts.ParallelAxis
@@ -77,12 +88,6 @@ type BaseConfiguration struct {
 	hasBrush      bool
 
 	GridList []opts.Grid `json:"grid,omitempty"`
-}
-
-// BaseActions represents a dispatchAction set needed by all chart types.
-type BaseActions struct {
-	actions.Type  `json:"type,omitempty"`
-	actions.Areas `json:"areas,omitempty"`
 }
 
 // JSON wraps all the options to a map so that it could be used in the base template
@@ -104,31 +109,23 @@ func (bc *BaseConfiguration) JSONNotEscaped() template.HTML {
 	return template.HTML(buff.String())
 }
 
-// JSONNotEscapedAction works like method JSON, but it returns a marshaled object whose characters will not be escaped in the template
-func (ba *BaseActions) JSONNotEscapedAction() template.HTML {
-	obj := ba.json()
-	buff := bytes.NewBufferString("")
-	enc := json.NewEncoder(buff)
-	enc.SetEscapeHTML(false)
-	enc.Encode(obj)
-
-	return template.HTML(buff.String())
-}
-
 func (bc *BaseConfiguration) json() map[string]interface{} {
 	obj := map[string]interface{}{
-		"title":     bc.Title,
-		"legend":    bc.Legend,
-		"animation": bc.Animation,
-		"tooltip":   bc.Tooltip,
-		"series":    bc.MultiSeries,
+		"title":   bc.Title,
+		"legend":  bc.Legend,
+		"tooltip": bc.Tooltip,
+		"series":  bc.MultiSeries,
 	}
+
+	if bc.Animation != nil {
+		obj["animation"] = bc.Animation
+	}
+
 	// if only one item, use it directly instead of an Array
 	if len(bc.DatasetList) == 1 {
 		obj["dataset"] = bc.DatasetList[0]
 	} else if len(bc.DatasetList) > 1 {
 		obj["dataset"] = bc.DatasetList
-
 	}
 	if bc.AxisPointer != nil {
 		obj["axisPointer"] = bc.AxisPointer
@@ -157,9 +154,7 @@ func (bc *BaseConfiguration) json() map[string]interface{} {
 		obj["singleAxis"] = bc.SingleAxis
 	}
 
-	if bc.Toolbox.Show {
-		obj["toolbox"] = bc.Toolbox
-	}
+	obj["toolbox"] = bc.Toolbox
 
 	if len(bc.DataZoomList) > 0 {
 		obj["dataZoom"] = bc.DataZoomList
@@ -216,7 +211,7 @@ func (bc *BaseConfiguration) AddDataset(dataset ...opts.Dataset) {
 
 // FillDefaultValues fill default values for chart options.
 func (bc *BaseConfiguration) FillDefaultValues() {
-	opts.SetDefaultValue(bc)
+	util.SetDefaultValue(bc)
 }
 
 func (bc *BaseConfiguration) initBaseConfiguration() {
@@ -249,34 +244,6 @@ func (bc *BaseConfiguration) setBaseGlobalOptions(opts ...GlobalOpts) {
 	}
 }
 
-func (ba *BaseActions) setBaseGlobalActions(opts ...GlobalActions) {
-	for _, opt := range opts {
-		opt(ba)
-	}
-}
-
-func (ba *BaseActions) json() map[string]interface{} {
-	obj := map[string]interface{}{
-		"type":  ba.Type,
-		"areas": ba.Areas,
-	}
-	return obj
-}
-
-// WithAreas sets the areas of the action
-func WithAreas(act actions.Areas) GlobalActions {
-	return func(ba *BaseActions) {
-		ba.Areas = act
-	}
-}
-
-// WithType sets the type of the action
-func WithType(act actions.Type) GlobalActions {
-	return func(ba *BaseActions) {
-		ba.Type = act
-	}
-}
-
 // WithAngleAxisOps sets the angle of the axis.
 func WithAngleAxisOps(opt opts.AngleAxis) GlobalOpts {
 	return func(bc *BaseConfiguration) {
@@ -303,6 +270,8 @@ func WithBrush(opt opts.Brush) GlobalOpts {
 func WithPolarOps(opt opts.Polar) GlobalOpts {
 	return func(bc *BaseConfiguration) {
 		bc.Polar = opt
+		bc.hasPolar = true
+		bc.hasXYAxis = false
 	}
 }
 
@@ -314,9 +283,9 @@ func WithTitleOpts(opt opts.Title) GlobalOpts {
 }
 
 // WithAnimation enable or disable the animation.
-func WithAnimation() GlobalOpts {
+func WithAnimation(enable bool) GlobalOpts {
 	return func(bc *BaseConfiguration) {
-		bc.Animation = false
+		bc.Animation = opts.Bool(enable)
 	}
 }
 
@@ -345,6 +314,12 @@ func WithTooltipOpts(opt opts.Tooltip) GlobalOpts {
 func WithLegendOpts(opt opts.Legend) GlobalOpts {
 	return func(bc *BaseConfiguration) {
 		bc.Legend = opt
+	}
+}
+
+func WithEventListeners(listeners ...event.Listener) GlobalOpts {
+	return func(bc *BaseConfiguration) {
+		bc.EventListeners = append(bc.EventListeners, listeners...)
 	}
 }
 
@@ -388,7 +363,6 @@ func WithGeoComponentOpts(opt opts.GeoComponent) GlobalOpts {
 		bc.GeoComponent = opt
 		bc.JSAssets.Add("maps/" + datasets.MapFileNames[opt.Map] + ".js")
 	}
-
 }
 
 // WithParallelComponentOpts sets the parallel component.

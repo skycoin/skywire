@@ -565,17 +565,17 @@ func server() {
 				var surveyTotalByteSize string
 				var totalBytes int64
 				for _, ni := range nis {
-				    surveytbs, err := script.File(ni).JQ(".ghw_blockinfo.total_size_bytes").Reject("null").Replace(`"`, "").String()
-				    if err == nil {
-				        surveyTotalByteSize += surveytbs
-							if surveytbs != "\n" && surveytbs != "" {
-								byteValue, err := strconv.ParseInt(strings.TrimRight(surveytbs, "\n"), 10, 64)
-								if err != nil {
-									result += fmt.Sprintf("Non nil error from strconv.ParseInt: %v\n", err)
-								}
-								totalBytes += byteValue
+					surveytbs, err := script.File(ni).JQ(".ghw_blockinfo.total_size_bytes").Reject("null").Replace(`"`, "").String()
+					if err == nil {
+						surveyTotalByteSize += surveytbs
+						if surveytbs != "\n" && surveytbs != "" {
+							byteValue, err := strconv.ParseInt(strings.TrimRight(surveytbs, "\n"), 10, 64)
+							if err != nil {
+								result += fmt.Sprintf("Non nil error from strconv.ParseInt: %v\n", err)
 							}
-				    }
+							totalBytes += byteValue
+						}
+					}
 				}
 
 				// Get stats for terabytes and gigabytes
@@ -592,38 +592,38 @@ func server() {
 
 				maxLen := len(bsstatsGB)
 				if len(bsstatsTB) > maxLen {
-				    maxLen = len(bsstatsTB)
+					maxLen = len(bsstatsTB)
 				}
 				for i := 0; i < maxLen; i++ {
-				    result += "<tr>\n"
-				    if i < len(bsstatsGB) {
-				        result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", bsstatsGB[i])
-				    } else {
-				        result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
-				    }
-				    if i < len(bsstatsTB) {
-				        result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", bsstatsTB[i])
-				    } else {
-				        result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
-				    }
-				    result += "</tr>\n"
+					result += "<tr>\n"
+					if i < len(bsstatsGB) {
+						result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", bsstatsGB[i])
+					} else {
+						result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
+					}
+					if i < len(bsstatsTB) {
+						result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", bsstatsTB[i])
+					} else {
+						result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
+					}
+					result += "</tr>\n"
 				}
 				result += "</table>\n<br>"
 
 				var surveyTotalUsableBytes string
 				var totalramBytes int64
 				for _, ni := range nis {
-				    surveymem, err := script.File(ni).JQ(".ghw_memoryinfo.total_usable_bytes").Reject("null").Replace(`"`, "").String()
-				    if err == nil {
-				        surveyTotalUsableBytes += surveymem
-							if surveymem != "\n" && surveymem != "" {
-								byteValue, err := strconv.ParseInt(strings.TrimRight(surveymem, "\n"), 10, 64)
-								if err != nil {
-									result += fmt.Sprintf("Non nil error from strconv.ParseInt: %v\n", err)
-								}
-								totalramBytes += byteValue
+					surveymem, err := script.File(ni).JQ(".ghw_memoryinfo.total_usable_bytes").Reject("null").Replace(`"`, "").String()
+					if err == nil {
+						surveyTotalUsableBytes += surveymem
+						if surveymem != "\n" && surveymem != "" {
+							byteValue, err := strconv.ParseInt(strings.TrimRight(surveymem, "\n"), 10, 64)
+							if err != nil {
+								result += fmt.Sprintf("Non nil error from strconv.ParseInt: %v\n", err)
 							}
-				    }
+							totalramBytes += byteValue
+						}
+					}
 				}
 
 				statsMB, _ := script.Echo(surveyTotalUsableBytes).ExecForEach("numfmt --to=iec {{.}}").Reject("G").Freq().Slice() //nolint
@@ -639,21 +639,21 @@ func server() {
 
 				maxLen = len(statsGB)
 				if len(statsMB) > maxLen {
-				    maxLen = len(statsMB)
+					maxLen = len(statsMB)
 				}
 				for i := 0; i < maxLen; i++ {
-				    result += "<tr>\n"
-				    if i < len(statsGB) {
-				        result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", statsGB[i])
-				    } else {
-				        result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
-				    }
-				    if i < len(statsMB) {
-				        result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", statsMB[i])
-				    } else {
-				        result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
-				    }
-				    result += "</tr>\n"
+					result += "<tr>\n"
+					if i < len(statsGB) {
+						result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", statsGB[i])
+					} else {
+						result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
+					}
+					if i < len(statsMB) {
+						result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", statsMB[i])
+					} else {
+						result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
+					}
+					result += "</tr>\n"
 				}
 				result += "</table>\n<br>"
 

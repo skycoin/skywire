@@ -206,7 +206,7 @@ func (p *InteractiveMultiselectPrinter) Show(text ...string) ([]string, error) {
 			}
 		case keys.Backspace:
 			// Remove last character from fuzzy search string
-			if len(p.fuzzySearchString) > 0 {
+			if p.fuzzySearchString != "" {
 				// Handle UTF-8 characters
 				p.fuzzySearchString = string([]rune(p.fuzzySearchString)[:len([]rune(p.fuzzySearchString))-1])
 			}
@@ -240,7 +240,7 @@ func (p *InteractiveMultiselectPrinter) Show(text ...string) ([]string, error) {
 				p.selectedOptions = append(p.selectedOptions, i)
 			}
 			area.Update(p.renderSelectMenu())
-		case keys.Up:
+		case keys.Up, keys.CtrlP:
 			if len(p.fuzzySearchMatches) == 0 {
 				return false, nil
 			}
@@ -263,7 +263,7 @@ func (p *InteractiveMultiselectPrinter) Show(text ...string) ([]string, error) {
 			}
 
 			area.Update(p.renderSelectMenu())
-		case keys.Down:
+		case keys.Down, keys.CtrlN:
 			if len(p.fuzzySearchMatches) == 0 {
 				return false, nil
 			}

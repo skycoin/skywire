@@ -9,7 +9,6 @@ import (
 // WordCloud represents a word cloud chart.
 type WordCloud struct {
 	BaseConfiguration
-	BaseActions
 }
 
 // Type returns the chart type.
@@ -42,7 +41,7 @@ func (c *WordCloud) AddSeries(name string, data []opts.WordCloudData, options ..
 		series.TextStyle = &opts.TextStyle{Normal: &opts.TextStyle{}}
 	}
 	if series.TextStyle.Normal.Color == "" {
-		series.TextStyle.Normal.Color = opts.FuncOpts(wcTextColor)
+		series.TextStyle.Normal.Color = string(opts.FuncOpts(wcTextColor))
 	}
 
 	c.MultiSeries = append(c.MultiSeries, series)
@@ -52,12 +51,6 @@ func (c *WordCloud) AddSeries(name string, data []opts.WordCloudData, options ..
 // SetGlobalOptions sets options for the WordCloud instance.
 func (c *WordCloud) SetGlobalOptions(options ...GlobalOpts) *WordCloud {
 	c.BaseConfiguration.setBaseGlobalOptions(options...)
-	return c
-}
-
-// SetDispatchActions sets actions for the WordCloud instance.
-func (c *WordCloud) SetDispatchActions(actions ...GlobalActions) *WordCloud {
-	c.BaseActions.setBaseGlobalActions(actions...)
 	return c
 }
 
