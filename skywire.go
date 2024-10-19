@@ -81,8 +81,6 @@ var Test Services
 // TestConf is the service configuration address / URL for the skywire test deployment
 var TestConf Conf
 
-var err error
-
 func init() {
 	err := json.Unmarshal(ArchesJSON, &Architectures)
 	if err != nil {
