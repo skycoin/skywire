@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/itchyny/timefmt-go"
@@ -50,6 +51,8 @@ func init() {
 		"builtins":       argFunc0(nil),
 		"input":          argFunc0(nil),
 		"modulemeta":     argFunc0(nil),
+		"debug":          argFunc1(nil),
+		"abs":            argFunc0(funcAbs),
 		"length":         argFunc0(funcLength),
 		"utf8bytelength": argFunc0(funcUtf8ByteLength),
 		"keys":           argFunc0(funcKeys),
@@ -69,6 +72,9 @@ func init() {
 		"endswith":       argFunc1(funcEndsWith),
 		"ltrimstr":       argFunc1(funcLtrimstr),
 		"rtrimstr":       argFunc1(funcRtrimstr),
+		"ltrim":          argFunc0(funcLtrim),
+		"rtrim":          argFunc0(funcRtrim),
+		"trim":           argFunc0(funcTrim),
 		"explode":        argFunc0(funcExplode),
 		"implode":        argFunc0(funcImplode),
 		"split":          {argcount1 | argcount2, false, funcSplit},
@@ -127,8 +133,8 @@ func init() {
 		"atanh":          mathFunc("atanh", math.Atanh),
 		"floor":          mathFunc("floor", math.Floor),
 		"round":          mathFunc("round", math.Round),
-		"nearbyint":      mathFunc("nearbyint", math.Round),
-		"rint":           mathFunc("rint", math.Round),
+		"nearbyint":      mathFunc("nearbyint", math.RoundToEven),
+		"rint":           mathFunc("rint", math.RoundToEven),
 		"ceil":           mathFunc("ceil", math.Ceil),
 		"trunc":          mathFunc("trunc", math.Trunc),
 		"significand":    mathFunc("significand", funcSignificand),
@@ -164,15 +170,14 @@ func init() {
 		"fmod":           mathFunc2("fmod", math.Mod),
 		"hypot":          mathFunc2("hypot", math.Hypot),
 		"jn":             mathFunc2("jn", funcJn),
-		"ldexp":          mathFunc2("ldexp", funcLdexp),
 		"nextafter":      mathFunc2("nextafter", math.Nextafter),
 		"nexttoward":     mathFunc2("nexttoward", math.Nextafter),
 		"remainder":      mathFunc2("remainder", math.Remainder),
-		"scalb":          mathFunc2("scalb", funcScalb),
-		"scalbln":        mathFunc2("scalbln", funcScalbln),
+		"ldexp":          mathFunc2("ldexp", funcLdexp),
+		"scalb":          mathFunc2("scalb", funcLdexp),
+		"scalbln":        mathFunc2("scalbln", funcLdexp),
 		"yn":             mathFunc2("yn", funcYn),
 		"pow":            mathFunc2("pow", math.Pow),
-		"pow10":          mathFunc("pow10", funcExp10),
 		"fma":            mathFunc3("fma", math.FMA),
 		"infinite":       argFunc0(funcInfinite),
 		"isfinite":       argFunc0(funcIsfinite),
@@ -272,6 +277,25 @@ func mathFunc3(name string, f func(_, _, _ float64) float64) function {
 		}
 		return f(x, y, z)
 	})
+}
+
+func funcAbs(v any) any {
+	switch v := v.(type) {
+	case int:
+		if v >= 0 {
+			return v
+		}
+		return -v
+	case float64:
+		return math.Abs(v)
+	case *big.Int:
+		if v.Sign() >= 0 {
+			return v
+		}
+		return new(big.Int).Abs(v)
+	default:
+		return &func0TypeError{"abs", v}
+	}
 }
 
 func funcLength(v any) any {
@@ -579,7 +603,7 @@ func indices(vs, xs []any) any {
 		return rs
 	}
 	for i := 0; i <= len(vs)-len(xs); i++ {
-		if compare(vs[i:i+len(xs)], xs) == 0 {
+		if Compare(vs[i:i+len(xs)], xs) == 0 {
 			rs = append(rs, i)
 		}
 	}
@@ -592,7 +616,7 @@ func funcIndex(v, x any) any {
 			return nil
 		}
 		for i := 0; i <= len(vs)-len(xs); i++ {
-			if compare(vs[i:i+len(xs)], xs) == 0 {
+			if Compare(vs[i:i+len(xs)], xs) == 0 {
 				return i
 			}
 		}
@@ -606,7 +630,7 @@ func funcRindex(v, x any) any {
 			return nil
 		}
 		for i := len(vs) - len(xs); i >= 0; i-- {
-			if compare(vs[i:i+len(xs)], xs) == 0 {
+			if Compare(vs[i:i+len(xs)], xs) == 0 {
 				return i
 			}
 		}
@@ -662,11 +686,11 @@ func funcEndsWith(v, x any) any {
 func funcLtrimstr(v, x any) any {
 	s, ok := v.(string)
 	if !ok {
-		return v
+		return &func1TypeError{"ltrimstr", v, x}
 	}
 	t, ok := x.(string)
 	if !ok {
-		return v
+		return &func1TypeError{"ltrimstr", v, x}
 	}
 	return strings.TrimPrefix(s, t)
 }
@@ -674,13 +698,37 @@ func funcLtrimstr(v, x any) any {
 func funcRtrimstr(v, x any) any {
 	s, ok := v.(string)
 	if !ok {
-		return v
+		return &func1TypeError{"rtrimstr", v, x}
 	}
 	t, ok := x.(string)
 	if !ok {
-		return v
+		return &func1TypeError{"rtrimstr", v, x}
 	}
 	return strings.TrimSuffix(s, t)
+}
+
+func funcLtrim(v any) any {
+	s, ok := v.(string)
+	if !ok {
+		return &func0TypeError{"ltrim", v}
+	}
+	return strings.TrimLeftFunc(s, unicode.IsSpace)
+}
+
+func funcRtrim(v any) any {
+	s, ok := v.(string)
+	if !ok {
+		return &func0TypeError{"rtrim", v}
+	}
+	return strings.TrimRightFunc(s, unicode.IsSpace)
+}
+
+func funcTrim(v any) any {
+	s, ok := v.(string)
+	if !ok {
+		return &func0TypeError{"trim", v}
+	}
+	return strings.TrimSpace(s)
 }
 
 func funcExplode(v any) any {
@@ -709,8 +757,12 @@ func funcImplode(v any) any {
 	var sb strings.Builder
 	sb.Grow(len(vs))
 	for _, v := range vs {
-		if r, ok := toInt(v); ok && 0 <= r && r <= utf8.MaxRune {
-			sb.WriteRune(rune(r))
+		if r, ok := toInt(v); ok {
+			if 0 <= r && r <= utf8.MaxRune {
+				sb.WriteRune(rune(r))
+			} else {
+				sb.WriteRune(utf8.RuneError)
+			}
 		} else {
 			return &func0TypeError{"implode", vs}
 		}
@@ -1137,7 +1189,7 @@ type rangeIter struct {
 }
 
 func (iter *rangeIter) Next() (any, bool) {
-	if compare(iter.step, 0)*compare(iter.value, iter.end) >= 0 {
+	if Compare(iter.step, 0)*Compare(iter.value, iter.end) >= 0 {
 		return nil, false
 	}
 	v := iter.value
@@ -1208,7 +1260,7 @@ func minMaxBy(vs, xs []any, isMin bool) any {
 	}
 	i, j, x := 0, 0, xs[0]
 	for i++; i < len(xs); i++ {
-		if compare(x, xs[i]) > 0 == isMin {
+		if Compare(x, xs[i]) > 0 == isMin {
 			j, x = i, xs[i]
 		}
 	}
@@ -1239,7 +1291,7 @@ func sortItems(name string, v, x any) ([]*sortItem, error) {
 		items[i] = &sortItem{v, xs[i]}
 	}
 	sort.SliceStable(items, func(i, j int) bool {
-		return compare(items[i].key, items[j].key) < 0
+		return Compare(items[i].key, items[j].key) < 0
 	})
 	return items, nil
 }
@@ -1272,7 +1324,7 @@ func funcGroupBy(v, x any) any {
 	rs := []any{}
 	var last any
 	for i, r := range items {
-		if i == 0 || compare(last, r.key) != 0 {
+		if i == 0 || Compare(last, r.key) != 0 {
 			rs, last = append(rs, []any{r.value}), r.key
 		} else {
 			rs[len(rs)-1] = append(rs[len(rs)-1].([]any), r.value)
@@ -1297,7 +1349,7 @@ func uniqueBy(name string, v, x any) any {
 	rs := []any{}
 	var last any
 	for i, r := range items {
-		if i == 0 || compare(last, r.key) != 0 {
+		if i == 0 || Compare(last, r.key) != 0 {
 			rs, last = append(rs, r.value), r.key
 		}
 	}
@@ -1385,14 +1437,6 @@ func funcJn(l, r float64) float64 {
 
 func funcLdexp(l, r float64) float64 {
 	return math.Ldexp(l, int(r))
-}
-
-func funcScalb(l, r float64) float64 {
-	return l * math.Pow(2, r)
-}
-
-func funcScalbln(l, r float64) float64 {
-	return l * math.Pow(2, r)
 }
 
 func funcYn(l, r float64) float64 {
@@ -1783,9 +1827,9 @@ func funcBsearch(v, t any) any {
 		return &func1TypeError{"bsearch", v, t}
 	}
 	i := sort.Search(len(vs), func(i int) bool {
-		return compare(vs[i], t) >= 0
+		return Compare(vs[i], t) >= 0
 	})
-	if i < len(vs) && compare(vs[i], t) == 0 {
+	if i < len(vs) && Compare(vs[i], t) == 0 {
 		return i
 	}
 	return -i - 1
@@ -2052,15 +2096,11 @@ func funcError(v any, args []any) any {
 	if len(args) > 0 {
 		v = args[0]
 	}
-	code := 5
-	if v == nil {
-		code = 0
-	}
-	return &exitCodeError{v, code, false}
+	return &exitCodeError{v, 5}
 }
 
 func funcHalt(any) any {
-	return &exitCodeError{nil, 0, true}
+	return &HaltError{nil, 0}
 }
 
 func funcHaltError(v any, args []any) any {
@@ -2071,7 +2111,7 @@ func funcHaltError(v any, args []any) any {
 			return &func0TypeError{"halt_error", args[0]}
 		}
 	}
-	return &exitCodeError{v, code, true}
+	return &HaltError{v, code}
 }
 
 func toInt(x any) (int, bool) {

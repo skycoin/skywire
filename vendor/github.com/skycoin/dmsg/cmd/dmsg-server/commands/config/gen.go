@@ -26,7 +26,7 @@ func init() {
 var genConfigCmd = &cobra.Command{
 	Use:   "gen",
 	Short: "Generate a config file",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
 		logger := mLog.PackageLogger("dmsg-server config generator")

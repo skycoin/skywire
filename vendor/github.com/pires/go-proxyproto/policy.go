@@ -14,6 +14,21 @@ import (
 // In case an error is returned the connection is denied.
 type PolicyFunc func(upstream net.Addr) (Policy, error)
 
+// ConnPolicyFunc can be used to decide whether to trust the PROXY info
+// based on connection policy options. If set, the connecting addresses
+// (remote and local) are passed in as argument.
+//
+// See below for the different policies.
+//
+// In case an error is returned the connection is denied.
+type ConnPolicyFunc func(connPolicyOptions ConnPolicyOptions) (Policy, error)
+
+// ConnPolicyOptions contains the remote and local addresses of a connection.
+type ConnPolicyOptions struct {
+	Upstream   net.Addr
+	Downstream net.Addr
+}
+
 // Policy defines how a connection with a PROXY header address is treated.
 type Policy int
 
@@ -32,7 +47,30 @@ const (
 	// a PROXY header is not present, subsequent reads do not. It is the task
 	// of the code using the connection to handle that case properly.
 	REQUIRE
+	// SKIP accepts a connection without requiring the PROXY header
+	// Note: an example usage can be found in the SkipProxyHeaderForCIDR
+	// function.
+	SKIP
 )
+
+// SkipProxyHeaderForCIDR returns a PolicyFunc which can be used to accept a
+// connection from a skipHeaderCIDR without requiring a PROXY header, e.g.
+// Kubernetes pods local traffic. The def is a policy to use when an upstream
+// address doesn't match the skipHeaderCIDR.
+func SkipProxyHeaderForCIDR(skipHeaderCIDR *net.IPNet, def Policy) PolicyFunc {
+	return func(upstream net.Addr) (Policy, error) {
+		ip, err := ipFromAddr(upstream)
+		if err != nil {
+			return def, err
+		}
+
+		if skipHeaderCIDR != nil && skipHeaderCIDR.Contains(ip) {
+			return SKIP, nil
+		}
+
+		return def, nil
+	}
+}
 
 // WithPolicy adds given policy to a connection when passed as option to NewConn()
 func WithPolicy(p Policy) func(*Conn) {
@@ -146,4 +184,23 @@ func ipFromAddr(upstream net.Addr) (net.IP, error) {
 	}
 
 	return upstreamIP, nil
+}
+
+// IgnoreProxyHeaderNotOnInterface retuns a ConnPolicyFunc which can be used to
+// decide whether to use or ignore PROXY headers depending on the connection
+// being made on a specific interface. This policy can be used when the server
+// is bound to multiple interfaces but wants to allow on only one interface.
+func IgnoreProxyHeaderNotOnInterface(allowedIP net.IP) ConnPolicyFunc {
+	return func(connOpts ConnPolicyOptions) (Policy, error) {
+		ip, err := ipFromAddr(connOpts.Downstream)
+		if err != nil {
+			return REJECT, err
+		}
+
+		if allowedIP.Equal(ip) {
+			return USE, nil
+		}
+
+		return IGNORE, nil
+	}
 }

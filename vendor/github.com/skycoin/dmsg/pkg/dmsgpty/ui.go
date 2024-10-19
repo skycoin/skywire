@@ -12,10 +12,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"nhooyr.io/websocket"
 )
 
 const (

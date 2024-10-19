@@ -2,13 +2,15 @@ package opts
 
 import (
 	"fmt"
+
+	"github.com/go-echarts/go-echarts/v2/types"
 )
 
-// Label contains options for a label text.
-// https://echarts.apache.org/en/option.html#series-line.label
+// Label contains options for a label text, it is a generic label config for all label needs.
+// i.e. https://echarts.apache.org/en/option.html#series-line.label
 type Label struct {
 	// Whether to show label.
-	Show bool `json:"show"`
+	Show types.Bool `json:"show,omitempty"`
 
 	// Color is the text color.
 	// If set as "auto", the color will assigned as visual color, such as series color.
@@ -105,17 +107,26 @@ type Label struct {
 // LabelLine Configuration of label guide line.
 type LabelLine struct {
 	// Whether to show the label guide line.
-	Show bool `json:"show"`
+	Show types.Bool `json:"show,omitempty"`
 	// Whether to show the label guide line above the corresponding element.
-	ShowAbove bool `json:"showAbove"`
+	ShowAbove types.Bool `json:"showAbove"`
 	// The length of the second segment of guide line.
 	Length2 float64 `json:"length2,omitempty"`
 	// smoothness of guide line.
-	Smooth bool `json:"smooth"`
+	Smooth types.Bool `json:"smooth,omitempty"`
 	// Minimum turn angle between two segments of guide line
 	MinTurnAngle float64 `json:"minTurnAngle,omitempty"`
 	// The style of label line
 	LineStyle *LineStyle `json:"lineStyle,omitempty"`
+}
+
+// Blur Configurations of blur state. Whether to blur follows the series.
+type Blur struct {
+	// the blur style of item
+	ItemStyle *ItemStyle `json:"itemStyle,omitempty"`
+
+	// the blur style of label
+	Label *Label `json:"label,omitempty"`
 }
 
 // Emphasis is the style when it is highlighted, like being hovered by mouse, or highlighted via legend connect.
@@ -125,6 +136,18 @@ type Emphasis struct {
 
 	// the emphasis style of item
 	ItemStyle *ItemStyle `json:"itemStyle,omitempty"`
+}
+
+// Animation represents animation behaviors of series.
+type Animation struct {
+	Animation               types.Bool `json:"animation,omitempty"`
+	AnimationThreshold      int        `json:"animationThreshold,omitempty"`
+	AnimationDuration       int        `json:"animationDuration,omitempty"`
+	AnimationEasing         string     `json:"animationEasing,omitempty"`
+	AnimationDelay          int        `json:"animationDelay,omitempty"`
+	AnimationDurationUpdate int        `json:"animationDurationUpdate,omitempty"`
+	AnimationEasingUpdate   string     `json:"animationEasingUpdate,omitempty"`
+	AnimationDelayUpdate    int        `json:"animationDelayUpdate,omitempty"`
 }
 
 // ItemStyle represents a style of an item.
@@ -154,6 +177,19 @@ type ItemStyle struct {
 
 	// Opacity of the component. Supports value from 0 to 1, and the component will not be drawn when set to 0.
 	Opacity float32 `json:"opacity,omitempty"`
+
+	// ShadowBlur Size of shadow blur.
+	// This attribute should be used along with shadowColor,shadowOffsetX, shadowOffsetY to set shadow to component.
+	ShadowBlur int `json:"shadowBlur,omitempty"`
+
+	// ShadowColor Shadow color. Support same format as color.
+	ShadowColor string `json:"shadowColor,omitempty"`
+
+	// ShadowOffsetX Offset distance on the horizontal direction of shadow.
+	ShadowOffsetX int `json:"shadowOffsetX,omitempty"`
+
+	// ShadowOffsetY Offset distance on the vertical direction of shadow.
+	ShadowOffsetY int `json:"shadowOffsetY,omitempty"`
 }
 
 // MarkLines represents a series of marklines.
@@ -173,11 +209,17 @@ type MarkLineStyle struct {
 
 	// Mark line text options.
 	Label *Label `json:"label,omitempty"`
+
+	LineStyle *LineStyle `json:"lineStyle,omitempty"`
+
+	Emphasis *Emphasis `json:"emphasis,omitempty"`
+
+	Blur *Blur `json:"blur,omitempty"`
 }
 
 // CircularStyle contains styling options for circular layout.
 type CircularStyle struct {
-	RotateLabel bool `json:"rotateLabel,omitempty"`
+	RotateLabel types.Bool `json:"rotateLabel,omitempty"`
 }
 
 // MarkLineNameTypeItem represents type for a MarkLine.
@@ -193,6 +235,8 @@ type MarkLineNameTypeItem struct {
 	// It may be the direct name of a dimension, like x,
 	// or angle for line charts, or open, or close for candlestick charts.
 	ValueDim string `json:"valueDim,omitempty"`
+
+	LineStyle *LineStyle `json:"lineStyle,omitempty"`
 }
 
 // MarkLineNameYAxisItem defines a MarkLine on a Y axis.
@@ -249,6 +293,27 @@ type MarkAreas struct {
 	MarkAreaStyle
 }
 
+// MarkAreaData a generic Data struct
+type MarkAreaData struct {
+	Name     string      `json:"name,omitempty"`
+	Type     string      `json:"type,omitempty"`
+	ValueDim int         `json:"valueDim,omitempty"`
+	Coord    interface{} `json:"coord,omitempty"`
+	X        interface{} `json:"x,omitempty"`
+	Y        interface{} `json:"y,omitempty"`
+	XAxis    interface{} `json:"xAxis,omitempty"`
+	YAxis    interface{} `json:"YAxis,omitempty"`
+	MarkAreaStyle
+}
+
+type MarkAreaData0 struct {
+	LeftTop MarkAreaData `json:"0,omitempty"`
+}
+
+type MarkAreaData1 struct {
+	RightBottom MarkAreaData `json:"1,omitempty"`
+}
+
 // MarkAreaStyle contains styling options for a MarkArea.
 type MarkAreaStyle struct {
 	// Mark area text options.
@@ -256,6 +321,12 @@ type MarkAreaStyle struct {
 
 	// ItemStyle settings
 	ItemStyle *ItemStyle `json:"itemStyle,omitempty"`
+
+	// Emphasis settings
+	Emphasis *Emphasis `json:"emphasis,omitempty"`
+
+	// Blur settings
+	Blur *Blur `json:"blur,omitempty"`
 }
 
 // MarkAreaNameTypeItem represents type for a MarkArea.
@@ -431,11 +502,21 @@ type AreaStyle struct {
 	// Fill area color.
 	Color string `json:"color,omitempty"`
 
+	// Origin position of area.
+	// By default, the area between axis line and data will be filled.
+	// This config enables you to fill the area from data to the max or min of the axis data or a specified value.
+	// Valid values:
+	// 'auto' to fill between axis line and data (Default)
+	// 'start' to fill between min axis value (when not inverse) and data
+	// 'end' to fill between max axis value (when not inverse) and data
+	//  number to fill between specified value and data
+	Origin string `json:"origin,omitempty"`
+
 	// Opacity of the component. Supports value from 0 to 1, and the component will not be drawn when set to 0.
 	Opacity float32 `json:"opacity,omitempty"`
 }
 
-// Configuration items about force-directed layout. Force-directed layout simulates
+// GraphForce Configuration items about force-directed layout. Force-directed layout simulates
 // spring/charge model, which will add a repulsion between 2 nodes and add a attraction
 // between 2 nodes of each edge. In each iteration nodes will move under the effect
 // of repulsion and attraction. After several iterations, the nodes will be static in a
@@ -465,7 +546,7 @@ type GraphForce struct {
 	EdgeLength float32 `json:"edgeLength,omitempty"`
 }
 
-// Leaf node special configuration, the leaf node and non-leaf node label location is different.
+// TreeLeaves Leaf node special configuration, the leaf node and non-leaf node label location is different.
 type TreeLeaves struct {
 	// The style setting of the text label in a single bar.
 	Label *Label `json:"label,omitempty"`
@@ -508,7 +589,7 @@ type TreeMapLevel struct {
 // https://echarts.apache.org/en/option.html#series-treemap.upperLabel
 type UpperLabel struct {
 	// Show is true to show upper label.
-	Show bool `json:"show,omitempty"`
+	Show types.Bool `json:"show,omitempty"`
 
 	// Position is the label's position.
 	// * top
@@ -616,7 +697,7 @@ func HSLAColor(h, s, l, a float32) string {
 // https://echarts.apache.org/en/option.html#series-graph.edgeLabel
 type EdgeLabel struct {
 	// Show is true to show label on edge.
-	Show bool `json:"show,omitempty"`
+	Show types.Bool `json:"show,omitempty"`
 
 	// Position is the label's position in line of edge.
 	// * "start"
@@ -680,7 +761,7 @@ type EdgeLabel struct {
 	Formatter string `json:"formatter,omitempty"`
 }
 
-// Define what is encoded to for each dimension of data
+// Encode Define what is encoded to for each dimension of data
 // https://echarts.apache.org/en/option.html#series-candlestick.encode
 type Encode struct {
 	X interface{} `json:"x"`

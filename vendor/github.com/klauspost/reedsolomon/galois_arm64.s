@@ -1,9 +1,12 @@
 //+build !noasm
 //+build !appengine
 //+build !gccgo
+//+build !nopshufb
 
 // Copyright 2015, Klaus Post, see LICENSE for details.
 // Copyright 2017, Minio, Inc.
+
+#include "textflag.h"
 
 #define LOAD(LO1, LO2, HI1, HI2) \
 	VLD1.P 32(R1), [LO1.B16, LO2.B16] \
@@ -100,28 +103,13 @@ loopXor:
 completeXor:
 	RET
 
-// func galXorNEON(in, out []byte)
-TEXT ·galXorNEON(SB), 7, $0
-	MOVD in_base+0(FP), R1
-	MOVD in_len+8(FP), R2    // length of message
-	MOVD out_base+24(FP), R5
-	SUBS $32, R2
-	BMI  completeXor
-
-loopXor:
-	// Main loop
-	VLD1.P 32(R1), [V0.B16, V1.B16]
-	VLD1   (R5), [V20.B16, V21.B16]
-
-	VEOR V20.B16, V0.B16, V4.B16
-	VEOR V21.B16, V1.B16, V5.B16
-
-	// Store result
-	VST1.P [V4.D2, V5.D2], 32(R5)
-
-	SUBS $32, R2
-	BPL  loopXor
-
-completeXor:
-	RET
-
+TEXT ·getVectorLength(SB), NOSPLIT, $0
+    WORD $0xd2800002 // mov   x2, #0
+    WORD $0x04225022 // addvl x2, x2, #1
+    WORD $0xd37df042 // lsl   x2, x2, #3
+    WORD $0xd2800003 // mov   x3, #0
+    WORD $0x04635023 // addpl x3, x3, #1
+    WORD $0xd37df063 // lsl   x3, x3, #3
+    MOVD R2, vl+0(FP)
+    MOVD R3, pl+8(FP)
+    RET

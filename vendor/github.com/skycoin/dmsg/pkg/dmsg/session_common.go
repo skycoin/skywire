@@ -3,11 +3,13 @@ package dmsg
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net"
 	"sync"
 	"time"
 
+	"github.com/chen3feng/safecast"
 	"github.com/hashicorp/yamux"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
@@ -123,9 +125,13 @@ func (sc *SessionCommon) writeObject(w io.Writer, obj SignedObject) error {
 	p := sc.ns.EncryptUnsafe(obj)
 	sc.wMx.Unlock()
 	p = append(make([]byte, 2), p...)
-	binary.BigEndian.PutUint16(p, uint16(len(p)-2))
-	_, err := w.Write(p)
-	return err
+	lps2, ok := safecast.To[uint16](len(p) - 2)
+	if ok {
+		binary.BigEndian.PutUint16(p, lps2)
+		_, err := w.Write(p)
+		return err
+	}
+	return fmt.Errorf("writeObject failed cast to uint16")
 }
 
 func (sc *SessionCommon) readObject(r io.Reader) (SignedObject, error) {

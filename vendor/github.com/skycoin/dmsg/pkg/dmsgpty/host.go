@@ -210,13 +210,15 @@ func dmsgEndpoints(h *Host) (mux hostMux) {
 }
 
 func handleWhitelist(h *Host) handleFunc {
-	return func(ctx context.Context, uri *url.URL, rpcS *rpc.Server) error {
+	//	return func(ctx context.Context, uri *url.URL, rpcS *rpc.Server) error {
+	return func(_ context.Context, _ *url.URL, rpcS *rpc.Server) error {
 		return rpcS.RegisterName(WhitelistRPCName, NewWhitelistGateway(h.wl))
 	}
 }
 
 func handlePty(h *Host) handleFunc {
-	return func(ctx context.Context, uri *url.URL, rpcS *rpc.Server) error {
+	//	return func(ctx context.Context, uri *url.URL, rpcS *rpc.Server) error {
+	return func(ctx context.Context, _ *url.URL, rpcS *rpc.Server) error {
 		pty := NewPty()
 		go func() {
 			<-ctx.Done()

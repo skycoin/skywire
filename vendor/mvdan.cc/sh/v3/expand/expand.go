@@ -52,17 +52,25 @@ type Config struct {
 	// this field might change until #451 is completely fixed.
 	ProcSubst func(*syntax.ProcSubst) (string, error)
 
-	// TODO(v4): update to os.Readdir with fs.DirEntry.
-	// We could possibly expose that as a preferred ReadDir2 before then,
-	// to allow users to opt into better performance in v3.
+	// TODO(v4): replace ReadDir with ReadDir2.
 
-	// ReadDir is used for file path globbing. If nil, globbing is disabled.
-	// Use ioutil.ReadDir to use the filesystem directly.
-	ReadDir func(string) ([]os.FileInfo, error)
+	// ReadDir is the older form of [ReadDir2], before io/fs.
+	//
+	// Deprecated: use ReadDir2 instead.
+	ReadDir func(string) ([]fs.FileInfo, error)
+
+	// ReadDir is used for file path globbing.
+	// If nil, and ReadDir is nil as well, globbing is disabled.
+	// Use os.ReadDir to use the filesystem directly.
+	ReadDir2 func(string) ([]fs.DirEntry, error)
 
 	// GlobStar corresponds to the shell option that allows globbing with
 	// "**".
 	GlobStar bool
+
+	// NoCaseGlob corresponds to the shell option that causes case-insensitive
+	// pattern matching in pathname expansion.
+	NoCaseGlob bool
 
 	// NullGlob corresponds to the shell option that allows globbing
 	// patterns which match nothing to result in zero fields.
@@ -94,6 +102,9 @@ func (u UnexpectedCommandError) Error() string {
 
 var zeroConfig = &Config{}
 
+// TODO: note that prepareConfig is modifying the user's config in place,
+// which doesn't feel right - we should make a copy.
+
 func prepareConfig(cfg *Config) *Config {
 	if cfg == nil {
 		cfg = zeroConfig
@@ -105,6 +116,20 @@ func prepareConfig(cfg *Config) *Config {
 	cfg.ifs = " \t\n"
 	if vr := cfg.Env.Get("IFS"); vr.IsSet() {
 		cfg.ifs = vr.String()
+	}
+
+	if cfg.ReadDir != nil && cfg.ReadDir2 == nil {
+		cfg.ReadDir2 = func(path string) ([]fs.DirEntry, error) {
+			infos, err := cfg.ReadDir(path)
+			if err != nil {
+				return nil, err
+			}
+			entries := make([]fs.DirEntry, len(infos))
+			for i, info := range infos {
+				entries[i] = fs.FileInfoToDirEntry(info)
+			}
+			return entries, nil
+		}
 	}
 	return cfg
 }
@@ -189,6 +214,9 @@ const patMode = pattern.Filenames | pattern.Braces
 // The config specifies shell expansion options; nil behaves the same as an
 // empty config.
 func Pattern(cfg *Config, word *syntax.Word) (string, error) {
+	if word == nil {
+		return "", nil
+	}
 	cfg = prepareConfig(cfg)
 	field, err := cfg.wordField(word.Parts, quoteNone)
 	if err != nil {
@@ -440,17 +468,17 @@ func Fields(cfg *Config, words ...*syntax.Word) ([]string, error) {
 			for _, field := range wfields {
 				path, doGlob := cfg.escapedGlobField(field)
 				var matches []string
-				var syntaxError *pattern.SyntaxError
-				if doGlob && cfg.ReadDir != nil {
+				if doGlob && cfg.ReadDir2 != nil {
 					matches, err = cfg.glob(dir, path)
-					if !errors.As(err, &syntaxError) {
-						if err != nil {
+					if err != nil {
+						// We avoid [errors.As] as it allocates,
+						// and we know that [Config.glob] returns [pattern.Regexp] errors without wrapping.
+						if _, ok := err.(*pattern.SyntaxError); !ok {
 							return nil, err
 						}
-						if len(matches) > 0 || cfg.NullGlob {
-							fields = append(fields, matches...)
-							continue
-						}
+					} else if len(matches) > 0 || cfg.NullGlob {
+						fields = append(fields, matches...)
+						continue
 					}
 				}
 				fields = append(fields, cfg.fieldJoin(field))
@@ -476,9 +504,9 @@ const (
 func (cfg *Config) wordField(wps []syntax.WordPart, ql quoteLevel) ([]fieldPart, error) {
 	var field []fieldPart
 	for i, wp := range wps {
-		switch x := wp.(type) {
+		switch wp := wp.(type) {
 		case *syntax.Lit:
-			s := x.Value
+			s := wp.Value
 			if i == 0 && ql == quoteNone {
 				if prefix, rest := cfg.expandUser(s); prefix != "" {
 					// TODO: return two separate fieldParts,
@@ -505,13 +533,13 @@ func (cfg *Config) wordField(wps []syntax.WordPart, ql quoteLevel) ([]fieldPart,
 			}
 			field = append(field, fieldPart{val: s})
 		case *syntax.SglQuoted:
-			fp := fieldPart{quote: quoteSingle, val: x.Value}
-			if x.Dollar {
+			fp := fieldPart{quote: quoteSingle, val: wp.Value}
+			if wp.Dollar {
 				fp.val, _, _ = Format(cfg, fp.val, nil)
 			}
 			field = append(field, fp)
 		case *syntax.DblQuoted:
-			wfield, err := cfg.wordField(x.Parts, quoteDouble)
+			wfield, err := cfg.wordField(wp.Parts, quoteDouble)
 			if err != nil {
 				return nil, err
 			}
@@ -520,31 +548,31 @@ func (cfg *Config) wordField(wps []syntax.WordPart, ql quoteLevel) ([]fieldPart,
 				field = append(field, part)
 			}
 		case *syntax.ParamExp:
-			val, err := cfg.paramExp(x)
+			val, err := cfg.paramExp(wp)
 			if err != nil {
 				return nil, err
 			}
 			field = append(field, fieldPart{val: val})
 		case *syntax.CmdSubst:
-			val, err := cfg.cmdSubst(x)
+			val, err := cfg.cmdSubst(wp)
 			if err != nil {
 				return nil, err
 			}
 			field = append(field, fieldPart{val: val})
 		case *syntax.ArithmExp:
-			n, err := Arithm(cfg, x.X)
+			n, err := Arithm(cfg, wp.X)
 			if err != nil {
 				return nil, err
 			}
 			field = append(field, fieldPart{val: strconv.Itoa(n)})
 		case *syntax.ProcSubst:
-			path, err := cfg.ProcSubst(x)
+			path, err := cfg.ProcSubst(wp)
 			if err != nil {
 				return nil, err
 			}
 			field = append(field, fieldPart{val: path})
 		default:
-			panic(fmt.Sprintf("unhandled word part: %T", x))
+			panic(fmt.Sprintf("unhandled word part: %T", wp))
 		}
 	}
 	return field, nil
@@ -596,9 +624,9 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 		}
 	}
 	for i, wp := range wps {
-		switch x := wp.(type) {
+		switch wp := wp.(type) {
 		case *syntax.Lit:
-			s := x.Value
+			s := wp.Value
 			if i == 0 {
 				prefix, rest := cfg.expandUser(s)
 				curField = append(curField, fieldPart{
@@ -624,14 +652,14 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 			curField = append(curField, fieldPart{val: s})
 		case *syntax.SglQuoted:
 			allowEmpty = true
-			fp := fieldPart{quote: quoteSingle, val: x.Value}
-			if x.Dollar {
+			fp := fieldPart{quote: quoteSingle, val: wp.Value}
+			if wp.Dollar {
 				fp.val, _, _ = Format(cfg, fp.val, nil)
 			}
 			curField = append(curField, fp)
 		case *syntax.DblQuoted:
-			if len(x.Parts) == 1 {
-				pe, _ := x.Parts[0].(*syntax.ParamExp)
+			if len(wp.Parts) == 1 {
+				pe, _ := wp.Parts[0].(*syntax.ParamExp)
 				if elems := cfg.quotedElemFields(pe); elems != nil {
 					for i, elem := range elems {
 						if i > 0 {
@@ -646,7 +674,7 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 				}
 			}
 			allowEmpty = true
-			wfield, err := cfg.wordField(x.Parts, quoteDouble)
+			wfield, err := cfg.wordField(wp.Parts, quoteDouble)
 			if err != nil {
 				return nil, err
 			}
@@ -655,25 +683,25 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 				curField = append(curField, part)
 			}
 		case *syntax.ParamExp:
-			val, err := cfg.paramExp(x)
+			val, err := cfg.paramExp(wp)
 			if err != nil {
 				return nil, err
 			}
 			splitAdd(val)
 		case *syntax.CmdSubst:
-			val, err := cfg.cmdSubst(x)
+			val, err := cfg.cmdSubst(wp)
 			if err != nil {
 				return nil, err
 			}
 			splitAdd(val)
 		case *syntax.ArithmExp:
-			n, err := Arithm(cfg, x.X)
+			n, err := Arithm(cfg, wp.X)
 			if err != nil {
 				return nil, err
 			}
 			curField = append(curField, fieldPart{val: strconv.Itoa(n)})
 		case *syntax.ProcSubst:
-			path, err := cfg.ProcSubst(x)
+			path, err := cfg.ProcSubst(wp)
 			if err != nil {
 				return nil, err
 			}
@@ -681,7 +709,7 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 		case *syntax.ExtGlob:
 			return nil, fmt.Errorf("extended globbing is not supported")
 		default:
-			panic(fmt.Sprintf("unhandled word part: %T", x))
+			panic(fmt.Sprintf("unhandled word part: %T", wp))
 		}
 	}
 	flush()
@@ -710,12 +738,14 @@ func (cfg *Config) quotedElemFields(pe *syntax.ParamExp) []string {
 			switch vr := cfg.Env.Get(name); vr.Kind {
 			case Indexed:
 				keys := make([]string, 0, len(vr.Map))
+				// TODO: maps.Keys if it makes it into Go 1.23
 				for key := range vr.List {
 					keys = append(keys, strconv.Itoa(key))
 				}
 				return keys
 			case Associative:
 				keys := make([]string, 0, len(vr.Map))
+				// TODO: maps.Keys if it makes it into Go 1.23
 				for key := range vr.Map {
 					keys = append(keys, key)
 				}
@@ -736,6 +766,7 @@ func (cfg *Config) quotedElemFields(pe *syntax.ParamExp) []string {
 		case Indexed:
 			return vr.List
 		case Associative:
+			// TODO: maps.Values if it makes it into Go 1.23
 			elems := make([]string, 0, len(vr.Map))
 			for _, elem := range vr.Map {
 				elems = append(elems, elem)
@@ -839,11 +870,11 @@ func (cfg *Config) glob(base, pat string) ([]string, error) {
 	// TODO: as an optimization, we could do chunks of the path all at once,
 	// like doing a single stat for "/foo/bar" in "/foo/bar/*".
 
-	// TODO: Another optimization would be to reduce the number of ReadDir calls.
+	// TODO: Another optimization would be to reduce the number of ReadDir2 calls.
 	// For example, /foo/* can end up doing one duplicate call:
 	//
-	//    ReadDir("/foo") to ensure that "/foo/" exists and only matches a directory
-	//    ReadDir("/foo") glob "*"
+	//    ReadDir2("/foo") to ensure that "/foo/" exists and only matches a directory
+	//    ReadDir2("/foo") glob "*"
 
 	for i, part := range parts {
 		// Keep around for debugging.
@@ -864,12 +895,12 @@ func (cfg *Config) glob(base, pat string) ([]string, error) {
 					match = filepath.Join(base, match)
 				}
 				match = pathJoin2(match, part)
-				// We can't use ReadDir on the parent and match the directory
+				// We can't use ReadDir2 on the parent and match the directory
 				// entry by name, because short paths on Windows break that.
-				// Our only option is to ReadDir on the directory entry itself,
+				// Our only option is to ReadDir2 on the directory entry itself,
 				// which can be wasteful if we only want to see if it exists,
 				// but at least it's correct in all scenarios.
-				if _, err := cfg.ReadDir(match); err != nil {
+				if _, err := cfg.ReadDir2(match); err != nil {
 					const errPathNotFound = syscall.Errno(3) // from syscall/types_windows.go, to avoid a build tag
 					var pathErr *os.PathError
 					if runtime.GOOS == "windows" && errors.As(err, &pathErr) && pathErr.Err == errPathNotFound {
@@ -922,7 +953,11 @@ func (cfg *Config) glob(base, pat string) ([]string, error) {
 			}
 			continue
 		}
-		expr, err := pattern.Regexp(part, pattern.Filenames|pattern.EntireString)
+		mode := pattern.Filenames | pattern.EntireString
+		if cfg.NoCaseGlob {
+			mode |= pattern.NoGlobCase
+		}
+		expr, err := pattern.Regexp(part, mode)
 		if err != nil {
 			return nil, err
 		}
@@ -945,7 +980,7 @@ func (cfg *Config) globDir(base, dir string, rx *regexp.Regexp, matchHidden bool
 	if !filepath.IsAbs(dir) {
 		fullDir = filepath.Join(base, dir)
 	}
-	infos, err := cfg.ReadDir(fullDir)
+	infos, err := cfg.ReadDir2(fullDir)
 	if err != nil {
 		// We still want to return matches, for the sake of reusing slices.
 		return matches, err
@@ -954,13 +989,13 @@ func (cfg *Config) globDir(base, dir string, rx *regexp.Regexp, matchHidden bool
 		name := info.Name()
 		if !wantDir {
 			// No filtering.
-		} else if mode := info.Mode(); mode&os.ModeSymlink != 0 {
+		} else if mode := info.Type(); mode&os.ModeSymlink != 0 {
 			// We need to know if the symlink points to a directory.
 			// This requires an extra syscall, as ReadDir on the parent directory
 			// does not follow symlinks for each of the directory entries.
 			// ReadDir is somewhat wasteful here, as we only want its error result,
 			// but we could try to reuse its result as per the TODO in Config.glob.
-			if _, err := cfg.ReadDir(filepath.Join(fullDir, info.Name())); err != nil {
+			if _, err := cfg.ReadDir2(filepath.Join(fullDir, info.Name())); err != nil {
 				continue
 			}
 		} else if !mode.IsDir() {
