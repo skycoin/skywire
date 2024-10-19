@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/bitfield/script"
+	"github.com/chen3feng/safecast"
 	"github.com/gin-gonic/gin"
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire-utilities/pkg/cmdutil"
@@ -152,15 +153,19 @@ func server() {
 	var listN []net.Listener
 
 	for _, dport := range dmsgPort {
-		lis, err := dmsgC.Listen(uint16(dport))
+		dp, ok := safecast.To[uint16](dport)
+		if !ok {
+			log.Fatal("uint16 overflow when converting dmsg port")
+		}
+		lis, err := dmsgC.Listen(dp)
 		if err != nil {
 			log.Fatalf("Error listening on port %d: %v", dport, err)
 		}
 
 		listN = append(listN, lis)
 
-		dport := dport
-		go func(l net.Listener, port uint) {
+		dport := dp
+		go func(l net.Listener, port uint16) {
 			<-ctx.Done()
 			if err := l.Close(); err != nil {
 				log.Printf("Error closing listener on port %d: %v", port, err)

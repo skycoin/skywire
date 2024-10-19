@@ -1,7 +1,9 @@
 package validator
 
 import (
+	"fmt"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -269,7 +271,7 @@ func asFloat64(param string) float64 {
 	return i
 }
 
-// asFloat64 returns the parameter as a float64
+// asFloat32 returns the parameter as a float32
 // or panics if it can't convert
 func asFloat32(param string) float64 {
 	i, err := strconv.ParseFloat(param, 32)
@@ -293,10 +295,18 @@ func panicIf(err error) {
 	}
 }
 
-func isNestedStructOrStructPtr(v reflect.StructField) bool {
-	if v.Type == nil {
-		return false
+// Checks if field value matches regex. If fl.Field can be cast to Stringer, it uses the Stringer interfaces
+// String() return value. Otherwise, it uses fl.Field's String() value.
+func fieldMatchesRegexByStringerValOrString(regexFn func() *regexp.Regexp, fl FieldLevel) bool {
+	regex := regexFn()
+	switch fl.Field().Kind() {
+	case reflect.String:
+		return regex.MatchString(fl.Field().String())
+	default:
+		if stringer, ok := fl.Field().Interface().(fmt.Stringer); ok {
+			return regex.MatchString(stringer.String())
+		} else {
+			return regex.MatchString(fl.Field().String())
+		}
 	}
-	kind := v.Type.Kind()
-	return kind == reflect.Struct || kind == reflect.Ptr && v.Type.Elem().Kind() == reflect.Struct
 }

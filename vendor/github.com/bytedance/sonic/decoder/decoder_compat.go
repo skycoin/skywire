@@ -1,4 +1,4 @@
-// +build !amd64 !go1.16 go1.22
+// +build !amd64,!arm64 go1.24 !go1.17 arm64,!go1.20
 
 /*
 * Copyright 2023 ByteDance Inc.
@@ -30,7 +30,7 @@ import (
 )
 
 func init() {
-     println("WARNING: sonic only supports Go1.16~1.20 && CPU amd64, but your environment is not suitable")
+     println("WARNING: sonic/decoder only supports (Go1.17~1.23 && CPU amd64) or (go1.20~1.23 && CPU arm64), but your environment is not suitable")
 }
 
 const (
@@ -42,6 +42,7 @@ const (
      _F_use_number      = types.B_USE_NUMBER
      _F_validate_string = types.B_VALIDATE_STRING
      _F_allow_control   = types.B_ALLOW_CONTROL
+     _F_no_validate_json   = types.B_NO_VALIDATE_JSON
 )
 
 type Options uint64
@@ -53,6 +54,7 @@ const (
      OptionDisableUnknown   Options = 1 << _F_disable_unknown
      OptionCopyString       Options = 1 << _F_copy_string
      OptionValidateString   Options = 1 << _F_validate_string
+     OptionNoValidateJSON   Options = 1 << _F_no_validate_json
 )
 
 func (self *Decoder) SetOptions(opts Options) {
@@ -112,10 +114,10 @@ func (self *Decoder) CheckTrailings() error {
 func (self *Decoder) Decode(val interface{}) error {
     r := bytes.NewBufferString(self.s)
    dec := json.NewDecoder(r)
-   if (self.f | uint64(OptionUseNumber)) != 0  {
+   if (self.f & uint64(OptionUseNumber)) != 0  {
        dec.UseNumber()
    }
-   if (self.f | uint64(OptionDisableUnknown)) != 0  {
+   if (self.f & uint64(OptionDisableUnknown)) != 0  {
        dec.DisallowUnknownFields()
    }
    return dec.Decode(val)

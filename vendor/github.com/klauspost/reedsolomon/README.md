@@ -25,6 +25,10 @@ Using Go modules is recommended.
 
 # Changes
 
+## 2024
+
+ * Auto-generation of SVE and NEON routines for ARM based on AVX2 code. This results in a speedup of 2x for SVE (as measured using Graviton 3 on AWS) and a speedup of 1.5x as compared to the existing NEON-accelerated code.
+
 ## 2022
 
 * [GFNI](https://github.com/klauspost/reedsolomon/pull/224) support for amd64, for up to 3x faster processing.
@@ -534,6 +538,21 @@ BenchmarkGaloisXor128K-160     862.02       7905.00      9.17x
 BenchmarkGaloisXor1M-160       784.60       6296.65      8.03x
 ```
 
+# Legal
+
+> None of section below is legal advice. Seek your own legal counsel.
+> As stated by the [LICENSE](LICENSE) the authors will not be held reliable for any use of this library.
+> Users are encouraged to independently verify they comply with all legal requirements. 
+
+As can be seen in [recent news](https://www.datanami.com/2023/10/16/cloudera-hit-with-240-million-judgement-over-erasure-coding/)
+there has been lawsuits related to possible patents of aspects of erasure coding functionality.
+
+As a possible mitigation it is possible to use the tag `nopshufb` when compiling any code which includes this package.
+This will remove all inclusion and use of `PSHUFB` and equivalent on other platforms.
+
+This is done by adding `-tags=nopshufb` to `go build` and similar commands that produce binary output.
+
+The removed code may not be infringing and even after `-tags=nopshufb` there may still be infringing code left. 
 
 # Links
 * [Backblaze Open Sources Reed-Solomon Erasure Coding Source Code](https://www.backblaze.com/blog/reed-solomon/).
@@ -543,8 +562,9 @@ BenchmarkGaloisXor1M-160       784.60       6296.65      8.03x
 * [Reed-Solomon Erasure Coding in Haskell](https://github.com/NicolasT/reedsolomon). Haskell port of the package with similar performance.
 * [reed-solomon-erasure](https://github.com/darrenldl/reed-solomon-erasure). Compatible Rust implementation.
 * [go-erasure](https://github.com/somethingnew2-0/go-erasure). A similar library using cgo, slower in my tests.
-* [Screaming Fast Galois Field Arithmetic](http://www.snia.org/sites/default/files2/SDC2013/presentations/NewThinking/EthanMiller_Screaming_Fast_Galois_Field%20Arithmetic_SIMD%20Instructions.pdf). Basis for SSE3 optimizations.
+* [Screaming Fast Galois Field Arithmetic](https://www.snia.org/sites/default/files/files2/files2/SDC2013/presentations/NewThinking/EthanMiller_Screaming_Fast_Galois_Field%20Arithmetic_SIMD%20Instructions.pdf). Basis for SSE3 optimizations.
 * [Leopard-RS](https://github.com/catid/leopard) C library used as basis for GF16 implementation.
+* [reed-solomon-simd](https://github.com/AndersTrier/reed-solomon-simd) Leopard-RS Rust implementation.
 
 # License
 

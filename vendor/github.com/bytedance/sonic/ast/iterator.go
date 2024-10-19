@@ -17,30 +17,48 @@
 package ast
 
 import (
-    `fmt`
+	"fmt"
 
-    `github.com/bytedance/sonic/internal/native/types`
+	"github.com/bytedance/sonic/internal/caching"
+	"github.com/bytedance/sonic/internal/native/types"
 )
 
 type Pair struct {
+    hash  uint64
     Key   string
     Value Node
 }
 
+func NewPair(key string, val Node) Pair {
+    return Pair{
+        hash: caching.StrHash(key),
+        Key: key,
+        Value: val,
+    }
+}
+
 // Values returns iterator for array's children traversal
 func (self *Node) Values() (ListIterator, error) {
-    if err := self.should(types.V_ARRAY, "an array"); err != nil {
+    if err := self.should(types.V_ARRAY); err != nil {
         return ListIterator{}, err
     }
-    return ListIterator{Iterator{p: self}}, nil
+    return self.values(), nil
+}
+
+func (self *Node) values() ListIterator {
+    return ListIterator{Iterator{p: self}}
 }
 
 // Properties returns iterator for object's children traversal
 func (self *Node) Properties() (ObjectIterator, error) {
-    if err := self.should(types.V_OBJECT, "an object"); err != nil {
+    if err := self.should(types.V_OBJECT); err != nil {
         return ObjectIterator{}, err
     }
-    return ObjectIterator{Iterator{p: self}}, nil
+    return self.properties(), nil
+}
+
+func (self *Node) properties() ObjectIterator {
+    return ObjectIterator{Iterator{p: self}}
 }
 
 type Iterator struct {
@@ -114,7 +132,7 @@ next_start:
     } else {
         n := self.p.pairAt(self.i)
         self.i++
-        if !n.Value.Exists() {
+        if n == nil || !n.Value.Exists() {
             goto next_start
         }
         return n
@@ -160,6 +178,9 @@ type Scanner func(path Sequence, node *Node) bool
 // 
 // NOTICE: A unsetted node WON'T trigger sc, but its index still counts into Path.Index
 func (self *Node) ForEach(sc Scanner) error {
+    if err := self.checkRaw(); err != nil {
+        return err
+    }
     switch self.itype() {
     case types.V_ARRAY:
         iter, err := self.Values()

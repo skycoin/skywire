@@ -16,6 +16,11 @@ import (
 // See https://github.com/prometheus/procfs/blob/a4ac0826abceb44c40fc71daed2b301db498b93e/proc_stat.go#L40 .
 const userHZ = 100
 
+// Different environments may have different page size.
+//
+// See https://github.com/VictoriaMetrics/VictoriaMetrics/issues/6457
+var pageSizeBytes = uint64(os.Getpagesize())
+
 // See http://man7.org/linux/man-pages/man5/proc.5.html
 type procStat struct {
 	State       byte
@@ -74,15 +79,15 @@ func writeProcessMetrics(w io.Writer) {
 
 	utime := float64(p.Utime) / userHZ
 	stime := float64(p.Stime) / userHZ
-	fmt.Fprintf(w, "process_cpu_seconds_system_total %g\n", stime)
-	fmt.Fprintf(w, "process_cpu_seconds_total %g\n", utime+stime)
-	fmt.Fprintf(w, "process_cpu_seconds_user_total %g\n", utime)
-	fmt.Fprintf(w, "process_major_pagefaults_total %d\n", p.Majflt)
-	fmt.Fprintf(w, "process_minor_pagefaults_total %d\n", p.Minflt)
-	fmt.Fprintf(w, "process_num_threads %d\n", p.NumThreads)
-	fmt.Fprintf(w, "process_resident_memory_bytes %d\n", p.Rss*4096)
-	fmt.Fprintf(w, "process_start_time_seconds %d\n", startTimeSeconds)
-	fmt.Fprintf(w, "process_virtual_memory_bytes %d\n", p.Vsize)
+	WriteCounterFloat64(w, "process_cpu_seconds_system_total", stime)
+	WriteCounterFloat64(w, "process_cpu_seconds_total", utime+stime)
+	WriteCounterFloat64(w, "process_cpu_seconds_user_total", utime)
+	WriteCounterUint64(w, "process_major_pagefaults_total", uint64(p.Majflt))
+	WriteCounterUint64(w, "process_minor_pagefaults_total", uint64(p.Minflt))
+	WriteGaugeUint64(w, "process_num_threads", uint64(p.NumThreads))
+	WriteGaugeUint64(w, "process_resident_memory_bytes", uint64(p.Rss)*pageSizeBytes)
+	WriteGaugeUint64(w, "process_start_time_seconds", uint64(startTimeSeconds))
+	WriteGaugeUint64(w, "process_virtual_memory_bytes", uint64(p.Vsize))
 	writeProcessMemMetrics(w)
 	writeIOMetrics(w)
 }
@@ -133,12 +138,12 @@ func writeIOMetrics(w io.Writer) {
 			writeBytes = getInt(s)
 		}
 	}
-	fmt.Fprintf(w, "process_io_read_bytes_total %d\n", rchar)
-	fmt.Fprintf(w, "process_io_written_bytes_total %d\n", wchar)
-	fmt.Fprintf(w, "process_io_read_syscalls_total %d\n", syscr)
-	fmt.Fprintf(w, "process_io_write_syscalls_total %d\n", syscw)
-	fmt.Fprintf(w, "process_io_storage_read_bytes_total %d\n", readBytes)
-	fmt.Fprintf(w, "process_io_storage_written_bytes_total %d\n", writeBytes)
+	WriteGaugeUint64(w, "process_io_read_bytes_total", uint64(rchar))
+	WriteGaugeUint64(w, "process_io_written_bytes_total", uint64(wchar))
+	WriteGaugeUint64(w, "process_io_read_syscalls_total", uint64(syscr))
+	WriteGaugeUint64(w, "process_io_write_syscalls_total", uint64(syscw))
+	WriteGaugeUint64(w, "process_io_storage_read_bytes_total", uint64(readBytes))
+	WriteGaugeUint64(w, "process_io_storage_written_bytes_total", uint64(writeBytes))
 }
 
 var startTimeSeconds = time.Now().Unix()
@@ -155,8 +160,8 @@ func writeFDMetrics(w io.Writer) {
 		log.Printf("ERROR: metrics: cannot determine the limit on open file descritors: %s", err)
 		return
 	}
-	fmt.Fprintf(w, "process_max_fds %d\n", maxOpenFDs)
-	fmt.Fprintf(w, "process_open_fds %d\n", totalOpenFDs)
+	WriteGaugeUint64(w, "process_max_fds", maxOpenFDs)
+	WriteGaugeUint64(w, "process_open_fds", totalOpenFDs)
 }
 
 func getOpenFDsCount(path string) (uint64, error) {
@@ -224,11 +229,11 @@ func writeProcessMemMetrics(w io.Writer) {
 		log.Printf("ERROR: metrics: cannot determine memory status: %s", err)
 		return
 	}
-	fmt.Fprintf(w, "process_virtual_memory_peak_bytes %d\n", ms.vmPeak)
-	fmt.Fprintf(w, "process_resident_memory_peak_bytes %d\n", ms.rssPeak)
-	fmt.Fprintf(w, "process_resident_memory_anon_bytes %d\n", ms.rssAnon)
-	fmt.Fprintf(w, "process_resident_memory_file_bytes %d\n", ms.rssFile)
-	fmt.Fprintf(w, "process_resident_memory_shared_bytes %d\n", ms.rssShmem)
+	WriteGaugeUint64(w, "process_virtual_memory_peak_bytes", ms.vmPeak)
+	WriteGaugeUint64(w, "process_resident_memory_peak_bytes", ms.rssPeak)
+	WriteGaugeUint64(w, "process_resident_memory_anon_bytes", ms.rssAnon)
+	WriteGaugeUint64(w, "process_resident_memory_file_bytes", ms.rssFile)
+	WriteGaugeUint64(w, "process_resident_memory_shared_bytes", ms.rssShmem)
 
 }
 

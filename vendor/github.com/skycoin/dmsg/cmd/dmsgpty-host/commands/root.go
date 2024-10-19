@@ -84,8 +84,7 @@ DMSG host for pseudoterminal command line interface`,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
-	PreRun:                func(cmd *cobra.Command, args []string) {},
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		conf, err := getConfig(cmd, false)
 		if err != nil {
 			return fmt.Errorf("failed to get config: %w", err)

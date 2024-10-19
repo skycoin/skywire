@@ -56,15 +56,10 @@ func WithYAxisOpts(opt opts.YAxis, index ...int) GlobalOpts {
 // RectConfiguration contains options for the rectangular coordinates.
 type RectConfiguration struct {
 	BaseConfiguration
-	BaseActions
 }
 
 func (rect *RectConfiguration) setRectGlobalOptions(options ...GlobalOpts) {
 	rect.BaseConfiguration.setBaseGlobalOptions(options...)
-}
-
-func (rect *RectConfiguration) setRectGlobalActions(options ...GlobalActions) {
-	rect.BaseActions.setBaseGlobalActions(options...)
 }
 
 // RectChart is a chart in RectChart coordinate.
@@ -84,12 +79,6 @@ func (rc *RectChart) SetGlobalOptions(options ...GlobalOpts) *RectChart {
 	return rc
 }
 
-// SetDispatchActions sets actions for the RectChart instance.
-func (rc *RectChart) SetDispatchActions(options ...GlobalActions) *RectChart {
-	rc.RectConfiguration.setRectGlobalActions(options...)
-	return rc
-}
-
 // Overlap composes multiple charts into one single canvas.
 // It is only suited for some of the charts which are in rectangular coordinate.
 // Supported charts: Bar/BoxPlot/Line/Scatter/EffectScatter/Kline/HeatMap/Custom
@@ -105,7 +94,7 @@ func (rc *RectChart) Validate() {
 	rc.XAxisList[0].Data = rc.xAxisData
 	// Make sure that the labels of Y axis show correctly
 	for i := 0; i < len(rc.YAxisList); i++ {
-		rc.YAxisList[i].AxisLabel.Show = true
+		rc.YAxisList[i].AxisLabel.Show = opts.Bool(true)
 	}
 	rc.Assets.Validate(rc.AssetsHost)
 }

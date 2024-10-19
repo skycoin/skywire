@@ -18,6 +18,7 @@ import (
 	"syscall"
 
 	"github.com/bitfield/script"
+	"github.com/chen3feng/safecast"
 	"github.com/confiant-inc/go-socks5"
 	"github.com/gin-gonic/gin"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
@@ -99,7 +100,7 @@ dmsgweb conf file detected: ` + dmsgwebconffile
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
-	Run: func(cmd *cobra.Command, _ []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		if isEnvs {
 			envfile := envfileLinux
 			if runtime.GOOS == "windows" {
@@ -390,8 +391,11 @@ func proxyTCPConn(n int) {
 		go func(conn net.Conn, n int) {
 			defer wg.Done()
 			defer conn.Close() //nolint
-
-			dmsgConn, err := dmsgC.DialStream(context.Background(), dmsg.Addr{PK: dialPK[n], Port: uint16(dmsgPorts[n])})
+			dp, ok := safecast.To[uint16](dmsgPorts[n])
+			if !ok {
+				dmsgWebLog.Fatal("uint16 overflow when converting dmsg port")
+			}
+			dmsgConn, err := dmsgC.DialStream(context.Background(), dmsg.Addr{PK: dialPK[n], Port: dp}) //nolint
 			if err != nil {
 				log.Printf("Failed to dial dmsg address %v:%v %v", dialPK[n].String(), dmsgPorts[n], err)
 				return

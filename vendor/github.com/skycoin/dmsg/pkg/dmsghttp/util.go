@@ -52,7 +52,7 @@ func UpdateServers(ctx context.Context, dClient disc.APIClient, dmsgDisc string,
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return //nolint
 		case <-ticker.C:
 			servers, err := dmsgclient.AllServers(ctx)
 			if err != nil {
