@@ -13,15 +13,13 @@ import (
 	"strings"
 	"time"
 
-	"nhooyr.io/websocket/internal/errd"
-	"nhooyr.io/websocket/internal/util"
-	"nhooyr.io/websocket/internal/xsync"
+	"github.com/coder/websocket/internal/errd"
+	"github.com/coder/websocket/internal/util"
+	"github.com/coder/websocket/internal/xsync"
 )
 
 // Reader reads from the connection until there is a WebSocket
 // data message to be read. It will handle ping, pong and close frames as appropriate.
-//
-// Deprecated: coder now maintains this library at https://github.com/coder/websocket.
 //
 // It returns the type of the message and an io.Reader to read it.
 // The passed context will also bound the reader.
@@ -41,8 +39,6 @@ func (c *Conn) Reader(ctx context.Context) (MessageType, io.Reader, error) {
 
 // Read is a convenience method around Reader to read a single message
 // from the connection.
-//
-// Deprecated: coder now maintains this library at https://github.com/coder/websocket.
 func (c *Conn) Read(ctx context.Context) (MessageType, []byte, error) {
 	typ, r, err := c.Reader(ctx)
 	if err != nil {
@@ -55,8 +51,6 @@ func (c *Conn) Read(ctx context.Context) (MessageType, []byte, error) {
 
 // CloseRead starts a goroutine to read from the connection until it is closed
 // or a data message is received.
-//
-// Deprecated: coder now maintains this library at https://github.com/coder/websocket.
 //
 // Once CloseRead is called you cannot read any messages from the connection.
 // The returned context will be cancelled when the connection is closed.
@@ -94,8 +88,6 @@ func (c *Conn) CloseRead(ctx context.Context) context.Context {
 
 // SetReadLimit sets the max number of bytes to read for a single message.
 // It applies to the Reader and Read methods.
-//
-// Deprecated: coder now maintains this library at https://github.com/coder/websocket.
 //
 // By default, the connection has a message read limit of 32768 bytes.
 //

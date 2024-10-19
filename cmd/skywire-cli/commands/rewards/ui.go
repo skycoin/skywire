@@ -752,7 +752,7 @@ func server() {
 		c.JSON(http.StatusOK, gin.H{
 			"frontend_start_time":             startTime,
 			"frontend_run_time":               runTime.String(),
-			"dmsg_discovery":                    dmsgDisc,
+			"dmsg_discovery":                  dmsgDisc,
 			"dmsg_address":                    fmt.Sprintf("%s:%d", pk.String(), dmsgPort),
 			"reward_system_active":            strings.TrimRight(active, "\n"),
 			"reward_system_next_run":          strings.TrimRight(nextrun, "\n"),

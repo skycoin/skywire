@@ -86,7 +86,7 @@ DMSG curl utility`,
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
 
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, args []string) error {
 		if dmsgcurlLog == nil {
 			dmsgcurlLog = logging.MustGetLogger("dmsgcurl")
 		}
@@ -254,7 +254,7 @@ func parseOutputFile(output string, replace bool) (*os.File, error) {
 		return nil, statErr
 	}
 	if replace {
-		return os.OpenFile(filepath.Clean(output), os.O_RDWR|os.O_CREATE|os.O_TRUNC, os.ModePerm)
+		return os.OpenFile(filepath.Clean(output), os.O_RDWR|os.O_CREATE|os.O_TRUNC, os.ModePerm) //nolint
 	}
 	return nil, os.ErrExist
 }

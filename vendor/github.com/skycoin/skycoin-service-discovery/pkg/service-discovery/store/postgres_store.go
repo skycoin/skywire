@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/chen3feng/safecast"
 	"github.com/lib/pq"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skywire-utilities/pkg/geo"
@@ -123,7 +124,12 @@ func (s *postgresStore) CountServiceTypes(_ context.Context) (uint64, error) {
 		return uint64(0), fmt.Errorf("Postgres command returned unexpected error: %w", err)
 	}
 
-	return uint64(countTypes), nil
+	u, ok := safecast.To[uint64](countTypes)
+	if ok {
+		return u, nil
+	}
+	return uint64(0), fmt.Errorf("uint64 conversion overflow")
+
 }
 
 func (s *postgresStore) CountServices(ctx context.Context, serviceType string) (uint64, error) {

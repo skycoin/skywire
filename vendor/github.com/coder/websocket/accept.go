@@ -17,12 +17,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"nhooyr.io/websocket/internal/errd"
+	"github.com/coder/websocket/internal/errd"
 )
 
 // AcceptOptions represents Accept's options.
-//
-// Deprecated: coder now maintains this library at https://github.com/coder/websocket.
 type AcceptOptions struct {
 	// Subprotocols lists the WebSocket subprotocols that Accept will negotiate with the client.
 	// The empty subprotocol will always be negotiated as per RFC 6455. If you would like to
@@ -76,8 +74,6 @@ func (opts *AcceptOptions) cloneWithDefaults() *AcceptOptions {
 
 // Accept accepts a WebSocket handshake from a client and upgrades the
 // the connection to a WebSocket.
-//
-// Deprecated: coder now maintains this library at https://github.com/coder/websocket.
 //
 // Accept will not allow cross origin requests by default.
 // See the InsecureSkipVerify and OriginPatterns options to allow cross origin requests.

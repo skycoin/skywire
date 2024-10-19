@@ -30,10 +30,10 @@ require (
 	github.com/pterm/pterm v0.12.79
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.3
-	github.com/skycoin/dmsg v1.3.29-0.20241004205035-c45754b16934
+	github.com/skycoin/dmsg v1.3.29-0.20241019182716-022283c93835
 	github.com/skycoin/skycoin v0.28.0
-	github.com/skycoin/skycoin-service-discovery v1.3.28
-	github.com/skycoin/skywire-services v1.3.28
+	github.com/skycoin/skycoin-service-discovery v1.3.29-0.20241019190420-233c2d68bce0
+	github.com/skycoin/skywire-services v1.3.29-0.20241019183828-0d760251ca55
 	github.com/skycoin/skywire-utilities v1.3.25
 	github.com/skycoin/systray v1.10.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
@@ -68,8 +68,10 @@ require (
 	github.com/bytedance/sonic/loader v0.2.0 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/chen3feng/safecast v0.0.0-20220908170618-81b2ecd47937 // indirect
 	github.com/cloudwego/base64x v0.1.4 // indirect
 	github.com/cloudwego/iasm v0.2.0 // indirect
+	github.com/coder/websocket v1.8.12 // indirect
 	github.com/confiant-inc/go-socks5 v0.0.0-20210816151940-c1124825b1d6 // indirect
 	github.com/containerd/console v1.0.4 // indirect
 	github.com/creack/pty v1.1.23 // indirect
@@ -167,7 +169,6 @@ require (
 	gorm.io/gorm v1.25.12 // indirect
 	howett.net/plist v1.0.1 // indirect
 	mvdan.cc/sh/v3 v3.9.0 // indirect
-	nhooyr.io/websocket v1.8.17 // indirect
 )
 
 replace github.com/xxxserxxx/gotop/v4 => github.com/ersonp/gotop/v4 v4.2.1

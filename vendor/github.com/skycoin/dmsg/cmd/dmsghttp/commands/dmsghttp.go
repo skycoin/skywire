@@ -62,7 +62,7 @@ DMSG http file server`,
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
 
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		log := logging.MustGetLogger("dmsghttp")
 		if dmsgDisc == "" {
 			log.Fatal("Dmsg Discovery URL not specified")

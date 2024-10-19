@@ -43,7 +43,7 @@ var RootCmd = &cobra.Command{
 	 │││││└─┐│ ┬├─┘ │ └┬┘───│ ││
 	─┴┘┴ ┴└─┘└─┘┴   ┴  ┴    └─┘┴
   ` + "DMSG pseudoterminal GUI",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
 			log.Printf("Failed to output build info: %v", err)
 		}

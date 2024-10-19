@@ -20,10 +20,9 @@ func init() {
 }
 
 var confgenCmd = &cobra.Command{
-	Use:    "confgen <config.json>",
-	Short:  "generates config file",
-	Args:   cobra.MaximumNArgs(1),
-	PreRun: func(cmd *cobra.Command, args []string) {},
+	Use:   "confgen <config.json>",
+	Short: "generates config file",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 
 		if len(args) == 0 {
