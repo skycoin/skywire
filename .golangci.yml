@@ -159,6 +159,9 @@ linters:
     - ineffassign
     - typecheck
     - gosec
+    - gosimple
+    - staticcheck
+    - unused
     - misspell
     - nakedret
   enable-all: false

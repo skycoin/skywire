@@ -96,7 +96,7 @@ func (hs SettlementHS) Do(ctx context.Context, dc DiscoveryClient, transport net
 // The handshake logic only REGISTERS the transport, and does not update the status of the transport.
 func MakeSettlementHS(init bool, log *logging.Logger) SettlementHS {
 	// initiating logic.
-	initHS := func(ctx context.Context, dc DiscoveryClient, transport network.Transport, sk cipher.SecKey) (err error) { //nolint
+	initHS := func(_ context.Context, _ DiscoveryClient, transport network.Transport, sk cipher.SecKey) (err error) {
 		entry := makeEntryFromTransport(transport)
 
 		// create signed entry and send it to responding visor.
