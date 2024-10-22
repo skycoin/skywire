@@ -55,8 +55,10 @@ type nodeinfo struct {
 	UUID       string  `json:"uuid"`
 	Share      float64 `json:"reward_share"`
 	Reward     float64 `json:"reward_amount"`
-	MacAddr    string
-	SvcConf    bool
+	MacAddr    string  `json:"mac_address"`
+	SvcConf    bool    `json:"service_conf"`
+	HV         string  `json:"hypervisor"`        //NOT the skywire hypervisor ; will be null unless the visor is running on virtual machine
+	Reason     string  `json:"ineligible_reason"` //Reason why the visor will not be rewarded
 }
 
 type counting struct {
@@ -296,6 +298,10 @@ Architectures:
 			} else {
 				macs = append(macs, "")
 			}
+			_, allowed1 := allowArchMap1[arch]
+			_, allowed2 := allowArchMap2[arch]
+			_, err := coincipher.DecodeBase58Address(sky)
+
 			ni := nodeinfo{
 				IPAddr:     ip,
 				SkyAddr:    sky,
@@ -305,11 +311,28 @@ Architectures:
 				MacAddr:    macs[0],
 				UUID:       uu,
 				SvcConf:    svcconf,
+				HV:         hv,
+				Reason: func() string {
+					switch {
+					case !(allowed1 || allowed2):
+						return arch
+					case strings.Count(ip, ".") != 3:
+						return ip
+					case uu == "":
+						return ip
+					case ifc == "":
+						return ifc
+					case len(macs) == 0 || macs[0] == "":
+						return macs[0]
+					case hv != "null":
+						return hv
+					case err != nil:
+						return "Invalid Skycoin address"
+					default:
+						return "Unknown reason"
+					}
+				}(),
 			}
-			//enforce all requirements for rewards
-			_, allowed1 := allowArchMap1[arch]
-			_, allowed2 := allowArchMap2[arch]
-			_, err := coincipher.DecodeBase58Address(sky)
 
 			if (allowed1 || allowed2) && strings.Count(ip, ".") == 3 && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" && hv == "null" && err == nil {
 				if allowed1 {
@@ -326,7 +349,7 @@ Architectures:
 		}
 		if grr {
 			for _, ni := range grrInfos {
-				fmt.Printf("%s, %s, %.6f, %.6f, %s, %s, %s, %s \n", ni.SkyAddr, ni.PK, ni.Share, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces)
+				fmt.Printf("%s, %s, %s, %.6f, %.6f, %s, %s, %s, %s \n", ni.SkyAddr, ni.PK, ni.Reason, ni.Share, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces)
 			}
 			return
 		}
