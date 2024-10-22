@@ -244,6 +244,7 @@ Architectures:
 				ip      string
 				sky     string
 				arch    string
+				hv      string
 				uu      string
 				ifc     string
 				ifc1    string
@@ -277,6 +278,8 @@ Architectures:
 			sky = strings.TrimRight(sky, "\n")
 			arch, _ = script.File(nodeInfoDotJSON).JQ(`.go_arch`).Replace(" ", "").Replace(`"`, "").String() //nolint
 			arch = strings.TrimRight(arch, "\n")
+			hv, _ = script.File(nodeInfoDotJSON).JQ(`.zcalusic_sysinfo.node.hypervisor`).Replace(" ", "").Replace(`"`, "").String() //nolint
+			hv = strings.TrimRight(hv, "\n")
 			uu, _ = script.File(nodeInfoDotJSON).JQ(".uuid").Replace(" ", "").Replace(`"`, "").String() //nolint
 			uu = strings.TrimRight(uu, "\n")
 			ifc, _ = script.File(nodeInfoDotJSON).JQ(`[.ip_addr[]? | select(.ifname != "lo") | {address: .address, ifname: .ifname}]`).Replace(" ", "").Replace(`"`, "").String() //nolint
@@ -308,7 +311,7 @@ Architectures:
 			_, allowed2 := allowArchMap2[arch]
 			_, err := coincipher.DecodeBase58Address(sky)
 
-			if (allowed1 || allowed2) && strings.Count(ip, ".") == 3 && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" && err == nil {
+			if (allowed1 || allowed2) && strings.Count(ip, ".") == 3 && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" && hv == "null" && err == nil {
 				if allowed1 {
 					nodesInfos1 = append(nodesInfos1, ni)
 				}
