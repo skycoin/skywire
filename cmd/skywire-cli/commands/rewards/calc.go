@@ -55,8 +55,10 @@ type nodeinfo struct {
 	UUID       string  `json:"uuid"`
 	Share      float64 `json:"reward_share"`
 	Reward     float64 `json:"reward_amount"`
-	MacAddr    string
-	SvcConf    bool
+	MacAddr    string  `json:"mac_address"`
+	SvcConf    bool    `json:"service_conf"`
+	HV         string  `json:"hypervisor"`        //NOT the skywire hypervisor ; will be null unless the visor is running on virtual machine
+	Reason     string  `json:"ineligible_reason"` //Reason why the visor will not be rewarded
 }
 
 type counting struct {
@@ -244,6 +246,7 @@ Architectures:
 				ip      string
 				sky     string
 				arch    string
+				hv      string
 				uu      string
 				ifc     string
 				ifc1    string
@@ -277,6 +280,8 @@ Architectures:
 			sky = strings.TrimRight(sky, "\n")
 			arch, _ = script.File(nodeInfoDotJSON).JQ(`.go_arch`).Replace(" ", "").Replace(`"`, "").String() //nolint
 			arch = strings.TrimRight(arch, "\n")
+			hv, _ = script.File(nodeInfoDotJSON).JQ(`.zcalusic_sysinfo.node.hypervisor`).Replace(" ", "").Replace(`"`, "").String() //nolint
+			hv = strings.TrimRight(hv, "\n")
 			uu, _ = script.File(nodeInfoDotJSON).JQ(".uuid").Replace(" ", "").Replace(`"`, "").String() //nolint
 			uu = strings.TrimRight(uu, "\n")
 			ifc, _ = script.File(nodeInfoDotJSON).JQ(`[.ip_addr[]? | select(.ifname != "lo") | {address: .address, ifname: .ifname}]`).Replace(" ", "").Replace(`"`, "").String() //nolint
@@ -293,6 +298,10 @@ Architectures:
 			} else {
 				macs = append(macs, "")
 			}
+			_, allowed1 := allowArchMap1[arch]
+			_, allowed2 := allowArchMap2[arch]
+			_, err := coincipher.DecodeBase58Address(sky)
+
 			ni := nodeinfo{
 				IPAddr:     ip,
 				SkyAddr:    sky,
@@ -302,13 +311,30 @@ Architectures:
 				MacAddr:    macs[0],
 				UUID:       uu,
 				SvcConf:    svcconf,
+				HV:         hv,
+				Reason: func() string {
+					switch {
+					case !(allowed1 || allowed2):
+						return arch
+					case strings.Count(ip, ".") != 3:
+						return ip
+					case uu == "":
+						return ip
+					case ifc == "":
+						return ifc
+					case len(macs) == 0 || macs[0] == "":
+						return macs[0]
+					case hv != "null":
+						return hv
+					case err != nil:
+						return "Invalid Skycoin address"
+					default:
+						return "Unknown reason"
+					}
+				}(),
 			}
-			//enforce all requirements for rewards
-			_, allowed1 := allowArchMap1[arch]
-			_, allowed2 := allowArchMap2[arch]
-			_, err := coincipher.DecodeBase58Address(sky)
 
-			if (allowed1 || allowed2) && strings.Count(ip, ".") == 3 && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" && err == nil {
+			if (allowed1 || allowed2) && strings.Count(ip, ".") == 3 && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" && hv == "null" && err == nil {
 				if allowed1 {
 					nodesInfos1 = append(nodesInfos1, ni)
 				}
@@ -323,7 +349,7 @@ Architectures:
 		}
 		if grr {
 			for _, ni := range grrInfos {
-				fmt.Printf("%s, %s, %.6f, %.6f, %s, %s, %s, %s \n", ni.SkyAddr, ni.PK, ni.Share, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces)
+				fmt.Printf("%s, %s, %s, %.6f, %.6f, %s, %s, %s, %s \n", ni.SkyAddr, ni.PK, ni.Reason, ni.Share, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces)
 			}
 			return
 		}
@@ -448,8 +474,16 @@ Architectures:
 			fmt.Printf("Unique UUIDs: %d\n", len(uniqueUUID))
 			fmt.Printf("Total valid shares (Pool 1): %.6f\n", totalValidShares1)
 			fmt.Printf("Total valid shares (Pool 2): %.6f\n", totalValidShares2)
-			fmt.Printf("Skycoin Per Share (Pool 1): %.6f\n", dayReward/totalValidShares1)
-			fmt.Printf("Skycoin Per Share (Pool 2): %.6f\n", dayReward/totalValidShares2)
+			if totalValidShares1 != 0 {
+				fmt.Printf("Skycoin Per Share (Pool 1): %.6f\n", dayReward/totalValidShares1)
+			} else {
+				fmt.Printf("Skycoin Per Share (Pool 1): 0\n")
+			}
+			if totalValidShares2 != 0 {
+				fmt.Printf("Skycoin Per Share (Pool 2): %.6f\n", dayReward/totalValidShares2)
+			} else {
+				fmt.Printf("Skycoin Per Share (Pool 2): 0\n")
+			}
 		}
 
 		// Calculate rewards for nodesInfos1

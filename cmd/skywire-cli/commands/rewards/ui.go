@@ -847,7 +847,7 @@ func server() {
 			l += "\n\nIneligible:\n"
 			for _, line := range l2 {
 				thispk, _ := script.Echo(line).Column(2).String()         //nolint
-				architecture, _ := script.Echo(line).Column(6).String()   //nolint
+				reason, _ := script.Echo(line).Column(3).String()   //nolint
 				invalid, _ := script.Echo(line).Match(", , , ,").String() //nolint
 				if invalid != "" {
 					_, err = script.IfExists("rewards/log_backups/" + thispk + "/node-info.json").Echo("").String()
@@ -857,7 +857,7 @@ func server() {
 						l += "<a id='" + strings.TrimRight(thispk, ",\n") + "'>" + strings.TrimRight(thispk, ",\n") + "</a>," + " Invalid survey\n"
 					}
 				} else {
-					l += "<a id='" + strings.TrimRight(thispk, ",\n") + "'>" + strings.TrimRight(thispk, ",\n") + "</a>," + " Ineligible " + strings.Replace(architecture, ",\n", "\n", -1)
+					l += "<a id='" + strings.TrimRight(thispk, ",\n") + "'>" + strings.TrimRight(thispk, ",\n") + "</a>," + " Ineligible " + strings.Replace(reason, ",\n", "\n", -1)
 				}
 			}
 		}
