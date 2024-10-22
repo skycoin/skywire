@@ -448,8 +448,16 @@ Architectures:
 			fmt.Printf("Unique UUIDs: %d\n", len(uniqueUUID))
 			fmt.Printf("Total valid shares (Pool 1): %.6f\n", totalValidShares1)
 			fmt.Printf("Total valid shares (Pool 2): %.6f\n", totalValidShares2)
-			fmt.Printf("Skycoin Per Share (Pool 1): %.6f\n", dayReward/totalValidShares1)
-			fmt.Printf("Skycoin Per Share (Pool 2): %.6f\n", dayReward/totalValidShares2)
+			if totalValidShares1 != 0 {
+				fmt.Printf("Skycoin Per Share (Pool 1): %.6f\n", dayReward/totalValidShares1)
+			} else {
+				fmt.Printf("Skycoin Per Share (Pool 1): 0\n")
+			}
+			if totalValidShares2 != 0 {
+				fmt.Printf("Skycoin Per Share (Pool 2): %.6f\n", dayReward/totalValidShares2)
+			} else {
+				fmt.Printf("Skycoin Per Share (Pool 2): 0\n")
+			}
 		}
 
 		// Calculate rewards for nodesInfos1
