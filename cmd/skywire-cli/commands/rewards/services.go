@@ -21,8 +21,7 @@ var rewardSH []byte
 var getlogsSH []byte
 
 const testSH = `#!/bin/bash
-echo "Hello World"
-`
+echo "Hello World"`
 
 var (
 	getlogssh bool
