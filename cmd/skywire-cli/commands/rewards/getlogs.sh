@@ -1,9 +1,13 @@
 #!/usr/bin/bash
-timeout 30.0m unbuffer skywire-cli log --minv v1.3.21 -s $(tail -n1 survey-wl.conf) | tee skywire-cli-log.txt
+timeout 30.0m unbuffer skywire-cli log $( [[ ! -z "${_minversion}" ]] && echo "--minv ${_minversion}" ) -s $(tail -n1 survey-wl.conf) | tee skywire-cli-log.txt
 #echo -e "skywire survey and transport log collection $(date)\n\n$(cat skywire-cli-log.txt)\n"
  echo -e "skywire survey and transport log collection $(date)\n\n$(cat skywire-cli-log.txt)\n" | tee skywire-cli-log0.txt >> /dev/null
 echo "finished "$(date) | tee -a skywire-cli-log0.txt
 mv skywire-cli-log0.txt skywire-cli-log.txt
+
+#Remove surveys below minimum version
+
+[[ ! -z "${_minversion}" ]] && for f in log_backups/*/node-info.json; do version=$(jq -r '.skywire_version' "$f" | cut -d'-' -f1); if [[ "$(echo -e "${_minversion}\n$version" | sort -V | head -n1)" == "$version" && "$version" != "${_minversion}" ]]; then rm -v "$f"; fi; done
 
 #Delete json files more than 1 week old
 find log_backups/*/*.json -type f -mmin +$((168 * 60)) -delete
