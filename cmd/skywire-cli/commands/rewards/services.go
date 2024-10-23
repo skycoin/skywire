@@ -3,6 +3,7 @@ package clirewards
 
 import (
 	"bytes"
+	_ "embed"
 	"fmt"
 	"os"
 	"os/user"
@@ -12,6 +13,57 @@ import (
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 )
+
+//go:embed reward.sh
+var rewardSH []byte
+
+//go:embed getlogs.sh
+var getlogsSH []byte
+
+const testSH = `#!/bin/bash
+echo "Hello World"`
+
+var (
+	getlogssh bool
+	rewardsh  bool
+	testsh    bool
+)
+
+func init() {
+	RootCmd.AddCommand(
+		scriptCmd,
+	)
+	scriptCmd.Flags().BoolVarP(&getlogssh, "getlogs", "g", false, "print getlogs.sh")
+	scriptCmd.Flags().BoolVarP(&rewardsh, "reward", "r", false, "print reward.sh")
+	scriptCmd.Flags().BoolVarP(&testsh, "test", "t", false, "print test.sh")
+	scriptCmd.Flags().MarkHidden("test") //nolint
+
+}
+
+var scriptCmd = &cobra.Command{
+	Use:   "script",
+	Short: "print reward system scripts",
+	Long: `Print the reward system scripts. Pipe to bash to execute.
+	$ skywire cli rewards script -t | bash
+	Hello World`,
+	Run: func(_ *cobra.Command, _ []string) {
+		if getlogssh && rewardsh {
+			log.Fatal("mutually exclusive flags")
+		}
+		if getlogssh {
+			fmt.Println(string(getlogsSH))
+			os.Exit(0)
+		}
+		if rewardsh {
+			fmt.Println(string(rewardSH))
+			os.Exit(0)
+		}
+		if testsh {
+			fmt.Println(string(testSH))
+			os.Exit(0)
+		}
+	},
+}
 
 var (
 	userName   string
@@ -148,7 +200,7 @@ After=network.target
 Type=simple
 User={{.User}}
 WorkingDirectory={{.Dir}}/rewards
-ExecStart=/bin/bash -c './getlogs.sh && ./reward.sh ; exit 0'
+ExecStart=/bin/bash -c 'skywire cli rewards script -g | bash && skywire cli rewards script -r | bash ; exit 0'
 
 [Install]
 WantedBy=multi-user.target
