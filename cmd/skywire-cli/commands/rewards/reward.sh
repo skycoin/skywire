@@ -12,6 +12,8 @@
 #date.txt             transaction ID of reward distribution transaction - indicates rewards sent if exists
 ################################################################################
 # Prevent running this script when rewards have already been distributed
+[[ ! -z ${_wdate} ]] && [[ -f hist/${_wdate}.txt ]] && echo "Transaction already broadcasted for ${_wdate}" && exit 0
+if [[ -z ${_wdate} ]] ; then
 [[ -f hist/$(date --date="yesterday" +%Y-%m-%d).txt ]] && echo "Transaction already broadcasted for yesterday" && exit 0
 # Determine the date for which to calculate rewards
 # based on the last file containing the reward transaction that exists
@@ -22,24 +24,24 @@
 [[ ! -f hist/$(date --date="yesterday" +%Y-%m-%d).txt ]] && _wdate=$(date --date="yesterday" +%Y-%m-%d)
 ## OR specify a date like yesterday ##
 #_wdate=$(date --date="yesterday" +%Y-%m-%d) ./reward.sh
-
+fi
 ####################################################
 skywire cli ut --cfu "hist/${_wdate}_ut.json" | tee "hist/${_wdate}_ut.txt"
 # New reward pool starts November 2nd, 2024
 if [[ $(date +%s) -lt $(date -d "2024-11-02" +%s) ]]; then
   #echo "The date is before November 2nd, 2024."
   #v1.3.29 - two reward pools - exclude pool 2
-  skywire cli rewards --utfile "hist/${_wdate}_ut.json" -x "" -ed ${_wdate} -p log_backups  |  tee hist/${_wdate}_ineligible.csv
-  skywire cli rewards --utfile "hist/${_wdate}_ut.json" -x "" -20d ${_wdate} -p log_backups |  tee hist/${_wdate}_shares.csv
-  skywire cli rewards --utfile "hist/${_wdate}_ut.json" -x "" -10d $(date --date="yesterday" +%Y-%m-%d) -p log_backups | tee hist/${_wdate}_rewardtxn0.csv
-  skywire cli rewards --utfile "hist/${_wdate}_ut.json" -x "" -12d ${_wdate} -p log_backups |  tee hist/${_wdate}_stats.txt
+  skywire cli rewards --utfile "hist/${_wdate}_ut.txt" -x "" -ed ${_wdate} -p log_backups  |  tee hist/${_wdate}_ineligible.csv
+  skywire cli rewards --utfile "hist/${_wdate}_ut.txt" -x "" -20d ${_wdate} -p log_backups |  tee hist/${_wdate}_shares.csv
+  skywire cli rewards --utfile "hist/${_wdate}_ut.txt" -x "" -10d ${_wdate} -p log_backups | tee hist/${_wdate}_rewardtxn0.csv
+  skywire cli rewards --utfile "hist/${_wdate}_ut.txt" -x "" -12d ${_wdate} -p log_backups |  tee hist/${_wdate}_stats.txt
 else
   #echo "The date is on or after November 2nd, 2024."
   #v1.3.29 - two reward pools - include pool 2
-  skywire cli rewards --utfile "hist/${_wdate}_ut.json" -ed ${_wdate} -p log_backups  |  tee hist/${_wdate}_ineligible.csv
-  skywire cli rewards --utfile "hist/${_wdate}_ut.json" -20d ${_wdate} -p log_backups |  tee hist/${_wdate}_shares.csv
-  skywire cli rewards --utfile "hist/${_wdate}_ut.json" -10d $(date --date="yesterday" +%Y-%m-%d) -p log_backups | tee hist/${_wdate}_rewardtxn0.csv
-  skywire cli rewards --utfile "hist/${_wdate}_ut.json" -12d ${_wdate} -p log_backups |  tee hist/${_wdate}_stats.txt
+  skywire cli rewards --utfile "hist/${_wdate}_ut.txt" -ed ${_wdate} -p log_backups  |  tee hist/${_wdate}_ineligible.csv
+  skywire cli rewards --utfile "hist/${_wdate}_ut.txt" -20d ${_wdate} -p log_backups |  tee hist/${_wdate}_shares.csv
+  skywire cli rewards --utfile "hist/${_wdate}_ut.txt" -10d ${_wdate} -p log_backups | tee hist/${_wdate}_rewardtxn0.csv
+  skywire cli rewards --utfile "hist/${_wdate}_ut.txt" -12d ${_wdate} -p log_backups |  tee hist/${_wdate}_stats.txt
 fi
 #return
 exit 0
