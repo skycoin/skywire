@@ -847,7 +847,7 @@ func server() {
 			l += "\n\nIneligible:\n"
 			for _, line := range l2 {
 				thispk, _ := script.Echo(line).Column(2).String()         //nolint
-				reason, _ := script.Echo(line).Column(3).String()   //nolint
+				reason, _ := script.Echo(line).Column(3).String()         //nolint
 				invalid, _ := script.Echo(line).Match(", , , ,").String() //nolint
 				if invalid != "" {
 					_, err = script.IfExists("rewards/log_backups/" + thispk + "/node-info.json").Echo("").String()
