@@ -702,6 +702,17 @@ github.com/xo/terminfo
 github.com/xtaci/kcp-go
 # github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37
 ## explicit; go 1.13
+# github.com/yuin/goldmark v1.4.13
+## explicit; go 1.18
+github.com/yuin/goldmark
+github.com/yuin/goldmark/ast
+github.com/yuin/goldmark/extension
+github.com/yuin/goldmark/extension/ast
+github.com/yuin/goldmark/parser
+github.com/yuin/goldmark/renderer
+github.com/yuin/goldmark/renderer/html
+github.com/yuin/goldmark/text
+github.com/yuin/goldmark/util
 # github.com/zcalusic/sysinfo v1.1.2
 ## explicit; go 1.22
 github.com/zcalusic/sysinfo
