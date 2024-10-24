@@ -11,29 +11,15 @@
 
 The required minimum Skywire version will be incremented periodically.
 
-#### Table of Contents
-* [Introduction](#introduction)
-* [Uptime Reward Pool](#uptime-reward-pool)
-* [Rules & Requirements](#rules--requirements)
-* [Exceptions](#exceptions-for-deployment-changes-with-dmsghttp-config-chinese-users)
-* [Verifying Requirements & Eligibility](#verifying-requirements--eligibility)
-  * [Version](#version)
-  * [Deployment](#deployment)
-  * [Uptime](#uptime)
-  * [Deployment](#deployment)
-  * [Skycoin Address](#skycoin-address)
-  * [Connection to DMSG network](#connection-to-dmsg-network)
-  * [Verifying other requirements](#verifying-other-requirements)
-* [Reward System Overview](#reward-system-overview)
-* ~~[Hardware](#hardware)~~
-
 ## Introduction
 
 <div align="center"><em> Updates to this article will be followed by a notification via the <a href="https://t.me/SkywirePSA">official Skywire PSA channel</a> on Telegram.</em>
 </div>
 <br>
 
-All information about rewards will be published here. Please ask for clarification in the [@skywire](https://t.me/skywire) Telegram channel if some things appear to not be covered. Please join [@SkywirePSA](https://t.me/SkywirePSA) for public service announcements (PSA) regarding the skywire network, update notices, changes to this article, etc.
+All information about rewards will be published here. Please ask for clarification in the [@skywire](https://t.me/skywire) Telegram channel if some things appear to not be covered.
+
+Please join [@SkywirePSA](https://t.me/SkywirePSA) for public service announcements (PSA) regarding the skywire network, update notices, changes to this article, etc.
 
 Reward distribution notifications are on telegram [@skywire_reward](https://t.me/skywire_reward).
 
@@ -95,13 +81,17 @@ to circumvent ISP blocking of http requests.
 
 In order to bootstrap the visor's to connection to the dmsg network (via TCP connection to an individual dmsg server) the [dmsghttp-config.json](/dmsghttp-config.json) is provided with the skywire binary release.
 
-In the instance that the skywire production deployment changes - specifically the dmsg servers - it will be necessary to update to the next version or package release which fixes the dmsg servers - or else to manually update the [dmsghttp-config.json](/dmsghttp-config.json) which is provided by your skywire installation.
+In the instance that the skywire production deployment changes - specifically the dmsg servers:
+* it will be necessary to update to the next version or package release which fixes the dmsg servers.
+OR
+* it will be necessary to manually update the [dmsghttp-config.json](/dmsghttp-config.json) which is provided by your skywire installation.
 
 Currently, **there is no mechanism for updating the dmsghttp-config.json which does not require an http request** ; a request which may be blocked depending on region.
 
 In this instance, the visor will not connect to any service because it is not connected to the dmsg network, so it will not be possible for the visor to accumulate uptime or for the reward system to collect the survey, which are prerequisites for reward eligibility.
 
-As a consequence of this; any visors running a dmsghttp-config, and hence any visors running in regions such as China, the minimum version requirement for obtaining rewards is not only the latest available version, but __the latest release of the package__ unless the dmsghttp-config.json is updated manually within your installation.
+As a consequence of this; any visors running a dmsghttp-config, and hence any visors running in regions such as China, the minimum version requirement for obtaining rewards is not only the latest available version,
+but __the latest release of the package__ unless the dmsghttp-config.json is updated manually within your installation.
 
 ## Verifying Requirements & Eligibility
 
@@ -140,7 +130,9 @@ The service configuration will be automatically updated any time a config is gen
 
 For those visors in china or those running a dmsghttp-config, compare the dmsghttp-config of your current installation with the dmsghttp-config on the develop branch of [github.com/skycoin/skywire](https://github.com/skycoin/skywire)
 
-The same data in a different format should be displayed in the [dmsg-discovery all_servers](https://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers) page. Ensure that the dmsghttp-config.json in your installation has the same ip addresses and ports for the dmsg server keys. The data from the dmsg discovery should be considered authoritative or current.
+The same data in a different format should be displayed in the [dmsg-discovery all_servers](https://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers) page. Ensure that the dmsghttp-config.json in your installation has the same ip addresses and ports for the dmsg server keys.
+
+The data from the dmsg discovery should be considered authoritative or current.
 
 ### Uptime
 
@@ -282,11 +274,16 @@ If your visor is not generating such logging or errors are indicated, please rea
 
 ### Transportability
 
-It is not required that a visor run any service, such as a vpn or socks5 proxy server, whichpermitsdirect access tothe internet from yor ip address. However, it is required that the visor is able to act as a hop along a route. A module is active at runtime which checks that transports may be established to that visor - the visor crates a dmsg transport to itself every few minutes to ensure transportability. If it's not possible to create a dmsg transport to the same visor after three attempts,the visor will shut down automatically. **It is expected that the visor will be restarted by a process control mechanism if the visor shuts down for any reason.** In the officially supported linux packages, systemd will restart the visor if it stops; regardless of the exit status of the process.
+It is not required that a visor run any service, such as a vpn or socks5 proxy server, which permits direct access to the internet from your ip address.
+However, it is required that the visor is able to act as a hop along a route.
+A module is active at runtime which checks that transports may be established to that visor - the visor creates a dmsg transport to itself every few minutes to ensure transportability.
+If it's not possible to create a dmsg transport to the same visor after three attempts,the visor will shut down automatically.
+**It is expected that the visor will be restarted by a process control mechanism if the visor shuts down for any reason.** In the officially supported linux packages, systemd will restart the visor if it stops; regardless of the exit status of the process.
 
 ### Transport setup node
 
-Previously, the transport setup node was run continuously as part of the reward system to ensure that visors were responding as expected to transport setup-node requests. However, there were intermittent issues with reliability of the results ; because there is no caching mechanism for responsiveness to transport setup-node requests as there exists for uptime.
+Previously, the transport setup node was run continuously as part of the reward system to ensure that visors were responding as expected to transport setup-node requests.
+However, there were intermittent issues with reliability of the results ; because there is no caching mechanism for responsiveness to transport setup-node requests as there exists for uptime.
 
 Currently, the transport setup-nodes which are configured for the visor are included in the survey and verified as an eligibility requirement for rewards by the reward system.
 
@@ -335,8 +332,6 @@ skywire cli log
 ```
 along with transport bandwidth logs.
 
-~~A survey of transports which have been set by transport setup-nodes are also collected hourly, from all visors which have had surveys collected~~
-
 The index of the collected files may be viewed at [fiber.skywire.dev/log-collection/tree](https://fiber.skywire.dev/log-collection/tree)
 
 Once collected from the nodes, the surveys for those visors which met uptime are checked to verify hardware and other requirements, etc.
@@ -349,7 +344,11 @@ The public keys which require to be whitelisted in order to collect the surveys,
 
 ## Reward System Funding & Distributions
 
-The reward system is funded on a monthly basis. **Sometimes there are unexpected or unavoidable delays in the funding.** In these instances, rewards will be distributed based on the data generated when the system is funded. In some instances, it's necessary to discard previous reward data and do multiple distributions to handle backlog of reward system funds. We do our best to ensure fair reward distribution, but the system itself is not infinitely flexible. If there is no good way to rectify historical or undistributed rewards backlog, it will be distributed going forward as multiple distributions on the same day.
+The reward system is funded on a monthly basis. **Sometimes there are unexpected or unavoidable delays in the funding.** In these instances, rewards will be distributed based on the data generated when the system is funded.
+In some instances, it's necessary to discard previous reward data and do multiple distributions to handle backlog of reward system funds.
+
+**We do our best to ensure fair reward distribution** - but the system itself is not infinitely flexible.
+If there is no good way to rectify historical or undistributed rewards backlog, it will be distributed going forward as multiple distributions on the same day to those current active participants in the network.
 
 ## Deployment Outages
 
@@ -360,3 +359,5 @@ The policy for handling rewards in the instance of a deployment outage is to rep
 ## Hardware
 
 As of November 2024, skywire rewards are open to all computer hardware and architectures.
+
+If there is not a release for your desired architecture, we can attempt to add it, on request.
