@@ -44,6 +44,7 @@ require (
 	github.com/tidwall/pretty v1.2.1
 	github.com/toqueteos/webbrowser v1.2.0
 	github.com/xtaci/kcp-go v5.4.20+incompatible
+	github.com/yuin/goldmark v1.4.13
 	github.com/zcalusic/sysinfo v1.1.2
 	go.etcd.io/bbolt v1.3.11
 	golang.org/x/net v0.30.0

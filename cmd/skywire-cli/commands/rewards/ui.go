@@ -104,8 +104,11 @@ func mainPage(c *gin.Context) {
 		fmt.Println("Error parsing Front Page template:", err1)
 	}
 	tmpl := tmpl0
+
+	mainnetRulesHtml, _ := script.Exec(`skywire cli reward rules -l`).String()              //nolint
+	skywireVersion, _ := script.Exec(`skywire -v`).Replace("skywire version ", "").String() //nolint
 	htmlPageTemplateData1 := htmlPageTemplateData
-	htmlPageTemplateData1.Content = htmpl.HTML(skycoinlogohtml) //nolint
+	htmlPageTemplateData1.Content = htmpl.HTML(skywireVersion + "<br>" + skycoinlogohtml + "<br>" + mainnetRulesHtml) //nolint
 	tmplData := map[string]interface{}{
 		"Page": htmlPageTemplateData1,
 	}
@@ -1540,6 +1543,12 @@ var htmlHeadTemplate = `<head>
 <meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=4.9,'>
 <title title='{{.Page.Title}}'>{{.Page.Title}}</title>
 <style type='text/css'>
+a {
+		color: #3399FF;
+}
+a:visited {
+		color: #FF00FF;
+}
 pre {
 	font-family:mononokiregular;
 	font-size:10pt;
