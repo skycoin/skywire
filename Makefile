@@ -132,6 +132,12 @@ check-windows: lint-windows test-windows ## Run linters and tests on windows ima
 
 build: clean build-merged ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
+print-build: ## Print the command used to build the binary
+	@echo "${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire ./cmd/skywire"
+
+print-run-source: ## Print the command used to go run from source
+	@echo "${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go cli config gen -n | sudo ${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go visor -n || true"
+
 build-merged: ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire ./cmd/skywire
 
@@ -321,19 +327,19 @@ prepare:
 
 
 run-source: prepare ## Run skywire from source, without compiling binaries
-	go run ./cmd/skywire/skywire.go cli config gen -in | sudo go run ./cmd/skywire/skywire.go visor -n || true
+	${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go cli config gen -n | sudo ${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go visor -n || true
 
 run-systray: prepare ## Run skywire from source, with vpn server enabled
-	go run ./cmd/skywire/skywire.go cli config gen -ni | sudo go run ./cmd/skywire/skywire.go visor -n --systray || true
+	${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go cli config gen -n | sudo ${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go visor -n --systray || true
 
 run-vpnsrv: prepare ## Run skywire from source, without compiling binaries
-	go run ./cmd/skywire/skywire.go cli config gen -in --servevpn | sudo go run ./cmd/skywire/skywire.go visor -n || true
+	${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go cli config gen -n --servevpn | sudo ${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go visor -n || true
 
 run-source-dmsghttp: prepare ## Run skywire from source with dmsghttp config
-	go run ./cmd/skywire/skywire.go cli config gen -din | sudo go run ./cmd/skywire/skywire.go visor -n || true
+	${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go cli config gen -dn | sudo ${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go visor -n || true
 
 run-vpnsrv-dmsghttp: prepare ## Run skywire from source with dmsghttp config and vpn server
-	go run ./cmd/skywire/skywire.go cli config gen -din --servevpn | sudo go run ./cmd/skywire/skywire.go visor -n || true
+	${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go cli config gen -dn --servevpn | sudo ${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go visor -n || true
 
 lint-ui:  ## Lint the UI code
 	cd $(MANAGER_UI_DIR) && npm run lint
