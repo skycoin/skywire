@@ -1,3 +1,6 @@
+//go:build !windows
+// +build !windows
+
 // Package clirewards cmd/skywire-cli/commands/rewards/services.go
 package clirewards
 
