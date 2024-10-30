@@ -74,15 +74,22 @@ function BuildInstaller($arch)
     Invoke-WebRequest "https://plaintext.ir/wintun-0.14.1.zip" -OutFile wintun.zip
     Expand-Archive wintun.zip
     Copy-Item .\wintun\wintun\bin\$wintun_arch\wintun.dll .\build\wintun.dll
+    $installerVersion = $version -replace '(-.*$)', ''
+    $productWxs = Get-Content -Path Product.wxs
+    $newContent = $productWxs -replace "skywireVersion", $installerVersion
+    Set-Content -Path Product.wxs -Value $newContent
 
     Write-Output "#       5. Building MSI Installer...                     #"
-    .\wix\candle.exe UI.wxs Product.wxs -arch $wix_arch > $null
+    .\wix\candle.exe UI.wxs Product.wxs -arch $wix_arch  > $null
     .\wix\light.exe -ext WixUIExtension -ext WixUtilExtension -sacl -spdb -out skywire.msi UI.wixobj Product.wixobj  > $null
     Move-Item skywire.msi ../../$msiName.msi -Force
 
     Write-Output "#          ==> Build Completed for $arch_title!                #"
     
     Write-Output "#       6. Cleaning Stage...                             #"
+    $productWxs = Get-Content -Path Product.wxs
+    $newContent = $productWxs -replace $installerVersion, "skywireVersion"
+    Set-Content -Path Product.wxs -Value $newContent
     Set-Location ../../
     CleanStage
 
