@@ -4,6 +4,7 @@
 package visorconfig
 
 import (
+	"net"
 	"runtime"
 
 	"github.com/google/uuid"
@@ -32,6 +33,7 @@ type Survey struct {
 	SkycoinAddress string           `json:"skycoin_address,omitempty"`
 	GOOS           string           `json:"go_os,omitempty"`
 	GOARCH         string           `json:"go_arch,omitempty"`
+	SYSINFO        []NetworkDevice  `json:"zcalusic_sysinfo,omitempty"`
 	IPAddr         string           `json:"ip_address,omitempty"`
 	Disks          *ghw.BlockInfo   `json:"ghw_blockinfo,omitempty"`
 	Product        *ghw.ProductInfo `json:"ghw_productinfo,omitempty"`
@@ -68,6 +70,7 @@ func SystemSurvey() (Survey, error) {
 		//		IPAddr:         ipAddr,
 		GOOS:           runtime.GOOS,
 		GOARCH:         runtime.GOARCH,
+		SYSINFO:        getMacAddr(),
 		UUID:           uuid.New(),
 		Disks:          disks,
 		Product:        product,
@@ -75,4 +78,28 @@ func SystemSurvey() (Survey, error) {
 		SkywireVersion: Version(),
 	}
 	return s, nil
+}
+
+type NetworkDevice struct {
+	Name       string `json:"name,omitempty"`
+	Driver     string `json:"driver,omitempty"`
+	MACAddress string `json:"macaddress,omitempty"`
+	Port       string `json:"port,omitempty"`
+	Speed      uint   `json:"speed,omitempty"` // device max supported speed in Mbps
+}
+
+func getMacAddr() []NetworkDevice {
+	si := make([]NetworkDevice, 1)
+	ifas, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+
+	for _, ifa := range ifas {
+		si[0].MACAddress = ifa.HardwareAddr.String()
+		if si[0].MACAddress != "" {
+			return si
+		}
+	}
+	return nil
 }
