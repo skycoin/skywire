@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"os/user"
 	"path/filepath"
 	"strings"
 
@@ -219,12 +218,6 @@ func Config() skyenv.PkgConfig {
 		return skyenv.PackageConfig()
 	}
 	return UserConfig()
-}
-
-// IsRoot checks for root permissions
-func IsRoot() bool {
-	userLvl, _ := user.Current() //nolint
-	return userLvl.Username == "root"
 }
 
 var (

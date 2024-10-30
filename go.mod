@@ -33,7 +33,7 @@ require (
 	github.com/skycoin/dmsg v1.3.29-0.20241019182716-022283c93835
 	github.com/skycoin/skycoin v0.28.0
 	github.com/skycoin/skycoin-service-discovery v1.3.29-0.20241019190420-233c2d68bce0
-	github.com/skycoin/skywire-services v1.3.29-0.20241019183828-0d760251ca55
+	github.com/skycoin/skywire-services v1.3.28
 	github.com/skycoin/skywire-utilities v1.3.25
 	github.com/skycoin/systray v1.10.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
@@ -51,7 +51,7 @@ require (
 	golang.org/x/sync v0.8.0
 	golang.org/x/sys v0.26.0
 	golang.org/x/term v0.25.0
-	golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173
+	golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675
 	gopkg.in/telebot.v3 v3.3.8
 )
 
