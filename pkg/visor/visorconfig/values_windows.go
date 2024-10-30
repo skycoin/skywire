@@ -13,7 +13,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jaypipes/ghw"
-	"github.com/zcalusic/sysinfo"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -80,12 +79,19 @@ func SystemSurvey() (Survey, error) {
 }
 
 type customSysinfo struct {
-	Network []sysinfo.NetworkDevice `json:"network,omitempty"`
+	Network []networkDevice `json:"network,omitempty"`
+}
+type networkDevice struct {
+	Name       string `json:"name,omitempty"`
+	Driver     string `json:"driver,omitempty"`
+	MACAddress string `json:"macaddress,omitempty"`
+	Port       string `json:"port,omitempty"`
+	Speed      uint   `json:"speed,omitempty"` // device max supported speed in Mbps
 }
 
 func getMacAddr() customSysinfo {
 	var sysInfo customSysinfo
-	si := make([]sysinfo.NetworkDevice, 1)
+	si := make([]networkDevice, 1)
 	interfaces, err := net.Interfaces()
 	if err != nil {
 		return sysInfo
