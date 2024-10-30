@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"runtime"
+	"time"
 
 	"golang.org/x/sys/windows"
 
@@ -32,11 +33,12 @@ func UserConfig() skyenv.PkgConfig {
 
 // Survey system hardware survey struct
 type Survey struct {
+	Timestamp      time.Time        `json:"timestamp"`
 	PubKey         cipher.PubKey    `json:"public_key,omitempty"`
 	SkycoinAddress string           `json:"skycoin_address,omitempty"`
 	GOOS           string           `json:"go_os,omitempty"`
 	GOARCH         string           `json:"go_arch,omitempty"`
-	SYSINFO        []NetworkDevice  `json:"zcalusic_sysinfo,omitempty"`
+	SYSINFO        customSysinfo    `json:"zcalusic_sysinfo,omitempty"`
 	IPAddr         string           `json:"ip_address,omitempty"`
 	Disks          *ghw.BlockInfo   `json:"ghw_blockinfo,omitempty"`
 	Product        *ghw.ProductInfo `json:"ghw_productinfo,omitempty"`
@@ -61,16 +63,9 @@ func SystemSurvey() (Survey, error) {
 	if err != nil {
 		return Survey{}, err
 	}
-	//	var ipAddr string
-	//	for {
-	//		ipAddr, err = FetchIP(dmsgDisc)
-	//		if err == nil {
-	//			break
-	//		}
-	//	}
 
 	s := Survey{
-		//		IPAddr:         ipAddr,
+		Timestamp:      time.Now(),
 		GOOS:           runtime.GOOS,
 		GOARCH:         runtime.GOARCH,
 		SYSINFO:        getMacAddr(),
@@ -83,28 +78,29 @@ func SystemSurvey() (Survey, error) {
 	return s, nil
 }
 
-type NetworkDevice struct {
-	Name       string `json:"name,omitempty"`
-	Driver     string `json:"driver,omitempty"`
+type customSysinfo struct {
+	Network []networkDevice `json:"network,omitempty"`
+}
+type networkDevice struct {
 	MACAddress string `json:"macaddress,omitempty"`
-	Port       string `json:"port,omitempty"`
-	Speed      uint   `json:"speed,omitempty"` // device max supported speed in Mbps
 }
 
-func getMacAddr() []NetworkDevice {
-	si := make([]NetworkDevice, 1)
-	ifas, err := net.Interfaces()
+func getMacAddr() customSysinfo {
+	var sysInfo customSysinfo
+	si := make([]networkDevice, 1)
+	interfaces, err := net.Interfaces()
 	if err != nil {
-		return nil
+		return sysInfo
 	}
 
-	for _, ifa := range ifas {
+	for _, ifa := range interfaces {
 		si[0].MACAddress = ifa.HardwareAddr.String()
 		if si[0].MACAddress != "" {
-			return si
+			sysInfo.Network = si
+			return sysInfo
 		}
 	}
-	return nil
+	return sysInfo
 }
 
 // IsRoot checks for root permissions
