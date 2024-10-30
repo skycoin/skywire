@@ -64,16 +64,9 @@ func SystemSurvey() (Survey, error) {
 	if err != nil && !strings.Contains(err.Error(), "Could not determine total usable bytes of memory") {
 		return Survey{}, err
 	}
-	//	var ipAddr string
-	//	for {
-	//		ipAddr, err = FetchIP(dmsgDisc)
-	//		if err == nil {
-	//			break
-	//		}
-	//	}
+
 	s := Survey{
-		Timestamp: time.Now(),
-		//		IPAddr:         ipAddr,
+		Timestamp:      time.Now(),
 		GOOS:           runtime.GOOS,
 		GOARCH:         runtime.GOARCH,
 		SYSINFO:        si,
