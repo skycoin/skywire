@@ -1,4 +1,4 @@
-@Echo OFF
+@Echo Off
 :: Opening Powershell with Administrator privilege
 %1 mshta vbscript:CreateObject("Shell.Application").ShellExecute("powershell.exe","/c %~s0 ::","","runas",1)(window.close)&&exit
 cd /d "%~dp0"
