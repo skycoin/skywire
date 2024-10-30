@@ -4,11 +4,14 @@
 package visorconfig
 
 import (
+	"net"
 	"os/user"
 	"runtime"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jaypipes/ghw"
+	"github.com/zcalusic/sysinfo"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -29,10 +32,12 @@ func UserConfig() skyenv.PkgConfig {
 
 // Survey system hardware survey struct
 type Survey struct {
+	Timestamp      time.Time      `json:"timestamp"`
 	PubKey         cipher.PubKey  `json:"public_key,omitempty"`
 	SkycoinAddress string         `json:"skycoin_address,omitempty"`
 	GOOS           string         `json:"go_os,omitempty"`
 	GOARCH         string         `json:"go_arch,omitempty"`
+	SYSINFO        customSysinfo  `json:"zcalusic_sysinfo,omitempty"`
 	IPAddr         string         `json:"ip_address,omitempty"`
 	Disks          *ghw.BlockInfo `json:"ghw_blockinfo,omitempty"`
 	UUID           uuid.UUID      `json:"uuid,omitempty"`
@@ -47,17 +52,11 @@ func SystemSurvey() (Survey, error) {
 	if err != nil {
 		return Survey{}, err
 	}
-	//	var ipAddr string
-	//	for {
-	//		ipAddr, err = FetchIP(dmsgDisc)
-	//		if err == nil {
-	//			break
-	//		}
-	//	}
 	s := Survey{
-		//		IPAddr:         ipAddr,
+		Timestamp:      time.Now(),
 		GOOS:           runtime.GOOS,
 		GOARCH:         runtime.GOARCH,
+		SYSINFO:        getMacAddr(),
 		UUID:           uuid.New(),
 		Disks:          disks,
 		SkywireVersion: Version(),
@@ -69,4 +68,26 @@ func SystemSurvey() (Survey, error) {
 func IsRoot() bool {
 	userLvl, _ := user.Current() //nolint
 	return userLvl.Username == "root"
+}
+
+type customSysinfo struct {
+	Network []sysinfo.NetworkDevice `json:"network,omitempty"`
+}
+
+func getMacAddr() customSysinfo {
+	var sysInfo customSysinfo
+	si := make([]sysinfo.NetworkDevice, 1)
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return sysInfo
+	}
+
+	for _, ifa := range interfaces {
+		si[0].MACAddress = ifa.HardwareAddr.String()
+		if si[0].MACAddress != "" {
+			sysInfo.Network = si
+			return sysInfo
+		}
+	}
+	return sysInfo
 }
