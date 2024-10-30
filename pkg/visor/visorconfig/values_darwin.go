@@ -4,6 +4,7 @@
 package visorconfig
 
 import (
+	"os/user"
 	"runtime"
 
 	"github.com/google/uuid"
@@ -62,4 +63,10 @@ func SystemSurvey() (Survey, error) {
 		SkywireVersion: Version(),
 	}
 	return s, nil
+}
+
+// IsRoot checks for root permissions
+func IsRoot() bool {
+	userLvl, _ := user.Current() //nolint
+	return userLvl.Username == "root"
 }
