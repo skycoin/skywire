@@ -57,7 +57,7 @@ function build_installer() {
 
   # Create directories
   mkdir -p ${installer_build_dir}/binaries/Skywire.app
-  mkdir -p ${installer_package_dir}/Contents/{Resources,MacOS/apps}
+  mkdir -p ${installer_package_dir}/Contents/{Resources,MacOS}
 
   # build deinstaller
   go build -o ${installer_package_dir}/Contents/MacOS/deinstaller ${mac_script_dir}/desktop-deinstaller/deinstaller.go
