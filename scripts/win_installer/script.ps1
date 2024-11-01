@@ -25,11 +25,7 @@ function InstallWix
 
 function BuildInstaller($arch)
 {
-    if ($arch -eq "386") {
-        $wintun_arch="x86"
-        $arch_title="386  "
-        $wix_arch="x86"
-    } else {
+    if ($arch -eq "amd64") {
         $wintun_arch="amd64"
         $arch_title="amd64"
         $wix_arch="x64"
@@ -100,6 +96,5 @@ Write-Output "`n##########################################################"
 Write-Output "#                                                        #"
 Write-Output "#        .:::: Create MSI Installer Package ::::.        #"
 BuildInstaller("amd64")
-BuildInstaller("386")
 Write-Output "#                                                        #"
 Write-Output "##########################################################`n"
