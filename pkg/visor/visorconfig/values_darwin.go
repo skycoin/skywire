@@ -4,7 +4,6 @@
 package visorconfig
 
 import (
-	"io/ioutil"
 	"net"
 	"os"
 	"os/user"
@@ -107,7 +106,7 @@ func getNodeHypervisor() string {
 		return "docker"
 	}
 	// Check for cgroup indicating Docker or container environment
-	data, err := ioutil.ReadFile("/proc/self/cgroup")
+	data, err := os.ReadFile("/proc/self/cgroup")
 	if err == nil && strings.Contains(string(data), "docker") {
 		return "docker"
 	}
