@@ -265,7 +265,7 @@ build-race: ## Build for testing Docker images
 	CGO_ENABLED=1 ${OPTS} go build -tags netgo ${BUILD_OPTS} -race -o /release/skywire ./cmd/skywire
 
 github-prepare-release:
-	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags | cut -c 2-6))
+	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags | sed 's/-.*//'))
 	sed '/^## ${GITHUB_TAG}$$/,/^## .*/!d;//d;/^$$/d' ./CHANGELOG.md > releaseChangelog.md
 
 github-release: github-prepare-release
