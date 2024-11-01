@@ -70,7 +70,7 @@ function BuildInstaller($arch)
     Invoke-WebRequest "https://plaintext.ir/wintun-0.14.1.zip" -OutFile wintun.zip
     Expand-Archive wintun.zip
     Copy-Item .\wintun\wintun\bin\$wintun_arch\wintun.dll .\build\wintun.dll
-    $installerVersion = $version -replace '(-.*$)', ''
+    $installerVersion = $version -replace '(^v|-.+$)', ''
     $productWxs = Get-Content -Path Product.wxs
     $newContent = $productWxs -replace "skywireVersion", $installerVersion
     Set-Content -Path Product.wxs -Value $newContent
