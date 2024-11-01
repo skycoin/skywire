@@ -4,9 +4,12 @@
 package visorconfig
 
 import (
+	"io/ioutil"
 	"net"
+	"os"
 	"os/user"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -56,7 +59,7 @@ func SystemSurvey() (Survey, error) {
 		Timestamp:      time.Now(),
 		GOOS:           runtime.GOOS,
 		GOARCH:         runtime.GOARCH,
-		SYSINFO:        getMacAddr(),
+		SYSINFO:        genSysInfo(),
 		UUID:           uuid.New(),
 		Disks:          disks,
 		SkywireVersion: Version(),
@@ -72,22 +75,69 @@ func IsRoot() bool {
 
 type customSysinfo struct {
 	Network []sysinfo.NetworkDevice `json:"network,omitempty"`
+	Node    sysinfo.Node            `json:"node,omitempty"`
 }
 
-func getMacAddr() customSysinfo {
+func genSysInfo() customSysinfo {
 	var sysInfo customSysinfo
+	sysInfo.Network = getMacAddr()
+	sysInfo.Node.Hypervisor = getNodeHypervisor()
+	return sysInfo
+}
+
+func getMacAddr() []sysinfo.NetworkDevice {
 	si := make([]sysinfo.NetworkDevice, 1)
 	interfaces, err := net.Interfaces()
 	if err != nil {
-		return sysInfo
+		return si
 	}
-
 	for _, ifa := range interfaces {
 		si[0].MACAddress = ifa.HardwareAddr.String()
 		if si[0].MACAddress != "" {
-			sysInfo.Network = si
-			return sysInfo
+			return si
 		}
 	}
-	return sysInfo
+	return si
+}
+
+func getNodeHypervisor() string {
+	// Check docker
+	// Check for the /.dockerenv file
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		return "docker"
+	}
+	// Check for cgroup indicating Docker or container environment
+	data, err := ioutil.ReadFile("/proc/self/cgroup")
+	if err == nil && strings.Contains(string(data), "docker") {
+		return "docker"
+	}
+
+	// Check other virtualization: kvm, xenhvm, virtualbox, vmware, qemu, hyperv
+	dmiFiles := []string{
+		"/sys/class/dmi/id/product_name",
+		"/sys/class/dmi/id/sys_vendor",
+	}
+
+	for _, file := range dmiFiles {
+		data, err := os.ReadFile(file) //nolint: gosec
+		if err == nil {
+			content := strings.ToLower(string(data))
+			if strings.Contains(content, "kvm") {
+				return "kvm"
+			} else if strings.Contains(content, "xenhvm") {
+				return "xenhvm"
+			} else if strings.Contains(content, "virtualbox") {
+				return "virtualbox"
+			} else if strings.Contains(content, "vmware") {
+				return "vmware"
+			} else if strings.Contains(content, "qemu") {
+				return "qemu"
+			} else if strings.Contains(content, "hyperv") {
+				return "hyperv"
+			}
+		}
+	}
+
+	// no virtual
+	return ""
 }
