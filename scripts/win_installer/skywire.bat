@@ -38,7 +38,7 @@ if exist "%HOMEPATH%\skywire-config.json" (
 
 :: Generating new config file if not exist
 if not exist "skywire-config.json" (
-    skywire cli config gen -birpw --disableapps vpn-server -S services-config.json -D dmsghttp-config.json >nul 2>&1
+    skywire cli config gen -birpw --disableapps vpn-server -S services-config.json -D dmsghttp-config.json --loglvl info >nul 2>&1
 )
 
 :: Regenerating config file after update and install new version of Skywire

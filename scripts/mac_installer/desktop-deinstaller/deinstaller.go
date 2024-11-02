@@ -48,7 +48,7 @@ pkgutil --forget ` + osxServiceIdentifier + `
 pkgutil --forget com.skycoin.skywire.updater
 pkgutil --forget com.skycoin.skywire.remover
 
-rm -rf ` + filepath.Join(os.Getenv("HOME"), "Library", "Logs", "skywire") + `
+rm -rf ` + filepath.Join(os.Getenv("HOME"), "Library", "Logs", "Skywire") + `
 rm -rf /Applications/Skywire.app
 `
 
