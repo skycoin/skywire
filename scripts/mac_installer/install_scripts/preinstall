@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-log_dir=/Users/${USER}/Library/Logs/skywire
+log_dir=/Users/${USER}/Library/Logs/Skywire
 
 mkdir -p /Users/"${USER}"/Library/Application\ Support/Skywire
 

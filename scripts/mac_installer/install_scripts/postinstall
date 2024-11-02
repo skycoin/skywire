@@ -3,7 +3,7 @@
 set -euo pipefail
 
 skywire_dir=/Users/${USER}/Library/Application\ Support/Skywire
-log_dir=/Users/${USER}/Library/Logs/skywire
+log_dir=/Users/${USER}/Library/Logs/Skywire
 
 if [[ -d ${skywire_dir} ]]; then
   rm -rf "${skywire_dir}"
