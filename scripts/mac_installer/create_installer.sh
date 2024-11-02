@@ -48,8 +48,7 @@ function build_installer() {
   fi
 
   # fetch skywire binaries from last release
-  # download_url=$(eval "curl --header 'Authorization: Bearer '$GITHUB_TOKEN'' https://api.github.com/repos/skycoin/skywire/releases" | jq '.[0].assets[] | select(.name|match("darwin-'${go_arch}'.tar.gz")) | .browser_download_url')
-  download_url=" https://github.com/skycoin/skywire/releases/download/v1.3.29-alpha.4/skywire-v1.3.29-alpha.4-darwin-arm64.tar.gz "
+  download_url=$(eval "curl --header 'Authorization: Bearer '$GITHUB_TOKEN'' https://api.github.com/repos/skycoin/skywire/releases" | jq '.[0].assets[] | select(.name|match("darwin-'${go_arch}'.tar.gz")) | .browser_download_url')
   wget ${download_url:1:$((${#download_url} - 2))} -O - | tar -xz
   
   if [ -d ${installer_build_dir}/binaries/Skywire.app ]; then
