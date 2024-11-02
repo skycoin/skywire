@@ -6,6 +6,21 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.29
+
+-   Fix Mac installer issue [#1900](https://github.com/skycoin/skywire/pull/1900)
+-   Fix WIX issue on versioning of Windows installer  [#1899](https://github.com/skycoin/skywire/pull/1899)
+-   Fix issue on release workflow  [#1896](https://github.com/skycoin/skywire/pull/1896)
+-   Improve Mac survey  [#1895](https://github.com/skycoin/skywire/pull/1895)
+-   Improve Windows installer [#1894](https://github.com/skycoin/skywire/pull/1894)
+-   Reward on Windows  [#1892](https://github.com/skycoin/skywire/pull/1892)
+-   Embed scripts for reward system  [#1888](https://github.com/skycoin/skywire/pull/1888)
+-   Fix codebase issues  [#1885](https://github.com/skycoin/skywire/pull/1885)
+-   Update Reward Calculation Cli &amp; UI  [#1884](https://github.com/skycoin/skywire/pull/1884)
+-   Update dependencies  [#1880](https://github.com/skycoin/skywire/pull/1880)
+-   Fix dmsghttp config gen logic  [#1877](https://github.com/skycoin/skywire/pull/1877)
+-   Fix services-config.json path reference for `skywire cli config gen`  [#1875](https://github.com/skycoin/skywire/pull/1875)
+
 ## 1.3.26
 
 -   Embed Deployment Configuration  [#1873](https://github.com/skycoin/skywire/pull/1873)
