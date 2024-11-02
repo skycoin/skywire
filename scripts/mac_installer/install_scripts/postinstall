@@ -3,7 +3,7 @@
 set -euo pipefail
 
 skywire_dir=/Users/${USER}/Library/Application\ Support/Skywire
-log_dir=/Users/${USER}/Library/Logs/skywire
+log_dir=/Users/${USER}/Library/Logs/Skywire
 
 if [[ -d ${skywire_dir} ]]; then
   rm -rf "${skywire_dir}"
@@ -15,7 +15,7 @@ chown -R "${USER}" "$skywire_dir"
 
 echo "generating skywire config if it doesn't exist"
 if [[ ! -f "${skywire_dir}"/skywire-config.json ]]; then
-  /Applications/Skywire.app/Contents/MacOS/skywire cli config gen -bpio "${skywire_dir}"/skywire-config.json
+  /Applications/Skywire.app/Contents/MacOS/skywire cli config gen --loglvl info -bpio "${skywire_dir}"/skywire-config.json
 fi
 chown "${USER}" "${skywire_dir}"/skywire-config.json
 
