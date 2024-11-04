@@ -80,9 +80,15 @@ github.com/armon/go-socks5
 # github.com/bitfield/script v0.23.0
 ## explicit; go 1.18
 github.com/bitfield/script
+# github.com/blang/semver v3.5.1+incompatible
+## explicit
+github.com/blang/semver
 # github.com/blang/semver/v4 v4.0.0
 ## explicit; go 1.14
 github.com/blang/semver/v4
+# github.com/boltdb/bolt v1.3.1
+## explicit
+github.com/boltdb/bolt
 # github.com/bytedance/sonic v1.12.3
 ## explicit; go 1.17
 github.com/bytedance/sonic
@@ -124,6 +130,9 @@ github.com/bytedance/sonic/loader/internal/rt
 # github.com/ccding/go-stun/stun v0.0.0-20200514191101-4dc67bcdb029
 ## explicit; go 1.14
 github.com/ccding/go-stun/stun
+# github.com/cenkalti/backoff v2.2.1+incompatible
+## explicit
+github.com/cenkalti/backoff
 # github.com/cespare/xxhash v1.1.0
 ## explicit
 github.com/cespare/xxhash
@@ -157,7 +166,7 @@ github.com/containerd/console
 # github.com/creack/pty v1.1.23
 ## explicit; go 1.18
 github.com/creack/pty
-# github.com/davecgh/go-spew v1.1.1
+# github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 ## explicit
 github.com/davecgh/go-spew/spew
 # github.com/dgraph-io/badger/v3 v3.2103.2
@@ -194,11 +203,12 @@ github.com/elazarl/goproxy
 # github.com/eliukblau/pixterm/pkg/ansimage v0.0.0-20191210081756-9fb6cf8c2f75
 ## explicit; go 1.13
 github.com/eliukblau/pixterm/pkg/ansimage
-# github.com/fatih/color v1.17.0
+# github.com/fatih/color v1.18.0
 ## explicit; go 1.17
 github.com/fatih/color
-# github.com/fsnotify/fsnotify v1.6.0
-## explicit; go 1.16
+# github.com/fsnotify/fsnotify v1.7.0
+## explicit; go 1.17
+github.com/fsnotify/fsnotify
 # github.com/gabriel-vasile/mimetype v1.4.6
 ## explicit; go 1.20
 github.com/gabriel-vasile/mimetype
@@ -330,6 +340,18 @@ github.com/gorilla/securecookie
 # github.com/hashicorp/go-version v1.7.0
 ## explicit
 github.com/hashicorp/go-version
+# github.com/hashicorp/hcl v1.0.0
+## explicit
+github.com/hashicorp/hcl
+github.com/hashicorp/hcl/hcl/ast
+github.com/hashicorp/hcl/hcl/parser
+github.com/hashicorp/hcl/hcl/printer
+github.com/hashicorp/hcl/hcl/scanner
+github.com/hashicorp/hcl/hcl/strconv
+github.com/hashicorp/hcl/hcl/token
+github.com/hashicorp/hcl/json/parser
+github.com/hashicorp/hcl/json/scanner
+github.com/hashicorp/hcl/json/token
 # github.com/hashicorp/yamux v0.1.2
 ## explicit; go 1.20
 github.com/hashicorp/yamux
@@ -440,6 +462,9 @@ github.com/lithammer/fuzzysearch/fuzzy
 # github.com/lucasb-eyer/go-colorful v1.2.0
 ## explicit; go 1.12
 github.com/lucasb-eyer/go-colorful
+# github.com/magiconair/properties v1.8.7
+## explicit; go 1.19
+github.com/magiconair/properties
 # github.com/mattn/go-colorable v0.1.13
 ## explicit; go 1.15
 github.com/mattn/go-colorable
@@ -455,6 +480,9 @@ github.com/mgutz/ansi
 # github.com/mitchellh/go-homedir v1.1.0
 ## explicit
 github.com/mitchellh/go-homedir
+# github.com/mitchellh/mapstructure v1.5.0
+## explicit; go 1.14
+github.com/mitchellh/mapstructure
 # github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd
 ## explicit
 github.com/modern-go/concurrent
@@ -495,7 +523,7 @@ github.com/pires/go-proxyproto
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
-# github.com/pmezard/go-difflib v1.0.0
+# github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 ## explicit
 github.com/pmezard/go-difflib/difflib
 # github.com/pterm/pterm v0.12.79
@@ -529,6 +557,15 @@ github.com/robert-nix/ansihtml
 ## explicit; go 1.13
 github.com/rs/cors
 github.com/rs/cors/internal
+# github.com/sagikazarmark/locafero v0.6.0
+## explicit; go 1.20
+github.com/sagikazarmark/locafero
+# github.com/sagikazarmark/slog-shim v0.1.0
+## explicit; go 1.20
+github.com/sagikazarmark/slog-shim
+# github.com/shopspring/decimal v1.4.0
+## explicit; go 1.10
+github.com/shopspring/decimal
 # github.com/sirupsen/logrus v1.9.3
 ## explicit; go 1.13
 github.com/sirupsen/logrus
@@ -568,14 +605,65 @@ github.com/skycoin/dmsg/pkg/noise
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 ## explicit
 github.com/skycoin/noise
-# github.com/skycoin/skycoin v0.28.0
-## explicit; go 1.14
+# github.com/skycoin/skycoin v0.28.1-0.20241104170131-96e4203814d4
+## explicit; go 1.22.0
+github.com/skycoin/skycoin
+github.com/skycoin/skycoin/cmd/newcoin/commands
+github.com/skycoin/skycoin/cmd/skycoin-cli/commands
+github.com/skycoin/skycoin/cmd/skycoin-wallet/commands
+github.com/skycoin/skycoin/cmd/skycoin/commands
+github.com/skycoin/skycoin/src/api
 github.com/skycoin/skycoin/src/cipher
 github.com/skycoin/skycoin/src/cipher/base58
+github.com/skycoin/skycoin/src/cipher/bip32
+github.com/skycoin/skycoin/src/cipher/bip39
+github.com/skycoin/skycoin/src/cipher/bip39/wordlists
+github.com/skycoin/skycoin/src/cipher/bip44
+github.com/skycoin/skycoin/src/cipher/chacha20poly1305
+github.com/skycoin/skycoin/src/cipher/chacha20poly1305/internal/chacha20
+github.com/skycoin/skycoin/src/cipher/crypto
+github.com/skycoin/skycoin/src/cipher/encoder
+github.com/skycoin/skycoin/src/cipher/encrypt
+github.com/skycoin/skycoin/src/cipher/pbkdf2
+github.com/skycoin/skycoin/src/cipher/poly1305
 github.com/skycoin/skycoin/src/cipher/ripemd160
+github.com/skycoin/skycoin/src/cipher/scrypt
 github.com/skycoin/skycoin/src/cipher/secp256k1-go
 github.com/skycoin/skycoin/src/cipher/secp256k1-go/secp256k1-go2
+github.com/skycoin/skycoin/src/cli
+github.com/skycoin/skycoin/src/coin
+github.com/skycoin/skycoin/src/daemon
+github.com/skycoin/skycoin/src/daemon/gnet
+github.com/skycoin/skycoin/src/daemon/pex
+github.com/skycoin/skycoin/src/daemon/strand
+github.com/skycoin/skycoin/src/fiber
+github.com/skycoin/skycoin/src/kvstorage
+github.com/skycoin/skycoin/src/params
+github.com/skycoin/skycoin/src/readable
+github.com/skycoin/skycoin/src/skycoin
+github.com/skycoin/skycoin/src/transaction
+github.com/skycoin/skycoin/src/util/apputil
+github.com/skycoin/skycoin/src/util/certutil
+github.com/skycoin/skycoin/src/util/droplet
+github.com/skycoin/skycoin/src/util/elapse
+github.com/skycoin/skycoin/src/util/fee
+github.com/skycoin/skycoin/src/util/file
+github.com/skycoin/skycoin/src/util/gziphandler
+github.com/skycoin/skycoin/src/util/http
+github.com/skycoin/skycoin/src/util/iputil
 github.com/skycoin/skycoin/src/util/logging
+github.com/skycoin/skycoin/src/util/mathutil
+github.com/skycoin/skycoin/src/util/timeutil
+github.com/skycoin/skycoin/src/util/useragent
+github.com/skycoin/skycoin/src/visor
+github.com/skycoin/skycoin/src/visor/blockdb
+github.com/skycoin/skycoin/src/visor/dbutil
+github.com/skycoin/skycoin/src/visor/historydb
+github.com/skycoin/skycoin/src/wallet
+github.com/skycoin/skycoin/src/wallet/bip44wallet
+github.com/skycoin/skycoin/src/wallet/collection
+github.com/skycoin/skycoin/src/wallet/deterministic
+github.com/skycoin/skycoin/src/wallet/xpubwallet
 # github.com/skycoin/skycoin-service-discovery v1.3.29-0.20241019190420-233c2d68bce0
 ## explicit; go 1.22.0
 github.com/skycoin/skycoin-service-discovery/cmd/service-discovery/commands
@@ -634,12 +722,38 @@ github.com/skycoin/systray/internal/generated/notifier
 # github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 ## explicit
 github.com/songgao/water
+# github.com/sourcegraph/conc v0.3.0
+## explicit; go 1.19
+github.com/sourcegraph/conc
+github.com/sourcegraph/conc/internal/multierror
+github.com/sourcegraph/conc/iter
+github.com/sourcegraph/conc/panics
+# github.com/spf13/afero v1.11.0
+## explicit; go 1.19
+github.com/spf13/afero
+github.com/spf13/afero/internal/common
+github.com/spf13/afero/mem
+# github.com/spf13/cast v1.7.0
+## explicit; go 1.19
+github.com/spf13/cast
 # github.com/spf13/cobra v1.8.1
 ## explicit; go 1.15
 github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.5
 ## explicit; go 1.12
 github.com/spf13/pflag
+# github.com/spf13/viper v1.19.0
+## explicit; go 1.20
+github.com/spf13/viper
+github.com/spf13/viper/internal/encoding
+github.com/spf13/viper/internal/encoding/dotenv
+github.com/spf13/viper/internal/encoding/hcl
+github.com/spf13/viper/internal/encoding/ini
+github.com/spf13/viper/internal/encoding/javaproperties
+github.com/spf13/viper/internal/encoding/json
+github.com/spf13/viper/internal/encoding/toml
+github.com/spf13/viper/internal/encoding/yaml
+github.com/spf13/viper/internal/features
 # github.com/stretchr/objx v0.5.2
 ## explicit; go 1.20
 github.com/stretchr/objx
@@ -648,6 +762,9 @@ github.com/stretchr/objx
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/mock
 github.com/stretchr/testify/require
+# github.com/subosito/gotenv v1.6.0
+## explicit; go 1.18
+github.com/subosito/gotenv
 # github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
 ## explicit
 github.com/syndtr/gocapability/capability
@@ -731,6 +848,9 @@ go.opencensus.io/trace/tracestate
 ## explicit; go 1.22
 go.uber.org/mock/mockgen
 go.uber.org/mock/mockgen/model
+# go.uber.org/multierr v1.11.0
+## explicit; go 1.19
+go.uber.org/multierr
 # golang.org/x/arch v0.11.0
 ## explicit; go 1.18
 golang.org/x/arch/x86/x86asm
@@ -756,7 +876,12 @@ golang.org/x/crypto/twofish
 golang.org/x/crypto/xtea
 # golang.org/x/exp v0.0.0-20241009180824-f66d83c29e7c
 ## explicit; go 1.22.0
+golang.org/x/exp/constraints
 golang.org/x/exp/rand
+golang.org/x/exp/slices
+golang.org/x/exp/slog
+golang.org/x/exp/slog/internal
+golang.org/x/exp/slog/internal/buffer
 # golang.org/x/image v0.21.0
 ## explicit; go 1.18
 golang.org/x/image/bmp
@@ -810,10 +935,15 @@ golang.org/x/term
 # golang.org/x/text v0.19.0
 ## explicit; go 1.18
 golang.org/x/text/cases
+golang.org/x/text/encoding
+golang.org/x/text/encoding/internal
+golang.org/x/text/encoding/internal/identifier
+golang.org/x/text/encoding/unicode
 golang.org/x/text/internal
 golang.org/x/text/internal/language
 golang.org/x/text/internal/language/compact
 golang.org/x/text/internal/tag
+golang.org/x/text/internal/utf8internal
 golang.org/x/text/language
 golang.org/x/text/runes
 golang.org/x/text/secure/bidirule
@@ -888,6 +1018,9 @@ google.golang.org/protobuf/runtime/protoiface
 google.golang.org/protobuf/runtime/protoimpl
 google.golang.org/protobuf/types/descriptorpb
 google.golang.org/protobuf/types/gofeaturespb
+# gopkg.in/ini.v1 v1.67.0
+## explicit
+gopkg.in/ini.v1
 # gopkg.in/natefinch/lumberjack.v2 v2.2.1
 ## explicit; go 1.13
 gopkg.in/natefinch/lumberjack.v2

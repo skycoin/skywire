@@ -86,7 +86,7 @@ func (xy XY) Bytes() []byte {
 }
 
 // BytesUncompressed returns serialized key in uncompressed format "<04> <X> <Y>"
-//65 bytes
+// 65 bytes
 func (xy *XY) BytesUncompressed() (raw []byte) {
 	xy.X.Normalize() // See https://github.com/piotrnar/gocoin/issues/15
 	xy.Y.Normalize() // See https://github.com/piotrnar/gocoin/issues/15
