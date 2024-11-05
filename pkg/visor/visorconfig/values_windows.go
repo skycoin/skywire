@@ -12,10 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/sys/windows"
-
 	"github.com/google/uuid"
 	"github.com/jaypipes/ghw"
+	"golang.org/x/sys/windows"
 
 	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skyenv"
