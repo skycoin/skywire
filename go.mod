@@ -33,7 +33,7 @@ require (
 	github.com/skycoin/dmsg v1.3.29-0.20241019182716-022283c93835
 	github.com/skycoin/skycoin v0.28.1-0.20241104170131-96e4203814d4
 	github.com/skycoin/skycoin-service-discovery v1.3.29-0.20241019190420-233c2d68bce0
-	github.com/skycoin/skywire-services v1.3.29-0.20241019183828-0d760251ca55
+	github.com/skycoin/skywire-services v1.3.29-0.20241105123837-b4869a32c8db
 	github.com/skycoin/skywire-utilities v1.3.25
 	github.com/skycoin/systray v1.10.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
@@ -70,7 +70,6 @@ require (
 	github.com/bytedance/sonic v1.12.3 // indirect
 	github.com/bytedance/sonic/loader v0.2.0 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
-	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chen3feng/safecast v0.0.0-20220908170618-81b2ecd47937 // indirect
 	github.com/cloudwego/base64x v0.1.4 // indirect
@@ -80,12 +79,9 @@ require (
 	github.com/containerd/console v1.0.4 // indirect
 	github.com/creack/pty v1.1.23 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/dgraph-io/badger/v3 v3.2103.2 // indirect
-	github.com/dgraph-io/ristretto v0.1.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/disintegration/imaging v1.6.2 // indirect
 	github.com/dlclark/regexp2 v1.11.4 // indirect
-	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/eliukblau/pixterm/pkg/ansimage v0.0.0-20191210081756-9fb6cf8c2f75 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.6 // indirect
@@ -102,13 +98,7 @@ require (
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
-	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b // indirect
-	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
-	github.com/golang/protobuf v1.5.4 // indirect
-	github.com/golang/snappy v0.0.4 // indirect
 	github.com/gomarkdown/markdown v0.0.0-20240930133441-72d49d9543d8 // indirect
-	github.com/google/flatbuffers v24.3.25+incompatible // indirect
 	github.com/google/pprof v0.0.0-20241017200806-017d972448fc // indirect
 	github.com/gookit/color v1.5.4 // indirect
 	github.com/gopherjs/gopherjs v1.17.2 // indirect
@@ -124,7 +114,6 @@ require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.8 // indirect
 	github.com/klauspost/reedsolomon v1.12.4 // indirect
 	github.com/kyokomi/emoji/v2 v2.2.13 // indirect
@@ -167,7 +156,6 @@ require (
 	github.com/valyala/histogram v1.2.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
-	go.opencensus.io v0.24.0 // indirect
 	go.uber.org/mock v0.5.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.11.0 // indirect
