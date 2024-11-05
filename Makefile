@@ -139,7 +139,7 @@ print-run-source: ## Print the command used to go run from source
 	@echo "${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go cli config gen -n | sudo ${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go visor -n || true"
 
 build-merged: ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
-	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire ./cmd/skywire
+	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire ./cmd/skycoin-skywire
 
 build-merged-windows: clean-windows
 	powershell '${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire.exe ./cmd/skywire'
