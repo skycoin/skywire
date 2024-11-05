@@ -25,11 +25,7 @@ function InstallWix
 
 function BuildInstaller($arch)
 {
-    if ($arch -eq "386") {
-        $wintun_arch="x86"
-        $arch_title="386  "
-        $wix_arch="x86"
-    } else {
+    if ($arch -eq "amd64") {
         $wintun_arch="amd64"
         $arch_title="amd64"
         $wix_arch="x64"
@@ -71,18 +67,25 @@ function BuildInstaller($arch)
     Copy-Item skywire.bat .\build\skywire.bat
     New-Item new.update  > $null
     Move-Item new.update .\build\new.update
-    Invoke-WebRequest "https://www.plaintext.ir/wintun-0.14.1.zip" -OutFile wintun.zip
+    Invoke-WebRequest "https://plaintext.ir/wintun-0.14.1.zip" -OutFile wintun.zip
     Expand-Archive wintun.zip
     Copy-Item .\wintun\wintun\bin\$wintun_arch\wintun.dll .\build\wintun.dll
+    $installerVersion = $version -replace '(^v|-.+$)', ''
+    $productWxs = Get-Content -Path Product.wxs
+    $newContent = $productWxs -replace "skywireVersion", $installerVersion
+    Set-Content -Path Product.wxs -Value $newContent
 
     Write-Output "#       5. Building MSI Installer...                     #"
-    .\wix\candle.exe UI.wxs Product.wxs -arch $wix_arch > $null
+    .\wix\candle.exe UI.wxs Product.wxs -arch $wix_arch  > $null
     .\wix\light.exe -ext WixUIExtension -ext WixUtilExtension -sacl -spdb -out skywire.msi UI.wixobj Product.wixobj  > $null
     Move-Item skywire.msi ../../$msiName.msi -Force
 
     Write-Output "#          ==> Build Completed for $arch_title!                #"
     
     Write-Output "#       6. Cleaning Stage...                             #"
+    $productWxs = Get-Content -Path Product.wxs
+    $newContent = $productWxs -replace $installerVersion, "skywireVersion"
+    Set-Content -Path Product.wxs -Value $newContent
     Set-Location ../../
     CleanStage
 
@@ -93,6 +96,5 @@ Write-Output "`n##########################################################"
 Write-Output "#                                                        #"
 Write-Output "#        .:::: Create MSI Installer Package ::::.        #"
 BuildInstaller("amd64")
-BuildInstaller("386")
 Write-Output "#                                                        #"
 Write-Output "##########################################################`n"

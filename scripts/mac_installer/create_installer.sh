@@ -57,7 +57,7 @@ function build_installer() {
 
   # Create directories
   mkdir -p ${installer_build_dir}/binaries/Skywire.app
-  mkdir -p ${installer_package_dir}/Contents/{Resources,MacOS/apps}
+  mkdir -p ${installer_package_dir}/Contents/{Resources,MacOS}
 
   # build deinstaller
   go build -o ${installer_package_dir}/Contents/MacOS/deinstaller ${mac_script_dir}/desktop-deinstaller/deinstaller.go
@@ -78,7 +78,7 @@ function build_installer() {
   cat <<EOF >${installer_package_dir}/Contents/MacOS/SkywireLauncher
 #!/bin/bash
 
-osascript -e "do shell script \"/Applications/Skywire.app/Contents/MacOS/skywire visor -c '/Users/\${USER}/Library/Application Support/Skywire/skywire-config.json' --systray > /Users/\${USER}/Library/Logs/skywire/visor.log\" with administrator privileges"
+osascript -e "do shell script \"/Applications/Skywire.app/Contents/MacOS/skywire visor -c '/Users/\${USER}/Library/Application Support/Skywire/skywire-config.json' --systray > /Users/\${USER}/Library/Logs/Skywire/visor.log\" with administrator privileges"
 
 EOF
 
