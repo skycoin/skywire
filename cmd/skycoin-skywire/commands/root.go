@@ -13,10 +13,10 @@ import (
 	"github.com/pterm/pterm/putils"
 	dmsg "github.com/skycoin/dmsg/cmd/dmsg/commands"
 	sd "github.com/skycoin/skycoin-service-discovery/cmd/service-discovery/commands"
+	skycoin "github.com/skycoin/skycoin/cmd/skycoin-wallet/commands"
 	"github.com/spf13/cobra"
 
 	services "github.com/skycoin/skywire-services/cmd/skywire-services/commands"
-	skycoin "github.com/skycoin/skycoin/cmd/skycoin-wallet/commands"
 	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	sc "github.com/skycoin/skywire/cmd/apps/skychat/commands"
 	ssc "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
