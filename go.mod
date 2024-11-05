@@ -31,7 +31,7 @@ require (
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/skycoin/dmsg v1.3.29-0.20241019182716-022283c93835
-	github.com/skycoin/skycoin v0.28.1-0.20241104170131-96e4203814d4
+	github.com/skycoin/skycoin v0.28.1-0.20241105130348-39b49a2d0a7f
 	github.com/skycoin/skycoin-service-discovery v1.3.29-0.20241019190420-233c2d68bce0
 	github.com/skycoin/skywire-services v1.3.29-0.20241105123837-b4869a32c8db
 	github.com/skycoin/skywire-utilities v1.3.25
@@ -83,7 +83,7 @@ require (
 	github.com/disintegration/imaging v1.6.2 // indirect
 	github.com/dlclark/regexp2 v1.11.4 // indirect
 	github.com/eliukblau/pixterm/pkg/ansimage v0.0.0-20191210081756-9fb6cf8c2f75 // indirect
-	github.com/fsnotify/fsnotify v1.7.0 // indirect
+	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.6 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
 	github.com/go-chi/chi v4.1.2+incompatible // indirect

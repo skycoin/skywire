@@ -185,9 +185,10 @@ github.com/eliukblau/pixterm/pkg/ansimage
 # github.com/fatih/color v1.18.0
 ## explicit; go 1.17
 github.com/fatih/color
-# github.com/fsnotify/fsnotify v1.7.0
+# github.com/fsnotify/fsnotify v1.8.0
 ## explicit; go 1.17
 github.com/fsnotify/fsnotify
+github.com/fsnotify/fsnotify/internal
 # github.com/gabriel-vasile/mimetype v1.4.6
 ## explicit; go 1.20
 github.com/gabriel-vasile/mimetype
@@ -557,7 +558,7 @@ github.com/skycoin/dmsg/pkg/noise
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 ## explicit
 github.com/skycoin/noise
-# github.com/skycoin/skycoin v0.28.1-0.20241104170131-96e4203814d4
+# github.com/skycoin/skycoin v0.28.1-0.20241105130348-39b49a2d0a7f
 ## explicit; go 1.22.0
 github.com/skycoin/skycoin
 github.com/skycoin/skycoin/cmd/newcoin/commands
