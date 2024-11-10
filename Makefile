@@ -187,6 +187,7 @@ lint: ## Run linters. Use make install-linters first
 lint-windows: ## Run linters. Use make install-linters-windows first
 	powershell 'golangci-lint --version'
 	powershell 'golangci-lint run -c .golangci.yml ./...'
+	powershell 'gocyclo ./pkg ./cmd ./internal'
 
 test: ## Run tests
 	-go clean -testcache &>/dev/null
