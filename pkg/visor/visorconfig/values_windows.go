@@ -4,7 +4,6 @@
 package visorconfig
 
 import (
-	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -121,7 +120,7 @@ func getNodeHypervisor() string {
 		return "docker"
 	}
 	// Check for cgroup indicating Docker or container environment
-	data, err := ioutil.ReadFile("/proc/self/cgroup")
+	data, err := os.ReadFile("/proc/self/cgroup")
 	if err == nil && strings.Contains(string(data), "docker") {
 		return "docker"
 	}
@@ -171,7 +170,7 @@ func IsRoot() bool {
 		log.Fatalf("SID Error: %s", err)
 		return false
 	}
-	defer windows.FreeSid(sid)
+	defer windows.FreeSid(sid) //nolint: errcheck
 
 	token := windows.Token(0)
 

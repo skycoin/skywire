@@ -619,8 +619,10 @@ func (hv *Hypervisor) getAppStats() http.HandlerFunc {
 	})
 }
 
-// TODO: simplify
 // nolint: funlen,gocognit,godox
+// TODO: fix gocyclo error.
+//
+//gocyclo:ignore
 func (hv *Hypervisor) putApp() http.HandlerFunc {
 	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		type req struct {

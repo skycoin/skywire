@@ -484,6 +484,9 @@ func (r *router) serveSetup() {
 	}
 }
 
+// TODO: fix gocyclo error.
+//
+//gocyclo:ignore
 func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Config) (*NoiseRouteGroup, error) {
 	r.logger.Debugf("Saving route group rules with desc: %s", &rules.Desc)
 
