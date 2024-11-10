@@ -13,6 +13,6 @@ func GainRoot() (int, error) {
 }
 
 // ReleaseRoot releases root privileges, not needed on windows
-func ReleaseRoot(oldUID int) error {
+func ReleaseRoot(_ int) error {
 	return nil
 }
