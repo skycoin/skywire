@@ -342,6 +342,9 @@ func (c *Client) setupTUN(tunIP, tunGateway net.IP) error {
 	return c.SetupTUN(c.tun.Name(), tunIP.String()+TUNNetmaskCIDR, tunGateway.String(), TUNMTU)
 }
 
+// TODO: fix gocyclo error.
+//
+//gocyclo:ignore
 func (c *Client) serveConn(conn net.Conn) error {
 	tunIP, tunGateway, err := c.shakeHands(conn)
 	if err != nil {

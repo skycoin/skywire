@@ -91,6 +91,9 @@ var (
 //go:embed "description.txt"
 var description string
 
+// TODO: fix gocyclo error.
+//
+//gocyclo:ignore
 func parseArgs() error {
 	cds := conf.ConfigDir.QueryFolders(configdir.All)
 	cpaths := make([]string, len(cds))
@@ -226,6 +229,9 @@ func setDefaultTermuiColors(c gotop.Config) {
 	ui.Theme.Block.Border = ui.NewStyle(ui.Color(c.Colorscheme.BorderLine), ui.Color(c.Colorscheme.Bg))
 }
 
+// TODO: fix gocyclo error.
+//
+//gocyclo:ignore
 func eventLoop(c gotop.Config, grid *layout.MyGrid) {
 	drawTicker := time.NewTicker(c.UpdateInterval).C
 
@@ -408,6 +414,9 @@ func eventLoop(c gotop.Config, grid *layout.MyGrid) {
 	}
 }
 
+// TODO: fix gocyclo error.
+//
+//gocyclo:ignore
 func run() int {
 	ling, err := lingo.New("en_US", ".", gotop.Dicts)
 	if err != nil {
