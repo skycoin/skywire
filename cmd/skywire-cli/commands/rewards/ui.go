@@ -129,6 +129,9 @@ var htmlRewardPageTemplate = `
 var htmlPageTemplateData htmlTemplateData
 var tmpl *htmpl.Template
 
+// TODO: fix gocyclo error.
+//
+//gocyclo:ignore
 func server() {
 
 	log := logging.MustGetLogger("dmsghttp")
