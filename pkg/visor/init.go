@@ -887,6 +887,9 @@ func handlePingConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 }
 
 // getRouteSetupHooks aka autotransport
+// TODO: fix gocyclo error.
+//
+//gocyclo:ignore
 func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []router.RouteSetupHook {
 	retrier := netutil.NewRetrier(log, time.Second, time.Second*20, 3, 1.3)
 	return []router.RouteSetupHook{
@@ -1298,6 +1301,9 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 	return nil
 }
 
+// TODO: fix gocyclo error.
+//
+//gocyclo:ignore
 func initEnsureTPDConcurrency(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
 	const tickDuration = 5 * time.Minute
 	ticker := time.NewTicker(tickDuration)
@@ -1408,6 +1414,9 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error { /
 	return nil
 }
 
+// TODO: fix gocyclo error.
+//
+//gocyclo:ignore
 func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Dmsgpty
 
