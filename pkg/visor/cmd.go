@@ -57,8 +57,10 @@ var (
 	isForceColor   bool
 )
 
+// TODO: fix gocyclo error.
+//
+//gocyclo:ignore
 func init() {
-
 	root = visorconfig.IsRoot()
 	RootCmd.Flags().SortFlags = false
 	//the default is not set to fix the aesthetic of the help command

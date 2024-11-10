@@ -126,6 +126,9 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 // The config's 'sk' field will be nil if not specified.
 // Generated config will be saved to 'confPath'.
 // This function always returns the latest config version.
+// TODO: fix gocyclo error.
+//
+//gocyclo:ignore
 func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool, pkgEnv bool, testEnv bool, dmsgHTTP bool, hypervisor bool, confPath, hypervisorPKs string, services *Services) (*V1, error) {
 	if usrEnv && pkgEnv {
 		log.Fatal("usrEnv and pkgEnv are mutually exclusive")

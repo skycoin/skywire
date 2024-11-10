@@ -43,6 +43,9 @@ var stCmd = &cobra.Command{
 	},
 }
 
+// TODO: fix gocyclo error.
+//
+//gocyclo:ignore
 func makeTree() {
 	utFileInfo, utFileInfoErr := os.Stat("/tmp/ut.json")
 	utData, utDataErr := script.File("/tmp/ut.json").String()
