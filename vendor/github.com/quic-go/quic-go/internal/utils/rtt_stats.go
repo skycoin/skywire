@@ -27,11 +27,6 @@ type RTTStats struct {
 	maxAckDelay time.Duration
 }
 
-// NewRTTStats makes a properly initialized RTTStats object
-func NewRTTStats() *RTTStats {
-	return &RTTStats{}
-}
-
 // MinRTT Returns the minRTT for the entire connection.
 // May return Zero if no valid updates have occurred.
 func (r *RTTStats) MinRTT() time.Duration { return r.minRTT }
@@ -55,7 +50,7 @@ func (r *RTTStats) PTO(includeMaxAckDelay bool) time.Duration {
 	if r.SmoothedRTT() == 0 {
 		return 2 * defaultInitialRTT
 	}
-	pto := r.SmoothedRTT() + Max(4*r.MeanDeviation(), protocol.TimerGranularity)
+	pto := r.SmoothedRTT() + max(4*r.MeanDeviation(), protocol.TimerGranularity)
 	if includeMaxAckDelay {
 		pto += r.MaxAckDelay()
 	}
@@ -64,7 +59,7 @@ func (r *RTTStats) PTO(includeMaxAckDelay bool) time.Duration {
 
 // UpdateRTT updates the RTT based on a new sample.
 func (r *RTTStats) UpdateRTT(sendDelta, ackDelay time.Duration, now time.Time) {
-	if sendDelta == InfDuration || sendDelta <= 0 {
+	if sendDelta <= 0 {
 		return
 	}
 
@@ -90,7 +85,7 @@ func (r *RTTStats) UpdateRTT(sendDelta, ackDelay time.Duration, now time.Time) {
 		r.smoothedRTT = sample
 		r.meanDeviation = sample / 2
 	} else {
-		r.meanDeviation = time.Duration(oneMinusBeta*float32(r.meanDeviation/time.Microsecond)+rttBeta*float32(AbsDuration(r.smoothedRTT-sample)/time.Microsecond)) * time.Microsecond
+		r.meanDeviation = time.Duration(oneMinusBeta*float32(r.meanDeviation/time.Microsecond)+rttBeta*float32((r.smoothedRTT-sample).Abs()/time.Microsecond)) * time.Microsecond
 		r.smoothedRTT = time.Duration((float32(r.smoothedRTT/time.Microsecond)*oneMinusAlpha)+(float32(sample/time.Microsecond)*rttAlpha)) * time.Microsecond
 	}
 }
@@ -112,20 +107,4 @@ func (r *RTTStats) SetInitialRTT(t time.Duration) {
 	}
 	r.smoothedRTT = t
 	r.latestRTT = t
-}
-
-// OnConnectionMigration is called when connection migrates and rtt measurement needs to be reset.
-func (r *RTTStats) OnConnectionMigration() {
-	r.latestRTT = 0
-	r.minRTT = 0
-	r.smoothedRTT = 0
-	r.meanDeviation = 0
-}
-
-// ExpireSmoothedMetrics causes the smoothed_rtt to be increased to the latest_rtt if the latest_rtt
-// is larger. The mean deviation is increased to the most recent deviation if
-// it's larger.
-func (r *RTTStats) ExpireSmoothedMetrics() {
-	r.meanDeviation = Max(r.meanDeviation, AbsDuration(r.smoothedRTT-r.latestRTT))
-	r.smoothedRTT = Max(r.smoothedRTT, r.latestRTT)
 }

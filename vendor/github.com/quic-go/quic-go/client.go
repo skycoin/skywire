@@ -28,14 +28,14 @@ type client struct {
 
 	initialPacketNumber  protocol.PacketNumber
 	hasNegotiatedVersion bool
-	version              protocol.VersionNumber
+	version              protocol.Version
 
 	handshakeChan chan struct{}
 
 	conn quicConn
 
-	tracer    logging.ConnectionTracer
-	tracingID uint64
+	tracer    *logging.ConnectionTracer
+	tracingID ConnectionTracingID
 	logger    utils.Logger
 }
 
@@ -153,7 +153,7 @@ func dial(
 	if c.config.Tracer != nil {
 		c.tracer = c.config.Tracer(context.WithValue(ctx, ConnectionTracingKey, c.tracingID), protocol.PerspectiveClient, c.destConnID)
 	}
-	if c.tracer != nil {
+	if c.tracer != nil && c.tracer.StartedConnection != nil {
 		c.tracer.StartedConnection(c.sendConn.LocalAddr(), c.sendConn.RemoteAddr(), c.srcConnID, c.destConnID)
 	}
 	if err := c.dial(ctx); err != nil {
@@ -191,6 +191,7 @@ func (c *client) dial(ctx context.Context) error {
 	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.tlsConf.ServerName, c.sendConn.LocalAddr(), c.sendConn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
 
 	c.conn = newClientConnection(
+		context.WithValue(context.WithoutCancel(ctx), ConnectionTracingKey, c.tracingID),
 		c.sendConn,
 		c.packetHandlers,
 		c.destConnID,
@@ -202,7 +203,6 @@ func (c *client) dial(ctx context.Context) error {
 		c.use0RTT,
 		c.hasNegotiatedVersion,
 		c.tracer,
-		c.tracingID,
 		c.logger,
 		c.version,
 	)
@@ -232,8 +232,8 @@ func (c *client) dial(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
-		c.conn.shutdown()
-		return ctx.Err()
+		c.conn.destroy(nil)
+		return context.Cause(ctx)
 	case err := <-errorChan:
 		return err
 	case recreateErr := <-recreateChan:

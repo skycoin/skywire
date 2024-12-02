@@ -15,6 +15,8 @@ const (
 	ipv4PKTINFO  = unix.IP_RECVPKTINFO
 )
 
+const ecnIPv4DataLen = 4
+
 // ReadBatch only returns a single packet on OSX,
 // see https://godoc.org/golang.org/x/net/ipv4#PacketConn.ReadBatch.
 const batchSize = 1
@@ -31,4 +33,6 @@ func parseIPv4PktInfo(body []byte) (ip netip.Addr, ifIndex uint32, ok bool) {
 	return netip.AddrFrom4(*(*[4]byte)(body[8:12])), binary.LittleEndian.Uint32(body), true
 }
 
-func isGSOSupported(syscall.RawConn) bool { return false }
+func isGSOEnabled(syscall.RawConn) bool { return false }
+
+func isECNEnabled() bool { return !isECNDisabledUsingEnv() }

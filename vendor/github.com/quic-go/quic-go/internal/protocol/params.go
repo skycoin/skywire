@@ -3,16 +3,13 @@ package protocol
 import "time"
 
 // DesiredReceiveBufferSize is the kernel UDP receive buffer size that we'd like to use.
-const DesiredReceiveBufferSize = (1 << 20) * 2 // 2 MB
+const DesiredReceiveBufferSize = (1 << 20) * 7 // 7 MB
 
 // DesiredSendBufferSize is the kernel UDP send buffer size that we'd like to use.
-const DesiredSendBufferSize = (1 << 20) * 2 // 2 MB
+const DesiredSendBufferSize = (1 << 20) * 7 // 7 MB
 
-// InitialPacketSizeIPv4 is the maximum packet size that we use for sending IPv4 packets.
-const InitialPacketSizeIPv4 = 1252
-
-// InitialPacketSizeIPv6 is the maximum packet size that we use for sending IPv6 packets.
-const InitialPacketSizeIPv6 = 1232
+// InitialPacketSize is the initial (before Path MTU discovery) maximum packet size used.
+const InitialPacketSize = 1280
 
 // MaxCongestionWindowPackets is the maximum congestion window in packet.
 const MaxCongestionWindowPackets = 10000
@@ -65,9 +62,6 @@ const MaxAcceptQueueSize = 32
 // TokenValidity is the duration that a (non-retry) token is considered valid
 const TokenValidity = 24 * time.Hour
 
-// RetryTokenValidity is the duration that a retry token is considered valid
-const RetryTokenValidity = 10 * time.Second
-
 // MaxOutstandingSentPackets is maximum number of packets saved for retransmission.
 // When reached, it imposes a soft limit on sending new packets:
 // Sending ACKs and retransmission is still allowed, but now new regular packets can be sent.
@@ -108,9 +102,6 @@ const DefaultIdleTimeout = 30 * time.Second
 // DefaultHandshakeIdleTimeout is the default idle timeout used before handshake completion.
 const DefaultHandshakeIdleTimeout = 5 * time.Second
 
-// DefaultHandshakeTimeout is the default timeout for a connection until the crypto handshake succeeds.
-const DefaultHandshakeTimeout = 10 * time.Second
-
 // MaxKeepAliveInterval is the maximum time until we send a packet to keep a connection alive.
 // It should be shorter than the time that NATs clear their mapping.
 const MaxKeepAliveInterval = 20 * time.Second
@@ -134,13 +125,6 @@ const MaxPostHandshakeCryptoFrameSize = 1000
 // The MaxAckFrameSize should be large enough to encode many ACK range,
 // but must ensure that a maximum size ACK frame fits into one packet.
 const MaxAckFrameSize ByteCount = 1000
-
-// MaxDatagramFrameSize is the maximum size of a DATAGRAM frame (RFC 9221).
-// The size is chosen such that a DATAGRAM frame fits into a QUIC packet.
-const MaxDatagramFrameSize ByteCount = 1200
-
-// DatagramRcvQueueLen is the length of the receive queue for DATAGRAM frames (RFC 9221)
-const DatagramRcvQueueLen = 128
 
 // MaxNumAckRanges is the maximum number of ACK ranges that we send in an ACK frame.
 // It also serves as a limit for the packet history.
