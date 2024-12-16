@@ -18,87 +18,170 @@ const (
 	// Dmsg port constants.
 	// TODO(evanlinjin): Define these properly. These are currently random.
 
-	DmsgCtrlPort           uint16 = 7   // DmsgCtrlPort Listening port for dmsgctrl protocol (similar to TCP Echo Protocol). //nolint
-	DmsgSetupPort          uint16 = 36  // DmsgSetupPort Listening port of a setup node.
-	DmsgHypervisorPort     uint16 = 46  // DmsgHypervisorPort Listening port of a hypervisor for incoming RPC visor connections over dmsg.
-	DmsgTransportSetupPort uint16 = 47  // DmsgTransportSetupPort Listening port for transport setup RPC over dmsg.
-	DmsgAwaitSetupPort     uint16 = 136 // DmsgAwaitSetupPort Listening port of a visor for setup operations.
+	// DmsgCtrlPort Listening port for dmsgctrl protocol (similar to TCP Echo Protocol). //nolint
+	DmsgCtrlPort uint16 = 7
+
+	// DmsgSetupPort Listening port of a setup node.
+	DmsgSetupPort uint16 = 36
+
+	// DmsgHypervisorPort Listening port of a hypervisor for incoming RPC visor connections over dmsg.
+	DmsgHypervisorPort uint16 = 46
+
+	// DmsgTransportSetupPort Listening port for transport setup RPC over dmsg.
+	DmsgTransportSetupPort uint16 = 47
+
+	// DmsgAwaitSetupPort Listening port of a visor for setup operations.
+	DmsgAwaitSetupPort uint16 = 136
 
 	// Transport port constants.
 
-	TransportPort     uint16 = 45   // TransportPort Listening port of a visor for incoming transports.
-	PublicAutoconnect        = true // PublicAutoconnect ...
+	// TransportPort Listening port of a visor for incoming transports.
+	TransportPort uint16 = 45
+
+	// PublicAutoconnect determines if the visor automatically creates stcpr transports to public visors
+	PublicAutoconnect = true
 
 	// Dmsgpty constants.
 
-	DmsgPtyPort   uint16 = 22     // DmsgPtyPort ...
-	DmsgPtyCLINet        = "unix" // DmsgPtyCLINet ...
+	// DmsgPtyPort is the dmsg port to listen on for dmsgpty connections
+	DmsgPtyPort uint16 = 22
+
+	// DmsgPtyCLINet is the type of cli net used by dmsgpty
+	DmsgPtyCLINet = "unix"
 
 	// Skywire-TCP constants.
 
-	STCPAddr = ":7777" // STCPAddr ...
+	// STCPAddr is the address to listen for stcpr or stcp transports
+	STCPAddr = ":7777"
 
 	// Default skywire app constants.
 
-	SkychatName         = "skychat"  // SkychatName ...
-	SkychatPort  uint16 = 1          // SkychatPort ...
-	SkychatAddr         = ":8001"    // SkychatAddr ...
-	PingTestName        = "pingtest" // PingTestName ...
-	PingTestPort uint16 = 2          // PingTestPort ...
-	SkysocksName        = "skysocks" // SkysocksName ...
-	SkysocksPort uint16 = 3          // SkysocksPort ...
+	// SkychatName is the name of the skychat app
+	SkychatName = "skychat"
 
-	SkysocksClientName        = "skysocks-client" // SkysocksClientName ...
-	SkysocksClientPort uint16 = 13                // SkysocksClientPort ...
-	SkysocksClientAddr        = ":1080"           // SkysocksClientAddr ...
+	// SkychatPort is the dmsg port used by skychat
+	SkychatPort uint16 = 1
 
-	VPNServerName        = "vpn-server" // VPNServerName ...
-	VPNServerPort uint16 = 44           // VPNServerPort ...
+	// SkychatAddr is the non-dmsg port used to access the skychat app on localhost
+	SkychatAddr = ":8001"
 
-	VPNClientName = "vpn-client" // VPNClientName ...
+	// PingTestName is the namew of the ping test
+	PingTestName = "pingtest"
+
+	// PingTestPort is the port to user for ping tests
+	PingTestPort uint16 = 2
+
+	// SkysocksName is the name of the skysocks app
+	SkysocksName = "skysocks"
+
+	// SkysocksPort is the skysocks port on dmsg
+	SkysocksPort uint16 = 3
+
+	// SkysocksClientName is the skysocks-client app name
+	SkysocksClientName = "skysocks-client"
+
+	// SkysocksClientPort is the skysocks-client app dmsg port
+	SkysocksClientPort uint16 = 13
+
+	// SkysocksClientAddr is the default port the socks5 proxy client serves on
+	SkysocksClientAddr = ":1080"
+
+	// VPNServerName is the name of the vpn server app
+	VPNServerName = "vpn-server"
+
+	// VPNServerPort is the vpn server dmsg port
+	VPNServerPort uint16 = 44
+
+	// VPNClientName is the name of the vpn client app
+	VPNClientName = "vpn-client"
 
 	// TODO(darkrengarius): this one's not needed for the app to run but lack of it causes errors
 
-	VPNClientPort           uint16 = 43                   // VPNClientPort ...
-	ExampleServerName              = "example-server-app" // ExampleServerName ...
-	ExampleServerPort       uint16 = 45                   // ExampleServerPort ...
-	ExampleClientName              = "example-client-app" // ExampleClientName ...
-	ExampleClientPort       uint16 = 46                   // ExampleClientPort ...
-	SkyForwardingServerName        = "sky-forwarding"     // SkyForwardingServerName ...
-	SkyForwardingServerPort uint16 = 47                   // SkyForwardingServerPort ...
-	SkyPingName                    = "sky-ping"           // SkyPingName ...
-	SkyPingPort             uint16 = 48                   // SkyPingPort ...
+	// VPNClientPort over dmsg
+	VPNClientPort uint16 = 43
+
+	// ExampleServerName is the name of the example server app
+	ExampleServerName = "example-server-app"
+
+	// ExampleServerPort is dmsg port of example server app
+	ExampleServerPort uint16 = 45
+
+	// ExampleClientName is the name of the example client app
+	ExampleClientName = "example-client-app"
+
+	// ExampleClientPort dmsg port of example client app
+	ExampleClientPort uint16 = 46
+
+	// SkyForwardingServerName name of sky forwarding server app
+	SkyForwardingServerName = "sky-forwarding"
+
+	// SkyForwardingServerPort dmsg port of skyfwd server app
+	SkyForwardingServerPort uint16 = 47
+
+	// SkyPingName is the name of the sky ping
+	SkyPingName = "sky-ping"
+
+	// SkyPingPort dmsg port of sky ping
+	SkyPingPort uint16 = 48
 
 	// RPC constants.
 
-	RPCAddr             = "localhost:3435" // RPCAddr ...
-	RPCTimeout          = 20 * time.Second // RPCTimeout ...
-	TransportRPCTimeout = 1 * time.Minute  // TransportRPCTimeout ...
-	UpdateRPCTimeout    = 6 * time.Hour    // UpdateRPCTimeout update requires huge timeout
+	// RPCAddr for skywire-cli to access skywire-visor
+	RPCAddr = "localhost:3435"
+
+	// RPCTimeout timeout of rpc requests
+	RPCTimeout = 20 * time.Second
+
+	// TransportRPCTimeout timeout of transport rpc
+	TransportRPCTimeout = 1 * time.Minute
+
+	// UpdateRPCTimeout update requires huge timeout - NOTE: this is likely unused
+	UpdateRPCTimeout = 6 * time.Hour
 
 	// Default skywire app server and discovery constants
 
-	AppSrvAddr                = "localhost:5505" // AppSrvAddr ...
-	ServiceDiscUpdateInterval = time.Minute      // ServiceDiscUpdateInterval ...
-	AppBinPath                = "./"             // AppBinPath ...
-	LogLevel                  = "info"           // LogLevel ...
+	// AppSrvAddr address of app server
+	AppSrvAddr = "localhost:5505"
+
+	// ServiceDiscUpdateInterval update interval for apps in service discovery
+	ServiceDiscUpdateInterval = time.Minute
+
+	// AppBinPath is the default path for the apps
+	AppBinPath = "./"
+
+	// LogLevel is the default log level of the visor
+	LogLevel = "info"
 
 	// Routing constants
 
-	TpLogStore = "transport_logs" // TpLogStore ...
-	Custom     = "custom"         // Custom ...
+	// TpLogStore is where tp logs are stored
+	TpLogStore = "transport_logs"
 
-	// LocalPath constants
+	// Custom path to serve files from dmsghttp log server over dmsg
+	Custom = "custom"
+
+	// LocalPath where the visor writes files to
 	LocalPath = "./local"
 
 	// Default hypervisor constants
 
-	HypervisorDB      = ".skycoin/hypervisor/users.db" //HypervisorDB ...
-	EnableAuth        = false                          // EnableAuth ...
-	PackageEnableAuth = true                           // PackageEnableAuth ...
-	EnableTLS         = false                          // EnableTLS ...
-	TLSKey            = "./ssl/key.pem"                // TLSKey ...
-	TLSCert           = "./ssl/cert.pem"               // TLSCert ...
+	//HypervisorDB stores the password to access the hypervisor
+	HypervisorDB = ".skycoin/hypervisor/users.db"
+
+	// EnableAuth enables auth on the hypervisor UI
+	EnableAuth = false
+
+	// PackageEnableAuth is the default auth for package-based installations for hypervisor UI
+	PackageEnableAuth = true
+
+	// EnableTLS enables tls for accessing hypervisor ui
+	EnableTLS = false
+
+	// TLSKey for access to hvui
+	TLSKey = "./ssl/key.pem"
+
+	// TLSCert for access to hvui
+	TLSCert = "./ssl/cert.pem"
 
 	// IPCShutdownMessageType sends IPC shutdown message type
 	IPCShutdownMessageType = 68

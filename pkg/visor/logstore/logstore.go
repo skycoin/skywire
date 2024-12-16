@@ -24,10 +24,10 @@ type Store interface {
 // overwriting the oldest entry when over the capacity
 // returned hook should be registered in logrus master logger to
 // store log entries
-func MakeStore(max int) (Store, logrus.Hook) {
-	entries := make([]string, max)
+func MakeStore(maxx int) (Store, logrus.Hook) {
+	entries := make([]string, maxx)
 	formatter := &logrus.JSONFormatter{}
-	store := &store{cap: int64(max), entries: entries, formatter: formatter}
+	store := &store{cap: int64(maxx), entries: entries, formatter: formatter}
 	return store, store
 }
 
