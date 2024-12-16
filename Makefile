@@ -182,11 +182,15 @@ lint: ## Run linters. Use make install-linters first
 	${OPTS} golangci-lint run -c .golangci.yml ./cmd/...
 	${OPTS} golangci-lint run -c .golangci.yml ./pkg/...
 	${OPTS} golangci-lint run -c .golangci.yml	 ./...
+
+gocyclo: ## Run gocyclo
 	gocyclo -over 14 .
 
 lint-windows: ## Run linters. Use make install-linters-windows first
 	powershell 'golangci-lint --version'
 	powershell 'golangci-lint run -c .golangci.yml ./...'
+
+gocyclo-windows: ## Run gocyclo on windows
 	powershell 'gocyclo -over 14 .'
 
 test: ## Run tests
@@ -214,7 +218,6 @@ tidy: ## Tidies and vendors dependencies.
 format: tidy ## Formats the code. Must have goimports and goimports-reviser installed (use make install-linters).
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg ./cmd ./internal
 	find . -type f -name '*.go' -not -path "./.git/*" -not -path "./vendor/*"  -exec goimports-reviser -project-name ${PROJECT_BASE} {} \;
-	gocyclo -over 14 .
 
 format-windows: tidy ## Formats the code. Must have goimports and goimports-reviser installed (use make install-linters).
 	powershell 'Get-ChildItem -Directory | where Name -NotMatch vendor | % { Get-ChildItem $$_ -Recurse -Include *.go } | % {goimports -w -local ${PROJECT_BASE} $$_ }'

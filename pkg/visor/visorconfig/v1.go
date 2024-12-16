@@ -288,9 +288,9 @@ func (v1 *V1) AddAppConfig(launch *launcher.AppLauncher, appName, binaryName str
 	}
 	var randomNumber int
 	for {
-		min := 10
-		max := 99
-		randomNumber = rand.Intn(max-min+1) + min                //nolint: gosec
+		minn := 10
+		maxx := 99
+		randomNumber = rand.Intn(maxx-minn+1) + minn             //nolint: gosec
 		if _, ok := busyPorts[routing.Port(randomNumber)]; !ok { //nolint: gosec
 			break
 		}
