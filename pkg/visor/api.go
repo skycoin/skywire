@@ -1393,19 +1393,19 @@ func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
 			result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(0), Min: fmt.Sprint(0), Mean: fmt.Sprint(0), Status: "Failed"})
 			continue
 		}
-		var max, min, mean, sumLatency time.Duration
-		min = time.Duration(10000000000)
+		var maxx, minn, mean, sumLatency time.Duration
+		minn = time.Duration(10000000000)
 		for _, latency := range latencies {
-			if latency > max {
-				max = latency
+			if latency > maxx {
+				maxx = latency
 			}
-			if latency < min {
-				min = latency
+			if latency < minn {
+				minn = latency
 			}
 			sumLatency += latency
 		}
 		mean = sumLatency / time.Duration(len(latencies))
-		result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(max), Min: fmt.Sprint(min), Mean: fmt.Sprint(mean), Status: "Success"})
+		result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(maxx), Min: fmt.Sprint(minn), Mean: fmt.Sprint(mean), Status: "Success"})
 		v.StopPing(conf.PK) //nolint
 	}
 	return result, nil
