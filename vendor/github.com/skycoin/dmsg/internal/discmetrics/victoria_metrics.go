@@ -2,7 +2,7 @@
 package discmetrics
 
 import (
-	"github.com/skycoin/skywire-utilities/pkg/metricsutil"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/metricsutil"
 )
 
 // VictoriaMetrics implements `Metrics` using `VictoriaMetrics`.

@@ -2,9 +2,9 @@ package config
 
 import (
 	msg "github.com/skycoin/dmsg/pkg/dmsgserver"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 const (

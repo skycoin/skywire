@@ -34,10 +34,10 @@ require (
 	github.com/pterm/pterm v0.12.79
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.3
-	github.com/skycoin/dmsg v1.3.29-0.20241019182716-022283c93835
+	github.com/skycoin/dmsg v1.3.29-0.20241217193208-d32ec623e670
 	github.com/skycoin/skycoin v0.28.1-0.20241105130348-39b49a2d0a7f
-	github.com/skycoin/skycoin-service-discovery v1.3.29-0.20241019190420-233c2d68bce0
-	github.com/skycoin/skywire-services v1.3.29-0.20241105123837-b4869a32c8db
+	github.com/skycoin/skycoin-service-discovery v1.3.29-0.20241217194518-634b05d94b2e
+	github.com/skycoin/skywire-services v1.3.29-0.20241217194941-6269f3c618c3
 	github.com/skycoin/systray v1.10.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.8.1
@@ -140,7 +140,6 @@ require (
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6 // indirect
-	github.com/skycoin/skywire-utilities v1.3.25 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/spf13/afero v1.11.0 // indirect
 	github.com/spf13/cast v1.7.0 // indirect
@@ -186,16 +185,18 @@ require (
 //replace github.com/skycoin/dmsg => ../dmsg
 //replace github.com/skycoin/skywire-services => ../skywire-services
 //replace github.com/skycoin/skycoin-service-discovery => ../skycoin-service-discovery
-//replace github.com/skycoin/skywire-utilities => ../skywire-utilities
 
-// Uncomment to update other skywire deps to specific commit hash.
+// To update other skywire deps to specific commit hash:
 // run `go mod tidy ; go mod vendor`
 // copy the changed line to the correct place in the above
 // then, re-comment the line before saving.
+// replace github.com/skycoin/skycoin => github.com/skycoin/skycoin <commit-hash>
 // replace github.com/skycoin/dmsg => github.com/skycoin/dmsg <commit-hash>
 // replace github.com/skycoin/skywire-services => github.com/skycoin/skywire-services <commit-hash>
-//replace github.com/skycoin/skywire-services => github.com/skycoin/skywire-services <commit-hash>
-// replace github.com/skycoin/skycoin => github.com/skycoin/skycoin <commit-hash>
-
 // replace github.com/skycoin/skycoin-service-discovery => github.com/skycoin/skycoin-service-discovery <commit-hash>
-// replace github.com/skycoin/skywire-utilities => github.com/skycoin/skywire-utilities <commit-hash>
+
+// Below should reflect the current versions of the following deps
+// replace github.com/skycoin/skycoin => github.com/skycoin/skycoin v0.28.1-0.20241105130348-39b49a2d0a7f
+// replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20241217193208-d32ec623e670
+// replace github.com/skycoin/skywire-services => github.com/skycoin/skywire-services v1.3.29-0.20241217194941-6269f3c618c3
+// replace github.com/skycoin/skycoin-service-discovery => github.com/skycoin/skycoin-service-discovery v1.3.29-0.20241217194518-634b05d94b2e

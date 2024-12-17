@@ -63,6 +63,21 @@ Visor apps are not executed directly by the user, but hosted by the visor proces
 
 Further documentation can be found in the [skywire wiki](https://github.com/skycoin/skywire/wiki).
 
+## `go install` or `go run` Skywire
+
+If you have golang set up - including setting GOPATH, GOBIN, and appending GOBIN to your PATH reenvironmental variable, skywire may be installed to your GOBIN as follows:
+
+```
+_skywire="github.com/skycoin/skywire" go install -ldflags=" -X ${_skywire}/pkg/skywire-utilities/pkg/buildinfo.golist=$(go list -mod=mod -m -json ${_skywire}@develop)" ${_skywire}/cmd/skywire@develop
+```
+
+`-ldflags` compiles the version into the binary, so that the visor will be eligible for rewards.
+
+It's also possible to `go run` skywire from outside the source code, but this is generally not recommended:
+```
+_skywire="github.com/skycoin/skywire" go run -ldflags=" -X ${_skywire}/pkg/skywire-utilities/pkg/buildinfo.golist=$(go list -mod=mod -m -json ${_skywire}@develop)" ${_skywire}/cmd/skywire@develop
+```
+
 ## Installing Skywire from Release
 
 Releases for windows & macOS are available from the [release section](https://github.com/skycoin/skywire/releases/)

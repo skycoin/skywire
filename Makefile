@@ -11,7 +11,7 @@ RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 COMMIT := $(shell git rev-list -1 HEAD)
 
 PROJECT_BASE := github.com/skycoin/skywire
-SKYWIRE_UTILITIES_BASE := github.com/skycoin/skywire-utilities
+SKYWIRE_UTILITIES_BASE := github.com/skycoin/skywire/pkg/skywire-utilities
 ifeq ($(OS),Windows_NT)
 	SHELL := pwsh
 	OPTS?=powershell -Command setx GO111MODULE on;
