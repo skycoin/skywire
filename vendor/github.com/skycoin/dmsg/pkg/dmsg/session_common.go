@@ -12,7 +12,7 @@ import (
 	"github.com/chen3feng/safecast"
 	"github.com/hashicorp/yamux"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 
 	"github.com/skycoin/dmsg/pkg/noise"
 )

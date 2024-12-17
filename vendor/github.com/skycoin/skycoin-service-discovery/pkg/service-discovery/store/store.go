@@ -4,8 +4,8 @@ import (
 	"context"
 	"io"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"gorm.io/gorm"
 )
 

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/skycoin/noise"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 var (

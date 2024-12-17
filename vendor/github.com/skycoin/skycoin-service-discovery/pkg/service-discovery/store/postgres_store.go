@@ -10,9 +10,9 @@ import (
 	"github.com/chen3feng/safecast"
 	"github.com/lib/pq"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skywire-utilities/pkg/geo"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/geo"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"gorm.io/gorm"
 )
 
