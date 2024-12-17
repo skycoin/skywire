@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/skycoin/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 )
 
 func TestDefaultNetworkInterfaceIPs(t *testing.T) {

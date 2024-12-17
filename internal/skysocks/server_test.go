@@ -16,7 +16,7 @@ import (
 	"golang.org/x/net/nettest"
 	"golang.org/x/net/proxy"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
 func TestMain(m *testing.M) {

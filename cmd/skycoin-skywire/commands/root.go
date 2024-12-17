@@ -17,7 +17,6 @@ import (
 	"github.com/spf13/cobra"
 
 	services "github.com/skycoin/skywire-services/cmd/skywire-services/commands"
-	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	sc "github.com/skycoin/skywire/cmd/apps/skychat/commands"
 	ssc "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
 	ss "github.com/skycoin/skywire/cmd/apps/skysocks/commands"
@@ -25,6 +24,7 @@ import (
 	vpns "github.com/skycoin/skywire/cmd/apps/vpn-server/commands"
 	sn "github.com/skycoin/skywire/cmd/setup-node/commands"
 	scli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 

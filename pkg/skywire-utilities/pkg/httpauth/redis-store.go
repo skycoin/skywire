@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-redis/redis/v8"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 type redisStore struct {

@@ -13,7 +13,6 @@ import (
 	"github.com/pterm/pterm/putils"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire-utilities/pkg/buildinfo"
 	clicompletion "github.com/skycoin/skywire/cmd/skywire-cli/commands/completion"
 	cliconfig "github.com/skycoin/skywire/cmd/skywire-cli/commands/config"
 	clidmsgpty "github.com/skycoin/skywire/cmd/skywire-cli/commands/dmsgpty"
@@ -31,6 +30,7 @@ import (
 	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 	clivpn "github.com/skycoin/skywire/cmd/skywire-cli/commands/vpn"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 )
 
 func init() {
