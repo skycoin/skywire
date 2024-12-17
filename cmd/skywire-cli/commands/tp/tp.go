@@ -22,10 +22,10 @@ import (
 	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor"

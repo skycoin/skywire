@@ -11,8 +11,8 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 )
 
 // Errors associated with geo calls.

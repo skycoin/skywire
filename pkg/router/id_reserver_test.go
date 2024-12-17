@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 // We check the contents of 'idReserver.rec' is as expected after calling 'NewIDReserver'.

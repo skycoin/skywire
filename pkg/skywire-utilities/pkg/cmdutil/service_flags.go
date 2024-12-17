@@ -12,7 +12,7 @@ import (
 	jsoniter "github.com/json-iterator/go"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
 // Associated errors.

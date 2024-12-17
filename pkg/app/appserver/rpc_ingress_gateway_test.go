@@ -15,13 +15,13 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/internal/testhelpers"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/idmanager"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
 func TestRPCIngressGateway_SetDetailedStatus(t *testing.T) {

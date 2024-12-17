@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
 // Hook is a function that can be run at some point as part

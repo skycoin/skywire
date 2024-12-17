@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 // Auth holds authentication mandatory values
