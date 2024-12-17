@@ -6,8 +6,8 @@ import (
 
 	"github.com/VictoriaMetrics/metrics"
 
-	"github.com/skycoin/skywire-utilities/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/metricsutil"
 )
 
 // Metrics collects metrics in prometheus format.

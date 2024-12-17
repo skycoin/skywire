@@ -15,8 +15,8 @@ import (
 	"github.com/jaypipes/ghw"
 	"golang.org/x/sys/windows"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 // UserConfig contains installation paths for running skywire as the user

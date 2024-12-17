@@ -7,7 +7,7 @@ package visor
 import (
 	"context"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
 func runAppSystray() {

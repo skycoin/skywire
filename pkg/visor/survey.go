@@ -10,7 +10,7 @@ import (
 
 	coincipher "github.com/skycoin/skycoin/src/cipher"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/util/pathutil"
 	visconf "github.com/skycoin/skywire/pkg/visor/visorconfig"
 )

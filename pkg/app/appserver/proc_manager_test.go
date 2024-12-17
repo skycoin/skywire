@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	appcommon "github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 func TestProcManager_ProcByName(t *testing.T) {

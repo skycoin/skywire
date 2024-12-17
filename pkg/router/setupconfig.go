@@ -4,8 +4,8 @@ package router
 import (
 	"time"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsgc"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 // Various timeouts for setup node.

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 // Port is a network port number
