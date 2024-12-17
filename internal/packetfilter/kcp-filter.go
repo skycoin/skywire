@@ -8,7 +8,7 @@ import (
 
 	"github.com/xtaci/kcp-go"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
 const (

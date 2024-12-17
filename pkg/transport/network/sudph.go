@@ -12,8 +12,8 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/xtaci/kcp-go"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/internal/packetfilter"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/transport/network/handshake"
 )

@@ -11,7 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
 func (sf *ServiceFlags) sysLogHook(log *logging.Logger, sysLvl int) {

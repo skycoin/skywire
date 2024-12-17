@@ -13,7 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"go.etcd.io/bbolt"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
 const (

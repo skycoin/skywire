@@ -4,7 +4,7 @@ package network
 import (
 	"github.com/ccding/go-stun/stun"
 
-	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
 // StunDetails represents the visors public network details.
