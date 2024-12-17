@@ -5,8 +5,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 
 	"github.com/skycoin/dmsg/pkg/disc"
 )

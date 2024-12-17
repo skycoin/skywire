@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/skywire-utilities/pkg/geo"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/geo"
 )
 
 type memStore struct {

@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/hashicorp/yamux"
-	"github.com/skycoin/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 )
 
 // ClientSession represents a session from the perspective of a dmsg client.

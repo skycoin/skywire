@@ -3,8 +3,8 @@ package store
 import (
 	"time"
 
-	"github.com/skycoin/skywire-utilities/pkg/geo"
-	"github.com/skycoin/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/geo"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"gorm.io/gorm"
 )
 
