@@ -38,6 +38,7 @@ rewards
 ./*.json
 !/dmsghttp-config.json
 !/services-config.json
+!/arches.json
 ./*.sh
 ./*.log
 
