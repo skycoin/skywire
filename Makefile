@@ -265,7 +265,7 @@ build-static-wos: ## Build `skywire-visor`, `skywire-cli`
 	${STATIC_OPTS} go build -tags withoutsystray -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH)skywire-visor ./cmd/skywire
 
 build-deploy: ## Build for deployment Docker images
-	${OPTS} go build -tags netgo ${BUILD_OPTS_DEPLOY} -o /release/skywire ./cmd/skywire
+	${OPTS} go build -tags netgo ${BUILD_OPTS_DEPLOY} -o /release/skywire ./cmd/skycoin-skywire
 
 build-race: ## Build for testing Docker images
 	CGO_ENABLED=1 ${OPTS} go build -tags netgo ${BUILD_OPTS} -race -o /release/skywire ./cmd/skywire
