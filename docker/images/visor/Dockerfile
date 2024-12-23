@@ -14,14 +14,14 @@ WORKDIR /skywire
 
 RUN apk add --no-cache make git && \
     sh -c /skywire/docker/images/visor/install-preq.sh && \
-    make build
+    make build-deploy
 
 ## Resulting image
-FROM ${base} as visor-runner
+FROM ${base} AS visor-runner
 
 COPY --from=builder /skywire/docker/images/visor/install-preq.sh /release/install-preq.sh
 COPY --from=builder /skywire/docker/images/visor/entrypoint.sh /entrypoint.sh
-COPY --from=builder ./build /release
+COPY --from=builder /release /release
 
 RUN sh -c /release/install-preq.sh \
     && rm -rf /release/install-preq.sh \
