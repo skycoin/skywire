@@ -39,7 +39,7 @@ visor)
     ;;
   esac
   ;;
-skywire-cli)
+cli)
   /release/skywire "$cmd" "$@" &
   ;;
 esac
