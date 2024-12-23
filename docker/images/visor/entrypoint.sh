@@ -31,16 +31,16 @@ case "$cmd" in
 visor)
   case "$1" in
   -c)
-    /release/"$cmd" "$@" &
+    /release/skywire "$cmd" "$@" &
     ;;
   *)
     gen_default_config
-    /release/"$cmd" -c "$default_config_path" "$@" &
+    /release/skywire "$cmd" -c "$default_config_path" "$@" &
     ;;
   esac
   ;;
-cli)
-  /release/"$cmd" "$@" &
+skywire-cli)
+  /release/skywire "$cmd" "$@" &
   ;;
 esac
 
