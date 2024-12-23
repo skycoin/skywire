@@ -12,7 +12,7 @@ COPY . /skywire
 
 WORKDIR /skywire
 
-RUN apk add --no-cache make git build && \
+RUN apk add --no-cache make git && \
     sh -c /skywire/docker/images/visor/install-preq.sh && \
     make build
 
