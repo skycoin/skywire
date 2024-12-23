@@ -21,7 +21,7 @@ FROM ${base} as visor-runner
 
 COPY --from=builder /skywire/docker/images/visor/install-preq.sh /release/install-preq.sh
 COPY --from=builder /skywire/docker/images/visor/entrypoint.sh /entrypoint.sh
-COPY --from=builder /build /release
+COPY --from=builder ./build /release
 
 RUN sh -c /release/install-preq.sh \
     && rm -rf /release/install-preq.sh \
