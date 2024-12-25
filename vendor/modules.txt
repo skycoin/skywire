@@ -620,11 +620,12 @@ github.com/skycoin/skycoin-service-discovery/internal/pg
 github.com/skycoin/skycoin-service-discovery/internal/sdmetrics
 github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/api
 github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/store
-# github.com/skycoin/skywire-services v1.3.29-0.20241218011810-0e3f3a797af4
+# github.com/skycoin/skywire-services v1.3.29-0.20241225081816-f0b7a58da138
 ## explicit; go 1.23
 github.com/skycoin/skywire-services/cmd/address-resolver/commands
 github.com/skycoin/skywire-services/cmd/config-bootstrapper/commands
 github.com/skycoin/skywire-services/cmd/keys-gen/commands
+github.com/skycoin/skywire-services/cmd/node-visualizer/commands
 github.com/skycoin/skywire-services/cmd/route-finder/commands
 github.com/skycoin/skywire-services/cmd/skywire-services/commands
 github.com/skycoin/skywire-services/cmd/sw-env/commands
@@ -639,6 +640,7 @@ github.com/skycoin/skywire-services/internal/utmetrics
 github.com/skycoin/skywire-services/pkg/address-resolver/api
 github.com/skycoin/skywire-services/pkg/address-resolver/store
 github.com/skycoin/skywire-services/pkg/config-bootstrapper/api
+github.com/skycoin/skywire-services/pkg/node-visualizer/api
 github.com/skycoin/skywire-services/pkg/route-finder/api
 github.com/skycoin/skywire-services/pkg/route-finder/store
 github.com/skycoin/skywire-services/pkg/transport-discovery/api
@@ -905,10 +907,8 @@ golang.org/x/tools/internal/versions
 # golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2
 ## explicit; go 1.17
 golang.zx2c4.com/wintun
-# golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173
-## explicit; go 1.20
-golang.zx2c4.com/wireguard/conn
-golang.zx2c4.com/wireguard/conn/winrio
+# golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173 => golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675
+## explicit; go 1.19
 golang.zx2c4.com/wireguard/rwcancel
 golang.zx2c4.com/wireguard/tun
 # google.golang.org/protobuf v1.35.1
@@ -960,3 +960,4 @@ mvdan.cc/sh/v3/fileutil
 mvdan.cc/sh/v3/pattern
 mvdan.cc/sh/v3/shell
 mvdan.cc/sh/v3/syntax
+# golang.zx2c4.com/wireguard => golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675

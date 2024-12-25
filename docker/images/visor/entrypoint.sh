@@ -9,7 +9,7 @@ default_config_path=/opt/skywire/config.json
 
 gen_default_config() {
   echo "no config found, generating one...."
-  /release/skywire-cli config gen -o "$default_config_path" -ri
+  /release/skywire cli config gen -o "$default_config_path" -ri
   sed -i 's/localhost//g' "$default_config_path"
   echo "config generated"
 }
@@ -24,23 +24,23 @@ sigint_handler() {
 
 trap 'kill ${!}; sigint_handler' INT
 
-cmd="$(echo "$1" | tr -d '[:space:]')"
+cmd="$(echo "$2" | tr -d '[:space:]')"
 shift 1
 
 case "$cmd" in
-skywire-visor)
+visor)
   case "$1" in
   -c)
-    /release/"$cmd" "$@" &
+    /release/skywire "$cmd" "$@" &
     ;;
   *)
     gen_default_config
-    /release/"$cmd" -c "$default_config_path" "$@" &
+    /release/skywire "$cmd" -c "$default_config_path" "$@" &
     ;;
   esac
   ;;
-skywire-cli)
-  /release/"$cmd" "$@" &
+cli)
+  /release/skywire "$cmd" "$@" &
   ;;
 esac
 
