@@ -37,7 +37,7 @@ require (
 	github.com/skycoin/dmsg v1.3.29-0.20241218010226-56d92f2ef624
 	github.com/skycoin/skycoin v0.28.1-0.20241105130348-39b49a2d0a7f
 	github.com/skycoin/skycoin-service-discovery v1.3.29-0.20241218011239-6f6be8edf287
-	github.com/skycoin/skywire-services v1.3.29-0.20241218011810-0e3f3a797af4
+	github.com/skycoin/skywire-services v1.3.29-0.20241225081816-f0b7a58da138
 	github.com/skycoin/systray v1.10.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.8.1
