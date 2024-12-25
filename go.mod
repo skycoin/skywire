@@ -37,7 +37,7 @@ require (
 	github.com/skycoin/dmsg v1.3.29-0.20241218010226-56d92f2ef624
 	github.com/skycoin/skycoin v0.28.1-0.20241105130348-39b49a2d0a7f
 	github.com/skycoin/skycoin-service-discovery v1.3.29-0.20241218011239-6f6be8edf287
-	github.com/skycoin/skywire-services v1.3.29-0.20241218011810-0e3f3a797af4
+	github.com/skycoin/skywire-services v1.3.29-0.20241225081816-f0b7a58da138
 	github.com/skycoin/systray v1.10.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.8.1
@@ -178,7 +178,7 @@ require (
 //replace github.com/xxxserxxx/gotop/v4 => github.com/ersonp/gotop/v4 v4.2.1
 
 // Wiregusrd version must match below version ; do not update
-// replace golang.zx2c4.com/wireguard => golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675
+replace golang.zx2c4.com/wireguard => golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675
 
 // Uncomment for tests with local sources
 //replace github.com/skycoin/dmsg => ../dmsg
