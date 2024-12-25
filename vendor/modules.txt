@@ -620,11 +620,12 @@ github.com/skycoin/skycoin-service-discovery/internal/pg
 github.com/skycoin/skycoin-service-discovery/internal/sdmetrics
 github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/api
 github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/store
-# github.com/skycoin/skywire-services v1.3.29-0.20241218011810-0e3f3a797af4
+# github.com/skycoin/skywire-services v1.3.29-0.20241225081816-f0b7a58da138
 ## explicit; go 1.23
 github.com/skycoin/skywire-services/cmd/address-resolver/commands
 github.com/skycoin/skywire-services/cmd/config-bootstrapper/commands
 github.com/skycoin/skywire-services/cmd/keys-gen/commands
+github.com/skycoin/skywire-services/cmd/node-visualizer/commands
 github.com/skycoin/skywire-services/cmd/route-finder/commands
 github.com/skycoin/skywire-services/cmd/skywire-services/commands
 github.com/skycoin/skywire-services/cmd/sw-env/commands
@@ -639,6 +640,7 @@ github.com/skycoin/skywire-services/internal/utmetrics
 github.com/skycoin/skywire-services/pkg/address-resolver/api
 github.com/skycoin/skywire-services/pkg/address-resolver/store
 github.com/skycoin/skywire-services/pkg/config-bootstrapper/api
+github.com/skycoin/skywire-services/pkg/node-visualizer/api
 github.com/skycoin/skywire-services/pkg/route-finder/api
 github.com/skycoin/skywire-services/pkg/route-finder/store
 github.com/skycoin/skywire-services/pkg/transport-discovery/api
