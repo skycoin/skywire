@@ -316,8 +316,6 @@ github.com/gomarkdown/markdown v0.0.0-20240930133441-72d49d9543d8 h1:4txT5G2kqVA
 github.com/gomarkdown/markdown v0.0.0-20240930133441-72d49d9543d8/go.mod h1:JDGcbDT52eL4fju3sZ4TeHGsQwhG9nbDV21aMyhwPoA=
 github.com/google/btree v0.0.0-20180813153112-4030bb1f1f0c/go.mod h1:lNA+9X1NB3Zf8V7Ke586lFgjr2dZNuvo3lPJSGZ5JPQ=
 github.com/google/btree v1.0.0/go.mod h1:lNA+9X1NB3Zf8V7Ke586lFgjr2dZNuvo3lPJSGZ5JPQ=
-github.com/google/btree v1.0.1 h1:gK4Kx5IaGY9CD5sPJ36FHiBJ6ZXl0kilRiiCj+jdYp4=
-github.com/google/btree v1.0.1/go.mod h1:xXMiIv4Fb/0kKde4SpL7qlzvu5cMJDRkFDxJfI9uaxA=
 github.com/google/go-cmp v0.2.0/go.mod h1:oXzfMopK8JAjlY9xF4vHSVASa0yLyX7SntLO5aqRK0M=
 github.com/google/go-cmp v0.3.0/go.mod h1:8QqcDgzrUqlUb/G2PQTWiueGozuR1884gddMywk6iLU=
 github.com/google/go-cmp v0.3.1/go.mod h1:8QqcDgzrUqlUb/G2PQTWiueGozuR1884gddMywk6iLU=
@@ -637,10 +635,6 @@ github.com/skycoin/skycoin v0.28.1-0.20241105130348-39b49a2d0a7f h1:isCGulVHahQf
 github.com/skycoin/skycoin v0.28.1-0.20241105130348-39b49a2d0a7f/go.mod h1:1iZLomiHUOEvmJaBNrzE+Tllf09uhrCZ5JLL3cHdKKQ=
 github.com/skycoin/skycoin-service-discovery v1.3.29-0.20241218011239-6f6be8edf287 h1:kHeaZh8XW6hTO13kLEf0fDa+NMfdttwem4To57+qSZM=
 github.com/skycoin/skycoin-service-discovery v1.3.29-0.20241218011239-6f6be8edf287/go.mod h1:yGXTOKxQrdGcGt7nRSqHhMVgZBvJ2gXhdMNgbw93OtY=
-github.com/skycoin/skywire-services v1.3.29-0.20241218011810-0e3f3a797af4 h1:d2V0uXLNUJXuNxG604rjm8lvjpzvX/5Qi8axoeg5U0I=
-github.com/skycoin/skywire-services v1.3.29-0.20241218011810-0e3f3a797af4/go.mod h1:u3Pq6EClErGL260fkj67sezx6b8e0Efdl7FZPiuqYrE=
-github.com/skycoin/skywire-services v1.3.29-0.20241222223523-c6c97b615d87 h1:rseHT/MgcPp6L7w+3BRjIrAGyZcuYHkjgYRFeZQz14o=
-github.com/skycoin/skywire-services v1.3.29-0.20241222223523-c6c97b615d87/go.mod h1:BXLEJMY+fCVW6Ow9Jbh1odVJV2TP47DwYhr9ZZ/xJsU=
 github.com/skycoin/skywire-services v1.3.29-0.20241225081816-f0b7a58da138 h1:Uro8DayLOK10pwr2GFy37Mc6uQwjseQd8PEo2APYbuU=
 github.com/skycoin/skywire-services v1.3.29-0.20241225081816-f0b7a58da138/go.mod h1:39u1wXSdXUxxUA+gkQVK1wQqnLml0URYDxQvpiW935o=
 github.com/skycoin/systray v1.10.0 h1:fQZJHMylpVvfmOOTLvUssfyHVDoC8Idx6Ba2BlLEuGg=
@@ -1084,8 +1078,8 @@ golang.org/x/xerrors v0.0.0-20220411194840-2f41105eb62f/go.mod h1:I/5z698sn9Ka8T
 golang.org/x/xerrors v0.0.0-20220517211312-f3a8303e98df/go.mod h1:K8+ghG5WaK9qNqU5K3HdILfMLy1f3aNYFI/wnl100a8=
 golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 h1:B82qJJgjvYKsXS9jeunTOisW56dUokqW/FOteYJJ/yg=
 golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2/go.mod h1:deeaetjYA+DHMHg+sMSMI58GrEteJUUzzw7en6TJQcI=
-golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675
-golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675/go.mod
+golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675 h1:/J/RVnr7ng4fWPRH3xa4WtBJ1Jp+Auu4YNLmGiPv5QU=
+golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675/go.mod h1:whfbyDBt09xhCYQWtO2+3UVjlaq6/9hDZrjg2ZE6SyA=
 google.golang.org/api v0.4.0/go.mod h1:8k5glujaEP+g9n7WNsDg8QP6cUVNI86fCNMcbazEtwE=
 google.golang.org/api v0.7.0/go.mod h1:WtwebWUNSVBH/HAw79HIFXZNqEvBhG+Ra+ax0hx3E3M=
 google.golang.org/api v0.8.0/go.mod h1:o4eAsZoiT+ibD93RtjEohWalFOjRDx6CVaqeizhEnKg=
@@ -1289,8 +1283,6 @@ gorm.io/driver/postgres v1.5.11 h1:ubBVAfbKEUld/twyKZ0IYn9rSQh448EdelLYk9Mv314=
 gorm.io/driver/postgres v1.5.11/go.mod h1:DX3GReXH+3FPWGrrgffdvCk3DQ1dwDPdmbenSkweRGI=
 gorm.io/gorm v1.25.12 h1:I0u8i2hWQItBq1WfE0o2+WuL9+8L21K9e2HHSTE/0f8=
 gorm.io/gorm v1.25.12/go.mod h1:xh7N7RHfYlNc5EmcI/El95gXusucDrQnHXe0+CgWcLQ=
-gvisor.dev/gvisor v0.0.0-20230927004350-cbd86285d259 h1:TbRPT0HtzFP3Cno1zZo7yPzEEnfu8EjLfl6IU9VfqkQ=
-gvisor.dev/gvisor v0.0.0-20230927004350-cbd86285d259/go.mod h1:AVgIgHMwK63XvmAzWG9vLQ41YnVHN0du0tEC46fI7yY=
 honnef.co/go/tools v0.0.0-20190102054323-c2f93a96b099/go.mod h1:rf3lG4BRIbNafJWhAfAdb/ePZxsR/4RtNHQocxwk9r4=
 honnef.co/go/tools v0.0.0-20190106161140-3f1c8253044a/go.mod h1:rf3lG4BRIbNafJWhAfAdb/ePZxsR/4RtNHQocxwk9r4=
 honnef.co/go/tools v0.0.0-20190418001031-e561f6794a2a/go.mod h1:rf3lG4BRIbNafJWhAfAdb/ePZxsR/4RtNHQocxwk9r4=

@@ -54,7 +54,7 @@ require (
 	golang.org/x/sync v0.10.0
 	golang.org/x/sys v0.28.0
 	golang.org/x/term v0.27.0
-	golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675
+	golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173
 	gopkg.in/telebot.v3 v3.3.8
 )
 
@@ -178,7 +178,7 @@ require (
 //replace github.com/xxxserxxx/gotop/v4 => github.com/ersonp/gotop/v4 v4.2.1
 
 // Wiregusrd version must match below version ; do not update
-// replace golang.zx2c4.com/wireguard => golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675
+replace golang.zx2c4.com/wireguard => golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675
 
 // Uncomment for tests with local sources
 //replace github.com/skycoin/dmsg => ../dmsg
