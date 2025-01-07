@@ -377,10 +377,12 @@ mac-installer-release: mac-installer ## Upload created signed and notarized appl
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-darwin-arm64.pkg
 
 win-installer-latest: ## Build the windows .msi (installer) latest version
-	@powershell '.\scripts\win_installer\script.ps1 latest'
+	@powershell '.\scripts\win_installer\script.ps1 latest amd64'
+	@powershell '.\scripts\win_installer\script.ps1 latest 386'
 
 win-installer: ## Build the windows .msi (installer) custom version
-	@powershell '.\scripts\win_installer\script.ps1 $(CUSTOM_VERSION)'
+	@powershell '.\scripts\win_installer\script.ps1 $(CUSTOM_VERSION) amd64'
+	@powershell '.\scripts\win_installer\script.ps1 $(CUSTOM_VERSION) 386'
 
 windows-installer-release:
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags))
