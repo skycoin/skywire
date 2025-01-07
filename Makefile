@@ -388,6 +388,7 @@ windows-installer-release:
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags))
 	make win-installer CUSTOM_VERSION=$(GITHUB_TAG)
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-windows-amd64.msi
+	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-windows-386.msi
 
 # useful commands
 #dmsghttp-update: ## update dmsghttp config
