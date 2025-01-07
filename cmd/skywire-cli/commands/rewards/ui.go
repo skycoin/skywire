@@ -380,8 +380,8 @@ func server() {
 		surveycount, _ := script.FindFiles("rewards/log_backups/").Match("node-info.json").CountLines() //nolint
 		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))                         //nolint
 		c.Writer.Flush()
-		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -e rewards/tp_setup -rup ` + c.Param("pk")).Bytes() //nolint
-		c.Writer.Write(ansihtml.ConvertToHTML(st))                                                                          //nolint
+		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -rup ` + c.Param("pk")).Bytes() //nolint
+		c.Writer.Write(ansihtml.ConvertToHTML(st))                                                      //nolint
 		c.Writer.Flush()
 		c.Writer.Write([]byte(htmltoplink)) //nolint
 		c.Writer.Flush()
