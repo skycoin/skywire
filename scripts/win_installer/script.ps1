@@ -1,6 +1,7 @@
 
 $ErrorActionPreference = "Stop"
 $version = $args[0]
+$arch = $args[1]
 function CleanStage
 {
     if (Test-Path ".\archive.zip") { Remove-Item ".\archive.zip" -Recurse -Force}
@@ -23,9 +24,13 @@ function InstallWix
     Set-Location ../../
 }
 
-function BuildInstaller($arch)
+function BuildInstaller()
 {
-    if ($arch -eq "amd64") {
+    if ($arch -eq "386") {
+        $wintun_arch="x86"
+        $arch_title="386  "
+        $wix_arch="x86"
+    } else {
         $wintun_arch="amd64"
         $arch_title="amd64"
         $wix_arch="x64"
@@ -95,6 +100,6 @@ function BuildInstaller($arch)
 Write-Output "`n##########################################################"
 Write-Output "#                                                        #"
 Write-Output "#        .:::: Create MSI Installer Package ::::.        #"
-BuildInstaller("amd64")
+BuildInstaller
 Write-Output "#                                                        #"
 Write-Output "##########################################################`n"
