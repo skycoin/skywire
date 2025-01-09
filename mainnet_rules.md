@@ -42,31 +42,31 @@ The two reward pools are differentiated by architecture ; one pool for ARM / RIS
 To receive Skycoin rewards for running skywire, the following requirements must be met:
 
 
-* 1) **Minimum skywire version v1.3.26** - Cutoff October 1st 2024
+* [1)](#Version) **Minimum skywire [version](#Version) v1.3.28** - Cutoff February 1st 2024
 
-* 2) **75% [uptime](#uptime) per day** minimum is required to be eligible to receive rewards
+* [2)](#Uptime) **75% [uptime](#Uptime) per day** minimum is required to be eligible to receive rewards
 
-* 3) ~The visor must be an **ARM or RISC architecture SBC** running on approved [hardware](#hardware)~
+* [3)](#Architercture) ~The visor must be an **ARM or RISC architecture SBC** running on approved [hardware](#hardware)~
 
-* 4) Visors must be running on **[the skywire production deployment](#deployment)** with a config that is updated on every version. No default keys or addresses of this configuration may be removed - but you can add keys where applicable.
+* [4)](#Deployment) Visors must be running on **[the skywire production deployment](#Deployment)** with a config that is updated on every version. No default keys or addresses of this configuration may be removed - but you can add keys where applicable.
 
-* 5) **Only 1 (one) visor per machine**
+* [5)](#Per-Machine-Limit) **Only 1 (one) visor per machine** - virtual machines are ineligible
 
-* 6) **Up to 8 (eight) visors may each receive 1 (one) reward share per location (ip address)**
+* [6)](#Per-IP-Limit) **Up to 8 (eight) visors may each receive 1 (one) reward share per location (ip address)** - with 8 shares divided between all visors at that ip address which achieved the minimum uptime.
 
-* 7) **A valid [skycoin address](#skycoin-address)** must be set for the visor
+* [7)](#Skycoin-Address) **A valid [skycoin address](#Skycoin-Address)** must be set for the visor
 
-* 8) The visor must be **[connected to the DMSG network](#connection-to-dmsg-network)**
+* [8)](#Connection-To-DMSG-Network) The visor must be **[connected to the DMSG network](#Connection-To-DMSG-Network)**
 
-* 9) **[Transports](#transportability) can be established to the visor**
+* [9)](#Transportability) **[Transports](#Transportability) can be established to the visor**
 
-* 10) **The visor responds to [Transport Setup-Node requests](#transport-setup-node)**
+* [10)](#Transport-Setup-Node) **The visor responds to [Transport Setup-Node requests](#Transport-Setup-Node)**
 
-* 11) **The visor responds to [pings](#ping-latency-metric)** - needed for latency-based rewards
+* [11)](#Ping-Latency-Metric) **The visor responds to [pings](#Ping-Latency-Metric)** - needed for latency-based rewards
 
-* 12) **The visor produces [transport bandwidth logs](#transport-bandwidth-logs)** - needed for bandwidth-based rewards
+* [12)](#Transport-Bandwidth-Logs) **The visor produces [transport bandwidth logs](#Transport-Bandwidth-Logs)** - needed for bandwidth-based rewards
 
-* 13) **The visor produces a [survey](#survey)** when queried over dmsg by any keys in the survey_whitelist array by default
+* [13)](#Survey) **The visor produces a [survey](#Survey)** when queried over dmsg by any keys in the survey_whitelist array by default
 
 
 ### Exceptions for Deployment Changes with dmsghttp-config (Chinese users)
@@ -95,7 +95,7 @@ but __the latest release of the package__ unless the dmsghttp-config.json is upd
 
 ## Verifying Requirements & Eligibility
 
-### Version
+### 1) Version
 
 View the version of skywire you are running with:
 ```
@@ -103,20 +103,111 @@ skywire cli -v
 skywire visor -v
 ```
 
+NOTE: the uptie tracker and other services consider the visor's config version - not the actual binary version. It is expected that the visor's config is re-generated on every update in order to include any config changes which may have been introduced
+
 The update deadlines specify the version of software required as of (i.e. on or before) the specified date in order to maintain reward eligibility:
 
+**Reward eligibility after 10-01-2024 requires Skywire v1.3.26**
 
-**Reward eligibility after 9-1-2024 requires Skywire v1.3.25**
+Requirement established 09-24-2024
 
-Requirement established 8-21-2024
+Rewards Cutoff date for updating 10-01-2024
 
-Rewards Cutoff date for updating 9-1-2024
+**Reward eligibility after 02-01-2025 requires Skywire v1.3.28**
 
-**Reward eligibility after 10-1-2024 requires Skywire v1.3.26**
+Requirement established 01-09-2025
 
-Requirement established 9-24-2024
+Rewards Cutoff date for updating 02-01-2025
 
-Rewards Cutoff date for updating 10-1-2024
+
+### Uptime
+
+
+Daily uptime statistics for all visors may be accessed via the
+
+- [uptime tracker](https://ut.skywire.skycoin.com/uptimes?v=v2)
+
+or using skywire cli
+
+```
+skywire cli ut -n0 -k <public-key>
+```
+
+For example with a locally running visor:
+```
+skywire cli ut -n0 -k $(skywire cli visor pk)
+```
+
+The uptime for all visors are tracked via the visor connecting to the [uptime tracker](https://ut.skywire.skycoin.com/uptimes?v=v2) at regular intervals (currently, every 5 minutes).
+
+It's possible to check uptime for a given visor's public key in the following ways:
+
+* Directly in the browser
+
+![image](https://github.com/user-attachments/assets/01a13a32-0382-4119-b104-96ff16dfd5d2)
+
+* Using an http client such as `curl` with an appropriate json parser such as `jq` - for exaple:
+
+```
+$ curl -sL https://ut.skywire.skycoin.com/uptimes?v=v2 | jq '[.[] | select(.pk == "02006214d489aee383dc14dea22d1c308a547520f545b914c1e476a7a87064e77b" or .pk == "02001319d25a66609b64cc389bd0dcee6d5b4ab93bd139186c47d1d6cbe955e7e1")]'
+[
+  {
+    "pk": "02001319d25a66609b64cc389bd0dcee6d5b4ab93bd139186c47d1d6cbe955e7e1",
+    "on": false,
+    "version": "v1.3.28",
+    "daily": {
+      "2025-01-03": "86.11",
+      "2025-01-05": "88.89",
+      "2025-01-06": "100.00",
+      "2025-01-07": "100.00",
+      "2025-01-08": "87.15"
+    }
+  },
+  {
+    "pk": "02006214d489aee383dc14dea22d1c308a547520f545b914c1e476a7a87064e77b",
+    "on": true,
+    "version": "v1.3.28",
+    "daily": {
+      "2025-01-03": "100.00",
+      "2025-01-04": "100.00",
+      "2025-01-05": "100.00",
+      "2025-01-06": "100.00",
+      "2025-01-07": "95.14",
+      "2025-01-08": "99.65",
+      "2025-01-09": "71.18"
+    }
+  }
+]
+
+```
+
+* Using `skywire cli ut` is the recoended approach, as it avoids rate-liiting of requests by caching the data which is fetched from the uptie tracker
+
+```
+$ skywire cli ut --help
+query uptime tracker
+
+Check local visor daily uptime percent with:
+ skywire-cli ut -k $(skywire cli visor pk)
+Set cache file location to "" to avoid using cache files
+
+ 
+
+Flags:
+  -m, --cfa int      update cache files if older than n minutes (default 5)
+      --cfu string   UT cache file location. (default "/tmp/ut.json")
+  -n, --min int      list visors meeting minimum uptime (default 75)
+  -o, --on           list currently online visors
+  -k, --pk string    check uptime for the specified key
+  -s, --stats        count the number of results
+  -t, --stats2       count of versions
+  -u, --url string   specify alternative uptime tracker url (default "http://ut.skywire.skycoin.com")
+
+```
+
+### Architecture
+
+We are pleased to state as of November 1, 2024 Rewards are open to all architectures, with a reward pool added for non-ARM architectures (amd64 & i386)
 
 ### Deployment
 
@@ -134,23 +225,19 @@ The same data in a different format should be displayed in the [dmsg-discovery a
 
 The data from the dmsg discovery should be considered authoritative or current.
 
-### Uptime
+### Per Machine Limit 
 
-Daily uptime statistics for all visors may be accessed via the
+Virtual machines are not eligible for rewards, as there is no way to limit the number of instances of skywire running on the same machine if they are running in virtual machines.
 
-- [uptime tracker](https://ut.skywire.skycoin.com/uptimes?v=v2)
+The visor is determined to be running on a virtual machine if a `hypervisor` is listed in it's survey uch as `kvm`, `xenhvm`, or `hyperv` - (not to be confused with a skywire hypervisor)
 
-or using skywire cli
+Multiple instances of skywire which are otherwise determined to be running on the same machine (via their mac address) will have one reward share divided between all the skycoin reward addresses which are set for those visors.
 
-```
-skywire cli ut -n0 -k <public-key>
-```
+### Per IP Limit
 
-For example with a locally running visor:
-```
-skywire cli ut -n0 -k $(skywire cli visor pk)
-```
+A maximum of 8 reward shares per ip address is divided between all visors which made uptime at a given ip address.
 
+For example, if 9 visors at a given ip address meet the minimum uptime requirement, the reward share for each visor will be 8/9ths of a share (~0.8888) which sum to a total of ~7.99999 shares.
 
 ### Skycoin Address
 
@@ -234,7 +321,7 @@ you can open the file in an editor to make that change, for instance nano
 sudo nano /etc/skywire.conf
 ```
 
-### Connection to DMSG network
+### Connection To DMSG Network
 
 For any given visor, the system hardware survey, transport setup-node survey, and transport bandwidth logs are collected **hourly** by the reward system over dmsg.
 
@@ -280,7 +367,7 @@ A module is active at runtime which checks that transports may be established to
 If it's not possible to create a dmsg transport to the same visor after three attempts,the visor will shut down automatically.
 **It is expected that the visor will be restarted by a process control mechanism if the visor shuts down for any reason.** In the officially supported linux packages, systemd will restart the visor if it stops; regardless of the exit status of the process.
 
-### Transport setup node
+### Transport Setup Node
 
 Previously, the transport setup node was run continuously as part of the reward system to ensure that visors were responding as expected to transport setup-node requests.
 However, there were intermittent issues with reliability of the results ; because there is no caching mechanism for responsiveness to transport setup-node requests as there exists for uptime.
@@ -291,7 +378,7 @@ Currently, the transport setup-nodes which are configured for the visor are incl
 
 Not yet implemented
 
-### Transport bandwidth logs
+### Transport Bandwidth Logs
 
 The visor will only produce transport bandwidth logs in response to transports being established to them. These are collected, along with the system survey, and are displayed on the reward system [here](https://fiber.skywire.dev/log-collection/tplogs)
 
@@ -314,11 +401,11 @@ skywire cli survey -p
 
 We respect your privacy.
 
-### Verifying other requirements
+### Verifying Other Requirements
 
 If the visor is not able to meet the [eligibility requirements](#rules--requirements) numbers 8 through 13, that is usually not the fault of the user - nor is it something the user is expected to troubleshoot on their own at this time. Please ask for assistance on telegram [@skywire](https://t.me/skywire)
 
-## Reward System overview
+## Reward System Overview
 
 The skycoin reward address may be set for each visor using `skywire cli` or for all visors connected to a hypervisor from the hypervisor UI
 
