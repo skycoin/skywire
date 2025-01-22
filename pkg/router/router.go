@@ -98,6 +98,7 @@ type DialOptions struct {
 	MaxForwardRts int
 	MinConsumeRts int
 	MaxConsumeRts int
+	Retries       int
 }
 
 // DefaultDialOptions returns default dial options.
@@ -108,6 +109,7 @@ func DefaultDialOptions() *DialOptions {
 		MaxForwardRts: 1,
 		MinConsumeRts: 1,
 		MaxConsumeRts: 1,
+		Retries:       3,
 	}
 }
 
@@ -1048,6 +1050,8 @@ func (r *router) fetchBestRoutes(src, dst cipher.PubKey, opts *DialOptions) (fwd
 		opts = DefaultDialOptions() // nolint
 	}
 
+	retries := opts.Retries
+
 	r.logger.Debugf("Requesting new routes from %s to %s", src, dst)
 
 	timer := time.NewTimer(retryDuration)
@@ -1064,6 +1068,14 @@ fetchRoutesAgain:
 
 	if err == rfclient.ErrTransportNotFound {
 		return nil, nil, err
+	}
+	// simple retries condition
+	if retries == 0 {
+		r.logger.Errorf(ErrNoRouteFound.Error())
+		return nil, nil, ErrNoRouteFound
+	}
+	if retries > 0 {
+		retries--
 	}
 
 	if err != nil {
