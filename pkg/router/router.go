@@ -246,20 +246,22 @@ func (r *router) DialRoutes(
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, lPort, rPort)
 
-	r.routeSetupHookMu.Lock()
-	defer r.routeSetupHookMu.Unlock()
-	if len(r.routeSetupHooks) != 0 {
-		for _, rsf := range r.routeSetupHooks {
-			if err := rsf(rPK, r.tm); err != nil {
-				return nil, err
-			}
-		}
+	// check if transport exist, then skip minhop value and consider it equal 0
+	defaultMinHops := r.conf.MinHops
+	if r.isTpdExist(rPK) {
+		r.conf.MinHops = 0
 	}
 
-	// check if transports are available
-	ok := r.checkIfTransportAvailable()
-	if !ok {
-		return nil, ErrNoTransportFound
+	if r.conf.MinHops == 0 {
+		r.routeSetupHookMu.Lock()
+		defer r.routeSetupHookMu.Unlock()
+		if len(r.routeSetupHooks) != 0 {
+			for _, rsf := range r.routeSetupHooks {
+				if err := rsf(rPK, r.tm); err != nil {
+					return nil, err
+				}
+			}
+		}
 	}
 
 	forwardPath, reversePath, err := r.fetchBestRoutes(lPK, rPK, opts)
@@ -301,6 +303,11 @@ func (r *router) DialRoutes(
 
 	r.logger.Debugf("Created new routes to %s on port %d", rPK, lPort)
 
+	// reset MinHops default value if changed before
+	if defaultMinHops != 0 {
+		r.conf.MinHops = defaultMinHops
+	}
+
 	return nrg, nil
 }
 
@@ -328,11 +335,6 @@ func (r *router) PingRoute(
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, lPK, lPort, rPort)
 
-	// check if transports are available
-	ok := r.checkIfTransportAvailable()
-	if !ok {
-		return nil, ErrNoTransportFound
-	}
 	forwardPath, reversePath, err := r.fetchPingRoute(lPK, rPK, opts)
 	if err != nil {
 		return nil, fmt.Errorf("route finder: %w", err)
@@ -1330,10 +1332,18 @@ func (r *router) removeRouteGroupOfRule(rule routing.Rule) {
 	log.Debug("Noise route group closed.")
 }
 
-func (r *router) checkIfTransportAvailable() (ok bool) {
-	r.tm.WalkTransports(func(_ *transport.ManagedTransport) bool {
-		ok = true
-		return ok
-	})
-	return ok
+func (r *router) isTpdExist(rPK cipher.PubKey) bool {
+	// check stcpr transport if exist
+	_, err := r.tm.GetTransport(rPK, network.STCPR)
+	if err == nil {
+		return true
+	}
+	// check sudph transport if exist
+	_, err = r.tm.GetTransport(rPK, network.SUDPH)
+	if err == nil {
+		return true
+	}
+	// check dmsg transport if exist
+	_, err = r.tm.GetTransport(rPK, network.DMSG)
+	return err == nil
 }
