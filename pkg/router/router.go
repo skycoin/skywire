@@ -251,10 +251,10 @@ func (r *router) DialRoutes(
 	// check if transport exist, then skip minhop value and consider it equal 0
 	defaultMinHops := r.conf.MinHops
 	if r.isTpdExist(rPK) {
-		r.conf.MinHops = 0
+		r.conf.MinHops = 1
 	}
 
-	if r.conf.MinHops == 0 {
+	if r.conf.MinHops == 1 {
 		r.routeSetupHookMu.Lock()
 		defer r.routeSetupHookMu.Unlock()
 		if len(r.routeSetupHooks) != 0 {
@@ -306,7 +306,7 @@ func (r *router) DialRoutes(
 	r.logger.Debugf("Created new routes to %s on port %d", rPK, lPort)
 
 	// reset MinHops default value if changed before
-	if defaultMinHops != 0 {
+	if defaultMinHops != 1 {
 		r.conf.MinHops = defaultMinHops
 	}
 
