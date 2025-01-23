@@ -68,6 +68,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		RouteFinder:        services.RouteFinder,
 		RouteSetupNodes:    services.RouteSetupNodes,
 		RouteFinderTimeout: DefaultTimeout,
+		MinHops:            1,
 	}
 	conf.Launcher = &Launcher{
 		ServiceDisc:   services.ServiceDiscovery,
