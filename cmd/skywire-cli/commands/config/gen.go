@@ -622,6 +622,7 @@ var genConfigCmd = &cobra.Command{
 			RouteFinder:        services.RouteFinder,     //utilenv.RouteFinderAddr,
 			RouteSetupNodes:    services.RouteSetupNodes, //[]cipher.PubKey{utilenv.MustPK(utilenv.SetupPK)},
 			RouteFinderTimeout: visorconfig.DefaultTimeout,
+			MinHops:            1,
 		}
 		conf.Launcher = &visorconfig.Launcher{
 			ServiceDisc:   services.ServiceDiscovery, //utilenv.ServiceDiscAddr,
