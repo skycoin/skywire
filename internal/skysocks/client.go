@@ -60,14 +60,12 @@ func (c *Client) ListenAndServe(addr string) error {
 	fmt.Printf("Listening skysocks client on %s", addr)
 
 	c.listener = l
+	go func() {
+		<-c.closeC
+		l.Close() //nolint
+	}()
 
 	for {
-		select {
-		case <-c.closeC:
-			return nil
-		default:
-		}
-
 		conn, err := l.Accept()
 		if err != nil {
 			fmt.Printf("Error accepting: %v\n", err)
@@ -187,8 +185,6 @@ func (c *Client) Close() error {
 		fmt.Println("Closing proxy client")
 
 		close(c.closeC)
-
-		err = c.listener.Close()
 	})
 
 	return err
