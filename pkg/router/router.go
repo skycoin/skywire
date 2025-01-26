@@ -35,7 +35,7 @@ const (
 
 	handshakeAwaitTimeout = 2 * time.Second
 
-	maxHops       = 7
+	maxHops       = 1000
 	retryDuration = 2 * time.Second
 	retryInterval = 500 * time.Millisecond
 )
