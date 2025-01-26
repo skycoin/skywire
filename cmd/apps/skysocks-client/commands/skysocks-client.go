@@ -35,16 +35,20 @@ const (
 )
 
 var (
-	r        = netutil.NewRetrier(nil, time.Second, netutil.DefaultMaxBackoff, 0, 1)
-	addr     string
-	serverPK string
-	httpAddr string
+	r          *netutil.Retrier
+	addr       string
+	serverPK   string
+	httpAddr   string
+	retryDelay int64
+	tries      int64
 )
 
 func init() {
 	RootCmd.Flags().StringVar(&addr, "addr", visorconfig.SkysocksClientAddr, "Client address to listen on")
 	RootCmd.Flags().StringVar(&serverPK, "srv", "", "PubKey of the server to connect to")
 	RootCmd.Flags().StringVar(&httpAddr, "http", "", "http proxy mode")
+	RootCmd.Flags().Int64Var(&tries, "tries", 3, "number of tries")
+	RootCmd.Flags().Int64Var(&retryDelay, "retry-time", 5, "delay between each try")
 }
 
 // RootCmd is the root command for skysocks
@@ -61,6 +65,8 @@ var RootCmd = &cobra.Command{
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
 	Run: func(_ *cobra.Command, _ []string) {
+		r = netutil.NewRetrier(nil, time.Duration(retryDelay)*time.Second, netutil.DefaultMaxBackoff, tries, 1)
+
 		appCl := app.NewClient(nil)
 		defer appCl.Close()
 
