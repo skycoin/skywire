@@ -67,6 +67,10 @@ Assumes the local visor public key as an argument if only one argument is given`
 			cmd.Help() //nolint
 			os.Exit(0)
 		}
+		// disble finding route, because of minhop value that set 0
+		if frMinHops == 0 {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Routing disabled. (minhop=0)"))
+		}
 		//set the routefinder address. It's not used as the default value to fix the display of the help command
 		if frAddr == "" {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Route Finder URL not specified"))
