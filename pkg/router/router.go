@@ -35,7 +35,7 @@ const (
 
 	handshakeAwaitTimeout = 2 * time.Second
 
-	maxHops       = 50
+	maxHops       = 1000
 	retryDuration = 2 * time.Second
 	retryInterval = 500 * time.Millisecond
 )
@@ -98,6 +98,7 @@ type DialOptions struct {
 	MaxForwardRts int
 	MinConsumeRts int
 	MaxConsumeRts int
+	Retries       int
 }
 
 // DefaultDialOptions returns default dial options.
@@ -108,6 +109,7 @@ func DefaultDialOptions() *DialOptions {
 		MaxForwardRts: 1,
 		MinConsumeRts: 1,
 		MaxConsumeRts: 1,
+		Retries:       3,
 	}
 }
 
@@ -243,23 +245,30 @@ func (r *router) DialRoutes(
 		return nil, fmt.Errorf("failed to dial routes: %w", err)
 	}
 
+	if r.conf.MinHops == 0 {
+		r.logger.Error("Routing disabled. (minhop=0)")
+		return nil, fmt.Errorf("Routing disabled. (minhop=0)")
+	}
+
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, lPort, rPort)
 
-	r.routeSetupHookMu.Lock()
-	defer r.routeSetupHookMu.Unlock()
-	if len(r.routeSetupHooks) != 0 {
-		for _, rsf := range r.routeSetupHooks {
-			if err := rsf(rPK, r.tm); err != nil {
-				return nil, err
-			}
-		}
+	// check if transport exist, then skip minhop value and consider it equal 0
+	defaultMinHops := r.conf.MinHops
+	if r.isTpdExist(rPK) {
+		r.conf.MinHops = 1
 	}
 
-	// check if transports are available
-	ok := r.checkIfTransportAvailable()
-	if !ok {
-		return nil, ErrNoTransportFound
+	if r.conf.MinHops == 1 {
+		r.routeSetupHookMu.Lock()
+		defer r.routeSetupHookMu.Unlock()
+		if len(r.routeSetupHooks) != 0 {
+			for _, rsf := range r.routeSetupHooks {
+				if err := rsf(rPK, r.tm); err != nil {
+					return nil, err
+				}
+			}
+		}
 	}
 
 	forwardPath, reversePath, err := r.fetchBestRoutes(lPK, rPK, opts)
@@ -301,6 +310,11 @@ func (r *router) DialRoutes(
 
 	r.logger.Debugf("Created new routes to %s on port %d", rPK, lPort)
 
+	// reset MinHops default value if changed before
+	if defaultMinHops != 1 {
+		r.conf.MinHops = defaultMinHops
+	}
+
 	return nrg, nil
 }
 
@@ -328,11 +342,6 @@ func (r *router) PingRoute(
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, lPK, lPort, rPort)
 
-	// check if transports are available
-	ok := r.checkIfTransportAvailable()
-	if !ok {
-		return nil, ErrNoTransportFound
-	}
 	forwardPath, reversePath, err := r.fetchPingRoute(lPK, rPK, opts)
 	if err != nil {
 		return nil, fmt.Errorf("route finder: %w", err)
@@ -1046,6 +1055,8 @@ func (r *router) fetchBestRoutes(src, dst cipher.PubKey, opts *DialOptions) (fwd
 		opts = DefaultDialOptions() // nolint
 	}
 
+	retries := opts.Retries
+
 	r.logger.Debugf("Requesting new routes from %s to %s", src, dst)
 
 	timer := time.NewTimer(retryDuration)
@@ -1062,6 +1073,14 @@ fetchRoutesAgain:
 
 	if err == rfclient.ErrTransportNotFound {
 		return nil, nil, err
+	}
+	// simple retries condition
+	if retries == 0 {
+		r.logger.Errorf(ErrNoRouteFound.Error())
+		return nil, nil, ErrNoRouteFound
+	}
+	if retries > 0 {
+		retries--
 	}
 
 	if err != nil {
@@ -1330,10 +1349,18 @@ func (r *router) removeRouteGroupOfRule(rule routing.Rule) {
 	log.Debug("Noise route group closed.")
 }
 
-func (r *router) checkIfTransportAvailable() (ok bool) {
-	r.tm.WalkTransports(func(_ *transport.ManagedTransport) bool {
-		ok = true
-		return ok
-	})
-	return ok
+func (r *router) isTpdExist(rPK cipher.PubKey) bool {
+	// check stcpr transport if exist
+	_, err := r.tm.GetTransport(rPK, network.STCPR)
+	if err == nil {
+		return true
+	}
+	// check sudph transport if exist
+	_, err = r.tm.GetTransport(rPK, network.SUDPH)
+	if err == nil {
+		return true
+	}
+	// check dmsg transport if exist
+	_, err = r.tm.GetTransport(rPK, network.DMSG)
+	return err == nil
 }

@@ -39,6 +39,8 @@ var (
 	ErrRuleTransportMismatch = errors.New("rule/transport mismatch")
 	// ErrNoSuitableTransport is returned when no suitable transport was found.
 	ErrNoSuitableTransport = errors.New("no suitable transport")
+	// ErrNoRouteFound is return when no route founds after specific tries
+	ErrNoRouteFound = errors.New("no route founds")
 )
 
 type timeoutError struct{}
