@@ -245,6 +245,11 @@ func (r *router) DialRoutes(
 		return nil, fmt.Errorf("failed to dial routes: %w", err)
 	}
 
+	if r.conf.MinHops == 0 {
+		r.logger.Error("Routing disabled. (minhop=0)")
+		return nil, fmt.Errorf("Routing disabled. (minhop=0)")
+	}
+
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, lPort, rPort)
 
