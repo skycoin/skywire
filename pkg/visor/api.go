@@ -1475,6 +1475,7 @@ func (v *Visor) RuntimeLogs() (string, error) {
 
 // SetMinHops sets min_hops routing config of visor
 func (v *Visor) SetMinHops(in uint16) error {
+	v.router.SetMinHop(in)
 	return v.conf.UpdateMinHops(in)
 }
 
