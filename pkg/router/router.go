@@ -140,6 +140,7 @@ type Router interface {
 	IntroduceRules(rules routing.EdgeRules) error
 	Serve(context.Context) error
 	SetupIsTrusted(cipher.PubKey) bool
+	SetMinHop(uint16)
 
 	// Routing table related methods
 	RoutesCount() int
@@ -1166,6 +1167,11 @@ fetchRoutesAgain:
 func (r *router) SetupIsTrusted(sPK cipher.PubKey) bool {
 	_, ok := r.trustedVisors[sPK]
 	return ok
+}
+
+// SetMinHop set minhop when visor running
+func (r *router) SetMinHop(minhop uint16) {
+	r.conf.MinHops = minhop
 }
 
 // Saves `rules` to the routing table.
