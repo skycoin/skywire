@@ -257,6 +257,11 @@ func (_m *MockRouter) SetupIsTrusted(_a0 cipher.PubKey) bool {
 	return r0
 }
 
+// SetMinHop provides a mock function with given fields: _a0
+func (_m *MockRouter) SetMinHop(_a0 uint16) {
+	_m.Called(_a0)
+}
+
 type mockConstructorTestingTNewMockRouter interface {
 	mock.TestingT
 	Cleanup(func())
