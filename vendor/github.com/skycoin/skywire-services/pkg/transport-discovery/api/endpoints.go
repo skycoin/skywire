@@ -89,8 +89,13 @@ func (api *API) getTransportByEdge(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) getAllTransports(w http.ResponseWriter, r *http.Request) {
-
-	entries, err := api.store.GetAllTransports(r.Context())
+	selfTransports := true
+	query := r.URL.Query()
+	selfTransportsParam := query.Get("selfTransports")
+	if selfTransportsParam == "hide" {
+		selfTransports = false
+	}
+	entries, err := api.store.GetAllTransports(r.Context(), selfTransports)
 	if err != nil {
 		if err != store.ErrTransportNotFound {
 			api.log(r).WithError(err).Error("Error getting transports")

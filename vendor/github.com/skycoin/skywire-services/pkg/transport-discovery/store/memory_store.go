@@ -116,11 +116,16 @@ func (s *memStore) GetNumberOfTransports(context.Context) (map[network.Type]int,
 	return response, nil
 }
 
-func (s *memStore) GetAllTransports(context.Context) ([]*transport.Entry, error) {
+func (s *memStore) GetAllTransports(_ context.Context, selfTransports bool) ([]*transport.Entry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var response []*transport.Entry
 	for _, entry := range s.transports {
+		if !selfTransports {
+			if entry.Edges[0] == entry.Edges[1] {
+				continue
+			}
+		}
 		response = append(response, entry)
 	}
 	return response, nil

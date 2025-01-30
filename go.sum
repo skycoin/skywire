@@ -635,8 +635,8 @@ github.com/skycoin/skycoin v0.28.1-0.20241105130348-39b49a2d0a7f h1:isCGulVHahQf
 github.com/skycoin/skycoin v0.28.1-0.20241105130348-39b49a2d0a7f/go.mod h1:1iZLomiHUOEvmJaBNrzE+Tllf09uhrCZ5JLL3cHdKKQ=
 github.com/skycoin/skycoin-service-discovery v1.3.29-0.20241218011239-6f6be8edf287 h1:kHeaZh8XW6hTO13kLEf0fDa+NMfdttwem4To57+qSZM=
 github.com/skycoin/skycoin-service-discovery v1.3.29-0.20241218011239-6f6be8edf287/go.mod h1:yGXTOKxQrdGcGt7nRSqHhMVgZBvJ2gXhdMNgbw93OtY=
-github.com/skycoin/skywire-services v1.3.29-0.20241225081816-f0b7a58da138 h1:Uro8DayLOK10pwr2GFy37Mc6uQwjseQd8PEo2APYbuU=
-github.com/skycoin/skywire-services v1.3.29-0.20241225081816-f0b7a58da138/go.mod h1:39u1wXSdXUxxUA+gkQVK1wQqnLml0URYDxQvpiW935o=
+github.com/skycoin/skywire-services v1.3.29-0.20250128080752-12a40802f0f5 h1:jnBmjbLz6t8I7feg84I6NKwXElF1wKojwCiJ8HJOu7w=
+github.com/skycoin/skywire-services v1.3.29-0.20250128080752-12a40802f0f5/go.mod h1:a73vZHel3sp2rEZLIMCIOeJtnm4du/swrmrulpQHaAw=
 github.com/skycoin/systray v1.10.0 h1:fQZJHMylpVvfmOOTLvUssfyHVDoC8Idx6Ba2BlLEuGg=
 github.com/skycoin/systray v1.10.0/go.mod h1:/i17Eni5GxFiboIZceeamY5LktDSFFRCvd3fBMerQ+4=
 github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8 h1:TG/diQgUe0pntT/2D9tmUCz4VNwm9MfrtPr0SU2qSX8=
