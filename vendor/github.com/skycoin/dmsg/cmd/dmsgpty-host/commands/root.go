@@ -259,7 +259,7 @@ func fillConfigFromENV(conf dmsgpty.Config) (dmsgpty.Config, error) {
 			return conf, fmt.Errorf("failed to parse dmsg port: %w", err)
 		}
 
-		conf.DmsgPort = uint16(dmsgPort)
+		conf.DmsgPort = uint16(dmsgPort) //nolint
 	}
 
 	if val, ok := os.LookupEnv(envPrefix + "_CLINET"); ok {
