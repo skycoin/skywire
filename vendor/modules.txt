@@ -519,7 +519,7 @@ github.com/shopspring/decimal
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v1.3.29-0.20241218010226-56d92f2ef624
+# github.com/skycoin/dmsg v1.3.29-0.20250130234351-770537afb4cb
 ## explicit; go 1.23
 github.com/skycoin/dmsg/cmd/dmsg-discovery/commands
 github.com/skycoin/dmsg/cmd/dmsg-server/commands
@@ -534,6 +534,7 @@ github.com/skycoin/dmsg/cmd/dmsgpty-cli/commands
 github.com/skycoin/dmsg/cmd/dmsgpty-host/commands
 github.com/skycoin/dmsg/cmd/dmsgpty-ui/commands
 github.com/skycoin/dmsg/cmd/dmsgweb/commands
+github.com/skycoin/dmsg/internal/cli
 github.com/skycoin/dmsg/internal/discmetrics
 github.com/skycoin/dmsg/internal/dmsg-discovery/api
 github.com/skycoin/dmsg/internal/dmsg-discovery/store
@@ -620,7 +621,7 @@ github.com/skycoin/skycoin-service-discovery/internal/pg
 github.com/skycoin/skycoin-service-discovery/internal/sdmetrics
 github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/api
 github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/store
-# github.com/skycoin/skywire-services v1.3.29-0.20241225081816-f0b7a58da138
+# github.com/skycoin/skywire-services v1.3.29-0.20250128080752-12a40802f0f5
 ## explicit; go 1.23
 github.com/skycoin/skywire-services/cmd/address-resolver/commands
 github.com/skycoin/skywire-services/cmd/config-bootstrapper/commands

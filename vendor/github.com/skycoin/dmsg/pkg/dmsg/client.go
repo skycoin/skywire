@@ -13,6 +13,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
+	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/dmsg/pkg/disc"
 )
@@ -502,6 +503,7 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 	ce.log.WithField("remote_pk", entry.Static).Debug("Dialing session...")
 
 	const network = "tcp"
+	var conn net.Conn
 
 	// Trigger dial callback.
 	if err := ce.conf.Callbacks.OnSessionDial(network, entry.Server.Address); err != nil {
@@ -514,9 +516,21 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 		}
 	}()
 
-	conn, err := net.Dial(network, entry.Server.Address)
-	if err != nil {
-		return ClientSession{}, err
+	proxyAddr, ok := ctx.Value("socks5_proxy").(string)
+	if ok && proxyAddr != "" {
+		socksDialer, err := proxy.SOCKS5("tcp", proxyAddr, nil, proxy.Direct)
+		if err != nil {
+			return ClientSession{}, fmt.Errorf("failed to create SOCKS5 dialer: %w", err)
+		}
+		conn, err = socksDialer.Dial(network, entry.Server.Address)
+		if err != nil {
+			return ClientSession{}, fmt.Errorf("failed to dial through SOCKS5 proxy: %w", err)
+		}
+	} else {
+		conn, err = net.Dial(network, entry.Server.Address)
+		if err != nil {
+			return ClientSession{}, fmt.Errorf("failed to dial: %w", err)
+		}
 	}
 
 	dSes, err := makeClientSession(&ce.EntityCommon, ce.porter, conn, entry.Static)
