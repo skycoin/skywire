@@ -34,10 +34,10 @@ require (
 	github.com/pterm/pterm v0.12.79
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.3
-	github.com/skycoin/dmsg v1.3.29-0.20241218010226-56d92f2ef624
+	github.com/skycoin/dmsg v1.3.29-0.20250130234351-770537afb4cb
 	github.com/skycoin/skycoin v0.28.1-0.20241105130348-39b49a2d0a7f
 	github.com/skycoin/skycoin-service-discovery v1.3.29-0.20241218011239-6f6be8edf287
-	github.com/skycoin/skywire-services v1.3.29-0.20241225081816-f0b7a58da138
+	github.com/skycoin/skywire-services v1.3.29-0.20250128080752-12a40802f0f5
 	github.com/skycoin/systray v1.10.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.8.1
@@ -196,6 +196,6 @@ replace golang.zx2c4.com/wireguard => golang.zx2c4.com/wireguard v0.0.0-20230223
 
 // Below should reflect the current versions of the following deps
 // replace github.com/skycoin/skycoin => github.com/skycoin/skycoin v0.28.1-0.20241105130348-39b49a2d0a7f
-// replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20241217193208-d32ec623e670
-//replace github.com/skycoin/skywire-services => github.com/skycoin/skywire-services v1.3.29-0.20241218011810-0e3f3a797af4
-//replace github.com/skycoin/skycoin-service-discovery => github.com/skycoin/skycoin-service-discovery v1.3.29-0.20241218011239-6f6be8edf287
+// replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20250130234351-770537afb4cb
+// replace github.com/skycoin/skywire-services => github.com/skycoin/skywire-services v1.3.29-0.20250128080752-12a40802f0f5
+// replace github.com/skycoin/skycoin-service-discovery => github.com/skycoin/skycoin-service-discovery v1.3.29-0.20241218011239-6f6be8edf287

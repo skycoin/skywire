@@ -35,7 +35,7 @@ type TransportStore interface {
 	GetTransportByID(context.Context, uuid.UUID) (*transport.Entry, error)
 	GetTransportsByEdge(context.Context, cipher.PubKey) ([]*transport.Entry, error)
 	GetNumberOfTransports(context.Context) (map[network.Type]int, error)
-	GetAllTransports(context.Context) ([]*transport.Entry, error)
+	GetAllTransports(context.Context, bool) ([]*transport.Entry, error)
 	Close()
 }
 
