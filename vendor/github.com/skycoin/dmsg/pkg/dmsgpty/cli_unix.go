@@ -47,7 +47,7 @@ func getPtySize(t *os.File) (*pty.Winsize, error) {
 // prepareStdin sets stdin to raw mode and provides a function to restore the original state.
 func (cli *CLI) prepareStdin() (restore func(), err error) {
 	var oldState *term.State
-	if oldState, err = term.MakeRaw(int(os.Stdin.Fd())); err != nil {
+	if oldState, err = term.MakeRaw(int(os.Stdin.Fd())); err != nil { //nolint
 		cli.Log.
 			WithError(err).
 			Warn("Failed to set stdin to raw mode.")
@@ -55,7 +55,7 @@ func (cli *CLI) prepareStdin() (restore func(), err error) {
 	}
 	restore = func() {
 		// Attempt to restore state.
-		if err = term.Restore(int(os.Stdin.Fd()), oldState); err != nil {
+		if err = term.Restore(int(os.Stdin.Fd()), oldState); err != nil { //nolint
 			cli.Log.
 				WithError(err).
 				Error("Failed to restore original stdin state.")

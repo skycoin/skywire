@@ -154,7 +154,7 @@ func fetchNodes(utURL string) error {
 }
 
 // createGraph creates a graph from the transport data
-func createGraph() ([]map[string]interface{}, error) {
+func createGraph(debug bool) ([]map[string]interface{}, error) {
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -171,18 +171,26 @@ func createGraph() ([]map[string]interface{}, error) {
 		if !exist {
 			nodeMap[edgeA] = nodeID
 			nodeID++
+			label := ""
+			if debug {
+				label = edgeA
+			}
 			nodes = append(nodes, map[string]interface{}{
 				"id":    edgeA,
-				"label": "",
+				"label": label,
 			})
 		}
 		_, exist = nodeMap[edgeB]
 		if !exist {
 			nodeMap[edgeB] = nodeID
 			nodeID++
+			label := ""
+			if debug {
+				label = edgeB
+			}
 			nodes = append(nodes, map[string]interface{}{
 				"id":    edgeB,
-				"label": "",
+				"label": label,
 			})
 		}
 
@@ -197,9 +205,13 @@ func createGraph() ([]map[string]interface{}, error) {
 		if !exist {
 			nodeMap[utItem.Key] = nodeID
 			nodeID++
+			label := ""
+			if debug {
+				label = utItem.Key
+			}
 			nodes = append(nodes, map[string]interface{}{
 				"id":    utItem.Key,
-				"label": "",
+				"label": label,
 			})
 		}
 	}
@@ -223,8 +235,14 @@ func graphHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var debug bool
+	query := r.URL.Query()
+	selfTransportsParam := query.Get("debug")
+	if selfTransportsParam == "true" {
+		debug = true
+	}
 	// Create the graph
-	graph, err := createGraph()
+	graph, err := createGraph(debug)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to create graph: %v", err), http.StatusInternalServerError)
 		return

@@ -102,7 +102,7 @@ func (s *postgresStore) GetNumberOfTransports(context.Context) (map[network.Type
 	return response, nil
 }
 
-func (s *postgresStore) GetAllTransports(context.Context) ([]*transport.Entry, error) {
+func (s *postgresStore) GetAllTransports(_ context.Context, selfTransports bool) ([]*transport.Entry, error) {
 	var tpRecords []Transport
 	if err := s.client.Find(&tpRecords).Error; err != nil {
 		return nil, ErrTransportNotFound
@@ -114,6 +114,11 @@ func (s *postgresStore) GetAllTransports(context.Context) ([]*transport.Entry, e
 		entry, err := makeEntry(tpRecord)
 		if err != nil {
 			return nil, err
+		}
+		if !selfTransports {
+			if entry.Edges[0] == entry.Edges[1] {
+				continue
+			}
 		}
 		entries = append(entries, &entry)
 	}

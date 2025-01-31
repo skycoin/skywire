@@ -21,7 +21,7 @@ import (
 	"github.com/skycoin/skywire-services/pkg/transport-discovery/store"
 )
 
-const maxNumberOfRoutes = 5
+const maxNumberOfRoutes = 3
 
 // API represents the api of the route-finder service.
 type API struct {
@@ -139,7 +139,7 @@ func (a *API) getPairedRoutes(w http.ResponseWriter, r *http.Request) {
 		dstPK := edge[1]
 		graph := graphs[srcPK]
 
-		forwardRoutes, err := graph.Shortest(r.Context(), srcPK, dstPK, minHops, maxHops, maxNumberOfRoutes)
+		forwardRoutes, err := graph.GetRoute(r.Context(), srcPK, dstPK, minHops, maxHops, maxNumberOfRoutes)
 		if err != nil {
 			a.handleError(w, r, http.StatusNotFound, err)
 			return
