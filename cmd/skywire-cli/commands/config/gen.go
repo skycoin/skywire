@@ -624,6 +624,13 @@ var genConfigCmd = &cobra.Command{
 			RouteFinderTimeout: visorconfig.DefaultTimeout,
 			MinHops:            1,
 		}
+
+		if oldConf.Routing != nil {
+			if oldConf.Routing.MinHops != 0 {
+				conf.Routing.MinHops = oldConf.Routing.MinHops
+			}
+		}
+
 		conf.Launcher = &visorconfig.Launcher{
 			ServiceDisc:   services.ServiceDiscovery, //utilenv.ServiceDiscAddr,
 			Apps:          nil,
