@@ -16,10 +16,8 @@ var (
 	serviceType     = servicedisc.ServiceTypeProxy
 	isUnFiltered    bool
 	rawData         bool
-	utURL           string
 	sdURL           string
 	cacheFileSD     string
-	cacheFileUT     string
 	cacheFilesAge   int
 	ver             string
 	country         string
