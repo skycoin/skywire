@@ -15,10 +15,8 @@ var (
 	serviceType     = servicedisc.ServiceTypeVPN
 	isUnFiltered    bool
 	rawData         bool
-	utURL           string
 	sdURL           string
 	cacheFileSD     string
-	cacheFileUT     string
 	cacheFilesAge   int
 	noFilterOnline  bool
 	path            string

@@ -64,7 +64,7 @@ var startCmd = &cobra.Command{
 			rpcClient.StopApp("skysocks-client") //nolint
 		}
 
-		tCtx := context.Background() //nolint
+		tCtx := context.Background()
 		if startingTimeout != 0 {
 			tCtx, _ = context.WithTimeout(context.Background(), time.Duration(startingTimeout)*time.Second) //nolint
 		}
@@ -269,20 +269,17 @@ func init() {
 	var services skywire.Services
 	if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err == nil {
 		if err := json.Unmarshal(envServices.Prod, &services); err == nil {
-			svcDiscURL = services.DmsgDiscovery
-			utURL = services.UptimeTracker
+			svcDiscURL = services.ServiceDiscovery
 		}
 	}
 	if version == "unknown" {
 		version = "" //nolint
 	}
 	version = strings.Split(version, "-")[0]
-	listCmd.Flags().StringVarP(&utURL, "uturl", "w", utURL, "uptime tracker url")
 	listCmd.Flags().StringVarP(&sdURL, "sdurl", "a", svcDiscURL, "service discovery url")
 	listCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "print raw data")
 	listCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status in UT")
 	listCmd.Flags().StringVar(&cacheFileSD, "cfs", os.TempDir()+"/proxysd.json", "SD cache file location")
-	listCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location.")
 	listCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
 	listCmd.Flags().StringVarP(&pk, "pk", "k", "", "check "+serviceType+" service discovery for public key")
 	listCmd.Flags().BoolVarP(&isUnFiltered, "unfilter", "u", false, "provide unfiltered results")
@@ -340,17 +337,15 @@ var listCmd = &cobra.Command{
 			script.Echo(sdkeys).Stdout() //nolint
 			return
 		}
-		uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
-		utkeys, _ := script.Echo(uts).JQ(".[] | select(.on) | .pk").Replace("\"", "").String() //nolint
 		if isStats {
-			count, _ := script.Echo(sdkeys + utkeys).Freq().Match("2 ").Column(2).CountLines() //nolint
-			script.Echo(fmt.Sprintf("%v\n", count)).Stdout()                                   //nolint
+			count, _ := script.Echo(sdkeys).Freq().Match("2 ").Column(2).CountLines() //nolint
+			script.Echo(fmt.Sprintf("%v\n", count)).Stdout()                          //nolint
 			return
 		}
 		if !isLabel {
-			script.Echo(sdkeys + utkeys).Freq().Match("2 ").Column(2).Stdout() //nolint
+			script.Echo(sdkeys).Freq().Match("2 ").Column(2).Stdout() //nolint
 		} else {
-			filteredKeys, _ := script.Echo(sdkeys + utkeys).Freq().Match("2 ").Column(2).Slice()                           //nolint
+			filteredKeys, _ := script.Echo(sdkeys).Freq().Match("2 ").Column(2).Slice()                                    //nolint
 			formattedoutput, _ := script.Echo(sds).JQ(".[] | \"\\(.address) \\(.geo.country)\"").Replace("\"", "").Slice() //nolint
 			// Very slow!
 			for _, fo := range formattedoutput {
