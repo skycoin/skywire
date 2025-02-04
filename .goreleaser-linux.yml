@@ -29,7 +29,7 @@ builds:
     main: ./cmd/skywire/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
 
-  - id: skywire-x86
+  - id: skywire-386
     binary: skywire
     goos:
       - linux
@@ -134,7 +134,7 @@ archives:
     builds:
       - skywire-armhf
   
-  - id: x86
+  - id: 386
     format: tar.gz
     wrap_in_directory: false
     name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}hf'
@@ -142,7 +142,7 @@ archives:
       - dmsghttp-config.json
       - services-config.json
     builds:
-      - skywire-x86
+      - skywire-386
 
   # - id: riscv64
   #   format: tar.gz
