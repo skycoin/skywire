@@ -21,6 +21,7 @@ import (
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
+	services "github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -263,6 +264,7 @@ var statusCmd = &cobra.Command{
 }
 
 var isLabel bool
+var jsonOutput bool
 
 func init() {
 	var envServices skywire.EnvServices
@@ -287,16 +289,26 @@ func init() {
 	listCmd.Flags().StringVarP(&country, "country", "c", "", "filter results by country")
 	listCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the results")
 	listCmd.Flags().BoolVarP(&isLabel, "label", "l", false, "label keys by country \033[91m(SLOW)\033[0m")
+
+	listCmd.Flags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
+	listCmd.Flags().MarkHidden(internal.JSONString) //nolint
 }
 
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List servers",
 	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache file location to \"\" to avoid using cache files", serviceType, svcDiscURL, serviceType, svcDiscURL, serviceType),
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		sds := internal.GetData(cacheFileSD, sdURL+"/api/services?type="+serviceType, cacheFilesAge)
 		if rawData {
 			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout() //nolint
+			return
+		}
+		if jsonOutput {
+			var list []services.Service
+			json.Unmarshal([]byte(sds), &list) //nolint
+			var b bytes.Buffer
+			internal.PrintOutput(cmd.Flags(), list, b.String())
 			return
 		}
 		if pk != "" {
