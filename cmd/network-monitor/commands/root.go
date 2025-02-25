@@ -34,7 +34,6 @@ var (
 	addr          string
 	tag           string
 	logLvl        string
-	batchSize     int
 )
 
 func init() {
