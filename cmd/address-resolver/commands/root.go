@@ -13,6 +13,9 @@ import (
 	"github.com/skycoin/dmsg/pkg/direct"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
+	"github.com/spf13/cobra"
+	"github.com/xtaci/kcp-go"
+
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
@@ -21,8 +24,6 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/storeconfig"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/tcpproxy"
-	"github.com/spf13/cobra"
-	"github.com/xtaci/kcp-go"
 
 	"github.com/skycoin/skywire/internal/armetrics"
 	"github.com/skycoin/skywire/pkg/address-resolver/api"

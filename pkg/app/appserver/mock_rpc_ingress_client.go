@@ -3,8 +3,9 @@
 package appserver
 
 import (
-	appnet "github.com/skycoin/skywire/pkg/app/appnet"
 	mock "github.com/stretchr/testify/mock"
+
+	appnet "github.com/skycoin/skywire/pkg/app/appnet"
 
 	routing "github.com/skycoin/skywire/pkg/routing"
 

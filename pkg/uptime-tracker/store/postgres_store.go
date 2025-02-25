@@ -8,9 +8,10 @@ import (
 	"sync"
 	"time"
 
+	"gorm.io/gorm"
+
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/geo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
-	"gorm.io/gorm"
 )
 
 type postgresStore struct {

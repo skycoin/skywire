@@ -5,11 +5,12 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
+
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
-	"gorm.io/gorm"
 )
 
 var (

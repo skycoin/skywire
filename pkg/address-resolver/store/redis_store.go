@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/go-redis/redis/v8"
+
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
