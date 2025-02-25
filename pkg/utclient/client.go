@@ -15,7 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 )
 
-//go:generate mockery -name APIClient -case underscore -inpkg
+//go:generate mockery --name APIClient --case underscore --inpackage
 
 // APIClient implements uptime tracker API client.
 type APIClient interface {

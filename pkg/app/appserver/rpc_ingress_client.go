@@ -11,7 +11,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
-//go:generate mockery -name RPCIngressClient -case underscore -inpkg
+//go:generate mockery --name RPCIngressClient --case underscore --inpackage
 
 // RPCIngressClient describes RPC interface to communicate with the server.
 type RPCIngressClient interface {

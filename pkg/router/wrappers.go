@@ -12,7 +12,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
-//go:generate mockery -name RouteGroupDialer -case underscore -inpkg
+//go:generate mockery --name RouteGroupDialer --case underscore --inpackage
 
 // RouteGroupDialer is an interface for RouteGroup dialers
 type RouteGroupDialer interface {

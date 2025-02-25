@@ -1,8 +1,6 @@
 module github.com/skycoin/skywire
 
-go 1.23
-
-toolchain go1.23.1
+go 1.24
 
 require (
 	github.com/AudriusButkevicius/pfilter v0.0.11
@@ -17,6 +15,9 @@ require (
 	github.com/gen2brain/dlgs v0.0.0-20220603100644-40c77870fa8d
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-chi/chi/v5 v5.2.0
+	github.com/go-chi/httprate v0.14.1
+	github.com/go-echarts/go-echarts/v2 v2.4.3
+	github.com/go-playground/validator/v10 v10.22.1
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/gocarina/gocsv v0.0.0-20240520201108-78e41c74b4b1
@@ -57,6 +58,8 @@ require (
 	golang.org/x/term v0.27.0
 	golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173
 	gopkg.in/telebot.v3 v3.3.8
+	gorm.io/driver/postgres v1.5.11
+	gorm.io/gorm v1.25.12
 )
 
 require (
@@ -91,12 +94,9 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.6 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
 	github.com/go-chi/cors v1.2.1 // indirect
-	github.com/go-chi/httprate v0.14.1 // indirect
-	github.com/go-echarts/go-echarts/v2 v2.4.3 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
-	github.com/go-playground/validator/v10 v10.22.1 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
@@ -169,8 +169,6 @@ require (
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	gorm.io/driver/postgres v1.5.11 // indirect
-	gorm.io/gorm v1.25.12 // indirect
 	howett.net/plist v1.0.1 // indirect
 	mvdan.cc/sh/v3 v3.9.0 // indirect
 )

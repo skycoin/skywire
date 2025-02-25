@@ -635,6 +635,7 @@ github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/store
 github.com/skycoin/skywire-services/cmd/address-resolver/commands
 github.com/skycoin/skywire-services/cmd/config-bootstrapper/commands
 github.com/skycoin/skywire-services/cmd/keys-gen/commands
+github.com/skycoin/skywire-services/cmd/network-monitor/commands
 github.com/skycoin/skywire-services/cmd/node-visualizer/commands
 github.com/skycoin/skywire-services/cmd/route-finder/commands
 github.com/skycoin/skywire-services/cmd/skywire-services/commands
@@ -644,12 +645,16 @@ github.com/skycoin/skywire-services/cmd/transport-setup/commands
 github.com/skycoin/skywire-services/cmd/uptime-tracker/commands
 github.com/skycoin/skywire-services/internal/armetrics
 github.com/skycoin/skywire-services/internal/config
+github.com/skycoin/skywire-services/internal/nm
+github.com/skycoin/skywire-services/internal/nmmetrics
 github.com/skycoin/skywire-services/internal/pg
 github.com/skycoin/skywire-services/internal/tpdiscmetrics
 github.com/skycoin/skywire-services/internal/utmetrics
 github.com/skycoin/skywire-services/pkg/address-resolver/api
 github.com/skycoin/skywire-services/pkg/address-resolver/store
 github.com/skycoin/skywire-services/pkg/config-bootstrapper/api
+github.com/skycoin/skywire-services/pkg/network-monitor/api
+github.com/skycoin/skywire-services/pkg/network-monitor/store
 github.com/skycoin/skywire-services/pkg/node-visualizer/api
 github.com/skycoin/skywire-services/pkg/route-finder/api
 github.com/skycoin/skywire-services/pkg/route-finder/store
