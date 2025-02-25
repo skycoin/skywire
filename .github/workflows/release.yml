@@ -8,9 +8,9 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: 1.23.x
+          go-version: 1.24.x
       - uses: actions/checkout@v4
       - name: Install Requirements
         run: |
@@ -26,9 +26,9 @@ jobs:
     needs: linux
     runs-on: macos-latest
     steps:
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: 1.23.x
+          go-version: 1.25.x
       - uses: actions/checkout@v4
       - name: Install Requirements
         run: |
@@ -46,9 +46,9 @@ jobs:
     needs: darwin
     runs-on: windows-latest
     steps:
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: 1.23.x
+          go-version: 1.24.x
       - uses: actions/checkout@v4
       - name: Install Requirements
         shell: pwsh
