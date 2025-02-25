@@ -167,5 +167,5 @@ var portsCmd = &cobra.Command{
 }
 
 func srvpk(w http.ResponseWriter, _ *http.Request) {
-	fmt.Fprintf(w, pk) //nolint
+	fmt.Fprintf(w, "%s", pk) //nolint
 }
