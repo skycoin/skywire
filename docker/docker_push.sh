@@ -21,9 +21,9 @@ declare -a images_arr=(
   "address-resolver"
   "uptime-tracker"
   "network-monitor"
-  "node-visualizer"
   "config-bootstrapper"
   "transport-setup"
+  "skywire-visor"
 )
 
 echo "Pushing to $registry using tag: $tag"

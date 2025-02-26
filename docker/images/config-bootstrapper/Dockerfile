@@ -2,13 +2,18 @@ ARG image_tag
 ARG base_image
 
 FROM ${base_image} AS builder
-
 ARG build_opts
+ARG image_tag
 
 COPY . /skywire-services
 WORKDIR /skywire-services
 
-RUN go build "${build_opts}" -o /release/config-bootstrapper ./cmd/config-bootstrapper && \ 
+RUN if [ "$image_tag" = "integration" ]; then \
+        apk add --no-cache build-base && \
+        CGO_ENABLED=1 go build "${build_opts}" -race -o /release/config-bootstrapper ./cmd/config-bootstrapper; \
+    else \
+        go build "${build_opts}" -o /release/config-bootstrapper ./cmd/config-bootstrapper; \
+    fi && \
     mv /skywire-services/docker/config/config.json /release/config.json
 
 FROM alpine AS prod

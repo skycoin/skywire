@@ -33,15 +33,6 @@ fi
 
 echo "Building using tag: $image_tag"
 
-echo "Build skywire visor image"
-DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/skywire-visor/Dockerfile \
-  --build-arg base_image="$base_image" \
-  --build-arg build_opts="$go_buildopts" \
-  --build-arg image_tag="$image_tag" \
-  $platform \
-  -t "$registry"/skywire-visor:"$image_tag" .
-
-
 if [[ "$image_tag" == "e2e" ]]; then
 
   if [ "$DOCKER_USERNAME" != "" ] && [ "$DOCKER_PASSWORD" != "" ]; then
@@ -121,7 +112,7 @@ if [[ "$image_tag" == "integration" ]]; then
   rm -rf ./tmp/*
 fi
 
-echo "Build skywire visor image"
+echo "Build skywrie visor image"
 DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/skywire-visor/Dockerfile \
   --build-arg base_image="$base_image" \
   --build-arg build_opts="$go_buildopts" \
@@ -168,14 +159,6 @@ DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/uptime-tracker/Dockerfil
   --build-arg base_image="$base_image" \
   $platform \
   -t "$registry"/uptime-tracker:"$image_tag" .
-
-echo "build node visualizer image"
-DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/node-visualizer/Dockerfile \
-  --build-arg base_image="$base_image" \
-  --build-arg build_opts="$go_buildopts" \
-  --build-arg image_tag="$image_tag" \
-  $platform \
-  -t "$registry"/node-visualizer:"$image_tag" .
 
 echo "building network monitor image"
 DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/network-monitor/Dockerfile \

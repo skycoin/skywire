@@ -1,7 +1,9 @@
 # Builder
 ARG base_image
 ARG image_tag
-FROM golang:1.24-alpine AS builder
+FROM ${base_image} AS builder
+ARG build_opts
+ARG image_tag
 
 ARG BUILDINFO_LDFLAGS
 ARG CGO_ENABLED=0
@@ -10,12 +12,14 @@ ENV CGO_ENABLED=${CGO_ENABLED} \
     GO111MODULE=on
 
 COPY . /skywire
-
 WORKDIR /skywire
 
-RUN apk add --no-cache make git && \
-    sh -c /skywire/docker/common/install-prequisites.sh && \
-    make build-deploy
+RUN if [ "$image_tag" = "integration" ]; then \
+        apk add --no-cache build-base && \
+        CGO_ENABLED=1 go build "${build_opts}" -race -o /release/skywire ./cmd/skywire; \
+    else \
+        go build "${build_opts}" -o /release/skywire ./cmd/skywire; \
+    fi
 
 ## Resulting image
 FROM ${base_image} AS visor-runner

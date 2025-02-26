@@ -332,24 +332,24 @@ services:
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 
-  node-visualizer:
-    image: "${REGISTRY}/node-visualizer:${DOCKER_TAG}"
-    hostname: node-visualizer
-    container_name: "node-visualizer"
-    networks:
-      srv:
-        ipv4_address: 175.0.0.17
-      intra:
-        ipv4_address: 174.0.0.17
-    ports:
-      - "9089:9089"
-    entrypoint: "/release/node-visualizer --ut-url http://uptime-tracker:9096/uptimes?status=on --tpd-url  http://transport-discovery:9091/all-transports?selfTransports=hide"
-    depends_on:
-      - transport-discovery
-      - uptime-tracker
-      - visor-a
-      - visor-b
-      - visor-c
+  # node-visualizer:
+  #   image: "${REGISTRY}/node-visualizer:${DOCKER_TAG}"
+  #   hostname: node-visualizer
+  #   container_name: "node-visualizer"
+  #   networks:
+  #     srv:
+  #       ipv4_address: 175.0.0.17
+  #     intra:
+  #       ipv4_address: 174.0.0.17
+  #   ports:
+  #     - "9089:9089"
+  #   entrypoint: "/release/node-visualizer --ut-url http://uptime-tracker:9096/uptimes?status=on --tpd-url  http://transport-discovery:9091/all-transports?selfTransports=hide"
+  #   depends_on:
+  #     - transport-discovery
+  #     - uptime-tracker
+  #     - visor-a
+  #     - visor-b
+  #     - visor-c
 
   # skywire visors, which by being on a different network are to be isolated from the first one
 
@@ -438,22 +438,22 @@ services:
     restart: always
     entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json
     
-  network-monitor:
-    image: "${REGISTRY}/network-monitor:${DOCKER_TAG}"
-    hostname: network-monitor
-    container_name: "network-monitor"
-    networks:
-      srv:
-        ipv4_address: 175.0.0.30  
-      intra:
-        ipv4_address: 174.0.0.30
-    ports:
-      - "9080:9080"
-    entrypoint: /release/network-monitor --ut-url http://uptime-tracker:9096 --tpd-url  http://transport-discovery:9091 --sd-url http://service-discovery:9098 --dmsgd-url http://dmsg-discovery:9090 --ar-url http://address-resolver:9093
-    depends_on:
-      - visor-c
-    stdin_open: true # docker run -i
-    tty: true        # docker run -t
+  # network-monitor:
+  #   image: "${REGISTRY}/network-monitor:${DOCKER_TAG}"
+  #   hostname: network-monitor
+  #   container_name: "network-monitor"
+  #   networks:
+  #     srv:
+  #       ipv4_address: 175.0.0.30  
+  #     intra:
+  #       ipv4_address: 174.0.0.30
+  #   ports:
+  #     - "9080:9080"
+  #   entrypoint: /release/network-monitor --ut-url http://uptime-tracker:9096 --tpd-url  http://transport-discovery:9091 --sd-url http://service-discovery:9098 --dmsgd-url http://dmsg-discovery:9090 --ar-url http://address-resolver:9093
+  #   depends_on:
+  #     - visor-c
+  #   stdin_open: true # docker run -i
+  #   tty: true        # docker run -t
 
 volumes:
   db:

@@ -2,14 +2,19 @@ ARG image_tag
 ARG base_image
 
 FROM ${base_image} AS builder
-
 ARG build_opts
+ARG image_tag
 
 COPY . /skywire-services
 WORKDIR /skywire-services
 
-RUN go build "${build_opts}" -o /release/network-monitor ./cmd/network-monitor && \
-    go build "${build_opts}" -o /release/vpn-client ./cmd/vpn-lite-client
+RUN if [ "$image_tag" = "integration" ]; then \
+        apk add --no-cache build-base && \
+        CGO_ENABLED=1 go build "${build_opts}" -race -o /release/network-monitor ./cmd/network-monitor; \
+    else \
+        go build "${build_opts}" -o /release/network-monitor ./cmd/network-monitor; \
+    fi
+
 
 FROM alpine AS prod
 WORKDIR /release
@@ -27,7 +32,6 @@ COPY ./docker/common/install-prequisites.sh /release/install-prequisites.sh
 RUN sh -c /release/install-prequisites.sh cert-only \
     && rm -rf /release/install-prequisites.sh
 
-COPY --from=builder /release/vpn-client /release/vpn-client
 COPY --from=builder /release/network-monitor /release/network-monitor
 ENTRYPOINT ["/release/network-monitor"]
 

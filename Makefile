@@ -83,8 +83,9 @@ BUILDTAGINFO := -X $(PROJECT_BASE)/pkg/visor.BuildTag=$(BUILDTAG)
 BUILDINFO?=$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT) $(BUILDTAGINFO)
 INFO?=$(VERSION) $(DATE) $(COMMIT) $(BUILDTAG)
 
-BUILD_OPTS?="-ldflags=$(BUILDINFO)" -mod=vendor $(RACE_FLAG)
+BUILD_OPTS?="-ldflags=$(BUILDINFO)" -mod=vendor
 BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
+BUILD_OPTS_RACE?="-race"
 
 export COMPOSE_FILE=${DOCKER_COMPOSE_FILE}
 export REGISTRY=${DOCKER_REGISTRY}
@@ -468,10 +469,10 @@ build-services: ## Build binaries
 	${OPTS} go build ${BUILD_OPTS} -o ./build/skywire-services ./cmd/skywire-services
 
 build-services-deploy: ## Build for deployment Docker images
-	${DOCKER_OPTS} go build ${BUILD_OPTS_DEPLOY} -mod=vendor -o ./build/skywire-services ./cmd/skywire-services
+	${DOCKER_OPTS} go build ${BUILD_OPTS_DEPLOY} -mod=vendor -o /release/skywire-services ./cmd/skywire-services
 
 build-services-race: ## Build binaries
-	${OPTS} go build ${BUILD_OPTS} -race -o ./build/skywire-services ./cmd/skywire-services
+	CGO_ENABLED=1 ${OPTS} go build ${BUILD_OPTS} -race -o /release/skywire-services ./cmd/skywire-services
 
 install-services: ## Install route-finder, transport-discovery, address-resolver, sw-env, keys-gen, network-monitor, node-visualizer
 	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire-services
@@ -507,17 +508,17 @@ e2e-help: ## E2E. Show env-vars and useful commands
 	@echo -e "\nConsult with:\n\n   docker compose help\n"
 
 docker-build-test:
-	bash ./docker/docker_build.sh test ${BUILD_OPTS_DEPLOY}
+	bash ./docker/docker_build.sh test ${BUILD_OPTS_DEPLOY} $(BUILD_ARCH)
 
 docker-build:
-	bash ./docker/docker_build.sh prod ${BUILD_OPTS_DEPLOY}
+	bash ./docker/docker_build.sh prod ${BUILD_OPTS_DEPLOY} $(BUILD_ARCH)
 
 docker-push-test:
-	bash ./docker/docker_build.sh test ${BUILD_OPTS_DEPLOY}
+	bash ./docker/docker_build.sh test ${BUILD_OPTS_DEPLOY} $(BUILD_ARCH)
 	bash ./docker/docker_push.sh test
 
 docker-push:
-	bash ./docker/docker_build.sh prod ${BUILD_OPTS_DEPLOY}
+	bash ./docker/docker_build.sh prod ${BUILD_OPTS_DEPLOY} $(BUILD_ARCH)
 	bash ./docker/docker_push.sh prod
 
 set-forwarding:
