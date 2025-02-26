@@ -4,20 +4,21 @@ package commands
 import (
 	"fmt"
 	"log"
-	"github.com/spf13/cobra"
-	"runtime/debug"
-	"path/filepath"
 	"os"
+	"path/filepath"
+	"runtime/debug"
 	"strings"
+
+	"github.com/spf13/cobra"
 )
 
-
+// RootCmd is the version command
 var RootCmd = &cobra.Command{
 	Use: func() string {
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
 	}(),
-	Short: `version`,
-	Long: `version`,
+	Short:                 `version`,
+	Long:                  `version`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
