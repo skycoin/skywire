@@ -141,10 +141,6 @@ check-help: ## Cursory check of the help menus
 	@echo
 	go run cmd/skywire-services/services.go confbs --help
 	@echo
-	go run cmd/skywire-services/services.go kg --help
-	@echo
-	go run cmd/skywire-services/services.go nv --help
-	@echo
 	go run cmd/skywire-services/services.go rf --help
 	@echo
 	go run cmd/skywire-services/services.go se --help
@@ -159,8 +155,6 @@ check-help: ## Cursory check of the help menus
 	@echo
 	go run cmd/transport-discovery/transport-discovery.go --help
 	@echo
-	go run cmd/keys-gen/keys-gen.go --help
-	@echo
 	go run cmd/sw-env/sw-env.go --help
 	@echo
 	go run cmd/uptime-tracker/uptime-tracker.go --help
@@ -170,8 +164,6 @@ check-help: ## Cursory check of the help menus
 	go run cmd/setup-node/setup-node.go --help
 	@echo
 	go run cmd/transport-setup/transport-setup.go --help
-	@echo
-	go run cmd/node-visualizer/node-visualizer.go --help
 	@echo
 	go run cmd/address-resolver/address-resolver.go --help
 	@echo
