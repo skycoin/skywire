@@ -2,15 +2,15 @@ name: Release
 # only trigger on pull request closed events
 on:
   push:
-    tags:        
-      - '*'  
+    tags:
+      - '*'
 jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/setup-go@v4
         with:
-          go-version: 1.23.x
+          go-version: 1.24.x
       - uses: actions/checkout@v4
       - name: Install Requirements
         run: |
@@ -21,14 +21,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make github-release
-  
+
   darwin:
     needs: linux
     runs-on: macos-latest
     steps:
       - uses: actions/setup-go@v4
         with:
-          go-version: 1.23.x
+          go-version: 1.24.x
       - uses: actions/checkout@v4
       - name: Install Requirements
         run: |
@@ -41,14 +41,14 @@ jobs:
         run: |
           make github-release-darwin
           make mac-installer-release
-  
+
   windows:
     needs: darwin
     runs-on: windows-latest
     steps:
       - uses: actions/setup-go@v4
         with:
-          go-version: 1.23.x
+          go-version: 1.24.x
       - uses: actions/checkout@v4
       - name: Install Requirements
         shell: pwsh

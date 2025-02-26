@@ -21,7 +21,6 @@ func init() {
 	hvCmd.AddCommand(hvpkCmd)
 	hvpkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
 	hvpkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
-	hvpkCmd.Flags().BoolVarP(&web, "http", "w", false, "serve public key via http")
 	hvCmd.AddCommand(chvpkCmd)
 }
 
