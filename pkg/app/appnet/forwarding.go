@@ -69,7 +69,7 @@ func NewForwardConn(log *logging.Logger, remoteConn net.Conn, remotePort, localP
 	var once sync.Once
 	handler := http.NewServeMux()
 	var lock sync.Mutex
-	handler.HandleFunc("/", handleFunc(remoteConn, log, closeChan, once, &lock))
+	handler.HandleFunc("/", handleFunc(remoteConn, log, closeChan, &once, &lock))
 
 	srv := &http.Server{
 		Addr:           fmt.Sprintf(":%v", localPort),
@@ -131,7 +131,7 @@ func isClosed(c chan struct{}) bool {
 	}
 }
 
-func handleFunc(remoteConn net.Conn, log *logging.Logger, closeChan chan struct{}, once sync.Once, lock *sync.Mutex) func(w http.ResponseWriter, req *http.Request) {
+func handleFunc(remoteConn net.Conn, log *logging.Logger, closeChan chan struct{}, once *sync.Once, lock *sync.Mutex) func(w http.ResponseWriter, req *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		lock.Lock()
 		defer lock.Unlock()
