@@ -23,6 +23,7 @@ import (
 	vpns "github.com/skycoin/skywire/cmd/apps/vpn-server/commands"
 	sn "github.com/skycoin/skywire/cmd/setup-node/commands"
 	scli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
+	version "github.com/skycoin/skywire/cmd/version/commands"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/visor"
 )
@@ -48,6 +49,7 @@ func init() {
 		appsCmd,
 		treeCmd,
 		docCmd,
+		version.RootCmd,
 	)
 	visor.RootCmd.Long = `
 	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐  ┬  ┬┬┌─┐┌─┐┬─┐

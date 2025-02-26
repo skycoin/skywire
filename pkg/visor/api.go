@@ -1628,10 +1628,11 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid
 	v.log.Debugf("Received: %v", sReply)
 
 	if sReply.Error != nil {
-		sErr := sReply.Error
-		v.log.WithError(fmt.Errorf(*sErr)).Error("Server closed with error")
-		return uuid.UUID{}, fmt.Errorf(*sErr)
+		sErr := *sReply.Error
+		v.log.WithError(fmt.Errorf("%s", sErr)).Error("Server closed with error")
+		return uuid.UUID{}, fmt.Errorf("%s", sErr)
 	}
+
 	forwardConn := appnet.NewForwardConn(v.log, remoteConn, remotePort, localPort)
 	forwardConn.Serve()
 	return forwardConn.ID, nil
