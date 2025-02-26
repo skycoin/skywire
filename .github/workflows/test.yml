@@ -15,6 +15,7 @@ jobs:
           make dep
           chmod +x ./ci_scripts/create-ip-aliases.sh
           ./ci_scripts/create-ip-aliases.sh
+          make install-shellcheck
         shell: bash
       - name: Checking Format and Testing
         run: make check
