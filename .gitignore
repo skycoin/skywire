@@ -10,6 +10,7 @@
 
 .idea/
 .vscode/
+tmp/
 
 ./skywire.json
 ./build/

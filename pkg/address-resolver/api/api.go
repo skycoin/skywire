@@ -17,6 +17,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 
+	"github.com/skycoin/skywire/internal/armetrics"
+	"github.com/skycoin/skywire/pkg/address-resolver/store"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httpauth"
@@ -28,9 +30,6 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/transport/network/handshake"
-
-	"github.com/skycoin/skywire/internal/armetrics"
-	"github.com/skycoin/skywire/pkg/address-resolver/store"
 )
 
 // ErrNotConnected is returned when requested peer is not connected.

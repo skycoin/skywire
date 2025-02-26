@@ -10,6 +10,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/dmsg/pkg/direct"
+	"github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsghttp"
+	"github.com/spf13/cobra"
+	"gorm.io/gorm"
+
 	"github.com/skycoin/skywire/internal/pg"
 	"github.com/skycoin/skywire/pkg/route-finder/api"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
@@ -20,12 +26,6 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/storeconfig"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/tcpproxy"
 	"github.com/skycoin/skywire/pkg/transport-discovery/store"
-
-	"github.com/skycoin/dmsg/pkg/direct"
-	"github.com/skycoin/dmsg/pkg/dmsg"
-	"github.com/skycoin/dmsg/pkg/dmsghttp"
-	"github.com/spf13/cobra"
-	"gorm.io/gorm"
 )
 
 var (

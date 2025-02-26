@@ -3,9 +3,8 @@ package store
 import (
 	"errors"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/storeconfig"
-
 	"github.com/skycoin/skywire/internal/nm"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/storeconfig"
 )
 
 // Store stores Transport metadata and generated nonce values.

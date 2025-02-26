@@ -17,14 +17,13 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
 
+	"github.com/skycoin/skywire/internal/nm"
+	"github.com/skycoin/skywire/pkg/network-monitor/store"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
-
-	"github.com/skycoin/skywire/internal/nm"
-	"github.com/skycoin/skywire/pkg/network-monitor/store"
 )
 
 // API register all the API endpoints.

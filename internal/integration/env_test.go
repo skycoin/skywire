@@ -20,14 +20,15 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/net/proxy"
+
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	skyvisor "github.com/skycoin/skywire/pkg/visor"
-	"github.com/stretchr/testify/require"
-	"golang.org/x/net/proxy"
 )
 
 type TestEnv struct {

@@ -12,9 +12,10 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/swarm"
+	"github.com/stretchr/testify/require"
+
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport/network"
-	"github.com/stretchr/testify/require"
 )
 
 // TODO: implement TestEnv.startup in code (without need for docker-compose up)

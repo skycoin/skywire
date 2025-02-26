@@ -5,12 +5,12 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
-
-	"github.com/google/uuid"
-	"github.com/stretchr/testify/require"
 )
 
 var ErrNoNodeInMockStore = errors.New("no node with that pk in mock store")

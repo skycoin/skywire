@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
-
 	"github.com/spf13/cobra"
 
 	ar "github.com/skycoin/skywire/cmd/address-resolver/commands"
@@ -19,6 +17,7 @@ import (
 	tpd "github.com/skycoin/skywire/cmd/transport-discovery/commands"
 	tps "github.com/skycoin/skywire/cmd/transport-setup/commands"
 	ut "github.com/skycoin/skywire/cmd/uptime-tracker/commands"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 )
 
 func init() {
