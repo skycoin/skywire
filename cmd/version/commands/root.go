@@ -25,7 +25,7 @@ var RootCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, _ []string) {
 		bi, ok := debug.ReadBuildInfo()
 		if !ok {
-			panic("couldn't read build info")
+			log.Fatal("couldn't read build info")
 		}
 
 		fmt.Printf("%s version %s\n", bi.Path, bi.Main.Version)
