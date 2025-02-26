@@ -1,4 +1,5 @@
-# Builder
+ARG image_tag=e2e
+
 ARG base=alpine
 FROM golang:1.23-alpine AS builder
 
@@ -8,19 +9,17 @@ ENV CGO_ENABLED=${CGO_ENABLED} \
     GOOS=linux  \
     GO111MODULE=on
 
-COPY . /skywire
-
+COPY /tmp/skywire /skywire
 WORKDIR /skywire
 
-RUN apk add --no-cache make git && \
+RUN apk add --no-cache make git build-base && \
     sh -c /skywire/docker/images/visor/install-preq.sh && \
-    make build-deploy
+    make build-race
 
 ## Resulting image
-FROM ${base} AS visor-runner
+FROM ${base} as visor-runner
 
 COPY --from=builder /skywire/docker/images/visor/install-preq.sh /release/install-preq.sh
-COPY --from=builder /skywire/docker/images/visor/entrypoint.sh /entrypoint.sh
 COPY --from=builder /release /release
 
 RUN sh -c /release/install-preq.sh \
@@ -29,11 +28,15 @@ RUN sh -c /release/install-preq.sh \
 
 STOPSIGNAL SIGINT
 
-ENTRYPOINT [ "/entrypoint.sh" ]
+ENTRYPOINT [ "/release/skywire" ]
 
 # default target
 FROM visor-runner AS prod
 
 FROM visor-runner AS test
 
-FROM visor-runner AS latest
+FROM visor-runner AS e2e
+
+FROM visor-runner AS integration
+
+FROM ${image_tag}

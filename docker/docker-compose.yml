@@ -1,0 +1,460 @@
+networks:
+  srv:
+    driver: "bridge"
+    ipam:
+      config:
+        - subnet: 175.0.0.0/16
+    driver_opts:
+      com.docker.network.bridge.name: br-srv
+    internal: true
+
+  visors:
+    driver: "bridge"
+    ipam:
+      config:
+        - subnet: 173.0.0.0/16
+    driver_opts:
+      com.docker.network.bridge.name: br-visors
+    internal: true
+
+  intra:
+    driver: "bridge"
+    ipam:
+      config:
+        - subnet: 174.0.0.0/16
+    driver_opts:
+      com.docker.network.bridge.name: br-intra
+
+services:
+  hoster:
+    privileged: true
+    image: neilpang/docker-hoster
+    container_name: hoster
+    hostname: hoster
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock
+      - /etc/hosts:/tmp/hosts
+      - ./integration/docker/config/:/app/conf/
+    networks:
+      intra:
+        ipv4_address: 174.0.0.249
+    environment:
+      - MG_LOG_LEVEL=ERROR
+
+  dmsgd-redis:
+    image: "redis:alpine"
+    networks:
+      srv:
+        ipv4_address: 175.0.0.250
+      intra:
+        ipv4_address: 174.0.0.250
+    ports:
+      - "6385:6379"
+    container_name: "dmsgd-redis"
+    hostname: dmsgd-redis
+    depends_on:
+      - hoster
+
+  ar-redis:
+    image: "redis:alpine"
+    networks:
+      srv:
+        ipv4_address: 175.0.0.251
+      intra:
+        ipv4_address: 174.0.0.251
+    ports:
+      - "6380:6379"
+    container_name: "ar-redis"
+    hostname: ar-redis
+    depends_on:
+      - hoster
+
+  sd-redis:
+    image: "redis:alpine"
+    networks:
+      srv:
+        ipv4_address: 175.0.0.252
+      intra:
+        ipv4_address: 174.0.0.252
+    ports:
+      - "6381:6379"
+    container_name: "sd-redis"
+    hostname: sd-redis
+    depends_on:
+      - hoster
+
+  tpd-redis:
+    image: "redis:alpine"
+    networks:
+      srv:
+        ipv4_address: 175.0.0.253
+      intra:
+        ipv4_address: 174.0.0.253
+    ports:
+      - "6382:6379"
+    container_name: "tpd-redis"
+    hostname: tpd-redis
+    depends_on:
+      - hoster
+
+  ut-redis:
+    image: "redis:alpine"
+    networks:
+      srv:
+        ipv4_address: 175.0.0.255
+      intra:
+        ipv4_address: 174.0.0.255
+    ports:
+      - "6384:6379"
+    container_name: "ut-redis"
+    hostname: ut-redis
+    depends_on:
+      - hoster
+  
+  postgres-db:
+    image: "postgres:alpine"
+    networks:
+      srv:
+        ipv4_address: 175.0.0.248
+      intra:
+        ipv4_address: 174.0.0.248
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DATABASE=postgres
+    ports:
+      - '5432:5432'
+    volumes: 
+      - db:/var/lib/postgresql/data
+    container_name: "postgres-db"
+    hostname: postgres-db
+    depends_on:
+      - hoster
+
+  transport-discovery:
+    privileged: true
+    image: "${REGISTRY}/transport-discovery:${DOCKER_TAG}"
+    hostname: transport-discovery
+    container_name: "transport-discovery"
+    restart: always
+    networks:
+      srv:
+        ipv4_address: 175.0.0.2
+      intra:
+        ipv4_address: 174.0.0.2
+    environment:
+      - PG_USER=postgres
+      - PG_PASSWORD=postgres
+      - PG_DATABASE=postgres
+    ports:
+      - "9091:9091"
+    depends_on:
+      - tpd-redis
+      - postgres-db
+    entrypoint: "/release/transport-discovery --pg-host postgres-db --pg-port 5432 --redis redis://tpd-redis:6379 --sk 85789cd7efcdf35340c8f4cb3e15bccdff57efda49af5bcdddaae57374d25ab8 --dmsg-disc http://dmsg-discovery:9090"
+    stdin_open: true # docker run -i
+    tty: true        # docker run -t
+
+  route-finder:
+    privileged: true
+    image: "${REGISTRY}/route-finder:${DOCKER_TAG}"
+    hostname: route-finder
+    container_name: "route-finder"
+    restart: always
+    networks:
+      srv:
+        ipv4_address: 175.0.0.3
+      intra:
+        ipv4_address: 174.0.0.3
+    environment:
+      - PG_USER=postgres
+      - PG_PASSWORD=postgres
+      - PG_DATABASE=postgres
+    ports:
+      - "9092:9092"
+    depends_on:
+      - transport-discovery
+    entrypoint: "/release/route-finder --pg-host postgres-db --pg-port 5432 --sk 640905f9fd60d6bf1ee88519f61035765d65319d9f3bac6c5f2fc14ea5cf15ca --dmsg-disc http://dmsg-discovery:9090"
+    stdin_open: true # docker run -i
+    tty: true        # docker run -t
+
+  dmsg-discovery:
+    image: "${REGISTRY}/dmsg-discovery:${DOCKER_TAG}"
+    hostname: dmsg-discovery
+    container_name: "dmsg-discovery"
+    networks:
+      srv:
+        ipv4_address: 175.0.0.4
+      intra:
+        ipv4_address: 174.0.0.4
+    ports:
+      - "9090:9090"
+    restart: on-failure
+    depends_on:
+      - dmsgd-redis
+      - transport-discovery
+    entrypoint: "/usr/local/bin/dmsg-discovery --redis redis://dmsgd-redis:6379 --sk b3f6706cb72215d3873ef92cc0c6037a47fe651112b1685017d6347eed0fb714 -t"
+    stdin_open: true # docker run -i
+    tty: true        # docker run -t
+
+  dmsg-server:
+    image: "${REGISTRY}/dmsg-server:${DOCKER_TAG}"
+    hostname: dmsg-server
+    container_name: "dmsg-server"
+    ports:
+      - "8080:8080"
+    networks:
+      srv:
+        ipv4_address: 175.0.0.5
+      intra:
+        ipv4_address: 174.0.0.5
+    depends_on:
+      - dmsg-discovery
+    restart: on-failure
+    entrypoint: "/usr/local/bin/dmsg-server start /release/dmsg-server.json"
+    volumes:
+      - type: bind
+        source: ../docker/integration/dmsg-server.json
+        target: /release/dmsg-server.json
+        read_only: true
+    stdin_open: true # docker run -i
+    tty: true        # docker run -t
+
+  setup-node:
+    privileged: true
+    image: "${REGISTRY}/setup-node:${DOCKER_TAG}"
+    hostname: setup-node
+    container_name: "setup-node"
+    networks:
+      srv:
+        ipv4_address: 175.0.0.6
+      intra:
+        ipv4_address: 174.0.0.6
+    depends_on:
+      - dmsg-server
+    restart: on-failure
+    entrypoint: /release/setup-node /release/setup-node.json
+    volumes:
+      - type: bind
+        source: ../docker/integration/setup-node.json
+        target: /release/setup-node.json
+        read_only: true
+    stdin_open: true # docker run -i
+    tty: true        # docker run -t
+
+  service-discovery:
+    privileged: true
+    image: "${REGISTRY}/service-discovery:${DOCKER_TAG}"
+    hostname: service-discovery
+    container_name: "service-discovery"
+    restart: always
+    networks:
+      srv:
+        ipv4_address: 175.0.0.9
+      intra:
+        ipv4_address: 174.0.0.9
+    depends_on:
+      - transport-discovery
+      - sd-redis
+      - postgres-db
+    ports:
+      - "9098:9098"
+    environment:
+      - PG_USER=postgres
+      - PG_PASSWORD=postgres
+      - PG_DATABASE=postgres
+    entrypoint: "/release/service-discovery --pg-host postgres-db --pg-port 5432 --redis redis://sd-redis:6379 --sk ccc3ae9993ed03bed80b1f9feb747d7c6ca3342a65c3923191b7527c2c00ef0f --dmsg-disc http://dmsg-discovery:9090"
+    stdin_open: true # docker run -i
+    tty: true        # docker run -t
+
+  uptime-tracker:
+    privileged: true
+    image: "${REGISTRY}/uptime-tracker:${DOCKER_TAG}"
+    hostname: uptime-tracker
+    container_name: "uptime-tracker"
+    restart: always
+    networks:
+      srv:
+        ipv4_address: 175.0.0.7
+      intra:
+        ipv4_address: 174.0.0.7
+    depends_on:
+      - ut-redis
+      - postgres-db
+    environment:
+      - PG_USER=postgres
+      - PG_PASSWORD=postgres
+      - PG_DATABASE=postgres
+    ports:
+      - "9096:9096"
+    entrypoint: "/release/uptime-tracker --pg-host postgres-db --pg-port 5432 --redis redis://ut-redis:6379 --sk e20681b4fd1eb1904ebfbf8fba79a138bbac481e1c3f77bcfab3a877525fda32 --dmsg-disc http://dmsg-discovery:9090"
+    stdin_open: true # docker run -i
+    tty: true        # docker run -t
+
+  address-resolver:
+    privileged: true
+    image: "${REGISTRY}/address-resolver:${DOCKER_TAG}"
+    hostname: address-resolver
+    container_name: "address-resolver"
+    networks:
+      srv:
+        ipv4_address: 175.0.0.8
+      intra:
+        ipv4_address: 174.0.0.8
+    ports:
+      - "9093:9093"
+    depends_on:
+      - ar-redis
+    restart: on-failure
+    entrypoint: "/release/address-resolver --redis redis://ar-redis:6379 --sk 1fa0a7b80438b8d31655b5c69efd57bcf931ac828438ff2925ab36e4abcc426a --dmsg-disc http://dmsg-discovery:9090"
+    stdin_open: true # docker run -i
+    tty: true        # docker run -t
+
+  transport-setup:
+    privileged: true
+    image: "${REGISTRY}/transport-setup:${DOCKER_TAG}"
+    hostname: transport-setup
+    container_name: "transport-setup"
+    networks:
+      srv:
+        ipv4_address: 175.0.0.16
+      intra:
+        ipv4_address: 174.0.0.16
+    depends_on:
+      - dmsg-server
+    restart: on-failure
+    entrypoint: /release/transport-setup -c /release/transport-setup.json
+    volumes:
+      - type: bind
+        source: ../docker/integration/transport-setup.json
+        target: /release/transport-setup.json
+        read_only: true
+    stdin_open: true # docker run -i
+    tty: true        # docker run -t
+
+  node-visualizer:
+    image: "${REGISTRY}/node-visualizer:${DOCKER_TAG}"
+    hostname: node-visualizer
+    container_name: "node-visualizer"
+    networks:
+      srv:
+        ipv4_address: 175.0.0.17
+      intra:
+        ipv4_address: 174.0.0.17
+    ports:
+      - "9089:9089"
+    entrypoint: "/release/node-visualizer --ut-url http://uptime-tracker:9096/uptimes?status=on --tpd-url  http://transport-discovery:9091/all-transports?selfTransports=hide"
+    depends_on:
+      - transport-discovery
+      - uptime-tracker
+      - visor-a
+      - visor-b
+      - visor-c
+
+  # skywire visors, which by being on a different network are to be isolated from the first one
+
+  visor-a:
+    privileged: true
+    image: "${REGISTRY}/skywire-visor:${DOCKER_TAG}"
+    container_name: "visor-a"
+    hostname: visor-a
+    cap_add:
+      - ALL
+    networks:
+      visors:
+        ipv4_address: 173.0.0.11
+      intra:
+        ipv4_address: 174.0.0.11
+    volumes:
+      - type: bind
+        source: ../docker/integration/visorA.json
+        target: /opt/skywire/skywire-visor.json
+        read_only: false
+    ports:
+      - "8001:8001"
+      - "3435:3435"
+    depends_on:
+      - visor-b
+    restart: on-failure
+    entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json
+
+  visor-b:
+    privileged: true
+    image: "${REGISTRY}/skywire-visor:${DOCKER_TAG}"
+    container_name: "visor-b"
+    hostname: visor-b
+    cap_add:
+      - ALL
+    networks:
+      visors:
+        ipv4_address: 173.0.0.12
+      intra:
+        ipv4_address: 174.0.0.12
+    volumes:
+      - type: bind
+        source: ../docker/integration/visorB.json
+        target: /opt/skywire/skywire-visor.json
+        read_only: false
+      - type: bind
+        source: ../docker/integration/hypervisor.crt
+        target: /opt/integration/hypervisor.crt
+        read_only: false
+      - type: bind
+        source: ../docker/integration/hypervisor.key
+        target: /opt/integration/hypervisor.key
+        read_only: false
+    ports:
+      - "3436:3435"
+      - "8000:8000"
+    depends_on:
+      - setup-node
+      - route-finder
+      - address-resolver
+    restart: always
+    entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json
+
+  visor-c:
+    privileged: true
+    image: "${REGISTRY}/skywire-visor:${DOCKER_TAG}"
+    container_name: "visor-c"
+    hostname: visor-c
+    cap_add:
+      - ALL
+    networks:
+      visors:
+        ipv4_address: 173.0.0.13
+      intra:
+        ipv4_address: 174.0.0.13
+    volumes:
+      - type: bind
+        source: ../docker/integration/visorC.json
+        target: /opt/skywire/skywire-visor.json
+        read_only: false
+    ports:
+      - "1080:1080"
+      - "3437:3435"
+    depends_on:
+      - visor-a
+    restart: always
+    entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json
+    
+  network-monitor:
+    image: "${REGISTRY}/network-monitor:${DOCKER_TAG}"
+    hostname: network-monitor
+    container_name: "network-monitor"
+    networks:
+      srv:
+        ipv4_address: 175.0.0.30  
+      intra:
+        ipv4_address: 174.0.0.30
+    ports:
+      - "9080:9080"
+    entrypoint: /release/network-monitor --ut-url http://uptime-tracker:9096 --tpd-url  http://transport-discovery:9091 --sd-url http://service-discovery:9098 --dmsgd-url http://dmsg-discovery:9090 --ar-url http://address-resolver:9093
+    depends_on:
+      - visor-c
+    stdin_open: true # docker run -i
+    tty: true        # docker run -t
+
+volumes:
+  db:
+    driver: local

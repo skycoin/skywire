@@ -1,0 +1,10 @@
+{
+  "public_key": "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
+  "secret_key": "6eddf9399b14f29a60e6a652b321d082f9ed2f0172e02c9d9c1a2a22acf4bee3",
+  "discovery": "http://dmsg-discovery:9090",
+  "public_address": "174.0.0.5:8080",
+  "local_address": ":8080",
+  "health_endpoint_address": ":8082",
+  "max_sessions": 100,
+  "log_level": "info"
+}
