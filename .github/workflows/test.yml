@@ -31,13 +31,7 @@ jobs:
           make e2e-run
           sleep 10
           echo "---------------------"
-          docker logs -n 10 visor-a
-          sleep 10
-          echo "---------------------"
-          docker logs -n 10 visor-b
-          sleep 10
-          echo "---------------------"
-          docker logs -n 10 visor-c
+          docker exec visor-a cat /opt/skywire/skywire-visor.json
           sleep 10
           docker ps
         shell: bash
