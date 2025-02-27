@@ -545,6 +545,8 @@ github.com/rivo/uniseg
 # github.com/robert-nix/ansihtml v1.0.1
 ## explicit; go 1.15
 github.com/robert-nix/ansihtml
+# github.com/rogpeppe/go-internal v1.13.1
+## explicit; go 1.22
 # github.com/rs/cors v1.11.1
 ## explicit; go 1.13
 github.com/rs/cors
@@ -657,47 +659,6 @@ github.com/skycoin/skycoin/src/wallet/bip44wallet
 github.com/skycoin/skycoin/src/wallet/collection
 github.com/skycoin/skycoin/src/wallet/deterministic
 github.com/skycoin/skycoin/src/wallet/xpubwallet
-# github.com/skycoin/skycoin-service-discovery v1.3.29-0.20241218011239-6f6be8edf287
-## explicit; go 1.23
-github.com/skycoin/skycoin-service-discovery/cmd/service-discovery/commands
-github.com/skycoin/skycoin-service-discovery/internal/pg
-github.com/skycoin/skycoin-service-discovery/internal/sdmetrics
-github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/api
-github.com/skycoin/skycoin-service-discovery/pkg/service-discovery/store
-# github.com/skycoin/skywire-services v1.3.29-0.20250128080752-12a40802f0f5
-## explicit; go 1.23
-github.com/skycoin/skywire-services/cmd/address-resolver/commands
-github.com/skycoin/skywire-services/cmd/config-bootstrapper/commands
-github.com/skycoin/skywire-services/cmd/keys-gen/commands
-github.com/skycoin/skywire-services/cmd/network-monitor/commands
-github.com/skycoin/skywire-services/cmd/node-visualizer/commands
-github.com/skycoin/skywire-services/cmd/route-finder/commands
-github.com/skycoin/skywire-services/cmd/skywire-services/commands
-github.com/skycoin/skywire-services/cmd/sw-env/commands
-github.com/skycoin/skywire-services/cmd/transport-discovery/commands
-github.com/skycoin/skywire-services/cmd/transport-setup/commands
-github.com/skycoin/skywire-services/cmd/uptime-tracker/commands
-github.com/skycoin/skywire-services/internal/armetrics
-github.com/skycoin/skywire-services/internal/config
-github.com/skycoin/skywire-services/internal/nm
-github.com/skycoin/skywire-services/internal/nmmetrics
-github.com/skycoin/skywire-services/internal/pg
-github.com/skycoin/skywire-services/internal/tpdiscmetrics
-github.com/skycoin/skywire-services/internal/utmetrics
-github.com/skycoin/skywire-services/pkg/address-resolver/api
-github.com/skycoin/skywire-services/pkg/address-resolver/store
-github.com/skycoin/skywire-services/pkg/config-bootstrapper/api
-github.com/skycoin/skywire-services/pkg/network-monitor/api
-github.com/skycoin/skywire-services/pkg/network-monitor/store
-github.com/skycoin/skywire-services/pkg/node-visualizer/api
-github.com/skycoin/skywire-services/pkg/route-finder/api
-github.com/skycoin/skywire-services/pkg/route-finder/store
-github.com/skycoin/skywire-services/pkg/transport-discovery/api
-github.com/skycoin/skywire-services/pkg/transport-discovery/store
-github.com/skycoin/skywire-services/pkg/transport-setup/api
-github.com/skycoin/skywire-services/pkg/transport-setup/config
-github.com/skycoin/skywire-services/pkg/uptime-tracker/api
-github.com/skycoin/skywire-services/pkg/uptime-tracker/store
 # github.com/skycoin/systray v1.10.0
 ## explicit; go 1.17
 github.com/skycoin/systray

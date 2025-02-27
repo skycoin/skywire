@@ -5,7 +5,7 @@ import (
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire-services/cmd/sw-env/commands"
+	"github.com/skycoin/skywire/cmd/sw-env/commands"
 )
 
 func init() {

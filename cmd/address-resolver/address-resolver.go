@@ -5,7 +5,7 @@ import (
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire-services/cmd/address-resolver/commands"
+	"github.com/skycoin/skywire/cmd/address-resolver/commands"
 )
 
 func init() {

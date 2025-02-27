@@ -41,8 +41,6 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/skycoin/dmsg v1.3.29-0.20250130234351-770537afb4cb
 	github.com/skycoin/skycoin v0.28.1-0.20241105130348-39b49a2d0a7f
-	github.com/skycoin/skycoin-service-discovery v1.3.29-0.20241218011239-6f6be8edf287
-	github.com/skycoin/skywire-services v1.3.29-0.20250128080752-12a40802f0f5
 	github.com/skycoin/systray v1.10.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.8.1
@@ -66,6 +64,11 @@ require (
 )
 
 require (
+	github.com/chen3feng/safecast v0.0.0-20220908170618-81b2ecd47937
+	github.com/go-chi/cors v1.2.1
+)
+
+require (
 	atomicgo.dev/cursor v0.2.0 // indirect
 	atomicgo.dev/keyboard v0.2.9 // indirect
 	atomicgo.dev/schedule v0.1.0 // indirect
@@ -81,7 +84,6 @@ require (
 	github.com/bytedance/sonic/loader v0.2.0 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/chen3feng/safecast v0.0.0-20220908170618-81b2ecd47937 // indirect
 	github.com/cloudwego/base64x v0.1.4 // indirect
 	github.com/cloudwego/iasm v0.2.0 // indirect
 	github.com/coder/websocket v1.8.12 // indirect
@@ -99,7 +101,6 @@ require (
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.6 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
-	github.com/go-chi/cors v1.2.1 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
@@ -142,6 +143,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/quic-go/quic-go v0.48.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
+	github.com/rogpeppe/go-internal v1.13.1 // indirect
 	github.com/rs/cors v1.11.1 // indirect
 	github.com/sagikazarmark/locafero v0.6.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
@@ -188,8 +190,6 @@ require (
 
 // Uncomment for tests with local sources
 //replace github.com/skycoin/dmsg => ../dmsg
-//replace github.com/skycoin/skywire-services => ../skywire-services
-//replace github.com/skycoin/skycoin-service-discovery => ../skycoin-service-discovery
 
 // To update other skywire deps to specific commit hash:
 // run `go mod tidy ; go mod vendor`
@@ -197,11 +197,7 @@ require (
 // then, re-comment the line before saving.
 // replace github.com/skycoin/skycoin => github.com/skycoin/skycoin <commit-hash>
 // replace github.com/skycoin/dmsg => github.com/skycoin/dmsg <commit-hash>
-// replace github.com/skycoin/skywire-services => github.com/skycoin/skywire-services <commit-hash>
-// replace github.com/skycoin/skycoin-service-discovery => github.com/skycoin/skycoin-service-discovery <commit-hash>
 
 // Below should reflect the current versions of the following deps
 // replace github.com/skycoin/skycoin => github.com/skycoin/skycoin v0.28.1-0.20241105130348-39b49a2d0a7f
 // replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20250130234351-770537afb4cb
-// replace github.com/skycoin/skywire-services => github.com/skycoin/skywire-services v1.3.29-0.20250128080752-12a40802f0f5
-// replace github.com/skycoin/skycoin-service-discovery => github.com/skycoin/skycoin-service-discovery v1.3.29-0.20241218011239-6f6be8edf287

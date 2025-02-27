@@ -5,7 +5,7 @@ import (
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire-services/cmd/network-monitor/commands"
+	"github.com/skycoin/skywire/cmd/network-monitor/commands"
 )
 
 func init() {
