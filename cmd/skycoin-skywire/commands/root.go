@@ -41,6 +41,10 @@ func init() {
 	services.RootCmd.AddCommand(
 		sd.RootCmd,
 		sn.RootCmd,
+		conf.ServicesConfCmd,
+	)
+	dmsg.RootCmd.AddCommand(
+		conf.DmsghttpConfCmd,
 	)
 	RootCmd.AddCommand(
 		visor.RootCmd,
@@ -70,6 +74,8 @@ func init() {
 	ssc.RootCmd.Use = "skysocks-client"
 	ss.RootCmd.Use = "skysocks"
 	sc.RootCmd.Use = "skychat"
+	conf.DmsghttpConfCmd.Use = "conf"
+	conf.ServicesConfCmd.Use = "conf"
 }
 
 // RootCmd contains literally every 'command' from four repos here
