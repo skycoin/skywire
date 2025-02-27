@@ -186,7 +186,7 @@ require (
 //replace github.com/xxxserxxx/gotop/v4 => github.com/ersonp/gotop/v4 v4.2.1
 
 // Wiregusrd version must match below version ; do not update
-//replace golang.zx2c4.com/wireguard => golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675
+replace golang.zx2c4.com/wireguard => golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675
 
 // Uncomment for tests with local sources
 //replace github.com/skycoin/dmsg => ../dmsg
