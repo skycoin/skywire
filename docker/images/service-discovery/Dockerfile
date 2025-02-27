@@ -1,45 +1,49 @@
-ARG image_tag
+# Builder
 ARG base_image
-
-FROM ${base_image} AS service-discovery-build
-
+ARG image_tag
+FROM ${base_image} AS builder
 ARG build_opts
-RUN apk --no-cache add bash curl
+ARG image_tag
 
+ARG BUILDINFO_LDFLAGS
 ARG CGO_ENABLED=0
 ENV CGO_ENABLED=${CGO_ENABLED} \
+    GOOS=linux  \
     GO111MODULE=on
 
-COPY /docker/common/install-prequisites.sh /install-prequisites.sh
-COPY /tmp/skycoin-service-discovery /skycoin-service-discovery
+COPY . /service-discovery
+WORKDIR /service-discovery
 
-WORKDIR /skycoin-service-discovery
+RUN if [ "$image_tag" = "integration" ]; then \
+        apk add --no-cache build-base && \
+        CGO_ENABLED=1 go build "${build_opts}" -race -o /release/service-discovery ./cmd/service-discovery; \
+    else \
+        go build "${build_opts}" -o /release/service-discovery ./cmd/service-discovery; \
+    fi
 
-RUN go build "${build_opts}" -o /release/service-discovery ./cmd/service-discovery
+## Resulting image
+FROM ${base_image} AS visor-runner
 
+COPY --from=builder /service-discovery/docker/common/install-prequisites.sh /release/install-prequisites.sh
+COPY --from=builder /release /release
 
-FROM alpine AS prod
+RUN sh -c /release/install-prequisites.sh \
+    && rm -rf /release/install-prequisites.sh \
+    && apk add curl
 
-COPY --from=service-discovery-build /install-prequisites.sh /release/install-prequisites.sh
-RUN sh -c /release/install-prequisites.sh cert-only \
-    && rm -rf /release/install-prequisites.sh
+STOPSIGNAL SIGINT
 
-COPY --from=service-discovery-build /release/* /release/
-WORKDIR /release
 ENTRYPOINT [ "/release/service-discovery" ]
 
-FROM prod AS test
+# default target
+FROM visor-runner AS prod
 
-FROM alpine AS e2e
+FROM visor-runner AS test
 
-COPY --from=service-discovery-build /install-prequisites.sh /release/install-prequisites.sh
-RUN sh -c /release/install-prequisites.sh cert-only \
-    && rm -rf /release/install-prequisites.sh
+FROM visor-runner AS latest
 
-COPY --from=service-discovery-build /release /release
-WORKDIR /release
-ENTRYPOINT [ "/release/service-discovery" ]
+FROM visor-runner AS e2e
 
-FROM e2e AS integration
+FROM visor-runner AS integration
 
 FROM ${image_tag}

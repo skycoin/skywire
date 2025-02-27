@@ -39,14 +39,6 @@ if [[ "$image_tag" == "e2e" ]]; then
     echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
   fi
 
-  # TODO(ersonp): instead of cloning the git branch we should directly use the docker image od SD from dockerhub like we doing for dmsg 
-  git clone https://github.com/skycoin/skycoin-service-discovery.git --depth 1 --branch "$git_branch" ./tmp/skycoin-service-discovery
-
-  if [ ! -d ./tmp/skycoin-service-discovery ]; then
-    echo "failed to clone skycoin-service-discovery" &&
-      exit 1
-  fi
-
   echo ============ Base images ready ======================
 
   if [[ "$git_branch" == "master" ]]; then
@@ -71,22 +63,11 @@ if [[ "$image_tag" == "e2e" ]]; then
     $platform \
     -t "$registry"/dmsg-server:"$image_tag" .
 
-  echo "build service discovery image"
-  DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/service-discovery/Dockerfile \
-    --build-arg base_image="$base_image" \
-    --build-arg build_opts="$go_buildopts" \
-    --build-arg image_tag="$image_tag" \
-    $platform \
-    -t "$registry"/service-discovery:"$image_tag" .
-
-  rm -rf ./tmp/skycoin-service-discovery
 fi
 
 if [[ "$image_tag" == "integration" ]]; then
   # TODO(ersonp) : the binaries build in the images need to be built with the -race flag
-  rm -rf ./tmp/skycoin-service-discovery
   rm -rf ./tmp/dmsg
-  cp -r ../skycoin-service-discovery ./tmp
   cp -r ../dmsg ./tmp
 
   echo ============ Base images ready ======================
@@ -101,16 +82,16 @@ if [[ "$image_tag" == "integration" ]]; then
     $platform \
     -t "$registry"/dmsg-server:"$image_tag" .
 
-  echo "build service discovery image"
+  rm -rf ./tmp/*
+fi
+
+echo "build service discovery image"
   DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/service-discovery/Dockerfile \
     --build-arg base_image="$base_image" \
     --build-arg build_opts="$go_buildopts" \
     --build-arg image_tag="$image_tag" \
     $platform \
     -t "$registry"/service-discovery:"$image_tag" .
-
-  rm -rf ./tmp/*
-fi
 
 echo "Build skywrie visor image"
 DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/skywire-visor/Dockerfile \
