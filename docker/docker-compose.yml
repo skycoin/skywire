@@ -449,9 +449,10 @@ services:
         ipv4_address: 174.0.0.30
     ports:
       - "9080:9080"
-    entrypoint: /release/network-monitor --ut-url http://uptime-tracker:9096 --tpd-url  http://transport-discovery:9091 --sd-url http://service-discovery:9098 --dmsgd-url http://dmsg-discovery:9090 --ar-url http://address-resolver:9093
+    entrypoint: "/release/network-monitor --ut-url http://uptime-tracker:9096 --tpd-url http://transport-discovery:9091 --sd-url http://service-discovery:9098 --dmsgd-url http://dmsg-discovery:9090 --ar-url http://address-resolver:9093"
     depends_on:
       - visor-c
+    restart: always
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 

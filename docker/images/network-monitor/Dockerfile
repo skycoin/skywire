@@ -18,7 +18,6 @@ RUN if [ "$image_tag" = "integration" ]; then \
 
 FROM alpine AS prod
 WORKDIR /release
-COPY --from=builder /release/vpn-client /apps/vpn-client
 COPY --from=builder /release/network-monitor /release/network-monitor
 ENTRYPOINT ["/release/network-monitor"]
 
