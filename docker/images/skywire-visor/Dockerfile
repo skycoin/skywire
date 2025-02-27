@@ -15,12 +15,11 @@ COPY . /skywire
 WORKDIR /skywire
 
 RUN if [ "$image_tag" = "integration" ]; then \
-        apk add --no-cache build-base && \
-        CGO_ENABLED=1 go build "${build_opts}" -race -o /release/skywire ./cmd/skywire; \
-    elif [[ "$image_tag" == "e2e" ]]; then \
-        go build -o /release/skywire ./cmd/skywire; \
+        apk add --no-cache make build-base && \
+        make build-race; \
     else \
-        go build "${build_opts}" -o /release/skywire ./cmd/skywire; \
+        apk add --no-cache make && \
+        make build-deploy; \
     fi
 
 ## Resulting image
