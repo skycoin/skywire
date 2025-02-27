@@ -23,19 +23,19 @@ jobs:
           make lint-shell
       - name: Build
         run: make build
-      # - name: Setup SSH Key Build and run e2e
-      #   run : |
-      #     make e2e-build
-      #     make e2e-run
-      #   shell: bash
-      #   env:
-      #     DOCKER_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      #     DOCKER_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
-      # - name: Test e2e
-      #   run: make e2e-test
-      # - name: Clean e2e
-      #   run: |
-      #     make e2e-stop
+      - name: Setup SSH Key Build and run e2e
+        run : |
+          make e2e-build
+          make e2e-run
+        shell: bash
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+      - name: Test e2e
+        run: make e2e-test
+      - name: Clean e2e
+        run: |
+          make e2e-stop
 
   darwin:
     runs-on: macos-latest
