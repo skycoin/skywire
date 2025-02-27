@@ -11,7 +11,7 @@ ENV CGO_ENABLED=${CGO_ENABLED} \
     GOOS=linux  \
     GO111MODULE=on
 
-WORKDIR /
+WORKDIR .
 
 RUN if [ "$image_tag" = "integration" ]; then \
         apk add --no-cache make bash build-base && \
