@@ -6,10 +6,11 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"runtime/debug"
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 )
 
 // RootCmd is the version command
@@ -24,12 +25,7 @@ var RootCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Run: func(_ *cobra.Command, _ []string) {
-		bi, ok := debug.ReadBuildInfo()
-		if !ok {
-			log.Fatal("couldn't read build info")
-		}
-
-		fmt.Printf("%s version %s\n", bi.Path, bi.Main.Version)
+		fmt.Printf("%s\n", buildinfo.Version())
 	},
 }
 
