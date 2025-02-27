@@ -114,7 +114,7 @@ dmsghttp: ## update dmsghttp-config.json
 count-dmsg-disc-entries:
 	curl -sL $(jq -r '.prod.dmsg_discovery' services-config.json)/dmsg-discovery/entries | jq '. | length'
 
-check: lint check-cg test check-help lint-shell ## Run linters and tests
+check: lint check-cg check-help test ## Run linters and tests
 
 check-cg: ## Cursory check of the main help menu, offline dmsghttp config gen and offline config gen
 	@echo "checking help menu for compilation without errors"

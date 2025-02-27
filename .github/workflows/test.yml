@@ -18,7 +18,9 @@ jobs:
           make install-shellcheck
         shell: bash
       - name: Checking Format and Testing
-        run: make check
+        run: |
+          make check
+          make lint-shell
       - name: Build
         run: make build
       # - name: Setup SSH Key Build and run e2e
@@ -49,7 +51,6 @@ jobs:
           make dep
           chmod +x ./ci_scripts/create-ip-aliases.sh
           ./ci_scripts/create-ip-aliases.sh
-          make install-shellcheck
         shell: bash
       - name: Checking Format and Testing
         run: make check
