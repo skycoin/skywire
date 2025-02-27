@@ -1,5 +1,4 @@
-// cmd/conf/conf.go
-
+// Package main cmd/conf/conf.go
 package main
 
 import (
