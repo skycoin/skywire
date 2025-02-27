@@ -15,11 +15,10 @@ COPY . /skywire
 WORKDIR /skywire
 
 RUN if [ "$image_tag" = "integration" ]; then \
-        apk add --no-cache make bash build-base && \
-        make build-race; \
+        apk add --no-cache build-base && \
+        CGO_ENABLED=1 go build "${build_opts}" -race -o /release/skywire ./cmd/skywire; \
     else \
-        apk add --no-cache make bash && \
-        make build-deploy; \
+        go build "${build_opts}" -o /release/skywire ./cmd/skywire; \
     fi
 
 ## Resulting image
@@ -30,8 +29,7 @@ COPY --from=builder /release /release
 
 RUN sh -c /release/install-prequisites.sh \
     && rm -rf /release/install-prequisites.sh \
-    && mkdir -p /opt/skywire && \
-    apk add curl 
+    && mkdir -p /opt/skywire
 
 STOPSIGNAL SIGINT
 
