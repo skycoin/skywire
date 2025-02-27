@@ -22,7 +22,9 @@
 		"discovery": "http://transport-discovery:9091",
 		"address_resolver": "http://address-resolver:9093",
 		"public_autoconnect": false,
-		"transport_setup": null,
+		"transport_setup_nodes": [
+			"0277dda8a284d43b4d5ee2a4152771e76131e9437c47be5d8e835aafe02c45a9ae"
+		],
 		"log_store": {
 			"type": "file",
 			"location": "./local/transport_logs",
