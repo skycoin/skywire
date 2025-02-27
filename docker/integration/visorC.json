@@ -108,7 +108,7 @@
 			}
 		],
 		"server_addr": ":5507",
-		"bin_path": "./release",
+		"bin_path": "/release",
 		"display_node_ip": false
 	},
 	"survey_whitelist": null,

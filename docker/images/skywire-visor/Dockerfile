@@ -29,7 +29,8 @@ COPY --from=builder /release /release
 
 RUN sh -c /release/install-prequisites.sh \
     && rm -rf /release/install-prequisites.sh \
-    && mkdir -p /opt/skywire
+    && mkdir -p /opt/skywire \
+    && apk add curl
 
 STOPSIGNAL SIGINT
 

@@ -91,7 +91,7 @@
 			}
 		],
 		"server_addr": ":5505",
-		"bin_path": "./release",
+		"bin_path": "/release",
 		"display_node_ip": false
 	},
 	"hypervisors": [

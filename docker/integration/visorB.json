@@ -58,7 +58,7 @@
 			}
 		],
 		"server_addr": ":5506",
-		"bin_path": "./release"
+		"bin_path": "/release"
 	},
 	"hypervisors": [],
 	"cli_addr": "0.0.0.0:3435",
