@@ -25,7 +25,7 @@ RUN if [ "$image_tag" = "integration" ]; then \
 FROM ${base_image} AS visor-runner
 
 COPY --from=builder /skywire/docker/common/install-prequisites.sh /release/install-prequisites.sh
-COPY --from=builder /release /release
+COPY --from=builder /release/skywire /release/skywire
 
 RUN sh -c /release/install-prequisites.sh \
     && rm -rf /release/install-prequisites.sh \
