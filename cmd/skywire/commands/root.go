@@ -21,8 +21,10 @@ import (
 	ss "github.com/skycoin/skywire/cmd/apps/skysocks/commands"
 	vpnc "github.com/skycoin/skywire/cmd/apps/vpn-client/commands"
 	vpns "github.com/skycoin/skywire/cmd/apps/vpn-server/commands"
+	conf "github.com/skycoin/skywire/cmd/conf/commands"
 	sn "github.com/skycoin/skywire/cmd/setup-node/commands"
 	scli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
+	version "github.com/skycoin/skywire/cmd/version/commands"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/visor"
 )
@@ -39,6 +41,10 @@ func init() {
 	services.RootCmd.AddCommand(
 		sd.RootCmd,
 		sn.RootCmd,
+		conf.ServicesConfCmd,
+	)
+	dmsg.RootCmd.AddCommand(
+		conf.DmsghttpConfCmd,
 	)
 	RootCmd.AddCommand(
 		visor.RootCmd,
@@ -48,7 +54,9 @@ func init() {
 		appsCmd,
 		treeCmd,
 		docCmd,
+		version.RootCmd,
 	)
+
 	visor.RootCmd.Long = `
 	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐  ┬  ┬┬┌─┐┌─┐┬─┐
 	└─┐├┴┐└┬┘││││├┬┘├┤───└┐┌┘│└─┐│ │├┬┘
@@ -64,6 +72,9 @@ func init() {
 	ssc.RootCmd.Use = "skysocks-client"
 	ss.RootCmd.Use = "skysocks"
 	sc.RootCmd.Use = "skychat"
+	conf.DmsghttpConfCmd.Use = "conf"
+	conf.ServicesConfCmd.Use = "conf"
+
 }
 
 // RootCmd contains literally every 'command' from four repos here

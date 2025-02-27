@@ -3,7 +3,6 @@ package clivisor
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 	"sort"
 	"strings"
@@ -17,16 +16,11 @@ import (
 
 var path string
 var pkg bool
-var web bool
-var webPort string
-var pk string
 
 func init() {
 	RootCmd.AddCommand(pkCmd)
 	pkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
 	pkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from "+fmt.Sprintf("%v", visorconfig.PackageConfig())) //nolint
-	pkCmd.Flags().BoolVarP(&web, "http", "w", false, "serve public key via http")
-	pkCmd.Flags().StringVarP(&webPort, "prt", "x", "7998", "serve public key via http")
 	RootCmd.AddCommand(summaryCmd)
 	RootCmd.AddCommand(buildInfoCmd)
 	RootCmd.AddCommand(portsCmd)
@@ -55,12 +49,6 @@ var pkCmd = &cobra.Command{
 			overview, err := rpcClient.Overview()
 			if err != nil {
 				internal.PrintFatalRPCError(cmd.Flags(), err)
-			}
-			pk = overview.PubKey.String() + "\n"
-			if web {
-				http.HandleFunc("/", srvpk)
-				logger.Info("\nServing public key " + pk + " on port " + webPort)
-				http.ListenAndServe(":"+webPort, nil) //nolint
 			}
 			outputPK = overview.PubKey.Hex() + "\n"
 		}
@@ -164,8 +152,4 @@ var portsCmd = &cobra.Command{
 		msg += "+-------------------------------------------+\n"
 		internal.PrintOutput(cmd.Flags(), ports, msg)
 	},
-}
-
-func srvpk(w http.ResponseWriter, _ *http.Request) {
-	fmt.Fprintf(w, "%s", pk) //nolint
 }
