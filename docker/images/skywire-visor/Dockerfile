@@ -13,8 +13,7 @@ ENV CGO_ENABLED=${CGO_ENABLED} \
 
 WORKDIR /
 
-RUN sh -c /docker/common/install-prequisites.sh && \
-    if [ "$image_tag" = "integration" ]; then \
+RUN if [ "$image_tag" = "integration" ]; then \
         apk add --no-cache make bash build-base && \
         make build-race; \
     else \
