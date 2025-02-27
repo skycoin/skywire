@@ -189,7 +189,7 @@ services:
         ipv4_address: 174.0.0.4
     ports:
       - "9090:9090"
-    restart: on-failure
+    restart: always
     depends_on:
       - dmsgd-redis
       - transport-discovery
@@ -210,7 +210,7 @@ services:
         ipv4_address: 174.0.0.5
     depends_on:
       - dmsg-discovery
-    restart: on-failure
+    restart: always
     entrypoint: "/usr/local/bin/dmsg-server start /release/dmsg-server.json"
     volumes:
       - type: bind
@@ -232,7 +232,7 @@ services:
         ipv4_address: 174.0.0.6
     depends_on:
       - dmsg-server
-    restart: on-failure
+    restart: always
     entrypoint: /release/setup-node /release/setup-node.json
     volumes:
       - type: bind
@@ -305,7 +305,7 @@ services:
       - "9093:9093"
     depends_on:
       - ar-redis
-    restart: on-failure
+    restart: always
     entrypoint: "/release/address-resolver --redis redis://ar-redis:6379 --sk 1fa0a7b80438b8d31655b5c69efd57bcf931ac828438ff2925ab36e4abcc426a --dmsg-disc http://dmsg-discovery:9090"
     stdin_open: true # docker run -i
     tty: true        # docker run -t
@@ -322,7 +322,7 @@ services:
         ipv4_address: 174.0.0.16
     depends_on:
       - dmsg-server
-    restart: on-failure
+    restart: always
     entrypoint: /release/transport-setup -c /release/transport-setup.json
     volumes:
       - type: bind
@@ -375,7 +375,7 @@ services:
       - "3435:3435"
     depends_on:
       - visor-b
-    restart: on-failure
+    restart: always
     entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json
 
   visor-b:

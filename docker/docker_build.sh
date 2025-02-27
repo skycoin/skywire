@@ -174,7 +174,7 @@ DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/config-bootstrapper/Dock
   --build-arg build_opts="$go_buildopts" \
   --build-arg image_tag="$image_tag" \
   $platform \
-  -t "$registry"/config-bootstrapper:"$image_tag"
+  -t "$registry"/config-bootstrapper:"$image_tag" .
 
 echo "building transport setup image"
 DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/transport-setup/Dockerfile \
