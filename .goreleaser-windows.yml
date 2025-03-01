@@ -34,9 +34,6 @@ archives:
     format: zip
     wrap_in_directory: false
     name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
-    files:
-      - dmsghttp-config.json
-      - services-config.json
     builds:
       - skywire
     allow_different_binary_count: true

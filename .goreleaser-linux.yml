@@ -98,9 +98,6 @@ archives:
     format: tar.gz
     wrap_in_directory: false
     name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
-    files:
-      - dmsghttp-config.json
-      - services-config.json
     builds:
       - skywire-amd64
 
@@ -108,9 +105,6 @@ archives:
     format: tar.gz
     wrap_in_directory: false
     name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
-    files:
-      - dmsghttp-config.json
-      - services-config.json
     builds:
       - skywire-arm64
 
@@ -118,9 +112,6 @@ archives:
     format: tar.gz
     wrap_in_directory: false
     name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
-    files:
-      - dmsghttp-config.json
-      - services-config.json
     builds:
       - skywire-arm
 
@@ -128,19 +119,13 @@ archives:
     format: tar.gz
     wrap_in_directory: false
     name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}hf'
-    files:
-      - dmsghttp-config.json
-      - services-config.json
     builds:
       - skywire-armhf
-  
+
   - id: 386
     format: tar.gz
     wrap_in_directory: false
     name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
-    files:
-      - dmsghttp-config.json
-      - services-config.json
     builds:
       - skywire-386
 
@@ -148,9 +133,6 @@ archives:
   #   format: tar.gz
   #   wrap_in_directory: false
   #   name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
-  #   files:
-  #     - dmsghttp-config.json
-  #     - services-config.json
   #   builds:
   #     - skywire-riscv64
 
