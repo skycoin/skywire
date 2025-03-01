@@ -19,6 +19,7 @@ import (
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -80,7 +81,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "noauth")
 	genConfigCmd.Flags().BoolVarP(&isDmsgHTTP, "dmsghttp", "d", scriptExecBool("${DMSGHTTP:-false}"), "use dmsg connection to skywire services\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "dmsghttp")
-	genConfigCmd.Flags().StringVarP(&dmsgHTTPPath, "dmsgconf", "D", scriptExecString(fmt.Sprintf("${DMSGCONF:-%s}", visorconfig.DMSGHTTPName)), "dmsghttp-config path\033[0m")
+	genConfigCmd.Flags().StringVarP(&dmsgHTTPPath, "dmsgconf", "D", scriptExecString("${DMSGCONF}"), "dmsghttp-config path\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "dmsgconf")
 	genConfigCmd.Flags().IntVar(&minDmsgSess, "minsess", scriptExecInt("${MINDMSGSESS:-2}"), "number of dmsg servers to connect to (0 = unlimited)\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "minsess")
@@ -203,7 +204,7 @@ func init() {
 	genConfigCmd.Flags().BoolVar(&noFetch, "nofetch", false, "do not fetch the services from the service conf url\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "nofetch")
 	//TODO: visorconfig.SvcConfName
-	genConfigCmd.Flags().StringVarP(&configServicePath, "svcconf", "S", scriptExecString(fmt.Sprintf("${SVCCONF:-%s}", visorconfig.SERVICESName)), "fallback service configuration file\033[0m")
+	genConfigCmd.Flags().StringVarP(&configServicePath, "svcconf", "S", scriptExecString("${SVCCONF}"), "fallback service configuration file\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "svcconf")
 	genConfigCmd.Flags().BoolVar(&noDefaults, "nodefaults", false, "do not use hardcoded defaults for services\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "nodefaults")
@@ -304,20 +305,6 @@ var genConfigCmd = &cobra.Command{
 			serviceConfURL = testServiceConfURL
 		}
 		var err error
-		if isPkgEnv {
-			if dmsgHTTPPath == visorconfig.DMSGHTTPName {
-				dmsgHTTPPath = visorconfig.SkywirePath + "/" + visorconfig.DMSGHTTPName //nolint
-			}
-		}
-		if isDmsgHTTP {
-			if _, err := os.Stat(dmsgHTTPPath); err == nil {
-				if !isStdout {
-					log.Info("Found Dmsghttp config: ", dmsgHTTPPath)
-				}
-			} else {
-				log.Fatal("Dmsghttp config not found at: ", dmsgHTTPPath)
-			}
-		}
 		if !isStdout {
 			if confPath, err = filepath.Abs(confPath); err != nil {
 				log.WithError(err).Fatal("Invalid output provided.")
@@ -412,13 +399,16 @@ var genConfigCmd = &cobra.Command{
 					log.WithError(err).Error("Failed to fetch servers")
 					log.Warn("Falling back on services-config.json")
 				}
-				body, err := os.ReadFile(configServicePath)
-				if err != nil {
-					if !isStdout {
-						log.WithError(err).Error("Failed to read config service from file")
-						log.Warn("Falling back on hardcoded servers")
+				body := skywire.ServicesJSON
+				if configServicePath != "" {
+					body, err = os.ReadFile(configServicePath)
+					if err != nil {
+						if !isStdout {
+							log.WithError(err).Error("Failed to read config service from file")
+							log.Warn("Falling back on hardcoded servers")
+						}
+						return
 					}
-					return
 				}
 				if err := json.Unmarshal(body, &servicesConfig); err != nil {
 					if !isStdout {
@@ -449,13 +439,16 @@ var genConfigCmd = &cobra.Command{
 				}
 			}
 		} else {
-			body, err := os.ReadFile(configServicePath)
-			if err != nil {
-				if !isStdout {
-					log.WithError(err).Error("Failed to read config service from file")
-					log.Warn("Falling back on hardcoded servers")
+			body := skywire.ServicesJSON
+			if configServicePath != "" {
+				body, err = os.ReadFile(configServicePath)
+				if err != nil {
+					if !isStdout {
+						log.WithError(err).Error("Failed to read config service from file")
+						log.Warn("Falling back on hardcoded servers")
+					}
+					return
 				}
-				return
 			}
 			if err := json.Unmarshal(body, &servicesConfig); err != nil {
 				if !isStdout {
@@ -538,14 +531,13 @@ var genConfigCmd = &cobra.Command{
 			//if isUsrEnv {
 			//	dmsgHTTPPath = homepath + "/" + visorconfig.DMSGHTTPName
 			//}
-			if isPkgEnv {
-				dmsgHTTPPath = visorconfig.SkywirePath + "/" + visorconfig.DMSGHTTPName //nolint
-			}
-
-			// Read the JSON configuration file
-			dmsghttpConfigData, err := os.ReadFile(dmsgHTTPPath) //nolint
-			if err != nil {
-				log.Fatalf("Failed to read config file: %v", err)
+			dmsghttpConfigData := skywire.DmsghttpJSON
+			if dmsgHTTPPath != "" {
+				// Read the JSON configuration file
+				dmsghttpConfigData, err = os.ReadFile(dmsgHTTPPath) //nolint
+				if err != nil {
+					log.Fatalf("Failed to read config file: %v", err)
+				}
 			}
 
 			// Decode JSON data
@@ -1029,10 +1021,10 @@ const envfileLinux = `#
 #--	Default config paths for the current userspace
 #USRENV=true
 
-#--	fallback service conf path
+#--	service conf path override
 #SVCCONF="services-config.json"
 
-#--	dmsghttp config path
+#--	dmsghttp config path override
 #DMSGCONF="dmsghttp-config.json"
 
 #--	Output path of the config file
@@ -1177,10 +1169,10 @@ const envfileWindows = `#
 #--	Default config paths for the current userspace
 #$USRENV=$true
 
-#--	fallback service conf path
+#--	service conf path override
 #$SVCCONF="services-config.json"
 
-#--	dmsghttp config path
+#--	dmsghttp config path override
 #$DMSGCONF="dmsghttp-config.json"
 
 #--	Output path of the config file
