@@ -147,9 +147,6 @@ build-merged-windows: clean-windows
 install-system-linux: build ## Install apps and binaries over those provided by the linux package - linux package must be installed first!
 	sudo echo "sudo cache"
 	sudo install -Dm755 $(BUILD_PATH)skywire /opt/skywire/bin/
-	sudo install -Dm644 services-config.json /opt/skywire/
-	sudo install -Dm644 dmsghttp-config.json /opt/skywire/
-
 
 install-generate: ## Installs required execs for go generate.
 	${OPTS} go install github.com/mjibson/esc github.com/vektra/mockery/v2@latest
