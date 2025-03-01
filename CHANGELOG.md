@@ -8,6 +8,7 @@ updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
 ## 1.3.29
 
+-   use embbedded configs by default for skywire cli config gen [#1941](https://github.com/skycoin/skywire/pull/1941)
 -   Integrate updated versioning into buildinfo  [#1939](https://github.com/skycoin/skywire/pull/1939)
 -   Add Version command  [#1938](https://github.com/skycoin/skywire/pull/1938)
 -   add `--json` flag back to vpn and proxy `list` subcommand  [#1931](https://github.com/skycoin/skywire/pull/1931)
@@ -17,15 +18,15 @@ updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 -   Update deps  [#1927](https://github.com/skycoin/skywire/pull/1927)
 -   improve SetMinHop api method  [#1925](https://github.com/skycoin/skywire/pull/1925)
 -   Improve route logic in visor side  [#1921](https://github.com/skycoin/skywire/pull/1921)
--   Update minimum version requirement &amp; reward cutoff date in mainnet_rules.md  [#1920](https://github.com/skycoin/skywire/pull/1920)
--   fix &#39;/log-collection/tree/:pk&#39; route on reward system ui  [#1919](https://github.com/skycoin/skywire/pull/1919)
+-   Update minimum version requirement & reward cutoff date in mainnet_rules.md  [#1920](https://github.com/skycoin/skywire/pull/1920)
+-   fix `/log-collection/tree/:pk` route on reward system ui  [#1919](https://github.com/skycoin/skywire/pull/1919)
 -   Fix goreleaser configs  [#1918](https://github.com/skycoin/skywire/pull/1918)
 -   Win32 Installer  [#1917](https://github.com/skycoin/skywire/pull/1917)
--   Improve Docker&#39;s scripts  [#1916](https://github.com/skycoin/skywire/pull/1916)
+-   Improve Docker scripts  [#1916](https://github.com/skycoin/skywire/pull/1916)
 -   Update .gitigonre  [#1915](https://github.com/skycoin/skywire/pull/1915)
 -   update deps  [#1914](https://github.com/skycoin/skywire/pull/1914)
 -   update vendor deps  [#1913](https://github.com/skycoin/skywire/pull/1913)
--   Replace &quot;github.com/skycoin/skywire-utilities&quot; imports with &quot;github.com/skycoin/skywire/pkg/skywire-utilities&quot;  [#1912](https://github.com/skycoin/skywire/pull/1912)
+-   Replace "github.com/skycoin/skywire-utilities" imports with "github.com/skycoin/skywire/pkg/skywire-utilities"  [#1912](https://github.com/skycoin/skywire/pull/1912)
 -   add skywire-utilities libraries  [#1911](https://github.com/skycoin/skywire/pull/1911)
 -   Remove `replace` directives from go.mod  [#1906](https://github.com/skycoin/skywire/pull/1906)
 -   Add `gocyclo` to local and CI lint  [#1904](https://github.com/skycoin/skywire/pull/1904)
