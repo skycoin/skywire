@@ -35,7 +35,7 @@ func (g *RPCGateway) Notify(e *Event, _ *struct{}) (err error) {
 	return PushEvent(g.subs, e)
 }
 
-//go:generate mockery -name RPCClient -case underscore -inpkg
+//go:generate mockery --name RPCClient --case underscore --inpackage
 
 // RPCClient describes the RPC client interface that communicates the NewRPCGateway.
 type RPCClient interface {

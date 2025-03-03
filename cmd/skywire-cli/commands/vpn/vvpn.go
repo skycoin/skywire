@@ -61,14 +61,18 @@ var startCmd = &cobra.Command{
 		}
 		internal.Catch(cmd.Flags(), rpcClient.StartVPNClient(pubkey))
 		internal.PrintOutput(cmd.Flags(), nil, "Starting.")
-		tCtc := context.Background() //nolint
+		var tCtxCancelFunc context.CancelFunc
+		tCtx := context.Background() //nolint
 		if startingTimeout != 0 {
-			tCtc, _ = context.WithTimeout(context.Background(), time.Duration(startingTimeout)*time.Second) //nolint
+			tCtx, tCtxCancelFunc = context.WithTimeout(context.Background(), time.Duration(startingTimeout)*time.Second) //nolint
 		}
-		ctx, cancel := cmdutil.SignalContext(tCtc, &logrus.Logger{})
+		ctx, cancel := cmdutil.SignalContext(tCtx, &logrus.Logger{})
 		go func() {
 			<-ctx.Done()
 			cancel()
+			if tCtxCancelFunc != nil {
+				tCtxCancelFunc()
+			}
 			rpcClient.KillApp("vpn-client") //nolint
 			fmt.Print("\nStopped!")
 			os.Exit(1)

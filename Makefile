@@ -1,12 +1,15 @@
 
-.PHONY : check lint install-linters dep test
-.PHONY : build clean install format  bin
+.PHONY : check lint install-linters dep test lint-extra
+.PHONY : build clean install format  bin build-race deploy
 .PHONY : host-apps bin
 .PHONY : docker-image docker-clean docker-network
 .PHONY : docker-apps docker-bin docker-volume
 .PHONY : docker-run docker-stop
+.PHONY : integration-build
+.PHONY : integration-run-generic
+.PHONY : e2e-build e2e-run e2e-test e2e-stop e2e-clean
 
-VERSION := $(shell git describe)
+VERSION := $(shell git describe --always)
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 COMMIT := $(shell git rev-list -1 HEAD)
 
@@ -18,22 +21,16 @@ ifeq ($(OS),Windows_NT)
 	DATE := $(shell powershell -Command date -u ${RFC_3339})
 	.DEFAULT_GOAL := help-windows
 else
-	SHELL := /bin/bash
+	SHELL := /usr/bin/env bash
 	OPTS?=GO111MODULE=on
 	DATE := $(shell date -u $(RFC_3339))
 	.DEFAULT_GOAL := help
 endif
 
-ifeq ($(OS),Windows_NT)
-    SYSTRAY_CGO_ENABLED := 1
-else
-    UNAME_S := $(shell uname -s)
-    ifeq ($(UNAME_S),Linux)
-        SYSTRAY_CGO_ENABLED := 0
-    endif
-    ifeq ($(UNAME_S),Darwin)
-        SYSTRAY_CGO_ENABLED := 1
-    endif
+SYSTRAY_CGO_ENABLED := 1
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Linux)
+    SYSTRAY_CGO_ENABLED := 0
 endif
 
 ifeq ($(VERSION),)
@@ -60,10 +57,14 @@ endif
 
 STATIC_OPTS?= $(OPTS) CC=musl-gcc
 MANAGER_UI_DIR = static/skywire-manager-src
-GO_BUILDER_VERSION=v1.17
+GO_BUILDER_VERSION=v1.24
 MANAGER_UI_BUILT_DIR=pkg/visor/static
+DOCKER_OPTS?=GO111MODULE=on GOOS=linux
+DOCKER_NETWORK?=SKYWIRE
+DOCKER_COMPOSE_FILE:=./docker/docker-compose.yml
+DOCKER_REGISTRY:=skycoin
 
-TEST_OPTS:=-cover -timeout=5m -mod=vendor
+TEST_OPTS:=-cover -timeout=5m -mod=vendor -tags no_ci
 
 GOARCH:=$(shell go env GOARCH)
 
@@ -82,8 +83,12 @@ BUILDTAGINFO := -X $(PROJECT_BASE)/pkg/visor.BuildTag=$(BUILDTAG)
 BUILDINFO?=$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT) $(BUILDTAGINFO)
 INFO?=$(VERSION) $(DATE) $(COMMIT) $(BUILDTAG)
 
-BUILD_OPTS?="-ldflags=$(BUILDINFO)" -mod=vendor $(RACE_FLAG)
+BUILD_OPTS?="-ldflags=$(BUILDINFO)" -mod=vendor
 BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
+BUILD_OPTS_RACE?="-race"
+
+export COMPOSE_FILE=${DOCKER_COMPOSE_FILE}
+export REGISTRY=${DOCKER_REGISTRY}
 
 buildinfo:
 	@echo $(INFO)
@@ -109,7 +114,7 @@ dmsghttp: ## update dmsghttp-config.json
 count-dmsg-disc-entries:
 	curl -sL $(jq -r '.prod.dmsg_discovery' services-config.json)/dmsg-discovery/entries | jq '. | length'
 
-check: lint check-cg test ## Run linters and tests
+check: lint check-cg check-help test ## Run linters and tests
 
 check-cg: ## Cursory check of the main help menu, offline dmsghttp config gen and offline config gen
 	@echo "checking help menu for compilation without errors"
@@ -127,6 +132,43 @@ check-cg: ## Cursory check of the main help menu, offline dmsghttp config gen an
 	@echo "config gen succeeded without error"
 	@echo
 
+check-help: ## Cursory check of the help menus
+	@echo "checking help menus for compilation without errors"
+	@echo
+	go run cmd/skywire-services/services.go --help
+	@echo
+	go run cmd/skywire-services/services.go ar --help
+	@echo
+	go run cmd/skywire-services/services.go confbs --help
+	@echo
+	go run cmd/skywire-services/services.go rf --help
+	@echo
+	go run cmd/skywire-services/services.go se --help
+	@echo
+	go run cmd/skywire-services/services.go tpd --help
+	@echo
+	go run cmd/skywire-services/services.go tps --help
+	@echo
+	go run cmd/skywire-services/services.go ut --help
+	@echo
+	go run cmd/config-bootstrapper/config.go --help
+	@echo
+	go run cmd/transport-discovery/transport-discovery.go --help
+	@echo
+	go run cmd/sw-env/sw-env.go --help
+	@echo
+	go run cmd/uptime-tracker/uptime-tracker.go --help
+	@echo
+	go run cmd/route-finder/route-finder.go --help
+	@echo
+	go run cmd/setup-node/setup-node.go --help
+	@echo
+	go run cmd/transport-setup/transport-setup.go --help
+	@echo
+	go run cmd/address-resolver/address-resolver.go --help
+	@echo
+	go run cmd/network-monitor/network-monitor.go --help
+	@echo
 
 check-windows: lint-windows test-windows ## Run linters and tests on windows image
 
@@ -175,10 +217,15 @@ install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 
 lint: ## Run linters. Use make install-linters first
 	golangci-lint --version
-	${OPTS} golangci-lint run -c .golangci.yml skywire.go	#break down the linter run over smaller sections of the source code
+	${OPTS} golangci-lint run -c .golangci.yml skywire.go
 	${OPTS} golangci-lint run -c .golangci.yml ./cmd/...
 	${OPTS} golangci-lint run -c .golangci.yml ./pkg/...
 	${OPTS} golangci-lint run -c .golangci.yml	 ./...
+	${OPTS} go vet -all -mod=vendor ./...
+
+lint-extra: ## Run linters with extra checks.
+	golangci-lint run --no-config --enable-all ./...
+	go vet -all -mod=vendor ./...
 
 gocyclo: ## Run gocyclo
 	gocyclo -over 14 .
@@ -189,6 +236,13 @@ lint-windows: ## Run linters. Use make install-linters-windows first
 
 gocyclo-windows: ## Run gocyclo on windows
 	powershell 'gocyclo -over 14 .'
+
+install-shellcheck: ## install shellcheck to current directory
+	./ci_scripts/install-shellcheck.sh
+
+lint-shell:
+	find ./ci_scripts -type f -iname '*.sh' -print0 | xargs -0 -I {} bash -c "./shellcheck \"{}\""
+	find ./docker -type f -iname '*.sh' -print0 | xargs -0 -I {} bash -c "./shellcheck -e SC2086 \"{}\""
 
 test: ## Run tests
 	-go clean -testcache &>/dev/null
@@ -203,8 +257,9 @@ test-windows: ## Run tests on windows
 	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/skywire... ./cmd/apps...
 
 install-linters: ## Install linters
-	- VERSION=latest ./ci_scripts/install-golangci-lint.sh
-	${OPTS} go install golang.org/x/tools/cmd/goimports@latest github.com/incu6us/goimports-reviser/v2@latest
+	- VERSION=1.64.5 ./ci_scripts/install-golangci-lint.sh
+	GOPRIVATE=github.com/skycoin/* go get -u 
+	${OPTS} go install golang.org/x/tools/cmd/goimports@latest github.com/incu6us/goimports-reviser/v2@latest github.com/FiloSottile/vendorcheck@latest
 
 install-linters-windows: ## Install linters
 	${OPTS} go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest golang.org/x/tools/cmd/goimports@latest
@@ -397,3 +452,89 @@ help: ## `make help` menu
 
 help-windows: ## Display help for windows
 	@powershell 'Select-String -Pattern "windows[a-zA-Z_-]*:.*## .*$$" $(MAKEFILE_LIST) | % { $$_.Line -split ":.*?## " -Join "`t:`t" } '
+
+## : ## _ [Build, install, clean]
+build-services: ## Build binaries
+	${OPTS} go build ${BUILD_OPTS} -o ./build/skywire-services ./cmd/skywire-services
+
+build-services-deploy: ## Build for deployment Docker images
+	${DOCKER_OPTS} go build ${BUILD_OPTS_DEPLOY} -mod=vendor -o /release/skywire-services ./cmd/skywire-services
+
+build-services-race: ## Build binaries
+	CGO_ENABLED=1 ${OPTS} go build ${BUILD_OPTS} -race -o /release/skywire-services ./cmd/skywire-services
+
+install-services: ## Install route-finder, transport-discovery, address-resolver, sw-env, keys-gen, network-monitor, node-visualizer
+	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire-services
+
+## : ## _ [E2E tests suite]
+
+e2e-build: set-forwarding ## E2E. Build dockers and containers for e2e-tests
+	./docker/docker_build.sh e2e ${BUILD_OPTS_DEPLOY} $(BUILD_ARCH)
+
+e2e-run: ## E2E. Start e2e environment
+	bash -c "DOCKER_TAG=e2e docker compose up -d"
+	bash -c "DOCKER_TAG=e2e docker compose ps"
+
+e2e-logs:
+	bash -c "docker compose logs --tail=all --follow"
+
+e2e-test: set-forwarding ## E2E. Run e2e-tests suite. Prepare e2e environment with `make e2e-build && make e2e-run`
+	-go clean -testcache
+	go test  -v -timeout=15m ./internal/integration
+
+e2e-stop: reset-forwarding ## E2E. Stop e2e environment without destroying it. Restart with `make e2e-run`
+	bash -c "DOCKER_TAG=e2e docker compose -f ${COMPOSE_FILE} stop"
+	bash -c "DOCKER_TAG=e2e docker compose -f ${COMPOSE_FILE} ps"
+
+e2e-clean: ## E2E. Stop e2e environment and clean everything. Restart only with `make e2e-build && make e2e-run`
+	bash -c "DOCKER_TAG=e2e docker compose -f ${COMPOSE_FILE} down"
+	bash ./docker/docker_clean.sh e2e
+
+e2e-help: ## E2E. Show env-vars and useful commands
+	@echo -e "\nNow you can use docker compose:\n"
+	@echo -e "   docker compose ps/top/logs"
+	@echo -e "   docker compose up/down/start/stop"
+	@echo -e "\nConsult with:\n\n   docker compose help\n"
+
+docker-build-test:
+	bash ./docker/docker_build.sh test ${BUILD_OPTS_DEPLOY} $(BUILD_ARCH)
+
+docker-build:
+	bash ./docker/docker_build.sh prod ${BUILD_OPTS_DEPLOY} $(BUILD_ARCH)
+
+docker-push-test:
+	bash ./docker/docker_build.sh test ${BUILD_OPTS_DEPLOY} $(BUILD_ARCH)
+	bash ./docker/docker_push.sh test
+
+docker-push:
+	bash ./docker/docker_build.sh prod ${BUILD_OPTS_DEPLOY} $(BUILD_ARCH)
+	bash ./docker/docker_push.sh prod
+
+set-forwarding:
+	# following 2 lines are needed for SD to function. these can't be run from within the container and need to be run on the host machine
+	if [ $(shell uname -s) == "Linux" ]; then \
+		sudo bash -c 'echo 1 > /proc/sys/net/ipv4/ip_forward' && \
+		sudo bash -c 'echo 1 > /proc/sys/net/ipv6/conf/all/forwarding'; \
+	fi
+
+reset-forwarding:
+	# revert the changes
+	if [ $(shell uname -s) == "Linux" ]; then \
+		sudo bash -c 'echo 0 > /proc/sys/net/ipv4/ip_forward' && \
+		sudo bash -c 'echo 0 > /proc/sys/net/ipv6/conf/all/forwarding'; \
+	fi
+## : ## _ [Interactive integration tests]
+
+integration-env-build: set-forwarding #build
+	./docker/docker_build.sh integration ${BUILD_OPTS_DEPLOY} $(BUILD_ARCH)
+	bash -c "DOCKER_TAG=integration docker compose up -d"
+
+integration-env-start: set-forwarding #start
+	bash -c "DOCKER_TAG=integration docker compose up -d"
+
+integration-env-stop: reset-forwarding #stop
+	bash -c "DOCKER_TAG=integration docker compose -f ${COMPOSE_FILE} stop"
+
+integration-env-clean: #clean
+	bash -c "DOCKER_TAG=integration docker compose -f ${COMPOSE_FILE} down"
+	bash ./docker/docker_clean.sh integration
