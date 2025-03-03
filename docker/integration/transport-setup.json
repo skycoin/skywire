@@ -1,0 +1,9 @@
+{
+    "secret_key": "40de503bd8dff2921ae2b070cc3104e5e700c84b481064f877ab0877f9320ace",
+    "public_key": "0277dda8a284d43b4d5ee2a4152771e76131e9437c47be5d8e835aafe02c45a9ae",
+    "port": 80,
+    "dmsg": {
+        "discovery": "http://dmsg-discovery:9090",
+        "sessions_count": 0
+    }
+}

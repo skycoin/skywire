@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+trap "exit" INT
+
+## Variables
+image_tag="$1"
+go_buildopts="$2"
+build_arch="$3"
+git_branch="$(git rev-parse --abbrev-ref HEAD)"
+bldkit="1"
+platform="--platform=linux/amd64"
+
+# shellcheck disable=SC2153
+registry="$REGISTRY"
+
+# shellcheck disable=SC2153
+base_image=golang:1.24-alpine
+
+if [[ "$#" != 2 ]]; then
+  echo "docker_build.sh <IMAGE_TAG> <GO_BUILDOPTS>"
+fi
+
+if [[ "$go_buildopts" == "" ]]; then
+  go_buildopts="-mod=vendor -ldflags\"-w -s\""
+fi
+
+if [[ "$build_arch" != "" ]]; then
+  platform="--platform=$build_arch"
+fi
+
+if [[ "$git_branch" != "master" ]] && [[ "$git_branch" != "develop" ]]; then
+  git_branch="develop"
+fi
+
+echo "Building using tag: $image_tag"
+
+if [[ "$image_tag" == "e2e" ]]; then
+
+  if [ "$DOCKER_USERNAME" != "" ] && [ "$DOCKER_PASSWORD" != "" ]; then
+    echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+  fi
+
+  echo ============ Base images ready ======================
+
+  if [[ "$git_branch" == "master" ]]; then
+    dockerhub_image_tag="prod"
+  else
+    dockerhub_image_tag="test"
+  fi
+
+  echo "build dmsg discovery image"
+  DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/dmsg-discovery/Dockerfile \
+    --build-arg build_opts="$go_buildopts" \
+    --build-arg image_tag="$image_tag" \
+    --build-arg base_image="skycoin/dmsg-discovery:$dockerhub_image_tag" \
+    $platform \
+    -t "$registry"/dmsg-discovery:"$image_tag" .
+
+  echo "build dmsg server image"
+  DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/dmsg-server/Dockerfile \
+    --build-arg base_image="skycoin/dmsg-server:$dockerhub_image_tag" \
+    --build-arg build_opts="$go_buildopts" \
+    --build-arg image_tag="$image_tag" \
+    $platform \
+    -t "$registry"/dmsg-server:"$image_tag" .
+
+fi
+
+if [[ "$image_tag" == "integration" ]]; then
+  # TODO(ersonp) : the binaries build in the images need to be built with the -race flag
+  rm -rf ./tmp/dmsg
+  cp -r ../dmsg ./tmp
+
+  echo ============ Base images ready ======================
+
+  echo "build dmsg discovery image"
+  DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/dmsg-discovery/DockerfileInt \
+    $platform \
+    -t "$registry"/dmsg-discovery:"$image_tag" .
+
+  echo "build dmsg server image"
+  DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/dmsg-server/DockerfileInt \
+    $platform \
+    -t "$registry"/dmsg-server:"$image_tag" .
+
+  rm -rf ./tmp/*
+fi
+
+echo "Build Skywrie Visor Image"
+DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/skywire-visor/Dockerfile \
+  --build-arg base_image="$base_image" \
+  --build-arg build_opts="$go_buildopts" \
+  --build-arg image_tag="$image_tag" \
+  $platform \
+  -t "$registry"/skywire-visor:"$image_tag" .
+
+echo "Build Skywrie Services Image"
+DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/skywire-services/Dockerfile \
+  --build-arg base_image="$base_image" \
+  --build-arg build_opts="$go_buildopts" \
+  --build-arg image_tag="$image_tag" \
+  $platform \
+  -t "$registry"/service-discovery:"$image_tag" . # TODO: we should use skywire-services dockerhub repo, but not available for now and we use service-discovery repo temporary
+
+wait
+
+echo service images built
