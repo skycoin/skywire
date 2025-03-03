@@ -133,7 +133,7 @@ services:
 
   transport-discovery:
     privileged: true
-    image: "${REGISTRY}/transport-discovery:${DOCKER_TAG}"
+    image: "${REGISTRY}/service-discovery:${DOCKER_TAG}" # TODO: We should change it later to skywire-services
     hostname: transport-discovery
     container_name: "transport-discovery"
     restart: always
@@ -151,13 +151,13 @@ services:
     depends_on:
       - tpd-redis
       - postgres-db
-    entrypoint: "/release/transport-discovery --pg-host postgres-db --pg-port 5432 --redis redis://tpd-redis:6379 --sk 85789cd7efcdf35340c8f4cb3e15bccdff57efda49af5bcdddaae57374d25ab8 --dmsg-disc http://dmsg-discovery:9090"
+    entrypoint: "/release/skywire-services/tpd --pg-host postgres-db --pg-port 5432 --redis redis://tpd-redis:6379 --sk 85789cd7efcdf35340c8f4cb3e15bccdff57efda49af5bcdddaae57374d25ab8 --dmsg-disc http://dmsg-discovery:9090"
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 
   route-finder:
     privileged: true
-    image: "${REGISTRY}/route-finder:${DOCKER_TAG}"
+    image: "${REGISTRY}/service-discovery:${DOCKER_TAG}" # TODO: We should change it later to skywire-services
     hostname: route-finder
     container_name: "route-finder"
     restart: always
@@ -174,7 +174,7 @@ services:
       - "9092:9092"
     depends_on:
       - transport-discovery
-    entrypoint: "/release/route-finder --pg-host postgres-db --pg-port 5432 --sk 640905f9fd60d6bf1ee88519f61035765d65319d9f3bac6c5f2fc14ea5cf15ca --dmsg-disc http://dmsg-discovery:9090"
+    entrypoint: "/release/skywire-services rf --pg-host postgres-db --pg-port 5432 --sk 640905f9fd60d6bf1ee88519f61035765d65319d9f3bac6c5f2fc14ea5cf15ca --dmsg-disc http://dmsg-discovery:9090"
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 
@@ -222,7 +222,7 @@ services:
 
   setup-node:
     privileged: true
-    image: "${REGISTRY}/setup-node:${DOCKER_TAG}"
+    image: "${REGISTRY}/service-discovery:${DOCKER_TAG}" # TODO: We should change it later to skywire-services
     hostname: setup-node
     container_name: "setup-node"
     networks:
@@ -233,7 +233,7 @@ services:
     depends_on:
       - dmsg-server
     restart: always
-    entrypoint: /release/setup-node /release/setup-node.json
+    entrypoint: /release/skywire-services sn /release/setup-node.json
     volumes:
       - type: bind
         source: ../docker/integration/setup-node.json
@@ -244,7 +244,7 @@ services:
 
   service-discovery:
     privileged: true
-    image: "${REGISTRY}/service-discovery:${DOCKER_TAG}"
+    image: "${REGISTRY}/service-discovery:${DOCKER_TAG}" # TODO: We should change it later to skywire-services
     hostname: service-discovery
     container_name: "service-discovery"
     restart: always
@@ -263,13 +263,13 @@ services:
       - PG_USER=postgres
       - PG_PASSWORD=postgres
       - PG_DATABASE=postgres
-    entrypoint: "/release/service-discovery --pg-host postgres-db --pg-port 5432 --redis redis://sd-redis:6379 --sk ccc3ae9993ed03bed80b1f9feb747d7c6ca3342a65c3923191b7527c2c00ef0f --dmsg-disc http://dmsg-discovery:9090"
+    entrypoint: "/release/skywire-services sd --pg-host postgres-db --pg-port 5432 --redis redis://sd-redis:6379 --sk ccc3ae9993ed03bed80b1f9feb747d7c6ca3342a65c3923191b7527c2c00ef0f --dmsg-disc http://dmsg-discovery:9090"
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 
   uptime-tracker:
     privileged: true
-    image: "${REGISTRY}/uptime-tracker:${DOCKER_TAG}"
+    image: "${REGISTRY}/service-discovery:${DOCKER_TAG}" # TODO: We should change it later to skywire-services
     hostname: uptime-tracker
     container_name: "uptime-tracker"
     restart: always
@@ -287,13 +287,13 @@ services:
       - PG_DATABASE=postgres
     ports:
       - "9096:9096"
-    entrypoint: "/release/uptime-tracker --pg-host postgres-db --pg-port 5432 --redis redis://ut-redis:6379 --sk e20681b4fd1eb1904ebfbf8fba79a138bbac481e1c3f77bcfab3a877525fda32 --dmsg-disc http://dmsg-discovery:9090"
+    entrypoint: "/release/skywire-services ut --pg-host postgres-db --pg-port 5432 --redis redis://ut-redis:6379 --sk e20681b4fd1eb1904ebfbf8fba79a138bbac481e1c3f77bcfab3a877525fda32 --dmsg-disc http://dmsg-discovery:9090"
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 
   address-resolver:
     privileged: true
-    image: "${REGISTRY}/address-resolver:${DOCKER_TAG}"
+    image: "${REGISTRY}/service-discovery:${DOCKER_TAG}" # TODO: We should change it later to skywire-services
     hostname: address-resolver
     container_name: "address-resolver"
     networks:
@@ -306,13 +306,13 @@ services:
     depends_on:
       - ar-redis
     restart: always
-    entrypoint: "/release/address-resolver --redis redis://ar-redis:6379 --sk 1fa0a7b80438b8d31655b5c69efd57bcf931ac828438ff2925ab36e4abcc426a --dmsg-disc http://dmsg-discovery:9090"
+    entrypoint: "/release/skywire-services ar --redis redis://ar-redis:6379 --sk 1fa0a7b80438b8d31655b5c69efd57bcf931ac828438ff2925ab36e4abcc426a --dmsg-disc http://dmsg-discovery:9090"
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 
   transport-setup:
     privileged: true
-    image: "${REGISTRY}/transport-setup:${DOCKER_TAG}"
+    image: "${REGISTRY}/service-discovery:${DOCKER_TAG}" # TODO: We should change it later to skywire-services
     hostname: transport-setup
     container_name: "transport-setup"
     networks:
@@ -323,7 +323,7 @@ services:
     depends_on:
       - dmsg-server
     restart: always
-    entrypoint: /release/transport-setup -c /release/transport-setup.json
+    entrypoint: /release/skywire-services tps -c /release/transport-setup.json
     volumes:
       - type: bind
         source: ../docker/integration/transport-setup.json
@@ -331,25 +331,6 @@ services:
         read_only: true
     stdin_open: true # docker run -i
     tty: true        # docker run -t
-
-  # node-visualizer:
-  #   image: "${REGISTRY}/node-visualizer:${DOCKER_TAG}"
-  #   hostname: node-visualizer
-  #   container_name: "node-visualizer"
-  #   networks:
-  #     srv:
-  #       ipv4_address: 175.0.0.17
-  #     intra:
-  #       ipv4_address: 174.0.0.17
-  #   ports:
-  #     - "9089:9089"
-  #   entrypoint: "/release/node-visualizer --ut-url http://uptime-tracker:9096/uptimes?status=on --tpd-url  http://transport-discovery:9091/all-transports?selfTransports=hide"
-  #   depends_on:
-  #     - transport-discovery
-  #     - uptime-tracker
-  #     - visor-a
-  #     - visor-b
-  #     - visor-c
 
   # skywire visors, which by being on a different network are to be isolated from the first one
 
@@ -438,23 +419,23 @@ services:
     restart: always
     entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json
     
-  # network-monitor:
-  #   image: "${REGISTRY}/network-monitor:${DOCKER_TAG}"
-  #   hostname: network-monitor
-  #   container_name: "network-monitor"
-  #   networks:
-  #     srv:
-  #       ipv4_address: 175.0.0.30  
-  #     intra:
-  #       ipv4_address: 174.0.0.30
-  #   ports:
-  #     - "9080:9080"
-  #   entrypoint: "/release/network-monitor --ut-url http://uptime-tracker:9096 --tpd-url http://transport-discovery:9091 --sd-url http://service-discovery:9098 --dmsgd-url http://dmsg-discovery:9090 --ar-url http://address-resolver:9093"
-  #   depends_on:
-  #     - visor-c
-  #   restart: always
-  #   stdin_open: true # docker run -i
-  #   tty: true        # docker run -t
+  network-monitor:
+    image: "${REGISTRY}/service-discovery:${DOCKER_TAG}" # TODO: We should change it later to skywire-services
+    hostname: network-monitor
+    container_name: "network-monitor"
+    networks:
+      srv:
+        ipv4_address: 175.0.0.30  
+      intra:
+        ipv4_address: 174.0.0.30
+    ports:
+      - "9080:9080"
+    entrypoint: "/release/skywire-services nm --ut-url http://uptime-tracker:9096 --tpd-url http://transport-discovery:9091 --sd-url http://service-discovery:9098 --dmsgd-url http://dmsg-discovery:9090 --ar-url http://address-resolver:9093"
+    depends_on:
+      - visor-c
+    restart: always
+    stdin_open: true # docker run -i
+    tty: true        # docker run -t
 
 volumes:
   db:

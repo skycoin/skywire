@@ -85,15 +85,7 @@ if [[ "$image_tag" == "integration" ]]; then
   rm -rf ./tmp/*
 fi
 
-echo "build service discovery image"
-  DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/service-discovery/Dockerfile \
-    --build-arg base_image="$base_image" \
-    --build-arg build_opts="$go_buildopts" \
-    --build-arg image_tag="$image_tag" \
-    $platform \
-    -t "$registry"/service-discovery:"$image_tag" .
-
-echo "Build skywrie visor image"
+echo "Build Skywrie Visor Image"
 DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/skywire-visor/Dockerfile \
   --build-arg base_image="$base_image" \
   --build-arg build_opts="$go_buildopts" \
@@ -101,69 +93,13 @@ DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/skywire-visor/Dockerfile
   $platform \
   -t "$registry"/skywire-visor:"$image_tag" .
 
-echo "Build transport discovery image"
-DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/transport-discovery/Dockerfile \
+echo "Build Skywrie Services Image"
+DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/skywire-services/Dockerfile \
   --build-arg base_image="$base_image" \
   --build-arg build_opts="$go_buildopts" \
   --build-arg image_tag="$image_tag" \
   $platform \
-  -t "$registry"/transport-discovery:"$image_tag" .
-
-echo "build route finder image"
-DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/route-finder/Dockerfile \
-  --build-arg base_image="$base_image" \
-  --build-arg build_opts="$go_buildopts" \
-  --build-arg image_tag="$image_tag" \
-  $platform \
-  -t "$registry"/route-finder:"$image_tag" .
-
-echo "build setup node image"
-DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/setup-node/Dockerfile \
-  --build-arg base_image="$base_image" \
-  --build-arg build_opts="$go_buildopts" \
-  --build-arg image_tag="$image_tag" \
-  $platform \
-  -t "$registry"/setup-node:"$image_tag" .
-
-echo "build address resolver image"
-DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/address-resolver/Dockerfile \
-  --build-arg base_image="$base_image" \
-  --build-arg build_opts="$go_buildopts" \
-  --build-arg image_tag="$image_tag" \
-  $platform \
-  -t "$registry"/address-resolver:"$image_tag" .
-
-echo "build uptime tracker image"
-DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/uptime-tracker/Dockerfile \
-  --build-arg build_opts="$go_buildopts" \
-  --build-arg image_tag="$image_tag" \
-  --build-arg base_image="$base_image" \
-  $platform \
-  -t "$registry"/uptime-tracker:"$image_tag" .
-
-echo "building network monitor image"
-DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/network-monitor/Dockerfile \
-  --build-arg base_image="$base_image" \
-  --build-arg build_opts="$go_buildopts" \
-  --build-arg image_tag="$image_tag" \
-  $platform \
-  -t "$registry"/network-monitor:"$image_tag" .
-
-echo "building config bootstrapper image"
-DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/config-bootstrapper/Dockerfile \
-  --build-arg base_image="$base_image" \
-  --build-arg build_opts="$go_buildopts" \
-  --build-arg image_tag="$image_tag" \
-  $platform \
-  -t "$registry"/config-bootstrapper:"$image_tag" .
-
-echo "building transport setup image"
-DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/transport-setup/Dockerfile \
-  --build-arg base_image="$base_image" \
-  --build-arg build_opts="$go_buildopts" \
-  --build-arg image_tag="$image_tag" \
-  $platform \
-  -t "$registry"/transport-setup:"$image_tag" .
+  -t "$registry"/service-discovery:"$image_tag" . # TODO: we should use skywire-services dockerhub repo, but not available for now and we use service-discovery repo temporary
 
 wait
 

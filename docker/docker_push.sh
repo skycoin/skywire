@@ -15,14 +15,7 @@ if [ -z "$tag" ]; then
 fi
 
 declare -a images_arr=(
-  "transport-discovery"
-  "route-finder"
-  "setup-node"
-  "address-resolver"
-  "uptime-tracker"
-  "network-monitor"
-  "config-bootstrapper"
-  "transport-setup"
+  "service-discovery"
   "skywire-visor"
 )
 
