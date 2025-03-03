@@ -11,29 +11,31 @@ ENV CGO_ENABLED=${CGO_ENABLED} \
     GOOS=linux  \
     GO111MODULE=on
 
-COPY . /skywire-services
-WORKDIR /skywire-services
+COPY . /skywire
+WORKDIR /skywire
 
 RUN if [ "$image_tag" = "integration" ]; then \
-        apk add --no-cache build-base && \
-        CGO_ENABLED=1 go build "${build_opts}" -race -o /release/skywire-services ./cmd/skywire-services; \
+        apk add --no-cache make build-base && \
+        make build-race \
     else \
-        go build "${build_opts}" -o /release/skywire-services ./cmd/skywire-services; \
+        apk add --no-cache make && \
+        make build-deploy \
     fi
 
 ## Resulting image
 FROM ${base_image} AS visor-runner
 
-COPY --from=builder /skywire-services/docker/common/install-prequisites.sh /release/install-prequisites.sh
+COPY --from=builder /skywire/docker/common/install-prequisites.sh /release/install-prequisites.sh
 COPY --from=builder /release /release
 
 RUN sh -c /release/install-prequisites.sh \
     && rm -rf /release/install-prequisites.sh \
+    && mkdir -p /opt/skywire \
     && apk add curl
 
 STOPSIGNAL SIGINT
 
-ENTRYPOINT [ "/release/skywire-services" ]
+ENTRYPOINT [ "/release/skywire" ]
 
 # default target
 FROM visor-runner AS prod
