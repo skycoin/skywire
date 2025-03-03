@@ -1,0 +1,9 @@
+{
+  "public_key": "02603d53d49b6575a0b8cee05b70dd23c86e42cd6cba99af769d61a6196ea2bcb1",
+  "secret_key": "8535d62ea3d19c8ce09e77ffe0f173c733e1798b23c84d9b72d2a70888c90a3b",
+  "dmsg": {
+    "discovery": "http://dmsg-discovery:9090",
+    "sessions_count": 1
+  },
+  "transport_discovery": "http://transport-discovery:9091"
+}
