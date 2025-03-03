@@ -10,7 +10,7 @@ import (
 
 const unknown = "unknown"
 
-//$ go build -mod=vendor -ldflags="-X 'github.com/skycoin/skywire-utilities/pkg/buildinfo.version=$(git describe)' -X 'github.com/skycoin/skywire-utilities/pkg/buildinfo.date=$(date -u "+%Y-%m-%dT%H:%M:%SZ")' -X 'github.com/skycoin/skywire-utilities/pkg/buildinfo.commit=$(git rev-list -1 HEAD)'" .
+//$ go build -mod=vendor -ldflags="-X 'main.version=$(git describe)' -X 'github.com/skycoin/skywire-utilities/pkg/buildinfo.date=$(date -u "+%Y-%m-%dT%H:%M:%SZ")' -X 'github.com/skycoin/skywire-utilities/pkg/buildinfo.commit=$(git rev-list -1 HEAD)'" .
 
 var (
 	version = unknown
