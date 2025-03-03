@@ -453,19 +453,6 @@ help: ## `make help` menu
 help-windows: ## Display help for windows
 	@powershell 'Select-String -Pattern "windows[a-zA-Z_-]*:.*## .*$$" $(MAKEFILE_LIST) | % { $$_.Line -split ":.*?## " -Join "`t:`t" } '
 
-## : ## _ [Build, install, clean]
-build-services: ## Build binaries
-	${OPTS} go build ${BUILD_OPTS} -o ./build/skywire-services ./cmd/skywire-services
-
-build-services-deploy: ## Build for deployment Docker images
-	${DOCKER_OPTS} go build ${BUILD_OPTS_DEPLOY} -mod=vendor -o /release/skywire-services ./cmd/skywire-services
-
-build-services-race: ## Build binaries
-	CGO_ENABLED=1 ${OPTS} go build ${BUILD_OPTS} -race -o /release/skywire-services ./cmd/skywire-services
-
-install-services: ## Install route-finder, transport-discovery, address-resolver, sw-env, keys-gen, network-monitor, node-visualizer
-	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire-services
-
 ## : ## _ [E2E tests suite]
 
 e2e-build: set-forwarding ## E2E. Build dockers and containers for e2e-tests
