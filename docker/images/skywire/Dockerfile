@@ -15,10 +15,10 @@ COPY . /skywire
 WORKDIR /skywire
 
 RUN if [ "$image_tag" = "integration" ]; then \
-        apk add --no-cache make build-base && \
+        apk add --no-cache make bash build-base && \
         make build-race; \
     else \
-        apk add --no-cache make && \
+        apk add --no-cache make bash && \
         make build-deploy; \
     fi
 
