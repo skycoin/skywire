@@ -85,21 +85,13 @@ if [[ "$image_tag" == "integration" ]]; then
   rm -rf ./tmp/*
 fi
 
-echo "Build Skywrie Visor Image"
-DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/skywire-visor/Dockerfile \
+echo "Build Skywire Image"
+DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/skywire/Dockerfile \
   --build-arg base_image="$base_image" \
   --build-arg build_opts="$go_buildopts" \
   --build-arg image_tag="$image_tag" \
   $platform \
-  -t "$registry"/skywire-visor:"$image_tag" .
-
-echo "Build Skywrie Services Image"
-DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/skywire-services/Dockerfile \
-  --build-arg base_image="$base_image" \
-  --build-arg build_opts="$go_buildopts" \
-  --build-arg image_tag="$image_tag" \
-  $platform \
-  -t "$registry"/service-discovery:"$image_tag" . # TODO: we should use skywire-services dockerhub repo, but not available for now and we use service-discovery repo temporary
+  -t "$registry"/skywire:"$image_tag" .
 
 wait
 
