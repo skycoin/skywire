@@ -8,6 +8,13 @@ updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
 ## 1.3.29
 
+-   Move skywire-services and skycoin-service-discovery to skywrie repo [#1937](https://github.com/skycoin/skywrie/pull/1937)
+-   Add `--json` flag back to vpn and proxy `list` subcommand  [#1931](https://github.com/skycoin/skywire/pull/1931)
+-   Remove UT checking in vpn and skysocks list  [#1930](https://github.com/skycoin/skywire/pull/1930)
+-   Linux x86 release  [#1928](https://github.com/skycoin/skywire/pull/1928)
+-   Improve SetMinHop api method  [#1925](https://github.com/skycoin/skywire/pull/1925)
+-   Improve route logic in visor side  [#1921](https://github.com/skycoin/skywire/pull/1921)
+-   Win32 Installer  [#1917](https://github.com/skycoin/skywire/pull/1917)
 -   Fix Mac installer issue [#1900](https://github.com/skycoin/skywire/pull/1900)
 -   Fix WIX issue on versioning of Windows installer  [#1899](https://github.com/skycoin/skywire/pull/1899)
 -   Fix issue on release workflow  [#1896](https://github.com/skycoin/skywire/pull/1896)
