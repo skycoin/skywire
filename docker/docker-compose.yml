@@ -336,7 +336,7 @@ services:
 
   visor-a:
     privileged: true
-    image: "${REGISTRY}/skywire-visor:${DOCKER_TAG}"
+    image: "${REGISTRY}/skywire:${DOCKER_TAG}"
     container_name: "visor-a"
     hostname: visor-a
     cap_add:
@@ -361,7 +361,7 @@ services:
 
   visor-b:
     privileged: true
-    image: "${REGISTRY}/skywire-visor:${DOCKER_TAG}"
+    image: "${REGISTRY}/skywire:${DOCKER_TAG}"
     container_name: "visor-b"
     hostname: visor-b
     cap_add:
@@ -396,7 +396,7 @@ services:
 
   visor-c:
     privileged: true
-    image: "${REGISTRY}/skywire-visor:${DOCKER_TAG}"
+    image: "${REGISTRY}/skywire:${DOCKER_TAG}"
     container_name: "visor-c"
     hostname: visor-c
     cap_add:
