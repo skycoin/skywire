@@ -14,6 +14,7 @@ import (
 	confbs "github.com/skycoin/skywire/cmd/config-bootstrapper/commands"
 	rf "github.com/skycoin/skywire/cmd/route-finder/commands"
 	sd "github.com/skycoin/skywire/cmd/service-discovery/commands"
+	sn "github.com/skycoin/skywire/cmd/setup-node/commands"
 	se "github.com/skycoin/skywire/cmd/sw-env/commands"
 	tpd "github.com/skycoin/skywire/cmd/transport-discovery/commands"
 	tps "github.com/skycoin/skywire/cmd/transport-setup/commands"
@@ -31,6 +32,7 @@ func init() {
 		se.RootCmd,
 		ut.RootCmd,
 		sd.RootCmd,
+		sn.RootCmd,
 	)
 	tpd.RootCmd.Use = "tpd"
 	tps.RootCmd.Use = "tps"
@@ -40,6 +42,7 @@ func init() {
 	se.RootCmd.Use = "se"
 	ut.RootCmd.Use = "ut"
 	sd.RootCmd.Use = "sd"
+	sn.RootCmd.Use = "sn"
 }
 
 // RootCmd contains all subcommands
