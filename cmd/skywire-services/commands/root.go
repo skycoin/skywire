@@ -13,6 +13,7 @@ import (
 	ar "github.com/skycoin/skywire/cmd/address-resolver/commands"
 	confbs "github.com/skycoin/skywire/cmd/config-bootstrapper/commands"
 	rf "github.com/skycoin/skywire/cmd/route-finder/commands"
+	sd "github.com/skycoin/skywire/cmd/service-discovery/commands"
 	se "github.com/skycoin/skywire/cmd/sw-env/commands"
 	tpd "github.com/skycoin/skywire/cmd/transport-discovery/commands"
 	tps "github.com/skycoin/skywire/cmd/transport-setup/commands"
@@ -29,6 +30,7 @@ func init() {
 		confbs.RootCmd,
 		se.RootCmd,
 		ut.RootCmd,
+		sd.RootCmd,
 	)
 	tpd.RootCmd.Use = "tpd"
 	tps.RootCmd.Use = "tps"
@@ -37,6 +39,7 @@ func init() {
 	confbs.RootCmd.Use = "confbs"
 	se.RootCmd.Use = "se"
 	ut.RootCmd.Use = "ut"
+	sd.RootCmd.Use = "sd"
 }
 
 // RootCmd contains all subcommands
