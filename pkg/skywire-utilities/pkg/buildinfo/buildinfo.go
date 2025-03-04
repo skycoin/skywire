@@ -41,9 +41,11 @@ func init() {
 			}
 		}
 	}
-	bi, ok := debug.ReadBuildInfo()
-	if ok && bi.Main.Version != "" {
-		version = bi.Main.Version
+	if Get().Version == "" {
+		bi, ok := debug.ReadBuildInfo()
+		if ok && bi.Main.Version != "" {
+			version = bi.Main.Version
+		}
 	}
 }
 

@@ -9,8 +9,7 @@ fi
 declare -a images_arr=(
   "skycoin/dmsg-server:${image_tag}"
   "skycoin/dmsg-discovery:${image_tag}"
-  "skycoin/skywire-visor:${image_tag}"
-  "skycoin/service-discovery:${image_tag}"
+  "skycoin/skywire:${image_tag}"
 )
 
 for i in "${images_arr[@]}"; do
