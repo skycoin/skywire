@@ -67,8 +67,6 @@ function BuildInstaller()
     Set-Location .\scripts\win_installer
     mkdir -p ".\build\apps" > $null
     Move-Item ..\..\archive\skywire.exe .\build\skywire.exe
-    Copy-Item ..\..\archive\dmsghttp-config.json .\build\dmsghttp-config.json
-    Copy-Item ..\..\archive\services-config.json .\build\services-config.json
     Copy-Item skywire.bat .\build\skywire.bat
     New-Item new.update  > $null
     Move-Item new.update .\build\new.update
