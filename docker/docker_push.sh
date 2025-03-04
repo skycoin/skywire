@@ -15,8 +15,7 @@ if [ -z "$tag" ]; then
 fi
 
 declare -a images_arr=(
-  "service-discovery"
-  "skywire-visor"
+  "skywire"
 )
 
 echo "Pushing to $registry using tag: $tag"
