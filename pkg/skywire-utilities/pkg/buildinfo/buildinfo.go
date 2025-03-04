@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"runtime/debug"
 )
 
 const unknown = "unknown"
@@ -38,6 +39,12 @@ func init() {
 			if mInfo.Origin.Hash != "" && commit == unknown {
 				commit = mInfo.Origin.Hash
 			}
+		}
+	}
+	if Get().Version == "" {
+		bi, ok := debug.ReadBuildInfo()
+		if ok && bi.Main.Version != "" {
+			version = bi.Main.Version
 		}
 	}
 }
