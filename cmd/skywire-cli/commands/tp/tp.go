@@ -3,7 +3,6 @@ package clitp
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -38,21 +37,10 @@ var (
 	logger        = logging.MustGetLogger("skywire-cli")
 	removeAll     bool
 	tpTypes       bool
-	tpDiscURL     string
-	sdURL         string
 	utURL         string
 )
 
 func init() {
-	var envServices skywire.EnvServices
-	var services skywire.Services
-	if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err == nil {
-		if err := json.Unmarshal(envServices.Prod, &services); err == nil {
-			tpDiscURL = services.TransportDiscovery
-			sdURL = services.ServiceDiscovery
-			utURL = services.UptimeTracker
-		}
-	}
 	tpCmd.Flags().SortFlags = false
 	addTpCmd.Flags().SortFlags = false
 	rmTpCmd.Flags().SortFlags = false
@@ -128,6 +116,7 @@ var (
 	rootnode       cipher.PubKey
 	lastnode       cipher.PubKey
 	cacheFileTPD   string
+	cacheFileDmsgD string
 	cacheFileUT    string
 	padSpaces      int
 	isStats        bool
@@ -138,9 +127,11 @@ var (
 	transportType  string
 	timeout        time.Duration
 	rpk            string
-	cacheFileSD    string
+	cacheFileAR    string
 	cacheFilesAge  int
 	forceAttempt   bool
+	arURL          string
+	dmsgdURL       string
 
 // queryHealth	bool
 )
@@ -149,11 +140,13 @@ func init() {
 	addTpCmd.Flags().StringVarP(&rpk, "rpk", "r", "", "remote public key.")
 	addTpCmd.Flags().StringVarP(&transportType, "type", "t", "", "type of transport to add.")
 	addTpCmd.Flags().DurationVarP(&timeout, "timeout", "o", 0, "if specified, sets an operation timeout")
-	addTpCmd.Flags().StringVarP(&sdURL, "sdurl", "a", sdURL, "service discovery url")
+	addTpCmd.Flags().StringVarP(&arURL, "ar", "a", skywire.Prod.AddressResolver, "address resolver URL")
+	addTpCmd.Flags().StringVarP(&dmsgdURL, "dmsg", "d", skywire.Prod.DmsgDiscovery, "dmsg discovery URL")
 	//TODO
 	//	listCmd.Flags().BoolVarP(&queryHealth, "health", "q", false, "check /health of remote visor over dmsg before creating transport")
 	addTpCmd.Flags().BoolVarP(&forceAttempt, "force", "f", false, "attempt transport creation without check of SD") // or visor /health over dmsg
-	addTpCmd.Flags().StringVar(&cacheFileSD, "cfs", os.TempDir()+"/pvisorsd.json", "SD cache file location")
+	addTpCmd.Flags().StringVar(&cacheFileAR, "cfar", os.TempDir()+"/ar.json", "AR cache file location")
+	addTpCmd.Flags().StringVar(&cacheFileDmsgD, "cfdd", os.TempDir()+"/dmsgd.json", "Dmsg Discovery cache file location")
 	addTpCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
 }
 
@@ -168,6 +161,9 @@ var addTpCmd = &cobra.Command{
 	Args:                  cobra.MinimumNArgs(1),
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
+		if transportType != "dmsg" && transportType != "stcpr" && transportType != "sudph" && transportType != "" {
+			logger.Fatal("Invalid transport type specified:", transportType)
+		}
 		isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -181,23 +177,63 @@ var addTpCmd = &cobra.Command{
 			internal.Catch(cmd.Flags(), pk.Set(rpk))
 		}
 
-		var pvs string
-		var pvkeys []string
-		var foundPV bool
-		//check before connecting stcpr transport that the visor is in the public visor list unless forceAttempt == true
-		if (transportType == "" || transportType == "stcpr") && !forceAttempt {
-			pvs = internal.GetData(cacheFileSD, sdURL+"/api/services?type=visor", cacheFilesAge)
-			pvkeys, _ = script.Echo(pvs).JQ(".[].address").Replace(":", " ").Column(1).Slice() //nolint
-			for _, pvkey := range pvkeys {
-				if pk.String() == pvkey {
-					foundPV = true
-					break
+		var transports string
+		var dmsgEntries string
+		var stcprkeys []string
+		var sudphkeys []string
+		var dmsgkeys []string
+		var availableSTCPR bool
+		var availableSUDPH bool
+		var availableDMSG bool
+		//check before connecting stcpr transport that the visor public key is available to be transported via the given transport type unless forceAttempt == true
+		if !forceAttempt {
+			transports = internal.GetData(cacheFileAR, arURL+"/transports", cacheFilesAge)
+			stcprkeys, _ = script.Echo(transports).JQ(".stcpr[]").Replace(`"`, "").Slice() //nolint
+			if transportType == "stcpr" {
+				found := false
+				for i := range stcprkeys {
+					if pk.String() == stcprkeys[i] {
+						found = true
+						break
+					}
+				}
+				if !found {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("cannot create stcpr transport ; public key not found in address resolver %v/transports.\nUse -f --force to force attempt transport creation", arURL))
+				} else {
+					availableSTCPR = true
 				}
 			}
-		}
-
-		if transportType == "stcpr" && !forceAttempt && !foundPV {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("cannot create stcpr transport ; public key not found in public visor service discovery.\nUse -f --force to force attempt transport creation"))
+			sudphkeys, _ = script.Echo(transports).JQ(".sudph[]").Replace(`"`, "").Slice() //nolint
+			if transportType == "sudph" {
+				found := false
+				for i := range sudphkeys {
+					if pk.String() == sudphkeys[i] {
+						found = true
+						break
+					}
+				}
+				if !found {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("cannot create sudph transport ; public key not found in address resolver %v/transports.\nUse -f --force to force attempt transport creation", arURL))
+				} else {
+					availableSUDPH = true
+				}
+			}
+			dmsgEntries = internal.GetData(cacheFileDmsgD, dmsgdURL+"/dmsg-discovery/entries", cacheFilesAge)
+			dmsgkeys, _ = script.Echo(dmsgEntries).JQ(".[]").Replace(`"`, "").Slice() //nolint
+			if transportType == "dmsg" {
+				found := false
+				for i := range dmsgkeys {
+					if pk.String() == dmsgkeys[i] {
+						found = true
+						break
+					}
+				}
+				if !found {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("cannot create dmsg transport ; public key not found in dmsg discovery entries %v/dmsg-discovery/entries.\nUse -f --force to force attempt transport creation", dmsgdURL))
+				} else {
+					availableDMSG = true
+				}
+			}
 		}
 
 		var tp *visor.TransportSummary
@@ -212,18 +248,24 @@ var addTpCmd = &cobra.Command{
 			}
 		} else {
 			var transportTypes []network.Type
-			if foundPV {
+			if forceAttempt {
 				transportTypes = []network.Type{
 					network.STCPR,
 					network.SUDPH,
 					network.DMSG,
 				}
 			} else {
-				transportTypes = []network.Type{
-					network.SUDPH,
-					network.DMSG,
+				if availableSTCPR {
+					transportTypes = append(transportTypes, network.STCPR)
+				}
+				if availableSUDPH {
+					transportTypes = append(transportTypes, network.SUDPH)
+				}
+				if availableDMSG {
+					transportTypes = append(transportTypes, network.DMSG)
 				}
 			}
+
 			for _, transportType := range transportTypes {
 				tp, err = rpcClient.AddTransport(pk, string(transportType), timeout)
 				if err == nil {
@@ -421,8 +463,8 @@ func init() {
 
 	treeCmd.Flags().StringVarP(&rootNode, "source", "k", "", "root node ; defaults to visor with most transports")
 	treeCmd.Flags().StringVarP(&lastNode, "dest", "d", "", "map route between source and dest")
-	treeCmd.Flags().StringVarP(&tpdURL, "tpdurl", "a", tpDiscURL, "transport discovery url")
-	treeCmd.Flags().StringVarP(&utURL, "uturl", "w", utURL, "uptime tracker url")
+	treeCmd.Flags().StringVarP(&tpdURL, "tpdurl", "a", skywire.Prod.TransportDiscovery, "transport discovery url")
+	treeCmd.Flags().StringVarP(&utURL, "uturl", "w", skywire.Prod.UptimeTracker, "uptime tracker url")
 	treeCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "print raw json data")
 	treeCmd.Flags().BoolVarP(&refinedData, "pretty", "p", false, "print pretty json data")
 	treeCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status in UT")
@@ -438,7 +480,7 @@ func init() {
 var treeCmd = &cobra.Command{
 	Use:   "tree",
 	Short: "tree map of transports on the skywire network",
-	Long:  fmt.Sprintf("display a tree representation of transports from TPD\n\n%v/all-transports\n\nSet cache file location to \"\" to avoid using cache files", tpDiscURL),
+	Long:  fmt.Sprintf("display a tree representation of transports from TPD\n\n%v/all-transports\n\nSet cache file location to \"\" to avoid using cache files", skywire.Prod.TransportDiscovery),
 	Run: func(cmd *cobra.Command, _ []string) {
 		if rootNode != "" {
 			err := rootnode.Set(rootNode)
