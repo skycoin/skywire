@@ -1,7 +1,9 @@
 // Package nm internal/nm/types.go
 package nm
 
-import "time"
+import (
+	"time"
+)
 
 // Status of network
 type Status struct {
