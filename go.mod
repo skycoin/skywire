@@ -57,7 +57,7 @@ require (
 	golang.org/x/sync v0.10.0
 	golang.org/x/sys v0.28.0
 	golang.org/x/term v0.27.0
-	golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173 //DO NOT MODIFY OR UPDATE v0.0.0-20230223181233-21636207a675
+	golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675 //DO NOT MODIFY OR UPDATE v0.0.0-20230223181233-21636207a675
 	gopkg.in/telebot.v3 v3.3.8
 	gorm.io/driver/postgres v1.5.11
 	gorm.io/gorm v1.25.12
@@ -182,11 +182,17 @@ require (
 	mvdan.cc/sh/v3 v3.9.0 // indirect
 )
 
+// IT IS FORBIDDEN TO USE REPLACE DIRECTIVES
+
+// [error] The go.mod file for the module providing named packages contains one or
+//	more replace directives. It must not contain directives that would cause
+//	it to be interpreted differently than if it were the main module.
+
 // issues with gotop on riscv64
 //replace github.com/xxxserxxx/gotop/v4 => github.com/ersonp/gotop/v4 v4.2.1
 
 // Wiregusrd version must match below version ; do not update
-replace golang.zx2c4.com/wireguard => golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675
+//replace golang.zx2c4.com/wireguard => golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675
 
 // Uncomment for tests with local sources
 //replace github.com/skycoin/dmsg => ../dmsg
