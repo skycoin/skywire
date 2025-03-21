@@ -571,10 +571,10 @@ func server() {
 		l += fmt.Sprintf("%d days in the year %d.\n", time.Date(time.Now().Year(), time.December, 31, 0, 0, 0, 0, time.UTC).YearDay(), time.Now().Year())
 		l += fmt.Sprintf("Today is day %d.\n", time.Now().YearDay())
 		l += fmt.Sprintf("There are %d days remaining in %d<br>", time.Date(time.Now().Year(), time.December, 31, 0, 0, 0, 0, time.UTC).YearDay()-time.Now().YearDay(), time.Now().Year())
-		calendar, err := script.Exec(`bash -c 'set -o pipefail ; unbuffer cal --color | lolcat -f -F 0.5'`).String()
-		if err != nil {
-			calendar = cal()
-		}
+		//		calendar, err := script.Exec(`bash -c 'set -o pipefail ; unbuffer cal --color | lolcat -f -F 0.5'`).String()
+		//		if err != nil {
+		calendar := cal()
+		//		}
 		l += "\n" + string(ansihtml.ConvertToHTML([]byte(calendar)))
 		l += "\n\n<table style='border-collapse: collapse; width: auto;'>\n"
 		l += "\n\n<table style='border-collapse: collapse; width: auto;'>\n"

@@ -53,10 +53,10 @@ require (
 	github.com/yuin/goldmark v1.4.13
 	github.com/zcalusic/sysinfo v1.1.2
 	go.etcd.io/bbolt v1.3.11
-	golang.org/x/net v0.32.0
+	golang.org/x/net v0.33.0
 	golang.org/x/sync v0.10.0
-	golang.org/x/sys v0.28.0
-	golang.org/x/term v0.27.0
+	golang.org/x/sys v0.29.0
+	golang.org/x/term v0.28.0
 	golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675 //DO NOT MODIFY OR UPDATE v0.0.0-20230223181233-21636207a675
 	gopkg.in/telebot.v3 v3.3.8
 	gorm.io/driver/postgres v1.5.11
@@ -64,6 +64,8 @@ require (
 )
 
 require (
+	cogentcore.org/core v0.3.9-0.20250226161054-6ec962b2d812
+	github.com/0magnet/calvin v0.0.0-20241204203002-126d3bcd81d8
 	github.com/chen3feng/safecast v0.0.0-20220908170618-81b2ecd47937
 	github.com/go-chi/cors v1.2.1
 )
@@ -74,19 +76,27 @@ require (
 	atomicgo.dev/schedule v0.1.0 // indirect
 	github.com/ActiveState/termtest/conpty v0.5.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
+	github.com/Bios-Marcel/wastebasket v0.0.4-0.20240213135800-f26f1ae0a7c4 // indirect
+	github.com/Masterminds/vcs v1.13.3 // indirect
 	github.com/MichaelMure/go-term-text v0.3.1 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/StackExchange/wmi v1.2.1 // indirect
+	github.com/adrg/strutil v0.3.1 // indirect
 	github.com/alecthomas/chroma v0.10.0 // indirect
+	github.com/alecthomas/chroma/v2 v2.13.0 // indirect
+	github.com/anthonynsimon/bild v0.13.0 // indirect
+	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/boltdb/bolt v1.3.1 // indirect
 	github.com/bytedance/sonic v1.12.3 // indirect
 	github.com/bytedance/sonic/loader v0.2.0 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/chewxy/math32 v1.10.1 // indirect
 	github.com/cloudwego/base64x v0.1.4 // indirect
 	github.com/cloudwego/iasm v0.2.0 // indirect
 	github.com/coder/websocket v1.8.12 // indirect
+	github.com/cogentcore/webgpu v0.0.0-20250118183535-3dd1436165cf // indirect
 	github.com/confiant-inc/go-socks5 v0.0.0-20210816151940-c1124825b1d6 // indirect
 	github.com/containerd/console v1.0.4 // indirect
 	github.com/creack/pty v1.1.23 // indirect
@@ -98,19 +108,27 @@ require (
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docker/go-units v0.4.0 // indirect
 	github.com/eliukblau/pixterm/pkg/ansimage v0.0.0-20191210081756-9fb6cf8c2f75 // indirect
+	github.com/ericchiang/css v1.3.0 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.6 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
+	github.com/go-gl/glfw/v3.3/glfw v0.0.0-20240506104042-037f3cc74f2a // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
+	github.com/goki/freetype v1.0.5 // indirect
 	github.com/gomarkdown/markdown v0.0.0-20240930133441-72d49d9543d8 // indirect
 	github.com/google/pprof v0.0.0-20241210010833-40e02aabc2ad // indirect
 	github.com/gookit/color v1.5.4 // indirect
 	github.com/gopherjs/gopherjs v1.17.2 // indirect
+	github.com/gorilla/css v1.0.1 // indirect
+	github.com/h2non/filetype v1.1.3 // indirect
+	github.com/hack-pad/go-indexeddb v0.3.2 // indirect
+	github.com/hack-pad/hackpadfs v0.2.1 // indirect
+	github.com/hack-pad/safejs v0.1.1 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/itchyny/gojq v0.12.16 // indirect
@@ -120,6 +138,7 @@ require (
 	github.com/jackc/pgx/v5 v5.7.1 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jaypipes/pcidb v1.0.1 // indirect
+	github.com/jinzhu/copier v0.4.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
@@ -167,7 +186,7 @@ require (
 	go.uber.org/mock v0.5.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.11.0 // indirect
-	golang.org/x/crypto v0.31.0 // indirect
+	golang.org/x/crypto v0.32.0 // indirect
 	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67 // indirect
 	golang.org/x/image v0.21.0 // indirect
 	golang.org/x/mod v0.22.0 // indirect
