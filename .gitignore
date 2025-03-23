@@ -17,6 +17,8 @@ tmp/
 build/
 ./apps/
 ./skywire/
+./local
+local/
 ./local/*
 ./local*/*
 ./transport_logs
@@ -28,6 +30,7 @@ rewards
 ./pkg/visor/bar/
 ./pkg/visor/foo/
 
+*.json
 ./bin
 ./node
 ./users.db
