@@ -329,8 +329,10 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
 	}
 
 	var outputTPS []outputTP
-
 	for _, tp := range tps {
+		if tp == nil {
+			continue
+		}
 		tpMode := "regular"
 		if tp.IsSetup {
 			tpMode = "setup"
@@ -347,6 +349,7 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
 
 		_, err = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", tp.Type, tp.ID, tp.Remote, tpMode, tp.Label)
 		internal.Catch(cmdFlags, err)
+
 	}
 	internal.Catch(cmdFlags, w.Flush())
 	internal.PrintOutput(cmdFlags, outputTPS, b.String())
