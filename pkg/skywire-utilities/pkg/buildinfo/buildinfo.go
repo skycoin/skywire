@@ -41,7 +41,7 @@ func init() {
 			}
 		}
 	}
-	if Get().Version == "" {
+	if Get().Version == unknown {
 		bi, ok := debug.ReadBuildInfo()
 		if ok && bi.Main.Version != "" {
 			version = bi.Main.Version
