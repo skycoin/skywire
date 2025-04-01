@@ -1,4 +1,4 @@
-// Package buildinfo pkg/buildinfo/buildinfo.go
+// Package buildinfo pkg/skywire-utilities/pkg/buildinfo/buildinfo.go
 package buildinfo
 
 import (
@@ -13,14 +13,14 @@ const unknown = "unknown"
 //$ go build -mod=vendor -ldflags="-X 'github.com/skycoin/skywire-utilities/pkg/buildinfo.version=$(git describe)' -X 'github.com/skycoin/skywire-utilities/pkg/buildinfo.date=$(date -u "+%Y-%m-%dT%H:%M:%SZ")' -X 'github.com/skycoin/skywire-utilities/pkg/buildinfo.commit=$(git rev-list -1 HEAD)'" .
 
 var (
-	version = unknown
-	commit  = unknown
-	date    = unknown
+	version   = unknown
+	commit    = unknown
+	date      = unknown
 	goversion = unknown
-	bi debug.BuildInfo
+	bi        debug.BuildInfo
 )
 
-//TODO: deprecate?
+// TODO: deprecate?
 // $ go build -ldflags="-X 'github.com/skycoin/skywire-utilities/pkg/buildinfo.golist=$(go list -m -json -mod=mod github.com/skycoin/<repo>@<branch>)' -X 'github.com/skycoin/skywire-utilities/pkg/buildinfo.date=$(date -u "+%Y-%m-%dT%H:%M:%SZ")'" .
 var golist string
 
@@ -86,16 +86,16 @@ func DebugBuildInfo() debug.BuildInfo {
 // Get returns build info summary.
 func Get() *Info {
 	return &Info{
-		Version: Version(),
-		Commit:  Commit(),
-		Date:    Date(),
+		Version:   Version(),
+		Commit:    Commit(),
+		Date:      Date(),
 		GoVersion: GoVersion(),
 	}
 }
 
 // Info is build info summary.
 type Info struct {
-	Go string `json:"go"`
+	Go      string `json:"go"`
 	Version string `json:"version"`
 	Commit  string `json:"commit"`
 	Date    string `json:"date"`
