@@ -17,7 +17,7 @@ var (
 	commit    = unknown
 	date      = unknown
 	goversion = unknown
-	bi        debug.BuildInfo
+	bi        *debug.BuildInfo
 )
 
 // TODO: deprecate?
@@ -79,17 +79,17 @@ func Date() string {
 }
 
 // DebugBuildInfo returns debug.BuildInfo.
-func DebugBuildInfo() debug.BuildInfo {
+func DebugBuildInfo() *debug.BuildInfo {
 	return bi
 }
 
 // Get returns build info summary.
 func Get() *Info {
 	return &Info{
-		Version:   Version(),
-		Commit:    Commit(),
-		Date:      Date(),
-		GoVersion: GoVersion(),
+		Version: Version(),
+		Commit:  Commit(),
+		Date:    Date(),
+		Go:      Go(),
 	}
 }
 
