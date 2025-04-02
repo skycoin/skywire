@@ -110,7 +110,7 @@ var RootCmd = &cobra.Command{
 			fmt.Printf("%v\n", buildinfo.DebugBuildInfo())
 			return
 		}
-		cmd.Help()
+		cmd.Help() //nolint
 	},
 }
 
