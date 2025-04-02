@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/0magnet/calvin"
 	"github.com/bitfield/script"
 	"github.com/pterm/pterm"
 	"github.com/pterm/pterm/putils"
@@ -29,8 +30,9 @@ import (
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
-func init() {
+var bi bool
 
+func init() {
 	appsCmd.AddCommand(
 		vpns.RootCmd,
 		vpnc.RootCmd,
@@ -57,10 +59,7 @@ func init() {
 		version.RootCmd,
 	)
 
-	visor.RootCmd.Long = `
-	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐  ┬  ┬┬┌─┐┌─┐┬─┐
-	└─┐├┴┐└┬┘││││├┬┘├┤───└┐┌┘│└─┐│ │├┬┘
-	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘   └┘ ┴└─┘└─┘┴└─`
+	visor.RootCmd.Long = calvin.AsciiFont("skywire-visor")
 	dmsg.RootCmd.Use = "dmsg"
 	services.RootCmd.Use = "svc"
 	sd.RootCmd.Use = "sd"
@@ -75,6 +74,19 @@ func init() {
 	conf.DmsghttpConfCmd.Use = "conf"
 	conf.ServicesConfCmd.Use = "conf"
 
+	modifySubcommands(RootCmd)
+	RootCmd.Flags().BoolVarP(&bi, "buildinfo", "b", false, "print runtime/debug.BuildInfo")
+}
+
+func modifySubcommands(cmd *cobra.Command) {
+	for i := range cmd.Commands() {
+		cmd.Commands()[i].Version = ""
+		cmd.Commands()[i].SilenceErrors = true
+		cmd.Commands()[i].SilenceUsage = true
+		cmd.Commands()[i].DisableSuggestions = true
+		cmd.Commands()[i].DisableFlagsInUseLine = true
+		modifySubcommands(cmd.Commands()[i]) // recursion
+	}
 }
 
 // RootCmd contains literally every 'command' from four repos here
@@ -82,39 +94,38 @@ var RootCmd = &cobra.Command{
 	Use: func() string {
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
 	}(),
-	Long: `
-	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
-	└─┐├┴┐└┬┘││││├┬┘├┤
-	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘`,
+	Long: func() (ret string) {
+		ret = calvin.AsciiFont("skywire")
+		ret += "\nskywire version " + buildinfo.Version()
+		if buildinfo.Go() != "unknown" {
+			ret += "\nbuilt with " + buildinfo.Go()
+		}
+		return ret
+	}(),
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
+	Run: func(_ *cobra.Command, _ []string) {
+		if bi {
+			fmt.Printf("%v\n", buildinfo.DebugBuildInfo())
+			return
+		}
+	},
 }
 
 var appsCmd = &cobra.Command{
 	Use:   "app",
 	Short: "skywire native applications",
-	Long: `
-	┌─┐┌─┐┌─┐┌─┐
-	├─┤├─┘├─┘└─┐
-	┴ ┴┴  ┴  └─┘`,
-	SilenceErrors:         true,
-	SilenceUsage:          true,
-	DisableSuggestions:    true,
-	DisableFlagsInUseLine: true,
+	Long:  calvin.AsciiFont("apps"),
 }
 
 var treeCmd = &cobra.Command{
-	Use:                   "tree",
-	Short:                 "subcommand tree",
-	Long:                  `subcommand tree`,
-	Hidden:                true,
-	SilenceErrors:         true,
-	SilenceUsage:          true,
-	DisableSuggestions:    true,
-	DisableFlagsInUseLine: true,
+	Use:    "tree",
+	Short:  "subcommand tree",
+	Long:   `subcommand tree`,
+	Hidden: true,
 	Run: func(_ *cobra.Command, _ []string) {
 		// You can use a LeveledList here, for easy generation.
 		leveledList := pterm.LeveledList{}
@@ -171,11 +182,7 @@ var docCmd = &cobra.Command{
 	generate toc:
 
 	cat cmd/skywire/README1.md | gh-md-toc`,
-	Hidden:                true,
-	SilenceErrors:         true,
-	SilenceUsage:          true,
-	DisableSuggestions:    true,
-	DisableFlagsInUseLine: true,
+	Hidden: true,
 	Run: func(_ *cobra.Command, _ []string) {
 		fmt.Printf("\n# %s\n", "skywire documentation")
 		fmt.Printf("\n## %s\n", "subcommand tree")
@@ -266,103 +273,6 @@ var docCmd = &cobra.Command{
 		}
 	},
 }
-
-/*
-cfgCmd.Flags().StringVarP(&pdmsgdURL, "dprod", "q", skywire.Prod.DmsgDiscovery, "prod dmsg discovery url")
-cfgCmd.Flags().StringVarP(&tdmsgdURL, "dtest", "r", skywire.Test.DmsgDiscovery, "test dmsg discovery url")
-cfgCmd.Flags().StringVarP(&dmsghttpCfg, "dfile", "u", "dmsghttp-config.json", "dmsghttp config json file")
-cfgCmd.Flags().BoolVarP(&writeDmsghttp, "dw", "x", false, "write updates to dmsghttp config file")
-*/
-
-/*
-var (
-prodURL,testURL,svcCfg,pdmsgdURL,tdmsgdURL,dmsghttpCfg string
-writeSvc, writeDmsghttp bool
-)
-
-// CombinedConfig represents the combined configuration of the production services
-type CombinedConfig struct {
-	Prod struct {
-		Conf             string                  `json:"conf,omitempty"`
-		skywire.Services `json:",inline"` // Embed the Services struct
-	} `json:"prod"`
-}
-
-func init() {
-	cfgCmd.Flags().StringVarP(&prodURL, "prod", "p", skywire.ProdConf.Conf, "prod configuration url")
-	cfgCmd.Flags().StringVarP(&svcCfg, "sfile", "s", "services-config.json", "services config json file")
-	cfgCmd.Flags().BoolVarP(&writeSvc, "sw", "w", false, "write updates to services config file")
-	cfgCmd.Flags().StringVarP(&testURL, "test", "t", skywire.TestConf.Conf, "test configuration url")
-}
-
-var cfgCmd = &cobra.Command{
-	Use:                   "cfg",
-	Short:                 "update services-config.json & dmsghttp-config.json",
-	Long:                  `update services-config.json & dmsghttp-config.json`,
-	Hidden:                true,
-	SilenceErrors:         true,
-	SilenceUsage:          true,
-	DisableSuggestions:    true,
-	DisableFlagsInUseLine: true,
-	Run: func(_ *cobra.Command, _ []string) {
-		_, _ = script.File(svcCfg).JQ(".prod").Stdout()
-		os.Exit(0)
-//		pConf, err := script.File(svcCfg).JQ(".prod").Bytes()
-//		tConf, err := script.File(svcCfg).JQ(".test").Bytes()
-		// Fetch the prod configuration from prodURL
-		if prodURL != "" {
-			prodConf, err := script.Get(prodURL).JQ(".").Bytes()
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			// Create an instance of the CombinedConfig struct
-			var combinedConfig CombinedConfig
-			combinedConfig.Prod.Conf = skywire.ProdConf.Conf // Assign the existing Conf
-
-			// Unmarshal the fetched prod configuration into the Services field
-			err = json.Unmarshal(prodConf, &combinedConfig.Prod.Services)
-			if err != nil {
-				log.Fatalf("Error unmarshaling prod config into Services: %v", err)
-			}
-
-			// Read the existing services-config.json file
-			existingConfigData, err := os.ReadFile(svcCfg)
-			if err != nil {
-				log.Fatalf("Error reading services config file: %v", err)
-			}
-
-			// Parse the existing configuration
-			var existingConfig map[string]interface{}
-			err = json.Unmarshal(existingConfigData, &existingConfig)
-			if err != nil {
-				log.Fatalf("Error unmarshaling existing services config: %v", err)
-			}
-
-			// Update the prod section with the new configuration
-			existingConfig["prod"] = combinedConfig.Prod
-
-			// Marshal the updated configuration back to JSON for output or saving
-			marshaled, err := json.MarshalIndent(existingConfig, "", "  ")
-			if err != nil {
-				log.Fatalf("Error marshaling updated config: %v", err)
-			}
-
-			// Print the updated configuration to the console
-			fmt.Println(string(marshaled))
-
-			// Write to file if the writeSvc flag is set
-			if writeSvc {
-				_, err := script.Echo(string(marshaled)).WriteFile(svcCfg)
-				if err != nil {
-					log.Fatalf("Error writing to services config file: %v", err)
-				}
-				fmt.Printf("Updated %s successfully.\n",svcCfg)
-			}
-		}
-	},
-}
-*/
 
 // Execute executes root CLI command.
 func Execute() {

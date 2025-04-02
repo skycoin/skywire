@@ -64,6 +64,7 @@ require (
 )
 
 require (
+	github.com/0magnet/calvin v0.0.0-20241204203002-126d3bcd81d8
 	github.com/chen3feng/safecast v0.0.0-20220908170618-81b2ecd47937
 	github.com/go-chi/cors v1.2.1
 )

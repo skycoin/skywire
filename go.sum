@@ -62,6 +62,8 @@ cloud.google.com/go/storage v1.8.0/go.mod h1:Wv1Oy7z6Yz3DshWRJFhqM/UCfaWIRTdp0RX
 cloud.google.com/go/storage v1.10.0/go.mod h1:FLPqc6j+Ki4BU591ie1oL6qBQGu2Bl/tZ9ullr3+Kg0=
 cloud.google.com/go/storage v1.14.0/go.mod h1:GrKmX003DSIwi9o29oFT7YDnHYwZoctc3fOKtUw0Xmo=
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
+github.com/0magnet/calvin v0.0.0-20241204203002-126d3bcd81d8 h1:F5mPw+nCDMC4Vw2ApncQNEgyWnHAeU4O3AFkfIBkWBg=
+github.com/0magnet/calvin v0.0.0-20241204203002-126d3bcd81d8/go.mod h1:nLyIguLxcNn+I8Znp9tfjDrKOtsXL+RPhheG9mzf24w=
 github.com/ActiveState/termtest/conpty v0.5.0 h1:JLUe6YDs4Jw4xNPCU+8VwTpniYOGeKzQg4SM2YHQNA8=
 github.com/ActiveState/termtest/conpty v0.5.0/go.mod h1:LO4208FLsxw6DcNZ1UtuGUMW+ga9PFtX4ntv8Ymg9og=
 github.com/AudriusButkevicius/pfilter v0.0.11 h1:6emuvqNeH1gGlqkML35pEizyPcaxdAN4JO9sdgwcx78=
