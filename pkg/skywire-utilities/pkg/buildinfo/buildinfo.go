@@ -1,4 +1,4 @@
-// Package buildinfo pkg/buildinfo/buildinfo.go
+// Package buildinfo pkg/skywire-utilities/pkg/buildinfo/buildinfo.go
 package buildinfo
 
 import (
@@ -10,15 +10,18 @@ import (
 
 const unknown = "unknown"
 
-//$ go build -mod=vendor -ldflags="-X 'github.com/skycoin/skywire-utilities/pkg/buildinfo.version=$(git describe)' -X 'github.com/skycoin/skywire-utilities/pkg/buildinfo.date=$(date -u "+%Y-%m-%dT%H:%M:%SZ")' -X 'github.com/skycoin/skywire-utilities/pkg/buildinfo.commit=$(git rev-list -1 HEAD)'" .
+//$ go build -mod=vendor -ldflags="-X 'github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.version=$(git describe)' -X 'github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date=$(date -u "+%Y-%m-%dT%H:%M:%SZ")' -X 'github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.commit=$(git rev-list -1 HEAD)'" .
 
 var (
-	version = unknown
-	commit  = unknown
-	date    = unknown
+	version   = unknown
+	commit    = unknown
+	date      = unknown
+	goversion = unknown
+	bi        *debug.BuildInfo
 )
 
-// $ go build -ldflags="-X 'github.com/skycoin/skywire-utilities/pkg/buildinfo.golist=$(go list -m -json -mod=mod github.com/skycoin/<repo>@<branch>)' -X 'github.com/skycoin/skywire-utilities/pkg/buildinfo.date=$(date -u "+%Y-%m-%dT%H:%M:%SZ")'" .
+// TODO: deprecate?
+// $ go build -ldflags="-X 'github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.golist=$(go list -m -json -mod=mod github.com/skycoin/<repo>@<branch>)' -X 'github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date=$(date -u "+%Y-%m-%dT%H:%M:%SZ")'" .
 var golist string
 
 // ModuleInfo represents the JSON structure returned by `go list -m -json`.
@@ -41,10 +44,16 @@ func init() {
 			}
 		}
 	}
-	if Get().Version == "" {
-		bi, ok := debug.ReadBuildInfo()
-		if ok && bi.Main.Version != "" {
-			version = bi.Main.Version
+	var ok bool
+	if Get().Version == unknown || Get().Version == "" {
+		bi, ok = debug.ReadBuildInfo()
+		if ok {
+			if bi.Main.Version != "" {
+				version = bi.Main.Version
+			}
+			if bi.GoVersion != "" {
+				goversion = bi.GoVersion
+			}
 		}
 	}
 }
@@ -52,6 +61,11 @@ func init() {
 // Version returns version from the parsed module info.
 func Version() string {
 	return version
+}
+
+// Go returns version of golang used for compilation from debug.ReadBuildInfo().
+func Go() string {
+	return goversion
 }
 
 // Commit returns commit hash from the parsed module info.
@@ -64,17 +78,24 @@ func Date() string {
 	return date
 }
 
+// DebugBuildInfo returns debug.BuildInfo.
+func DebugBuildInfo() *debug.BuildInfo {
+	return bi
+}
+
 // Get returns build info summary.
 func Get() *Info {
 	return &Info{
 		Version: Version(),
 		Commit:  Commit(),
 		Date:    Date(),
+		Go:      Go(),
 	}
 }
 
 // Info is build info summary.
 type Info struct {
+	Go      string `json:"go"`
 	Version string `json:"version"`
 	Commit  string `json:"commit"`
 	Date    string `json:"date"`
