@@ -25,7 +25,6 @@ import (
 	sn "github.com/skycoin/skywire/cmd/setup-node/commands"
 	scli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
 	services "github.com/skycoin/skywire/cmd/skywire-services/commands"
-	version "github.com/skycoin/skywire/cmd/version/commands"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/visor"
 )
@@ -56,7 +55,6 @@ func init() {
 		appsCmd,
 		treeCmd,
 		docCmd,
-		version.RootCmd,
 	)
 
 	visor.RootCmd.Long = calvin.AsciiFont("skywire-visor")
@@ -107,11 +105,12 @@ var RootCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		if bi {
 			fmt.Printf("%v\n", buildinfo.DebugBuildInfo())
 			return
 		}
+		cmd.Help()
 	},
 }
 
