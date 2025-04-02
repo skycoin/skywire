@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/0magnet/calvin"
 	"github.com/bitfield/script"
 	"github.com/pterm/pterm"
 	"github.com/pterm/pterm/putils"
@@ -29,8 +30,9 @@ import (
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
-func init() {
+var bi bool
 
+func init() {
 	appsCmd.AddCommand(
 		vpns.RootCmd,
 		vpnc.RootCmd,
@@ -57,10 +59,7 @@ func init() {
 		version.RootCmd,
 	)
 
-	visor.RootCmd.Long = `
-	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐  ┬  ┬┬┌─┐┌─┐┬─┐
-	└─┐├┴┐└┬┘││││├┬┘├┤───└┐┌┘│└─┐│ │├┬┘
-	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘   └┘ ┴└─┘└─┘┴└─`
+	visor.RootCmd.Long = calvin.AsciiFont("skywire-visor")
 	dmsg.RootCmd.Use = "dmsg"
 	services.RootCmd.Use = "svc"
 	sd.RootCmd.Use = "sd"
@@ -75,6 +74,20 @@ func init() {
 	conf.DmsghttpConfCmd.Use = "conf"
 	conf.ServicesConfCmd.Use = "conf"
 
+	modifySubcommands(RootCmd)
+	RootCmd.Flags().BoolVarP(&bi, "buildinfo", "b", false, "print runtime/debug.BuildInfo")
+
+}
+
+func modifySubcommands(cmd *cobra.Command) {
+	for i := range cmd.Commands() {
+		cmd.Commands()[i].Version = ""
+		cmd.Commands()[i].SilenceErrors = true
+		cmd.Commands()[i].SilenceUsage = true
+		cmd.Commands()[i].DisableSuggestions = true
+		cmd.Commands()[i].DisableFlagsInUseLine = true
+		modifySubcommands(cmd.Commands()[i]) // recursion
+	}
 }
 
 // RootCmd contains literally every 'command' from four repos here
@@ -82,39 +95,37 @@ var RootCmd = &cobra.Command{
 	Use: func() string {
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
 	}(),
-	Long: `
-	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
-	└─┐├┴┐└┬┘││││├┬┘├┤
-	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘`,
+	Long: func() (ret string) {
+		ret = calvin.AsciiFont("skywire")
+		ret += "\nskywire version " + buildinfo.Version()
+		if buildinfo.Go() != "unknown" {
+			ret += "\nbuilt with " + buildinfo.Go()
+		}
+		return ret
+	}(),
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
+	Run: func(_ *cobra.Command, _ []string) {
+		if bi {
+			fmt.Printf("%v\n", buildinfo.DebugBuildInfo())
+		}
+	},
 }
 
 var appsCmd = &cobra.Command{
 	Use:   "app",
 	Short: "skywire native applications",
-	Long: `
-	┌─┐┌─┐┌─┐┌─┐
-	├─┤├─┘├─┘└─┐
-	┴ ┴┴  ┴  └─┘`,
-	SilenceErrors:         true,
-	SilenceUsage:          true,
-	DisableSuggestions:    true,
-	DisableFlagsInUseLine: true,
+	Long:  calvin.AsciiFont("apps"),
 }
 
 var treeCmd = &cobra.Command{
-	Use:                   "tree",
-	Short:                 "subcommand tree",
-	Long:                  `subcommand tree`,
-	Hidden:                true,
-	SilenceErrors:         true,
-	SilenceUsage:          true,
-	DisableSuggestions:    true,
-	DisableFlagsInUseLine: true,
+	Use:    "tree",
+	Short:  "subcommand tree",
+	Long:   `subcommand tree`,
+	Hidden: true,
 	Run: func(_ *cobra.Command, _ []string) {
 		// You can use a LeveledList here, for easy generation.
 		leveledList := pterm.LeveledList{}
@@ -171,11 +182,7 @@ var docCmd = &cobra.Command{
 	generate toc:
 
 	cat cmd/skywire/README1.md | gh-md-toc`,
-	Hidden:                true,
-	SilenceErrors:         true,
-	SilenceUsage:          true,
-	DisableSuggestions:    true,
-	DisableFlagsInUseLine: true,
+	Hidden: true,
 	Run: func(_ *cobra.Command, _ []string) {
 		fmt.Printf("\n# %s\n", "skywire documentation")
 		fmt.Printf("\n## %s\n", "subcommand tree")
