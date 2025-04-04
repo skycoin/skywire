@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	htmpl "html/template"
@@ -119,11 +120,9 @@ SKYENV=/path/to/fiber.conf fiber run`
 }
 
 func extractFiles() (string, error) {
-	// Create a temporary directory inside the system's temp folder
 	tempDir := os.TempDir() + "/ui"
 	err := os.Mkdir(tempDir, 0755) //nolint
 	if err != nil {
-		// If the directory already exists or error in creating, clean up the directory manually
 		toRemove, err := script.FindFiles(tempDir).Reject(tempDir + "/vendor").Slice()
 		if err != nil {
 			return "", err
@@ -143,7 +142,6 @@ func extractFiles() (string, error) {
 		_, _ = script.FindFiles(tempDir).Stdout() //nolint
 	}
 
-	// Walk through embedded files and extract them
 	if err := fs.WalkDir(embeddedFiles, "ui", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return fmt.Errorf("failed to access path %s: %w", path, err)
@@ -536,6 +534,100 @@ func server() {
 		}
 		c.Header("Content-Type", "application/json")
 		c.JSON(http.StatusOK, data)
+	})
+
+	r1.GET("/skycoin-rewards/txids", func(c *gin.Context) {
+		txids, err := script.File(wd + "/transactions0.txt").Slice()
+		if err != nil {
+			c.Writer.WriteHeader(http.StatusInternalServerError)
+			c.Writer.Write([]byte("500 Internal Server Error" + err.Error())) //nolint
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		c.Header("Content-Type", "application/json")
+		c.JSON(http.StatusOK, txids)
+	})
+
+	// BuildInfo represents build metadata.
+	type buildInfo struct {
+		Version string `json:"version"`
+		Commit  string `json:"commit"`
+		Date    string `json:"date"`
+	}
+
+	// Health represents the health.json data.
+	type health struct {
+		Time      string    `json:"time"`
+		BuildInfo buildInfo `json:"build_info"`
+		StartedAt string    `json:"started_at"`
+	}
+
+	// Node represents a single node's information.
+	type node struct {
+		PK       string `json:"pk"`
+		Health   health `json:"health,omitempty"`
+		NodeInfo string `json:"node_info,omitempty"`
+	}
+
+	type nodesResponse struct {
+		Nodes []node `json:"nodes"`
+	}
+
+	r1.GET("/log-collection/json", func(c *gin.Context) {
+		pks, err := script.ListFiles(wd + "/log_backups").Basename().Slice()
+		if err != nil {
+			c.Writer.WriteHeader(http.StatusInternalServerError)
+			c.Writer.Write([]byte("500 Internal Server Error" + err.Error())) //nolint
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		var nodes []node
+
+		for i := range pks {
+			fileInfo, err := os.Stat(wd + "/log_backups/" + pks[i] + "/health.json")
+			if err != nil {
+				continue
+			}
+			_, err = os.Stat(wd + "/log_backups/" + pks[i] + "/node-info.json")
+			if err != nil {
+				continue
+			}
+			// Get modification time
+			modTime := fileInfo.ModTime().Format(time.RFC3339)
+			healthData, err := script.File(wd + "/log_backups/" + pks[i] + "/health.json").Bytes()
+			if err != nil {
+				continue
+			}
+			var healthJSON health
+			err = json.Unmarshal(healthData, &healthJSON)
+			if err != nil {
+				continue
+			}
+			healthJSON.Time = modTime
+
+			var nodeInfo string
+
+			nodeInfoSlc, err := script.File(wd+"/log_backups/"+pks[i]+"/node-info.json").JQ(".skywire_version").Replace(`"`, "").Replace("\n", "").Slice()
+			if err != nil {
+				continue
+			}
+			if len(nodeInfoSlc) == 0 {
+				continue
+			}
+			nodeInfo = nodeInfoSlc[0]
+
+			nodes = append(nodes, node{
+				PK:       pks[i],
+				Health:   healthJSON,
+				NodeInfo: nodeInfo,
+			})
+		}
+
+		response := nodesResponse{Nodes: nodes}
+
+		// Set header and return JSON response
+		c.Header("Content-Type", "application/json")
+		c.JSON(http.StatusOK, response)
 	})
 
 	r1.GET("/skycoin-rewards/hist/:date", func(c *gin.Context) {
