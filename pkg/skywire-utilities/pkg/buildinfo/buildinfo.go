@@ -5,23 +5,26 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"regexp"
 	"runtime/debug"
+	"strings"
 )
 
 const unknown = "unknown"
 
-//$ go build -mod=vendor -ldflags="-X 'github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.version=$(git describe)' -X 'github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date=$(date -u "+%Y-%m-%dT%H:%M:%SZ")' -X 'github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.commit=$(git rev-list -1 HEAD)'" .
-
+// Variables set via -ldflags during build
+// $ go build -mod=vendor -ldflags="-X 'github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.version=$(git describe)' -X 'github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date=$(date -u "+%Y-%m-%dT%H:%M:%SZ")' -X 'github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.commit=$(git rev-list -1 HEAD)'" .
 var (
 	version   = unknown
 	commit    = unknown
 	date      = unknown
-	goversion = unknown
+	goversion = ""
 	bi        *debug.BuildInfo
 )
 
 // TODO: deprecate?
 // $ go build -ldflags="-X 'github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.golist=$(go list -m -json -mod=mod github.com/skycoin/<repo>@<branch>)' -X 'github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date=$(date -u "+%Y-%m-%dT%H:%M:%SZ")'" .
+// ldflags-provided module info (`go list -m -json`)
 var golist string
 
 // ModuleInfo represents the JSON structure returned by `go list -m -json`.
@@ -32,7 +35,12 @@ type ModuleInfo struct {
 	} `json:"Origin"`
 }
 
+// Regular expressions for commit hash and timestamp
+var commitRegex = regexp.MustCompile(`[a-f0-9]{12,}$`)
+var dateRegex = regexp.MustCompile(`\d{14}$`)
+
 func init() {
+	// Use ldflags-provided `golist` info if available
 	if golist != "" {
 		var mInfo ModuleInfo
 		if err := json.Unmarshal([]byte(golist), &mInfo); err == nil {
@@ -44,12 +52,14 @@ func init() {
 			}
 		}
 	}
-	var ok bool
-	if Get().Version == unknown || Get().Version == "" {
+
+	// If version is still unknown, try reading from runtime build info
+	if version == unknown || version == "" {
+		var ok bool
 		bi, ok = debug.ReadBuildInfo()
 		if ok {
 			if bi.Main.Version != "" {
-				version = bi.Main.Version
+				parseVersionInfo(bi.Main.Version)
 			}
 			if bi.GoVersion != "" {
 				goversion = bi.GoVersion
@@ -58,32 +68,70 @@ func init() {
 	}
 }
 
-// Version returns version from the parsed module info.
+// parseVersionInfo extracts version, commit hash, and date from the version string
+func parseVersionInfo(ver string) {
+	parts := strings.Split(ver, "-")
+	if len(parts) < 2 {
+		// If no `-` separators, treat entire string as version
+		version = ver
+		return
+	}
+
+	// Assume last part is commit hash (if it matches the regex)
+	lastPart := parts[len(parts)-1]
+	if commitRegex.MatchString(lastPart) {
+		commit = lastPart
+		parts = parts[:len(parts)-1] // Remove commit
+	}
+
+	// Assume the new last part is the date (if it matches the regex)
+	lastPart = parts[len(parts)-1]
+	if dateRegex.MatchString(lastPart) {
+		date = formatBuildDate(lastPart)
+		parts = parts[:len(parts)-1] // Remove date
+	}
+
+	// Remaining string is the version
+	version = strings.Join(parts, "-")
+}
+
+// formatBuildDate converts a 14-digit timestamp into RFC3339 format
+func formatBuildDate(dateStr string) string {
+	if len(dateStr) != 14 {
+		return unknown
+	}
+	return fmt.Sprintf("%s-%s-%sT%s:%s:%sZ",
+		dateStr[0:4], dateStr[4:6], dateStr[6:8], // YYYY-MM-DD
+		dateStr[8:10], dateStr[10:12], dateStr[12:14], // HH:MM:SS
+	)
+}
+
+// Version returns the extracted version string.
 func Version() string {
 	return version
 }
 
-// Go returns version of golang used for compilation from debug.ReadBuildInfo().
+// Go returns the Go compiler version used for the build.
 func Go() string {
 	return goversion
 }
 
-// Commit returns commit hash from the parsed module info.
+// Commit returns the extracted commit hash.
 func Commit() string {
 	return commit
 }
 
-// Date returns date of build in RFC3339 format.
+// Date returns the extracted build date in RFC3339 format.
 func Date() string {
 	return date
 }
 
-// DebugBuildInfo returns debug.BuildInfo.
+// DebugBuildInfo returns the raw debug.BuildInfo struct.
 func DebugBuildInfo() *debug.BuildInfo {
 	return bi
 }
 
-// Get returns build info summary.
+// Get returns a summary of build information.
 func Get() *Info {
 	return &Info{
 		Version: Version(),
@@ -93,15 +141,15 @@ func Get() *Info {
 	}
 }
 
-// Info is build info summary.
+// Info represents build metadata.
 type Info struct {
-	Go      string `json:"go"`
+	Go      string `json:"go,omitempty"`
 	Version string `json:"version"`
 	Commit  string `json:"commit"`
 	Date    string `json:"date"`
 }
 
-// WriteTo writes build info summary to io.Writer.
+// WriteTo writes build info summary to an io.Writer.
 func (info *Info) WriteTo(w io.Writer) (int64, error) {
 	msg := fmt.Sprintf("Version %q built on %q against commit %q\n", info.Version, info.Date, info.Commit)
 	n, err := w.Write([]byte(msg))
