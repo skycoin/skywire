@@ -1708,37 +1708,7 @@ func mainPage(c *gin.Context) {
 	c.Writer.Write((bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1))) //nolint
 }
 
-/*
-	func cal() (ret string) {
-		today := time.Now()
-		year, month, _ := today.Date()
-		firstOfMonth := time.Date(year, month, 1, 0, 0, 0, 0, time.Local)
-		startDayOfWeek := firstOfMonth.Weekday()
-		numDays := time.Date(year, month+1, 0, 0, 0, 0, 0, time.Local).Day()
-		header := fmt.Sprintf("%s %d", month.String(), year)
-		headerWidth := 20
-		padding := (headerWidth - len(header)) / 2
-		ret += fmt.Sprintf("%*s%s%*s\n", padding, "", header, headerWidth-len(header)-padding, "")
-		ret += "Su Mo Tu We Th Fr Sa\n"
-		for i := 0; i < int(startDayOfWeek); i++ {
-			ret += "   "
-		}
-		day := 1
-		for day <= numDays {
-			for i := int(startDayOfWeek); i < 7 && day <= numDays; i++ {
-				if day == today.Day() {
-					ret += fmt.Sprintf("\x1b[30;47m%2d\x1b[0m ", day)
-				} else {
-					ret += fmt.Sprintf("%2d ", day)
-				}
-				day++
-			}
-			ret += "\n"
-			startDayOfWeek = 0
-		}
-		return ret
-	}
-*/
+
 const nextlogrun = `#!/bin/bash
 _nextskywireclilogrun() {
 	if systemctl is-active --quiet skywire-reward >/dev/null; then
