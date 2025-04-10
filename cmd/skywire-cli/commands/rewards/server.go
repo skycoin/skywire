@@ -1707,7 +1707,7 @@ func mainPage(c *gin.Context) {
 	c.Writer.WriteHeader(http.StatusOK)
 	c.Writer.Write((bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1))) //nolint
 }
-
+/*
 func cal() (ret string) {
 	today := time.Now()
 	year, month, _ := today.Date()
@@ -1737,7 +1737,7 @@ func cal() (ret string) {
 	}
 	return ret
 }
-
+*/
 const nextlogrun = `#!/bin/bash
 _nextskywireclilogrun() {
 	if systemctl is-active --quiet skywire-reward >/dev/null; then
