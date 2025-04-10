@@ -436,11 +436,14 @@ func server() {
 		}())) //nolint
 	})
 
+/*
 	r1.GET("/skycoin-rewards", func(c *gin.Context) {
 		c.Writer.Header().Set("Server", "")
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
 		c.Writer.WriteHeader(http.StatusOK)
 		c.Writer.Flush()
+		l := "test"
+		/*
 		l := fmt.Sprintf("<div style='float: right;'>%s</div>", func() string {
 			yearlyTotal := 408000.0
 			result := fmt.Sprintf("<u>Annual reward distribution per pool:</u>\n%g Skycoin\n<u>Monthly rewards per pool:</u>\n", yearlyTotal)
@@ -513,10 +516,11 @@ func server() {
 						}
 					}
 				}
-
+*/
 				// Get stats for terabytes and gigabytes
-				bsstatsTB, _ := script.Exec(`bash -c 'jq '.ghw_blockinfo.total_size_bytes' rewards/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("G").Slice() //nolint
-				bsstatsGB, _ := script.Exec(`bash -c 'jq '.ghw_blockinfo.total_size_bytes' rewards/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("T").Slice() //nolint
+//				bsstatsTB, _ := script.Exec(`bash -c 'jq '.ghw_blockinfo.total_size_bytes' `+wd + `/`+`/rewards/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("G").Slice() //nolint
+//				bsstatsGB, _ := script.Exec(`bash -c 'jq '.ghw_blockinfo.total_size_bytes' `+wd + `/`+`rewards/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("T").Slice() //nolint
+/*
 				formattedTotal, err := script.Echo(fmt.Sprintf("%d", totalBytes)).ExecForEach("numfmt --to=iec {{.}}").String()
 				if err != nil {
 					result += fmt.Sprintf("%v\n", err)
@@ -559,9 +563,10 @@ func server() {
 						}
 					}
 				}
-
-				statsMB, _ := script.Exec(`bash -c 'jq '.ghw_memoryinfo.total_usable_bytes' rewards/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("G").Slice() //nolint
-				statsGB, _ := script.Exec(`bash -c 'jq '.ghw_memoryinfo.total_usable_bytes' rewards/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("M").Slice() //nolint
+*/
+//				statsMB, _ := script.Exec(`bash -c 'jq '.ghw_memoryinfo.total_usable_bytes' `+wd + `/`+`rewards/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("G").Slice() //nolint
+//				statsGB, _ := script.Exec(`bash -c 'jq '.ghw_memoryinfo.total_usable_bytes' `+wd + `/`+`rewards/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("M").Slice() //nolint
+/*
 				ramTotal, err := script.Echo(fmt.Sprintf("%d", totalramBytes)).ExecForEach("numfmt --to=iec {{.}}").String()
 				if err != nil {
 					result += fmt.Sprintf("%v\n", err)
@@ -614,7 +619,7 @@ func server() {
 		l += "</tr>\n"
 		l += "</thead>\n"
 		l += "<tbody>\n"
-		rewardtxncsvs, _ := script.FindFiles(`rewards/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Replace(wd+`/`+"hist/", "").Replace("_rewardtxn0.csv", "").Slice() //nolint
+		rewardtxncsvs, _ := script.FindFiles(wd + `/`+`rewards/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Basename().Replace("_rewardtxn0.csv", "").Slice() //nolint
 		for i := len(rewardtxncsvs) - 1; i >= 0; i-- {
 			skycoinpershare, _ := script.File(wd+`/`+"hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share: ").Replace("Skycoin Per Share: ", "").String() //nolint
 			skycoinpershare1 := ""
@@ -674,6 +679,7 @@ func server() {
 		c.Writer.Write(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1)) //nolint
 		c.Writer.Flush()
 	})
+	*/
 
 	authRoute := r1.Group("/")
 	if len(wlkeys) > 0 {
@@ -762,13 +768,13 @@ func server() {
 			return
 		}
 		c.Writer.Header().Set("Server", "")
-		f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice() //nolint
+		f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Basename().Slice() //nolint
 		for _, f1 := range f {
 			g, err := script.File(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String()
 			if err != nil || g == "" || g == "\n" || g == "test" || g == "test\n" {
 				c.Writer.Header().Set("Content-Type", "text/plain")
 				c.Writer.WriteHeader(http.StatusOK)
-				c.Writer.Write([]byte("skycoin-" + f1)) //nolint
+				c.Writer.Write([]byte("skycoin-rewards/hist/" + f1)) //nolint
 				return
 			}
 
@@ -806,11 +812,11 @@ func server() {
 		}
 		c.Writer.Header().Set("Server", "")
 		c.Writer.Header().Set("Content-Type", "text/plain")
-		f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice() //nolint
+		f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Basename().Slice() //nolint
 		for _, f1 := range f {
-			g, _ := script.File(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String() //nolint
+			g, _ := script.File(wd + `/hist/` + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String() //nolint
 			if g != "" && g != "\n" {
-				c.Redirect(http.StatusFound, "/skycoin-"+f1)
+				c.Redirect(http.StatusFound, "/skycoin-rewards/hist/"+f1)
 				return
 			}
 
