@@ -31,6 +31,9 @@ import (
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
+var bi bool
+
+
 func init() {
 
 	appsCmd.AddCommand(
@@ -104,6 +107,13 @@ var RootCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
+	Run: func(cmd *cobra.Command, _ []string) {
+		if bi {
+			fmt.Printf("%v\n", buildinfo.DebugBuildInfo())
+			return
+		}
+		cmd.Help() //nolint
+	},
 }
 
 var appsCmd = &cobra.Command{
