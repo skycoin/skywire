@@ -36,8 +36,8 @@ type ModuleInfo struct {
 }
 
 // Regular expressions for commit hash and timestamp
-var commitRegex = regexp.MustCompile(`[a-f0-9]{12,}$`)
-var dateRegex = regexp.MustCompile(`\d{14}$`)
+var commitRegex = regexp.MustCompile(`[a-f0-9]{12,}$`) // <-- match commit from end of string
+var dateRegex = regexp.MustCompile(`\d{14}`) // <-- match date anywhere
 
 func init() {
 	// Use ldflags-provided `golist` info if available
@@ -68,31 +68,25 @@ func init() {
 	}
 }
 
-// parseVersionInfo extracts version, commit hash, and date from the version string
+var commitRegex = regexp.MustCompile(`[a-f0-9]{12,}$`)
+var dateRegex = regexp.MustCompile(`\d{14}`) // <-- match date anywhere
+
 func parseVersionInfo(ver string) {
-	parts := strings.Split(ver, "-")
-	if len(parts) < 2 {
-		// If no `-` separators, treat entire string as version
-		version = ver
-		return
+	// Extract commit
+	if match := commitRegex.FindString(ver); match != "" {
+		commit = match
+		ver = strings.TrimSuffix(ver, "-"+commit)
 	}
 
-	// Assume last part is commit hash (if it matches the regex)
-	lastPart := parts[len(parts)-1]
-	if commitRegex.MatchString(lastPart) {
-		commit = lastPart
-		parts = parts[:len(parts)-1] // Remove commit
+	// Extract date
+	if match := dateRegex.FindString(ver); match != "" {
+		date = formatBuildDate(match)
+		ver = strings.Replace(ver, match, "", 1)
+		ver = strings.TrimSuffix(ver, "-") // Clean up any trailing dash
 	}
 
-	// Assume the new last part is the date (if it matches the regex)
-	lastPart = parts[len(parts)-1]
-	if dateRegex.MatchString(lastPart) {
-		date = formatBuildDate(lastPart)
-		parts = parts[:len(parts)-1] // Remove date
-	}
-
-	// Remaining string is the version
-	version = strings.Join(parts, "-")
+	// What's left is version
+	version = ver
 }
 
 // formatBuildDate converts a 14-digit timestamp into RFC3339 format
