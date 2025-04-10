@@ -26,7 +26,6 @@ import (
 	sn "github.com/skycoin/skywire/cmd/setup-node/commands"
 	scli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
 	services "github.com/skycoin/skywire/cmd/skywire-services/commands"
-	version "github.com/skycoin/skywire/cmd/version/commands"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/visor"
 )
@@ -60,7 +59,6 @@ func init() {
 		appsCmd,
 		treeCmd,
 		docCmd,
-		version.RootCmd,
 	)
 	visor.RootCmd.Long = calvin.AsciiFont("skywire-visor")
 	dmsg.RootCmd.Use = "dmsg"
@@ -98,10 +96,14 @@ var RootCmd = &cobra.Command{
 	Use: func() string {
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
 	}(),
-	Long: `
-	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
-	└─┐├┴┐└┬┘││││├┬┘├┤
-	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘`,
+	Long: func() (ret string) {
+		ret = calvin.AsciiFont("skywire")
+		ret += "\nskywire version " + buildinfo.Version()
+		if buildinfo.Go() != "unknown" {
+			ret += "\nbuilt with " + buildinfo.Go()
+		}
+		return ret
+	}(),
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
