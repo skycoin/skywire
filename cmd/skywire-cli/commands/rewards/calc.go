@@ -41,8 +41,6 @@ var (
 	pubkey                string
 	logLvl                string
 	log                   = logging.MustGetLogger("rewards")
-	sConfig               string
-	dConfig               string
 	nodeInfoSvc           []byte
 )
 
@@ -115,8 +113,6 @@ func init() {
 	RootCmd.Flags().IntVarP(&yearlyTotal, "year", "y", yearlyTotalRewardsPerPool, "yearly total rewards per pool")
 	RootCmd.Flags().StringVarP(&utfile, "utfile", "u", "ut.txt", "uptime tracker data file")
 	RootCmd.Flags().StringVarP(&hwSurveyPath, "lpath", "p", "log_collecting", "path to the surveys")
-	RootCmd.Flags().StringVarP(&sConfig, "svcconf", "f", "/opt/skywire/services-config.json", "path to the services-config.json")
-	RootCmd.Flags().StringVarP(&dConfig, "dmsghttpconf", "g", "/opt/skywire/dmsghttp-config.json", "path to the dmsghttp-config.json")
 	RootCmd.Flags().BoolVarP(&h0, "h0", "0", false, "hide statistical data")
 	RootCmd.Flags().BoolVarP(&h1, "h1", "1", false, "hide survey csv data")
 	RootCmd.Flags().BoolVarP(&h2, "h2", "2", false, "hide reward csv data")
@@ -145,14 +141,12 @@ Architectures:
 				logging.SetLevel(lvl)
 			}
 		}
-		mustExist(sConfig)
-		mustExist(dConfig)
 
-		sConf, err := script.File(sConfig).JQ(`.prod  | del(.stun_servers)`).Bytes()
+		sConf, err := script.Echo(string(skywire.ServicesJSON)).JQ(`.prod  | del(.stun_servers)`).Bytes()
 		if err != nil {
 			log.Fatal("error parsing json with jq:\n", err)
 		}
-		dConf, err := script.File(dConfig).JQ(`.prod`).Bytes()
+		dConf, err := script.Echo(string(skywire.DmsghttpJSON)).JQ(`.prod`).Bytes()
 		if err != nil {
 			log.Fatal("error parsing json with jq:\n", err)
 		}
@@ -579,8 +573,6 @@ func init() {
 	testCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "info", "[ debug | warn | error | fatal | panic | trace ] \u001b[0m*")
 	testCmd.Flags().StringVarP(&pubkey, "pk", "k", pubkey, "verify services in survey for pubkey")
 	testCmd.Flags().StringVarP(&hwSurveyPath, "lpath", "p", "log_collecting", "path to the surveys")
-	testCmd.Flags().StringVarP(&sConfig, "svcconf", "f", "/opt/skywire/services-config.json", "path to the services-config.json")
-	testCmd.Flags().StringVarP(&dConfig, "dmsghttpconf", "g", "/opt/skywire/dmsghttp-config.json", "path to the dmsghttp-config.json")
 }
 
 var testCmd = &cobra.Command{
@@ -605,8 +597,6 @@ var testCmd = &cobra.Command{
 
 		mustExist(hwSurveyPath)
 		mustExist(fmt.Sprintf("%s/%s/node-info.json", hwSurveyPath, pubkey))
-		mustExist(sConfig)
-		mustExist(dConfig)
 
 		//stun_servers does not currently match between conf.skywire.skycoin.com & https://github.com/skycoin/skywire/blob/develop/services-config.json ; omit checking them until next version
 		nodeInfoSvc, err = script.File(fmt.Sprintf("%s/%s/node-info.json", hwSurveyPath, pubkey)).JQ(`.services | del(.stun_servers)`).Bytes()
@@ -614,12 +604,11 @@ var testCmd = &cobra.Command{
 			log.Fatal("error parsing json with jq:\n", err)
 		}
 
-		sConf, err := script.File(sConfig).JQ(`.prod  | del(.stun_servers)`).Bytes()
+		sConf, err := script.Echo(string(skywire.ServicesJSON)).JQ(`.prod  | del(.stun_servers)`).Bytes()
 		if err != nil {
 			log.Fatal("error parsing json with jq:\n", err)
 		}
-
-		dConf, err := script.File(dConfig).JQ(`.prod`).Bytes()
+		dConf, err := script.Echo(string(skywire.DmsghttpJSON)).JQ(`.prod`).Bytes()
 		if err != nil {
 			log.Fatal("error parsing json with jq:\n", err)
 		}
