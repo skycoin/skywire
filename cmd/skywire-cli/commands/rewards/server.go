@@ -762,13 +762,13 @@ func server() {
 			return
 		}
 		c.Writer.Header().Set("Server", "")
-		f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice() //nolint
+		f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).BaseName().Slice() //nolint
 		for _, f1 := range f {
 			g, err := script.File(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String()
 			if err != nil || g == "" || g == "\n" || g == "test" || g == "test\n" {
 				c.Writer.Header().Set("Content-Type", "text/plain")
 				c.Writer.WriteHeader(http.StatusOK)
-				c.Writer.Write([]byte("skycoin-" + f1)) //nolint
+				c.Writer.Write([]byte("skycoin-rewards/hist/" + f1)) //nolint
 				return
 			}
 
@@ -806,11 +806,11 @@ func server() {
 		}
 		c.Writer.Header().Set("Server", "")
 		c.Writer.Header().Set("Content-Type", "text/plain")
-		f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice() //nolint
+		f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).BaseName().Slice() //nolint
 		for _, f1 := range f {
-			g, _ := script.File(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String() //nolint
+			g, _ := script.File(wd + `/hist/` + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String() //nolint
 			if g != "" && g != "\n" {
-				c.Redirect(http.StatusFound, "/skycoin-"+f1)
+				c.Redirect(http.StatusFound, "/skycoin-rewards/hist/"+f1)
 				return
 			}
 
