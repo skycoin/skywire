@@ -770,7 +770,7 @@ func server() {
 		c.Writer.Header().Set("Server", "")
 		f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Basename().Slice() //nolint
 		for _, f1 := range f {
-			g, err := script.File(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String()
+			g, err := script.File(wd + `/hist/`+ strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String()
 			if err != nil || g == "" || g == "\n" || g == "test" || g == "test\n" {
 				c.Writer.Header().Set("Content-Type", "text/plain")
 				c.Writer.WriteHeader(http.StatusOK)
@@ -902,7 +902,7 @@ func server() {
 			}
 
 		}
-		rewardfiles, _ := script.FindFiles(`rewards/hist`).Match(c.Param("date")).Slice() //nolint
+		rewardfiles, _ := script.FindFiles(wd + `/hist`).Match(c.Param("date")).Slice() //nolint
 		if len(rewardfiles) == 0 {
 			c.Writer.WriteHeader(http.StatusNotFound)
 			c.Writer.Flush()
@@ -1033,7 +1033,7 @@ func server() {
 
 	r1.GET("/skycoin-rewards.json", func(c *gin.Context) {
 		data := rewards{}
-		rewardtxncsvs, err := script.FindFiles(wd+`/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Replace(wd+`/hist/`, "").Replace("_rewardtxn0.csv", "").Slice() //nolint
+		rewardtxncsvs, err := script.FindFiles(wd+`/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Basename().Replace("_rewardtxn0.csv", "").Slice() //nolint
 		if err != nil {
 			c.Writer.WriteHeader(http.StatusInternalServerError)
 			c.Writer.Write([]byte("500 Internal Server Error #1 " + err.Error())) //nolint
