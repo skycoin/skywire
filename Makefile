@@ -217,14 +217,14 @@ install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 
 lint: ## Run linters. Use make install-linters first
 	golangci-lint --version
-	${OPTS} golangci-lint run --timeout 0 -c .golangci.yml skywire.go
-	${OPTS} golangci-lint run --timeout 0 -c .golangci.yml ./cmd/... --exclude-dirs cmd/skywire-cli/commands/rewards-ui/ui
-	${OPTS} golangci-lint run --timeout 0 -c .golangci.yml ./pkg/...
-	${OPTS} golangci-lint run --timeout 0 -c .golangci.yml	 ./... --exclude-dirs cmd/skywire-cli/commands/rewards-ui/ui
+	${OPTS} golangci-lint run -c .golangci.yml skywire.go
+	${OPTS} golangci-lint run -c .golangci.yml ./cmd/...
+	${OPTS} golangci-lint run -c .golangci.yml ./pkg/...
+	${OPTS} golangci-lint run -c .golangci.yml	 ./...
 	${OPTS} go vet -all -mod=vendor ./...
 
 lint-extra: ## Run linters with extra checks.
-	golangci-lint run --no-config --enable-all ./... --exclude-dirs cmd/skywire-cli/commands/rewards-ui/ui
+	golangci-lint run --no-config --enable-all ./...
 	go vet -all -mod=vendor ./...
 
 gocyclo: ## Run gocyclo
@@ -232,7 +232,7 @@ gocyclo: ## Run gocyclo
 
 lint-windows: ## Run linters. Use make install-linters-windows first
 	powershell 'golangci-lint --version'
-	powershell 'golangci-lint run --timeout 0 -c .golangci.yml ./...'
+	powershell 'golangci-lint run -c .golangci.yml ./...'
 
 gocyclo-windows: ## Run gocyclo on windows
 	powershell 'gocyclo -over 14 .'
