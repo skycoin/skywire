@@ -117,10 +117,6 @@ count-dmsg-disc-entries:
 check: lint check-cg check-help test ## Run linters and tests
 
 check-cg: ## Cursory check of the main help menu, offline dmsghttp config gen and offline config gen
-	@echo "checking help menu for compilation without errors"
-	@echo
-	go run cmd/skywire/skywire.go --help
-	@echo
 	@echo "checking dmsghttp offline config gen"
 	@echo
 	go run cmd/skywire/skywire.go cli config gen --nofetch -dnw
@@ -133,41 +129,15 @@ check-cg: ## Cursory check of the main help menu, offline dmsghttp config gen an
 	@echo
 
 check-help: ## Cursory check of the help menus
-	@echo "checking help menus for compilation without errors"
+	@echo "checking help menu for compilation without errors"
 	@echo
-	go run cmd/skywire-services/services.go --help
+	go run cmd/skywire/skywire.go --help
 	@echo
-	go run cmd/skywire-services/services.go ar --help
+	@echo "checking cmd/skycoin-skywire help menu for compilation without errors"
 	@echo
-	go run cmd/skywire-services/services.go confbs --help
+	go run cmd/skycoin-skywire/skywire.go --help
 	@echo
-	go run cmd/skywire-services/services.go rf --help
-	@echo
-	go run cmd/skywire-services/services.go se --help
-	@echo
-	go run cmd/skywire-services/services.go tpd --help
-	@echo
-	go run cmd/skywire-services/services.go tps --help
-	@echo
-	go run cmd/skywire-services/services.go ut --help
-	@echo
-	go run cmd/config-bootstrapper/config.go --help
-	@echo
-	go run cmd/transport-discovery/transport-discovery.go --help
-	@echo
-	go run cmd/sw-env/sw-env.go --help
-	@echo
-	go run cmd/uptime-tracker/uptime-tracker.go --help
-	@echo
-	go run cmd/route-finder/route-finder.go --help
-	@echo
-	go run cmd/setup-node/setup-node.go --help
-	@echo
-	go run cmd/transport-setup/transport-setup.go --help
-	@echo
-	go run cmd/address-resolver/address-resolver.go --help
-	@echo
-	go run cmd/network-monitor/network-monitor.go --help
+	@echo "compilation successful"
 	@echo
 
 check-windows: lint-windows test-windows ## Run linters and tests on windows image
