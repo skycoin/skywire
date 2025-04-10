@@ -258,7 +258,7 @@ test-windows: ## Run tests on windows
 
 install-linters: ## Install linters
 	- VERSION=1.64.5 ./ci_scripts/install-golangci-lint.sh
-	GOPRIVATE=github.com/skycoin/* go get -u 
+	GOPRIVATE=github.com/skycoin/* go get -u
 	${OPTS} go install golang.org/x/tools/cmd/goimports@latest github.com/incu6us/goimports-reviser/v2@latest github.com/FiloSottile/vendorcheck@latest
 
 install-linters-windows: ## Install linters
